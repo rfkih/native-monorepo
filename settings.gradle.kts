@@ -20,8 +20,8 @@ dependencyResolutionManagement {
 rootProject.name = "native"
 
 include("libs:money")
+include("libs:events")
+include("libs:tenant")
 // Further modules are wired in as each milestone lands:
-// include("libs:events")
-// include("libs:tenant")
 // include("service-template")
 // include("services:restaurant-service")
