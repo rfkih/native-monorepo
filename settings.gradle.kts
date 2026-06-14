@@ -24,4 +24,4 @@ include("libs:events")
 include("libs:tenant")
 include("service-template")
 // Further modules are wired in as each milestone lands:
-// include("services:restaurant-service")
+include("services:restaurant-service")
