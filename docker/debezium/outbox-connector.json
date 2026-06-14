@@ -1,0 +1,49 @@
+{
+  "name": "restaurant-outbox-connector",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+
+    "//": "Tail restaurant-service's database; one connector per service DB (DB-per-service).",
+    "database.hostname": "postgres",
+    "database.port": "5432",
+    "database.user": "restaurant_service",
+    "database.password": "restaurant_service",
+    "database.dbname": "restaurant_service",
+    "topic.prefix": "restaurant",
+    "plugin.name": "pgoutput",
+    "slot.name": "restaurant_outbox_slot",
+    "publication.name": "restaurant_outbox_pub",
+
+    "//table": "Capture ONLY the transactional outbox table (rule 3: publish via the outbox).",
+    "table.include.list": "public.outbox",
+
+    "//router": "The outbox event router: each outbox row becomes a Kafka record on a topic",
+    "//router2": "named for its event_type (e.g. SaleRecorded), keyed by aggregate_id, with the",
+    "//router3": "row's bytea Avro `payload` as the message value (shipped verbatim).",
+    "transforms": "outbox",
+    "transforms.outbox.type": "io.debezium.transforms.outbox.EventRouter",
+    "transforms.outbox.table.field.event.id": "id",
+    "transforms.outbox.table.field.event.key": "aggregate_id",
+    "transforms.outbox.table.field.event.type": "event_type",
+    "transforms.outbox.table.field.event.timestamp": "occurred_at",
+    "transforms.outbox.table.field.event.payload": "payload",
+
+    "//topic": "Route to a topic named exactly after the event_type (no prefix), so the value",
+    "//topic2": "lands on `SaleRecorded` — the topic finance-service's @KafkaListener subscribes to.",
+    "transforms.outbox.route.by.field": "event_type",
+    "transforms.outbox.route.topic.replacement": "${routedByValue}",
+
+    "//headers": "Expose the outbox row id + company_id as Kafka headers. The consumer dedupes by",
+    "//headers2": "the `id` header (the durable event id), not by Kafka offset (HR-3).",
+    "transforms.outbox.table.fields.additional.placement": "id:header:id,company_id:header:company_id",
+
+    "//converters": "payload is raw Avro bytes already — ship the value as a byte array verbatim;",
+    "//converters2": "no Connect-side Avro/JSON conversion (consistent with how the outbox stores it).",
+    "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+    "value.converter": "org.apache.kafka.connect.converters.ByteArrayConverter",
+
+    "//tombstones": "An outbox is append-only and never deletes, so no tombstones are emitted.",
+    "tombstones.on.delete": "false",
+    "snapshot.mode": "initial"
+  }
+}

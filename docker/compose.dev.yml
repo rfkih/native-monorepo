@@ -1,0 +1,161 @@
+# Native — local dev stack (M0.4).
+#
+# The real transport loop the services run against locally:
+#   Postgres 16 (logical WAL, one database per service)
+#     -> Debezium / Kafka Connect (tails each service's `outbox` table)
+#        -> Kafka (one topic per event_type, e.g. `SaleRecorded`)
+#           -> consumers (e.g. finance-service)
+#   + Schema Registry (Avro) and Keycloak (OIDC) alongside.
+#
+# This is the M0.4 "local dev stack" from the build plan: it is the genuine event
+# transport behind the validation slice — restaurant-service writes a SaleRecorded
+# row to its outbox; Debezium's outbox event router ships the row's bytea Avro
+# `payload` to the `SaleRecorded` topic; finance-service consumes it.
+#
+# It is config (author-only, not part of the Gradle build/tests). Bring it up with:
+#   docker compose -f docker/compose.dev.yml up -d
+# then register the Debezium connector (see docker/README.md).
+
+name: native-dev
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16 — one database per service (DB-per-service, rule 1).
+  # wal_level=logical is required for Debezium CDC to tail the outbox tables.
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: native-postgres
+    command:
+      - postgres
+      - -c
+      - wal_level=logical          # required for Debezium logical decoding (CDC)
+      - -c
+      - max_wal_senders=10
+      - -c
+      - max_replication_slots=10
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      # Creates one database + one app role per service on first boot, and grants
+      # the app role REPLICATION so Debezium can connect as it if desired.
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+      - native-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ---------------------------------------------------------------------------
+  # Kafka (KRaft mode — no ZooKeeper). The event backbone; one topic per event_type.
+  # ---------------------------------------------------------------------------
+  kafka:
+    image: confluentinc/cp-kafka:7.7.1
+    container_name: native-kafka
+    ports:
+      - "9092:9092"     # host clients (external listener)
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,EXTERNAL://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      CLUSTER_ID: native-dev-cluster-0001
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:29092"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  # ---------------------------------------------------------------------------
+  # Schema Registry (Avro). The event-catalog schemas register here. NOTE: the
+  # services deliberately consume the outbox payload as RAW Avro bytes via
+  # libs/events AvroSerde (NOT a Confluent Schema Registry serde) — the registry
+  # is here for tooling/governance and future producers, not on the hot path.
+  # ---------------------------------------------------------------------------
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.7.1
+    container_name: native-schema-registry
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8081:8081"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka:29092
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/subjects"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ---------------------------------------------------------------------------
+  # Debezium / Kafka Connect — tails each service's `outbox` table and ships rows
+  # to Kafka via the outbox event router (one topic per event_type, the row's
+  # bytea Avro `payload` as the message value). Register the connector after boot
+  # (see docker/README.md) using debezium/outbox-connector.json.
+  # ---------------------------------------------------------------------------
+  connect:
+    image: debezium/connect:2.7.3.Final
+    container_name: native-connect
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8083:8083"     # Kafka Connect REST API (POST the connector config here)
+    environment:
+      BOOTSTRAP_SERVERS: kafka:29092
+      GROUP_ID: native-connect
+      CONFIG_STORAGE_TOPIC: _connect_configs
+      OFFSET_STORAGE_TOPIC: _connect_offsets
+      STATUS_STORAGE_TOPIC: _connect_status
+      CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      STATUS_STORAGE_REPLICATION_FACTOR: 1
+      # The payload is raw Avro bytes already; Connect treats the topic value as a
+      # byte array and ships it verbatim (no Connect-side Avro/JSON conversion).
+      KEY_CONVERTER: org.apache.kafka.connect.storage.StringConverter
+      VALUE_CONVERTER: org.apache.kafka.connect.converters.ByteArrayConverter
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/connectors"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ---------------------------------------------------------------------------
+  # Keycloak (OIDC, RS256 JWT). Issues the short-lived tokens carrying company_id +
+  # roles the gateway validates (M1.1). Dev mode; imports the native realm if present.
+  # ---------------------------------------------------------------------------
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: native-keycloak
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "8080:8080"
+    volumes:
+      # Drop a native-realm.json here to auto-provision the realm/client on boot.
+      - ./keycloak/import:/opt/keycloak/data/import:ro
+
+volumes:
+  native-postgres-data:
