@@ -53,10 +53,46 @@ dependencies {
     "testImplementation"("com.tngtech.archunit:archunit-junit5:1.4.1")
 }
 
-// Formatting + Checkstyle + ArchUnit (a normal test) are blocking via `check`.
-// The JaCoCo coverage *threshold* gate is intentionally deferred and ratcheted in
-// (floor = measured coverage) after the layered refactor lands — enabling a hard
-// 70% gate on the existing tree blind would just break the build. See standards doc.
+// JaCoCo coverage gate (a ratchet): the floor is set from MEASURED coverage so it can only be
+// raised, never regress. *Application, the cross-cutting config/ package, and DTO records are
+// excluded from the denominator (low-logic glue, not behaviour worth a coverage number). The
+// standards-doc TARGET is instruction >= 0.70 / branch >= 0.60 (0.85 for money/tenant/outbox);
+// this initial floor reflects today's tree (tenant + restaurant-service are the lowest) and is
+// raised as tests grow.
+tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
+    dependsOn(tasks.named("test"))
+    violationRules {
+        rule {
+            limit {
+                counter = "INSTRUCTION"
+                minimum = "0.65".toBigDecimal()
+            }
+            limit {
+                counter = "BRANCH"
+                minimum = "0.25".toBigDecimal()
+            }
+        }
+    }
+    classDirectories.setFrom(
+        files(
+            classDirectories.files.map {
+                fileTree(it) {
+                    exclude(
+                        "**/*Application.*",
+                        "**/config/**",
+                        "**/*Config.*",
+                        "**/*Request.*",
+                        "**/*Response.*",
+                        "**/*Command.*",
+                        "**/*Result.*",
+                    )
+                }
+            },
+        ),
+    )
+}
+
+// Formatting + Checkstyle + ArchUnit (a normal test) + the coverage floor block via `check`.
 tasks.named("check") {
-    dependsOn("spotlessCheck")
+    dependsOn("spotlessCheck", "jacocoTestCoverageVerification")
 }
