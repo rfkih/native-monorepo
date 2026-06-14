@@ -21,7 +21,7 @@ schema. Until then a row here is documentation of intent, not a shippable contra
 
 | Event | Producer | Consumers | Key fields | Status |
 |---|---|---|---|---|
-| `CompanyCreated` | org-service | entitlement, finance, verticals | company_id, legal_employer_id, base_currency, default_language | planned (M1.2) |
+| **`CompanyCreated`** | **org-service** | **entitlement, finance, verticals** | **company_id, legal_employer_id, base_currency, default_language** | **LIVE (M1.2)** |
 | `OrgUnitCreated/Changed` | org-service | employee, verticals, finance | org_unit_id, type, parent_id, company_id | planned |
 | `EntitlementGranted/Revoked` | entitlement | shell, all services | company_id, module_key | planned |
 | `EmployeeChanged` | employee | verticals | employee_id, company_id, status | planned |
@@ -37,6 +37,62 @@ schema. Until then a row here is documentation of intent, not a shippable contra
 ---
 
 ## Live events
+
+### `CompanyCreated`
+
+Emitted by org-service when a company (a tenant) is created in the create-company
+flow (M1.2 — the tenant keystone). A company's **base currency** and **default
+language** are set at creation and carried on this event so downstream services can
+seed their slice of the new tenant without a synchronous call (rule 2).
+
+- **Producer:** `org-service`
+- **Consumers:** `entitlement-service` (seed the tenant's entitlements — treat as fully
+  entitled in the validation slice), `finance-service` (register the company's
+  consolidation scope + base currency), the verticals (cache their slice of the org
+  tree / company config).
+- **Aggregate type / partition key:** `company` / `company_id`
+- **Outbox `event_type`:** `CompanyCreated`
+- **Schema:** `services/org-service/src/main/resources/avro/CompanyCreated.avsc`
+- **Full name:** `id.co.nativeapp.events.org.CompanyCreated`
+
+**Base currency is an ISO-4217 code, immutable once set** (CLAUDE.md "Settings live at
+creation"). It is a currency *code*, never a monetary amount and never a float. The
+company is its own tenant, so `company_id` is the new company's id; in M1.2 a company
+is its own legal employer, so `legal_employer_id == company_id` (the dedicated
+legal-employer aggregate arrives with the full org tree later).
+
+**Key fields**
+
+| Field | Avro type | Meaning |
+|---|---|---|
+| `company_id` | `string` | The new tenant / company aggregate id (UUID as string); the partition key |
+| `legal_employer_id` | `string` | The legal employer this company is — consolidation + entitlement boundary (UUID as string) |
+| `base_currency` | `string` | The company's base (functional) currency: an ISO-4217 code (e.g. `IDR`, `USD`); immutable |
+| `default_language` | `string` | The company default language (e.g. `en`, `id`); a per-user override lives on the user profile |
+
+**Avro schema**
+
+```json
+{
+  "type": "record",
+  "name": "CompanyCreated",
+  "namespace": "id.co.nativeapp.events.org",
+  "doc": "Emitted by org-service when a company (tenant) is created; consumed by entitlement-service (to seed entitlements), finance-service (to register the consolidation/base-currency scope), and the verticals. Carries the company's immutable base_currency and default_language, set at creation (CLAUDE.md 'Settings live at creation').",
+  "fields": [
+    {"name": "company_id", "type": "string", "doc": "The new tenant / company aggregate id (UUID as string); also the Kafka partition key."},
+    {"name": "legal_employer_id", "type": "string", "doc": "The legal employer this company is — the consolidation + entitlement boundary (UUID as string)."},
+    {"name": "base_currency", "type": "string", "doc": "The company's base (functional) currency: an ISO-4217 code (e.g. IDR, USD). Immutable once transactions exist."},
+    {"name": "default_language", "type": "string", "doc": "The company default language (e.g. en, id). A per-user override lives on the user profile."}
+  ]
+}
+```
+
+**Compatibility.** Only backward-compatible evolution is allowed: add fields with a
+default (e.g. an optional `display_name` as `["null","string"]` with `default: null`).
+Never add a required field without a default, never remove or rename a field, never
+change a field's type. The contract test (`CompanyCreatedContractTest`) enforces this —
+it asserts the schema is backward-compatible with itself and with an
+added-optional-field variant, and rejects a new required field without a default.
 
 ### `SaleRecorded`
 
