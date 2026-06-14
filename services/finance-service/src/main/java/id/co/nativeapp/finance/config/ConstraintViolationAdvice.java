@@ -1,5 +1,6 @@
 package id.co.nativeapp.finance.config;
 
+import id.co.nativeapp.finance.fx.MissingFxRateException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
@@ -33,6 +34,11 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * {@code @ExceptionHandler} across both. Unknown-currency / bad-period {@code
  * IllegalArgumentException} → {@code 400} and the non-leaking catch-all {@code 500} still come from
  * the shared advice, so they are no longer duplicated here.
+ *
+ * <p>It also maps {@link MissingFxRateException} → {@code 422 Unprocessable Entity}: a presentation
+ * conversion was requested but no FX rate (direct or USD-pivot) resolves for the period, so the
+ * server CANNOT satisfy the presentation currency. Fail-loud — the endpoint never invents a rate or
+ * returns the native figure mislabelled as converted.
  */
 @RestControllerAdvice
 public class ConstraintViolationAdvice {
@@ -55,6 +61,25 @@ public class ConstraintViolationAdvice {
     List<Map<String, String>> errors =
         ex.getConstraintViolations().stream().map(ConstraintViolationAdvice::toViolation).toList();
     problem.setProperty("errors", errors);
+    return problem;
+  }
+
+  /**
+   * No resolvable FX rate for a requested presentation conversion → {@code 422}. The well-formed
+   * request cannot be satisfied for this period/currency; the native figures are NOT returned
+   * mislabelled as converted (fail-loud, never invent a rate).
+   */
+  @ExceptionHandler(MissingFxRateException.class)
+  public ProblemDetail handleMissingFxRate(MissingFxRateException ex, HttpServletRequest request) {
+    ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.UNPROCESSABLE_ENTITY);
+    problem.setType(URI.create(TYPE_BASE + "fx-rate-unavailable"));
+    problem.setTitle("FX rate unavailable");
+    problem.setDetail(ex.getMessage());
+    problem.setInstance(URI.create(request.getRequestURI()));
+    String traceId = MDC.get("trace_id");
+    if (traceId != null) {
+      problem.setProperty("traceId", traceId);
+    }
     return problem;
   }
 

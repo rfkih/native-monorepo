@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import id.co.nativeapp.finance.config.ConstraintViolationAdvice;
+import id.co.nativeapp.finance.fx.PresentationConverter;
 import id.co.nativeapp.finance.revenue.RevenueController;
 import id.co.nativeapp.finance.revenue.RevenueReader;
 import id.co.nativeapp.money.Money;
@@ -34,6 +35,9 @@ class RevenueControllerTest {
   @Autowired private MockMvc mockMvc;
 
   @MockitoBean private RevenueReader revenueReader;
+
+  // The presentation path is not exercised in these native-only cases; mocked so the context wires.
+  @MockitoBean private PresentationConverter presentationConverter;
 
   @Test
   void returnsTheConsolidatedRevenueAsMinorPlusCurrency() throws Exception {

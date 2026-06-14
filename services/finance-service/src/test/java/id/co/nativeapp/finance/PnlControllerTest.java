@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import id.co.nativeapp.finance.config.ConstraintViolationAdvice;
+import id.co.nativeapp.finance.fx.PresentationConverter;
 import id.co.nativeapp.finance.pnl.ConsolidatedPnl;
 import id.co.nativeapp.finance.pnl.PnlController;
 import id.co.nativeapp.finance.pnl.PnlReader;
@@ -33,6 +34,9 @@ class PnlControllerTest {
   @Autowired private MockMvc mockMvc;
 
   @MockitoBean private PnlReader pnlReader;
+
+  // The presentation path is not exercised in these native-only cases; mocked so the context wires.
+  @MockitoBean private PresentationConverter presentationConverter;
 
   @Test
   void returnsTheConsolidatedPnlWithRevenueExpenseAndNet() throws Exception {

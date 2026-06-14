@@ -1,7 +1,10 @@
 package id.co.nativeapp.finance.revenue;
 
+import id.co.nativeapp.finance.fx.PresentationConverter;
+import id.co.nativeapp.finance.fx.RevenuePresentation;
 import id.co.nativeapp.money.Money;
 import jakarta.validation.constraints.Pattern;
+import java.util.Currency;
 import java.util.Optional;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -24,6 +27,15 @@ import org.springframework.web.bind.annotation.RestController;
  * from org-service); with revenue present that param is ignored. With neither revenue nor a {@code
  * currency} hint, the endpoint returns {@code 204 No Content} rather than inventing a currency
  * (currencies are company config, not hardcoded in finance — HR-9 / config standard).
+ *
+ * <p><strong>Presentation currency (P3c, additive).</strong> An OPTIONAL {@code presentation=XXX}
+ * query param requests a VIEW-ONLY conversion of the figure into that ISO-4217 currency at the
+ * period AVERAGE rate. It is NOT a base-currency change and NOT a dashboard toggle — a transient
+ * per-request view lens. Absent → today's behaviour exactly (existing tests unchanged). Present →
+ * the native total is still returned, plus the converted presentation fields ({@code
+ * presentationCurrency}, {@code presentationTotalMinor}, {@code usesStubFx}, {@code fxAsOf}, {@code
+ * appliedRates}). If no rate resolves the request fails loudly with a {@code 422} (the advice) —
+ * the native figure is never returned mislabelled as converted.
  */
 @RestController
 @RequestMapping("/api/v1/revenue")
@@ -31,9 +43,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class RevenueController {
 
   private final RevenueReader revenueReader;
+  private final PresentationConverter presentationConverter;
 
-  public RevenueController(RevenueReader revenueReader) {
+  public RevenueController(
+      RevenueReader revenueReader, PresentationConverter presentationConverter) {
     this.revenueReader = revenueReader;
+    this.presentationConverter = presentationConverter;
   }
 
   /**
@@ -41,6 +56,7 @@ public class RevenueController {
    *
    * @param period the accounting period {@code YYYY-MM} (validated)
    * @param currency optional ISO-4217 code used only to render a zero total for an empty period
+   * @param presentation optional ISO-4217 code requesting a view-only conversion of the total
    */
   @GetMapping
   public ResponseEntity<RevenueResponse> revenue(
@@ -53,11 +69,20 @@ public class RevenueController {
               regexp = "\\d{4}-(0[1-9]|1[0-2])",
               message = "period must be a valid YYYY-MM month")
           String period,
-      @RequestParam(required = false) String currency) {
+      @RequestParam(required = false) String currency,
+      @RequestParam(required = false) String presentation) {
 
     Optional<Money> revenue = revenueReader.revenueForPeriod(period);
     if (revenue.isPresent()) {
-      return ResponseEntity.ok(RevenueResponse.of(period, revenue.get()));
+      Money total = revenue.get();
+      if (presentation != null && !presentation.isBlank()) {
+        // VIEW-ONLY: convert on the way out; the stored read model is never touched. An unknown
+        // ISO-4217 code -> 400 via Currency.getInstance/the shared advice; no rate -> 422.
+        Currency target = Currency.getInstance(presentation.strip());
+        RevenuePresentation view = presentationConverter.convertRevenue(total, period, target);
+        return ResponseEntity.ok(RevenueResponse.withPresentation(period, total, view));
+      }
+      return ResponseEntity.ok(RevenueResponse.of(period, total));
     }
     if (currency != null && !currency.isBlank()) {
       // No postings for the period yet: a zero total in the caller-supplied base currency.
