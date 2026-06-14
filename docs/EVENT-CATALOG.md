@@ -32,8 +32,8 @@ schema. Until then a row here is documentation of intent, not a shippable contra
 | **`PeriodSealed`** | **verticals** | **employee, finance** | **company_id, business_id, period** | **LIVE (employee consumer #23)** |
 | **`SaleRecorded`** | **restaurant-service + carwash-service** (verticals) | **finance** | **sale_id, company_id, business_id, amount_minor, currency, occurred_at** | **LIVE (M1.4 / #20)** |
 | **`ExpenseRecorded`** | **verticals** | **finance** | **expense_id, company_id, business_id, amount_minor, currency, gl_hint, occurred_at** | **LIVE (finance consumer #21)** |
-| **`PayrollPosted`** | **employee-service** | **finance** | **payroll_run_id, company_id, period, base_currency, totals, rule_versions, uses_illustrative_rules, posted_at** | **LIVE (#23)** |
-| **`LaborCostAllocated`** | **employee-service** | **finance** | **payroll_run_id, company_id, period, outlet_id, gl_account, amount_minor, currency, uses_illustrative_rules** | **LIVE (#23)** |
+| **`PayrollPosted`** | **employee-service** | **finance** | **payroll_run_id, run_seq, company_id, period, base_currency, totals, rule_versions, uses_illustrative_rules, posted_at** | **LIVE (#23); finance consumer #23** |
+| **`LaborCostAllocated`** | **employee-service** | **finance** | **payroll_run_id, run_seq, company_id, period, outlet_id, gl_account, amount_minor, currency, uses_illustrative_rules, unallocated** | **LIVE (#23); finance consumer #23** |
 | **`ConsolidationClosed`** | **finance** | **shell, notification** | **company_id (or group_id), period** | **LIVE (notification consumer #22)** |
 | **`DeliveryReceipt`** | **notification-service** | **(audit/observability sinks; re-send policy)** | **notification_id, company_id, channel, status, provider_ref, delivered_at** | **LIVE (#22)** |
 
@@ -790,6 +790,7 @@ handles supersession, not double-counting two runs for one period).
       {"name": "rule_key", "type": "string"},
       {"name": "rule_version", "type": "string"}
     ]}}},
+    {"name": "run_seq", "type": "int", "default": 1},
     {"name": "uses_illustrative_rules", "type": "boolean"},
     {"name": "posted_at", "type": {"type": "long", "logicalType": "timestamp-millis"}}
   ]
@@ -797,8 +798,27 @@ handles supersession, not double-counting two runs for one period).
 ```
 
 **Compatibility.** Backward-compatible evolution only: `uses_illustrative_rules` is present from v1;
-future fields are added as a union-with-default. The contract test (`PayrollPostedContractTest`)
-enforces the triad (parse + `AvroSerde` round-trip + add-optional compatible / new-required broken).
+`run_seq` is added **backward-compatibly** (`default: 1`, so an old-producer record with no `run_seq`
+reads as the first run); future fields are added as a union-with-default. The producer **populates
+`run_seq` from `payroll_run.run_seq`** on the wire (a corrected re-run carries `run_seq=2`), so finance
+reads the real sequence — not the default 1 — and supersession actually fires. The contract test
+(`PayrollPostedContractTest`) enforces the triad (parse + `AvroSerde` round-trip + add-optional
+compatible / new-required broken) and that a `run_seq=2` record round-trips as `2`.
+
+**Finance CONSUMER view (#23).** finance-service consumes `PayrollPosted` as the run-level
+**control/announcement** — it **produces NO ledger posting**. It is used only for: (a) **reconciliation**
+— the labor control total (`employer_contribution_total_minor + gross_total_minor`, the employer-borne
+base, in minor units, same currency) is compared against the running sum of the run's
+`LaborCostAllocated` buckets on the `payroll_run_ledger` control row keyed on `(company_id, period,
+run_seq)`: **match → `RECONCILED`**, **mismatch → `RECONCILE_FAILED`** (loud; postings stay on the books,
+the period is held back from being presented as final — never silently accept a partial run); (b)
+recording the run-level **illustrative flag**; (c) the **supersession** trigger / run-state machine. The
+consumer is **idempotent** (dedupe by the `id`-header event UUID via `ProcessedEventStore`, inside the
+reconciliation `@Transactional`), binds the tenant from the event `company_id` (RLS — rule 5), and
+fails closed to `PayrollPosted.DLT` on a missing/non-UUID `id` header or an undecodable payload
+(`PayrollPostedDecodeException`, non-retryable). finance's consumer copy of the `.avsc` lives at
+`services/finance-service/src/main/resources/avro/PayrollPosted.avsc`; `PayrollPostedContractTest`
+asserts back-compat.
 
 ### `LaborCostAllocated`
 
@@ -841,6 +861,7 @@ field was added **backward-compatibly** with a `default: false`, so an old reade
     {"name": "gl_account", "type": "string"},
     {"name": "amount_minor", "type": "long"},
     {"name": "currency", "type": "string"},
+    {"name": "run_seq", "type": "int", "default": 1},
     {"name": "uses_illustrative_rules", "type": "boolean"},
     {"name": "unallocated", "type": "boolean", "default": false},
     {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}}
@@ -848,8 +869,38 @@ field was added **backward-compatibly** with a `default: false`, so an old reade
 }
 ```
 
-**Compatibility.** Backward-compatible evolution only (the `unallocated` field carries a default).
-The contract test (`LaborCostAllocatedContractTest`) enforces the triad.
+**Compatibility.** Backward-compatible evolution only (the `unallocated` and `run_seq` fields carry
+defaults — `run_seq` `default: 1`). The producer **populates `run_seq` from `payroll_run.run_seq`** on
+the wire (a corrected re-run carries `run_seq=2`), so finance reads the real sequence — not the default
+1 — and supersession actually fires. The contract test (`LaborCostAllocatedContractTest`) enforces the
+triad and that a `run_seq=2` record round-trips as `2`.
+
+**Finance CONSUMER view (#23).** finance-service consumes each `LaborCostAllocated` bucket as exactly
+one **EXPENSE `ledger_posting`** (the labor cost is genuinely an expense). The posting's
+`business_id = outlet_id`, `period` = the event's authoritative **run period** (NOT derived from
+`occurred_at`; `occurred_at` drives only the effective `mapping_rule` version), `amount = Money`
+(minor units — never a float, rule 8). The `gl_account` is treated as a **HINT**: finance **RE-RESOLVES**
+the canonical account via its own `mapping_rule` (CQRS, resolve-on-write — the ledger owns its chart of
+accounts), exactly like `ExpenseRecorded.gl_hint`. An unrecognised hint **fails safe** to the expense
+suspense `9999` (money never dropped — HR-3); the **UNALLOCATED** bucket (`outlet_id` = all-zeros
+sentinel, `gl_account = 9999-UNALLOCATED-LABOR`, `unallocated = true`) is routed to the explicit,
+visible **`6900` Unallocated-Labor-Clearing** account (distinct from the general suspense) with the
+`unallocated` flag stamped on the posting. Each PRIMARY posting moves the consolidated P&L expense leg
+up (`PnlReadModelWriter.addExpense`), carrying `uses_illustrative_rules` **sticky-OR** onto the
+`consolidated_pnl` row. **Supersession** (a higher `run_seq` for the same `(company_id, period)`) is
+**append-only**: finance posts one **REVERSAL** contra per prior PRIMARY posting (amount negated, a
+deterministic synthetic `source_event_id`, `posting_role = REVERSAL`) and flips the prior
+`payroll_run_ledger` row to `SUPERSEDED` — the ledger never mutates and the supersession is itself
+idempotent under re-delivery. The consumer is **idempotent** (dedupe by the `id`-header event UUID;
+`ledger_posting.source_event_id` UNIQUE backstop), binds the tenant from the event `company_id` (RLS),
+and fails closed to `LaborCostAllocated.DLT` on a bad `id` header or an undecodable payload
+(`LaborCostAllocatedDecodeException`, non-retryable). finance's consumer copy of the `.avsc` lives at
+`services/finance-service/src/main/resources/avro/LaborCostAllocated.avsc`;
+`LaborCostAllocatedContractTest` asserts back-compat. **`employee_id` is intentionally omitted** —
+finance needs only `(outlet, gl_account)` granularity; a per-employee amount would leak individual
+labor cost ≈ salary (rule 6). This is the recorded **finance sign-off** (see ARCHITECTURE.md §5), and
+the **k=1** single-occupant-outlet residual (a one-employee outlet's bucket equals that person's cost)
+is an accepted, RLS-/role-gated residual, not mitigated by suppression.
 
 ### `PeriodSealed`
 

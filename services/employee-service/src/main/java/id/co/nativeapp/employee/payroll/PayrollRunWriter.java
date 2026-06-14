@@ -303,6 +303,7 @@ public class PayrollRunWriter {
                   bucket.getKey().outletId(),
                   bucket.getKey().glAccount(),
                   bucket.getValue(),
+                  run.getRunSeq(),
                   run.usesIllustrativeRules(),
                   unallocated,
                   clock.instant())),

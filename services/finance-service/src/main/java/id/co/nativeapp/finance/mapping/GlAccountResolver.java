@@ -59,6 +59,15 @@ public class GlAccountResolver {
    */
   public static final String SUSPENSE_ACCOUNT_CODE = "9999";
 
+  /**
+   * The explicit LABOR-suspense / clearing account a UNALLOCATED labor bucket (an employee with no
+   * outlet assignment in the period) lands on (#23). DISTINCT from the general expense suspense
+   * {@link #SUSPENSE_ACCOUNT_CODE} so an unallocated labor cost is visibly its own concern: the
+   * money is preserved on the books and the balance sits queryably in this clearing account for an
+   * operator to clear once the assignment is known. Seeded in {@code chart_of_account} by V3.
+   */
+  public static final String LABOR_CLEARING_ACCOUNT_CODE = "6900";
+
   private static final String RESOLVE_SQL =
       """
       SELECT gl_account_code
@@ -121,6 +130,40 @@ public class GlAccountResolver {
     // A specific category finance does not recognise: genuinely unmappable. Route to suspense so
     // the money is posted (never dropped), flagged unmapped for reclassification — NOT silently
     // absorbed into the default General Expense account.
+    return new GlAccountResolution(SUSPENSE_ACCOUNT_CODE, false);
+  }
+
+  /**
+   * Resolves the LABOR expense account effective at {@code occurredAt} for a labor {@code
+   * gl_account} hint carried on a {@code LaborCostAllocated} bucket (#23). Mirrors {@link
+   * #resolveExpense}: labor buckets resolve under {@code posting_type=EXPENSE} keyed on the event's
+   * {@code gl_account} string as the {@code gl_hint}. A specific hint matching a seeded LABOR
+   * {@code mapping_rule} resolves to that account; a hint matching NO rule FAILS SAFE to the
+   * general suspense account ({@link #SUSPENSE_ACCOUNT_CODE}, {@code mapped=false}, logged) — the
+   * labor cost is still posted (money is never dropped, HR-3), never silently absorbed into a
+   * default.
+   *
+   * <p>finance RE-RESOLVES the canonical account rather than blindly trusting the producer's {@code
+   * gl_account}: the ledger owns its own chart of accounts (CQRS, resolve-on-write), exactly like
+   * the {@code ExpenseRecorded} path. The producer's value is only a HINT.
+   *
+   * <p>The UNALLOCATED suspense bucket does NOT come through here — the consumer routes it directly
+   * to {@link #LABOR_CLEARING_ACCOUNT_CODE} (a visible, explicit clearing account), distinct from
+   * this general fail-safe.
+   *
+   * @param glHint the labor {@code gl_account} hint carried on the event
+   * @param occurredAt when the run posted (drives the effective rule version)
+   */
+  public GlAccountResolution resolveLabor(String glHint, Instant occurredAt) {
+    String hint = glHint == null ? ANY_HINT : glHint.strip();
+    if (!hint.isEmpty()) {
+      String specific = lookup(PostingType.EXPENSE, hint, occurredAt);
+      if (specific != null) {
+        return new GlAccountResolution(specific, true);
+      }
+    }
+    // An unrecognised (or blank) labor gl_account: genuinely unmappable. Route to suspense so the
+    // labor cost is posted (never dropped), flagged unmapped for an operator to reclassify.
     return new GlAccountResolution(SUSPENSE_ACCOUNT_CODE, false);
   }
 

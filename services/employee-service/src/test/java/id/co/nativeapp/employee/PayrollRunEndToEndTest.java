@@ -99,6 +99,8 @@ class PayrollRunEndToEndTest extends PostgresRlsTestBase {
     GenericRecord postedRecord = AvroSerde.deserialize(postedBytes, PayrollPostedSchema.schema());
     assertThat(postedRecord.get("net_total_minor")).isEqualTo(17_798_333L);
     assertThat(postedRecord.get("uses_illustrative_rules")).isEqualTo(true);
+    // run_seq is populated from payroll_run.run_seq on the producer wire: the first run is 1.
+    assertThat(postedRecord.get("run_seq")).isEqualTo(1);
     assertThat(((List<?>) postedRecord.get("rule_versions"))).isNotEmpty();
 
     List<Map<String, Object>> allocated =
@@ -110,6 +112,8 @@ class PayrollRunEndToEndTest extends PostgresRlsTestBase {
             (byte[]) allocated.get(0).get("payload"), LaborCostAllocatedSchema.schema());
     assertThat(allocRecord.get("amount_minor")).isEqualTo(20_400_000L);
     assertThat(allocRecord.get("uses_illustrative_rules")).isEqualTo(true);
+    // run_seq is populated from payroll_run.run_seq on the producer wire: the first run is 1.
+    assertThat(allocRecord.get("run_seq")).isEqualTo(1);
 
     // HR-6: the individual NET salary figure must not appear in any event payload.
     assertThat(new String(postedBytes, StandardCharsets.UTF_8))

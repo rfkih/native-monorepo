@@ -43,9 +43,11 @@ public final class LaborCostAllocatedSchema {
   }
 
   /**
-   * Builds a {@code LaborCostAllocated} record for one outlet/GL bucket. {@code unallocated} marks
-   * the UNALLOCATED suspense bucket (employer labor cost for employees with no outlet assignment in
-   * the period) so finance can clear it rather than treat it as a real outlet cost.
+   * Builds a {@code LaborCostAllocated} record for one outlet/GL bucket. {@code runSeq} is the
+   * run's sequence (the supersession signal finance keys on; a higher seq supersedes lower runs for
+   * the same {@code (company, period)}). {@code unallocated} marks the UNALLOCATED suspense bucket
+   * (employer labor cost for employees with no outlet assignment in the period) so finance can
+   * clear it rather than treat it as a real outlet cost.
    */
   public static GenericRecord toRecord(
       UUID payrollRunId,
@@ -54,6 +56,7 @@ public final class LaborCostAllocatedSchema {
       UUID outletId,
       String glAccount,
       Money amount,
+      int runSeq,
       boolean usesIllustrativeRules,
       boolean unallocated,
       Instant occurredAt) {
@@ -65,6 +68,7 @@ public final class LaborCostAllocatedSchema {
     record.put("gl_account", glAccount);
     record.put("amount_minor", amount.amountMinor());
     record.put("currency", amount.currency().getCurrencyCode());
+    record.put("run_seq", runSeq);
     record.put("uses_illustrative_rules", usesIllustrativeRules);
     record.put("unallocated", unallocated);
     record.put("occurred_at", occurredAt.toEpochMilli());

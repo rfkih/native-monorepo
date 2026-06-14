@@ -72,6 +72,48 @@ public class LedgerPosting extends Auditable {
   @Column(name = "source_event_id", nullable = false, updatable = false)
   private UUID sourceEventId;
 
+  /**
+   * The payroll run this posting belongs to, or {@code null} for a REVENUE / {@code
+   * ExpenseRecorded} posting. Set for every labor posting (PRIMARY or REVERSAL) so a run is
+   * reversible and auditable (#23). Indexed so a run's postings can be found to reverse them on
+   * supersession.
+   */
+  @Column(name = "payroll_run_id", updatable = false)
+  private UUID payrollRunId;
+
+  /**
+   * The run sequence of the owning payroll run, or {@code null} for non-payroll postings. A higher
+   * {@code run_seq} for the same {@code (company, period)} supersedes lower ones (#23).
+   */
+  @Column(name = "run_seq", updatable = false)
+  private Integer runSeq;
+
+  /**
+   * Whether this posting is an original ({@link PostingRole#PRIMARY}) or a supersession contra
+   * entry ({@link PostingRole#REVERSAL}). {@code PRIMARY} for every non-payroll posting. A REVERSAL
+   * carries a negative {@link Money} so the prior run's P&amp;L contribution is unwound append-only
+   * (#23).
+   */
+  @Enumerated(EnumType.STRING)
+  @Column(name = "posting_role", nullable = false, updatable = false, length = 16)
+  private PostingRole postingRole = PostingRole.PRIMARY;
+
+  /**
+   * Whether this posting carries a figure derived from {@code ILLUSTRATIVE_PLACEHOLDER} statutory
+   * data (#23). Stamped from the {@code LaborCostAllocated} event so a placeholder-derived posting
+   * is self-describing for an auditor; {@code false} for revenue / expense-from-sale postings.
+   */
+  @Column(name = "uses_illustrative_rules", nullable = false, updatable = false)
+  private boolean usesIllustrativeRules;
+
+  /**
+   * Whether this is the UNALLOCATED labor-suspense bucket (an employee with no outlet assignment in
+   * the period). Stamped from the {@code LaborCostAllocated} event so the labor-clearing balance is
+   * queryable and an operator can clear it; {@code false} for every other posting (#23).
+   */
+  @Column(name = "unallocated", nullable = false, updatable = false)
+  private boolean unallocated;
+
   protected LedgerPosting() {
     // for JPA
   }
@@ -120,6 +162,54 @@ public class LedgerPosting extends Auditable {
   }
 
   /**
+   * Creates a labor posting from a consumed {@code LaborCostAllocated} bucket (#23). Unlike the
+   * sale/expense paths, the {@code period} is the payroll run's AUTHORITATIVE period (the event's
+   * {@code period} field), NOT derived from {@code occurred_at} via {@link #periodOf(Instant)} —
+   * the run is the source of truth for which accounting period the cost lands in. Carries the labor
+   * dimensions ({@code payroll_run_id}, {@code run_seq}, {@code posting_role}, {@code
+   * uses_illustrative_rules}, {@code unallocated}).
+   *
+   * <p>A {@link PostingRole#REVERSAL} contra posting passes a negative {@code amount} (via {@link
+   * Money#negate()}) and a synthetic {@code sourceEventId} — append-only supersession, never a
+   * destructive update.
+   *
+   * @param postingType always {@link PostingType#EXPENSE} for labor (the cost is genuinely an
+   *     expense; a REVERSAL is still EXPENSE carrying a negative amount)
+   * @param businessId the bucket's {@code outlet_id} (the all-zeros sentinel for the suspense
+   *     bucket)
+   * @param period the run's authoritative accounting period {@code YYYY-MM} (the event field)
+   * @param amount the posting amount as {@link Money} (negative for a REVERSAL); never a float
+   * @param glAccountCode the resolved labor / labor-clearing account
+   * @param sourceEventId the {@code LaborCostAllocated} event UUID (or the synthetic reversal UUID)
+   * @param payrollRunId the owning payroll run
+   * @param runSeq the run sequence (the supersession signal)
+   * @param postingRole {@link PostingRole#PRIMARY} for an original, {@link PostingRole#REVERSAL}
+   *     for a contra
+   * @param usesIllustrativeRules whether the figure is placeholder-derived
+   * @param unallocated whether this is the UNALLOCATED labor-suspense bucket
+   */
+  @SuppressWarnings("checkstyle:ParameterNumber")
+  public LedgerPosting(
+      PostingType postingType,
+      UUID businessId,
+      String period,
+      Money amount,
+      String glAccountCode,
+      UUID sourceEventId,
+      UUID payrollRunId,
+      int runSeq,
+      PostingRole postingRole,
+      boolean usesIllustrativeRules,
+      boolean unallocated) {
+    this(postingType, businessId, period, amount, glAccountCode, sourceEventId);
+    this.payrollRunId = Objects.requireNonNull(payrollRunId, "payrollRunId");
+    this.runSeq = runSeq;
+    this.postingRole = Objects.requireNonNull(postingRole, "postingRole");
+    this.usesIllustrativeRules = usesIllustrativeRules;
+    this.unallocated = unallocated;
+  }
+
+  /**
    * Derives the accounting period ({@code YYYY-MM}) from an instant, in UTC. The producer stamps
    * {@code occurred_at} as epoch millis UTC, so the period boundary is unambiguous and stable
    * regardless of the consumer's local zone.
@@ -157,5 +247,30 @@ public class LedgerPosting extends Auditable {
 
   public UUID getSourceEventId() {
     return sourceEventId;
+  }
+
+  /** The owning payroll run, or {@code null} for a non-payroll posting. */
+  public UUID getPayrollRunId() {
+    return payrollRunId;
+  }
+
+  /** The owning run's sequence, or {@code null} for a non-payroll posting. */
+  public Integer getRunSeq() {
+    return runSeq;
+  }
+
+  /** Whether this posting is an original (PRIMARY) or a supersession contra (REVERSAL). */
+  public PostingRole getPostingRole() {
+    return postingRole;
+  }
+
+  /** Whether the figure is derived from illustrative-placeholder statutory data. */
+  public boolean isUsesIllustrativeRules() {
+    return usesIllustrativeRules;
+  }
+
+  /** Whether this is the UNALLOCATED labor-suspense bucket. */
+  public boolean isUnallocated() {
+    return unallocated;
   }
 }

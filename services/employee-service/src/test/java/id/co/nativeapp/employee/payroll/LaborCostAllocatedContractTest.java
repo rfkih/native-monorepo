@@ -7,6 +7,7 @@ import id.co.nativeapp.money.Money;
 import java.time.Instant;
 import java.util.UUID;
 import org.apache.avro.Schema;
+import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericRecord;
 import org.junit.jupiter.api.Test;
 
@@ -26,6 +27,9 @@ class LaborCostAllocatedContractTest {
     assertThat(schema.getField("gl_account")).isNotNull();
     assertThat(schema.getField("amount_minor")).isNotNull();
     assertThat(schema.getField("uses_illustrative_rules")).isNotNull();
+    // run_seq rides the wire (the supersession signal finance keys on), added backward-compatibly.
+    assertThat(schema.getField("run_seq").schema().getType()).isEqualTo(Schema.Type.INT);
+    assertThat(schema.getField("run_seq").hasDefaultValue()).isTrue();
     // The UNALLOCATED-suspense marker rides the wire with a default (backward-compatible add).
     assertThat(schema.getField("unallocated")).isNotNull();
     assertThat(schema.getField("unallocated").hasDefaultValue()).isTrue();
@@ -43,6 +47,7 @@ class LaborCostAllocatedContractTest {
             new UUID(0L, 0L),
             "9999-UNALLOCATED-LABOR",
             Money.ofMinor(5_000_000L, "IDR"),
+            1,
             false,
             true,
             Instant.ofEpochMilli(1_750_000_000_000L));
@@ -63,6 +68,7 @@ class LaborCostAllocatedContractTest {
             UUID.fromString("22222222-2222-2222-2222-222222222222"),
             "5100-SALARY",
             Money.ofMinor(20_400_000L, "IDR"),
+            2, // a corrected re-run carries run_seq=2 on the wire
             true,
             false,
             Instant.ofEpochMilli(1_750_000_000_000L));
@@ -71,9 +77,59 @@ class LaborCostAllocatedContractTest {
     GenericRecord decoded = AvroSerde.deserialize(bytes, LaborCostAllocatedSchema.schema());
     assertThat(decoded.get("amount_minor")).isEqualTo(20_400_000L);
     assertThat(decoded.get("gl_account").toString()).isEqualTo("5100-SALARY");
+    // run_seq=2 round-trips as 2 (not the default 1) so finance can supersede the prior run.
+    assertThat(decoded.get("run_seq")).isEqualTo(2);
     assertThat(decoded.get("uses_illustrative_rules")).isEqualTo(true);
     assertThat(decoded.get("unallocated")).isEqualTo(false);
   }
+
+  @Test
+  void preRunSeqBytesReadAsTheDefaultFirstRunUnderTheCurrentSchema() {
+    // An already-shipped producer with no run_seq: its bytes still read under the current schema,
+    // defaulting run_seq to 1 (the first run) — proves the add is backward-compatible.
+    Schema preRunSeq = new Schema.Parser().parse(PRE_RUN_SEQ_SCHEMA_JSON);
+    assertThat(AvroSerde.isBackwardCompatible(preRunSeq, LaborCostAllocatedSchema.schema()))
+        .isTrue();
+
+    GenericRecord old = new GenericData.Record(preRunSeq);
+    old.put("payroll_run_id", "55555555-5555-5555-5555-555555555555");
+    old.put("company_id", "11111111-1111-1111-1111-111111111111");
+    old.put("period", "2026-06");
+    old.put("outlet_id", "22222222-2222-2222-2222-222222222222");
+    old.put("gl_account", "5100-SALARY");
+    old.put("amount_minor", 900_000L);
+    old.put("currency", "IDR");
+    old.put("uses_illustrative_rules", false);
+    old.put("unallocated", false);
+    old.put("occurred_at", 1_750_000_000_000L);
+
+    GenericRecord decoded =
+        AvroSerde.deserialize(
+            AvroSerde.serialize(old), preRunSeq, LaborCostAllocatedSchema.schema());
+    assertThat(decoded.get("run_seq")).isEqualTo(1);
+  }
+
+  /** The producer's PRE-run_seq {@code LaborCostAllocated} schema (no {@code run_seq}). */
+  private static final String PRE_RUN_SEQ_SCHEMA_JSON =
+      """
+      {
+        "type": "record",
+        "name": "LaborCostAllocated",
+        "namespace": "id.co.nativeapp.events.employee",
+        "fields": [
+          {"name": "payroll_run_id", "type": "string"},
+          {"name": "company_id", "type": "string"},
+          {"name": "period", "type": "string"},
+          {"name": "outlet_id", "type": "string"},
+          {"name": "gl_account", "type": "string"},
+          {"name": "amount_minor", "type": "long"},
+          {"name": "currency", "type": "string"},
+          {"name": "uses_illustrative_rules", "type": "boolean"},
+          {"name": "unallocated", "type": "boolean", "default": false},
+          {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}}
+        ]
+      }
+      """;
 
   @Test
   void addingAnOptionalFieldStaysBackwardCompatibleAndARequiredFieldBreaks() {

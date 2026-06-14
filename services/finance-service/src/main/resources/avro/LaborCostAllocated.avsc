@@ -1,0 +1,19 @@
+{
+  "type": "record",
+  "name": "LaborCostAllocated",
+  "namespace": "id.co.nativeapp.events.employee",
+  "doc": "finance-service's CONSUMER copy of the LaborCostAllocated contract (producer: employee-service, #23). Emitted per (outlet_id, gl_account) bucket — AGGREGATED across employees so no individual salary is derivable (rule 6); employee_id is intentionally NOT on the wire. Consumed by finance-service to resolve the LABOR gl_account via the versioned, effective-dated mapping_rule (from the gl_account HINT) and post exactly one EXPENSE ledger_posting per bucket. finance owns its own consumer view; a contract test asserts this copy stays backward-compatible with the producer schema (rule 7). Bytes are read as raw Avro via libs/events AvroSerde — NOT through a Schema Registry serde. Money is an integer minor-units amount plus an ISO-4217 currency code, never a float (rule 8). run_seq is added backward-compatibly (default 1) — it is the supersession signal finance keys on; an old-producer record with no run_seq reads as the first run.",
+  "fields": [
+    {"name": "payroll_run_id", "type": "string", "doc": "The payroll run aggregate id (UUID as string); also the Kafka partition key."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string)."},
+    {"name": "period", "type": "string", "doc": "The run's authoritative accounting period YYYY-MM. Finance posts under THIS period, not the one derived from occurred_at."},
+    {"name": "outlet_id", "type": "string", "doc": "The dimensional org leg (outlet org_unit UUID as string); the all-zeros sentinel UUID for the UNALLOCATED suspense bucket."},
+    {"name": "gl_account", "type": "string", "doc": "The labor GL account HINT (the pay_component.gl_account, e.g. 5100-SALARY, 5200-BPJS-ER); finance RE-RESOLVES it to its own chart_of_account via mapping_rule. The all-zeros bucket carries 9999-UNALLOCATED-LABOR."},
+    {"name": "amount_minor", "type": "long", "doc": "The bucket's aggregated employer-borne labor cost in the currency's minor units. Never a float."},
+    {"name": "currency", "type": "string", "doc": "ISO-4217 currency code (the run's base currency), e.g. IDR or USD."},
+    {"name": "run_seq", "type": "int", "default": 1, "doc": "The run sequence for the (company_id, period). A higher run_seq supersedes lower ones — the supersession signal finance keys on. Added backward-compatibly (default 1)."},
+    {"name": "uses_illustrative_rules", "type": "boolean", "doc": "Whether the figure is derived from ILLUSTRATIVE_PLACEHOLDER statutory data — finance stamps it on the posting AND ORs it into the consolidated P&L (sticky)."},
+    {"name": "unallocated", "type": "boolean", "default": false, "doc": "True for the UNALLOCATED suspense bucket (an employee with no outlet assignment in the period). Finance routes it to the explicit 6900 labor-clearing account. Added backward-compatibly (default false)."},
+    {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the run posted, epoch millis (UTC). Drives the effective mapping_rule version (NOT the period — the period is authoritative on the event)."}
+  ]
+}

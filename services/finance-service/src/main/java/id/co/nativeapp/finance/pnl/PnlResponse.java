@@ -14,9 +14,18 @@ package id.co.nativeapp.finance.pnl;
  * @param expenseMinor accumulated expense in the currency's minor units
  * @param netMinor revenue − expense in the currency's minor units (derived, never stored)
  * @param currency the ISO-4217 currency code
+ * @param usesIllustrativeRules whether this period's figure is contaminated by illustrative-
+ *     placeholder labor data (#23) — the dashboard renders a provisional/illustrative badge and
+ *     must not present the number as final (HR integrity). The frontend keys an i18n string off
+ *     this boolean; the API never ships a hardcoded user-facing string (rule 9).
  */
 public record PnlResponse(
-    String period, long revenueMinor, long expenseMinor, long netMinor, String currency) {
+    String period,
+    long revenueMinor,
+    long expenseMinor,
+    long netMinor,
+    String currency,
+    boolean usesIllustrativeRules) {
 
   /** Builds the response from a {@link ConsolidatedPnl} accumulator row. */
   static PnlResponse from(ConsolidatedPnl pnl) {
@@ -25,11 +34,15 @@ public record PnlResponse(
         pnl.revenue().amountMinor(),
         pnl.expense().amountMinor(),
         pnl.net().amountMinor(),
-        pnl.revenue().currency().getCurrencyCode());
+        pnl.revenue().currency().getCurrencyCode(),
+        pnl.usesIllustrativeRules());
   }
 
-  /** A zero P&amp;L in {@code currency} for a period with no postings yet. */
+  /**
+   * A zero P&amp;L in {@code currency} for a period with no postings yet — never illustrative (no
+   * labor has landed).
+   */
   static PnlResponse zero(String period, String currency) {
-    return new PnlResponse(period, 0L, 0L, 0L, currency);
+    return new PnlResponse(period, 0L, 0L, 0L, currency, false);
   }
 }

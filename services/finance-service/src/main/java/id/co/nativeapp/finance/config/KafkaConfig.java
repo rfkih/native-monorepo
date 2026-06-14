@@ -102,6 +102,8 @@ public class KafkaConfig {
         java.io.UncheckedIOException.class,
         id.co.nativeapp.finance.revenue.SaleRecordedDecodeException.class,
         id.co.nativeapp.finance.expense.ExpenseRecordedDecodeException.class,
+        id.co.nativeapp.finance.labor.LaborCostAllocatedDecodeException.class,
+        id.co.nativeapp.finance.labor.PayrollPostedDecodeException.class,
         id.co.nativeapp.finance.revenue.MissingEventIdException.class);
     return handler;
   }

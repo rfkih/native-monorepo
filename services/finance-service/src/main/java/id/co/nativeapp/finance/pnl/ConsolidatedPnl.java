@@ -51,6 +51,17 @@ public class ConsolidatedPnl extends Auditable {
   @Column(name = "currency", nullable = false, length = 3)
   private String currency;
 
+  /**
+   * Whether ANY labor cost contributing to this period's P&amp;L is derived from {@code
+   * ILLUSTRATIVE_PLACEHOLDER} statutory data (#23). STICKY/monotonic: the {@link
+   * PnlReadModelWriter} upsert ORs it in, so once a placeholder-derived run lands the period stays
+   * flagged true (a later non-illustrative or reversal posting cannot clear it) — the consolidated
+   * figure is contaminated and a dashboard must keep badging the period provisional. {@code false}
+   * for a period built only from revenue / {@code ExpenseRecorded}.
+   */
+  @Column(name = "uses_illustrative_rules", nullable = false)
+  private boolean usesIllustrativeRules;
+
   protected ConsolidatedPnl() {
     // for JPA
   }
@@ -76,5 +87,14 @@ public class ConsolidatedPnl extends Auditable {
   /** The P&amp;L net (revenue − expense) as {@link Money}, derived from the two legs. */
   public Money net() {
     return revenue().minus(expense());
+  }
+
+  /**
+   * Whether this period's figure is contaminated by illustrative-placeholder labor data (sticky —
+   * see the field doc). The dashboard renders a provisional/illustrative badge when {@code true}
+   * and must not present the number as final (HR integrity, #23).
+   */
+  public boolean usesIllustrativeRules() {
+    return usesIllustrativeRules;
   }
 }

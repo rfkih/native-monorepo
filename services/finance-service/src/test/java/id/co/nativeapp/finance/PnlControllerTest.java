@@ -41,6 +41,7 @@ class PnlControllerTest {
     when(pnl.revenue()).thenReturn(id.co.nativeapp.money.Money.ofMinor(2_000_000L, "IDR"));
     when(pnl.expense()).thenReturn(id.co.nativeapp.money.Money.ofMinor(750_000L, "IDR"));
     when(pnl.net()).thenReturn(id.co.nativeapp.money.Money.ofMinor(1_250_000L, "IDR"));
+    when(pnl.usesIllustrativeRules()).thenReturn(true);
     when(pnlReader.pnlForPeriod("2026-06")).thenReturn(Optional.of(pnl));
 
     mockMvc
@@ -50,7 +51,9 @@ class PnlControllerTest {
         .andExpect(jsonPath("$.revenueMinor").value(2_000_000L))
         .andExpect(jsonPath("$.expenseMinor").value(750_000L))
         .andExpect(jsonPath("$.netMinor").value(1_250_000L))
-        .andExpect(jsonPath("$.currency").value("IDR"));
+        .andExpect(jsonPath("$.currency").value("IDR"))
+        // The illustrative flag reaches the API so the dashboard can render a provisional badge.
+        .andExpect(jsonPath("$.usesIllustrativeRules").value(true));
   }
 
   @Test

@@ -153,9 +153,31 @@ Each entry: **Responsibility · Owns · Publishes · Consumes · Notes.**
 | `PeriodSealed` | verticals | employee, finance | business_id, period |
 | `SaleRecorded` | verticals | finance | sale_id, company_id, business_id, amount, occurred_at |
 | `ExpenseRecorded` | verticals | finance | expense_id, company_id, business_id, amount, gl_hint |
-| `PayrollPosted` | employee | finance | payroll_run_id, company_id, period |
-| `LaborCostAllocated` | employee | finance | employee_id, company_id, outlet_id, amount, period |
+| `PayrollPosted` | employee | finance | payroll_run_id, run_seq, company_id, period, base_currency, totals, uses_illustrative_rules |
+| `LaborCostAllocated` | employee | finance | payroll_run_id, run_seq, company_id, period, outlet_id, gl_account, amount_minor, currency, uses_illustrative_rules, unallocated |
 | `ConsolidationClosed` | finance | shell, notification | company_id (or group_id), period |
+
+> **`LaborCostAllocated` grain — finance sign-off (#23).** The starter list above formerly carried
+> `employee_id`. It is **DROPPED**: the event is **aggregated per `(outlet_id, gl_account)` bucket**,
+> not per person. A per-`(employee, outlet, gl)` amount would effectively leak an individual's labor
+> cost ≈ salary (**rule 6 PII**), and the dimensional ledger gains nothing from it — finance's
+> dimensions are `company_id, business_id (= outlet), period, gl_account_code, posting_type`; it never
+> needs `employee_id`. **Finance consumes the aggregated bucket and is fully served.** This is the
+> recorded **finance sign-off** that resolves the EVENT-CATALOG `LaborCostAllocated` open-risk note.
+>
+> **`run_seq` on both events.** `run_seq` is added to **both** `PayrollPosted` and `LaborCostAllocated`
+> (backward-compatible, union-with-default on the wire — `default 1` so an old reader sees the first
+> run). It is the explicit **supersession** signal finance keys on: a higher `run_seq` for the same
+> `(company_id, period)` supersedes lower runs (finance reverses-and-reposts, append-only). The
+> producer already keys its outbox UNIQUE on `(company_id, period, run_seq)`.
+>
+> **Small-count (k=1) residual — accepted.** When an outlet has exactly one employee in the period,
+> its `(outlet, gl)` bucket amount **equals that one person's allocated labor cost** — the aggregation
+> does not hide the individual's figure. This is an **accepted, signed-off residual**: the dimensional
+> ledger legitimately needs outlet-level labor cost, the figure is the outlet's *real* cost, and access
+> is gated by **RLS + finance-role authorization** (only users entitled to the company's books). It is
+> **not** mitigated by suppression — suppression would break the exact-sum reconciliation and the P&L.
+> Documented here so it is a conscious contract decision, not an oversight.
 
 ---
 

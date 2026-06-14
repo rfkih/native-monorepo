@@ -70,6 +70,7 @@ public final class PayrollPostedSchema {
             .toList();
     record.put("rule_versions", rvRecords);
 
+    record.put("run_seq", run.getRunSeq());
     record.put("uses_illustrative_rules", run.usesIllustrativeRules());
     record.put("posted_at", run.getPostedAt().toEpochMilli());
     return record;

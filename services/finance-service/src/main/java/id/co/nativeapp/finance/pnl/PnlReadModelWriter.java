@@ -31,17 +31,25 @@ public class PnlReadModelWriter {
   // only on the first insert and never overwritten. The leg column name is the only thing that
   // differs between the revenue and expense paths, so it is formatted in (a fixed identifier from
   // our own constants — never user input — so no injection surface).
+  //
+  // uses_illustrative_rules is STICKY/MONOTONIC: the upsert ORs it in, so once any illustrative-
+  // derived labor lands in a (company, period, currency) the row is flagged true and stays true (a
+  // later non-illustrative posting cannot clear it) — the consolidated figure is now contaminated
+  // by
+  // placeholder data and a dashboard must keep badging the period provisional (#23).
   private static final String UPSERT_TEMPLATE =
       """
       INSERT INTO consolidated_pnl
-          (id, period, %1$s, currency,
+          (id, period, %1$s, currency, uses_illustrative_rules,
            created_at, created_by, updated_at, updated_by, version, company_id)
-      VALUES (?, ?, ?, ?, now(), ?, now(), ?, 0, ?)
+      VALUES (?, ?, ?, ?, ?, now(), ?, now(), ?, 0, ?)
       ON CONFLICT (company_id, period, currency) DO UPDATE SET
-          %1$s       = consolidated_pnl.%1$s + EXCLUDED.%1$s,
-          updated_at = now(),
-          updated_by = EXCLUDED.updated_by,
-          version    = consolidated_pnl.version + 1
+          %1$s                    = consolidated_pnl.%1$s + EXCLUDED.%1$s,
+          uses_illustrative_rules = consolidated_pnl.uses_illustrative_rules
+                                      OR EXCLUDED.uses_illustrative_rules,
+          updated_at              = now(),
+          updated_by              = EXCLUDED.updated_by,
+          version                 = consolidated_pnl.version + 1
       """;
 
   private static final String UPSERT_REVENUE_SQL = UPSERT_TEMPLATE.formatted("revenue_minor");
@@ -53,23 +61,49 @@ public class PnlReadModelWriter {
     this.jdbcTemplate = jdbcTemplate;
   }
 
-  /** Accumulates a posting's amount onto the period's REVENUE leg (atomic upsert). */
+  /**
+   * Accumulates a posting's amount onto the period's REVENUE leg (atomic upsert). Revenue is never
+   * illustrative-derived, so the illustrative flag is contributed as {@code false}.
+   */
   public void addRevenue(String period, Money amount, String companyId, String actor) {
-    accumulate(UPSERT_REVENUE_SQL, period, amount, companyId, actor);
+    accumulate(UPSERT_REVENUE_SQL, period, amount, companyId, actor, false);
   }
 
-  /** Accumulates a posting's amount onto the period's EXPENSE leg (atomic upsert). */
+  /**
+   * Accumulates a posting's amount onto the period's EXPENSE leg (atomic upsert). The {@code
+   * ExpenseRecorded} path is never illustrative-derived, so the flag is contributed as {@code
+   * false}.
+   */
   public void addExpense(String period, Money amount, String companyId, String actor) {
-    accumulate(UPSERT_EXPENSE_SQL, period, amount, companyId, actor);
+    accumulate(UPSERT_EXPENSE_SQL, period, amount, companyId, actor, false);
   }
 
-  private void accumulate(String sql, String period, Money amount, String companyId, String actor) {
+  /**
+   * Accumulates a labor posting's amount onto the period's EXPENSE leg, carrying the {@code
+   * uses_illustrative_rules} flag (#23). A PRIMARY labor posting passes its positive amount; a
+   * REVERSAL passes {@code amount.negate()}, moving the expense leg back down — net stays correct
+   * and append-only. The flag is OR-ed into the row monotonically (sticky), so an illustrative run
+   * contaminates the period's P&amp;L permanently until a clean period-close recompute.
+   */
+  public void addExpense(
+      String period, Money amount, String companyId, String actor, boolean usesIllustrative) {
+    accumulate(UPSERT_EXPENSE_SQL, period, amount, companyId, actor, usesIllustrative);
+  }
+
+  private void accumulate(
+      String sql,
+      String period,
+      Money amount,
+      String companyId,
+      String actor,
+      boolean usesIllustrative) {
     jdbcTemplate.update(
         sql,
         UUID.randomUUID(),
         period,
         amount.amountMinor(),
         amount.currency().getCurrencyCode(),
+        usesIllustrative,
         actor,
         actor,
         companyId);

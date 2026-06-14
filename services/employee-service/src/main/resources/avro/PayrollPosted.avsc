@@ -16,6 +16,7 @@
       {"name": "rule_key", "type": "string", "doc": "The statutory rule family key, e.g. PPH21_PROGRESSIVE."},
       {"name": "rule_version", "type": "string", "doc": "The immutable resolved rule version label, e.g. ILLUSTRATIVE-2026.1."}
     ]}}, "doc": "The FROZEN rule-version set resolved at run start (reproducibility)."},
+    {"name": "run_seq", "type": "int", "default": 1, "doc": "The run sequence for the (company_id, period). A higher run_seq supersedes lower ones — the supersession signal finance keys on. A corrected re-run is a NEW run_seq. Added backward-compatibly (default 1) so an already-shipped consumer with no run_seq still reads (rule 7)."},
     {"name": "uses_illustrative_rules", "type": "boolean", "doc": "True if ANY resolved statutory rule is an ILLUSTRATIVE_PLACEHOLDER — results are NOT based on verified DJP/BPJS rates."},
     {"name": "posted_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the run was posted (epoch millis)."}
   ]
