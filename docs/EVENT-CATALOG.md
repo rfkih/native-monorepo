@@ -23,7 +23,8 @@ schema. Until then a row here is documentation of intent, not a shippable contra
 |---|---|---|---|---|
 | **`CompanyCreated`** | **org-service** | **entitlement, finance, verticals** | **company_id, legal_employer_id, base_currency, default_language** | **LIVE (M1.2)** |
 | `OrgUnitCreated/Changed` | org-service | employee, verticals, finance | org_unit_id, type, parent_id, company_id | planned |
-| `EntitlementGranted/Revoked` | entitlement | shell, all services | company_id, module_key | planned |
+| **`EntitlementGranted`** | **entitlement-service** | **shell, all services** | **company_id, module_key** | **LIVE** |
+| **`EntitlementRevoked`** | **entitlement-service** | **shell, all services** | **company_id, module_key** | **LIVE** |
 | `EmployeeChanged` | employee | verticals | employee_id, company_id, status | planned |
 | `AssignmentChanged` | employee | verticals, finance | employee_id, org_unit_id, reporting_to, effective_from/to | planned |
 | `MetricPublished` | verticals | employee | metric_key, period, grain, subject_id, value, source_business_id | planned |
@@ -149,3 +150,104 @@ change a field's type. The contract test
 (`SaleRecordedContractTest`) enforces this — it asserts the schema is
 backward-compatible with itself and with an added-optional-field variant, and rejects
 a new required field without a default.
+
+### `EntitlementGranted`
+
+Emitted by entitlement-service when a company is granted a module — either as part of
+the **default set seeded on `CompanyCreated`** (a new company is granted its base
+modules), or via an **explicit grant** (`POST /api/v1/entitlements`). One event per
+grant.
+
+- **Producer:** `entitlement-service`
+- **Consumers:** the `shell` (decides what to render), and **all services** (a vertical /
+  employee-service refreshes its local entitlement view). The `entitlement-check` shared
+  library's **Redis cache is invalidated** by this event (the company's cached view is
+  dropped, so the next entitled? check re-reads the source of truth).
+- **Aggregate type / partition key:** `entitlement` / `company_id`
+- **Outbox `event_type`:** `EntitlementGranted`
+- **Schema:** `services/entitlement-service/src/main/resources/avro/EntitlementGranted.avsc`
+- **Full name:** `id.co.nativeapp.events.entitlement.EntitlementGranted`
+
+**Key fields** (ARCHITECTURE.md §5: `company_id`, `module_key`)
+
+| Field | Avro type | Meaning |
+|---|---|---|
+| `company_id` | `string` | The owning tenant / company id (UUID as string); the partition key |
+| `module_key` | `string` | The module granted (e.g. `restaurant`, `carwash`, `laundromat`, `hr`, `finance`) |
+| `granted_at` | `long` (`timestamp-millis`) | When the grant took effect, epoch millis UTC |
+
+**Avro schema**
+
+```json
+{
+  "type": "record",
+  "name": "EntitlementGranted",
+  "namespace": "id.co.nativeapp.events.entitlement",
+  "doc": "Emitted by entitlement-service when a company is granted a module — either as part of the DEFAULT set seeded on CompanyCreated, or via an explicit grant on POST /api/v1/entitlements. Consumed by the shell and all services; the entitlement-check Redis cache is invalidated by it. Key fields per ARCHITECTURE.md §5: company_id, module_key.",
+  "fields": [
+    {"name": "company_id", "type": "string", "doc": "The owning tenant / company id (UUID as string); also the Kafka partition key."},
+    {"name": "module_key", "type": "string", "doc": "The module the company was granted (e.g. restaurant, carwash, laundromat, hr, finance)."},
+    {"name": "granted_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the grant took effect, epoch millis (UTC)."}
+  ]
+}
+```
+
+**Compatibility.** Backward-compatible only (add optional fields with a default; never a
+new required field without a default, never remove/rename/retype). Enforced by
+`EntitlementEventContractTest` (parse + `AvroSerde` round-trip + back-compat for-change /
+against-break).
+
+### `EntitlementRevoked`
+
+Emitted by entitlement-service when a company's module entitlement is revoked
+(`DELETE /api/v1/entitlements/{moduleKey}`). The `tenant_entitlement` row's status flips
+to `REVOKED` (the row is kept, not deleted), and one event is emitted.
+
+- **Producer:** `entitlement-service`
+- **Consumers:** the `shell` (stop rendering the module) and **all services** (drop the
+  local entitlement view). The `entitlement-check` Redis cache is **invalidated** by it.
+- **Aggregate type / partition key:** `entitlement` / `company_id`
+- **Outbox `event_type`:** `EntitlementRevoked`
+- **Schema:** `services/entitlement-service/src/main/resources/avro/EntitlementRevoked.avsc`
+- **Full name:** `id.co.nativeapp.events.entitlement.EntitlementRevoked`
+
+**Key fields** (ARCHITECTURE.md §5: `company_id`, `module_key`)
+
+| Field | Avro type | Meaning |
+|---|---|---|
+| `company_id` | `string` | The owning tenant / company id (UUID as string); the partition key |
+| `module_key` | `string` | The module whose entitlement was revoked |
+| `revoked_at` | `long` (`timestamp-millis`) | When the revoke took effect, epoch millis UTC |
+
+**Avro schema**
+
+```json
+{
+  "type": "record",
+  "name": "EntitlementRevoked",
+  "namespace": "id.co.nativeapp.events.entitlement",
+  "doc": "Emitted by entitlement-service when a company's module entitlement is revoked via DELETE /api/v1/entitlements/{moduleKey}. Consumed by the shell and all services; the entitlement-check Redis cache is invalidated by it. Key fields per ARCHITECTURE.md §5: company_id, module_key.",
+  "fields": [
+    {"name": "company_id", "type": "string", "doc": "The owning tenant / company id (UUID as string); also the Kafka partition key."},
+    {"name": "module_key", "type": "string", "doc": "The module whose entitlement was revoked."},
+    {"name": "revoked_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the revoke took effect, epoch millis (UTC)."}
+  ]
+}
+```
+
+**Compatibility.** Backward-compatible only, enforced by `EntitlementEventContractTest`.
+
+### `CompanyCreated` — entitlement-service consumer view
+
+entitlement-service **consumes** the org-service `CompanyCreated` (the producer contract
+is documented above) to seed a new company's **default entitlements**. It keeps its own
+**consumer copy** of the schema at
+`services/entitlement-service/src/main/resources/avro/CompanyCreated.avsc` (full name
+`id.co.nativeapp.events.org.CompanyCreated`), reads the outbox payload as **raw Avro
+bytes** via `libs/events AvroSerde` (no Schema Registry serde), and dedupes by the event
+UUID (`ProcessedEventStore`) so a re-delivery never double-grants. On a new company it
+grants the configured **default module set** (e.g. `restaurant, carwash, laundromat, hr,
+finance`), persisting `tenant_entitlement` rows and emitting one `EntitlementGranted` per
+grant — all in one transaction inside the new company's tenant scope (so RLS applies). The
+`CompanyCreatedContractTest` asserts the consumer copy stays backward-compatible with the
+producer schema (rule 7).

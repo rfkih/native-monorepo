@@ -1,0 +1,11 @@
+{
+  "type": "record",
+  "name": "EntitlementRevoked",
+  "namespace": "id.co.nativeapp.events.entitlement",
+  "doc": "Emitted by entitlement-service when a company's module entitlement is revoked via DELETE /api/v1/entitlements/{moduleKey}. Consumed by the shell (stop rendering the module) and all services (verticals/employee drop their local entitlement view); the entitlement-check Redis cache is invalidated by it. Key fields per ARCHITECTURE.md §5: company_id, module_key.",
+  "fields": [
+    {"name": "company_id", "type": "string", "doc": "The owning tenant / company id (UUID as string); also the Kafka partition key."},
+    {"name": "module_key", "type": "string", "doc": "The module whose entitlement was revoked."},
+    {"name": "revoked_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the revoke took effect, epoch millis (UTC)."}
+  ]
+}
