@@ -37,6 +37,14 @@ dependencies {
     implementation(project(":libs:events"))
     implementation(project(":libs:tenant"))
 
+    // Defense-in-depth local JWT validation (#16): a shared auto-configuration that, in the
+    // non-dev profile, validates the inbound RS256 token against Keycloak's JWKS and binds
+    // TenantContext from the verified company_id claim (so RLS engages) — never trusting an
+    // inbound X-Company-Id header. In the dev profile it yields to the header-trust DevTenantFilter.
+    // Brings spring-boot-starter-oauth2-resource-server + security transitively; no per-service
+    // security code.
+    implementation(project(":libs:security"))
+
     // Web (/healthz + the /api/v1/companies endpoints) + JPA persistence.
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
@@ -72,4 +80,22 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.testcontainers:testcontainers-postgresql")
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
+
+    // The SECURED (non-dev) profile proof — POST /api/v1/companies is the tenant bootstrap, so it
+    // must succeed with a valid OWNER token that has NO company_id claim (libs/security declares it
+    // tenant-optional). A real Keycloak via Testcontainers issues genuine RS256 tokens (exactly as
+    // libs/security's own proof), and okhttp fetches them via the password grant.
+    testImplementation("com.github.dasniko:testcontainers-keycloak:3.9.0")
+    testImplementation("com.squareup.okhttp3:okhttp:4.12.0")
+}
+
+// libs/security (#16) ships an auto-configuration whose DEFAULT (non-dev) path stands up a JWT
+// SecurityFilterChain that validates the inbound RS256 token against Keycloak's JWKS. The existing
+// suites bind the tenant directly (TenantContext.callAs) or via MockMvc and never present a real
+// Keycloak token, so they run under the `dev` profile — which selects libs/security's permissive
+// DevSecurityConfig and leaves the header-trust DevTenantFilter as the tenant source (no Keycloak
+// needed). The SECURED non-dev path is proven separately in libs/security against a real Keycloak.
+// Set here (not per-test-class) so no existing test annotation/assertion changes.
+tasks.named<Test>("test") {
+    systemProperty("spring.profiles.active", "dev")
 }

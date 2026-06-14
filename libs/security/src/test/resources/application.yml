@@ -1,0 +1,48 @@
+# Test config for the #16 defense-in-depth proof app. NO active profile -> the non-dev
+# (secured) path of libs/security is selected, exactly as production. The datasource,
+# Keycloak issuer/JWKS, and bootstrap settings are wired to the Testcontainers in the
+# integration test via @DynamicPropertySource; the values here are inert placeholders so
+# the context can describe its beans before the dynamic properties land.
+spring:
+  application:
+    name: security-proof-app
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:0/realms/native
+          jwk-set-uri: http://localhost:0/realms/native/protocol/openid-connect/certs
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+# The tenant-bootstrap exemption under test: POST /api/v1/bootstrap (the proof-app stand-in for
+# org-service's POST /api/v1/companies) is tenant-optional, so TenantBindingFilter lets an
+# authenticated-but-tenant-less token through to the handler instead of 403'ing it. Every other
+# /api/v1/** path stays strictly tenant-scoped (a tenant-less token there is still a 403).
+native:
+  security:
+    tenant-optional:
+      - "POST /api/v1/bootstrap"

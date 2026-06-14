@@ -22,6 +22,7 @@ rootProject.name = "native"
 include("libs:money")
 include("libs:events")
 include("libs:tenant")
+include("libs:security")
 include("service-template")
 // Further modules are wired in as each milestone lands:
 include("services:gateway")

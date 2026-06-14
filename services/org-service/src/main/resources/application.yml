@@ -47,3 +47,43 @@ logging:
     # Structured-ish console pattern including the trace/span ids OpenTelemetry
     # injects into MDC, so logs correlate with traces once OTel is on the agent.
     console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%X{trace_id:-},%X{span_id:-}] %logger{36} - %msg%n"
+
+---
+# Defense-in-depth local JWT validation (#16, libs/security) — NON-DEV ONLY.
+#
+# This document activates on every profile EXCEPT `dev`. In a non-dev (production) profile the
+# service validates the inbound RS256 token against Keycloak's JWKS locally (never trusting the
+# gateway/header alone) and binds the tenant from the verified company_id claim; issuer-uri makes
+# Spring validate the iss claim and discover the JWKS. Both default to the docker dev-stack
+# Keycloak `native` realm and are overridden per environment via env/Vault.
+#
+# It is scoped to !dev on purpose: in the `dev` profile there is NO resource-server config, so
+# Spring Boot's OAuth2 resource-server auto-configuration stays off and libs/security's permissive
+# DevSecurityConfig governs while the header-trust DevTenantFilter binds the tenant (no Keycloak).
+#
+# NOTE org-service: POST /api/v1/companies bootstraps a new tenant — the owner creating their FIRST
+# company has no company_id claim yet, because this request CREATES the tenant. It is still an
+# authenticated endpoint (the JWT must be valid -> 401 if missing/invalid/expired), but a missing
+# company_id claim must NOT be 403'd. We therefore declare it tenant-optional below
+# (native.security.tenant-optional); libs/security's TenantBindingFilter then lets the tenant-less
+# bootstrap token through WITHOUT binding a scope, and CompanyController opens its own scope over the
+# new id. Every OTHER /api/v1/** request stays strictly tenant-scoped (tenant-less token -> 403).
+# The DevTenantFilter (dev path only) documents the same bootstrap exemption via shouldNotFilter.
+spring:
+  config:
+    activate:
+      on-profile: "!dev"
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/native}
+          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://localhost:8080/realms/native/protocol/openid-connect/certs}
+
+native:
+  security:
+    # The tenant bootstrap: create-company creates a NEW tenant, so a valid token with no
+    # company_id claim must reach it (no 403). Only this exact method+path is exempt — its
+    # sub-resources (e.g. /api/v1/companies/{id}/businesses) remain strictly tenant-scoped.
+    tenant-optional:
+      - "POST /api/v1/companies"
