@@ -20,6 +20,10 @@ CREATE DATABASE restaurant_service OWNER restaurant_service;
 CREATE ROLE finance_service LOGIN PASSWORD 'finance_service' REPLICATION;
 CREATE DATABASE finance_service OWNER finance_service;
 
+-- ---- employee-service ----
+CREATE ROLE employee_service LOGIN PASSWORD 'employee_service' REPLICATION;
+CREATE DATABASE employee_service OWNER employee_service;
+
 -- Each service owns its schema so Flyway (running as the app role) can create its
 -- tables; PostgreSQL 16 revokes CREATE on public from PUBLIC by default.
 \connect org_service
@@ -30,3 +34,6 @@ GRANT ALL ON SCHEMA public TO restaurant_service;
 
 \connect finance_service
 GRANT ALL ON SCHEMA public TO finance_service;
+
+\connect employee_service
+GRANT ALL ON SCHEMA public TO employee_service;

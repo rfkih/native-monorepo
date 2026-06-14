@@ -1,0 +1,104 @@
+spring:
+  application:
+    name: employee-service
+
+  datasource:
+    # Connect as the service's own NON-superuser role (no BYPASSRLS) so RLS is
+    # genuinely enforced. Overridden per environment; in real deploys the creds
+    # come from Vault (short-TTL dynamic credentials).
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/employee_service}
+    username: ${DB_USERNAME:employee_service}
+    password: ${DB_PASSWORD:employee_service}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      # The schema is owned by Flyway; the app only validates that the mapping
+      # matches the migrated schema and never mutates DDL.
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+
+  kafka:
+    # The OrgUnitCreated / OrgUnitChanged topics carry RAW Avro bytes (the org-service
+    # outbox payload, shipped by Debezium). We deserialize with libs/events AvroSerde
+    # against employee's OWN consumer copies of the schemas — NOT a Confluent
+    # kafka-avro-serializer / Schema Registry serde. So both key and value come off the
+    # wire as String/byte[] and the listener does the Avro decode itself.
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${KAFKA_GROUP_ID:employee-service}
+      # Start at the earliest offset for a new group so a freshly-deployed employee
+      # consumer hydrates its org read model from already-published org units.
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.ByteArrayDeserializer
+    listener:
+      # Manual-immediate ack: the container commits the offset only after the handler
+      # returns, so a crash mid-handle redelivers (at-least-once); the idempotent
+      # consumer (ProcessedEventStore) makes redelivery safe.
+      ack-mode: record
+
+# PII column-level encryption key (rule 6). A base64-encoded 32-byte AES-256 key, sourced from the
+# NATIVE_PII_KEY environment variable. IN PRODUCTION this env value is injected from VAULT (a
+# short-TTL secret reference) — NEVER a literal secret committed here. The committed default below is
+# a dev-only fallback (a placeholder, not a real secret) so the local stack has a deterministic key;
+# the test suite overrides it via the NATIVE_PII_KEY system property in build.gradle.kts. The app
+# fails fast at startup if the key is missing or not a valid 32-byte base64 value.
+native:
+  pii:
+    # base64 of the 32 ASCII bytes "native-dev-placeholder-pii-key32" — a dev-only placeholder, not a
+    # real secret (the AES-256 key must decode to exactly 32 bytes).
+    key: ${NATIVE_PII_KEY:bmF0aXZlLWRldi1wbGFjZWhvbGRlci1waWkta2V5MzI=}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # Lean observability: liveness/readiness + Prometheus metrics. /healthz is
+        # the simple LB probe (see HealthController); richer probes under /actuator.
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      service: employee-service
+
+logging:
+  pattern:
+    # Structured-ish console pattern including the trace/span ids OpenTelemetry
+    # injects into MDC, so logs correlate with traces once OTel is on the agent.
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%X{trace_id:-},%X{span_id:-}] %logger{36} - %msg%n"
+
+---
+# Defense-in-depth local JWT validation (#16, libs/security) — NON-DEV ONLY.
+#
+# This document activates on every profile EXCEPT `dev`. In a non-dev (production) profile the
+# service validates the inbound RS256 token against Keycloak's JWKS locally (never trusting the
+# gateway/header alone) and binds the tenant from the verified company_id claim; issuer-uri makes
+# Spring validate the iss claim and discover the JWKS. Both default to the docker dev-stack Keycloak
+# `native` realm and are overridden per environment via env/Vault.
+#
+# It is scoped to !dev on purpose: in the `dev` profile there is NO resource-server config, so Spring
+# Boot's OAuth2 resource-server auto-configuration stays off and libs/security's permissive
+# DevSecurityConfig governs while the header-trust DevTenantFilter binds the tenant (no Keycloak).
+spring:
+  config:
+    activate:
+      on-profile: "!dev"
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/native}
+          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://localhost:8080/realms/native/protocol/openid-connect/certs}

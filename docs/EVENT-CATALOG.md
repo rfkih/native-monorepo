@@ -26,8 +26,8 @@ schema. Until then a row here is documentation of intent, not a shippable contra
 | **`OrgUnitChanged`** | **org-service** | **employee, verticals, finance** | **org_unit_id, type, parent_id, company_id** | **LIVE (#18)** |
 | **`EntitlementGranted`** | **entitlement-service** | **shell, all services** | **company_id, module_key** | **LIVE** |
 | **`EntitlementRevoked`** | **entitlement-service** | **shell, all services** | **company_id, module_key** | **LIVE** |
-| `EmployeeChanged` | employee | verticals | employee_id, company_id, status | planned |
-| `AssignmentChanged` | employee | verticals, finance | employee_id, org_unit_id, reporting_to, effective_from/to | planned |
+| **`EmployeeChanged`** | **employee-service** | **verticals** | **employee_id, company_id, status** | **LIVE (#19)** |
+| **`AssignmentChanged`** | **employee-service** | **verticals, finance** | **employee_id, org_unit_id, reporting_to, effective_from/to** | **LIVE (#19)** |
 | `MetricPublished` | verticals | employee | metric_key, period, grain, subject_id, value, source_business_id | planned |
 | `PeriodSealed` | verticals | employee, finance | business_id, period | planned |
 | **`SaleRecorded`** | **restaurant-service** (verticals) | **finance** | **sale_id, company_id, business_id, amount_minor, currency, occurred_at** | **LIVE (M1.4)** |
@@ -358,3 +358,120 @@ finance`), persisting `tenant_entitlement` rows and emitting one `EntitlementGra
 grant — all in one transaction inside the new company's tenant scope (so RLS applies). The
 `CompanyCreatedContractTest` asserts the consumer copy stays backward-compatible with the
 producer schema (rule 7).
+
+### `EmployeeChanged`
+
+Emitted by employee-service (#19 — the HR records-only slice) when an `employee` is **created** or
+its record fields **change** (name, ptkp_status, PII, or status). Consumed by the verticals to update
+their local staff read model.
+
+- **Producer:** `employee-service`
+- **Consumers:** the verticals (local staff read model).
+- **Aggregate type / partition key:** `employee` / `employee_id`
+- **Outbox `event_type`:** `EmployeeChanged`
+- **Schema:** `services/employee-service/src/main/resources/avro/EmployeeChanged.avsc`
+- **Full name:** `id.co.nativeapp.events.employee.EmployeeChanged`
+
+**No PII (rule 6).** The event carries only the non-PII identity + status: `employee_id`,
+`company_id`, `status`. It NEVER carries the name, NIK, or bank account — those are column-encrypted
+at rest and never cross a service boundary. A consumer that needs more reads its own slice.
+
+**Key fields** (ARCHITECTURE.md §5: `employee_id`, `company_id`, `status`)
+
+| Field | Avro type | Meaning |
+|---|---|---|
+| `employee_id` | `string` | The employee aggregate id (UUID as string); the partition key |
+| `company_id` | `string` | The owning tenant / company id (UUID as string) |
+| `status` | `string` | The employee's employment status: `ACTIVE` \| `INACTIVE` |
+
+**Avro schema**
+
+```json
+{
+  "type": "record",
+  "name": "EmployeeChanged",
+  "namespace": "id.co.nativeapp.events.employee",
+  "doc": "Emitted by employee-service when an employee is created or its record fields change; consumed by the verticals (local staff read model). Key fields per ARCHITECTURE.md §5: employee_id, company_id, status. NO PII is carried — never the name, NIK, or bank account (rule 6).",
+  "fields": [
+    {"name": "employee_id", "type": "string", "doc": "The employee aggregate id (UUID as string); also the Kafka partition key."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant / company id (UUID as string)."},
+    {"name": "status", "type": "string", "doc": "The employee's employment status: ACTIVE | INACTIVE."}
+  ]
+}
+```
+
+**Compatibility.** Backward-compatible only (add optional fields with a default; never a new required
+field without a default, never remove/rename/retype). Enforced by `EmployeeChangedContractTest`
+(parse + `AvroSerde` round-trip + back-compat for-change / against-break), which also pins that NO PII
+field is present.
+
+### `AssignmentChanged`
+
+Emitted by employee-service (#19) when an `assignment` is **created** (or changes). An employee holds
+multiple concurrent assignments; org/team/manager live on the assignment, not the employee
+(ARCHITECTURE.md §2). Consumed by the verticals (local staff read model) and finance (labor-cost
+dimensions later).
+
+- **Producer:** `employee-service`
+- **Consumers:** the verticals (local staff read model), `finance-service` (labor-cost dimensions).
+- **Aggregate type / partition key:** `assignment` / `assignment_id`
+- **Outbox `event_type`:** `AssignmentChanged`
+- **Schema:** `services/employee-service/src/main/resources/avro/AssignmentChanged.avsc`
+- **Full name:** `id.co.nativeapp.events.employee.AssignmentChanged`
+
+**No PII (rule 6).** Only the assignment dimensions are carried. `reporting_to` is a nullable union
+(an assignment may have no manager). `effective_from`/`effective_to` are Avro `date` logical-type
+ints (epoch day); an open-ended assignment uses the far-future `9999-12-31` sentinel, never null.
+
+**Key fields** (ARCHITECTURE.md §5: `employee_id`, `org_unit_id`, `reporting_to`, `effective_from/to`)
+
+| Field | Avro type | Meaning |
+|---|---|---|
+| `assignment_id` | `string` | The assignment aggregate id (UUID as string); the partition key |
+| `employee_id` | `string` | The employee this assignment is for (UUID as string) |
+| `company_id` | `string` | The owning tenant / company id (UUID as string) |
+| `org_unit_id` | `string` | The org unit this assignment is to (UUID as string) |
+| `reporting_to` | `["null","string"]` (default `null`) | The manager (employee id), or null |
+| `role` | `string` | The role held in this assignment |
+| `effective_from` | `int` (`date`) | The date the assignment becomes effective (epoch day) |
+| `effective_to` | `int` (`date`) | The date it ceases to be effective; `9999-12-31` when open-ended |
+
+**Avro schema**
+
+```json
+{
+  "type": "record",
+  "name": "AssignmentChanged",
+  "namespace": "id.co.nativeapp.events.employee",
+  "doc": "Emitted by employee-service when an assignment is created or changes; consumed by the verticals and finance. Key fields per ARCHITECTURE.md §5: employee_id, org_unit_id, reporting_to, effective_from/to. NO PII (rule 6). reporting_to is a nullable union; effective dates are date logical-type ints (epoch day), open-ended = 9999-12-31.",
+  "fields": [
+    {"name": "assignment_id", "type": "string", "doc": "The assignment aggregate id (UUID as string); also the Kafka partition key."},
+    {"name": "employee_id", "type": "string", "doc": "The employee this assignment is for (UUID as string)."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant / company id (UUID as string)."},
+    {"name": "org_unit_id", "type": "string", "doc": "The org unit this assignment is to (UUID as string)."},
+    {"name": "reporting_to", "type": ["null", "string"], "default": null, "doc": "The manager (employee id, UUID as string) this assignment reports to, or null."},
+    {"name": "role", "type": "string", "doc": "The role held in this assignment."},
+    {"name": "effective_from", "type": {"type": "int", "logicalType": "date"}, "doc": "The date the assignment becomes effective (epoch day)."},
+    {"name": "effective_to", "type": {"type": "int", "logicalType": "date"}, "doc": "The date the assignment ceases to be effective (epoch day); 9999-12-31 sentinel when open-ended."}
+  ]
+}
+```
+
+**Compatibility.** Backward-compatible only, enforced by `AssignmentChangedContractTest`.
+
+### `OrgUnitCreated` / `OrgUnitChanged` — employee-service consumer view
+
+employee-service **consumes** the org-service `OrgUnitCreated` / `OrgUnitChanged` (the producer
+contracts are documented above) into a **local org read model** (`org_unit_id -> {company_id,
+legal_employer_id, type, active}`) — the projection the same-legal-employer assignment invariant
+(ARCHITECTURE.md §2) is checked against (rule 2 — a cached read model, never a sync call). It keeps
+its own **consumer copies** of the schemas at
+`services/employee-service/src/main/resources/avro/OrgUnitCreated.avsc` and `.../OrgUnitChanged.avsc`
+(full names `id.co.nativeapp.events.org.OrgUnitCreated` / `.OrgUnitChanged`), reads the outbox
+payload as **raw Avro bytes** via `libs/events AvroSerde` (no Schema Registry serde), and dedupes by
+the event UUID (`ProcessedEventStore`) so a re-delivery never double-applies. The projection write
+runs inside a `TenantContext` scope bound to the event's `company_id`, so RLS applies. The
+`OrgUnitConsumerContractTest` asserts the consumer copies stay backward-compatible with the producer
+schemas (rule 7). On creating an assignment, the target org_unit's `legal_employer_id` is resolved
+from this read model and a concurrent assignment under a DIFFERENT legal employer is rejected
+(`409`).

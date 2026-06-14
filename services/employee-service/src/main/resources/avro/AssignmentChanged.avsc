@@ -1,0 +1,16 @@
+{
+  "type": "record",
+  "name": "AssignmentChanged",
+  "namespace": "id.co.nativeapp.events.employee",
+  "doc": "Emitted by employee-service when an assignment is created or changes; consumed by the verticals (local staff read model) and finance (labor cost dimensions). Key fields per ARCHITECTURE.md §5 / EVENT-CATALOG: employee_id, org_unit_id, reporting_to, effective_from/to. NO PII (rule 6). reporting_to is a nullable union (an assignment may have no manager). effective_from/effective_to are epoch-day ints (Avro date logical type); an open-ended assignment uses the far-future 9999-12-31 sentinel, never null.",
+  "fields": [
+    {"name": "assignment_id", "type": "string", "doc": "The assignment aggregate id (UUID as string); also the Kafka partition key."},
+    {"name": "employee_id", "type": "string", "doc": "The employee this assignment is for (UUID as string)."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant / company id (UUID as string)."},
+    {"name": "org_unit_id", "type": "string", "doc": "The org unit this assignment is to (UUID as string)."},
+    {"name": "reporting_to", "type": ["null", "string"], "default": null, "doc": "The manager (employee id, UUID as string) this assignment reports to, or null."},
+    {"name": "role", "type": "string", "doc": "The role held in this assignment."},
+    {"name": "effective_from", "type": {"type": "int", "logicalType": "date"}, "doc": "The date the assignment becomes effective (epoch day)."},
+    {"name": "effective_to", "type": {"type": "int", "logicalType": "date"}, "doc": "The date the assignment ceases to be effective (epoch day); 9999-12-31 sentinel when open-ended."}
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "type": "record",
+  "name": "EmployeeChanged",
+  "namespace": "id.co.nativeapp.events.employee",
+  "doc": "Emitted by employee-service when an employee is created or its record fields change; consumed by the verticals (local staff read model). Key fields per ARCHITECTURE.md §5 / EVENT-CATALOG: employee_id, company_id, status. NO PII is carried — never the name, NIK, or bank account (rule 6); a consumer that needs more reads its own slice, it does not get PII over the event.",
+  "fields": [
+    {"name": "employee_id", "type": "string", "doc": "The employee aggregate id (UUID as string); also the Kafka partition key."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant / company id (UUID as string)."},
+    {"name": "status", "type": "string", "doc": "The employee's employment status: ACTIVE | INACTIVE."}
+  ]
+}
