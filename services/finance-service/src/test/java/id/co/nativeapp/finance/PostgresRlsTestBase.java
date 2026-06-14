@@ -52,7 +52,12 @@ abstract class PostgresRlsTestBase {
             java.sql.DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
         Statement st = admin.createStatement()) {
-      st.execute("TRUNCATE TABLE ledger_posting, consolidated_revenue, processed_event");
+      // Truncate only the per-event business/read-model tables; the chart_of_account and
+      // mapping_rule reference data seeded by Flyway V2 is left intact (truncating it would
+      // break gl_account resolution for every test).
+      st.execute(
+          "TRUNCATE TABLE ledger_posting, consolidated_revenue, consolidated_pnl,"
+              + " processed_event");
     } catch (SQLException ignored) {
       // Tables not created yet (pre-Flyway) — nothing to reset.
     }

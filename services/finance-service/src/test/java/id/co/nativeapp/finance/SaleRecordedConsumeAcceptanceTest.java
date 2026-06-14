@@ -67,6 +67,9 @@ class SaleRecordedConsumeAcceptanceTest extends KafkaPostgresTestBase {
     assertThat(posting.get("amount_minor")).isEqualTo(amountMinor);
     assertThat(posting.get("currency").toString().strip()).isEqualTo("IDR");
     assertThat(posting.get("source_event_id")).hasToString(eventId.toString());
+    // (a) mapping resolution: the REVENUE posting resolved its gl_account via the effective
+    // mapping_rule to the seeded Sales Revenue account (4000) and stamped it on the dimension.
+    assertThat(posting.get("gl_account_code")).isEqualTo("4000");
 
     // The consolidated-revenue read model reflects it: the reader (RLS-scoped to A) sees the total.
     Optional<Money> revenue =
@@ -95,7 +98,7 @@ class SaleRecordedConsumeAcceptanceTest extends KafkaPostgresTestBase {
         java.sql.ResultSet rs =
             st.executeQuery(
                 "SELECT company_id, business_id, period, posting_type, amount_minor, currency,"
-                    + " source_event_id FROM ledger_posting")) {
+                    + " gl_account_code, source_event_id FROM ledger_posting")) {
       rs.next();
       return Map.of(
           "company_id", rs.getString("company_id"),
@@ -104,6 +107,7 @@ class SaleRecordedConsumeAcceptanceTest extends KafkaPostgresTestBase {
           "posting_type", rs.getString("posting_type"),
           "amount_minor", rs.getLong("amount_minor"),
           "currency", rs.getString("currency"),
+          "gl_account_code", rs.getString("gl_account_code"),
           "source_event_id", rs.getObject("source_event_id"));
     }
   }

@@ -32,13 +32,26 @@ class LedgerDomainTest {
   }
 
   @Test
-  void aRevenuePostingCarriesItsMoneyAndType() {
+  void aRevenuePostingCarriesItsMoneyTypeAndGlAccount() {
     Money amount = Money.ofMinor(1_500_000L, "IDR");
-    LedgerPosting posting = new LedgerPosting(BUSINESS, "2026-06", amount, UUID.randomUUID());
+    LedgerPosting posting =
+        new LedgerPosting(BUSINESS, "2026-06", amount, "4000", UUID.randomUUID());
     assertThat(posting.getPostingType()).isEqualTo(PostingType.REVENUE);
     assertThat(posting.getAmount()).isEqualTo(amount);
     assertThat(posting.getPeriod()).isEqualTo("2026-06");
     assertThat(posting.getBusinessId()).isEqualTo(BUSINESS);
+    assertThat(posting.getGlAccountCode()).isEqualTo("4000");
+  }
+
+  @Test
+  void anExpensePostingCarriesItsTypeAndDimension() {
+    Money amount = Money.ofMinor(750_000L, "IDR");
+    LedgerPosting posting =
+        new LedgerPosting(
+            PostingType.EXPENSE, BUSINESS, "2026-06", amount, "5200", UUID.randomUUID());
+    assertThat(posting.getPostingType()).isEqualTo(PostingType.EXPENSE);
+    assertThat(posting.getGlAccountCode()).isEqualTo("5200");
+    assertThat(posting.getAmount()).isEqualTo(amount);
   }
 
   @Test

@@ -1,6 +1,8 @@
 package id.co.nativeapp.finance.revenue;
 
 import id.co.nativeapp.events.ProcessedEventStore;
+import id.co.nativeapp.finance.mapping.GlAccountResolver;
+import id.co.nativeapp.finance.pnl.PnlReadModelWriter;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.UUID;
@@ -65,14 +67,20 @@ public class RevenuePostingWriter {
   private final LedgerPostingRepository ledgerRepository;
   private final ProcessedEventStore processedEvents;
   private final JdbcTemplate jdbcTemplate;
+  private final GlAccountResolver glAccountResolver;
+  private final PnlReadModelWriter pnlReadModel;
 
   public RevenuePostingWriter(
       LedgerPostingRepository ledgerRepository,
       ProcessedEventStore processedEvents,
-      JdbcTemplate jdbcTemplate) {
+      JdbcTemplate jdbcTemplate,
+      GlAccountResolver glAccountResolver,
+      PnlReadModelWriter pnlReadModel) {
     this.ledgerRepository = ledgerRepository;
     this.processedEvents = processedEvents;
     this.jdbcTemplate = jdbcTemplate;
+    this.glAccountResolver = glAccountResolver;
+    this.pnlReadModel = pnlReadModel;
   }
 
   /**
@@ -98,9 +106,14 @@ public class RevenuePostingWriter {
     String companyId = tenant.companyId();
     String actor = tenant.actor();
 
-    // 1) Append the immutable ledger posting. source_event_id is UNIQUE, so even if the
-    //    ProcessedEventStore claim were ever bypassed, a duplicate posting is impossible.
-    LedgerPosting posting = new LedgerPosting(event.businessId(), period, amount, event.eventId());
+    // 0) RESOLVE the REVENUE gl_account via the versioned, effective-dated mapping_rule
+    //    (CQRS: resolve on write). Stamped on the posting as its dimension.
+    String glAccountCode = glAccountResolver.resolveRevenue(event.occurredAt());
+
+    // 1) Append the immutable, dimensional ledger posting. source_event_id is UNIQUE, so even
+    //    if the ProcessedEventStore claim were ever bypassed, a duplicate posting is impossible.
+    LedgerPosting posting =
+        new LedgerPosting(event.businessId(), period, amount, glAccountCode, event.eventId());
     posting.setCompanyId(companyId);
     ledgerRepository.save(posting);
 
@@ -119,5 +132,10 @@ public class RevenuePostingWriter {
         actor,
         actor,
         companyId);
+
+    // 3) Atomically accumulate the consolidated P&L read model's REVENUE leg (same
+    //    no-read-modify-write upsert), in the SAME transaction. The P&L's net = revenue -
+    //    expense; this moves the revenue leg.
+    pnlReadModel.addRevenue(period, amount, companyId, actor);
   }
 }

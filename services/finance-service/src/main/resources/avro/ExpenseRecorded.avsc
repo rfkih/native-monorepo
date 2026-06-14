@@ -1,0 +1,15 @@
+{
+  "type": "record",
+  "name": "ExpenseRecorded",
+  "namespace": "id.co.nativeapp.events.restaurant",
+  "doc": "finance-service's CONSUMER copy of the ExpenseRecorded contract (producer: the verticals, e.g. restaurant-service). Emitted when an expense is recorded; consumed by finance-service to resolve the EXPENSE gl_account via the versioned, effective-dated mapping_rule (from gl_hint) and post an EXPENSE ledger_posting. finance owns its own consumer view of the schema; a contract test asserts this copy stays backward-compatible with the producer schema (rule 7). Bytes are read as raw Avro via libs/events AvroSerde — NOT through a Schema Registry serde. Money is an integer minor-units amount plus an ISO-4217 currency code, never a float (CLAUDE.md rule 8).",
+  "fields": [
+    {"name": "expense_id", "type": "string", "doc": "The expense aggregate id (UUID as string); also the Kafka partition key."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string)."},
+    {"name": "business_id", "type": "string", "doc": "The originating business unit (UUID as string)."},
+    {"name": "amount_minor", "type": "long", "doc": "Amount in the currency's minor units (e.g. cents for USD, whole rupiah for IDR). Never a float."},
+    {"name": "currency", "type": "string", "doc": "ISO-4217 currency code, e.g. IDR or USD."},
+    {"name": "gl_hint", "type": "string", "doc": "The expense category hint the vertical tags the expense with (e.g. cogs, supplies, utilities); finance resolves it to a chart_of_account expense account via mapping_rule. An unrecognised hint fails safe to the suspense account."},
+    {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the expense occurred, epoch millis (UTC). Drives the accounting period and the effective mapping_rule version."}
+  ]
+}
