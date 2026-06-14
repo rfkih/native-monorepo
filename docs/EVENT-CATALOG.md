@@ -34,7 +34,8 @@ schema. Until then a row here is documentation of intent, not a shippable contra
 | **`ExpenseRecorded`** | **verticals** | **finance** | **expense_id, company_id, business_id, amount_minor, currency, gl_hint, occurred_at** | **LIVE (finance consumer #21)** |
 | `PayrollPosted` | employee | finance | payroll_run_id, company_id, period | planned |
 | `LaborCostAllocated` | employee | finance | employee_id, company_id, outlet_id, amount, period | planned |
-| `ConsolidationClosed` | finance | shell, notification | company_id (or group_id), period | planned |
+| **`ConsolidationClosed`** | **finance** | **shell, notification** | **company_id (or group_id), period** | **LIVE (notification consumer #22)** |
+| **`DeliveryReceipt`** | **notification-service** | **(audit/observability sinks; re-send policy)** | **notification_id, company_id, channel, status, provider_ref, delivered_at** | **LIVE (#22)** |
 
 ---
 
@@ -636,3 +637,115 @@ schemas at `services/carwash-service/src/main/resources/avro/EmployeeChanged.avs
 events carry only `employee_id` / `company_id` / `status` and the assignment dimensions (rule 6). The
 `StaffConsumerContractTest` asserts the consumer copies stay backward-compatible with the producer
 schemas (rule 7).
+
+### `ConsolidationClosed`
+
+Emitted by finance-service when a consolidation close completes — the period is locked, intercompany
+matching has run, and the result is final (ARCHITECTURE.md §4: "never present a mid-flight
+consolidation as final"). It is the trigger notification-service consumes (#22) to create + deliver a
+"consolidation closed for &lt;period&gt;" notice. The producer path on finance is not yet shipped;
+this section defines the **contract** (the producer schema is the source of truth) so the consumer can
+be built against it (rule 7).
+
+- **Producer:** `finance-service` (the consolidation-close path).
+- **Consumers:** the `shell` (refresh the consolidated dashboard), and **`notification-service`**
+  (create + deliver a notification) — **LIVE (notification consumer #22)**.
+- **Aggregate type / partition key:** `consolidation` / `company_id`
+- **Outbox `event_type`:** `ConsolidationClosed`
+- **Schema (producer, source of truth):** `services/finance-service/src/main/resources/avro/ConsolidationClosed.avsc` (to be added when finance ships the producer path).
+- **Schema (notification consumer copy):** `services/notification-service/src/main/resources/avro/ConsolidationClosed.avsc` — notification owns its own consumer view of the contract; the notification `ConsolidationClosedContractTest` asserts the copy stays backward-compatible with the producer schema (rule 7). The notification consumer reads the outbox payload as **raw Avro bytes** via `libs/events AvroSerde` (no Schema Registry serde), deduping by the event UUID (`ProcessedEventStore`) so a re-delivery never creates a duplicate notification.
+- **Full name:** `id.co.nativeapp.events.finance.ConsolidationClosed`
+
+A close is scoped to a single company (within-company consolidation) **or** a group (group
+consolidation + elimination). `company_id` is always present and is the tenant the notification is
+created under; `group_id` is a nullable union, set only for a group-level close (ARCHITECTURE.md §5:
+`company_id (or group_id), period`).
+
+**Key fields**
+
+| Field | Avro type | Meaning |
+|---|---|---|
+| `company_id` | `string` | The owning tenant / company id (UUID as string); the partition key. For a group close, the group's lead/owner company (the tenant the notification belongs to) |
+| `group_id` | `["null","string"]` (default `null`) | The consolidation group id (UUID as string) for a group close, else null |
+| `period` | `string` | The accounting period that was closed (e.g. `YYYY-MM`) |
+
+**Avro schema**
+
+```json
+{
+  "type": "record",
+  "name": "ConsolidationClosed",
+  "namespace": "id.co.nativeapp.events.finance",
+  "doc": "Emitted by finance-service when a consolidation close completes for a company (or a group) and a period; consumed by the shell (refresh the dashboard) and notification-service (#22 — create + deliver a 'consolidation closed for <period>' notification). Key fields per ARCHITECTURE.md §5: company_id (or group_id), period.",
+  "fields": [
+    {"name": "company_id", "type": "string", "doc": "The owning tenant / company id (UUID as string); also the Kafka partition key. For a group close, the group's lead/owner company id (the tenant the notification belongs to)."},
+    {"name": "group_id", "type": ["null", "string"], "default": null, "doc": "The consolidation group id (UUID as string) for a group-level close; null for a within-company close."},
+    {"name": "period", "type": "string", "doc": "The accounting period that was closed (e.g. YYYY-MM)."}
+  ]
+}
+```
+
+**Compatibility.** Only backward-compatible evolution is allowed: add fields with a default. Never
+add a required field without a default, never remove or rename a field, never change a field's type.
+The contract test (`ConsolidationClosedContractTest`, notification-service) enforces this — it parses
+the consumer copy, round-trips a `GenericRecord` through `AvroSerde`, asserts the copy is
+backward-compatible with the producer schema, and rejects a new required field without a default (the
+triad).
+
+### `DeliveryReceipt`
+
+Emitted by notification-service (#22) when a notification has been DELIVERED through a transport — or
+has FAILED delivery (a delivery failure is **recorded, not swallowed**, so a FAILED receipt is emitted
+too). Published via the transactional outbox (rule 3) in the **same transaction** as the
+`notification` + `delivery_receipt` rows, so the receipt event commits atomically with the receipt it
+reports.
+
+- **Producer:** `notification-service`
+- **Consumers:** downstream sinks that track notification outcomes (an audit/observability sink, a
+  re-send policy) — none wired yet; the event is published for when they arrive.
+- **Aggregate type / partition key:** `notification` / `notification_id`
+- **Outbox `event_type`:** `DeliveryReceipt`
+- **Schema:** `services/notification-service/src/main/resources/avro/DeliveryReceipt.avsc`
+- **Full name:** `id.co.nativeapp.events.notification.DeliveryReceipt`
+
+**NO PII (rule 6).** The event carries only the ids, the channel, the outcome status, and the
+transport's `provider_ref` (a synthetic id for the stub). It never carries the recipient address, the
+subject, or the body. `delivered_at` is epoch millis (UTC) via the Avro `timestamp-millis` logical
+type; `provider_ref` is a nullable union (a failure may carry none).
+
+**Key fields**
+
+| Field | Avro type | Meaning |
+|---|---|---|
+| `notification_id` | `string` | The notification this receipt is for (UUID as string); the partition key |
+| `company_id` | `string` | The owning tenant / company id (UUID as string) |
+| `channel` | `string` | The delivery channel: `EMAIL` \| `PUSH` |
+| `status` | `string` | The delivery outcome: `DELIVERED` \| `FAILED` |
+| `provider_ref` | `["null","string"]` (default `null`) | The transport reference (synthetic for the stub), or null |
+| `delivered_at` | `long` (`timestamp-millis`) | When the delivery attempt completed, epoch millis UTC |
+
+**Avro schema**
+
+```json
+{
+  "type": "record",
+  "name": "DeliveryReceipt",
+  "namespace": "id.co.nativeapp.events.notification",
+  "doc": "Emitted by notification-service when a notification has been DELIVERED (or has FAILED delivery) through a transport. Published via the transactional outbox (rule 3) in the SAME transaction as the notification + delivery_receipt rows. A delivery failure is RECORDED, not swallowed — a FAILED receipt is emitted too. NO PII or secret is ever carried (rule 6): only the ids, the channel, the outcome status, and the transport's provider_ref.",
+  "fields": [
+    {"name": "notification_id", "type": "string", "doc": "The notification this receipt is for (UUID as string); also the Kafka partition key."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant / company id (UUID as string)."},
+    {"name": "channel", "type": "string", "doc": "The delivery channel: EMAIL | PUSH."},
+    {"name": "status", "type": "string", "doc": "The delivery outcome: DELIVERED | FAILED."},
+    {"name": "provider_ref", "type": ["null", "string"], "default": null, "doc": "The transport's reference for the delivery attempt (a synthetic id for the stub), or null when the transport returned none."},
+    {"name": "delivered_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the delivery attempt completed, epoch millis (UTC)."}
+  ]
+}
+```
+
+**Compatibility.** Only backward-compatible evolution is allowed: add fields with a default (e.g. an
+optional `attempt_count`). Never add a required field without a default, never remove or rename a
+field, never change a field's type. The contract test (`DeliveryReceiptContractTest`,
+notification-service) enforces this — it parses the schema, round-trips a `GenericRecord` through
+`AvroSerde` (including a null `provider_ref`), accepts an added optional field, and rejects a new
+required field without a default (the triad).
