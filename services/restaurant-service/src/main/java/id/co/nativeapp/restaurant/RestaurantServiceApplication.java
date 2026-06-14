@@ -1,6 +1,5 @@
 package id.co.nativeapp.restaurant;
 
-import id.co.nativeapp.restaurant.config.PersistenceConfig;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
@@ -8,11 +7,13 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * Entry point for restaurant-service (M1.4) — the first vertical and the validation-slice goal:
  * record a sale, emit {@code SaleRecorded} via the outbox.
  *
- * <p>The cross-cutting persistence wiring (Spring Data JPA auditing from {@code libs/tenant} and
- * the auto-RLS beans/aspect) lives in {@link PersistenceConfig} rather than on this bootstrap
- * class. Keeping it off the {@code @SpringBootApplication} class means web slice tests
- * ({@code @WebMvcTest}) do not drag in JPA infrastructure they have no datasource for, while the
- * full application still loads it via component scanning.
+ * <p>The cross-cutting persistence wiring (Spring Data JPA auditing and the auto-RLS beans/aspect +
+ * pinned tx-advisor order) is now contributed by {@code libs/tenant}'s {@code
+ * TenantRlsAutoConfiguration}, and the shared RFC-7807 {@code ProblemDetail} advice by {@code
+ * libs/security} — both Spring Boot auto-configurations this service inherits purely by depending
+ * on those libraries, with no copied {@code config} class. The auto-config's aspect is
+ * {@code @ConditionalOnBean(DataSource.class)}, so a web slice test ({@code @WebMvcTest}) with no
+ * datasource is unaffected, while the full application loads it.
  */
 @SpringBootApplication
 public class RestaurantServiceApplication {

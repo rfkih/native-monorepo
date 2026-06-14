@@ -27,12 +27,21 @@ dependencies {
     implementation(project(":libs:events"))
     implementation(project(":libs:tenant"))
 
+    // Defense-in-depth local JWT validation (#16) AND the shared RFC-7807 ProblemDetail advice
+    // (#12): libs/security ships both as Spring Boot auto-configurations, so this service inherits
+    // ONE compliant ApiExceptionHandler (and local JWT validation) by dependency — no copied
+    // config/ApiExceptionHandler. Brings spring-boot-starter-oauth2-resource-server + security +
+    // starter-web transitively. The dev profile yields to the header-trust DevTenantFilter.
+    implementation(project(":libs:security"))
+
     // Web (/healthz controller) + JPA persistence.
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
 
-    // AOP: the auto-RLS @Aspect that sets the tenant GUC on every @Transactional.
-    // Spring Boot 4 renamed the AOP starter to spring-boot-starter-aspectj.
+    // AOP: the auto-RLS @Aspect (from libs/tenant's TenantRlsAutoConfiguration) that sets the
+    // tenant GUC on every @Transactional. Spring Boot 4 renamed the AOP starter to
+    // spring-boot-starter-aspectj. libs/tenant also exposes it transitively, but it is named here
+    // so the service's auto-RLS does not silently depend on a transitive being present.
     implementation("org.springframework.boot:spring-boot-starter-aspectj")
 
     // Lean observability: actuator endpoints + the Prometheus meter registry that
@@ -58,4 +67,16 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.testcontainers:testcontainers-postgresql")
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
+}
+
+// libs/security (#16) ships an auto-configuration whose DEFAULT (non-dev) path stands up a JWT
+// SecurityFilterChain that validates the inbound RS256 token against Keycloak's JWKS. Now that the
+// template depends on libs/security (for the shared #12 ProblemDetail advice + local JWT
+// validation), its existing full-context tests — which bind the tenant directly
+// (TenantContext.callAs) and never present a real Keycloak token — run under the `dev` profile,
+// which selects libs/security's permissive DevSecurityConfig (no Keycloak needed). The SECURED
+// non-dev path is proven in libs/security against a real Keycloak. Set here (not per-test-class) so
+// no existing test annotation/assertion changes.
+tasks.named<Test>("test") {
+    systemProperty("spring.profiles.active", "dev")
 }

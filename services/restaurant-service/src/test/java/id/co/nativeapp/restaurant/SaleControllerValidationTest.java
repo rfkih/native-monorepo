@@ -9,11 +9,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import id.co.nativeapp.money.Money;
-import id.co.nativeapp.restaurant.config.ApiExceptionHandler;
 import id.co.nativeapp.restaurant.sale.RecordSaleResult;
 import id.co.nativeapp.restaurant.sale.Sale;
 import id.co.nativeapp.restaurant.sale.SaleController;
 import id.co.nativeapp.restaurant.sale.SaleService;
+import id.co.nativeapp.security.ApiExceptionHandler;
 import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;

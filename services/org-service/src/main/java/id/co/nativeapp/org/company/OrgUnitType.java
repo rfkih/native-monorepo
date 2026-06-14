@@ -19,7 +19,7 @@ public enum OrgUnitType {
    *
    * @param raw the wire value (e.g. {@code "business_unit"} / {@code "OUTLET"})
    * @throws IllegalArgumentException if {@code raw} is null/blank or not a known type (mapped to a
-   *     {@code 400} by {@link id.co.nativeapp.org.config.ApiExceptionHandler})
+   *     {@code 400} by {@link id.co.nativeapp.security.ApiExceptionHandler})
    */
   public static OrgUnitType from(String raw) {
     if (raw == null || raw.isBlank()) {

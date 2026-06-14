@@ -1,14 +1,14 @@
-package id.co.nativeapp.finance.config;
+package id.co.nativeapp.security;
 
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.validation.ConstraintViolation;
-import jakarta.validation.ConstraintViolationException;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.validation.FieldError;
@@ -17,8 +17,13 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /**
- * Maps faults to RFC 7807 {@link ProblemDetail} responses ({@code application/problem+json}), per
- * ENGINEERING-STANDARDS §1.2 — never an ad-hoc {@code {status,error,message}} map.
+ * The single, SHARED RFC 7807 {@link ProblemDetail} advice every Native service inherits (#12),
+ * mapping faults to {@code application/problem+json} — never an ad-hoc {@code
+ * {status,error,message}} map (ENGINEERING-STANDARDS §1.2). Before this it was copied byte-for-byte
+ * into every service's {@code config} package; it now lives once in {@code libs/security} (which
+ * already owns the web/edge auto-config and the 403 {@code ProblemDetail} {@link
+ * TenantBindingFilter} writes) and is contributed by {@link NativeProblemDetailAutoConfiguration},
+ * so a service gets it by dependency, not by copy.
  *
  * <p>Every problem carries a stable kebab-case {@code type} URI ({@code
  * https://errors.nativeapp.id/<slug>}), a numeric {@code status}, a {@code title}, the request
@@ -26,23 +31,31 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * SLF4J {@code MDC} (the {@code trace_id} key the logging pattern already uses), so no heavy OTel
  * dependency is pulled in just to surface it.
  *
- * <p>Four fault shapes are handled:
+ * <p>Three fault shapes are handled, matching the contract the per-service copies pinned:
  *
  * <ul>
  *   <li>{@link MethodArgumentNotValidException} — a bean-validation failure on a {@code @Valid}
  *       request body → {@code 400} with a machine-readable {@code errors} list of {@code {field,
- *       message}} (one entry per violated constraint);
- *   <li>{@link ConstraintViolationException} — a bean-validation failure on a request parameter
- *       (e.g. a malformed {@code period} query param) → {@code 400} with the same {@code errors}
- *       list;
- *   <li>{@link IllegalArgumentException} — a value the domain rejects (e.g. an unknown ISO-4217
- *       currency, a bad period format) → {@code 400} with the message as {@code detail}; and
+ *       message}} (one entry per violated constraint), which the React forms map back to each
+ *       field;
+ *   <li>{@link IllegalArgumentException} — a value the domain rejects, most importantly a bad/blank
+ *       ISO-4217 currency code from {@code libs/money} {@code Money.ofMinor} ({@code
+ *       Currency.getInstance} throws {@code IllegalArgumentException} for an unknown code) → {@code
+ *       400} with the message as {@code detail}; and
  *   <li>any other {@link Exception} — an unexpected fault → {@code 500} whose {@code detail} is a
  *       generic, non-leaking message (the real exception is logged server-side with the {@code
  *       traceId}, never returned to the client; HR-6).
  * </ul>
+ *
+ * <p><strong>Composability with service-specific advice.</strong> This advice is ordered at {@link
+ * Ordered#LOWEST_PRECEDENCE}, so a service that adds its own {@code @RestControllerAdvice} for a
+ * narrower exception (e.g. org-service's {@code TenantAccessDeniedException} → {@code 403}, or
+ * finance-service's {@code ConstraintViolationException} → {@code 400}) is consulted first; Spring
+ * still resolves the most specific {@code @ExceptionHandler} across all advices, so those keep
+ * their mappings while this one owns the shared contract and the catch-all.
  */
 @RestControllerAdvice
+@Order(Ordered.LOWEST_PRECEDENCE)
 public class ApiExceptionHandler {
 
   private static final String TYPE_BASE = "https://errors.nativeapp.id/";
@@ -64,20 +77,7 @@ public class ApiExceptionHandler {
     return problem;
   }
 
-  /** Bean-validation failures on a request parameter (e.g. {@code period}) → 400. */
-  @ExceptionHandler(ConstraintViolationException.class)
-  public ProblemDetail handleConstraintViolation(
-      ConstraintViolationException ex, HttpServletRequest request) {
-    ProblemDetail problem = problem(HttpStatus.BAD_REQUEST, "validation-failed", request);
-    problem.setTitle("Validation failed");
-    problem.setDetail("One or more parameters are invalid.");
-    List<Map<String, String>> errors =
-        ex.getConstraintViolations().stream().map(ApiExceptionHandler::toViolation).toList();
-    problem.setProperty("errors", errors);
-    return problem;
-  }
-
-  /** A domain-rejected value (e.g. an unknown ISO-4217 currency, a bad period) → 400. */
+  /** A domain-rejected value (e.g. an unknown ISO-4217 currency from Money) → 400. */
   @ExceptionHandler(IllegalArgumentException.class)
   public ProblemDetail handleIllegalArgument(
       IllegalArgumentException ex, HttpServletRequest request) {
@@ -114,14 +114,5 @@ public class ApiExceptionHandler {
   private static Map<String, String> toFieldError(FieldError error) {
     String message = error.getDefaultMessage();
     return Map.of("field", error.getField(), "message", message == null ? "invalid" : message);
-  }
-
-  private static Map<String, String> toViolation(ConstraintViolation<?> violation) {
-    String message = violation.getMessage();
-    return Map.of(
-        "field",
-        violation.getPropertyPath().toString(),
-        "message",
-        message == null ? "invalid" : message);
   }
 }

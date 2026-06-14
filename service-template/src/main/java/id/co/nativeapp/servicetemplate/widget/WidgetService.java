@@ -1,6 +1,6 @@
 package id.co.nativeapp.servicetemplate.widget;
 
-import id.co.nativeapp.servicetemplate.config.RlsAutoApplyAspect;
+import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
 import org.springframework.stereotype.Service;

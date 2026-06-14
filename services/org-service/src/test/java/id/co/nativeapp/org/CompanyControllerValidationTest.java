@@ -9,7 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import id.co.nativeapp.org.company.CompanyController;
 import id.co.nativeapp.org.company.CompanyService;
-import id.co.nativeapp.org.config.ApiExceptionHandler;
+import id.co.nativeapp.security.ApiExceptionHandler;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;

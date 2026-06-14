@@ -6,7 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import id.co.nativeapp.finance.config.ApiExceptionHandler;
+import id.co.nativeapp.finance.config.ConstraintViolationAdvice;
 import id.co.nativeapp.finance.revenue.RevenueController;
 import id.co.nativeapp.finance.revenue.RevenueReader;
 import id.co.nativeapp.money.Money;
@@ -28,7 +28,7 @@ import org.springframework.test.web.servlet.MockMvc;
  * {@link RevenueReader} is mocked — no DB.
  */
 @WebMvcTest(RevenueController.class)
-@Import(ApiExceptionHandler.class)
+@Import(ConstraintViolationAdvice.class)
 class RevenueControllerTest {
 
   @Autowired private MockMvc mockMvc;

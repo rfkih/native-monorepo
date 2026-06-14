@@ -11,7 +11,7 @@ import id.co.nativeapp.org.company.CompanyController;
 import id.co.nativeapp.org.company.CompanyService;
 import id.co.nativeapp.org.company.OrgUnit;
 import id.co.nativeapp.org.company.OrgUnitType;
-import id.co.nativeapp.org.config.ApiExceptionHandler;
+import id.co.nativeapp.org.config.TenantAccessDeniedAdvice;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -36,7 +36,7 @@ import org.springframework.test.web.servlet.MockMvc;
  * request-edge tenant binding the gateway/{@code DevTenantFilter} performs in production.
  */
 @WebMvcTest(CompanyController.class)
-@Import(ApiExceptionHandler.class)
+@Import(TenantAccessDeniedAdvice.class)
 class CreateBusinessTenantGuardTest {
 
   private static final UUID BOUND_TENANT = UUID.fromString("11111111-1111-1111-1111-111111111111");

@@ -1,6 +1,6 @@
 package id.co.nativeapp.org.company;
 
-import id.co.nativeapp.org.config.ApiExceptionHandler;
+import id.co.nativeapp.security.ApiExceptionHandler;
 import jakarta.validation.constraints.NotBlank;
 
 /**

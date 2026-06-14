@@ -1,6 +1,5 @@
 package id.co.nativeapp.org;
 
-import id.co.nativeapp.org.config.PersistenceConfig;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
@@ -9,11 +8,14 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * with its immutable {@code base_currency} and {@code default_language} plus one business, and emit
  * {@code CompanyCreated} via the outbox.
  *
- * <p>The cross-cutting persistence wiring (Spring Data JPA auditing from {@code libs/tenant} and
- * the auto-RLS beans/aspect) lives in {@link PersistenceConfig} rather than on this bootstrap
- * class. Keeping it off the {@code @SpringBootApplication} class means web slice tests
- * ({@code @WebMvcTest}) do not drag in JPA infrastructure they have no datasource for, while the
- * full application still loads it via component scanning.
+ * <p>The cross-cutting persistence wiring (Spring Data JPA auditing and the auto-RLS beans/aspect +
+ * pinned tx-advisor order) is now contributed by {@code libs/tenant}'s {@code
+ * TenantRlsAutoConfiguration}, and the shared RFC-7807 {@code ProblemDetail} advice by {@code
+ * libs/security} — both Spring Boot auto-configurations this service inherits purely by depending
+ * on those libraries, with no copied {@code config} class. The one org-specific fault shape (a
+ * tenant mismatch → {@code 403}) is added by {@code config/TenantAccessDeniedAdvice}. The
+ * auto-config's aspect is {@code @ConditionalOnBean(DataSource.class)}, so a web slice test
+ * ({@code @WebMvcTest}) with no datasource is unaffected, while the full application loads it.
  */
 @SpringBootApplication
 public class OrgServiceApplication {

@@ -14,10 +14,10 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>It is a distinct bean (not a private method on {@link RevenuePostingService}) so the method is
  * invoked through the Spring proxy: a self-invocation would bypass the {@code @Transactional}
- * advice and the {@link id.co.nativeapp.finance.config.RlsAutoApplyAspect} that sets the tenant
- * GUC, and the tenant GUC is exactly what makes the RLS {@code WITH CHECK} pass on the inserts
- * (rule 5). The caller ({@link RevenuePostingService}) binds the tenant from the event's {@code
- * company_id} before invoking this method.
+ * advice and the {@link id.co.nativeapp.tenant.RlsAutoApplyAspect} that sets the tenant GUC, and
+ * the tenant GUC is exactly what makes the RLS {@code WITH CHECK} pass on the inserts (rule 5). The
+ * caller ({@link RevenuePostingService}) binds the tenant from the event's {@code company_id}
+ * before invoking this method.
  *
  * <p><strong>Idempotency (rule 3 / HR-3).</strong> Everything below happens in ONE transaction: the
  * dedupe claim and the side effects commit (or roll back) together. {@link

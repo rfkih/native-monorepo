@@ -2,7 +2,7 @@ package id.co.nativeapp.org.company;
 
 import id.co.nativeapp.events.AvroSerde;
 import id.co.nativeapp.events.OutboxWriter;
-import id.co.nativeapp.org.config.RlsAutoApplyAspect;
+import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
 import java.util.UUID;

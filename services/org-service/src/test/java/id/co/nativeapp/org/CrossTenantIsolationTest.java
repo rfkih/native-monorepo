@@ -19,9 +19,9 @@ import org.springframework.boot.test.context.SpringBootTest;
  * <p>A company and its org_unit created under tenant A are invisible within tenant B's scope. The
  * read paths ({@link CompanyService#findCompaniesForCurrentTenant()} / {@link
  * CompanyService#findOrgUnitsForCurrentTenant()}) carry NO {@code WHERE company_id} and never call
- * the synchronizer by hand — only {@link id.co.nativeapp.org.config.RlsAutoApplyAspect} sets the
- * tenant GUC on each {@code @Transactional} unit of work. This models a developer who forgets the
- * tenant and proves they are still protected (rule 5).
+ * the synchronizer by hand — only {@link id.co.nativeapp.tenant.RlsAutoApplyAspect} sets the tenant
+ * GUC on each {@code @Transactional} unit of work. This models a developer who forgets the tenant
+ * and proves they are still protected (rule 5).
  *
  * <p>Each company is created via the real bootstrap flow (no inbound tenant scope), then reads are
  * issued inside each company's own scope. Runs as the unprivileged {@code app_user} role (see

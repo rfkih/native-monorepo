@@ -1,14 +1,12 @@
-package id.co.nativeapp.servicetemplate.config;
+package id.co.nativeapp.tenant;
 
-import id.co.nativeapp.tenant.RlsTransactionSynchronizer;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.springframework.core.Ordered;
-import org.springframework.stereotype.Component;
 
 /**
- * THE auto-applied RLS guarantee (the M0.2 item deferred by both reviewers).
+ * THE auto-applied RLS guarantee (rule 5), shared by every Native service from {@code libs/tenant}.
  *
  * <p>This aspect wraps every {@code @Transactional} method so the PostgreSQL tenant GUC ({@code
  * app.current_tenant}) is set on the transaction's connection <em>automatically</em>, on every
@@ -29,9 +27,12 @@ import org.springframework.stereotype.Component;
  * <p>It delegates to {@link RlsTransactionSynchronizer#register()}, which applies the tenant now
  * and re-applies it across transaction suspend/resume so the GUC stays correct on a shared pooled
  * connection. When no tenant is bound or no transaction is active the synchronizer is a safe no-op.
+ *
+ * <p>This is wired as a bean by {@link TenantRlsAutoConfiguration}; a service gets it simply by
+ * depending on {@code libs/tenant}, with no copied aspect of its own (and may still override it
+ * with its own {@code RlsAutoApplyAspect} bean, which {@code @ConditionalOnMissingBean} defers to).
  */
 @Aspect
-@Component
 public class RlsAutoApplyAspect implements Ordered {
 
   private final RlsTransactionSynchronizer synchronizer;
@@ -58,8 +59,8 @@ public class RlsAutoApplyAspect implements Ordered {
    * Lowest precedence so this advice runs <em>after</em> Spring's transaction interceptor has
    * opened the transaction — the connection must already be bound for {@code SET LOCAL} to take
    * effect. Spring's {@code @Transactional} advisor is pinned to a strictly higher precedence in
-   * {@link PersistenceConfig#TX_ADVISOR_ORDER}, so "this aspect runs inside the transaction" is
-   * guaranteed by contract, not by an undefined tie-break.
+   * {@link TenantRlsAutoConfiguration#TX_ADVISOR_ORDER}, so "this aspect runs inside the
+   * transaction" is guaranteed by contract, not by an undefined tie-break.
    */
   @Override
   public int getOrder() {

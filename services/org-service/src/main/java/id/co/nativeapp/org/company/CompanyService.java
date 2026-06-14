@@ -25,11 +25,11 @@ import org.springframework.stereotype.Service;
  * </ol>
  *
  * <p>Because {@link CompanyWriter#create} is {@code @Transactional} and invoked through the Spring
- * proxy from within that scope, the {@link id.co.nativeapp.org.config.RlsAutoApplyAspect} sets
- * {@code app.current_tenant = newCompanyId} on the transaction's connection. Every inserted row
- * carries {@code company_id = newCompanyId}, so the RLS {@code WITH CHECK} passes on the bootstrap
- * insert and {@code company_id} is stamped correctly. The actor flows into {@code
- * created_by}/{@code updated_by} via {@code TenantAuditorAware}.
+ * proxy from within that scope, the {@link id.co.nativeapp.tenant.RlsAutoApplyAspect} sets {@code
+ * app.current_tenant = newCompanyId} on the transaction's connection. Every inserted row carries
+ * {@code company_id = newCompanyId}, so the RLS {@code WITH CHECK} passes on the bootstrap insert
+ * and {@code company_id} is stamped correctly. The actor flows into {@code created_by}/{@code
+ * updated_by} via {@code TenantAuditorAware}.
  *
  * <p>This service is deliberately NOT {@code @Transactional} itself — it merely opens the tenant
  * scope and delegates; the transaction boundary lives on the writer so the proxy + RLS aspect

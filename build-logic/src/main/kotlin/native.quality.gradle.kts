@@ -81,6 +81,16 @@ tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
                         "**/*Application.*",
                         "**/config/**",
                         "**/*Config.*",
+                        // Cross-cutting Spring wiring with no business logic, on a par with the
+                        // config/ package and *Config above: the auto-configurations and the
+                        // auto-RLS @Aspect promoted into libs/tenant + libs/security (#6/#12).
+                        // They are exercised end to end by the RLS isolation / auto-RLS / ProblemDetail
+                        // tests, but are bean-wiring glue, not behaviour worth a per-class coverage
+                        // number — same rationale the existing exclusions apply.
+                        "**/*AutoConfiguration.*",
+                        "**/*Aspect.*",
+                        "**/*Advice.*",
+                        "**/*ExceptionHandler.*",
                         "**/*Request.*",
                         "**/*Response.*",
                         "**/*Command.*",

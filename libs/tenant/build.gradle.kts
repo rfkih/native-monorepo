@@ -21,6 +21,26 @@ dependencies {
     // (see native.spring-conventions), so no explicit versions here.
     api("org.springframework.boot:spring-boot-starter-data-jpa")
 
+    // #6 — promote auto-RLS into THIS library as a Spring Boot auto-configuration
+    // (TenantRlsAutoConfiguration, registered in
+    // META-INF/spring/...AutoConfiguration.imports). It contributes the
+    // RlsConnectionInitializer + RlsTransactionSynchronizer beans, the
+    // RlsAutoApplyAspect (@Around every @Transactional), @EnableTransactionManagement
+    // with the pinned tx-advisor order, and @EnableJpaAuditing wiring
+    // TenantAuditorAware — so a service gets the rule-5 guarantee by depending on
+    // libs/tenant, with NO copied config. Exposed as `api` so consumers inherit the
+    // autoconfigure/aspect machinery without re-declaring it:
+    //  - spring-boot-autoconfigure: @AutoConfiguration + @ConditionalOnClass/Bean/MissingBean.
+    //  - spring-boot-starter-aspectj: aspectjweaver + spring-aop for the @Aspect.
+    //  - spring-tx: @EnableTransactionManagement / @Transactional / the tx synchronizer.
+    //  - spring-jdbc: DataSourceUtils, the transaction-bound connection the SET LOCAL lands on.
+    // spring-data-jpa already pulls spring-tx/spring-jdbc transitively; they are named
+    // explicitly because this library now compiles against them directly.
+    api("org.springframework.boot:spring-boot-autoconfigure")
+    api("org.springframework.boot:spring-boot-starter-aspectj")
+    api("org.springframework:spring-tx")
+    api("org.springframework:spring-jdbc")
+
     // Audit-column round-trip test: a sample @Entity persisted against an
     // in-memory H2 (PostgreSQL compatibility mode) with JPA auditing active.
     // Spring Boot 4 splits the @DataJpaTest slice into its own module

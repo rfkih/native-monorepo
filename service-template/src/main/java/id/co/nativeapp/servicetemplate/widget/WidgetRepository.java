@@ -1,6 +1,6 @@
 package id.co.nativeapp.servicetemplate.widget;
 
-import id.co.nativeapp.servicetemplate.config.RlsAutoApplyAspect;
+import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 /**
