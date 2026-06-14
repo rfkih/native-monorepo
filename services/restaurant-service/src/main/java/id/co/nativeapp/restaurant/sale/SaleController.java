@@ -2,26 +2,32 @@ package id.co.nativeapp.restaurant.sale;
 
 import id.co.nativeapp.restaurant.config.DevTenantFilter;
 import jakarta.validation.Valid;
+import java.net.URI;
 import java.time.Instant;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * {@code POST /sales} — record a sale.
+ * {@code POST /api/v1/sales} — record a sale.
  *
  * <p>The request carries only the business payload; the tenant ({@code company_id}) and actor come
  * from the bound {@link id.co.nativeapp.tenant.TenantContext TenantContext} (set at the request
  * edge by {@link DevTenantFilter}, the documented stand-in for the JWT/gateway that arrives in
  * M1.1) — never from the body (rule 5).
  *
- * <p>Returns {@code 201 Created} when a new sale was recorded (and exactly one {@code SaleRecorded}
- * emitted), and {@code 200 OK} when a retry with the same {@code idempotency_key} returned the
- * pre-existing sale (no second event).
+ * <p>The resource lives under {@code /api/v1} (URI versioning — ENGINEERING-STANDARDS §1.1), so the
+ * gateway, which routes {@code /api/v1/sales/**} preserving the full path, reaches this handler.
+ *
+ * <p>Returns {@code 201 Created} (with a {@code Location} header pointing at the new resource) when
+ * a new sale was recorded (and exactly one {@code SaleRecorded} emitted), and {@code 200 OK} when a
+ * retry with the same {@code idempotency_key} returned the pre-existing sale (no second event, no
+ * {@code Location}).
  */
 @RestController
+@RequestMapping("/api/v1/sales")
 public class SaleController {
 
   private final SaleService saleService;
@@ -30,7 +36,7 @@ public class SaleController {
     this.saleService = saleService;
   }
 
-  @PostMapping("/sales")
+  @PostMapping
   public ResponseEntity<SaleResponse> recordSale(@Valid @RequestBody SaleRequest request) {
     RecordSaleCommand command =
         new RecordSaleCommand(
@@ -42,6 +48,8 @@ public class SaleController {
 
     RecordSaleResult result = saleService.recordSale(command);
     SaleResponse body = SaleResponse.from(result.sale());
-    return ResponseEntity.status(result.created() ? HttpStatus.CREATED : HttpStatus.OK).body(body);
+    return result.created()
+        ? ResponseEntity.created(URI.create("/api/v1/sales/" + body.id())).body(body)
+        : ResponseEntity.ok(body);
   }
 }
