@@ -82,14 +82,23 @@ tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
                         "**/config/**",
                         "**/*Config.*",
                         // Cross-cutting Spring wiring with no business logic, on a par with the
-                        // config/ package and *Config above: the auto-configurations and the
-                        // auto-RLS @Aspect promoted into libs/tenant + libs/security (#6/#12).
-                        // They are exercised end to end by the RLS isolation / auto-RLS / ProblemDetail
-                        // tests, but are bean-wiring glue, not behaviour worth a per-class coverage
-                        // number — same rationale the existing exclusions apply.
-                        "**/*AutoConfiguration.*",
-                        "**/*Aspect.*",
-                        "**/*Advice.*",
+                        // config/ package and *Config above: the SPECIFIC platform-glue classes
+                        // promoted into libs/tenant + libs/security (#6/#12). They are exercised
+                        // end to end by the RLS isolation / auto-RLS / ProblemDetail tests, but are
+                        // bean-wiring glue, not behaviour worth a per-class coverage number.
+                        //
+                        // NARROWED from the former broad **/*AutoConfiguration.* / **/*Aspect.* /
+                        // **/*Advice.* name-globs (task #14.5): those silently excluded ANY future
+                        // *Advice/*Aspect — including one carrying real branch logic — from the
+                        // coverage denominator. Now only the KNOWN glue is named, so a new
+                        // *Advice/*Aspect with logic IS measured and held to the floor. The existing
+                        // *Advice classes (NotEntitledAdvice, EmployeeApiAdvice, …) all live under a
+                        // config/ package and stay excluded via **/config/** above — not by name.
+                        "**/RlsAutoApplyAspect.*",
+                        "**/TenantRlsAutoConfiguration.*",
+                        "**/NativeSecurityAutoConfiguration.*",
+                        "**/NativeProblemDetailAutoConfiguration.*",
+                        "**/KafkaReadinessHealthAutoConfiguration.*",
                         "**/*ExceptionHandler.*",
                         "**/*Request.*",
                         "**/*Response.*",

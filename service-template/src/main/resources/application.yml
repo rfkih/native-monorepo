@@ -38,12 +38,19 @@ management:
     health:
       probes:
         enabled: true
+      # Readiness aggregates the DB indicator (ENGINEERING-STANDARDS §7): a pod reports
+      # NOT_READY (and is pulled from rotation) while its schema/read model is still
+      # hydrating or the DB is unreachable. Liveness stays the cheap /healthz probe (no
+      # DB hit) so a transient DB blip never gets the pod killed. No Kafka here (this
+      # template has no consumer); Kafka services add `kafka` to this list.
+      group:
+        readiness:
+          include: readinessState, db
   metrics:
     tags:
       service: service-template
 
-logging:
-  pattern:
-    # Structured-ish console pattern including the trace/span ids OpenTelemetry
-    # injects into MDC, so logs correlate with traces once OTel is on the agent.
-    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%X{trace_id:-},%X{span_id:-}] %logger{36} - %msg%n"
+# Structured JSON logs are defined ONCE in libs/observability's shared logback-native-json.xml
+# (ENGINEERING-STANDARDS §5), included via this service's logback-spring.xml. The old
+# logging.pattern.console is intentionally gone: the dev console pattern now lives in that shared
+# logback config (dev profile), and every non-dev profile emits one JSON object per line.

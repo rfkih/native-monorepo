@@ -27,6 +27,11 @@ dependencies {
     implementation(project(":libs:events"))
     implementation(project(":libs:tenant"))
 
+    // observability — the SHARED logback-native-json.xml (JSON logs, trace/correlation MDC
+    // fields, dev console fallback) that this service's logback-spring.xml <include>s, plus the
+    // logstash-logback-encoder it references (ENGINEERING-STANDARDS §5). One source, no copied XML.
+    implementation(project(":libs:observability"))
+
     // Defense-in-depth local JWT validation (#16) AND the shared RFC-7807 ProblemDetail advice
     // (#12): libs/security ships both as Spring Boot auto-configurations, so this service inherits
     // ONE compliant ApiExceptionHandler (and local JWT validation) by dependency — no copied

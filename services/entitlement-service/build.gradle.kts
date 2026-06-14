@@ -50,6 +50,11 @@ dependencies {
     implementation(project(":libs:money"))
     implementation(project(":libs:events"))
     implementation(project(":libs:tenant"))
+    // observability — the SHARED logback-native-json.xml (one-object-per-line JSON logs with the
+    // trace/correlation MDC fields + a dev console fallback) this service's logback-spring.xml
+    // <include>s, plus the logstash-logback-encoder it references (ENGINEERING-STANDARDS §5). One
+    // source of the log format across every service; no copied appender XML.
+    implementation(project(":libs:observability"))
     implementation(project(":libs:security"))
     implementation(project(":libs:entitlement-check"))
 

@@ -31,6 +31,13 @@ dependencyManagement {
 }
 
 dependencies {
+    // observability — the SHARED logback-native-json.xml (one-object-per-line JSON logs with the
+    // trace/correlation MDC fields + a dev console fallback) the gateway's logback-spring.xml
+    // <include>s, plus the logstash-logback-encoder it references (ENGINEERING-STANDARDS §5). This
+    // is deliberately the ONLY libs/* the stateless gateway depends on — it is dependency-light (no
+    // JPA/Spring), so the gateway gets identical JSON logs without gaining a persistence stack.
+    implementation(project(":libs:observability"))
+
     // Spring Cloud Gateway on the SERVLET stack (server-webmvc). Pulls in
     // spring-boot-starter-web transitively, so the gateway runs on the same blocking
     // model as the downstream services — no WebFlux.

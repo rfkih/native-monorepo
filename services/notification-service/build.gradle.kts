@@ -38,6 +38,12 @@ dependencies {
     implementation(project(":libs:events"))
     implementation(project(":libs:tenant"))
 
+    // observability — the SHARED logback-native-json.xml (one-object-per-line JSON logs with the
+    // trace/correlation MDC fields + a dev console fallback) this service's logback-spring.xml
+    // <include>s, plus the logstash-logback-encoder it references (ENGINEERING-STANDARDS §5). One
+    // source of the log format across every service; no copied appender XML.
+    implementation(project(":libs:observability"))
+
     // Defense-in-depth local JWT validation (#16): a shared auto-configuration that, in the
     // non-dev profile, validates the inbound RS256 token against Keycloak's JWKS and binds
     // TenantContext from the verified company_id claim (so RLS engages) — never trusting an inbound

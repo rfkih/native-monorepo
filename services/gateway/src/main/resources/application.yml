@@ -67,12 +67,19 @@ management:
     health:
       probes:
         enabled: true
+      # The gateway is STATELESS — no database, no Kafka consumer, no read model to
+      # hydrate (ENGINEERING-STANDARDS §7). Its readiness is therefore just the
+      # readinessState lifecycle indicator: there is no `db`/`kafka` indicator to
+      # aggregate. Redis backs only the rate limiter (a degradable convenience), so it is
+      # deliberately NOT a readiness gate — the gateway's core job (JWT validation +
+      # routing) stays available if Redis blips.
+      group:
+        readiness:
+          include: readinessState
   metrics:
     tags:
       service: gateway
 
-logging:
-  pattern:
-    # Structured-ish console pattern including the trace/span ids OpenTelemetry injects
-    # into MDC, so logs correlate with traces once OTel is on the agent.
-    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%X{trace_id:-},%X{span_id:-}] %logger{36} - %msg%n"
+# Structured JSON logs are defined ONCE in libs/observability's shared logback-native-json.xml
+# (ENGINEERING-STANDARDS §5), included via this service's logback-spring.xml — dev keeps a console
+# pattern, every non-dev profile emits one JSON object per line.

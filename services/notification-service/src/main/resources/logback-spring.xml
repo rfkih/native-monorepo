@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Native logging entry point. Intentionally a one-line include of the SHARED definition
+  shipped by libs/observability (ENGINEERING-STANDARDS §5) — the JSON encoder, the dev
+  console fallback, the trace/correlation MDC fields, and the profile gating all live
+  there, so every service emits identical logs from a single source with no copied XML.
+
+  Boot detects this file (logback-SPRING.xml) and enables the <springProfile>/<springProperty>
+  extensions for the included file too. When a service is cloned from service-template this
+  file is copied verbatim — do not edit it; change the shared logback-native-json.xml instead.
+
+  Spring Boot's own base config (console/file pattern defaults) is deliberately NOT included:
+  the shared file fully defines the root and appenders.
+-->
+<configuration>
+  <include resource="logback-native-json.xml"/>
+</configuration>

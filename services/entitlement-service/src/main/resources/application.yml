@@ -71,15 +71,20 @@ management:
     health:
       probes:
         enabled: true
+      # Readiness aggregates the DB AND Kafka indicators (ENGINEERING-STANDARDS §7):
+      # entitlement-service consumes CompanyCreated to seed default modules, so it must
+      # report NOT_READY (and be pulled from rotation) while that read model is hydrating
+      # or the broker is down. Liveness stays the cheap /healthz probe.
+      group:
+        readiness:
+          include: readinessState, db, kafka
   metrics:
     tags:
       service: entitlement-service
 
-logging:
-  pattern:
-    # Structured-ish console pattern including the trace/span ids OpenTelemetry injects into MDC, so
-    # logs correlate with traces once OTel is on the agent.
-    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%X{trace_id:-},%X{span_id:-}] %logger{36} - %msg%n"
+# Structured JSON logs are defined ONCE in libs/observability's shared logback-native-json.xml
+# (ENGINEERING-STANDARDS §5), included via this service's logback-spring.xml — dev keeps a console
+# pattern, every non-dev profile emits one JSON object per line.
 
 ---
 # Defense-in-depth local JWT validation (#16, libs/security) — NON-DEV ONLY.

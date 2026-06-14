@@ -38,15 +38,19 @@ management:
     health:
       probes:
         enabled: true
+      # Readiness aggregates the DB indicator (ENGINEERING-STANDARDS §7): NOT_READY while
+      # the schema/read model is hydrating or the DB is unreachable. org-service has no
+      # Kafka consumer, so no `kafka` indicator here. Liveness stays the cheap /healthz probe.
+      group:
+        readiness:
+          include: readinessState, db
   metrics:
     tags:
       service: org-service
 
-logging:
-  pattern:
-    # Structured-ish console pattern including the trace/span ids OpenTelemetry
-    # injects into MDC, so logs correlate with traces once OTel is on the agent.
-    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%X{trace_id:-},%X{span_id:-}] %logger{36} - %msg%n"
+# Structured JSON logs are defined ONCE in libs/observability's shared logback-native-json.xml
+# (ENGINEERING-STANDARDS §5), included via this service's logback-spring.xml — dev keeps a console
+# pattern, every non-dev profile emits one JSON object per line.
 
 ---
 # Defense-in-depth local JWT validation (#16, libs/security) — NON-DEV ONLY.

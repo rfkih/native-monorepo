@@ -4,10 +4,17 @@ import static com.tngtech.archunit.base.DescribedPredicate.describe;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
+import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
+import com.tngtech.archunit.core.domain.JavaField;
+import com.tngtech.archunit.core.domain.JavaMethod;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
+import com.tngtech.archunit.lang.ArchCondition;
 import com.tngtech.archunit.lang.ArchRule;
+import com.tngtech.archunit.lang.ConditionEvents;
+import com.tngtech.archunit.lang.SimpleConditionEvent;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -15,6 +22,21 @@ import org.junit.jupiter.api.Test;
 class LayeredArchitectureTest {
 
   private static final String BASE_PACKAGE = "id.co.nativeapp.carwash";
+
+  /**
+   * Fully-qualified names of types that must NEVER hold a monetary amount on a persistent
+   * {@code @Entity}/{@code @Embeddable} (HR-8): the boxed floating types and {@code BigDecimal},
+   * plus the primitive {@code float}/{@code double} (a primitive is not a class "dependency"
+   * ArchUnit's {@code dependOnClassesThat} can see, so a field-type scan is required to cover
+   * {@code double amount}).
+   */
+  private static final Set<String> BANNED_MONEY_FIELD_TYPES =
+      Set.of("float", "double", "java.lang.Float", "java.lang.Double", "java.math.BigDecimal");
+
+  /** Simple names of the RLS wiring beans whose single source of truth is libs/tenant. */
+  private static final Set<String> RLS_WIRING_TYPES =
+      Set.of("RlsConnectionInitializer", "RlsTransactionSynchronizer", "RlsAutoApplyAspect");
+
   private static JavaClasses classes;
 
   @BeforeAll
@@ -157,18 +179,119 @@ class LayeredArchitectureTest {
     rule.check(classes);
   }
 
+  /**
+   * HR-8: no monetary amount on a persistent {@code @Entity}/{@code @Embeddable} may be a floating
+   * type ({@code float}/{@code double}, primitive OR boxed) or {@code BigDecimal} — money is the
+   * libs/money {@code Money} (integer minor units + ISO-4217 currency), persisted as the two-column
+   * {@code MoneyEmbeddable}. This covers BOTH {@code @Embeddable} (where the money columns live)
+   * and {@code @Entity}, and BOTH primitive and boxed floating types (a primitive field is not a
+   * class dependency, so a field-type scan is required — {@code dependOnClassesThat} alone would
+   * miss {@code double amount}).
+   */
   @Test
   void entitiesHaveNoDecimalMoneyFields() {
     ArchRule rule =
-        noClasses()
+        classes()
             .that()
             .areAnnotatedWith(jakarta.persistence.Entity.class)
             .or()
             .areAnnotatedWith(jakarta.persistence.Embeddable.class)
-            .should()
-            .dependOnClassesThat()
-            .haveFullyQualifiedName("java.math.BigDecimal")
-            .as("money is libs/money Money (minor units + currency), never a float or BigDecimal");
+            .should(haveNoFloatingPointOrDecimalFields())
+            .as(
+                "money is libs/money Money (minor units + currency), never a float/double/BigDecimal"
+                    + " field (HR-8)");
     rule.check(classes);
+  }
+
+  /**
+   * Drift guard: the RLS + JPA-auditing wiring has a SINGLE source — libs/tenant's {@code
+   * TenantRlsAutoConfiguration}. No service class may re-declare it by carrying
+   * {@code @EnableTransactionManagement} / {@code @EnableJpaAuditing}, or by declaring a
+   * {@code @Bean} of {@code RlsConnectionInitializer} / {@code RlsTransactionSynchronizer} / {@code
+   * RlsAutoApplyAspect}. A per-service copy would drift from (and could mis-order) the load-bearing
+   * rule-5 aspect, so it is banned statically here rather than discovered later in review.
+   */
+  @Test
+  void servicesDoNotRedeclareTheRlsOrAuditingWiring() {
+    ArchRule rule =
+        classes()
+            .that()
+            .resideInAPackage(BASE_PACKAGE + "..")
+            .should(notRedeclareTheRlsOrAuditingWiring())
+            .as(
+                "the RLS + JPA-auditing wiring is owned solely by libs/tenant"
+                    + " (TenantRlsAutoConfiguration); a service must not redeclare it (HR-5 drift)");
+    rule.check(classes);
+  }
+
+  /**
+   * Positive condition (violated == bad): a field-type scan flagging any {@code float}/{@code
+   * double}/{@code Float}/{@code Double}/{@code BigDecimal} field. Covers primitive AND boxed — a
+   * primitive field is not a class dependency, so {@code dependOnClassesThat} would miss {@code
+   * double amount}.
+   */
+  private static ArchCondition<JavaClass> haveNoFloatingPointOrDecimalFields() {
+    return new ArchCondition<>("have no float/double/BigDecimal field") {
+      @Override
+      public void check(JavaClass item, ConditionEvents events) {
+        for (JavaField field : item.getFields()) {
+          String typeName = field.getRawType().getName();
+          if (BANNED_MONEY_FIELD_TYPES.contains(typeName)) {
+            events.add(
+                SimpleConditionEvent.violated(
+                    field,
+                    String.format(
+                        "Field %s.%s is of banned monetary type %s (use libs/money Money /"
+                            + " MoneyEmbeddable, HR-8)",
+                        item.getName(), field.getName(), typeName)));
+          }
+        }
+      }
+    };
+  }
+
+  /**
+   * Positive condition (violated == bad): flags a class that carries
+   * {@code @EnableTransactionManagement} / {@code @EnableJpaAuditing}, or declares a {@code @Bean}
+   * whose return type is one of the libs/tenant RLS wiring types.
+   */
+  private static ArchCondition<JavaClass> notRedeclareTheRlsOrAuditingWiring() {
+    return new ArchCondition<>("not redeclare the libs/tenant RLS / JPA-auditing wiring") {
+      @Override
+      public void check(JavaClass item, ConditionEvents events) {
+        if (item.isAnnotatedWith(
+            org.springframework.transaction.annotation.EnableTransactionManagement.class)) {
+          events.add(
+              SimpleConditionEvent.violated(
+                  item,
+                  item.getName()
+                      + " is annotated @EnableTransactionManagement — that wiring lives ONLY in"
+                      + " libs/tenant's TenantRlsAutoConfiguration (HR-5 drift)"));
+        }
+        if (item.isAnnotatedWith(
+            org.springframework.data.jpa.repository.config.EnableJpaAuditing.class)) {
+          events.add(
+              SimpleConditionEvent.violated(
+                  item,
+                  item.getName()
+                      + " is annotated @EnableJpaAuditing — that wiring lives ONLY in libs/tenant"
+                      + " (TenantRlsAutoConfiguration)"));
+        }
+        for (JavaMethod method : item.getMethods()) {
+          if (method.isAnnotatedWith(org.springframework.context.annotation.Bean.class)
+              && RLS_WIRING_TYPES.contains(method.getRawReturnType().getSimpleName())) {
+            events.add(
+                SimpleConditionEvent.violated(
+                    method,
+                    String.format(
+                        "%s.%s declares an RLS-wiring @Bean (%s) — owned by libs/tenant only"
+                            + " (HR-5 drift)",
+                        item.getName(),
+                        method.getName(),
+                        method.getRawReturnType().getSimpleName())));
+          }
+        }
+      }
+    };
   }
 }

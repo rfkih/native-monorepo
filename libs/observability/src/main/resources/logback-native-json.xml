@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Shared Native logging definition (ENGINEERING-STANDARDS §5 — Observability).
+
+  ONE source of truth for every service's log format, shipped as a classpath resource in
+  libs/observability and pulled in by each service's tiny logback-spring.xml via
+  <include resource="logback-native-json.xml"/>. Because the including file is a
+  *-spring.xml, Spring Boot's <springProfile>/<springProperty> extensions are active for
+  this included file too, so the profile gating below works.
+
+  Output contract (one JSON object per line — machine-parseable by Loki, never the old
+  plain-text console pattern):
+    - service        : the Spring application name (spring.application.name)
+    - level, logger, message, @timestamp, thread, stack_trace : LogstashEncoder defaults
+    - correlation_id : the request/correlation id from MDC (when present)
+    - trace_id, span_id : the OpenTelemetry trace context from MDC (when present), so a
+                          log line correlates to its span exactly as the old pattern's
+                          [trace_id,span_id] did.
+
+  Profiles:
+    - dev  -> a human-friendly plain-text console (keeps local logs readable; still carries
+              [trace_id,span_id], matching the previous logging.pattern.console).
+    - default / prod / any non-dev profile -> the JSON encoder.
+  The message TEXT is identical in both encoders (only the surrounding encoding differs),
+  so the log-capture tests that assert on the formatted MESSAGE (e.g. employee-service's
+  PII-absence assertions) are unaffected.
+-->
+<included>
+  <!-- The service name is read from Spring's Environment (spring.application.name) and
+       embedded as a constant JSON field on every line. Falls back to "unknown-service"
+       if unset so a misconfigured boot still produces valid JSON. -->
+  <springProperty scope="local" name="appName" source="spring.application.name"
+                  defaultValue="unknown-service"/>
+
+  <!-- JSON: one object per line, with the OTel trace context + correlation id from MDC.
+       includeMdcKeyName is allow-listed so ONLY these MDC keys are promoted to top-level
+       fields (avoids leaking arbitrary MDC content, HR-6). -->
+  <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+      <includeMdcKeyName>trace_id</includeMdcKeyName>
+      <includeMdcKeyName>span_id</includeMdcKeyName>
+      <includeMdcKeyName>correlation_id</includeMdcKeyName>
+      <customFields>{"service":"${appName}"}</customFields>
+      <fieldNames>
+        <timestamp>@timestamp</timestamp>
+      </fieldNames>
+    </encoder>
+  </appender>
+
+  <!-- Dev-only human-readable console; same trace correlation as the retired pattern. -->
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%X{trace_id:-},%X{span_id:-}] %logger{36} - %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <springProfile name="dev">
+    <root level="INFO">
+      <appender-ref ref="CONSOLE"/>
+    </root>
+  </springProfile>
+
+  <springProfile name="!dev">
+    <root level="INFO">
+      <appender-ref ref="JSON"/>
+    </root>
+  </springProfile>
+</included>

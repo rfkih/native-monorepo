@@ -24,6 +24,7 @@ include("libs:events")
 include("libs:tenant")
 include("libs:security")
 include("libs:entitlement-check")
+include("libs:observability")
 include("service-template")
 // Further modules are wired in as each milestone lands:
 include("services:gateway")
