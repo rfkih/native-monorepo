@@ -100,10 +100,11 @@ The first live event (M1.4 — the validation slice). Emitted by a vertical when
 is recorded; consumed by finance-service to post to the ledger.
 
 - **Producer:** `restaurant-service` (and the other verticals as they ship)
-- **Consumers:** `finance-service` (ledger posting + consolidated-revenue read model)
+- **Consumers:** `finance-service` (ledger posting + consolidated-revenue read model) — **LIVE (M1.5)**
 - **Aggregate type / partition key:** `sale` / `sale_id`
 - **Outbox `event_type`:** `SaleRecorded`
-- **Schema:** `services/restaurant-service/src/main/resources/avro/SaleRecorded.avsc`
+- **Schema (producer, source of truth):** `services/restaurant-service/src/main/resources/avro/SaleRecorded.avsc`
+- **Schema (finance consumer copy):** `services/finance-service/src/main/resources/avro/SaleRecorded.avsc` — finance owns its own consumer view of the contract; the finance `SaleRecordedContractTest` asserts the copy stays backward-compatible with the producer schema (rule 7). The finance consumer reads the outbox payload as **raw Avro bytes** via `libs/events AvroSerde` (no Schema Registry serde), deduping by the event UUID (`ProcessedEventStore`) so a re-delivery never double-posts.
 - **Full name:** `id.co.nativeapp.events.restaurant.SaleRecorded`
 
 **Money is an integer minor-units amount + an ISO-4217 currency code, never a float**
