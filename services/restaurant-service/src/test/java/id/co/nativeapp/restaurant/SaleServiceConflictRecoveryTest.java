@@ -15,49 +15,53 @@ import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
 
 /**
- * Deterministic proof of {@link SaleService}'s conflict-recovery branch — the one a
- * concurrent insert race triggers — without depending on thread timing.
+ * Deterministic proof of {@link SaleService}'s conflict-recovery branch — the one a concurrent
+ * insert race triggers — without depending on thread timing.
  *
- * <p>When {@link SaleWriter#create} throws a {@link DataIntegrityViolationException}
- * (the unique-constraint loser), {@code recordSale} must NOT propagate a 500: it
- * re-reads via {@link SaleWriter#findExistingByKey} (a fresh transaction) and returns
- * the existing sale with {@code created=false}. If that re-read finds nothing — a
- * genuine integrity error, not a concurrency race — the original exception propagates.
+ * <p>When {@link SaleWriter#create} throws a {@link DataIntegrityViolationException} (the
+ * unique-constraint loser), {@code recordSale} must NOT propagate a 500: it re-reads via {@link
+ * SaleWriter#findExistingByKey} (a fresh transaction) and returns the existing sale with {@code
+ * created=false}. If that re-read finds nothing — a genuine integrity error, not a concurrency race
+ * — the original exception propagates.
  */
 class SaleServiceConflictRecoveryTest {
 
-    private static final String TENANT = "11111111-1111-1111-1111-111111111111";
-    private static final String ACTOR = "cashier-a";
+  private static final String TENANT = "11111111-1111-1111-1111-111111111111";
+  private static final String ACTOR = "cashier-a";
 
-    private final SaleWriter writer = mock(SaleWriter.class);
-    private final SaleService service = new SaleService(writer);
+  private final SaleWriter writer = mock(SaleWriter.class);
+  private final SaleService service = new SaleService(writer);
 
-    private final RecordSaleCommand command = new RecordSaleCommand(
-            UUID.fromString("22222222-2222-2222-2222-222222222222"),
-            1_500_000L, "IDR", Instant.parse("2026-06-14T08:30:00Z"), "k");
+  private final RecordSaleCommand command =
+      new RecordSaleCommand(
+          UUID.fromString("22222222-2222-2222-2222-222222222222"),
+          1_500_000L,
+          "IDR",
+          Instant.parse("2026-06-14T08:30:00Z"),
+          "k");
 
-    @Test
-    void aUniqueConstraintConflictRecoversTheExistingSaleAsIdempotent() throws Exception {
-        Sale existing = new Sale(
-                command.businessId(), Money.ofMinor(1_500_000L, "IDR"),
-                command.occurredAt(), command.idempotencyKey());
-        when(writer.create(any())).thenThrow(new DataIntegrityViolationException("dup key"));
-        when(writer.findExistingByKey(command.idempotencyKey())).thenReturn(Optional.of(existing));
+  @Test
+  void aUniqueConstraintConflictRecoversTheExistingSaleAsIdempotent() throws Exception {
+    Sale existing =
+        new Sale(
+            command.businessId(), Money.ofMinor(1_500_000L, "IDR"),
+            command.occurredAt(), command.idempotencyKey());
+    when(writer.create(any())).thenThrow(new DataIntegrityViolationException("dup key"));
+    when(writer.findExistingByKey(command.idempotencyKey())).thenReturn(Optional.of(existing));
 
-        RecordSaleResult result = TenantContext.callAs(TENANT, ACTOR, () ->
-                service.recordSale(command));
+    RecordSaleResult result =
+        TenantContext.callAs(TENANT, ACTOR, () -> service.recordSale(command));
 
-        assertThat(result.created()).isFalse();
-        assertThat(result.sale()).isSameAs(existing);
-    }
+    assertThat(result.created()).isFalse();
+    assertThat(result.sale()).isSameAs(existing);
+  }
 
-    @Test
-    void aConflictWithNoRecoverableRowRethrows() throws Exception {
-        when(writer.create(any())).thenThrow(new DataIntegrityViolationException("dup key"));
-        when(writer.findExistingByKey(command.idempotencyKey())).thenReturn(Optional.empty());
+  @Test
+  void aConflictWithNoRecoverableRowRethrows() throws Exception {
+    when(writer.create(any())).thenThrow(new DataIntegrityViolationException("dup key"));
+    when(writer.findExistingByKey(command.idempotencyKey())).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() ->
-                TenantContext.callAs(TENANT, ACTOR, () -> service.recordSale(command)))
-                .isInstanceOf(DataIntegrityViolationException.class);
-    }
+    assertThatThrownBy(() -> TenantContext.callAs(TENANT, ACTOR, () -> service.recordSale(command)))
+        .isInstanceOf(DataIntegrityViolationException.class);
+  }
 }

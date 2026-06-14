@@ -29,107 +29,106 @@ import org.testcontainers.utility.DockerImageName;
 @Testcontainers
 class ProcessedEventStorePostgresTest {
 
-    @Container
-    static final PostgreSQLContainer<?> POSTGRES =
-            new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"));
+  @Container
+  static final PostgreSQLContainer<?> POSTGRES =
+      new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"));
 
-    private JdbcTemplate jdbcTemplate;
-    private TransactionTemplate tx;
-    private ProcessedEventStore store;
+  private JdbcTemplate jdbcTemplate;
+  private TransactionTemplate tx;
+  private ProcessedEventStore store;
 
-    @BeforeEach
-    void setUp() {
-        DriverManagerDataSource ds =
-                new DriverManagerDataSource(
-                        POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
-        ds.setDriverClassName("org.postgresql.Driver");
-        this.jdbcTemplate = new JdbcTemplate(ds);
-        this.tx = new TransactionTemplate(new DataSourceTransactionManager(ds));
-        jdbcTemplate.execute("DROP TABLE IF EXISTS processed_event");
-        jdbcTemplate.execute(
-                "CREATE TABLE processed_event ("
-                        + "event_id UUID PRIMARY KEY, "
-                        + "processed_at TIMESTAMP WITH TIME ZONE NOT NULL)");
-        this.store = new ProcessedEventStore(jdbcTemplate);
-    }
+  @BeforeEach
+  void setUp() {
+    DriverManagerDataSource ds =
+        new DriverManagerDataSource(
+            POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+    ds.setDriverClassName("org.postgresql.Driver");
+    this.jdbcTemplate = new JdbcTemplate(ds);
+    this.tx = new TransactionTemplate(new DataSourceTransactionManager(ds));
+    jdbcTemplate.execute("DROP TABLE IF EXISTS processed_event");
+    jdbcTemplate.execute(
+        "CREATE TABLE processed_event ("
+            + "event_id UUID PRIMARY KEY, "
+            + "processed_at TIMESTAMP WITH TIME ZONE NOT NULL)");
+    this.store = new ProcessedEventStore(jdbcTemplate);
+  }
 
-    @Test
-    void processOnceRunsHandlerOnlyForTheFirstDelivery() {
-        UUID eventId = UUID.randomUUID();
-        AtomicInteger sideEffects = new AtomicInteger();
+  @Test
+  void processOnceRunsHandlerOnlyForTheFirstDelivery() {
+    UUID eventId = UUID.randomUUID();
+    AtomicInteger sideEffects = new AtomicInteger();
 
-        boolean firstRan = tx.execute(s -> store.processOnce(eventId, sideEffects::incrementAndGet));
-        boolean secondRan = tx.execute(s -> store.processOnce(eventId, sideEffects::incrementAndGet));
+    boolean firstRan = tx.execute(s -> store.processOnce(eventId, sideEffects::incrementAndGet));
+    boolean secondRan = tx.execute(s -> store.processOnce(eventId, sideEffects::incrementAndGet));
 
-        assertTrue(firstRan, "first delivery must run the handler");
-        assertFalse(secondRan, "re-delivery must be skipped");
-        assertEquals(1, sideEffects.get(), "handler side effect must happen exactly once");
-    }
+    assertTrue(firstRan, "first delivery must run the handler");
+    assertFalse(secondRan, "re-delivery must be skipped");
+    assertEquals(1, sideEffects.get(), "handler side effect must happen exactly once");
+  }
 
-    @Test
-    void alreadyProcessedReflectsState() {
-        UUID eventId = UUID.randomUUID();
-        assertFalse(store.alreadyProcessed(eventId));
+  @Test
+  void alreadyProcessedReflectsState() {
+    UUID eventId = UUID.randomUUID();
+    assertFalse(store.alreadyProcessed(eventId));
 
-        tx.execute(s -> store.processOnce(eventId, () -> {}));
+    tx.execute(s -> store.processOnce(eventId, () -> {}));
 
-        assertTrue(store.alreadyProcessed(eventId));
-    }
+    assertTrue(store.alreadyProcessed(eventId));
+  }
 
-    @Test
-    void distinctEventIdsEachProcessOnce() {
-        AtomicInteger sideEffects = new AtomicInteger();
-        boolean firstRan =
-                tx.execute(s -> store.processOnce(UUID.randomUUID(), sideEffects::incrementAndGet));
-        boolean secondRan =
-                tx.execute(s -> store.processOnce(UUID.randomUUID(), sideEffects::incrementAndGet));
-        assertTrue(firstRan);
-        assertTrue(secondRan);
-        assertEquals(2, sideEffects.get());
-    }
+  @Test
+  void distinctEventIdsEachProcessOnce() {
+    AtomicInteger sideEffects = new AtomicInteger();
+    boolean firstRan =
+        tx.execute(s -> store.processOnce(UUID.randomUUID(), sideEffects::incrementAndGet));
+    boolean secondRan =
+        tx.execute(s -> store.processOnce(UUID.randomUUID(), sideEffects::incrementAndGet));
+    assertTrue(firstRan);
+    assertTrue(secondRan);
+    assertEquals(2, sideEffects.get());
+  }
 
-    @Test
-    void redeliveryInASeparateTransactionIsACleanNoOp() {
-        UUID eventId = UUID.randomUUID();
-        AtomicInteger sideEffects = new AtomicInteger();
+  @Test
+  void redeliveryInASeparateTransactionIsACleanNoOp() {
+    UUID eventId = UUID.randomUUID();
+    AtomicInteger sideEffects = new AtomicInteger();
 
-        Boolean first = tx.execute(status -> store.processOnce(eventId, sideEffects::incrementAndGet));
+    Boolean first = tx.execute(status -> store.processOnce(eventId, sideEffects::incrementAndGet));
 
-        // Re-delivery in its own transaction: it must be skipped AND the transaction must stay
-        // healthy enough to keep doing work afterwards (a naive catch-exception impl would have
-        // aborted this transaction at the duplicate insert).
-        Boolean second =
-                tx.execute(
-                        status -> {
-                            boolean ran = store.processOnce(eventId, sideEffects::incrementAndGet);
-                            Integer count =
-                                    jdbcTemplate.queryForObject(
-                                            "SELECT count(*) FROM processed_event", Integer.class);
-                            assertEquals(
-                                    1, count, "a duplicate claim must not insert a second row");
-                            return ran;
-                        });
+    // Re-delivery in its own transaction: it must be skipped AND the transaction must stay
+    // healthy enough to keep doing work afterwards (a naive catch-exception impl would have
+    // aborted this transaction at the duplicate insert).
+    Boolean second =
+        tx.execute(
+            status -> {
+              boolean ran = store.processOnce(eventId, sideEffects::incrementAndGet);
+              Integer count =
+                  jdbcTemplate.queryForObject(
+                      "SELECT count(*) FROM processed_event", Integer.class);
+              assertEquals(1, count, "a duplicate claim must not insert a second row");
+              return ran;
+            });
 
-        assertEquals(Boolean.TRUE, first, "first delivery runs the handler");
-        assertEquals(Boolean.FALSE, second, "re-delivery is skipped");
-        assertEquals(1, sideEffects.get(), "the side effect happens exactly once");
-    }
+    assertEquals(Boolean.TRUE, first, "first delivery runs the handler");
+    assertEquals(Boolean.FALSE, second, "re-delivery is skipped");
+    assertEquals(1, sideEffects.get(), "the side effect happens exactly once");
+  }
 
-    @Test
-    void duplicateClaimDoesNotAbortTheTransaction() {
-        UUID eventId = UUID.randomUUID();
-        tx.execute(status -> store.processOnce(eventId, () -> {})); // first claim, committed
+  @Test
+  void duplicateClaimDoesNotAbortTheTransaction() {
+    UUID eventId = UUID.randomUUID();
+    tx.execute(status -> store.processOnce(eventId, () -> {})); // first claim, committed
 
-        // In a single live transaction: a duplicate claim, then more work that MUST succeed.
-        String result =
-                tx.execute(
-                        status -> {
-                            boolean ran = store.processOnce(eventId, () -> {});
-                            assertFalse(ran, "the duplicate must be skipped");
-                            // Proves the transaction is still usable (not aborted by the dup).
-                            return jdbcTemplate.queryForObject("SELECT 'tx-alive'", String.class);
-                        });
+    // In a single live transaction: a duplicate claim, then more work that MUST succeed.
+    String result =
+        tx.execute(
+            status -> {
+              boolean ran = store.processOnce(eventId, () -> {});
+              assertFalse(ran, "the duplicate must be skipped");
+              // Proves the transaction is still usable (not aborted by the dup).
+              return jdbcTemplate.queryForObject("SELECT 'tx-alive'", String.class);
+            });
 
-        assertEquals("tx-alive", result, "transaction must remain usable after a duplicate claim");
-    }
+    assertEquals("tx-alive", result, "transaction must remain usable after a duplicate claim");
+  }
 }

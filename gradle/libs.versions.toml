@@ -1,0 +1,28 @@
+# Gradle version catalog — the single source of truth for dependency versions.
+# Modules reference these as libs.* ; the build-logic composite pins its own
+# plugin versions separately (it is a standalone build and cannot see this catalog).
+[versions]
+springBoot = "4.1.0"
+junit = "5.11.4"
+testcontainers = "2.0.5"
+avro = "1.12.1"
+postgresql = "42.7.4"
+h2 = "2.3.232"
+archunit = "1.3.0"
+# Build tooling (also pinned literally in build-logic where the catalog isn't visible)
+spotless = "7.0.2"
+googleJavaFormat = "1.25.2"
+checkstyle = "10.21.1"
+jacoco = "0.8.15"
+foojay = "1.0.0"
+
+[libraries]
+archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref = "archunit" }
+junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
+testcontainers-bom = { module = "org.testcontainers:testcontainers-bom", version.ref = "testcontainers" }
+avro = { module = "org.apache.avro:avro", version.ref = "avro" }
+postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" }
+h2 = { module = "com.h2database:h2", version.ref = "h2" }
+
+[plugins]
+spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }

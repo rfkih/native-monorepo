@@ -10,20 +10,20 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
- * {@code GET /healthz} returns 200 with the small status body. A web slice — no
- * database or RLS wiring is loaded.
+ * {@code GET /healthz} returns 200 with the small status body. A web slice — no database or RLS
+ * wiring is loaded.
  */
 @WebMvcTest(HealthController.class)
 class HealthControllerTest {
 
-    @Autowired
-    private MockMvc mockMvc;
+  @Autowired private MockMvc mockMvc;
 
-    @Test
-    void healthzReturns200() throws Exception {
-        mockMvc.perform(get("/healthz"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("UP"))
-                .andExpect(jsonPath("$.service").value("restaurant-service"));
-    }
+  @Test
+  void healthzReturns200() throws Exception {
+    mockMvc
+        .perform(get("/healthz"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("UP"))
+        .andExpect(jsonPath("$.service").value("restaurant-service"));
+  }
 }

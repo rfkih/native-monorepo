@@ -4,6 +4,8 @@
 
 plugins {
     `java-library`
+    // Enterprise quality gates (Spotless/Checkstyle/JaCoCo/ArchUnit) for every module.
+    id("native.quality")
 }
 
 group = "id.co.nativeapp"  // 'native' is a Java reserved word, cannot be a package segment
