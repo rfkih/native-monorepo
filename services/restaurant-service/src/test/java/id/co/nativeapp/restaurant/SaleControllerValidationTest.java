@@ -3,6 +3,7 @@ package id.co.nativeapp.restaurant;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -12,6 +13,7 @@ import id.co.nativeapp.restaurant.sale.SaleService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -21,19 +23,25 @@ import org.springframework.test.web.servlet.MockMvc;
  *
  * <p>Bean-validation failures on the {@code @Valid} body and a domain {@link
  * IllegalArgumentException} (e.g. an unknown ISO-4217 currency from {@code libs/money}) are mapped
- * to {@code 400} by {@link ApiExceptionHandler}, while a valid request still reaches the service.
- * The idempotent-retry path is a {@code 200} returned by {@link SaleController} and is unaffected
- * by the advice.
+ * to an RFC 7807 {@link org.springframework.http.ProblemDetail} {@code 400} ({@code
+ * application/problem+json}) by {@link ApiExceptionHandler}, while a valid request still reaches
+ * the service. The assertions pin the ProblemDetail shape: {@code status}, content-type, the stable
+ * {@code type} URI, {@code title}, and the machine-readable {@code errors[]} of {@code {field,
+ * message}}. The idempotent-retry path is a {@code 200} returned by {@link SaleController} and is
+ * unaffected by the advice.
  */
 @WebMvcTest(SaleController.class)
+@Import(ApiExceptionHandler.class)
 class SaleControllerValidationTest {
+
+  private static final String PROBLEM_JSON = "application/problem+json";
 
   @Autowired private MockMvc mockMvc;
 
   @MockitoBean private SaleService saleService;
 
   @Test
-  void blankCurrencyIsRejectedWith400() throws Exception {
+  void blankCurrencyIsRejectedWithAProblemDetail() throws Exception {
     String body =
         """
                 {"businessId":"22222222-2222-2222-2222-222222222222",
@@ -42,11 +50,17 @@ class SaleControllerValidationTest {
     mockMvc
         .perform(post("/sales").contentType(MediaType.APPLICATION_JSON).content(body))
         .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.status").value(400));
+        .andExpect(content().contentTypeCompatibleWith(PROBLEM_JSON))
+        .andExpect(jsonPath("$.status").value(400))
+        .andExpect(jsonPath("$.title").value("Validation failed"))
+        .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/validation-failed"))
+        .andExpect(jsonPath("$.errors").isArray())
+        .andExpect(jsonPath("$.errors[0].field").value("currency"))
+        .andExpect(jsonPath("$.errors[0].message").exists());
   }
 
   @Test
-  void nonPositiveAmountIsRejectedWith400() throws Exception {
+  void nonPositiveAmountIsRejectedWithAProblemDetail() throws Exception {
     String body =
         """
                 {"businessId":"22222222-2222-2222-2222-222222222222",
@@ -55,24 +69,28 @@ class SaleControllerValidationTest {
     mockMvc
         .perform(post("/sales").contentType(MediaType.APPLICATION_JSON).content(body))
         .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.status").value(400));
+        .andExpect(content().contentTypeCompatibleWith(PROBLEM_JSON))
+        .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/validation-failed"))
+        .andExpect(jsonPath("$.errors[0].field").value("amountMinor"));
   }
 
   @Test
-  void missingBusinessIdIsRejectedWith400() throws Exception {
+  void missingBusinessIdIsRejectedWithAProblemDetail() throws Exception {
     String body =
         """
                 {"amountMinor":1500000,"currency":"IDR","idempotencyKey":"k1"}
                 """;
     mockMvc
         .perform(post("/sales").contentType(MediaType.APPLICATION_JSON).content(body))
-        .andExpect(status().isBadRequest());
+        .andExpect(status().isBadRequest())
+        .andExpect(content().contentTypeCompatibleWith(PROBLEM_JSON))
+        .andExpect(jsonPath("$.errors[0].field").value("businessId"));
   }
 
   @Test
-  void unknownCurrencyCodeFromMoneyIsMappedTo400() throws Exception {
+  void unknownCurrencyCodeFromMoneyIsMappedToAProblemDetail() throws Exception {
     // Passes bean validation (non-blank), but Money.ofMinor rejects "ZZZ" with an
-    // IllegalArgumentException that the advice maps to 400 (not a 500).
+    // IllegalArgumentException that the advice maps to a 400 ProblemDetail.
     when(saleService.recordSale(any()))
         .thenThrow(new IllegalArgumentException("No currency for code ZZZ"));
     String body =
@@ -83,6 +101,8 @@ class SaleControllerValidationTest {
     mockMvc
         .perform(post("/sales").contentType(MediaType.APPLICATION_JSON).content(body))
         .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.message").value("No currency for code ZZZ"));
+        .andExpect(content().contentTypeCompatibleWith(PROBLEM_JSON))
+        .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/invalid-argument"))
+        .andExpect(jsonPath("$.detail").value("No currency for code ZZZ"));
   }
 }
