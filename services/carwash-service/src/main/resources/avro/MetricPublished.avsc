@@ -1,0 +1,14 @@
+{
+  "type": "record",
+  "name": "MetricPublished",
+  "namespace": "id.co.nativeapp.events.carwash",
+  "doc": "Emitted by a vertical (carwash-service) when an operational metric is produced — the per-employee/shift/outlet metrics employee-service consumes for variable pay / commission. Each vertical declares its metric contract: which metric_keys it emits at which grains (employee | shift | outlet); the consumer (employee side) rejects a commission rule requesting a grain the vertical cannot emit. carwash emits wash_count (a count) and upsell_amount (minor units of the wash currency) at the outlet grain. Key fields per ARCHITECTURE.md §5: metric_key, period, grain, subject_id, value, source_business_id.",
+  "fields": [
+    {"name": "metric_key", "type": "string", "doc": "The metric this measures, e.g. wash_count | upsell_amount."},
+    {"name": "period", "type": "string", "doc": "The period the metric covers (YYYY-MM-DD for a daily metric)."},
+    {"name": "grain", "type": "string", "doc": "The aggregation grain this metric is at: employee | shift | outlet."},
+    {"name": "subject_id", "type": "string", "doc": "The id of the grain subject (UUID as string) — the outlet/employee/shift the value is for."},
+    {"name": "value", "type": "long", "doc": "The metric value as a long: a count for wash_count, minor units of the wash currency for upsell_amount. Never a float."},
+    {"name": "source_business_id", "type": "string", "doc": "The carwash outlet (business unit, UUID as string) the metric originated from; also the Kafka partition key / outbox aggregate id."}
+  ]
+}

@@ -28,9 +28,9 @@ schema. Until then a row here is documentation of intent, not a shippable contra
 | **`EntitlementRevoked`** | **entitlement-service** | **shell, all services** | **company_id, module_key** | **LIVE** |
 | **`EmployeeChanged`** | **employee-service** | **verticals** | **employee_id, company_id, status** | **LIVE (#19)** |
 | **`AssignmentChanged`** | **employee-service** | **verticals, finance** | **employee_id, org_unit_id, reporting_to, effective_from/to** | **LIVE (#19)** |
-| `MetricPublished` | verticals | employee | metric_key, period, grain, subject_id, value, source_business_id | planned |
+| **`MetricPublished`** | **carwash-service** (verticals) | **employee** | **metric_key, period, grain, subject_id, value, source_business_id** | **LIVE (#20)** |
 | `PeriodSealed` | verticals | employee, finance | business_id, period | planned |
-| **`SaleRecorded`** | **restaurant-service** (verticals) | **finance** | **sale_id, company_id, business_id, amount_minor, currency, occurred_at** | **LIVE (M1.4)** |
+| **`SaleRecorded`** | **restaurant-service + carwash-service** (verticals) | **finance** | **sale_id, company_id, business_id, amount_minor, currency, occurred_at** | **LIVE (M1.4 / #20)** |
 | `ExpenseRecorded` | verticals | finance | expense_id, company_id, business_id, amount, gl_hint | planned |
 | `PayrollPosted` | employee | finance | payroll_run_id, company_id, period | planned |
 | `LaborCostAllocated` | employee | finance | employee_id, company_id, outlet_id, amount, period | planned |
@@ -207,11 +207,14 @@ org tree; it carries the node's new state so a consumer applies it idempotently.
 The first live event (M1.4 — the validation slice). Emitted by a vertical when a sale
 is recorded; consumed by finance-service to post to the ledger.
 
-- **Producer:** `restaurant-service` (and the other verticals as they ship)
+- **Producer:** `restaurant-service` **and `carwash-service`** (#20 — the 2nd vertical; a recorded
+  wash emits `SaleRecorded` with `business_id` = the carwash outlet, so finance consolidates carwash
+  revenue alongside restaurant), and the other verticals as they ship.
 - **Consumers:** `finance-service` (ledger posting + consolidated-revenue read model) — **LIVE (M1.5)**
 - **Aggregate type / partition key:** `sale` / `sale_id`
 - **Outbox `event_type`:** `SaleRecorded`
 - **Schema (producer, source of truth):** `services/restaurant-service/src/main/resources/avro/SaleRecorded.avsc`
+- **Schema (carwash producer copy):** `services/carwash-service/src/main/resources/avro/SaleRecorded.avsc` — byte-identical to the restaurant producer schema (same full name); carwash's `SaleRecordedContractTest` asserts the copy stays backward-compatible with the producer schema (rule 7), so finance reads carwash washes through the very same consumer path.
 - **Schema (finance consumer copy):** `services/finance-service/src/main/resources/avro/SaleRecorded.avsc` — finance owns its own consumer view of the contract; the finance `SaleRecordedContractTest` asserts the copy stays backward-compatible with the producer schema (rule 7). The finance consumer reads the outbox payload as **raw Avro bytes** via `libs/events AvroSerde` (no Schema Registry serde), deduping by the event UUID (`ProcessedEventStore`) so a re-delivery never double-posts.
 - **Full name:** `id.co.nativeapp.events.restaurant.SaleRecorded`
 
@@ -257,6 +260,66 @@ change a field's type. The contract test
 (`SaleRecordedContractTest`) enforces this — it asserts the schema is
 backward-compatible with itself and with an added-optional-field variant, and rejects
 a new required field without a default.
+
+### `MetricPublished`
+
+Emitted by a vertical when an operational metric is produced (#20 — carwash declares the first live
+metric contract). Consumed by employee-service for variable pay / commission. Each vertical declares
+its **metric contract**: which `metric_key`s it emits, at which grains (`employee` | `shift` |
+`outlet`). The validation layer on the **consumer / employee side** rejects a commission rule
+requesting a grain the vertical cannot emit; the producing vertical only DECLARES the contract and
+EMITS against it.
+
+- **Producer:** `carwash-service` (and the other verticals as they ship). carwash declares, at the
+  `outlet` grain: `wash_count` (a count of washes) and `upsell_amount` (upsell revenue in the wash
+  currency's minor units). On recording a wash it emits one `MetricPublished` per declared metric,
+  via the transactional outbox in the same transaction as the wash + `SaleRecorded`.
+- **Consumers:** `employee-service` (variable pay / commission).
+- **Aggregate type / partition key:** `metric` / `source_business_id` (the carwash outlet)
+- **Outbox `event_type`:** `MetricPublished`
+- **Schema:** `services/carwash-service/src/main/resources/avro/MetricPublished.avsc`
+- **Full name:** `id.co.nativeapp.events.carwash.MetricPublished`
+
+**Money is never a float (rule 8).** The `value` is a `long`: a count for `wash_count`, minor units
+of the wash currency for `upsell_amount`. The grain `subject_id` is the subject of the grain (at the
+`outlet` grain it is the outlet's id).
+
+**Key fields** (ARCHITECTURE.md §5: `metric_key`, `period`, `grain`, `subject_id`, `value`,
+`source_business_id`)
+
+| Field | Avro type | Meaning |
+|---|---|---|
+| `metric_key` | `string` | The metric this measures, e.g. `wash_count` \| `upsell_amount` |
+| `period` | `string` | The period the metric covers (`YYYY-MM-DD` for a daily metric) |
+| `grain` | `string` | The aggregation grain: `employee` \| `shift` \| `outlet` |
+| `subject_id` | `string` | The id of the grain subject (UUID as string) |
+| `value` | `long` | The metric value as a long — a count or minor-units amount; never a float |
+| `source_business_id` | `string` | The originating business unit (the carwash outlet; UUID as string) — the partition key |
+
+**Avro schema**
+
+```json
+{
+  "type": "record",
+  "name": "MetricPublished",
+  "namespace": "id.co.nativeapp.events.carwash",
+  "doc": "Emitted by a vertical (carwash-service) when an operational metric is produced — the per-employee/shift/outlet metrics employee-service consumes for variable pay / commission. Each vertical declares its metric contract: which metric_keys it emits at which grains (employee | shift | outlet); the consumer (employee side) rejects a commission rule requesting a grain the vertical cannot emit. carwash emits wash_count (a count) and upsell_amount (minor units of the wash currency) at the outlet grain. Key fields per ARCHITECTURE.md §5: metric_key, period, grain, subject_id, value, source_business_id.",
+  "fields": [
+    {"name": "metric_key", "type": "string", "doc": "The metric this measures, e.g. wash_count | upsell_amount."},
+    {"name": "period", "type": "string", "doc": "The period the metric covers (YYYY-MM-DD for a daily metric)."},
+    {"name": "grain", "type": "string", "doc": "The aggregation grain this metric is at: employee | shift | outlet."},
+    {"name": "subject_id", "type": "string", "doc": "The id of the grain subject (UUID as string) — the outlet/employee/shift the value is for."},
+    {"name": "value", "type": "long", "doc": "The metric value as a long: a count for wash_count, minor units of the wash currency for upsell_amount. Never a float."},
+    {"name": "source_business_id", "type": "string", "doc": "The carwash outlet (business unit, UUID as string) the metric originated from; also the Kafka partition key / outbox aggregate id."}
+  ]
+}
+```
+
+**Compatibility.** Only backward-compatible evolution is allowed: add fields with a default (e.g. an
+optional `unit` as `["null","string"]` with `default: null`). Never add a required field without a
+default, never remove or rename a field, never change a field's type. The contract test
+(`MetricPublishedContractTest`) enforces this — it asserts the schema is backward-compatible with
+itself and with an added-optional-field variant, and rejects a new required field without a default.
 
 ### `EntitlementGranted`
 
@@ -475,3 +538,32 @@ runs inside a `TenantContext` scope bound to the event's `company_id`, so RLS ap
 schemas (rule 7). On creating an assignment, the target org_unit's `legal_employer_id` is resolved
 from this read model and a concurrent assignment under a DIFFERENT legal employer is rejected
 (`409`).
+
+### `EntitlementGranted` / `EntitlementRevoked` — carwash-service consumer view
+
+carwash-service (#20 — the 2nd vertical) **consumes** the entitlement-service
+`EntitlementGranted` / `EntitlementRevoked` (the producer contracts are documented above) into a
+**local entitlement projection** (`(company_id, module_key) -> entitled`) and, on apply, **invalidates
+the `entitlement-check` Redis cache** for that company. It keeps its own **consumer copies** of the
+schemas at `services/carwash-service/src/main/resources/avro/EntitlementGranted.avsc` and
+`.../EntitlementRevoked.avsc` (same full names), reads the outbox payload as **raw Avro bytes** via
+`libs/events AvroSerde` (no Schema Registry serde), and dedupes by the event UUID
+(`ProcessedEventStore`) so a re-delivery never double-applies. The projection write runs inside a
+`TenantContext` scope bound to the event's `company_id`, so RLS applies. This projection backs the
+DB-backed `EntitlementLoader` the shared `libs/entitlement-check` cache consults on a miss, so the
+**record-wash gate** (`POST /api/v1/washes` → `403` when not entitled to `carwash`) reflects a grant
+/ revoke promptly. The `EntitlementConsumerContractTest` asserts the consumer copies stay
+backward-compatible with the producer schemas (rule 7).
+
+### `EmployeeChanged` / `AssignmentChanged` — carwash-service consumer view
+
+carwash-service (#20) also **consumes** the employee-service `EmployeeChanged` / `AssignmentChanged`
+into a **local staff read model** (`employee_id -> {org_unit_id, active}`) so the vertical knows its
+staff (rule 2 — a cached read model, never a sync call). It keeps its own **consumer copies** of the
+schemas at `services/carwash-service/src/main/resources/avro/EmployeeChanged.avsc` and
+`.../AssignmentChanged.avsc` (same full names), reads the outbox payload as **raw Avro bytes** via
+`libs/events AvroSerde`, dedupes by the event UUID (`ProcessedEventStore`), and writes inside a
+`TenantContext` scope bound to the event's `company_id` (RLS applies). **NO PII** is projected — the
+events carry only `employee_id` / `company_id` / `status` and the assignment dimensions (rule 6). The
+`StaffConsumerContractTest` asserts the consumer copies stay backward-compatible with the producer
+schemas (rule 7).
