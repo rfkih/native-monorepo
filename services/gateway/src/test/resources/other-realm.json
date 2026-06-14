@@ -1,0 +1,39 @@
+{
+  "realm": "other",
+  "enabled": true,
+  "sslRequired": "none",
+  "accessTokenLifespan": 300,
+  "registrationAllowed": false,
+  "clients": [
+    {
+      "clientId": "other-client",
+      "name": "Foreign-issuer client",
+      "description": "A client in a different realm (a different issuer); a token it mints must be rejected 401 by the gateway as a wrong-issuer token.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "other-client-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["*"],
+      "webOrigins": ["*"],
+      "attributes": {
+        "access.token.signed.response.alg": "RS256"
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "other-user",
+      "enabled": true,
+      "email": "other@example.co.id",
+      "emailVerified": true,
+      "firstName": "Other",
+      "lastName": "Realm",
+      "credentials": [
+        { "type": "password", "value": "other-password", "temporary": false }
+      ]
+    }
+  ]
+}

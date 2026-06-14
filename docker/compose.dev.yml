@@ -154,8 +154,27 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      # Drop a native-realm.json here to auto-provision the realm/client on boot.
-      - ./keycloak/import:/opt/keycloak/data/import:ro
+      # native-realm.json is auto-imported on boot (--import-realm): it provisions the
+      # `native` realm, the confidential `native-gateway` client, a sample user with a
+      # company_id attribute, and the protocol mappers that put company_id + roles into
+      # the RS256 access token the gateway (M1.1) validates. See docker/README.md.
+      - ./keycloak:/opt/keycloak/data/import:ro
+
+  # ---------------------------------------------------------------------------
+  # Redis — backs the gateway's distributed per-tenant token-bucket rate limit
+  # (M1.1). The limit is keyed per (company_id, sub) and must hold across gateway
+  # replicas, so the bucket lives in Redis (an atomic Lua script), not in-JVM.
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: native-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
 volumes:
   native-postgres-data:

@@ -1,0 +1,78 @@
+spring:
+  application:
+    name: gateway
+
+  # Explicit connect + read timeouts for the gateway's downstream HTTP client
+  # (ENGINEERING-STANDARDS §4 — never a library default, which is effectively infinite).
+  # Spring Cloud Gateway server-webmvc proxies via a RestClient whose ClientHttpRequestFactory
+  # Spring Boot builds from spring.http.clients.*, so these bound BOTH the proxy's connect and
+  # read timeout. A hung or slow downstream therefore cannot tie up a gateway servlet thread
+  # indefinitely — it fails fast (502/504) and the thread is released.
+  http:
+    clients:
+      connect-timeout: ${GATEWAY_DOWNSTREAM_CONNECT_TIMEOUT:2s}
+      read-timeout: ${GATEWAY_DOWNSTREAM_READ_TIMEOUT:10s}
+
+  # The gateway is the single synchronous security edge: it validates inbound RS256
+  # JWTs against Keycloak's JWKS. issuer-uri makes Spring discover the JWKS endpoint
+  # (and validate the iss claim); it is the realm's well-known issuer. In the docker
+  # dev stack Keycloak is reachable at http://localhost:8080 with the `native` realm.
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/native}
+          # jwk-set-uri can be set explicitly to skip discovery (e.g. when the issuer
+          # host differs between token and gateway); defaults to issuer discovery.
+          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://localhost:8080/realms/native/protocol/openid-connect/certs}
+
+  # Redis backs the distributed per-tenant token bucket (the rate limit holds across
+  # gateway replicas). Defaults to the dev-stack Redis; creds/host come from env/Vault.
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      # Explicit client timeout (never a library default — ENGINEERING-STANDARDS §4).
+      timeout: ${REDIS_TIMEOUT:2s}
+
+# Downstream route targets — defaulted for the docker dev stack (service hostnames on
+# the compose network), overridden per environment. Validated @NotNull at startup.
+native:
+  gateway:
+    # Edge JWT validation knobs. The clock skew for exp/nbf is kept TIGHT (default 5s, vs
+    # Spring Security's 60s default) so an expired token is rejected promptly at the edge;
+    # widen only if an environment has real clock drift (JwtDecoderConfig binds this).
+    jwt:
+      clock-skew: ${GATEWAY_JWT_CLOCK_SKEW:5s}
+    routes:
+      org-service: ${ORG_SERVICE_URI:http://org-service:8080}
+      restaurant-service: ${RESTAURANT_SERVICE_URI:http://restaurant-service:8080}
+      finance-service: ${FINANCE_SERVICE_URI:http://finance-service:8080}
+    rate-limit:
+      # Token bucket per (company_id, sub): capacity is the burst size; the bucket
+      # refills refill-tokens every refill-period. Tuned low here so the limit is easy
+      # to exercise; raise per environment.
+      capacity: ${RATE_LIMIT_CAPACITY:20}
+      refill-tokens: ${RATE_LIMIT_REFILL_TOKENS:20}
+      refill-period: ${RATE_LIMIT_REFILL_PERIOD:1s}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # Lean observability: liveness/readiness + Prometheus metrics. /healthz is the
+        # simple LB probe (see HealthController); richer probes under /actuator.
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      service: gateway
+
+logging:
+  pattern:
+    # Structured-ish console pattern including the trace/span ids OpenTelemetry injects
+    # into MDC, so logs correlate with traces once OTel is on the agent.
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%X{trace_id:-},%X{span_id:-}] %logger{36} - %msg%n"
