@@ -2,6 +2,8 @@ package id.co.nativeapp.employee.config;
 
 import id.co.nativeapp.employee.org.MissingEventIdException;
 import id.co.nativeapp.employee.org.OrgUnitDecodeException;
+import id.co.nativeapp.employee.payroll.MissingPayrollEventIdException;
+import id.co.nativeapp.employee.payroll.PayrollEventDecodeException;
 import java.io.UncheckedIOException;
 import java.util.HashMap;
 import java.util.Map;
@@ -93,7 +95,11 @@ public class KafkaConfig {
     DefaultErrorHandler handler =
         new DefaultErrorHandler(recoverer, new FixedBackOff(RETRY_INTERVAL_MS, MAX_RETRIES));
     handler.addNotRetryableExceptions(
-        UncheckedIOException.class, OrgUnitDecodeException.class, MissingEventIdException.class);
+        UncheckedIOException.class,
+        OrgUnitDecodeException.class,
+        MissingEventIdException.class,
+        PayrollEventDecodeException.class,
+        MissingPayrollEventIdException.class);
     return handler;
   }
 

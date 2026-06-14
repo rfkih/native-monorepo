@@ -296,4 +296,50 @@ class MoneyTest {
     assertSame(z1.getClass(), z2.getClass());
     assertEquals(z1, z1.plus(Money.zero(USD)));
   }
+
+  // ------------------------------------------------------------------
+  // Proportional arithmetic (payroll engine): mulDiv / basis points / min-max
+  // ------------------------------------------------------------------
+
+  @Test
+  void mulDivRoundsHalfEvenOnceAtTheDivision() {
+    // 12345 * 1 / 3 = 4115.0 -> 4115 (exact). Use a case that exercises HALF_EVEN tie-breaking:
+    // 5 * 1 / 2 = 2.5 -> 2 (rounds to even), 7 * 1 / 2 = 3.5 -> 4 (rounds to even).
+    assertEquals(2L, Money.ofMinor(5L, IDR).mulDiv(1L, 2L).amountMinor());
+    assertEquals(4L, Money.ofMinor(7L, IDR).mulDiv(1L, 2L).amountMinor());
+  }
+
+  @Test
+  void mulDivRejectsNonPositiveDenominator() {
+    assertThrows(IllegalArgumentException.class, () -> Money.ofMinor(100L, IDR).mulDiv(1L, 0L));
+    assertThrows(IllegalArgumentException.class, () -> Money.ofMinor(100L, IDR).mulDiv(1L, -2L));
+  }
+
+  @Test
+  void applyBasisPointsScalesByTenThousandths() {
+    // 2.5% of 10_000_000 IDR = 250_000.
+    assertEquals(250_000L, Money.ofMinor(10_000_000L, IDR).applyBasisPoints(250L).amountMinor());
+    assertThrows(
+        IllegalArgumentException.class, () -> Money.ofMinor(1L, IDR).applyBasisPoints(-1L));
+  }
+
+  @Test
+  void minMaxPickTheExpectedAmount() {
+    Money small = Money.ofMinor(100L, IDR);
+    Money big = Money.ofMinor(900L, IDR);
+    assertEquals(small, small.min(big));
+    assertEquals(small, big.min(small));
+    assertEquals(big, small.max(big));
+    assertEquals(big, big.max(small));
+  }
+
+  @Test
+  void fractionDigitsAndRequireSameCurrencyAreExposed() {
+    assertEquals(0, Money.ofMinor(1L, IDR).fractionDigits());
+    assertEquals(2, Money.ofMinor(1L, USD).fractionDigits());
+    Money.ofMinor(1L, USD).requireSameCurrencyAs(Money.ofMinor(2L, USD));
+    assertThrows(
+        MismatchedCurrencyException.class,
+        () -> Money.ofMinor(1L, USD).requireSameCurrencyAs(Money.ofMinor(2L, IDR)));
+  }
 }

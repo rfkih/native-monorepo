@@ -1,0 +1,14 @@
+{
+  "type": "record",
+  "name": "MetricPublished",
+  "namespace": "id.co.nativeapp.events.carwash",
+  "doc": "employee-service CONSUMER copy of carwash-service's MetricPublished — variable-pay inputs (commission). Projected into metric_input; PER_METRIC_UNIT earning_rules read the projection (never a sync call — rule 2). Raw Avro bytes via AvroSerde; deduped by event UUID via ProcessedEventStore; written under the EVENT's company_id (RLS). Key fields per ARCHITECTURE.md §5: metric_key, period, grain, subject_id, value, source_business_id. NO PII (operational counts/amounts, not individual salary). Kept backward-compatible with the producer schema (a contract test asserts it).",
+  "fields": [
+    {"name": "metric_key", "type": "string", "doc": "The metric this measures, e.g. wash_count | upsell_amount."},
+    {"name": "period", "type": "string", "doc": "The period the metric covers (YYYY-MM-DD for a daily metric)."},
+    {"name": "grain", "type": "string", "doc": "The aggregation grain this metric is at: employee | shift | outlet."},
+    {"name": "subject_id", "type": "string", "doc": "The id of the grain subject (UUID as string) — the outlet/employee/shift the value is for."},
+    {"name": "value", "type": "long", "doc": "The metric value as a long: a count for wash_count, minor units of the wash currency for upsell_amount. Never a float."},
+    {"name": "source_business_id", "type": "string", "doc": "The carwash outlet (business unit, UUID as string) the metric originated from; also the Kafka partition key / outbox aggregate id."}
+  ]
+}

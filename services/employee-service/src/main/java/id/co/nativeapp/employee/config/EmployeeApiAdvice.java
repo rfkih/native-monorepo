@@ -2,6 +2,7 @@ package id.co.nativeapp.employee.config;
 
 import id.co.nativeapp.employee.assignment.ConflictingLegalEmployerException;
 import id.co.nativeapp.employee.employee.EmployeeNotFoundException;
+import id.co.nativeapp.employee.payroll.IncompletePeriodException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
@@ -54,6 +55,17 @@ public class EmployeeApiAdvice {
     ProblemDetail problem = problem(HttpStatus.CONFLICT, "conflicting-legal-employer", request);
     problem.setTitle("Conflicting legal employer");
     // The message names only legal-employer ids (not PII): safe to surface as the detail.
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /** A payroll run asked to calculate/post an incomplete period → 409 Conflict. */
+  @ExceptionHandler(IncompletePeriodException.class)
+  public ProblemDetail handleIncompletePeriod(
+      IncompletePeriodException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.CONFLICT, "incomplete-period", request);
+    problem.setTitle("Period not complete");
+    // The message names only business-unit ids (UUIDs), never PII (rule 6).
     problem.setDetail(ex.getMessage());
     return problem;
   }

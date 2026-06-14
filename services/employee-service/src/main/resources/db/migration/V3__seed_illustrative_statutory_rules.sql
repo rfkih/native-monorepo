@@ -1,0 +1,49 @@
+-- ===========================================================================
+-- ILLUSTRATIVE PLACEHOLDER FIGURES ONLY — NOT verified DJP/BPJS rates.
+-- DO NOT USE FOR REAL PAYROLL.
+-- Replace with OFFICIAL effective-dated rows (provenance=OFFICIAL, a new
+-- rule_version) before production. The numbers below are DELIBERATELY round,
+-- obviously-fake illustrative values (a 10%/15% two-bracket PPh21, a 1%/4%
+-- BPJS with a 10,000,000 ceiling, a flat PTKP relief) so no one mistakes them
+-- for the real statutory schedule.
+-- ===========================================================================
+--
+-- WHY THIS MIGRATION SEEDS NOTHING DIRECTLY (a deliberate, documented choice):
+-- every payroll table is under FORCE ROW LEVEL SECURITY keyed to
+-- current_setting('app.current_tenant'). A Flyway migration runs with NO tenant
+-- GUC bound, so a plain INSERT into statutory_rule / pay_component would FAIL the
+-- RLS WITH CHECK (company_id = current_setting(...)) — RLS is doing exactly its
+-- job (fail closed when no tenant is bound). The illustrative defaults are
+-- therefore SHAREABLE DEFAULTS SEEDED PER TENANT at runtime by
+-- IllustrativeStatutorySeedWriter (a proxied @Transactional writer whose auto-RLS
+-- aspect binds the tenant GUC), NOT by this migration. This file is the
+-- DOCUMENTED SOURCE OF TRUTH for the illustrative figures and carries the loud
+-- banner so a reader auditing the seed sees the disclaimer here too; the Java
+-- seeder mirrors these exact numbers.
+--
+-- THE ILLUSTRATIVE FIGURES (mirrored by IllustrativeStatutorySeedWriter), all in the
+-- tenant's base currency minor units, rule_version = 'ILLUSTRATIVE-2026.1',
+-- provenance = ILLUSTRATIVE_PLACEHOLDER, effective_from 2026-01-01, open-ended:
+--
+--   BPJS_KESEHATAN  (PERCENTAGE_CEILING):
+--     ceiling_minor=10,000,000  employee_bp=100 (1%)  employer_bp=400 (4%)
+--     reduces_tax_base=true
+--
+--   PPH21_PROGRESSIVE (PROGRESSIVE_BRACKET):
+--     [0 .. 50,000,000]            @ 1000 bp (10%)
+--     [50,000,000 .. +infinity]    @ 1500 bp (15%)
+--
+--   PTKP_RELIEF (RELIEF_TABLE, annualization_months=12):
+--     TK0 54,000,000 / TK1 58,500,000 / TK2 63,000,000 / TK3 67,500,000
+--     K0  58,500,000 / K1  63,000,000 / K2  67,500,000 / K3  72,000,000
+--
+-- DEFAULT pay-component catalog (mirrored by the seeder):
+--   BASE            EARNING   FIXED                EMPLOYEE  taxable  GL 5100-SALARY
+--   MEAL_ALLOWANCE  EARNING   FIXED                EMPLOYEE  taxable  GL 5110-ALLOWANCE
+--   BPJS_KES_EE     DEDUCTION STATUTORY_CEILING    EMPLOYEE           GL 2100-BPJS    -> BPJS_KESEHATAN
+--   BPJS_KES_ER     DEDUCTION STATUTORY_CEILING    EMPLOYER           GL 5200-BPJS-ER -> BPJS_KESEHATAN
+--   PPH21           DEDUCTION STATUTORY_PROGRESSIVE EMPLOYEE          GL 2110-PPH21   -> PPH21_PROGRESSIVE
+--
+-- A no-op marker so Flyway records this version; the actual rows are seeded
+-- per-tenant at runtime (see above).
+DO $$ BEGIN PERFORM 1; END $$;

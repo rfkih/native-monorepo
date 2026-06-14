@@ -29,11 +29,11 @@ schema. Until then a row here is documentation of intent, not a shippable contra
 | **`EmployeeChanged`** | **employee-service** | **verticals** | **employee_id, company_id, status** | **LIVE (#19)** |
 | **`AssignmentChanged`** | **employee-service** | **verticals, finance** | **employee_id, org_unit_id, reporting_to, effective_from/to** | **LIVE (#19)** |
 | **`MetricPublished`** | **carwash-service** (verticals) | **employee** | **metric_key, period, grain, subject_id, value, source_business_id** | **LIVE (#20)** |
-| `PeriodSealed` | verticals | employee, finance | business_id, period | planned |
+| **`PeriodSealed`** | **verticals** | **employee, finance** | **company_id, business_id, period** | **LIVE (employee consumer #23)** |
 | **`SaleRecorded`** | **restaurant-service + carwash-service** (verticals) | **finance** | **sale_id, company_id, business_id, amount_minor, currency, occurred_at** | **LIVE (M1.4 / #20)** |
 | **`ExpenseRecorded`** | **verticals** | **finance** | **expense_id, company_id, business_id, amount_minor, currency, gl_hint, occurred_at** | **LIVE (finance consumer #21)** |
-| `PayrollPosted` | employee | finance | payroll_run_id, company_id, period | planned |
-| `LaborCostAllocated` | employee | finance | employee_id, company_id, outlet_id, amount, period | planned |
+| **`PayrollPosted`** | **employee-service** | **finance** | **payroll_run_id, company_id, period, base_currency, totals, rule_versions, uses_illustrative_rules, posted_at** | **LIVE (#23)** |
+| **`LaborCostAllocated`** | **employee-service** | **finance** | **payroll_run_id, company_id, period, outlet_id, gl_account, amount_minor, currency, uses_illustrative_rules** | **LIVE (#23)** |
 | **`ConsolidationClosed`** | **finance** | **shell, notification** | **company_id (or group_id), period** | **LIVE (notification consumer #22)** |
 | **`DeliveryReceipt`** | **notification-service** | **(audit/observability sinks; re-send policy)** | **notification_id, company_id, channel, status, provider_ref, delivered_at** | **LIVE (#22)** |
 
@@ -749,3 +749,148 @@ field, never change a field's type. The contract test (`DeliveryReceiptContractT
 notification-service) enforces this — it parses the schema, round-trips a `GenericRecord` through
 `AvroSerde` (including a null `provider_ref`), accepts an added optional field, and rejects a new
 required field without a default (the triad).
+
+### `PayrollPosted`
+
+Emitted by **employee-service** (#23, the Phase-3 payroll engine) when a `payroll_run` transitions
+`CALCULATED -> POSTED`. Consumed by **finance-service** (payroll consolidation). Published via the
+**transactional outbox** (rule 3) in the SAME transaction that flips the run to `POSTED`; only a
+`CALCULATED -> POSTED` transition emits, and a UNIQUE `(company_id, period, run_seq)` guards against a
+double post, so a retried post cannot double-emit.
+
+- **Producer aggregate:** `payroll_run` (the run id is the Kafka partition key).
+- **Outbox `event_type`:** `PayrollPosted`
+- **Schema:** `services/employee-service/src/main/resources/avro/PayrollPosted.avsc`
+- **Full name:** `id.co.nativeapp.events.employee.PayrollPosted`
+
+**NO PII (rule 6).** Company-level **totals only** — no per-person amounts, no salary, no NIK/bank.
+Carries the **frozen `rule_versions` set** (HR-7 reproducibility) and the runtime
+`uses_illustrative_rules` flag so a run computed against `ILLUSTRATIVE_PLACEHOLDER` statutory figures
+is loud on the wire and cannot be mistaken for an official-figure run. A corrected re-run is a **new
+`run_seq`** → a second `PayrollPosted` for the period that **supersedes** the prior run (finance
+handles supersession, not double-counting two runs for one period).
+
+**Avro schema**
+
+```json
+{
+  "type": "record",
+  "name": "PayrollPosted",
+  "namespace": "id.co.nativeapp.events.employee",
+  "fields": [
+    {"name": "payroll_run_id", "type": "string"},
+    {"name": "company_id", "type": "string"},
+    {"name": "period", "type": "string"},
+    {"name": "base_currency", "type": "string"},
+    {"name": "gross_total_minor", "type": "long"},
+    {"name": "employee_deduction_total_minor", "type": "long"},
+    {"name": "employer_contribution_total_minor", "type": "long"},
+    {"name": "net_total_minor", "type": "long"},
+    {"name": "rule_versions", "type": {"type": "array", "items": {"type": "record", "name": "RuleVersion", "fields": [
+      {"name": "rule_key", "type": "string"},
+      {"name": "rule_version", "type": "string"}
+    ]}}},
+    {"name": "uses_illustrative_rules", "type": "boolean"},
+    {"name": "posted_at", "type": {"type": "long", "logicalType": "timestamp-millis"}}
+  ]
+}
+```
+
+**Compatibility.** Backward-compatible evolution only: `uses_illustrative_rules` is present from v1;
+future fields are added as a union-with-default. The contract test (`PayrollPostedContractTest`)
+enforces the triad (parse + `AvroSerde` round-trip + add-optional compatible / new-required broken).
+
+### `LaborCostAllocated`
+
+Emitted by **employee-service** (#23) per **(outlet_org_unit_id, gl_account) bucket** when a
+`payroll_run` posts. Consumed by **finance-service** (dimensional ledger). Published via the
+**transactional outbox** (rule 3) in the SAME transaction that flips the run to `POSTED`.
+
+- **Producer aggregate:** `payroll_run` (the run id is the Kafka partition key).
+- **Outbox `event_type`:** `LaborCostAllocated`
+- **Schema:** `services/employee-service/src/main/resources/avro/LaborCostAllocated.avsc`
+- **Full name:** `id.co.nativeapp.events.employee.LaborCostAllocated`
+
+**NO PII (rule 6).** One event **per outlet/GL bucket, AGGREGATED across employees** so no individual
+salary is derivable. **NOTE / open risk:** ARCHITECTURE.md §5 lists `employee_id` on this event, but
+a per-`(employee, outlet, gl)` amount effectively leaks individual labor cost ≈ salary; `employee_id`
+is therefore **DROPPED** here by design decision (finance gets outlet/GL granularity, which is what
+the dimensional ledger needs). This diverges from the §5 starter field list and needs finance
+sign-off. The exact-sum allocation invariant (`sum(allocations) == run labor total`, in minor units,
+largest-remainder residual) is asserted before the run may post.
+
+**UNALLOCATED suspense bucket.** An employee with **no outlet assignment** in the period (on leave /
+between assignments) has their employer labor cost routed to an explicit suspense bucket — `outlet_id`
+is the all-zeros sentinel UUID, `gl_account` is `9999-UNALLOCATED-LABOR`, and the boolean
+`unallocated` field is `true`. This keeps the exact-sum invariant holding (the cost is never silently
+dropped) and lets finance clear the suspense rather than mistaking it for a real outlet cost. The
+field was added **backward-compatibly** with a `default: false`, so an old reader simply ignores it.
+
+**Avro schema**
+
+```json
+{
+  "type": "record",
+  "name": "LaborCostAllocated",
+  "namespace": "id.co.nativeapp.events.employee",
+  "fields": [
+    {"name": "payroll_run_id", "type": "string"},
+    {"name": "company_id", "type": "string"},
+    {"name": "period", "type": "string"},
+    {"name": "outlet_id", "type": "string"},
+    {"name": "gl_account", "type": "string"},
+    {"name": "amount_minor", "type": "long"},
+    {"name": "currency", "type": "string"},
+    {"name": "uses_illustrative_rules", "type": "boolean"},
+    {"name": "unallocated", "type": "boolean", "default": false},
+    {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}}
+  ]
+}
+```
+
+**Compatibility.** Backward-compatible evolution only (the `unallocated` field carries a default).
+The contract test (`LaborCostAllocatedContractTest`) enforces the triad.
+
+### `PeriodSealed`
+
+A vertical (carwash-service and the others) emits `PeriodSealed` when a business unit (outlet) has
+sealed its operational data for a period — the **completeness gate** (ARCHITECTURE.md §4): a
+`payroll_run` may only transition to `CALCULATING`/`POST` once **every expected source `business_id`
+for the period has sealed** (no running on partial data). Consumed by **employee-service** (#23, the
+gate) and **finance**.
+
+- **Full name:** `id.co.nativeapp.events.<vertical>.PeriodSealed` (employee's consumer copy uses
+  `id.co.nativeapp.events.carwash.PeriodSealed`).
+- **Key fields** (EVENT-CATALOG): `company_id`, `business_id`, `period`.
+
+**Avro schema** (employee-service consumer copy at
+`services/employee-service/src/main/resources/avro/PeriodSealed.avsc`)
+
+```json
+{
+  "type": "record",
+  "name": "PeriodSealed",
+  "namespace": "id.co.nativeapp.events.carwash",
+  "fields": [
+    {"name": "company_id", "type": "string"},
+    {"name": "business_id", "type": "string"},
+    {"name": "period", "type": "string"},
+    {"name": "sealed_at", "type": {"type": "long", "logicalType": "timestamp-millis"}}
+  ]
+}
+```
+
+### `MetricPublished` / `PeriodSealed` — employee-service consumer view
+
+employee-service (#23) **consumes** `MetricPublished` (variable-pay/commission inputs) and
+`PeriodSealed` (the completeness gate). It keeps its own **consumer copies** of the schemas at
+`services/employee-service/src/main/resources/avro/MetricPublished.avsc` and `.../PeriodSealed.avsc`,
+reads the outbox payload as **raw Avro bytes** via `libs/events AvroSerde` (no Schema Registry
+serde), and dedupes by the event UUID (`ProcessedEventStore`) so a re-delivery never double-applies
+(rule 3). The projection write runs inside a `TenantContext` scope bound to the event's `company_id`
+(RLS applies — rule 5): `MetricPublished` projects into `metric_input` (`PER_METRIC_UNIT` earning
+rules read it — rule 2, never a sync call); `PeriodSealed` projects into `period_seal` (the gate
+reads it). A record without a valid `id` header (and, for `MetricPublished`, a `company_id` header —
+the payload carries no `company_id`) fails closed to `<topic>.DLT`. The contract tests
+(`PayrollConsumerContractTest`) assert the `MetricPublished` consumer copy stays
+backward-compatible with carwash's producer schema (rule 7).

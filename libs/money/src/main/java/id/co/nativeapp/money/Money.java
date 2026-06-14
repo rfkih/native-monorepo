@@ -196,6 +196,89 @@ public final class Money implements Comparable<Money> {
     return new Money(Math.multiplyExact(amountMinor, factor), currency);
   }
 
+  /**
+   * Returns {@code this * numerator / denominator}, rounding the single division to this currency's
+   * minor units with {@link java.math.RoundingMode#HALF_EVEN}. This is the ONE rounding point for a
+   * proportional calculation (a percentage, a basis-point rate, an allocation share): the
+   * multiplication is exact on {@code BigInteger}, and only the final divide rounds — so a chain of
+   * proportions never compounds intermediate rounding error.
+   *
+   * <p>Used by the payroll engine for {@code PERCENT_OF_BASE} earnings, the percentage-with-ceiling
+   * social-insurance legs, the progressive-bracket tax steps, and the largest-remainder labor-cost
+   * allocation. All amounts stay in integer minor units; there is never a float.
+   *
+   * @param numerator the proportion numerator (e.g. a basis-point rate, or an attributable amount)
+   * @param denominator the proportion denominator (e.g. {@code 10000} for basis points); must be
+   *     strictly positive
+   * @throws IllegalArgumentException if {@code denominator <= 0}
+   */
+  public Money mulDiv(long numerator, long denominator) {
+    if (denominator <= 0L) {
+      throw new IllegalArgumentException("denominator must be strictly positive: " + denominator);
+    }
+    BigDecimal product = BigDecimal.valueOf(amountMinor).multiply(BigDecimal.valueOf(numerator));
+    long minor =
+        product
+            .divide(BigDecimal.valueOf(denominator), 0, java.math.RoundingMode.HALF_EVEN)
+            .longValueExact();
+    return new Money(minor, currency);
+  }
+
+  /**
+   * Returns this amount scaled by a basis-point rate ({@code 1 bp = 1/10000}), e.g. {@code
+   * applyBasisPoints(250)} is 2.5% of this amount, rounded once with {@link
+   * java.math.RoundingMode#HALF_EVEN} to the currency's minor units. A convenience over {@link
+   * #mulDiv(long, long)} with a {@code 10000} denominator.
+   *
+   * @param basisPoints the rate in basis points (must be non-negative)
+   * @throws IllegalArgumentException if {@code basisPoints < 0}
+   */
+  public Money applyBasisPoints(long basisPoints) {
+    if (basisPoints < 0L) {
+      throw new IllegalArgumentException("basisPoints must be non-negative: " + basisPoints);
+    }
+    return mulDiv(basisPoints, 10_000L);
+  }
+
+  /**
+   * Returns the lesser of {@code this} and {@code other} (same currency). Used to cap a base at a
+   * statutory ceiling.
+   *
+   * @throws MismatchedCurrencyException if currencies differ
+   */
+  public Money min(Money other) {
+    return compareTo(other) <= 0 ? this : other;
+  }
+
+  /**
+   * Returns the greater of {@code this} and {@code other} (same currency).
+   *
+   * @throws MismatchedCurrencyException if currencies differ
+   */
+  public Money max(Money other) {
+    return compareTo(other) >= 0 ? this : other;
+  }
+
+  /**
+   * The number of minor-unit (fraction) digits for this money's currency (e.g. 2 for USD, 0 for
+   * IDR), aligned with CLDR/Intl. Exposed so the payroll engine can reason about rounding scale.
+   */
+  public int fractionDigits() {
+    return fractionDigits(currency);
+  }
+
+  /**
+   * Asserts {@code other} is in the same currency as {@code this}, throwing {@link
+   * MismatchedCurrencyException} otherwise. Exposed so the payroll engine can fail a run at the
+   * point it discovers a comp-package / assignment in a currency other than the run's base currency
+   * (there is no implicit FX — finance owns FX).
+   *
+   * @throws MismatchedCurrencyException if currencies differ
+   */
+  public void requireSameCurrencyAs(Money other) {
+    requireSameCurrency(other);
+  }
+
   // ---------------------------------------------------------------------
   // Predicates & comparison
   // ---------------------------------------------------------------------

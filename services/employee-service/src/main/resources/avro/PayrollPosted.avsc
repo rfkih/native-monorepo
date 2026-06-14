@@ -1,0 +1,22 @@
+{
+  "type": "record",
+  "name": "PayrollPosted",
+  "namespace": "id.co.nativeapp.events.employee",
+  "doc": "Emitted by employee-service when a payroll_run transitions CALCULATED -> POSTED; consumed by finance (consolidation). Published via the transactional outbox (rule 3) in the SAME transaction that flips the run to POSTED. NO PII (rule 6): company-level TOTALS only — no per-person amounts, no salary, no NIK/bank. Carries the FROZEN rule_versions set (HR-7 reproducibility) and the runtime uses_illustrative_rules flag so a run computed against ILLUSTRATIVE_PLACEHOLDER statutory figures is loud on the wire and cannot be mistaken for an official-figure run. A corrected re-run is a NEW run_seq -> a second PayrollPosted for the period that SUPERSEDES the prior run (finance handles supersession, not double-counting).",
+  "fields": [
+    {"name": "payroll_run_id", "type": "string", "doc": "The payroll_run aggregate id (UUID as string); also the Kafka partition key."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant / company id (UUID as string)."},
+    {"name": "period", "type": "string", "doc": "The payroll period (YYYY-MM)."},
+    {"name": "base_currency", "type": "string", "doc": "The run's base (functional) ISO-4217 currency; every total is in this currency."},
+    {"name": "gross_total_minor", "type": "long", "doc": "Company-level gross earnings total, minor units. Never a float."},
+    {"name": "employee_deduction_total_minor", "type": "long", "doc": "Company-level employee-borne deduction total, minor units."},
+    {"name": "employer_contribution_total_minor", "type": "long", "doc": "Company-level employer-borne contribution total (labor cost beyond gross), minor units."},
+    {"name": "net_total_minor", "type": "long", "doc": "Company-level net pay total, minor units."},
+    {"name": "rule_versions", "type": {"type": "array", "items": {"type": "record", "name": "RuleVersion", "fields": [
+      {"name": "rule_key", "type": "string", "doc": "The statutory rule family key, e.g. PPH21_PROGRESSIVE."},
+      {"name": "rule_version", "type": "string", "doc": "The immutable resolved rule version label, e.g. ILLUSTRATIVE-2026.1."}
+    ]}}, "doc": "The FROZEN rule-version set resolved at run start (reproducibility)."},
+    {"name": "uses_illustrative_rules", "type": "boolean", "doc": "True if ANY resolved statutory rule is an ILLUSTRATIVE_PLACEHOLDER — results are NOT based on verified DJP/BPJS rates."},
+    {"name": "posted_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the run was posted (epoch millis)."}
+  ]
+}

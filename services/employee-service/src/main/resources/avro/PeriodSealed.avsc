@@ -1,0 +1,12 @@
+{
+  "type": "record",
+  "name": "PeriodSealed",
+  "namespace": "id.co.nativeapp.events.carwash",
+  "doc": "employee-service CONSUMER copy of PeriodSealed (producer: the verticals). Signals that a business unit (outlet) has sealed its operational data for a period — the completeness gate (ARCHITECTURE.md §4): a payroll_run may only transition to CALCULATING/POST once every expected source business_id for the period has sealed (no running on partial data). Raw Avro bytes via AvroSerde; deduped by event UUID via ProcessedEventStore; projected into period_seal under the EVENT's company_id (RLS). Key fields per EVENT-CATALOG: business_id, period. NO PII.",
+  "fields": [
+    {"name": "company_id", "type": "string", "doc": "The owning tenant / company id (UUID as string)."},
+    {"name": "business_id", "type": "string", "doc": "The business unit (outlet) that sealed (UUID as string)."},
+    {"name": "period", "type": "string", "doc": "The period sealed (YYYY-MM)."},
+    {"name": "sealed_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the period was sealed (epoch millis)."}
+  ]
+}

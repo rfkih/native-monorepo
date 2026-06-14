@@ -1,0 +1,18 @@
+{
+  "type": "record",
+  "name": "LaborCostAllocated",
+  "namespace": "id.co.nativeapp.events.employee",
+  "doc": "Emitted by employee-service per (outlet_org_unit_id, gl_account) bucket when a payroll_run posts; consumed by finance (dimensional ledger). One event PER outlet/GL bucket, AGGREGATED across employees so no individual salary is derivable. Published via the transactional outbox (rule 3) in the SAME transaction that flips the run to POSTED. NO PII (rule 6): an outlet/GL cost-center aggregate only. NOTE: ARCHITECTURE.md §5 lists employee_id on this event, but a per-(employee,outlet,gl) amount effectively leaks individual labor cost ~= salary; employee_id is DROPPED here by design decision (see open risks — needs finance sign-off). Carries uses_illustrative_rules so an illustrative run can be quarantined downstream.",
+  "fields": [
+    {"name": "payroll_run_id", "type": "string", "doc": "The payroll_run aggregate id (UUID as string); also the Kafka partition key."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant / company id (UUID as string)."},
+    {"name": "period", "type": "string", "doc": "The payroll period (YYYY-MM)."},
+    {"name": "outlet_id", "type": "string", "doc": "The outlet org unit this labor-cost bucket is for (UUID as string)."},
+    {"name": "gl_account", "type": "string", "doc": "The GL account this labor cost posts to."},
+    {"name": "amount_minor", "type": "long", "doc": "The allocated labor cost for this outlet/GL bucket, minor units. Never a float."},
+    {"name": "currency", "type": "string", "doc": "The ISO-4217 currency (the run's base currency)."},
+    {"name": "uses_illustrative_rules", "type": "boolean", "doc": "True if the run was computed against ILLUSTRATIVE_PLACEHOLDER statutory figures."},
+    {"name": "unallocated", "type": "boolean", "default": false, "doc": "True if this is the UNALLOCATED suspense bucket: employer labor cost for employees with no outlet assignment in the period (on leave / between assignments). outlet_id is the all-zeros sentinel and gl_account is the suspense account; finance must clear it rather than treat it as a real outlet cost. Added backward-compatibly with a default so an old reader ignores it."},
+    {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the allocation occurred (epoch millis)."}
+  ]
+}
