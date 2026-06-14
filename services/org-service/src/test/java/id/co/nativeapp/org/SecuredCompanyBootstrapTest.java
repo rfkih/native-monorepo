@@ -100,7 +100,7 @@ class SecuredCompanyBootstrapTest {
   void resetTables() {
     try (Connection admin = adminConnection();
         Statement st = admin.createStatement()) {
-      st.execute("TRUNCATE TABLE company, org_unit, outbox");
+      st.execute("TRUNCATE TABLE company, org_unit, legal_employer, outbox");
     } catch (SQLException ignored) {
       // Tables not created yet (pre-Flyway) — nothing to reset.
     }

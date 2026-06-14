@@ -22,7 +22,8 @@ schema. Until then a row here is documentation of intent, not a shippable contra
 | Event | Producer | Consumers | Key fields | Status |
 |---|---|---|---|---|
 | **`CompanyCreated`** | **org-service** | **entitlement, finance, verticals** | **company_id, legal_employer_id, base_currency, default_language** | **LIVE (M1.2)** |
-| `OrgUnitCreated/Changed` | org-service | employee, verticals, finance | org_unit_id, type, parent_id, company_id | planned |
+| **`OrgUnitCreated`** | **org-service** | **employee, verticals, finance** | **org_unit_id, type, parent_id, company_id** | **LIVE (#18)** |
+| **`OrgUnitChanged`** | **org-service** | **employee, verticals, finance** | **org_unit_id, type, parent_id, company_id** | **LIVE (#18)** |
 | **`EntitlementGranted`** | **entitlement-service** | **shell, all services** | **company_id, module_key** | **LIVE** |
 | **`EntitlementRevoked`** | **entitlement-service** | **shell, all services** | **company_id, module_key** | **LIVE** |
 | `EmployeeChanged` | employee | verticals | employee_id, company_id, status | planned |
@@ -94,6 +95,112 @@ Never add a required field without a default, never remove or rename a field, ne
 change a field's type. The contract test (`CompanyCreatedContractTest`) enforces this —
 it asserts the schema is backward-compatible with itself and with an
 added-optional-field variant, and rejects a new required field without a default.
+
+### `OrgUnitCreated`
+
+Emitted by org-service when an `org_unit` (a node in the company's self-referencing org
+tree — `business_unit > branch > outlet > team`) is created, including the company's
+root business unit created during the company bootstrap (#18 — the full org tree).
+Consumed by employee-service, the verticals, and finance-service so each caches its
+slice of the org tree without a synchronous call (rule 2).
+
+- **Producer:** `org-service`
+- **Consumers:** `employee-service` (anchors assignments on the org tree),
+  the verticals (local staff/org read model), `finance-service` (dimensional ledger
+  org dimensions).
+- **Aggregate type / partition key:** `org_unit` / `org_unit_id`
+- **Outbox `event_type`:** `OrgUnitCreated`
+- **Schema:** `services/org-service/src/main/resources/avro/OrgUnitCreated.avsc`
+- **Full name:** `id.co.nativeapp.events.org.OrgUnitCreated`
+
+The org tree is strictly nested and enforced in the `OrgUnit` aggregate: a `business_unit`
+is a top-level node (`parent_id` null); a `branch` hangs under a `business_unit`; an
+`outlet` under a `branch`; a `team` under an `outlet`. `parent_id` is therefore a nullable
+union (`["null","string"]`, default `null`).
+
+**Key fields** (ARCHITECTURE.md §5: `org_unit_id`, `type`, `parent_id`, `company_id`)
+
+| Field | Avro type | Meaning |
+|---|---|---|
+| `org_unit_id` | `string` | The org_unit aggregate id (UUID as string); the partition key |
+| `company_id` | `string` | The owning tenant / company id (UUID as string) |
+| `type` | `string` | The org-unit kind: `business_unit` \| `branch` \| `outlet` \| `team` |
+| `parent_id` | `["null","string"]` (default `null`) | The parent org_unit id, or null for a top-level node |
+| `legal_employer_id` | `string` | The legal employer this node belongs to (UUID as string) |
+| `name` | `string` | The org-unit display name |
+
+**Avro schema**
+
+```json
+{
+  "type": "record",
+  "name": "OrgUnitCreated",
+  "namespace": "id.co.nativeapp.events.org",
+  "doc": "Emitted by org-service when an org_unit (a node in the company's business_unit > branch > outlet > team tree) is created; consumed by employee-service, the verticals, and finance-service so each can cache its slice of the org tree without a synchronous call (rule 2). Key fields per ARCHITECTURE.md §5: org_unit_id, type, parent_id, company_id.",
+  "fields": [
+    {"name": "org_unit_id", "type": "string", "doc": "The org_unit aggregate id (UUID as string); also the Kafka partition key."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant / company id (UUID as string)."},
+    {"name": "type", "type": "string", "doc": "The org-unit kind: business_unit | branch | outlet | team."},
+    {"name": "parent_id", "type": ["null", "string"], "default": null, "doc": "The parent org_unit id (UUID as string), or null for a top-level node (a business_unit)."},
+    {"name": "legal_employer_id", "type": "string", "doc": "The legal employer this node belongs to (UUID as string)."},
+    {"name": "name", "type": "string", "doc": "The org-unit display name."}
+  ]
+}
+```
+
+**Compatibility.** Backward-compatible only (add optional fields with a default; never a
+new required field without a default, never remove/rename/retype). Enforced by
+`OrgUnitEventContractTest` (parse + `AvroSerde` round-trip + back-compat for-change /
+against-break).
+
+### `OrgUnitChanged`
+
+Emitted by org-service when an `org_unit` is **renamed**, **moved** to a new parent, or
+**deactivated** via `PATCH /api/v1/org-units/{orgUnitId}` (#18). One event per effective
+change. Consumed by the same set as `OrgUnitCreated` to update their cached slice of the
+org tree; it carries the node's new state so a consumer applies it idempotently.
+
+- **Producer:** `org-service`
+- **Consumers:** `employee-service`, the verticals, `finance-service` (same as
+  `OrgUnitCreated`).
+- **Aggregate type / partition key:** `org_unit` / `org_unit_id`
+- **Outbox `event_type`:** `OrgUnitChanged`
+- **Schema:** `services/org-service/src/main/resources/avro/OrgUnitChanged.avsc`
+- **Full name:** `id.co.nativeapp.events.org.OrgUnitChanged`
+
+**Key fields** (ARCHITECTURE.md §5: `org_unit_id`, `type`, `parent_id`, `company_id`)
+
+| Field | Avro type | Meaning |
+|---|---|---|
+| `org_unit_id` | `string` | The org_unit aggregate id (UUID as string); the partition key |
+| `company_id` | `string` | The owning tenant / company id (UUID as string) |
+| `type` | `string` | The org-unit kind (immutable once created) |
+| `parent_id` | `["null","string"]` (default `null`) | The CURRENT parent after the change, or null |
+| `change_kind` | `string` | What changed: `RENAMED` \| `MOVED` \| `DEACTIVATED` |
+| `name` | `string` | The org-unit display name after the change |
+| `active` | `boolean` | Whether the node is still active after the change |
+
+**Avro schema**
+
+```json
+{
+  "type": "record",
+  "name": "OrgUnitChanged",
+  "namespace": "id.co.nativeapp.events.org",
+  "doc": "Emitted by org-service when an org_unit is renamed, moved to a new parent, or deactivated; consumed by employee-service, the verticals, and finance-service to update their cached slice of the org tree. Key fields per ARCHITECTURE.md §5: org_unit_id, type, parent_id, company_id. Carries the new state so a consumer can apply it idempotently.",
+  "fields": [
+    {"name": "org_unit_id", "type": "string", "doc": "The org_unit aggregate id (UUID as string); also the Kafka partition key."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant / company id (UUID as string)."},
+    {"name": "type", "type": "string", "doc": "The org-unit kind: business_unit | branch | outlet | team (immutable once created)."},
+    {"name": "parent_id", "type": ["null", "string"], "default": null, "doc": "The CURRENT parent org_unit id (UUID as string) after the change, or null for a top-level node."},
+    {"name": "change_kind", "type": "string", "doc": "What changed: RENAMED | MOVED | DEACTIVATED."},
+    {"name": "name", "type": "string", "doc": "The org-unit display name after the change."},
+    {"name": "active", "type": "boolean", "doc": "Whether the node is still active after the change (false after a deactivation)."}
+  ]
+}
+```
+
+**Compatibility.** Backward-compatible only, enforced by `OrgUnitEventContractTest`.
 
 ### `SaleRecorded`
 

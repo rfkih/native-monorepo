@@ -74,7 +74,14 @@ class CreateBusinessTenantGuardTest {
 
   @Test
   void addBusinessWithAPathCompanyIdMatchingTheBoundTenantSucceeds() throws Exception {
-    OrgUnit created = new OrgUnit("Outlet 1", OrgUnitType.OUTLET, null);
+    OrgUnit created =
+        new OrgUnit(
+            "Outlet 1",
+            OrgUnitType.BUSINESS_UNIT,
+            null,
+            null,
+            BOUND_TENANT,
+            java.time.LocalDate.of(2026, 1, 1));
     created.setCompanyId(BOUND_TENANT.toString());
     when(companyService.addBusiness(any())).thenReturn(created);
 

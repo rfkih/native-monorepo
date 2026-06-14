@@ -1,0 +1,14 @@
+{
+  "type": "record",
+  "name": "OrgUnitCreated",
+  "namespace": "id.co.nativeapp.events.org",
+  "doc": "Emitted by org-service when an org_unit (a node in the company's business_unit > branch > outlet > team tree) is created; consumed by employee-service, the verticals, and finance-service so each can cache its slice of the org tree without a synchronous call (rule 2). Key fields per ARCHITECTURE.md §5: org_unit_id, type, parent_id, company_id.",
+  "fields": [
+    {"name": "org_unit_id", "type": "string", "doc": "The org_unit aggregate id (UUID as string); also the Kafka partition key."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant / company id (UUID as string)."},
+    {"name": "type", "type": "string", "doc": "The org-unit kind: business_unit | branch | outlet | team."},
+    {"name": "parent_id", "type": ["null", "string"], "default": null, "doc": "The parent org_unit id (UUID as string), or null for a top-level node (a business_unit)."},
+    {"name": "legal_employer_id", "type": "string", "doc": "The legal employer this node belongs to (UUID as string)."},
+    {"name": "name", "type": "string", "doc": "The org-unit display name."}
+  ]
+}

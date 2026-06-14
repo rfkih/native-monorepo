@@ -4,6 +4,8 @@ import id.co.nativeapp.events.AvroSerde;
 import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
+import java.time.Clock;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import org.apache.avro.generic.GenericRecord;
@@ -26,15 +28,21 @@ public class CompanyWriter {
 
   private final CompanyRepository companyRepository;
   private final OrgUnitRepository orgUnitRepository;
+  private final LegalEmployerRepository legalEmployerRepository;
   private final OutboxWriter outboxWriter;
+  private final Clock clock;
 
   public CompanyWriter(
       CompanyRepository companyRepository,
       OrgUnitRepository orgUnitRepository,
-      OutboxWriter outboxWriter) {
+      LegalEmployerRepository legalEmployerRepository,
+      OutboxWriter outboxWriter,
+      Clock clock) {
     this.companyRepository = companyRepository;
     this.orgUnitRepository = orgUnitRepository;
+    this.legalEmployerRepository = legalEmployerRepository;
     this.outboxWriter = outboxWriter;
+    this.clock = clock;
   }
 
   /**
@@ -75,9 +83,13 @@ public class CompanyWriter {
     // new company id, so the company is its own tenant and the WITH CHECK passes.
     String tenant = TenantContext.require().companyId();
 
-    // A company is its own legal employer in M1.2 (one company == one legal employer);
-    // the dedicated legal_employer aggregate arrives with the full org tree later.
+    // Default ONE legal_employer per company in the bootstrap, with its id equal to the
+    // company id — so the historical legal_employer_id == company_id invariant still
+    // holds — but now modelled as a real, first-class aggregate, not an implied identity.
     UUID legalEmployerId = newCompanyId;
+    LegalEmployer legalEmployer = new LegalEmployer(legalEmployerId, name);
+    legalEmployer.setCompanyId(tenant);
+    legalEmployerRepository.save(legalEmployer);
 
     // The Company aggregate validates the base currency (ISO-4217) and makes it
     // immutable; an unknown code throws IllegalArgumentException -> 400.
@@ -86,31 +98,37 @@ public class CompanyWriter {
     company.setCompanyId(tenant);
     Company savedCompany = companyRepository.save(company);
 
-    // The first business is a top-level org unit (no parent) of type business_unit.
-    OrgUnit firstBusiness = new OrgUnit(businessName, OrgUnitType.from(businessType), null);
+    // The first business is the ROOT of the org tree: a top-level BUSINESS_UNIT (no
+    // parent). It is always a business_unit regardless of the requested businessType —
+    // the company's root business unit is the top of the business_unit > branch >
+    // outlet > team hierarchy (sub-types are added later under it). businessType is kept
+    // in the signature for API compatibility but does not override the root kind.
+    OrgUnit firstBusiness =
+        new OrgUnit(businessName, OrgUnitType.BUSINESS_UNIT, null, null, legalEmployerId, today());
     firstBusiness.setCompanyId(tenant);
     OrgUnit savedBusiness = orgUnitRepository.save(firstBusiness);
 
     // Flush so the inserts (and any RLS WITH CHECK violation) surface inside this
-    // transaction, before the outbox row, rather than at commit.
+    // transaction, before the outbox rows, rather than at commit.
+    legalEmployerRepository.flush();
     companyRepository.flush();
     orgUnitRepository.flush();
 
-    // Build the CompanyCreated GenericRecord and serialize it for the outbox payload.
-    GenericRecord event = CompanyCreatedSchema.toRecord(savedCompany);
-    byte[] payload = AvroSerde.serialize(event);
-
-    // The outbox INSERT runs on this transaction's connection (rule 3): it commits
-    // atomically with the company + org_unit above. company_id is a UUID column on
-    // the outbox; the new tenant id is a UUID by construction (generated server-side).
+    // CompanyCreated: the outbox INSERT runs on this transaction's connection (rule 3),
+    // so it commits atomically with the company + legal_employer + org_unit above.
+    GenericRecord companyCreated = CompanyCreatedSchema.toRecord(savedCompany);
     outboxWriter.write(
         CompanyCreatedSchema.AGGREGATE_TYPE,
         savedCompany.getId().toString(),
         CompanyCreatedSchema.EVENT_TYPE,
-        payload,
+        AvroSerde.serialize(companyCreated),
         null,
         newCompanyId,
         savedCompany.getCreatedAt());
+
+    // OrgUnitCreated for the root business unit — downstream services cache the org tree
+    // from these events; the bootstrap node is the first one.
+    writeOrgUnitCreated(savedBusiness, newCompanyId);
 
     return new CreateCompanyResult(savedCompany, savedBusiness);
   }
@@ -127,15 +145,44 @@ public class CompanyWriter {
   public OrgUnit addBusiness(CreateBusinessCommand command) {
     String tenant = TenantContext.require().companyId();
 
-    // In M1.2's minimal flat model a "business" added to a company is a top-level org
-    // unit under that company (parent_id null) — the company itself is the tenant root,
-    // not an org_unit, so a business is a top-level node, not a child of another node.
-    // The full nested org tree (branch/outlet/team hierarchy) arrives in a later task.
-    // RLS confines the row to the bound tenant; company_id is stamped from the scope,
-    // never from the request body (rule 5).
-    OrgUnit orgUnit = new OrgUnit(command.name(), OrgUnitType.from(command.type()), null);
+    // A "business" added to a company is a top-level node — a root BUSINESS_UNIT (the
+    // top of the business_unit > branch > outlet > team tree). The nested sub-types are
+    // added under it via the org-unit endpoint (OrgUnitWriter). RLS confines the row to
+    // the bound tenant; company_id is stamped from the scope, never the body (rule 5).
+    OrgUnit orgUnit =
+        new OrgUnit(
+            command.name(),
+            OrgUnitType.BUSINESS_UNIT,
+            null,
+            null,
+            UUID.fromString(tenant),
+            today());
     orgUnit.setCompanyId(tenant);
-    return orgUnitRepository.save(orgUnit);
+    OrgUnit saved = orgUnitRepository.save(orgUnit);
+    orgUnitRepository.flush();
+    writeOrgUnitCreated(saved, UUID.fromString(tenant));
+    return saved;
+  }
+
+  /**
+   * Writes one {@code OrgUnitCreated} outbox row for the given org unit, on the caller's
+   * transactional connection, so it commits atomically with the org_unit insert (rule 3).
+   */
+  void writeOrgUnitCreated(OrgUnit orgUnit, UUID companyId) {
+    GenericRecord event = OrgUnitCreatedSchema.toRecord(orgUnit);
+    outboxWriter.write(
+        OrgUnitCreatedSchema.AGGREGATE_TYPE,
+        orgUnit.getId().toString(),
+        OrgUnitCreatedSchema.EVENT_TYPE,
+        AvroSerde.serialize(event),
+        null,
+        companyId,
+        orgUnit.getCreatedAt());
+  }
+
+  /** Today's date (UTC), via the injected clock, for effective-dating new nodes. */
+  private LocalDate today() {
+    return LocalDate.now(clock);
   }
 
   /**
