@@ -1,4 +1,4 @@
-package id.co.nativeapp.restaurant;
+package id.co.nativeapp.restaurant.config;
 
 import java.util.Map;
 import org.springframework.http.ResponseEntity;

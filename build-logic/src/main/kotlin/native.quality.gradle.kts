@@ -46,7 +46,11 @@ tasks.named<JacocoReport>("jacocoTestReport") {
 }
 
 dependencies {
-    "testImplementation"("com.tngtech.archunit:archunit-junit5:1.3.0")
+    // 1.4.1+ bundles ASM 9.8, which understands Java 25 bytecode (class file major
+    // version 69); 1.3.0's ASM 9.7.1 tops out at Java 24 and silently imports zero
+    // classes from a Java 25 build, making every layered-architecture rule fail with
+    // "failed to check any classes".
+    "testImplementation"("com.tngtech.archunit:archunit-junit5:1.4.1")
 }
 
 // Formatting + Checkstyle + ArchUnit (a normal test) are blocking via `check`.

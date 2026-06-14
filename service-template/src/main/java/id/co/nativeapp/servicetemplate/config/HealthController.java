@@ -1,4 +1,4 @@
-package id.co.nativeapp.servicetemplate;
+package id.co.nativeapp.servicetemplate.config;
 
 import java.util.Map;
 import org.springframework.http.ResponseEntity;

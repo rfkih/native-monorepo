@@ -3,6 +3,7 @@ package id.co.nativeapp.restaurant;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import id.co.nativeapp.events.AvroSerde;
+import id.co.nativeapp.restaurant.sale.SaleRecordedSchema;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericRecord;

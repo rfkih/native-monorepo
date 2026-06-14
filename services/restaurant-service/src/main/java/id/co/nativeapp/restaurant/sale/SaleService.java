@@ -1,4 +1,4 @@
-package id.co.nativeapp.restaurant;
+package id.co.nativeapp.restaurant.sale;
 
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;

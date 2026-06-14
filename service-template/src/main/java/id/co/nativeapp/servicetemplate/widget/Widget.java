@@ -1,4 +1,4 @@
-package id.co.nativeapp.servicetemplate;
+package id.co.nativeapp.servicetemplate.widget;
 
 import id.co.nativeapp.tenant.Auditable;
 import jakarta.persistence.Entity;

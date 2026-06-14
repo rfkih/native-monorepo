@@ -1,5 +1,6 @@
 package id.co.nativeapp.restaurant;
 
+import id.co.nativeapp.restaurant.config.PersistenceConfig;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 

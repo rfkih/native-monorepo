@@ -8,7 +8,7 @@ testcontainers = "2.0.5"
 avro = "1.12.1"
 postgresql = "42.7.4"
 h2 = "2.3.232"
-archunit = "1.3.0"
+archunit = "1.4.1"  # 1.4.1+ bundles ASM 9.8 (understands Java 25 bytecode); 1.3.0 cannot
 # Build tooling (also pinned literally in build-logic where the catalog isn't visible)
 spotless = "7.0.2"
 googleJavaFormat = "1.25.2"

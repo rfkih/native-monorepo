@@ -2,6 +2,10 @@ package id.co.nativeapp.restaurant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import id.co.nativeapp.restaurant.config.RlsAutoApplyAspect;
+import id.co.nativeapp.restaurant.sale.RecordSaleCommand;
+import id.co.nativeapp.restaurant.sale.Sale;
+import id.co.nativeapp.restaurant.sale.SaleService;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Instant;
 import java.util.List;

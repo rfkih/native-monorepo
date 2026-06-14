@@ -1,5 +1,6 @@
-package id.co.nativeapp.restaurant;
+package id.co.nativeapp.restaurant.sale;
 
+import id.co.nativeapp.restaurant.config.RlsAutoApplyAspect;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;

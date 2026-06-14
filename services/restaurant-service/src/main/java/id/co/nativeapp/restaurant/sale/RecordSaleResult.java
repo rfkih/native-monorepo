@@ -1,4 +1,4 @@
-package id.co.nativeapp.restaurant;
+package id.co.nativeapp.restaurant.sale;
 
 /**
  * Outcome of {@link SaleService#recordSale(RecordSaleCommand)}.

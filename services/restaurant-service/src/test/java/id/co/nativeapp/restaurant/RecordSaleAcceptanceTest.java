@@ -3,6 +3,10 @@ package id.co.nativeapp.restaurant;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import id.co.nativeapp.events.AvroSerde;
+import id.co.nativeapp.restaurant.sale.RecordSaleCommand;
+import id.co.nativeapp.restaurant.sale.RecordSaleResult;
+import id.co.nativeapp.restaurant.sale.SaleRecordedSchema;
+import id.co.nativeapp.restaurant.sale.SaleService;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Instant;
 import java.util.List;

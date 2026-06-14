@@ -2,6 +2,9 @@ package id.co.nativeapp.restaurant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import id.co.nativeapp.restaurant.sale.RecordSaleCommand;
+import id.co.nativeapp.restaurant.sale.RecordSaleResult;
+import id.co.nativeapp.restaurant.sale.SaleService;
 import id.co.nativeapp.tenant.TenantContext;
 import java.sql.Connection;
 import java.sql.ResultSet;

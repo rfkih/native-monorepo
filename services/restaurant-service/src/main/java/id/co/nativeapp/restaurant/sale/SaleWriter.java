@@ -1,8 +1,9 @@
-package id.co.nativeapp.restaurant;
+package id.co.nativeapp.restaurant.sale;
 
 import id.co.nativeapp.events.AvroSerde;
 import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.money.Money;
+import id.co.nativeapp.restaurant.config.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
 import java.util.Optional;

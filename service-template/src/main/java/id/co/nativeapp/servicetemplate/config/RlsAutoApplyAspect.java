@@ -1,4 +1,4 @@
-package id.co.nativeapp.servicetemplate;
+package id.co.nativeapp.servicetemplate.config;
 
 import id.co.nativeapp.tenant.RlsTransactionSynchronizer;
 import org.aspectj.lang.ProceedingJoinPoint;

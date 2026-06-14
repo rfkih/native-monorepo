@@ -2,6 +2,9 @@ package id.co.nativeapp.servicetemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import id.co.nativeapp.servicetemplate.config.RlsAutoApplyAspect;
+import id.co.nativeapp.servicetemplate.widget.Widget;
+import id.co.nativeapp.servicetemplate.widget.WidgetService;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
 import org.junit.jupiter.api.Test;

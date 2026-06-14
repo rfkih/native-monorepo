@@ -1,4 +1,4 @@
-package id.co.nativeapp.servicetemplate;
+package id.co.nativeapp.restaurant.config;
 
 import id.co.nativeapp.tenant.RlsConnectionInitializer;
 import id.co.nativeapp.tenant.RlsTransactionSynchronizer;
@@ -15,6 +15,10 @@ import org.springframework.context.annotation.Configuration;
  * DataSource}. Together with the aspect this gives every {@code @Transactional} unit of work an
  * automatic {@code SET LOCAL app.current_tenant} from the bound {@link
  * id.co.nativeapp.tenant.TenantContext TenantContext}.
+ *
+ * <p>Copied verbatim from the service-template shape (M1.4). A later task promotes this into a
+ * {@code libs/tenant} auto-configuration; until then every service carries its own copy so the
+ * rule-5 guarantee holds without a shared dependency the libraries do not yet provide.
  */
 @Configuration
 public class RlsConfig {

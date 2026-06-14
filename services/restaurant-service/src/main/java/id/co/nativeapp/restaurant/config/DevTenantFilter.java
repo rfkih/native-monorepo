@@ -1,4 +1,4 @@
-package id.co.nativeapp.restaurant;
+package id.co.nativeapp.restaurant.config;
 
 import id.co.nativeapp.tenant.TenantContext;
 import jakarta.servlet.FilterChain;

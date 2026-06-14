@@ -1,4 +1,4 @@
-package id.co.nativeapp.restaurant;
+package id.co.nativeapp.restaurant.sale;
 
 /**
  * A test seam invoked inside {@link SaleWriter#create} <em>immediately after</em> the outbox row is

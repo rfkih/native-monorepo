@@ -1,5 +1,7 @@
-package id.co.nativeapp.restaurant;
+package id.co.nativeapp.restaurant.config;
 
+import id.co.nativeapp.restaurant.sale.SaleController;
+import id.co.nativeapp.restaurant.sale.SaleService;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
