@@ -34,6 +34,8 @@ schema. Until then a row here is documentation of intent, not a shippable contra
 | **`ExpenseRecorded`** | **verticals** | **finance** | **expense_id, company_id, business_id, amount_minor, currency, gl_hint, occurred_at** | **LIVE (finance consumer #21)** |
 | **`PayrollPosted`** | **employee-service** | **finance** | **payroll_run_id, run_seq, company_id, period, base_currency, totals, rule_versions, uses_illustrative_rules, posted_at** | **LIVE (#23); finance consumer #23** |
 | **`LaborCostAllocated`** | **employee-service** | **finance** | **payroll_run_id, run_seq, company_id, period, outlet_id, gl_account, amount_minor, currency, uses_illustrative_rules, unallocated** | **LIVE (#23); finance consumer #23** |
+| **`GroupDefined`** | **org-service** | **finance** | **group_id, lead_company_id, reporting_currency, name** | **LIVE (P3d SEAM 1); finance consumer P3d SEAM 1** |
+| **`GroupMembershipChanged`** | **org-service** | **finance** | **group_id, member_company_id, change_kind, effective_from, effective_to** | **LIVE (P3d SEAM 1); finance consumer P3d SEAM 1** |
 | **`ConsolidationClosed`** | **finance** | **shell, notification** | **company_id (or group_id), period** | **LIVE (notification consumer #22)** |
 | **`DeliveryReceipt`** | **notification-service** | **(audit/observability sinks; re-send policy)** | **notification_id, company_id, channel, status, provider_ref, delivered_at** | **LIVE (#22)** |
 
@@ -945,3 +947,142 @@ reads it). A record without a valid `id` header (and, for `MetricPublished`, a `
 the payload carries no `company_id`) fails closed to `<topic>.DLT`. The contract tests
 (`PayrollConsumerContractTest`) assert the `MetricPublished` consumer copy stays
 backward-compatible with carwash's producer schema (rule 7).
+
+### `GroupDefined`
+
+Emitted by org-service when a **consolidation group** is defined (P3d SEAM 1 — the group model +
+membership read model). A consolidation group is a named set of companies whose books a **lead
+company** consolidates; it is owned by that lead. Consumed by finance-service to register the group
+in a **local group read model** (`group_id -> {lead_company_id, reporting_currency}`) so finance
+knows the group's lead + reporting currency without a synchronous call to org-service (rule 2). This
+seam is **pure plumbing — NO consolidation math**; later seams read this reference to drive group
+consolidation.
+
+- **Producer:** `org-service` (the consolidation-group create flow).
+- **Consumers:** `finance-service` (the local `group_ref` read model) — **LIVE (P3d SEAM 1)**.
+- **Aggregate type / partition key:** `consolidation_group` / `group_id`
+- **Outbox `event_type`:** `GroupDefined`
+- **Schema (producer, source of truth):** `services/org-service/src/main/resources/avro/GroupDefined.avsc`
+- **Schema (finance consumer copy):** `services/finance-service/src/main/resources/avro/GroupDefined.avsc`
+  — finance owns its own consumer view of the contract; the finance `GroupDefinedContractTest` asserts
+  the copy stays backward-compatible with the producer schema (rule 7). The finance consumer reads the
+  outbox payload as **raw Avro bytes** via `libs/events AvroSerde` (no Schema Registry serde), deduping
+  by the event UUID (`ProcessedEventStore`) so a re-delivery never double-applies.
+- **Full name:** `id.co.nativeapp.events.org.GroupDefined`
+
+**`reporting_currency` is an ISO-4217 code, immutable once set** (CLAUDE.md "Settings live at
+creation") — the exact pattern `CompanyCreated.base_currency` uses. It is a currency *code*, never a
+monetary amount and never a float. `lead_company_id` is the group's owner/tenant; the group and its
+membership are RLS-scoped to it (a member company can neither enumerate nor mutate the group).
+
+**Key fields**
+
+| Field | Avro type | Meaning |
+|---|---|---|
+| `group_id` | `string` | The consolidation group aggregate id (UUID as string); the partition key |
+| `lead_company_id` | `string` | The lead/owner company that administers the group (UUID as string) |
+| `reporting_currency` | `string` | The group's reporting (presentation) currency: an ISO-4217 code (e.g. `IDR`, `USD`); immutable |
+| `name` | `string` | The group display name |
+
+**Avro schema**
+
+```json
+{
+  "type": "record",
+  "name": "GroupDefined",
+  "namespace": "id.co.nativeapp.events.org",
+  "doc": "Emitted by org-service when a consolidation group is defined (P3d SEAM 1); consumed by finance-service to register the group's lead company + immutable reporting currency in a local group read model, without a synchronous call (rule 2). The group is owned by its lead company; reporting_currency is set once at creation and is immutable (CLAUDE.md 'Settings live at creation').",
+  "fields": [
+    {"name": "group_id", "type": "string", "doc": "The consolidation_group aggregate id (UUID as string); also the Kafka partition key."},
+    {"name": "lead_company_id", "type": "string", "doc": "The lead/owner company that administers the group (UUID as string); the group's tenant."},
+    {"name": "reporting_currency", "type": "string", "doc": "The group's reporting (presentation) currency: an ISO-4217 code (e.g. IDR, USD). Immutable once set."},
+    {"name": "name", "type": "string", "doc": "The group display name."}
+  ]
+}
+```
+
+**Compatibility.** Only backward-compatible evolution is allowed: add fields with a default. Never
+add a required field without a default, never remove or rename a field, never change a field's type.
+The contract tests (`GroupEventContractTest` producer-side in org-service, `GroupDefinedContractTest`
+consumer-side in finance) enforce the triad — parse + `AvroSerde` round-trip + back-compat
+for-change / against-break.
+
+### `GroupMembershipChanged`
+
+Emitted by org-service when a company is **added to** or **removed from** a consolidation group (P3d
+SEAM 1). A removal **closes the membership's effective window** (`effective_to` stamped to the
+removal date) — it never hard-deletes, so membership history is preserved for re-runnable
+consolidation. Consumed by finance-service to maintain the **active member set** of its local group
+read model (`group_member`), again without a synchronous call (rule 2).
+
+- **Producer:** `org-service` (the add-member / remove-member flow).
+- **Consumers:** `finance-service` (the local `group_member` read model) — **LIVE (P3d SEAM 1)**.
+- **Aggregate type / partition key:** `consolidation_group` / `group_id` (so a group's membership
+  events are ordered, and finance's `GroupDefined` for the group precedes them).
+- **Outbox `event_type`:** `GroupMembershipChanged`
+- **Schema (producer, source of truth):** `services/org-service/src/main/resources/avro/GroupMembershipChanged.avsc`
+- **Schema (finance consumer copy):** `services/finance-service/src/main/resources/avro/GroupMembershipChanged.avsc`
+  — finance owns its own consumer view; `GroupMembershipChangedContractTest` asserts back-compat with
+  the producer schema (rule 7). Raw Avro bytes via `libs/events AvroSerde`, deduped by event UUID
+  (`ProcessedEventStore`).
+- **Full name:** `id.co.nativeapp.events.org.GroupMembershipChanged`
+
+**Effective dates are Avro `date` logical-type ints** (epoch day), exactly as `AssignmentChanged`
+carries its effective dates; an open membership uses the far-future `9999-12-31` sentinel, never null.
+The event carries the **post-change** state so a consumer applies it idempotently. It carries no
+`lead_company_id`; finance resolves the owning lead (the tenant the `group_member` write is bound to)
+from its local group reference, keyed on `group_id` — a cached read model, never a sync call (rule 2).
+
+**Key fields**
+
+| Field | Avro type | Meaning |
+|---|---|---|
+| `group_id` | `string` | The consolidation group id (UUID as string); the partition key |
+| `member_company_id` | `string` | The member company added or removed (UUID as string) |
+| `change_kind` | `string` | The transition: `ADDED` \| `REMOVED` |
+| `effective_from` | `int` (`date`) | The date the membership becomes effective (epoch day) |
+| `effective_to` | `int` (`date`) | The date it ceases to be effective; `9999-12-31` while open |
+
+**Avro schema**
+
+```json
+{
+  "type": "record",
+  "name": "GroupMembershipChanged",
+  "namespace": "id.co.nativeapp.events.org",
+  "doc": "Emitted by org-service when a company is added to or removed from a consolidation group (P3d SEAM 1); consumed by finance-service to maintain the active member set of a local group read model, without a synchronous call (rule 2). A removal CLOSES the effective_to window (no hard-delete); effective dates are date logical-type ints (epoch day), open-ended = 9999-12-31.",
+  "fields": [
+    {"name": "group_id", "type": "string", "doc": "The consolidation_group id (UUID as string); also the Kafka partition key."},
+    {"name": "member_company_id", "type": "string", "doc": "The member company added or removed (UUID as string)."},
+    {"name": "change_kind", "type": "string", "doc": "The membership transition: ADDED | REMOVED."},
+    {"name": "effective_from", "type": {"type": "int", "logicalType": "date"}, "doc": "The date the membership becomes effective (epoch day)."},
+    {"name": "effective_to", "type": {"type": "int", "logicalType": "date"}, "doc": "The date the membership ceases to be effective (epoch day); the 9999-12-31 sentinel while the membership is open."}
+  ]
+}
+```
+
+**Compatibility.** Backward-compatible only, enforced by `GroupEventContractTest` (org-service) and
+`GroupMembershipChangedContractTest` (finance) — the triad (parse + `AvroSerde` round-trip +
+add-optional compatible / new-required broken).
+
+### `GroupDefined` / `GroupMembershipChanged` — finance-service consumer view
+
+finance-service **consumes** the org-service `GroupDefined` / `GroupMembershipChanged` into a **local
+group read model** (rule 2 — never a sync call): `group_ref` (`group_id -> {lead_company_id,
+reporting_currency}`) and `group_member` (`group_id -> the effective-dated active member set`). It
+keeps its own **consumer copies** of the schemas at
+`services/finance-service/src/main/resources/avro/GroupDefined.avsc` and
+`.../GroupMembershipChanged.avsc` (same full names), reads the outbox payload as **raw Avro bytes** via
+`libs/events AvroSerde`, and dedupes by the event UUID (`ProcessedEventStore`) so a re-delivery never
+double-applies. `group_ref` and `group_member` are **Auditable + under FORCE RLS scoped to the LEAD
+company** (`company_id = lead_company_id`) — the existing finance org-derived-read-model precedent
+(consolidated_revenue / consolidated_pnl tenancy); **SEAM 1 does NOT introduce the group-scoped GUC
+(that is SEAM 2)**. `GroupDefined` carries the lead in its payload; `GroupMembershipChanged` does not,
+so finance resolves the lead from a small cross-tenant `group_lead` reference mapping (`group_id ->
+lead_company_id`, NOT under RLS — like `chart_of_account` / `processed_event`), written alongside
+`group_ref`, then binds that lead before the RLS-scoped `group_member` write. A membership event for a
+group whose `GroupDefined` has not yet been consumed throws a **retryable** `UnknownGroupException`
+(re-delivered until the group is registered), never projected under an unknown tenant. A record without
+a valid `id` header fails closed to `<topic>.DLT`; an undecodable payload routes to the DLT
+(non-retryable). The `GroupDefinedContractTest` / `GroupMembershipChangedContractTest` assert the
+consumer copies stay backward-compatible with the producer schemas (rule 7).

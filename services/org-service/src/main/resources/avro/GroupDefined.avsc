@@ -1,0 +1,12 @@
+{
+  "type": "record",
+  "name": "GroupDefined",
+  "namespace": "id.co.nativeapp.events.org",
+  "doc": "Emitted by org-service when a consolidation group is defined (P3d SEAM 1); consumed by finance-service to register the group's lead company + immutable reporting currency in a local group read model, without a synchronous call (rule 2). The group is owned by its lead company; reporting_currency is set once at creation and is immutable (CLAUDE.md 'Settings live at creation').",
+  "fields": [
+    {"name": "group_id", "type": "string", "doc": "The consolidation_group aggregate id (UUID as string); also the Kafka partition key."},
+    {"name": "lead_company_id", "type": "string", "doc": "The lead/owner company that administers the group (UUID as string); the group's tenant."},
+    {"name": "reporting_currency", "type": "string", "doc": "The group's reporting (presentation) currency: an ISO-4217 code (e.g. IDR, USD). Immutable once set."},
+    {"name": "name", "type": "string", "doc": "The group display name."}
+  ]
+}

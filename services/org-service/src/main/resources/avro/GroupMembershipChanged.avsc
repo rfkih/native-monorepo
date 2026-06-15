@@ -1,0 +1,13 @@
+{
+  "type": "record",
+  "name": "GroupMembershipChanged",
+  "namespace": "id.co.nativeapp.events.org",
+  "doc": "Emitted by org-service when a company is added to or removed from a consolidation group (P3d SEAM 1); consumed by finance-service to maintain the active member set of a local group read model, without a synchronous call (rule 2). A removal CLOSES the effective_to window (no hard-delete); effective dates are date logical-type ints (epoch day), open-ended = 9999-12-31.",
+  "fields": [
+    {"name": "group_id", "type": "string", "doc": "The consolidation_group id (UUID as string); also the Kafka partition key."},
+    {"name": "member_company_id", "type": "string", "doc": "The member company added or removed (UUID as string)."},
+    {"name": "change_kind", "type": "string", "doc": "The membership transition: ADDED | REMOVED."},
+    {"name": "effective_from", "type": {"type": "int", "logicalType": "date"}, "doc": "The date the membership becomes effective (epoch day)."},
+    {"name": "effective_to", "type": {"type": "int", "logicalType": "date"}, "doc": "The date the membership ceases to be effective (epoch day); the 9999-12-31 sentinel while the membership is open."}
+  ]
+}

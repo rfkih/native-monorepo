@@ -1,0 +1,12 @@
+{
+  "type": "record",
+  "name": "GroupDefined",
+  "namespace": "id.co.nativeapp.events.org",
+  "doc": "finance-service CONSUMER copy of the org-service GroupDefined contract. Consumed into the local group_ref read model (group_id -> {lead_company_id, reporting_currency}) without a synchronous call (rule 2). Read as raw Avro bytes via libs/events AvroSerde (no Schema Registry serde); GroupDefinedContractTest asserts this copy stays backward-compatible with the producer schema (rule 7).",
+  "fields": [
+    {"name": "group_id", "type": "string", "doc": "The consolidation_group aggregate id (UUID as string); also the Kafka partition key."},
+    {"name": "lead_company_id", "type": "string", "doc": "The lead/owner company that administers the group (UUID as string); the group's tenant."},
+    {"name": "reporting_currency", "type": "string", "doc": "The group's reporting (presentation) currency: an ISO-4217 code (e.g. IDR, USD). Immutable once set."},
+    {"name": "name", "type": "string", "doc": "The group display name."}
+  ]
+}

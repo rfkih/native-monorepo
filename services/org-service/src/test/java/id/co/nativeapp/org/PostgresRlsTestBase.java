@@ -55,7 +55,9 @@ abstract class PostgresRlsTestBase {
             java.sql.DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
         Statement st = admin.createStatement()) {
-      st.execute("TRUNCATE TABLE company, org_unit, legal_employer, outbox");
+      st.execute(
+          "TRUNCATE TABLE company, org_unit, legal_employer, group_membership,"
+              + " consolidation_group, outbox");
     } catch (SQLException ignored) {
       // Tables not created yet (pre-Flyway) — nothing to reset.
     }
