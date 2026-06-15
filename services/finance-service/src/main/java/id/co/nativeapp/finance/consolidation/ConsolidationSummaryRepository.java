@@ -3,6 +3,7 @@ package id.co.nativeapp.finance.consolidation;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -74,4 +75,35 @@ public interface ConsolidationSummaryRepository extends JpaRepository<Consolidat
       @Param("groupId") UUID groupId,
       @Param("period") String period,
       @Param("closeRunSeq") int closeRunSeq);
+
+  /**
+   * The single ACTIVE (non-SUPERSEDED) summary for a {@code (group, period)} — the LATEST close,
+   * the one a read surface returns (P3d SEAM 4b). Supersession flips every prior summary to
+   * TERMINAL {@link ConsolidationState#SUPERSEDED}, so at most one non-SUPERSEDED row exists per
+   * {@code (group, period)}; this returns it (the highest {@code close_run_seq} defensively, so a
+   * transient mid-supersession read never returns two). Empty means no close has been attempted for
+   * the period (the read surface renders a {@code 204}). Tenant + group scoping come solely from
+   * the auto-applied two-GUC conjunction RLS (rule 5); the explicit {@code group_id} predicate is
+   * defense-in-depth.
+   */
+  @Query(
+      """
+      SELECT s FROM ConsolidationSummary s
+       WHERE s.groupId = :groupId
+         AND s.period = :period
+         AND s.state <> id.co.nativeapp.finance.consolidation.ConsolidationState.SUPERSEDED
+       ORDER BY s.closeRunSeq DESC
+      """)
+  List<ConsolidationSummary> findActiveSummaries(
+      @Param("groupId") UUID groupId, @Param("period") String period, Limit limit);
+
+  /**
+   * The single ACTIVE (latest, non-SUPERSEDED) summary for a {@code (group, period)}, taking the
+   * highest {@code close_run_seq} (defensive against a transient mid-supersession read returning
+   * two). Empty when no close has been attempted for the period.
+   */
+  default Optional<ConsolidationSummary> findActiveSummary(UUID groupId, String period) {
+    List<ConsolidationSummary> rows = findActiveSummaries(groupId, period, Limit.of(1));
+    return rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst());
+  }
 }
