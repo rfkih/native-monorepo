@@ -1,0 +1,11 @@
+{
+  "type": "record",
+  "name": "ConsolidationClosed",
+  "namespace": "id.co.nativeapp.events.finance",
+  "doc": "finance-service's PRODUCER copy of the ConsolidationClosed contract (the SOURCE OF TRUTH; P3d SEAM 4a). Emitted by finance when a consolidation close completes for a company (or a group) and a period; consumed by the shell (refresh the consolidated dashboard) and notification-service (#22 — create + deliver a 'consolidation closed for <period>' notice). The nullable group_id DISTINGUISHES the two close kinds: a within-company close emits group_id=null (the company finalised its own period); a GROUP close emits group_id=G with company_id=the group's lead. Published via the transactional outbox (rule 3) atomic with the close, only on a real CLOSED close. Bytes are read by consumers as raw Avro via libs/events AvroSerde — NOT through a Schema Registry serde. Key fields per ARCHITECTURE.md §5: company_id (or group_id), period.",
+  "fields": [
+    {"name": "company_id", "type": "string", "doc": "The owning tenant / company id (UUID as string); also the Kafka partition key. For a within-company close, the company that closed. For a group close, the group's lead/owner company id (the tenant the notification belongs to)."},
+    {"name": "group_id", "type": ["null", "string"], "default": null, "doc": "The consolidation GROUP id (UUID as string) for a group-level close; null for a within-company close. The discriminator between the two close kinds."},
+    {"name": "period", "type": "string", "doc": "The accounting period that was closed (e.g. YYYY-MM)."}
+  ]
+}

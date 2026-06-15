@@ -1,5 +1,7 @@
 package id.co.nativeapp.finance.consolidation;
 
+import id.co.nativeapp.events.AvroSerde;
+import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.events.ProcessedEventStore;
 import id.co.nativeapp.finance.fx.Translated;
 import id.co.nativeapp.finance.fx.TranslationService;
@@ -12,6 +14,7 @@ import id.co.nativeapp.finance.grouptb.GroupTrialBalanceLineRepository;
 import id.co.nativeapp.finance.mapping.AccountType;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.TenantContext;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
@@ -24,6 +27,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.apache.avro.generic.GenericRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -110,6 +114,8 @@ public class GroupCloseWriter {
   private final GroupMembershipReadiness membershipReadiness;
   private final ProcessedEventStore processedEvents;
   private final TranslationService translationService;
+  private final OutboxWriter outboxWriter;
+  private final Clock clock;
 
   @SuppressWarnings("checkstyle:ParameterNumber")
   public GroupCloseWriter(
@@ -121,7 +127,9 @@ public class GroupCloseWriter {
       IntercompanyMatchRepository matchRepository,
       GroupMembershipReadiness membershipReadiness,
       ProcessedEventStore processedEvents,
-      TranslationService translationService) {
+      TranslationService translationService,
+      OutboxWriter outboxWriter,
+      Clock clock) {
     this.groupRefRepository = groupRefRepository;
     this.groupMemberRepository = groupMemberRepository;
     this.trialBalanceRepository = trialBalanceRepository;
@@ -131,6 +139,8 @@ public class GroupCloseWriter {
     this.membershipReadiness = membershipReadiness;
     this.processedEvents = processedEvents;
     this.translationService = translationService;
+    this.outboxWriter = outboxWriter;
+    this.clock = clock;
   }
 
   /**
@@ -598,6 +608,22 @@ public class GroupCloseWriter {
     summary.setCompanyId(lead);
     summaryRepository.save(summary);
 
+    // (i) EMIT ConsolidationClosed(company_id = lead, group_id = G, period) via the OUTBOX, atomic
+    //     with this close tx (rule 3). ONLY reached on a real CLOSED close — every HELD state (
+    //     PENDING_MEMBERS, MEMBER_TRIAL_BALANCE_UNBALANCED, INTERCOMPANY_UNRECONCILED,
+    //     PENDING_MEMBERS_WARMING_UP) returned early via holdSummary above and emits NOTHING, so
+    // the
+    //     event fires iff the consolidation is genuinely final ("never present a mid-flight
+    //     consolidation as final"). IDEMPOTENT: the emission is claimed in the ProcessedEventStore
+    //     under a deterministic (group, period, close_run_seq) key, so a re-delivery at the SAME
+    // seq
+    //     is a clean no-op (no double-emit), while a re-close at a HIGHER seq derives a fresh key
+    // and
+    //     legitimately emits a fresh event. The outbox row commits with the summary, so if the
+    // close
+    //     rolls back the event is never published.
+    emitConsolidationClosed(groupId, period, closeRunSeq, lead);
+
     log.info(
         "Group close groupId={} period={} closeRunSeq={} CLOSED: revenue={} expense={} net={}"
             + " (eliminated internal trade revenue={} expense={}, illustrative={}, stubFx={},"
@@ -906,6 +932,41 @@ public class GroupCloseWriter {
   /** Whether an account class is a P&L (income-statement) class: REVENUE or EXPENSE. */
   private static boolean isPnl(AccountType type) {
     return type == AccountType.REVENUE || type == AccountType.EXPENSE;
+  }
+
+  // ----------------------------------------------------------------------- producer (SEAM 4a)
+
+  /**
+   * Emits {@code ConsolidationClosed(company_id = lead, group_id = G, period)} via the outbox for a
+   * GROUP close that reached CLOSED (P3d SEAM 4a — the loop closer). Claimed in the {@link
+   * ProcessedEventStore} under the deterministic {@code (group, period, close_run_seq)} emission
+   * key so a re-delivery at the SAME seq never double-emits, while a re-close at a HIGHER seq emits
+   * a fresh event. The outbox INSERT runs on the close's transactional connection, so the event
+   * commits atomically with the summary (rule 3) — never published on a rolled-back close.
+   */
+  private void emitConsolidationClosed(UUID groupId, String period, int closeRunSeq, String lead) {
+    UUID emitKey = ConsolidationEntryIds.forConsolidationClosedEmit(groupId, period, closeRunSeq);
+    UUID leadCompanyId = UUID.fromString(lead);
+    processedEvents.processOnce(
+        emitKey,
+        () -> {
+          GenericRecord event = ConsolidationClosedSchema.toRecord(leadCompanyId, groupId, period);
+          outboxWriter.write(
+              ConsolidationClosedSchema.AGGREGATE_TYPE,
+              groupId.toString(),
+              ConsolidationClosedSchema.EVENT_TYPE,
+              AvroSerde.serialize(event),
+              null,
+              leadCompanyId,
+              clock.instant());
+          log.info(
+              "Group close groupId={} period={} closeRunSeq={} emitted ConsolidationClosed"
+                  + " (lead={}, group scope) via the outbox",
+              groupId,
+              period,
+              closeRunSeq,
+              leadCompanyId);
+        });
   }
 
   // ----------------------------------------------------------------------- posting helpers

@@ -59,7 +59,8 @@ abstract class PostgresRlsTestBase {
           "TRUNCATE TABLE ledger_posting, consolidated_revenue, consolidated_pnl,"
               + " payroll_run_ledger, group_ref, group_member, group_lead,"
               + " group_trial_balance, consolidation_ledger, consolidation_summary,"
-              + " intercompany_match, group_membership_pending, processed_event");
+              + " intercompany_match, group_membership_pending, processed_event,"
+              + " outbox, within_company_close, member_group_index");
     } catch (SQLException ignored) {
       // Tables not created yet (pre-Flyway) — nothing to reset.
     }

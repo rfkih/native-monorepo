@@ -36,8 +36,8 @@ schema. Until then a row here is documentation of intent, not a shippable contra
 | **`LaborCostAllocated`** | **employee-service** | **finance** | **payroll_run_id, run_seq, company_id, period, outlet_id, gl_account, amount_minor, currency, uses_illustrative_rules, unallocated** | **LIVE (#23); finance consumer #23** |
 | **`GroupDefined`** | **org-service** | **finance** | **group_id, lead_company_id, reporting_currency, name** | **LIVE (P3d SEAM 1); finance consumer P3d SEAM 1** |
 | **`GroupMembershipChanged`** | **org-service** | **finance** | **group_id, member_company_id, change_kind, effective_from, effective_to** | **LIVE (P3d SEAM 1); finance consumer P3d SEAM 1** |
-| **`TrialBalancePublished`** | **finance** (member close) | **finance** (group consolidation) | **company_id, group_id, period, base_currency, reconciled, uses_illustrative_rules, lines[]** | **CONSUMER LIVE (P3d SEAM 2, group_trial_balance ingest); PRODUCER SEAM 3/4 (not wired)** |
-| **`ConsolidationClosed`** | **finance** | **shell, notification** | **company_id (or group_id), period** | **LIVE (notification consumer #22)** |
+| **`TrialBalancePublished`** | **finance** (member within-company close) | **finance** (group consolidation) | **company_id, group_id, period, base_currency, reconciled, uses_illustrative_rules, lines[]** | **LIVE (CONSUMER P3d SEAM 2 group_trial_balance ingest; PRODUCER P3d SEAM 4a within-company close)** |
+| **`ConsolidationClosed`** | **finance** (within-company + group close) | **shell, notification** | **company_id (or group_id), period** | **LIVE (PRODUCER P3d SEAM 4a; notification consumer #22)** |
 | **`DeliveryReceipt`** | **notification-service** | **(audit/observability sinks; re-send policy)** | **notification_id, company_id, channel, status, provider_ref, delivered_at** | **LIVE (#22)** |
 
 ---
@@ -646,17 +646,28 @@ schemas (rule 7).
 Emitted by finance-service when a consolidation close completes — the period is locked, intercompany
 matching has run, and the result is final (ARCHITECTURE.md §4: "never present a mid-flight
 consolidation as final"). It is the trigger notification-service consumes (#22) to create + deliver a
-"consolidation closed for &lt;period&gt;" notice. The producer path on finance is not yet shipped;
-this section defines the **contract** (the producer schema is the source of truth) so the consumer can
-be built against it (rule 7).
+"consolidation closed for &lt;period&gt;" notice. **The finance PRODUCER path is now LIVE (P3d SEAM
+4a — THE PRODUCERS).**
 
-- **Producer:** `finance-service` (the consolidation-close path).
+- **Producer:** `finance-service`. Emitted in **two** places, both via the transactional outbox (rule
+  3), atomic with the close, and ONLY on a real CLOSED close:
+  1. a **WITHIN-COMPANY close** (`WithinCompanyCloseWriter`) → `ConsolidationClosed(company_id = the
+     company, group_id = NULL, period)`. The nullable `group_id` is what distinguishes this kind: the
+     company finalised its own period.
+  2. a **GROUP close** (`GroupCloseWriter`, ONLY when the `consolidation_summary` reaches `CLOSED` —
+     never a HELD `PENDING_MEMBERS` / `MEMBER_TRIAL_BALANCE_UNBALANCED` / `INTERCOMPANY_UNRECONCILED`
+     / `PENDING_MEMBERS_WARMING_UP` / `SUPERSEDED` state) → `ConsolidationClosed(company_id = the
+     group's lead, group_id = G, period)`. **Idempotent:** the emission is claimed in the
+     `ProcessedEventStore` under a deterministic `(group, period, close_run_seq)` key
+     (`ConsolidationEntryIds.forConsolidationClosedEmit`), so a re-delivery at the SAME seq never
+     double-emits, while a re-close at a HIGHER `close_run_seq` legitimately emits a FRESH event.
 - **Consumers:** the `shell` (refresh the consolidated dashboard), and **`notification-service`**
   (create + deliver a notification) — **LIVE (notification consumer #22)**.
-- **Aggregate type / partition key:** `consolidation` / `company_id`
+- **Aggregate type / partition key:** `consolidation` (within-company; partition key `company_id`) /
+  `consolidation` with partition key `group_id` (group close).
 - **Outbox `event_type`:** `ConsolidationClosed`
-- **Schema (producer, source of truth):** `services/finance-service/src/main/resources/avro/ConsolidationClosed.avsc` (to be added when finance ships the producer path).
-- **Schema (notification consumer copy):** `services/notification-service/src/main/resources/avro/ConsolidationClosed.avsc` — notification owns its own consumer view of the contract; the notification `ConsolidationClosedContractTest` asserts the copy stays backward-compatible with the producer schema (rule 7). The notification consumer reads the outbox payload as **raw Avro bytes** via `libs/events AvroSerde` (no Schema Registry serde), deduping by the event UUID (`ProcessedEventStore`) so a re-delivery never creates a duplicate notification.
+- **Schema (producer, source of truth):** `services/finance-service/src/main/resources/avro/ConsolidationClosed.avsc` (`ConsolidationClosedSchema` parses + builds it). **LIVE.**
+- **Schema (notification consumer copy):** `services/notification-service/src/main/resources/avro/ConsolidationClosed.avsc` — notification owns its own consumer view of the contract; the notification `ConsolidationClosedContractTest` asserts the copy stays backward-compatible with the producer schema (rule 7). The producer schema is byte-compatible with this consumer copy (same three fields, the nullable `group_id` union with `default null`), so the existing contract test stays satisfied. The notification consumer reads the outbox payload as **raw Avro bytes** via `libs/events AvroSerde` (no Schema Registry serde), deduping by the event UUID (`ProcessedEventStore`) so a re-delivery never creates a duplicate notification.
 - **Full name:** `id.co.nativeapp.events.finance.ConsolidationClosed`
 
 A close is scoped to a single company (within-company consolidation) **or** a group (group
@@ -1090,27 +1101,40 @@ consumer copies stay backward-compatible with the producer schemas (rule 7).
 
 ### `TrialBalancePublished`
 
-Emitted by a **member company's** finance close when its trial balance for a period is finalized (P3d
-SEAM 2 — the group trial-balance ingest). Consumed by the **group consolidation** in finance-service
-to ingest the member's trial-balance lines into the group's `group_trial_balance` read model, so a
-later seam can run group consolidation + intercompany elimination. **SEAM 2 ships ONLY the consumer
-(the ingest); the PRODUCER — emitting `TrialBalancePublished` at a within-company close — is SEAM 3/4
-and is NOT wired this seam.** SEAM 2 also introduces the **two-GUC group RLS core**: a group table is
-scoped by the CONJUNCTION `group_id = current_setting('app.current_group') AND company_id =
-current_setting('app.current_tenant')`, where `company_id` is the group's LEAD company. A group
-read/write therefore requires BOTH the group scope AND the lead-company tenant; any partial/unbound
-state fails closed, and a normal single-tenant request (which never sets `app.current_group`) sees no
-group rows at all (the single-tenant path is byte-identical).
+Emitted by a **member company's** finance **within-company close** when its trial balance for a period
+is finalized. Consumed by the **group consolidation** in finance-service to ingest the member's
+trial-balance lines into the group's `group_trial_balance` read model, so the group close can run
+consolidation + intercompany elimination. **Both sides are now LIVE: the CONSUMER (the ingest) shipped
+in P3d SEAM 2; the PRODUCER (the within-company close that emits it) shipped in P3d SEAM 4a.** SEAM 2
+introduced the **two-GUC group RLS core**: a group table is scoped by the CONJUNCTION `group_id =
+current_setting('app.current_group') AND company_id = current_setting('app.current_tenant')`, where
+`company_id` is the group's LEAD company. A group read/write therefore requires BOTH the group scope
+AND the lead-company tenant; any partial/unbound state fails closed, and a normal single-tenant request
+(which never sets `app.current_group`) sees no group rows at all (the single-tenant path is
+byte-identical).
 
-- **Producer:** `finance-service` (the within-company close path) — **SEAM 3/4, not yet shipped**.
+**PRODUCER (P3d SEAM 4a).** A within-company close (`WithinCompanyCloseWriter`) gathers the company's
+BALANCED trial balance from the dimensional ledger — its REVENUE + EXPENSE lines by `gl_account`
+(`account_type` resolved from `chart_of_account`) PLUS a BALANCING retained-earnings EQUITY closing
+line equal to `−(Σ REVENUE − Σ EXPENSE)` so the lines sum SIGNED-TO-ZERO in the company's functional
+currency (the P&L closes to equity — exactly what makes the member trial balance pass the SEAM-3b
+native-balance gate). It emits one `TrialBalancePublished` **per group the company is active in at
+period-end** (resolved from a `member_group_index` reverse-index reference table — rule 2, never a sync
+call), with `reconciled = true` (the closing equity line guarantees it) and `uses_illustrative_rules`
+sticky-OR-ed from the period's postings. A company in no group does the within-company close but emits
+no `TrialBalancePublished` (it still emits `ConsolidationClosed(group_id = null)`). All emissions are
+via the transactional outbox (rule 3), atomic with the close.
+
+- **Producer:** `finance-service` (the within-company close path) — **LIVE (P3d SEAM 4a)**.
 - **Consumers:** `finance-service` (the group `group_trial_balance` ingest) — **LIVE (P3d SEAM 2)**.
 - **Aggregate type / partition key:** `consolidation_group` / `group_id` (so a group's member trial
   balances are ordered after its `GroupDefined`, the way the group read model is hydrated first).
 - **Outbox `event_type`:** `TrialBalancePublished`
-- **Schema (producer, source of truth):** `services/finance-service/src/main/resources/avro/TrialBalancePublished.avsc` (the producer path reuses this once it ships in SEAM 3/4).
-- **Schema (finance consumer copy):** `services/finance-service/src/main/resources/avro/TrialBalancePublished.avsc`
-  — finance owns its own consumer view; the finance `TrialBalancePublishedContractTest` asserts the copy
-  stays backward-compatible (rule 7). The consumer reads the outbox payload as **raw Avro bytes** via
+- **Schema (producer source of truth + finance consumer copy — ONE `.avsc`):** `services/finance-service/src/main/resources/avro/TrialBalancePublished.avsc`
+  — both the producer (`TrialBalancePublishedSchema.toRecord`) and the consumer
+  (`TrialBalancePublishedSchema.decode`) read this single schema, so a produced event is
+  decode-compatible with the consumer by construction; the finance `TrialBalancePublishedContractTest`
+  asserts back-compat (rule 7). The consumer reads the outbox payload as **raw Avro bytes** via
   `libs/events AvroSerde` (no Schema Registry serde), deduping by the **real, globally-unique event
   UUID** (`ProcessedEventStore`) plus a `(source_event_id, gl_account_code, posting_type)` UNIQUE
   backstop, so a re-delivery never double-ingests.

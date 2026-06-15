@@ -36,16 +36,19 @@ public class GroupReadModelWriter {
   private final GroupRefRepository groupRefRepository;
   private final GroupMemberRepository groupMemberRepository;
   private final GroupLeadResolver leadResolver;
+  private final MemberGroupResolver memberGroupResolver;
   private final ProcessedEventStore processedEvents;
 
   public GroupReadModelWriter(
       GroupRefRepository groupRefRepository,
       GroupMemberRepository groupMemberRepository,
       GroupLeadResolver leadResolver,
+      MemberGroupResolver memberGroupResolver,
       ProcessedEventStore processedEvents) {
     this.groupRefRepository = groupRefRepository;
     this.groupMemberRepository = groupMemberRepository;
     this.leadResolver = leadResolver;
+    this.memberGroupResolver = memberGroupResolver;
     this.processedEvents = processedEvents;
   }
 
@@ -114,6 +117,12 @@ public class GroupReadModelWriter {
       member.applyWindow(event.effectiveFrom(), event.effectiveTo());
     }
     groupMemberRepository.save(member);
+    // Mirror the membership window into the non-RLS member->group REVERSE index alongside the
+    // LEAD-scoped group_member row, so a within-company close (running as the MEMBER, which cannot
+    // read the lead-owned group_member under RLS) can resolve the groups it belongs to (rule 2 —
+    // a cached reference, never a sync call). Same post-change window, so it stays consistent.
+    memberGroupResolver.record(
+        event.memberCompanyId(), event.groupId(), event.effectiveFrom(), event.effectiveTo());
     log.info(
         "Applied {} for groupId={} member={} (active={})",
         event.changeKind(),

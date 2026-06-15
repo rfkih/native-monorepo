@@ -1,6 +1,8 @@
 package id.co.nativeapp.finance.config;
 
 import id.co.nativeapp.finance.fx.MissingFxRateException;
+import id.co.nativeapp.finance.withinclose.BaseCurrencyMismatchException;
+import id.co.nativeapp.finance.withinclose.UndeterminableBaseCurrencyException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
@@ -39,6 +41,13 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * conversion was requested but no FX rate (direct or USD-pivot) resolves for the period, so the
  * server CANNOT satisfy the presentation currency. Fail-loud — the endpoint never invents a rate or
  * returns the native figure mislabelled as converted.
+ *
+ * <p>It likewise maps the within-company-close base-currency faults → {@code 422} (FIX 1, the
+ * immutable base-currency rule): {@link BaseCurrencyMismatchException} when a request DECLARES a
+ * base currency that disagrees with the one DERIVED from the company ledger (the request never
+ * overrides the books), and {@link UndeterminableBaseCurrencyException} when an EMPTY period
+ * supplies no currency to record and the ledger reveals none. Both fail loud rather than silently
+ * overriding or fabricating the company's immutable base currency.
  */
 @RestControllerAdvice
 public class ConstraintViolationAdvice {
@@ -75,6 +84,44 @@ public class ConstraintViolationAdvice {
     problem.setType(URI.create(TYPE_BASE + "fx-rate-unavailable"));
     problem.setTitle("FX rate unavailable");
     problem.setDetail(ex.getMessage());
+    problem.setInstance(URI.create(request.getRequestURI()));
+    String traceId = MDC.get("trace_id");
+    if (traceId != null) {
+      problem.setProperty("traceId", traceId);
+    }
+    return problem;
+  }
+
+  /**
+   * A within-company close DECLARED a base currency that disagrees with the one DERIVED from the
+   * company ledger → {@code 422}. Per CLAUDE.md the base currency is immutable and read from the
+   * books; the request never overrides it, so a mismatch fails loud rather than being silently
+   * accepted. (FIX 1 — the immutable base-currency cross-check.)
+   */
+  @ExceptionHandler(BaseCurrencyMismatchException.class)
+  public ProblemDetail handleBaseCurrencyMismatch(
+      BaseCurrencyMismatchException ex, HttpServletRequest request) {
+    return currencyProblem(
+        "base-currency-mismatch", "Base currency mismatch", ex.getMessage(), request);
+  }
+
+  /**
+   * A within-company close of an EMPTY period supplied no base currency to record, and the ledger
+   * reveals none → {@code 422}. Finance will not fabricate a base currency the company never had.
+   */
+  @ExceptionHandler(UndeterminableBaseCurrencyException.class)
+  public ProblemDetail handleUndeterminableBaseCurrency(
+      UndeterminableBaseCurrencyException ex, HttpServletRequest request) {
+    return currencyProblem(
+        "base-currency-undeterminable", "Base currency undeterminable", ex.getMessage(), request);
+  }
+
+  private ProblemDetail currencyProblem(
+      String typeSlug, String title, String detail, HttpServletRequest request) {
+    ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.UNPROCESSABLE_ENTITY);
+    problem.setType(URI.create(TYPE_BASE + typeSlug));
+    problem.setTitle(title);
+    problem.setDetail(detail);
     problem.setInstance(URI.create(request.getRequestURI()));
     String traceId = MDC.get("trace_id");
     if (traceId != null) {

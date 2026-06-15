@@ -46,6 +46,9 @@ final class ConsolidationEntryIds {
   /** The domain prefix for a SEAM-3b cross-currency intercompany FX_TRANSLATION_DIFF entry. */
   private static final String FX_DIFF_PREFIX = "consolidation-fxdiff:";
 
+  /** The domain prefix for the SEAM-4a ConsolidationClosed outbox-emission dedupe key. */
+  private static final String CLOSED_EMIT_PREFIX = "consolidation-closed-emit:";
+
   private ConsolidationEntryIds() {}
 
   /**
@@ -102,6 +105,20 @@ final class ConsolidationEntryIds {
       UUID groupId, String period, int closeRunSeq, String intercompanyRef) {
     String name =
         FX_DIFF_PREFIX + groupId + ":" + period + ":" + closeRunSeq + ":" + intercompanyRef;
+    return UUID.nameUUIDFromBytes(name.getBytes(StandardCharsets.UTF_8));
+  }
+
+  /**
+   * The synthetic dedupe key for the SEAM-4a {@code ConsolidationClosed} outbox emission of a GROUP
+   * close run. There is exactly ONE emission per {@code (group, period, close_run_seq)} — a group
+   * re-close at a HIGHER {@code close_run_seq} legitimately emits a FRESH event (a different key),
+   * while a re-delivery at the SAME seq derives the SAME key and {@link
+   * id.co.nativeapp.events.ProcessedEventStore#processOnce} makes it a clean no-op (no
+   * double-emit). The {@code consolidation-closed-emit:} prefix keeps it disjoint from every
+   * ledger-entry / labor namespace, so claiming it never collides with a real posting's id.
+   */
+  static UUID forConsolidationClosedEmit(UUID groupId, String period, int closeRunSeq) {
+    String name = CLOSED_EMIT_PREFIX + groupId + ":" + period + ":" + closeRunSeq;
     return UUID.nameUUIDFromBytes(name.getBytes(StandardCharsets.UTF_8));
   }
 }
