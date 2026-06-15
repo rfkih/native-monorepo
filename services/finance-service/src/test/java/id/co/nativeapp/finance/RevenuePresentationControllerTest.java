@@ -9,12 +9,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import id.co.nativeapp.finance.config.ConstraintViolationAdvice;
-import id.co.nativeapp.finance.fx.AppliedRate;
-import id.co.nativeapp.finance.fx.MissingFxRateException;
-import id.co.nativeapp.finance.fx.PresentationConverter;
-import id.co.nativeapp.finance.fx.RevenuePresentation;
-import id.co.nativeapp.finance.revenue.RevenueController;
-import id.co.nativeapp.finance.revenue.RevenueReader;
+import id.co.nativeapp.finance.fx.domain.MissingFxRateException;
+import id.co.nativeapp.finance.fx.dto.AppliedRate;
+import id.co.nativeapp.finance.fx.dto.RevenuePresentation;
+import id.co.nativeapp.finance.fx.service.PresentationConverter;
+import id.co.nativeapp.finance.revenue.controller.RevenueController;
+import id.co.nativeapp.finance.revenue.service.RevenueReader;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.money.Provenance;
 import id.co.nativeapp.money.RateType;

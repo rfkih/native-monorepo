@@ -2,7 +2,7 @@ package id.co.nativeapp.carwash;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import id.co.nativeapp.carwash.entitlement.EntitlementEventSchemas;
+import id.co.nativeapp.carwash.entitlement.messaging.EntitlementEventSchemas;
 import id.co.nativeapp.events.AvroSerde;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;

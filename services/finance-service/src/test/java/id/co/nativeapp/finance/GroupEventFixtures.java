@@ -1,9 +1,9 @@
 package id.co.nativeapp.finance;
 
 import id.co.nativeapp.events.AvroSerde;
-import id.co.nativeapp.finance.group.GroupDefinedSchema;
-import id.co.nativeapp.finance.group.GroupMembershipChangedSchema;
-import id.co.nativeapp.finance.revenue.SaleRecordedListener;
+import id.co.nativeapp.finance.group.messaging.GroupDefinedSchema;
+import id.co.nativeapp.finance.group.messaging.GroupMembershipChangedSchema;
+import id.co.nativeapp.finance.revenue.messaging.SaleRecordedListener;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.Map;

@@ -4,9 +4,9 @@ import static org.springframework.cloud.gateway.server.mvc.filter.BeforeFilterFu
 import static org.springframework.cloud.gateway.server.mvc.handler.HandlerFunctions.http;
 import static org.springframework.web.servlet.function.RequestPredicates.path;
 
-import id.co.nativeapp.gateway.filter.RateLimitFilter;
-import id.co.nativeapp.gateway.filter.RedisTokenBucketRateLimiter;
 import id.co.nativeapp.gateway.filter.TenantContextHeaderFilter;
+import id.co.nativeapp.gateway.ratelimit.RateLimitFilter;
+import id.co.nativeapp.gateway.ratelimit.RedisTokenBucketRateLimiter;
 import org.springframework.cloud.gateway.server.mvc.handler.GatewayRouterFunctions;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

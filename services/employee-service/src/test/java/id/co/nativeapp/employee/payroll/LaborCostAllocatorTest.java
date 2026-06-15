@@ -3,9 +3,10 @@ package id.co.nativeapp.employee.payroll;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import id.co.nativeapp.employee.payroll.AllocationInputs.OutletShare;
-import id.co.nativeapp.employee.payroll.AllocationInputs.PersonAllocation;
-import id.co.nativeapp.employee.payroll.LaborCostAllocator.AllocatedRow;
+import id.co.nativeapp.employee.payroll.domain.AllocationInputs.OutletShare;
+import id.co.nativeapp.employee.payroll.domain.AllocationInputs.PersonAllocation;
+import id.co.nativeapp.employee.payroll.service.LaborCostAllocator;
+import id.co.nativeapp.employee.payroll.service.LaborCostAllocator.AllocatedRow;
 import id.co.nativeapp.money.Money;
 import java.util.List;
 import java.util.UUID;

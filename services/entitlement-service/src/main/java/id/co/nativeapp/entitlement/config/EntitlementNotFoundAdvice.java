@@ -1,6 +1,6 @@
 package id.co.nativeapp.entitlement.config;
 
-import id.co.nativeapp.entitlement.entitlement.EntitlementNotFoundException;
+import id.co.nativeapp.entitlement.entitlement.domain.EntitlementNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
 import org.slf4j.MDC;

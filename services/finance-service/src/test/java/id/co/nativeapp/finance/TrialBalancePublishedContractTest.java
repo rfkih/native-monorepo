@@ -3,8 +3,8 @@ package id.co.nativeapp.finance;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import id.co.nativeapp.events.AvroSerde;
-import id.co.nativeapp.finance.grouptb.TrialBalancePublishedEvent;
-import id.co.nativeapp.finance.grouptb.TrialBalancePublishedSchema;
+import id.co.nativeapp.finance.grouptb.messaging.TrialBalancePublishedEvent;
+import id.co.nativeapp.finance.grouptb.messaging.TrialBalancePublishedSchema;
 import java.util.List;
 import java.util.UUID;
 import org.apache.avro.Schema;

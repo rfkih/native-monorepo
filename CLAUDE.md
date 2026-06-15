@@ -9,7 +9,7 @@
 - Event contracts: **docs/EVENT-CATALOG.md** (read before touching any event).
 - Build order and tasks: **CLAUDE-CODE-BUILD-PLAN.md**.
 - **Engineering standards** (API/RFC-7807, persistence, testing, resilience, observability, security, config): **docs/ENGINEERING-STANDARDS.md**.
-- **Code structure & layering** (controller → service → repository → domain, package-by-feature, ArchUnit-enforced): **docs/CODE-STRUCTURE.md** — consult before writing a controller, repository, test, or migration.
+- **Code structure & layering** (controller → service → repository → domain, package-by-feature with layer sub-packages, ArchUnit-enforced): **docs/CODE-STRUCTURE.md** — consult before writing a controller, repository, test, or migration.
 
 ## Stack (pinned — no change without an ADR)
 - **Java 25** (LTS), **Spring Boot 4.x** (Spring Framework 7), **Gradle** (Kotlin DSL)

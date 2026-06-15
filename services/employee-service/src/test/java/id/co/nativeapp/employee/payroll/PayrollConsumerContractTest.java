@@ -2,6 +2,10 @@ package id.co.nativeapp.employee.payroll;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import id.co.nativeapp.employee.payroll.dto.MetricProjectedEvent;
+import id.co.nativeapp.employee.payroll.dto.PeriodSealedProjectedEvent;
+import id.co.nativeapp.employee.payroll.messaging.MetricPublishedConsumerSchema;
+import id.co.nativeapp.employee.payroll.messaging.PeriodSealedSchema;
 import id.co.nativeapp.events.AvroSerde;
 import java.time.Instant;
 import java.util.UUID;

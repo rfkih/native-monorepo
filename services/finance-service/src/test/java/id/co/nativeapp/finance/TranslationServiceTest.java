@@ -3,9 +3,9 @@ package id.co.nativeapp.finance;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import id.co.nativeapp.finance.fx.MissingFxRateException;
-import id.co.nativeapp.finance.fx.Translated;
-import id.co.nativeapp.finance.fx.TranslationService;
+import id.co.nativeapp.finance.fx.domain.MissingFxRateException;
+import id.co.nativeapp.finance.fx.dto.Translated;
+import id.co.nativeapp.finance.fx.service.TranslationService;
 import id.co.nativeapp.money.Money;
 import java.sql.Connection;
 import java.sql.Statement;

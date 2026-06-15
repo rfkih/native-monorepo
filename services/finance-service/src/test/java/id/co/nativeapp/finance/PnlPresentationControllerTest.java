@@ -9,13 +9,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import id.co.nativeapp.finance.config.ConstraintViolationAdvice;
-import id.co.nativeapp.finance.fx.AppliedRate;
-import id.co.nativeapp.finance.fx.MissingFxRateException;
-import id.co.nativeapp.finance.fx.PnlPresentation;
-import id.co.nativeapp.finance.fx.PresentationConverter;
-import id.co.nativeapp.finance.pnl.ConsolidatedPnl;
-import id.co.nativeapp.finance.pnl.PnlController;
-import id.co.nativeapp.finance.pnl.PnlReader;
+import id.co.nativeapp.finance.fx.domain.MissingFxRateException;
+import id.co.nativeapp.finance.fx.dto.AppliedRate;
+import id.co.nativeapp.finance.fx.dto.PnlPresentation;
+import id.co.nativeapp.finance.fx.service.PresentationConverter;
+import id.co.nativeapp.finance.pnl.controller.PnlController;
+import id.co.nativeapp.finance.pnl.domain.ConsolidatedPnl;
+import id.co.nativeapp.finance.pnl.service.PnlReader;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.money.Provenance;
 import id.co.nativeapp.money.RateType;

@@ -10,17 +10,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import id.co.nativeapp.finance.config.ConstraintViolationAdvice;
-import id.co.nativeapp.finance.consolidation.ConsolidationState;
-import id.co.nativeapp.finance.consolidation.GroupAccessDeniedException;
-import id.co.nativeapp.finance.consolidation.GroupCloseResponse;
-import id.co.nativeapp.finance.consolidation.GroupConsolidationAdvice;
-import id.co.nativeapp.finance.consolidation.GroupConsolidationController;
-import id.co.nativeapp.finance.consolidation.GroupConsolidationResponse;
-import id.co.nativeapp.finance.consolidation.GroupConsolidationService;
-import id.co.nativeapp.finance.consolidation.GroupEliminationStatusResponse;
-import id.co.nativeapp.finance.consolidation.GroupRequester;
-import id.co.nativeapp.finance.consolidation.GroupRequesterFactory;
-import id.co.nativeapp.finance.consolidation.GroupRoleDeniedException;
+import id.co.nativeapp.finance.consolidation.controller.GroupConsolidationAdvice;
+import id.co.nativeapp.finance.consolidation.controller.GroupConsolidationController;
+import id.co.nativeapp.finance.consolidation.domain.ConsolidationState;
+import id.co.nativeapp.finance.consolidation.domain.GroupAccessDeniedException;
+import id.co.nativeapp.finance.consolidation.domain.GroupRoleDeniedException;
+import id.co.nativeapp.finance.consolidation.dto.GroupCloseResponse;
+import id.co.nativeapp.finance.consolidation.dto.GroupConsolidationResponse;
+import id.co.nativeapp.finance.consolidation.dto.GroupEliminationStatusResponse;
+import id.co.nativeapp.finance.consolidation.dto.GroupRequester;
+import id.co.nativeapp.finance.consolidation.service.GroupConsolidationService;
+import id.co.nativeapp.finance.consolidation.service.GroupRequesterFactory;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;

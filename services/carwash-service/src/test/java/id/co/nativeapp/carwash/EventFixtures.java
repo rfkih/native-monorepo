@@ -1,9 +1,9 @@
 package id.co.nativeapp.carwash;
 
-import id.co.nativeapp.carwash.entitlement.EntitlementEventListener;
-import id.co.nativeapp.carwash.entitlement.EntitlementEventSchemas;
-import id.co.nativeapp.carwash.staff.StaffEventListener;
-import id.co.nativeapp.carwash.staff.StaffEventSchemas;
+import id.co.nativeapp.carwash.entitlement.messaging.EntitlementEventListener;
+import id.co.nativeapp.carwash.entitlement.messaging.EntitlementEventSchemas;
+import id.co.nativeapp.carwash.staff.messaging.StaffEventListener;
+import id.co.nativeapp.carwash.staff.messaging.StaffEventSchemas;
 import id.co.nativeapp.events.AvroSerde;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;

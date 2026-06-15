@@ -3,11 +3,11 @@ package id.co.nativeapp.employee;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import id.co.nativeapp.employee.assignment.Assignment;
-import id.co.nativeapp.employee.assignment.AssignmentResponse;
-import id.co.nativeapp.employee.employee.Employee;
-import id.co.nativeapp.employee.employee.EmployeeResponse;
-import id.co.nativeapp.employee.employee.PtkpStatus;
+import id.co.nativeapp.employee.assignment.domain.Assignment;
+import id.co.nativeapp.employee.assignment.dto.AssignmentResponse;
+import id.co.nativeapp.employee.employee.domain.Employee;
+import id.co.nativeapp.employee.employee.domain.PtkpStatus;
+import id.co.nativeapp.employee.employee.dto.EmployeeResponse;
 import java.time.LocalDate;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;

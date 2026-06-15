@@ -3,12 +3,12 @@ package id.co.nativeapp.notification;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import id.co.nativeapp.notification.notification.Channel;
-import id.co.nativeapp.notification.notification.DeliveryOutcome;
-import id.co.nativeapp.notification.notification.DeliveryStatus;
-import id.co.nativeapp.notification.notification.Notification;
-import id.co.nativeapp.notification.notification.NotificationStatus;
-import id.co.nativeapp.notification.notification.StubNotificationSender;
+import id.co.nativeapp.notification.notification.domain.Channel;
+import id.co.nativeapp.notification.notification.domain.DeliveryOutcome;
+import id.co.nativeapp.notification.notification.domain.DeliveryStatus;
+import id.co.nativeapp.notification.notification.domain.Notification;
+import id.co.nativeapp.notification.notification.domain.NotificationStatus;
+import id.co.nativeapp.notification.notification.service.StubNotificationSender;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;

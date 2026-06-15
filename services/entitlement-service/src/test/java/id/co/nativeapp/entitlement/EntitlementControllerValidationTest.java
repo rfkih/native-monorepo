@@ -8,10 +8,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import id.co.nativeapp.entitlement.config.EntitlementNotFoundAdvice;
-import id.co.nativeapp.entitlement.entitlement.EntitlementController;
-import id.co.nativeapp.entitlement.entitlement.EntitlementNotFoundException;
-import id.co.nativeapp.entitlement.entitlement.EntitlementService;
-import id.co.nativeapp.entitlement.entitlement.UnknownModuleException;
+import id.co.nativeapp.entitlement.entitlement.controller.EntitlementController;
+import id.co.nativeapp.entitlement.entitlement.domain.EntitlementNotFoundException;
+import id.co.nativeapp.entitlement.entitlement.domain.UnknownModuleException;
+import id.co.nativeapp.entitlement.entitlement.service.EntitlementService;
 import id.co.nativeapp.security.ApiExceptionHandler;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

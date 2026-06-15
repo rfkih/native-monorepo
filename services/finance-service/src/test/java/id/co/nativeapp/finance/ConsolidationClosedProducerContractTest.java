@@ -3,7 +3,7 @@ package id.co.nativeapp.finance;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import id.co.nativeapp.events.AvroSerde;
-import id.co.nativeapp.finance.consolidation.ConsolidationClosedSchema;
+import id.co.nativeapp.finance.consolidation.messaging.ConsolidationClosedSchema;
 import java.util.UUID;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericRecord;

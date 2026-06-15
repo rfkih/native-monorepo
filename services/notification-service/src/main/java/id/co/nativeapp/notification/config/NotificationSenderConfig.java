@@ -1,8 +1,8 @@
 package id.co.nativeapp.notification.config;
 
 import id.co.nativeapp.notification.config.NotificationProperties.SenderMode;
-import id.co.nativeapp.notification.notification.NotificationSender;
-import id.co.nativeapp.notification.notification.StubNotificationSender;
+import id.co.nativeapp.notification.notification.service.NotificationSender;
+import id.co.nativeapp.notification.notification.service.StubNotificationSender;
 import java.time.Clock;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;

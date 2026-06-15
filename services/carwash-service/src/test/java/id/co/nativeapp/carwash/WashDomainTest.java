@@ -3,7 +3,7 @@ package id.co.nativeapp.carwash;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import id.co.nativeapp.carwash.wash.Wash;
+import id.co.nativeapp.carwash.wash.domain.Wash;
 import id.co.nativeapp.money.Money;
 import java.time.Instant;
 import java.util.Optional;

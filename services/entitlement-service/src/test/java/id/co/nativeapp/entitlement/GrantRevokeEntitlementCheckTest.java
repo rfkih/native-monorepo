@@ -2,9 +2,9 @@ package id.co.nativeapp.entitlement;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import id.co.nativeapp.entitlement.entitlement.EntitlementService;
-import id.co.nativeapp.entitlement.entitlement.EntitlementStatus;
-import id.co.nativeapp.entitlement.entitlement.TenantEntitlement;
+import id.co.nativeapp.entitlement.entitlement.domain.EntitlementStatus;
+import id.co.nativeapp.entitlement.entitlement.domain.TenantEntitlement;
+import id.co.nativeapp.entitlement.entitlement.service.EntitlementService;
 import id.co.nativeapp.entitlementcheck.CachedEntitlementChecker;
 import id.co.nativeapp.tenant.TenantContext;
 import org.junit.jupiter.api.Test;

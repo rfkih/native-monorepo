@@ -3,6 +3,7 @@ package id.co.nativeapp.entitlement.config;
 import static com.tngtech.archunit.base.DescribedPredicate.describe;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
+import static com.tngtech.archunit.library.Architectures.layeredArchitecture;
 
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
@@ -18,7 +19,21 @@ import java.util.Set;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-/** Enforces the Native LAYERED architecture (controller -> service -> repository -> domain). */
+/**
+ * Enforces the Native LAYERED architecture (controller -> service -> repository -> domain) over the
+ * feature's LAYER SUB-PACKAGES.
+ *
+ * <p>Each feature package {@code id.co.nativeapp.entitlement.<feature>} holds its classes in a
+ * layer sub-package ({@code .controller}, {@code .service}, {@code .repository}, {@code .domain},
+ * {@code .dto}, {@code .messaging}). The layered-direction rule is expressed with ArchUnit's {@link
+ * com.tngtech.archunit.library.Architectures#layeredArchitecture() layeredArchitecture()}, matching
+ * layers by package-name suffix (e.g. {@code "..controller.."}) and {@code
+ * consideringOnlyDependenciesInLayers()} so the cross-cutting {@code config} package and the shared
+ * libs are out of scope. The remaining rules are the service-specific invariants (no-float money,
+ * the RLS/auditing-wiring drift guard, the {@code @Entity}-at-the-boundary and
+ * {@code @Transactional}-in-the-service-layer guards, naming-matches-stereotype) — retargeted to
+ * the new layout, never weakened.
+ */
 class LayeredArchitectureTest {
 
   private static final String BASE_PACKAGE = "id.co.nativeapp.entitlement";
@@ -45,6 +60,55 @@ class LayeredArchitectureTest {
         new ClassFileImporter()
             .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
             .importPackages(BASE_PACKAGE);
+  }
+
+  /**
+   * The layered direction over the feature's layer sub-packages, matched by package-name suffix.
+   * Dependencies point downward only: controller/messaging -> service -> repository -> domain, with
+   * dto as the boundary-translation layer. {@code consideringOnlyDependenciesInLayers()} scopes the
+   * check to dependencies whose target is one of these layers, so the cross-cutting {@code config}
+   * package (the {@code @Configuration}/filter/advice set) and the shared libs are out of scope.
+   */
+  @Test
+  void featureLayersRespectTheLayeredArchitecture() {
+    ArchRule rule =
+        layeredArchitecture()
+            .consideringOnlyDependenciesInLayers()
+            .layer("Controller")
+            .definedBy("..controller..")
+            .layer("Messaging")
+            .definedBy("..messaging..")
+            .layer("Service")
+            .definedBy("..service..")
+            .layer("Repository")
+            .definedBy("..repository..")
+            .layer("Domain")
+            .definedBy("..domain..")
+            .layer("Dto")
+            .definedBy("..dto..")
+            // Controller is the HTTP entry point: no in-scope layer may depend on it.
+            .whereLayer("Controller")
+            .mayNotBeAccessedByAnyLayer()
+            // Messaging holds the listeners (entry points) AND the producer-side Avro *Schema
+            // holders the service layer builds outbox payloads with (CODE-STRUCTURE §3.2 lists
+            // messaging as an allowed service dependency), so only the service layer may reach it.
+            .whereLayer("Messaging")
+            .mayOnlyBeAccessedByLayers("Service")
+            // Service is reached only from the entry points (controllers + messaging listeners).
+            .whereLayer("Service")
+            .mayOnlyBeAccessedByLayers("Controller", "Messaging")
+            // Repositories are a data port reached only from the service layer.
+            .whereLayer("Repository")
+            .mayOnlyBeAccessedByLayers("Service")
+            // Dto is the boundary-translation layer used by the edges + the service.
+            .whereLayer("Dto")
+            .mayOnlyBeAccessedByLayers("Controller", "Service", "Messaging")
+            // Domain is the floor: every layer may depend on it; it depends on none of these.
+            .whereLayer("Domain")
+            .mayOnlyBeAccessedByLayers("Controller", "Messaging", "Service", "Repository", "Dto")
+            .as(
+                "controller/messaging -> service -> repository -> domain (no upward or skip edges)");
+    rule.check(classes);
   }
 
   @Test

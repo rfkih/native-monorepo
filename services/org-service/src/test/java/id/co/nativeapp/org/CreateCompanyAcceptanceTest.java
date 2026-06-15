@@ -3,10 +3,10 @@ package id.co.nativeapp.org;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import id.co.nativeapp.events.AvroSerde;
-import id.co.nativeapp.org.company.CompanyCreatedSchema;
-import id.co.nativeapp.org.company.CompanyService;
-import id.co.nativeapp.org.company.CreateCompanyCommand;
-import id.co.nativeapp.org.company.CreateCompanyResult;
+import id.co.nativeapp.org.company.dto.CreateCompanyCommand;
+import id.co.nativeapp.org.company.dto.CreateCompanyResult;
+import id.co.nativeapp.org.company.messaging.CompanyCreatedSchema;
+import id.co.nativeapp.org.company.service.CompanyService;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;

@@ -1,8 +1,8 @@
 package id.co.nativeapp.notification;
 
 import id.co.nativeapp.events.AvroSerde;
-import id.co.nativeapp.notification.notification.ConsolidationClosedListener;
-import id.co.nativeapp.notification.notification.ConsolidationClosedSchema;
+import id.co.nativeapp.notification.notification.messaging.ConsolidationClosedListener;
+import id.co.nativeapp.notification.notification.messaging.ConsolidationClosedSchema;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.UUID;

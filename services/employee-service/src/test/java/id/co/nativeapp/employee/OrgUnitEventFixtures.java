@@ -1,7 +1,7 @@
 package id.co.nativeapp.employee;
 
-import id.co.nativeapp.employee.org.OrgUnitEventListener;
-import id.co.nativeapp.employee.org.OrgUnitEventSchemas;
+import id.co.nativeapp.employee.org.messaging.OrgUnitEventListener;
+import id.co.nativeapp.employee.org.messaging.OrgUnitEventSchemas;
 import id.co.nativeapp.events.AvroSerde;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;

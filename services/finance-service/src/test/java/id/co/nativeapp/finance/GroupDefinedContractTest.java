@@ -3,7 +3,7 @@ package id.co.nativeapp.finance;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import id.co.nativeapp.events.AvroSerde;
-import id.co.nativeapp.finance.group.GroupDefinedSchema;
+import id.co.nativeapp.finance.group.messaging.GroupDefinedSchema;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericRecord;

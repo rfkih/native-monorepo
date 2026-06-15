@@ -2,11 +2,11 @@ package id.co.nativeapp.notification;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import id.co.nativeapp.notification.notification.ConsolidationClosedEvent;
-import id.co.nativeapp.notification.notification.DeliveryReceipt;
-import id.co.nativeapp.notification.notification.Notification;
-import id.co.nativeapp.notification.notification.NotificationDeliveryService;
-import id.co.nativeapp.notification.notification.NotificationReader;
+import id.co.nativeapp.notification.notification.domain.DeliveryReceipt;
+import id.co.nativeapp.notification.notification.domain.Notification;
+import id.co.nativeapp.notification.notification.messaging.ConsolidationClosedEvent;
+import id.co.nativeapp.notification.notification.service.NotificationDeliveryService;
+import id.co.nativeapp.notification.notification.service.NotificationReader;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;

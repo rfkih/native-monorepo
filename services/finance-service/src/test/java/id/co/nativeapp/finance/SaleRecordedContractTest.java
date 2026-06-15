@@ -3,7 +3,7 @@ package id.co.nativeapp.finance;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import id.co.nativeapp.events.AvroSerde;
-import id.co.nativeapp.finance.revenue.SaleRecordedSchema;
+import id.co.nativeapp.finance.revenue.messaging.SaleRecordedSchema;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericRecord;

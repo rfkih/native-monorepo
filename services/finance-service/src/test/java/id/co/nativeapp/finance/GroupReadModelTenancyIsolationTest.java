@@ -2,13 +2,13 @@ package id.co.nativeapp.finance;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import id.co.nativeapp.finance.group.GroupDefinedEvent;
-import id.co.nativeapp.finance.group.GroupMember;
-import id.co.nativeapp.finance.group.GroupMemberRepository;
-import id.co.nativeapp.finance.group.GroupMembershipChangedEvent;
-import id.co.nativeapp.finance.group.GroupReadModelService;
-import id.co.nativeapp.finance.group.GroupRef;
-import id.co.nativeapp.finance.group.GroupRefRepository;
+import id.co.nativeapp.finance.group.domain.GroupMember;
+import id.co.nativeapp.finance.group.domain.GroupRef;
+import id.co.nativeapp.finance.group.messaging.GroupDefinedEvent;
+import id.co.nativeapp.finance.group.messaging.GroupMembershipChangedEvent;
+import id.co.nativeapp.finance.group.repository.GroupMemberRepository;
+import id.co.nativeapp.finance.group.repository.GroupRefRepository;
+import id.co.nativeapp.finance.group.service.GroupReadModelService;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.LocalDate;
 import java.util.List;

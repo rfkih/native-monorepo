@@ -1,8 +1,8 @@
 package id.co.nativeapp.finance;
 
 import id.co.nativeapp.events.AvroSerde;
-import id.co.nativeapp.finance.revenue.SaleRecordedListener;
-import id.co.nativeapp.finance.revenue.SaleRecordedSchema;
+import id.co.nativeapp.finance.revenue.messaging.SaleRecordedListener;
+import id.co.nativeapp.finance.revenue.messaging.SaleRecordedSchema;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Map;

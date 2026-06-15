@@ -3,7 +3,7 @@ package id.co.nativeapp.notification;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import id.co.nativeapp.events.AvroSerde;
-import id.co.nativeapp.notification.notification.DeliveryReceiptSchema;
+import id.co.nativeapp.notification.notification.messaging.DeliveryReceiptSchema;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericRecord;

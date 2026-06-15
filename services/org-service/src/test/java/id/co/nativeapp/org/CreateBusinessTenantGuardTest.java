@@ -7,10 +7,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import id.co.nativeapp.org.company.CompanyController;
-import id.co.nativeapp.org.company.CompanyService;
-import id.co.nativeapp.org.company.OrgUnit;
-import id.co.nativeapp.org.company.OrgUnitType;
+import id.co.nativeapp.org.company.controller.CompanyController;
+import id.co.nativeapp.org.company.domain.OrgUnit;
+import id.co.nativeapp.org.company.domain.OrgUnitType;
+import id.co.nativeapp.org.company.service.CompanyService;
 import id.co.nativeapp.org.config.TenantAccessDeniedAdvice;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.UUID;

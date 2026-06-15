@@ -1,8 +1,8 @@
 package id.co.nativeapp.employee.config;
 
-import id.co.nativeapp.employee.assignment.ConflictingLegalEmployerException;
-import id.co.nativeapp.employee.employee.EmployeeNotFoundException;
-import id.co.nativeapp.employee.payroll.IncompletePeriodException;
+import id.co.nativeapp.employee.assignment.domain.ConflictingLegalEmployerException;
+import id.co.nativeapp.employee.employee.domain.EmployeeNotFoundException;
+import id.co.nativeapp.employee.payroll.domain.IncompletePeriodException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;

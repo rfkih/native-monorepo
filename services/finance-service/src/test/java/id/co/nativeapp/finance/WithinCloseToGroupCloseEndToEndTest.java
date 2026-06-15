@@ -2,17 +2,17 @@ package id.co.nativeapp.finance;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import id.co.nativeapp.finance.consolidation.GroupCloseResult;
-import id.co.nativeapp.finance.consolidation.GroupCloseService;
-import id.co.nativeapp.finance.expense.ExpensePostingService;
-import id.co.nativeapp.finance.expense.ExpenseRecordedEvent;
-import id.co.nativeapp.finance.group.GroupReadModelService;
-import id.co.nativeapp.finance.grouptb.GroupTrialBalanceIngestService;
-import id.co.nativeapp.finance.grouptb.TrialBalancePublishedEvent;
-import id.co.nativeapp.finance.grouptb.TrialBalancePublishedSchema;
-import id.co.nativeapp.finance.revenue.RevenuePostingService;
-import id.co.nativeapp.finance.revenue.SaleRecordedEvent;
-import id.co.nativeapp.finance.withinclose.WithinCompanyCloseService;
+import id.co.nativeapp.finance.consolidation.dto.GroupCloseResult;
+import id.co.nativeapp.finance.consolidation.service.GroupCloseService;
+import id.co.nativeapp.finance.expense.messaging.ExpenseRecordedEvent;
+import id.co.nativeapp.finance.expense.service.ExpensePostingService;
+import id.co.nativeapp.finance.group.service.GroupReadModelService;
+import id.co.nativeapp.finance.grouptb.messaging.TrialBalancePublishedEvent;
+import id.co.nativeapp.finance.grouptb.messaging.TrialBalancePublishedSchema;
+import id.co.nativeapp.finance.grouptb.service.GroupTrialBalanceIngestService;
+import id.co.nativeapp.finance.revenue.messaging.SaleRecordedEvent;
+import id.co.nativeapp.finance.revenue.service.RevenuePostingService;
+import id.co.nativeapp.finance.withinclose.service.WithinCompanyCloseService;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.TenantContext;
 import java.sql.Connection;

@@ -100,14 +100,14 @@ public class KafkaConfig {
         new DefaultErrorHandler(recoverer, new FixedBackOff(RETRY_INTERVAL_MS, MAX_RETRIES));
     handler.addNotRetryableExceptions(
         java.io.UncheckedIOException.class,
-        id.co.nativeapp.finance.revenue.SaleRecordedDecodeException.class,
-        id.co.nativeapp.finance.expense.ExpenseRecordedDecodeException.class,
-        id.co.nativeapp.finance.labor.LaborCostAllocatedDecodeException.class,
-        id.co.nativeapp.finance.labor.PayrollPostedDecodeException.class,
-        id.co.nativeapp.finance.group.GroupDefinedDecodeException.class,
-        id.co.nativeapp.finance.group.GroupMembershipChangedDecodeException.class,
-        id.co.nativeapp.finance.grouptb.TrialBalancePublishedDecodeException.class,
-        id.co.nativeapp.finance.revenue.MissingEventIdException.class);
+        id.co.nativeapp.finance.revenue.messaging.SaleRecordedDecodeException.class,
+        id.co.nativeapp.finance.expense.messaging.ExpenseRecordedDecodeException.class,
+        id.co.nativeapp.finance.labor.messaging.LaborCostAllocatedDecodeException.class,
+        id.co.nativeapp.finance.labor.messaging.PayrollPostedDecodeException.class,
+        id.co.nativeapp.finance.group.messaging.GroupDefinedDecodeException.class,
+        id.co.nativeapp.finance.group.messaging.GroupMembershipChangedDecodeException.class,
+        id.co.nativeapp.finance.grouptb.messaging.TrialBalancePublishedDecodeException.class,
+        id.co.nativeapp.finance.revenue.messaging.MissingEventIdException.class);
     // NOTE: GroupMembershipChanged's / TrialBalancePublished's UnknownGroupException is
     // deliberately
     // NOT listed — it is a TRANSIENT reorder (GroupDefined not yet consumed), so it MUST be

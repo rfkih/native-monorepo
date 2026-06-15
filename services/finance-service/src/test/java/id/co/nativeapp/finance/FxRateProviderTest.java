@@ -2,8 +2,8 @@ package id.co.nativeapp.finance;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import id.co.nativeapp.finance.fx.ResolvedFxRate;
-import id.co.nativeapp.finance.fx.TableFxRateProvider;
+import id.co.nativeapp.finance.fx.domain.ResolvedFxRate;
+import id.co.nativeapp.finance.fx.service.TableFxRateProvider;
 import id.co.nativeapp.money.FxRate;
 import id.co.nativeapp.money.Provenance;
 import id.co.nativeapp.money.RateType;

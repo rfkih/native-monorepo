@@ -2,6 +2,7 @@ package id.co.nativeapp.employee.payroll;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import id.co.nativeapp.employee.payroll.messaging.PayrollPostedSchema;
 import id.co.nativeapp.events.AvroSerde;
 import java.util.List;
 import org.apache.avro.Schema;

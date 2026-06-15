@@ -2,7 +2,7 @@ package id.co.nativeapp.employee;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import id.co.nativeapp.employee.assignment.AssignmentChangedSchema;
+import id.co.nativeapp.employee.assignment.messaging.AssignmentChangedSchema;
 import id.co.nativeapp.events.AvroSerde;
 import java.time.LocalDate;
 import org.apache.avro.Schema;

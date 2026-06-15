@@ -2,10 +2,10 @@ package id.co.nativeapp.org;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import id.co.nativeapp.org.company.Company;
-import id.co.nativeapp.org.company.CompanyService;
-import id.co.nativeapp.org.company.CreateCompanyCommand;
-import id.co.nativeapp.org.company.OrgUnit;
+import id.co.nativeapp.org.company.domain.Company;
+import id.co.nativeapp.org.company.domain.OrgUnit;
+import id.co.nativeapp.org.company.dto.CreateCompanyCommand;
+import id.co.nativeapp.org.company.service.CompanyService;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
 import java.util.UUID;

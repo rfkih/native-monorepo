@@ -2,7 +2,7 @@ package id.co.nativeapp.entitlement;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import id.co.nativeapp.entitlement.entitlement.EntitlementEventSchema;
+import id.co.nativeapp.entitlement.entitlement.messaging.EntitlementEventSchema;
 import id.co.nativeapp.events.AvroSerde;
 import java.time.Instant;
 import org.apache.avro.Schema;

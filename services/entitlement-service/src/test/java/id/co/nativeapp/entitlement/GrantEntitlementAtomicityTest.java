@@ -3,9 +3,9 @@ package id.co.nativeapp.entitlement;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import id.co.nativeapp.entitlement.entitlement.EntitlementService;
-import id.co.nativeapp.entitlement.entitlement.EntitlementWriter;
-import id.co.nativeapp.entitlement.entitlement.PostOutboxHook;
+import id.co.nativeapp.entitlement.entitlement.service.EntitlementService;
+import id.co.nativeapp.entitlement.entitlement.service.EntitlementWriter;
+import id.co.nativeapp.entitlement.entitlement.service.PostOutboxHook;
 import id.co.nativeapp.tenant.TenantContext;
 import java.sql.Connection;
 import java.sql.ResultSet;

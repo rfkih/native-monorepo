@@ -2,12 +2,12 @@ package id.co.nativeapp.finance;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import id.co.nativeapp.finance.group.GroupDefinedEvent;
-import id.co.nativeapp.finance.grouptb.GroupTrialBalanceIngestService;
-import id.co.nativeapp.finance.grouptb.GroupTrialBalanceLine;
-import id.co.nativeapp.finance.grouptb.GroupTrialBalanceLineRepository;
-import id.co.nativeapp.finance.grouptb.TrialBalancePublishedEvent;
-import id.co.nativeapp.finance.grouptb.TrialBalancePublishedEvent.TrialBalanceLine;
+import id.co.nativeapp.finance.group.messaging.GroupDefinedEvent;
+import id.co.nativeapp.finance.grouptb.domain.GroupTrialBalanceLine;
+import id.co.nativeapp.finance.grouptb.messaging.TrialBalancePublishedEvent;
+import id.co.nativeapp.finance.grouptb.messaging.TrialBalancePublishedEvent.TrialBalanceLine;
+import id.co.nativeapp.finance.grouptb.repository.GroupTrialBalanceLineRepository;
+import id.co.nativeapp.finance.grouptb.service.GroupTrialBalanceIngestService;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
 import java.util.UUID;
@@ -43,7 +43,10 @@ class GroupTrialBalanceConjunctionIsolationTest extends PostgresRlsTestBase {
   private static final String ACTOR = "finance-consumer";
 
   @Autowired private GroupTrialBalanceIngestService ingestService;
-  @Autowired private id.co.nativeapp.finance.group.GroupReadModelService groupReadModelService;
+
+  @Autowired
+  private id.co.nativeapp.finance.group.service.GroupReadModelService groupReadModelService;
+
   @Autowired private GroupTbReader reader;
 
   @Test
@@ -205,11 +208,12 @@ class GroupTrialBalanceConjunctionIsolationTest extends PostgresRlsTestBase {
   public static class GroupTbReader {
 
     private final GroupTrialBalanceLineRepository tbRepository;
-    private final id.co.nativeapp.finance.revenue.LedgerPostingRepository ledgerRepository;
+    private final id.co.nativeapp.finance.revenue.repository.LedgerPostingRepository
+        ledgerRepository;
 
     public GroupTbReader(
         GroupTrialBalanceLineRepository tbRepository,
-        id.co.nativeapp.finance.revenue.LedgerPostingRepository ledgerRepository) {
+        id.co.nativeapp.finance.revenue.repository.LedgerPostingRepository ledgerRepository) {
       this.tbRepository = tbRepository;
       this.ledgerRepository = ledgerRepository;
     }

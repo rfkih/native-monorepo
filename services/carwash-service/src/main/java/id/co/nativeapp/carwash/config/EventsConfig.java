@@ -1,7 +1,7 @@
 package id.co.nativeapp.carwash.config;
 
-import id.co.nativeapp.carwash.entitlement.ProjectionEntitlementLoader;
-import id.co.nativeapp.carwash.wash.PostOutboxHook;
+import id.co.nativeapp.carwash.entitlement.service.ProjectionEntitlementLoader;
+import id.co.nativeapp.carwash.wash.service.PostOutboxHook;
 import id.co.nativeapp.entitlementcheck.CachedEntitlementChecker;
 import id.co.nativeapp.entitlementcheck.EntitlementCache;
 import id.co.nativeapp.events.OutboxWriter;
@@ -61,7 +61,7 @@ public class EventsConfig {
   }
 
   /**
-   * The production no-op post-outbox hook ({@link id.co.nativeapp.carwash.wash.WashWriter
+   * The production no-op post-outbox hook ({@link id.co.nativeapp.carwash.wash.service.WashWriter
    * WashWriter} test seam). Declared {@link ConditionalOnMissingBean} so the atomicity test can
    * supply a throwing hook in its own context without a bean-definition clash.
    */

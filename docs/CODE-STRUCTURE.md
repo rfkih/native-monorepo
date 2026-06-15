@@ -22,8 +22,8 @@ controller  ──>  service  ──>  repository  ──>  domain
         \             \                              ^
          \             \____________________________/  service & repository map to/from domain
           \____ dto / mapper (boundary translation) ___/
-                         config  (cross-cutting wiring — no layer; depended on by Spring only)
-                       messaging (event/outbox/Avro for the feature; lives with the feature)
+                         config  (cross-cutting wiring — no layer, flat at the service root)
+                       messaging (event/outbox/Avro; a layer sub-package inside each feature)
 ```
 
 | Layer | Stereotype | Name suffix | May depend on | Must NOT depend on |
@@ -40,51 +40,75 @@ These map 1:1 to the current code: `SaleController` (controller), `SaleService` 
 (domain), `SaleRequest`/`SaleResponse`/`RecordSaleCommand`/`RecordSaleResult` (dto),
 `SaleRecordedSchema` (messaging), the `*Config`/aspect/filter/advice set (config).
 
+> **Carve-out: the `gateway`.** This feature-layer convention covers the aggregate-bearing
+> business services only. The `gateway` is a reactive Spring Cloud Gateway — an edge, not a
+> bounded context with aggregates — so it is organized by its own roles
+> (`config`/`security`/`filter`/`ratelimit`) and ships **no** layered ArchUnit suite.
+
 ---
 
-## 2. Package-by-feature (NOT package-by-layer)
+## 2. Package-by-feature at the top, layer sub-packages inside (NOT package-by-layer)
 
 **Rule.** Under the service root `id.co.<org>.<service>` (today `id.co.nativeapp.restaurant`),
-each feature/aggregate gets **one package** holding its controller, service, repository,
-domain, dto, mapper, and event classes **together**. Cross-feature technical code lives
-only in the reserved `config` package (and, for a multi-feature service, a feature-internal
-`messaging` sub-package).
+each feature/aggregate gets **one package** — and **inside that feature package** the classes
+are split into **layer sub-packages**: `controller`, `service`, `repository`, `domain`, `dto`,
+and `messaging`. A feature only creates the sub-packages it actually populates (no empty layer
+folders). Cross-feature technical code lives only in the reserved `config` package at the
+service root.
 
 **Do NOT** create one global top-level package per layer — no
-`id.co.nativeapp.restaurant.controller` holding every controller.
+`id.co.nativeapp.restaurant.controller` holding every controller. The layer split happens
+**within** each feature (`sale.controller`, `sale.service`, …), so a feature stays cohesive
+and an aggregate's classes move together.
 
 **Why.** A service is one bounded context whose aggregates enforce their own invariants
-(`CLAUDE.md`). Keeping an aggregate's controller/service/repo/domain/events cohesive makes
-the eventual service split a **package move**, not cross-cutting surgery, and keeps
-`service-template` clonable. The restaurant-service is currently one feature (`sale`) in a
-flat package, so feature-by-package is the natural, low-churn target.
+(`CLAUDE.md`). Feature-at-the-top keeps an aggregate's controller/service/repo/domain/events
+cohesive, so the eventual service split is a **package move**, not cross-cutting surgery. The
+layer sub-packages inside make the `controller -> service -> repository -> domain` direction a
+**package fact** that the ArchUnit `layeredArchitecture` rule enforces by name suffix (§5–§6),
+not a convention a reviewer has to remember. `service-template` mirrors this so every cloned
+service inherits the structure.
 
 ### Target layout (restaurant-service)
 
 ```
 id.co.nativeapp.restaurant
-  .sale                         // one bounded aggregate = one feature package
-      SaleController.java        // @RestController                    (controller)
-      SaleRequest.java           // record, @Valid constraints         (dto)  ── split out of SaleController
-      SaleResponse.java          // record + static from(Sale)         (dto)  ── split out of SaleController
-      RecordSaleCommand.java     // application command record         (dto)
-      RecordSaleResult.java      // application result record          (dto)
-      SaleService.java           // @Service — orchestration, logic    (service)
-      SaleWriter.java            // @Component @Transactional units    (service)
-      PostOutboxHook.java        // @Transactional test seam           (service)
-      SaleRepository.java        // Spring Data interface              (repository)
-      Sale.java                  // @Entity aggregate, owns invariants (domain)
-      MoneyEmbeddable.java       // @Embeddable Money value mapping    (domain)
-      SaleRecordedSchema.java    // Avro <-> aggregate                 (messaging)
-  .config                       // cross-cutting technical wiring (no business logic)
+  .sale                              // one bounded aggregate = one feature package
+      .controller
+          SaleController.java        // @RestController                    (controller)
+      .dto
+          SaleRequest.java           // record, @Valid constraints         (dto)  ── moved into sale/dto
+          SaleResponse.java          // record + static from(Sale)         (dto)  ── moved into sale/dto
+          RecordSaleCommand.java     // application command record         (dto)
+          RecordSaleResult.java      // application result record          (dto)
+      .service
+          SaleService.java           // @Service — orchestration, logic    (service)
+          SaleWriter.java            // @Component @Transactional units    (service)
+          PostOutboxHook.java        // @Transactional test seam           (service)
+      .repository
+          SaleRepository.java        // Spring Data interface              (repository)
+      .domain
+          Sale.java                  // @Entity aggregate, owns invariants (domain)
+          MoneyEmbeddable.java       // @Embeddable Money value mapping    (domain)
+      .messaging
+          SaleRecordedSchema.java    // Avro <-> aggregate                 (messaging)
+  .config                       // cross-cutting technical wiring (no business logic) — flat, not a layer
       PersistenceConfig.java  RlsConfig.java  RlsAutoApplyAspect.java
       EventsConfig.java  DevTenantFilter.java  ApiExceptionHandler.java
       HealthController.java
   RestaurantServiceApplication.java   // @SpringBootApplication at the root (component-scan anchor)
 ```
 
-`service-template` mirrors this with a `widget` feature package and the same `config`
-package, so every cloned service inherits the structure.
+A multi-feature service (org, finance, employee, carwash) repeats this per feature
+(`company.controller`, `company.service`, …; `group.service`, …). `service-template` mirrors
+it with a `widget` feature package and the same `config` package, so every cloned service
+inherits the structure.
+
+> The `config` package is **cross-cutting wiring, not a layer** — it stays flat at the service
+> root and is excluded from the layered-direction check (`consideringOnlyDependenciesInLayers()`,
+> §6) so its Spring `@Configuration`/filter/advice classes may depend on any layer. The
+> `@SpringBootApplication` stays at the root, so component-scan/`@EntityScan` cover every feature
+> sub-package automatically — no `basePackages` to maintain.
 
 > `ApiExceptionHandler` and `HealthController` are cross-cutting (not part of any one
 > feature) and live in `config`. A feature-specific advice would instead live in its
@@ -152,8 +176,9 @@ or accepting an `@Entity`. `SaleController` already models this — keep it that
 
 ### 3.6 messaging — a dedicated, auditable concern
 
-- Avro schema mapping (`*Schema`), outbox wiring (`EventsConfig`), and producer hooks live in
-  the feature package (or a `messaging` sub-package).
+- Avro schema mapping (`*Schema`), event/command records (`*Event`), listeners (`*Listener`),
+  and the decode/`MissingEventId` exceptions live in the feature's `messaging` sub-package; the
+  outbox wiring (`EventsConfig`) is cross-cutting and stays in `config`.
 - A producer writes events **only** through `libs/events` `OutboxWriter`, inside the same
   `@Transactional` unit that mutates the aggregate (rule 3) — never via `KafkaTemplate` or a
   direct broker call. `SaleWriter.create()` writes the `SaleRecorded` outbox row in the same
@@ -190,9 +215,18 @@ It runs as part of `./gradlew test`. The ArchUnit JUnit5 dependency is pinned in
 
 The suite asserts (all scoped to `id.co.nativeapp..`):
 
-1. **Layered direction** — `controller -> service -> repository -> domain`, no upward or skip
-   edges. Layers defined by name suffix; controllers may be accessed by nothing, services only
-   by controllers, repositories only by services.
+1. **Layered direction** — a single ArchUnit `layeredArchitecture().consideringOnlyDependencies‑
+   InLayers()` rule, with the six layers defined by **package-name suffix** of the per-feature
+   sub-packages (`..controller..`, `..service..`, `..repository..`, `..domain..`, `..dto..`,
+   `..messaging..`), so the one rule covers every feature. Direction (downward only):
+   `controller -> service -> repository -> domain`, with `dto` the boundary-translation layer and
+   `messaging` the feature-local event plumbing. Edges: **Controller** accessed by no layer (an
+   entry point); **Service** accessed only by Controller + Messaging; **Repository** accessed only
+   by Service; **Dto** accessed only by Controller + Service + Messaging; **Messaging** accessed
+   only by Service (the producer-side `*Schema` Avro holders are built by the `*Writer` service
+   beans — §3.2 lists messaging as an allowed service dependency); **Domain** accessed by all,
+   accesses none of these. `consideringOnlyDependenciesInLayers()` keeps `config` and the shared
+   `libs/*` out of scope.
 2. **Controllers must not touch repositories directly** — `*Controller` must not depend on a
    `org.springframework.data.repository.Repository`.
 3. **Repositories accessed only from the service layer** — a `Repository` may be accessed only
@@ -224,12 +258,12 @@ refactor lands. See the build-logic `native.quality` convention and `config/chec
 ## 6. The ArchUnit suite (drop-in, generic)
 
 Each service drops in **one** test class that points ArchUnit at its base package. The rules
-are written generically (by name suffix + stereotype), so the same class works for every
-service. Copy `LayeredArchitectureTest` into `<service>/src/test/java/.../config/` and set
-`BASE_PACKAGE` to the **service root** (`id.co.nativeapp.restaurant`,
-`id.co.nativeapp.servicetemplate`) — never the broad `id.co.nativeapp`, or it would also analyse
-the shared libs. It is a plain JUnit 5 class (not the `@AnalyzeClasses` engine), so it needs only
-ArchUnit core on the test classpath:
+are written generically (layers by **package-name suffix** + stereotype by name suffix), so the
+same class works for every service regardless of how many features it has. Copy
+`LayeredArchitectureTest` into `<service>/src/test/java/.../config/` and set `BASE_PACKAGE` to the
+**service root** (`id.co.nativeapp.restaurant`, `id.co.nativeapp.servicetemplate`) — never the
+broad `id.co.nativeapp`, or it would also analyse the shared libs. It is a plain JUnit 5 class
+(not the `@AnalyzeClasses` engine), so it needs only ArchUnit core on the test classpath:
 
 ```java
 class LayeredArchitectureTest {
@@ -242,24 +276,54 @@ class LayeredArchitectureTest {
         .importPackages(BASE_PACKAGE);
   }
 
+  @Test
+  void featureLayersRespectTheLayeredArchitecture() {
+    layeredArchitecture()
+        .consideringOnlyDependenciesInLayers()
+        .layer("Controller").definedBy("..controller..")
+        .layer("Service").definedBy("..service..")
+        .layer("Repository").definedBy("..repository..")
+        .layer("Domain").definedBy("..domain..")
+        .layer("Dto").definedBy("..dto..")
+        .layer("Messaging").definedBy("..messaging..")
+        .whereLayer("Controller").mayNotBeAccessedByAnyLayer()
+        .whereLayer("Messaging").mayOnlyBeAccessedByLayers("Service")
+        .whereLayer("Service").mayOnlyBeAccessedByLayers("Controller", "Messaging")
+        .whereLayer("Repository").mayOnlyBeAccessedByLayers("Service")
+        .whereLayer("Dto").mayOnlyBeAccessedByLayers("Controller", "Service", "Messaging")
+        .whereLayer("Domain")
+            .mayOnlyBeAccessedByLayers("Controller", "Service", "Repository", "Dto", "Messaging")
+        .check(classes);
+  }
+
   @Test void controllersMustNotDependOnRepositories() { /* rule.check(classes) */ }
-  // + service-direction, repository-access, naming-matches-stereotype, @Entity-boundary,
-  //   @Transactional-in-service-only, and no-BigDecimal-money rules (the full class ships in
+  // + repository-access, naming-matches-stereotype, @Entity-boundary, @Transactional-in-service-
+  //   only, no-BigDecimal-money, and the RLS/auditing-wiring drift guard (the full class ships in
   //   each service's .config test package).
 }
 ```
+
+> A single-feature service may have layers with no class yet (e.g. notification-service has no
+> `controller`/`dto`). Mark those `optionalLayer()` so the rule still loads; populated layers stay
+> required. The `config` test package itself is not a layer — the test class lives there for
+> convenience, not because `config` participates in the layered direction.
 
 ---
 
 ## 7. Refactor checklist (flat -> layered)
 
-1. Create the `<feature>` and `config` packages under the service root.
-2. Move each class per the mapping in the kit's `refactorMapping`. **Split** the two nested
-   records out of `SaleController` (`SaleRequest`, `SaleResponse`) into their own files in the
-   feature package's dto set.
+1. Create the `<feature>` package and, inside it, the layer sub-packages it needs
+   (`controller`/`service`/`repository`/`domain`/`dto`/`messaging` — only the populated ones);
+   keep the `config` package flat at the service root.
+2. Move each class into its feature's layer sub-package per the mapping in the kit's
+   `refactorMapping` (use `git mv` so history is preserved as renames). **Move**
+   `SaleRequest`/`SaleResponse` into `sale/dto` — at HEAD they were already standalone top-level
+   files, so this is a package move, not a nested-record split. A `*Response.from(Entity)` mapper
+   that the sibling `controller` sub-package now calls across a package boundary is widened to
+   `public` (behaviour-neutral).
 3. Update `package` declarations and imports (Spotless `removeUnusedImports` + IDE handle the
    bulk); the `@SpringBootApplication` class stays at the root so component scan still covers
-   both packages.
+   every feature sub-package.
 4. Add `native.quality` to each module and drop in `LayeredArchitectureTest`.
 5. Run `./gradlew spotlessApply check` — the suite, Checkstyle, JaCoCo, and existing
    Testcontainers tests must all stay green (the move is behaviour-preserving).

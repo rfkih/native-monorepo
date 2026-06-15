@@ -2,9 +2,9 @@ package id.co.nativeapp.finance;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import id.co.nativeapp.finance.revenue.RevenuePostingService;
-import id.co.nativeapp.finance.revenue.RevenueReader;
-import id.co.nativeapp.finance.revenue.SaleRecordedEvent;
+import id.co.nativeapp.finance.revenue.messaging.SaleRecordedEvent;
+import id.co.nativeapp.finance.revenue.service.RevenuePostingService;
+import id.co.nativeapp.finance.revenue.service.RevenueReader;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Instant;

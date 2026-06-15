@@ -1,9 +1,9 @@
 package id.co.nativeapp.employee.config;
 
-import id.co.nativeapp.employee.org.MissingEventIdException;
-import id.co.nativeapp.employee.org.OrgUnitDecodeException;
-import id.co.nativeapp.employee.payroll.MissingPayrollEventIdException;
-import id.co.nativeapp.employee.payroll.PayrollEventDecodeException;
+import id.co.nativeapp.employee.org.messaging.MissingEventIdException;
+import id.co.nativeapp.employee.org.messaging.OrgUnitDecodeException;
+import id.co.nativeapp.employee.payroll.messaging.MissingPayrollEventIdException;
+import id.co.nativeapp.employee.payroll.messaging.PayrollEventDecodeException;
 import java.io.UncheckedIOException;
 import java.util.HashMap;
 import java.util.Map;

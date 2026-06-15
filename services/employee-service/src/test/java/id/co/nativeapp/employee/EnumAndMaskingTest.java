@@ -3,10 +3,10 @@ package id.co.nativeapp.employee;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import id.co.nativeapp.employee.employee.Employee;
-import id.co.nativeapp.employee.employee.EmployeeStatus;
-import id.co.nativeapp.employee.employee.EmploymentType;
-import id.co.nativeapp.employee.employee.PtkpStatus;
+import id.co.nativeapp.employee.employee.domain.Employee;
+import id.co.nativeapp.employee.employee.domain.EmployeeStatus;
+import id.co.nativeapp.employee.employee.domain.EmploymentType;
+import id.co.nativeapp.employee.employee.domain.PtkpStatus;
 import org.junit.jupiter.api.Test;
 
 /**

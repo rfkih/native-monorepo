@@ -3,6 +3,7 @@ package id.co.nativeapp.employee.config;
 import static com.tngtech.archunit.base.DescribedPredicate.describe;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
+import static com.tngtech.archunit.library.Architectures.layeredArchitecture;
 
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
@@ -45,6 +46,65 @@ class LayeredArchitectureTest {
         new ClassFileImporter()
             .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
             .importPackages(BASE_PACKAGE);
+  }
+
+  /**
+   * The Native LAYERED standard, enforced over the per-feature LAYER sub-packages ({@code
+   * <feature>.controller / .service / .repository / .domain / .dto / .messaging}). Layers are
+   * matched by package-name suffix (e.g. {@code "..controller.."}), so the single rule covers every
+   * present and future feature package under the service root.
+   *
+   * <p>Direction (downward only): controller -&gt; service -&gt; repository -&gt; domain, with dto
+   * as the boundary-translation layer and messaging as the feature-local event plumbing. Controller
+   * is the HTTP entry point (accessed by no layer); messaging is event plumbing reached only from
+   * the service layer (a {@code *Writer} builds the outbox {@code GenericRecord} via a feature
+   * {@code *Schema}, while a {@code *Listener} delegates down into the service layer); domain is
+   * the sink (accessed by all, accesses none of these). {@code
+   * consideringOnlyDependenciesInLayers()} scopes the check to edges between these layers, ignoring
+   * JDK / Spring / libs / config dependencies.
+   */
+  @Test
+  void featureLayersRespectTheLayeredArchitecture() {
+    ArchRule rule =
+        layeredArchitecture()
+            .consideringOnlyDependenciesInLayers()
+            .layer("Controller")
+            .definedBy("..controller..")
+            .layer("Service")
+            .definedBy("..service..")
+            .layer("Repository")
+            .definedBy("..repository..")
+            .layer("Domain")
+            .definedBy("..domain..")
+            .layer("Dto")
+            .definedBy("..dto..")
+            .layer("Messaging")
+            .definedBy("..messaging..")
+            // Controller is an entry point: nothing depends on a controller.
+            .whereLayer("Controller")
+            .mayNotBeAccessedByAnyLayer()
+            // Messaging is feature-local event plumbing reached only from the service layer (a
+            // *Writer builds the outbound GenericRecord via the feature *Schema); no
+            // controller/repository/domain/dto may reach into it. CODE-STRUCTURE §3.6.
+            .whereLayer("Messaging")
+            .mayOnlyBeAccessedByLayers("Service")
+            // Service is reachable from the controller entry point and from messaging (a *Listener
+            // decodes an event and delegates down into the service layer).
+            .whereLayer("Service")
+            .mayOnlyBeAccessedByLayers("Controller", "Messaging")
+            // Repository is a data port used only by the service layer.
+            .whereLayer("Repository")
+            .mayOnlyBeAccessedByLayers("Service")
+            // Domain is the sink: every layer may read it.
+            .whereLayer("Domain")
+            .mayOnlyBeAccessedByLayers("Controller", "Service", "Repository", "Dto", "Messaging")
+            // Dto is the boundary translation layer (request/response/command/result + decoded
+            // event records the service and messaging layers exchange).
+            .whereLayer("Dto")
+            .mayOnlyBeAccessedByLayers("Controller", "Service", "Messaging")
+            .as(
+                "controller -> service -> repository -> domain (+ dto boundary, feature messaging)");
+    rule.check(classes);
   }
 
   @Test

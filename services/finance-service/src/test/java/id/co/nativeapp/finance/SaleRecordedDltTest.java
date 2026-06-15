@@ -3,7 +3,7 @@ package id.co.nativeapp.finance;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-import id.co.nativeapp.finance.revenue.SaleRecordedSchema;
+import id.co.nativeapp.finance.revenue.messaging.SaleRecordedSchema;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;

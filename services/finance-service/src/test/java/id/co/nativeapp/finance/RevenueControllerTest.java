@@ -7,9 +7,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import id.co.nativeapp.finance.config.ConstraintViolationAdvice;
-import id.co.nativeapp.finance.fx.PresentationConverter;
-import id.co.nativeapp.finance.revenue.RevenueController;
-import id.co.nativeapp.finance.revenue.RevenueReader;
+import id.co.nativeapp.finance.fx.service.PresentationConverter;
+import id.co.nativeapp.finance.revenue.controller.RevenueController;
+import id.co.nativeapp.finance.revenue.service.RevenueReader;
 import id.co.nativeapp.money.Money;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;

@@ -2,8 +2,8 @@ package id.co.nativeapp.org;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import id.co.nativeapp.org.group.ConsolidationGroup;
-import id.co.nativeapp.org.group.ConsolidationGroupRepository;
+import id.co.nativeapp.org.group.domain.ConsolidationGroup;
+import id.co.nativeapp.org.group.repository.ConsolidationGroupRepository;
 import id.co.nativeapp.tenant.TenantContext;
 import java.lang.reflect.Field;
 import java.util.UUID;

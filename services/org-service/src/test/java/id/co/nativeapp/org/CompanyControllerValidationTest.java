@@ -7,8 +7,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import id.co.nativeapp.org.company.CompanyController;
-import id.co.nativeapp.org.company.CompanyService;
+import id.co.nativeapp.org.company.controller.CompanyController;
+import id.co.nativeapp.org.company.service.CompanyService;
 import id.co.nativeapp.security.ApiExceptionHandler;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

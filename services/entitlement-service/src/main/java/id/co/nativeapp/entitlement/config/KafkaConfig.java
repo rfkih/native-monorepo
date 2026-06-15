@@ -1,7 +1,7 @@
 package id.co.nativeapp.entitlement.config;
 
-import id.co.nativeapp.entitlement.entitlement.CompanyCreatedDecodeException;
-import id.co.nativeapp.entitlement.entitlement.MissingEventIdException;
+import id.co.nativeapp.entitlement.entitlement.messaging.CompanyCreatedDecodeException;
+import id.co.nativeapp.entitlement.entitlement.messaging.MissingEventIdException;
 import java.io.UncheckedIOException;
 import java.util.HashMap;
 import java.util.Map;

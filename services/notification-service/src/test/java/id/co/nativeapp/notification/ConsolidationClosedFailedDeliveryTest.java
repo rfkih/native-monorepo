@@ -116,7 +116,8 @@ class ConsolidationClosedFailedDeliveryTest extends KafkaPostgresTestBase {
         byte[] payload = rs.getBytes("payload");
         org.apache.avro.generic.GenericRecord decoded =
             id.co.nativeapp.events.AvroSerde.deserialize(
-                payload, id.co.nativeapp.notification.notification.DeliveryReceiptSchema.schema());
+                payload,
+                id.co.nativeapp.notification.notification.messaging.DeliveryReceiptSchema.schema());
         return decoded.get("status").toString();
       }
     }

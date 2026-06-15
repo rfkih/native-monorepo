@@ -2,13 +2,13 @@ package id.co.nativeapp.carwash;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import id.co.nativeapp.carwash.entitlement.EntitlementProjectedEvent;
-import id.co.nativeapp.carwash.entitlement.EntitlementProjectionService;
-import id.co.nativeapp.carwash.wash.NotEntitledException;
-import id.co.nativeapp.carwash.wash.RecordWashCommand;
-import id.co.nativeapp.carwash.wash.RecordWashResult;
-import id.co.nativeapp.carwash.wash.SaleRecordedSchema;
-import id.co.nativeapp.carwash.wash.WashService;
+import id.co.nativeapp.carwash.entitlement.dto.EntitlementProjectedEvent;
+import id.co.nativeapp.carwash.entitlement.service.EntitlementProjectionService;
+import id.co.nativeapp.carwash.wash.domain.NotEntitledException;
+import id.co.nativeapp.carwash.wash.dto.RecordWashCommand;
+import id.co.nativeapp.carwash.wash.dto.RecordWashResult;
+import id.co.nativeapp.carwash.wash.messaging.SaleRecordedSchema;
+import id.co.nativeapp.carwash.wash.service.WashService;
 import id.co.nativeapp.events.AvroSerde;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Instant;
@@ -138,7 +138,7 @@ class RecordWashAcceptanceTest extends KafkaPostgresRedisTestBase {
             row ->
                 AvroSerde.deserialize(
                     (byte[]) row.get("payload"),
-                    id.co.nativeapp.carwash.metric.MetricPublishedSchema.schema()))
+                    id.co.nativeapp.carwash.metric.messaging.MetricPublishedSchema.schema()))
         .collect(
             java.util.stream.Collectors.toMap(
                 r -> r.get("metric_key").toString(), r -> (Long) r.get("value")));

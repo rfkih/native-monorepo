@@ -1,0 +1,195 @@
+package id.co.nativeapp.employee.employee.domain;
+
+import id.co.nativeapp.employee.config.PiiAttributeConverter;
+import id.co.nativeapp.tenant.Auditable;
+import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import java.util.Objects;
+import java.util.UUID;
+
+/**
+ * The {@code employee} aggregate — the HR module's canonical person. It owns the person's identity
+ * ({@code full_name}, {@code ptkp_status}), employment {@code status}, and the two PII fields
+ * ({@code nik}, {@code bank_account}); it deliberately holds NO org/team/manager — those live on
+ * the {@link id.co.nativeapp.employee.assignment.domain.Assignment assignment} (ARCHITECTURE.md
+ * §2).
+ *
+ * <p><strong>PII at rest (rule 6).</strong> {@code nik} and {@code bank_account} are column-level
+ * encrypted via {@link PiiAttributeConverter} (AES-256-GCM, random IV per value): the database row
+ * only ever holds ciphertext, while the entity works in plaintext. The plaintext NEVER leaves this
+ * aggregate as-is to a log, a {@link #toString()}, an event payload, or a DTO — callers read the
+ * {@linkplain #maskedNik() masked} / {@linkplain #maskedBankAccount() last-4} forms for responses
+ * and only the encrypt/decrypt path ever touches the raw value.
+ *
+ * <p>It extends {@link Auditable}, inheriting the mandatory audit + tenancy columns and the {@code
+ * employee} RLS policy (rule 4 + rule 5).
+ */
+@Entity
+@Table(name = "employee")
+public class Employee extends Auditable {
+
+  @Id
+  @Column(name = "id", nullable = false, updatable = false)
+  private UUID id;
+
+  @Column(name = "full_name", nullable = false)
+  private String fullName;
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = "ptkp_status", nullable = false, length = 16)
+  private PtkpStatus ptkpStatus;
+
+  /**
+   * The Indonesian national id number (NIK) — PII. Column-encrypted at rest via {@link
+   * PiiAttributeConverter}; the plaintext is held only in memory and never logged/serialized.
+   */
+  @Convert(converter = PiiAttributeConverter.class)
+  @Column(name = "nik", nullable = false)
+  private String nik;
+
+  /** The employee's bank account number — PII. Column-encrypted at rest (see {@link #nik}). */
+  @Convert(converter = PiiAttributeConverter.class)
+  @Column(name = "bank_account", nullable = false)
+  private String bankAccount;
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = "status", nullable = false, length = 16)
+  private EmployeeStatus status;
+
+  protected Employee() {
+    // for JPA
+  }
+
+  /**
+   * Creates an active employee with a freshly generated id, validating its construction.
+   *
+   * @param fullName the person's full name; must be non-blank
+   * @param ptkpStatus the PTKP tax status; must be non-null
+   * @param nik the national id number (PII); must be non-blank
+   * @param bankAccount the bank account number (PII); must be non-blank
+   */
+  public Employee(String fullName, PtkpStatus ptkpStatus, String nik, String bankAccount) {
+    this.id = UUID.randomUUID();
+    this.fullName = requireNonBlank(fullName, "fullName");
+    this.ptkpStatus = Objects.requireNonNull(ptkpStatus, "ptkpStatus");
+    this.nik = requireNonBlank(nik, "nik");
+    this.bankAccount = requireNonBlank(bankAccount, "bankAccount");
+    this.status = EmployeeStatus.ACTIVE;
+  }
+
+  /**
+   * Applies an update to the mutable record fields. A null argument leaves the corresponding field
+   * unchanged (a partial update); PII fields are replaced only when a new non-blank value is given.
+   *
+   * @return {@code true} if any field actually changed (so the caller can decide whether to emit an
+   *     {@code EmployeeChanged}), {@code false} if the update was a no-op
+   */
+  public boolean update(
+      String newFullName,
+      PtkpStatus newPtkpStatus,
+      String newNik,
+      String newBankAccount,
+      EmployeeStatus newStatus) {
+    boolean changed = false;
+    if (newFullName != null) {
+      String trimmed = requireNonBlank(newFullName, "fullName");
+      if (!trimmed.equals(this.fullName)) {
+        this.fullName = trimmed;
+        changed = true;
+      }
+    }
+    if (newPtkpStatus != null && newPtkpStatus != this.ptkpStatus) {
+      this.ptkpStatus = newPtkpStatus;
+      changed = true;
+    }
+    if (newNik != null) {
+      String trimmed = requireNonBlank(newNik, "nik");
+      if (!trimmed.equals(this.nik)) {
+        this.nik = trimmed;
+        changed = true;
+      }
+    }
+    if (newBankAccount != null) {
+      String trimmed = requireNonBlank(newBankAccount, "bankAccount");
+      if (!trimmed.equals(this.bankAccount)) {
+        this.bankAccount = trimmed;
+        changed = true;
+      }
+    }
+    if (newStatus != null && newStatus != this.status) {
+      this.status = newStatus;
+      changed = true;
+    }
+    return changed;
+  }
+
+  private static String requireNonBlank(String value, String field) {
+    Objects.requireNonNull(value, field);
+    String trimmed = value.strip();
+    if (trimmed.isEmpty()) {
+      throw new IllegalArgumentException(field + " must not be blank");
+    }
+    return trimmed;
+  }
+
+  public UUID getId() {
+    return id;
+  }
+
+  public String getFullName() {
+    return fullName;
+  }
+
+  public PtkpStatus getPtkpStatus() {
+    return ptkpStatus;
+  }
+
+  public EmployeeStatus getStatus() {
+    return status;
+  }
+
+  /**
+   * The NIK fully redacted for a response/DTO. The NIK is highly sensitive (the national id), so it
+   * is never partially revealed — a caller sees only that a value is present. The raw plaintext is
+   * NEVER returned (rule 6).
+   */
+  public String maskedNik() {
+    return PiiMasking.redact(nik);
+  }
+
+  /**
+   * The bank account masked to its last 4 digits (e.g. {@code "****6789"}) for a response/DTO. The
+   * raw plaintext is NEVER returned (rule 6).
+   */
+  public String maskedBankAccount() {
+    return PiiMasking.lastFour(bankAccount);
+  }
+
+  /**
+   * The raw decrypted NIK. <strong>Restricted:</strong> intended only for the encrypt/decrypt path
+   * and authorized internal use — it is never placed in a response, log, or event. Package-private
+   * so only the feature can reach it (e.g. a round-trip test in the same package).
+   */
+  String nikPlaintext() {
+    return nik;
+  }
+
+  /** The raw decrypted bank account. Restricted exactly as {@link #nikPlaintext()}. */
+  String bankAccountPlaintext() {
+    return bankAccount;
+  }
+
+  /**
+   * A PII-safe representation: id / status only, NEVER the name, NIK, or bank account (rule 6 — PII
+   * never logged). An accidental {@code log.info("emp={}", employee)} cannot leak PII.
+   */
+  @Override
+  public String toString() {
+    return "Employee[id=" + id + ", status=" + status + "]";
+  }
+}

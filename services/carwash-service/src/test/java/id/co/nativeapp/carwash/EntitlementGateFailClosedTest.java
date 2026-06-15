@@ -3,10 +3,10 @@ package id.co.nativeapp.carwash;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import id.co.nativeapp.carwash.entitlement.EntitlementProjectedEvent;
-import id.co.nativeapp.carwash.entitlement.EntitlementProjectionService;
-import id.co.nativeapp.carwash.wash.RecordWashCommand;
-import id.co.nativeapp.carwash.wash.WashService;
+import id.co.nativeapp.carwash.entitlement.dto.EntitlementProjectedEvent;
+import id.co.nativeapp.carwash.entitlement.service.EntitlementProjectionService;
+import id.co.nativeapp.carwash.wash.dto.RecordWashCommand;
+import id.co.nativeapp.carwash.wash.service.WashService;
 import id.co.nativeapp.tenant.TenantContext;
 import java.sql.Connection;
 import java.sql.ResultSet;

@@ -2,11 +2,11 @@ package id.co.nativeapp.employee;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import id.co.nativeapp.employee.assignment.AddAssignmentCommand;
-import id.co.nativeapp.employee.assignment.AssignmentService;
-import id.co.nativeapp.employee.employee.CreateEmployeeCommand;
-import id.co.nativeapp.employee.employee.EmployeeReader;
-import id.co.nativeapp.employee.employee.EmployeeService;
+import id.co.nativeapp.employee.assignment.dto.AddAssignmentCommand;
+import id.co.nativeapp.employee.assignment.service.AssignmentService;
+import id.co.nativeapp.employee.employee.dto.CreateEmployeeCommand;
+import id.co.nativeapp.employee.employee.service.EmployeeReader;
+import id.co.nativeapp.employee.employee.service.EmployeeService;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.LocalDate;
 import java.util.Optional;
@@ -37,7 +37,7 @@ class CrossTenantIsolationTest extends PostgresRlsTestBase {
   @Autowired private EmployeeService employeeService;
   @Autowired private EmployeeReader employeeReader;
   @Autowired private AssignmentService assignmentService;
-  @Autowired private id.co.nativeapp.employee.org.OrgProjectionService orgProjectionService;
+  @Autowired private id.co.nativeapp.employee.org.service.OrgProjectionService orgProjectionService;
 
   @Test
   void tenantBCannotReadTenantAsEmployee() throws Exception {
@@ -72,7 +72,7 @@ class CrossTenantIsolationTest extends PostgresRlsTestBase {
     UUID orgUnitA = UUID.randomUUID();
     UUID employeeB;
     orgProjectionService.apply(
-        new id.co.nativeapp.employee.org.OrgUnitProjectedEvent(
+        new id.co.nativeapp.employee.org.dto.OrgUnitProjectedEvent(
             UUID.randomUUID(), orgUnitA, TENANT_A, LEGAL_EMPLOYER_A, "OUTLET", true));
 
     employeeB =

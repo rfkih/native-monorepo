@@ -1,9 +1,9 @@
 package id.co.nativeapp.finance;
 
 import id.co.nativeapp.events.AvroSerde;
-import id.co.nativeapp.finance.labor.LaborCostAllocatedSchema;
-import id.co.nativeapp.finance.labor.PayrollPostedSchema;
-import id.co.nativeapp.finance.revenue.SaleRecordedListener;
+import id.co.nativeapp.finance.labor.messaging.LaborCostAllocatedSchema;
+import id.co.nativeapp.finance.labor.messaging.PayrollPostedSchema;
+import id.co.nativeapp.finance.revenue.messaging.SaleRecordedListener;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;

@@ -1,8 +1,8 @@
 package id.co.nativeapp.finance.config;
 
-import id.co.nativeapp.finance.fx.MissingFxRateException;
-import id.co.nativeapp.finance.withinclose.BaseCurrencyMismatchException;
-import id.co.nativeapp.finance.withinclose.UndeterminableBaseCurrencyException;
+import id.co.nativeapp.finance.fx.domain.MissingFxRateException;
+import id.co.nativeapp.finance.withinclose.domain.BaseCurrencyMismatchException;
+import id.co.nativeapp.finance.withinclose.domain.UndeterminableBaseCurrencyException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;

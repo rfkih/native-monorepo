@@ -1,7 +1,7 @@
 package id.co.nativeapp.entitlement.config;
 
-import id.co.nativeapp.entitlement.entitlement.DbEntitlementLoader;
-import id.co.nativeapp.entitlement.entitlement.PostOutboxHook;
+import id.co.nativeapp.entitlement.entitlement.service.DbEntitlementLoader;
+import id.co.nativeapp.entitlement.entitlement.service.PostOutboxHook;
 import id.co.nativeapp.entitlementcheck.CachedEntitlementChecker;
 import id.co.nativeapp.entitlementcheck.EntitlementCache;
 import id.co.nativeapp.events.OutboxWriter;
@@ -61,9 +61,9 @@ public class EventsConfig {
 
   /**
    * The production no-op post-outbox hook ({@link
-   * id.co.nativeapp.entitlement.entitlement.EntitlementWriter EntitlementWriter} test seam).
-   * Declared {@link ConditionalOnMissingBean} so the atomicity test can supply a throwing hook in
-   * its own context without a bean-definition clash.
+   * id.co.nativeapp.entitlement.entitlement.service.EntitlementWriter EntitlementWriter} test
+   * seam). Declared {@link ConditionalOnMissingBean} so the atomicity test can supply a throwing
+   * hook in its own context without a bean-definition clash.
    */
   @Bean
   @ConditionalOnMissingBean

@@ -2,16 +2,16 @@ package id.co.nativeapp.finance;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import id.co.nativeapp.finance.expense.ExpensePostingService;
-import id.co.nativeapp.finance.expense.ExpenseRecordedEvent;
-import id.co.nativeapp.finance.fx.PnlPresentation;
-import id.co.nativeapp.finance.fx.PresentationConverter;
-import id.co.nativeapp.finance.fx.RevenuePresentation;
-import id.co.nativeapp.finance.pnl.ConsolidatedPnl;
-import id.co.nativeapp.finance.pnl.PnlReader;
-import id.co.nativeapp.finance.revenue.RevenuePostingService;
-import id.co.nativeapp.finance.revenue.RevenueReader;
-import id.co.nativeapp.finance.revenue.SaleRecordedEvent;
+import id.co.nativeapp.finance.expense.messaging.ExpenseRecordedEvent;
+import id.co.nativeapp.finance.expense.service.ExpensePostingService;
+import id.co.nativeapp.finance.fx.dto.PnlPresentation;
+import id.co.nativeapp.finance.fx.dto.RevenuePresentation;
+import id.co.nativeapp.finance.fx.service.PresentationConverter;
+import id.co.nativeapp.finance.pnl.domain.ConsolidatedPnl;
+import id.co.nativeapp.finance.pnl.service.PnlReader;
+import id.co.nativeapp.finance.revenue.messaging.SaleRecordedEvent;
+import id.co.nativeapp.finance.revenue.service.RevenuePostingService;
+import id.co.nativeapp.finance.revenue.service.RevenueReader;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.TenantContext;
 import java.sql.Connection;

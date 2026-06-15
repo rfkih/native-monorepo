@@ -2,7 +2,7 @@ package id.co.nativeapp.employee;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import id.co.nativeapp.employee.payroll.IllustrativeStatutorySeedWriter;
+import id.co.nativeapp.employee.payroll.service.IllustrativeStatutorySeedWriter;
 import id.co.nativeapp.tenant.TenantContext;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;

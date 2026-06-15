@@ -3,8 +3,8 @@ package id.co.nativeapp.org;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import id.co.nativeapp.org.company.OrgUnit;
-import id.co.nativeapp.org.company.OrgUnitType;
+import id.co.nativeapp.org.company.domain.OrgUnit;
+import id.co.nativeapp.org.company.domain.OrgUnitType;
 import java.time.LocalDate;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;

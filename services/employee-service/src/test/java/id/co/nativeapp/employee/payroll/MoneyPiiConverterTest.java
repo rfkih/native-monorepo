@@ -3,6 +3,11 @@ package id.co.nativeapp.employee.payroll;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import id.co.nativeapp.employee.config.PiiCipher;
+import id.co.nativeapp.employee.payroll.domain.MoneyPiiConverter;
+import id.co.nativeapp.employee.payroll.domain.PayComponentBearer;
+import id.co.nativeapp.employee.payroll.domain.PayComponentKind;
+import id.co.nativeapp.employee.payroll.domain.PayslipLine;
+import id.co.nativeapp.employee.payroll.dto.PayslipLineResponse;
 import id.co.nativeapp.money.Money;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;

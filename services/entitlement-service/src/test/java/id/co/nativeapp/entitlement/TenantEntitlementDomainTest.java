@@ -2,8 +2,8 @@ package id.co.nativeapp.entitlement;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import id.co.nativeapp.entitlement.entitlement.EntitlementStatus;
-import id.co.nativeapp.entitlement.entitlement.TenantEntitlement;
+import id.co.nativeapp.entitlement.entitlement.domain.EntitlementStatus;
+import id.co.nativeapp.entitlement.entitlement.domain.TenantEntitlement;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
 

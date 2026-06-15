@@ -5,11 +5,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import id.co.nativeapp.carwash.wash.NotEntitledException;
-import id.co.nativeapp.carwash.wash.RecordWashCommand;
-import id.co.nativeapp.carwash.wash.RecordWashResult;
-import id.co.nativeapp.carwash.wash.WashController;
-import id.co.nativeapp.carwash.wash.WashService;
+import id.co.nativeapp.carwash.wash.controller.WashController;
+import id.co.nativeapp.carwash.wash.domain.NotEntitledException;
+import id.co.nativeapp.carwash.wash.dto.RecordWashCommand;
+import id.co.nativeapp.carwash.wash.dto.RecordWashResult;
+import id.co.nativeapp.carwash.wash.service.WashService;
 import id.co.nativeapp.security.ApiExceptionHandler;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatchers;
@@ -85,7 +85,7 @@ class WashControllerValidationTest {
   void aSuccessfulRecordReturns201WithLocation() throws Exception {
     // Stub a created result so the controller emits 201 + Location.
     var wash =
-        new id.co.nativeapp.carwash.wash.Wash(
+        new id.co.nativeapp.carwash.wash.domain.Wash(
             java.util.UUID.fromString("22222222-2222-2222-2222-222222222222"),
             "bay-1",
             java.util.Optional.empty(),

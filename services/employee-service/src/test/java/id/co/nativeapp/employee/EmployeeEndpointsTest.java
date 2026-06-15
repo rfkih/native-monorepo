@@ -8,8 +8,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import id.co.nativeapp.employee.org.OrgProjectionService;
-import id.co.nativeapp.employee.org.OrgUnitProjectedEvent;
+import id.co.nativeapp.employee.org.dto.OrgUnitProjectedEvent;
+import id.co.nativeapp.employee.org.service.OrgProjectionService;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;

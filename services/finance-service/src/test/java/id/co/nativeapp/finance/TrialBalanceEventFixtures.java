@@ -1,8 +1,8 @@
 package id.co.nativeapp.finance;
 
 import id.co.nativeapp.events.AvroSerde;
-import id.co.nativeapp.finance.grouptb.TrialBalancePublishedSchema;
-import id.co.nativeapp.finance.revenue.SaleRecordedListener;
+import id.co.nativeapp.finance.grouptb.messaging.TrialBalancePublishedSchema;
+import id.co.nativeapp.finance.revenue.messaging.SaleRecordedListener;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;

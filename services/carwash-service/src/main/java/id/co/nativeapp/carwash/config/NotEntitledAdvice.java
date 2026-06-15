@@ -1,6 +1,6 @@
 package id.co.nativeapp.carwash.config;
 
-import id.co.nativeapp.carwash.wash.NotEntitledException;
+import id.co.nativeapp.carwash.wash.domain.NotEntitledException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
 import org.slf4j.MDC;

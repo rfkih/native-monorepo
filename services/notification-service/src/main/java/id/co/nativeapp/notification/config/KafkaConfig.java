@@ -1,5 +1,7 @@
 package id.co.nativeapp.notification.config;
 
+import id.co.nativeapp.notification.notification.messaging.ConsolidationClosedDecodeException;
+import id.co.nativeapp.notification.notification.messaging.MissingEventIdException;
 import java.io.UncheckedIOException;
 import java.util.HashMap;
 import java.util.Map;

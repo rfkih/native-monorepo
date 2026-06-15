@@ -3,6 +3,7 @@ package id.co.nativeapp.servicetemplate.config;
 import static com.tngtech.archunit.base.DescribedPredicate.describe;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
+import static com.tngtech.archunit.library.Architectures.layeredArchitecture;
 
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
@@ -45,6 +46,68 @@ class LayeredArchitectureTest {
         new ClassFileImporter()
             .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
             .importPackages(BASE_PACKAGE);
+  }
+
+  /**
+   * The Native LAYERED standard, enforced over the per-feature LAYER sub-packages ({@code
+   * <feature>.controller / .service / .repository / .domain / .dto / .messaging}). Layers are
+   * matched by package-name suffix (e.g. {@code "..controller.."}), so the single rule covers every
+   * present and future feature package under the service root — including the day a cloned service
+   * grows a controller/dto/messaging in its first feature.
+   *
+   * <p>Direction (downward only): controller -&gt; service -&gt; repository -&gt; domain, with dto
+   * as the boundary-translation layer and messaging as the feature-local event plumbing. Controller
+   * and messaging are the entry points (accessed by no layer); domain is the sink (accessed by all,
+   * accesses none of these). {@code consideringOnlyDependenciesInLayers()} scopes the check to
+   * edges between these layers, ignoring JDK / Spring / libs dependencies.
+   *
+   * <p>The template's single {@code widget} feature has only a domain/repository/service slice, so
+   * Controller, Dto and Messaging are declared {@code optionalLayer()}: the rule still loads and is
+   * already enforced for the day a cloned service lands a controller/dto/messaging in them.
+   */
+  @Test
+  void featureLayersRespectTheLayeredArchitecture() {
+    ArchRule rule =
+        layeredArchitecture()
+            .consideringOnlyDependenciesInLayers()
+            // Controller/Dto/Messaging carry no class in the template's widget slice yet, so they
+            // are optional layers — the direction rule is already enforced for the day a cloned
+            // service lands a controller/dto/messaging in them.
+            .optionalLayer("Controller")
+            .definedBy("..controller..")
+            .optionalLayer("Dto")
+            .definedBy("..dto..")
+            .optionalLayer("Messaging")
+            .definedBy("..messaging..")
+            .layer("Service")
+            .definedBy("..service..")
+            .layer("Repository")
+            .definedBy("..repository..")
+            .layer("Domain")
+            .definedBy("..domain..")
+            // Controller is an entry point: nothing depends on a controller.
+            .whereLayer("Controller")
+            .mayNotBeAccessedByAnyLayer()
+            // Messaging is feature-local event plumbing reached only from the service layer (the
+            // producer-side Avro *Schema holders are built by the *Writer service beans); no
+            // controller/repository/domain/dto may reach into it. CODE-STRUCTURE §3.2.
+            .whereLayer("Messaging")
+            .mayOnlyBeAccessedByLayers("Service")
+            // Service is reachable from the controller entry point and from messaging.
+            .whereLayer("Service")
+            .mayOnlyBeAccessedByLayers("Controller", "Messaging")
+            // Repository is a data port used only by the service layer.
+            .whereLayer("Repository")
+            .mayOnlyBeAccessedByLayers("Service")
+            // Domain is the sink: every layer may read it.
+            .whereLayer("Domain")
+            .mayOnlyBeAccessedByLayers("Controller", "Service", "Repository", "Dto", "Messaging")
+            // Dto is the boundary translation layer (request/response/command/result).
+            .whereLayer("Dto")
+            .mayOnlyBeAccessedByLayers("Controller", "Service", "Messaging")
+            .as(
+                "controller -> service -> repository -> domain (+ dto boundary, feature messaging)");
+    rule.check(classes);
   }
 
   @Test

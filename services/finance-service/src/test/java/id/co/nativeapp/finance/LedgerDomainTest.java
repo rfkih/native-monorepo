@@ -3,10 +3,10 @@ package id.co.nativeapp.finance;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import id.co.nativeapp.finance.revenue.ConsolidatedRevenue;
-import id.co.nativeapp.finance.revenue.LedgerPosting;
-import id.co.nativeapp.finance.revenue.MoneyEmbeddable;
-import id.co.nativeapp.finance.revenue.PostingType;
+import id.co.nativeapp.finance.revenue.domain.ConsolidatedRevenue;
+import id.co.nativeapp.finance.revenue.domain.LedgerPosting;
+import id.co.nativeapp.finance.revenue.domain.MoneyEmbeddable;
+import id.co.nativeapp.finance.revenue.domain.PostingType;
 import id.co.nativeapp.money.MismatchedCurrencyException;
 import id.co.nativeapp.money.Money;
 import java.time.Instant;

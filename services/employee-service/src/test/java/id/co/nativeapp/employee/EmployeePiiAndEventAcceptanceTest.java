@@ -6,10 +6,10 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
-import id.co.nativeapp.employee.employee.CreateEmployeeCommand;
-import id.co.nativeapp.employee.employee.Employee;
-import id.co.nativeapp.employee.employee.EmployeeChangedSchema;
-import id.co.nativeapp.employee.employee.EmployeeService;
+import id.co.nativeapp.employee.employee.domain.Employee;
+import id.co.nativeapp.employee.employee.dto.CreateEmployeeCommand;
+import id.co.nativeapp.employee.employee.messaging.EmployeeChangedSchema;
+import id.co.nativeapp.employee.employee.service.EmployeeService;
 import id.co.nativeapp.events.AvroSerde;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
@@ -48,7 +48,7 @@ class EmployeePiiAndEventAcceptanceTest extends PostgresRlsTestBase {
   private static final String BANK_ACCOUNT = "1234567890123456";
 
   @Autowired private EmployeeService employeeService;
-  @Autowired private id.co.nativeapp.employee.employee.EmployeeReader employeeReader;
+  @Autowired private id.co.nativeapp.employee.employee.service.EmployeeReader employeeReader;
   @Autowired private JdbcTemplate jdbcTemplate;
   @Autowired private id.co.nativeapp.employee.config.PiiCipher piiCipher;
 

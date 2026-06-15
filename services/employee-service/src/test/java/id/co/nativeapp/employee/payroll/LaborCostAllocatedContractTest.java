@@ -2,6 +2,7 @@ package id.co.nativeapp.employee.payroll;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import id.co.nativeapp.employee.payroll.messaging.LaborCostAllocatedSchema;
 import id.co.nativeapp.events.AvroSerde;
 import id.co.nativeapp.money.Money;
 import java.time.Instant;

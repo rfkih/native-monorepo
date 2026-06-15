@@ -3,11 +3,11 @@ package id.co.nativeapp.carwash;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import id.co.nativeapp.carwash.entitlement.EntitlementProjectedEvent;
-import id.co.nativeapp.carwash.entitlement.EntitlementProjectionService;
-import id.co.nativeapp.carwash.wash.PostOutboxHook;
-import id.co.nativeapp.carwash.wash.RecordWashCommand;
-import id.co.nativeapp.carwash.wash.WashService;
+import id.co.nativeapp.carwash.entitlement.dto.EntitlementProjectedEvent;
+import id.co.nativeapp.carwash.entitlement.service.EntitlementProjectionService;
+import id.co.nativeapp.carwash.wash.dto.RecordWashCommand;
+import id.co.nativeapp.carwash.wash.service.PostOutboxHook;
+import id.co.nativeapp.carwash.wash.service.WashService;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Instant;
 import java.util.UUID;
@@ -41,9 +41,9 @@ class RecordWashAtomicityTest extends KafkaPostgresRedisTestBase {
    * Installs a {@link PostOutboxHook} that throws. A DISTINCT bean name (not {@code
    * postOutboxHook}) avoids a bean-definition override clash with the
    * {@code @ConditionalOnMissingBean} default, and {@link Primary} makes it win injection into
-   * {@link id.co.nativeapp.carwash.wash.WashWriter WashWriter}. Declaring it also makes this test's
-   * context configuration distinct, so Spring caches it separately and the throwing hook never
-   * leaks into the other {@code @SpringBootTest} classes.
+   * {@link id.co.nativeapp.carwash.wash.service.WashWriter WashWriter}. Declaring it also makes
+   * this test's context configuration distinct, so Spring caches it separately and the throwing
+   * hook never leaks into the other {@code @SpringBootTest} classes.
    */
   @TestConfiguration
   static class ThrowingHookConfig {

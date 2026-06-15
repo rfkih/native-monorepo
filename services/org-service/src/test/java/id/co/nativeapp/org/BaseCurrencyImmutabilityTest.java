@@ -3,7 +3,7 @@ package id.co.nativeapp.org;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import id.co.nativeapp.org.company.Company;
+import id.co.nativeapp.org.company.domain.Company;
 import jakarta.persistence.Column;
 import java.lang.reflect.Field;
 import java.util.Arrays;

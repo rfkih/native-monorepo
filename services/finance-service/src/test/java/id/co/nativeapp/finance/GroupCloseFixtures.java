@@ -1,12 +1,12 @@
 package id.co.nativeapp.finance;
 
-import id.co.nativeapp.finance.group.GroupDefinedEvent;
-import id.co.nativeapp.finance.group.GroupMember;
-import id.co.nativeapp.finance.group.GroupMembershipChangedEvent;
-import id.co.nativeapp.finance.group.GroupReadModelService;
-import id.co.nativeapp.finance.grouptb.GroupTrialBalanceIngestService;
-import id.co.nativeapp.finance.grouptb.TrialBalancePublishedEvent;
-import id.co.nativeapp.finance.grouptb.TrialBalancePublishedEvent.TrialBalanceLine;
+import id.co.nativeapp.finance.group.domain.GroupMember;
+import id.co.nativeapp.finance.group.messaging.GroupDefinedEvent;
+import id.co.nativeapp.finance.group.messaging.GroupMembershipChangedEvent;
+import id.co.nativeapp.finance.group.service.GroupReadModelService;
+import id.co.nativeapp.finance.grouptb.messaging.TrialBalancePublishedEvent;
+import id.co.nativeapp.finance.grouptb.messaging.TrialBalancePublishedEvent.TrialBalanceLine;
+import id.co.nativeapp.finance.grouptb.service.GroupTrialBalanceIngestService;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;

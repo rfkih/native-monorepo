@@ -2,10 +2,10 @@ package id.co.nativeapp.employee;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import id.co.nativeapp.employee.payroll.MetricInputProjectionService;
-import id.co.nativeapp.employee.payroll.MetricProjectedEvent;
-import id.co.nativeapp.employee.payroll.PeriodSealProjectionService;
-import id.co.nativeapp.employee.payroll.PeriodSealedProjectedEvent;
+import id.co.nativeapp.employee.payroll.dto.MetricProjectedEvent;
+import id.co.nativeapp.employee.payroll.dto.PeriodSealedProjectedEvent;
+import id.co.nativeapp.employee.payroll.service.MetricInputProjectionService;
+import id.co.nativeapp.employee.payroll.service.PeriodSealProjectionService;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;

@@ -3,10 +3,10 @@ package id.co.nativeapp.restaurant;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import id.co.nativeapp.restaurant.sale.PostOutboxHook;
-import id.co.nativeapp.restaurant.sale.RecordSaleCommand;
-import id.co.nativeapp.restaurant.sale.SaleService;
-import id.co.nativeapp.restaurant.sale.SaleWriter;
+import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
+import id.co.nativeapp.restaurant.sale.service.PostOutboxHook;
+import id.co.nativeapp.restaurant.sale.service.SaleService;
+import id.co.nativeapp.restaurant.sale.service.SaleWriter;
 import id.co.nativeapp.tenant.TenantContext;
 import java.sql.Connection;
 import java.sql.ResultSet;

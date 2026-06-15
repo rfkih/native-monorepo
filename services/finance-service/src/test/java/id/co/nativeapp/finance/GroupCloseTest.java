@@ -8,11 +8,11 @@ import static id.co.nativeapp.finance.GroupCloseFixtures.intercompanyRevenue;
 import static id.co.nativeapp.finance.GroupCloseFixtures.revenue;
 import static org.assertj.core.api.Assertions.assertThat;
 
-import id.co.nativeapp.finance.consolidation.ConsolidationState;
-import id.co.nativeapp.finance.consolidation.GroupCloseResult;
-import id.co.nativeapp.finance.consolidation.GroupCloseService;
-import id.co.nativeapp.finance.group.GroupReadModelService;
-import id.co.nativeapp.finance.grouptb.GroupTrialBalanceIngestService;
+import id.co.nativeapp.finance.consolidation.domain.ConsolidationState;
+import id.co.nativeapp.finance.consolidation.dto.GroupCloseResult;
+import id.co.nativeapp.finance.consolidation.service.GroupCloseService;
+import id.co.nativeapp.finance.group.service.GroupReadModelService;
+import id.co.nativeapp.finance.grouptb.service.GroupTrialBalanceIngestService;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.Statement;

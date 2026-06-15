@@ -7,10 +7,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import id.co.nativeapp.finance.config.ConstraintViolationAdvice;
-import id.co.nativeapp.finance.fx.PresentationConverter;
-import id.co.nativeapp.finance.pnl.ConsolidatedPnl;
-import id.co.nativeapp.finance.pnl.PnlController;
-import id.co.nativeapp.finance.pnl.PnlReader;
+import id.co.nativeapp.finance.fx.service.PresentationConverter;
+import id.co.nativeapp.finance.pnl.controller.PnlController;
+import id.co.nativeapp.finance.pnl.domain.ConsolidatedPnl;
+import id.co.nativeapp.finance.pnl.service.PnlReader;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;

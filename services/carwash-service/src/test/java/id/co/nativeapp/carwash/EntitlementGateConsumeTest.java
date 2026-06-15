@@ -4,9 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
-import id.co.nativeapp.carwash.wash.NotEntitledException;
-import id.co.nativeapp.carwash.wash.RecordWashCommand;
-import id.co.nativeapp.carwash.wash.WashService;
+import id.co.nativeapp.carwash.wash.domain.NotEntitledException;
+import id.co.nativeapp.carwash.wash.dto.RecordWashCommand;
+import id.co.nativeapp.carwash.wash.service.WashService;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Duration;
 import java.time.Instant;

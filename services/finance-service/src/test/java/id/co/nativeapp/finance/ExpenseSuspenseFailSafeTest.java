@@ -2,11 +2,11 @@ package id.co.nativeapp.finance;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import id.co.nativeapp.finance.expense.ExpensePostingService;
-import id.co.nativeapp.finance.expense.ExpenseRecordedEvent;
-import id.co.nativeapp.finance.mapping.GlAccountResolver;
-import id.co.nativeapp.finance.pnl.ConsolidatedPnl;
-import id.co.nativeapp.finance.pnl.PnlReader;
+import id.co.nativeapp.finance.expense.messaging.ExpenseRecordedEvent;
+import id.co.nativeapp.finance.expense.service.ExpensePostingService;
+import id.co.nativeapp.finance.mapping.service.GlAccountResolver;
+import id.co.nativeapp.finance.pnl.domain.ConsolidatedPnl;
+import id.co.nativeapp.finance.pnl.service.PnlReader;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.TenantContext;
 import java.sql.Connection;

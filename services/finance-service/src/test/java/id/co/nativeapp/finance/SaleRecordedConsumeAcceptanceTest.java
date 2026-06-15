@@ -3,7 +3,7 @@ package id.co.nativeapp.finance;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-import id.co.nativeapp.finance.revenue.RevenueReader;
+import id.co.nativeapp.finance.revenue.service.RevenueReader;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Duration;

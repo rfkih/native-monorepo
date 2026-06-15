@@ -2,10 +2,10 @@ package id.co.nativeapp.finance;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import id.co.nativeapp.finance.labor.LaborCostAllocatedEvent;
-import id.co.nativeapp.finance.labor.LaborCostPostingService;
-import id.co.nativeapp.finance.labor.PayrollPostedEvent;
-import id.co.nativeapp.finance.labor.PayrollReconciliationService;
+import id.co.nativeapp.finance.labor.messaging.LaborCostAllocatedEvent;
+import id.co.nativeapp.finance.labor.messaging.PayrollPostedEvent;
+import id.co.nativeapp.finance.labor.service.LaborCostPostingService;
+import id.co.nativeapp.finance.labor.service.PayrollReconciliationService;
 import id.co.nativeapp.money.Money;
 import java.sql.Connection;
 import java.sql.ResultSet;

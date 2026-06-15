@@ -4,13 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
-import id.co.nativeapp.employee.assignment.AddAssignmentCommand;
-import id.co.nativeapp.employee.assignment.Assignment;
-import id.co.nativeapp.employee.assignment.AssignmentService;
-import id.co.nativeapp.employee.assignment.ConflictingLegalEmployerException;
-import id.co.nativeapp.employee.employee.CreateEmployeeCommand;
-import id.co.nativeapp.employee.employee.EmployeeNotFoundException;
-import id.co.nativeapp.employee.employee.EmployeeService;
+import id.co.nativeapp.employee.assignment.domain.Assignment;
+import id.co.nativeapp.employee.assignment.domain.ConflictingLegalEmployerException;
+import id.co.nativeapp.employee.assignment.dto.AddAssignmentCommand;
+import id.co.nativeapp.employee.assignment.service.AssignmentService;
+import id.co.nativeapp.employee.employee.domain.EmployeeNotFoundException;
+import id.co.nativeapp.employee.employee.dto.CreateEmployeeCommand;
+import id.co.nativeapp.employee.employee.service.EmployeeService;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -49,7 +49,7 @@ class OrgConsumeAndAssignmentInvariantTest extends KafkaPostgresTestBase {
 
   @Autowired private EmployeeService employeeService;
   @Autowired private AssignmentService assignmentService;
-  @Autowired private id.co.nativeapp.employee.org.OrgProjectionService orgProjectionService;
+  @Autowired private id.co.nativeapp.employee.org.service.OrgProjectionService orgProjectionService;
   @Autowired private JdbcTemplate jdbcTemplate;
 
   @Test
@@ -285,14 +285,14 @@ class OrgConsumeAndAssignmentInvariantTest extends KafkaPostgresTestBase {
 
   /**
    * Seeds an org_unit_projection row via the CONSUMER service path ({@link
-   * id.co.nativeapp.employee.org.OrgProjectionService#apply}), the same transactional write the
-   * OrgUnit listener uses — so the auto-RLS aspect sets the GUC and the RLS {@code WITH CHECK}
+   * id.co.nativeapp.employee.org.service.OrgProjectionService#apply}), the same transactional write
+   * the OrgUnit listener uses — so the auto-RLS aspect sets the GUC and the RLS {@code WITH CHECK}
    * passes (a bare repository save from a test would not engage the aspect).
    */
   private UUID seedOrgUnit(UUID legalEmployerId, String type) {
     UUID orgUnitId = UUID.randomUUID();
     orgProjectionService.apply(
-        new id.co.nativeapp.employee.org.OrgUnitProjectedEvent(
+        new id.co.nativeapp.employee.org.dto.OrgUnitProjectedEvent(
             UUID.randomUUID(), orgUnitId, TENANT_A, legalEmployerId, type, true));
     return orgUnitId;
   }

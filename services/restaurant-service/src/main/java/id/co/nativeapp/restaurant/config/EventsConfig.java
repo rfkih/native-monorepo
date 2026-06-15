@@ -1,7 +1,7 @@
 package id.co.nativeapp.restaurant.config;
 
 import id.co.nativeapp.events.OutboxWriter;
-import id.co.nativeapp.restaurant.sale.PostOutboxHook;
+import id.co.nativeapp.restaurant.sale.service.PostOutboxHook;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -26,9 +26,10 @@ public class EventsConfig {
   }
 
   /**
-   * The production no-op post-outbox hook ({@link id.co.nativeapp.restaurant.sale.SaleWriter
-   * SaleWriter} test seam). Declared {@link ConditionalOnMissingBean} so the atomicity test can
-   * supply a throwing hook in its own context without a bean-definition clash.
+   * The production no-op post-outbox hook ({@link
+   * id.co.nativeapp.restaurant.sale.service.SaleWriter SaleWriter} test seam). Declared {@link
+   * ConditionalOnMissingBean} so the atomicity test can supply a throwing hook in its own context
+   * without a bean-definition clash.
    */
   @Bean
   @ConditionalOnMissingBean

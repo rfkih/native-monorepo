@@ -9,10 +9,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import id.co.nativeapp.org.company.OrgUnit;
-import id.co.nativeapp.org.company.OrgUnitController;
-import id.co.nativeapp.org.company.OrgUnitService;
-import id.co.nativeapp.org.company.OrgUnitType;
+import id.co.nativeapp.org.company.controller.OrgUnitController;
+import id.co.nativeapp.org.company.domain.OrgUnit;
+import id.co.nativeapp.org.company.domain.OrgUnitType;
+import id.co.nativeapp.org.company.service.OrgUnitService;
 import id.co.nativeapp.security.ApiExceptionHandler;
 import java.time.LocalDate;
 import java.util.UUID;

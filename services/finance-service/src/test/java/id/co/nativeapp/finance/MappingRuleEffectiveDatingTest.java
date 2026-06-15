@@ -2,8 +2,8 @@ package id.co.nativeapp.finance;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import id.co.nativeapp.finance.mapping.GlAccountResolution;
-import id.co.nativeapp.finance.mapping.GlAccountResolver;
+import id.co.nativeapp.finance.mapping.domain.GlAccountResolution;
+import id.co.nativeapp.finance.mapping.service.GlAccountResolver;
 import java.sql.Connection;
 import java.sql.Statement;
 import java.time.Instant;

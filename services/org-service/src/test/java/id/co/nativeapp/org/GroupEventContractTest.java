@@ -3,8 +3,8 @@ package id.co.nativeapp.org;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import id.co.nativeapp.events.AvroSerde;
-import id.co.nativeapp.org.group.GroupDefinedSchema;
-import id.co.nativeapp.org.group.GroupMembershipChangedSchema;
+import id.co.nativeapp.org.group.messaging.GroupDefinedSchema;
+import id.co.nativeapp.org.group.messaging.GroupMembershipChangedSchema;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericRecord;

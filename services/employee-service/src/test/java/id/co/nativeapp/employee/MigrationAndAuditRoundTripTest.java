@@ -2,10 +2,10 @@ package id.co.nativeapp.employee;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import id.co.nativeapp.employee.employee.CreateEmployeeCommand;
-import id.co.nativeapp.employee.employee.Employee;
-import id.co.nativeapp.employee.employee.EmployeeReader;
-import id.co.nativeapp.employee.employee.EmployeeService;
+import id.co.nativeapp.employee.employee.domain.Employee;
+import id.co.nativeapp.employee.employee.dto.CreateEmployeeCommand;
+import id.co.nativeapp.employee.employee.service.EmployeeReader;
+import id.co.nativeapp.employee.employee.service.EmployeeService;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
