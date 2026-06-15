@@ -40,6 +40,12 @@ final class ConsolidationEntryIds {
   /** The domain prefix for a supersession REVERSAL entry. */
   private static final String REVERSAL_PREFIX = "consolidation-rev:";
 
+  /** The domain prefix for the SEAM-3b simplified CTA / translation-reserve balancing entry. */
+  private static final String CTA_PREFIX = "consolidation-cta:";
+
+  /** The domain prefix for a SEAM-3b cross-currency intercompany FX_TRANSLATION_DIFF entry. */
+  private static final String FX_DIFF_PREFIX = "consolidation-fxdiff:";
+
   private ConsolidationEntryIds() {}
 
   /**
@@ -71,6 +77,31 @@ final class ConsolidationEntryIds {
             + ":"
             + priorEntryId
             + ":REVERSAL";
+    return UUID.nameUUIDFromBytes(name.getBytes(StandardCharsets.UTF_8));
+  }
+
+  /**
+   * The synthetic id for the SEAM-3b simplified CTA / translation-reserve balancing entry of a
+   * close run. There is exactly ONE CTA entry per {@code (group, period, close_run_seq)}, so the
+   * key needs no further discriminator; the {@code consolidation-cta:} prefix keeps it disjoint
+   * from the elimination/reversal/labor namespaces. Deterministic so a re-run at the same seq is
+   * idempotent.
+   */
+  static UUID forCta(UUID groupId, String period, int closeRunSeq) {
+    String name = CTA_PREFIX + groupId + ":" + period + ":" + closeRunSeq;
+    return UUID.nameUUIDFromBytes(name.getBytes(StandardCharsets.UTF_8));
+  }
+
+  /**
+   * The synthetic id for a SEAM-3b cross-currency intercompany FX_TRANSLATION_DIFF entry, keyed on
+   * the {@code (group, period, close_run_seq, intercompany_ref)} of the cross-currency pair (one
+   * residual per cross-currency IC ref). The {@code consolidation-fxdiff:} prefix keeps it disjoint
+   * from every other consolidation/labor namespace.
+   */
+  static UUID forFxTranslationDiff(
+      UUID groupId, String period, int closeRunSeq, String intercompanyRef) {
+    String name =
+        FX_DIFF_PREFIX + groupId + ":" + period + ":" + closeRunSeq + ":" + intercompanyRef;
     return UUID.nameUUIDFromBytes(name.getBytes(StandardCharsets.UTF_8));
   }
 }

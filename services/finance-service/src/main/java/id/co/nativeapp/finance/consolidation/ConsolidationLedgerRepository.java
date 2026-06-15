@@ -52,4 +52,27 @@ public interface ConsolidationLedgerRepository
       @Param("groupId") UUID groupId,
       @Param("period") String period,
       @Param("closeRunSeq") int closeRunSeq);
+
+  /**
+   * The PRIMARY {@link ConsolidationEntryType#CTA} entries this close run actually posted for a
+   * {@code (group, period, closeRunSeq)} — read back from the ledger so the SEAM-3b integrity gate
+   * can sum what LANDED in {@code 3950-CTA-TRANSLATION-RESERVE} INDEPENDENTLY of the in-memory CTA
+   * it computed, rather than asserting the {@code x + (-x) == 0} tautology. On a validated-balanced
+   * input, {@code signed(translated TB) + sum(these CTA amounts)} must be zero. The explicit {@code
+   * group_id} predicate is defense-in-depth atop the two-GUC RLS (rule 5 remains the enforcing
+   * layer).
+   */
+  @Query(
+      """
+      SELECT e FROM ConsolidationLedgerEntry e
+       WHERE e.groupId = :groupId
+         AND e.period = :period
+         AND e.closeRunSeq = :closeRunSeq
+         AND e.entryType = id.co.nativeapp.finance.consolidation.ConsolidationEntryType.CTA
+         AND e.postingRole = id.co.nativeapp.finance.consolidation.ConsolidationPostingRole.PRIMARY
+      """)
+  List<ConsolidationLedgerEntry> findCtaPrimaries(
+      @Param("groupId") UUID groupId,
+      @Param("period") String period,
+      @Param("closeRunSeq") int closeRunSeq);
 }

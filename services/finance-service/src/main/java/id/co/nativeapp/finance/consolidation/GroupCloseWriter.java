@@ -1,6 +1,8 @@
 package id.co.nativeapp.finance.consolidation;
 
 import id.co.nativeapp.events.ProcessedEventStore;
+import id.co.nativeapp.finance.fx.Translated;
+import id.co.nativeapp.finance.fx.TranslationService;
 import id.co.nativeapp.finance.group.GroupMember;
 import id.co.nativeapp.finance.group.GroupMemberRepository;
 import id.co.nativeapp.finance.group.GroupRef;
@@ -14,6 +16,7 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Currency;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,10 +30,20 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * The single {@code @Transactional} unit of work that runs a group's SINGLE-CURRENCY consolidation
- * close for a period (P3d SEAM 3a). Must be invoked inside a {@link TenantContext#callAsGroup}
- * scope bound to the group's LEAD company AND the group id, so the two-GUC conjunction RLS engages
- * on every consolidation-table read/write (rule 5).
+ * The single {@code @Transactional} unit of work that runs a group's consolidation close for a
+ * period (P3d SEAM 3a + 3b). Must be invoked inside a {@link TenantContext#callAsGroup} scope bound
+ * to the group's LEAD company AND the group id, so the two-GUC conjunction RLS engages on every
+ * consolidation-table read/write (rule 5).
+ *
+ * <p><strong>SEAM 3b — MULTI-CURRENCY, FLAGGED-SIMPLIFIED.</strong> Multi-currency groups are now
+ * SUPPORTED (the 3a {@code MULTI_CURRENCY_UNSUPPORTED} hard stop is GONE): every member line is
+ * TRANSLATED into the reporting currency by account type (BS at CLOSING, P&amp;L at AVERAGE) via
+ * the P3c {@code TranslationService}; the translated set is balanced via a flagged CTA reserve; a
+ * cross-currency intercompany pair eliminates its translated legs and posts a flagged
+ * FX_TRANSLATION_DIFF residual; the summary is loudly flagged {@code
+ * uses_simplified_translation_policy} + {@code uses_stub_fx}. This is a DELIBERATELY SIMPLIFIED,
+ * PROVISIONAL policy — full IAS-21 CTA/OCI, historical-rate equity and opening-balance roll-forward
+ * are DEFERRED to an accounting SME. See {@link SimplifiedTranslationPolicy}.
  *
  * <p>A distinct bean (not a private method on {@link GroupCloseService}) so the method is invoked
  * through the Spring proxy: a self-invocation would bypass the {@code @Transactional} advice and
@@ -50,19 +63,31 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li><strong>Member-completeness gate.</strong> Every active member must have an ingested {@code
  *       group_trial_balance} for the period; a missing one -> {@code PENDING_MEMBERS}, not
  *       finalized.
- *   <li><strong>Same-currency scope.</strong> Assert every member's base currency == the group's
- *       reporting currency; ANY divergence is a MULTI-CURRENCY close, REJECTED cleanly ({@code
- *       MULTI_CURRENCY_UNSUPPORTED} — FX is SEAM 3b), never silently summing mixed currencies.
+ *   <li><strong>Native balance gate (SEAM 3b — the accounting integrity gate).</strong> BEFORE
+ *       translation, validate each member's trial balance in its OWN functional currency: a
+ *       non-zero signed double-entry residual (its books do not balance) OR a member-published
+ *       {@code reconciled = false} HOLDs the close ({@code MEMBER_TRIAL_BALANCE_UNBALANCED}). The
+ *       simplified policy ASSUMES each member balances natively, so the only post-translation
+ *       residual is the legitimate closing-vs-average FX effect; a raw native imbalance must NEVER
+ *       be swept into the CTA and mis-labelled a translation adjustment.
+ *   <li><strong>Translation (SEAM 3b).</strong> Translate every member line into the reporting
+ *       currency by account type (BS at CLOSING, P&amp;L at AVERAGE). A missing rate fails the
+ *       whole close atomically (no summary, no partial ledger); {@code uses_stub_fx} is OR-ed
+ *       across every translated line; any translation flags {@code
+ *       uses_simplified_translation_policy}.
  *   <li><strong>Intercompany match.</strong> Pair related-party legs on {@code (intercompany_ref,
- *       period)}; MATCHED -> an ELIMINATION contra; UNMATCHED / AMOUNT_MISMATCH -> flagged and the
- *       close held back ({@code INTERCOMPANY_UNRECONCILED} — money is never eliminated against
- *       nothing).
- *   <li><strong>Compute.</strong> Sum the trial balances into revenue/expense/net, apply the
- *       eliminations, carry {@code uses_illustrative_rules} sticky-OR, write {@code
- *       consolidation_summary} (state CLOSED).
+ *       period)}; same-currency MATCHED -> an ELIMINATION contra; cross-currency MATCHED_CROSS_
+ *       CURRENCY -> eliminate the translated legs + a flagged FX_TRANSLATION_DIFF residual;
+ *       UNMATCHED / AMOUNT_MISMATCH / MALFORMED -> flagged and the close held back ({@code
+ *       INTERCOMPANY_UNRECONCILED} — money is never eliminated against nothing).
+ *   <li><strong>Compute + balance-check.</strong> Sum the TRANSLATED trial balances into
+ *       revenue/expense/net, apply the eliminations; for a translated close, post the signed
+ *       translation residual to the flagged CTA reserve so the set reconciles (the integrity gate),
+ *       carry the sticky flags, write {@code consolidation_summary} (state CLOSED).
  *   <li><strong>Supersession (append-only, #23).</strong> A higher {@code close_run_seq} reverses
- *       each prior PRIMARY elimination (negated, role REVERSAL, a deterministic collision-free
- *       synthetic id) and flips the prior summary to TERMINAL {@code SUPERSEDED}, then reposts.
+ *       each prior PRIMARY entry (elimination, CTA, FX_TRANSLATION_DIFF) (negated, role REVERSAL, a
+ *       deterministic collision-free synthetic id) and flips the prior summary to TERMINAL {@code
+ *       SUPERSEDED}, then reposts.
  * </ol>
  */
 @Component
@@ -84,6 +109,7 @@ public class GroupCloseWriter {
   private final IntercompanyMatchRepository matchRepository;
   private final GroupMembershipReadiness membershipReadiness;
   private final ProcessedEventStore processedEvents;
+  private final TranslationService translationService;
 
   @SuppressWarnings("checkstyle:ParameterNumber")
   public GroupCloseWriter(
@@ -94,7 +120,8 @@ public class GroupCloseWriter {
       ConsolidationSummaryRepository summaryRepository,
       IntercompanyMatchRepository matchRepository,
       GroupMembershipReadiness membershipReadiness,
-      ProcessedEventStore processedEvents) {
+      ProcessedEventStore processedEvents,
+      TranslationService translationService) {
     this.groupRefRepository = groupRefRepository;
     this.groupMemberRepository = groupMemberRepository;
     this.trialBalanceRepository = trialBalanceRepository;
@@ -103,6 +130,30 @@ public class GroupCloseWriter {
     this.matchRepository = matchRepository;
     this.membershipReadiness = membershipReadiness;
     this.processedEvents = processedEvents;
+    this.translationService = translationService;
+  }
+
+  /**
+   * One member trial-balance line PAIRED with its translation into the group reporting currency
+   * (P3d SEAM 3b). {@code translated} is the line's amount in the reporting currency — by {@code
+   * account_type}: ASSET/LIABILITY/EQUITY at the CLOSING rate, REVENUE/EXPENSE at the AVERAGE rate
+   * (a line already in the reporting currency is the identity). The downstream roll-up,
+   * intercompany matching and balance-check all operate on {@code translated} so every figure is in
+   * one currency. See {@link SimplifiedTranslationPolicy}.
+   */
+  private record TranslatedLine(GroupTrialBalanceLine line, Money translated) {
+
+    AccountType accountType() {
+      return line.getAccountType();
+    }
+
+    UUID memberCompanyId() {
+      return line.getMemberCompanyId();
+    }
+
+    String intercompanyRef() {
+      return line.getIntercompanyRef();
+    }
   }
 
   /**
@@ -250,36 +301,94 @@ public class GroupCloseWriter {
     boolean usesIllustrative =
         lines.stream().anyMatch(GroupTrialBalanceLine::isUsesIllustrativeRules);
 
-    // (d) SAME-CURRENCY SCOPE: every line must be in the reporting currency. ANY divergence is a
-    //     multi-currency close -> SEAM 3b not built -> REJECT cleanly, never silently sum mixed
-    //     currencies (Money.plus would throw on the mismatch; we turn that into a clear gated
-    // state).
+    Currency reportingCcy = Currency.getInstance(reportingCurrency);
+
+    // A close is MULTI-CURRENCY (the translated, CTA-bearing path) when ANY member line is in a
+    // currency other than the group's reporting currency. A same-currency (3a) close performs no
+    // translation and posts no CTA, so no raw imbalance can be swept into a CTA — the native
+    // balance
+    // gate below applies ONLY to the multi-currency path (the 3a model is deliberately P&L-only and
+    // never carried a balancing full trial balance, so it must NOT be gated on native balance).
+    boolean multiCurrency =
+        lines.stream().anyMatch(l -> !l.getAmount().currency().equals(reportingCcy));
+
+    // (c2) NATIVE BALANCE GATE (the SEAM-3b accounting Critical fix). The simplified translation
+    //     policy ASSUMES each member trial balance already sums to ZERO in its OWN functional
+    //     currency, so the ONLY post-translation residual is the legitimate closing-vs-average FX
+    //     effect (-> the flagged CTA reserve). Before translating a MULTI-CURRENCY close, VALIDATE
+    //     that assumption per member, in the member's functional currency, using the same
+    //     double-entry sign convention (ASSET + EXPENSE positive, LIABILITY + EQUITY + REVENUE
+    //     negative):
+    //       * a member whose native signed residual is NON-ZERO does NOT balance — its raw
+    // imbalance
+    //         must NEVER be swept into the CTA and mis-labelled a translation adjustment;
+    //       * a member that published reconciled = false says its own books do not balance.
+    //     EITHER HOLDs the close in MEMBER_TRIAL_BALANCE_UNBALANCED (no consolidation, no CTA
+    // sweep,
+    //     no CLOSED) — exactly like the member-completeness gate. ONLY when every member native
+    // book
+    //     balances (and is reconciled) does the close proceed to translate; the post-translation
+    //     residual is then PURELY the FX effect.
+    List<UUID> unbalancedMembers =
+        multiCurrency ? unbalancedNativeMembers(lines, activeMemberIds) : List.of();
+    if (!unbalancedMembers.isEmpty()) {
+      log.warn(
+          "Group close groupId={} period={} HELD MEMBER_TRIAL_BALANCE_UNBALANCED: {} active"
+              + " member(s) whose native trial balance does not reconcile (non-zero functional"
+              + " residual) or was published reconciled=false: {} — refusing to sweep a raw"
+              + " imbalance into the CTA reserve as a translation adjustment",
+          groupId,
+          period,
+          unbalancedMembers.size(),
+          unbalancedMembers);
+      return holdSummary(
+          groupId,
+          period,
+          reportingCurrency,
+          ConsolidationState.MEMBER_TRIAL_BALANCE_UNBALANCED,
+          usesIllustrative,
+          closeRunSeq);
+    }
+
+    // (d) TRANSLATION (P3d SEAM 3b — SIMPLIFIED, FLAGGED). Multi-currency is now SUPPORTED: instead
+    //     of the 3a MULTI_CURRENCY_UNSUPPORTED hard stop, EVERY line is translated into the group's
+    //     reporting currency by account_type via the P3c TranslationService —
+    // ASSET/LIABILITY/EQUITY
+    //     at the CLOSING (period-end) rate, REVENUE/EXPENSE at the AVERAGE (period) rate. A line
+    //     already in the reporting currency is the identity (no rate, no stub). A MISSING rate
+    //     throws MissingFxRateException, which propagates OUT of this @Transactional method and
+    // rolls
+    //     the WHOLE close back atomically: no summary, no partial ledger (the held/failed state).
+    // See
+    //     SimplifiedTranslationPolicy for the deferred full-IAS-21 boundary.
+    //
+    //     uses_stub_fx is OR-ed (Translated.usesStubFx) across every translated line. A close that
+    //     translated ANY line is flagged uses_simplified_translation_policy = true (sticky). A
+    //     same-currency (3a) close translates everything via the identity, so both flags stay
+    // false.
+    List<TranslatedLine> translatedLines = new ArrayList<>(lines.size());
+    boolean usesStubFx = false;
+    boolean usesSimplifiedTranslation = false;
     for (GroupTrialBalanceLine line : lines) {
-      String lineCurrency = line.getAmount().currency().getCurrencyCode();
-      if (!lineCurrency.equals(reportingCurrency)) {
-        log.warn(
-            "Group close groupId={} period={} MULTI_CURRENCY_UNSUPPORTED: member={} line currency {}"
-                + " != reporting currency {} (FX translation is SEAM 3b)",
-            groupId,
-            period,
-            line.getMemberCompanyId(),
-            lineCurrency,
-            reportingCurrency);
-        return holdSummary(
-            groupId,
-            period,
-            reportingCurrency,
-            ConsolidationState.MULTI_CURRENCY_UNSUPPORTED,
-            usesIllustrative,
-            closeRunSeq);
+      Translated t = translate(line, period, reportingCcy);
+      translatedLines.add(new TranslatedLine(line, t.amount()));
+      usesStubFx = usesStubFx || t.usesStubFx();
+      // A non-identity translation (the source currency differs from the reporting currency) is
+      // what
+      // makes this a SIMPLIFIED multi-currency close.
+      if (!line.getAmount().currency().equals(reportingCcy)) {
+        usesSimplifiedTranslation = true;
       }
     }
 
     // (e) INTERCOMPANY MATCH on (intercompany_ref, period): pair related-party legs. Persist the
     //     reconciliation rows; UNMATCHED / AMOUNT_MISMATCH / MALFORMED block the close. A pure
-    //     balance-sheet IC ref is OUT_OF_SCOPE_BALANCE_SHEET — recorded, non-blocking, not
-    //     eliminated (3a consolidates only the P&L; balance-sheet IC elimination is SEAM 3b).
-    List<IntercompanyMatch> matches = reconcileIntercompany(groupId, period, closeRunSeq, lines);
+    //     balance-sheet IC ref is OUT_OF_SCOPE_BALANCE_SHEET (non-blocking, not eliminated). A
+    //     well-formed CROSS-currency P&L pair is MATCHED_CROSS_CURRENCY (non-blocking; eliminated
+    // via
+    //     the translated legs + an FX_TRANSLATION_DIFF residual below).
+    List<IntercompanyMatch> matches =
+        reconcileIntercompany(groupId, period, closeRunSeq, translatedLines);
     matchRepository.saveAll(stamp(matches, lead));
     boolean anyBlocking = matches.stream().anyMatch(IntercompanyMatch::blocksClose);
     if (anyBlocking) {
@@ -299,17 +408,20 @@ public class GroupCloseWriter {
           closeRunSeq);
     }
 
-    // (f) SUPERSESSION (append-only, #23): a higher close_run_seq reverses each prior PRIMARY
-    //     elimination of the superseded run(s) then reposts. Flip the prior summary to terminal
-    //     SUPERSEDED.
+    // A ref -> its translated legs, so the elimination posting can use TRANSLATED amounts (the
+    // roll-up below is on translated figures, so eliminations must be too).
+    Map<String, List<TranslatedLine>> translatedByRef = legsByRef(translatedLines);
+
+    // (f) SUPERSESSION (append-only, #23): a higher close_run_seq reverses each prior PRIMARY entry
+    //     (elimination, CTA, FX_TRANSLATION_DIFF) of the superseded run(s) then reposts. Flip the
+    //     prior summary to terminal SUPERSEDED.
     //
-    //     NOTE on a HELD prior: a prior summary that never finalised (a non-CLOSED HOLD —
-    //     PENDING_*/MULTI_CURRENCY_UNSUPPORTED/INTERCOMPANY_UNRECONCILED) posted NO PRIMARY ledger
-    //     entries, so reversePriorRun finds nothing to reverse — the SUPERSEDED transition on it is
-    //     purely cosmetic (it leaves no orphaned eliminations). Marking it SUPERSEDED rather than
-    //     overwriting it keeps the supersession path uniform and append-only (one summary row per
-    //     close_run_seq, the prior history preserved), and the active-head query reads the latest
-    //     non-SUPERSEDED row either way. We deliberately do NOT special-case HELD priors here.
+    //     NOTE on a HELD prior: a prior summary that never finalised (a non-CLOSED HOLD) posted NO
+    //     PRIMARY ledger entries, so reversePriorRun finds nothing to reverse — the SUPERSEDED
+    //     transition on it is purely cosmetic. Marking it SUPERSEDED rather than overwriting it
+    // keeps
+    //     the supersession path uniform and append-only. We deliberately do NOT special-case HELD
+    //     priors here.
     for (ConsolidationSummary priorSummary :
         summaryRepository.findActivePriorSummaries(groupId, period, closeRunSeq)) {
       reversePriorRun(groupId, period, closeRunSeq, priorSummary.getCloseRunSeq(), lead);
@@ -317,47 +429,159 @@ public class GroupCloseWriter {
       summaryRepository.save(priorSummary);
     }
 
-    // (e cont.) Post the ELIMINATION contras for the MATCHED references (this run's PRIMARY
-    // entries).
+    // NOTE (flagged-simplified scope): the ELIMINATION and FX_TRANSLATION_DIFF postings below are
+    // CAPTURED and FLAGGED on the ledger, but they are NOT yet part of a balanced double-entry set
+    // (their own contra/OCI legs are absent) — completing them into full double-entry is the
+    // deferred
+    // #37 accounting-SME gate. See SimplifiedTranslationPolicy.
     Money zeroReporting = Money.ofMinor(0L, reportingCurrency);
     Money eliminatedRevenue = zeroReporting;
     Money eliminatedExpense = zeroReporting;
     for (IntercompanyMatch match : matches) {
-      // Only a strictly well-formed MATCHED P&L pair drives an elimination. A non-blocking
-      // OUT_OF_SCOPE_BALANCE_SHEET ref reaches here (it did NOT block above) but must NOT be
-      // eliminated — it is out of 3a's P&L scope. Skip it; post no contra.
-      if (!match.eliminates()) {
-        continue;
+      List<TranslatedLine> refLegs = translatedByRef.get(match.getIntercompanyRef());
+      if (match.eliminates()) {
+        // SAME-CURRENCY MATCHED pair (3a strict invariant): exactly one REVENUE + one EXPENSE leg,
+        // both strictly positive, equal NATIVE magnitude, two members. Eliminate the TRANSLATED leg
+        // amounts by class. Both legs are in the same source currency, so they translate via the
+        // same AVERAGE rate -> equal translated amounts -> group net unchanged, exactly as in 3a.
+        Money revenueLeg = translatedLegOfType(refLegs, AccountType.REVENUE);
+        Money expenseLeg = translatedLegOfType(refLegs, AccountType.EXPENSE);
+        postElimination(
+            groupId,
+            period,
+            closeRunSeq,
+            match.getIntercompanyRef(),
+            match.revenueLegMember(),
+            match.expenseLegMember(),
+            revenueLeg,
+            expenseLeg,
+            lead);
+        eliminatedRevenue = eliminatedRevenue.plus(revenueLeg);
+        eliminatedExpense = eliminatedExpense.plus(expenseLeg);
+      } else if (match.isCrossCurrency()) {
+        // CROSS-CURRENCY MATCHED pair (SEAM 3b, SIMPLIFIED): the two legs are in different
+        // currencies, so their native magnitudes are not comparable. Each leg is translated into
+        // the
+        // reporting currency at the AVERAGE rate; we eliminate each TRANSLATED leg from its own
+        // account class, then post the residual (translatedRevenueLeg - translatedExpenseLeg)
+        // between the two translated legs as a flagged FX_TRANSLATION_DIFF entry — the
+        // cross-currency
+        // residual is captured and flagged, NEVER silently absorbed. (This is the simplified
+        // policy;
+        // a full IAS-21 treatment of intra-group FX is part of the deferred SME gate — see
+        // SimplifiedTranslationPolicy.)
+        Money revenueLeg = translatedLegOfType(refLegs, AccountType.REVENUE);
+        Money expenseLeg = translatedLegOfType(refLegs, AccountType.EXPENSE);
+        postElimination(
+            groupId,
+            period,
+            closeRunSeq,
+            match.getIntercompanyRef(),
+            match.revenueLegMember(),
+            match.expenseLegMember(),
+            revenueLeg,
+            expenseLeg,
+            lead);
+        eliminatedRevenue = eliminatedRevenue.plus(revenueLeg);
+        eliminatedExpense = eliminatedExpense.plus(expenseLeg);
+        Money fxDiff = revenueLeg.minus(expenseLeg);
+        postFxTranslationDiff(
+            groupId, period, closeRunSeq, match.getIntercompanyRef(), fxDiff, lead);
+        log.info(
+            "Group close groupId={} period={} cross-currency IC ref={} eliminated translated"
+                + " revenueLeg={} expenseLeg={}, FX_TRANSLATION_DIFF residual={} (flagged)",
+            groupId,
+            period,
+            match.getIntercompanyRef(),
+            revenueLeg,
+            expenseLeg,
+            fxDiff);
       }
-      // Guaranteed strictly well-formed: exactly one REVENUE leg + one EXPENSE leg, BOTH strictly
-      // positive, equal magnitude, between two members. Eliminate BY ACCOUNT CLASS using each leg's
-      // OWN validated-positive amount (no abs() — the strict invariant already rejected any
-      // non-positive leg), so each contra EXACTLY offsets what the SIGNED roll-up summed for that
-      // class. For a well-formed pair the two are equal, so group net is unchanged: the internal
-      // sale and the internal purchase both leave the group.
-      Money revenueLeg = match.revenueLegAmount();
-      Money expenseLeg = match.expenseLegAmount();
-      postElimination(
-          groupId,
-          period,
-          closeRunSeq,
-          match.getIntercompanyRef(),
-          // Per-leg traceability: each contra is stamped with the member that owns THAT leg class.
-          match.revenueLegMember(),
-          match.expenseLegMember(),
-          revenueLeg,
-          expenseLeg,
-          lead);
-      eliminatedRevenue = eliminatedRevenue.plus(revenueLeg);
-      eliminatedExpense = eliminatedExpense.plus(expenseLeg);
+      // OUT_OF_SCOPE_BALANCE_SHEET reaches here but neither eliminates() nor isCrossCurrency() — it
+      // is recorded only, posting no contra (unchanged from 3a).
     }
 
-    // (f) COMPUTE: sum the trial balances by account class, then subtract the eliminated internal
-    //     trade. All same-currency by the gate above, so Money.plus never throws here.
-    Money grossRevenue = sumByAccountType(lines, AccountType.REVENUE, reportingCurrency);
-    Money grossExpense = sumByAccountType(lines, AccountType.EXPENSE, reportingCurrency);
+    // (g) COMPUTE: sum the TRANSLATED trial balances by account class, then subtract the eliminated
+    //     internal trade. Every figure is in the reporting currency (translated above), so
+    // Money.plus
+    //     never throws on a currency mismatch.
+    Money grossRevenue =
+        sumTranslatedByAccountType(translatedLines, AccountType.REVENUE, reportingCcy);
+    Money grossExpense =
+        sumTranslatedByAccountType(translatedLines, AccountType.EXPENSE, reportingCcy);
     Money groupRevenue = grossRevenue.minus(eliminatedRevenue);
     Money groupExpense = grossExpense.minus(eliminatedExpense);
+
+    // (h) BALANCE-CHECK + FLAGGED CTA (the integrity gate, SEAM 3b). Each member native book
+    // ALREADY
+    //     balanced (the native balance gate above HELD otherwise), so the ONLY reason the
+    // TRANSLATED
+    //     trial balance does not sum to zero is the closing-vs-average FX effect: balance-sheet
+    // items
+    //     translate at CLOSING, P&L items at AVERAGE. Compute the signed residual of the TRANSLATED
+    //     trial balance and post its negation to the explicitly-flagged CTA / translation-reserve
+    //     account (3950-CTA-TRANSLATION-RESERVE), so the translated set BALANCES — the CTA is now
+    // the
+    //     GENUINE FX effect, NOT a swept-in raw imbalance. GATE the close on it MEANINGFULLY: after
+    //     the CTA posts, INDEPENDENTLY recompute signed(translated TB) + sum(posted CTA) and assert
+    //     zero — the residual is NEVER silently dropped, and the gate is no longer the x + (-x)
+    //     tautology. (This is the SIMPLIFIED balancing device, NOT the IAS-21 CTA = closing net
+    //     assets − opening net assets at the opening rate − average-rate P&L, which needs opening
+    //     balances + historical-rate equity — the deferred SME gate. See
+    // SimplifiedTranslationPolicy.)
+    //
+    //     ONLY for a TRANSLATED (multi-currency) close: a same-currency (3a) close performs no
+    //     translation, so there is no translation residual and no CTA — its (P&L-only) figures are
+    //     consolidated exactly as before (the 3a model never carried full balancing trial balances,
+    //     so a signed-residual CTA must not appear for it). The residual the CTA balances is the
+    //     CLOSING-vs-AVERAGE translation effect, which is zero without translation.
+    Money translatedSignedResidual =
+        usesSimplifiedTranslation
+            ? signedTrialBalanceResidual(translatedLines, reportingCcy)
+            : Money.ofMinor(0L, reportingCcy);
+    if (!translatedSignedResidual.isZero()) {
+      // Every member native book balanced (the gate above HELD otherwise), so this residual is
+      // PURELY the closing-vs-average FX effect — a genuine translation adjustment, NOT a raw
+      // imbalance. Post its negation to the flagged CTA reserve so the translated set reconciles.
+      Money cta = translatedSignedResidual.negate();
+      postCta(groupId, period, closeRunSeq, cta, lead);
+
+      // The integrity GATE (now MEANINGFUL, not the x + (-x) tautology). INDEPENDENTLY recompute
+      // the
+      // signed total of the translated trial balance and ADD the CTA we posted (re-derived from the
+      // ledger account, not reused from `cta`); on a validated-balanced input this must be zero.
+      // The
+      // residual is recomputed from `translatedLines` and the CTA is summed from what actually
+      // landed
+      // in 3950 — two independent paths — so a future refactor that breaks the invariant (e.g.
+      // posts
+      // the wrong CTA magnitude, or lets a native imbalance through) fails LOUD rather than
+      // silently
+      // dropping money.
+      Money recomputedResidual = signedTrialBalanceResidual(translatedLines, reportingCcy);
+      Money postedCta = postedCtaTotal(groupId, period, closeRunSeq, reportingCcy);
+      Money reconciledTotal = recomputedResidual.plus(postedCta);
+      if (!reconciledTotal.isZero()) {
+        throw new IllegalStateException(
+            "Translated consolidation did not balance after the CTA residual: "
+                + reconciledTotal
+                + " (independently recomputed translated residual="
+                + recomputedResidual
+                + " + posted CTA="
+                + postedCta
+                + ", group="
+                + groupId
+                + " period="
+                + period
+                + ")");
+      }
+      log.info(
+          "Group close groupId={} period={} SIMPLIFIED-TRANSLATION CTA posted: residual={} ->"
+              + " 3950-CTA-TRANSLATION-RESERVE (FLAGGED PROVISIONAL — not IAS-21, accounting SME gate)",
+          groupId,
+          period,
+          cta);
+    }
 
     ConsolidationSummary summary =
         new ConsolidationSummary(
@@ -368,13 +592,16 @@ public class GroupCloseWriter {
             groupExpense,
             ConsolidationState.CLOSED,
             usesIllustrative,
+            usesStubFx,
+            usesSimplifiedTranslation,
             closeRunSeq);
     summary.setCompanyId(lead);
     summaryRepository.save(summary);
 
     log.info(
         "Group close groupId={} period={} closeRunSeq={} CLOSED: revenue={} expense={} net={}"
-            + " (eliminated internal trade revenue={} expense={}, illustrative={})",
+            + " (eliminated internal trade revenue={} expense={}, illustrative={}, stubFx={},"
+            + " simplifiedTranslation={})",
         groupId,
         period,
         closeRunSeq,
@@ -383,9 +610,30 @@ public class GroupCloseWriter {
         groupRevenue.minus(groupExpense),
         eliminatedRevenue,
         eliminatedExpense,
-        usesIllustrative);
+        usesIllustrative,
+        usesStubFx,
+        usesSimplifiedTranslation);
 
     return new GroupCloseResult(ConsolidationState.CLOSED, summary.getId(), closeRunSeq, true);
+  }
+
+  // ----------------------------------------------------------------------- translation (SEAM 3b)
+
+  /**
+   * Translates one trial-balance line into the group reporting currency by {@code account_type}
+   * (SEAM 3b — SIMPLIFIED): ASSET / LIABILITY / EQUITY at the CLOSING (period-end) rate; REVENUE /
+   * EXPENSE at the AVERAGE (period) rate. A line already in the reporting currency short-circuits
+   * to the identity inside {@link TranslationService}. A missing rate throws {@link
+   * id.co.nativeapp.finance.fx.MissingFxRateException}, which fails the whole close atomically. See
+   * {@link SimplifiedTranslationPolicy}.
+   */
+  private Translated translate(GroupTrialBalanceLine line, String period, Currency reportingCcy) {
+    return switch (line.getAccountType()) {
+      case ASSET, LIABILITY, EQUITY ->
+          translationService.translateBalance(line.getAmount(), period, reportingCcy);
+      case REVENUE, EXPENSE ->
+          translationService.translateFlow(line.getAmount(), period, reportingCcy);
+    };
   }
 
   // ----------------------------------------------------------------------- intercompany matching
@@ -428,40 +676,30 @@ public class GroupCloseWriter {
    *       fabricate a phantom contra against the wrong class);
    *   <li>EITHER leg amount is ZERO or NEGATIVE ({@code amountMinor <= 0}) -> MALFORMED (a
    *       sign-blind match against a non-positive leg fabricates net);
-   *   <li>a one-revenue+one-expense, both-strictly-positive pair of UNEQUAL magnitude ->
-   *       AMOUNT_MISMATCH;
-   *   <li>a one-revenue+one-expense, both-strictly-positive pair of EQUAL magnitude (same currency)
-   *       -> MATCHED.
+   *   <li>a one-revenue+one-expense, both-strictly-positive, SAME-currency pair of UNEQUAL
+   *       magnitude -> AMOUNT_MISMATCH;
+   *   <li>a one-revenue+one-expense, both-strictly-positive, SAME-currency pair of EQUAL magnitude
+   *       -> MATCHED (eliminated in the shared currency — the 3a strict invariant);
+   *   <li>a one-revenue+one-expense, both-strictly-positive pair in DIFFERENT currencies (SEAM 3b)
+   *       -> MATCHED_CROSS_CURRENCY (non-blocking; eliminated via the translated legs + a flagged
+   *       FX_TRANSLATION_DIFF residual — the native magnitudes are not comparable, so no
+   *       AMOUNT_MISMATCH check applies).
    * </ul>
    *
    * <p>References are processed in a deterministic (sorted) order so the persisted rows and any
-   * derived synthetic ids are reproducible across runs.
+   * derived synthetic ids are reproducible across runs. The {@code IntercompanyMatch} row records
+   * each leg's NATIVE amount + account class (the source of record); the close eliminates the
+   * TRANSLATED amounts.
    */
   private List<IntercompanyMatch> reconcileIntercompany(
-      UUID groupId, String period, int closeRunSeq, List<GroupTrialBalanceLine> lines) {
-    // Group the intercompany legs by ref, preserving a deterministic ref order.
-    Map<String, List<GroupTrialBalanceLine>> byRef = new LinkedHashMap<>();
-    Set<String> refs = new TreeSet<>();
-    for (GroupTrialBalanceLine line : lines) {
-      String ref = line.getIntercompanyRef();
-      if (ref != null) {
-        refs.add(ref);
-      }
-    }
-    for (String ref : refs) {
-      List<GroupTrialBalanceLine> legs =
-          lines.stream()
-              .filter(l -> ref.equals(l.getIntercompanyRef()))
-              .sorted(Comparator.comparing(l -> l.getMemberCompanyId().toString()))
-              .toList();
-      byRef.put(ref, legs);
-    }
+      UUID groupId, String period, int closeRunSeq, List<TranslatedLine> lines) {
+    Map<String, List<TranslatedLine>> byRef = legsByRef(lines);
 
     List<IntercompanyMatch> matches = new ArrayList<>();
-    for (Map.Entry<String, List<GroupTrialBalanceLine>> entry : byRef.entrySet()) {
+    for (Map.Entry<String, List<TranslatedLine>> entry : byRef.entrySet()) {
       String ref = entry.getKey();
-      List<GroupTrialBalanceLine> legs = entry.getValue();
-      GroupTrialBalanceLine legA = legs.get(0);
+      List<TranslatedLine> legs = entry.getValue();
+      TranslatedLine legA = legs.get(0);
 
       // One leg only: the counterparty never reported -> UNMATCHED (nothing to eliminate against).
       if (legs.size() == 1) {
@@ -477,26 +715,24 @@ public class GroupCloseWriter {
         continue;
       }
 
-      GroupTrialBalanceLine legB = legs.get(1);
+      TranslatedLine legB = legs.get(1);
 
       // SELF-DEAL: both lines carry the same ref from the SAME member. Not an intercompany trade
       // between two members; eliminating it would invent a contra against a single member. Block.
-      if (legA.getMemberCompanyId().equals(legB.getMemberCompanyId())) {
+      if (legA.memberCompanyId().equals(legB.memberCompanyId())) {
         matches.add(malformed(groupId, period, ref, legA, legB, closeRunSeq));
         continue;
       }
 
-      // 3a IC SCOPE — P&L ONLY. Classify each leg as P&L (REVENUE/EXPENSE) or balance-sheet
-      // (ASSET/LIABILITY/EQUITY). 3a consolidates only the P&L; a pure balance-sheet IC ref does
-      // not
-      // affect the P&L net.
-      boolean aIsPnl = isPnl(legA.getAccountType());
-      boolean bIsPnl = isPnl(legB.getAccountType());
+      // IC SCOPE — P&L ONLY. Classify each leg as P&L (REVENUE/EXPENSE) or balance-sheet
+      // (ASSET/LIABILITY/EQUITY). The close consolidates only the P&L; a pure balance-sheet IC ref
+      // does not affect the P&L net.
+      boolean aIsPnl = isPnl(legA.accountType());
+      boolean bIsPnl = isPnl(legB.accountType());
 
-      // BOTH legs balance-sheet (e.g. IC receivable=ASSET + IC payable=LIABILITY): OUT OF 3a SCOPE.
-      // A NON-BLOCKING skip — record it, do NOT eliminate it, do NOT block the close. Balance-sheet
-      // IC elimination is a future / SEAM 3b concern; flagging it MALFORMED here would wrongly make
-      // a group with a legitimate IC receivable/payable pair un-closable on its P&L.
+      // BOTH legs balance-sheet (e.g. IC receivable=ASSET + IC payable=LIABILITY): OUT OF P&L
+      // SCOPE.
+      // A NON-BLOCKING skip — record it, do NOT eliminate it, do NOT block the close.
       if (!aIsPnl && !bIsPnl) {
         matches.add(
             classified(
@@ -510,9 +746,7 @@ public class GroupCloseWriter {
         continue;
       }
 
-      // MIXED ref: one P&L leg + one balance-sheet leg. Genuinely malformed (an IC trade is not
-      // part
-      // P&L, part balance-sheet on the same ref) — block rather than half-eliminate.
+      // MIXED ref: one P&L leg + one balance-sheet leg. Genuinely malformed — block.
       if (aIsPnl != bIsPnl) {
         matches.add(malformed(groupId, period, ref, legA, legB, closeRunSeq));
         continue;
@@ -522,31 +756,44 @@ public class GroupCloseWriter {
       // revenue leg (the internal sale) + ONE expense leg (the internal purchase). Two same-class
       // legs (e.g. two REVENUE legs) are NOT eliminable by class — block rather than mis-eliminate.
       boolean oneRevenueOneExpense =
-          (legA.getAccountType() == AccountType.REVENUE
-                  && legB.getAccountType() == AccountType.EXPENSE)
-              || (legA.getAccountType() == AccountType.EXPENSE
-                  && legB.getAccountType() == AccountType.REVENUE);
+          (legA.accountType() == AccountType.REVENUE && legB.accountType() == AccountType.EXPENSE)
+              || (legA.accountType() == AccountType.EXPENSE
+                  && legB.accountType() == AccountType.REVENUE);
       if (!oneRevenueOneExpense) {
         matches.add(malformed(groupId, period, ref, legA, legB, closeRunSeq));
         continue;
       }
 
-      // STRICT non-negativity: the roll-up sums the SIGNED amount, so a ZERO or NEGATIVE leg
-      // (amountMinor <= 0) cannot be eliminated against its abs without fabricating net (a -X
-      // expense leg sits in gross expense while the elimination subtracts a +X). Block it
-      // MALFORMED.
-      // (Equality is on the raw amounts below — both validated strictly positive here, so a
-      // positive
-      // == positive comparison is sign-faithful, no abs() needed.)
-      if (!legA.getAmount().isPositive() || !legB.getAmount().isPositive()) {
+      // STRICT non-negativity (on the NATIVE amounts): a ZERO or NEGATIVE leg fabricates net under
+      // the signed roll-up. Block it MALFORMED.
+      if (!legA.line().getAmount().isPositive() || !legB.line().getAmount().isPositive()) {
         matches.add(malformed(groupId, period, ref, legA, legB, closeRunSeq));
         continue;
       }
 
-      // Both strictly positive, one-revenue+one-expense pair: equal magnitude (same currency) ->
-      // MATCHED, else AMOUNT_MISMATCH.
+      // CROSS-CURRENCY (SEAM 3b): the two legs are in different source currencies, so their native
+      // magnitudes are not comparable for equality. This is NOT an AMOUNT_MISMATCH — it is a
+      // well-formed cross-currency pair, MATCHED_CROSS_CURRENCY: the close translates each leg and
+      // posts the FX residual as a flagged FX_TRANSLATION_DIFF (non-blocking).
+      boolean sameCurrency =
+          legA.line().getAmount().currency().equals(legB.line().getAmount().currency());
+      if (!sameCurrency) {
+        matches.add(
+            classified(
+                groupId,
+                period,
+                ref,
+                legA,
+                legB,
+                IntercompanyMatchState.MATCHED_CROSS_CURRENCY,
+                closeRunSeq));
+        continue;
+      }
+
+      // Both strictly positive, one-revenue+one-expense, SAME-currency pair: equal magnitude ->
+      // MATCHED, else AMOUNT_MISMATCH (the 3a strict invariant, unchanged).
       IntercompanyMatchState state =
-          legA.getAmount().equals(legB.getAmount())
+          legA.line().getAmount().equals(legB.line().getAmount())
               ? IntercompanyMatchState.MATCHED
               : IntercompanyMatchState.AMOUNT_MISMATCH;
       matches.add(
@@ -554,29 +801,69 @@ public class GroupCloseWriter {
               groupId,
               period,
               ref,
-              legA.getMemberCompanyId(),
-              legB.getMemberCompanyId(),
-              legA.getAmount(),
-              legB.getAmount(),
-              legA.getAccountType(),
-              legB.getAccountType(),
+              legA.memberCompanyId(),
+              legB.memberCompanyId(),
+              legA.line().getAmount(),
+              legB.line().getAmount(),
+              legA.accountType(),
+              legB.accountType(),
               state,
               closeRunSeq));
     }
     return matches;
   }
 
+  /**
+   * Groups the intercompany legs by {@code intercompany_ref}, preserving a deterministic ref order
+   * (sorted refs) and a deterministic leg order within a ref (sorted by member id), so the
+   * persisted rows and derived synthetic ids are reproducible. Non-intercompany lines (null ref)
+   * are excluded.
+   */
+  private static Map<String, List<TranslatedLine>> legsByRef(List<TranslatedLine> lines) {
+    Map<String, List<TranslatedLine>> byRef = new LinkedHashMap<>();
+    Set<String> refs = new TreeSet<>();
+    for (TranslatedLine line : lines) {
+      String ref = line.intercompanyRef();
+      if (ref != null) {
+        refs.add(ref);
+      }
+    }
+    for (String ref : refs) {
+      List<TranslatedLine> legs =
+          lines.stream()
+              .filter(l -> ref.equals(l.intercompanyRef()))
+              .sorted(Comparator.comparing(l -> l.memberCompanyId().toString()))
+              .toList();
+      byRef.put(ref, legs);
+    }
+    return byRef;
+  }
+
+  /**
+   * The TRANSLATED amount of the leg of the given account class in a matched ref's two legs. Only
+   * meaningful for an eliminating pair (a one-REVENUE + one-EXPENSE pair), where exactly one leg
+   * has the requested class.
+   */
+  private static Money translatedLegOfType(List<TranslatedLine> refLegs, AccountType type) {
+    return refLegs.stream()
+        .filter(l -> l.accountType() == type)
+        .map(TranslatedLine::translated)
+        .findFirst()
+        .orElseThrow(
+            () -> new IllegalStateException("Matched IC pair missing its " + type + " leg"));
+  }
+
   private static IntercompanyMatch unmatched(
-      UUID groupId, String period, String ref, GroupTrialBalanceLine legA, int closeRunSeq) {
+      UUID groupId, String period, String ref, TranslatedLine legA, int closeRunSeq) {
     return new IntercompanyMatch(
         groupId,
         period,
         ref,
-        legA.getMemberCompanyId(),
+        legA.memberCompanyId(),
         null,
-        legA.getAmount(),
+        legA.line().getAmount(),
         null,
-        legA.getAccountType(),
+        legA.accountType(),
         null,
         IntercompanyMatchState.UNMATCHED,
         closeRunSeq);
@@ -586,8 +873,8 @@ public class GroupCloseWriter {
       UUID groupId,
       String period,
       String ref,
-      GroupTrialBalanceLine legA,
-      GroupTrialBalanceLine legB,
+      TranslatedLine legA,
+      TranslatedLine legB,
       int closeRunSeq) {
     return classified(
         groupId, period, ref, legA, legB, IntercompanyMatchState.MALFORMED, closeRunSeq);
@@ -598,20 +885,20 @@ public class GroupCloseWriter {
       UUID groupId,
       String period,
       String ref,
-      GroupTrialBalanceLine legA,
-      GroupTrialBalanceLine legB,
+      TranslatedLine legA,
+      TranslatedLine legB,
       IntercompanyMatchState state,
       int closeRunSeq) {
     return new IntercompanyMatch(
         groupId,
         period,
         ref,
-        legA.getMemberCompanyId(),
-        legB.getMemberCompanyId(),
-        legA.getAmount(),
-        legB.getAmount(),
-        legA.getAccountType(),
-        legB.getAccountType(),
+        legA.memberCompanyId(),
+        legB.memberCompanyId(),
+        legA.line().getAmount(),
+        legB.line().getAmount(),
+        legA.accountType(),
+        legB.accountType(),
         state,
         closeRunSeq);
   }
@@ -675,8 +962,91 @@ public class GroupCloseWriter {
       String lead) {
     UUID sourceEntryId =
         ConsolidationEntryIds.forElimination(groupId, period, closeRunSeq, elimKey);
-    // Idempotency claim inside the surrounding transaction: a re-close at the same seq derives the
-    // same id and this is a clean no-op (also backstopped by the UNIQUE source_entry_id column).
+    appendPrimary(
+        groupId,
+        period,
+        closeRunSeq,
+        ConsolidationEntryType.ELIMINATION,
+        account,
+        contra,
+        elimKey,
+        sourceMember,
+        sourceEntryId,
+        lead);
+  }
+
+  /**
+   * Posts the SEAM-3b SIMPLIFIED CTA / translation-reserve balancing entry (the residual of the
+   * translated trial balance) to {@link
+   * SimplifiedTranslationPolicy#CTA_TRANSLATION_RESERVE_ACCOUNT}. A PRIMARY entry (reversed
+   * append-only on supersession, exactly like an elimination) with a deterministic id, so a
+   * re-close at the same seq is idempotent. FLAGGED PROVISIONAL — NOT the IAS-21 CTA (see {@link
+   * SimplifiedTranslationPolicy}).
+   */
+  private void postCta(UUID groupId, String period, int closeRunSeq, Money cta, String lead) {
+    UUID sourceEntryId = ConsolidationEntryIds.forCta(groupId, period, closeRunSeq);
+    appendPrimary(
+        groupId,
+        period,
+        closeRunSeq,
+        ConsolidationEntryType.CTA,
+        SimplifiedTranslationPolicy.CTA_TRANSLATION_RESERVE_ACCOUNT,
+        cta,
+        null,
+        null,
+        sourceEntryId,
+        lead);
+  }
+
+  /**
+   * Posts the SEAM-3b cross-currency intercompany FX residual (the difference between the two
+   * TRANSLATED legs of a {@code MATCHED_CROSS_CURRENCY} pair) to {@link
+   * SimplifiedTranslationPolicy#FX_TRANSLATION_DIFF_ACCOUNT} as a flagged {@link
+   * ConsolidationEntryType#FX_TRANSLATION_DIFF} entry — the residual is captured and flagged, never
+   * silently absorbed. A PRIMARY entry with a deterministic per-ref id (idempotent under re-close).
+   */
+  private void postFxTranslationDiff(
+      UUID groupId,
+      String period,
+      int closeRunSeq,
+      String intercompanyRef,
+      Money residual,
+      String lead) {
+    UUID sourceEntryId =
+        ConsolidationEntryIds.forFxTranslationDiff(groupId, period, closeRunSeq, intercompanyRef);
+    appendPrimary(
+        groupId,
+        period,
+        closeRunSeq,
+        ConsolidationEntryType.FX_TRANSLATION_DIFF,
+        SimplifiedTranslationPolicy.FX_TRANSLATION_DIFF_ACCOUNT,
+        residual,
+        intercompanyRef,
+        null,
+        sourceEntryId,
+        lead);
+  }
+
+  /**
+   * Appends ONE PRIMARY consolidation ledger entry of the given {@link ConsolidationEntryType},
+   * claiming its deterministic synthetic id in the {@link ProcessedEventStore} (idempotent: a
+   * re-close at the same seq derives the same id and this is a clean no-op, also backstopped by the
+   * UNIQUE {@code source_entry_id} column). The shared posting primitive behind every PRIMARY entry
+   * — eliminations, the CTA, and the cross-currency FX_TRANSLATION_DIFF — so they all reverse
+   * uniformly on supersession via {@link #reversePriorRun}.
+   */
+  @SuppressWarnings("checkstyle:ParameterNumber")
+  private void appendPrimary(
+      UUID groupId,
+      String period,
+      int closeRunSeq,
+      ConsolidationEntryType entryType,
+      String account,
+      Money amount,
+      String intercompanyRef,
+      UUID sourceMember,
+      UUID sourceEntryId,
+      String lead) {
     processedEvents.processOnce(
         sourceEntryId,
         () -> {
@@ -684,10 +1054,10 @@ public class GroupCloseWriter {
               new ConsolidationLedgerEntry(
                   groupId,
                   period,
-                  ConsolidationEntryType.ELIMINATION,
+                  entryType,
                   account,
-                  contra,
-                  elimKey,
+                  amount,
+                  intercompanyRef,
                   sourceMember,
                   ConsolidationPostingRole.PRIMARY,
                   closeRunSeq,
@@ -701,6 +1071,7 @@ public class GroupCloseWriter {
    * Reverses every PRIMARY entry of a prior close run append-only (#23): one REVERSAL contra per
    * PRIMARY (amount negated, role REVERSAL, a deterministic collision-free synthetic id).
    * Idempotent — a re-delivered superseding close derives the same reversal ids and claims nothing.
+   * Reverses CTA / FX_TRANSLATION_DIFF entries uniformly with eliminations (all PRIMARY rows).
    */
   private void reversePriorRun(
       UUID groupId, String period, int closeRunSeq, int priorSeq, String lead) {
@@ -731,14 +1102,111 @@ public class GroupCloseWriter {
 
   // ----------------------------------------------------------------------- compute helpers
 
-  private Money sumByAccountType(
-      List<GroupTrialBalanceLine> lines, AccountType type, String reportingCurrency) {
-    Money sum = Money.ofMinor(0L, reportingCurrency);
-    for (GroupTrialBalanceLine line : lines) {
-      if (line.getAccountType() == type) {
-        // Same-currency by the gate above; Money.plus is exact and never throws here.
-        sum = sum.plus(line.getAmount());
+  /**
+   * Sums the TRANSLATED amounts of the lines of one account class (every figure is already in the
+   * reporting currency, so {@code Money.plus} never throws on a mismatch).
+   */
+  private static Money sumTranslatedByAccountType(
+      List<TranslatedLine> lines, AccountType type, Currency reportingCcy) {
+    Money sum = Money.ofMinor(0L, reportingCcy);
+    for (TranslatedLine line : lines) {
+      if (line.accountType() == type) {
+        sum = sum.plus(line.translated());
       }
+    }
+    return sum;
+  }
+
+  /**
+   * The SIGNED residual of the TRANSLATED trial balance under the double-entry sign convention
+   * (DEBIT classes positive, CREDIT classes negative): {@code (ASSET + EXPENSE) − (LIABILITY +
+   * EQUITY + REVENUE)}, all translated.
+   *
+   * <p>A trial balance in the member's FUNCTIONAL currency sums these signed amounts to ZERO
+   * (debits = credits). After translation — balance-sheet at CLOSING, P&amp;L at AVERAGE — the
+   * signed total is no longer zero; that residual is the SIMPLIFIED translation adjustment,
+   * balanced to the flagged CTA reserve so the consolidated set reconciles. (This is the simplified
+   * balancing device, NOT the IAS-21 CTA — see {@link SimplifiedTranslationPolicy}.)
+   */
+  private static Money signedTrialBalanceResidual(
+      List<TranslatedLine> lines, Currency reportingCcy) {
+    Money signed = Money.ofMinor(0L, reportingCcy);
+    for (TranslatedLine line : lines) {
+      Money amount = line.translated();
+      signed = applySignConvention(signed, line.accountType(), amount);
+    }
+    return signed;
+  }
+
+  /**
+   * The DEBIT/CREDIT sign convention applied to one line's magnitude: DEBIT-normal classes (ASSET,
+   * EXPENSE) add positively; CREDIT-normal classes (LIABILITY, EQUITY, REVENUE) subtract. The
+   * magnitudes are stored positive; the sign is applied here, not at ingest. Shared by the
+   * post-translation residual (in the reporting currency) and the per-member NATIVE residual (in
+   * the member's functional currency).
+   */
+  private static Money applySignConvention(Money running, AccountType type, Money magnitude) {
+    return switch (type) {
+      case ASSET, EXPENSE -> running.plus(magnitude);
+      case LIABILITY, EQUITY, REVENUE -> running.minus(magnitude);
+    };
+  }
+
+  /**
+   * The active members (sorted, deterministic) whose NATIVE trial balance does NOT pass the SEAM-3b
+   * pre-translation gate: EITHER its signed double-entry residual in its OWN functional currency is
+   * non-zero (debits ≠ credits — its books do not balance), OR the member published it {@code
+   * reconciled = false}. An empty result means every member book balances natively and is
+   * reconciled, so the close may translate and the post-translation residual is PURELY the
+   * closing-vs-average FX effect (never a swept-in raw imbalance).
+   *
+   * <p>The native residual is computed PER MEMBER in that member's functional currency (every line
+   * of one member is in one currency — the member's base currency — so {@code Money.plus}/{@code
+   * minus} never cross currencies here). A member with no lines cannot reach this method (the
+   * member-completeness gate already HELD).
+   */
+  private static List<UUID> unbalancedNativeMembers(
+      List<GroupTrialBalanceLine> lines, Set<UUID> activeMemberIds) {
+    // member -> running native signed residual (in the member's functional currency).
+    Map<UUID, Money> nativeResidualByMember = new LinkedHashMap<>();
+    // member -> whether the member published reconciled (member-level, identical across its lines).
+    Map<UUID, Boolean> reconciledByMember = new LinkedHashMap<>();
+    for (GroupTrialBalanceLine line : lines) {
+      UUID member = line.getMemberCompanyId();
+      Money amount = line.getAmount();
+      Money running =
+          nativeResidualByMember.computeIfAbsent(member, m -> Money.ofMinor(0L, amount.currency()));
+      nativeResidualByMember.put(
+          member, applySignConvention(running, line.getAccountType(), amount));
+      reconciledByMember.merge(member, line.isReconciled(), Boolean::logicalAnd);
+    }
+    Set<UUID> unbalanced = new TreeSet<>();
+    for (UUID member : activeMemberIds) {
+      Money residual = nativeResidualByMember.get(member);
+      boolean reconciled = Boolean.TRUE.equals(reconciledByMember.get(member));
+      // A non-zero native residual (books do not balance) OR a member-reported reconciled=false
+      // HOLDs
+      // the close. residual is non-null: a member in activeMemberIds always has lines here (the
+      // completeness gate already returned otherwise).
+      if (residual == null || !residual.isZero() || !reconciled) {
+        unbalanced.add(member);
+      }
+    }
+    return List.copyOf(unbalanced);
+  }
+
+  /**
+   * Sums the PRIMARY {@link ConsolidationEntryType#CTA} amounts this close run ACTUALLY posted,
+   * re-read from the ledger (independently of the in-memory CTA the close computed). The SEAM-3b
+   * integrity gate adds this to an independently-recomputed translated-TB residual and asserts zero
+   * — a real check on a validated-balanced input, not the {@code x + (-x)} tautology.
+   */
+  private Money postedCtaTotal(
+      UUID groupId, String period, int closeRunSeq, Currency reportingCcy) {
+    Money sum = Money.ofMinor(0L, reportingCcy);
+    for (ConsolidationLedgerEntry cta :
+        ledgerRepository.findCtaPrimaries(groupId, period, closeRunSeq)) {
+      sum = sum.plus(cta.getAmount());
     }
     return sum;
   }

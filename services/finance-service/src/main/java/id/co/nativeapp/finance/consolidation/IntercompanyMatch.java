@@ -198,22 +198,33 @@ public class IntercompanyMatch extends Auditable {
 
   /**
    * Whether this reference blocks the close. Everything other than a well-formed MATCHED pair
-   * blocks EXCEPT {@link IntercompanyMatchState#OUT_OF_SCOPE_BALANCE_SHEET}, which is a
-   * non-blocking out-of-3a-scope skip (a pure balance-sheet IC ref does not affect the P&amp;L net
-   * 3a consolidates, so it must not make the group un-closable).
+   * blocks EXCEPT {@link IntercompanyMatchState#OUT_OF_SCOPE_BALANCE_SHEET} (a pure balance-sheet
+   * IC ref does not affect the P&amp;L net) and {@link
+   * IntercompanyMatchState#MATCHED_CROSS_CURRENCY} (a well-formed cross-currency P&amp;L pair the
+   * SEAM-3b translation path eliminates) — both non-blocking, so a non-blocking ref never makes the
+   * group un-closable.
    */
   public boolean blocksClose() {
     return state != IntercompanyMatchState.MATCHED
-        && state != IntercompanyMatchState.OUT_OF_SCOPE_BALANCE_SHEET;
+        && state != IntercompanyMatchState.OUT_OF_SCOPE_BALANCE_SHEET
+        && state != IntercompanyMatchState.MATCHED_CROSS_CURRENCY;
   }
 
   /**
-   * Whether this reference drives an elimination contra (only a strictly well-formed MATCHED
-   * P&amp;L pair does). A non-blocking {@link IntercompanyMatchState#OUT_OF_SCOPE_BALANCE_SHEET}
-   * skip is recorded but NEVER eliminated.
+   * Whether this reference drives a SAME-CURRENCY elimination contra (only a strictly well-formed
+   * MATCHED same-currency P&amp;L pair does). A {@link
+   * IntercompanyMatchState#MATCHED_CROSS_CURRENCY} pair is eliminated via the SEAM-3b
+   * cross-currency translation path (translated legs + an FX_TRANSLATION_DIFF residual), NOT here;
+   * an {@link IntercompanyMatchState#OUT_OF_SCOPE_BALANCE_SHEET} skip is recorded but NEVER
+   * eliminated.
    */
   public boolean eliminates() {
     return state == IntercompanyMatchState.MATCHED;
+  }
+
+  /** Whether this reference is a well-formed CROSS-currency P&amp;L pair (SEAM 3b). */
+  public boolean isCrossCurrency() {
+    return state == IntercompanyMatchState.MATCHED_CROSS_CURRENCY;
   }
 
   /**

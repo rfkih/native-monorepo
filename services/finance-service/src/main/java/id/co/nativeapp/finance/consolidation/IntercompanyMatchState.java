@@ -28,16 +28,26 @@ package id.co.nativeapp.finance.consolidation;
  *       NOT affect the P&amp;L net. It is a NON-BLOCKING, out-of-3a-scope SKIP: it is recorded, NOT
  *       eliminated, and does NOT block the close (balance-sheet IC elimination is a future / SEAM
  *       3b concern).
+ *   <li>{@link #MATCHED_CROSS_CURRENCY} — (SEAM 3b, SIMPLIFIED) a well-formed P&amp;L pair (exactly
+ *       one strictly-positive REVENUE leg + one strictly-positive EXPENSE leg, two different
+ *       members) whose two legs are in DIFFERENT currencies. The native magnitudes cannot be
+ *       compared for equality, so the close does NOT AMOUNT_MISMATCH-block it; instead it
+ *       TRANSLATES each leg into the reporting currency (AVERAGE rate), eliminates the translated
+ *       amounts, and posts the residual between the two translated legs as a flagged {@link
+ *       ConsolidationEntryType#FX_TRANSLATION_DIFF} entry (never silently absorbed). See {@link
+ *       SimplifiedTranslationPolicy}.
  * </ul>
  *
  * <p>{@link #UNMATCHED}, {@link #AMOUNT_MISMATCH} and {@link #MALFORMED} block the close (default
  * block — money is never eliminated against nothing, nor eliminated wrongly). {@link
- * #OUT_OF_SCOPE_BALANCE_SHEET} is the sole NON-blocking non-MATCHED state.
+ * #OUT_OF_SCOPE_BALANCE_SHEET} and {@link #MATCHED_CROSS_CURRENCY} are the NON-blocking non-MATCHED
+ * states.
  */
 public enum IntercompanyMatchState {
   MATCHED,
   UNMATCHED,
   AMOUNT_MISMATCH,
   MALFORMED,
-  OUT_OF_SCOPE_BALANCE_SHEET
+  OUT_OF_SCOPE_BALANCE_SHEET,
+  MATCHED_CROSS_CURRENCY
 }

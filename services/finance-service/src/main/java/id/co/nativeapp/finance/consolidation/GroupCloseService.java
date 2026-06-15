@@ -7,9 +7,12 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 
 /**
- * Orchestrates a group's SINGLE-CURRENCY consolidation close (P3d SEAM 3a) — resolves the group's
- * LEAD company, binds the two-GUC group scope, and delegates the transactional close to the proxied
- * {@link GroupCloseWriter}.
+ * Orchestrates a group's consolidation close (P3d SEAM 3a + 3b — MULTI-CURRENCY,
+ * FLAGGED-SIMPLIFIED) — resolves the group's LEAD company, binds the two-GUC group scope, and
+ * delegates the transactional close to the proxied {@link GroupCloseWriter}. A multi-currency group
+ * is now SUPPORTED via the simplified, flagged translation path ({@link
+ * SimplifiedTranslationPolicy}); each member book must balance in its own functional currency
+ * before it consolidates.
  *
  * <p><strong>This seam exposes the close as a callable SERVICE method, not yet an authz-gated
  * endpoint</strong> (the group authz endpoint + the {@code ConsolidationClosed} producer are SEAM

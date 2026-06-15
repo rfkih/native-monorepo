@@ -46,12 +46,28 @@ final class GroupCloseFixtures {
             UUID.randomUUID(), groupId, member, "ADDED", effectiveFrom, effectiveTo));
   }
 
-  /** Ingests a member trial balance for the period (one or more lines). */
+  /** Ingests a member trial balance for the period (one or more lines), published reconciled. */
   void ingestTrialBalance(
       UUID groupId, UUID member, String period, String currency, List<TrialBalanceLine> lines) {
     ingestService.handle(
         new TrialBalancePublishedEvent(
             UUID.randomUUID(), member, groupId, period, currency, true, false, lines));
+  }
+
+  /**
+   * Ingests a member trial balance, publishing it with an explicit {@code reconciled} flag — used
+   * to drive the SEAM-3b native-balance gate (a {@code reconciled = false} member HOLDs the close).
+   */
+  void ingestTrialBalance(
+      UUID groupId,
+      UUID member,
+      String period,
+      String currency,
+      boolean reconciled,
+      List<TrialBalanceLine> lines) {
+    ingestService.handle(
+        new TrialBalancePublishedEvent(
+            UUID.randomUUID(), member, groupId, period, currency, reconciled, false, lines));
   }
 
   /** Ingests a member trial balance, marking it illustrative-placeholder-derived. */
@@ -70,6 +86,16 @@ final class GroupCloseFixtures {
 
   static TrialBalanceLine expense(long amountMinor, String currency) {
     return new TrialBalanceLine("6000", "EXPENSE", "EXPENSE", amountMinor, currency, null, null);
+  }
+
+  /** A plain (non-intercompany) ASSET line — a balance-sheet DEBIT (translated at CLOSING). */
+  static TrialBalanceLine asset(long amountMinor, String currency) {
+    return new TrialBalanceLine("1000", "ASSET", "ASSET", amountMinor, currency, null, null);
+  }
+
+  /** A plain (non-intercompany) EQUITY line — a balance-sheet CREDIT (translated at CLOSING). */
+  static TrialBalanceLine equity(long amountMinor, String currency) {
+    return new TrialBalanceLine("3000", "EQUITY", "EQUITY", amountMinor, currency, null, null);
   }
 
   /** An intercompany REVENUE leg (the internal sale) tagged with a counterparty + reference. */

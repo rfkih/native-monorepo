@@ -181,26 +181,52 @@ class GroupCloseTest extends PostgresRlsTestBase {
   }
 
   @Test
-  void aMultiCurrencyGroupIsCleanlyRejectedNotSilentlySummed() {
+  void aMultiCurrencyGroupIsTranslatedAndClosedUnderTheFlaggedSimplifiedPolicyNotRejected() {
+    // SEAM 3b: a multi-currency group is no longer rejected MULTI_CURRENCY_UNSUPPORTED — it is
+    // TRANSLATED into the reporting currency under the SIMPLIFIED, FLAGGED policy and CLOSED. Each
+    // member's trial balance BALANCES in its own functional currency (so the only residual is the
+    // FX effect of translating BS at CLOSING + P&L at AVERAGE), and that residual lands in the
+    // flagged CTA reserve (3950). See GroupCloseMultiCurrencyTest for the full machinery; this is
+    // the regression that the 3a hard stop is GONE.
     UUID groupId = UUID.randomUUID();
     UUID lead = UUID.randomUUID();
     UUID memberIdr = UUID.randomUUID();
     UUID memberUsd = UUID.randomUUID();
 
-    // Group reports in IDR; member USD's base currency differs -> 3b territory, reject cleanly.
     fx.defineGroup(groupId, lead, "IDR");
     fx.addMember(groupId, memberIdr, LocalDate.of(2026, 1, 1));
     fx.addMember(groupId, memberUsd, LocalDate.of(2026, 1, 1));
 
-    fx.ingestTrialBalance(groupId, memberIdr, PERIOD, "IDR", List.of(revenue(10_000_000L, "IDR")));
-    fx.ingestTrialBalance(groupId, memberUsd, PERIOD, "USD", List.of(revenue(500_00L, "USD")));
+    // IDR member (reporting = IDR -> identity translation), balances: ASSET 6M = REVENUE 10M -
+    // EXPENSE 4M.
+    fx.ingestTrialBalance(
+        groupId,
+        memberIdr,
+        PERIOD,
+        "IDR",
+        List.of(
+            GroupCloseFixtures.asset(6_000_000L, "IDR"),
+            revenue(10_000_000L, "IDR"),
+            expense(4_000_000L, "IDR")));
+    // USD member, balances in USD: ASSET $300 = REVENUE $500 - EXPENSE $200.
+    fx.ingestTrialBalance(
+        groupId,
+        memberUsd,
+        PERIOD,
+        "USD",
+        List.of(
+            GroupCloseFixtures.asset(300_00L, "USD"),
+            revenue(500_00L, "USD"),
+            expense(200_00L, "USD")));
 
     GroupCloseResult result = closeService.close(groupId, PERIOD, 1);
 
-    assertThat(result.state()).isEqualTo(ConsolidationState.MULTI_CURRENCY_UNSUPPORTED);
-    assertThat(summaryStateAsAdmin(groupId)).isEqualTo("MULTI_CURRENCY_UNSUPPORTED");
-    // No silent sum, no eliminations.
-    assertThat(ledgerCountAsAdmin(groupId)).isZero();
+    // CLOSED (flagged), NOT rejected. The retired MULTI_CURRENCY_UNSUPPORTED state is never
+    // written.
+    assertThat(result.isClosed()).isTrue();
+    assertThat(summaryStateAsAdmin(groupId)).isEqualTo("CLOSED");
+    assertThat(summaryFlagAsAdmin(groupId, "uses_simplified_translation_policy")).isTrue();
+    assertThat(summaryFlagAsAdmin(groupId, "uses_stub_fx")).isTrue();
   }
 
   @Test

@@ -48,7 +48,7 @@ public class ConsolidationLedgerEntry extends Auditable {
   private String period;
 
   @Enumerated(EnumType.STRING)
-  @Column(name = "entry_type", nullable = false, updatable = false, length = 16)
+  @Column(name = "entry_type", nullable = false, updatable = false, length = 20)
   private ConsolidationEntryType entryType;
 
   @Column(name = "gl_account_code", nullable = false, updatable = false, length = 32)

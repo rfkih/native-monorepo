@@ -89,6 +89,16 @@ public class GroupTrialBalanceLine extends Auditable {
   @Column(name = "uses_illustrative_rules", nullable = false, updatable = false)
   private boolean usesIllustrativeRules;
 
+  /**
+   * Whether the MEMBER published this trial balance as reconciled (debits == credits in its own
+   * functional currency), mirrored from {@code TrialBalancePublished.reconciled}. The SEAM-3b close
+   * HOLDs ({@code MEMBER_TRIAL_BALANCE_UNBALANCED}) rather than consolidate a member that reported
+   * {@code reconciled = false} — like the member-completeness gate. Stamped per line (every line of
+   * one event carries the same member-level flag); the close reads any line of the member.
+   */
+  @Column(name = "reconciled", nullable = false, updatable = false)
+  private boolean reconciled;
+
   @Column(name = "source_event_id", nullable = false, updatable = false)
   private UUID sourceEventId;
 
@@ -109,6 +119,8 @@ public class GroupTrialBalanceLine extends Auditable {
    * @param relatedPartyCounterpartyId the intercompany counterparty, or {@code null}
    * @param intercompanyRef a free-form intercompany reference, or {@code null}
    * @param usesIllustrativeRules whether the figure is illustrative-placeholder-derived
+   * @param reconciled whether the member published the trial balance as reconciled (debits ==
+   *     credits in its functional currency)
    * @param sourceEventId the {@code TrialBalancePublished} event UUID (the idempotency key)
    */
   @SuppressWarnings("checkstyle:ParameterNumber")
@@ -123,6 +135,7 @@ public class GroupTrialBalanceLine extends Auditable {
       UUID relatedPartyCounterpartyId,
       String intercompanyRef,
       boolean usesIllustrativeRules,
+      boolean reconciled,
       UUID sourceEventId) {
     this.id = UUID.randomUUID();
     this.groupId = Objects.requireNonNull(groupId, "groupId");
@@ -135,6 +148,7 @@ public class GroupTrialBalanceLine extends Auditable {
     this.relatedPartyCounterpartyId = relatedPartyCounterpartyId;
     this.intercompanyRef = intercompanyRef;
     this.usesIllustrativeRules = usesIllustrativeRules;
+    this.reconciled = reconciled;
     this.sourceEventId = Objects.requireNonNull(sourceEventId, "sourceEventId");
   }
 
@@ -184,6 +198,15 @@ public class GroupTrialBalanceLine extends Auditable {
   /** Whether the figure is derived from illustrative-placeholder statutory data. */
   public boolean isUsesIllustrativeRules() {
     return usesIllustrativeRules;
+  }
+
+  /**
+   * Whether the member published this trial balance as reconciled (debits == credits in its
+   * functional currency). A {@code false} here HOLDs the SEAM-3b close ({@code
+   * MEMBER_TRIAL_BALANCE_UNBALANCED}) — an unreconciled member is not consolidated.
+   */
+  public boolean isReconciled() {
+    return reconciled;
   }
 
   public UUID getSourceEventId() {

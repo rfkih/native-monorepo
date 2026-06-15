@@ -71,6 +71,16 @@ public class ConsolidationSummary extends Auditable {
   @Column(name = "uses_illustrative_rules", nullable = false)
   private boolean usesIllustrativeRules;
 
+  /**
+   * (P3d SEAM 3b) Whether this close translated any member figures under the SIMPLIFIED, FLAGGED
+   * multi-currency policy ({@link SimplifiedTranslationPolicy}). Sticky/monotonic: true for any
+   * multi-currency / translated close, so a future dashboard badges the consolidation PROVISIONAL
+   * ("needs accounting sign-off"). A same-currency (3a) close leaves it false — no translation
+   * happened.
+   */
+  @Column(name = "uses_simplified_translation_policy", nullable = false)
+  private boolean usesSimplifiedTranslationPolicy;
+
   @Column(name = "close_run_seq", nullable = false, updatable = false)
   private int closeRunSeq;
 
@@ -79,9 +89,9 @@ public class ConsolidationSummary extends Auditable {
   }
 
   /**
-   * Creates a consolidation summary for one close run. The figures are already in the reporting
-   * currency (3a is same-currency; FX is 3b). {@code group_net} is derived as {@code revenue -
-   * expense} and must share the reporting currency.
+   * Creates a SAME-CURRENCY (3a) / held consolidation summary: no FX, no simplified translation.
+   * The figures are already in the reporting currency. {@code group_net} is derived as {@code
+   * revenue - expense} and must share the reporting currency.
    *
    * @param groupId the consolidation group
    * @param period the accounting period {@code YYYY-MM}
@@ -102,12 +112,53 @@ public class ConsolidationSummary extends Auditable {
       ConsolidationState state,
       boolean usesIllustrativeRules,
       int closeRunSeq) {
+    this(
+        groupId,
+        period,
+        reportingCurrency,
+        groupRevenue,
+        groupExpense,
+        state,
+        usesIllustrativeRules,
+        false,
+        false,
+        closeRunSeq);
+  }
+
+  /**
+   * Creates a consolidation summary for one close run, carrying the SEAM-3b multi-currency flags.
+   * {@code group_net} is derived as {@code revenue - expense} and must share the reporting
+   * currency.
+   *
+   * @param groupId the consolidation group
+   * @param period the accounting period {@code YYYY-MM}
+   * @param reportingCurrency the group's reporting ISO-4217 currency (every amount is in it)
+   * @param groupRevenue the post-elimination consolidated revenue (in the reporting currency)
+   * @param groupExpense the post-elimination consolidated expense (in the reporting currency)
+   * @param state the close lifecycle state
+   * @param usesIllustrativeRules sticky-OR from the member trial balances
+   * @param usesStubFx sticky-OR across every translated line (true if any applied rate was a stub)
+   * @param usesSimplifiedTranslationPolicy true for any multi-currency / translated close (sticky)
+   * @param closeRunSeq the close run that produced this summary
+   */
+  @SuppressWarnings("checkstyle:ParameterNumber")
+  public ConsolidationSummary(
+      UUID groupId,
+      String period,
+      String reportingCurrency,
+      Money groupRevenue,
+      Money groupExpense,
+      ConsolidationState state,
+      boolean usesIllustrativeRules,
+      boolean usesStubFx,
+      boolean usesSimplifiedTranslationPolicy,
+      int closeRunSeq) {
     Objects.requireNonNull(reportingCurrency, "reportingCurrency");
     Objects.requireNonNull(groupRevenue, "groupRevenue");
     Objects.requireNonNull(groupExpense, "groupExpense");
     // All three amounts must share the reporting currency. Money.minus throws on a mismatch — the
-    // last-line defence that net cannot silently mix currencies (3a is same-currency by
-    // construction).
+    // last-line defence that net cannot silently mix currencies (post-translation every figure is
+    // in the reporting currency by construction).
     Money net = groupRevenue.minus(groupExpense);
     this.id = UUID.randomUUID();
     this.groupId = Objects.requireNonNull(groupId, "groupId");
@@ -117,8 +168,9 @@ public class ConsolidationSummary extends Auditable {
     this.groupExpenseMinor = groupExpense.amountMinor();
     this.groupNetMinor = net.amountMinor();
     this.state = Objects.requireNonNull(state, "state");
-    this.usesStubFx = false; // 3a writes no FX
+    this.usesStubFx = usesStubFx;
     this.usesIllustrativeRules = usesIllustrativeRules;
+    this.usesSimplifiedTranslationPolicy = usesSimplifiedTranslationPolicy;
     this.closeRunSeq = closeRunSeq;
   }
 
@@ -179,6 +231,15 @@ public class ConsolidationSummary extends Auditable {
 
   public boolean isUsesIllustrativeRules() {
     return usesIllustrativeRules;
+  }
+
+  /**
+   * Whether this close translated any member figures under the SIMPLIFIED, FLAGGED multi-currency
+   * policy (SEAM 3b). True means the consolidation is PROVISIONAL — see {@link
+   * SimplifiedTranslationPolicy}.
+   */
+  public boolean isUsesSimplifiedTranslationPolicy() {
+    return usesSimplifiedTranslationPolicy;
   }
 
   public int getCloseRunSeq() {

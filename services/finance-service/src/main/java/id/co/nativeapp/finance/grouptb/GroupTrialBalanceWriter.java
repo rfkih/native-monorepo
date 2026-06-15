@@ -89,6 +89,7 @@ public class GroupTrialBalanceWriter {
               line.relatedPartyCounterpartyId(),
               line.intercompanyRef(),
               event.usesIllustrativeRules(),
+              event.reconciled(),
               event.eventId());
       row.setCompanyId(leadTenant);
       repository.save(row);
