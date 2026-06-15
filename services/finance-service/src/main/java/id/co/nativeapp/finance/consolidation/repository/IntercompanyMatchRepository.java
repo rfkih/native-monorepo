@@ -32,11 +32,21 @@ public interface IntercompanyMatchRepository extends JpaRepository<IntercompanyM
       @Param("closeRunSeq") int closeRunSeq);
 
   /**
-   * The number of UNRECONCILED intercompany references in a close run — those whose {@link
-   * IntercompanyMatch#getState()} is a BLOCKING state ({@code UNMATCHED} / {@code AMOUNT_MISMATCH}
-   * / {@code MALFORMED}). The group read surface surfaces this count (and the boolean "all
-   * reconciled?") so a UI can flag a held close, NEVER a member's standalone figure. Scoped by the
-   * two-GUC RLS (rule 5) plus the explicit defense-in-depth predicates.
+   * The number of UNRECONCILED (close-BLOCKING) intercompany references in a close run — those
+   * whose {@link IntercompanyMatch#getState()} is a state that holds the close back. The group read
+   * surface surfaces this count (and the boolean "all reconciled?") so a UI can flag a held close,
+   * NEVER a member's standalone figure. Scoped by the two-GUC RLS (rule 5) plus the explicit
+   * defense-in-depth predicates.
+   *
+   * <p><strong>Defined by the COMPLEMENT of the NON-blocking set</strong> ({@code MATCHED}, {@code
+   * OUT_OF_SCOPE_BALANCE_SHEET}, {@code MATCHED_CROSS_CURRENCY}) rather than by an explicit
+   * blocking set ({@code UNMATCHED} / {@code AMOUNT_MISMATCH} / {@code MALFORMED}). This tracks
+   * {@link IntercompanyMatch#blocksClose()} BY CONSTRUCTION: a FUTURE blocking state added to
+   * {@link IntercompanyMatchState} counts as unreconciled here automatically, so the READ badge can
+   * never report "all reconciled" on a close the WRITER held back on a state this query forgot to
+   * list. The non-blocking set is the small, stable allow-list — it changes only on a deliberate
+   * decision that a new state is NON-blocking, which is exactly when {@code blocksClose()} must
+   * also change.
    */
   @Query(
       """
@@ -44,10 +54,10 @@ public interface IntercompanyMatchRepository extends JpaRepository<IntercompanyM
        WHERE m.groupId = :groupId
          AND m.period = :period
          AND m.closeRunSeq = :closeRunSeq
-         AND m.state IN (
-           id.co.nativeapp.finance.consolidation.domain.IntercompanyMatchState.UNMATCHED,
-           id.co.nativeapp.finance.consolidation.domain.IntercompanyMatchState.AMOUNT_MISMATCH,
-           id.co.nativeapp.finance.consolidation.domain.IntercompanyMatchState.MALFORMED)
+         AND m.state NOT IN (
+           id.co.nativeapp.finance.consolidation.domain.IntercompanyMatchState.MATCHED,
+           id.co.nativeapp.finance.consolidation.domain.IntercompanyMatchState.OUT_OF_SCOPE_BALANCE_SHEET,
+           id.co.nativeapp.finance.consolidation.domain.IntercompanyMatchState.MATCHED_CROSS_CURRENCY)
       """)
   long countUnreconciledByCloseRun(
       @Param("groupId") UUID groupId,

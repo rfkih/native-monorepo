@@ -471,6 +471,192 @@ class GroupCloseTest extends PostgresRlsTestBase {
     assertThat(summaryMinorAsAdmin(groupId, "group_net_minor")).isEqualTo(7_000_000L);
     // One revenue contra (-3M) + one expense contra (-3M).
     assertThat(primaryEliminationSumAsAdmin(groupId)).isEqualTo(-6_000_000L);
+
+    // ACCOUNT-LEVEL ledger breakdown (#40): not just the aggregate -6M, but exactly ONE PRIMARY
+    // contra on the IC-REVENUE-ELIM account = -3M AND exactly ONE on the IC-EXPENSE-ELIM account =
+    // -3M. This locks that the revenue leg eliminates from gross REVENUE and the expense leg from
+    // gross EXPENSE SEPARATELY (eliminate-by-class), not both from one account class.
+    assertThat(primaryCountForAccountAsAdmin(groupId, "3900-IC-REVENUE-ELIM")).isEqualTo(1L);
+    assertThat(primarySumForAccountAsAdmin(groupId, "3900-IC-REVENUE-ELIM")).isEqualTo(-3_000_000L);
+    assertThat(primaryCountForAccountAsAdmin(groupId, "3910-IC-EXPENSE-ELIM")).isEqualTo(1L);
+    assertThat(primarySumForAccountAsAdmin(groupId, "3910-IC-EXPENSE-ELIM")).isEqualTo(-3_000_000L);
+  }
+
+  @Test
+  void aZeroAmountIntercompanyLegBlocksTheCloseAsMalformed() {
+    // ELIMINATION INVARIANT (#40): a leg amount that is ZERO (amountMinor == 0) is not a real
+    // intercompany trade — a sign-blind match against a non-positive leg fabricates net under the
+    // signed roll-up. The strict positivity guard (amount.isPositive()) rejects it -> MALFORMED,
+    // so the close BLOCKS: no elimination, no CLOSED summary.
+    UUID groupId = UUID.randomUUID();
+    UUID lead = UUID.randomUUID();
+    UUID memberA = UUID.randomUUID();
+    UUID memberB = UUID.randomUUID();
+
+    fx.defineGroup(groupId, lead, "IDR");
+    fx.addMember(groupId, memberA, LocalDate.of(2026, 1, 1));
+    fx.addMember(groupId, memberB, LocalDate.of(2026, 1, 1));
+
+    // A reports a ZERO IC revenue leg; B reports a matching IC expense leg. The zero leg is
+    // non-positive -> MALFORMED.
+    fx.ingestTrialBalance(
+        groupId,
+        memberA,
+        PERIOD,
+        "IDR",
+        List.of(revenue(10_000_000L, "IDR"), intercompanyRevenue(0L, "IDR", memberB, "IC-ZERO")));
+    fx.ingestTrialBalance(
+        groupId,
+        memberB,
+        PERIOD,
+        "IDR",
+        List.of(
+            expense(2_000_000L, "IDR"),
+            intercompanyExpense(3_000_000L, "IDR", memberA, "IC-ZERO")));
+
+    GroupCloseResult result = closeService.close(groupId, PERIOD, 1);
+
+    assertThat(result.state()).isEqualTo(ConsolidationState.INTERCOMPANY_UNRECONCILED);
+    assertThat(matchStateAsAdmin(groupId, "IC-ZERO")).isEqualTo("MALFORMED");
+    assertThat(ledgerCountAsAdmin(groupId)).isZero();
+    assertThat(closedSummaryCountAsAdmin(groupId)).isZero();
+  }
+
+  @Test
+  void aBothNegativeEqualAbsRevenueExpensePairBlocksProvingPositivityFiresBeforeEqualsMatch() {
+    // ELIMINATION INVARIANT (#40) — the EXACT 2nd-failure regression class. A
+    // one-REVENUE(-3M) + one-EXPENSE(-3M) pair has EQUAL ABS magnitude. Money.equals would consider
+    // -3M IDR equal to -3M IDR, so a positivity guard placed AFTER the equals-match would MATCH
+    // this
+    // pair and eliminate against two negative legs (fabricating net). The positivity guard must
+    // fire
+    // BEFORE the equals() match: BOTH legs are non-positive -> MALFORMED, blocked. This locks the
+    // gate ORDER (positivity before equality), not merely that some guard exists.
+    UUID groupId = UUID.randomUUID();
+    UUID lead = UUID.randomUUID();
+    UUID memberA = UUID.randomUUID();
+    UUID memberB = UUID.randomUUID();
+
+    fx.defineGroup(groupId, lead, "IDR");
+    fx.addMember(groupId, memberA, LocalDate.of(2026, 1, 1));
+    fx.addMember(groupId, memberB, LocalDate.of(2026, 1, 1));
+
+    fx.ingestTrialBalance(
+        groupId,
+        memberA,
+        PERIOD,
+        "IDR",
+        List.of(
+            revenue(10_000_000L, "IDR"),
+            intercompanyRevenue(-3_000_000L, "IDR", memberB, "IC-BOTH-NEG")));
+    fx.ingestTrialBalance(
+        groupId,
+        memberB,
+        PERIOD,
+        "IDR",
+        List.of(
+            expense(2_000_000L, "IDR"),
+            intercompanyExpense(-3_000_000L, "IDR", memberA, "IC-BOTH-NEG")));
+
+    GroupCloseResult result = closeService.close(groupId, PERIOD, 1);
+
+    assertThat(result.state()).isEqualTo(ConsolidationState.INTERCOMPANY_UNRECONCILED);
+    assertThat(matchStateAsAdmin(groupId, "IC-BOTH-NEG")).isEqualTo("MALFORMED");
+    assertThat(ledgerCountAsAdmin(groupId)).isZero();
+    assertThat(closedSummaryCountAsAdmin(groupId)).isZero();
+  }
+
+  @Test
+  void aMixedPnlAndBalanceSheetIntercompanyRefBlocksTheCloseAsMalformed() {
+    // ELIMINATION INVARIANT (#40): a MIXED ref — one P&L leg + one balance-sheet leg — is genuinely
+    // malformed. It is neither a pure balance-sheet OUT_OF_SCOPE pair nor a well-formed P&L
+    // revenue+expense pair; eliminating it would mis-state the group. -> MALFORMED, blocked.
+    UUID groupId = UUID.randomUUID();
+    UUID lead = UUID.randomUUID();
+    UUID memberA = UUID.randomUUID();
+    UUID memberB = UUID.randomUUID();
+
+    fx.defineGroup(groupId, lead, "IDR");
+    fx.addMember(groupId, memberA, LocalDate.of(2026, 1, 1));
+    fx.addMember(groupId, memberB, LocalDate.of(2026, 1, 1));
+
+    // A reports an IC REVENUE (P&L) leg; B reports an IC PAYABLE (LIABILITY, balance-sheet) leg on
+    // the same ref -> a P&L+balance-sheet MIX.
+    fx.ingestTrialBalance(
+        groupId,
+        memberA,
+        PERIOD,
+        "IDR",
+        List.of(
+            revenue(10_000_000L, "IDR"),
+            intercompanyRevenue(3_000_000L, "IDR", memberB, "IC-MIXED")));
+    fx.ingestTrialBalance(
+        groupId,
+        memberB,
+        PERIOD,
+        "IDR",
+        List.of(
+            expense(2_000_000L, "IDR"),
+            intercompanyPayable(3_000_000L, "IDR", memberA, "IC-MIXED")));
+
+    GroupCloseResult result = closeService.close(groupId, PERIOD, 1);
+
+    assertThat(result.state()).isEqualTo(ConsolidationState.INTERCOMPANY_UNRECONCILED);
+    assertThat(matchStateAsAdmin(groupId, "IC-MIXED")).isEqualTo("MALFORMED");
+    assertThat(ledgerCountAsAdmin(groupId)).isZero();
+    assertThat(closedSummaryCountAsAdmin(groupId)).isZero();
+  }
+
+  @Test
+  void aSameMagnitudeDifferentCurrencyIntercompanyPairIsNeverPlainMatchedAsSameCurrency() {
+    // GUARD #2 LOCK (#40): a one-REVENUE + one-EXPENSE pair of EQUAL numeric magnitude but in
+    // DIFFERENT currencies (3M IDR vs 3M USD minor) must NEVER be decided a plain same-currency
+    // MATCHED — eliminating incomparable native magnitudes at face value would fabricate the group.
+    // The self-defending MATCHED decision (explicit currency-equality conjunction) keeps it out of
+    // MATCHED: the matcher routes it to the cross-currency path (MATCHED_CROSS_CURRENCY), which
+    // eliminates the TRANSLATED legs + a flagged FX_TRANSLATION_DIFF residual. We assert the state
+    // is MATCHED_CROSS_CURRENCY (NOT MATCHED) and that the cross-currency hallmark — an
+    // FX_TRANSLATION_DIFF entry — was posted (a plain same-currency MATCHED never posts one).
+    UUID groupId = UUID.randomUUID();
+    UUID lead = UUID.randomUUID();
+    UUID memberIdr = UUID.randomUUID();
+    UUID memberUsd = UUID.randomUUID();
+
+    fx.defineGroup(groupId, lead, "IDR");
+    fx.addMember(groupId, memberIdr, LocalDate.of(2026, 1, 1));
+    fx.addMember(groupId, memberUsd, LocalDate.of(2026, 1, 1));
+
+    // Equal numeric magnitude (3,000,000 minor) but different currencies. Each member balances
+    // natively via a balancing BS line so the native-balance gate passes and the cross-currency
+    // matcher is reached.
+    fx.ingestTrialBalance(
+        groupId,
+        memberIdr,
+        PERIOD,
+        "IDR",
+        List.of(
+            intercompanyRevenue(3_000_000L, "IDR", memberUsd, "IC-XCCY-EQ"),
+            GroupCloseFixtures.asset(3_000_000L, "IDR")));
+    fx.ingestTrialBalance(
+        groupId,
+        memberUsd,
+        PERIOD,
+        "USD",
+        List.of(
+            intercompanyExpense(3_000_000L, "USD", memberIdr, "IC-XCCY-EQ"),
+            GroupCloseFixtures.equity(3_000_000L, "USD")));
+
+    GroupCloseResult result = closeService.close(groupId, PERIOD, 1);
+
+    // CLOSED via the cross-currency translation path, NOT held and NOT plain same-currency MATCHED.
+    assertThat(result.isClosed()).isTrue();
+    // Routed to the cross-currency path (the guard-#2 invariant): equal magnitude + different
+    // currency is NEVER plain MATCHED.
+    assertThat(matchStateAsAdmin(groupId, "IC-XCCY-EQ")).isEqualTo("MATCHED_CROSS_CURRENCY");
+    assertThat(matchStateAsAdmin(groupId, "IC-XCCY-EQ")).isNotEqualTo("MATCHED");
+    // The cross-currency hallmark: a flagged FX_TRANSLATION_DIFF entry was posted (a same-currency
+    // MATCHED elimination never posts one — it would silently absorb the magnitude mismatch).
+    assertThat(entryTypeCountAsAdmin(groupId, "FX_TRANSLATION_DIFF")).isEqualTo(1L);
   }
 
   @Test
@@ -622,6 +808,33 @@ class GroupCloseTest extends PostgresRlsTestBase {
         "SELECT coalesce(sum(amount_minor),0) FROM consolidation_ledger WHERE group_id = '"
             + groupId
             + "' AND posting_role = 'PRIMARY'");
+  }
+
+  private long primaryCountForAccountAsAdmin(UUID groupId, String account) {
+    return longQueryAsAdmin(
+        "SELECT count(*) FROM consolidation_ledger WHERE group_id = '"
+            + groupId
+            + "' AND posting_role = 'PRIMARY' AND gl_account_code = '"
+            + account
+            + "'");
+  }
+
+  private long primarySumForAccountAsAdmin(UUID groupId, String account) {
+    return longQueryAsAdmin(
+        "SELECT coalesce(sum(amount_minor),0) FROM consolidation_ledger WHERE group_id = '"
+            + groupId
+            + "' AND posting_role = 'PRIMARY' AND gl_account_code = '"
+            + account
+            + "'");
+  }
+
+  private long entryTypeCountAsAdmin(UUID groupId, String entryType) {
+    return longQueryAsAdmin(
+        "SELECT count(*) FROM consolidation_ledger WHERE group_id = '"
+            + groupId
+            + "' AND entry_type = '"
+            + entryType
+            + "'");
   }
 
   private String matchStateAsAdmin(UUID groupId, String ref) {

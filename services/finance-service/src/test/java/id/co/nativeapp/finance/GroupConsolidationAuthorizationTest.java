@@ -1,6 +1,7 @@
 package id.co.nativeapp.finance;
 
 import static id.co.nativeapp.finance.GroupCloseFixtures.expense;
+import static id.co.nativeapp.finance.GroupCloseFixtures.intercompanyRevenue;
 import static id.co.nativeapp.finance.GroupCloseFixtures.revenue;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -275,5 +276,53 @@ class GroupConsolidationAuthorizationTest extends PostgresRlsTestBase {
     assertThat(read.groupRevenueMinor()).isZero();
     // A's 10M is NEVER exposed through the held group read.
     assertThat(read.groupRevenueMinor()).isNotEqualTo(10_000_000L);
+  }
+
+  @Test
+  void aCloseHeldByAMalformedRefReportsNotAllReconciledThroughTheReadDto() {
+    // #43: the read-side unreconciled tally is defined by the COMPLEMENT of the NON-blocking states
+    // (so it tracks IntercompanyMatch.blocksClose() by construction). A MALFORMED ref HOLDs the
+    // close INTERCOMPANY_UNRECONCILED, and the read DTO must report allReconciled=false with
+    // exactly
+    // one unreconciled reference — never badge a writer-HELD close as "all reconciled".
+    UUID groupId = UUID.randomUUID();
+    UUID lead = UUID.randomUUID();
+    UUID memberA = UUID.randomUUID();
+    UUID memberB = UUID.randomUUID();
+
+    fx.defineGroup(groupId, lead, "IDR");
+    fx.addMember(groupId, memberA, LocalDate.of(2026, 1, 1));
+    fx.addMember(groupId, memberB, LocalDate.of(2026, 1, 1));
+
+    // Both members report a REVENUE leg on the SAME ref (two same-class legs, not one sale + one
+    // purchase) -> MALFORMED -> the close is HELD INTERCOMPANY_UNRECONCILED.
+    fx.ingestTrialBalance(
+        groupId,
+        memberA,
+        PERIOD,
+        "IDR",
+        List.of(intercompanyRevenue(3_000_000L, "IDR", memberB, "IC-BAD-SAMECLASS")));
+    fx.ingestTrialBalance(
+        groupId,
+        memberB,
+        PERIOD,
+        "IDR",
+        List.of(intercompanyRevenue(3_000_000L, "IDR", memberA, "IC-BAD-SAMECLASS")));
+
+    GroupCloseResponse close =
+        consolidationService.closeGroup(
+            requester(lead, GroupConsolidationRole.CLOSE), groupId, PERIOD, 1);
+    assertThat(close.state()).isEqualTo(ConsolidationState.INTERCOMPANY_UNRECONCILED);
+
+    // Read it back through the DTO: the eliminations status must say NOT all reconciled, with
+    // exactly one blocking reference counted.
+    GroupConsolidationResponse read =
+        consolidationService
+            .readConsolidation(requester(lead, GroupConsolidationRole.VIEW), groupId, PERIOD)
+            .orElseThrow();
+    assertThat(read.state()).isEqualTo(ConsolidationState.INTERCOMPANY_UNRECONCILED);
+    assertThat(read.eliminations().allReconciled()).isFalse();
+    assertThat(read.eliminations().unreconciledReferences()).isEqualTo(1L);
+    assertThat(read.eliminations().totalReferences()).isEqualTo(1L);
   }
 }

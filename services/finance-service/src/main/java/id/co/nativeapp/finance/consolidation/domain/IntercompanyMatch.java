@@ -15,10 +15,11 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 /**
- * The {@code intercompany_match} aggregate (P3d SEAM 3a) — the reconciliation of ONE intercompany
- * reference for a period: which two members' related-party legs pair on {@code (intercompany_ref,
- * period)}, their amounts, and the {@link IntercompanyMatchState} (MATCHED | UNMATCHED |
- * AMOUNT_MISMATCH).
+ * The {@code intercompany_match} aggregate (P3d SEAM 3a + 3b) — the reconciliation of ONE
+ * intercompany reference for a period: which two members' related-party legs pair on {@code
+ * (intercompany_ref, period)}, their amounts, and the {@link IntercompanyMatchState} — one of the
+ * SIX states {@code MATCHED | UNMATCHED | AMOUNT_MISMATCH | MALFORMED | OUT_OF_SCOPE_BALANCE_SHEET
+ * | MATCHED_CROSS_CURRENCY}.
  *
  * <p>A {@link IntercompanyMatchState#MATCHED} reference drives an ELIMINATION in the {@code
  * consolidation_ledger} (the internal trade nets to zero). A MATCHED reference is STRICTLY
@@ -229,20 +230,49 @@ public class IntercompanyMatch extends Auditable {
 
   /**
    * The amount of this match's REVENUE leg (the internal sale) to eliminate from gross revenue.
-   * Only meaningful for a MATCHED pair (strictly well-formed: exactly one revenue + one expense
-   * leg, both strictly positive), where it is guaranteed strictly positive.
+   * Only meaningful for an ELIMINATING pair ({@link IntercompanyMatchState#MATCHED} or {@link
+   * IntercompanyMatchState#MATCHED_CROSS_CURRENCY}), where the pair is strictly well-formed
+   * (exactly one revenue + one expense leg, both strictly positive) so this is guaranteed strictly
+   * positive. Asserts that precondition so a future off-happy-path caller fails LOUD rather than
+   * silently reading {@code amountB} (which may be {@code null} for an UNMATCHED reference, or the
+   * wrong class for a MALFORMED one).
    */
   public Money revenueLegAmount() {
+    requireEliminatingPair("revenueLegAmount");
     return accountTypeA == AccountType.REVENUE ? amountA() : amountB();
   }
 
   /**
    * The amount of this match's EXPENSE leg (the internal purchase) to eliminate from gross expense.
-   * Only meaningful for a MATCHED pair (strictly well-formed: exactly one revenue + one expense
-   * leg, both strictly positive), where it is guaranteed strictly positive.
+   * Only meaningful for an ELIMINATING pair ({@link IntercompanyMatchState#MATCHED} or {@link
+   * IntercompanyMatchState#MATCHED_CROSS_CURRENCY}), where the pair is strictly well-formed
+   * (exactly one revenue + one expense leg, both strictly positive) so this is guaranteed strictly
+   * positive. Asserts that precondition so a future off-happy-path caller fails LOUD rather than
+   * silently reading {@code amountB} (which may be {@code null} for an UNMATCHED reference, or the
+   * wrong class for a MALFORMED one).
    */
   public Money expenseLegAmount() {
+    requireEliminatingPair("expenseLegAmount");
     return accountTypeA == AccountType.EXPENSE ? amountA() : amountB();
+  }
+
+  /**
+   * Asserts this match is an ELIMINATING pair (a {@code MATCHED} same-currency pair or a {@code
+   * MATCHED_CROSS_CURRENCY} pair) — the only states for which a revenue/expense leg amount is
+   * well-defined. Off any of those states the leg accessors would read {@code amountB} blindly
+   * (null for UNMATCHED, the wrong class for MALFORMED); this makes such a misuse fail loud.
+   */
+  private void requireEliminatingPair(String accessor) {
+    if (state != IntercompanyMatchState.MATCHED
+        && state != IntercompanyMatchState.MATCHED_CROSS_CURRENCY) {
+      throw new IllegalStateException(
+          accessor
+              + "() is only defined for an eliminating pair (MATCHED / MATCHED_CROSS_CURRENCY), not "
+              + state
+              + " (ref="
+              + intercompanyRef
+              + ")");
+    }
   }
 
   /**

@@ -5,7 +5,7 @@ import java.util.List;
 
 /**
  * A company's BALANCED trial balance for a period (P3d SEAM 4a), as gathered by {@link
- * TrialBalanceGatherer}: the REVENUE + EXPENSE lines from the dimensional ledger PLUS the balancing
+ * TrialBalanceReader}: the REVENUE + EXPENSE lines from the dimensional ledger PLUS the balancing
  * retained-earnings EQUITY closing line, so the lines sum signed-to-zero in the company's
  * functional currency (the P&amp;L closes to equity — exactly what makes a member trial balance
  * pass the SEAM-3b native-balance gate).

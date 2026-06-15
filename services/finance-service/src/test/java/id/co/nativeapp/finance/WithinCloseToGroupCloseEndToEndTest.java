@@ -250,6 +250,11 @@ class WithinCloseToGroupCloseEndToEndTest extends PostgresRlsTestBase {
     assertThat(summaryFlag(group, "uses_simplified_translation_policy")).isTrue();
     assertThat(ctaSum(group)).isEqualTo(-30_000L);
     assertThat(entryTypeCount(group, "CTA")).isEqualTo(1L);
+    // #42: the CTA lands on EXACTLY the flagged 3950-CTA-TRANSLATION-RESERVE account (by account,
+    // not merely by entry_type) — so an auditor sees the residual on the named translation reserve,
+    // never swept onto some other GL account.
+    assertThat(ledgerSumForAccount(group, "3950-CTA-TRANSLATION-RESERVE")).isEqualTo(-30_000L);
+    assertThat(primaryCountForAccount(group, "3950-CTA-TRANSLATION-RESERVE")).isEqualTo(1L);
 
     // The loop is closed both ways: 2 within-company ConsolidationClosed(group_id=null) + 1 group
     // ConsolidationClosed(group_id=G).
@@ -332,6 +337,24 @@ class WithinCloseToGroupCloseEndToEndTest extends PostgresRlsTestBase {
             + "' AND entry_type = '"
             + entryType
             + "'");
+  }
+
+  private long ledgerSumForAccount(UUID group, String account) {
+    return longQuery(
+        "SELECT coalesce(sum(amount_minor),0) FROM consolidation_ledger WHERE group_id = '"
+            + group
+            + "' AND gl_account_code = '"
+            + account
+            + "' AND posting_role = 'PRIMARY'");
+  }
+
+  private long primaryCountForAccount(UUID group, String account) {
+    return longQuery(
+        "SELECT count(*) FROM consolidation_ledger WHERE group_id = '"
+            + group
+            + "' AND gl_account_code = '"
+            + account
+            + "' AND posting_role = 'PRIMARY'");
   }
 
   private long longQuery(String sql) {

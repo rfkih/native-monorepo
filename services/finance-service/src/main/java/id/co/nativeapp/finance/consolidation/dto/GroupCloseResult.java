@@ -11,8 +11,10 @@ import java.util.UUID;
  * is a GATED outcome (the close held back loudly — pending members, a member trial balance that
  * does not reconcile in its functional currency, unreconciled intercompany, or a warming-up member
  * projection). A multi-currency group is SUPPORTED in 3b via the simplified, flagged translation
- * path (no longer a hold-back); a member's unbalanced native book is. {@code firstRun} is {@code
- * false} when an idempotent re-run at the same {@code close_run_seq} was a clean no-op.
+ * path (no longer a hold-back); a member's unbalanced native book is still a hold-back ({@link
+ * ConsolidationState#MEMBER_TRIAL_BALANCE_UNBALANCED} — its raw imbalance must never be swept into
+ * the CTA reserve and mis-labelled a translation adjustment). {@code firstRun} is {@code false}
+ * when an idempotent re-run at the same {@code close_run_seq} was a clean no-op.
  *
  * @param state the lifecycle state the close landed in
  * @param summaryId the {@code consolidation_summary} row id this close wrote, or {@code null} when

@@ -547,8 +547,12 @@ public class GroupCloseWriter {
     //     account (3950-CTA-TRANSLATION-RESERVE), so the translated set BALANCES — the CTA is now
     // the
     //     GENUINE FX effect, NOT a swept-in raw imbalance. GATE the close on it MEANINGFULLY: after
-    //     the CTA posts, INDEPENDENTLY recompute signed(translated TB) + sum(posted CTA) and assert
-    //     zero — the residual is NEVER silently dropped, and the gate is no longer the x + (-x)
+    //     the CTA posts, assert signed(translated TB) + sum(CTA that LANDED in 3950) == 0, with the
+    //     residual operand rebuilt from the PER-ACCOUNT-CLASS totals (a fold-by-class, NOT a re-run
+    //     of the per-line signedTrialBalanceResidual that produced the CTA) and the CTA RE-READ
+    // from
+    //     the ledger — two structurally different paths, so a bug in either cannot cancel on both
+    //     sides. The residual is NEVER silently dropped, and the gate is no longer the x + (-x)
     //     tautology. (This is the SIMPLIFIED balancing device, NOT the IAS-21 CTA = closing net
     //     assets − opening net assets at the opening rate − average-rate P&L, which needs opening
     //     balances + historical-rate equity — the deferred SME gate. See
@@ -570,19 +574,23 @@ public class GroupCloseWriter {
       Money cta = translatedSignedResidual.negate();
       postCta(groupId, period, closeRunSeq, cta, lead);
 
-      // The integrity GATE (now MEANINGFUL, not the x + (-x) tautology). INDEPENDENTLY recompute
-      // the
-      // signed total of the translated trial balance and ADD the CTA we posted (re-derived from the
-      // ledger account, not reused from `cta`); on a validated-balanced input this must be zero.
-      // The
-      // residual is recomputed from `translatedLines` and the CTA is summed from what actually
-      // landed
-      // in 3950 — two independent paths — so a future refactor that breaks the invariant (e.g.
-      // posts
-      // the wrong CTA magnitude, or lets a native imbalance through) fails LOUD rather than
-      // silently
-      // dropping money.
-      Money recomputedResidual = signedTrialBalanceResidual(translatedLines, reportingCcy);
+      // The integrity GATE — a GENUINE check, not the x + (-x) tautology, and not a re-run of the
+      // SAME function over the SAME list either. It asserts: signed(translated TB) + sum(CTA that
+      // ACTUALLY LANDED in 3950) == 0, with BOTH operands derived along STRUCTURALLY DIFFERENT
+      // paths
+      // from the ones that produced the CTA we posted:
+      //   * the residual operand is rebuilt from the PER-ACCOUNT-CLASS translated totals (one
+      //     sumTranslatedByAccountType per class, then the sign convention applied to the five
+      // class
+      //     totals) — a fold-by-class, NOT the line-by-line fold of signedTrialBalanceResidual that
+      //     computed `cta`. A bug in signedTrialBalanceResidual therefore cannot cancel on both
+      //     sides of the check;
+      //   * the CTA operand is RE-READ from the ledger (what landed in 3950), not the in-memory
+      //     `cta`.
+      // So a future refactor that breaks the invariant (a wrong CTA magnitude, or a native
+      // imbalance
+      // slipping through) fails LOUD rather than silently dropping money.
+      Money recomputedResidual = signedResidualFromClassTotals(translatedLines, reportingCcy);
       Money postedCta = postedCtaTotal(groupId, period, closeRunSeq, reportingCcy);
       Money reconciledTotal = recomputedResidual.plus(postedCta);
       if (!reconciledTotal.isZero()) {
@@ -832,8 +840,21 @@ public class GroupCloseWriter {
 
       // Both strictly positive, one-revenue+one-expense, SAME-currency pair: equal magnitude ->
       // MATCHED, else AMOUNT_MISMATCH (the 3a strict invariant, unchanged).
+      //
+      // SELF-DEFENDING MATCHED DECISION (#40): a same-currency MATCH is decided by an EXPLICIT
+      // currency-equality conjunction, not just by Money.equals (which happens to compare currency
+      // too). Same-currency is already gated upstream (the cross-currency branch above diverted to
+      // MATCHED_CROSS_CURRENCY), so this conjunction is an ASSERTED INVARIANT: even if a future
+      // gate-ordering accident let a cross-currency pair fall through to here, a same-magnitude
+      // pair
+      // in DIFFERENT currencies can NEVER be MATCHED (it would AMOUNT_MISMATCH-block, not eliminate
+      // against an incomparable magnitude). The matcher defends its own MATCHED precondition.
+      Money amountA = legA.line().getAmount();
+      Money amountB = legB.line().getAmount();
+      boolean sameCurrencyEqualMagnitude =
+          amountA.currency().equals(amountB.currency()) && amountA.equals(amountB);
       IntercompanyMatchState state =
-          legA.line().getAmount().equals(legB.line().getAmount())
+          sameCurrencyEqualMagnitude
               ? IntercompanyMatchState.MATCHED
               : IntercompanyMatchState.AMOUNT_MISMATCH;
       matches.add(
@@ -843,8 +864,8 @@ public class GroupCloseWriter {
               ref,
               legA.memberCompanyId(),
               legB.memberCompanyId(),
-              legA.line().getAmount(),
-              legB.line().getAmount(),
+              amountA,
+              amountB,
               legA.accountType(),
               legB.accountType(),
               state,
@@ -1209,6 +1230,26 @@ public class GroupCloseWriter {
     for (TranslatedLine line : lines) {
       Money amount = line.translated();
       signed = applySignConvention(signed, line.accountType(), amount);
+    }
+    return signed;
+  }
+
+  /**
+   * The SAME signed residual as {@link #signedTrialBalanceResidual}, but computed along a
+   * STRUCTURALLY DIFFERENT path: it first rolls the translated lines into ONE total PER ACCOUNT
+   * CLASS (via {@link #sumTranslatedByAccountType}, the very aggregation that feeds the summary),
+   * then applies the double-entry sign convention to those five class totals. The per-line fold and
+   * this fold-by-class must agree, so the post-CTA integrity gate (#41) can use this as an
+   * INDEPENDENT recompute of the residual operand: a bug in the line-by-line {@code
+   * signedTrialBalanceResidual} that produced the posted CTA cannot also corrupt this side of the
+   * check, so the two cannot cancel and hide a real imbalance.
+   */
+  private static Money signedResidualFromClassTotals(
+      List<TranslatedLine> lines, Currency reportingCcy) {
+    Money signed = Money.ofMinor(0L, reportingCcy);
+    for (AccountType type : AccountType.values()) {
+      Money classTotal = sumTranslatedByAccountType(lines, type, reportingCcy);
+      signed = applySignConvention(signed, type, classTotal);
     }
     return signed;
   }
