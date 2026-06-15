@@ -142,6 +142,19 @@ class FxRateTest {
         () -> new FxRate(1L, -1, USD, IDR, RateType.CLOSING, Provenance.STUB));
   }
 
+  @Test
+  void constructorRejectsAScaleAboveTheDbEnforcedUpperBound() {
+    // The DB enforces fx_rate.rate_scale BETWEEN 0 AND 12 (finance V4); the value type must be
+    // self-protecting regardless of storage, so a scale beyond MAX_SCALE is rejected loudly.
+    assertEquals(12, FxRate.MAX_SCALE);
+    // The exact upper bound is accepted...
+    new FxRate(1L, FxRate.MAX_SCALE, USD, IDR, RateType.CLOSING, Provenance.STUB);
+    // ...one past it is not.
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new FxRate(1L, FxRate.MAX_SCALE + 1, USD, IDR, RateType.CLOSING, Provenance.STUB));
+  }
+
   // ------------------------------------------------------------------
   // Triangulation: compose-then-round-once, OR-ed provenance
   // ------------------------------------------------------------------
@@ -179,6 +192,33 @@ class FxRateTest {
     FxRate idrUsd = new FxRate(625L, 10, IDR, USD, RateType.CLOSING, Provenance.LIVE);
     // EUR->USD then IDR->USD do not chain (USD != IDR).
     assertThrows(IllegalArgumentException.class, () -> eurUsd.composeWith(idrUsd));
+  }
+
+  // ------------------------------------------------------------------
+  // No silent wrap: the long arithmetic fails LOUD (ArithmeticException) near Long.MAX_VALUE.
+  // ------------------------------------------------------------------
+
+  @Test
+  void convertFailsLoudRatherThanSilentlyWrappingOnAHugeSourceAmount() {
+    // A huge USD source at a >1 rate overflows a long minor result. The numerator multiply is exact
+    // (BigDecimal), but longValueExact() at the final minor-unit result must THROW rather than
+    // wrap.
+    //   result ≈ source_minor * 16_000 * 10^0 / (10^0 * 10^2) = source_minor * 160, which for a
+    //   near-Long.MAX_VALUE source is far outside long range.
+    FxRate rate = new FxRate(16_000L, 0, USD, IDR, RateType.CLOSING, Provenance.STUB);
+    Money huge = Money.ofMinor(Long.MAX_VALUE, USD);
+    assertThrows(ArithmeticException.class, () -> rate.convert(huge, IDR));
+  }
+
+  @Test
+  void composeWithFailsLoudRatherThanSilentlyWrappingWhenTheProductOverflows() {
+    // Two legs whose unscaled product exceeds Long.MAX_VALUE: 5e9 * 5e9 = 2.5e19 > 9.22e18. The
+    // composed scale (0 + 0) stays within MAX_SCALE, so the guard we hit is multiplyExact — proving
+    // the composed-rate path fails LOUD (ArithmeticException) rather than silently wrapping
+    // unscaled.
+    FxRate eurUsd = new FxRate(5_000_000_000L, 0, EUR, USD, RateType.CLOSING, Provenance.LIVE);
+    FxRate usdIdr = new FxRate(5_000_000_000L, 0, USD, IDR, RateType.CLOSING, Provenance.LIVE);
+    assertThrows(ArithmeticException.class, () -> eurUsd.composeWith(usdIdr));
   }
 
   // ------------------------------------------------------------------

@@ -22,6 +22,9 @@ import org.springframework.stereotype.Component;
  * sentinel), taking the highest {@code version} if more than one matches. So an event dated
  * <em>before</em> a new rule version's boundary resolves to the prior account and one dated
  * <em>after</em> it to the new account — the effective-dated behaviour proven by the boundary test.
+ * The order is {@code version DESC, effective_from DESC}: if two rows with overlapping effective
+ * windows share the highest version the NEWEST {@code effective_from} wins deterministically, so an
+ * overlap can never resolve arbitrarily (#36) — the same secondary sort guards {@code fx_rate}.
  *
  * <p><strong>REVENUE</strong> ignores the hint (it resolves under the empty-criterion sentinel
  * {@code gl_hint = ''}).
@@ -76,7 +79,7 @@ public class GlAccountResolver {
        WHERE posting_type = ?
          AND gl_hint = ?
          AND ? BETWEEN effective_from AND effective_to
-       ORDER BY version DESC
+       ORDER BY version DESC, effective_from DESC
        LIMIT 1
       """;
 

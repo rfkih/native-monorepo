@@ -25,6 +25,11 @@ import org.springframework.stereotype.Component;
  * the {@code [effective_from, effective_to]} window containing the as-of date, and take the highest
  * version. The two integer rate columns are reconstructed into the {@link FxRate} value type by the
  * {@link RowMapper}, which re-validates both currency codes via {@link Currency#getInstance}.
+ *
+ * <p><strong>Deterministic tie-break.</strong> The order is {@code version DESC, effective_from
+ * DESC}: the highest version wins, and if two rows with overlapping effective windows share that
+ * version the NEWEST {@code effective_from} wins deterministically — so an overlap can never
+ * resolve arbitrarily (#36). The same secondary sort guards {@code GlAccountResolver}.
  */
 @Component
 public class TableFxRateProvider implements FxRateProvider {
@@ -37,7 +42,7 @@ public class TableFxRateProvider implements FxRateProvider {
          AND to_ccy = ?
          AND rate_type = ?
          AND ? BETWEEN effective_from AND effective_to
-       ORDER BY version DESC
+       ORDER BY version DESC, effective_from DESC
        LIMIT 1
       """;
 

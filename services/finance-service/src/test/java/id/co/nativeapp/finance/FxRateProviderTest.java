@@ -119,6 +119,34 @@ class FxRateProviderTest extends PostgresRlsTestBase {
   }
 
   @Test
+  void twoOverlappingRowsAtTheSameVersionResolveDeterministicallyNewestEffectiveFromWins()
+      throws Exception {
+    // #36 determinism: two USD->IDR CLOSING rows that OVERLAP at the SAME version (2) — their
+    // effective windows both contain the as-of date — would otherwise resolve ARBITRARILY (no
+    // tie-break). The secondary sort `effective_from DESC` makes the NEWEST effective_from win.
+    seed(
+        "INSERT INTO fx_rate (id, from_ccy, to_ccy, rate_unscaled, rate_scale, rate_type,"
+            + " provenance, source_note, version, effective_from, effective_to) VALUES"
+            + " (gen_random_uuid(),'USD','IDR',18000,0,'CLOSING','LIVE','TEST overlap-older',2,"
+            + " DATE '2026-06-01', DATE '9999-12-31')");
+    seed(
+        "INSERT INTO fx_rate (id, from_ccy, to_ccy, rate_unscaled, rate_scale, rate_type,"
+            + " provenance, source_note, version, effective_from, effective_to) VALUES"
+            + " (gen_random_uuid(),'USD','IDR',19000,0,'CLOSING','LIVE','TEST overlap-newer',2,"
+            + " DATE '2026-06-10', DATE '9999-12-31')");
+
+    // An as-of after BOTH effective_from dates: both rows are in-window at version 2. The newer
+    // effective_from (2026-06-10 -> 19,000) must win deterministically every time.
+    long resolved =
+        provider
+            .rateFor(USD, IDR, RateType.CLOSING, LocalDate.parse("2026-06-15"))
+            .orElseThrow()
+            .rate()
+            .unscaled();
+    assertThat(resolved).isEqualTo(19_000L);
+  }
+
+  @Test
   void aMissingDirectPairResolvesEmpty() {
     // EUR->IDR is not seeded directly; the provider answers only the single-pair question (empty).
     Optional<ResolvedFxRate> eurIdr =

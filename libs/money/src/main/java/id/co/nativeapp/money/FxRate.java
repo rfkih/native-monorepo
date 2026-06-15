@@ -43,8 +43,8 @@ import java.util.Objects;
  *
  * @param unscaled the rate's unscaled integer value (strictly positive); value = {@code unscaled /
  *     10^scale}
- * @param scale the rate's decimal scale (non-negative) -- how many powers of ten {@code unscaled}
- *     is divided by
+ * @param scale the rate's decimal scale (within {@code [0, } {@link #MAX_SCALE} {@code ]}) -- how
+ *     many powers of ten {@code unscaled} is divided by
  * @param from the source currency this rate converts FROM
  * @param to the target currency this rate converts TO
  * @param rateType the IAS-21 rate kind (CLOSING / AVERAGE / SPOT)
@@ -59,13 +59,23 @@ public record FxRate(
     RateType rateType,
     Provenance provenance) {
 
+  /**
+   * The inclusive upper bound on {@link #scale}, mirroring the {@code fx_rate.rate_scale CHECK
+   * (rate_scale BETWEEN 0 AND 12)} DB constraint (finance V4). Asserted in the compact constructor
+   * so the value type is self-protecting regardless of its storage — a deeper scale could only
+   * arrive from a hand-built {@link FxRate} (e.g. an over-deep {@link #composeWith} chain), and is
+   * rejected loudly rather than silently mis-stating a rate.
+   */
+  public static final int MAX_SCALE = 12;
+
   /** Compact canonical constructor -- validates the integer pair and the currencies. */
   public FxRate {
     if (unscaled <= 0L) {
       throw new IllegalArgumentException("FxRate unscaled must be strictly positive: " + unscaled);
     }
-    if (scale < 0) {
-      throw new IllegalArgumentException("FxRate scale must be non-negative: " + scale);
+    if (scale < 0 || scale > MAX_SCALE) {
+      throw new IllegalArgumentException(
+          "FxRate scale must be within [0, " + MAX_SCALE + "]: " + scale);
     }
     Objects.requireNonNull(from, "from");
     Objects.requireNonNull(to, "to");
