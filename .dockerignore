@@ -1,0 +1,27 @@
+# Keep the Docker build context lean and reproducible: the image builds the boot jar
+# from source inside the container, so host build outputs, IDE files, and the local dev
+# stack data must NOT be copied in (they bloat the context and can shadow a clean build).
+
+# Gradle / build outputs (rebuilt inside the image)
+**/build/
+.gradle/
+**/.gradle/
+
+# VCS / IDE / OS cruft
+.git/
+.github/
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Local dev stack + deploy manifests (not needed to build a service image)
+docker/
+deploy/
+
+# Python caches that happen to live in the tree
+__pycache__/
+**/__pycache__/
+
+# Frontend (services here are JVM; the FE has its own build)
+**/node_modules/

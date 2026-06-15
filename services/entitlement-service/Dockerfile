@@ -1,4 +1,4 @@
-# Multi-stage build for restaurant-service.
+# Multi-stage build for entitlement-service.
 # Stage 1 builds the boot jar with the Java 25 toolchain; stage 2 ships a slim
 # JRE-only runtime image that launches it.
 
@@ -14,15 +14,15 @@ COPY build-logic ./build-logic
 COPY libs ./libs
 # settings.gradle.kts `include`s every services:* project AND service-template; Gradle
 # refuses to configure the build unless each included project's directory exists. We only
-# build this one service, but its settings evaluation still needs the other project dirs
-# present — so copy the whole services tree + service-template. (Copying just this one
-# service dir fails: "Configuring project ':services:gateway' without an existing
-# directory is not allowed".)
+# build :services:entitlement-service, but its settings evaluation still needs the other
+# project dirs present — so copy the whole services tree + service-template. (Copying just
+# services/entitlement-service fails: "Configuring project ':services:gateway' without an
+# existing directory is not allowed".)
 COPY service-template ./service-template
 COPY services ./services
 
 RUN chmod +x ./gradlew \
-    && ./gradlew :services:restaurant-service:bootJar --no-daemon
+    && ./gradlew :services:entitlement-service:bootJar --no-daemon
 
 # ---- runtime ----
 FROM eclipse-temurin:25-jre AS runtime
@@ -32,7 +32,7 @@ WORKDIR /app
 RUN groupadd --system native && useradd --system --gid native --home /app native-svc
 USER native-svc
 
-COPY --from=build /workspace/services/restaurant-service/build/libs/*.jar app.jar
+COPY --from=build /workspace/services/entitlement-service/build/libs/*.jar app.jar
 
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

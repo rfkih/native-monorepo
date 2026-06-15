@@ -1,0 +1,56 @@
+# gateway overlay — the single synchronous edge: stateless (NO database), validates
+# inbound RS256 JWTs against Keycloak's JWKS, rate-limits per tenant via Redis, and
+# routes to the downstream ClusterIP services. It is the ONLY externally-exposed service
+# (adds an Ingress). Readiness is just readinessState (no db/kafka indicator).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: native
+
+resources:
+  - ../../base
+  - ingress.yaml
+
+labels:
+  - includeSelectors: true
+    pairs:
+      app.kubernetes.io/name: gateway
+
+patches:
+  - target:
+      kind: Deployment
+      name: service
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: gateway
+  - target:
+      kind: Service
+      name: service
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: gateway
+
+images:
+  - name: native-service
+    newName: REGISTRY/native/gateway
+    newTag: latest
+
+# No DB. Keycloak issuer/JWKS, Redis (rate-limit bucket), and the downstream route URIs
+# (in-cluster Service DNS) — all non-secret, so all in the ConfigMap.
+configMapGenerator:
+  - name: service-config
+    literals:
+      - KEYCLOAK_ISSUER_URI=https://keycloak.example.co.id/realms/native
+      - KEYCLOAK_JWK_SET_URI=https://keycloak.example.co.id/realms/native/protocol/openid-connect/certs
+      - REDIS_HOST=redis.native.svc.cluster.local
+      - REDIS_PORT=6379
+      - ORG_SERVICE_URI=http://org-service.native.svc.cluster.local:80
+      - RESTAURANT_SERVICE_URI=http://restaurant-service.native.svc.cluster.local:80
+      - FINANCE_SERVICE_URI=http://finance-service.native.svc.cluster.local:80
+
+generatorOptions:
+  # Hash-suffix the ConfigMap/Secret names so a config change rolls the pods: kustomize
+  # rewrites the Deployment's envFrom refs to the new hash, forcing a new ReplicaSet.
+  disableNameSuffixHash: false

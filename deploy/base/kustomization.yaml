@@ -1,0 +1,16 @@
+# Base per-service shape shared by every overlay: a Deployment (non-root, probes,
+# resource bounds, env from ConfigMap+Secret) and a ClusterIP Service.
+#
+# Overlays (overlays/<svc>) set the concrete name, image, replica count, the
+# ConfigMap (Kafka/Keycloak/Redis/route env) and the Secret (DB creds, ...).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - deployment.yaml
+  - service.yaml
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/managed-by: kustomize

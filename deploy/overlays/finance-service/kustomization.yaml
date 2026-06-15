@@ -1,0 +1,55 @@
+# finance-service overlay — a DB-owning service (Postgres role finance_service) and a
+# Kafka CONSUMER (SaleRecorded -> ledger read model). Readiness gates on db + kafka.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: native
+
+resources:
+  - ../../base
+
+labels:
+  - includeSelectors: true
+    pairs:
+      app.kubernetes.io/name: finance-service
+
+patches:
+  - target:
+      kind: Deployment
+      name: service
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: finance-service
+  - target:
+      kind: Service
+      name: service
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: finance-service
+
+images:
+  - name: native-service
+    newName: REGISTRY/native/finance-service
+    newTag: latest
+
+configMapGenerator:
+  - name: service-config
+    literals:
+      - DB_URL=jdbc:postgresql://postgres.native.svc.cluster.local:5432/finance_service
+      - KAFKA_BOOTSTRAP_SERVERS=kafka.native.svc.cluster.local:9092
+      - KEYCLOAK_ISSUER_URI=https://keycloak.example.co.id/realms/native
+      - KEYCLOAK_JWK_SET_URI=https://keycloak.example.co.id/realms/native/protocol/openid-connect/certs
+
+# Secret PLACEHOLDERS only — real creds come from Vault / a sealed-secret (see README).
+secretGenerator:
+  - name: service-secret
+    literals:
+      - DB_USERNAME=finance_service
+      - DB_PASSWORD=CHANGE_ME_VAULT
+
+generatorOptions:
+  # Hash-suffix the ConfigMap/Secret names so a config change rolls the pods: kustomize
+  # rewrites the Deployment's envFrom refs to the new hash, forcing a new ReplicaSet.
+  disableNameSuffixHash: false

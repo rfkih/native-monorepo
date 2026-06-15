@@ -1,0 +1,59 @@
+# employee-service overlay — a DB-owning service (Postgres role employee_service) and a
+# Kafka CONSUMER (OrgUnitCreated/Changed -> org read model). Readiness gates on db + kafka.
+# Also holds the PII column-encryption key (NATIVE_PII_KEY) — a SECRET, never config.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: native
+
+resources:
+  - ../../base
+
+labels:
+  - includeSelectors: true
+    pairs:
+      app.kubernetes.io/name: employee-service
+
+patches:
+  - target:
+      kind: Deployment
+      name: service
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: employee-service
+  - target:
+      kind: Service
+      name: service
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: employee-service
+
+images:
+  - name: native-service
+    newName: REGISTRY/native/employee-service
+    newTag: latest
+
+configMapGenerator:
+  - name: service-config
+    literals:
+      - DB_URL=jdbc:postgresql://postgres.native.svc.cluster.local:5432/employee_service
+      - KAFKA_BOOTSTRAP_SERVERS=kafka.native.svc.cluster.local:9092
+      - KEYCLOAK_ISSUER_URI=https://keycloak.example.co.id/realms/native
+      - KEYCLOAK_JWK_SET_URI=https://keycloak.example.co.id/realms/native/protocol/openid-connect/certs
+
+# Secret PLACEHOLDERS only — real creds come from Vault / a sealed-secret (see README).
+# NATIVE_PII_KEY is the base64 AES-256 column-encryption key (rule 6) — Vault-injected,
+# NEVER the committed dev placeholder.
+secretGenerator:
+  - name: service-secret
+    literals:
+      - DB_USERNAME=employee_service
+      - DB_PASSWORD=CHANGE_ME_VAULT
+      - NATIVE_PII_KEY=CHANGE_ME_VAULT_BASE64_32_BYTE_AES_KEY
+
+generatorOptions:
+  # Hash-suffix the ConfigMap/Secret names so a config change rolls the pods: kustomize
+  # rewrites the Deployment's envFrom refs to the new hash, forcing a new ReplicaSet.
+  disableNameSuffixHash: false

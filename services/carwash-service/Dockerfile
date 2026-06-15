@@ -12,7 +12,14 @@ COPY gradlew gradlew.bat settings.gradle.kts gradle.properties build.gradle.kts 
 COPY gradle ./gradle
 COPY build-logic ./build-logic
 COPY libs ./libs
-COPY services/carwash-service ./services/carwash-service
+# settings.gradle.kts `include`s every services:* project AND service-template; Gradle
+# refuses to configure the build unless each included project's directory exists. We only
+# build this one service, but its settings evaluation still needs the other project dirs
+# present — so copy the whole services tree + service-template. (Copying just this one
+# service dir fails: "Configuring project ':services:gateway' without an existing
+# directory is not allowed".)
+COPY service-template ./service-template
+COPY services ./services
 
 RUN chmod +x ./gradlew \
     && ./gradlew :services:carwash-service:bootJar --no-daemon

@@ -1,0 +1,104 @@
+# Common per-service Deployment shape. Each overlay renames it (via the `app`
+# label/selector + kustomize nameSuffix is NOT used — overlays set names explicitly)
+# and patches the container image, env, and replica count.
+#
+# Probes use the actuator health groups already enabled on every service
+# (management.endpoint.health.probes.enabled: true):
+#   liveness  -> /actuator/health/liveness   (cheap, never gated on DB/Kafka)
+#   readiness -> /actuator/health/readiness  (aggregates db/kafka where configured)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service # overlay overrides
+  labels:
+    app.kubernetes.io/name: service
+    app.kubernetes.io/part-of: native
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: service
+        app.kubernetes.io/part-of: native
+    spec:
+      # Pod-level security: run as a non-root user, no privilege escalation.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          # Placeholder image; `images:` in each overlay pins the real registry ref + tag.
+          image: native-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          # Spring Boot reads SPRING_PROFILES_ACTIVE; non-dev activates real JWT
+          # validation + JSON logging (see each service's application.yml `!dev` doc).
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: prod
+          # Non-secret config (Kafka bootstrap, Keycloak issuer, Redis host, ...) comes
+          # from a ConfigMap; secrets (DB creds, ...) from a Secret. Overlays supply both.
+          envFrom:
+            - configMapRef:
+                name: service-config
+                optional: true
+            - secretRef:
+                name: service-secret
+                optional: true
+          # Liveness: process is up and the JVM responds. Never gated on DB/Kafka, so a
+          # transient downstream blip does not get the pod killed.
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # Readiness: pulled from the Service endpoints while the read model hydrates or
+          # the DB/broker is unreachable (per-service readiness group in application.yml).
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # Give the app time to drain in-flight requests / commit Kafka offsets on SIGTERM.
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          # The JRE writes nothing to the image FS at runtime, but a writable /tmp is
+          # needed (Tomcat work dir, Spring temp). Mount an emptyDir so the root FS stays
+          # read-only.
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

@@ -1,0 +1,59 @@
+# org-service overlay — a DB-owning service (Postgres role org_service), an event
+# PRODUCER (no Kafka consumer), and a tenant-bootstrap edge.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: native
+
+resources:
+  - ../../base
+
+# Rename the base `service` Deployment + Service to this service, and stamp the real
+# `app.kubernetes.io/name` across metadata, selectors, and the pod template in one shot.
+labels:
+  - includeSelectors: true
+    pairs:
+      app.kubernetes.io/name: org-service
+
+patches:
+  - target:
+      kind: Deployment
+      name: service
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: org-service
+  - target:
+      kind: Service
+      name: service
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: org-service
+
+# Pin the real image. Set the registry ref + tag here at deploy time (CI bumps the tag).
+images:
+  - name: native-service
+    newName: REGISTRY/native/org-service
+    newTag: latest
+
+# Non-secret env. Kafka/Keycloak/Redis are EXTERNAL managed deps referenced by host.
+configMapGenerator:
+  - name: service-config
+    literals:
+      - DB_URL=jdbc:postgresql://postgres.native.svc.cluster.local:5432/org_service
+      - KEYCLOAK_ISSUER_URI=https://keycloak.example.co.id/realms/native
+      - KEYCLOAK_JWK_SET_URI=https://keycloak.example.co.id/realms/native/protocol/openid-connect/certs
+
+# Secret PLACEHOLDERS only — real creds come from Vault / a sealed-secret (see README).
+# DO NOT commit real values here; CHANGE_ME_VAULT is replaced at deploy time.
+secretGenerator:
+  - name: service-secret
+    literals:
+      - DB_USERNAME=org_service
+      - DB_PASSWORD=CHANGE_ME_VAULT
+
+generatorOptions:
+  # Hash-suffix the ConfigMap/Secret names so a config change rolls the pods: kustomize
+  # rewrites the Deployment's envFrom refs to the new hash, forcing a new ReplicaSet.
+  disableNameSuffixHash: false

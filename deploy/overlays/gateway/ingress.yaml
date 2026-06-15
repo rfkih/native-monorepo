@@ -1,0 +1,30 @@
+# The gateway is the ONLY externally-exposed service (the single synchronous edge that
+# validates inbound RS256 JWTs). Everything else is ClusterIP-only, reachable solely via
+# the gateway's routes. Set the host + TLS secret for your environment (see README).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gateway
+  labels:
+    app.kubernetes.io/name: gateway
+    app.kubernetes.io/part-of: native
+  annotations:
+    # Ingress controller is environment-specific (nginx / Traefik / a cloud LB). Set the
+    # class + any TLS/cert-manager annotations your cluster uses.
+    kubernetes.io/ingress.class: nginx
+spec:
+  tls:
+    - hosts:
+        - api.example.co.id # CHANGE_ME — your real gateway host
+      secretName: gateway-tls # CHANGE_ME — TLS cert Secret (cert-manager / sealed-secret)
+  rules:
+    - host: api.example.co.id # CHANGE_ME
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway
+                port:
+                  number: 80

@@ -1,0 +1,58 @@
+# entitlement-service overlay — a DB-owning service (Postgres role entitlement_service),
+# a Kafka CONSUMER (CompanyCreated -> default grants) AND PRODUCER (Entitlement events),
+# and a Redis user (entitlement-check cache). Readiness gates on db + kafka.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: native
+
+resources:
+  - ../../base
+
+labels:
+  - includeSelectors: true
+    pairs:
+      app.kubernetes.io/name: entitlement-service
+
+patches:
+  - target:
+      kind: Deployment
+      name: service
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: entitlement-service
+  - target:
+      kind: Service
+      name: service
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: entitlement-service
+
+images:
+  - name: native-service
+    newName: REGISTRY/native/entitlement-service
+    newTag: latest
+
+configMapGenerator:
+  - name: service-config
+    literals:
+      - DB_URL=jdbc:postgresql://postgres.native.svc.cluster.local:5432/entitlement_service
+      - KAFKA_BOOTSTRAP_SERVERS=kafka.native.svc.cluster.local:9092
+      - REDIS_HOST=redis.native.svc.cluster.local
+      - REDIS_PORT=6379
+      - KEYCLOAK_ISSUER_URI=https://keycloak.example.co.id/realms/native
+      - KEYCLOAK_JWK_SET_URI=https://keycloak.example.co.id/realms/native/protocol/openid-connect/certs
+
+# Secret PLACEHOLDERS only — real creds come from Vault / a sealed-secret (see README).
+secretGenerator:
+  - name: service-secret
+    literals:
+      - DB_USERNAME=entitlement_service
+      - DB_PASSWORD=CHANGE_ME_VAULT
+
+generatorOptions:
+  # Hash-suffix the ConfigMap/Secret names so a config change rolls the pods: kustomize
+  # rewrites the Deployment's envFrom refs to the new hash, forcing a new ReplicaSet.
+  disableNameSuffixHash: false

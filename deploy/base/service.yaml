@@ -1,0 +1,17 @@
+# Stable in-cluster endpoint for the service. Other pods reach it by name on port 80
+# (e.g. the gateway routes to http://org-service:80). Overlays rename it to match.
+apiVersion: v1
+kind: Service
+metadata:
+  name: service # overlay overrides
+  labels:
+    app.kubernetes.io/name: service
+    app.kubernetes.io/part-of: native
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: service
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
