@@ -1,0 +1,34 @@
+{
+  "type": "record",
+  "name": "TrialBalancePublished",
+  "namespace": "id.co.nativeapp.events.finance",
+  "doc": "finance-service CONSUMER copy of the TrialBalancePublished contract (P3d SEAM 2). Emitted (SEAM 3/4 — NOT wired this seam) by a member company's finance close; consumed by the GROUP consolidation to ingest the member's trial-balance lines into group_trial_balance, bound to the group's LEAD tenant + group scope (the two-GUC conjunction). Read as raw Avro bytes via libs/events AvroSerde (no Schema Registry serde); TrialBalancePublishedContractTest asserts this copy stays backward-compatible with the producer schema (rule 7). Partition key = group_id so a group's member trial balances are ordered after its GroupDefined. Money is integer minor units + ISO-4217 currency, never a float (rule 8).",
+  "fields": [
+    {"name": "company_id", "type": "string", "doc": "The MEMBER company whose trial balance this is (UUID as string). A dimension on the ingested lines, NOT the group tenant."},
+    {"name": "group_id", "type": "string", "doc": "The consolidation group the member belongs to (UUID as string); the Kafka partition key and the second RLS dimension."},
+    {"name": "period", "type": "string", "doc": "The accounting period these lines reconcile for (YYYY-MM)."},
+    {"name": "base_currency", "type": "string", "doc": "The member's base (functional) currency: an ISO-4217 code (e.g. IDR, USD)."},
+    {"name": "reconciled", "type": "boolean", "doc": "Whether the member's trial balance reconciled (debits == credits) before publish."},
+    {"name": "uses_illustrative_rules", "type": "boolean", "doc": "Whether the figures are derived from ILLUSTRATIVE_PLACEHOLDER statutory rules (self-describing for an auditor)."},
+    {
+      "name": "lines",
+      "doc": "The member's trial-balance lines for the period.",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "TrialBalanceLine",
+          "fields": [
+            {"name": "gl_account_code", "type": "string", "doc": "The resolved chart_of_account account code (the dimension)."},
+            {"name": "account_type", "type": "string", "doc": "The GL account class: ASSET | LIABILITY | EQUITY | REVENUE | EXPENSE."},
+            {"name": "posting_type", "type": "string", "doc": "The posting kind carried verbatim from the member's books."},
+            {"name": "amount_minor", "type": "long", "doc": "The line amount in the currency's minor units (integer; never a float)."},
+            {"name": "currency", "type": "string", "doc": "The line's ISO-4217 currency code (e.g. IDR, USD)."},
+            {"name": "related_party_counterparty_id", "type": ["null", "string"], "default": null, "doc": "The intercompany counterparty (UUID as string) for a related-party line, else null. SEAM-3 elimination."},
+            {"name": "intercompany_ref", "type": ["null", "string"], "default": null, "doc": "A free-form intercompany reference for a related-party line, else null."}
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -57,7 +57,8 @@ abstract class PostgresRlsTestBase {
       // break gl_account resolution for every test).
       st.execute(
           "TRUNCATE TABLE ledger_posting, consolidated_revenue, consolidated_pnl,"
-              + " payroll_run_ledger, group_ref, group_member, group_lead, processed_event");
+              + " payroll_run_ledger, group_ref, group_member, group_lead,"
+              + " group_trial_balance, processed_event");
     } catch (SQLException ignored) {
       // Tables not created yet (pre-Flyway) — nothing to reset.
     }

@@ -36,6 +36,7 @@ schema. Until then a row here is documentation of intent, not a shippable contra
 | **`LaborCostAllocated`** | **employee-service** | **finance** | **payroll_run_id, run_seq, company_id, period, outlet_id, gl_account, amount_minor, currency, uses_illustrative_rules, unallocated** | **LIVE (#23); finance consumer #23** |
 | **`GroupDefined`** | **org-service** | **finance** | **group_id, lead_company_id, reporting_currency, name** | **LIVE (P3d SEAM 1); finance consumer P3d SEAM 1** |
 | **`GroupMembershipChanged`** | **org-service** | **finance** | **group_id, member_company_id, change_kind, effective_from, effective_to** | **LIVE (P3d SEAM 1); finance consumer P3d SEAM 1** |
+| **`TrialBalancePublished`** | **finance** (member close) | **finance** (group consolidation) | **company_id, group_id, period, base_currency, reconciled, uses_illustrative_rules, lines[]** | **CONSUMER LIVE (P3d SEAM 2, group_trial_balance ingest); PRODUCER SEAM 3/4 (not wired)** |
 | **`ConsolidationClosed`** | **finance** | **shell, notification** | **company_id (or group_id), period** | **LIVE (notification consumer #22)** |
 | **`DeliveryReceipt`** | **notification-service** | **(audit/observability sinks; re-send policy)** | **notification_id, company_id, channel, status, provider_ref, delivered_at** | **LIVE (#22)** |
 
@@ -1086,3 +1087,106 @@ group whose `GroupDefined` has not yet been consumed throws a **retryable** `Unk
 a valid `id` header fails closed to `<topic>.DLT`; an undecodable payload routes to the DLT
 (non-retryable). The `GroupDefinedContractTest` / `GroupMembershipChangedContractTest` assert the
 consumer copies stay backward-compatible with the producer schemas (rule 7).
+
+### `TrialBalancePublished`
+
+Emitted by a **member company's** finance close when its trial balance for a period is finalized (P3d
+SEAM 2 — the group trial-balance ingest). Consumed by the **group consolidation** in finance-service
+to ingest the member's trial-balance lines into the group's `group_trial_balance` read model, so a
+later seam can run group consolidation + intercompany elimination. **SEAM 2 ships ONLY the consumer
+(the ingest); the PRODUCER — emitting `TrialBalancePublished` at a within-company close — is SEAM 3/4
+and is NOT wired this seam.** SEAM 2 also introduces the **two-GUC group RLS core**: a group table is
+scoped by the CONJUNCTION `group_id = current_setting('app.current_group') AND company_id =
+current_setting('app.current_tenant')`, where `company_id` is the group's LEAD company. A group
+read/write therefore requires BOTH the group scope AND the lead-company tenant; any partial/unbound
+state fails closed, and a normal single-tenant request (which never sets `app.current_group`) sees no
+group rows at all (the single-tenant path is byte-identical).
+
+- **Producer:** `finance-service` (the within-company close path) — **SEAM 3/4, not yet shipped**.
+- **Consumers:** `finance-service` (the group `group_trial_balance` ingest) — **LIVE (P3d SEAM 2)**.
+- **Aggregate type / partition key:** `consolidation_group` / `group_id` (so a group's member trial
+  balances are ordered after its `GroupDefined`, the way the group read model is hydrated first).
+- **Outbox `event_type`:** `TrialBalancePublished`
+- **Schema (producer, source of truth):** `services/finance-service/src/main/resources/avro/TrialBalancePublished.avsc` (the producer path reuses this once it ships in SEAM 3/4).
+- **Schema (finance consumer copy):** `services/finance-service/src/main/resources/avro/TrialBalancePublished.avsc`
+  — finance owns its own consumer view; the finance `TrialBalancePublishedContractTest` asserts the copy
+  stays backward-compatible (rule 7). The consumer reads the outbox payload as **raw Avro bytes** via
+  `libs/events AvroSerde` (no Schema Registry serde), deduping by the **real, globally-unique event
+  UUID** (`ProcessedEventStore`) plus a `(source_event_id, gl_account_code, posting_type)` UNIQUE
+  backstop, so a re-delivery never double-ingests.
+- **Full name:** `id.co.nativeapp.events.finance.TrialBalancePublished`
+
+**`company_id` is the MEMBER company** whose trial balance this is — a *dimension* on the ingested
+lines (stored as `member_company_id`), NOT the tenant. The ingested `group_trial_balance` rows are
+owned by the group's **LEAD** company (`company_id = lead`, resolved from finance's local `group_lead`
+reference mapping — rule 2, never a sync call), and the write is bound to `(tenant = lead, group =
+group_id)` so the conjunction `WITH CHECK` passes. A member can therefore neither enumerate nor mutate
+the group's accumulated trial balance. An event for a group whose `GroupDefined` has not yet been
+consumed throws a **retryable** `UnknownGroupException` (re-delivered until the group is registered),
+never ingested under an unknown tenant. A record without a valid `id` header fails closed to
+`TrialBalancePublished.DLT`; an undecodable payload (or a line with an unknown `account_type`) routes
+to the DLT (non-retryable). Money is integer minor units + an ISO-4217 currency, **never a float**
+(rule 8).
+
+**Key fields**
+
+| Field | Avro type | Meaning |
+|---|---|---|
+| `company_id` | `string` | The MEMBER company whose trial balance this is (UUID as string); a dimension, not the tenant |
+| `group_id` | `string` | The consolidation group the member belongs to (UUID as string); the partition key + the second RLS dimension |
+| `period` | `string` | The accounting period these lines reconcile for (`YYYY-MM`) |
+| `base_currency` | `string` | The member's base (functional) currency: an ISO-4217 code |
+| `reconciled` | `boolean` | Whether the member's trial balance reconciled (debits == credits) before publish |
+| `uses_illustrative_rules` | `boolean` | Whether the figures are illustrative-placeholder-derived (self-describing for an auditor) |
+| `lines` | `array<TrialBalanceLine>` | The member's trial-balance lines for the period |
+| `lines[].gl_account_code` | `string` | The resolved chart_of_account account code (the dimension) |
+| `lines[].account_type` | `string` | The GL account class: `ASSET` \| `LIABILITY` \| `EQUITY` \| `REVENUE` \| `EXPENSE` |
+| `lines[].posting_type` | `string` | The posting kind, carried verbatim from the member's books |
+| `lines[].amount_minor` | `long` | The line amount in the currency's minor units (integer; never a float) |
+| `lines[].currency` | `string` | The line's ISO-4217 currency code |
+| `lines[].related_party_counterparty_id` | `["null","string"]` (default `null`) | The intercompany counterparty (UUID as string) for a related-party line, else null (SEAM-3 elimination) |
+| `lines[].intercompany_ref` | `["null","string"]` (default `null`) | A free-form intercompany reference for a related-party line, else null |
+
+**Avro schema**
+
+```json
+{
+  "type": "record",
+  "name": "TrialBalancePublished",
+  "namespace": "id.co.nativeapp.events.finance",
+  "doc": "Emitted by a member company's finance close when its trial balance for a period is finalized (P3d SEAM 2); consumed by the group consolidation in finance-service to ingest the member's trial-balance lines into group_trial_balance, bound to the group's LEAD tenant + group scope (the two-GUC conjunction). SEAM 2 ships only the consumer; the producer is SEAM 3/4. company_id is the MEMBER company (a dimension), not the tenant. Money is integer minor units + ISO-4217 currency, never a float.",
+  "fields": [
+    {"name": "company_id", "type": "string", "doc": "The MEMBER company whose trial balance this is (UUID as string). A dimension on the ingested lines, NOT the group tenant."},
+    {"name": "group_id", "type": "string", "doc": "The consolidation group the member belongs to (UUID as string); the Kafka partition key and the second RLS dimension."},
+    {"name": "period", "type": "string", "doc": "The accounting period these lines reconcile for (YYYY-MM)."},
+    {"name": "base_currency", "type": "string", "doc": "The member's base (functional) currency: an ISO-4217 code (e.g. IDR, USD)."},
+    {"name": "reconciled", "type": "boolean", "doc": "Whether the member's trial balance reconciled (debits == credits) before publish."},
+    {"name": "uses_illustrative_rules", "type": "boolean", "doc": "Whether the figures are derived from ILLUSTRATIVE_PLACEHOLDER statutory rules (self-describing for an auditor)."},
+    {
+      "name": "lines",
+      "doc": "The member's trial-balance lines for the period.",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "TrialBalanceLine",
+          "fields": [
+            {"name": "gl_account_code", "type": "string", "doc": "The resolved chart_of_account account code (the dimension)."},
+            {"name": "account_type", "type": "string", "doc": "The GL account class: ASSET | LIABILITY | EQUITY | REVENUE | EXPENSE."},
+            {"name": "posting_type", "type": "string", "doc": "The posting kind carried verbatim from the member's books."},
+            {"name": "amount_minor", "type": "long", "doc": "The line amount in the currency's minor units (integer; never a float)."},
+            {"name": "currency", "type": "string", "doc": "The line's ISO-4217 currency code (e.g. IDR, USD)."},
+            {"name": "related_party_counterparty_id", "type": ["null", "string"], "default": null, "doc": "The intercompany counterparty (UUID as string) for a related-party line, else null. SEAM-3 elimination."},
+            {"name": "intercompany_ref", "type": ["null", "string"], "default": null, "doc": "A free-form intercompany reference for a related-party line, else null."}
+          ]
+        }
+      }
+    }
+  ]
+}
+```
+
+**Compatibility.** Backward-compatible only: add fields with a default, never add a required field
+without a default, never remove/rename a field or change a type. The finance
+`TrialBalancePublishedContractTest` enforces the triad (parse + `AvroSerde` round-trip +
+add-optional-compatible / new-required-broken).

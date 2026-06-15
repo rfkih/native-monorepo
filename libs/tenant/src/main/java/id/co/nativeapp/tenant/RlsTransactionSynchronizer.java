@@ -65,7 +65,16 @@ public class RlsTransactionSynchronizer {
     // subsequent queries use.
     var connection = DataSourceUtils.getConnection(dataSource);
     try {
-      initializer.applyTenant(connection, tenant.get().companyId());
+      var bound = tenant.get();
+      if (bound.hasGroup()) {
+        // P3d SEAM 2 — a consolidation group is bound: set BOTH app.current_tenant (the lead) AND,
+        // additively, app.current_group. Group-table RLS is a conjunction of the two.
+        initializer.applyTenantAndGroup(connection, bound.companyId(), bound.groupId());
+      } else {
+        // The UNCHANGED single-tenant path: ONLY app.current_tenant is set; app.current_group is
+        // never touched, so the behaviour is byte-identical to today.
+        initializer.applyTenant(connection, bound.companyId());
+      }
       return true;
     } catch (SQLException e) {
       throw new IllegalStateException(

@@ -106,10 +106,15 @@ public class KafkaConfig {
         id.co.nativeapp.finance.labor.PayrollPostedDecodeException.class,
         id.co.nativeapp.finance.group.GroupDefinedDecodeException.class,
         id.co.nativeapp.finance.group.GroupMembershipChangedDecodeException.class,
+        id.co.nativeapp.finance.grouptb.TrialBalancePublishedDecodeException.class,
         id.co.nativeapp.finance.revenue.MissingEventIdException.class);
-    // NOTE: GroupMembershipChanged's UnknownGroupException is deliberately NOT listed — it is a
-    // TRANSIENT reorder (GroupDefined not yet consumed), so it MUST be retried, not DLT'd on the
-    // first attempt; only after the bounded retry budget is exhausted does it reach the DLT.
+    // NOTE: GroupMembershipChanged's / TrialBalancePublished's UnknownGroupException is
+    // deliberately
+    // NOT listed — it is a TRANSIENT reorder (GroupDefined not yet consumed), so it MUST be
+    // retried,
+    // not DLT'd on the first attempt; only after the bounded retry budget is exhausted does it
+    // reach
+    // the DLT.
     return handler;
   }
 
