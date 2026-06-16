@@ -8,9 +8,6 @@ import id.co.nativeapp.finance.pnl.domain.ConsolidatedPnl;
 import id.co.nativeapp.finance.pnl.service.PnlReader;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.TenantContext;
-import java.sql.Connection;
-import java.sql.ResultSet;
-import java.sql.Statement;
 import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -288,10 +285,6 @@ class LaborSupersessionTest extends PostgresRlsTestBase {
         occurredAt);
   }
 
-  private long ledgerCountAsAdmin() throws Exception {
-    return longQueryAsAdmin("SELECT count(*) FROM ledger_posting");
-  }
-
   private long reversalCountAsAdmin() throws Exception {
     return longQueryAsAdmin("SELECT count(*) FROM ledger_posting WHERE posting_role = 'REVERSAL'");
   }
@@ -304,25 +297,13 @@ class LaborSupersessionTest extends PostgresRlsTestBase {
             + "'");
   }
 
-  private String runStateAsAdmin(UUID runId) throws Exception {
-    try (Connection admin =
-            java.sql.DriverManager.getConnection(
-                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
-        Statement st = admin.createStatement();
-        ResultSet rs =
-            st.executeQuery(
-                "SELECT state FROM payroll_run_ledger WHERE payroll_run_id = '" + runId + "'")) {
-      rs.next();
-      return rs.getString("state");
-    }
-  }
-
+  /** Single-{@code long}-column admin (BYPASSRLS) query, local to this test's reversal helpers. */
   private long longQueryAsAdmin(String sql) throws Exception {
-    try (Connection admin =
+    try (java.sql.Connection admin =
             java.sql.DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
-        Statement st = admin.createStatement();
-        ResultSet rs = st.executeQuery(sql)) {
+        java.sql.Statement st = admin.createStatement();
+        java.sql.ResultSet rs = st.executeQuery(sql)) {
       rs.next();
       return rs.getLong(1);
     }

@@ -1,8 +1,10 @@
 package id.co.nativeapp.finance;
 
 import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -54,13 +56,16 @@ abstract class PostgresRlsTestBase {
         Statement st = admin.createStatement()) {
       // Truncate only the per-event business/read-model tables; the chart_of_account and
       // mapping_rule reference data seeded by Flyway V2 is left intact (truncating it would
-      // break gl_account resolution for every test).
+      // break gl_account resolution for every test). CASCADE so a future FK from a new table onto
+      // one of these (or a new table added to this list) is also cleared and never left dirty —
+      // CASCADE only follows FKs WITHIN this truncated set here, so it does not reach the retained
+      // reference data.
       st.execute(
           "TRUNCATE TABLE ledger_posting, consolidated_revenue, consolidated_pnl,"
               + " payroll_run_ledger, group_ref, group_member, group_lead,"
               + " group_trial_balance, consolidation_ledger, consolidation_summary,"
               + " intercompany_match, group_membership_pending, processed_event,"
-              + " outbox, within_company_close, member_group_index");
+              + " outbox, within_company_close, member_group_index CASCADE");
     } catch (SQLException ignored) {
       // Tables not created yet (pre-Flyway) — nothing to reset.
     }
@@ -99,6 +104,42 @@ abstract class PostgresRlsTestBase {
       st.execute("GRANT ALL ON DATABASE " + POSTGRES.getDatabaseName() + " TO " + APP_USER);
     } catch (SQLException e) {
       throw new IllegalStateException("Failed to provision the app_user role", e);
+    }
+  }
+
+  // ----------------------------------------------------------------------- admin (BYPASSRLS) reads
+  // The two verification helpers the labor reconciliation/supersession tests each re-declared,
+  // hoisted here (#35). They read straight off the superuser/BYPASSRLS connection so they see every
+  // tenant's rows regardless of any session GUC. Deliberately instance (not static) protected
+  // methods AND self-contained (no shared longQueryAsAdmin/stringQueryAsAdmin in the base): several
+  // unrelated subclasses still declare their OWN private helpers of those names/signatures, and a
+  // private instance method may coexist with an inherited protected instance method (it does not
+  // override) — whereas an inherited STATIC method, or a base longQueryAsAdmin/stringQueryAsAdmin,
+  // would collide with theirs. Keeping only these two names confined here avoids that.
+
+  /** The {@code payroll_run_ledger.state} for a run, read over the admin (BYPASSRLS) connection. */
+  protected String runStateAsAdmin(UUID runId) throws SQLException {
+    try (Connection admin =
+            java.sql.DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        Statement st = admin.createStatement();
+        ResultSet rs =
+            st.executeQuery(
+                "SELECT state FROM payroll_run_ledger WHERE payroll_run_id = '" + runId + "'")) {
+      rs.next();
+      return rs.getString(1);
+    }
+  }
+
+  /** The total {@code ledger_posting} row count, read over the admin (BYPASSRLS) connection. */
+  protected long ledgerCountAsAdmin() throws SQLException {
+    try (Connection admin =
+            java.sql.DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        Statement st = admin.createStatement();
+        ResultSet rs = st.executeQuery("SELECT count(*) FROM ledger_posting")) {
+      rs.next();
+      return rs.getLong(1);
     }
   }
 }

@@ -243,7 +243,7 @@ public class PayrollRunWriter {
 
     // Exact-sum guard across the whole run: sum(allocations) == total employer labor cost.
     Money totalLaborCost = grossTotal.plus(employerContributionTotal);
-    assertAllocationSumsToTotal(allAllocations, totalLaborCost, baseCurrency);
+    assertAllocationSumsToTotal(run, allAllocations, totalLaborCost, baseCurrency);
 
     run.setTotals(grossTotal, employeeDeductionTotal, employerContributionTotal, netTotal);
     run.markCalculated();
@@ -496,7 +496,7 @@ public class PayrollRunWriter {
         switch (earningRule.getParamKind()) {
           case FIXED_AMOUNT -> earningRule.getFixedAmount();
           case PERCENT_OF_BASE -> pkgBase.applyBasisPoints(earningRule.getPercentBasisPoints());
-          case PER_METRIC_UNIT -> resolveMetricEarning(employee, earningRule, asOf, baseCurrency);
+          case PER_METRIC_UNIT -> resolveMetricEarning(employee, earningRule, asOf);
         };
     amount.requireSameCurrencyAs(Money.ofMinor(0L, baseCurrency));
     if (component.getKind() == PayComponentKind.EARNING) {
@@ -506,8 +506,7 @@ public class PayrollRunWriter {
     }
   }
 
-  private Money resolveMetricEarning(
-      Employee employee, EarningRule earningRule, LocalDate asOf, String baseCurrency) {
+  private Money resolveMetricEarning(Employee employee, EarningRule earningRule, LocalDate asOf) {
     Money rate = earningRule.getRate();
     // Run-month prefix ("YYYY-MM"). A metric is stored at whatever grain the producer published —
     // daily ("YYYY-MM-DD") or monthly ("YYYY-MM"). SUM every row for this metric_key + subject
@@ -515,17 +514,66 @@ public class PayrollRunWriter {
     // metric resolves correctly instead of silently matching nothing and resolving to zero.
     String monthPrefix = YearMonth.from(asOf).toString();
     long totalUnits = 0L;
+    // Single-grain guard (#34): the prefix match sums every row in the run month REGARDLESS of
+    // period grain. A metric is published either at DAILY grain (period "YYYY-MM-DD") or MONTHLY
+    // grain (period "YYYY-MM"); the two are alternatives, never both. If a producer ever emitted
+    // BOTH a daily AND a monthly row for the same (metric_key, subject, month) — a double-publish
+    // at
+    // two grains — the prefix sum would DOUBLE-COUNT the same operational activity into the
+    // commission. The period grain is the PERIOD-STRING shape (not MetricInput.grain, which is the
+    // SUBJECT grain outlet/employee/shift); assert every matched row for a subject shares ONE
+    // period
+    // grain and fail loudly on a mixed-grain set rather than guess which is canonical.
+    PeriodGrain resolvedGrain = null;
     // Attribute the metric to the employee's outlets in the period (subject_id = outlet id).
     for (UUID outletId : outletsForEmployee(employee.getId(), asOf)) {
-      totalUnits +=
-          metricInputRepository
-              .findByMetricKeyAndSubjectIdAndPeriodStartingWith(
-                  earningRule.getMetricKey(), outletId, monthPrefix)
-              .stream()
-              .mapToLong(MetricInput::getValue)
-              .sum();
+      List<MetricInput> rows =
+          metricInputRepository.findByMetricKeyAndSubjectIdAndPeriodStartingWith(
+              earningRule.getMetricKey(), outletId, monthPrefix);
+      for (MetricInput row : rows) {
+        PeriodGrain rowGrain = periodGrainOf(row.getPeriod());
+        if (resolvedGrain == null) {
+          resolvedGrain = rowGrain;
+        } else if (resolvedGrain != rowGrain) {
+          throw new IllegalStateException(
+              "Metric '"
+                  + earningRule.getMetricKey()
+                  + "' for subject "
+                  + outletId
+                  + " in "
+                  + monthPrefix
+                  + " has rows at MIXED period grains ("
+                  + resolvedGrain
+                  + " and "
+                  + rowGrain
+                  + "); a single (metric_key, subject, month) must resolve at exactly ONE grain —"
+                  + " summing both would double-count. Fix the upstream producer's grain");
+        }
+        totalUnits += row.getValue();
+      }
     }
     return rate.multiply(totalUnits);
+  }
+
+  /** The two period grains a metric row may carry; the period-string shape distinguishes them. */
+  private enum PeriodGrain {
+    MONTHLY,
+    DAILY
+  }
+
+  /**
+   * Classifies a metric row's stored {@code period} by its string shape: {@code "YYYY-MM"} (length
+   * 7) is MONTHLY, {@code "YYYY-MM-DD"} (length 10) is DAILY. Any other length is an unrecognised
+   * producer grain and fails loudly rather than being silently summed.
+   */
+  private PeriodGrain periodGrainOf(String period) {
+    return switch (period.length()) {
+      case 7 -> PeriodGrain.MONTHLY;
+      case 10 -> PeriodGrain.DAILY;
+      default ->
+          throw new IllegalStateException(
+              "Metric period '" + period + "' is neither monthly (YYYY-MM) nor daily (YYYY-MM-DD)");
+    };
   }
 
   // ---------------------------------------------------------------------
@@ -624,7 +672,7 @@ public class PayrollRunWriter {
   }
 
   private void assertAllocationSumsToTotal(
-      List<AllocatedRow> rows, Money totalLaborCost, String baseCurrency) {
+      PayrollRun run, List<AllocatedRow> rows, Money totalLaborCost, String baseCurrency) {
     Money sum = Money.ofMinor(0L, baseCurrency);
     for (AllocatedRow row : rows) {
       sum = sum.plus(row.amount());
@@ -635,6 +683,10 @@ public class PayrollRunWriter {
               + sum.amountMinor()
               + " does not equal total labor cost "
               + totalLaborCost.amountMinor()
+              + " for payroll_run "
+              + run.getId()
+              + " period "
+              + run.getPeriod()
               + " (exact-sum invariant violated; run fails)");
     }
   }

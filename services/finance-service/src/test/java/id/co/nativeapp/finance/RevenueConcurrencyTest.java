@@ -103,10 +103,6 @@ class RevenueConcurrencyTest extends PostgresRlsTestBase {
             });
   }
 
-  private long ledgerCountAsAdmin() throws Exception {
-    return countAsAdmin("SELECT count(*) FROM ledger_posting");
-  }
-
   private long revenueRowCountAsAdmin() throws Exception {
     return countAsAdmin("SELECT count(*) FROM consolidated_revenue");
   }

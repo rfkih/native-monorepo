@@ -106,8 +106,7 @@ public class PayrollReconciliationWriter {
     Money controlTotal = event.laborControlTotal();
     runRow.recordControlTotal(controlTotal, event.usesIllustrativeRules());
 
-    if (runRow.allocatedSum().equals(controlTotal)) {
-      runRow.transitionTo(PayrollRunState.RECONCILED);
+    if (runRow.reconcileAgainstControl()) {
       log.info(
           "PayrollPosted runId={} period={} run_seq={} RECONCILED: allocated_sum={} == control={}",
           event.payrollRunId(),
@@ -116,7 +115,6 @@ public class PayrollReconciliationWriter {
           runRow.allocatedSum(),
           controlTotal);
     } else {
-      runRow.transitionTo(PayrollRunState.RECONCILE_FAILED);
       log.error(
           "PayrollPosted runId={} period={} run_seq={} RECONCILE_FAILED: allocated_sum={} !="
               + " control={}; postings stay on the books, the period is held back from final",

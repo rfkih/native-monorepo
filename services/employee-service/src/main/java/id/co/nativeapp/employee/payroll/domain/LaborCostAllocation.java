@@ -46,6 +46,10 @@ public class LaborCostAllocation extends Auditable {
 
   @Embedded private MoneyEmbeddable amount;
 
+  // NOMINAL pre-residual share (round(attributable_earnings * 10000 / total)) — NOT the realized
+  // share of the stored amount: largest-remainder rounding moves the residual onto one outlet, so
+  // amount/total may differ slightly from this bp. It records the allocation BASIS, not the
+  // outcome.
   @Column(name = "earnings_share_bp", nullable = false)
   private int earningsShareBp;
 

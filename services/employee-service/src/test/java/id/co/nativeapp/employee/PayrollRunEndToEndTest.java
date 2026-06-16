@@ -283,6 +283,89 @@ class PayrollRunEndToEndTest extends PostgresRlsTestBase {
     // proving the daily-grain metric resolved through gross-to-net into the run totals.
     assertThat(run.grossTotalMinor()).isEqualTo(BASE_MINOR + expectedCommission);
     assertThat(run.grossTotalMinor()).isEqualTo(21_500_000L);
+
+    // Gross-only is not enough (#34): the COMMISSION component is TAXABLE, so it must also flow
+    // into
+    // the PPh21/net leg. If a mis-routed commission landed in a NON-taxable bucket, gross would
+    // still
+    // be 21,500,000 but PPh21 (and thus net) would be UNCHANGED from the no-commission baseline —
+    // this delta assertion catches that mis-route.
+    //   taxableBase 21,500,000; BPJS EE 100,000 (capped at ceiling); periodTaxable 21,400,000;
+    //   annual = 21,400,000*12 - 54,000,000(TK0) = 202,800,000;
+    //   tax = 50,000,000*10% + 152,800,000*15% = 27,920,000; /12 HALF_EVEN = 2,326,667.
+    //   EE deductions = BPJS 100,000 + PPh21 2,326,667 = 2,426,667; net = 21,500,000 - 2,426,667.
+    assertThat(run.employeeDeductionTotalMinor()).isEqualTo(2_426_667L);
+    assertThat(run.netTotalMinor()).isEqualTo(19_073_333L);
+    // The taxable commission raised PPh21/net above the base-only run (gross 20M -> EE 2,201,667):
+    // the +1,500,000 taxable commission added 225,000 of employee deductions, not zero.
+    assertThat(run.employeeDeductionTotalMinor()).isGreaterThan(2_201_667L);
+  }
+
+  @Test
+  void aMetricPublishedAtBothDailyAndMonthlyGrainInTheSameMonthFailsTheRunLoudly()
+      throws Exception {
+    // SINGLE-GRAIN guard (#34): a metric is published at daily grain ("YYYY-MM-DD") OR monthly
+    // grain
+    // ("YYYY-MM"), never both. If a producer double-publishes the SAME (metric_key, subject, month)
+    // at both grains, the run-month prefix sum would DOUBLE-COUNT it into the commission. The run
+    // must fail loudly on the mixed-grain set rather than silently pay against a doubled base.
+    org.assertj.core.api.Assertions.assertThatThrownBy(
+            () ->
+                TenantContext.callAs(
+                    TENANT_A,
+                    ACTOR_A,
+                    () -> {
+                      seeder.seed(IDR);
+                      UUID outlet = UUID.randomUUID();
+                      orgProjectionService.apply(
+                          new OrgUnitProjectedEvent(
+                              UUID.randomUUID(), outlet, TENANT_A, LEGAL_EMPLOYER, "OUTLET", true));
+                      UUID commissionId = insertCommissionComponentAsAdmin();
+
+                      // BOTH a daily row AND a monthly row for the SAME outlet in the SAME month.
+                      projectDailyWash(outlet, "2026-06-01", 12L);
+                      projectMonthlyWash(outlet, "2026-06", 30L);
+
+                      UUID employeeId =
+                          employeeService
+                              .create(
+                                  new CreateEmployeeCommand(
+                                      "Rina", "TK0", "3209777777777777", "8888000011112222"))
+                              .getId();
+                      var contract =
+                          employeeService.addContract(
+                              new AddContractCommand(
+                                  employeeId,
+                                  "PERMANENT",
+                                  LEGAL_EMPLOYER,
+                                  LocalDate.of(2026, 1, 1),
+                                  LocalDate.of(9999, 12, 31)));
+                      CompensationPackage pkg =
+                          compensationWriter.createPackage(
+                              employeeId,
+                              contract.getId(),
+                              Money.ofMinor(BASE_MINOR, IDR),
+                              LocalDate.of(2026, 1, 1),
+                              LocalDate.of(9999, 12, 31));
+                      compensationWriter.addPerMetricEarning(
+                          pkg.getId(),
+                          commissionId,
+                          "wash_count",
+                          Money.ofMinor(50_000L, IDR),
+                          LocalDate.of(2026, 1, 1),
+                          LocalDate.of(9999, 12, 31));
+                      assignmentService.add(
+                          new AddAssignmentCommand(
+                              employeeId,
+                              outlet,
+                              null,
+                              "cashier",
+                              LocalDate.of(2026, 1, 1),
+                              LocalDate.of(9999, 12, 31)));
+                      return payrollRunService.calculate(
+                          new RunPayrollCommand("2026-06", List.of(employeeId), List.of()), IDR);
+                    }))
+        .hasMessageContaining("MIXED period grains");
   }
 
   @Test
@@ -403,6 +486,12 @@ class PayrollRunEndToEndTest extends PostgresRlsTestBase {
   }
 
   private void projectDailyWash(UUID outlet, String period, long value) {
+    metricProjectionService.apply(
+        new MetricProjectedEvent(
+            UUID.randomUUID(), TENANT_A, "wash_count", period, "outlet", outlet, value));
+  }
+
+  private void projectMonthlyWash(UUID outlet, String period, long value) {
     metricProjectionService.apply(
         new MetricProjectedEvent(
             UUID.randomUUID(), TENANT_A, "wash_count", period, "outlet", outlet, value));

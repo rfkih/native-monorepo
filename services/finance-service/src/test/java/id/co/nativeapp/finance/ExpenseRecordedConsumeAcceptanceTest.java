@@ -103,17 +103,6 @@ class ExpenseRecordedConsumeAcceptanceTest extends KafkaPostgresTestBase {
     assertThat(afterDup.revenue()).isEqualTo(Money.ofMinor(revenueMinor, "IDR"));
   }
 
-  private long ledgerCountAsAdmin() throws Exception {
-    try (java.sql.Connection admin =
-            java.sql.DriverManager.getConnection(
-                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
-        java.sql.Statement st = admin.createStatement();
-        java.sql.ResultSet rs = st.executeQuery("SELECT count(*) FROM ledger_posting")) {
-      rs.next();
-      return rs.getLong(1);
-    }
-  }
-
   private Map<String, Object> expensePostingAsAdmin() throws Exception {
     try (java.sql.Connection admin =
             java.sql.DriverManager.getConnection(

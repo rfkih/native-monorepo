@@ -264,8 +264,10 @@ public class LaborCostPostingWriter {
         || runRow.getState() == PayrollRunState.CURRENCY_MISMATCH) {
       return;
     }
-    if (runRow.allocatedSum().equals(controlTotal)) {
-      runRow.transitionTo(PayrollRunState.RECONCILED);
+    // The shared reconcile-decision (#35): RECONCILED on a match, else hold RECONCILE_FAILED until
+    // a
+    // later bucket completes the sum (or the run is genuinely partial).
+    if (runRow.reconcileAgainstControl()) {
       log.info(
           "Run runId={} period={} run_seq={} self-healed to RECONCILED on the final bucket:"
               + " allocated_sum={} == control={} (no PayrollPosted re-delivery needed)",
@@ -274,10 +276,6 @@ public class LaborCostPostingWriter {
           runRow.getRunSeq(),
           runRow.allocatedSum(),
           controlTotal);
-    } else {
-      // Still short of (or over) the control total — hold RECONCILE_FAILED until a later bucket
-      // completes the sum (or the run is genuinely partial).
-      runRow.transitionTo(PayrollRunState.RECONCILE_FAILED);
     }
   }
 
@@ -293,9 +291,14 @@ public class LaborCostPostingWriter {
    */
   private String divergentPeriodCurrency(
       PayrollRunLedger runRow, String period, String bucketCurrency) {
-    // For an already-accumulating run, its own currency is authoritative.
+    // The run row's own currency is the authoritative check at both ends (computed once, #35):
+    // null when the bucket matches it, else the run currency it diverges from.
+    String runRowDivergence =
+        runRow.currencyCode().equals(bucketCurrency) ? null : runRow.currencyCode();
+
+    // For an already-accumulating run, its own currency is authoritative — decide on it directly.
     if (runRow.allocatedSum().amountMinor() != 0L || runRow.controlTotal() != null) {
-      return runRow.currencyCode().equals(bucketCurrency) ? null : runRow.currencyCode();
+      return runRowDivergence;
     }
     // Otherwise compare against any P&L row already established for the period (e.g. a prior run in
     // a
@@ -306,8 +309,8 @@ public class LaborCostPostingWriter {
         return periodCurrency;
       }
     }
-    // The run row's own seeded currency (set from the first bucket it saw) is the last check.
-    return runRow.currencyCode().equals(bucketCurrency) ? null : runRow.currencyCode();
+    // Fall back to the run row's own seeded currency (set from the first bucket it saw).
+    return runRowDivergence;
   }
 
   /** Finds this run's control row or opens a fresh PENDING one stamped with the event tenant. */

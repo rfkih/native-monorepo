@@ -288,19 +288,6 @@ class LaborCostPostingTest extends PostgresRlsTestBase {
         occurredAt);
   }
 
-  private String runStateAsAdmin(UUID runId) throws Exception {
-    try (Connection admin =
-            java.sql.DriverManager.getConnection(
-                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
-        Statement st = admin.createStatement();
-        ResultSet rs =
-            st.executeQuery(
-                "SELECT state FROM payroll_run_ledger WHERE payroll_run_id = '" + runId + "'")) {
-      rs.next();
-      return rs.getString("state");
-    }
-  }
-
   private LaborCostAllocatedEvent laborEvent(
       UUID eventId,
       UUID runId,
@@ -351,17 +338,6 @@ class LaborCostPostingTest extends PostgresRlsTestBase {
           rs.getString("posting_role"),
           rs.getBoolean("unallocated"),
           rs.getString("period"));
-    }
-  }
-
-  private long ledgerCountAsAdmin() throws Exception {
-    try (Connection admin =
-            java.sql.DriverManager.getConnection(
-                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
-        Statement st = admin.createStatement();
-        ResultSet rs = st.executeQuery("SELECT count(*) FROM ledger_posting")) {
-      rs.next();
-      return rs.getLong(1);
     }
   }
 

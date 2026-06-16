@@ -35,6 +35,12 @@ public interface PayrollRunLedgerRepository extends JpaRepository<PayrollRunLedg
    * paths, BEFORE any run-row read/insert. Returns {@code true} (the void {@code
    * pg_advisory_xact_lock} is mapped to a boolean projection) purely so Spring Data can bind it as
    * a scalar result.
+   *
+   * <p>{@code hashtext(:key)} maps the {@code company:period} string into a 32-bit space, so two
+   * distinct keys could collide onto the same lock id. A collision only OVER-serializes (two
+   * unrelated {@code (company, period)} pairs briefly take turns on one lock) — it is never a money
+   * error: correctness rests on supersession + the exact-sum invariant, not on the lock's
+   * granularity, which only affects concurrency throughput.
    */
   @Query(value = "SELECT pg_advisory_xact_lock(hashtext(:key)::bigint) IS NULL", nativeQuery = true)
   boolean lockPeriod(@Param("key") String key);

@@ -65,15 +65,4 @@ class SaleRecordedMissingHeaderDltTest extends KafkaPostgresTestBase {
         .pollInterval(Duration.ofMillis(200))
         .untilAsserted(() -> assertThat(ledgerCountAsAdmin()).isEqualTo(1L));
   }
-
-  private long ledgerCountAsAdmin() throws Exception {
-    try (java.sql.Connection admin =
-            java.sql.DriverManager.getConnection(
-                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
-        java.sql.Statement st = admin.createStatement();
-        java.sql.ResultSet rs = st.executeQuery("SELECT count(*) FROM ledger_posting")) {
-      rs.next();
-      return rs.getLong(1);
-    }
-  }
 }

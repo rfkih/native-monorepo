@@ -266,20 +266,23 @@ class GrossToNetCalculatorTest {
   }
 
   @Test
-  void aTopBracketCapBelowTheIncomeFailsLoudlySoTopIncomeIsNeverLeftUntaxed() {
-    // A MISCONFIGURED progressive table whose top bracket cap (100,000,000) is BELOW the annualized
-    // taxable income would silently leave the income above the cap UNTAXED. The walker must reject
-    // it rather than under-tax.
+  void aFiniteTopBracketCapIsRejectedAtLoadTimeSoTopIncomeIsNeverLeftUntaxed() {
+    // A MISCONFIGURED progressive table whose top bracket cap (100,000,000) is FINITE (not the
+    // agreed unbounded sentinel) would silently leave income above the cap UNTAXED. Loading the
+    // rule
+    // (StatutoryParams.progressive, invoked the moment the calculator resolves the table) now FAILS
+    // LOUDLY at load time — fail-fast, regardless of the actual income — rather than only when a
+    // high-enough earner trips the run-time walkBrackets net.
     Map<String, StatutoryRule> brokenRules =
         Map.of(
             "PPH21_PROGRESSIVE",
             rule(
                 "PPH21_PROGRESSIVE",
                 StatutoryCalcType.PROGRESSIVE_BRACKET,
-                // No unbounded top bracket — caps out at 100,000,000.
+                // No unbounded top bracket — caps out at a finite 100,000,000.
                 "{\"brackets\":[{\"floor_minor\":0,\"cap_minor\":100000000,\"rate_bp\":1000}]}",
                 RuleProvenance.ILLUSTRATIVE_PLACEHOLDER));
-    Money base = Money.ofMinor(50_000_000L, IDR); // annualizes to 600,000,000 >> 100,000,000 cap
+    Money base = Money.ofMinor(50_000_000L, IDR);
     PersonInput input =
         new PersonInput(
             UUID.randomUUID(),
@@ -300,8 +303,8 @@ class GrossToNetCalculatorTest {
             brokenRules);
 
     assertThatThrownBy(() -> calculator.compute(input))
-        .isInstanceOf(IllegalStateException.class)
-        .hasMessageContaining("top progressive bracket cap");
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("unbounded sentinel");
   }
 
   private static ComputedLine line(PersonResult result, String key) {

@@ -8,10 +8,8 @@ import id.co.nativeapp.finance.pnl.domain.ConsolidatedPnl;
 import id.co.nativeapp.finance.pnl.service.PnlReader;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.TenantContext;
-import java.sql.Connection;
-import java.sql.ResultSet;
-import java.sql.Statement;
 import java.time.Instant;
+import java.time.YearMonth;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CyclicBarrier;
@@ -103,6 +101,65 @@ class LaborSupersessionConcurrencyTest extends PostgresRlsTestBase {
     assertThat(runStateAsAdmin(run1)).as("run 1 superseded").isEqualTo("SUPERSEDED");
   }
 
+  /**
+   * LOOPED hardening of the same two-new-runs race (#35): the single-shot test above is
+   * deterministic for BOTH lock-win orders, so it can pass on ONE lucky scheduling even if the lock
+   * were placed too late. Driving the SAME concurrent race over many iterations — each on a fresh
+   * {@code (period, run ids, event ids)} so iterations are independent — forces a wide spread of
+   * real thread interleavings and commit orders. A future regression that moves the {@code
+   * pg_advisory_xact_lock} below the run-row read/insert (re-opening the first-two-runs window)
+   * would double-count, leave two PRIMARYs with no reversal, or leave run 1 un-superseded on at
+   * least one iteration and fail HERE, where a single ordering could slip through. Every iteration
+   * must net to run 2 only with exactly 3 ledger rows + one reversal + run 1 SUPERSEDED.
+   */
+  @Test
+  void theTwoNewRunsRaceHoldsAcrossManyInterleavings() throws Exception {
+    int iterations = 40;
+    long run1Amount = 20_000_000L;
+    long run2Amount = 22_000_000L; // the corrected (higher-seq) run
+    ExecutorService pool = Executors.newFixedThreadPool(2);
+    try {
+      for (int i = 0; i < iterations; i++) {
+        // A distinct period per iteration keeps the iterations independent within one @BeforeEach
+        // reset (the lock key is company:period, so distinct periods never serialize across
+        // iterations — each is a clean first-two-runs window).
+        String period = YearMonth.of(2026, 1).plusMonths(i).toString();
+        Instant occurredAt = Instant.parse("2026-01-15T10:00:00Z");
+        UUID run1 = UUID.randomUUID();
+        UUID run2 = UUID.randomUUID();
+        LaborCostAllocatedEvent run1Event =
+            event(UUID.randomUUID(), run1, 1, period, "5100-SALARY", run1Amount, occurredAt);
+        LaborCostAllocatedEvent run2Event =
+            event(UUID.randomUUID(), run2, 2, period, "5100-SALARY", run2Amount, occurredAt);
+
+        CyclicBarrier barrier = new CyclicBarrier(2);
+        Future<Boolean> f1 = pool.submit(post(barrier, run1Event));
+        Future<Boolean> f2 = pool.submit(post(barrier, run2Event));
+        assertThat(f1.get()).as("iteration %s: run 1 posted", i).isTrue();
+        assertThat(f2.get()).as("iteration %s: run 2 posted", i).isTrue();
+
+        // This iteration's period nets to run 2 ONLY — no double-count on ANY interleaving.
+        ConsolidatedPnl pnl =
+            TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.pnlForPeriod(period))
+                .orElseThrow();
+        assertThat(pnl.expense())
+            .as("iteration %s: period nets to run 2 only — no double-count", i)
+            .isEqualTo(Money.ofMinor(run2Amount, "IDR"));
+        assertThat(ledgerCountForPeriodAsAdmin(period))
+            .as("iteration %s: two PRIMARYs + one REVERSAL", i)
+            .isEqualTo(3L);
+        assertThat(reversalCountForPeriodAsAdmin(period))
+            .as("iteration %s: exactly one reversal", i)
+            .isEqualTo(1L);
+        assertThat(runStateAsAdmin(run1))
+            .as("iteration %s: run 1 superseded", i)
+            .isEqualTo("SUPERSEDED");
+      }
+    } finally {
+      pool.shutdownNow();
+    }
+  }
+
   private Callable<Boolean> post(CyclicBarrier barrier, LaborCostAllocatedEvent event) {
     return () ->
         TenantContext.callAs(
@@ -136,33 +193,28 @@ class LaborSupersessionConcurrencyTest extends PostgresRlsTestBase {
         occurredAt);
   }
 
-  private long ledgerCountAsAdmin() throws Exception {
-    return longQueryAsAdmin("SELECT count(*) FROM ledger_posting");
-  }
-
   private long reversalCountAsAdmin() throws Exception {
     return longQueryAsAdmin("SELECT count(*) FROM ledger_posting WHERE posting_role = 'REVERSAL'");
   }
 
-  private String runStateAsAdmin(UUID runId) throws Exception {
-    try (Connection admin =
-            java.sql.DriverManager.getConnection(
-                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
-        Statement st = admin.createStatement();
-        ResultSet rs =
-            st.executeQuery(
-                "SELECT state FROM payroll_run_ledger WHERE payroll_run_id = '" + runId + "'")) {
-      rs.next();
-      return rs.getString("state");
-    }
+  private long ledgerCountForPeriodAsAdmin(String period) throws Exception {
+    return longQueryAsAdmin("SELECT count(*) FROM ledger_posting WHERE period = '" + period + "'");
   }
 
+  private long reversalCountForPeriodAsAdmin(String period) throws Exception {
+    return longQueryAsAdmin(
+        "SELECT count(*) FROM ledger_posting WHERE posting_role = 'REVERSAL' AND period = '"
+            + period
+            + "'");
+  }
+
+  /** Single-{@code long}-column admin (BYPASSRLS) query, local to this test's count helpers. */
   private long longQueryAsAdmin(String sql) throws Exception {
-    try (Connection admin =
+    try (java.sql.Connection admin =
             java.sql.DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
-        Statement st = admin.createStatement();
-        ResultSet rs = st.executeQuery(sql)) {
+        java.sql.Statement st = admin.createStatement();
+        java.sql.ResultSet rs = st.executeQuery(sql)) {
       rs.next();
       return rs.getLong(1);
     }

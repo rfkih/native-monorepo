@@ -108,10 +108,57 @@ public class PayrollRunLedger extends Auditable {
     this.usesIllustrativeRules = this.usesIllustrativeRules || bucketIllustrative;
   }
 
-  /** Records the {@code PayrollPosted} labor control total (minor units) for reconciliation. */
+  /**
+   * Records the {@code PayrollPosted} labor control total (minor units) for reconciliation.
+   *
+   * <p>The control total is stored as bare minor units and later reconstructed in the run row's
+   * established {@link #currency} (see {@link #controlTotal()}). That reconstruction is only sound
+   * if the incoming total is in the SAME currency, so this asserts the invariant explicitly (#35).
+   * Today it is benign — {@code base_currency} seeds both the run row and {@code PayrollPosted}
+   * identically — but if a future change let a divergent-currency total in, silently storing its
+   * minor units against this row's currency would misstate the control. We fail loudly instead of
+   * dropping the currency.
+   *
+   * @throws IllegalArgumentException if the control total's currency differs from the run's
+   *     established currency
+   */
   public void recordControlTotal(Money controlTotal, boolean runIllustrative) {
+    String controlCurrency = controlTotal.currency().getCurrencyCode();
+    if (!currency.strip().equals(controlCurrency)) {
+      throw new IllegalArgumentException(
+          "PayrollPosted control total currency "
+              + controlCurrency
+              + " differs from the run's established currency "
+              + currency.strip()
+              + " (run "
+              + payrollRunId
+              + " seq "
+              + runSeq
+              + "); the control total is stored as minor units and reconstructed in the run"
+              + " currency, so the currencies must match (no FX in scope)");
+    }
     this.controlTotalMinor = controlTotal.amountMinor();
     this.usesIllustrativeRules = this.usesIllustrativeRules || runIllustrative;
+  }
+
+  /**
+   * The single reconcile-decision both writer paths share (#35): compares the running {@code
+   * allocatedSum} against the recorded {@code controlTotal} and transitions the run to {@link
+   * PayrollRunState#RECONCILED} on a match or {@link PayrollRunState#RECONCILE_FAILED} on a
+   * mismatch, returning whether it reconciled. {@link Money#equals} returns {@code false} (never
+   * throws) on a currency mismatch, so the inequality branch safely backstops that too. Terminal
+   * states ({@link PayrollRunState#SUPERSEDED} / {@link PayrollRunState#CURRENCY_MISMATCH}) are
+   * honoured by {@link #transitionTo}, which refuses to clobber them — so a once-superseded or
+   * once-divergent run is never reconciled back. Callers own logging (the two paths log at
+   * different verbosity) and any pre-checks (e.g. a missing control total).
+   *
+   * @return {@code true} if the run reconciled (allocated == control), {@code false} otherwise
+   */
+  public boolean reconcileAgainstControl() {
+    Money controlTotal = controlTotal();
+    boolean reconciled = controlTotal != null && allocatedSum().equals(controlTotal);
+    transitionTo(reconciled ? PayrollRunState.RECONCILED : PayrollRunState.RECONCILE_FAILED);
+    return reconciled;
   }
 
   /**

@@ -29,6 +29,17 @@ public final class StatutoryParams {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
+  /**
+   * The agreed "effectively unbounded" sentinel for a PROGRESSIVE table's TOP bracket {@code
+   * cap_minor} (#34). A progressive schedule's highest bracket must extend to +infinity so the top
+   * marginal rate applies to ALL income above its floor; a FINITE top cap would silently leave
+   * income above it UNTAXED. We model +infinity as this large-but-finite constant (well above any
+   * realistic annualized IDR/USD minor-unit income, yet inside {@code long}/{@code jsonb} range)
+   * and REJECT any progressive table whose top cap is not exactly this value at load time — turning
+   * the existing run-time {@code walkBrackets} safety net into a fail-fast load-time invariant.
+   */
+  public static final long UNBOUNDED_TOP_CAP_MINOR = 999_999_999_999L;
+
   private StatutoryParams() {
     // static helpers
   }
@@ -67,6 +78,21 @@ public final class StatutoryParams {
               b.get("rate_bp").asInt()));
     }
     parsed.sort((a, c) -> Long.compare(a.floorMinor(), c.floorMinor()));
+    // Load-time single-source guard (#34): the TOP (highest-floor) bracket's cap MUST be the agreed
+    // unbounded sentinel so the top marginal rate covers all income above its floor. A finite top
+    // cap is rejected HERE — when the rule is loaded for a run — rather than silently leaving top
+    // income untaxed at compute time (walkBrackets keeps a defence-in-depth net, but a
+    // misconfigured
+    // OFFICIAL table now fails the moment it is resolved, not only for a high-enough earner).
+    long topCap = parsed.get(parsed.size() - 1).capMinor();
+    if (topCap != UNBOUNDED_TOP_CAP_MINOR) {
+      throw new IllegalArgumentException(
+          "PROGRESSIVE_BRACKET top bracket cap_minor is "
+              + topCap
+              + " but must be the agreed unbounded sentinel "
+              + UNBOUNDED_TOP_CAP_MINOR
+              + "; a finite top cap would leave income above it untaxed — fix the bracket table");
+    }
     return new ProgressiveParams(List.copyOf(parsed));
   }
 

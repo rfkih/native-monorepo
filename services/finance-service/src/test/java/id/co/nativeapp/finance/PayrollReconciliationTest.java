@@ -7,9 +7,6 @@ import id.co.nativeapp.finance.labor.messaging.PayrollPostedEvent;
 import id.co.nativeapp.finance.labor.service.LaborCostPostingService;
 import id.co.nativeapp.finance.labor.service.PayrollReconciliationService;
 import id.co.nativeapp.money.Money;
-import java.sql.Connection;
-import java.sql.ResultSet;
-import java.sql.Statement;
 import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -309,29 +306,5 @@ class PayrollReconciliationTest extends PostgresRlsTestBase {
         Money.ofMinor(grossMinor - employerMinor, "IDR"),
         false,
         Instant.parse("2026-06-30T12:00:00Z"));
-  }
-
-  private String runStateAsAdmin(UUID runId) throws Exception {
-    try (Connection admin =
-            java.sql.DriverManager.getConnection(
-                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
-        Statement st = admin.createStatement();
-        ResultSet rs =
-            st.executeQuery(
-                "SELECT state FROM payroll_run_ledger WHERE payroll_run_id = '" + runId + "'")) {
-      rs.next();
-      return rs.getString("state");
-    }
-  }
-
-  private long ledgerCountAsAdmin() throws Exception {
-    try (Connection admin =
-            java.sql.DriverManager.getConnection(
-                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
-        Statement st = admin.createStatement();
-        ResultSet rs = st.executeQuery("SELECT count(*) FROM ledger_posting")) {
-      rs.next();
-      return rs.getLong(1);
-    }
   }
 }
