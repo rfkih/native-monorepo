@@ -193,6 +193,28 @@ public class OrgUnit extends Auditable {
     return true;
   }
 
+  /**
+   * Reactivates this org unit, REOPENING its effective period: flips {@code active} back to {@code
+   * true} and restores {@code effective_to} to the {@link #OPEN_ENDED} sentinel — the exact inverse
+   * of {@link #deactivate}. A no-op if already active.
+   *
+   * <p>The aggregate cannot see the parent's state, so the tree invariant <em>no active node may
+   * have an inactive ancestor</em> is enforced one layer out, in the writer: it rejects
+   * reactivating a node whose parent is inactive (reactivate the parent first). Reactivation does
+   * NOT cascade to descendants — each node is reactivated explicitly, top-down.
+   *
+   * @return {@code true} if the node was inactive and is now reactivated, {@code false} if it was
+   *     already active
+   */
+  public boolean reactivate() {
+    if (this.active) {
+      return false;
+    }
+    this.active = true;
+    this.effectiveTo = OPEN_ENDED;
+    return true;
+  }
+
   private static String requireNonBlank(String value, String field) {
     Objects.requireNonNull(value, field);
     String trimmed = value.strip();

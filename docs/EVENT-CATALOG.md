@@ -171,10 +171,15 @@ against-break).
 
 ### `OrgUnitChanged`
 
-Emitted by org-service when an `org_unit` is **renamed**, **moved** to a new parent, or
-**deactivated** via `PATCH /api/v1/org-units/{orgUnitId}` (#18). One event per effective
-change. Consumed by the same set as `OrgUnitCreated` to update their cached slice of the
-org tree; it carries the node's new state so a consumer applies it idempotently.
+Emitted by org-service when an `org_unit` is **renamed**, **moved** to a new parent,
+**deactivated**, or **reactivated** via `PATCH /api/v1/org-units/{orgUnitId}` (#18, #25). One
+event per effective change. **Deactivation cascades** to the node's active subtree (one
+`DEACTIVATED` event per node), so deactivating a branch takes its outlets/teams down too;
+**reactivation** (`REACTIVATED`) applies to the node alone and requires an active parent.
+Consumed by the same set as `OrgUnitCreated` to update their cached slice of the org tree; it
+carries the node's new state so a consumer applies it idempotently (the employee-service
+consumer keys on the `active` flag, not `change_kind`, so it applies DEACTIVATED/REACTIVATED
+uniformly).
 
 - **Producer:** `org-service`
 - **Consumers:** `employee-service`, the verticals, `finance-service` (same as
@@ -192,9 +197,9 @@ org tree; it carries the node's new state so a consumer applies it idempotently.
 | `company_id` | `string` | The owning tenant / company id (UUID as string) |
 | `type` | `string` | The org-unit kind (immutable once created) |
 | `parent_id` | `["null","string"]` (default `null`) | The CURRENT parent after the change, or null |
-| `change_kind` | `string` | What changed: `RENAMED` \| `MOVED` \| `DEACTIVATED` |
+| `change_kind` | `string` | What changed: `RENAMED` \| `MOVED` \| `DEACTIVATED` \| `REACTIVATED` |
 | `name` | `string` | The org-unit display name after the change |
-| `active` | `boolean` | Whether the node is still active after the change |
+| `active` | `boolean` | Whether the node is active after the change (false after deactivate, true after reactivate) |
 
 **Avro schema**
 
@@ -203,15 +208,15 @@ org tree; it carries the node's new state so a consumer applies it idempotently.
   "type": "record",
   "name": "OrgUnitChanged",
   "namespace": "id.co.nativeapp.events.org",
-  "doc": "Emitted by org-service when an org_unit is renamed, moved to a new parent, or deactivated; consumed by employee-service, the verticals, and finance-service to update their cached slice of the org tree. Key fields per ARCHITECTURE.md §5: org_unit_id, type, parent_id, company_id. Carries the new state so a consumer can apply it idempotently.",
+  "doc": "Emitted by org-service when an org_unit is renamed, moved to a new parent, deactivated, or reactivated; consumed by employee-service, the verticals, and finance-service to update their cached slice of the org tree. Deactivation cascades to the active subtree (one event per node). Key fields per ARCHITECTURE.md §5: org_unit_id, type, parent_id, company_id. Carries the new state so a consumer can apply it idempotently.",
   "fields": [
     {"name": "org_unit_id", "type": "string", "doc": "The org_unit aggregate id (UUID as string); also the Kafka partition key."},
     {"name": "company_id", "type": "string", "doc": "The owning tenant / company id (UUID as string)."},
     {"name": "type", "type": "string", "doc": "The org-unit kind: business_unit | branch | outlet | team (immutable once created)."},
     {"name": "parent_id", "type": ["null", "string"], "default": null, "doc": "The CURRENT parent org_unit id (UUID as string) after the change, or null for a top-level node."},
-    {"name": "change_kind", "type": "string", "doc": "What changed: RENAMED | MOVED | DEACTIVATED."},
+    {"name": "change_kind", "type": "string", "doc": "What changed: RENAMED | MOVED | DEACTIVATED | REACTIVATED. A string (not an Avro enum), so adding a kind is backward-compatible; consumers that key on the 'active' flag handle DEACTIVATED/REACTIVATED uniformly."},
     {"name": "name", "type": "string", "doc": "The org-unit display name after the change."},
-    {"name": "active", "type": "boolean", "doc": "Whether the node is still active after the change (false after a deactivation)."}
+    {"name": "active", "type": "boolean", "doc": "Whether the node is active after the change (false after a deactivation, true after a reactivation)."}
   ]
 }
 ```

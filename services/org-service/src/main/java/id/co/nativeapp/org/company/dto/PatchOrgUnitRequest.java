@@ -15,7 +15,9 @@ import java.util.UUID;
  *       (or {@code null} to move to the top level). The {@code reparent} flag is what disambiguates
  *       "move under no parent" ({@code parentId:null, reparent:true}) from "do not move" ({@code
  *       reparent} absent/false) — a bare {@code null} could mean either;
- *   <li><strong>deactivate</strong> — set {@code deactivate=true}.
+ *   <li><strong>deactivate</strong> — set {@code deactivate=true} (cascades to the active subtree);
+ *   <li><strong>reactivate</strong> — set {@code reactivate=true} (requires an active parent).
+ *       {@code deactivate} and {@code reactivate} are mutually exclusive (both → {@code 400}).
  * </ul>
  *
  * <p>The boolean intent flags are nullable {@link Boolean}s, not primitives, so an omitted flag
@@ -32,12 +34,14 @@ import java.util.UUID;
  *     possibly {@code null}); {@code null}/false to leave the parent unchanged
  * @param parentId the new parent when reparenting ({@code null} = move to top level)
  * @param deactivateFlag {@code true} to deactivate the node; {@code null}/false otherwise
+ * @param reactivateFlag {@code true} to reactivate the node; {@code null}/false otherwise
  */
 public record PatchOrgUnitRequest(
     String name,
     @JsonProperty("reparent") Boolean reparentFlag,
     UUID parentId,
-    @JsonProperty("deactivate") Boolean deactivateFlag) {
+    @JsonProperty("deactivate") Boolean deactivateFlag,
+    @JsonProperty("reactivate") Boolean reactivateFlag) {
 
   /** Whether a move was requested (normalizing an omitted flag to {@code false}). */
   public boolean reparent() {
@@ -49,6 +53,11 @@ public record PatchOrgUnitRequest(
     return Boolean.TRUE.equals(deactivateFlag);
   }
 
+  /** Whether a reactivation was requested (normalizing an omitted flag to {@code false}). */
+  public boolean reactivate() {
+    return Boolean.TRUE.equals(reactivateFlag);
+  }
+
   /** Whether a rename was requested (a non-null name; blankness is validated by the aggregate). */
   public boolean isRename() {
     return name != null;
@@ -56,6 +65,6 @@ public record PatchOrgUnitRequest(
 
   /** Whether this patch requests no operation at all (so it should be rejected as a 400). */
   public boolean isNoOp() {
-    return !isRename() && !reparent() && !deactivate();
+    return !isRename() && !reparent() && !deactivate() && !reactivate();
   }
 }

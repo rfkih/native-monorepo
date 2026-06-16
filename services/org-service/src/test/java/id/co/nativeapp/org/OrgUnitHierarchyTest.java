@@ -103,6 +103,25 @@ class OrgUnitHierarchyTest {
   }
 
   @Test
+  void reactivateIsTheExactInverseOfDeactivateAndIsIdempotent() {
+    OrgUnit bu = node(OrgUnitType.BUSINESS_UNIT, null, null);
+
+    // Reactivating an already-active node is a no-op.
+    assertThat(bu.reactivate()).isFalse();
+
+    bu.deactivate(LocalDate.of(2026, 12, 31));
+    assertThat(bu.isActive()).isFalse();
+
+    // Reactivate reopens the effective period: active again, effective_to back to the sentinel.
+    assertThat(bu.reactivate()).isTrue();
+    assertThat(bu.isActive()).isTrue();
+    assertThat(bu.getEffectiveTo()).isEqualTo(OrgUnit.OPEN_ENDED);
+
+    // A second reactivation is a no-op.
+    assertThat(bu.reactivate()).isFalse();
+  }
+
+  @Test
   void orgUnitTypeEncodesTheSingleLegalParent() {
     assertThat(OrgUnitType.BUSINESS_UNIT.isRoot()).isTrue();
     assertThat(OrgUnitType.BRANCH.requiredParentType()).contains(OrgUnitType.BUSINESS_UNIT);

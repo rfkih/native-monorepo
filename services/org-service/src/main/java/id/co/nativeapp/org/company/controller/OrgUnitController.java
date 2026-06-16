@@ -59,12 +59,17 @@ public class OrgUnitController {
     return ResponseEntity.created(URI.create("/api/v1/org-units/" + body.id())).body(body);
   }
 
-  /** Rename, move, and/or deactivate an org unit; emits {@code OrgUnitChanged} per change. */
+  /**
+   * Rename, move, deactivate, and/or reactivate an org unit; emits {@code OrgUnitChanged} per
+   * change. Deactivation cascades to the active subtree; reactivation requires an active parent;
+   * deactivate + reactivate together is a {@code 400}.
+   */
   @PatchMapping("/{orgUnitId}")
   public ResponseEntity<OrgUnitResponse> patchOrgUnit(
       @PathVariable UUID orgUnitId, @Valid @RequestBody PatchOrgUnitRequest request) {
     if (request.isNoOp()) {
-      throw new IllegalArgumentException("Patch requested no change (rename, move, or deactivate)");
+      throw new IllegalArgumentException(
+          "Patch requested no change (rename, move, deactivate, or reactivate)");
     }
     PatchOrgUnitCommand command =
         new PatchOrgUnitCommand(
@@ -72,7 +77,8 @@ public class OrgUnitController {
             request.name(),
             request.reparent(),
             request.parentId(),
-            request.deactivate());
+            request.deactivate(),
+            request.reactivate());
     OrgUnit patched = orgUnitService.patch(command);
     return ResponseEntity.ok(OrgUnitResponse.from(patched));
   }

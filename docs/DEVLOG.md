@@ -21,10 +21,11 @@ controller/service/repository/domain/dto/messaging layer sub-packages**, ArchUni
   roll-forward) — ships a FLAGGED-SIMPLIFIED translation; needs an accounting SME.
 - Live infra (a real registry/cluster/secrets for the deploy; a real notification transport).
 
-**Open follow-ups (tracked):** org-tree move/deactivate *semantics* (needs a decision); notification
-real provider (needs a transport choice); payroll expected-source registry (needs a rule). (DONE:
-the P3d deferred operational items — `member_group_index` backfill, the within-company concurrent-
-close lock, the within-close MVC tests; and the finance-expansion posting-currency robustness guard.)
+**Open follow-ups (tracked):** notification real provider (needs a transport choice); payroll
+expected-source registry (needs a rule). (DONE: the P3d deferred operational items —
+`member_group_index` backfill, the within-company concurrent-close lock, the within-close MVC tests;
+the finance-expansion posting-currency robustness guard; and the org-tree move/deactivate semantics —
+cascade-deactivate + reactivation.)
 
 ## Key design decisions (the why)
 - **Package root `id.co.nativeapp`** — `id.co` reverse-domain; `nativeapp` because `native` is a Java
@@ -57,6 +58,15 @@ close lock, the within-close MVC tests; and the finance-expansion posting-curren
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **Org-tree move/deactivate semantics (#25)** — the undecided lifecycle semantics, resolved by user
+  decision: deactivation **cascades** to the active subtree (one `DEACTIVATED` event per node), and a
+  node can be **reactivated** (`REACTIVATED`, requires an active parent, no cascade down). Enforces a
+  single invariant — *no active node may have an inactive ancestor* — across all four structural ops
+  (cascade-deactivate; reactivate-needs-active-parent; can't move an active node under an inactive
+  parent; can't create under an inactive parent). New `REACTIVATED` `change_kind` is a backward-compat
+  Avro `string`; employee-service consumes via the `active` flag (no consumer change). Producer-only
+  change, no migration. Adversarially reviewed (PASS; closed the create-guard gap it found); org +
+  employee builds green.
 - **Finance-expansion robustness — posting-currency guard (#26)** — a `SaleRecorded`/`ExpenseRecorded`
   in a currency other than the company's immutable base currency used to silently create a SECOND
   `consolidated_pnl`/`consolidated_revenue` row (keyed on `(company, period, currency)`), detonating

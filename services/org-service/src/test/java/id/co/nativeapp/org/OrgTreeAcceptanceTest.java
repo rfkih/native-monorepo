@@ -162,7 +162,7 @@ class OrgTreeAcceptanceTest extends PostgresRlsTestBase {
                   () ->
                       orgUnitService.patch(
                           new PatchOrgUnitCommand(
-                              t.rootBusinessUnitId(), null, true, branch.getId(), false)))
+                              t.rootBusinessUnitId(), null, true, branch.getId(), false, false)))
               .isInstanceOf(IllegalArgumentException.class);
           return null;
         });
@@ -189,10 +189,12 @@ class OrgTreeAcceptanceTest extends PostgresRlsTestBase {
 
               // Rename the outlet.
               orgUnitService.patch(
-                  new PatchOrgUnitCommand(outlet.getId(), "Renamed Outlet", false, null, false));
+                  new PatchOrgUnitCommand(
+                      outlet.getId(), "Renamed Outlet", false, null, false, false));
               // Move it under branch B.
               orgUnitService.patch(
-                  new PatchOrgUnitCommand(outlet.getId(), null, true, branchB.getId(), false));
+                  new PatchOrgUnitCommand(
+                      outlet.getId(), null, true, branchB.getId(), false, false));
               return outlet.getId();
             });
 
@@ -224,7 +226,7 @@ class OrgTreeAcceptanceTest extends PostgresRlsTestBase {
                       new CreateOrgUnitCommand("Branch", "branch", t.rootBusinessUnitId()));
               OrgUnit patched =
                   orgUnitService.patch(
-                      new PatchOrgUnitCommand(branch.getId(), null, false, null, true));
+                      new PatchOrgUnitCommand(branch.getId(), null, false, null, true, false));
               assertThat(patched.isActive()).isFalse();
               return branch.getId();
             });
@@ -236,6 +238,237 @@ class OrgTreeAcceptanceTest extends PostgresRlsTestBase {
     assertThat(deactivated.get("active")).isEqualTo(false);
     // active flag is closed in the DB.
     assertThat(isActive(branchId)).isFalse();
+  }
+
+  @Test
+  void deactivatingABranchCascadesToItsActiveSubtree() throws Exception {
+    Tenant t = bootstrapCompany("Theta", "owner-t");
+
+    UUID[] ids =
+        TenantContext.callAs(
+            t.companyId().toString(),
+            "owner-t",
+            () -> {
+              OrgUnit branch =
+                  orgUnitService.create(
+                      new CreateOrgUnitCommand("Branch", "branch", t.rootBusinessUnitId()));
+              OrgUnit outlet =
+                  orgUnitService.create(
+                      new CreateOrgUnitCommand("Outlet", "outlet", branch.getId()));
+              OrgUnit team =
+                  orgUnitService.create(new CreateOrgUnitCommand("Team", "team", outlet.getId()));
+              // Deactivate the BRANCH — it must cascade down to the outlet and the team.
+              orgUnitService.patch(
+                  new PatchOrgUnitCommand(branch.getId(), null, false, null, true, false));
+              return new UUID[] {branch.getId(), outlet.getId(), team.getId()};
+            });
+
+    // The whole subtree is inactive; the bootstrap root business unit (a sibling ancestor) stays
+    // up.
+    assertThat(isActive(ids[0])).isFalse();
+    assertThat(isActive(ids[1])).isFalse();
+    assertThat(isActive(ids[2])).isFalse();
+    assertThat(isActive(t.rootBusinessUnitId())).isTrue();
+
+    // Exactly one DEACTIVATED event per node in the subtree.
+    for (UUID id : ids) {
+      List<Map<String, Object>> changed = orgUnitChangedRows(id);
+      assertThat(changed).hasSize(1);
+      GenericRecord event = decodeChanged(changed.get(0));
+      assertThat(event.get("change_kind").toString()).isEqualTo("DEACTIVATED");
+      assertThat(event.get("active")).isEqualTo(false);
+    }
+  }
+
+  @Test
+  void reactivatingRequiresAnActiveParentAndDoesNotCascadeDown() throws Exception {
+    Tenant t = bootstrapCompany("Iota", "owner-i");
+
+    UUID[] ids =
+        TenantContext.callAs(
+            t.companyId().toString(),
+            "owner-i",
+            () -> {
+              OrgUnit branch =
+                  orgUnitService.create(
+                      new CreateOrgUnitCommand("Branch", "branch", t.rootBusinessUnitId()));
+              OrgUnit outlet =
+                  orgUnitService.create(
+                      new CreateOrgUnitCommand("Outlet", "outlet", branch.getId()));
+              // Deactivate the branch — branch + outlet both go inactive (cascade).
+              orgUnitService.patch(
+                  new PatchOrgUnitCommand(branch.getId(), null, false, null, true, false));
+              return new UUID[] {branch.getId(), outlet.getId()};
+            });
+    UUID branchId = ids[0];
+    UUID outletId = ids[1];
+    assertThat(isActive(branchId)).isFalse();
+    assertThat(isActive(outletId)).isFalse();
+
+    // Reactivating the OUTLET while its parent branch is still inactive is rejected (the
+    // invariant).
+    TenantContext.callAs(
+        t.companyId().toString(),
+        "owner-i",
+        () -> {
+          assertThatThrownBy(
+                  () ->
+                      orgUnitService.patch(
+                          new PatchOrgUnitCommand(outletId, null, false, null, false, true)))
+              .isInstanceOf(IllegalArgumentException.class);
+          return null;
+        });
+    assertThat(isActive(outletId)).isFalse();
+
+    // Reactivate the branch (its parent, the root BU, is active) — succeeds, does NOT cascade down.
+    TenantContext.callAs(
+        t.companyId().toString(),
+        "owner-i",
+        () -> {
+          OrgUnit reactivated =
+              orgUnitService.patch(
+                  new PatchOrgUnitCommand(branchId, null, false, null, false, true));
+          assertThat(reactivated.isActive()).isTrue();
+          return null;
+        });
+    assertThat(isActive(branchId)).isTrue();
+    assertThat(isActive(outletId)).isFalse(); // reactivation did NOT cascade to the outlet
+
+    // Now the outlet's parent is active, so reactivating the outlet succeeds.
+    TenantContext.callAs(
+        t.companyId().toString(),
+        "owner-i",
+        () -> {
+          orgUnitService.patch(new PatchOrgUnitCommand(outletId, null, false, null, false, true));
+          return null;
+        });
+    assertThat(isActive(outletId)).isTrue();
+
+    // The branch emitted a DEACTIVATED then a REACTIVATED (order-independent — a fixed clock could
+    // stamp both with the same occurred_at).
+    List<String> branchKinds =
+        orgUnitChangedRows(branchId).stream()
+            .map(row -> decodeChanged(row).get("change_kind").toString())
+            .toList();
+    assertThat(branchKinds).containsExactlyInAnyOrder("DEACTIVATED", "REACTIVATED");
+  }
+
+  @Test
+  void movingAnActiveNodeUnderAnInactiveParentIsRejected() throws Exception {
+    Tenant t = bootstrapCompany("Kappa", "owner-k");
+
+    TenantContext.callAs(
+        t.companyId().toString(),
+        "owner-k",
+        () -> {
+          OrgUnit branch1 =
+              orgUnitService.create(
+                  new CreateOrgUnitCommand("Branch 1", "branch", t.rootBusinessUnitId()));
+          OrgUnit branch2 =
+              orgUnitService.create(
+                  new CreateOrgUnitCommand("Branch 2", "branch", t.rootBusinessUnitId()));
+          OrgUnit outlet =
+              orgUnitService.create(new CreateOrgUnitCommand("Outlet", "outlet", branch1.getId()));
+          // Deactivate branch2 (a leaf) — now inactive.
+          orgUnitService.patch(
+              new PatchOrgUnitCommand(branch2.getId(), null, false, null, true, false));
+          // Moving the ACTIVE outlet under the INACTIVE branch2 is rejected (type-legal, but it
+          // would orphan an active node under an inactive ancestor).
+          assertThatThrownBy(
+                  () ->
+                      orgUnitService.patch(
+                          new PatchOrgUnitCommand(
+                              outlet.getId(), null, true, branch2.getId(), false, false)))
+              .isInstanceOf(IllegalArgumentException.class);
+          return null;
+        });
+  }
+
+  @Test
+  void aPatchThatBothDeactivatesAndReactivatesIsRejected() throws Exception {
+    Tenant t = bootstrapCompany("Lambda", "owner-l");
+
+    TenantContext.callAs(
+        t.companyId().toString(),
+        "owner-l",
+        () -> {
+          assertThatThrownBy(
+                  () ->
+                      orgUnitService.patch(
+                          new PatchOrgUnitCommand(
+                              t.rootBusinessUnitId(), null, false, null, true, true)))
+              .isInstanceOf(IllegalArgumentException.class);
+          return null;
+        });
+  }
+
+  @Test
+  void creatingANodeUnderAnInactiveParentIsRejected() throws Exception {
+    Tenant t = bootstrapCompany("Mu", "owner-m");
+
+    TenantContext.callAs(
+        t.companyId().toString(),
+        "owner-m",
+        () -> {
+          OrgUnit branch =
+              orgUnitService.create(
+                  new CreateOrgUnitCommand("Branch", "branch", t.rootBusinessUnitId()));
+          // Deactivate the branch, then try to create an outlet under it — a new node is always
+          // active, so this would orphan an active node under an inactive ancestor. Rejected.
+          orgUnitService.patch(
+              new PatchOrgUnitCommand(branch.getId(), null, false, null, true, false));
+          assertThatThrownBy(
+                  () ->
+                      orgUnitService.create(
+                          new CreateOrgUnitCommand("Outlet", "outlet", branch.getId())))
+              .isInstanceOf(IllegalArgumentException.class);
+          return null;
+        });
+  }
+
+  @Test
+  void aCascadeDeactivationDoesNotTouchAnotherTenantsIdenticalTree() throws Exception {
+    Tenant a = bootstrapCompany("Nu", "owner-n");
+    Tenant b = bootstrapCompany("Xi", "owner-x");
+
+    // B builds branch > outlet under its own root and leaves them active.
+    UUID[] bIds =
+        TenantContext.callAs(
+            b.companyId().toString(),
+            "owner-x",
+            () -> {
+              OrgUnit branch =
+                  orgUnitService.create(
+                      new CreateOrgUnitCommand("B Branch", "branch", b.rootBusinessUnitId()));
+              OrgUnit outlet =
+                  orgUnitService.create(
+                      new CreateOrgUnitCommand("B Outlet", "outlet", branch.getId()));
+              return new UUID[] {branch.getId(), outlet.getId()};
+            });
+
+    // A builds its own branch > outlet and cascade-deactivates the branch.
+    UUID[] aIds =
+        TenantContext.callAs(
+            a.companyId().toString(),
+            "owner-n",
+            () -> {
+              OrgUnit branch =
+                  orgUnitService.create(
+                      new CreateOrgUnitCommand("A Branch", "branch", a.rootBusinessUnitId()));
+              OrgUnit outlet =
+                  orgUnitService.create(
+                      new CreateOrgUnitCommand("A Outlet", "outlet", branch.getId()));
+              orgUnitService.patch(
+                  new PatchOrgUnitCommand(branch.getId(), null, false, null, true, false));
+              return new UUID[] {branch.getId(), outlet.getId()};
+            });
+
+    // A's subtree went down; B's identical subtree is completely untouched (the cascade's findAll
+    // is RLS-scoped to A — no cross-tenant leakage).
+    assertThat(isActive(aIds[0])).isFalse();
+    assertThat(isActive(aIds[1])).isFalse();
+    assertThat(isActive(bIds[0])).isTrue();
+    assertThat(isActive(bIds[1])).isTrue();
   }
 
   // ---- helpers (read over the admin BYPASSRLS connection / the non-RLS outbox) ----------------
