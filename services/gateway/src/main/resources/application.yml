@@ -67,6 +67,10 @@ management:
     health:
       probes:
         enabled: true
+      # Pinned explicitly (never rely on Spring's implicit default): the unauthenticated
+      # /actuator/health/* sub-paths the gateway permits must NEVER leak internals. `never`
+      # keeps the probe body a bare {"status":...}.
+      show-details: never
       # The gateway is STATELESS — no database, no Kafka consumer, no read model to
       # hydrate (ENGINEERING-STANDARDS §7). Its readiness is therefore just the
       # readinessState lifecycle indicator: there is no `db`/`kafka` indicator to

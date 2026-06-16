@@ -38,6 +38,10 @@ management:
     health:
       probes:
         enabled: true
+      # Pinned explicitly (never rely on Spring's implicit default): the unauthenticated
+      # /actuator/health/** the gateway permits must NEVER leak DB/broker internals (version,
+      # cluster-id, node-count, connection details). `never` keeps the body a bare {"status":...}.
+      show-details: never
       # Readiness aggregates the DB indicator (ENGINEERING-STANDARDS §7): a pod reports
       # NOT_READY (and is pulled from rotation) while its schema/read model is still
       # hydrating or the DB is unreachable. Liveness stays the cheap /healthz probe (no

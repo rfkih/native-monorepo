@@ -115,6 +115,12 @@ dependencies {
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
     testImplementation("org.testcontainers:testcontainers-kafka")
     testImplementation("org.awaitility:awaitility")
+
+    // H2 (BOM-managed) backs ONLY the fast, container-free RLS-aspect-wiring guard
+    // (RlsAspectWiredTest): TenantRlsAutoConfiguration @Imports JpaAuditingConfig
+    // (@EnableJpaAuditing), which needs a non-empty JPA metamodel, so that unit test stands up a
+    // throwaway in-memory persistence unit over a trivial test-local entity — no PostgreSQL.
+    testImplementation("com.h2database:h2")
 }
 
 // libs/security (#16) ships an auto-configuration whose DEFAULT (non-dev) path stands up a JWT

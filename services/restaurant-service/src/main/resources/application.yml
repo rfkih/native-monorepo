@@ -38,6 +38,10 @@ management:
     health:
       probes:
         enabled: true
+      # Pinned explicitly (never rely on Spring's implicit default): the unauthenticated
+      # /actuator/health/** the gateway permits must NEVER leak DB/broker internals (version,
+      # cluster-id, node-count, connection details). `never` keeps the body a bare {"status":...}.
+      show-details: never
       # Readiness aggregates the DB indicator (ENGINEERING-STANDARDS §7): NOT_READY while
       # the schema/read model is hydrating or the DB is unreachable. restaurant-service is
       # an event PRODUCER (outbox + Debezium), not a consumer, so no `kafka` indicator here.

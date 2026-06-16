@@ -60,6 +60,10 @@ management:
     health:
       probes:
         enabled: true
+      # Pinned explicitly (never rely on Spring's implicit default): the unauthenticated
+      # /actuator/health/** the gateway permits must NEVER leak DB/broker internals (version,
+      # cluster-id, node-count, connection details). `never` keeps the body a bare {"status":...}.
+      show-details: never
       # Readiness aggregates the DB AND Kafka indicators (ENGINEERING-STANDARDS §7):
       # finance-service consumes SaleRecorded to build its ledger read model, so it must
       # report NOT_READY (and be pulled from rotation) while that read model is hydrating
