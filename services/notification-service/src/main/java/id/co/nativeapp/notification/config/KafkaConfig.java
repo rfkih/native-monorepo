@@ -1,5 +1,6 @@
 package id.co.nativeapp.notification.config;
 
+import id.co.nativeapp.events.Base64ByteArraySerializer;
 import id.co.nativeapp.notification.notification.messaging.ConsolidationClosedDecodeException;
 import id.co.nativeapp.notification.notification.messaging.MissingEventIdException;
 import java.io.UncheckedIOException;
@@ -7,7 +8,6 @@ import java.util.HashMap;
 import java.util.Map;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.TopicPartition;
-import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.boot.kafka.autoconfigure.KafkaProperties;
 import org.springframework.context.annotation.Bean;
@@ -100,17 +100,20 @@ public class KafkaConfig {
   }
 
   /**
-   * The {@link KafkaTemplate} the DLT recoverer publishes with. The original record is a {@code
-   * (String key, byte[] value)} — the raw Avro payload — so the producer MUST use a {@link
-   * StringSerializer} key and a {@link ByteArraySerializer} value, overriding the auto-configured
-   * template's String/String defaults (which would throw {@code ClassCastException: [B cannot be
-   * cast to String} on every DLT publish and leave the poison record looping on the partition).
+   * The {@link KafkaTemplate} the DLT recoverer publishes with. After the consumer's {@link
+   * Base64ByteArrayDeserializer} runs, the original record value is the RAW Avro {@code byte[]}, so
+   * re-publishing to the DLT must use the SAME base64 transport encoding as the source topic — a
+   * {@link StringSerializer} key and a {@link Base64ByteArraySerializer} value — overriding the
+   * auto-configured template's String/String defaults (which would throw {@code ClassCastException:
+   * [B cannot be cast to String} on every DLT publish and leave the poison record looping on the
+   * partition).
    */
   @Bean
   public KafkaTemplate<String, byte[]> deadLetterKafkaTemplate(KafkaProperties kafkaProperties) {
     Map<String, Object> producerProps = new HashMap<>(kafkaProperties.buildProducerProperties());
     producerProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-    producerProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, ByteArraySerializer.class);
+    producerProps.put(
+        ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, Base64ByteArraySerializer.class);
     ProducerFactory<String, byte[]> producerFactory =
         new DefaultKafkaProducerFactory<>(producerProps);
     return new KafkaTemplate<>(producerFactory);

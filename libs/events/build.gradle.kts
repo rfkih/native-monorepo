@@ -22,10 +22,22 @@ dependencies {
     // Spring BOM, so the version is pinned explicitly (stack-approved 1.12.1).
     api("org.apache.avro:avro:1.12.1")
 
+    // The base64 Kafka transport (de)serializer pair (Base64ByteArray{Serializer,Deserializer})
+    // implement Kafka's Serializer/Deserializer SPI. compileOnly mirrors libs/observability: every
+    // module that USES these classes (the Kafka consumer services + their test producers) already
+    // brings kafka-clients at runtime via spring-boot-starter-kafka, so this lib must not force a
+    // Kafka dependency onto the DB-only modules that use only the outbox plumbing. The version is
+    // governed by the Spring Boot 4 BOM (kafka-clients 4.2.1).
+    compileOnly("org.apache.kafka:kafka-clients")
+
     // Fast plumbing tests (outbox writer, Avro serde, happy-path idempotency) run on H2 in
     // PostgreSQL compatibility mode so the JDBC plumbing is exercised for real.
     testImplementation("com.h2database:h2")
     testImplementation("org.springframework:spring-jdbc")
+
+    // The base64 serde round-trip test instantiates the Serializer/Deserializer directly, so the
+    // Kafka SPI types are needed on the test classpath too (compileOnly is not visible to tests).
+    testImplementation("org.apache.kafka:kafka-clients")
 
     // The idempotency claim uses ON CONFLICT DO NOTHING — a guarantee that a duplicate delivery
     // does NOT abort the caller's transaction. That is a PostgreSQL behaviour H2 cannot prove,

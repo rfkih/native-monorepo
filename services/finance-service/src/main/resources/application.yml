@@ -28,11 +28,13 @@ spring:
     baseline-on-migrate: false
 
   kafka:
-    # The SaleRecorded topic carries RAW Avro bytes (the producer outbox payload,
-    # shipped by Debezium). We deserialize with libs/events AvroSerde against finance's
-    # OWN consumer copy of the schema — NOT a Confluent kafka-avro-serializer / Schema
-    # Registry serde. So both key and value come off the wire as byte[]/String and the
-    # listener does the Avro decode itself.
+    # The SaleRecorded topic value is the producer outbox Avro payload (shipped by Debezium),
+    # base64-encoded on the wire: Debezium decodes the bytea payload as a ByteBuffer that
+    # ByteArrayConverter cannot ship, so it emits base64 text (binary.handling.mode=base64) via a
+    # StringConverter. libs/events Base64ByteArrayDeserializer base64-decodes that back to the RAW
+    # Avro bytes, which we then decode with libs/events AvroSerde against finance's OWN consumer copy
+    # of the schema — NOT a Confluent kafka-avro-serializer / Schema Registry serde. The base64 is a
+    # pure transport layer; the listener still receives raw Avro byte[].
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     consumer:
       group-id: ${KAFKA_GROUP_ID:finance-service}
@@ -40,7 +42,7 @@ spring:
       # consumer does not miss already-published sales.
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.apache.kafka.common.serialization.ByteArrayDeserializer
+      value-deserializer: id.co.nativeapp.events.Base64ByteArrayDeserializer
     listener:
       # Manual-immediate ack: the listener container commits the offset only after the
       # handler returns, so a crash mid-handle redelivers the record (at-least-once);

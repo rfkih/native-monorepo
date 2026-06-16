@@ -129,8 +129,12 @@ services:
       CONFIG_STORAGE_REPLICATION_FACTOR: 1
       OFFSET_STORAGE_REPLICATION_FACTOR: 1
       STATUS_STORAGE_REPLICATION_FACTOR: 1
-      # The payload is raw Avro bytes already; Connect treats the topic value as a
-      # byte array and ships it verbatim (no Connect-side Avro/JSON conversion).
+      # Worker-default value converter. The outbox connector OVERRIDES this per-connector to a
+      # StringConverter (see debezium/outbox-connector.json): the bytea Avro payload is emitted as
+      # base64 text (binary.handling.mode=base64) because Debezium decodes a bytea as a ByteBuffer
+      # that ByteArrayConverter cannot ship. The value is still the raw Avro bytes (base64-wrapped),
+      # no Connect-side Avro/JSON conversion. This default applies to any connector that does not
+      # override it.
       KEY_CONVERTER: org.apache.kafka.connect.storage.StringConverter
       VALUE_CONVERTER: org.apache.kafka.connect.converters.ByteArrayConverter
     healthcheck:

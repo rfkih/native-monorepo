@@ -1,6 +1,7 @@
 package id.co.nativeapp.finance;
 
 import id.co.nativeapp.events.AvroSerde;
+import id.co.nativeapp.events.Base64ByteArraySerializer;
 import id.co.nativeapp.finance.revenue.messaging.SaleRecordedListener;
 import id.co.nativeapp.finance.revenue.messaging.SaleRecordedSchema;
 import java.nio.charset.StandardCharsets;
@@ -12,15 +13,16 @@ import org.apache.avro.generic.GenericRecord;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 
 /**
- * Test fixtures for publishing a {@code SaleRecorded} the way the producer + Debezium would: raw
- * Avro bytes (built via {@code libs/events AvroSerde}) as the message value, the sale id as the
- * key, and the durable event id stamped into the {@code id} header (the Debezium outbox-router
- * event-id header the {@link SaleRecordedListener} dedupes on). NOT a Schema Registry serde —
- * exactly the transport finance consumes in production.
+ * Test fixtures for publishing a {@code SaleRecorded} the way the producer + Debezium would: the
+ * raw Avro bytes (built via {@code libs/events AvroSerde}) base64-encoded onto the wire by a {@link
+ * Base64ByteArraySerializer} (the exact encoding Debezium emits with {@code
+ * binary.handling.mode=base64} + a {@code StringConverter} — see {@code docker/README.md}), the
+ * sale id as the key, and the durable event id stamped into the {@code id} header (the Debezium
+ * outbox-router event-id header the {@link SaleRecordedListener} dedupes on). NOT a Schema Registry
+ * serde — exactly the transport finance consumes in production.
  */
 final class SaleRecordedFixtures {
 
@@ -98,7 +100,7 @@ final class SaleRecordedFixtures {
         ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG,
         StringSerializer.class,
         ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,
-        ByteArraySerializer.class,
+        Base64ByteArraySerializer.class,
         ProducerConfig.ACKS_CONFIG,
         "all");
   }

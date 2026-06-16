@@ -1,6 +1,7 @@
 package id.co.nativeapp.finance;
 
 import id.co.nativeapp.events.AvroSerde;
+import id.co.nativeapp.events.Base64ByteArraySerializer;
 import id.co.nativeapp.finance.labor.messaging.LaborCostAllocatedSchema;
 import id.co.nativeapp.finance.labor.messaging.PayrollPostedSchema;
 import id.co.nativeapp.finance.revenue.messaging.SaleRecordedListener;
@@ -14,7 +15,6 @@ import org.apache.avro.generic.GenericRecord;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 
 /**
@@ -120,7 +120,7 @@ final class LaborEventFixtures {
         ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG,
         StringSerializer.class,
         ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,
-        ByteArraySerializer.class,
+        Base64ByteArraySerializer.class,
         ProducerConfig.ACKS_CONFIG,
         "all");
   }

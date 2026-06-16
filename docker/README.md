@@ -19,7 +19,7 @@ the services together by hand.
 |---|---|---|
 | `postgres` | 5432 | PostgreSQL 16, **one database + app role per service**, `wal_level=logical` for CDC |
 | `kafka` | 9092 | Kafka (KRaft, no ZooKeeper) — the event backbone, one topic per `event_type` |
-| `schema-registry` | 8081 | Avro Schema Registry (governance/tooling; the hot path uses raw Avro bytes) |
+| `schema-registry` | 8081 | Avro Schema Registry (governance/tooling; the hot path uses raw Avro bytes, base64-encoded on the wire — no Confluent serde) |
 | `connect` | 8083 | Debezium / Kafka Connect — tails each `outbox` table via the outbox event router |
 | `keycloak` | 8080 | OIDC / RS256 JWT issuer (`company_id` + roles), validated by the gateway (M1.1) |
 | `redis` | 6379 | Backs the gateway's distributed per-tenant token-bucket rate limit (M1.1) |
@@ -95,15 +95,22 @@ turns each `outbox` row into one Kafka record:
 |---|---|---|
 | `event_type` | the **topic name** (e.g. `SaleRecorded`) | `route.by.field` → `${routedByValue}` |
 | `aggregate_id` | the message **key** (partitioning) | e.g. the `sale_id` |
-| `payload` (bytea) | the message **value**, shipped **verbatim** | raw Avro bytes; `ByteArrayConverter`, no re-encode |
+| `payload` (bytea) | the message **value**, **base64-encoded on the wire** | Avro bytes shipped as base64 text — Debezium decodes the `bytea` payload as a `ByteBuffer` that `ByteArrayConverter` cannot ship, so the connector sets `binary.handling.mode=base64` and a `StringConverter`; the value is still the Avro bytes, no Confluent serde |
 | `id` | a Kafka **header** `id` | the durable **event id** the consumer dedupes on (not the offset) |
 | `company_id` | a Kafka **header** `company_id` | the owning tenant |
 | `occurred_at` | the record timestamp | |
 
-The services consume the value as **raw Avro bytes** via `libs/events AvroSerde` against
-their own copy of the schema — **not** a Confluent Schema Registry serde — consistent with
-how the outbox stores events. The Schema Registry container is present for governance and
-future producers, not the consume hot path.
+The value on the wire is the **base64-encoded Avro bytes** (a transport encoding, not a
+re-serialization): Debezium decodes the `bytea` `payload` as a `java.nio.ByteBuffer`, which
+Connect's `ByteArrayConverter` rejects (`ByteArrayConverter is not compatible with objects
+of type java.nio.HeapByteBuffer`) — so the connector emits base64 text via
+`binary.handling.mode=base64` + a `StringConverter`. The services then base64-decode the
+value back to the **raw Avro bytes** with `libs/events Base64ByteArrayDeserializer` and
+decode those bytes via `libs/events AvroSerde` against their own copy of the schema — still
+**not** a Confluent Schema Registry serde, and `AvroSerde`'s raw-bytes contract is unchanged.
+The same base64 transport is used by the test producers, the `StubRelay`, and the DLT
+re-publisher, so the wire format is consistent end to end. The Schema Registry container is
+present for governance and future producers, not the consume hot path.
 
 ## Run the loop end to end
 

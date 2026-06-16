@@ -5,6 +5,7 @@ import id.co.nativeapp.carwash.entitlement.messaging.EntitlementEventSchemas;
 import id.co.nativeapp.carwash.staff.messaging.StaffEventListener;
 import id.co.nativeapp.carwash.staff.messaging.StaffEventSchemas;
 import id.co.nativeapp.events.AvroSerde;
+import id.co.nativeapp.events.Base64ByteArraySerializer;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -15,7 +16,6 @@ import org.apache.avro.generic.GenericRecord;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 
 /**
@@ -138,7 +138,7 @@ final class EventFixtures {
         ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG,
         StringSerializer.class,
         ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,
-        ByteArraySerializer.class,
+        Base64ByteArraySerializer.class,
         ProducerConfig.ACKS_CONFIG,
         "all");
   }
