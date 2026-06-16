@@ -17,6 +17,12 @@
     "//table": "Capture ONLY the transactional outbox table (rule 3: publish via the outbox).",
     "table.include.list": "public.outbox",
 
+    "//publication": "Create the publication for ONLY the filtered table(s), not FOR ALL TABLES.",
+    "//publication2": "The connector connects as the service's NON-superuser role (so RLS is",
+    "//publication3": "enforced); 'all_tables' (the default) needs superuser, but a table OWNER may",
+    "//publication4": "publish its own table, so 'filtered' -> CREATE PUBLICATION ... FOR TABLE outbox.",
+    "publication.autocreate.mode": "filtered",
+
     "//router": "The outbox event router: each outbox row becomes a Kafka record on a topic",
     "//router2": "named for its event_type (e.g. SaleRecorded), keyed by aggregate_id, with the",
     "//router3": "row's bytea Avro `payload` as the message value (shipped verbatim).",
@@ -25,7 +31,11 @@
     "transforms.outbox.table.field.event.id": "id",
     "transforms.outbox.table.field.event.key": "aggregate_id",
     "transforms.outbox.table.field.event.type": "event_type",
-    "transforms.outbox.table.field.event.timestamp": "occurred_at",
+    "//timestamp": "Do NOT map occurred_at as the event timestamp: the EventRouter requires an",
+    "//timestamp2": "INT64 epoch-millis field, but occurred_at is a Postgres timestamp (decoded as a",
+    "//timestamp3": "non-INT64 type), which fails the SMT. The Kafka record carries the CDC commit time",
+    "//timestamp4": "instead; occurred_at is still in the Avro payload, and the consumer dedupes on the",
+    "//timestamp5": "`id` header (HR-3), not the record timestamp — so nothing is lost.",
     "transforms.outbox.table.field.event.payload": "payload",
 
     "//topic": "Route to a topic named exactly after the event_type (no prefix), so the value",
