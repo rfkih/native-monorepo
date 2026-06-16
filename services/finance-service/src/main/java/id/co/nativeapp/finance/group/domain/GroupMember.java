@@ -43,6 +43,17 @@ public class GroupMember extends Auditable {
   @Column(name = "member_company_id", nullable = false, updatable = false)
   private UUID memberCompanyId;
 
+  /**
+   * The owning group's LEAD company — the read model's tenant (equals {@code company_id}). Known at
+   * insert time (it is the bound tenant, resolved from {@code group_lead} before the RLS-scoped
+   * write) and write-once, it structurally pins the tenant via the {@code
+   * ck_group_member_lead_is_tenant} CHECK, mirroring org-service's producer {@code
+   * group_membership} — so a raw (non-Hibernate) finance writer also cannot mis-stamp a member row
+   * to another tenant.
+   */
+  @Column(name = "lead_company_id", nullable = false, updatable = false)
+  private UUID leadCompanyId;
+
   @Column(name = "effective_from", nullable = false)
   private LocalDate effectiveFrom;
 
@@ -58,14 +69,21 @@ public class GroupMember extends Auditable {
    *
    * @param groupId the consolidation group
    * @param memberCompanyId the member company
+   * @param leadCompanyId the owning group's lead company (the read model's tenant); must be
+   *     non-null
    * @param effectiveFrom the date the membership becomes effective
    * @param effectiveTo the date it ceases to be effective (the sentinel for an active membership)
    */
   public GroupMember(
-      UUID groupId, UUID memberCompanyId, LocalDate effectiveFrom, LocalDate effectiveTo) {
+      UUID groupId,
+      UUID memberCompanyId,
+      UUID leadCompanyId,
+      LocalDate effectiveFrom,
+      LocalDate effectiveTo) {
     this.id = UUID.randomUUID();
     this.groupId = Objects.requireNonNull(groupId, "groupId");
     this.memberCompanyId = Objects.requireNonNull(memberCompanyId, "memberCompanyId");
+    this.leadCompanyId = Objects.requireNonNull(leadCompanyId, "leadCompanyId");
     this.effectiveFrom = Objects.requireNonNull(effectiveFrom, "effectiveFrom");
     this.effectiveTo = Objects.requireNonNull(effectiveTo, "effectiveTo");
   }
@@ -94,6 +112,11 @@ public class GroupMember extends Auditable {
 
   public UUID getMemberCompanyId() {
     return memberCompanyId;
+  }
+
+  /** The owning group's lead company — the read model's tenant ({@code company_id}). */
+  public UUID getLeadCompanyId() {
+    return leadCompanyId;
   }
 
   public LocalDate getEffectiveFrom() {

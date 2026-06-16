@@ -8,6 +8,7 @@ import id.co.nativeapp.finance.group.messaging.GroupMembershipChangedEvent;
 import id.co.nativeapp.finance.group.repository.GroupMemberRepository;
 import id.co.nativeapp.finance.group.repository.GroupRefRepository;
 import id.co.nativeapp.tenant.TenantContext;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -109,6 +110,12 @@ public class GroupReadModelWriter {
 
   private void upsertGroupMember(GroupMembershipChangedEvent event) {
     String tenant = TenantContext.require().companyId();
+    // The bound tenant IS the group's lead (resolved from group_lead by GroupReadModelService
+    // before
+    // this RLS-scoped write), so it is both the company_id stamped below and the lead_company_id
+    // the
+    // ck_group_member_lead_is_tenant CHECK pins it to.
+    UUID lead = UUID.fromString(tenant);
     GroupMember member =
         groupMemberRepository
             .findByGroupIdAndMemberCompanyId(event.groupId(), event.memberCompanyId())
@@ -116,7 +123,11 @@ public class GroupReadModelWriter {
     if (member == null) {
       member =
           new GroupMember(
-              event.groupId(), event.memberCompanyId(), event.effectiveFrom(), event.effectiveTo());
+              event.groupId(),
+              event.memberCompanyId(),
+              lead,
+              event.effectiveFrom(),
+              event.effectiveTo());
       member.setCompanyId(tenant);
     } else {
       // Mirror the event's post-change window (idempotent — the event is the source of truth).

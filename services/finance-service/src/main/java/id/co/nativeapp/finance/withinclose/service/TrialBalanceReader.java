@@ -5,6 +5,7 @@ import id.co.nativeapp.finance.mapping.domain.AccountType;
 import id.co.nativeapp.finance.revenue.repository.LedgerPostingRepository;
 import id.co.nativeapp.finance.revenue.repository.LedgerPostingRepository.TrialBalanceLineProjection;
 import id.co.nativeapp.finance.withinclose.domain.BaseCurrencyMismatchException;
+import id.co.nativeapp.finance.withinclose.domain.MultiCurrencyTrialBalanceException;
 import id.co.nativeapp.finance.withinclose.domain.UndeterminableBaseCurrencyException;
 import id.co.nativeapp.finance.withinclose.domain.UnmappedLedgerAccountException;
 import id.co.nativeapp.money.Money;
@@ -183,15 +184,11 @@ public class TrialBalanceReader {
     for (TrialBalanceLineProjection row : rows) {
       String currency = row.getCurrency().strip();
       if (!currency.equals(baseCurrency)) {
-        throw new IllegalStateException(
-            "Period "
-                + period
-                + " holds both "
-                + baseCurrency
-                + " and "
-                + currency
-                + " ledger lines; multi-currency within one company needs FX, out of scope for the"
-                + " close");
+        // A TYPED fault (mapped to 422) rather than a bare IllegalStateException (a generic 500) —
+        // an intra-company multi-currency period is malformed input the close cannot process, in
+        // the
+        // same fail-loud class as the other within-close faults (#42).
+        throw new MultiCurrencyTrialBalanceException(period, baseCurrency, currency);
       }
     }
     return baseCurrency;

@@ -3,7 +3,6 @@ package id.co.nativeapp.finance.consolidation.service;
 import id.co.nativeapp.finance.consolidation.dto.GroupCloseResult;
 import id.co.nativeapp.finance.group.domain.UnknownGroupException;
 import id.co.nativeapp.finance.group.service.GroupLeadResolver;
-import id.co.nativeapp.tenant.TenantContext;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 
@@ -23,10 +22,11 @@ import org.springframework.stereotype.Service;
  * consolidation table is owned by the lead (rule 4) and scoped by the conjunction {@code group_id =
  * current_group AND company_id = current_tenant}. The lead is resolved from the local {@code
  * group_lead} reference mapping ({@link GroupLeadResolver} — rule 2, never a sync call to
- * org-service), and the close is bound via {@link TenantContext#callAsGroup} to {@code (tenant =
- * lead, group = groupId)}, so the auto-RLS aspect sets BOTH GUCs and the conjunction WITH CHECK
- * passes. If the group's {@code GroupDefined} has not been consumed the lead is unknown, so this
- * throws {@link UnknownGroupException} rather than closing under an unknown tenant.
+ * org-service), and the close is bound via {@link id.co.nativeapp.tenant.TenantContext#callAsGroup}
+ * (through {@link GroupScopeRunner}) to {@code (tenant = lead, group = groupId)}, so the auto-RLS
+ * aspect sets BOTH GUCs and the conjunction WITH CHECK passes. If the group's {@code GroupDefined}
+ * has not been consumed the lead is unknown, so this throws {@link UnknownGroupException} rather
+ * than closing under an unknown tenant.
  */
 @Service
 public class GroupCloseService {
@@ -43,8 +43,10 @@ public class GroupCloseService {
   }
 
   /**
-   * Runs the close for {@code (groupId, period)} at {@code closeRunSeq}, bound to the group's
-   * resolved LEAD company and group scope.
+   * Runs the close for {@code (groupId, period)} at {@code closeRunSeq}, RESOLVING the group's LEAD
+   * company itself (the consumer-driven path, where no lead has been validated upstream). For the
+   * request-driven path that has ALREADY validated the lead, prefer {@link #closeAs(UUID, UUID,
+   * String, int)} so the bound lead is structurally the validated one (#43).
    *
    * @param groupId the consolidation group
    * @param period the accounting period {@code YYYY-MM}
@@ -61,18 +63,29 @@ public class GroupCloseService {
                         "Consolidation close for unknown group "
                             + groupId
                             + " (its GroupDefined has not been consumed yet)"));
-    try {
-      return TenantContext.callAsGroup(
-          lead.toString(),
-          groupId.toString(),
-          CLOSE_ACTOR,
-          () -> writer.close(groupId, period, closeRunSeq));
-    } catch (RuntimeException e) {
-      throw e;
-    } catch (Exception e) {
-      // callAsGroup declares checked Exception; writer.close throws only unchecked, so this is
-      // unreachable in practice — rewrap defensively.
-      throw new IllegalStateException("Failed to run group consolidation close", e);
-    }
+    return closeAs(lead, groupId, period, closeRunSeq);
+  }
+
+  /**
+   * Runs the close for {@code (groupId, period)} at {@code closeRunSeq} bound to an
+   * ALREADY-VALIDATED {@code lead} — the lead the caller resolved and authorized (#43). Binding the
+   * lead passed in makes the bound scope STRUCTURALLY the validated lead rather than a value
+   * re-resolved independently inside the close (which could, in principle, diverge from the one the
+   * caller validated). The request path ({@link GroupConsolidationService#closeGroup}) uses this;
+   * the consumer path uses {@link #close(UUID, String, int)}, which resolves the lead itself.
+   *
+   * @param lead the group's LEAD company, validated by the caller (the bound tenant)
+   * @param groupId the consolidation group
+   * @param period the accounting period {@code YYYY-MM}
+   * @param closeRunSeq the close run sequence (a higher seq supersedes lower ones)
+   * @return the {@link GroupCloseResult}
+   */
+  public GroupCloseResult closeAs(UUID lead, UUID groupId, String period, int closeRunSeq) {
+    return GroupScopeRunner.runInGroupScope(
+        lead,
+        groupId,
+        CLOSE_ACTOR,
+        "Failed to run group consolidation close",
+        () -> writer.close(groupId, period, closeRunSeq));
   }
 }

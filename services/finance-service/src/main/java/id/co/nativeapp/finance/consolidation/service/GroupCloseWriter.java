@@ -26,6 +26,7 @@ import id.co.nativeapp.finance.group.repository.GroupRefRepository;
 import id.co.nativeapp.finance.grouptb.domain.GroupTrialBalanceLine;
 import id.co.nativeapp.finance.grouptb.repository.GroupTrialBalanceLineRepository;
 import id.co.nativeapp.finance.mapping.domain.AccountType;
+import id.co.nativeapp.money.MismatchedCurrencyException;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Clock;
@@ -243,6 +244,19 @@ public class GroupCloseWriter {
                             + " — the group is unknown or the scope is mis-bound"));
     String reportingCurrency = ref.getReportingCurrency();
 
+    // Load the period's ingested member lines ONCE up front and derive usesIllustrative from them
+    // here, so EVERY hold-summary below carries the REAL flag consistently (#41) — not a hardcoded
+    // false on the warming-up / empty-member / pending-members holds while the native-unbalanced
+    // hold
+    // passes the true value. The active-member filter is applied later (after the membership
+    // gates);
+    // illustrative-ness is a property of the ingested data regardless of which gate the close stops
+    // at, so the unfiltered period set is the right source for the flag on a held summary.
+    List<GroupTrialBalanceLine> periodLines =
+        trialBalanceRepository.findByGroupIdAndPeriod(groupId, period);
+    boolean usesIllustrative =
+        periodLines.stream().anyMatch(GroupTrialBalanceLine::isUsesIllustrativeRules);
+
     // (b) MEMBERSHIP EFFECTIVE-DATING GATE — warming-up guard FIRST. If the group_member projection
     //     is not caught up, HOLD: do not consolidate a stale member set.
     if (!membershipReadiness.isCaughtUp(groupId)) {
@@ -255,7 +269,7 @@ public class GroupCloseWriter {
           period,
           reportingCurrency,
           ConsolidationState.PENDING_MEMBERS_WARMING_UP,
-          false,
+          usesIllustrative,
           closeRunSeq);
     }
 
@@ -287,7 +301,7 @@ public class GroupCloseWriter {
           period,
           reportingCurrency,
           ConsolidationState.PENDING_MEMBERS,
-          false,
+          usesIllustrative,
           closeRunSeq);
     }
 
@@ -309,21 +323,17 @@ public class GroupCloseWriter {
           period,
           reportingCurrency,
           ConsolidationState.PENDING_MEMBERS,
-          false,
+          usesIllustrative,
           closeRunSeq);
     }
 
-    // Load the ingested lines for the active member set (lines from a NON-active member are
-    // excluded — a member not in the group at period-end does not consolidate even if it has stray
-    // lines). The active set is non-empty here (the fail-closed guard above returned otherwise), so
-    // an empty set can never widen the filter to pass everything.
+    // Filter the period lines (loaded once up front) to the active member set: lines from a
+    // NON-active
+    // member are excluded — a member not in the group at period-end does not consolidate even if it
+    // has stray lines. The active set is non-empty here (the fail-closed guard above returned
+    // otherwise), so an empty set can never widen the filter to pass everything.
     List<GroupTrialBalanceLine> lines =
-        trialBalanceRepository.findByGroupIdAndPeriod(groupId, period).stream()
-            .filter(l -> activeMemberIds.contains(l.getMemberCompanyId()))
-            .toList();
-
-    boolean usesIllustrative =
-        lines.stream().anyMatch(GroupTrialBalanceLine::isUsesIllustrativeRules);
+        periodLines.stream().filter(l -> activeMemberIds.contains(l.getMemberCompanyId())).toList();
 
     Currency reportingCcy = Currency.getInstance(reportingCurrency);
 
@@ -353,9 +363,30 @@ public class GroupCloseWriter {
     // book
     //     balances (and is reconciled) does the close proceed to translate; the post-translation
     //     residual is then PURELY the FX effect.
-    List<UUID> unbalancedMembers =
-        multiCurrency ? unbalancedNativeMembers(lines, activeMemberIds) : List.of();
-    if (!unbalancedMembers.isEmpty()) {
+    NativeBalanceGate nativeGate =
+        multiCurrency ? nativeBalanceGate(lines, activeMemberIds) : NativeBalanceGate.allClear();
+    // A member whose OWN trial balance mixes currencies has no well-defined native residual
+    // (Money.plus across currencies is undefined). HOLD with a clear typed diagnostic rather than
+    // letting a raw MismatchedCurrencyException escape as a generic 500.
+    if (!nativeGate.multiCurrencyMembers().isEmpty()) {
+      log.warn(
+          "Group close groupId={} period={} HELD MEMBER_TRIAL_BALANCE_MULTICURRENCY: {} active"
+              + " member(s) whose OWN trial balance mixes currencies (no single functional currency,"
+              + " so no native double-entry residual): {} — a member trial balance must be in one"
+              + " functional currency",
+          groupId,
+          period,
+          nativeGate.multiCurrencyMembers().size(),
+          nativeGate.multiCurrencyMembers());
+      return holdSummary(
+          groupId,
+          period,
+          reportingCurrency,
+          ConsolidationState.MEMBER_TRIAL_BALANCE_MULTICURRENCY,
+          usesIllustrative,
+          closeRunSeq);
+    }
+    if (!nativeGate.unbalancedMembers().isEmpty()) {
       log.warn(
           "Group close groupId={} period={} HELD MEMBER_TRIAL_BALANCE_UNBALANCED: {} active"
               + " member(s) whose native trial balance does not reconcile (non-zero functional"
@@ -363,8 +394,8 @@ public class GroupCloseWriter {
               + " imbalance into the CTA reserve as a translation adjustment",
           groupId,
           period,
-          unbalancedMembers.size(),
-          unbalancedMembers);
+          nativeGate.unbalancedMembers().size(),
+          nativeGate.unbalancedMembers());
       return holdSummary(
           groupId,
           period,
@@ -403,6 +434,30 @@ public class GroupCloseWriter {
       if (!line.getAmount().currency().equals(reportingCcy)) {
         usesSimplifiedTranslation = true;
       }
+    }
+
+    // PREDICATE-DESYNC GUARD (#41): the native-balance gate above ran on `multiCurrency`, while the
+    // CTA-residual path below runs on `usesSimplifiedTranslation`. Both mean exactly "≥1 member
+    // line
+    // is not in the reporting currency", but they are computed by SEPARATE folds, so a future edit
+    // could let them drift — and a CTA posting on a path the native gate did NOT guard would sweep
+    // an
+    // unvalidated native imbalance into the reserve. They MUST stay equivalent; assert it loudly so
+    // a
+    // desync fails the close rather than silently mis-gating. (A non-empty line set with no FX
+    // translation leaves both false; any non-reporting-currency line makes both true.)
+    if (multiCurrency != usesSimplifiedTranslation) {
+      throw new IllegalStateException(
+          "Native-balance gate predicate (multiCurrency="
+              + multiCurrency
+              + ") desynced from the CTA-path predicate (usesSimplifiedTranslation="
+              + usesSimplifiedTranslation
+              + ") for group="
+              + groupId
+              + " period="
+              + period
+              + "; they must be equivalent so the CTA never posts on a path the native gate did not"
+              + " guard");
     }
 
     // (e) INTERCOMPANY MATCH on (intercompany_ref, period): pair related-party legs. Persist the
@@ -1269,46 +1324,82 @@ public class GroupCloseWriter {
   }
 
   /**
-   * The active members (sorted, deterministic) whose NATIVE trial balance does NOT pass the SEAM-3b
-   * pre-translation gate: EITHER its signed double-entry residual in its OWN functional currency is
-   * non-zero (debits ≠ credits — its books do not balance), OR the member published it {@code
-   * reconciled = false}. An empty result means every member book balances natively and is
-   * reconciled, so the close may translate and the post-translation residual is PURELY the
-   * closing-vs-average FX effect (never a swept-in raw imbalance).
+   * The outcome of the SEAM-3b pre-translation native-balance gate, splitting the held members into
+   * two TYPED buckets so each maps to a distinct {@link ConsolidationState} hold:
    *
-   * <p>The native residual is computed PER MEMBER in that member's functional currency (every line
-   * of one member is in one currency — the member's base currency — so {@code Money.plus}/{@code
-   * minus} never cross currencies here). A member with no lines cannot reach this method (the
-   * member-completeness gate already HELD).
+   * <ul>
+   *   <li>{@code multiCurrencyMembers} — members whose OWN trial balance mixes currencies, so no
+   *       single-currency native residual exists ({@code Money.plus} across currencies is
+   *       undefined). A clear gated diagnostic, never a raw {@code MismatchedCurrencyException};
+   *   <li>{@code unbalancedMembers} — members whose native signed double-entry residual is non-zero
+   *       (debits ≠ credits) OR that published {@code reconciled = false}.
+   * </ul>
+   *
+   * Both empty means every member book is single-currency, balances natively, and is reconciled —
+   * so the close may translate and the post-translation residual is PURELY the closing-vs-average
+   * FX effect.
    */
-  private static List<UUID> unbalancedNativeMembers(
+  private record NativeBalanceGate(List<UUID> multiCurrencyMembers, List<UUID> unbalancedMembers) {
+
+    static NativeBalanceGate allClear() {
+      return new NativeBalanceGate(List.of(), List.of());
+    }
+  }
+
+  /**
+   * Evaluates the native-balance gate per active member, in that member's functional currency. A
+   * member whose lines mix currencies is bucketed as MULTI-CURRENCY (no native residual is
+   * computable); a single-currency member whose signed residual is non-zero or that published
+   * {@code reconciled = false} is bucketed as UNBALANCED. Both lists are sorted (deterministic). A
+   * member with no lines cannot reach this method (the member-completeness gate already HELD).
+   */
+  private static NativeBalanceGate nativeBalanceGate(
       List<GroupTrialBalanceLine> lines, Set<UUID> activeMemberIds) {
-    // member -> running native signed residual (in the member's functional currency).
+    // member -> running native signed residual (in the member's functional currency), or absent
+    // once
+    // the member is found to mix currencies (a mismatched line poisons the residual).
     Map<UUID, Money> nativeResidualByMember = new LinkedHashMap<>();
     // member -> whether the member published reconciled (member-level, identical across its lines).
     Map<UUID, Boolean> reconciledByMember = new LinkedHashMap<>();
+    // members whose own lines are not all in one currency (no native residual is well-defined).
+    Set<UUID> mixedCurrency = new TreeSet<>();
     for (GroupTrialBalanceLine line : lines) {
       UUID member = line.getMemberCompanyId();
       Money amount = line.getAmount();
+      reconciledByMember.merge(member, line.isReconciled(), Boolean::logicalAnd);
+      if (mixedCurrency.contains(member)) {
+        continue; // already flagged multi-currency; its residual is meaningless.
+      }
       Money running =
           nativeResidualByMember.computeIfAbsent(member, m -> Money.ofMinor(0L, amount.currency()));
-      nativeResidualByMember.put(
-          member, applySignConvention(running, line.getAccountType(), amount));
-      reconciledByMember.merge(member, line.isReconciled(), Boolean::logicalAnd);
+      // applySignConvention does Money.plus/minus, which throws on a currency mismatch — a member
+      // whose own lines mix currencies. Bucket it as MULTI-CURRENCY (a typed hold) instead of
+      // letting
+      // the MismatchedCurrencyException escape the close as a generic 500.
+      try {
+        nativeResidualByMember.put(
+            member, applySignConvention(running, line.getAccountType(), amount));
+      } catch (MismatchedCurrencyException mixed) {
+        mixedCurrency.add(member);
+        nativeResidualByMember.remove(member);
+      }
     }
     Set<UUID> unbalanced = new TreeSet<>();
     for (UUID member : activeMemberIds) {
+      if (mixedCurrency.contains(member)) {
+        continue; // handled as a multi-currency hold, not an unbalanced one.
+      }
       Money residual = nativeResidualByMember.get(member);
       boolean reconciled = Boolean.TRUE.equals(reconciledByMember.get(member));
       // A non-zero native residual (books do not balance) OR a member-reported reconciled=false
-      // HOLDs
-      // the close. residual is non-null: a member in activeMemberIds always has lines here (the
-      // completeness gate already returned otherwise).
+      // HOLDs the close. residual is non-null: a single-currency member in activeMemberIds always
+      // has
+      // lines here (the completeness gate already returned otherwise).
       if (residual == null || !residual.isZero() || !reconciled) {
         unbalanced.add(member);
       }
     }
-    return List.copyOf(unbalanced);
+    return new NativeBalanceGate(List.copyOf(mixedCurrency), List.copyOf(unbalanced));
   }
 
   /**

@@ -78,7 +78,12 @@ public class GroupConsolidationService {
       GroupRequester requester, UUID groupId, String period) {
     requireRole(requester, GroupConsolidationRole.VIEW, "read the group consolidation");
     UUID lead = requireLead(requester, groupId);
-    return callAsGroup(lead, groupId, requester.actor(), () -> reader.read(groupId, period));
+    return GroupScopeRunner.runInGroupScope(
+        lead,
+        groupId,
+        requester.actor(),
+        "Failed to read the group consolidation",
+        () -> reader.read(groupId, period));
   }
 
   /**
@@ -94,10 +99,13 @@ public class GroupConsolidationService {
   public GroupCloseResponse closeGroup(
       GroupRequester requester, UUID groupId, String period, int closeRunSeq) {
     requireRole(requester, GroupConsolidationRole.CLOSE, "close the group consolidation");
-    // Validate the requester leads the group BEFORE delegating — the close must never run for a
-    // group the requester does not lead, even though GroupCloseService re-resolves the lead itself.
-    requireLead(requester, groupId);
-    GroupCloseResult result = closeService.close(groupId, period, closeRunSeq);
+    // Validate the requester leads the group BEFORE delegating, and PASS the validated lead INTO
+    // the
+    // close (#43) — so the lead the close binds is STRUCTURALLY the one authorized here, not a
+    // value
+    // re-resolved independently inside the close that could (in principle) diverge from it.
+    UUID lead = requireLead(requester, groupId);
+    GroupCloseResult result = closeService.closeAs(lead, groupId, period, closeRunSeq);
     return GroupCloseResponse.from(groupId, period, result);
   }
 
@@ -132,18 +140,5 @@ public class GroupConsolidationService {
           "No group " + groupId + " led by company " + requester.companyId());
     }
     return lead.get();
-  }
-
-  /** Binds {@code callAsGroup(lead, group)} and runs the (unchecked-throwing) action. */
-  private static <T> T callAsGroup(
-      UUID lead, UUID groupId, String actor, java.util.concurrent.Callable<T> action) {
-    try {
-      return TenantContext.callAsGroup(lead.toString(), groupId.toString(), actor, action);
-    } catch (RuntimeException e) {
-      throw e;
-    } catch (Exception e) {
-      // callAsGroup declares checked Exception; the reader throws only unchecked, so unreachable.
-      throw new IllegalStateException("Failed to read the group consolidation", e);
-    }
   }
 }

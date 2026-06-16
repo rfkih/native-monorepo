@@ -9,6 +9,7 @@ import id.co.nativeapp.finance.mapping.domain.AccountType;
 import id.co.nativeapp.finance.revenue.repository.LedgerPostingRepository;
 import id.co.nativeapp.finance.revenue.repository.LedgerPostingRepository.TrialBalanceLineProjection;
 import id.co.nativeapp.finance.withinclose.domain.BaseCurrencyMismatchException;
+import id.co.nativeapp.finance.withinclose.domain.MultiCurrencyTrialBalanceException;
 import id.co.nativeapp.finance.withinclose.domain.UndeterminableBaseCurrencyException;
 import id.co.nativeapp.finance.withinclose.domain.UnmappedLedgerAccountException;
 import id.co.nativeapp.finance.withinclose.service.CompanyTrialBalance;
@@ -102,6 +103,49 @@ class TrialBalanceReaderTest {
 
     assertThat(tb.isEmpty()).isTrue();
     assertThat(tb.baseCurrency()).isEqualTo("IDR");
+  }
+
+  @Test
+  void aMultiCurrencyPeriodFailsLoudWithATypedFault() {
+    // #42: a period whose postings span TWO currencies is malformed input the close cannot roll up
+    // (multi-currency within one company needs FX). It must surface as a TYPED MultiCurrencyTrial
+    // BalanceException (mapped to 422), NOT a bare IllegalStateException (a generic 500).
+    when(ledgerRepository.trialBalanceForPeriod(PERIOD))
+        .thenReturn(
+            List.of(
+                row("4000", "REVENUE", "REVENUE", 10_000_000L, "IDR", false),
+                row("4001", "REVENUE", "REVENUE", 5_000L, "USD", false)));
+
+    TrialBalanceReader reader = new TrialBalanceReader(ledgerRepository);
+    assertThatThrownBy(() -> reader.gather(PERIOD, null))
+        .isInstanceOf(MultiCurrencyTrialBalanceException.class)
+        .hasMessageContaining("IDR")
+        .hasMessageContaining("USD");
+  }
+
+  // #42 zero-net P&L --------------------------------------------------------
+
+  @Test
+  void aPeriodWhosePnlNetsToZeroAppendsNoEquityLineYetStillSumsSignedToZero() {
+    // #42: a period whose P&L nets to EXACTLY zero (revenue credit cancels expense debit) appends
+    // NO
+    // retained-earnings equity closing line, yet the published trial balance still sums signed-to-
+    // zero. This locks that the equity line is appended CONDITIONALLY on a non-zero net — a future
+    // refactor that unconditionally appends it (double-counting the now-zero net) would break the
+    // "no line" assertion below.
+    when(ledgerRepository.trialBalanceForPeriod(PERIOD))
+        .thenReturn(
+            List.of(
+                row("4000", "REVENUE", "REVENUE", 6_000_000L, "IDR", false),
+                row("5100", "EXPENSE", "EXPENSE", 6_000_000L, "IDR", false)));
+
+    CompanyTrialBalance tb = new TrialBalanceReader(ledgerRepository).gather(PERIOD, "IDR");
+
+    // The signed double-entry residual is zero with NO equity closing line synthesized.
+    assertThat(signed(tb)).isZero();
+    assertThat(tb.lines()).noneMatch(l -> "EQUITY".equals(l.accountType()));
+    // Exactly the two original P&L lines, no synthesized closing line.
+    assertThat(tb.lines()).hasSize(2);
   }
 
   // FIX 2 -------------------------------------------------------------------

@@ -63,7 +63,7 @@ public class ConsolidationSummary extends Auditable {
   private long groupNetMinor;
 
   @Enumerated(EnumType.STRING)
-  @Column(name = "state", nullable = false, length = 32)
+  @Column(name = "state", nullable = false, length = 40)
   private ConsolidationState state;
 
   @Column(name = "uses_stub_fx", nullable = false)

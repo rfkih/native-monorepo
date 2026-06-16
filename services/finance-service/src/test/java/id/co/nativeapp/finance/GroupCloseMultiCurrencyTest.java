@@ -361,6 +361,51 @@ class GroupCloseMultiCurrencyTest extends PostgresRlsTestBase {
   }
 
   @Test
+  void aMemberWithMixedCurrencyLinesHoldsTheCloseWithATypedDiagnosticNotARawCrash() {
+    // #41: a member that reports lines in MORE THAN ONE currency within ONE TrialBalancePublished
+    // has
+    // no single functional currency, so its native double-entry residual is undefined (Money.plus
+    // across currencies throws). The close must HOLD with the typed
+    // MEMBER_TRIAL_BALANCE_MULTICURRENCY
+    // diagnostic — NOT let a raw MismatchedCurrencyException escape as a generic 500.
+    UUID groupId = UUID.randomUUID();
+    UUID lead = UUID.randomUUID();
+    UUID memberIdr = UUID.randomUUID();
+    UUID memberMixed = UUID.randomUUID();
+
+    fx.defineGroup(groupId, lead, "IDR");
+    fx.addMember(groupId, memberIdr, LocalDate.of(2026, 1, 1));
+    fx.addMember(groupId, memberMixed, LocalDate.of(2026, 1, 1));
+
+    // The clean IDR member balances natively.
+    fx.ingestTrialBalance(
+        groupId,
+        memberIdr,
+        PERIOD,
+        "IDR",
+        List.of(asset(6_000_000L, "IDR"), revenue(10_000_000L, "IDR"), expense(4_000_000L, "IDR")));
+    // The offending member reports a REVENUE line in USD and an EXPENSE line in IDR — two
+    // currencies
+    // within its OWN trial balance. (This makes the GROUP close multi-currency too, so the native
+    // gate runs.)
+    fx.ingestTrialBalance(
+        groupId,
+        memberMixed,
+        PERIOD,
+        "USD",
+        List.of(revenue(500_00L, "USD"), expense(1_000_000L, "IDR")));
+
+    GroupCloseResult result = closeService.close(groupId, PERIOD, 1);
+
+    // HELD with the typed multi-currency state — no consolidation, no CTA sweep, empty ledger.
+    assertThat(result.isClosed()).isFalse();
+    assertThat(result.state()).isEqualTo(ConsolidationState.MEMBER_TRIAL_BALANCE_MULTICURRENCY);
+    assertThat(summaryStateAsAdmin(groupId)).isEqualTo("MEMBER_TRIAL_BALANCE_MULTICURRENCY");
+    assertThat(entryTypeCountAsAdmin(groupId, "CTA")).isZero();
+    assertThat(ledgerCountAsAdmin(groupId)).isZero();
+  }
+
+  @Test
   void aMemberPublishedReconciledFalseHoldsTheCloseNotConsolidated() {
     // A member that published reconciled=false says its own books do not balance: HOLD, like the
     // completeness gate — even if its lines happen to sum signed-to-zero, the producer flagged it

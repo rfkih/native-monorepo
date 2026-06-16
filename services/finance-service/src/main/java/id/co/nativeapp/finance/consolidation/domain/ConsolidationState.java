@@ -24,6 +24,14 @@ package id.co.nativeapp.finance.consolidation.domain;
  *       post-translation residual is the legitimate closing-vs-average FX effect). A native
  *       imbalance is NOT a translation effect and must NOT be swept into the CTA reserve; HOLD
  *       rather than consolidate (and mis-label) raw imbalance as a translation adjustment.
+ *   <li>{@link #MEMBER_TRIAL_BALANCE_MULTICURRENCY} — at least one active member reported lines in
+ *       MORE THAN ONE currency WITHIN a single trial balance, so its own functional trial balance
+ *       is not in a single currency and has no well-defined native double-entry residual ({@code
+ *       Money.plus} across currencies is undefined). A member's books must be in its single
+ *       functional currency (the within-company close derives exactly one base currency from the
+ *       ledger); a multi-currency member trial balance is malformed input. The close HOLDs here
+ *       (clear gated diagnostic) rather than throwing a raw {@code MismatchedCurrencyException} out
+ *       as a generic 500.
  *   <li>{@link #MULTI_CURRENCY_UNSUPPORTED} — <strong>RETIRED in SEAM 3b.</strong> In 3a a member's
  *       base currency differing from the reporting currency was rejected cleanly here. SEAM 3b now
  *       SUPPORTS multi-currency via the SIMPLIFIED, FLAGGED translation path ({@link
@@ -43,6 +51,7 @@ public enum ConsolidationState {
   PENDING_MEMBERS_WARMING_UP,
   MULTI_CURRENCY_UNSUPPORTED,
   MEMBER_TRIAL_BALANCE_UNBALANCED,
+  MEMBER_TRIAL_BALANCE_MULTICURRENCY,
   INTERCOMPANY_UNRECONCILED,
   SUPERSEDED
 }

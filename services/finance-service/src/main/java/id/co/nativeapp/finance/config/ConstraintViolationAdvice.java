@@ -2,6 +2,7 @@ package id.co.nativeapp.finance.config;
 
 import id.co.nativeapp.finance.fx.domain.MissingFxRateException;
 import id.co.nativeapp.finance.withinclose.domain.BaseCurrencyMismatchException;
+import id.co.nativeapp.finance.withinclose.domain.MultiCurrencyTrialBalanceException;
 import id.co.nativeapp.finance.withinclose.domain.UndeterminableBaseCurrencyException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolation;
@@ -48,6 +49,11 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * overrides the books), and {@link UndeterminableBaseCurrencyException} when an EMPTY period
  * supplies no currency to record and the ledger reveals none. Both fail loud rather than silently
  * overriding or fabricating the company's immutable base currency.
+ *
+ * <p>It also maps {@link MultiCurrencyTrialBalanceException} → {@code 422} (#42): the period's
+ * postings span more than one currency, which the within-company close cannot roll up
+ * (multi-currency within one company needs FX). A typed fail-loud {@code 4xx}, not a generic {@code
+ * 500}.
  */
 @RestControllerAdvice
 public class ConstraintViolationAdvice {
@@ -114,6 +120,18 @@ public class ConstraintViolationAdvice {
       UndeterminableBaseCurrencyException ex, HttpServletRequest request) {
     return currencyProblem(
         "base-currency-undeterminable", "Base currency undeterminable", ex.getMessage(), request);
+  }
+
+  /**
+   * A within-company close found the period's postings in MORE THAN ONE currency → {@code 422}.
+   * Multi-currency within one company needs FX, out of scope for the close; this fails loud as a
+   * typed {@code 4xx} rather than a generic {@code 500} (#42).
+   */
+  @ExceptionHandler(MultiCurrencyTrialBalanceException.class)
+  public ProblemDetail handleMultiCurrencyTrialBalance(
+      MultiCurrencyTrialBalanceException ex, HttpServletRequest request) {
+    return currencyProblem(
+        "multi-currency-trial-balance", "Multi-currency trial balance", ex.getMessage(), request);
   }
 
   private ProblemDetail currencyProblem(
