@@ -90,6 +90,17 @@ public class WithinCompanyCloseWriter {
     String tenant = TenantContext.require().companyId();
     UUID companyId = UUID.fromString(tenant);
 
+    // Serialize concurrent closes of THIS (company, period) with a deterministic transaction-scoped
+    // advisory lock, taken BEFORE the idempotency probe below. Two parallel close requests for the
+    // same (company, period) would otherwise both pass the "no row yet" probe, both gather the
+    // trial
+    // balance, and then one would win the uq_within_company_close UNIQUE insert while the other
+    // died
+    // with a unique-violation 500. The lock makes the second attempt block until the first commits,
+    // then fall through to the probe, find the row, and return the clean idempotent no-op. The lock
+    // auto-releases at commit/rollback. (Mirrors the labor/group-close advisory-lock primitive.)
+    closeRepository.lockPeriod(tenant + ":" + period);
+
     // IDEMPOTENCY: an already-closed (company, period) is a clean no-op — re-emit nothing.
     Optional<WithinCompanyClose> existing = closeRepository.findByPeriod(period);
     if (existing.isPresent()) {

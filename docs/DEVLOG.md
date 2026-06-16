@@ -23,8 +23,8 @@ controller/service/repository/domain/dto/messaging layer sub-packages**, ArchUni
 
 **Open follow-ups (tracked):** org-tree move/deactivate *semantics* (needs a decision); notification
 real provider (needs a transport choice); payroll expected-source registry (needs a rule);
-finance-expansion robustness scoping; a few deferred operational items (member_group_index backfill, a
-within-company concurrent-close lock, two MVC integration tests).
+finance-expansion robustness scoping. (The P3d deferred operational items — `member_group_index`
+backfill, the within-company concurrent-close lock, the within-close MVC tests — are now DONE.)
 
 ## Key design decisions (the why)
 - **Package root `id.co.nativeapp`** — `id.co` reverse-domain; `nativeapp` because `native` is a Java
@@ -57,6 +57,16 @@ within-company concurrent-close lock, two MVC integration tests).
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **P3d deferred operational items (#46)** — (a) V12 backfills the non-RLS `member_group_index` from
+  the FORCE-RLS `group_member` for pre-V10 memberships (whose `GroupMembershipChanged` was already
+  deduped and will never re-fire, so a within-company close would silently emit no
+  `TrialBalancePublished` for them); the migration uses a `NO FORCE`/`FORCE` bracket so the
+  table-owning role can read across tenants at migrate time (a plain FORCE-RLS read sees zero rows
+  with no GUC bound). (b) An advisory lock (`pg_advisory_xact_lock`, mirroring the labor primitive) on
+  the within-company close serializes concurrent closes so the loser returns the idempotent no-op,
+  not a UNIQUE-violation 500. (c) Web-slice MVC tests for `WithinCompanyCloseController` (200/422/400)
+  + a concurrency regression test + a backfill projection test. Adversarially reviewed (PASS); full
+  finance build green.
 - **Live end-to-end validation + 3 CDC fixes** — ran the real outbox→Debezium→Kafka→finance loop;
   found+fixed the publication-mode, occurred_at-timestamp, and bytea/ByteBuffer (base64) bugs the
   stubbed-relay tests couldn't catch. Proven: `GET /api/v1/revenue` = the recorded sales.

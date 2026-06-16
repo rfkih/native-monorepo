@@ -22,6 +22,11 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.apache.avro.generic.GenericRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -177,6 +182,62 @@ class WithinCompanyCloseTest extends PostgresRlsTestBase {
     assertThat(result.trialBalancePublishedGroups()).isEmpty();
     assertThat(outboxCount("ConsolidationClosed")).isEqualTo(1L);
     assertThat(outboxCount("TrialBalancePublished")).isZero();
+  }
+
+  @Test
+  void concurrentClosesOfTheSamePeriodSerializeViaTheAdvisoryLockAndEmitExactlyOnce()
+      throws Exception {
+    UUID company = UUID.randomUUID();
+    UUID group = UUID.randomUUID();
+    UUID lead = UUID.randomUUID();
+    UUID outlet = UUID.randomUUID();
+
+    fx.defineGroup(group, lead, "IDR");
+    fx.addMember(group, company, LocalDate.of(2026, 1, 1));
+    revenueService.handle(
+        new SaleRecordedEvent(
+            UUID.randomUUID(),
+            company.toString(),
+            outlet,
+            Money.ofMinor(9_000_000L, "IDR"),
+            IN_PERIOD));
+
+    // Two close requests for the SAME (company, period) fire simultaneously (released together by a
+    // barrier). The transaction-scoped advisory lock serializes them: one wins and emits, the other
+    // blocks until it commits, then falls through to the idempotency probe, finds the row, and
+    // returns the clean no-op. WITHOUT the lock the loser would instead die on the
+    // uq_within_company_close UNIQUE insert (a spurious 500). The assertion proves both complete
+    // gracefully and the loop-closing events fire EXACTLY ONCE.
+    CyclicBarrier barrier = new CyclicBarrier(2);
+    java.util.concurrent.Callable<WithinCompanyCloseResult> task =
+        () ->
+            callAsCompany(
+                company,
+                () -> {
+                  barrier.await();
+                  return closeService.close(PERIOD, "IDR");
+                });
+
+    ExecutorService pool = Executors.newFixedThreadPool(2);
+    try {
+      Future<WithinCompanyCloseResult> f1 = pool.submit(task);
+      Future<WithinCompanyCloseResult> f2 = pool.submit(task);
+      WithinCompanyCloseResult r1 = f1.get(30, TimeUnit.SECONDS);
+      WithinCompanyCloseResult r2 = f2.get(30, TimeUnit.SECONDS);
+
+      // Exactly one of the two was the first close; the other was the idempotent no-op — and
+      // neither
+      // threw a unique-violation.
+      assertThat(List.of(r1.firstClose(), r2.firstClose())).containsExactlyInAnyOrder(true, false);
+      // Both observe the SAME close row id.
+      assertThat(r1.closeId()).isEqualTo(r2.closeId());
+    } finally {
+      pool.shutdownNow();
+    }
+
+    // The events fired exactly once despite the two concurrent closes.
+    assertThat(outboxCount("ConsolidationClosed")).isEqualTo(1L);
+    assertThat(outboxCount("TrialBalancePublished")).isEqualTo(1L);
   }
 
   // ----------------------------------------------------------------------- helpers
