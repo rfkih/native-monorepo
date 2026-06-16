@@ -5,6 +5,9 @@
 ## What this is
 **Native** — a multi-tenant B2B SaaS: a per-company management console over independently deployable vertical services, a shared platform layer, an event-driven financial consolidation core, and an integrated HR module. **Localized** (English / Bahasa Indonesia, more later) and **multi-currency** (IDR / USD, more later). Microservices architecture, deployed pragmatically — first usable slice ships as 1–2 units, services split out under load.
 
+- **Orientation map (AI agents: read FIRST)** — services, events, tables, ports, "where do I find X",
+  common tasks: **docs/PROJECT-MAP.md**. Run/test/debug locally + the gotchas: **docs/RUNBOOK.md**.
+  History, design decisions, current status: **docs/DEVLOG.md** (keep it current).
 - Architecture reference: **ARCHITECTURE.md** (read before any service or event work).
 - Event contracts: **docs/EVENT-CATALOG.md** (read before touching any event).
 - Build order and tasks: **CLAUDE-CODE-BUILD-PLAN.md**.

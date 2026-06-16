@@ -1,0 +1,88 @@
+# RUNBOOK — run, test, debug locally (+ the gotchas)
+
+> **For an AI agent:** the validation slice has been run end-to-end against the live stack. The exact
+> commands + the non-obvious gotchas are here so you don't re-derive them (each one cost real
+> debugging). See PROJECT-MAP for the module map, DEVLOG for history/status.
+
+## Build & test
+```bash
+./gradlew build          # the FULL gate: compile + unit + Testcontainers integration + ArchUnit
+                         # + spotless (google-java-format) + checkstyle + jacoco coverage. One command.
+./gradlew :services:finance-service:build     # one module (faster; finance is the slowest, ~1–3 min)
+./gradlew spotlessApply  # auto-format before building if checkstyle/spotless complain
+```
+- Tests use **Testcontainers** (real Postgres/Kafka) — a Docker daemon must be running. RLS + `ON CONFLICT`
+  are exercised against real Postgres as the non-superuser `app_user` role.
+- The integration tests **stub the Debezium relay** (StubRelay) — so they do NOT cover the real
+  outbox→Kafka CDC path. That path is only proven by the live run below (which is why it caught 3 bugs).
+
+## Run the dev stack + the services locally
+```bash
+# 1) infra (Postgres-per-service, Kafka, Debezium Connect, Keycloak, Redis):
+docker compose -f docker/compose.dev.yml up -d --wait
+#    On first boot Postgres runs docker/postgres/init/01-init-databases.sql → 7 DBs + non-superuser roles.
+
+# 2) run a service (they are NOT containerized in the dev stack — run the bootJar on the host):
+./gradlew :services:<svc>:bootJar
+JAVA25="$HOME/.gradle/jdks/eclipse_adoptium-25-amd64-windows.2/bin/java.exe"   # see gotcha #4
+DB_URL=jdbc:postgresql://localhost:5432/<svc>_service DB_USERNAME=<svc>_service DB_PASSWORD=<svc>_service \
+SPRING_PROFILES_ACTIVE=dev SERVER_PORT=80NN KAFKA_BOOTSTRAP_SERVERS=localhost:9092 \
+NATIVE_DEV_TENANT_FILTER_ENABLED=true \
+  "$JAVA25" -jar services/<svc>/build/libs/<svc>-0.1.0-SNAPSHOT.jar
+
+# 3) register the Debezium outbox connector (after the producing service has migrated its outbox table):
+curl -fsS -X POST http://localhost:8083/connectors -H 'Content-Type: application/json' \
+  -d @docker/debezium/outbox-connector.json
+curl -fsS http://localhost:8083/connectors/restaurant-outbox-connector/status   # task must be RUNNING
+```
+Drive the loop: `POST /api/v1/sales` (headers `X-Company-Id: <uuid>`, `X-Actor: x`, `X-Roles: cashier`,
+body `{businessId,amountMinor,currency,idempotencyKey}`) → then `GET /api/v1/revenue?period=YYYY-MM` on
+finance (same `X-Company-Id`) shows the consolidated revenue move.
+
+## GOTCHAS (each cost real debugging — read before running locally)
+1. **Host `DB_*` env vars override the service defaults.** The yml uses `${DB_PASSWORD:default}`; if the
+   shell has `DB_PASSWORD`/`DB_USERNAME`/`DB_URL` set (e.g. another project), Spring picks the host value
+   → `FATAL: password authentication failed`. **Always pass `DB_URL/DB_USERNAME/DB_PASSWORD` explicitly**
+   per service when running locally.
+2. **The dev tenant filter is OFF by default.** `DevTenantFilter` is `@ConditionalOnProperty(
+   native.dev-tenant-filter.enabled=true)` (a safety gate — it trusts headers). Without
+   `NATIVE_DEV_TENANT_FILTER_ENABLED=true`, a tenant-scoped request fails 500 "No tenant bound". The
+   header names are `X-Company-Id` (must be a UUID) + `X-Actor` (both required, else 400).
+3. **The Debezium connector needed 3 fixes for the real outbox path** (all now in
+   `docker/debezium/outbox-connector.json`; the Testcontainers tests could not catch these because they
+   stub the relay): (a) `publication.autocreate.mode: filtered` — the connector runs as a non-superuser
+   role, and `FOR ALL TABLES` (the default) needs superuser; (b) NO `event.timestamp` mapping — `occurred_at`
+   is a timestamp, not the INT64 the EventRouter wants; (c) `binary.handling.mode: base64` + a per-connector
+   `value.converter=StringConverter` — Debezium decodes the `bytea` payload as a `ByteBuffer` that
+   `ByteArrayConverter` rejects, so the payload is base64'd on the wire and the consumer's
+   `libs/events Base64ByteArrayDeserializer` decodes it back to the raw Avro bytes (AvroSerde unchanged).
+4. **System `java` is 21; the bootJars are Java 25.** Run with the foojay-provisioned JDK 25 at
+   `~/.gradle/jdks/eclipse_adoptium-25-*/bin/java` (or `./gradlew :svc:bootRun`, which uses the toolchain).
+5. **A raw `psql` connection sees NO rows from RLS tables** unless it sets `app.current_tenant`
+   (`SET app.current_tenant = '<company-uuid>'`) — this is RLS working, not missing data. Query via the
+   service API (which binds the tenant) or set the GUC. Use the `postgres` superuser only for admin.
+6. **Slot drop ⇒ stale Connect offset.** If you drop a replication slot and re-register the same-named
+   connector, Connect's stored offset is stale → it skips the snapshot / streams from the wrong LSN.
+   Register a FRESH connector (unique name + `slot.name` + `topic.prefix`) for a clean run.
+7. **Port conflicts** (another local stack may hold 5432/9092/8081). The compose publishes those host
+   ports; remap if needed (Kafka host port + `KAFKA_ADVERTISED_LISTENERS` EXTERNAL must change together;
+   the in-cluster `kafka:29092` listener is unaffected). Schema-registry (8081) is optional — the consume
+   path uses raw Avro bytes, not the registry.
+
+## Tear down
+```bash
+docker compose -f docker/compose.dev.yml down       # keep the Postgres volume (data persists)
+docker compose -f docker/compose.dev.yml down -v     # also drop data + replication slots
+```
+
+## Troubleshooting (symptom → cause → fix)
+| symptom | cause | fix |
+|---|---|---|
+| service exits 0 at boot, `password authentication failed` | host `DB_*` env leak (gotcha #1) | pass DB creds explicitly |
+| `No tenant bound in the current scope` (500) | dev tenant filter not enabled (gotcha #2) | `NATIVE_DEV_TENANT_FILTER_ENABLED=true` + the `X-Company-Id`/`X-Actor` headers |
+| `Unsupported class file major version 69` | running a Java 25 jar with Java 21 (gotcha #4) | use the JDK-25 path |
+| Debezium task FAILED `must be superuser…FOR ALL TABLES` | (gotcha #3a) | `publication.autocreate.mode: filtered` |
+| Debezium task FAILED `'occurred_at' is not of type INT64` | (gotcha #3b) | remove `event.timestamp` mapping |
+| Debezium task FAILED `ByteArrayConverter…HeapByteBuffer` | (gotcha #3c) | `binary.handling.mode: base64` + StringConverter |
+| message on Kafka but consumer silent / topic empty | stale Connect offset (gotcha #6) | fresh connector name/slot/prefix |
+| `psql` returns no rows from a known-populated table | RLS, no tenant GUC (gotcha #5) | set `app.current_tenant` or query the API |
