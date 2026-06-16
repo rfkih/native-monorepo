@@ -127,9 +127,9 @@ kubectl apply              -k deploy/overlays/org-service          # real apply
    per-service ArgoCD Application — is the deploy unit.)
 8. **Database migrations** — Flyway runs in-process on startup here. For zero-downtime /
    rollback-safe deploys, move it to a **pre-deploy Job** using the expand/contract pattern
-   (see `devops-engineer.md`); never let a deploy auto-apply a destructive migration.
+   (see `.claude/agents/devops-engineer.md`); never let a deploy auto-apply a destructive migration.
 
-## Not yet wired (future, per `devops-engineer.md`)
+## Not yet wired (future, per `.claude/agents/devops-engineer.md`)
 
 OpenTelemetry export, Linkerd (mTLS) at the service-split point, ArgoCD/GitOps CD with the
 prod approval gate, Trivy/cosign in CI, and HPAs. Out of scope for this author-only task.
