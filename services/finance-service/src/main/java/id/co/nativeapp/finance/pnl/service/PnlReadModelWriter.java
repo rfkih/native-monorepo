@@ -1,6 +1,8 @@
 package id.co.nativeapp.finance.pnl.service;
 
+import id.co.nativeapp.finance.pnl.domain.MismatchedPostingCurrencyException;
 import id.co.nativeapp.money.Money;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -55,10 +57,41 @@ public class PnlReadModelWriter {
   private static final String UPSERT_REVENUE_SQL = UPSERT_TEMPLATE.formatted("revenue_minor");
   private static final String UPSERT_EXPENSE_SQL = UPSERT_TEMPLATE.formatted("expense_minor");
 
+  // Is there already a consolidated_pnl row for this period in a DIFFERENT currency? Tenant-scoped
+  // by the RLS GUC the surrounding posting transaction set (no manual WHERE company_id — rule 5).
+  // consolidated_pnl accumulates BOTH the revenue and expense legs of every posting, so it is the
+  // superset that establishes the period's single currency; a hit means the incoming posting
+  // diverges from it.
+  private static final String DIVERGENT_CURRENCY_SQL =
+      "SELECT currency FROM consolidated_pnl WHERE period = ? AND currency <> ? LIMIT 1";
+
   private final JdbcTemplate jdbcTemplate;
 
   public PnlReadModelWriter(JdbcTemplate jdbcTemplate) {
     this.jdbcTemplate = jdbcTemplate;
+  }
+
+  /**
+   * Guards the single-base-currency invariant on the revenue/expense posting path (#26): if the
+   * period already has an established currency (any {@code consolidated_pnl} row for the bound
+   * tenant) that DIFFERS from {@code amount}'s currency, throws {@link
+   * MismatchedPostingCurrencyException} so the consume transaction rolls back BEFORE any divergent
+   * row is created (and the record is DLT'd, fail-closed) — rather than silently writing a
+   * second-currency P&amp;L row that detonates later as a read-time {@code 500}. A no-op for the
+   * period's FIRST posting (no row yet establishes the currency) and for an in-currency posting.
+   *
+   * <p>Must be called from inside the posting transaction (so the read is RLS-scoped to the bound
+   * tenant), BEFORE the accumulate. The labor path has its own richer divergence guard ({@code
+   * CURRENCY_MISMATCH}), so it does not call this.
+   */
+  public void requireConsistentCurrency(String period, Money amount) {
+    String incoming = amount.currency().getCurrencyCode();
+    List<String> divergent =
+        jdbcTemplate.query(
+            DIVERGENT_CURRENCY_SQL, (rs, rowNum) -> rs.getString("currency"), period, incoming);
+    if (!divergent.isEmpty()) {
+      throw new MismatchedPostingCurrencyException(period, divergent.getFirst(), incoming);
+    }
   }
 
   /**

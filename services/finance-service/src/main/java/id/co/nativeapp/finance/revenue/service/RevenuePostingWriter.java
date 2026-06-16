@@ -109,18 +109,25 @@ public class RevenuePostingWriter {
     String companyId = tenant.companyId();
     String actor = tenant.actor();
 
-    // 0) RESOLVE the REVENUE gl_account via the versioned, effective-dated mapping_rule
+    // 0) GUARD the single-base-currency invariant (#26): a sale whose currency diverges from the
+    //    period's already-established currency violates the company's immutable base currency (a
+    //    producer sent the wrong currency). Fail closed BEFORE writing anything — the consume
+    //    transaction rolls back and the record is DLT'd — rather than silently creating a divergent
+    //    second-currency read-model row that detonates later as a read-time 500.
+    pnlReadModel.requireConsistentCurrency(period, amount);
+
+    // 1) RESOLVE the REVENUE gl_account via the versioned, effective-dated mapping_rule
     //    (CQRS: resolve on write). Stamped on the posting as its dimension.
     String glAccountCode = glAccountResolver.resolveRevenue(event.occurredAt());
 
-    // 1) Append the immutable, dimensional ledger posting. source_event_id is UNIQUE, so even
+    // 2) Append the immutable, dimensional ledger posting. source_event_id is UNIQUE, so even
     //    if the ProcessedEventStore claim were ever bypassed, a duplicate posting is impossible.
     LedgerPosting posting =
         new LedgerPosting(event.businessId(), period, amount, glAccountCode, event.eventId());
     posting.setCompanyId(companyId);
     ledgerRepository.save(posting);
 
-    // 2) Atomically accumulate the consolidated-revenue read model for this
+    // 3) Atomically accumulate the consolidated-revenue read model for this
     //    tenant+period+currency in the SAME transaction. A single INSERT ... ON CONFLICT
     //    DO UPDATE adds onto the stored total with no read-modify-write window, so concurrent
     //    distinct sales for the same key never lose an update (§3.2) and never collide on the
@@ -136,7 +143,7 @@ public class RevenuePostingWriter {
         actor,
         companyId);
 
-    // 3) Atomically accumulate the consolidated P&L read model's REVENUE leg (same
+    // 4) Atomically accumulate the consolidated P&L read model's REVENUE leg (same
     //    no-read-modify-write upsert), in the SAME transaction. The P&L's net = revenue -
     //    expense; this moves the revenue leg.
     pnlReadModel.addRevenue(period, amount, companyId, actor);

@@ -78,7 +78,15 @@ public class ExpensePostingWriter {
     String companyId = tenant.companyId();
     String actor = tenant.actor();
 
-    // 0) RESOLVE the EXPENSE gl_account via the versioned, effective-dated mapping_rule from the
+    // 0) GUARD the single-base-currency invariant (#26): an expense whose currency diverges from
+    // the
+    //    period's already-established currency violates the company's immutable base currency (a
+    //    producer sent the wrong currency). Fail closed BEFORE writing anything — the consume
+    //    transaction rolls back and the record is DLT'd — rather than silently creating a divergent
+    //    second-currency read-model row that detonates later as a read-time 500.
+    pnlReadModel.requireConsistentCurrency(period, amount);
+
+    // 1) RESOLVE the EXPENSE gl_account via the versioned, effective-dated mapping_rule from the
     //    gl_hint (CQRS: resolve on write). An unmappable hint fails safe to the suspense account —
     //    the money is still posted, never dropped (HR-3).
     GlAccountResolution resolution =
@@ -92,7 +100,7 @@ public class ExpensePostingWriter {
           resolution.accountCode());
     }
 
-    // 1) Append the immutable, dimensional EXPENSE ledger posting. source_event_id is UNIQUE.
+    // 2) Append the immutable, dimensional EXPENSE ledger posting. source_event_id is UNIQUE.
     LedgerPosting posting =
         new LedgerPosting(
             PostingType.EXPENSE,
@@ -104,7 +112,7 @@ public class ExpensePostingWriter {
     posting.setCompanyId(companyId);
     ledgerRepository.save(posting);
 
-    // 2) Atomically accumulate the P&L read model's EXPENSE leg in the SAME transaction (the
+    // 3) Atomically accumulate the P&L read model's EXPENSE leg in the SAME transaction (the
     //    no-read-modify-write upsert), so concurrent distinct expenses for the same key never lose
     //    an update and the P&L net (revenue - expense) reflects this expense.
     pnlReadModel.addExpense(period, amount, companyId, actor);

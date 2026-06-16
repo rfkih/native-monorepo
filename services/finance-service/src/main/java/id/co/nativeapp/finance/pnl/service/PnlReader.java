@@ -31,6 +31,11 @@ public class PnlReader {
    * nothing has been posted for the period yet. Single base currency, so a period has at most one
    * currency row.
    *
+   * <p>The single-currency invariant is now ENFORCED at write time: {@code PnlReadModelWriter}'s
+   * currency guard rejects a divergent-currency revenue/expense posting (#26) before it can create
+   * a second-currency row, so this multi-currency branch is a defense-in-depth backstop that the
+   * normal flow never reaches.
+   *
    * @throws IllegalStateException if a period somehow holds more than one currency (would require
    *     FX to consolidate into one figure, which is out of scope here)
    */

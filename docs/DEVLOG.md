@@ -22,9 +22,9 @@ controller/service/repository/domain/dto/messaging layer sub-packages**, ArchUni
 - Live infra (a real registry/cluster/secrets for the deploy; a real notification transport).
 
 **Open follow-ups (tracked):** org-tree move/deactivate *semantics* (needs a decision); notification
-real provider (needs a transport choice); payroll expected-source registry (needs a rule);
-finance-expansion robustness scoping. (The P3d deferred operational items — `member_group_index`
-backfill, the within-company concurrent-close lock, the within-close MVC tests — are now DONE.)
+real provider (needs a transport choice); payroll expected-source registry (needs a rule). (DONE:
+the P3d deferred operational items — `member_group_index` backfill, the within-company concurrent-
+close lock, the within-close MVC tests; and the finance-expansion posting-currency robustness guard.)
 
 ## Key design decisions (the why)
 - **Package root `id.co.nativeapp`** — `id.co` reverse-domain; `nativeapp` because `native` is a Java
@@ -57,6 +57,16 @@ backfill, the within-company concurrent-close lock, the within-close MVC tests �
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **Finance-expansion robustness — posting-currency guard (#26)** — a `SaleRecorded`/`ExpenseRecorded`
+  in a currency other than the company's immutable base currency used to silently create a SECOND
+  `consolidated_pnl`/`consolidated_revenue` row (keyed on `(company, period, currency)`), detonating
+  later as a raw read-time `500` in `PnlReader`. Added a write-time guard (`PnlReadModelWriter
+  .requireConsistentCurrency`, RLS-scoped) on the revenue+expense writers: a divergent posting throws
+  a typed, non-retryable `MismatchedPostingCurrencyException` → the consume rolls back (no divergent
+  row) and the record is DLT'd (fail-closed, money held, read stays clean). Mirrors the labor path's
+  `CURRENCY_MISMATCH` guard + the within-close `MultiCurrencyTrialBalanceException`; the `PnlReader`
+  multi-currency branch stays as a defense-in-depth backstop. Adversarially reviewed (PASS); full
+  finance build green.
 - **P3d deferred operational items (#46)** — (a) V12 backfills the non-RLS `member_group_index` from
   the FORCE-RLS `group_member` for pre-V10 memberships (whose `GroupMembershipChanged` was already
   deduped and will never re-fire, so a within-company close would silently emit no

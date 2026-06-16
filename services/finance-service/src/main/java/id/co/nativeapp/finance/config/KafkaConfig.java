@@ -73,16 +73,22 @@ public class KafkaConfig {
    * budget is exhausted. A {@link ConsumerRecord} whose value failed to deserialize (an {@link
    * ErrorHandlingDeserializer}-wrapped failure) is not retried — it goes straight to the DLT.
    *
-   * <p>Two finance-specific failures are also classified as <strong>non-retryable</strong>, so a
-   * deterministic poison record is DLT'd immediately instead of wasting the retry budget on a
-   * record that can never succeed (and never silently dropping money):
+   * <p>The deterministic poison failures below are also classified as
+   * <strong>non-retryable</strong>, so a record that can NEVER succeed is DLT'd immediately instead
+   * of wasting the retry budget (and never silently dropping money):
    *
    * <ul>
-   *   <li>{@code SaleRecordedDecodeException} — the value is not a valid {@code SaleRecorded} Avro
-   *       payload (garbage / truncated bytes); and
+   *   <li>the per-event {@code *DecodeException} — the value is not a valid Avro payload for that
+   *       event (garbage / truncated bytes);
    *   <li>{@code MissingEventIdException} — the record has no valid durable {@code id} header, a
-   *       producer-side contract violation the consumer fails closed on.
+   *       producer-side contract violation the consumer fails closed on; and
+   *   <li>{@code MismatchedPostingCurrencyException} — a revenue/expense posting whose currency
+   *       diverges from the company's immutable base currency for the period (#26): no FX in this
+   *       path and a company has one base currency, so it can never post and is quarantined to DLT.
    * </ul>
+   *
+   * <p>The transient {@code UnknownGroupException} is deliberately NOT in this set (see the note in
+   * the method body) — it is a reorder that MUST be retried, not DLT'd on the first attempt.
    */
   @Bean
   public DefaultErrorHandler kafkaErrorHandler(
@@ -107,7 +113,12 @@ public class KafkaConfig {
         id.co.nativeapp.finance.group.messaging.GroupDefinedDecodeException.class,
         id.co.nativeapp.finance.group.messaging.GroupMembershipChangedDecodeException.class,
         id.co.nativeapp.finance.grouptb.messaging.TrialBalancePublishedDecodeException.class,
-        id.co.nativeapp.finance.revenue.messaging.MissingEventIdException.class);
+        id.co.nativeapp.finance.revenue.messaging.MissingEventIdException.class,
+        // A posting whose currency diverges from the period's established base currency (#26) is a
+        // deterministic producer contract violation (a company has one immutable base currency) —
+        // it can NEVER succeed on retry, so DLT it immediately rather than burning the retry
+        // budget.
+        id.co.nativeapp.finance.pnl.domain.MismatchedPostingCurrencyException.class);
     // NOTE: GroupMembershipChanged's / TrialBalancePublished's UnknownGroupException is
     // deliberately
     // NOT listed — it is a TRANSIENT reorder (GroupDefined not yet consumed), so it MUST be
