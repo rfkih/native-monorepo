@@ -31,6 +31,8 @@ service-template/   the blueprint every service is cloned from (widget feature +
 services/           the 8 deployable Spring Boot apps (see table below)
 docs/               this map, RUNBOOK, DEVLOG, ARCHITECTURE, EVENT-CATALOG, CODE-STRUCTURE, STANDARDS
   adr/              Architecture Decision Records — the append-only "why" log (read adr/README.md)
+  generated/        machine-readable manifests (services.yaml, events.yaml) — generated + drift-checked
+                    (./gradlew generateProjectDocs / verifyProjectDocs; do not hand-edit)
 docker/             compose.dev.yml (Postgres/Kafka/SchemaReg/Debezium/Keycloak/Redis) + connector/realm/init
 deploy/             Kustomize base + per-service overlays (#24, author-only-unverified)
 .github/workflows/  ci.yml (build + test + image matrix)
@@ -46,7 +48,7 @@ deploy/             Kustomize base + per-service overlays (#24, author-only-unve
 | **restaurant-service** | 1st vertical: `sale` aggregate | SaleRecorded | — | V1 |
 | **carwash-service** | 2nd vertical: `wash`, entitlement-gated; metrics | SaleRecorded, MetricPublished | EntitlementGranted/Revoked, EmployeeChanged, AssignmentChanged | V1 |
 | **employee-service** | HR: employee/assignment (PII-encrypted) + **payroll engine** (gross-to-net, flagged-illustrative statutory) | EmployeeChanged, AssignmentChanged, PayrollPosted, LaborCostAllocated | OrgUnitCreated/Changed, MetricPublished, PeriodSealed | V1–V3 |
-| **finance-service** | the consolidation core: dimensional ledger, P&L, FX, group consolidation. **The big one (V1–V11)** | ConsolidationClosed, TrialBalancePublished | SaleRecorded, ExpenseRecorded, PayrollPosted, LaborCostAllocated, GroupDefined, GroupMembershipChanged, TrialBalancePublished | V1–V11 |
+| **finance-service** | the consolidation core: dimensional ledger, P&L, FX, group consolidation. **The big one (V1–V12)** | ConsolidationClosed, TrialBalancePublished | SaleRecorded, ExpenseRecorded, PayrollPosted, LaborCostAllocated, GroupDefined, GroupMembershipChanged, TrialBalancePublished | V1–V12 |
 | **entitlement-service** | module entitlements per company + billing | EntitlementGranted/Revoked | CompanyCreated | V1 |
 | **notification-service** | notify + (stub) delivery | DeliveryReceipt | ConsolidationClosed | V1 |
 
