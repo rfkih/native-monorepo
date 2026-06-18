@@ -74,7 +74,7 @@ dependencies {
 
     // Kafka consumer. The @KafkaListener on "OrgUnitCreated"/"OrgUnitChanged" reads the raw
     // Avro bytes the org-service outbox stored (shipped by Debezium) — we deserialize with
-    // libs/events AvroSerde against employee's OWN consumer copies of the schemas, NOT a
+    // libs/events AvroSerde against employee's shared libs/contracts schemas, NOT a
     // Confluent kafka-avro-serializer / Schema Registry serde. In Spring Boot 4 the Kafka
     // auto-configuration (KafkaProperties + KafkaAutoConfiguration) lives in the dedicated
     // spring-boot-starter-kafka module, which bundles spring-kafka.

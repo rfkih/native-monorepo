@@ -38,7 +38,7 @@ dependencies {
     //   events — AvroSerde (raw-bytes Avro, no Schema Registry serde), OutboxWriter, and
     //            ProcessedEventStore (the idempotent-consumer dedupe store). Exposes Avro
     //            (org.apache.avro) transitively as `api`, so building the EntitlementGranted/Revoked
-    //            GenericRecords and parsing the consumer-copy CompanyCreated.avsc needs no codegen.
+    //            GenericRecords and parsing the CompanyCreated.avsc (from libs/contracts) needs no codegen.
     //   tenant — Auditable @MappedSuperclass, TenantContext scoped value, and (via
     //            TenantRlsAutoConfiguration) the auto-RLS aspect + JPA auditing this service
     //            inherits with NO copied config.
@@ -65,7 +65,7 @@ dependencies {
 
     // Kafka consumer. The @KafkaListener on "CompanyCreated" reads the raw Avro bytes the producer
     // outbox stored (shipped by Debezium) — deserialized with libs/events AvroSerde against this
-    // service's OWN consumer copy of the schema, NOT a Confluent kafka-avro-serializer / Schema
+    // service's shared libs/contracts schema, NOT a Confluent kafka-avro-serializer / Schema
     // Registry serde. In Spring Boot 4 the Kafka auto-configuration lives in the dedicated
     // spring-boot-starter-kafka module (which bundles spring-kafka).
     implementation("org.springframework.boot:spring-boot-starter-kafka")

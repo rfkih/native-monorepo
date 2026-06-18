@@ -31,7 +31,7 @@ dependencies {
     //   events — AvroSerde (raw-bytes Avro, no Schema Registry serde), OutboxWriter (the
     //            DeliveryReceipt producer), and ProcessedEventStore (the idempotent-consumer
     //            dedupe store keyed by the trigger event's UUID). Exposes Avro (org.apache.avro)
-    //            transitively as `api`, so parsing the consumer-copy ConsolidationClosed.avsc and
+    //            transitively as `api`, so parsing the ConsolidationClosed.avsc (from libs/contracts) and
     //            building the DeliveryReceipt record need no extra dependency or codegen.
     //   tenant — Auditable @MappedSuperclass, TenantContext scoped value, JpaAuditingConfig,
     //            RlsConnectionInitializer + the transaction synchronizer the auto-RLS aspect drives.
@@ -60,7 +60,7 @@ dependencies {
 
     // Kafka consumer. The @KafkaListener on "ConsolidationClosed" reads the raw Avro bytes the
     // producer outbox stored (shipped by Debezium) — deserialized with libs/events AvroSerde against
-    // this service's OWN consumer copy of the schema, NOT a Confluent kafka-avro-serializer / Schema
+    // this service's shared libs/contracts schema, NOT a Confluent kafka-avro-serializer / Schema
     // Registry serde. In Spring Boot 4 the Kafka auto-configuration lives in the dedicated
     // spring-boot-starter-kafka module (which bundles spring-kafka).
     implementation("org.springframework.boot:spring-boot-starter-kafka")

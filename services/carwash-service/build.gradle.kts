@@ -9,8 +9,8 @@
 // libs/tenant + libs/security — NO copied config.
 //
 // It is BOTH a producer and a consumer:
-//   * PRODUCES SaleRecorded (the SAME Avro contract finance already consumes — a consumer-copy
-//     SaleRecorded.avsc matching the producer; business_id = the carwash outlet) and
+//   * PRODUCES SaleRecorded (the SAME Avro contract finance already consumes — one shared
+//     SaleRecorded.avsc in libs/contracts; business_id = the carwash outlet) and
 //     MetricPublished (wash_count / upsell_amount at the declared grains), both via the
 //     transactional outbox in one @Transactional unit with the wash insert.
 //   * CONSUMES EntitlementGranted / EntitlementRevoked into a LOCAL entitlement projection that
