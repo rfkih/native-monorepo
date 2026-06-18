@@ -6,7 +6,6 @@ import id.co.nativeapp.servicetemplate.widget.domain.Widget;
 import id.co.nativeapp.servicetemplate.widget.service.WidgetService;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
-import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -35,10 +34,12 @@ class MigrationAndAuditRoundTripTest extends PostgresRlsTestBase {
         TenantContext.callAs(TENANT_A, ACTOR_A, () -> widgetService.create("first-widget").getId());
     assertThat(id).isNotNull();
 
-    List<Widget> widgets = TenantContext.callAs(TENANT_A, ACTOR_A, widgetService::findAll);
+    // Load the full entity via the @Transactional entity read so the auto-RLS aspect sets the
+    // tenant GUC and tenant A's row is visible (the narrow WidgetView projection deliberately omits
+    // the Auditable columns this proof checks).
+    Widget loaded =
+        TenantContext.callAs(TENANT_A, ACTOR_A, () -> widgetService.findById(id).orElseThrow());
 
-    assertThat(widgets).hasSize(1);
-    Widget loaded = widgets.getFirst();
     assertThat(loaded.getName()).isEqualTo("first-widget");
     // Audit columns populated automatically from the tenant scope.
     assertThat(loaded.getCompanyId()).isEqualTo(TENANT_A);

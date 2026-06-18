@@ -1,10 +1,12 @@
 package id.co.nativeapp.servicetemplate.widget.service;
 
 import id.co.nativeapp.servicetemplate.widget.domain.Widget;
+import id.co.nativeapp.servicetemplate.widget.projection.WidgetView;
 import id.co.nativeapp.servicetemplate.widget.repository.WidgetRepository;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,12 +38,25 @@ public class WidgetService {
   }
 
   /**
-   * All widgets visible to the bound tenant. Deliberately unfiltered in code: the result set is
-   * constrained solely by the auto-applied RLS policy.
+   * All widgets visible to the bound tenant, as a {@link WidgetView} read projection (native query
+   * — only the needed columns, never {@code SELECT *} of the entity; CLAUDE.md native-query
+   * convention). Deliberately unfiltered in code: the result set is constrained solely by the
+   * auto-applied RLS policy.
    */
   @Transactional(readOnly = true)
-  public List<Widget> findAll() {
-    return repository.findAll();
+  public List<WidgetView> findAll() {
+    return repository.findAllViews();
+  }
+
+  /**
+   * The full {@link Widget} entity by id within the bound tenant (RLS-scoped), if any. Returns the
+   * ENTITY rather than a projection — the write-path / full-row side of the convention: a caller
+   * loads it to mutate+save, and it carries the {@code Auditable} columns a narrow read projection
+   * omits.
+   */
+  @Transactional(readOnly = true)
+  public Optional<Widget> findById(Long id) {
+    return repository.findById(id);
   }
 
   /** Count of widgets visible to the bound tenant (RLS-constrained). */

@@ -3,7 +3,7 @@ package id.co.nativeapp.servicetemplate;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import id.co.nativeapp.servicetemplate.widget.domain.Widget;
+import id.co.nativeapp.servicetemplate.widget.projection.WidgetView;
 import id.co.nativeapp.servicetemplate.widget.service.WidgetService;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
@@ -57,7 +57,7 @@ class AutoRlsIsolationTest extends PostgresRlsTestBase {
         TenantContext.callAs(
             TENANT_A,
             ACTOR_A,
-            () -> widgetService.findAll().stream().map(Widget::getName).sorted().toList());
+            () -> widgetService.findAll().stream().map(WidgetView::getName).sorted().toList());
     assertThat(aNames).containsExactly("a-1", "a-2");
 
     // The inverse: inside B's scope only B's row is visible.
@@ -65,7 +65,7 @@ class AutoRlsIsolationTest extends PostgresRlsTestBase {
         TenantContext.callAs(
             TENANT_B,
             ACTOR_B,
-            () -> widgetService.findAll().stream().map(Widget::getName).sorted().toList());
+            () -> widgetService.findAll().stream().map(WidgetView::getName).sorted().toList());
     assertThat(bNames).containsExactly("b-1");
 
     // Counts confirm neither tenant can see the other's rows.
