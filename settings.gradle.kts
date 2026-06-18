@@ -20,6 +20,7 @@ dependencyResolutionManagement {
 rootProject.name = "native"
 
 include("libs:money")
+include("libs:contracts")
 include("libs:events")
 include("libs:tenant")
 include("libs:security")

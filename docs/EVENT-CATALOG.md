@@ -7,9 +7,10 @@
 
 All events are published through the **transactional outbox** (rule 3) and tailed to
 Kafka by Debezium. Consumers are **idempotent** (dedupe by event id/key). Avro is the
-payload format; schemas live alongside their producing service
-(`<service>/src/main/resources/avro/*.avsc`) and are registered in the Schema
-Registry.
+payload format; every schema lives **once** in **`libs/contracts`**
+(`libs/contracts/src/main/resources/avro/*.avsc`, on the classpath at `avro/<Event>.avsc`).
+Producers and consumers both depend on that module — there are no per-service schema copies
+to drift (ADR 0003). A Schema Registry is the eventual home at the first service split.
 
 **Wire transport (Kafka record value).** The outbox `payload` column is `bytea` (raw
 Avro bytes). Debezium decodes a `bytea` as a `java.nio.ByteBuffer`, which Connect's
@@ -18,7 +19,7 @@ Avro bytes). Debezium decodes a `bytea` as a `java.nio.ByteBuffer`, which Connec
 record value is therefore the **base64-encoded Avro bytes** (a pure transport encoding,
 **no Confluent Schema Registry serde**). Every consumer base64-decodes the value back to
 the raw Avro bytes with `libs/events Base64ByteArrayDeserializer` and then decodes those
-bytes with `libs/events AvroSerde` against its own schema copy — so where a section below
+bytes with `libs/events AvroSerde` against the shared `libs/contracts` schema — so where a section below
 says a consumer "reads the outbox payload as **raw Avro bytes** via `libs/events
 AvroSerde`", that is the post-base64-decode payload; `AvroSerde`'s raw-bytes contract is
 unchanged.

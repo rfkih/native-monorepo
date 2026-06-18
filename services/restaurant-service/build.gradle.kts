@@ -29,6 +29,7 @@ dependencies {
     //            synchronizer the auto-RLS aspect drives.
     implementation(project(":libs:money"))
     implementation(project(":libs:events"))
+    implementation(project(":libs:contracts")) // event Avro schemas: single source of truth
     implementation(project(":libs:tenant"))
 
     // observability — the SHARED logback-native-json.xml (one-object-per-line JSON logs with the
