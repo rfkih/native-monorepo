@@ -29,6 +29,8 @@ libs/               shared PLATFORM (auto-config, not deployable):
   entitlement-check cached "is company entitled to module X?" gate
 service-template/   the blueprint every service is cloned from (widget feature + the ArchUnit suite)
 services/           the 8 deployable Spring Boot apps (see table below)
+frontend/console/   the per-company management console (Vite+React+TS+Tailwind+TanStack Query+i18n;
+                    onboarding wizard + consolidated dashboard). Conventions: docs/FRONTEND-STRUCTURE.md
 docs/               this map, RUNBOOK, DEVLOG, ARCHITECTURE, EVENT-CATALOG, CODE-STRUCTURE, STANDARDS
   adr/              Architecture Decision Records — the append-only "why" log (read adr/README.md)
   generated/        machine-readable manifests (services.yaml, events.yaml) — generated + drift-checked

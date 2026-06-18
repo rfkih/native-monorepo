@@ -1,0 +1,92 @@
+@import 'tailwindcss';
+
+/*
+ * Native console — the "ledger" design system.
+ * Warm paper + ink, hairline rules, a single confident emerald, amber reserved for
+ * provisional/flagged (stub-FX) figures, rose for negatives. Tabular mono for all money.
+ */
+@theme {
+  --font-display: 'Fraunces', ui-serif, Georgia, serif;
+  --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
+
+  --color-paper: #f6f2ea;
+  --color-surface: #fffefa;
+  --color-ink: #1b1813;
+  --color-ink-2: #4a443b;
+  --color-ink-3: #847c6e;
+  --color-line: #e6dfd1;
+  --color-line-strong: #d2c9b6;
+
+  --color-emerald: #0d6a4a;
+  --color-emerald-2: #0a553c;
+  --color-emerald-tint: #e7efe8;
+  --color-amber: #9a6512;
+  --color-amber-2: #7c5210;
+  --color-amber-tint: #f5ead2;
+  --color-rose: #8f322b;
+  --color-rose-tint: #f0e1dc;
+
+  --radius-card: 0.75rem;
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    /* a soft emerald glow up top for depth, over warm paper */
+    background-image: radial-gradient(
+      130% 90% at 50% -20%,
+      rgba(13, 106, 74, 0.07),
+      transparent 55%
+    );
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    background: var(--color-emerald);
+    color: #fff;
+  }
+}
+
+@layer utilities {
+  /* tabular numerals — load-bearing for aligned money columns */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+  .hairline {
+    border-color: var(--color-line);
+  }
+
+  @keyframes reveal-up {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .reveal {
+    animation: reveal-up 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal {
+      animation: none;
+    }
+  }
+}

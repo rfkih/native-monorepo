@@ -14,7 +14,10 @@ deploy authored (unverified vs a real cluster). The whole codebase is **package-
 controller/service/repository/domain/dto/messaging layer sub-packages**, ArchUnit-enforced.
 
 **Not done (hard gates — need a human/SME/infra, do NOT invent):**
-- Frontends (console onboarding wizard + dashboard, employee PWA) — design decisions, never autonomous.
+- Frontends — **first console slice built** (`frontend/console`: company onboarding wizard +
+  consolidated revenue/P&L dashboard, en/id, Intl money, presentation-currency lens, provisional-FX/
+  illustrative badges; builds green, not yet run against the live stack). Remaining: the rest of the
+  console (org tree, group consolidation, closes) + the employee PWA — design decisions, never autonomous.
 - **Official DJP/BPJS statutory figures** — payroll ships `ILLUSTRATIVE_PLACEHOLDER` data (provenance
   column + loud seed + runtime flag); a tax SME must seed real effective-dated figures.
 - **Full IAS-21 multi-currency consolidation** (CTA/OCI, historical-rate equity, opening-balance
