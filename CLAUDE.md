@@ -13,8 +13,10 @@
 - Build order and tasks: **CLAUDE-CODE-BUILD-PLAN.md**.
 - **Engineering standards** (API/RFC-7807, persistence, testing, resilience, observability, security, config): **docs/ENGINEERING-STANDARDS.md**.
 - **Code structure & layering** (controller → service → repository → domain, package-by-feature with layer sub-packages, ArchUnit-enforced): **docs/CODE-STRUCTURE.md** — consult before writing a controller, repository, test, or migration.
+- **Decisions (ADRs)**: **docs/adr/** — the append-only log of cross-cutting/hard-to-reverse choices and their *why*. Add one for any such change; read `docs/adr/README.md` first.
+- **Repo automation**: project slash commands in **.claude/commands/** — `/new-service`, `/new-feature`, `/new-event`, `/new-migration`, `/native-check`. Prefer them over re-deriving a workflow from prose.
 
-## Stack (pinned — no change without an ADR)
+## Stack (pinned — no change without an [ADR](docs/adr/))
 - **Java 25** (LTS), **Spring Boot 4.x** (Spring Framework 7), **Gradle** (Kotlin DSL)
 - **PostgreSQL 16**, one database/schema **per service**, **Flyway**
 - **Kafka** + **Schema Registry** (Avro), transactional **outbox** + **Debezium** CDC
@@ -42,7 +44,7 @@
 
 ## Conventions
 - Package root: `id.co.example.<service>` (replace `example`).
-- Native-query aliases snake_case; map via projection interfaces.
+- **Queries are native + projection.** Every repository `@Query` is a native query (`nativeQuery = true`) — no JPQL; the `repositoryQueriesAreNative` ArchUnit rule fails the build on a JPQL `@Query`. A **read** path selects only the columns it needs into a Spring Data **projection interface** (snake_case aliases → camelCase getters), never `SELECT *` of the entity; the projection lives in the feature's dedicated `<feature>.projection` package (an ArchUnit layer accessed only by service + repository), not nested in the repository nor mixed into `dto`. The full `@Entity` is loaded only on the **write** path (inherited `findById`/`save`, which needs the whole aggregate) and `count`/`exists` return scalars — those are not projections. See `services/restaurant-service` (`SaleRepository` + `sale.projection.SaleView`) and **docs/CODE-STRUCTURE.md §3.3**.
 - Writes: `@Modifying` + `TransactionTemplate`. Chunk `IN` clauses with `Lists.partition` (≤ 1000).
 - One bounded context per service; aggregates enforce their own invariants.
 - Effective-dated rows: far-future sentinel `9999-12-31` for open-ended `effective_to`, not NULL.
@@ -62,5 +64,6 @@ Build `./gradlew build` · Test `./gradlew test` · Integration `./gradlew integ
 - Touch another service's DB or call a business service synchronously.
 - Introduce an event without adding it to `docs/EVENT-CATALOG.md` + a registered Avro schema.
 - **Store money as a float. Hardcode a user-facing string.** Log PII. Bypass RLS. Publish outside the outbox.
+- **Write a JPQL `@Query` (must be native), or `SELECT *` / return a full entity on a read path (must be a `projection`).**
 - **Add a currency or language toggle to the dashboard** — those are set at company creation.
 - Build the full platform stack before the first usable slice ships.

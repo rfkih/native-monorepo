@@ -19,6 +19,8 @@ build-logic/        4 Gradle convention plugins (native.java-conventions, .sprin
                     .spring-boot-app, .quality) — every module applies these, not raw config.
 libs/               shared PLATFORM (auto-config, not deployable):
   money             Money (int minor units + ISO-4217, never float) + FxRate (scaled-int, no float)
+  contracts         event Avro schemas (.avsc) — the SINGLE source of truth; producers + consumers
+                    both depend on it, no per-service copies (ADR 0003). Classpath: avro/<Event>.avsc
   tenant            Auditable base entity, RLS GUC wiring, RlsAutoApplyAspect, scoped-value TenantContext
   events            transactional outbox writer, ProcessedEventStore (idempotency), AvroSerde (raw bytes),
                     Base64ByteArray(De)serializer (Kafka wire), StubRelay
@@ -28,9 +30,12 @@ libs/               shared PLATFORM (auto-config, not deployable):
 service-template/   the blueprint every service is cloned from (widget feature + the ArchUnit suite)
 services/           the 8 deployable Spring Boot apps (see table below)
 docs/               this map, RUNBOOK, DEVLOG, ARCHITECTURE, EVENT-CATALOG, CODE-STRUCTURE, STANDARDS
+  adr/              Architecture Decision Records — the append-only "why" log (read adr/README.md)
 docker/             compose.dev.yml (Postgres/Kafka/SchemaReg/Debezium/Keycloak/Redis) + connector/realm/init
 deploy/             Kustomize base + per-service overlays (#24, author-only-unverified)
 .github/workflows/  ci.yml (build + test + image matrix)
+.claude/            agents/ (the 10-agent team), commands/ (slash commands: /new-service /new-feature
+                    /new-event /new-migration /native-check), settings.json (shared safe allowlist)
 ```
 
 ## Services (the 8 deployables)
