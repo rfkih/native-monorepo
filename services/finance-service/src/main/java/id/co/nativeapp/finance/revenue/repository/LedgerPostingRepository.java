@@ -2,6 +2,7 @@ package id.co.nativeapp.finance.revenue.repository;
 
 import id.co.nativeapp.finance.revenue.domain.LedgerPosting;
 import id.co.nativeapp.finance.revenue.domain.PostingRole;
+import id.co.nativeapp.finance.revenue.projection.TrialBalanceLineView;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -68,24 +69,5 @@ public interface LedgerPostingRepository extends JpaRepository<LedgerPosting, UU
            ORDER BY lp.gl_account_code, lp.posting_type
           """,
       nativeQuery = true)
-  List<TrialBalanceLineProjection> trialBalanceForPeriod(@Param("period") String period);
-
-  /**
-   * One aggregated trial-balance line — the native-query projection backing {@link
-   * #trialBalanceForPeriod}. Snake_case aliases map to these accessors via the projection-interface
-   * convention (CLAUDE.md "native-query aliases snake_case; map via projection interfaces").
-   */
-  interface TrialBalanceLineProjection {
-    String getGlAccountCode();
-
-    String getAccountType();
-
-    String getPostingType();
-
-    long getAmountMinor();
-
-    String getCurrency();
-
-    boolean getUsesIllustrativeRules();
-  }
+  List<TrialBalanceLineView> trialBalanceForPeriod(@Param("period") String period);
 }

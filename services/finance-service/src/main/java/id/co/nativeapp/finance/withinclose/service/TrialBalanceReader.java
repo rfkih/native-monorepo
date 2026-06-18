@@ -2,8 +2,8 @@ package id.co.nativeapp.finance.withinclose.service;
 
 import id.co.nativeapp.finance.grouptb.messaging.TrialBalancePublishedEvent.TrialBalanceLine;
 import id.co.nativeapp.finance.mapping.domain.AccountType;
+import id.co.nativeapp.finance.revenue.projection.TrialBalanceLineView;
 import id.co.nativeapp.finance.revenue.repository.LedgerPostingRepository;
-import id.co.nativeapp.finance.revenue.repository.LedgerPostingRepository.TrialBalanceLineProjection;
 import id.co.nativeapp.finance.withinclose.domain.BaseCurrencyMismatchException;
 import id.co.nativeapp.finance.withinclose.domain.MultiCurrencyTrialBalanceException;
 import id.co.nativeapp.finance.withinclose.domain.UndeterminableBaseCurrencyException;
@@ -85,7 +85,7 @@ public class TrialBalanceReader {
    */
   @Transactional(readOnly = true)
   public CompanyTrialBalance gather(String period, String declaredCurrency) {
-    List<TrialBalanceLineProjection> rows = ledgerRepository.trialBalanceForPeriod(period);
+    List<TrialBalanceLineView> rows = ledgerRepository.trialBalanceForPeriod(period);
     String declared = declaredCurrency == null ? null : declaredCurrency.strip();
     if (rows.isEmpty()) {
       // EMPTY period: the ledger reveals no currency, so there is nothing authoritative to derive
@@ -121,7 +121,7 @@ public class TrialBalanceReader {
     // books.
     Money signedPnl = Money.ofMinor(0L, baseCurrency);
 
-    for (TrialBalanceLineProjection row : rows) {
+    for (TrialBalanceLineView row : rows) {
       String currency = row.getCurrency().strip();
       // Defence-in-depth (FIX 2): the LEFT JOIN surfaces a posting with no chart_of_account row as
       // a
@@ -178,10 +178,9 @@ public class TrialBalanceReader {
    * Fails loud if the period ever holds more than one currency (multi-currency within one company
    * needs FX, out of scope here, mirroring {@code PnlReader}). {@code rows} is non-empty here.
    */
-  private static String requireSingleCurrency(
-      List<TrialBalanceLineProjection> rows, String period) {
+  private static String requireSingleCurrency(List<TrialBalanceLineView> rows, String period) {
     String baseCurrency = rows.getFirst().getCurrency().strip();
-    for (TrialBalanceLineProjection row : rows) {
+    for (TrialBalanceLineView row : rows) {
       String currency = row.getCurrency().strip();
       if (!currency.equals(baseCurrency)) {
         // A TYPED fault (mapped to 422) rather than a bare IllegalStateException (a generic 500) —

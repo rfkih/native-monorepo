@@ -18,7 +18,10 @@ import java.time.Instant;
 public record EntitlementResponse(
     String moduleKey, EntitlementStatus status, Instant grantedAt, Instant revokedAt) {
 
-  /** Maps a persisted entitlement to its response DTO. */
+  /**
+   * Maps a persisted entitlement entity to its response DTO. Used on write-result paths (grant /
+   * revoke) where the writer returns the full {@link TenantEntitlement} aggregate.
+   */
   public static EntitlementResponse from(TenantEntitlement entitlement) {
     return new EntitlementResponse(
         entitlement.getModuleKey(),

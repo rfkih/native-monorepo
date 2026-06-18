@@ -36,11 +36,13 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, UUID> 
    * lead tenant by RLS; {@code group_id} narrows to the one group.
    */
   @Query(
-      """
-      SELECT m FROM GroupMember m
-       WHERE m.groupId = :groupId
-         AND m.effectiveFrom <= :asOf
-         AND :asOf < m.effectiveTo
-      """)
+      value =
+          """
+          SELECT m.* FROM group_member m
+           WHERE m.group_id = :groupId
+             AND m.effective_from <= :asOf
+             AND :asOf < m.effective_to
+          """,
+      nativeQuery = true)
   List<GroupMember> findActiveAt(@Param("groupId") UUID groupId, @Param("asOf") LocalDate asOf);
 }

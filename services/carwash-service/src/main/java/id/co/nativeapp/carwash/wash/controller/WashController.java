@@ -58,7 +58,7 @@ public class WashController {
             request.idempotencyKey());
 
     RecordWashResult result = washService.recordWash(command);
-    WashResponse body = WashResponse.from(result.wash());
+    WashResponse body = result.wash();
     return result.created()
         ? ResponseEntity.created(URI.create("/api/v1/washes/" + body.id())).body(body)
         : ResponseEntity.ok(body);

@@ -9,8 +9,11 @@ import id.co.nativeapp.carwash.wash.controller.WashController;
 import id.co.nativeapp.carwash.wash.domain.NotEntitledException;
 import id.co.nativeapp.carwash.wash.dto.RecordWashCommand;
 import id.co.nativeapp.carwash.wash.dto.RecordWashResult;
+import id.co.nativeapp.carwash.wash.dto.WashResponse;
 import id.co.nativeapp.carwash.wash.service.WashService;
 import id.co.nativeapp.security.ApiExceptionHandler;
+import java.time.Instant;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatchers;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -83,17 +86,22 @@ class WashControllerValidationTest {
 
   @Test
   void aSuccessfulRecordReturns201WithLocation() throws Exception {
-    // Stub a created result so the controller emits 201 + Location.
-    var wash =
-        new id.co.nativeapp.carwash.wash.domain.Wash(
-            java.util.UUID.fromString("22222222-2222-2222-2222-222222222222"),
+    // Stub a created result so the controller emits 201 + Location. RecordWashResult now holds
+    // a WashResponse directly (the service maps the projection before returning, so the controller
+    // never touches the entity).
+    var response =
+        new WashResponse(
+            UUID.fromString("33333333-3333-3333-3333-333333333333"),
+            UUID.fromString("22222222-2222-2222-2222-222222222222"),
             "bay-1",
-            java.util.Optional.empty(),
-            id.co.nativeapp.money.Money.ofMinor(500000L, "IDR"),
-            java.time.Instant.parse("2026-06-14T08:30:00Z"),
+            500000L,
+            "IDR",
+            null,
+            null,
+            Instant.parse("2026-06-14T08:30:00Z"),
             "k1");
     when(washService.recordWash(ArgumentMatchers.any(RecordWashCommand.class)))
-        .thenReturn(new RecordWashResult(wash, true));
+        .thenReturn(new RecordWashResult(response, true));
 
     String body =
         """

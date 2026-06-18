@@ -20,12 +20,14 @@ public interface IntercompanyMatchRepository extends JpaRepository<IntercompanyM
    * the explicit predicates narrow the count to the one group/period/run (defense-in-depth).
    */
   @Query(
-      """
-      SELECT count(m) FROM IntercompanyMatch m
-       WHERE m.groupId = :groupId
-         AND m.period = :period
-         AND m.closeRunSeq = :closeRunSeq
-      """)
+      value =
+          """
+          SELECT count(m.*) FROM intercompany_match m
+           WHERE m.group_id = :groupId
+             AND m.period = :period
+             AND m.close_run_seq = :closeRunSeq
+          """,
+      nativeQuery = true)
   long countByCloseRun(
       @Param("groupId") UUID groupId,
       @Param("period") String period,
@@ -49,16 +51,15 @@ public interface IntercompanyMatchRepository extends JpaRepository<IntercompanyM
    * also change.
    */
   @Query(
-      """
-      SELECT count(m) FROM IntercompanyMatch m
-       WHERE m.groupId = :groupId
-         AND m.period = :period
-         AND m.closeRunSeq = :closeRunSeq
-         AND m.state NOT IN (
-           id.co.nativeapp.finance.consolidation.domain.IntercompanyMatchState.MATCHED,
-           id.co.nativeapp.finance.consolidation.domain.IntercompanyMatchState.OUT_OF_SCOPE_BALANCE_SHEET,
-           id.co.nativeapp.finance.consolidation.domain.IntercompanyMatchState.MATCHED_CROSS_CURRENCY)
-      """)
+      value =
+          """
+          SELECT count(m.*) FROM intercompany_match m
+           WHERE m.group_id = :groupId
+             AND m.period = :period
+             AND m.close_run_seq = :closeRunSeq
+             AND m.state NOT IN ('MATCHED', 'OUT_OF_SCOPE_BALANCE_SHEET', 'MATCHED_CROSS_CURRENCY')
+          """,
+      nativeQuery = true)
   long countUnreconciledByCloseRun(
       @Param("groupId") UUID groupId,
       @Param("period") String period,

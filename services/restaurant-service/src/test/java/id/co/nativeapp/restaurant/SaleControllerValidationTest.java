@@ -12,6 +12,7 @@ import id.co.nativeapp.money.Money;
 import id.co.nativeapp.restaurant.sale.controller.SaleController;
 import id.co.nativeapp.restaurant.sale.domain.Sale;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
+import id.co.nativeapp.restaurant.sale.dto.SaleResponse;
 import id.co.nativeapp.restaurant.sale.service.SaleService;
 import id.co.nativeapp.security.ApiExceptionHandler;
 import java.time.Instant;
@@ -56,7 +57,8 @@ class SaleControllerValidationTest {
             Money.ofMinor(1_500_000L, "IDR"),
             Instant.parse("2026-06-14T08:30:00Z"),
             "k1");
-    when(saleService.recordSale(any())).thenReturn(new RecordSaleResult(sale, true));
+    when(saleService.recordSale(any()))
+        .thenReturn(new RecordSaleResult(SaleResponse.from(sale), true));
     String body =
         """
                 {"businessId":"22222222-2222-2222-2222-222222222222",
@@ -77,7 +79,8 @@ class SaleControllerValidationTest {
             Money.ofMinor(1_500_000L, "IDR"),
             Instant.parse("2026-06-14T08:30:00Z"),
             "k1");
-    when(saleService.recordSale(any())).thenReturn(new RecordSaleResult(sale, false));
+    when(saleService.recordSale(any()))
+        .thenReturn(new RecordSaleResult(SaleResponse.from(sale), false));
     String body =
         """
                 {"businessId":"22222222-2222-2222-2222-222222222222",

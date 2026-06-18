@@ -50,35 +50,38 @@ class LayeredArchitectureTest {
 
   /**
    * The Native LAYERED standard, enforced over the per-feature LAYER sub-packages ({@code
-   * <feature>.controller / .service / .repository / .domain / .dto / .messaging}). Layers are
-   * matched by package-name suffix (e.g. {@code "..controller.."}), so the single rule covers every
-   * present and future feature package under the service root — including the day a cloned service
-   * grows a controller/dto/messaging in its first feature.
+   * <feature>.controller / .service / .repository / .domain / .dto / .messaging / .projection}).
+   * Layers are matched by package-name suffix (e.g. {@code "..controller.."}), so the single rule
+   * covers every present and future feature package under the service root — including the day a
+   * cloned service grows a controller/dto/messaging/projection in its first feature.
    *
    * <p>Direction (downward only): controller -&gt; service -&gt; repository -&gt; domain, with dto
    * as the boundary-translation layer and messaging as the feature-local event plumbing. Controller
    * and messaging are the entry points (accessed by no layer); domain is the sink (accessed by all,
-   * accesses none of these). {@code consideringOnlyDependenciesInLayers()} scopes the check to
-   * edges between these layers, ignoring JDK / Spring / libs dependencies.
+   * accesses none of these); projection holds native-query read models produced by the repository
+   * and consumed (mapped to a dto) by the service. {@code consideringOnlyDependenciesInLayers()}
+   * scopes the check to edges between these layers, ignoring JDK / Spring / libs dependencies.
    *
    * <p>The template's single {@code widget} feature has only a domain/repository/service slice, so
-   * Controller, Dto and Messaging are declared {@code optionalLayer()}: the rule still loads and is
-   * already enforced for the day a cloned service lands a controller/dto/messaging in them.
+   * Controller, Dto, Messaging, and Projection are declared {@code optionalLayer()}: the rule still
+   * loads and is already enforced for the day a cloned service lands any of those packages.
    */
   @Test
   void featureLayersRespectTheLayeredArchitecture() {
     ArchRule rule =
         layeredArchitecture()
             .consideringOnlyDependenciesInLayers()
-            // Controller/Dto/Messaging carry no class in the template's widget slice yet, so they
-            // are optional layers — the direction rule is already enforced for the day a cloned
-            // service lands a controller/dto/messaging in them.
+            // Controller/Dto/Messaging/Projection carry no class in the template's widget slice
+            // yet, so they are optional layers — the direction rule is already enforced for the
+            // day a cloned service lands a controller/dto/messaging/projection in them.
             .optionalLayer("Controller")
             .definedBy("..controller..")
             .optionalLayer("Dto")
             .definedBy("..dto..")
             .optionalLayer("Messaging")
             .definedBy("..messaging..")
+            .optionalLayer("Projection")
+            .definedBy("..projection..")
             .layer("Service")
             .definedBy("..service..")
             .layer("Repository")
@@ -105,8 +108,14 @@ class LayeredArchitectureTest {
             // Dto is the boundary translation layer (request/response/command/result).
             .whereLayer("Dto")
             .mayOnlyBeAccessedByLayers("Controller", "Service", "Messaging")
+            // Projection holds native-query read models, produced by the repository and consumed
+            // (mapped to a dto) by the service — reachable from neither the controller nor below.
+            // CODE-STRUCTURE §3.3.
+            .whereLayer("Projection")
+            .mayOnlyBeAccessedByLayers("Service", "Repository")
             .as(
-                "controller -> service -> repository -> domain (+ dto boundary, feature messaging)");
+                "controller -> service -> repository -> domain (+ dto boundary, feature messaging,"
+                    + " projection read models)");
     rule.check(classes);
   }
 
@@ -240,6 +249,29 @@ class LayeredArchitectureTest {
   }
 
   /**
+   * Native-query convention (CLAUDE.md "native-query aliases snake_case; map via projection
+   * interfaces"): every {@code @Query} declared on a repository must be a NATIVE query ({@code
+   * nativeQuery = true}). The companion rule — read queries select only the needed columns into a
+   * projection rather than {@code SELECT *} of the entity — is a return-type convention that
+   * generics erasure makes impractical to assert statically, so it is enforced by code review; this
+   * guard pins the objective half (no JPQL slips back in) so a future repository cannot silently
+   * add a non-native {@code @Query}. CODE-STRUCTURE §3.3.
+   */
+  @Test
+  void repositoryQueriesAreNative() {
+    ArchRule rule =
+        classes()
+            .that()
+            .areAssignableTo(org.springframework.data.repository.Repository.class)
+            .and()
+            .resideInAPackage(BASE_PACKAGE + "..")
+            .should(haveOnlyNativeAtQueryMethods())
+            .as(
+                "every @Query on a repository is a native query (CLAUDE.md native-query convention)");
+    rule.check(classes);
+  }
+
+  /**
    * HR-8: no monetary amount on a persistent {@code @Entity}/{@code @Embeddable} may be a floating
    * type ({@code float}/{@code double}, primitive OR boxed) or {@code BigDecimal} — money is the
    * libs/money {@code Money} (integer minor units + ISO-4217 currency), persisted as the two-column
@@ -282,6 +314,36 @@ class LayeredArchitectureTest {
                 "the RLS + JPA-auditing wiring is owned solely by libs/tenant"
                     + " (TenantRlsAutoConfiguration); a service must not redeclare it (HR-5 drift)");
     rule.check(classes);
+  }
+
+  /**
+   * Positive condition (violated == bad): flags any repository method annotated with {@code @Query}
+   * whose {@code nativeQuery} attribute is not {@code true} (i.e. a JPQL query). Reads the actual
+   * annotation instance so the {@code nativeQuery} flag is inspected, not just the presence of the
+   * annotation.
+   */
+  private static ArchCondition<JavaClass> haveOnlyNativeAtQueryMethods() {
+    return new ArchCondition<>("have only native @Query methods") {
+      @Override
+      public void check(JavaClass item, ConditionEvents events) {
+        for (JavaMethod method : item.getMethods()) {
+          if (method.isAnnotatedWith(org.springframework.data.jpa.repository.Query.class)) {
+            org.springframework.data.jpa.repository.Query query =
+                method.getAnnotationOfType(org.springframework.data.jpa.repository.Query.class);
+            if (!query.nativeQuery()) {
+              events.add(
+                  SimpleConditionEvent.violated(
+                      method,
+                      String.format(
+                          "%s.%s carries a non-native @Query (JPQL) — repository queries must be"
+                              + " native (nativeQuery = true) per the CLAUDE.md native-query"
+                              + " convention",
+                          item.getName(), method.getName())));
+            }
+          }
+        }
+      }
+    };
   }
 
   /**

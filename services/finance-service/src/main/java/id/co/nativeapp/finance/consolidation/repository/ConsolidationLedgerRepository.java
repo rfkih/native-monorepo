@@ -42,13 +42,15 @@ public interface ConsolidationLedgerRepository
    * groups).
    */
   @Query(
-      """
-      SELECT e FROM ConsolidationLedgerEntry e
-       WHERE e.groupId = :groupId
-         AND e.period = :period
-         AND e.closeRunSeq = :closeRunSeq
-         AND e.postingRole = id.co.nativeapp.finance.consolidation.domain.ConsolidationPostingRole.PRIMARY
-      """)
+      value =
+          """
+          SELECT e.* FROM consolidation_ledger e
+           WHERE e.group_id = :groupId
+             AND e.period = :period
+             AND e.close_run_seq = :closeRunSeq
+             AND e.posting_role = 'PRIMARY'
+          """,
+      nativeQuery = true)
   List<ConsolidationLedgerEntry> findPriorPrimaries(
       @Param("groupId") UUID groupId,
       @Param("period") String period,
@@ -64,14 +66,16 @@ public interface ConsolidationLedgerRepository
    * layer).
    */
   @Query(
-      """
-      SELECT e FROM ConsolidationLedgerEntry e
-       WHERE e.groupId = :groupId
-         AND e.period = :period
-         AND e.closeRunSeq = :closeRunSeq
-         AND e.entryType = id.co.nativeapp.finance.consolidation.domain.ConsolidationEntryType.CTA
-         AND e.postingRole = id.co.nativeapp.finance.consolidation.domain.ConsolidationPostingRole.PRIMARY
-      """)
+      value =
+          """
+          SELECT e.* FROM consolidation_ledger e
+           WHERE e.group_id = :groupId
+             AND e.period = :period
+             AND e.close_run_seq = :closeRunSeq
+             AND e.entry_type = 'CTA'
+             AND e.posting_role = 'PRIMARY'
+          """,
+      nativeQuery = true)
   List<ConsolidationLedgerEntry> findCtaPrimaries(
       @Param("groupId") UUID groupId,
       @Param("period") String period,

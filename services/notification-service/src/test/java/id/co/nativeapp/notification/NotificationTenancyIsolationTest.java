@@ -2,9 +2,9 @@ package id.co.nativeapp.notification;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import id.co.nativeapp.notification.notification.domain.DeliveryReceipt;
-import id.co.nativeapp.notification.notification.domain.Notification;
 import id.co.nativeapp.notification.notification.messaging.ConsolidationClosedEvent;
+import id.co.nativeapp.notification.notification.projection.DeliveryReceiptView;
+import id.co.nativeapp.notification.notification.projection.NotificationView;
 import id.co.nativeapp.notification.notification.service.NotificationDeliveryService;
 import id.co.nativeapp.notification.notification.service.NotificationReader;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
@@ -27,6 +27,9 @@ import org.springframework.boot.test.context.SpringBootTest;
  *
  * <p>Runs as the unprivileged {@code app_user} role (see {@link PostgresRlsTestBase}); {@code FORCE
  * ROW LEVEL SECURITY} in the baseline binds even that owning role.
+ *
+ * <p>Read paths return {@link NotificationView} / {@link DeliveryReceiptView} projections (the
+ * native-query + projection convention) rather than the full entity.
  */
 @SpringBootTest
 class NotificationTenancyIsolationTest extends PostgresRlsTestBase {
@@ -55,7 +58,7 @@ class NotificationTenancyIsolationTest extends PostgresRlsTestBase {
             ACTOR_A,
             () ->
                 reader.findAllNotificationsForCurrentTenant().stream()
-                    .map(Notification::getTriggerEventId)
+                    .map(NotificationView::getTriggerEventId)
                     .toList());
     assertThat(aNotifications).containsExactly(eventA);
     assertThat(aNotifications).doesNotContain(eventB);
@@ -66,7 +69,7 @@ class NotificationTenancyIsolationTest extends PostgresRlsTestBase {
             ACTOR_A,
             () ->
                 reader.findAllReceiptsForCurrentTenant().stream()
-                    .map(DeliveryReceipt::getNotificationId)
+                    .map(DeliveryReceiptView::getNotificationId)
                     .toList());
     assertThat(aReceiptNotifications).hasSize(1);
 
@@ -77,7 +80,7 @@ class NotificationTenancyIsolationTest extends PostgresRlsTestBase {
             ACTOR_B,
             () ->
                 reader.findAllNotificationsForCurrentTenant().stream()
-                    .map(Notification::getTriggerEventId)
+                    .map(NotificationView::getTriggerEventId)
                     .toList());
     assertThat(bNotifications).containsExactly(eventB);
     assertThat(bNotifications).doesNotContain(eventA);

@@ -2,9 +2,9 @@ package id.co.nativeapp.org;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import id.co.nativeapp.org.company.domain.Company;
-import id.co.nativeapp.org.company.domain.OrgUnit;
 import id.co.nativeapp.org.company.dto.CreateCompanyCommand;
+import id.co.nativeapp.org.company.projection.CompanyView;
+import id.co.nativeapp.org.company.projection.OrgUnitView;
 import id.co.nativeapp.org.company.service.CompanyService;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
@@ -56,7 +56,7 @@ class CrossTenantIsolationTest extends PostgresRlsTestBase {
             "owner-a",
             () ->
                 companyService.findCompaniesForCurrentTenant().stream()
-                    .map(Company::getId)
+                    .map(CompanyView::getId)
                     .toList());
     assertThat(companiesVisibleToA).containsExactly(companyA);
     assertThat(companiesVisibleToA).doesNotContain(companyB);
@@ -67,7 +67,7 @@ class CrossTenantIsolationTest extends PostgresRlsTestBase {
             "owner-a",
             () ->
                 companyService.findOrgUnitsForCurrentTenant().stream()
-                    .map(OrgUnit::getId)
+                    .map(OrgUnitView::getId)
                     .toList());
     // A sees exactly its one org unit (the first business); none of B's.
     assertThat(orgUnitsVisibleToA).hasSize(1);
@@ -81,7 +81,7 @@ class CrossTenantIsolationTest extends PostgresRlsTestBase {
             "owner-b",
             () ->
                 companyService.findCompaniesForCurrentTenant().stream()
-                    .map(Company::getId)
+                    .map(CompanyView::getId)
                     .toList());
     assertThat(companiesVisibleToB).containsExactly(companyB);
     assertThat(companiesVisibleToB).doesNotContain(companyA);
@@ -92,7 +92,7 @@ class CrossTenantIsolationTest extends PostgresRlsTestBase {
             "owner-b",
             () ->
                 companyService.findOrgUnitsForCurrentTenant().stream()
-                    .map(OrgUnit::getId)
+                    .map(OrgUnitView::getId)
                     .toList());
     assertThat(orgUnitsVisibleToB).hasSize(1);
     assertThat(orgUnitsVisibleToB).doesNotContain(aOrgUnitId);

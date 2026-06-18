@@ -52,7 +52,7 @@ public class SaleController {
             request.idempotencyKey());
 
     RecordSaleResult result = saleService.recordSale(command);
-    SaleResponse body = SaleResponse.from(result.sale());
+    SaleResponse body = result.sale();
     return result.created()
         ? ResponseEntity.created(URI.create("/api/v1/sales/" + body.id())).body(body)
         : ResponseEntity.ok(body);

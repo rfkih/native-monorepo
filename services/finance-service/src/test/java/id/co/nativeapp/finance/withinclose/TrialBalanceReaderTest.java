@@ -6,8 +6,8 @@ import static org.mockito.Mockito.when;
 
 import id.co.nativeapp.finance.grouptb.messaging.TrialBalancePublishedEvent.TrialBalanceLine;
 import id.co.nativeapp.finance.mapping.domain.AccountType;
+import id.co.nativeapp.finance.revenue.projection.TrialBalanceLineView;
 import id.co.nativeapp.finance.revenue.repository.LedgerPostingRepository;
-import id.co.nativeapp.finance.revenue.repository.LedgerPostingRepository.TrialBalanceLineProjection;
 import id.co.nativeapp.finance.withinclose.domain.BaseCurrencyMismatchException;
 import id.co.nativeapp.finance.withinclose.domain.MultiCurrencyTrialBalanceException;
 import id.co.nativeapp.finance.withinclose.domain.UndeterminableBaseCurrencyException;
@@ -217,14 +217,14 @@ class TrialBalanceReaderTest {
     return total;
   }
 
-  private static TrialBalanceLineProjection row(
+  private static TrialBalanceLineView row(
       String glAccountCode,
       String accountType,
       String postingType,
       long amountMinor,
       String currency,
       boolean usesIllustrative) {
-    return new TrialBalanceLineProjection() {
+    return new TrialBalanceLineView() {
       @Override
       public String getGlAccountCode() {
         return glAccountCode;

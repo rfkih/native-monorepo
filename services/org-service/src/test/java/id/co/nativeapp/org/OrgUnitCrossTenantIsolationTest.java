@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import id.co.nativeapp.org.company.domain.OrgUnit;
 import id.co.nativeapp.org.company.dto.CreateCompanyCommand;
 import id.co.nativeapp.org.company.dto.CreateOrgUnitCommand;
+import id.co.nativeapp.org.company.projection.OrgUnitView;
 import id.co.nativeapp.org.company.service.CompanyService;
 import id.co.nativeapp.org.company.service.OrgUnitService;
 import id.co.nativeapp.tenant.TenantContext;
@@ -70,7 +71,7 @@ class OrgUnitCrossTenantIsolationTest extends PostgresRlsTestBase {
             "b",
             () ->
                 companyService.findOrgUnitsForCurrentTenant().stream()
-                    .map(OrgUnit::getId)
+                    .map(OrgUnitView::getId)
                     .toList());
     assertThat(visibleToB).hasSize(1);
     assertThat(visibleToB).doesNotContainAnyElementsOf(aUnitIds);

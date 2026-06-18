@@ -2,8 +2,8 @@ package id.co.nativeapp.restaurant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import id.co.nativeapp.restaurant.sale.domain.Sale;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
+import id.co.nativeapp.restaurant.sale.dto.SaleResponse;
 import id.co.nativeapp.restaurant.sale.service.SaleService;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
@@ -51,7 +51,7 @@ class SaleTenancyIsolationTest extends PostgresRlsTestBase {
                     .recordSale(
                         new RecordSaleCommand(businessId, 1_000_000L, "IDR", occurredAt, "a-key"))
                     .sale()
-                    .getId());
+                    .id());
     UUID saleB =
         TenantContext.callAs(
             TENANT_B,
@@ -61,14 +61,14 @@ class SaleTenancyIsolationTest extends PostgresRlsTestBase {
                     .recordSale(
                         new RecordSaleCommand(businessId, 2_000_000L, "IDR", occurredAt, "b-key"))
                     .sale()
-                    .getId());
+                    .id());
 
     // Inside A's scope: only A's sale is visible. No WHERE clause anywhere; RLS only.
     List<UUID> aVisible =
         TenantContext.callAs(
             TENANT_A,
             ACTOR_A,
-            () -> saleService.findAllForCurrentTenant().stream().map(Sale::getId).toList());
+            () -> saleService.findAllForCurrentTenant().stream().map(SaleResponse::id).toList());
     assertThat(aVisible).containsExactly(saleA);
     assertThat(aVisible).doesNotContain(saleB);
 
@@ -77,7 +77,7 @@ class SaleTenancyIsolationTest extends PostgresRlsTestBase {
         TenantContext.callAs(
             TENANT_B,
             ACTOR_B,
-            () -> saleService.findAllForCurrentTenant().stream().map(Sale::getId).toList());
+            () -> saleService.findAllForCurrentTenant().stream().map(SaleResponse::id).toList());
     assertThat(bVisible).containsExactly(saleB);
     assertThat(bVisible).doesNotContain(saleA);
   }

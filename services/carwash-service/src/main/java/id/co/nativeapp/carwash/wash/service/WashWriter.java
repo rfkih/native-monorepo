@@ -6,7 +6,9 @@ import id.co.nativeapp.carwash.metric.messaging.MetricPublishedSchema;
 import id.co.nativeapp.carwash.wash.domain.Wash;
 import id.co.nativeapp.carwash.wash.dto.RecordWashCommand;
 import id.co.nativeapp.carwash.wash.dto.RecordWashResult;
+import id.co.nativeapp.carwash.wash.dto.WashResponse;
 import id.co.nativeapp.carwash.wash.messaging.SaleRecordedSchema;
+import id.co.nativeapp.carwash.wash.projection.WashView;
 import id.co.nativeapp.carwash.wash.repository.WashRepository;
 import id.co.nativeapp.events.AvroSerde;
 import id.co.nativeapp.events.OutboxWriter;
@@ -39,6 +41,12 @@ import org.springframework.transaction.annotation.Transactional;
  * ONE {@code MetricPublished} outbox row per entry in the carwash {@link CarwashMetricContract}
  * (e.g. {@code wash_count} + {@code upsell_amount} at the outlet grain) — all in the SAME
  * transaction. A rollback drops every row together.
+ *
+ * <p><strong>Read paths use native-query projections (CLAUDE.md convention).</strong> The
+ * idempotency fast-path short-circuit and the conflict-recovery re-read both fetch only the
+ * response columns via {@link WashRepository#findViewByIdempotencyKey} ({@link WashView}), never
+ * {@code SELECT *} of the full {@code Auditable} entity. The write-path new-insert result maps the
+ * freshly saved entity with {@link WashResponse#from(Wash)}.
  */
 @Component
 public class WashWriter {
@@ -74,14 +82,14 @@ public class WashWriter {
     String companyId = TenantContext.require().companyId();
 
     // Idempotency fast path: a prior wash under this tenant + key short-circuits, emitting no
-    // second
-    // events. RLS-scoped, so it can only match this tenant's rows. Under concurrency two callers
-    // may
-    // both miss here and race the INSERT below; the (company_id, idempotency_key) unique constraint
-    // is the backstop and the loser is recovered by WashService via findExistingByKey.
-    Optional<Wash> existing = repository.findByIdempotencyKey(command.idempotencyKey());
+    // second events. RLS-scoped, so it can only match this tenant's rows. Uses a native projection
+    // (not the entity) since the result is only ever read into the response, never mutated. Under
+    // concurrency two callers may both miss here and race the INSERT below; the
+    // (company_id, idempotency_key) unique constraint is the backstop and the loser is recovered by
+    // WashService via findExistingByKey.
+    Optional<WashView> existing = repository.findViewByIdempotencyKey(command.idempotencyKey());
     if (existing.isPresent()) {
-      return new RecordWashResult(existing.get(), false);
+      return new RecordWashResult(toResponse(existing.get()), false);
     }
 
     // Validate the amount through libs/money Money (ISO-4217; integer minor units, never a float).
@@ -105,30 +113,49 @@ public class WashWriter {
     writeMetrics(saved, companyId);
 
     // Test seam: a no-op in production; a test can install a hook that throws here to prove the
-    // wash
-    // AND the outbox rows roll back together (atomicity, rule 3).
+    // wash AND the outbox rows roll back together (atomicity, rule 3).
     postOutboxHook.afterOutboxWrite(saved);
 
-    return new RecordWashResult(saved, true);
+    return new RecordWashResult(WashResponse.from(saved), true);
   }
 
   /**
    * Re-reads a wash by idempotency key in a FRESH transaction, used to recover the loser of a
    * concurrent insert race after its own create transaction aborted. RLS-scoped to the bound
-   * tenant, matching the unique constraint exactly.
+   * tenant, matching the unique constraint exactly. Returns a projection ({@link WashResponse}) —
+   * the result is only ever mapped to the response, never mutated.
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
-  public Optional<Wash> findExistingByKey(String idempotencyKey) {
-    return repository.findByIdempotencyKey(idempotencyKey);
+  public Optional<WashResponse> findExistingByKey(String idempotencyKey) {
+    return repository.findViewByIdempotencyKey(idempotencyKey).map(WashWriter::toResponse);
   }
 
   /**
    * All washes visible to the bound tenant — no {@code WHERE company_id}; the result set is
-   * constrained solely by the auto-applied RLS policy.
+   * constrained solely by the auto-applied RLS policy. Read path: a native-query projection (only
+   * the response columns), never {@code SELECT *} of the {@code Auditable} entity.
    */
   @Transactional(readOnly = true)
-  public List<Wash> findAllForCurrentTenant() {
-    return repository.findAll();
+  public List<WashResponse> findAllForCurrentTenant() {
+    return repository.findAllViews().stream().map(WashWriter::toResponse).toList();
+  }
+
+  /**
+   * Maps a read-path {@link WashView} projection to the response shape. The {@code currency} column
+   * is {@code CHAR(3)} in PostgreSQL and may carry trailing spaces — {@link String#strip()} removes
+   * them before the value reaches the wire.
+   */
+  private static WashResponse toResponse(WashView view) {
+    return new WashResponse(
+        view.getId(),
+        view.getBusinessId(),
+        view.getBay(),
+        view.getAmountMinor(),
+        view.getCurrency().strip(),
+        view.getUpsellName(),
+        view.getUpsellAmountMinor(),
+        view.getOccurredAt(),
+        view.getIdempotencyKey());
   }
 
   private static Optional<Wash.Upsell> toUpsell(RecordWashCommand command, Money washAmount) {

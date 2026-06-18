@@ -3,9 +3,10 @@ package id.co.nativeapp.entitlement;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import id.co.nativeapp.entitlement.entitlement.domain.TenantEntitlement;
+import id.co.nativeapp.entitlement.entitlement.service.EntitlementReader;
 import id.co.nativeapp.entitlement.entitlement.service.EntitlementService;
 import id.co.nativeapp.tenant.TenantContext;
-import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -18,6 +19,14 @@ import org.springframework.boot.test.context.SpringBootTest;
  *
  * <p>The full context boots as the unprivileged {@code app_user}; the assertions confirm baseline +
  * mapping agree (a drift would fail the boot) and that the JPA-auditing pipeline stamps the actor.
+ *
+ * <p>The audit-column assertions use the write-path entity load ({@link
+ * EntitlementReader#findEntitlement(String)} — a {@code @Transactional} read so the auto-RLS aspect
+ * sets the tenant GUC and the bound tenant's row is visible) rather than the display-read
+ * projection ({@link EntitlementService#list()}), because {@link id.co.nativeapp.tenant.Auditable
+ * Auditable} columns ({@code company_id}, {@code created_by}, {@code created_at}, {@code
+ * updated_at}) are excluded from the narrow-column native projection by design — the projection
+ * only carries the four display columns a response needs.
  */
 @SpringBootTest
 class MigrationAndAuditRoundTripTest extends KafkaPostgresRedisTestBase {
@@ -26,20 +35,20 @@ class MigrationAndAuditRoundTripTest extends KafkaPostgresRedisTestBase {
   private static final String ACTOR_A = "owner-a@example.co.id";
 
   @Autowired private EntitlementService entitlementService;
+  @Autowired private EntitlementReader entitlementReader;
 
   @Test
   void anEntitlementRoundTripsWithAuditColumnsStampedFromTheTenantScope() throws Exception {
-    List<TenantEntitlement> persisted =
-        TenantContext.callAs(
-            TENANT_A,
-            ACTOR_A,
-            () -> {
-              entitlementService.grant("finance");
-              return entitlementService.list();
-            });
+    TenantContext.callAs(TENANT_A, ACTOR_A, () -> entitlementService.grant("finance"));
 
-    assertThat(persisted).hasSize(1);
-    TenantEntitlement entitlement = persisted.getFirst();
+    // Read the full entity through the @Transactional reader so the auto-RLS aspect sets
+    // app.current_tenant and the policy lets us see tenant A's row (a raw TransactionTemplate
+    // would NOT trigger the aspect, so RLS would fail closed and return empty).
+    Optional<TenantEntitlement> found =
+        TenantContext.callAs(TENANT_A, ACTOR_A, () -> entitlementReader.findEntitlement("finance"));
+
+    assertThat(found).isPresent();
+    TenantEntitlement entitlement = found.get();
     assertThat(entitlement.getModuleKey()).isEqualTo("finance");
     assertThat(entitlement.getCompanyId()).isEqualTo(TENANT_A);
     assertThat(entitlement.getCreatedBy()).isEqualTo(ACTOR_A);

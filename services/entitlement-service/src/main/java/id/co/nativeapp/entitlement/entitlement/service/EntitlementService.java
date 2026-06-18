@@ -2,9 +2,12 @@ package id.co.nativeapp.entitlement.entitlement.service;
 
 import id.co.nativeapp.entitlement.config.EntitlementProperties;
 import id.co.nativeapp.entitlement.entitlement.domain.EntitlementNotFoundException;
+import id.co.nativeapp.entitlement.entitlement.domain.EntitlementStatus;
 import id.co.nativeapp.entitlement.entitlement.domain.TenantEntitlement;
 import id.co.nativeapp.entitlement.entitlement.domain.UnknownModuleException;
+import id.co.nativeapp.entitlement.entitlement.dto.EntitlementResponse;
 import id.co.nativeapp.entitlement.entitlement.messaging.CompanyCreatedEvent;
+import id.co.nativeapp.entitlement.entitlement.projection.TenantEntitlementView;
 import id.co.nativeapp.entitlement.entitlement.service.EntitlementWriter.WriteOutcome;
 import id.co.nativeapp.entitlementcheck.CachedEntitlementChecker;
 import id.co.nativeapp.tenant.TenantContext;
@@ -143,9 +146,31 @@ public class EntitlementService {
     return outcome.entitlement();
   }
 
-  /** The bound tenant's entitlements (RLS-scoped), backing {@code GET /api/v1/entitlements}. */
-  public List<TenantEntitlement> list() {
-    return reader.entitlementsForCurrentTenant();
+  /**
+   * The bound tenant's entitlements (RLS-scoped), backing {@code GET /api/v1/entitlements}. Reads
+   * the narrow-column {@link TenantEntitlementView} projection (native query, no {@code SELECT *})
+   * and maps it to {@link EntitlementResponse} here in the service layer — the projection is never
+   * surfaced above the service (CODE-STRUCTURE §3.3: projection accessed only by Service /
+   * Repository). The {@code status} VARCHAR is converted to {@link EntitlementStatus} at the
+   * mapping boundary.
+   */
+  public List<EntitlementResponse> list() {
+    return reader.entitlementsForCurrentTenant().stream()
+        .map(EntitlementService::toResponse)
+        .toList();
+  }
+
+  /**
+   * Maps a native-query projection to its response DTO (service-layer boundary — projection types
+   * never cross into the controller or dto layers). The {@code status} column is a {@code
+   * VARCHAR(16)} raw string in the projection; it is converted to {@link EntitlementStatus} here.
+   */
+  private static EntitlementResponse toResponse(TenantEntitlementView view) {
+    return new EntitlementResponse(
+        view.getModuleKey(),
+        EntitlementStatus.valueOf(view.getStatus()),
+        view.getGrantedAt(),
+        view.getRevokedAt());
   }
 
   private void requireKnownModule(String moduleKey) {

@@ -106,7 +106,7 @@ class EntitlementGateConsumeTest extends KafkaPostgresRedisTestBase {
                         Instant.parse("2026-06-14T08:30:00Z"),
                         idempotencyKey))
                 .wash()
-                .getId());
+                .id());
   }
 
   /** The cached hash field for a (company, module), or null if not cached. */

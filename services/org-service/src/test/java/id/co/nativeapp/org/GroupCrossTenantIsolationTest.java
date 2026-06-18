@@ -5,10 +5,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import id.co.nativeapp.org.company.dto.CreateCompanyCommand;
 import id.co.nativeapp.org.company.service.CompanyService;
-import id.co.nativeapp.org.group.domain.ConsolidationGroup;
 import id.co.nativeapp.org.group.dto.AddMemberCommand;
 import id.co.nativeapp.org.group.dto.CreateGroupCommand;
 import id.co.nativeapp.org.group.dto.RemoveMemberCommand;
+import id.co.nativeapp.org.group.projection.ConsolidationGroupView;
 import id.co.nativeapp.org.group.repository.ConsolidationGroupRepository;
 import id.co.nativeapp.org.group.service.GroupService;
 import id.co.nativeapp.tenant.TenantContext;
@@ -111,7 +111,7 @@ class GroupCrossTenantIsolationTest extends PostgresRlsTestBase {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
     public List<UUID> visibleGroupIds() {
-      return repository.findAll().stream().map(ConsolidationGroup::getId).toList();
+      return repository.findAllViews().stream().map(ConsolidationGroupView::getId).toList();
     }
   }
 }

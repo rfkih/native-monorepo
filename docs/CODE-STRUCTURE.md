@@ -33,6 +33,7 @@ controller  ──>  service  ──>  repository  ──>  domain
 | **repository** | Spring Data interface | `*Repository` | domain, JDK, Spring Data | service, controller, `Money` arithmetic, events |
 | **domain** | `@Entity` / `@Embeddable` / value record | (aggregate name) | `jakarta.persistence`, `libs/money`, `libs/tenant` `Auditable`, JDK | controller, service, repository, dto, Spring web/tx |
 | **dto** | none (records) | `*Request` / `*Response` / `*Command` / `*Result` | JDK, bean-validation, domain (for mapper factory) | JPA/Spring annotations, broker |
+| **projection** | Spring Data interface projection | `*View` / `*Projection` | JDK only | JPA/Spring annotations, domain, dto |
 | **config** | `@Configuration` / filter / aspect / advice | `*Config` (+ filter/aspect/advice) | anything it wires | business logic |
 
 These map 1:1 to the current code: `SaleController` (controller), `SaleService` +
@@ -52,8 +53,8 @@ These map 1:1 to the current code: `SaleController` (controller), `SaleService` 
 **Rule.** Under the service root `id.co.<org>.<service>` (today `id.co.nativeapp.restaurant`),
 each feature/aggregate gets **one package** — and **inside that feature package** the classes
 are split into **layer sub-packages**: `controller`, `service`, `repository`, `domain`, `dto`,
-and `messaging`. A feature only creates the sub-packages it actually populates (no empty layer
-folders). Cross-feature technical code lives only in the reserved `config` package at the
+`projection`, and `messaging`. A feature only creates the sub-packages it actually populates (no
+empty layer folders). Cross-feature technical code lives only in the reserved `config` package at the
 service root.
 
 **Do NOT** create one global top-level package per layer — no
@@ -87,6 +88,8 @@ id.co.nativeapp.restaurant
           PostOutboxHook.java        // @Transactional test seam           (service)
       .repository
           SaleRepository.java        // Spring Data interface              (repository)
+      .projection
+          SaleView.java              // native-query read model (no SELECT *) (projection)
       .domain
           Sale.java                  // @Entity aggregate, owns invariants (domain)
           MoneyEmbeddable.java       // @Embeddable Money value mapping    (domain)
@@ -151,6 +154,15 @@ or accepting an `@Entity`. `SaleController` already models this — keep it that
 - A repository MUST be injected **only** into the service layer.
 - For an association access path, declare it at query time (`@EntityGraph` / fetch join) — no
   EAGER, no lazy-load in a loop (`open-in-view=false` makes a stray lazy load throw).
+- **Queries are native + projection.** Every `@Query` is a native query (`nativeQuery = true`;
+  CLAUDE.md "native-query aliases snake_case; map via projection interfaces") — the
+  `repositoryQueriesAreNative` ArchUnit rule fails the build on a JPQL `@Query`. A **read** path
+  selects only the columns it needs into a **projection interface** (snake_case aliases →
+  accessors), never `SELECT *` of the entity — the projection lives in the feature's dedicated
+  `projection` sub-package (e.g. `sale.projection.SaleView`), not nested in the repository or mixed
+  into `dto`. The full `@Entity` is loaded only on the **write** path (the inherited
+  `findById`/`save`, which needs the whole aggregate to mutate it) and for `count`/`exists`
+  scalars — those legitimately are not projections.
 
 ### 3.4 domain — owns its invariants, framework-light
 
@@ -216,17 +228,18 @@ It runs as part of `./gradlew test`. The ArchUnit JUnit5 dependency is pinned in
 The suite asserts (all scoped to `id.co.nativeapp..`):
 
 1. **Layered direction** — a single ArchUnit `layeredArchitecture().consideringOnlyDependencies‑
-   InLayers()` rule, with the six layers defined by **package-name suffix** of the per-feature
+   InLayers()` rule, with the seven layers defined by **package-name suffix** of the per-feature
    sub-packages (`..controller..`, `..service..`, `..repository..`, `..domain..`, `..dto..`,
-   `..messaging..`), so the one rule covers every feature. Direction (downward only):
-   `controller -> service -> repository -> domain`, with `dto` the boundary-translation layer and
-   `messaging` the feature-local event plumbing. Edges: **Controller** accessed by no layer (an
-   entry point); **Service** accessed only by Controller + Messaging; **Repository** accessed only
-   by Service; **Dto** accessed only by Controller + Service + Messaging; **Messaging** accessed
-   only by Service (the producer-side `*Schema` Avro holders are built by the `*Writer` service
-   beans — §3.2 lists messaging as an allowed service dependency); **Domain** accessed by all,
-   accesses none of these. `consideringOnlyDependenciesInLayers()` keeps `config` and the shared
-   `libs/*` out of scope.
+   `..projection..`, `..messaging..`), so the one rule covers every feature. Direction (downward
+   only): `controller -> service -> repository -> domain`, with `dto` the boundary-translation
+   layer and `messaging` the feature-local event plumbing. Edges: **Controller** accessed by no
+   layer (an entry point); **Service** accessed only by Controller + Messaging; **Repository**
+   accessed only by Service; **Dto** accessed only by Controller + Service + Messaging;
+   **Projection** (native-query read models) accessed only by Service + Repository; **Messaging**
+   accessed only by Service (the producer-side `*Schema` Avro holders are built by the `*Writer`
+   service beans — §3.2 lists messaging as an allowed service dependency); **Domain** accessed by
+   all, accesses none of these. `consideringOnlyDependenciesInLayers()` keeps `config` and the
+   shared `libs/*` out of scope.
 2. **Controllers must not touch repositories directly** — `*Controller` must not depend on a
    `org.springframework.data.repository.Repository`.
 3. **Repositories accessed only from the service layer** — a `Repository` may be accessed only
@@ -243,6 +256,10 @@ The suite asserts (all scoped to `id.co.nativeapp..`):
 9. **No float money** — no `@Entity` **or `@Embeddable`** may depend on `BigDecimal`/`float`/
    `double` (money is `libs/money` `Money` — minor units + currency; rule 8). The money columns
    live in `MoneyEmbeddable`, so the rule must cover `@Embeddable`, not just `@Entity`.
+10. **Repository queries are native** — every method annotated `@Query` on a Spring Data
+    `Repository` must set `nativeQuery = true` (`repositoryQueriesAreNative`), so a JPQL `@Query`
+    fails the build. Pairs with the projection convention in §3.3 (read paths fetch a narrow
+    column set into a `projection` interface, never `SELECT *`).
 
 The current code already complies, so the suite is green on day one and locks the invariants
 for every future feature and service. Formatting is owned solely by **Spotless +

@@ -33,10 +33,12 @@ public interface GroupTrialBalanceLineRepository
 
   /** The distinct member companies that have ingested lines for a {@code (group, period)}. */
   @org.springframework.data.jpa.repository.Query(
-      """
-      SELECT DISTINCT l.memberCompanyId FROM GroupTrialBalanceLine l
-       WHERE l.groupId = :groupId AND l.period = :period
-      """)
+      value =
+          """
+          SELECT DISTINCT l.member_company_id FROM group_trial_balance l
+           WHERE l.group_id = :groupId AND l.period = :period
+          """,
+      nativeQuery = true)
   List<UUID> findMembersWithLines(
       @org.springframework.data.repository.query.Param("groupId") UUID groupId,
       @org.springframework.data.repository.query.Param("period") String period);

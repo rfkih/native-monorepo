@@ -10,6 +10,8 @@ import id.co.nativeapp.org.company.dto.CreateBusinessCommand;
 import id.co.nativeapp.org.company.dto.CreateCompanyResult;
 import id.co.nativeapp.org.company.messaging.CompanyCreatedSchema;
 import id.co.nativeapp.org.company.messaging.OrgUnitCreatedSchema;
+import id.co.nativeapp.org.company.projection.CompanyView;
+import id.co.nativeapp.org.company.projection.OrgUnitView;
 import id.co.nativeapp.org.company.repository.CompanyRepository;
 import id.co.nativeapp.org.company.repository.LegalEmployerRepository;
 import id.co.nativeapp.org.company.repository.OrgUnitRepository;
@@ -200,19 +202,24 @@ public class CompanyWriter {
    * All org units visible to the bound tenant — no {@code WHERE company_id}; the result set is
    * constrained solely by the auto-applied RLS policy. This is the read path the cross-tenant
    * isolation test relies on to prove a company/org_unit created under tenant A is invisible to
-   * tenant B.
+   * tenant B. Uses a native projection ({@link OrgUnitView}) — pure read, never mutated/saved.
+   *
+   * <p>NOTE: the write-path {@code cascadeDeactivate} still calls the inherited {@code findAll()}
+   * on the same repository because it mutates the returned entities and saves them — that stays on
+   * the entity path (rule 3).
    */
   @Transactional(readOnly = true)
-  public List<OrgUnit> findOrgUnitsForCurrentTenant() {
-    return orgUnitRepository.findAll();
+  public List<OrgUnitView> findOrgUnitsForCurrentTenant() {
+    return orgUnitRepository.findAllViews();
   }
 
   /**
    * All companies visible to the bound tenant — RLS-constrained. A company is its own tenant, so
-   * within tenant A's scope this returns only company A.
+   * within tenant A's scope this returns only company A. Uses a native projection ({@link
+   * CompanyView}) — pure read, never mutated/saved.
    */
   @Transactional(readOnly = true)
-  public List<Company> findCompaniesForCurrentTenant() {
-    return companyRepository.findAll();
+  public List<CompanyView> findCompaniesForCurrentTenant() {
+    return companyRepository.findAllViews();
   }
 }

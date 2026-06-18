@@ -62,11 +62,13 @@ public class EntitlementController {
     return ResponseEntity.noContent().build();
   }
 
-  /** The bound tenant's entitlements (RLS-scoped). Returns {@code 200} with the list. */
+  /**
+   * The bound tenant's entitlements (RLS-scoped). Returns {@code 200} with the list. The service
+   * maps the native-query projection to {@link EntitlementResponse} before returning, so the
+   * controller receives a ready-to-serialize list (no further mapping needed here).
+   */
   @GetMapping
   public ResponseEntity<List<EntitlementResponse>> list() {
-    List<EntitlementResponse> body =
-        entitlementService.list().stream().map(EntitlementResponse::from).toList();
-    return ResponseEntity.ok(body);
+    return ResponseEntity.ok(entitlementService.list());
   }
 }

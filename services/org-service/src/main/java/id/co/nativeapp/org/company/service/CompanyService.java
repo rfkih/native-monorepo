@@ -1,10 +1,11 @@
 package id.co.nativeapp.org.company.service;
 
-import id.co.nativeapp.org.company.domain.Company;
 import id.co.nativeapp.org.company.domain.OrgUnit;
 import id.co.nativeapp.org.company.dto.CreateBusinessCommand;
 import id.co.nativeapp.org.company.dto.CreateCompanyCommand;
 import id.co.nativeapp.org.company.dto.CreateCompanyResult;
+import id.co.nativeapp.org.company.projection.CompanyView;
+import id.co.nativeapp.org.company.projection.OrgUnitView;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
 import java.util.UUID;
@@ -100,14 +101,19 @@ public class CompanyService {
   /**
    * All org units visible to the bound tenant. Deliberately unfiltered in code: the result set is
    * constrained solely by the auto-applied RLS policy (no {@code WHERE company_id}). This is the
-   * read path the cross-tenant isolation test relies on.
+   * read path the cross-tenant isolation test relies on. Returns a native projection ({@link
+   * OrgUnitView}) — narrower I/O than {@code SELECT *} of the entity.
    */
-  public List<OrgUnit> findOrgUnitsForCurrentTenant() {
+  public List<OrgUnitView> findOrgUnitsForCurrentTenant() {
     return writer.findOrgUnitsForCurrentTenant();
   }
 
-  /** All companies visible to the bound tenant (RLS-constrained; a company is its own tenant). */
-  public List<Company> findCompaniesForCurrentTenant() {
+  /**
+   * All companies visible to the bound tenant (RLS-constrained; a company is its own tenant).
+   * Returns a native projection ({@link CompanyView}) — narrower I/O than {@code SELECT *} of the
+   * entity.
+   */
+  public List<CompanyView> findCompaniesForCurrentTenant() {
     return writer.findCompaniesForCurrentTenant();
   }
 }

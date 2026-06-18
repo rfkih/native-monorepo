@@ -1,8 +1,8 @@
 package id.co.nativeapp.restaurant.sale.service;
 
-import id.co.nativeapp.restaurant.sale.domain.Sale;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
+import id.co.nativeapp.restaurant.sale.dto.SaleResponse;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -18,7 +18,7 @@ import org.springframework.stereotype.Service;
  * 500}.
  *
  * <p><strong>Why the create is a separate transaction from the conflict re-read.</strong> Two
- * concurrent record-sale calls with the same key can both pass the {@code findByIdempotencyKey}
+ * concurrent record-sale calls with the same key can both pass the {@code findViewByIdempotencyKey}
  * short-circuit and then race to {@code INSERT}; the loser trips the {@code (company_id,
  * idempotency_key)} unique constraint, which raises a {@link DataIntegrityViolationException}. In
  * PostgreSQL a constraint violation <em>aborts the current transaction</em>, so the loser CANNOT
@@ -61,7 +61,7 @@ public class SaleService {
       // No SaleRecorded is written on this path — the winner already emitted it.
       return writer
           .findExistingByKey(command.idempotencyKey())
-          .map(sale -> new RecordSaleResult(sale, false))
+          .map(response -> new RecordSaleResult(response, false))
           .orElseThrow(() -> conflict);
     }
   }
@@ -72,7 +72,7 @@ public class SaleService {
    * read path the tenancy isolation test relies on to prove a sale recorded under tenant A is
    * invisible to tenant B.
    */
-  public List<Sale> findAllForCurrentTenant() {
+  public List<SaleResponse> findAllForCurrentTenant() {
     return writer.findAllForCurrentTenant();
   }
 }

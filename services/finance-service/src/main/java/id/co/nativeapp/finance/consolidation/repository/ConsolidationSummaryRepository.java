@@ -24,12 +24,14 @@ public interface ConsolidationSummaryRepository extends JpaRepository<Consolidat
    * an explicit {@code group_id} predicate (defense-in-depth atop the two-GUC RLS).
    */
   @Query(
-      """
-      SELECT s FROM ConsolidationSummary s
-       WHERE s.groupId = :groupId
-         AND s.period = :period
-         AND s.closeRunSeq = :closeRunSeq
-      """)
+      value =
+          """
+          SELECT s.* FROM consolidation_summary s
+           WHERE s.group_id = :groupId
+             AND s.period = :period
+             AND s.close_run_seq = :closeRunSeq
+          """,
+      nativeQuery = true)
   Optional<ConsolidationSummary> findByGroupIdAndPeriodAndCloseRunSeq(
       @Param("groupId") UUID groupId,
       @Param("period") String period,
@@ -43,13 +45,15 @@ public interface ConsolidationSummaryRepository extends JpaRepository<Consolidat
    * defense-in-depth atop the two-GUC RLS.
    */
   @Query(
-      """
-      SELECT s FROM ConsolidationSummary s
-       WHERE s.groupId = :groupId
-         AND s.period = :period
-         AND s.closeRunSeq < :closeRunSeq
-         AND s.state <> id.co.nativeapp.finance.consolidation.domain.ConsolidationState.SUPERSEDED
-      """)
+      value =
+          """
+          SELECT s.* FROM consolidation_summary s
+           WHERE s.group_id = :groupId
+             AND s.period = :period
+             AND s.close_run_seq < :closeRunSeq
+             AND s.state <> 'SUPERSEDED'
+          """,
+      nativeQuery = true)
   List<ConsolidationSummary> findActivePriorSummaries(
       @Param("groupId") UUID groupId,
       @Param("period") String period,
@@ -65,13 +69,15 @@ public interface ConsolidationSummaryRepository extends JpaRepository<Consolidat
    * two-GUC RLS.
    */
   @Query(
-      """
-      SELECT count(s) > 0 FROM ConsolidationSummary s
-       WHERE s.groupId = :groupId
-         AND s.period = :period
-         AND s.closeRunSeq >= :closeRunSeq
-         AND s.state <> id.co.nativeapp.finance.consolidation.domain.ConsolidationState.SUPERSEDED
-      """)
+      value =
+          """
+          SELECT count(s.*) > 0 FROM consolidation_summary s
+           WHERE s.group_id = :groupId
+             AND s.period = :period
+             AND s.close_run_seq >= :closeRunSeq
+             AND s.state <> 'SUPERSEDED'
+          """,
+      nativeQuery = true)
   boolean existsActiveAtOrAboveSeq(
       @Param("groupId") UUID groupId,
       @Param("period") String period,
@@ -88,13 +94,15 @@ public interface ConsolidationSummaryRepository extends JpaRepository<Consolidat
    * defense-in-depth.
    */
   @Query(
-      """
-      SELECT s FROM ConsolidationSummary s
-       WHERE s.groupId = :groupId
-         AND s.period = :period
-         AND s.state <> id.co.nativeapp.finance.consolidation.domain.ConsolidationState.SUPERSEDED
-       ORDER BY s.closeRunSeq DESC
-      """)
+      value =
+          """
+          SELECT s.* FROM consolidation_summary s
+           WHERE s.group_id = :groupId
+             AND s.period = :period
+             AND s.state <> 'SUPERSEDED'
+           ORDER BY s.close_run_seq DESC
+          """,
+      nativeQuery = true)
   List<ConsolidationSummary> findActiveSummaries(
       @Param("groupId") UUID groupId, @Param("period") String period, Limit limit);
 

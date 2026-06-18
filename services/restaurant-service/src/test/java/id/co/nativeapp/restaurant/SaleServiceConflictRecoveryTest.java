@@ -10,6 +10,7 @@ import id.co.nativeapp.money.Money;
 import id.co.nativeapp.restaurant.sale.domain.Sale;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
+import id.co.nativeapp.restaurant.sale.dto.SaleResponse;
 import id.co.nativeapp.restaurant.sale.service.SaleService;
 import id.co.nativeapp.restaurant.sale.service.SaleWriter;
 import id.co.nativeapp.tenant.TenantContext;
@@ -51,14 +52,16 @@ class SaleServiceConflictRecoveryTest {
         new Sale(
             command.businessId(), Money.ofMinor(1_500_000L, "IDR"),
             command.occurredAt(), command.idempotencyKey());
+    SaleResponse existingResponse = SaleResponse.from(existing);
     when(writer.create(any())).thenThrow(new DataIntegrityViolationException("dup key"));
-    when(writer.findExistingByKey(command.idempotencyKey())).thenReturn(Optional.of(existing));
+    when(writer.findExistingByKey(command.idempotencyKey()))
+        .thenReturn(Optional.of(existingResponse));
 
     RecordSaleResult result =
         TenantContext.callAs(TENANT, ACTOR, () -> service.recordSale(command));
 
     assertThat(result.created()).isFalse();
-    assertThat(result.sale()).isSameAs(existing);
+    assertThat(result.sale()).isEqualTo(existingResponse);
   }
 
   @Test

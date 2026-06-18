@@ -76,8 +76,7 @@ class RecordWashConcurrencyTest extends KafkaPostgresRedisTestBase {
 
     // A barrier so both threads enter recordWash as close to simultaneously as possible, maximizing
     // the chance both miss the idempotency short-circuit and race the INSERT (the loser must then
-    // be
-    // recovered, not 500).
+    // be recovered, not 500).
     CyclicBarrier barrier = new CyclicBarrier(2);
     Callable<RecordWashResult> attempt =
         () ->
@@ -102,9 +101,9 @@ class RecordWashConcurrencyTest extends KafkaPostgresRedisTestBase {
       assertThat(r1.created() ^ r2.created())
           .as("exactly one caller created the wash, the other was idempotent")
           .isTrue();
-      assertThat(r1.wash().getId())
+      assertThat(r1.wash().id())
           .as("both callers resolve to the same single wash")
-          .isEqualTo(r2.wash().getId());
+          .isEqualTo(r2.wash().id());
     } finally {
       pool.shutdownNow();
     }

@@ -4,8 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import id.co.nativeapp.carwash.entitlement.dto.EntitlementProjectedEvent;
 import id.co.nativeapp.carwash.entitlement.service.EntitlementProjectionService;
-import id.co.nativeapp.carwash.wash.domain.Wash;
 import id.co.nativeapp.carwash.wash.dto.RecordWashCommand;
+import id.co.nativeapp.carwash.wash.dto.WashResponse;
 import id.co.nativeapp.carwash.wash.service.WashService;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
@@ -58,7 +58,7 @@ class WashTenancyIsolationTest extends KafkaPostgresRedisTestBase {
                         new RecordWashCommand(
                             OUTLET, "bay-1", 1_000_000L, "IDR", null, null, occurredAt, "a-key"))
                     .wash()
-                    .getId());
+                    .id());
     UUID washB =
         TenantContext.callAs(
             TENANT_B,
@@ -69,14 +69,14 @@ class WashTenancyIsolationTest extends KafkaPostgresRedisTestBase {
                         new RecordWashCommand(
                             OUTLET, "bay-2", 2_000_000L, "IDR", null, null, occurredAt, "b-key"))
                     .wash()
-                    .getId());
+                    .id());
 
     // Inside A's scope: only A's wash is visible. No WHERE clause anywhere; RLS only.
     List<UUID> aVisible =
         TenantContext.callAs(
             TENANT_A,
             ACTOR_A,
-            () -> washService.findAllForCurrentTenant().stream().map(Wash::getId).toList());
+            () -> washService.findAllForCurrentTenant().stream().map(WashResponse::id).toList());
     assertThat(aVisible).containsExactly(washA);
     assertThat(aVisible).doesNotContain(washB);
 
@@ -85,7 +85,7 @@ class WashTenancyIsolationTest extends KafkaPostgresRedisTestBase {
         TenantContext.callAs(
             TENANT_B,
             ACTOR_B,
-            () -> washService.findAllForCurrentTenant().stream().map(Wash::getId).toList());
+            () -> washService.findAllForCurrentTenant().stream().map(WashResponse::id).toList());
     assertThat(bVisible).containsExactly(washB);
     assertThat(bVisible).doesNotContain(washA);
   }

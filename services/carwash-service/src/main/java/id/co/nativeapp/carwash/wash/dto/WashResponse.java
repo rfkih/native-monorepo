@@ -16,6 +16,7 @@ public record WashResponse(
     Instant occurredAt,
     String idempotencyKey) {
 
+  /** Maps the write-path {@link Wash} entity (just persisted) to the response shape. */
   public static WashResponse from(Wash wash) {
     return new WashResponse(
         wash.getId(),

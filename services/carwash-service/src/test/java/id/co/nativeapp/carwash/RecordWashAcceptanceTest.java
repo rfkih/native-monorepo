@@ -65,7 +65,7 @@ class RecordWashAcceptanceTest extends KafkaPostgresRedisTestBase {
     RecordWashResult first =
         TenantContext.callAs(TENANT_A, ACTOR_A, () -> washService.recordWash(command));
     assertThat(first.created()).isTrue();
-    UUID washId = first.wash().getId();
+    UUID washId = first.wash().id();
 
     // Exactly one SaleRecorded, with the right payload (amount = the wash total, business =
     // outlet).
@@ -94,7 +94,7 @@ class RecordWashAcceptanceTest extends KafkaPostgresRedisTestBase {
     RecordWashResult retry =
         TenantContext.callAs(TENANT_A, ACTOR_A, () -> washService.recordWash(command));
     assertThat(retry.created()).isFalse();
-    assertThat(retry.wash().getId()).isEqualTo(washId);
+    assertThat(retry.wash().id()).isEqualTo(washId);
 
     assertThat(outboxRows("SaleRecorded")).hasSize(1);
     assertThat(outboxRows("MetricPublished")).hasSize(2);

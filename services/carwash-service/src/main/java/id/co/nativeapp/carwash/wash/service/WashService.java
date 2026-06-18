@@ -2,9 +2,9 @@ package id.co.nativeapp.carwash.wash.service;
 
 import id.co.nativeapp.carwash.config.CarwashProperties;
 import id.co.nativeapp.carwash.wash.domain.NotEntitledException;
-import id.co.nativeapp.carwash.wash.domain.Wash;
 import id.co.nativeapp.carwash.wash.dto.RecordWashCommand;
 import id.co.nativeapp.carwash.wash.dto.RecordWashResult;
+import id.co.nativeapp.carwash.wash.dto.WashResponse;
 import id.co.nativeapp.entitlementcheck.EntitlementChecker;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
@@ -70,8 +70,9 @@ public class WashService {
     // loudly here. The actual company_id is stamped from the bound scope inside WashWriter.
     String companyId = TenantContext.require().companyId();
 
-    // The entitlement gate (Phase-2): reject record-wash with 403 if the company is not entitled to
-    // the carwash module. Checked BEFORE the write so no row/event is produced on a denied request.
+    // The entitlement gate (Phase-2): reject record-wash with 403 if the company is not entitled
+    // to the carwash module. Checked BEFORE the write so no row/event is produced on a denied
+    // request.
     if (!entitlementChecker.isEntitled(companyId, moduleKey)) {
       throw new NotEntitledException(moduleKey);
     }
@@ -91,11 +92,12 @@ public class WashService {
 
   /**
    * All washes visible to the bound tenant. Deliberately unfiltered in code: the result set is
-   * constrained solely by the auto-applied RLS policy (no {@code WHERE company_id}). This is the
-   * read path the tenancy isolation test relies on to prove a wash recorded under tenant A is
+   * constrained solely by the auto-applied RLS policy (no {@code WHERE company_id}). Returns the
+   * projected response shape — a read path never loads the full {@code Auditable} entity. This is
+   * the read path the tenancy isolation test relies on to prove a wash recorded under tenant A is
    * invisible to tenant B.
    */
-  public List<Wash> findAllForCurrentTenant() {
+  public List<WashResponse> findAllForCurrentTenant() {
     return writer.findAllForCurrentTenant();
   }
 }

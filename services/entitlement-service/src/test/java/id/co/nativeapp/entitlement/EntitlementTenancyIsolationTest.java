@@ -2,7 +2,7 @@ package id.co.nativeapp.entitlement;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import id.co.nativeapp.entitlement.entitlement.domain.TenantEntitlement;
+import id.co.nativeapp.entitlement.entitlement.dto.EntitlementResponse;
 import id.co.nativeapp.entitlement.entitlement.service.EntitlementService;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
@@ -21,6 +21,11 @@ import org.springframework.boot.test.context.SpringBootTest;
  *
  * <p>Runs as the unprivileged {@code app_user} role; {@code FORCE ROW LEVEL SECURITY} in the
  * baseline binds even that owning role.
+ *
+ * <p>{@link EntitlementService#list()} uses the native-query projection ({@code findAllViews})
+ * internally and maps the result to {@link EntitlementResponse} in the service layer — the
+ * isolation proof is identical: the projection query carries no {@code WHERE company_id} and is
+ * confined solely by the RLS policy on the transactional connection.
  */
 @SpringBootTest
 class EntitlementTenancyIsolationTest extends KafkaPostgresRedisTestBase {
@@ -43,13 +48,13 @@ class EntitlementTenancyIsolationTest extends KafkaPostgresRedisTestBase {
           return null;
         });
 
-    // As A, the entitlement is visible.
-    List<TenantEntitlement> aView =
+    // As A, the entitlement is visible (via the projection-backed list, mapped to responses).
+    List<EntitlementResponse> aView =
         TenantContext.callAs(TENANT_A, ACTOR_A, () -> entitlementService.list());
-    assertThat(aView).extracting(TenantEntitlement::getModuleKey).containsExactly("restaurant");
+    assertThat(aView).extracting(EntitlementResponse::moduleKey).containsExactly("restaurant");
 
     // As B, the list is empty — A's row is invisible via RLS (no WHERE company_id is written).
-    List<TenantEntitlement> bView =
+    List<EntitlementResponse> bView =
         TenantContext.callAs(TENANT_B, ACTOR_B, () -> entitlementService.list());
     assertThat(bView).isEmpty();
   }

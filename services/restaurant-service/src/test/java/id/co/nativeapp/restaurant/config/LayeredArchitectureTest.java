@@ -75,6 +75,8 @@ class LayeredArchitectureTest {
             .definedBy("..domain..")
             .layer("Dto")
             .definedBy("..dto..")
+            .layer("Projection")
+            .definedBy("..projection..")
             .layer("Messaging")
             .definedBy("..messaging..")
             // Controller is an entry point: nothing depends on a controller.
@@ -97,6 +99,10 @@ class LayeredArchitectureTest {
             // Dto is the boundary translation layer (request/response/command/result).
             .whereLayer("Dto")
             .mayOnlyBeAccessedByLayers("Controller", "Service", "Messaging")
+            // Projection holds native-query read models, produced by the repository and consumed
+            // (mapped to a dto) by the service — reachable from neither the controller nor below.
+            .whereLayer("Projection")
+            .mayOnlyBeAccessedByLayers("Service", "Repository")
             .as(
                 "controller -> service -> repository -> domain (+ dto boundary, feature messaging)");
     rule.check(classes);
@@ -232,6 +238,29 @@ class LayeredArchitectureTest {
   }
 
   /**
+   * Native-query convention (CLAUDE.md "native-query aliases snake_case; map via projection
+   * interfaces"): every {@code @Query} declared on a repository must be a NATIVE query ({@code
+   * nativeQuery = true}). The companion rule — read queries select only the needed columns into a
+   * projection rather than {@code SELECT *} of the entity — is a return-type convention that
+   * generics erasure makes impractical to assert statically, so it is enforced by code review; this
+   * guard pins the objective half (no JPQL slips back in) so a future repository cannot silently
+   * add a non-native {@code @Query}.
+   */
+  @Test
+  void repositoryQueriesAreNative() {
+    ArchRule rule =
+        classes()
+            .that()
+            .areAssignableTo(org.springframework.data.repository.Repository.class)
+            .and()
+            .resideInAPackage(BASE_PACKAGE + "..")
+            .should(haveOnlyNativeAtQueryMethods())
+            .as(
+                "every @Query on a repository is a native query (CLAUDE.md native-query convention)");
+    rule.check(classes);
+  }
+
+  /**
    * HR-8: no monetary amount on a persistent {@code @Entity}/{@code @Embeddable} may be a floating
    * type ({@code float}/{@code double}, primitive OR boxed) or {@code BigDecimal} — money is the
    * libs/money {@code Money} (integer minor units + ISO-4217 currency), persisted as the two-column
@@ -274,6 +303,36 @@ class LayeredArchitectureTest {
                 "the RLS + JPA-auditing wiring is owned solely by libs/tenant"
                     + " (TenantRlsAutoConfiguration); a service must not redeclare it (HR-5 drift)");
     rule.check(classes);
+  }
+
+  /**
+   * Positive condition (violated == bad): flags any repository method annotated with {@code @Query}
+   * whose {@code nativeQuery} attribute is not {@code true} (i.e. a JPQL query). Reads the actual
+   * annotation instance so the {@code nativeQuery} flag is inspected, not just the presence of the
+   * annotation.
+   */
+  private static ArchCondition<JavaClass> haveOnlyNativeAtQueryMethods() {
+    return new ArchCondition<>("have only native @Query methods") {
+      @Override
+      public void check(JavaClass item, ConditionEvents events) {
+        for (JavaMethod method : item.getMethods()) {
+          if (method.isAnnotatedWith(org.springframework.data.jpa.repository.Query.class)) {
+            org.springframework.data.jpa.repository.Query query =
+                method.getAnnotationOfType(org.springframework.data.jpa.repository.Query.class);
+            if (!query.nativeQuery()) {
+              events.add(
+                  SimpleConditionEvent.violated(
+                      method,
+                      String.format(
+                          "%s.%s carries a non-native @Query (JPQL) — repository queries must be"
+                              + " native (nativeQuery = true) per the CLAUDE.md native-query"
+                              + " convention",
+                          item.getName(), method.getName())));
+            }
+          }
+        }
+      }
+    };
   }
 
   /**

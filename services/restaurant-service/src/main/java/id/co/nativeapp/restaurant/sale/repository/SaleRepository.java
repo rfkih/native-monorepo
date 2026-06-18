@@ -1,10 +1,14 @@
 package id.co.nativeapp.restaurant.sale.repository;
 
 import id.co.nativeapp.restaurant.sale.domain.Sale;
+import id.co.nativeapp.restaurant.sale.projection.SaleView;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 /**
  * Spring Data repository for {@link Sale}.
@@ -15,13 +19,54 @@ import org.springframework.data.jpa.repository.JpaRepository;
  * restricts results to the bound company (correctness by default — rule 5). The {@code
  * idempotency_key} lookup is therefore implicitly tenant-scoped: it can only ever find a row
  * belonging to the session tenant, which matches the {@code (company_id, idempotency_key)} unique
- * constraint exactly.
+ * constraint exactly. Native queries run on that same RLS-scoped connection, so projecting columns
+ * by hand does NOT weaken tenant isolation.
+ *
+ * <p><strong>Read paths use a native query + projection (CLAUDE.md convention — "native-query
+ * aliases snake_case; map via projection interfaces").</strong> Both read methods fetch only the
+ * six business columns the response needs ({@link SaleView}) rather than {@code SELECT *} of the
+ * full {@code Auditable} row — narrower I/O, and the entity is loaded only on the write path (the
+ * inherited {@code save}/{@code saveAndFlush}, which legitimately needs the whole aggregate).
  */
 public interface SaleRepository extends JpaRepository<Sale, UUID> {
 
   /**
-   * Finds an existing sale by its client idempotency key within the bound tenant (RLS-scoped). Used
-   * to make record-sale idempotent on retry.
+   * Finds an existing sale by its client idempotency key within the bound tenant (RLS-scoped),
+   * projected to {@link SaleView}. Used to make record-sale idempotent on retry — the result is
+   * only ever read into the response, never mutated, so a projection (not the entity) is fetched.
    */
-  Optional<Sale> findByIdempotencyKey(String idempotencyKey);
+  @Query(
+      value =
+          """
+          SELECT s.id              AS id,
+                 s.business_id     AS business_id,
+                 s.amount_minor    AS amount_minor,
+                 s.currency        AS currency,
+                 s.occurred_at     AS occurred_at,
+                 s.idempotency_key AS idempotency_key
+            FROM sale s
+           WHERE s.idempotency_key = :idempotencyKey
+          """,
+      nativeQuery = true)
+  Optional<SaleView> findViewByIdempotencyKey(@Param("idempotencyKey") String idempotencyKey);
+
+  /**
+   * Every sale visible to the bound tenant, projected to {@link SaleView} and ordered
+   * deterministically. No {@code WHERE company_id} — the result set is constrained solely by the
+   * auto-applied RLS policy (rule 5).
+   */
+  @Query(
+      value =
+          """
+          SELECT s.id              AS id,
+                 s.business_id     AS business_id,
+                 s.amount_minor    AS amount_minor,
+                 s.currency        AS currency,
+                 s.occurred_at     AS occurred_at,
+                 s.idempotency_key AS idempotency_key
+            FROM sale s
+           ORDER BY s.occurred_at, s.id
+          """,
+      nativeQuery = true)
+  List<SaleView> findAllViews();
 }

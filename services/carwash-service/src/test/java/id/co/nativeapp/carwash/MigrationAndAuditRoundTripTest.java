@@ -4,8 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import id.co.nativeapp.carwash.entitlement.dto.EntitlementProjectedEvent;
 import id.co.nativeapp.carwash.entitlement.service.EntitlementProjectionService;
-import id.co.nativeapp.carwash.wash.domain.Wash;
 import id.co.nativeapp.carwash.wash.dto.RecordWashCommand;
+import id.co.nativeapp.carwash.wash.dto.WashResponse;
 import id.co.nativeapp.carwash.wash.service.WashService;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Instant;
@@ -57,7 +57,7 @@ class MigrationAndAuditRoundTripTest extends KafkaPostgresRedisTestBase {
                             Instant.parse("2026-06-14T08:30:00Z"),
                             "audit-key"))
                     .wash()
-                    .getId());
+                    .id());
 
     Map<String, Object> row = washRowAsAdmin(washId);
     assertThat(row.get("company_id")).isEqualTo(TENANT_A);
@@ -66,18 +66,20 @@ class MigrationAndAuditRoundTripTest extends KafkaPostgresRedisTestBase {
     assertThat(row.get("amount_minor")).isEqualTo(5_000_00L);
     assertThat(((String) row.get("currency")).strip()).isEqualTo("IDR");
 
-    // The entity reads back via the repository inside the scope (RLS-scoped).
-    Wash reloaded =
+    // The wash reads back via the native projection inside the scope (RLS-scoped). The read path
+    // returns a WashResponse (native-query projection), so entity fields are accessed via the
+    // record accessors.
+    WashResponse reloaded =
         TenantContext.callAs(
             TENANT_A,
             ACTOR_A,
             () ->
                 washService.findAllForCurrentTenant().stream()
-                    .filter(w -> w.getId().equals(washId))
+                    .filter(w -> w.id().equals(washId))
                     .findFirst()
                     .orElseThrow());
-    assertThat(reloaded.getBusinessId()).isEqualTo(OUTLET);
-    assertThat(reloaded.getAmount().amountMinor()).isEqualTo(5_000_00L);
+    assertThat(reloaded.businessId()).isEqualTo(OUTLET);
+    assertThat(reloaded.amountMinor()).isEqualTo(5_000_00L);
   }
 
   private Map<String, Object> washRowAsAdmin(UUID washId) throws Exception {

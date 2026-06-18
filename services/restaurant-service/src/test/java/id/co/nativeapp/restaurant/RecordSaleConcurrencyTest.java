@@ -85,9 +85,9 @@ class RecordSaleConcurrencyTest extends PostgresRlsTestBase {
       assertThat(r1.created() ^ r2.created())
           .as("exactly one caller created the sale, the other was idempotent")
           .isTrue();
-      assertThat(r1.sale().getId())
+      assertThat(r1.sale().id())
           .as("both callers resolve to the same single sale")
-          .isEqualTo(r2.sale().getId());
+          .isEqualTo(r2.sale().id());
     } finally {
       pool.shutdownNow();
     }

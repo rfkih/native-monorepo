@@ -55,7 +55,7 @@ class RecordSaleAcceptanceTest extends PostgresRlsTestBase {
     RecordSaleResult first =
         TenantContext.callAs(TENANT_A, ACTOR_A, () -> saleService.recordSale(command));
     assertThat(first.created()).isTrue();
-    UUID saleId = first.sale().getId();
+    UUID saleId = first.sale().id();
 
     assertThat(outboxRows()).hasSize(1);
     Map<String, Object> row = outboxRows().getFirst();
@@ -78,7 +78,7 @@ class RecordSaleAcceptanceTest extends PostgresRlsTestBase {
     RecordSaleResult retry =
         TenantContext.callAs(TENANT_A, ACTOR_A, () -> saleService.recordSale(command));
     assertThat(retry.created()).isFalse();
-    assertThat(retry.sale().getId()).isEqualTo(saleId);
+    assertThat(retry.sale().id()).isEqualTo(saleId);
 
     // Still exactly one SaleRecorded in the outbox after the retry.
     assertThat(outboxRows()).hasSize(1);

@@ -25,14 +25,14 @@ import org.junit.jupiter.api.Test;
  *
  * <p>Each feature package {@code id.co.nativeapp.notification.<feature>} holds its classes in a
  * layer sub-package ({@code .controller}, {@code .service}, {@code .repository}, {@code .domain},
- * {@code .dto}, {@code .messaging}). The layered-direction rule is expressed with ArchUnit's {@link
- * com.tngtech.archunit.library.Architectures#layeredArchitecture() layeredArchitecture()}, matching
- * layers by package-name suffix (e.g. {@code "..controller.."}) and {@code
- * consideringOnlyDependenciesInLayers()} so the cross-cutting {@code config} package and the shared
- * libs are out of scope. The remaining rules are the service-specific invariants (no-float money,
- * the RLS/auditing-wiring drift guard, the {@code @Entity}-at-the-boundary and
- * {@code @Transactional}-in-the-service-layer guards, naming-matches-stereotype) — retargeted to
- * the new layout, never weakened.
+ * {@code .dto}, {@code .messaging}, {@code .projection}). The layered-direction rule is expressed
+ * with ArchUnit's {@link com.tngtech.archunit.library.Architectures#layeredArchitecture()
+ * layeredArchitecture()}, matching layers by package-name suffix (e.g. {@code "..controller.."})
+ * and {@code consideringOnlyDependenciesInLayers()} so the cross-cutting {@code config} package and
+ * the shared libs are out of scope. The remaining rules are the service-specific invariants
+ * (no-float money, the RLS/auditing-wiring drift guard, the {@code @Entity}-at-the-boundary and
+ * {@code @Transactional}-in-the-service-layer guards, naming-matches-stereotype, native-query
+ * convention) — retargeted to the new layout, never weakened.
  */
 class LayeredArchitectureTest {
 
@@ -65,11 +65,15 @@ class LayeredArchitectureTest {
   /**
    * The layered direction over the feature's layer sub-packages, matched by package-name suffix.
    * Dependencies point downward only: controller/messaging -> service -> repository -> domain, with
-   * dto as the boundary-translation layer. {@code consideringOnlyDependenciesInLayers()} scopes the
-   * check to dependencies whose target is one of these layers, so the cross-cutting {@code config}
-   * package (the {@code @Configuration}/filter set) and the shared libs are out of scope. The
-   * controller and dto layers carry no class in this slice yet; they are declared as optional so a
-   * future controller/dto lands in the right place under an already-enforced rule.
+   * dto as the boundary-translation layer, and projection as the native-query read-model layer.
+   * {@code consideringOnlyDependenciesInLayers()} scopes the check to dependencies whose target is
+   * one of these layers, so the cross-cutting {@code config} package (the
+   * {@code @Configuration}/filter set) and the shared libs are out of scope.
+   *
+   * <p>The controller and dto layers carry no class in this slice yet; they are declared as
+   * optional so a future controller/dto lands in the right place under an already-enforced rule.
+   * The projection layer is a required layer — {@code NotificationView} and {@code
+   * DeliveryReceiptView} already live in {@code notification.notification.projection}.
    */
   @Test
   void featureLayersRespectTheLayeredArchitecture() {
@@ -90,6 +94,10 @@ class LayeredArchitectureTest {
             .definedBy("..repository..")
             .layer("Domain")
             .definedBy("..domain..")
+            // Projection holds native-query read models produced by the repository and consumed
+            // (mapped to a dto) by the service — reachable from neither the controller nor below.
+            .layer("Projection")
+            .definedBy("..projection..")
             // Controller is the HTTP entry point: no in-scope layer may depend on it.
             .whereLayer("Controller")
             .mayNotBeAccessedByAnyLayer()
@@ -110,8 +118,13 @@ class LayeredArchitectureTest {
             // Domain is the floor: every layer may depend on it; it depends on none of these.
             .whereLayer("Domain")
             .mayOnlyBeAccessedByLayers("Controller", "Messaging", "Service", "Repository", "Dto")
+            // Projection (native-query read models) is produced by the repository and consumed by
+            // the service; it must not reach controllers or below domain.
+            .whereLayer("Projection")
+            .mayOnlyBeAccessedByLayers("Service", "Repository")
             .as(
-                "controller/messaging -> service -> repository -> domain (no upward or skip edges)");
+                "controller/messaging -> service -> repository -> domain (+ dto boundary,"
+                    + " projection read models; no upward or skip edges)");
     rule.check(classes);
   }
 
@@ -248,6 +261,29 @@ class LayeredArchitectureTest {
   }
 
   /**
+   * Native-query convention (CLAUDE.md "native-query aliases snake_case; map via projection
+   * interfaces"): every {@code @Query} declared on a repository must be a NATIVE query ({@code
+   * nativeQuery = true}). The companion rule — read queries select only the needed columns into a
+   * projection rather than {@code SELECT *} of the entity — is a return-type convention that
+   * generics erasure makes impractical to assert statically, so it is enforced by code review; this
+   * guard pins the objective half (no JPQL slips back in) so a future repository cannot silently
+   * add a non-native {@code @Query}.
+   */
+  @Test
+  void repositoryQueriesAreNative() {
+    ArchRule rule =
+        classes()
+            .that()
+            .areAssignableTo(org.springframework.data.repository.Repository.class)
+            .and()
+            .resideInAPackage(BASE_PACKAGE + "..")
+            .should(haveOnlyNativeAtQueryMethods())
+            .as(
+                "every @Query on a repository is a native query (CLAUDE.md native-query convention)");
+    rule.check(classes);
+  }
+
+  /**
    * HR-8: no monetary amount on a persistent {@code @Entity}/{@code @Embeddable} may be a floating
    * type ({@code float}/{@code double}, primitive OR boxed) or {@code BigDecimal} — money is the
    * libs/money {@code Money} (integer minor units + ISO-4217 currency), persisted as the two-column
@@ -293,10 +329,40 @@ class LayeredArchitectureTest {
   }
 
   /**
+   * Positive condition (violated == bad): flags any repository method annotated with {@code @Query}
+   * whose {@code nativeQuery} attribute is not {@code true} (i.e. a JPQL query). Reads the actual
+   * annotation instance so the {@code nativeQuery} flag is inspected, not just the presence of the
+   * annotation.
+   */
+  private static ArchCondition<JavaClass> haveOnlyNativeAtQueryMethods() {
+    return new ArchCondition<>("have only native @Query methods") {
+      @Override
+      public void check(JavaClass item, ConditionEvents events) {
+        for (JavaMethod method : item.getMethods()) {
+          if (method.isAnnotatedWith(org.springframework.data.jpa.repository.Query.class)) {
+            org.springframework.data.jpa.repository.Query query =
+                method.getAnnotationOfType(org.springframework.data.jpa.repository.Query.class);
+            if (!query.nativeQuery()) {
+              events.add(
+                  SimpleConditionEvent.violated(
+                      method,
+                      String.format(
+                          "%s.%s carries a non-native @Query (JPQL) — repository queries must be"
+                              + " native (nativeQuery = true) per the CLAUDE.md native-query"
+                              + " convention",
+                          item.getName(), method.getName())));
+            }
+          }
+        }
+      }
+    };
+  }
+
+  /**
    * Positive condition (violated == bad): a field-type scan flagging any {@code float}/{@code
    * double}/{@code Float}/{@code Double}/{@code BigDecimal} field. Covers primitive AND boxed — a
    * primitive field is not a class dependency, so {@code dependOnClassesThat} would miss {@code
-   * double amount}.
+   * double amount}).
    */
   private static ArchCondition<JavaClass> haveNoFloatingPointOrDecimalFields() {
     return new ArchCondition<>("have no float/double/BigDecimal field") {

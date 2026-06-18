@@ -6,7 +6,9 @@ import id.co.nativeapp.money.Money;
 import id.co.nativeapp.restaurant.sale.domain.Sale;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
+import id.co.nativeapp.restaurant.sale.dto.SaleResponse;
 import id.co.nativeapp.restaurant.sale.messaging.SaleRecordedSchema;
+import id.co.nativeapp.restaurant.sale.projection.SaleView;
 import id.co.nativeapp.restaurant.sale.repository.SaleRepository;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
@@ -63,9 +65,9 @@ public class SaleWriter {
     // Under concurrency two callers may both miss here and race the INSERT below;
     // the (company_id, idempotency_key) unique constraint is the backstop and the
     // loser is recovered by SaleService via findExistingByKey.
-    Optional<Sale> existing = repository.findByIdempotencyKey(command.idempotencyKey());
+    Optional<SaleView> existing = repository.findViewByIdempotencyKey(command.idempotencyKey());
     if (existing.isPresent()) {
-      return new RecordSaleResult(existing.get(), false);
+      return new RecordSaleResult(toResponse(existing.get()), false);
     }
 
     // Validate the amount through libs/money Money (ISO-4217; integer minor units,
@@ -106,7 +108,7 @@ public class SaleWriter {
     // prove the sale AND the outbox row roll back together (atomicity, rule 3).
     postOutboxHook.afterOutboxWrite(saved);
 
-    return new RecordSaleResult(saved, true);
+    return new RecordSaleResult(SaleResponse.from(saved), true);
   }
 
   /**
@@ -115,16 +117,28 @@ public class SaleWriter {
    * tenant, matching the unique constraint exactly.
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
-  public Optional<Sale> findExistingByKey(String idempotencyKey) {
-    return repository.findByIdempotencyKey(idempotencyKey);
+  public Optional<SaleResponse> findExistingByKey(String idempotencyKey) {
+    return repository.findViewByIdempotencyKey(idempotencyKey).map(SaleWriter::toResponse);
   }
 
   /**
    * All sales visible to the bound tenant — no {@code WHERE company_id}; the result set is
-   * constrained solely by the auto-applied RLS policy.
+   * constrained solely by the auto-applied RLS policy. Read path: a native-query projection (only
+   * the response columns), never {@code SELECT *} of the {@code Auditable} entity.
    */
   @Transactional(readOnly = true)
-  public List<Sale> findAllForCurrentTenant() {
-    return repository.findAll();
+  public List<SaleResponse> findAllForCurrentTenant() {
+    return repository.findAllViews().stream().map(SaleWriter::toResponse).toList();
+  }
+
+  /** Maps a read projection to the response shape (currency CHAR(3) is right-padded — strip it). */
+  private static SaleResponse toResponse(SaleView view) {
+    return new SaleResponse(
+        view.getId(),
+        view.getBusinessId(),
+        view.getAmountMinor(),
+        view.getCurrency().strip(),
+        view.getOccurredAt(),
+        view.getIdempotencyKey());
   }
 }

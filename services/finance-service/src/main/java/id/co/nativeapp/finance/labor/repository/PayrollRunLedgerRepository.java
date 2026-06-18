@@ -51,12 +51,14 @@ public interface PayrollRunLedgerRepository extends JpaRepository<PayrollRunLedg
    * append-only and flipped to {@link PayrollRunState#SUPERSEDED}.
    */
   @Query(
-      """
-      SELECT r FROM PayrollRunLedger r
-       WHERE r.period = :period
-         AND r.runSeq < :runSeq
-         AND r.state <> id.co.nativeapp.finance.labor.domain.PayrollRunState.SUPERSEDED
-      """)
+      value =
+          """
+          SELECT r.* FROM payroll_run_ledger r
+           WHERE r.period = :period
+             AND r.run_seq < :runSeq
+             AND r.state <> 'SUPERSEDED'
+          """,
+      nativeQuery = true)
   List<PayrollRunLedger> findActivePriorRuns(
       @Param("period") String period, @Param("runSeq") int runSeq);
 
@@ -71,11 +73,13 @@ public interface PayrollRunLedgerRepository extends JpaRepository<PayrollRunLedg
    * double-counting the period.
    */
   @Query(
-      """
-      SELECT count(r) > 0 FROM PayrollRunLedger r
-       WHERE r.period = :period
-         AND r.runSeq > :runSeq
-         AND r.state <> id.co.nativeapp.finance.labor.domain.PayrollRunState.SUPERSEDED
-      """)
+      value =
+          """
+          SELECT count(r.*) > 0 FROM payroll_run_ledger r
+           WHERE r.period = :period
+             AND r.run_seq > :runSeq
+             AND r.state <> 'SUPERSEDED'
+          """,
+      nativeQuery = true)
   boolean existsActiveHigherRun(@Param("period") String period, @Param("runSeq") int runSeq);
 }

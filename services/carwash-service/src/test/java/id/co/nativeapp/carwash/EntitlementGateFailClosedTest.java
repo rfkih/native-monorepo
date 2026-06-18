@@ -85,7 +85,7 @@ class EntitlementGateFailClosedTest extends PostgresRlsTestBase {
     UUID createdWashId =
         TenantContext.callAs(TENANT_A, ACTOR_A, () -> washService.recordWash(command("ok-1")))
             .wash()
-            .getId();
+            .id();
     assertThat(createdWashId).isNotNull();
     assertThat(washRowCountAsAdmin()).isEqualTo(1L);
     assertThat(saleRecordedCountAsAdmin()).isEqualTo(1L);
