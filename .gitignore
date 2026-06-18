@@ -8,3 +8,6 @@ node_modules/
 __pycache__/
 *.pyc
 !gradle-wrapper.jar
+
+# Claude Code — personal/local overrides (bypass mode, machine-specific allows). Shared rules live in .claude/settings.json (committed).
+.claude/settings.local.json
