@@ -15,10 +15,12 @@ export const id = {
   },
   nav: {
     dashboard: 'Dasbor',
+    pos: 'Kasir',
     onboarding: 'Perusahaan baru',
     switchCompany: 'Ganti perusahaan',
     language: 'Bahasa',
     actingAs: 'Bertindak sebagai',
+    logout: 'Keluar',
   },
   onboarding: {
     title: 'Buat perusahaan',
@@ -86,5 +88,32 @@ export const id = {
     error: 'Tidak dapat memuat dasbor.',
     noCompany: 'Belum ada perusahaan dipilih',
     noCompanyHint: 'Buat perusahaan untuk melihat posisi terkonsolidasinya.',
+  },
+  pos: {
+    title: 'Kasir',
+    subtitle: 'Buat pesanan untuk {{name}}.',
+    emptyMenu: 'Belum ada menu',
+    emptyMenuHint: 'Muat menu contoh untuk mulai membuat pesanan.',
+    loadSample: 'Muat menu contoh',
+    cart: 'Pesanan',
+    cartEmpty: 'Ketuk item untuk menambahkan.',
+    total: 'Total',
+    charge: 'Tagih',
+    paid: 'Pesanan dibuat',
+    paidHint: 'Penjualan dicatat — mengalir ke dasbor terkonsolidasi.',
+    newOrder: 'Pesanan baru',
+    noCompanyHint: 'Buat perusahaan dulu — kasir membuat pesanan untuk bisnisnya.',
+    category: {
+      mains: 'Makanan',
+      drinks: 'Minuman',
+      desserts: 'Pencuci mulut',
+    },
+  },
+  auth: {
+    deniedTitle: 'Tidak ada akses',
+    deniedBody:
+      'Akun Anda tidak memiliki peran untuk ruang kerja ini. Minta pemilik memberi akses, atau masuk dengan akun lain.',
+    signedInAs: 'Masuk sebagai',
+    signOut: 'Keluar',
   },
 } satisfies typeof en

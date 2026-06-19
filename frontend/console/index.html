@@ -15,6 +15,10 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Runtime config (window.__NATIVE_CONFIG__). A stub in dev (public/env.js); the container
+         regenerates it from env vars at start so ONE built image serves every environment. Loaded
+         as a classic script so it runs BEFORE the deferred module bundle reads it. -->
+    <script src="/env.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

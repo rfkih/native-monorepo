@@ -5,10 +5,13 @@
  * then format locale-aware via Intl.NumberFormat (rule 9 — no server-side localized strings).
  */
 
-// ISO-4217 minor-unit exponents (java.util.Currency.getDefaultFractionDigits). Default 2.
-// IDR and USD (the currencies supported today) are both 2; common exceptions listed for the future.
+// ISO-4217 minor-unit exponents — MUST match the backend libs/money Money.fractionDigits().
+// CRITICAL: Native books IDR with ZERO minor digits (whole rupiah), overriding the JDK/CLDR ISO
+// table which says 2 for IDR — see Money.java `case "IDR" -> 0`. amount_minor on the wire is scaled
+// by this exponent, so a mismatch mis-scales every displayed AND recorded amount by a power of ten.
+// USD and the rest below use the JDK default, which the backend does not override. Default 2.
 const ISO_MINOR_EXPONENT: Record<string, number> = {
-  IDR: 2,
+  IDR: 0,
   USD: 2,
   EUR: 2,
   SGD: 2,

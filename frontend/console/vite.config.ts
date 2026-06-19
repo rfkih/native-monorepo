@@ -9,16 +9,16 @@ import { fileURLToPath, URL } from 'node:url'
 // Override via env: VITE_ORG_URL / VITE_FINANCE_URL. Defaults assume org=8082, finance=8085.
 const ORG = process.env.VITE_ORG_URL ?? 'http://localhost:8082'
 const FINANCE = process.env.VITE_FINANCE_URL ?? 'http://localhost:8085'
+const RESTAURANT = process.env.VITE_RESTAURANT_URL ?? 'http://localhost:8086'
 
-// https://vite.dev/config/
-export default defineConfig({
-  plugins: [react(), tailwindcss()],
-  resolve: {
-    alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
-  },
-  server: {
-    port: 5173,
-    proxy: {
+// When VITE_GATEWAY_URL is set (the oidc dev recipe), proxy ALL /api/** to the single gateway
+// origin (the bearer token flows through it, same as production). Otherwise fall back to the
+// per-path proxy straight to each service (the header-trust dev recipe, no gateway).
+const GATEWAY = process.env.VITE_GATEWAY_URL
+
+const proxy = GATEWAY
+  ? { '/api': { target: GATEWAY, changeOrigin: true } }
+  : {
       // org-service
       '/api/v1/companies': { target: ORG, changeOrigin: true },
       '/api/v1/org-units': { target: ORG, changeOrigin: true },
@@ -28,6 +28,20 @@ export default defineConfig({
       '/api/v1/revenue': { target: FINANCE, changeOrigin: true },
       '/api/v1/closes': { target: FINANCE, changeOrigin: true },
       '/api/v1/groups': { target: FINANCE, changeOrigin: true },
-    },
+      // restaurant-service (POS)
+      '/api/v1/menu': { target: RESTAURANT, changeOrigin: true },
+      '/api/v1/orders': { target: RESTAURANT, changeOrigin: true },
+      '/api/v1/sales': { target: RESTAURANT, changeOrigin: true },
+    }
+
+// https://vite.dev/config/
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
+  },
+  server: {
+    port: 5173,
+    proxy,
   },
 })

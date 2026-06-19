@@ -13,10 +13,12 @@ export const en = {
   },
   nav: {
     dashboard: 'Dashboard',
+    pos: 'Point of sale',
     onboarding: 'New company',
     switchCompany: 'Switch company',
     language: 'Language',
     actingAs: 'Acting as',
+    logout: 'Sign out',
   },
   onboarding: {
     title: 'Create a company',
@@ -82,5 +84,32 @@ export const en = {
     error: 'Could not load the dashboard.',
     noCompany: 'No company selected',
     noCompanyHint: 'Create a company to see its consolidated position.',
+  },
+  pos: {
+    title: 'Point of sale',
+    subtitle: 'Ring up an order for {{name}}.',
+    emptyMenu: 'No menu yet',
+    emptyMenuHint: 'Load a sample menu to start ringing up orders.',
+    loadSample: 'Load sample menu',
+    cart: 'Order',
+    cartEmpty: 'Tap items to add them.',
+    total: 'Total',
+    charge: 'Charge',
+    paid: 'Order placed',
+    paidHint: 'The sale was recorded — it flows to the consolidated dashboard.',
+    newOrder: 'New order',
+    noCompanyHint: 'Create a company first — the POS rings up orders for its business.',
+    category: {
+      mains: 'Mains',
+      drinks: 'Drinks',
+      desserts: 'Desserts',
+    },
+  },
+  auth: {
+    deniedTitle: 'No access',
+    deniedBody:
+      'Your account does not have a role for this workspace. Ask an owner to grant you access, or sign in with a different account.',
+    signedInAs: 'Signed in as',
+    signOut: 'Sign out',
   },
 }

@@ -51,6 +51,7 @@ export function OnboardingWizard() {
         name: res.name,
         baseCurrency: res.baseCurrency,
         defaultLanguage: res.defaultLanguage,
+        businessId: res.firstBusinessId,
         actor: DEV_ACTOR,
       })
     },

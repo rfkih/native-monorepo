@@ -1,13 +1,22 @@
 /**
- * Tiny typed API client for the Native gateway. In dev, Vite proxies `/api/**` to the gateway;
- * in prod the console is served behind that same gateway, so the relative path is identical.
+ * Tiny typed API client for the Native gateway.
  *
- * Tenancy is carried in headers — the gateway's stand-in `X-Company-Id` / `X-Actor` (in production
- * the gateway injects these from the validated JWT). The browser never picks the tenant from a body
- * or query (rule 5); the console sends the company it is acting as.
+ * Two auth modes (see {@link AUTH_MODE}):
+ *  - `oidc` (production): send `Authorization: Bearer <token>`. The gateway VALIDATES the token and
+ *    derives `X-Company-Id` / `X-Actor` / `X-Roles` from it, stripping any browser-supplied copies —
+ *    so the console never asserts its own tenant.
+ *  - `dev` (local, no Keycloak): send the header-trust `X-Company-Id` / `X-Actor` the dev
+ *    `DevTenantFilter` reads, exactly as before.
  */
+import { API_BASE_URL, AUTH_MODE } from '@/lib/config'
 
-const BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? ''
+/** The current bearer token in oidc mode; null in dev mode. Set by the AuthProvider. */
+let accessToken: string | null = null
+
+/** Called by the auth layer whenever the access token changes (or clears on logout). */
+export function setAccessToken(token: string | null): void {
+  accessToken = token
+}
 
 export interface ProblemDetail {
   type?: string
@@ -51,14 +60,18 @@ function buildQuery(query?: Record<string, string | undefined>): string {
 export async function apiFetch<T>(path: string, opts: RequestOptions = {}): Promise<T | null> {
   const headers: Record<string, string> = { Accept: 'application/json' }
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json'
-  if (opts.tenant) {
+  if (AUTH_MODE === 'oidc') {
+    // The gateway derives tenant/actor/roles from the verified token; do NOT send X-Company-Id /
+    // X-Actor (the gateway strips client copies anyway).
+    if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`
+  } else if (opts.tenant) {
     headers['X-Company-Id'] = opts.tenant.companyId
     headers['X-Actor'] = opts.tenant.actor
   } else if (opts.actor) {
     headers['X-Actor'] = opts.actor
   }
 
-  const res = await fetch(BASE + path + buildQuery(opts.query), {
+  const res = await fetch(API_BASE_URL + path + buildQuery(opts.query), {
     method: opts.method ?? 'GET',
     headers,
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
