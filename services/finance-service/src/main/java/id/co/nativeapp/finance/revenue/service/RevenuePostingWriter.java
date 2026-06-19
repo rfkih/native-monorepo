@@ -1,6 +1,11 @@
 package id.co.nativeapp.finance.revenue.service;
 
 import id.co.nativeapp.events.ProcessedEventStore;
+import id.co.nativeapp.finance.gl.domain.EventKind;
+import id.co.nativeapp.finance.gl.domain.JournalEntry;
+import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
+import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.JournalPostingService;
 import id.co.nativeapp.finance.mapping.service.GlAccountResolver;
 import id.co.nativeapp.finance.pnl.service.PnlReadModelWriter;
 import id.co.nativeapp.finance.revenue.domain.LedgerPosting;
@@ -72,18 +77,28 @@ public class RevenuePostingWriter {
   private final JdbcTemplate jdbcTemplate;
   private final GlAccountResolver glAccountResolver;
   private final PnlReadModelWriter pnlReadModel;
+  private final JournalPostingService journalPostingService;
+  private final JournalEntryRepository journalEntryRepository;
+  private final JournalLineRepository journalLineRepository;
 
+  @SuppressWarnings("checkstyle:ParameterNumber")
   public RevenuePostingWriter(
       LedgerPostingRepository ledgerRepository,
       ProcessedEventStore processedEvents,
       JdbcTemplate jdbcTemplate,
       GlAccountResolver glAccountResolver,
-      PnlReadModelWriter pnlReadModel) {
+      PnlReadModelWriter pnlReadModel,
+      JournalPostingService journalPostingService,
+      JournalEntryRepository journalEntryRepository,
+      JournalLineRepository journalLineRepository) {
     this.ledgerRepository = ledgerRepository;
     this.processedEvents = processedEvents;
     this.jdbcTemplate = jdbcTemplate;
     this.glAccountResolver = glAccountResolver;
     this.pnlReadModel = pnlReadModel;
+    this.journalPostingService = journalPostingService;
+    this.journalEntryRepository = journalEntryRepository;
+    this.journalLineRepository = journalLineRepository;
   }
 
   /**
@@ -147,5 +162,25 @@ public class RevenuePostingWriter {
     //    no-read-modify-write upsert), in the SAME transaction. The P&L's net = revenue -
     //    expense; this moves the revenue leg.
     pnlReadModel.addRevenue(period, amount, companyId, actor);
+
+    // 5) Double-entry GL journal — SAME transaction, SAME processOnce claim. Build a balanced
+    //    journal entry from the illustrative posting template (SALE: Dr CASH_CLEARING / Cr REVENUE)
+    //    and save it alongside the dimensional posting. The source_event_id UNIQUE constraint on
+    //    journal_entry is the DB backstop — a re-delivered event is already claimed by processOnce
+    //    above, so this line is never reached on a re-delivery.
+    JournalEntry glEntry =
+        journalPostingService.buildEntry(
+            EventKind.SALE, amount, event.occurredAt(), event.eventId(), "SaleRecorded");
+    glEntry.setCompanyId(companyId);
+    // saveAndFlush flushes the journal_entry INSERT to Postgres immediately so the FK on
+    // journal_line.entry_id is satisfied when the line INSERTs follow in the same transaction.
+    journalEntryRepository.saveAndFlush(glEntry);
+    glEntry
+        .getLines()
+        .forEach(
+            line -> {
+              line.setCompanyId(companyId);
+              journalLineRepository.save(line);
+            });
   }
 }

@@ -1,6 +1,11 @@
 package id.co.nativeapp.finance.labor.service;
 
 import id.co.nativeapp.events.ProcessedEventStore;
+import id.co.nativeapp.finance.gl.domain.EventKind;
+import id.co.nativeapp.finance.gl.domain.JournalEntry;
+import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
+import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
+import id.co.nativeapp.finance.gl.service.JournalPostingService;
 import id.co.nativeapp.finance.labor.domain.PayrollRunLedger;
 import id.co.nativeapp.finance.labor.domain.PayrollRunState;
 import id.co.nativeapp.finance.labor.messaging.LaborCostAllocatedEvent;
@@ -66,20 +71,30 @@ public class LaborCostPostingWriter {
   private final GlAccountResolver glAccountResolver;
   private final PnlReadModelWriter pnlReadModel;
   private final ConsolidatedPnlRepository pnlRepository;
+  private final JournalPostingService journalPostingService;
+  private final JournalEntryRepository journalEntryRepository;
+  private final JournalLineRepository journalLineRepository;
 
+  @SuppressWarnings("checkstyle:ParameterNumber")
   public LaborCostPostingWriter(
       LedgerPostingRepository ledgerRepository,
       PayrollRunLedgerRepository runLedgerRepository,
       ProcessedEventStore processedEvents,
       GlAccountResolver glAccountResolver,
       PnlReadModelWriter pnlReadModel,
-      ConsolidatedPnlRepository pnlRepository) {
+      ConsolidatedPnlRepository pnlRepository,
+      JournalPostingService journalPostingService,
+      JournalEntryRepository journalEntryRepository,
+      JournalLineRepository journalLineRepository) {
     this.ledgerRepository = ledgerRepository;
     this.runLedgerRepository = runLedgerRepository;
     this.processedEvents = processedEvents;
     this.glAccountResolver = glAccountResolver;
     this.pnlReadModel = pnlReadModel;
     this.pnlRepository = pnlRepository;
+    this.journalPostingService = journalPostingService;
+    this.journalEntryRepository = journalEntryRepository;
+    this.journalLineRepository = journalLineRepository;
   }
 
   /**
@@ -210,6 +225,28 @@ public class LaborCostPostingWriter {
             event.unallocated());
     posting.setCompanyId(companyId);
     ledgerRepository.save(posting);
+
+    // 4b) Double-entry GL journal — SAME transaction, SAME processOnce claim. PRIMARY only.
+    //     Labor reversal GL entries are a follow-up (noted in scope guards); the PRIMARY journal
+    //     is sufficient for the end-to-end balance proof in this phase.
+    JournalEntry glEntry =
+        journalPostingService.buildEntry(
+            EventKind.LABOR,
+            event.amount(),
+            event.occurredAt(),
+            event.eventId(),
+            "LaborCostAllocated");
+    glEntry.setCompanyId(companyId);
+    // saveAndFlush flushes the journal_entry INSERT to Postgres immediately so the FK on
+    // journal_line.entry_id is satisfied when the line INSERTs follow in the same transaction.
+    journalEntryRepository.saveAndFlush(glEntry);
+    glEntry
+        .getLines()
+        .forEach(
+            line -> {
+              line.setCompanyId(companyId);
+              journalLineRepository.save(line);
+            });
 
     // 5) Move the P&L expense leg up, carrying the illustrative flag (sticky-OR on the read model).
     pnlReadModel.addExpense(
