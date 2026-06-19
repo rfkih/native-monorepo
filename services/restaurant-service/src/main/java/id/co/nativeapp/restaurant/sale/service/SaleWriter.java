@@ -112,6 +112,44 @@ public class SaleWriter {
   }
 
   /**
+   * Persists a sale and writes its {@code SaleRecorded} outbox row by <em>joining</em> the caller's
+   * existing transaction (propagation {@code MANDATORY} — throws if no transaction is active). This
+   * is the method {@link id.co.nativeapp.restaurant.order.service.OrderWriter OrderWriter} uses so
+   * that the order rows, the sale row, and the {@code SaleRecorded} outbox row all commit — or all
+   * roll back — as a single physical transaction (rule 3, C1 fix).
+   *
+   * <p>Unlike {@link #create} (which suspends any enclosing transaction via {@code REQUIRES_NEW}),
+   * this method participates in the caller's unit of work. The {@code PostOutboxHook} seam fires
+   * here too, so the checkout-atomicity test can inject a throwing hook and prove the whole
+   * transaction rolls back.
+   */
+  @Transactional(propagation = Propagation.MANDATORY)
+  public RecordSaleResult recordInCurrentTx(RecordSaleCommand command) {
+    String companyId = TenantContext.require().companyId();
+
+    Money amount = Money.ofMinor(command.amountMinor(), command.currency());
+    Sale sale =
+        new Sale(command.businessId(), amount, command.occurredAt(), command.idempotencyKey());
+    sale.setCompanyId(companyId);
+    Sale saved = repository.saveAndFlush(sale);
+
+    GenericRecord event = SaleRecordedSchema.toRecord(saved, companyId);
+    byte[] payload = AvroSerde.serialize(event);
+    outboxWriter.write(
+        SaleRecordedSchema.AGGREGATE_TYPE,
+        saved.getId().toString(),
+        SaleRecordedSchema.EVENT_TYPE,
+        payload,
+        null,
+        UUID.fromString(companyId),
+        saved.getOccurredAt());
+
+    postOutboxHook.afterOutboxWrite(saved);
+
+    return new RecordSaleResult(SaleResponse.from(saved), true);
+  }
+
+  /**
    * Re-reads a sale by idempotency key in a FRESH transaction, used to recover the loser of a
    * concurrent insert race after its own create transaction aborted. RLS-scoped to the bound
    * tenant, matching the unique constraint exactly.

@@ -26,13 +26,18 @@ import org.testcontainers.utility.DockerImageName;
  * the cached context (and its Hikari pool) is reused across them — only safe if the underlying
  * container outlives every class. Testcontainers' Ryuk shutdown hook reaps it at JVM exit.
  */
-abstract class PostgresRlsTestBase {
+public abstract class PostgresRlsTestBase {
 
   static final String APP_USER = "app_user";
   static final String APP_PASSWORD = "app_secret";
 
+  /**
+   * Protected (not package-private) so test classes in feature sub-packages — e.g. {@code
+   * id.co.nativeapp.restaurant.order} — can read the container's JDBC coordinates to open an
+   * admin/BYPASSRLS connection for cross-tenant row-count assertions.
+   */
   @SuppressWarnings("resource") // reaped by the Testcontainers/Ryuk shutdown hook at JVM exit
-  static final PostgreSQLContainer<?> POSTGRES =
+  protected static final PostgreSQLContainer<?> POSTGRES =
       new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"));
 
   static {
@@ -53,7 +58,7 @@ abstract class PostgresRlsTestBase {
             java.sql.DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
         Statement st = admin.createStatement()) {
-      st.execute("TRUNCATE TABLE sale, outbox");
+      st.execute("TRUNCATE TABLE order_line, restaurant_order, menu_item, sale, outbox CASCADE");
     } catch (SQLException ignored) {
       // Tables not created yet (pre-Flyway) — nothing to reset.
     }
