@@ -1,6 +1,7 @@
 package id.co.nativeapp.finance.config;
 
 import id.co.nativeapp.finance.fx.domain.MissingFxRateException;
+import id.co.nativeapp.finance.gl.domain.GlMultiCurrencyException;
 import id.co.nativeapp.finance.withinclose.domain.BaseCurrencyMismatchException;
 import id.co.nativeapp.finance.withinclose.domain.MultiCurrencyTrialBalanceException;
 import id.co.nativeapp.finance.withinclose.domain.UndeterminableBaseCurrencyException;
@@ -132,6 +133,18 @@ public class ConstraintViolationAdvice {
       MultiCurrencyTrialBalanceException ex, HttpServletRequest request) {
     return currencyProblem(
         "multi-currency-trial-balance", "Multi-currency trial balance", ex.getMessage(), request);
+  }
+
+  /**
+   * A GL trial balance (period or cumulative) backing a financial statement spans MORE THAN ONE
+   * currency → {@code 422}. Like the within-close case this needs FX (out of scope); a typed
+   * fail-loud {@code 4xx}, not a generic {@code 500} (Financial Statements feature).
+   */
+  @ExceptionHandler(GlMultiCurrencyException.class)
+  public ProblemDetail handleGlMultiCurrency(
+      GlMultiCurrencyException ex, HttpServletRequest request) {
+    return currencyProblem(
+        "multi-currency-ledger", "Multi-currency ledger", ex.getMessage(), request);
   }
 
   private ProblemDetail currencyProblem(

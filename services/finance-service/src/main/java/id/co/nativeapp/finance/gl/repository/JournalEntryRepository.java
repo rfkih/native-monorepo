@@ -1,6 +1,7 @@
 package id.co.nativeapp.finance.gl.repository;
 
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
+import id.co.nativeapp.finance.gl.projection.GlCumulativeTrialBalanceLineView;
 import id.co.nativeapp.finance.gl.projection.GlTrialBalanceLineView;
 import java.util.List;
 import java.util.UUID;
@@ -60,4 +61,38 @@ public interface JournalEntryRepository extends JpaRepository<JournalEntry, UUID
           """,
       nativeQuery = true)
   List<GlTrialBalanceLineView> glTrialBalance(@Param("period") String period);
+
+  /**
+   * CUMULATIVE trial balance: aggregates all GL journal lines where the owning entry's period is
+   * {@code <=} {@code :asOfPeriod} (inclusive) — the data required to build a Balance Sheet as of a
+   * given period end.
+   *
+   * <p>Each line carries the same columns as {@link #glTrialBalance} but the sum spans every
+   * historical period up to and including the as-of period. A left join to {@code chart_of_account}
+   * surfaces unmapped accounts as a NULL {@code account_type} (defence-in-depth; the reader must
+   * fail loud on NULL rather than silently misclassifying the account — mirrors {@link
+   * id.co.nativeapp.finance.gl.service.GlTrialBalanceReader#assertAllAccountsMapped}).
+   *
+   * <p><strong>No {@code SELECT *}, projection only.</strong> Returns {@link
+   * GlCumulativeTrialBalanceLineView}.
+   */
+  @Query(
+      value =
+          """
+          SELECT jl.account_code                      AS account_code,
+                 coa.account_type                     AS account_type,
+                 SUM(jl.debit_minor)                  AS total_debit_minor,
+                 SUM(jl.credit_minor)                 AS total_credit_minor,
+                 jl.currency                          AS currency,
+                 bool_or(je.uses_illustrative_rules)  AS uses_illustrative_rules
+            FROM journal_line jl
+            JOIN journal_entry je ON je.id = jl.entry_id
+            LEFT JOIN chart_of_account coa ON coa.account_code = jl.account_code
+           WHERE je.period <= :asOfPeriod
+           GROUP BY jl.account_code, coa.account_type, jl.currency
+          HAVING SUM(jl.debit_minor) <> 0 OR SUM(jl.credit_minor) <> 0
+           ORDER BY jl.account_code
+          """,
+      nativeQuery = true)
+  List<GlCumulativeTrialBalanceLineView> glTrialBalanceAsOf(@Param("asOfPeriod") String asOfPeriod);
 }

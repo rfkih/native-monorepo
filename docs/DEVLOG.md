@@ -62,6 +62,24 @@ cascade-deactivate + reactivation.)
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **Financial Statements (Income Statement + Balance Sheet)** — finance gains a read-only statements
+  API derived ENTIRELY from the double-entry GL (no new tables, no migrations). `GET
+  /api/v1/statements/income?period=YYYY-MM` is period-scoped (REVENUE−EXPENSE=net, via
+  `GlTrialBalanceReader`); `GET /api/v1/statements/balance-sheet?asOf=YYYY-MM` is CUMULATIVE — a new
+  `JournalEntryRepository#glTrialBalanceAsOf` native query + `GlCumulativeTrialBalanceLineView`
+  projection sums all journal activity where `period <= :asOf`. **Retained earnings is computed on
+  read** (Σrevenue − Σexpense cumulative; never posted to the GL) so the sheet balances, with a
+  defence-in-depth `assets == liabilities + equity` gate that throws on imbalance (an internal
+  posting bug → 500). Sign conventions per `AccountType` (ASSET/EXPENSE debit-normal,
+  LIABILITY/EQUITY/REVENUE credit-normal); all amounts `long` minor units + `Math.*Exact` (HR-8).
+  Tenant-scoped via RLS only — readers are `@Transactional`, no manual `WHERE company_id`; a tenancy
+  isolation test proves A's books are invisible to B. Code-reviewed → fixed: a multi-currency trial
+  balance is now a TYPED `GlMultiCurrencyException` → **422** (was a bare `IllegalStateException` →
+  opaque 500; mirrors the within-close `MultiCurrencyTrialBalanceException`), and an unmapped account
+  a typed `GlUnmappedAccountException` (→ non-leaking internal 500, like `UnmappedLedgerAccountException`);
+  added the missing `StatementsControllerTest` web-slice (200/204/400/422 + RFC-7807 shape) for parity
+  with the sibling controllers. 248 finance tests green. SME-deferred: SAK-EMKM presentation
+  grouping/labels, comparative columns, Cash Flow statement.
 - **Double-entry General Ledger** — finance gains a real double-entry GL (`journal_entry` + balanced
   `journal_line`, the invariant enforced in the aggregate so an unbalanced entry can't exist)
   ALONGSIDE the existing dimensional ledger (untouched). Every money event auto-posts a balanced

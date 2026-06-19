@@ -1,5 +1,7 @@
 package id.co.nativeapp.finance.gl.service;
 
+import id.co.nativeapp.finance.gl.domain.GlMultiCurrencyException;
+import id.co.nativeapp.finance.gl.domain.GlUnmappedAccountException;
 import id.co.nativeapp.finance.gl.projection.GlTrialBalanceLineView;
 import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
 import java.util.List;
@@ -21,8 +23,12 @@ import org.springframework.transaction.annotation.Transactional;
  *       currency would require FX, which is out of scope; fail loud so the operator notices.
  * </ol>
  *
- * <p>Both are fail-loud ({@link IllegalStateException}) rather than silent: the GL is the source of
- * truth for financial statements; a quietly-unbalanced GL is worse than a loud error.
+ * <p>All are fail-loud rather than silent: the GL is the source of truth for financial statements;
+ * a quietly-unbalanced GL is worse than a loud error. A multi-currency trial balance throws the
+ * typed {@link GlMultiCurrencyException} (mapped to {@code 422}); an unmapped account throws the
+ * typed {@link GlUnmappedAccountException} and an internal Σdebit≠Σcredit imbalance throws {@link
+ * IllegalStateException} — both internal data-integrity faults that surface as a non-leaking {@code
+ * 500}.
  */
 @Service
 public class GlTrialBalanceReader {
@@ -40,7 +46,9 @@ public class GlTrialBalanceReader {
    *
    * @param period the accounting period {@code YYYY-MM}
    * @return the trial-balance lines (may be empty for a period with no journal entries)
-   * @throws IllegalStateException if Σdebits ≠ Σcredits or more than one currency is present
+   * @throws GlMultiCurrencyException if more than one currency is present (mapped to {@code 422})
+   * @throws GlUnmappedAccountException if a line has no resolvable {@code account_type}
+   * @throws IllegalStateException if Σdebits ≠ Σcredits (an internal posting bug)
    */
   @Transactional(readOnly = true)
   public List<GlTrialBalanceLineView> read(String period) {
@@ -65,13 +73,7 @@ public class GlTrialBalanceReader {
   private static void assertAllAccountsMapped(List<GlTrialBalanceLineView> lines, String period) {
     for (GlTrialBalanceLineView line : lines) {
       if (line.getAccountType() == null) {
-        throw new IllegalStateException(
-            "GL trial balance for period "
-                + period
-                + " references account "
-                + line.getAccountCode()
-                + " which has no account_type in chart_of_account — the account is unmapped; seed"
-                + " it before relying on this trial balance (a statement would misclassify it)");
+        throw new GlUnmappedAccountException("period " + period, line.getAccountCode());
       }
     }
   }
@@ -81,14 +83,7 @@ public class GlTrialBalanceReader {
     for (GlTrialBalanceLineView line : lines) {
       String currency = line.getCurrency().strip();
       if (!currency.equals(firstCurrency)) {
-        throw new IllegalStateException(
-            "GL trial balance for period "
-                + period
-                + " contains multiple currencies ("
-                + firstCurrency
-                + " and "
-                + currency
-                + ") — FX is out of scope; this indicates a data-integrity problem");
+        throw new GlMultiCurrencyException("period " + period, firstCurrency, currency);
       }
     }
   }
