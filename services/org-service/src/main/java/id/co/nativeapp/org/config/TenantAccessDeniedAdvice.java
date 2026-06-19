@@ -2,6 +2,7 @@ package id.co.nativeapp.org.config;
 
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
+import java.util.NoSuchElementException;
 import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -39,6 +40,26 @@ public class TenantAccessDeniedAdvice {
     ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
     problem.setType(URI.create(TYPE_BASE + "tenant-mismatch"));
     problem.setTitle("Forbidden");
+    problem.setDetail(ex.getMessage());
+    problem.setInstance(URI.create(request.getRequestURI()));
+    String traceId = MDC.get("trace_id");
+    if (traceId != null) {
+      problem.setProperty("traceId", traceId);
+    }
+    return problem;
+  }
+
+  /**
+   * A resource that does not exist for the bound tenant → 404. Used by {@code GET
+   * /api/v1/companies/current} when no company row exists for the bound {@code company_id} (e.g. a
+   * newly provisioned tenant that has not yet been bootstrapped). The exception message is
+   * server-diagnostic English; it is never localised here (HR-9).
+   */
+  @ExceptionHandler(NoSuchElementException.class)
+  public ProblemDetail handleNotFound(NoSuchElementException ex, HttpServletRequest request) {
+    ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.NOT_FOUND);
+    problem.setType(URI.create(TYPE_BASE + "not-found"));
+    problem.setTitle("Not Found");
     problem.setDetail(ex.getMessage());
     problem.setInstance(URI.create(request.getRequestURI()));
     String traceId = MDC.get("trace_id");

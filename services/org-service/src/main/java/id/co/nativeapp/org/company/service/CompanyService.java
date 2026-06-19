@@ -1,6 +1,7 @@
 package id.co.nativeapp.org.company.service;
 
 import id.co.nativeapp.org.company.domain.OrgUnit;
+import id.co.nativeapp.org.company.dto.CompanyResponse;
 import id.co.nativeapp.org.company.dto.CreateBusinessCommand;
 import id.co.nativeapp.org.company.dto.CreateCompanyCommand;
 import id.co.nativeapp.org.company.dto.CreateCompanyResult;
@@ -8,6 +9,7 @@ import id.co.nativeapp.org.company.projection.CompanyView;
 import id.co.nativeapp.org.company.projection.OrgUnitView;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 
@@ -45,9 +47,11 @@ import org.springframework.stereotype.Service;
 public class CompanyService {
 
   private final CompanyWriter writer;
+  private final CompanyReader reader;
 
-  public CompanyService(CompanyWriter writer) {
+  public CompanyService(CompanyWriter writer, CompanyReader reader) {
     this.writer = writer;
+    this.reader = reader;
   }
 
   /**
@@ -115,5 +119,22 @@ public class CompanyService {
    */
   public List<CompanyView> findCompaniesForCurrentTenant() {
     return writer.findCompaniesForCurrentTenant();
+  }
+
+  /**
+   * The company for the currently bound tenant, together with its first business id — the data the
+   * console SPA needs immediately after OIDC login.
+   *
+   * <p>The company id comes exclusively from the bound {@link TenantContext} (rule 5); the client
+   * never supplies it. RLS scopes the read to the bound company. The first business is the
+   * earliest-created root {@code BUSINESS_UNIT} org unit, matching the selection the create-company
+   * bootstrap uses.
+   *
+   * @return the company response for the bound tenant
+   * @throws NoSuchElementException if no company exists for the bound tenant (→ 404)
+   */
+  public CompanyResponse getCurrentCompany() {
+    TenantContext.require();
+    return reader.findCurrentCompany();
   }
 }

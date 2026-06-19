@@ -16,6 +16,7 @@ import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -71,6 +72,21 @@ public class CompanyController {
     CreateCompanyResult result = companyService.createCompany(command);
     CompanyResponse body = CompanyResponse.from(result.company(), result.firstBusiness());
     return ResponseEntity.created(URI.create("/api/v1/companies/" + body.id())).body(body);
+  }
+
+  /**
+   * Returns the company bound to the current tenant scope, together with its first business id —
+   * the minimal data the console SPA needs after OIDC login to bootstrap its navigation.
+   *
+   * <p>The company id comes exclusively from the bound {@link TenantContext} (never from the client
+   * — rule 5); RLS scopes the underlying read to the same company. Returns {@code 200} with a
+   * {@link CompanyResponse} body, or {@code 404} (RFC 7807 {@code application/problem+json}) if no
+   * company exists for the bound tenant.
+   */
+  @GetMapping("/current")
+  public ResponseEntity<CompanyResponse> getCurrentCompany() {
+    CompanyResponse body = companyService.getCurrentCompany();
+    return ResponseEntity.ok(body);
   }
 
   /**
