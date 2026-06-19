@@ -14,10 +14,11 @@ deploy authored (unverified vs a real cluster). The whole codebase is **package-
 controller/service/repository/domain/dto/messaging layer sub-packages**, ArchUnit-enforced.
 
 **Not done (hard gates — need a human/SME/infra, do NOT invent):**
-- Frontends — **first console slice built** (`frontend/console`: company onboarding wizard +
-  consolidated revenue/P&L dashboard, en/id, Intl money, presentation-currency lens, provisional-FX/
-  illustrative badges; builds green, not yet run against the live stack). Remaining: the rest of the
-  console (org tree, group consolidation, closes) + the employee PWA — design decisions, never autonomous.
+- Frontends — **console slice live** (`frontend/console`: onboarding wizard, consolidated revenue/P&L
+  dashboard, and a **cashier POS**, en/id, Intl money). Now behind **real Keycloak OIDC login** with
+  **role-gated surfaces** (cashier → POS only; owner/manager → dashboard + POS), proven on the running
+  authenticated stack. Remaining: the rest of the console (org tree, group consolidation, closes) +
+  the employee PWA — design decisions, never autonomous.
 - **Official DJP/BPJS statutory figures** — payroll ships `ILLUSTRATIVE_PLACEHOLDER` data (provenance
   column + loud seed + runtime flag); a tax SME must seed real effective-dated figures.
 - **Full IAS-21 multi-currency consolidation** (CTA/OCI, historical-rate equity, opening-balance
@@ -61,6 +62,23 @@ cascade-deactivate + reactivation.)
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **Double-entry General Ledger** — finance gains a real double-entry GL (`journal_entry` + balanced
+  `journal_line`, the invariant enforced in the aggregate so an unbalanced entry can't exist)
+  ALONGSIDE the existing dimensional ledger (untouched). Every money event auto-posts a balanced
+  journal in the SAME consume transaction via a data-driven posting-template framework — SME-gated:
+  the Indonesian COA / account mappings / tax are higher-version effective-dated rows, with a loud
+  flagged-illustrative seed today; the GL trial-balance read proves Σdebit==Σcredit. Code-reviewed →
+  fixed (authoritative-period vs `periodOf(occurredAt)`, fail-loud on an unmapped account,
+  illustrative-flag OR). V13. (commits `04fb971` + `ee3f400`)
+- **Console production auth + POS** — real Keycloak OIDC (authorization-code + PKCE) login in the
+  console; the SPA sends a bearer to the gateway, which now **role-gates** routes (cashier → the
+  restaurant POS routes; owner/manager → the finance/org dashboard routes via a `RoleAuthorizationFilter`)
+  and the SPA gates its surfaces by role (cashier → POS only). New restaurant **POS** (menu + atomic
+  order checkout reusing `SaleRecorded`). Fixed a 100× IDR bug (`money.ts` fraction digits ≠ libs/money).
+  Added org `GET /api/v1/companies/current`, a `native-console` PKCE realm client, a console Docker
+  image + Kustomize overlay + CI job, and the **≥-blackheart standards scorecard** (a maintained
+  competitive bar) to ENGINEERING-STANDARDS. Verified live end-to-end (owner sees dashboard+POS;
+  cashier POS-only with the dashboard 403'd at the gateway; forged tenant headers stripped).
 - **Org-tree move/deactivate semantics (#25)** — the undecided lifecycle semantics, resolved by user
   decision: deactivation **cascades** to the active subtree (one `DEACTIVATED` event per node), and a
   node can be **reactivated** (`REACTIVATED`, requires an active parent, no cascade down). Enforces a

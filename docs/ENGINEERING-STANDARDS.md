@@ -10,6 +10,43 @@
 
 ---
 
+## 0. The competitive bar — Native ≥ blackheart (maintained scorecard)
+
+> **North star — read first.** Native is explicitly benchmarked against the team's other Spring Boot
+> system, **`blackheart-trading-engine`** (`C:\Project\blackheart-trading-engine` — a package-by-layer
+> modular monolith). Standing rule: **Native must be ≥ blackheart on every dimension below**, and a PR
+> may never regress a ✅ to a gap without an ADR recording why. This table is the single source of
+> truth for "are we still ahead"; each row points to the section that defines the rule + its enforcer.
+> When a gap's code lands, flip its status to ✅ **in the same PR**.
+
+| # | Dimension | Native standard (rule → enforcer) | vs blackheart | Status |
+|---|---|---|---|---|
+| 1 | Package cohesion | package-by-feature + layering suite — `docs/CODE-STRUCTURE.md` (ArchUnit) | by-layer, 250-file `service/` | ✅ ahead |
+| 2 | Structure can't rot | ArchUnit wired into `./gradlew check` | Sonar + discipline | ✅ ahead |
+| 3 | Error contract | RFC-7807 `ProblemDetail` — §1.2 (test) | custom `ResponseDto` envelope | ✅ ahead |
+| 4 | Type safety | records + `Money` + no-float (ArchUnit); **no Lombok** | Lombok mutable entities | ✅ ahead — *add no-Lombok ArchUnit guard* |
+| 5 | Tenant isolation | RLS + no-manual-`company_id`-filter — §2.1–2.2 (ArchUnit) | userId/account ownership checks | ✅ ahead |
+| 6 | Test rigor | Testcontainers + ArchUnit + event-contract triad — §3 (test) | unit + Sonar | ✅ ahead |
+| 7 | Edge security | gateway JWT + RLS + role-gated routes — §6 (built this session) | JWT filter, single app | ✅ ahead |
+| 8 | Exactly-once / idempotency | unique key + conflict re-read + DLT — §3.2/§4 (test) | per-strategy idempotency | ✅ ahead |
+| 9 | **API docs (OpenAPI)** | springdoc + `@Operation` contract test — §1.3 (test) | ✅ Swagger annotations | ⚠ **gap → code phase** |
+| 10 | **Distributed tracing** | OTel context across every hop — §5 (test) | telemetry dashboard | ⚠ **gap (deferred) → code phase** |
+| 11 | **Error observability** | JSON logs → sink + RED + outbox-lag — §5; *(optional DB inbox)* | ✅ DB error-inbox + alerting | ⚠ **partial → code phase** |
+| 12 | Client resilience (timeouts) | explicit connect/read timeouts — §4 (startup check) | configured | ⚠ gap → code phase |
+| 13 | **Deployed & proven** | CI + Kustomize authored — `deploy/` | ✅ live in prod | ❗ **infra-gated — owner action, not code** |
+
+**Maintenance protocol.** (a) Any PR touching a dimension updates its Status in the same PR. (b) A
+✅→gap regression requires an ADR. (c) Add a row when a benchmark gains a capability Native lacks.
+(d) Re-benchmark against `blackheart-trading-engine` when its structure materially changes. (e) Row
+13 is earned by deploying, not coding — it is the one bar code alone cannot clear.
+
+**Close-the-gap priority (the "then code" phase):** 9 OpenAPI → 12 client timeouts → 10 tracing → 11
+error-sink/alerting. Each lands **with its enforcer** — e.g. an ArchUnit rule that every
+`@RequestMapping` handler carries an `@Operation`; a startup self-check that every `RestClient`/
+`WebClient` has non-null connect+read timeouts — so a closed gap cannot silently re-open.
+
+---
+
 ## 1. API & Error Handling
 
 REST is the external edge (HR via gateway/OpenAPI). Internal hops are events, never sync calls (HR-2).
