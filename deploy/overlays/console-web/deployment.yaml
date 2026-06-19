@@ -1,0 +1,68 @@
+# Console SPA (static nginx). Unlike the Spring services it serves static files on 8080 via a
+# non-root nginx, so it does not extend deploy/base (different port, probes, no actuator).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: console-web
+  labels:
+    app.kubernetes.io/name: console-web
+    app.kubernetes.io/part-of: native
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: console-web
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: console-web
+        app.kubernetes.io/part-of: native
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101 # nginx-unprivileged
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: web
+          # Placeholder; `images:` in the overlay pins the real registry ref + tag.
+          image: native-console-web:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          # Runtime config (window.__NATIVE_CONFIG__) the entrypoint writes into env.js at start.
+          envFrom:
+            - configMapRef:
+                name: console-web-config
+                optional: true
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            # NOT readOnlyRootFilesystem: nginx writes its cache + the entrypoint regenerates env.js.

@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: native
+
+resources:
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+
+images:
+  - name: native-console-web
+    newName: REGISTRY/native/console-web # CHANGE_ME — your registry
+    newTag: latest # CHANGE_ME — pin to the build SHA in CD
+
+# Runtime config injected into env.js at container start (see frontend/console docker-entrypoint).
+configMapGenerator:
+  - name: console-web-config
+    literals:
+      - NATIVE_AUTH_MODE=oidc
+      # The gateway's public base URL (the SPA sends the bearer here). CHANGE_ME.
+      - NATIVE_API_BASE_URL=https://api.example.co.id
+      # Keycloak base URL + realm the SPA logs in against. CHANGE_ME.
+      - NATIVE_KEYCLOAK_URL=https://keycloak.example.co.id
+      - NATIVE_KEYCLOAK_REALM=native

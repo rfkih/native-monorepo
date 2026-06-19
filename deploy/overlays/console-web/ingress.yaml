@@ -1,0 +1,29 @@
+# The console SPA is served on its own host (the gateway keeps api.example.co.id). The browser then
+# calls the gateway cross-origin, so EITHER the gateway must allow this origin via CORS, OR co-host
+# by routing /api on this same host to the gateway Service (avoids CORS). Set the host + TLS secret
+# for your environment (see deploy/README.md).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: console-web
+  labels:
+    app.kubernetes.io/name: console-web
+    app.kubernetes.io/part-of: native
+  annotations:
+    kubernetes.io/ingress.class: nginx
+spec:
+  tls:
+    - hosts:
+        - app.example.co.id # CHANGE_ME — your real console host
+      secretName: console-web-tls # CHANGE_ME — TLS cert Secret (cert-manager / sealed-secret)
+  rules:
+    - host: app.example.co.id # CHANGE_ME
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: console-web
+                port:
+                  number: 80
