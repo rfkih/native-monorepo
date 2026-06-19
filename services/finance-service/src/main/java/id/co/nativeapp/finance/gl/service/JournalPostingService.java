@@ -7,7 +7,6 @@ import id.co.nativeapp.finance.gl.domain.JournalLine;
 import id.co.nativeapp.finance.gl.domain.PostingTemplate;
 import id.co.nativeapp.finance.gl.domain.TemplateLine;
 import id.co.nativeapp.finance.gl.domain.UnbalancedJournalException;
-import id.co.nativeapp.finance.revenue.domain.LedgerPosting;
 import id.co.nativeapp.money.Money;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -64,20 +63,32 @@ public class JournalPostingService {
    * the lines.
    *
    * @param eventKind the event type (drives template resolution)
+   * @param period the accounting period {@code YYYY-MM} to stamp on the entry — the caller's
+   *     AUTHORITATIVE period (e.g. a payroll run's {@code event.period()}, which is NOT necessarily
+   *     {@code periodOf(occurredAt)}). Passing it explicitly keeps the GL entry in the same period
+   *     as the dimensional ledger posting for the same event.
    * @param gross the gross monetary amount from the event (never a float)
-   * @param occurredAt the event's occurred-at instant (drives effective-dated resolution)
+   * @param occurredAt the event's occurred-at instant (drives effective-dated resolution + the
+   *     entry's {@code occurred_at}); distinct from {@code period} (see above)
    * @param sourceEventId the consumed event UUID (idempotency key; will be UNIQUE in the DB)
    * @param description a human-readable description for the journal header
+   * @param eventUsesIllustrative the event's own illustrative-rules flag (e.g. a payroll run built
+   *     from placeholder statutory data); OR'd with the resolved template's flag so an entry is
+   *     marked illustrative if EITHER the rule data OR the source figure is illustrative
    * @return a balanced {@link JournalEntry} ready to be saved
    */
+  @SuppressWarnings("checkstyle:ParameterNumber")
   public JournalEntry buildEntry(
       EventKind eventKind,
+      String period,
       Money gross,
       Instant occurredAt,
       UUID sourceEventId,
-      String description) {
+      String description,
+      boolean eventUsesIllustrative) {
 
     Objects.requireNonNull(eventKind, "eventKind");
+    Objects.requireNonNull(period, "period");
     Objects.requireNonNull(gross, "gross");
     Objects.requireNonNull(occurredAt, "occurredAt");
     Objects.requireNonNull(sourceEventId, "sourceEventId");
@@ -85,7 +96,6 @@ public class JournalPostingService {
 
     // Pre-allocate the entry id so lines can reference it consistently before persistence.
     UUID entryId = UUID.randomUUID();
-    String period = LedgerPosting.periodOf(occurredAt);
     String currency = gross.currency().getCurrencyCode();
 
     PostingTemplate template = templateResolver.resolve(eventKind, occurredAt);
@@ -131,7 +141,7 @@ public class JournalPostingService {
           description,
           currency,
           sourceEventId,
-          template.usesIllustrative(),
+          template.usesIllustrative() || eventUsesIllustrative,
           lines);
     } catch (UnbalancedJournalException e) {
       log.error(

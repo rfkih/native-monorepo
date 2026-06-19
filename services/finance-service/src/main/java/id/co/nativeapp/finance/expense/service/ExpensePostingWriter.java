@@ -139,7 +139,13 @@ public class ExpensePostingWriter {
     //    the DB backstop — re-deliveries are already blocked by processOnce above.
     JournalEntry glEntry =
         journalPostingService.buildEntry(
-            EventKind.EXPENSE, amount, event.occurredAt(), event.eventId(), "ExpenseRecorded");
+            EventKind.EXPENSE,
+            period,
+            amount,
+            event.occurredAt(),
+            event.eventId(),
+            "ExpenseRecorded",
+            false);
     glEntry.setCompanyId(companyId);
     // saveAndFlush flushes the journal_entry INSERT to Postgres immediately so the FK on
     // journal_line.entry_id is satisfied when the line INSERTs follow in the same transaction.

@@ -227,15 +227,23 @@ public class LaborCostPostingWriter {
     ledgerRepository.save(posting);
 
     // 4b) Double-entry GL journal — SAME transaction, SAME processOnce claim. PRIMARY only.
-    //     Labor reversal GL entries are a follow-up (noted in scope guards); the PRIMARY journal
-    //     is sufficient for the end-to-end balance proof in this phase.
+    //     period is the run's AUTHORITATIVE event.period() (NOT periodOf(occurredAt)) so the GL
+    //     entry lands in the same period as the dimensional posting above; the event's illustrative
+    //     flag is OR'd into the entry inside buildEntry.
+    //     TODO(GL-labor-reversal): supersession posts a dimensional REVERSAL (step 2 / 6) but NO GL
+    //     counterpart yet, so a superseded run's labor overstates the GL period total until the GL
+    //     reversal lands. Each entry stays internally balanced (trial balance Σdr==Σcr holds), but
+    //     the GL diverges from the dimensional ledger on supersession. Track before the GL becomes
+    //     the system of record for statements.
     JournalEntry glEntry =
         journalPostingService.buildEntry(
             EventKind.LABOR,
+            event.period(),
             event.amount(),
             event.occurredAt(),
             event.eventId(),
-            "LaborCostAllocated");
+            "LaborCostAllocated",
+            event.usesIllustrativeRules());
     glEntry.setCompanyId(companyId);
     // saveAndFlush flushes the journal_entry INSERT to Postgres immediately so the FK on
     // journal_line.entry_id is satisfied when the line INSERTs follow in the same transaction.

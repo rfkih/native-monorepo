@@ -170,7 +170,13 @@ public class RevenuePostingWriter {
     //    above, so this line is never reached on a re-delivery.
     JournalEntry glEntry =
         journalPostingService.buildEntry(
-            EventKind.SALE, amount, event.occurredAt(), event.eventId(), "SaleRecorded");
+            EventKind.SALE,
+            period,
+            amount,
+            event.occurredAt(),
+            event.eventId(),
+            "SaleRecorded",
+            false);
     glEntry.setCompanyId(companyId);
     // saveAndFlush flushes the journal_entry INSERT to Postgres immediately so the FK on
     // journal_line.entry_id is satisfied when the line INSERTs follow in the same transaction.

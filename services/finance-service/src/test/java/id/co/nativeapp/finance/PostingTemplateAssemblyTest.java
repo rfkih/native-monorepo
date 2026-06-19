@@ -27,11 +27,14 @@ import org.junit.jupiter.api.Test;
  * Unit tests for {@link JournalPostingService} — verifies the template assembly logic using mocked
  * resolvers (no Spring, no DB). Each event kind must produce a balanced two-line entry with the
  * illustrative flag {@code true}, and a missing template must produce a suspense entry (still
- * balanced) also flagged illustrative.
+ * balanced) also flagged illustrative. Also pins that the entry's period is the CALLER's
+ * authoritative period (not derived from occurredAt) and that the event's own illustrative flag is
+ * OR'd into the entry.
  */
 class PostingTemplateAssemblyTest {
 
   private static final Instant NOW = Instant.parse("2026-06-14T08:30:00Z");
+  private static final String PERIOD = "2026-06";
   private static final UUID EVENT_ID = UUID.randomUUID();
   private static final Money GROSS_IDR = Money.ofMinor(1_500_000L, "IDR");
 
@@ -56,6 +59,16 @@ class PostingTemplateAssemblyTest {
             new TemplateLine(2, AccountRole.REVENUE, Side.CREDIT, "GROSS")));
   }
 
+  private PostingTemplate laborTemplate(int version, boolean usesIllustrative) {
+    return new PostingTemplate(
+        EventKind.LABOR,
+        version,
+        usesIllustrative,
+        List.of(
+            new TemplateLine(1, AccountRole.LABOR_EXPENSE, Side.DEBIT, "GROSS"),
+            new TemplateLine(2, AccountRole.LABOR_CLEARING, Side.CREDIT, "GROSS")));
+  }
+
   @Test
   void saleEventProducesBalancedTwoLineEntryFlaggedIllustrative() {
     when(templateResolver.resolve(eq(EventKind.SALE), any())).thenReturn(saleTemplate());
@@ -63,11 +76,12 @@ class PostingTemplateAssemblyTest {
     when(roleResolver.resolve(eq(AccountRole.REVENUE), any())).thenReturn("4000");
 
     JournalEntry entry =
-        service.buildEntry(EventKind.SALE, GROSS_IDR, NOW, EVENT_ID, "SaleRecorded");
+        service.buildEntry(EventKind.SALE, PERIOD, GROSS_IDR, NOW, EVENT_ID, "SaleRecorded", false);
 
     assertThat(entry.isUsesIllustrativeRules()).isTrue();
     assertThat(entry.getCurrency()).isEqualTo("IDR");
     assertThat(entry.getSourceEventId()).isEqualTo(EVENT_ID);
+    assertThat(entry.getPeriod()).isEqualTo(PERIOD);
 
     List<JournalLine> lines = entry.getLines();
     assertThat(lines).hasSize(2);
@@ -101,7 +115,8 @@ class PostingTemplateAssemblyTest {
     when(roleResolver.resolve(eq(AccountRole.CASH_CLEARING), any())).thenReturn("1900");
 
     JournalEntry entry =
-        service.buildEntry(EventKind.EXPENSE, GROSS_IDR, NOW, EVENT_ID, "ExpenseRecorded");
+        service.buildEntry(
+            EventKind.EXPENSE, PERIOD, GROSS_IDR, NOW, EVENT_ID, "ExpenseRecorded", false);
 
     assertThat(entry.isUsesIllustrativeRules()).isTrue();
     long totalDebit = entry.getLines().stream().mapToLong(JournalLine::getDebitMinor).sum();
@@ -111,24 +126,58 @@ class PostingTemplateAssemblyTest {
 
   @Test
   void laborEventProducesBalancedEntry() {
-    PostingTemplate laborTemplate =
-        new PostingTemplate(
-            EventKind.LABOR,
-            1,
-            true,
-            List.of(
-                new TemplateLine(1, AccountRole.LABOR_EXPENSE, Side.DEBIT, "GROSS"),
-                new TemplateLine(2, AccountRole.LABOR_CLEARING, Side.CREDIT, "GROSS")));
-
-    when(templateResolver.resolve(eq(EventKind.LABOR), any())).thenReturn(laborTemplate);
+    when(templateResolver.resolve(eq(EventKind.LABOR), any())).thenReturn(laborTemplate(1, true));
     when(roleResolver.resolve(eq(AccountRole.LABOR_EXPENSE), any())).thenReturn("6000");
     when(roleResolver.resolve(eq(AccountRole.LABOR_CLEARING), any())).thenReturn("6900");
 
     JournalEntry entry =
-        service.buildEntry(EventKind.LABOR, GROSS_IDR, NOW, EVENT_ID, "LaborCostAllocated");
+        service.buildEntry(
+            EventKind.LABOR, PERIOD, GROSS_IDR, NOW, EVENT_ID, "LaborCostAllocated", false);
 
     assertThat(entry.isUsesIllustrativeRules()).isTrue();
     assertThat(entry.totalDebit()).isEqualTo(GROSS_IDR);
+  }
+
+  @Test
+  void entryIsStampedWithTheCallersAuthoritativePeriodNotPeriodOfOccurredAt() {
+    // A June payroll run posted/allocated in early July: occurredAt is in July, but the run's
+    // authoritative period is June. The GL entry MUST land in June (matching the dimensional ledger
+    // posting), not in periodOf(occurredAt)=July. (Code-review H1.)
+    when(templateResolver.resolve(eq(EventKind.LABOR), any())).thenReturn(laborTemplate(1, true));
+    when(roleResolver.resolve(eq(AccountRole.LABOR_EXPENSE), any())).thenReturn("6000");
+    when(roleResolver.resolve(eq(AccountRole.LABOR_CLEARING), any())).thenReturn("6900");
+
+    Instant julyInstant = Instant.parse("2026-07-03T02:00:00Z");
+    JournalEntry entry =
+        service.buildEntry(
+            EventKind.LABOR,
+            "2026-06",
+            GROSS_IDR,
+            julyInstant,
+            EVENT_ID,
+            "LaborCostAllocated",
+            false);
+
+    assertThat(entry.getPeriod()).isEqualTo("2026-06");
+    assertThat(entry.getOccurredAt()).isEqualTo(julyInstant);
+  }
+
+  @Test
+  void eventIllustrativeFlagIsOrdIntoTheEntryEvenWhenTemplateIsReal() {
+    // A real (uses_illustrative=false) template, but the source figure is illustrative (e.g. a
+    // payroll run built from placeholder statutory data): the entry must still be flagged
+    // illustrative. (Code-review M1.)
+    when(templateResolver.resolve(eq(EventKind.LABOR), any())).thenReturn(laborTemplate(2, false));
+    when(roleResolver.resolve(eq(AccountRole.LABOR_EXPENSE), any())).thenReturn("6000");
+    when(roleResolver.resolve(eq(AccountRole.LABOR_CLEARING), any())).thenReturn("6900");
+
+    JournalEntry entry =
+        service.buildEntry(
+            EventKind.LABOR, PERIOD, GROSS_IDR, NOW, EVENT_ID, "LaborCostAllocated", true);
+
+    assertThat(entry.isUsesIllustrativeRules())
+        .as("event illustrative flag must OR into the entry even when the template is real")
+        .isTrue();
   }
 
   @Test
@@ -136,7 +185,7 @@ class PostingTemplateAssemblyTest {
     when(templateResolver.resolve(any(), any())).thenReturn(null);
 
     JournalEntry entry =
-        service.buildEntry(EventKind.SALE, GROSS_IDR, NOW, EVENT_ID, "SaleRecorded");
+        service.buildEntry(EventKind.SALE, PERIOD, GROSS_IDR, NOW, EVENT_ID, "SaleRecorded", false);
 
     long totalDebit = entry.getLines().stream().mapToLong(JournalLine::getDebitMinor).sum();
     long totalCredit = entry.getLines().stream().mapToLong(JournalLine::getCreditMinor).sum();
@@ -153,7 +202,7 @@ class PostingTemplateAssemblyTest {
     when(roleResolver.resolve(eq(AccountRole.REVENUE), any())).thenReturn(null);
 
     JournalEntry entry =
-        service.buildEntry(EventKind.SALE, GROSS_IDR, NOW, EVENT_ID, "SaleRecorded");
+        service.buildEntry(EventKind.SALE, PERIOD, GROSS_IDR, NOW, EVENT_ID, "SaleRecorded", false);
 
     long totalDebit = entry.getLines().stream().mapToLong(JournalLine::getDebitMinor).sum();
     long totalCredit = entry.getLines().stream().mapToLong(JournalLine::getCreditMinor).sum();

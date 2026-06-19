@@ -49,9 +49,31 @@ public class GlTrialBalanceReader {
     if (lines.isEmpty()) {
       return lines;
     }
+    assertAllAccountsMapped(lines, period);
     assertSingleCurrency(lines, period);
     assertBalanced(lines, period);
     return lines;
+  }
+
+  /**
+   * Fail loud if any line references an account with no {@code account_type} in {@code
+   * chart_of_account}. The repository uses a LEFT JOIN precisely so an orphan account surfaces as a
+   * NULL {@code account_type} here rather than being silently dropped from the aggregate; a NULL
+   * means the chart/seed is incomplete and any statement derived from this trial balance would
+   * misclassify the account. Mirrors {@code TrialBalanceReader}'s unmapped-account guard.
+   */
+  private static void assertAllAccountsMapped(List<GlTrialBalanceLineView> lines, String period) {
+    for (GlTrialBalanceLineView line : lines) {
+      if (line.getAccountType() == null) {
+        throw new IllegalStateException(
+            "GL trial balance for period "
+                + period
+                + " references account "
+                + line.getAccountCode()
+                + " which has no account_type in chart_of_account — the account is unmapped; seed"
+                + " it before relying on this trial balance (a statement would misclassify it)");
+      }
+    }
   }
 
   private static void assertSingleCurrency(List<GlTrialBalanceLineView> lines, String period) {
