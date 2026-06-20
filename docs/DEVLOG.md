@@ -78,8 +78,10 @@ cascade-deactivate + reactivation.)
   opaque 500; mirrors the within-close `MultiCurrencyTrialBalanceException`), and an unmapped account
   a typed `GlUnmappedAccountException` (→ non-leaking internal 500, like `UnmappedLedgerAccountException`);
   added the missing `StatementsControllerTest` web-slice (200/204/400/422 + RFC-7807 shape) for parity
-  with the sibling controllers. 248 finance tests green. SME-deferred: SAK-EMKM presentation
-  grouping/labels, comparative columns, Cash Flow statement.
+  with the sibling controllers. 248 finance tests green. The gateway routes + **owner/manager
+  role-gates** `/api/v1/statements/**` → finance-service (a new `statementsRoute`, mirroring the
+  pnl/revenue dashboard routes; a cashier is denied 403 at the edge), with a role-routing test.
+  SME-deferred: SAK-EMKM presentation grouping/labels, comparative columns, Cash Flow statement.
 - **Double-entry General Ledger** — finance gains a real double-entry GL (`journal_entry` + balanced
   `journal_line`, the invariant enforced in the aggregate so an unbalanced entry can't exist)
   ALONGSIDE the existing dimensional ledger (untouched). Every money event auto-posts a balanced

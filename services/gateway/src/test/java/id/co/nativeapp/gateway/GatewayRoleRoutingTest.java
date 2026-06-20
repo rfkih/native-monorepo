@@ -102,4 +102,42 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
     assertThat(response).isEqualTo("ok");
     assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/pnl/2026-06");
   }
+
+  @Test
+  void aCashierIsDeniedTheDashboardStatementsRouteWith403() throws Exception {
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/statements/income")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void anOwnerCanReachTheDashboardStatementsRoute() throws Exception {
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/statements/balance-sheet")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/statements/balance-sheet");
+  }
 }

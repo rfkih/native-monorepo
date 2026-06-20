@@ -23,7 +23,8 @@ import org.springframework.web.servlet.function.ServerResponse;
  *   <li><b>Cashier POS</b> ({@code owner}/{@code manager}/{@code cashier}): {@code
  *       /api/v1/menu/**}, {@code /api/v1/orders/**}, {@code /api/v1/sales/**} → restaurant-service.
  *   <li><b>Owner dashboard</b> ({@code owner}/{@code manager} only): {@code /api/v1/companies/**} →
- *       org-service; {@code /api/v1/revenue/**}, {@code /api/v1/pnl/**} → finance-service.
+ *       org-service; {@code /api/v1/revenue/**}, {@code /api/v1/pnl/**}, {@code
+ *       /api/v1/statements/**} → finance-service.
  * </ul>
  *
  * <p>Every route carries the same filter chain, in order: {@link RateLimitFilter} (per-tenant token
@@ -132,6 +133,20 @@ public class RoutingConfig {
       TenantContextHeaderFilter tenantFilter) {
     return GatewayRouterFunctions.route("finance-service-pnl")
         .route(path("/api/v1/pnl/**"), http())
+        .before(uri(routes.financeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  @Bean
+  RouterFunction<ServerResponse> statementsRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("finance-service-statements")
+        .route(path("/api/v1/statements/**"), http())
         .before(uri(routes.financeService()))
         .filter(new RateLimitFilter(limiter))
         .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
