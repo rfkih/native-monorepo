@@ -62,6 +62,13 @@ cascade-deactivate + reactivation.)
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **OpenAPI docs — springdoc pilot (finance-service)** — finance now serves `/v3/api-docs`
+  (OpenAPI 3.1) + `/swagger-ui`, generated from the live controllers. Pinned **springdoc-openapi
+  3.0.x** — the Boot 4 / Framework 7 line; an earlier probe's 2.8.x (Boot 3) returns a Base64-mangled
+  `/v3/api-docs` on Framework 7. An `OpenApiDocsSmokeTest` boots the service and asserts the endpoint
+  is real OpenAPI JSON (not Base64) documenting the statements paths, so a Boot/springdoc bump that
+  breaks doc generation fails the build. Docs sit behind the JWT chain and are not gateway-routed
+  (dev/in-cluster only). Decision recorded in **ADR 0004**; fleet-wide rollout is a later ADR.
 - **Financial Statements (Income Statement + Balance Sheet)** — finance gains a read-only statements
   API derived ENTIRELY from the double-entry GL (no new tables, no migrations). `GET
   /api/v1/statements/income?period=YYYY-MM` is period-scoped (REVENUE−EXPENSE=net, via

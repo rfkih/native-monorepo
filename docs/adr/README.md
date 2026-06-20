@@ -22,3 +22,4 @@ boundary, a security posture. Routine, local choices do not need one — use a c
 | [0001](0001-record-architecture-decisions.md) | Record architecture decisions in ADRs | Accepted |
 | [0002](0002-native-query-and-projection-reads.md) | Repository reads are native queries + projections | Accepted |
 | [0003](0003-single-source-event-schemas-libs-contracts.md) | Event Avro schemas have a single source: `libs/contracts` | Accepted |
+| [0004](0004-openapi-docs-springdoc.md) | Use springdoc-openapi (3.0.x) for OpenAPI docs, piloted in finance-service | Accepted (pilot) |

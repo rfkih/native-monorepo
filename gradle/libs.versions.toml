@@ -9,6 +9,7 @@ avro = "1.12.1"
 postgresql = "42.7.4"
 h2 = "2.3.232"
 archunit = "1.4.1"  # 1.4.1+ bundles ASM 9.8 (understands Java 25 bytecode); 1.3.0 cannot
+springdoc = "3.0.3" # OpenAPI docs; the 3.0.x line targets Spring Boot 4 / Framework 7 (2.8.x is Boot 3) — ADR 0004
 # Build tooling (also pinned literally in build-logic where the catalog isn't visible)
 spotless = "7.0.2"
 googleJavaFormat = "1.25.2"
@@ -23,6 +24,7 @@ testcontainers-bom = { module = "org.testcontainers:testcontainers-bom", version
 avro = { module = "org.apache.avro:avro", version.ref = "avro" }
 postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" }
 h2 = { module = "com.h2database:h2", version.ref = "h2" }
+springdoc-starter-webmvc-ui = { module = "org.springdoc:springdoc-openapi-starter-webmvc-ui", version.ref = "springdoc" }
 
 [plugins]
 spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
