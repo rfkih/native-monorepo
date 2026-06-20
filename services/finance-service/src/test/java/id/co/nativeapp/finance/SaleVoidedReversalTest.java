@@ -74,6 +74,9 @@ class SaleVoidedReversalTest extends PostgresRlsTestBase {
     // Two ledger_posting rows (one positive, one negative).
     assertThat(ledgerCountAsAdmin()).isEqualTo(2L);
 
+    // The reversal posting must carry posting_role = REVERSAL (M1 fix).
+    assertReversalPostingRole(voidId, "REVERSAL");
+
     // SALE_VOID journal entry must be balanced.
     assertVoidJournalIsBalanced(voidId);
   }
@@ -177,6 +180,26 @@ class SaleVoidedReversalTest extends PostgresRlsTestBase {
         .as("void journal must balance (Σdebit == Σcredit)")
         .isEqualTo(totalCredit);
     assertThat(totalDebit).as("void journal totals must be positive").isPositive();
+  }
+
+  private void assertReversalPostingRole(UUID sourceEventId, String expectedRole) throws Exception {
+    String sql =
+        "SELECT posting_role FROM ledger_posting"
+            + " WHERE source_event_id = '"
+            + sourceEventId
+            + "'";
+    try (Connection admin =
+            java.sql.DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        Statement st = admin.createStatement();
+        ResultSet rs = st.executeQuery(sql)) {
+      assertThat(rs.next())
+          .as("reversal posting must exist for sourceEventId=" + sourceEventId)
+          .isTrue();
+      assertThat(rs.getString("posting_role"))
+          .as("reversal posting_role must be " + expectedRole)
+          .isEqualTo(expectedRole);
+    }
   }
 
   private String debitAccountForVoidEntry(UUID voidId) throws Exception {

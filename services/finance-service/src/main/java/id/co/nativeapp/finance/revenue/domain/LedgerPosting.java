@@ -264,6 +264,16 @@ public class LedgerPosting extends Auditable {
     return postingRole;
   }
 
+  /**
+   * Stamps this posting as a {@link PostingRole#REVERSAL} contra entry. Called by the void/refund
+   * reversal writer (ADR 0006, slice 4) so the posting is auditably distinguishable from PRIMARY
+   * revenue/expense postings. May only be called before first persist; the column is {@code
+   * updatable = false} in the schema.
+   */
+  public void markAsReversal() {
+    this.postingRole = PostingRole.REVERSAL;
+  }
+
   /** Whether the figure is derived from illustrative-placeholder statutory data. */
   public boolean isUsesIllustrativeRules() {
     return usesIllustrativeRules;

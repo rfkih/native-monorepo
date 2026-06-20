@@ -84,9 +84,12 @@ public class PaymentCaptureWriter {
     }
 
     // Payment.capture() enforces the PENDING guard — throws if already VOIDED/REFUNDED/etc.
-    // The sale idempotency key is the original checkout idempotency_key + ":sale" so a
-    // re-delivered capture finds the same sale without writing a second SaleRecorded.
-    String saleIdempotencyKey = payment.getIdempotencyKey().replace(":pay", "") + ":capture-sale";
+    // The sale idempotency key is derived from the immutable payment id (a UUID), not the
+    // client-supplied idempotency_key string. Using the payment id eliminates any risk of
+    // collisions from client keys that happen to contain ":pay" as a substring, and makes the
+    // capture idempotency self-contained: a re-delivered capture for the SAME payment id always
+    // resolves to the same sale key — no second SaleRecorded (M3 / ADR 0006).
+    String saleIdempotencyKey = payment.getId() + ":capture-sale";
 
     // Record the sale and emit SaleRecorded in THIS transaction (MANDATORY joins us).
     RecordSaleCommand saleCommand =

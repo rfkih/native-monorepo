@@ -67,6 +67,8 @@ class SaleRefundedReversalTest extends PostgresRlsTestBase {
         .as("full refund must bring revenue to 0")
         .isZero();
     assertThat(ledgerCountAsAdmin()).isEqualTo(2L);
+    // The refund posting must carry posting_role = REVERSAL (M1 fix).
+    assertRefundPostingRole(refundId, "REVERSAL");
   }
 
   @Test
@@ -166,6 +168,21 @@ class SaleRefundedReversalTest extends PostgresRlsTestBase {
                     + "'")) {
       rs.next();
       return rs.getLong(1);
+    }
+  }
+
+  private void assertRefundPostingRole(UUID refundId, String expectedRole) throws Exception {
+    String sql =
+        "SELECT posting_role FROM ledger_posting" + " WHERE source_event_id = '" + refundId + "'";
+    try (Connection admin =
+            java.sql.DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        Statement st = admin.createStatement();
+        ResultSet rs = st.executeQuery(sql)) {
+      assertThat(rs.next()).as("refund posting must exist for refundId=" + refundId).isTrue();
+      assertThat(rs.getString("posting_role"))
+          .as("refund posting_role must be " + expectedRole)
+          .isEqualTo(expectedRole);
     }
   }
 

@@ -34,19 +34,4 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID> {
               + " FROM payment p WHERE p.id = :id",
       nativeQuery = true)
   Optional<PaymentView> findViewById(@Param("id") UUID id);
-
-  /**
-   * Fetches the read-path view for the payment linked to the given order. A single order currently
-   * holds exactly one payment (multi-tender is a future extension).
-   */
-  @Query(
-      value =
-          "SELECT p.id, p.order_id, p.business_id, p.tender_type, p.status,"
-              + " p.amount_minor, p.currency, p.tendered_minor, p.change_minor,"
-              + " p.refunded_minor, p.provider_ref, p.provider_pending, p.sale_id,"
-              + " p.captured_at, p.occurred_at, p.idempotency_key"
-              + " FROM payment p WHERE p.order_id = :orderId"
-              + " LIMIT 1",
-      nativeQuery = true)
-  Optional<PaymentView> findViewByOrderId(@Param("orderId") UUID orderId);
 }

@@ -9,6 +9,7 @@ import id.co.nativeapp.restaurant.payment.messaging.SaleRefundedSchema;
 import id.co.nativeapp.restaurant.payment.messaging.SaleVoidedSchema;
 import id.co.nativeapp.restaurant.payment.repository.PaymentRepository;
 import id.co.nativeapp.tenant.TenantContext;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.UUID;
 import org.apache.avro.generic.GenericRecord;
@@ -26,12 +27,15 @@ import org.springframework.transaction.annotation.Transactional;
  * <p><strong>Atomicity.</strong> Each operation commits the payment state-transition, the outbox
  * event row, and any aggregate updates in ONE transaction. A rollback clears all side effects.
  *
- * <p><strong>Idempotency.</strong> Both operations are guarded by a deterministic outbox key: the
- * {@code void_id} / {@code refund_id} are synthesised from the payment id + an incrementing token
- * so re-delivery is detected by the outbox {@code (aggregate_type, aggregate_id, event_type)}
- * uniqueness or the outbox payload's idempotency. The payment state-transition guards ({@link
- * Payment#voidPayment()} / {@link Payment#refund(Money)}) enforce the invariants at the domain
- * level: only CAPTURED payments can be voided/refunded.
+ * <p><strong>Idempotency.</strong> Both operations emit a DETERMINISTIC event id so a retry of the
+ * same logical void or refund derives the same UUID — making the operation idempotent at the outbox
+ * UNIQUE key backstop AND at the finance-side {@code processOnce} dedupe (ADR 0006). The {@code
+ * void_id} is derived as a type-3 UUID over {@code "<paymentId>:VOID"}. The {@code refund_id} is
+ * derived over {@code "<paymentId>:REFUND:<cumulativeTotalMinor>"} so each distinct partial refund
+ * produces a distinct id while a retry of the same logical refund (same amounts) collapses to the
+ * same id. The payment state-transition guards ({@link Payment#voidPayment()} / {@link
+ * Payment#refund(Money)}) also enforce domain-level invariants: only CAPTURED payments can be
+ * voided/refunded.
  */
 @Component
 public class VoidRefundWriter {
@@ -69,7 +73,11 @@ public class VoidRefundWriter {
     paymentRepository.saveAndFlush(payment);
 
     // Emit SaleVoided outbox event — commits in this transaction.
-    UUID voidId = UUID.randomUUID();
+    // DETERMINISTIC void id: a name-based UUID (type 3, MD5) over "<paymentId>:VOID".
+    // A retry of the same logical void derives the same voidId, so the outbox UNIQUE key and
+    // the finance-side processOnce dedupe are idempotent across retries (ADR 0006 / H2).
+    UUID voidId =
+        UUID.nameUUIDFromBytes((payment.getId() + ":VOID").getBytes(StandardCharsets.UTF_8));
     GenericRecord event =
         SaleVoidedSchema.toRecord(
             voidId,
@@ -121,7 +129,16 @@ public class VoidRefundWriter {
     paymentRepository.saveAndFlush(payment);
 
     // Emit SaleRefunded outbox event — commits in this transaction.
-    UUID refundId = UUID.randomUUID();
+    // DETERMINISTIC refund id: a name-based UUID (type 3, MD5) over
+    // "<paymentId>:REFUND:<newTotal>". The cumulative total (newTotal.amountMinor()) is the
+    // authoritative token that distinguishes each distinct partial refund (a second partial
+    // refund to a different total produces a different id), while a retry of the SAME logical
+    // refund (same amounts → same total) derives the same refundId — idempotent via processOnce
+    // and the finance-side source_event_id UNIQUE backstop (ADR 0006 / H2).
+    UUID refundId =
+        UUID.nameUUIDFromBytes(
+            (payment.getId() + ":REFUND:" + newTotal.amountMinor())
+                .getBytes(StandardCharsets.UTF_8));
     GenericRecord event =
         SaleRefundedSchema.toRecord(
             refundId,

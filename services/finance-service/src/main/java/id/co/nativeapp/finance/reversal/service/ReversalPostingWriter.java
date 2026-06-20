@@ -123,7 +123,7 @@ public class ReversalPostingWriter {
 
     String glAccountCode = glAccountResolver.resolveRevenue(event.occurredAt());
 
-    // 1) Contra dimensional ledger posting (negated amount, REVENUE type).
+    // 1) Contra dimensional ledger posting (negated amount, REVENUE type, REVERSAL role).
     LedgerPosting posting =
         new LedgerPosting(
             PostingType.REVENUE,
@@ -132,6 +132,7 @@ public class ReversalPostingWriter {
             negated,
             glAccountCode,
             event.voidId());
+    posting.markAsReversal();
     posting.setCompanyId(companyId);
     ledgerRepository.save(posting);
 
@@ -183,7 +184,7 @@ public class ReversalPostingWriter {
 
     String glAccountCode = glAccountResolver.resolveRevenue(event.occurredAt());
 
-    // 1) Contra dimensional ledger posting (negated refund amount, REVENUE type).
+    // 1) Contra dimensional ledger posting (negated refund amount, REVENUE type, REVERSAL role).
     LedgerPosting posting =
         new LedgerPosting(
             PostingType.REVENUE,
@@ -192,6 +193,7 @@ public class ReversalPostingWriter {
             negated,
             glAccountCode,
             event.refundId());
+    posting.markAsReversal();
     posting.setCompanyId(companyId);
     ledgerRepository.save(posting);
 
