@@ -12,6 +12,12 @@ const OnboardingWizard = lazy(() =>
 const Dashboard = lazy(() =>
   import('@/features/dashboard/Dashboard').then((m) => ({ default: m.Dashboard })),
 )
+const IncomeStatement = lazy(() =>
+  import('@/features/statements/IncomeStatement').then((m) => ({ default: m.IncomeStatement })),
+)
+const BalanceSheet = lazy(() =>
+  import('@/features/statements/BalanceSheet').then((m) => ({ default: m.BalanceSheet })),
+)
 const Pos = lazy(() => import('@/features/pos/Pos').then((m) => ({ default: m.Pos })))
 const AccessDenied = lazy(() =>
   import('@/features/auth/AccessDenied').then((m) => ({ default: m.AccessDenied })),
@@ -71,6 +77,18 @@ export function App() {
             <Route
               path="/"
               element={company ? <Dashboard /> : <Navigate to="/onboarding" replace />}
+            />
+          )}
+          {canDashboard && (
+            <Route
+              path="/statements/income"
+              element={company ? <IncomeStatement /> : <Navigate to="/onboarding" replace />}
+            />
+          )}
+          {canDashboard && (
+            <Route
+              path="/statements/balance-sheet"
+              element={company ? <BalanceSheet /> : <Navigate to="/onboarding" replace />}
             />
           )}
           {canPos && <Route path="/pos" element={<Pos />} />}

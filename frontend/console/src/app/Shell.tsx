@@ -22,6 +22,8 @@ export function Shell({ children }: { children: ReactNode }) {
   // Nav is built from roles: a cashier only ever sees the POS link.
   const nav = [
     canDashboard ? { to: '/', label: t('nav.dashboard') } : null,
+    canDashboard ? { to: '/statements/income', label: t('nav.income') } : null,
+    canDashboard ? { to: '/statements/balance-sheet', label: t('nav.balanceSheet') } : null,
     canPos ? { to: '/pos', label: t('nav.pos') } : null,
     canDashboard ? { to: '/onboarding', label: t('nav.onboarding') } : null,
   ].filter((x): x is { to: string; label: string } => x !== null)

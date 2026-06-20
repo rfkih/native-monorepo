@@ -1,0 +1,87 @@
+import { useQuery } from '@tanstack/react-query'
+import { apiFetch } from '@/lib/api'
+
+/** One Income Statement line — mirror of finance-service IncomeLineItem (net as minor + ISO-4217). */
+export interface IncomeLine {
+  accountCode: string
+  accountType: string
+  netMinor: number
+  currency: string
+}
+
+/** Mirror of finance-service IncomeStatementResponse (all amounts integer minor units, rule 8). */
+export interface IncomeStatementResponse {
+  period: string
+  currency: string
+  revenueLines: IncomeLine[]
+  expenseLines: IncomeLine[]
+  totalRevenueMinor: number
+  totalExpenseMinor: number
+  netMinor: number
+  usesIllustrativeRules: boolean
+}
+
+/** One Balance Sheet line — mirror of finance-service BalanceSheetLineItem (balance as minor). */
+export interface BalanceLine {
+  accountCode: string
+  accountType: string
+  balanceMinor: number
+  currency: string
+}
+
+/** Mirror of finance-service BalanceSheetResponse (all amounts integer minor units, rule 8). */
+export interface BalanceSheetResponse {
+  asOf: string
+  currency: string
+  assetLines: BalanceLine[]
+  liabilityLines: BalanceLine[]
+  equityLines: BalanceLine[]
+  totalAssetsMinor: number
+  totalLiabilitiesMinor: number
+  totalEquityMinor: number
+  totalLiabilitiesAndEquityMinor: number
+  retainedEarningsMinor: number
+  usesIllustrativeRules: boolean
+}
+
+/**
+ * GET /api/v1/statements/income?period=YYYY-MM. Unlike the P&L endpoint there is no currency hint:
+ * a period with no GL entries returns 204 (apiFetch → null), which the page renders as an empty
+ * state rather than a zeroed statement with a guessed currency.
+ */
+export function useIncomeStatement(params: {
+  companyId: string
+  actor: string
+  period: string
+  enabled: boolean
+}) {
+  const { companyId, actor, period, enabled } = params
+  return useQuery({
+    enabled,
+    queryKey: ['incomeStatement', companyId, period],
+    queryFn: () =>
+      apiFetch<IncomeStatementResponse>('/api/v1/statements/income', {
+        tenant: { companyId, actor },
+        query: { period },
+      }),
+  })
+}
+
+/** GET /api/v1/statements/balance-sheet?asOf=YYYY-MM. 204 → null (no GL entries yet). */
+export function useBalanceSheet(params: {
+  companyId: string
+  actor: string
+  asOf: string
+  enabled: boolean
+}) {
+  const { companyId, actor, asOf, enabled } = params
+  return useQuery({
+    enabled,
+    queryKey: ['balanceSheet', companyId, asOf],
+    queryFn: () =>
+      apiFetch<BalanceSheetResponse>('/api/v1/statements/balance-sheet', {
+        tenant: { companyId, actor },
+        query: { asOf },
+      }),
+  })
+}

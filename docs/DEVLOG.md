@@ -87,8 +87,13 @@ cascade-deactivate + reactivation.)
   added the missing `StatementsControllerTest` web-slice (200/204/400/422 + RFC-7807 shape) for parity
   with the sibling controllers. 248 finance tests green. The gateway routes + **owner/manager
   role-gates** `/api/v1/statements/**` → finance-service (a new `statementsRoute`, mirroring the
-  pnl/revenue dashboard routes; a cashier is denied 403 at the edge), with a role-routing test.
-  SME-deferred: SAK-EMKM presentation grouping/labels, comparative columns, Cash Flow statement.
+  pnl/revenue dashboard routes; a cashier is denied 403 at the edge), with a role-routing test. The
+  **console** adds two owner/manager pages — Income statement (`/statements/income`) and Balance
+  sheet (`/statements/balance-sheet`) — dashboard-style (KPI tiles + a bar chart + an expandable
+  per-account breakdown), en/id, Intl money via the shared `money.ts`, reusing the illustrative
+  badge; `tsc` + `vite build` green (also fixed a latent type error in the console's dev-proxy
+  config). SME-deferred: SAK-EMKM presentation grouping/labels, comparative columns, Cash Flow
+  statement.
 - **Double-entry General Ledger** — finance gains a real double-entry GL (`journal_entry` + balanced
   `journal_line`, the invariant enforced in the aggregate so an unbalanced entry can't exist)
   ALONGSIDE the existing dimensional ledger (untouched). Every money event auto-posts a balanced

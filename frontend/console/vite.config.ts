@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type ProxyOptions } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { fileURLToPath, URL } from 'node:url'
@@ -16,7 +16,7 @@ const RESTAURANT = process.env.VITE_RESTAURANT_URL ?? 'http://localhost:8086'
 // per-path proxy straight to each service (the header-trust dev recipe, no gateway).
 const GATEWAY = process.env.VITE_GATEWAY_URL
 
-const proxy = GATEWAY
+const proxy: Record<string, ProxyOptions> = GATEWAY
   ? { '/api': { target: GATEWAY, changeOrigin: true } }
   : {
       // org-service
@@ -26,6 +26,7 @@ const proxy = GATEWAY
       // finance-service
       '/api/v1/pnl': { target: FINANCE, changeOrigin: true },
       '/api/v1/revenue': { target: FINANCE, changeOrigin: true },
+      '/api/v1/statements': { target: FINANCE, changeOrigin: true },
       '/api/v1/closes': { target: FINANCE, changeOrigin: true },
       '/api/v1/groups': { target: FINANCE, changeOrigin: true },
       // restaurant-service (POS)
