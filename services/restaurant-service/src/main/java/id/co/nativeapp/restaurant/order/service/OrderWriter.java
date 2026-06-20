@@ -14,6 +14,9 @@ import id.co.nativeapp.restaurant.order.projection.OrderLineView;
 import id.co.nativeapp.restaurant.order.projection.OrderView;
 import id.co.nativeapp.restaurant.order.repository.OrderLineRepository;
 import id.co.nativeapp.restaurant.order.repository.OrderRepository;
+import id.co.nativeapp.restaurant.payment.dto.PaymentResponse;
+import id.co.nativeapp.restaurant.payment.service.PaymentInstruction;
+import id.co.nativeapp.restaurant.payment.service.PaymentWriter;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
 import id.co.nativeapp.restaurant.sale.service.SaleWriter;
@@ -69,16 +72,19 @@ public class OrderWriter {
   private final OrderLineRepository lineRepository;
   private final MenuItemRepository menuItemRepository;
   private final SaleWriter saleWriter;
+  private final PaymentWriter paymentWriter;
 
   public OrderWriter(
       OrderRepository orderRepository,
       OrderLineRepository lineRepository,
       MenuItemRepository menuItemRepository,
-      SaleWriter saleWriter) {
+      SaleWriter saleWriter,
+      PaymentWriter paymentWriter) {
     this.orderRepository = orderRepository;
     this.lineRepository = lineRepository;
     this.menuItemRepository = menuItemRepository;
     this.saleWriter = saleWriter;
+    this.paymentWriter = paymentWriter;
   }
 
   /**
@@ -202,7 +208,29 @@ public class OrderWriter {
     saved.linkSale(saleResult.sale().id());
     orderRepository.saveAndFlush(saved);
 
-    return new CheckoutResult(OrderResponse.from(saved), true);
+    // ------------------------------------------------------------------
+    // 6. Optional payment (ADR 0006). Cash captures synchronously, in THIS
+    //    transaction, against the sale just recorded — so order + lines +
+    //    sale + outbox + payment all commit (or roll back) together.
+    //    Digital tenders are not captured at checkout (they are PENDING
+    //    until capture) — that flow lands with the capture endpoint.
+    // ------------------------------------------------------------------
+    OrderResponse response = OrderResponse.from(saved);
+    if (request.payment() != null) {
+      PaymentInstruction instruction =
+          new PaymentInstruction(
+              saved.getId(),
+              request.businessId(),
+              request.payment().tenderType(),
+              runningTotal,
+              request.payment().tenderedMinor(),
+              request.idempotencyKey() + ":pay");
+      PaymentResponse paymentResponse =
+          paymentWriter.captureCashInCurrentTx(instruction, saleResult.sale().id(), now);
+      response = response.withPayment(paymentResponse);
+    }
+
+    return new CheckoutResult(response, true);
   }
 
   /**
@@ -246,12 +274,15 @@ public class OrderWriter {
   }
 
   private static OrderResponse toOrderResponse(OrderView view, List<OrderLineResponse> lines) {
+    // An existing-order re-read (idempotent retry / conflict recovery) returns the order without a
+    // payment block — the payment was returned on the original successful checkout response.
     return new OrderResponse(
         view.getId(),
         view.getBusinessId(),
         view.getTotalMinor(),
         view.getCurrency().strip(),
         view.getSaleId(),
-        lines);
+        lines,
+        null);
   }
 }

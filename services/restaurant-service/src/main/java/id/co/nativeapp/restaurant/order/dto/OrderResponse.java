@@ -1,19 +1,24 @@
 package id.co.nativeapp.restaurant.order.dto;
 
 import id.co.nativeapp.restaurant.order.domain.Order;
+import id.co.nativeapp.restaurant.payment.dto.PaymentResponse;
 import java.util.List;
 import java.util.UUID;
 
-/** Response body for a checked-out order. */
+/**
+ * Response body for a checked-out order. {@code payment} is present when the order was paid in the
+ * same checkout call (cash), and null otherwise (no payment, or an existing-order re-read).
+ */
 public record OrderResponse(
     UUID orderId,
     UUID businessId,
     long totalMinor,
     String currency,
     UUID saleId,
-    List<OrderLineResponse> lines) {
+    List<OrderLineResponse> lines,
+    PaymentResponse payment) {
 
-  /** Maps the write-path aggregate (with its in-memory lines) to the response shape. */
+  /** Maps the write-path aggregate (with its in-memory lines) to the response shape, no payment. */
   public static OrderResponse from(Order order) {
     List<OrderLineResponse> lineResponses =
         order.getLines().stream().map(OrderLineResponse::from).toList();
@@ -23,6 +28,13 @@ public record OrderResponse(
         order.getTotal().amountMinor(),
         order.getTotal().currency().getCurrencyCode(),
         order.getSaleId(),
-        lineResponses);
+        lineResponses,
+        null);
+  }
+
+  /** Returns a copy of this response with the given payment attached. */
+  public OrderResponse withPayment(PaymentResponse paymentResponse) {
+    return new OrderResponse(
+        orderId, businessId, totalMinor, currency, saleId, lines, paymentResponse);
   }
 }

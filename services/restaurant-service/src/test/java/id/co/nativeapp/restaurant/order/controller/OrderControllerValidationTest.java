@@ -58,7 +58,8 @@ class OrderControllerValidationTest {
                 "Nasi Goreng",
                 15_000L,
                 2,
-                30_000L)));
+                30_000L)),
+        null);
   }
 
   @Test
