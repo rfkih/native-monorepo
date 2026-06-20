@@ -29,8 +29,8 @@
 | 6 | Test rigor | Testcontainers + ArchUnit + event-contract triad — §3 (test) | unit + Sonar | ✅ ahead |
 | 7 | Edge security | gateway JWT + RLS + role-gated routes — §6 (built this session) | JWT filter, single app | ✅ ahead |
 | 8 | Exactly-once / idempotency | unique key + conflict re-read + DLT — §3.2/§4 (test) | per-strategy idempotency | ✅ ahead |
-| 9 | **API docs (OpenAPI)** | springdoc + `@Operation` contract test — §1.3 (test) | ✅ Swagger annotations | ⚠ **gap → code phase** |
-| 10 | **Distributed tracing** | OTel context across every hop — §5 (test) | telemetry dashboard | ⚠ **gap (deferred) → code phase** |
+| 9 | **API docs (OpenAPI)** | springdoc + `@Operation` contract test — §1.3 (test) | ✅ springdoc 2.6 + `@Operation`/`@Tag` on all controllers | ⚠ **partial — springdoc 3.0.x pilot in finance ([ADR 0004](adr/0004-openapi-docs-springdoc.md)); remaining: `@Operation` coverage + ArchUnit enforcer + fleet rollout** |
+| 10 | **Distributed tracing** | OTel context across every hop — §5 (test) | metrics + Grafana dashboards; custom trace-IDs + MDC (no full OTel either) | ⚠ **gap (deferred) → code phase** |
 | 11 | **Error observability** | JSON logs → sink + RED + outbox-lag — §5; *(optional DB inbox)* | ✅ DB error-inbox + alerting | ⚠ **partial → code phase** |
 | 12 | Client resilience (timeouts) | explicit connect/read timeouts — §4 (startup check) | configured | ⚠ gap → code phase |
 | 13 | **Deployed & proven** | CI + Kustomize authored — `deploy/` | ✅ live in prod | ❗ **infra-gated — owner action, not code** |
