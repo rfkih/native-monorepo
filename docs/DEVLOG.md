@@ -26,7 +26,8 @@ controller/service/repository/domain/dto/messaging layer sub-packages**, ArchUni
 - Live infra (a real registry/cluster/secrets for the deploy; a real notification transport).
 
 **Open follow-ups (tracked):** notification real provider (needs a transport choice); payroll
-expected-source registry (needs a rule). (DONE: the P3d deferred operational items —
+expected-source registry (needs a rule); error-inbox/alerting **fleet rollout** beyond the finance
+pilot + Grafana dashboards (ADR 0005; scorecard gap #11/#13). (DONE: the P3d deferred operational items —
 `member_group_index` backfill, the within-company concurrent-close lock, the within-close MVC tests;
 the finance-expansion posting-currency robustness guard; and the org-tree move/deactivate semantics —
 cascade-deactivate + reactivation.)
@@ -62,6 +63,20 @@ cascade-deactivate + reactivation.)
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **Error-inbox + webhook alerting (finance pilot, ADR 0005)** — a DLT'd money event is no longer a
+  silent failure. The Kafka DLT recoverer records each consume failure into a per-service
+  `error_log` ops table (V14) via a fingerprint-deduped `INSERT … ON CONFLICT` upsert
+  (`ErrorInboxWriter`, plain JdbcTemplate in a REQUIRES_NEW tx so it survives the rolled-back
+  business tx), then fires an async webhook alert on occurrence-count milestones (1/10/100/every-1000;
+  no-op when the URL is unset, so dev/CI never call out). Deliberate, ADR-recorded deviations:
+  `error_log` is NOT Auditable and NOT RLS-scoped — it is cross-tenant **operator** data, `company_id`
+  nullable context never an access key; the HR-6 mitigation in place of RLS is **PII redaction at
+  write time** (email + ≥10-digit runs incl. space/hyphen-separated). Code-reviewed (money/tenancy
+  gate) → fixed a **blocker**: the alert webhook had shipped the RAW exception message off-box; it now
+  carries only the redacted message + the real dedup fingerprint, the upsert runs under a bounded tx
+  timeout (no partition stall), and a payload test guards the egress. Closes scorecard **gap #11** for
+  finance; fleet rollout + Grafana dashboards (#13) deferred to a follow-up ADR. 279 finance tests
+  green. (commits `cd4d744` + `e51325c`)
 - **OpenAPI docs — springdoc pilot (finance-service)** — finance now serves `/v3/api-docs`
   (OpenAPI 3.1) + `/swagger-ui`, generated from the live controllers. Pinned **springdoc-openapi
   3.0.x** — the Boot 4 / Framework 7 line; an earlier probe's 2.8.x (Boot 3) returns a Base64-mangled
