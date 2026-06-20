@@ -44,6 +44,8 @@ schema. Until then a row here is documentation of intent, not a shippable contra
 | **`MetricPublished`** | **carwash-service** (verticals) | **employee** | **metric_key, period, grain, subject_id, value, source_business_id** | **LIVE (#20)** |
 | **`PeriodSealed`** | **verticals** | **employee, finance** | **company_id, business_id, period** | **LIVE (employee consumer #23)** |
 | **`SaleRecorded`** | **restaurant-service + carwash-service** (verticals) | **finance** | **sale_id, company_id, business_id, amount_minor, currency, occurred_at** | **LIVE (M1.4 / #20)** |
+| **`SaleVoided`** | **restaurant-service** | **finance** | **void_id, sale_id, payment_id, company_id, business_id, amount_minor, currency, occurred_at, tender_type** | **LIVE (ADR 0006, slice 4)** |
+| **`SaleRefunded`** | **restaurant-service** | **finance** | **refund_id, sale_id, payment_id, company_id, business_id, refund_amount_minor, currency, total_refunded_minor, occurred_at, tender_type** | **LIVE (ADR 0006, slice 4)** |
 | **`ExpenseRecorded`** | **verticals** | **finance** | **expense_id, company_id, business_id, amount_minor, currency, gl_hint, occurred_at** | **LIVE (finance consumer #21)** |
 | **`PayrollPosted`** | **employee-service** | **finance** | **payroll_run_id, run_seq, company_id, period, base_currency, totals, rule_versions, uses_illustrative_rules, posted_at** | **LIVE (#23); finance consumer #23** |
 | **`LaborCostAllocated`** | **employee-service** | **finance** | **payroll_run_id, run_seq, company_id, period, outlet_id, gl_account, amount_minor, currency, uses_illustrative_rules, unallocated** | **LIVE (#23); finance consumer #23** |
@@ -1234,3 +1236,110 @@ to the DLT (non-retryable). Money is integer minor units + an ISO-4217 currency,
 without a default, never remove/rename a field or change a type. The finance
 `TrialBalancePublishedContractTest` enforces the triad (parse + `AvroSerde` round-trip +
 add-optional-compatible / new-required-broken).
+
+---
+
+### `SaleVoided`
+
+Emitted by restaurant-service when a captured payment is fully voided before settlement
+(ADR 0006, slice 4). Finance consumes this to reverse the original `SaleRecorded` ledger
+posting with a contra entry (credit clearing, debit revenue — the inverse of the SALE
+template). An idempotent consumer uses the `void_id` as the dedup key via
+`ProcessedEventStore`.
+
+- **Producer:** `restaurant-service`
+- **Consumers:** `finance-service` (reverse the ledger posting + contra journal entry)
+- **Aggregate type / partition key:** `sale` / `sale_id`
+- **Outbox `event_type`:** `SaleVoided`
+- **Schema:** `libs/contracts/src/main/resources/avro/SaleVoided.avsc`
+- **Full name:** `id.co.nativeapp.events.restaurant.SaleVoided`
+
+**Key fields**
+
+| Field | Avro type | Meaning |
+|---|---|---|
+| `void_id` | `string` | Unique id for this void event (UUID as string); the reversal idempotency key |
+| `sale_id` | `string` | The sale being voided (UUID as string); matches the original `SaleRecorded` |
+| `payment_id` | `string` | The payment aggregate being voided (UUID as string) |
+| `company_id` | `string` | The owning tenant (UUID as string) |
+| `business_id` | `string` | The originating business unit (UUID as string) |
+| `amount_minor` | `long` | The voided amount in minor units; never a float |
+| `currency` | `string` | ISO-4217 currency code |
+| `occurred_at` | `timestamp-millis` | When the void occurred, epoch millis UTC |
+| `tender_type` | `["null","string"]` (default `null`) | Original tender (CASH/QRIS/CARD or null) — finance uses this to reverse the correct clearing account |
+
+**Avro schema** (single source of truth in `libs/contracts/src/main/resources/avro/SaleVoided.avsc`)
+
+```json
+{
+  "type": "record",
+  "name": "SaleVoided",
+  "namespace": "id.co.nativeapp.events.restaurant",
+  "doc": "Emitted by restaurant-service when a captured payment is fully voided before settlement. Finance consumes this to reverse the original SaleRecorded ledger posting with a contra entry. Money is an integer minor-units amount plus an ISO-4217 currency code, never a float (CLAUDE.md rule 8).",
+  "fields": [
+    {"name": "void_id", "type": "string", "doc": "The void event's unique id (UUID as string); the idempotency key for the reversal."},
+    {"name": "sale_id", "type": "string", "doc": "The sale being voided (UUID as string); matches the SaleRecorded sale_id."},
+    {"name": "payment_id", "type": "string", "doc": "The payment aggregate being voided (UUID as string)."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string)."},
+    {"name": "business_id", "type": "string", "doc": "The originating business unit (UUID as string)."},
+    {"name": "amount_minor", "type": "long", "doc": "The voided amount in the currency's minor units. Never a float."},
+    {"name": "currency", "type": "string", "doc": "ISO-4217 currency code, e.g. IDR or USD."},
+    {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the void occurred, epoch millis (UTC)."},
+    {"name": "tender_type", "type": ["null", "string"], "default": null, "doc": "The original payment tender type (CASH | QRIS | CARD, or null for legacy). Finance uses this to reverse the correct clearing account."}
+  ]
+}
+```
+
+---
+
+### `SaleRefunded`
+
+Emitted by restaurant-service when a captured payment is partially or fully refunded after
+settlement (ADR 0006, slice 4). Finance consumes this to post a proportional contra entry
+reversing the original `SaleRecorded` ledger posting by the refunded amount. An idempotent
+consumer uses the `refund_id` as the dedup key via `ProcessedEventStore`.
+
+- **Producer:** `restaurant-service`
+- **Consumers:** `finance-service` (contra ledger posting for the refunded amount)
+- **Aggregate type / partition key:** `sale` / `sale_id`
+- **Outbox `event_type`:** `SaleRefunded`
+- **Schema:** `libs/contracts/src/main/resources/avro/SaleRefunded.avsc`
+- **Full name:** `id.co.nativeapp.events.restaurant.SaleRefunded`
+
+**Key fields**
+
+| Field | Avro type | Meaning |
+|---|---|---|
+| `refund_id` | `string` | Unique id for this refund event (UUID as string); the reversal idempotency key |
+| `sale_id` | `string` | The sale being refunded (UUID as string); matches the original `SaleRecorded` |
+| `payment_id` | `string` | The payment aggregate being refunded (UUID as string) |
+| `company_id` | `string` | The owning tenant (UUID as string) |
+| `business_id` | `string` | The originating business unit (UUID as string) |
+| `refund_amount_minor` | `long` | The refunded amount in minor units (partial or full); never a float |
+| `currency` | `string` | ISO-4217 currency code |
+| `total_refunded_minor` | `long` | Cumulative total refunded (including this refund) in minor units; never a float |
+| `occurred_at` | `timestamp-millis` | When the refund occurred, epoch millis UTC |
+| `tender_type` | `["null","string"]` (default `null`) | Original tender (CASH/QRIS/CARD or null) — finance uses this to reverse the correct clearing account |
+
+**Avro schema** (single source of truth in `libs/contracts/src/main/resources/avro/SaleRefunded.avsc`)
+
+```json
+{
+  "type": "record",
+  "name": "SaleRefunded",
+  "namespace": "id.co.nativeapp.events.restaurant",
+  "doc": "Emitted by restaurant-service when a captured payment is partially or fully refunded after settlement. Finance consumes this to post a proportional contra entry reversing the original SaleRecorded ledger posting by the refunded amount. Money is an integer minor-units amount plus an ISO-4217 currency code, never a float (CLAUDE.md rule 8).",
+  "fields": [
+    {"name": "refund_id", "type": "string", "doc": "The refund event's unique id (UUID as string); the idempotency key for the reversal posting."},
+    {"name": "sale_id", "type": "string", "doc": "The sale being refunded (UUID as string); matches the SaleRecorded sale_id."},
+    {"name": "payment_id", "type": "string", "doc": "The payment aggregate being refunded (UUID as string)."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string)."},
+    {"name": "business_id", "type": "string", "doc": "The originating business unit (UUID as string)."},
+    {"name": "refund_amount_minor", "type": "long", "doc": "The refunded amount in the currency's minor units (partial or full). Never a float."},
+    {"name": "currency", "type": "string", "doc": "ISO-4217 currency code, e.g. IDR or USD."},
+    {"name": "total_refunded_minor", "type": "long", "doc": "Cumulative total refunded (including this refund) in minor units. Never a float."},
+    {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the refund occurred, epoch millis (UTC)."},
+    {"name": "tender_type", "type": ["null", "string"], "default": null, "doc": "The original payment tender type (CASH | QRIS | CARD, or null for legacy). Finance uses this to reverse the correct clearing account."}
+  ]
+}
+```

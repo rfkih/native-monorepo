@@ -1,0 +1,17 @@
+{
+  "type": "record",
+  "name": "SaleVoided",
+  "namespace": "id.co.nativeapp.events.restaurant",
+  "doc": "Emitted by restaurant-service when a captured payment is fully voided before settlement. Finance consumes this to reverse the original SaleRecorded ledger posting with a contra entry. Money is an integer minor-units amount plus an ISO-4217 currency code, never a float (CLAUDE.md rule 8).",
+  "fields": [
+    {"name": "void_id", "type": "string", "doc": "The void event's unique id (UUID as string); the idempotency key for the reversal."},
+    {"name": "sale_id", "type": "string", "doc": "The sale being voided (UUID as string); matches the SaleRecorded sale_id."},
+    {"name": "payment_id", "type": "string", "doc": "The payment aggregate being voided (UUID as string)."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string)."},
+    {"name": "business_id", "type": "string", "doc": "The originating business unit (UUID as string)."},
+    {"name": "amount_minor", "type": "long", "doc": "The voided amount in the currency's minor units. Never a float."},
+    {"name": "currency", "type": "string", "doc": "ISO-4217 currency code, e.g. IDR or USD."},
+    {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the void occurred, epoch millis (UTC)."},
+    {"name": "tender_type", "type": ["null", "string"], "default": null, "doc": "The original payment tender type (CASH | QRIS | CARD, or null for legacy). Finance uses this to reverse the correct clearing account."}
+  ]
+}

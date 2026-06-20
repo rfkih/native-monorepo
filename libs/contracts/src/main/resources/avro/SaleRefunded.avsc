@@ -1,0 +1,18 @@
+{
+  "type": "record",
+  "name": "SaleRefunded",
+  "namespace": "id.co.nativeapp.events.restaurant",
+  "doc": "Emitted by restaurant-service when a captured payment is partially or fully refunded after settlement. Finance consumes this to post a proportional contra entry reversing the original SaleRecorded ledger posting by the refunded amount. Money is an integer minor-units amount plus an ISO-4217 currency code, never a float (CLAUDE.md rule 8).",
+  "fields": [
+    {"name": "refund_id", "type": "string", "doc": "The refund event's unique id (UUID as string); the idempotency key for the reversal posting."},
+    {"name": "sale_id", "type": "string", "doc": "The sale being refunded (UUID as string); matches the SaleRecorded sale_id."},
+    {"name": "payment_id", "type": "string", "doc": "The payment aggregate being refunded (UUID as string)."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string)."},
+    {"name": "business_id", "type": "string", "doc": "The originating business unit (UUID as string)."},
+    {"name": "refund_amount_minor", "type": "long", "doc": "The refunded amount in the currency's minor units (partial or full). Never a float."},
+    {"name": "currency", "type": "string", "doc": "ISO-4217 currency code, e.g. IDR or USD."},
+    {"name": "total_refunded_minor", "type": "long", "doc": "Cumulative total refunded (including this refund) in minor units. Never a float."},
+    {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the refund occurred, epoch millis (UTC)."},
+    {"name": "tender_type", "type": ["null", "string"], "default": null, "doc": "The original payment tender type (CASH | QRIS | CARD, or null for legacy). Finance uses this to reverse the correct clearing account."}
+  ]
+}

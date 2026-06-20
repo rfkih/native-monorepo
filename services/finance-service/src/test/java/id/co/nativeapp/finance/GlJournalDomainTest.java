@@ -148,6 +148,11 @@ class GlJournalDomainTest {
   @Test
   void eventKindValuesExist() {
     assertThat(EventKind.values())
-        .containsExactlyInAnyOrder(EventKind.SALE, EventKind.EXPENSE, EventKind.LABOR);
+        .containsExactlyInAnyOrder(
+            EventKind.SALE,
+            EventKind.EXPENSE,
+            EventKind.LABOR,
+            EventKind.SALE_VOID,
+            EventKind.SALE_REFUND);
   }
 }

@@ -7,5 +7,12 @@ package id.co.nativeapp.finance.gl.domain;
 public enum EventKind {
   SALE,
   EXPENSE,
-  LABOR
+  LABOR,
+  /** Full reversal of a captured sale before settlement — contra of {@link #SALE}. */
+  SALE_VOID,
+  /**
+   * Partial or full refund of a captured sale after settlement — proportional contra of {@link
+   * #SALE}.
+   */
+  SALE_REFUND
 }
