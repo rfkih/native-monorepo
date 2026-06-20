@@ -1,6 +1,7 @@
 package id.co.nativeapp.finance.config;
 
 import id.co.nativeapp.events.Base64ByteArraySerializer;
+import id.co.nativeapp.finance.observability.service.ConsumeErrorRecorder;
 import java.util.HashMap;
 import java.util.Map;
 import org.apache.kafka.clients.producer.ProducerConfig;
@@ -14,6 +15,7 @@ import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.ProducerFactory;
+import org.springframework.kafka.listener.ConsumerRecordRecoverer;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.util.backoff.FixedBackOff;
@@ -34,6 +36,12 @@ import org.springframework.util.backoff.FixedBackOff;
  * DeadLetterPublishingRecoverer}, so a poison record cannot stall finance consolidation.
  * Idempotency is by event UUID (the {@code ProcessedEventStore}), so the at-least-once redelivery
  * these retries cause never double-counts.
+ *
+ * <p><strong>Error inbox (ADR 0005).</strong> Before each DLT publish the {@link
+ * id.co.nativeapp.finance.observability.service.ConsumeErrorRecorder} upserts the failure into the
+ * {@code error_log} ops table (fingerprint dedup + occurrence count) and fires a webhook alert on
+ * first occurrence and configured milestones. The recording runs in a {@code REQUIRES_NEW}
+ * transaction so it survives the rolled-back business transaction.
  */
 @Configuration
 public class KafkaConfig {
@@ -89,21 +97,36 @@ public class KafkaConfig {
    *
    * <p>The transient {@code UnknownGroupException} is deliberately NOT in this set (see the note in
    * the method body) — it is a reorder that MUST be retried, not DLT'd on the first attempt.
+   *
+   * <p><strong>Error inbox (ADR 0005):</strong> before publishing to the DLT the {@link
+   * ConsumeErrorRecorder} upserts the failure into {@code error_log} (REQUIRES_NEW, so it survives
+   * this rolled-back business tx) and fires a webhook alert on first occurrence and configured
+   * milestones.
    */
   @Bean
   public DefaultErrorHandler kafkaErrorHandler(
-      KafkaTemplate<String, byte[]> deadLetterKafkaTemplate) {
+      KafkaTemplate<String, byte[]> deadLetterKafkaTemplate,
+      ConsumeErrorRecorder consumeErrorRecorder) {
     // Pin the DLT destination to "<topic>.DLT" explicitly (the convention this codebase and
     // ENGINEERING-STANDARDS §4 name). spring-kafka's default suffix has varied across versions
     // (e.g. "-dlt"), so resolving it ourselves keeps the topic name deterministic and lets the
     // partition be chosen by the broker (partition = -1) regardless of the source partition count.
-    DeadLetterPublishingRecoverer recoverer =
+    DeadLetterPublishingRecoverer dlpr =
         new DeadLetterPublishingRecoverer(
             deadLetterKafkaTemplate,
             (record, exception) ->
                 new org.apache.kafka.common.TopicPartition(record.topic() + DLT_SUFFIX, -1));
+
+    // Wrap the recoverer: record the error in the inbox BEFORE publishing to the DLT so that a
+    // DLT publish failure doesn't suppress the inbox entry.
+    ConsumerRecordRecoverer wrapped =
+        (rec, ex) -> {
+          consumeErrorRecorder.record(rec, ex);
+          dlpr.accept(rec, ex);
+        };
+
     DefaultErrorHandler handler =
-        new DefaultErrorHandler(recoverer, new FixedBackOff(RETRY_INTERVAL_MS, MAX_RETRIES));
+        new DefaultErrorHandler(wrapped, new FixedBackOff(RETRY_INTERVAL_MS, MAX_RETRIES));
     handler.addNotRetryableExceptions(
         java.io.UncheckedIOException.class,
         id.co.nativeapp.finance.revenue.messaging.SaleRecordedDecodeException.class,

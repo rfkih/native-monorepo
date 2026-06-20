@@ -76,6 +76,15 @@ management:
     tags:
       service: finance-service
 
+# Error inbox + webhook alerting (ADR 0005).
+# A blank webhook-url (the default) disables all outbound HTTP calls — safe for dev and CI.
+# Set NATIVE_ALERT_WEBHOOK_URL in production to receive push alerts on DLT milestones.
+native:
+  alert:
+    webhook-url: ${NATIVE_ALERT_WEBHOOK_URL:}
+    connect-timeout-ms: ${NATIVE_ALERT_CONNECT_TIMEOUT_MS:2000}
+    read-timeout-ms: ${NATIVE_ALERT_READ_TIMEOUT_MS:3000}
+
 # Structured JSON logs are defined ONCE in libs/observability's shared logback-native-json.xml
 # (ENGINEERING-STANDARDS §5), included via this service's logback-spring.xml — dev keeps a console
 # pattern, every non-dev profile emits one JSON object per line.
