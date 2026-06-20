@@ -1,6 +1,8 @@
 .gradle/
 build/
 **/build/
+# Eclipse/JDT + VS Code Java compiled-output dirs (one per module) — never source
+bin/
 .idea/
 *.iml
 node_modules/
