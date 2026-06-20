@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api'
 
 /** One Income Statement line — mirror of finance-service IncomeLineItem (net as minor + ISO-4217). */
@@ -6,6 +6,7 @@ export interface IncomeLine {
   accountCode: string
   accountType: string
   netMinor: number
+  /** Always the statement's single base currency; the page formats with the top-level currency. */
   currency: string
 }
 
@@ -58,6 +59,9 @@ export function useIncomeStatement(params: {
   const { companyId, actor, period, enabled } = params
   return useQuery({
     enabled,
+    // Keep the prior period's figures on screen while stepping to a new month, so a period that
+    // returns 204 (no entries) doesn't flash the previous figures then snap to the empty state.
+    placeholderData: keepPreviousData,
     queryKey: ['incomeStatement', companyId, period],
     queryFn: () =>
       apiFetch<IncomeStatementResponse>('/api/v1/statements/income', {
@@ -77,6 +81,8 @@ export function useBalanceSheet(params: {
   const { companyId, actor, asOf, enabled } = params
   return useQuery({
     enabled,
+    // Keep the prior period's figures on screen while stepping months (see useIncomeStatement).
+    placeholderData: keepPreviousData,
     queryKey: ['balanceSheet', companyId, asOf],
     queryFn: () =>
       apiFetch<BalanceSheetResponse>('/api/v1/statements/balance-sheet', {

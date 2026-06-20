@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronLeft, ChevronRight, Info, TriangleAlert } from 'lucide-react'
+import { Info, TriangleAlert } from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, XAxis } from 'recharts'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -8,13 +8,10 @@ import { Spinner } from '@/components/ui/Spinner'
 import { Segmented } from '@/components/ui/Segmented'
 import { useSession } from '@/lib/session'
 import { localeOf } from '@/i18n'
-import { cn } from '@/lib/cn'
-import { formatMoney, minorToMajor } from '@/lib/money'
-import { currentPeriod, formatPeriod, shiftPeriod } from '@/lib/period'
+import { minorToMajor } from '@/lib/money'
+import { currentPeriod, shiftPeriod } from '@/lib/period'
+import { EMERALD, EmptyState, KpiTile, PeriodNav, ROSE } from '@/features/_shared/financeUi'
 import { usePnl, type PnlResponse } from './api'
-
-const EMERALD = '#0d6a4a'
-const ROSE = '#8f322b'
 
 export function Dashboard() {
   const { t, i18n } = useTranslation()
@@ -178,77 +175,6 @@ function readFigures(data: PnlResponse | null, converted: boolean): Figures {
   return { revenue: data.revenueMinor, expense: data.expenseMinor, net: data.netMinor }
 }
 
-function PeriodNav({
-  period,
-  locale,
-  onPrev,
-  onNext,
-  prevLabel,
-  nextLabel,
-}: {
-  period: string
-  locale: string
-  onPrev: () => void
-  onNext: () => void
-  prevLabel: string
-  nextLabel: string
-}) {
-  return (
-    <div className="inline-flex items-center gap-1 rounded-lg border border-line-strong bg-surface p-1">
-      <button
-        type="button"
-        aria-label={prevLabel}
-        onClick={onPrev}
-        className="grid size-8 place-items-center rounded-md text-ink-3 transition-colors hover:bg-paper hover:text-ink"
-      >
-        <ChevronLeft className="size-4" />
-      </button>
-      <span className="min-w-[8.5rem] text-center text-sm font-medium text-ink">
-        {formatPeriod(period, locale)}
-      </span>
-      <button
-        type="button"
-        aria-label={nextLabel}
-        onClick={onNext}
-        className="grid size-8 place-items-center rounded-md text-ink-3 transition-colors hover:bg-paper hover:text-ink"
-      >
-        <ChevronRight className="size-4" />
-      </button>
-    </div>
-  )
-}
-
-function KpiTile({
-  label,
-  minor,
-  currency,
-  locale,
-  loading,
-  tone,
-  emphatic,
-}: {
-  label: string
-  minor: number
-  currency: string
-  locale: string
-  loading: boolean
-  tone?: string
-  emphatic?: boolean
-}) {
-  return (
-    <Card className={cn('p-5', emphatic && 'ring-1 ring-emerald/15')}>
-      <div className="text-[11px] uppercase tracking-wider text-ink-3">{label}</div>
-      {loading ? (
-        <div className="mt-3 h-7 w-28 animate-pulse rounded bg-line" />
-      ) : (
-        <div className={cn('tnum mt-2 font-mono text-2xl font-medium', tone ?? 'text-ink')}>
-          {formatMoney(minor, currency, locale)}
-        </div>
-      )}
-    </Card>
-  )
-}
-
 function BreakdownChart({
   revenue,
   expense,
@@ -283,14 +209,5 @@ function BreakdownChart({
         </Bar>
       </BarChart>
     </ResponsiveContainer>
-  )
-}
-
-function EmptyState({ title, hint }: { title: string; hint: string }) {
-  return (
-    <Card className="mx-auto max-w-md p-10 text-center">
-      <h2 className="font-display text-xl font-semibold text-ink">{title}</h2>
-      <p className="mt-2 text-sm text-ink-3">{hint}</p>
-    </Card>
   )
 }
