@@ -14,11 +14,14 @@ import id.co.nativeapp.finance.observability.dto.AlertPayload;
 import id.co.nativeapp.finance.observability.service.AlertWebhookClient;
 import id.co.nativeapp.finance.observability.service.ConsumeErrorRecorder;
 import id.co.nativeapp.finance.observability.service.ErrorInboxWriter;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -34,22 +37,34 @@ import org.mockito.junit.jupiter.MockitoExtension;
  *   <li>{@code occurrenceCount == 2000} → alert invoked (1000-multiple milestone).
  *   <li>Writer throws → recorder does not throw (ops infrastructure is fail-safe).
  *   <li><strong>The alert payload carries the REDACTED message and the REAL fingerprint</strong>
- *       returned by the writer — never the raw exception text (HR-6 / ADR 0005 egress guard).
+ *       returned by the writer — never the raw exception text (HR-6 / ADR 0005 egress guard) — and
+ *       a {@code lastSeen} stamped from the injected {@link Clock}.
  * </ul>
  */
 @ExtendWith(MockitoExtension.class)
 class ConsumeErrorRecorderTest {
 
+  private static final Instant FIXED_NOW = Instant.parse("2026-06-20T12:00:00Z");
+
   @Mock private ErrorInboxWriter errorInboxWriter;
   @Mock private AlertWebhookClient alertWebhookClient;
 
-  @InjectMocks private ConsumeErrorRecorder recorder;
+  private ConsumeErrorRecorder recorder;
+
+  @BeforeEach
+  void setUp() {
+    recorder =
+        new ConsumeErrorRecorder(
+            errorInboxWriter, alertWebhookClient, Clock.fixed(FIXED_NOW, ZoneOffset.UTC));
+  }
 
   private ConsumerRecord<String, byte[]> record(String topic) {
     return new ConsumerRecord<>(topic, 0, 0L, "key", new byte[0]);
   }
 
-  /** A recorded result with the given occurrence count, a stable fingerprint, and a redacted msg. */
+  /**
+   * A recorded result with the given occurrence count, a stable fingerprint, and a redacted msg.
+   */
   private static ErrorInboxWriter.Recorded recorded(long count) {
     return new ErrorInboxWriter.Recorded(count, "fp-" + count, "redacted");
   }
@@ -83,7 +98,8 @@ class ConsumeErrorRecorderTest {
 
   @Test
   void occurrenceCount100TriggersAlert() {
-    when(errorInboxWriter.record(any(), anyString(), isNull(), isNull())).thenReturn(recorded(100L));
+    when(errorInboxWriter.record(any(), anyString(), isNull(), isNull()))
+        .thenReturn(recorded(100L));
 
     recorder.record(record("LaborCostAllocated"), new RuntimeException("timeout"));
 
@@ -102,7 +118,8 @@ class ConsumeErrorRecorderTest {
 
   @Test
   void occurrenceCount999DoesNotTriggerAlert() {
-    when(errorInboxWriter.record(any(), anyString(), isNull(), isNull())).thenReturn(recorded(999L));
+    when(errorInboxWriter.record(any(), anyString(), isNull(), isNull()))
+        .thenReturn(recorded(999L));
 
     recorder.record(record("SaleRecorded"), new RuntimeException("error"));
 
@@ -151,5 +168,6 @@ class ConsumeErrorRecorderTest {
     assertThat(sent.message()).isEqualTo("Employee NIK *** failed validation");
     assertThat(sent.message()).doesNotContain("3201234567890001");
     assertThat(sent.fingerprint()).isEqualTo("sha256-row-key");
+    assertThat(sent.lastSeen()).isEqualTo(FIXED_NOW);
   }
 }

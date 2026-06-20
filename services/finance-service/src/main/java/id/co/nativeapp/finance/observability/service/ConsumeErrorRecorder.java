@@ -1,6 +1,7 @@
 package id.co.nativeapp.finance.observability.service;
 
 import id.co.nativeapp.finance.observability.dto.AlertPayload;
+import java.time.Clock;
 import java.time.Instant;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
@@ -36,11 +37,13 @@ public class ConsumeErrorRecorder {
 
   private final ErrorInboxWriter errorInboxWriter;
   private final AlertWebhookClient alertWebhookClient;
+  private final Clock clock;
 
   public ConsumeErrorRecorder(
-      ErrorInboxWriter errorInboxWriter, AlertWebhookClient alertWebhookClient) {
+      ErrorInboxWriter errorInboxWriter, AlertWebhookClient alertWebhookClient, Clock clock) {
     this.errorInboxWriter = errorInboxWriter;
     this.alertWebhookClient = alertWebhookClient;
+    this.clock = clock;
   }
 
   /**
@@ -74,7 +77,7 @@ public class ConsumeErrorRecorder {
                 recorded.redactedMessage(),
                 source,
                 recorded.occurrenceCount(),
-                Instant.now());
+                Instant.now(clock));
         alertWebhookClient.send(payload);
       }
     } catch (Exception e) {

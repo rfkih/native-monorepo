@@ -4,7 +4,9 @@ import id.co.nativeapp.finance.observability.dto.AlertPayload;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,6 +37,11 @@ public class AlertWebhookClient {
 
   private static final Logger log = LoggerFactory.getLogger(AlertWebhookClient.class);
 
+  /**
+   * Bounded backlog of pending alerts before the oldest is discarded (a hung webhook sheds load).
+   */
+  private static final int ALERT_QUEUE_CAPACITY = 64;
+
   private final String webhookUrl;
   private final RestClient restClient;
   private final ExecutorService executor;
@@ -51,14 +58,25 @@ public class AlertWebhookClient {
 
     this.restClient = RestClient.builder().requestFactory(factory).build();
 
-    // Single daemon thread: fire-and-forget, never blocks the caller.
+    // Single daemon worker with a small BOUNDED queue: fire-and-forget, never blocks the caller.
+    // Milestone alerts are sparse, but a hung endpoint (up to the read timeout per call) must not
+    // let the queue grow without bound — DiscardOldestPolicy sheds the stalest queued alert so a
+    // wedged webhook drops load instead of accumulating it.
+    ThreadFactory threadFactory =
+        r -> {
+          Thread t = new Thread(r, "alert-webhook");
+          t.setDaemon(true);
+          return t;
+        };
     this.executor =
-        Executors.newSingleThreadExecutor(
-            r -> {
-              Thread t = new Thread(r, "alert-webhook");
-              t.setDaemon(true);
-              return t;
-            });
+        new ThreadPoolExecutor(
+            1,
+            1,
+            0L,
+            TimeUnit.MILLISECONDS,
+            new LinkedBlockingQueue<>(ALERT_QUEUE_CAPACITY),
+            threadFactory,
+            new ThreadPoolExecutor.DiscardOldestPolicy());
   }
 
   /**

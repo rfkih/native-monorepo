@@ -37,6 +37,10 @@ public class ErrorInboxWriter {
 
   private static final Logger log = LoggerFactory.getLogger(ErrorInboxWriter.class);
 
+  // On conflict we deliberately keep the LATEST occurrence's redacted_message (last-write-wins) so
+  // it pairs with the bumped last_seen — two messages sharing a fingerprint (digits normalised) can
+  // differ in non-digit text, and the most recent occurrence is the more useful diagnostic.
+  // first_seen is set on INSERT and never updated, so the first-occurrence time is still preserved.
   private static final String UPSERT_SQL =
       "INSERT INTO error_log"
           + " (id, fingerprint, exception_class, redacted_message, source,"

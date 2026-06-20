@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import id.co.nativeapp.finance.observability.service.ErrorInboxWriter;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import org.junit.jupiter.api.BeforeEach;
@@ -126,14 +127,15 @@ class ErrorInboxWriterTest extends PostgresRlsTestBase {
     try (Connection admin =
             java.sql.DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
-        Statement st = admin.createStatement();
-        ResultSet rs =
-            st.executeQuery(
-                "SELECT occurrence_count FROM error_log WHERE source = '" + source + "'")) {
-      if (rs.next()) {
-        return rs.getLong(1);
+        PreparedStatement ps =
+            admin.prepareStatement("SELECT occurrence_count FROM error_log WHERE source = ?")) {
+      ps.setString(1, source);
+      try (ResultSet rs = ps.executeQuery()) {
+        if (rs.next()) {
+          return rs.getLong(1);
+        }
+        return 0L;
       }
-      return 0L;
     }
   }
 
@@ -141,14 +143,15 @@ class ErrorInboxWriterTest extends PostgresRlsTestBase {
     try (Connection admin =
             java.sql.DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
-        Statement st = admin.createStatement();
-        ResultSet rs =
-            st.executeQuery(
-                "SELECT redacted_message FROM error_log WHERE source = '" + source + "'")) {
-      if (rs.next()) {
-        return rs.getString(1);
+        PreparedStatement ps =
+            admin.prepareStatement("SELECT redacted_message FROM error_log WHERE source = ?")) {
+      ps.setString(1, source);
+      try (ResultSet rs = ps.executeQuery()) {
+        if (rs.next()) {
+          return rs.getString(1);
+        }
+        return null;
       }
-      return null;
     }
   }
 }
