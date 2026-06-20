@@ -33,10 +33,14 @@ public class ErrorMessageRedactor {
   private static final String EMAIL_PATTERN = "[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}";
 
   /**
-   * Digit run of length ≥ 10 — covers NIK (16-digit national ID), bank account numbers, and any
-   * other long numeric identifier. A "short" number (e.g. an amount {@code 12345}) is NOT masked.
+   * A long numeric identifier of ≥ 10 digits — covers NIK (16-digit national ID), bank account
+   * numbers, phone numbers, and any other long numeric identifier. Single space / hyphen
+   * separators <em>inside</em> the run are tolerated and consumed, so a formatted account ({@code
+   * 1234 5678 9012}) or phone ({@code 0812-3456-7890}) is masked as a whole — not just contiguous
+   * digit runs. A "short" number (e.g. an amount {@code 12345}) is NOT masked. Erring toward
+   * masking is the safe direction for a non-RLS ops table whose sole PII mitigation is redaction.
    */
-  private static final String LONG_DIGIT_PATTERN = "\\d{10,}";
+  private static final String LONG_DIGIT_PATTERN = "\\d(?:[ -]?\\d){9,}";
 
   /**
    * Any digit run of any length — used only for {@link #fingerprintNormalize(String)} where even

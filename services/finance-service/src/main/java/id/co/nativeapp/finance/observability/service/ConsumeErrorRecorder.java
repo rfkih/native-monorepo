@@ -58,20 +58,22 @@ public class ConsumeErrorRecorder {
       String source = "kafka:" + rec.topic();
       String traceId = MDC.get("trace_id");
 
-      long count = errorInboxWriter.record(ex, source, null, traceId);
+      ErrorInboxWriter.Recorded recorded = errorInboxWriter.record(ex, source, null, traceId);
 
-      if (shouldAlert(count)) {
+      if (shouldAlert(recorded.occurrenceCount())) {
         Throwable cause = NestedExceptionUtils.getMostSpecificCause(ex);
         AlertPayload payload =
             new AlertPayload(
                 SERVICE_NAME,
-                // fingerprint is not re-computed here; pass a placeholder derived from the
-                // exception class + source for the webhook consumer's display.
-                cause.getClass().getSimpleName() + "@" + source,
+                // The REAL dedup fingerprint (also the error_log row key), so an operator can
+                // correlate the alert back to the stored row.
+                recorded.fingerprint(),
                 cause.getClass().getName(),
-                cause.getMessage() != null ? cause.getMessage() : "",
+                // The PII-REDACTED message from the writer — the raw cause.getMessage() must
+                // NEVER leave this service over the webhook (HR-6 / ADR 0005).
+                recorded.redactedMessage(),
                 source,
-                count,
+                recorded.occurrenceCount(),
                 Instant.now());
         alertWebhookClient.send(payload);
       }

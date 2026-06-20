@@ -1,5 +1,6 @@
 package id.co.nativeapp.finance.observability;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -16,6 +17,7 @@ import id.co.nativeapp.finance.observability.service.ErrorInboxWriter;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -31,6 +33,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
  *   <li>{@code occurrenceCount == 100} → alert invoked (milestone).
  *   <li>{@code occurrenceCount == 2000} → alert invoked (1000-multiple milestone).
  *   <li>Writer throws → recorder does not throw (ops infrastructure is fail-safe).
+ *   <li><strong>The alert payload carries the REDACTED message and the REAL fingerprint</strong>
+ *       returned by the writer — never the raw exception text (HR-6 / ADR 0005 egress guard).
  * </ul>
  */
 @ExtendWith(MockitoExtension.class)
@@ -45,9 +49,14 @@ class ConsumeErrorRecorderTest {
     return new ConsumerRecord<>(topic, 0, 0L, "key", new byte[0]);
   }
 
+  /** A recorded result with the given occurrence count, a stable fingerprint, and a redacted msg. */
+  private static ErrorInboxWriter.Recorded recorded(long count) {
+    return new ErrorInboxWriter.Recorded(count, "fp-" + count, "redacted");
+  }
+
   @Test
   void occurrenceCount1TriggersAlert() {
-    when(errorInboxWriter.record(any(), anyString(), isNull(), isNull())).thenReturn(1L);
+    when(errorInboxWriter.record(any(), anyString(), isNull(), isNull())).thenReturn(recorded(1L));
 
     recorder.record(record("SaleRecorded"), new RuntimeException("decode error"));
 
@@ -56,7 +65,7 @@ class ConsumeErrorRecorderTest {
 
   @Test
   void occurrenceCount2DoesNotTriggerAlert() {
-    when(errorInboxWriter.record(any(), anyString(), isNull(), isNull())).thenReturn(2L);
+    when(errorInboxWriter.record(any(), anyString(), isNull(), isNull())).thenReturn(recorded(2L));
 
     recorder.record(record("SaleRecorded"), new RuntimeException("decode error"));
 
@@ -65,7 +74,7 @@ class ConsumeErrorRecorderTest {
 
   @Test
   void occurrenceCount10TriggersAlert() {
-    when(errorInboxWriter.record(any(), anyString(), isNull(), isNull())).thenReturn(10L);
+    when(errorInboxWriter.record(any(), anyString(), isNull(), isNull())).thenReturn(recorded(10L));
 
     recorder.record(record("ExpenseRecorded"), new RuntimeException("avro error"));
 
@@ -74,7 +83,7 @@ class ConsumeErrorRecorderTest {
 
   @Test
   void occurrenceCount100TriggersAlert() {
-    when(errorInboxWriter.record(any(), anyString(), isNull(), isNull())).thenReturn(100L);
+    when(errorInboxWriter.record(any(), anyString(), isNull(), isNull())).thenReturn(recorded(100L));
 
     recorder.record(record("LaborCostAllocated"), new RuntimeException("timeout"));
 
@@ -83,7 +92,8 @@ class ConsumeErrorRecorderTest {
 
   @Test
   void occurrenceCount2000TriggersAlert() {
-    when(errorInboxWriter.record(any(), anyString(), isNull(), isNull())).thenReturn(2000L);
+    when(errorInboxWriter.record(any(), anyString(), isNull(), isNull()))
+        .thenReturn(recorded(2000L));
 
     recorder.record(record("PayrollPosted"), new RuntimeException("schema mismatch"));
 
@@ -92,7 +102,7 @@ class ConsumeErrorRecorderTest {
 
   @Test
   void occurrenceCount999DoesNotTriggerAlert() {
-    when(errorInboxWriter.record(any(), anyString(), isNull(), isNull())).thenReturn(999L);
+    when(errorInboxWriter.record(any(), anyString(), isNull(), isNull())).thenReturn(recorded(999L));
 
     recorder.record(record("SaleRecorded"), new RuntimeException("error"));
 
@@ -114,10 +124,32 @@ class ConsumeErrorRecorderTest {
   @Test
   void sourceIsDerivedFromTopicName() {
     when(errorInboxWriter.record(any(), eq("kafka:SaleRecorded"), isNull(), isNull()))
-        .thenReturn(0L);
+        .thenReturn(recorded(0L));
 
     recorder.record(record("SaleRecorded"), new RuntimeException("error"));
 
     verify(errorInboxWriter).record(any(), eq("kafka:SaleRecorded"), isNull(), isNull());
+  }
+
+  // ----------------------------------------------------- PII egress guard (B1 / HR-6)
+
+  @Test
+  void alertPayloadCarriesRedactedMessageAndRealFingerprintNeverRawMessage() {
+    // The writer returns the REDACTED message + the real dedup fingerprint; the recorder must put
+    // those on the wire, NOT the raw cause.getMessage() (which here contains a NIK).
+    ErrorInboxWriter.Recorded rec =
+        new ErrorInboxWriter.Recorded(1L, "sha256-row-key", "Employee NIK *** failed validation");
+    when(errorInboxWriter.record(any(), anyString(), isNull(), isNull())).thenReturn(rec);
+    ArgumentCaptor<AlertPayload> captor = ArgumentCaptor.forClass(AlertPayload.class);
+
+    recorder.record(
+        record("PayrollPosted"),
+        new RuntimeException("Employee NIK 3201234567890001 failed validation"));
+
+    verify(alertWebhookClient).send(captor.capture());
+    AlertPayload sent = captor.getValue();
+    assertThat(sent.message()).isEqualTo("Employee NIK *** failed validation");
+    assertThat(sent.message()).doesNotContain("3201234567890001");
+    assertThat(sent.fingerprint()).isEqualTo("sha256-row-key");
   }
 }

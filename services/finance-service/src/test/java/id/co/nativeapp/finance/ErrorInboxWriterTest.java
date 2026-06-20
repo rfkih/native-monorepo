@@ -51,8 +51,8 @@ class ErrorInboxWriterTest extends PostgresRlsTestBase {
     RuntimeException ex = new RuntimeException("connection refused");
     String source = "kafka:SaleRecorded";
 
-    long first = errorInboxWriter.record(ex, source, null, null);
-    long second = errorInboxWriter.record(ex, source, null, null);
+    long first = errorInboxWriter.record(ex, source, null, null).occurrenceCount();
+    long second = errorInboxWriter.record(ex, source, null, null).occurrenceCount();
 
     assertThat(first).isEqualTo(1L);
     assertThat(second).isEqualTo(2L);
@@ -101,8 +101,8 @@ class ErrorInboxWriterTest extends PostgresRlsTestBase {
     RuntimeException ex2 = new RuntimeException("Timeout after 5000ms on attempt 2");
     String source = "kafka:LaborCostAllocated";
 
-    long c1 = errorInboxWriter.record(ex1, source, null, null);
-    long c2 = errorInboxWriter.record(ex2, source, null, null);
+    long c1 = errorInboxWriter.record(ex1, source, null, null).occurrenceCount();
+    long c2 = errorInboxWriter.record(ex2, source, null, null).occurrenceCount();
 
     assertThat(c1).isEqualTo(1L);
     assertThat(c2).isEqualTo(2L);

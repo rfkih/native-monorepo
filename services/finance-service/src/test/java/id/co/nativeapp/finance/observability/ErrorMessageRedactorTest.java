@@ -44,6 +44,21 @@ class ErrorMessageRedactorTest {
   }
 
   @Test
+  void spaceSeparatedBankAccountIsMasked() {
+    // A bank account formatted with spaces (12 digits across groups) must be masked as a whole —
+    // contiguous-only masking would have leaked it.
+    String result = redactor.redact("transfer to 1234 5678 9012 was rejected");
+    assertThat(result).doesNotContain("1234 5678 9012").doesNotContain("5678").contains("***");
+  }
+
+  @Test
+  void hyphenSeparatedPhoneIsMasked() {
+    // A phone number formatted with hyphens (12 digits) must be masked as a whole.
+    String result = redactor.redact("sms to 0812-3456-7890 failed");
+    assertThat(result).doesNotContain("0812-3456-7890").doesNotContain("3456").contains("***");
+  }
+
+  @Test
   void shortNumberIsNotMasked() {
     // A 5-digit amount like "12345" MUST NOT be masked (less than 10 digits)
     String result = redactor.redact("amount 12345 is invalid");

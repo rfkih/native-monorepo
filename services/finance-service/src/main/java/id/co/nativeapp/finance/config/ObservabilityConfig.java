@@ -18,9 +18,22 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class ObservabilityConfig {
 
   /**
+   * Bounded timeout (seconds) for the error-inbox upsert. The inbox write runs synchronously on the
+   * Kafka consumer thread just before the DLT publish, so an unbounded upsert (slow DB, pool
+   * starvation, or lock contention on a single hot fingerprint during an error storm) would delay
+   * the DLT publish and stall the partition — partly defeating the "never block the partition"
+   * guarantee this error path exists to protect. The transaction timeout propagates to the JDBC
+   * statement, so a wedged upsert fails fast (and is swallowed by {@code ErrorInboxWriter}) rather
+   * than blocking the consumer.
+   */
+  private static final int ERROR_INBOX_TX_TIMEOUT_SECONDS = 5;
+
+  /**
    * A {@link TransactionTemplate} that always runs in a brand-new transaction ({@code
    * PROPAGATION_REQUIRES_NEW}), used exclusively by {@code ErrorInboxWriter} to persist error
-   * records even when the surrounding business transaction has already been marked for rollback.
+   * records even when the surrounding business transaction has already been marked for rollback. A
+   * bounded {@linkplain #ERROR_INBOX_TX_TIMEOUT_SECONDS timeout} keeps a slow upsert from stalling
+   * the consumer partition.
    */
   @Bean
   public TransactionTemplate errorInboxTransactionTemplate(
@@ -28,6 +41,7 @@ public class ObservabilityConfig {
     TransactionTemplate template = new TransactionTemplate(transactionManager);
     template.setPropagationBehavior(
         org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    template.setTimeout(ERROR_INBOX_TX_TIMEOUT_SECONDS);
     return template;
   }
 }

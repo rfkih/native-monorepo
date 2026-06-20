@@ -76,9 +76,12 @@ public class ErrorInboxWriter {
    * @param source the origin label, e.g. {@code "kafka:SaleRecorded"}
    * @param companyId the tenant, or {@code null} when not resolvable (e.g. deserialisation failure)
    * @param traceId the W3C trace-id from MDC, or {@code null}
-   * @return the {@code occurrence_count} after the upsert, or {@code 0} if recording failed
+   * @return a {@link Recorded} carrying the post-upsert {@code occurrence_count}, the dedup {@code
+   *     fingerprint}, and the PII-{@code redactedMessage}; {@link Recorded#failed()} (count {@code
+   *     0}, null fingerprint) if recording failed. The redacted message is returned so the alert
+   *     egress path can use it — the raw message must NEVER leave this service (HR-6 / ADR 0005).
    */
-  public long record(Throwable ex, String source, String companyId, String traceId) {
+  public Recorded record(Throwable ex, String source, String companyId, String traceId) {
     try {
       Throwable cause = NestedExceptionUtils.getMostSpecificCause(ex);
       String exceptionClass = cause.getClass().getName();
@@ -106,14 +109,29 @@ public class ErrorInboxWriter {
                       now,
                       now));
 
-      return count != null ? count : 0L;
+      return new Recorded(count != null ? count : 0L, fingerprint, redactedMessage);
     } catch (Exception e) {
       log.warn(
           "error-inbox: failed to record error (source={}, exClass={}); continuing",
           source,
           ex.getClass().getName(),
           e);
-      return 0L;
+      return Recorded.failed();
+    }
+  }
+
+  /**
+   * The outcome of an inbox upsert: the post-upsert {@code occurrenceCount}, the dedup {@code
+   * fingerprint} (the same value stored in {@code error_log.fingerprint}, so an alert can be
+   * correlated back to the row), and the already-PII-redacted {@code redactedMessage} (the value
+   * stored in {@code error_log.redacted_message}). The recorder MUST use {@code redactedMessage}
+   * for any alert egress — never the raw exception message (HR-6 / ADR 0005).
+   */
+  public record Recorded(long occurrenceCount, String fingerprint, String redactedMessage) {
+
+    /** The sentinel returned when recording failed: count {@code 0} suppresses any alert. */
+    static Recorded failed() {
+      return new Recorded(0L, null, "");
     }
   }
 

@@ -42,6 +42,10 @@ ADR 0004); fleet rollout is a later ADR.
 - **Alerting:** on `occurrence_count` transitions to **1** and milestones **10/100/1000**, an
   **`@Async`** POST sends the alert JSON to `NATIVE_ALERT_WEBHOOK_URL` with **explicit connect/read
   timeouts** (also advances gap #12). **No-op when the URL is unset** (so dev/CI never call out).
+  The alert JSON carries the **PII-redacted** message and the **real dedup fingerprint** (the
+  `error_log` row key, for operator correlation) — **never the raw exception text**, so the egress
+  path is held to the same HR-6 bar as storage (the writer returns the redacted message; the
+  recorder puts only that on the wire).
 - **Out of scope (follow-ups):** web-path `5xx` capture (fleet rollout, via an optional `ErrorSink`
   SPI in `libs/security`'s catch-all so other services opt in with one bean); centralizing transport
   ownership in **notification-service** (today a stub); Grafana dashboards (infra-gated, gap #13).
@@ -49,9 +53,13 @@ ADR 0004); fleet rollout is a later ADR.
 ## Consequences
 - Ops gains durable visibility + push alerts on the money-critical consume failures finance can hit;
   a DLT'd event is no longer silent.
-- **Enforcement:** a Testcontainers test proves the upsert dedups (count increments, one row), a
-  redaction test proves no PII reaches `redacted_message`, and an alert test proves the webhook fires
-  once on first occurrence (and not on a benign repeat below a milestone).
+- **Enforcement:** a Testcontainers test proves the upsert dedups (count increments, one row); a
+  redaction test proves no PII reaches `redacted_message` — including **space/hyphen-separated**
+  identifiers (formatted bank accounts / phone numbers), not just contiguous digit runs; an alert
+  test proves the webhook fires once on first occurrence (and not on a benign repeat below a
+  milestone); and a payload test proves the alert carries only the **redacted** message (not the
+  raw exception text). The inbox upsert runs under a **bounded transaction timeout** so a slow DB
+  cannot stall the consumer partition.
 - **Cost / debt:** one non-RLS, non-Auditable table per service — justified above and fenced to ops
   data only; any future column that could carry tenant-identifying data must be redacted or this ADR
   revisited. The pilot is finance-only; the scorecard row #11 stays ⚠ until the fleet rollout +
