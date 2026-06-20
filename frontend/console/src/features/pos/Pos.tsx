@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { Check, Minus, Plus, Trash2, Utensils } from 'lucide-react'
+import { Minus, Plus, Trash2, Utensils } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -10,7 +10,9 @@ import { useSession, type CompanySession } from '@/lib/session'
 import { localeOf } from '@/i18n'
 import { cn } from '@/lib/cn'
 import { formatMoney } from '@/lib/money'
-import { useCheckout, useMenu, useSeedMenu, type MenuItem, type OrderResponse } from './api'
+import { useMenu, useSeedMenu, type MenuItem, type OrderResponse, type PaymentResponse } from './api'
+import { PaymentModal } from './PaymentModal'
+import { ReceiptView } from './ReceiptView'
 
 const CATEGORY_ORDER = ['mains', 'drinks', 'desserts']
 
@@ -24,11 +26,14 @@ function PosInner({ session }: { session: CompanySession }) {
   const { t, i18n } = useTranslation()
   const locale = localeOf(i18n.language)
   const menuQuery = useMenu(session)
-  const checkout = useCheckout(session)
   const seed = useSeedMenu(session)
 
   const [cart, setCart] = useState<Record<string, number>>({})
-  const [placed, setPlaced] = useState<OrderResponse | null>(null)
+
+  // Modal state: null = no modal, 'payment' = payment modal, 'receipt' = receipt overlay
+  const [modal, setModal] = useState<'payment' | 'receipt' | null>(null)
+  const [placedOrder, setPlacedOrder] = useState<OrderResponse | null>(null)
+  const [placedPayment, setPlacedPayment] = useState<PaymentResponse | null>(null)
 
   const items = menuQuery.data ?? []
   const byId = new Map(items.map((i) => [i.id, i]))
@@ -51,18 +56,25 @@ function PosInner({ session }: { session: CompanySession }) {
       return next
     })
   }
-  function charge() {
-    const lines = Object.entries(cart).map(([menuItemId, qty]) => ({ menuItemId, qty }))
-    checkout.mutate(lines, {
-      onSuccess: (res) => {
-        if (res) {
-          setPlaced(res)
-          setCart({})
-        }
-      },
-    })
+
+  function openPayment() {
+    setModal('payment')
   }
 
+  function handlePaymentSuccess(order: OrderResponse, payment: PaymentResponse) {
+    setPlacedOrder(order)
+    setPlacedPayment(payment)
+    setCart({})
+    setModal('receipt')
+  }
+
+  function handleNewOrder() {
+    setPlacedOrder(null)
+    setPlacedPayment(null)
+    setModal(null)
+  }
+
+  const cartLines = Object.entries(cart).map(([menuItemId, qty]) => ({ menuItemId, qty }))
   const grouped = groupByCategory(items)
 
   return (
@@ -170,28 +182,38 @@ function PosInner({ session }: { session: CompanySession }) {
                 {formatMoney(totalMinor, currency, locale)}
               </span>
             </div>
-            {checkout.isError ? (
-              <p className="mt-2 text-xs text-rose">{(checkout.error as Error).message}</p>
-            ) : null}
             <Button
               className="mt-4 w-full"
-              disabled={lineCount === 0 || checkout.isPending}
-              onClick={charge}
+              disabled={lineCount === 0}
+              onClick={openPayment}
             >
-              {checkout.isPending ? (
-                <Spinner />
-              ) : (
-                <>
-                  {t('pos.charge')} · {formatMoney(totalMinor, currency, locale)}
-                </>
-              )}
+              {t('pos.charge')} · {formatMoney(totalMinor, currency, locale)}
             </Button>
           </div>
         </Card>
       </div>
 
-      {placed ? (
-        <ChargeSuccess order={placed} locale={locale} onNew={() => setPlaced(null)} />
+      {/* Payment modal */}
+      {modal === 'payment' ? (
+        <PaymentModal
+          session={session}
+          lines={cartLines}
+          totalMinor={totalMinor}
+          currency={currency}
+          locale={locale}
+          onSuccess={handlePaymentSuccess}
+          onClose={() => setModal(null)}
+        />
+      ) : null}
+
+      {/* Receipt overlay */}
+      {modal === 'receipt' && placedOrder && placedPayment ? (
+        <ReceiptView
+          order={placedOrder}
+          payment={placedPayment}
+          locale={locale}
+          onNew={handleNewOrder}
+        />
       ) : null}
     </div>
   )
@@ -228,35 +250,6 @@ function ItemCard({
         {formatMoney(item.priceMinor, item.currency, locale)}
       </span>
     </button>
-  )
-}
-
-function ChargeSuccess({
-  order,
-  locale,
-  onNew,
-}: {
-  order: OrderResponse
-  locale: string
-  onNew: () => void
-}) {
-  const { t } = useTranslation()
-  return (
-    <div className="fixed inset-0 z-40 grid place-items-center bg-ink/30 p-5 backdrop-blur-sm">
-      <Card className="reveal w-full max-w-sm p-8 text-center">
-        <div className="mx-auto grid size-14 place-items-center rounded-full bg-emerald text-white">
-          <Check className="size-7" />
-        </div>
-        <h2 className="mt-4 font-display text-2xl font-semibold text-ink">{t('pos.paid')}</h2>
-        <p className="mt-1 text-sm text-ink-3">{t('pos.paidHint')}</p>
-        <div className="tnum mt-5 font-mono text-3xl font-medium text-ink">
-          {formatMoney(order.totalMinor, order.currency, locale)}
-        </div>
-        <Button className="mt-6 w-full" onClick={onNew}>
-          {t('pos.newOrder')}
-        </Button>
-      </Card>
-    </div>
   )
 }
 
