@@ -189,52 +189,75 @@ public class OrderWriter {
     Order saved = orderRepository.saveAndFlush(order);
 
     // ------------------------------------------------------------------
-    // 5. Record the sale by reusing SaleWriter — exactly one SaleRecorded
-    //    outbox row emitted (rule 3), atomically within THIS transaction.
-    //    recordInCurrentTx has propagation MANDATORY: it joins our
-    //    REQUIRES_NEW transaction, so order + lines + sale + outbox row
-    //    all commit (or roll back) as one physical unit (C1 fix).
+    // 5. Record the sale / payment based on tender type (ADR 0006).
+    //
+    //    CASH (or no payment): record the sale synchronously — exactly one
+    //    SaleRecorded outbox row is emitted in THIS transaction.  Revenue
+    //    is recognised immediately together with the order.
+    //
+    //    DIGITAL (QRIS / CARD): do NOT record a sale at checkout.  Revenue
+    //    is deferred to the explicit capture call (revenue-at-capture
+    //    invariant, ADR 0006).  Only a PENDING payment row is written here;
+    //    the order stays without a sale_id until capture commits it.
+    //    SaleRecorded is emitted only at capture time.
     // ------------------------------------------------------------------
-    // Thread the tender type from the checkout request so the SaleRecorded outbox event
-    // carries it (ADR 0006 slice 2 — finance routes GL clearing account by tender).
-    // null when no payment block is present (legacy / direct-sale path; finance defaults to
-    // CASH_CLEARING, keeping the carwash / SaleService paths unchanged).
-    String tenderTypeName =
-        (request.payment() != null) ? request.payment().tenderType().name() : null;
-    RecordSaleCommand saleCommand =
-        new RecordSaleCommand(
-            request.businessId(),
-            runningTotal.amountMinor(),
-            currencyCode,
-            now,
-            request.idempotencyKey(),
-            tenderTypeName);
-    RecordSaleResult saleResult = saleWriter.recordInCurrentTx(saleCommand);
+    OrderResponse response;
+    boolean isDigitalPayment =
+        request.payment() != null && request.payment().tenderType().isDigital();
 
-    // Link the sale id back to the order (triggers an UPDATE on restaurant_order).
-    saved.linkSale(saleResult.sale().id());
-    orderRepository.saveAndFlush(saved);
+    if (!isDigitalPayment) {
+      // CASH or no-payment path: record sale synchronously in this transaction.
+      // Thread the tender type so finance can route the GL clearing account (ADR 0006, slice 2).
+      // null when no payment block is present (legacy / direct-sale path; finance defaults to
+      // CASH_CLEARING, keeping the carwash / SaleService paths unchanged).
+      String tenderTypeName =
+          (request.payment() != null) ? request.payment().tenderType().name() : null;
+      RecordSaleCommand saleCommand =
+          new RecordSaleCommand(
+              request.businessId(),
+              runningTotal.amountMinor(),
+              currencyCode,
+              now,
+              request.idempotencyKey(),
+              tenderTypeName);
+      RecordSaleResult saleResult = saleWriter.recordInCurrentTx(saleCommand);
 
-    // ------------------------------------------------------------------
-    // 6. Optional payment (ADR 0006). Cash captures synchronously, in THIS
-    //    transaction, against the sale just recorded — so order + lines +
-    //    sale + outbox + payment all commit (or roll back) together.
-    //    Digital tenders are not captured at checkout (they are PENDING
-    //    until capture) — that flow lands with the capture endpoint.
-    // ------------------------------------------------------------------
-    OrderResponse response = OrderResponse.from(saved);
-    if (request.payment() != null) {
+      // Link the sale id back to the order → status COMPLETED.
+      saved.linkSale(saleResult.sale().id());
+      orderRepository.saveAndFlush(saved);
+
+      response = OrderResponse.from(saved);
+      if (request.payment() != null) {
+        // CASH: capture synchronously against the just-recorded sale.
+        PaymentInstruction instruction =
+            new PaymentInstruction(
+                saved.getId(),
+                request.businessId(),
+                request.payment().tenderType(),
+                runningTotal,
+                request.payment().tenderedMinor(),
+                request.idempotencyKey() + ":pay");
+        PaymentResponse paymentResponse =
+            paymentWriter.captureCashInCurrentTx(instruction, saleResult.sale().id(), now);
+        response = response.withPayment(paymentResponse);
+      }
+    } else {
+      // DIGITAL path: persist a PENDING payment; no sale, no SaleRecorded yet.
+      // The order stays in AWAITING_PAYMENT status (no sale_id until capture).
+      saved.markAwaitingPayment();
+      orderRepository.saveAndFlush(saved);
+
       PaymentInstruction instruction =
           new PaymentInstruction(
               saved.getId(),
               request.businessId(),
               request.payment().tenderType(),
               runningTotal,
-              request.payment().tenderedMinor(),
+              null, // digital tenders carry no tendered amount
               request.idempotencyKey() + ":pay");
       PaymentResponse paymentResponse =
-          paymentWriter.captureCashInCurrentTx(instruction, saleResult.sale().id(), now);
-      response = response.withPayment(paymentResponse);
+          paymentWriter.recordPendingDigitalInCurrentTx(instruction, now);
+      response = OrderResponse.from(saved).withPayment(paymentResponse);
     }
 
     return new CheckoutResult(response, true);

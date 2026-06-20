@@ -112,6 +112,16 @@ public class Order extends Auditable {
     this.status = "COMPLETED";
   }
 
+  /**
+   * Transitions this order to {@code AWAITING_PAYMENT} status when a digital tender (QRIS/CARD) is
+   * submitted at checkout. The sale is NOT recorded here — it is created only when the digital
+   * payment is captured (ADR 0006 revenue-at-capture invariant). The {@code sale_id} remains null
+   * until {@link #linkSale} is called at capture time.
+   */
+  public void markAwaitingPayment() {
+    this.status = "AWAITING_PAYMENT";
+  }
+
   public UUID getId() {
     return id;
   }
