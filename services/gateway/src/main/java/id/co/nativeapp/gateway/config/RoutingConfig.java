@@ -21,7 +21,8 @@ import org.springframework.web.servlet.function.ServerResponse;
  *
  * <ul>
  *   <li><b>Cashier POS</b> ({@code owner}/{@code manager}/{@code cashier}): {@code
- *       /api/v1/menu/**}, {@code /api/v1/orders/**}, {@code /api/v1/sales/**} → restaurant-service.
+ *       /api/v1/menu/**}, {@code /api/v1/orders/**}, {@code /api/v1/sales/**}, {@code
+ *       /api/v1/payments/**} → restaurant-service.
  *   <li><b>Owner dashboard</b> ({@code owner}/{@code manager} only): {@code /api/v1/companies/**} →
  *       org-service; {@code /api/v1/revenue/**}, {@code /api/v1/pnl/**}, {@code
  *       /api/v1/statements/**} → finance-service.
@@ -102,6 +103,20 @@ public class RoutingConfig {
       TenantContextHeaderFilter tenantFilter) {
     return GatewayRouterFunctions.route("restaurant-service-orders")
         .route(path("/api/v1/orders/**"), http())
+        .before(uri(routes.restaurantService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(POS_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  @Bean
+  RouterFunction<ServerResponse> paymentsRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("restaurant-service-payments")
+        .route(path("/api/v1/payments/**"), http())
         .before(uri(routes.restaurantService()))
         .filter(new RateLimitFilter(limiter))
         .filter(new RoleAuthorizationFilter(POS_ROLES))

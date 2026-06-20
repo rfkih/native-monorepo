@@ -33,6 +33,7 @@ const proxy: Record<string, ProxyOptions> = GATEWAY
       '/api/v1/menu': { target: RESTAURANT, changeOrigin: true },
       '/api/v1/orders': { target: RESTAURANT, changeOrigin: true },
       '/api/v1/sales': { target: RESTAURANT, changeOrigin: true },
+      '/api/v1/payments': { target: RESTAURANT, changeOrigin: true },
     }
 
 // https://vite.dev/config/
