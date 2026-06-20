@@ -24,10 +24,29 @@ import java.util.UUID;
  * @param currency the ISO-4217 currency code
  * @param occurredAt when the sale occurred; the caller defaults a missing value to now
  * @param idempotencyKey the client's request id, the producer-idempotency dedupe key
+ * @param tenderType the payment tender type ({@code CASH}, {@code QRIS}, {@code CARD}), or {@code
+ *     null} for legacy/no-payment sales; threaded to the {@code SaleRecorded} event wire field so
+ *     finance can route the GL clearing account by tender (ADR 0006, slice 2)
  */
 public record RecordSaleCommand(
     @NotNull UUID businessId,
     @NotNull @Positive Long amountMinor,
     @NotBlank String currency,
     Instant occurredAt,
-    @NotBlank String idempotencyKey) {}
+    @NotBlank String idempotencyKey,
+    String tenderType) {
+
+  /**
+   * Convenience constructor preserving the original five-argument shape (no-tender / legacy
+   * callers). Sets {@code tenderType} to {@code null}, which the event catalog defines as "no
+   * tender / carwash / legacy" and finance maps to the {@code CASH_CLEARING} account.
+   */
+  public RecordSaleCommand(
+      UUID businessId,
+      Long amountMinor,
+      String currency,
+      Instant occurredAt,
+      String idempotencyKey) {
+    this(businessId, amountMinor, currency, occurredAt, idempotencyKey, null);
+  }
+}

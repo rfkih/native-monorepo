@@ -12,13 +12,16 @@ import org.apache.avro.generic.GenericRecord;
 /**
  * Loads the {@code SaleRecorded} Avro schema from the classpath ({@code avro/SaleRecorded.avsc})
  * and builds {@link GenericRecord}s from it — no Avro code-generation plugin, exactly as M1.4
- * specifies. The schema is the single source of truth registered in {@code docs/EVENT-CATALOG.md};
- * this class just parses it once and projects a {@link Sale} onto it.
+ * specifies. The schema is the single source of truth in {@code libs/contracts} (ADR 0003),
+ * registered in {@code docs/EVENT-CATALOG.md}; this class just parses it once and projects a {@link
+ * Sale} onto it.
  *
  * <p>The record is serialized to the outbox payload via {@code libs/events} {@link
  * id.co.nativeapp.events.AvroSerde AvroSerde}. Field shape matches ARCHITECTURE.md §5: {@code
  * sale_id}, {@code company_id}, {@code business_id} (strings), {@code amount_minor} (long), {@code
- * currency} (string), and {@code occurred_at} (long, logicalType {@code timestamp-millis}).
+ * currency} (string), {@code occurred_at} (long, logicalType {@code timestamp-millis}), and the ADR
+ * 0006 / slice 2 addition {@code tender_type} (nullable string — null for legacy/no-tender sales;
+ * carwash leaves it null and finance defaults to CASH_CLEARING).
  */
 public final class SaleRecordedSchema {
 
@@ -43,13 +46,16 @@ public final class SaleRecordedSchema {
   }
 
   /**
-   * Builds a {@code SaleRecorded} {@link GenericRecord} from a persisted sale. The amount is taken
-   * from the sale's {@link Money} (integer minor units + ISO-4217 code), never a float.
+   * Builds a {@code SaleRecorded} {@link GenericRecord} from a persisted sale, including the
+   * optional {@code tender_type} field (ADR 0006, slice 2). The amount is taken from the sale's
+   * {@link Money} (integer minor units + ISO-4217 code), never a float.
    *
    * @param sale the persisted sale aggregate
    * @param companyId the owning tenant (stamped on the sale from the tenant scope)
+   * @param tenderType the tender enum name ({@code "CASH"}, {@code "QRIS"}, {@code "CARD"}), or
+   *     {@code null} for legacy/no-payment sales (carwash always passes null)
    */
-  public static GenericRecord toRecord(Sale sale, String companyId) {
+  public static GenericRecord toRecord(Sale sale, String companyId, String tenderType) {
     Money amount = sale.getAmount();
     GenericRecord record = new GenericData.Record(SCHEMA);
     record.put("sale_id", sale.getId().toString());
@@ -58,7 +64,20 @@ public final class SaleRecordedSchema {
     record.put("amount_minor", amount.amountMinor());
     record.put("currency", amount.currency().getCurrencyCode());
     record.put("occurred_at", sale.getOccurredAt().toEpochMilli());
+    // tender_type is ["null","string"] with default null — set it explicitly (null or the name).
+    record.put("tender_type", tenderType);
     return record;
+  }
+
+  /**
+   * Backward-compatible overload for callers that have no tender context (e.g. legacy {@code POST
+   * /sales}). Sets {@code tender_type} to {@code null} on the wire.
+   *
+   * @param sale the persisted sale aggregate
+   * @param companyId the owning tenant
+   */
+  public static GenericRecord toRecord(Sale sale, String companyId) {
+    return toRecord(sale, companyId, null);
   }
 
   private static Schema parse() {

@@ -11,20 +11,27 @@ import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericRecord;
 
 /**
- * Loads finance-service's CONSUMER copy of the {@code SaleRecorded} Avro schema from the classpath
- * ({@code avro/SaleRecorded.avsc}) and decodes raw Avro bytes into a {@link SaleRecordedEvent} — no
- * Avro code-generation plugin, and no Confluent / Schema Registry serde. finance owns its own
- * consumer view of the contract (full name {@code id.co.nativeapp.events.restaurant.SaleRecorded},
- * matching docs/EVENT-CATALOG.md); a contract test asserts this copy stays backward-compatible with
- * the producer's schema.
+ * Loads finance-service's consumer view of the {@code SaleRecorded} Avro schema from the classpath
+ * ({@code avro/SaleRecorded.avsc}, sourced from {@code libs/contracts} — ADR 0003) and decodes raw
+ * Avro bytes into a {@link SaleRecordedEvent} — no Avro code-generation plugin, and no Confluent /
+ * Schema Registry serde. finance owns its consumer decode path (full name {@code
+ * id.co.nativeapp.events.restaurant.SaleRecorded}, matching docs/EVENT-CATALOG.md); a contract test
+ * asserts this schema stays backward-compatible with itself across changes.
  *
  * <p>The wire bytes are the producer outbox payload (raw Avro), so we deserialize with {@code
  * libs/events} {@link AvroSerde} against this parsed schema — consistent with how the outbox stores
  * events.
+ *
+ * <p><strong>ADR 0006 slice 2 addition:</strong> the {@code tender_type} nullable field is decoded
+ * and threaded into {@link SaleRecordedEvent} so {@link
+ * id.co.nativeapp.finance.revenue.service.RevenuePostingWriter} can route the GL clearing account
+ * by tender ({@code null}/{@code "CASH"} → CASH_CLEARING, {@code "QRIS"} → QRIS_CLEARING, {@code
+ * "CARD"} → CARD_CLEARING). Old events (carwash, legacy direct-sales) have {@code tender_type =
+ * null} and remain routed to CASH_CLEARING unchanged.
  */
 public final class SaleRecordedSchema {
 
-  /** Classpath location of the consumer-copy {@code .avsc}. */
+  /** Classpath location of the consumer-copy {@code .avsc} (from libs/contracts). */
   public static final String RESOURCE = "avro/SaleRecorded.avsc";
 
   /** The Kafka topic the producer outbox event is routed to (one topic per event type). */
@@ -36,18 +43,19 @@ public final class SaleRecordedSchema {
     // static holder
   }
 
-  /** The parsed reader schema for {@code SaleRecorded} (finance's consumer copy). */
+  /** The parsed reader schema for {@code SaleRecorded} (finance's consumer view). */
   public static Schema schema() {
     return SCHEMA;
   }
 
   /**
    * Decodes raw Avro bytes (the producer outbox payload, shipped by Debezium) into a {@link
-   * SaleRecordedEvent}, using this consumer copy of the schema as both writer and reader schema.
+   * SaleRecordedEvent}, using this consumer view of the schema as both writer and reader schema.
    *
    * <p>The money is reconstructed as {@code libs/money} {@link Money} from the integer {@code
    * amount_minor} + ISO-4217 {@code currency} (never a float); {@code occurred_at} is epoch millis
-   * UTC.
+   * UTC. The optional {@code tender_type} (nullable string) is decoded — {@code null} for old
+   * events / carwash; the enum name string for POS sales.
    *
    * @param eventId the event's UUID (the outbox row / Debezium message id) — the idempotency key
    * @param payload the raw Avro bytes off the topic
@@ -56,12 +64,17 @@ public final class SaleRecordedSchema {
     GenericRecord record = AvroSerde.deserialize(payload, SCHEMA);
     Money amount =
         Money.ofMinor((long) record.get("amount_minor"), record.get("currency").toString());
+    // tender_type is ["null","string"] with default null; old events have it absent (reads as
+    // null).
+    Object tenderTypeRaw = record.get("tender_type");
+    String tenderType = (tenderTypeRaw != null) ? tenderTypeRaw.toString() : null;
     return new SaleRecordedEvent(
         eventId,
         record.get("company_id").toString(),
         UUID.fromString(record.get("business_id").toString()),
         amount,
-        Instant.ofEpochMilli((long) record.get("occurred_at")));
+        Instant.ofEpochMilli((long) record.get("occurred_at")),
+        tenderType);
   }
 
   private static Schema parse() {

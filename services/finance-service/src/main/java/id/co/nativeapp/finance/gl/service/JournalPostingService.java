@@ -86,6 +86,38 @@ public class JournalPostingService {
       UUID sourceEventId,
       String description,
       boolean eventUsesIllustrative) {
+    return buildEntry(
+        eventKind,
+        period,
+        gross,
+        occurredAt,
+        sourceEventId,
+        description,
+        eventUsesIllustrative,
+        null);
+  }
+
+  /**
+   * Builds a balanced {@link JournalEntry} for the given event, with an optional {@code
+   * clearingRoleOverride} (ADR 0006 slice 2 — tender routing). When non-null, any template line
+   * whose {@link AccountRole} is {@link AccountRole#CASH_CLEARING} is resolved using {@code
+   * clearingRoleOverride} instead — allowing QRIS/card sales to post to the correct settlement
+   * clearing account without a new template or a new EventKind. All other parameters are identical
+   * to {@link #buildEntry(EventKind, String, Money, Instant, UUID, String, boolean)}.
+   *
+   * @param clearingRoleOverride when non-null, replaces {@code CASH_CLEARING} in every template
+   *     line with this role before resolution; when null, behaviour is identical to the 7-arg form
+   */
+  @SuppressWarnings("checkstyle:ParameterNumber")
+  public JournalEntry buildEntry(
+      EventKind eventKind,
+      String period,
+      Money gross,
+      Instant occurredAt,
+      UUID sourceEventId,
+      String description,
+      boolean eventUsesIllustrative,
+      AccountRole clearingRoleOverride) {
 
     Objects.requireNonNull(eventKind, "eventKind");
     Objects.requireNonNull(period, "period");
@@ -112,12 +144,20 @@ public class JournalPostingService {
     List<JournalLine> lines = new ArrayList<>(template.lines().size());
 
     for (TemplateLine tl : template.lines()) {
-      String accountCode = roleResolver.resolve(tl.accountRole(), occurredAt);
+      // ADR 0006 slice 2: when a clearing-role override is supplied and this line uses
+      // CASH_CLEARING, substitute the override so QRIS/card sales post to QRIS_CLEARING /
+      // CARD_CLEARING rather than the generic CASH_CLEARING. All other roles pass through.
+      AccountRole effectiveRole =
+          (clearingRoleOverride != null && tl.accountRole() == AccountRole.CASH_CLEARING)
+              ? clearingRoleOverride
+              : tl.accountRole();
+
+      String accountCode = roleResolver.resolve(effectiveRole, occurredAt);
       if (accountCode == null) {
         log.warn(
             "No role_account_map found for role={} eventKind={} occurredAt={};"
                 + " routing line {} to suspense — money NOT dropped",
-            tl.accountRole(),
+            effectiveRole,
             eventKind,
             occurredAt,
             tl.lineNo());

@@ -12,6 +12,10 @@ package id.co.nativeapp.finance.gl.domain;
  */
 public enum AccountRole {
   CASH_CLEARING,
+  /** Illustrative clearing account for QRIS (QR-code) digital payments (ADR 0006, slice 2). */
+  QRIS_CLEARING,
+  /** Illustrative clearing account for CARD (debit/credit) payments (ADR 0006, slice 2). */
+  CARD_CLEARING,
   REVENUE,
   EXPENSE,
   LABOR_EXPENSE,

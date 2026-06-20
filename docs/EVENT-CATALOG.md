@@ -255,8 +255,9 @@ whole rupiah for IDR); `currency` is the ISO-4217 code. `occurred_at` is epoch m
 | `amount_minor` | `long` | Amount in the currency's minor units — never a float |
 | `currency` | `string` | ISO-4217 currency code (e.g. `IDR`, `USD`) |
 | `occurred_at` | `long` (`timestamp-millis`) | When the sale occurred, epoch millis UTC |
+| `tender_type` | `["null","string"]` (default `null`) | Payment tender: `CASH` \| `QRIS` \| `CARD`, or `null` for legacy/no-payment sales. Finance routes the GL debit clearing account by tender: `null`/`CASH` → `CASH_CLEARING`, `QRIS` → `QRIS_CLEARING`, `CARD` → `CARD_CLEARING`. Backward-compatible addition — ADR 0006 slice 2 |
 
-**Avro schema**
+**Avro schema** (single source of truth in `libs/contracts/src/main/resources/avro/SaleRecorded.avsc`)
 
 ```json
 {
@@ -270,7 +271,8 @@ whole rupiah for IDR); `currency` is the ISO-4217 code. `occurred_at` is epoch m
     {"name": "business_id", "type": "string", "doc": "The originating business unit (UUID as string)."},
     {"name": "amount_minor", "type": "long", "doc": "Amount in the currency's minor units (e.g. cents for USD, whole rupiah for IDR). Never a float."},
     {"name": "currency", "type": "string", "doc": "ISO-4217 currency code, e.g. IDR or USD."},
-    {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the sale occurred, epoch millis (UTC)."}
+    {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the sale occurred, epoch millis (UTC)."},
+    {"name": "tender_type", "type": ["null", "string"], "default": null, "doc": "Payment tender type: CASH | QRIS | CARD, or null for legacy/no-payment sales. Finance routes the GL debit clearing account by tender (null/CASH → CASH_CLEARING, QRIS → QRIS_CLEARING, CARD → CARD_CLEARING). Backward-compatible — ADR 0006 slice 2."}
   ]
 }
 ```

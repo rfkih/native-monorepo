@@ -9,6 +9,7 @@
     {"name": "business_id", "type": "string", "doc": "The originating business unit (UUID as string)."},
     {"name": "amount_minor", "type": "long", "doc": "Amount in the currency's minor units (e.g. cents for USD, whole rupiah for IDR). Never a float."},
     {"name": "currency", "type": "string", "doc": "ISO-4217 currency code, e.g. IDR or USD."},
-    {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the sale occurred, epoch millis (UTC)."}
+    {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the sale occurred, epoch millis (UTC)."},
+    {"name": "tender_type", "type": ["null", "string"], "default": null, "doc": "The payment tender type: CASH | QRIS | CARD, or null for legacy/no-payment sales. Finance routes the GL debit clearing account by tender (null/CASH -> CASH_CLEARING, QRIS -> QRIS_CLEARING, CARD -> CARD_CLEARING). Backward-compatible: old producers leave it null; old readers ignore it."}
   ]
 }

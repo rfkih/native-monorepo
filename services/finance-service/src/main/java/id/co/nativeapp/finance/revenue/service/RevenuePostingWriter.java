@@ -1,6 +1,7 @@
 package id.co.nativeapp.finance.revenue.service;
 
 import id.co.nativeapp.events.ProcessedEventStore;
+import id.co.nativeapp.finance.gl.domain.AccountRole;
 import id.co.nativeapp.finance.gl.domain.EventKind;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
@@ -164,10 +165,14 @@ public class RevenuePostingWriter {
     pnlReadModel.addRevenue(period, amount, companyId, actor);
 
     // 5) Double-entry GL journal — SAME transaction, SAME processOnce claim. Build a balanced
-    //    journal entry from the illustrative posting template (SALE: Dr CASH_CLEARING / Cr REVENUE)
-    //    and save it alongside the dimensional posting. The source_event_id UNIQUE constraint on
+    //    journal entry from the illustrative posting template (SALE: Dr <clearing> / Cr REVENUE)
+    //    and save it alongside the dimensional posting. The clearing account is routed by tender
+    //    type (ADR 0006 slice 2): null/CASH → CASH_CLEARING (unchanged default), QRIS →
+    //    QRIS_CLEARING, CARD → CARD_CLEARING. The source_event_id UNIQUE constraint on
     //    journal_entry is the DB backstop — a re-delivered event is already claimed by processOnce
     //    above, so this line is never reached on a re-delivery.
+    AccountRole clearingRole = resolveClearingRole(event.tenderType());
+    // Use the override form when the tender is not the default (avoids null args for CASH/null).
     JournalEntry glEntry =
         journalPostingService.buildEntry(
             EventKind.SALE,
@@ -176,7 +181,8 @@ public class RevenuePostingWriter {
             event.occurredAt(),
             event.eventId(),
             "SaleRecorded",
-            false);
+            false,
+            clearingRole == AccountRole.CASH_CLEARING ? null : clearingRole);
     glEntry.setCompanyId(companyId);
     // saveAndFlush flushes the journal_entry INSERT to Postgres immediately so the FK on
     // journal_line.entry_id is satisfied when the line INSERTs follow in the same transaction.
@@ -188,5 +194,24 @@ public class RevenuePostingWriter {
               line.setCompanyId(companyId);
               journalLineRepository.save(line);
             });
+  }
+
+  /**
+   * Resolves the GL clearing {@link AccountRole} from a {@code tender_type} wire value (ADR 0006
+   * slice 2). Returns {@link AccountRole#CASH_CLEARING} for {@code null} (legacy / no-tender sales,
+   * carwash) and for {@code "CASH"}; {@link AccountRole#QRIS_CLEARING} for {@code "QRIS"}; {@link
+   * AccountRole#CARD_CLEARING} for {@code "CARD"}. Any unrecognised value falls back to {@link
+   * AccountRole#CASH_CLEARING} (safe default — money is never dropped).
+   */
+  static AccountRole resolveClearingRole(String tenderType) {
+    if (tenderType == null) {
+      return AccountRole.CASH_CLEARING;
+    }
+    return switch (tenderType) {
+      case "CASH" -> AccountRole.CASH_CLEARING;
+      case "QRIS" -> AccountRole.QRIS_CLEARING;
+      case "CARD" -> AccountRole.CARD_CLEARING;
+      default -> AccountRole.CASH_CLEARING;
+    };
   }
 }

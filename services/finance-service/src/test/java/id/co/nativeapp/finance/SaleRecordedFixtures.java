@@ -36,6 +36,21 @@ final class SaleRecordedFixtures {
       long amountMinor,
       String currency,
       Instant occurredAt) {
+    return record(saleId, companyId, businessId, amountMinor, currency, occurredAt, null);
+  }
+
+  /**
+   * Builds a {@code SaleRecorded} {@link GenericRecord} with an explicit {@code tender_type} (ADR
+   * 0006 slice 2). Pass {@code null} for legacy / no-payment / carwash sales.
+   */
+  static GenericRecord record(
+      UUID saleId,
+      String companyId,
+      UUID businessId,
+      long amountMinor,
+      String currency,
+      Instant occurredAt,
+      String tenderType) {
     GenericRecord record = new GenericData.Record(SaleRecordedSchema.schema());
     record.put("sale_id", saleId.toString());
     record.put("company_id", companyId);
@@ -43,6 +58,7 @@ final class SaleRecordedFixtures {
     record.put("amount_minor", amountMinor);
     record.put("currency", currency);
     record.put("occurred_at", occurredAt.toEpochMilli());
+    record.put("tender_type", tenderType);
     return record;
   }
 

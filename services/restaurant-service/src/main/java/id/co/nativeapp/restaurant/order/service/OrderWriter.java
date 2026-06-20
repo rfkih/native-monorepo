@@ -195,13 +195,20 @@ public class OrderWriter {
     //    REQUIRES_NEW transaction, so order + lines + sale + outbox row
     //    all commit (or roll back) as one physical unit (C1 fix).
     // ------------------------------------------------------------------
+    // Thread the tender type from the checkout request so the SaleRecorded outbox event
+    // carries it (ADR 0006 slice 2 — finance routes GL clearing account by tender).
+    // null when no payment block is present (legacy / direct-sale path; finance defaults to
+    // CASH_CLEARING, keeping the carwash / SaleService paths unchanged).
+    String tenderTypeName =
+        (request.payment() != null) ? request.payment().tenderType().name() : null;
     RecordSaleCommand saleCommand =
         new RecordSaleCommand(
             request.businessId(),
             runningTotal.amountMinor(),
             currencyCode,
             now,
-            request.idempotencyKey());
+            request.idempotencyKey(),
+            tenderTypeName);
     RecordSaleResult saleResult = saleWriter.recordInCurrentTx(saleCommand);
 
     // Link the sale id back to the order (triggers an UPDATE on restaurant_order).
