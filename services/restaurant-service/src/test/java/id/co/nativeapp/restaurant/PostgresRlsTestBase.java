@@ -59,7 +59,9 @@ public abstract class PostgresRlsTestBase {
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
         Statement st = admin.createStatement()) {
       st.execute(
-          "TRUNCATE TABLE payment, order_line, restaurant_order, menu_item, sale, outbox CASCADE");
+          "TRUNCATE TABLE payment, order_line_modifier, order_line, restaurant_order,"
+              + " menu_item_modifier_option, menu_item_modifier_group, menu_item,"
+              + " menu_category, sale, outbox CASCADE");
     } catch (SQLException ignored) {
       // Tables not created yet (pre-Flyway) — nothing to reset.
     }

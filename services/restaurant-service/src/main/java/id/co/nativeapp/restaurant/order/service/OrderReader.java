@@ -2,7 +2,11 @@ package id.co.nativeapp.restaurant.order.service;
 
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.restaurant.menu.projection.MenuItemView;
+import id.co.nativeapp.restaurant.menu.projection.ModifierGroupView;
+import id.co.nativeapp.restaurant.menu.projection.ModifierOptionView;
 import id.co.nativeapp.restaurant.menu.repository.MenuItemRepository;
+import id.co.nativeapp.restaurant.menu.repository.ModifierGroupRepository;
+import id.co.nativeapp.restaurant.menu.repository.ModifierOptionRepository;
 import id.co.nativeapp.restaurant.order.dto.OrderLineRequest;
 import id.co.nativeapp.restaurant.order.dto.PriceBreakdownResponse;
 import id.co.nativeapp.restaurant.order.dto.QuoteRequest;
@@ -12,6 +16,7 @@ import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Currency;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -48,10 +53,18 @@ import org.springframework.transaction.annotation.Transactional;
 public class OrderReader {
 
   private final MenuItemRepository menuItemRepository;
+  private final ModifierGroupRepository modifierGroupRepository;
+  private final ModifierOptionRepository modifierOptionRepository;
   private final TaxChargeService taxChargeService;
 
-  public OrderReader(MenuItemRepository menuItemRepository, TaxChargeService taxChargeService) {
+  public OrderReader(
+      MenuItemRepository menuItemRepository,
+      ModifierGroupRepository modifierGroupRepository,
+      ModifierOptionRepository modifierOptionRepository,
+      TaxChargeService taxChargeService) {
     this.menuItemRepository = menuItemRepository;
+    this.modifierGroupRepository = modifierGroupRepository;
+    this.modifierOptionRepository = modifierOptionRepository;
     this.taxChargeService = taxChargeService;
   }
 
@@ -80,8 +93,8 @@ public class OrderReader {
         itemViews.stream().collect(Collectors.toMap(MenuItemView::getId, Function.identity()));
 
     // ------------------------------------------------------------------
-    // 2. Validate: all requested items must exist, be active, belong to
-    //    the request's business, and share the SAME currency.
+    // 2. Validate: all requested items must exist, be active, available,
+    //    belong to the request's business, and share the SAME currency.
     // ------------------------------------------------------------------
     Set<UUID> foundIds = itemMap.keySet();
     for (OrderLineRequest lineReq : request.lines()) {
@@ -92,6 +105,11 @@ public class OrderReader {
       MenuItemView view = itemMap.get(lineReq.menuItemId());
       if (!view.isActive()) {
         throw new IllegalArgumentException("Menu item is inactive: " + lineReq.menuItemId());
+      }
+      // Phase 3: reject unavailable (86'd) items at quote time too.
+      if (!view.isAvailable()) {
+        throw new IllegalArgumentException(
+            "Menu item is not available (86'd): " + lineReq.menuItemId());
       }
       if (!request.businessId().equals(view.getBusinessId())) {
         throw new IllegalArgumentException(
@@ -114,13 +132,110 @@ public class OrderReader {
     Currency currency = Currency.getInstance(currencyCode);
 
     // ------------------------------------------------------------------
-    // 3. Compute line totals + subtotal (integer minor units, exact).
+    // 3. Resolve + validate modifier options (Phase 3).
+    // ------------------------------------------------------------------
+    List<UUID> allOptionIds =
+        request.lines().stream().flatMap(lr -> lr.selectedOptionIds().stream()).distinct().toList();
+
+    Map<UUID, ModifierOptionView> optionMap = new HashMap<>();
+    if (!allOptionIds.isEmpty()) {
+      for (int i = 0; i < allOptionIds.size(); i += 1000) {
+        List<UUID> chunk = allOptionIds.subList(i, Math.min(i + 1000, allOptionIds.size()));
+        modifierOptionRepository.findViewsByIds(chunk).forEach(o -> optionMap.put(o.getId(), o));
+      }
+    }
+
+    List<UUID> allGroupIds =
+        optionMap.values().stream().map(ModifierOptionView::getGroupId).distinct().toList();
+
+    Map<UUID, ModifierGroupView> groupMap = new HashMap<>();
+    if (!allGroupIds.isEmpty()) {
+      for (int i = 0; i < allGroupIds.size(); i += 1000) {
+        List<UUID> chunk = allGroupIds.subList(i, Math.min(i + 1000, allGroupIds.size()));
+        modifierGroupRepository.findViewsByIds(chunk).forEach(g -> groupMap.put(g.getId(), g));
+      }
+    }
+
+    // Validate selected options and compute per-line modifier deltas.
+    Map<Integer, Long> modifierDeltaByLineIndex = new HashMap<>();
+    for (int idx = 0; idx < request.lines().size(); idx++) {
+      OrderLineRequest lineReq = request.lines().get(idx);
+      List<UUID> selectedIds = lineReq.selectedOptionIds();
+      long lineModifierDelta = 0L;
+      if (!selectedIds.isEmpty()) {
+        List<ModifierGroupView> requiredGroups =
+            modifierGroupRepository.findRequiredViewsByMenuItemId(lineReq.menuItemId());
+        Map<UUID, List<UUID>> selectionsByGroup = new HashMap<>();
+        for (UUID optionId : selectedIds) {
+          ModifierOptionView option = optionMap.get(optionId);
+          if (option == null) {
+            throw new IllegalArgumentException("Modifier option not found: " + optionId);
+          }
+          if (!option.isAvailable()) {
+            throw new IllegalArgumentException("Modifier option is not available: " + optionId);
+          }
+          ModifierGroupView group = groupMap.get(option.getGroupId());
+          if (group == null || !group.getMenuItemId().equals(lineReq.menuItemId())) {
+            throw new IllegalArgumentException(
+                "Modifier option "
+                    + optionId
+                    + " does not belong to menu item "
+                    + lineReq.menuItemId());
+          }
+          selectionsByGroup
+              .computeIfAbsent(option.getGroupId(), k -> new ArrayList<>())
+              .add(optionId);
+          lineModifierDelta = Math.addExact(lineModifierDelta, option.getPriceDeltaMinor());
+        }
+        for (Map.Entry<UUID, List<UUID>> entry : selectionsByGroup.entrySet()) {
+          ModifierGroupView group = groupMap.get(entry.getKey());
+          if (group != null && entry.getValue().size() > group.getMaxSelect()) {
+            throw new IllegalArgumentException(
+                "Too many selections for modifier group '"
+                    + group.getName()
+                    + "': max "
+                    + group.getMaxSelect());
+          }
+        }
+        for (ModifierGroupView rg : requiredGroups) {
+          List<UUID> chosen = selectionsByGroup.getOrDefault(rg.getId(), List.of());
+          if (chosen.size() < rg.getMinSelect()) {
+            throw new IllegalArgumentException(
+                "Required modifier group '"
+                    + rg.getName()
+                    + "' needs at least "
+                    + rg.getMinSelect()
+                    + " selection(s)");
+          }
+        }
+      } else {
+        List<ModifierGroupView> requiredGroups =
+            modifierGroupRepository.findRequiredViewsByMenuItemId(lineReq.menuItemId());
+        for (ModifierGroupView rg : requiredGroups) {
+          if (rg.getMinSelect() > 0) {
+            throw new IllegalArgumentException(
+                "Required modifier group '"
+                    + rg.getName()
+                    + "' needs at least "
+                    + rg.getMinSelect()
+                    + " selection(s)");
+          }
+        }
+      }
+      modifierDeltaByLineIndex.put(idx, lineModifierDelta);
+    }
+
+    // ------------------------------------------------------------------
+    // 3b. Compute line totals + subtotal (integer minor units, exact).
     // ------------------------------------------------------------------
     Money runningTotal = Money.zero(currency);
-    for (OrderLineRequest lineReq : request.lines()) {
+    for (int idx = 0; idx < request.lines().size(); idx++) {
+      OrderLineRequest lineReq = request.lines().get(idx);
       MenuItemView view = itemMap.get(lineReq.menuItemId());
       Money unitPrice = Money.ofMinor(view.getPriceMinor(), view.getCurrency().strip());
-      long lineTotal = Math.multiplyExact(unitPrice.amountMinor(), (long) lineReq.qty());
+      long modifierDelta = modifierDeltaByLineIndex.getOrDefault(idx, 0L);
+      long effectiveUnit = Math.addExact(unitPrice.amountMinor(), modifierDelta);
+      long lineTotal = Math.multiplyExact(effectiveUnit, (long) lineReq.qty());
       runningTotal = runningTotal.plus(Money.ofMinor(lineTotal, currencyCode));
     }
 

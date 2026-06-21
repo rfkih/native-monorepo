@@ -22,9 +22,13 @@ public interface MenuItemView {
 
   String getCategory();
 
+  UUID getCategoryId();
+
   long getPriceMinor();
 
   String getCurrency();
 
   boolean isActive();
+
+  boolean isAvailable();
 }

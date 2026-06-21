@@ -41,6 +41,9 @@ public class MenuReader {
    * Maps a read-path projection to the response shape. Currency is {@code CHAR(3)} (PostgreSQL
    * right-pads it) so strip before returning. Lives in the service layer so the ArchUnit rule
    * ({@code projection} accessed only by {@code service} and {@code repository}) is respected.
+   *
+   * <p>Phase 3: includes {@code categoryId} and {@code available}. Modifier groups are NOT loaded
+   * on the cashier read path to keep the payload lean; the admin path loads them separately.
    */
   static MenuItemResponse toResponse(MenuItemView view) {
     return new MenuItemResponse(
@@ -48,8 +51,11 @@ public class MenuReader {
         view.getBusinessId(),
         view.getName(),
         view.getCategory(),
+        view.getCategoryId(),
         view.getPriceMinor(),
         view.getCurrency().strip(),
-        view.isActive());
+        view.isActive(),
+        view.isAvailable(),
+        java.util.List.of());
   }
 }

@@ -20,6 +20,16 @@ import java.util.UUID;
  * {@code V2__pos.sql} (rule 5). The price is a {@link Money} persisted as {@code price_minor BIGINT
  * + currency CHAR(3)} via {@link MoneyEmbeddable} (rule 8 — never a float).
  *
+ * <p>Two distinct boolean flags govern visibility/sellability:
+ *
+ * <ul>
+ *   <li>{@code active} — the item is in the catalog (manageable by an admin). An inactive item
+ *       never appears to cashiers.
+ *   <li>{@code available} — the item is available <em>right now</em> (can be 86'd by a cashier
+ *       without removing it from the catalog). Checked at checkout; a cashier can toggle it via the
+ *       86-endpoint.
+ * </ul>
+ *
  * <p>A {@code protected} no-arg constructor exists only for JPA; application code uses the public
  * constructor which validates its invariants.
  */
@@ -40,6 +50,10 @@ public class MenuItem extends Auditable {
   @Column(name = "category", nullable = false, length = 64)
   private String category;
 
+  /** FK to {@link MenuCategory}; nullable until back-filled or set at item creation. */
+  @Column(name = "category_id", nullable = true)
+  private UUID categoryId;
+
   @Embedded
   @AttributeOverrides({
     @AttributeOverride(
@@ -54,12 +68,19 @@ public class MenuItem extends Auditable {
   @Column(name = "active", nullable = false)
   private boolean active = true;
 
+  /**
+   * Whether this item is available for ordering <em>right now</em>. Distinct from {@code active}:
+   * an active item may be temporarily unavailable (86'd) without being removed from the catalog.
+   */
+  @Column(name = "available", nullable = false)
+  private boolean available = true;
+
   protected MenuItem() {
     // for JPA
   }
 
   /**
-   * Creates a new active menu item with a freshly generated id.
+   * Creates a new active, available menu item with a freshly generated id.
    *
    * @param businessId the owning business unit
    * @param name display name (non-blank)
@@ -73,6 +94,7 @@ public class MenuItem extends Auditable {
     this.category = Objects.requireNonNull(category, "category");
     this.price = MoneyEmbeddable.of(Objects.requireNonNull(price, "price"));
     this.active = true;
+    this.available = true;
   }
 
   public UUID getId() {
@@ -91,6 +113,15 @@ public class MenuItem extends Auditable {
     return category;
   }
 
+  public UUID getCategoryId() {
+    return categoryId;
+  }
+
+  /** Links this item to the given category. */
+  public void assignCategory(UUID categoryId) {
+    this.categoryId = categoryId;
+  }
+
   /** The item price as a {@link Money} value (reconstructed from its columns). */
   public Money getPrice() {
     return price.toMoney();
@@ -100,8 +131,23 @@ public class MenuItem extends Auditable {
     return active;
   }
 
+  /** Whether this item is currently available for ordering (not 86'd). */
+  public boolean isAvailable() {
+    return available;
+  }
+
   /** Deactivates this item — it will no longer appear in active-item reads. */
   public void deactivate() {
     this.active = false;
+  }
+
+  /** Marks the item as unavailable for ordering right now (86). */
+  public void markUnavailable() {
+    this.available = false;
+  }
+
+  /** Marks the item as available for ordering again (un-86). */
+  public void markAvailable() {
+    this.available = true;
   }
 }
