@@ -4,6 +4,8 @@ import id.co.nativeapp.finance.withinclose.dto.WithinCompanyCloseRequest;
 import id.co.nativeapp.finance.withinclose.dto.WithinCompanyCloseResponse;
 import id.co.nativeapp.finance.withinclose.dto.WithinCompanyCloseResult;
 import id.co.nativeapp.finance.withinclose.service.WithinCompanyCloseService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -27,6 +29,13 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>The GROUP authz-gated query endpoint + role is SEAM 4b — NOT built here; this seam ships only
  * the producer path (the within-company close that EMITS).
  */
+@Tag(
+    name = "Period Close",
+    description =
+        "Finalises the bound company's accounting period (P3d SEAM 4a). Gathers the balanced"
+            + " trial balance, records the within-company close, and emits ConsolidationClosed +"
+            + " TrialBalancePublished events atomically via the transactional outbox. Idempotent:"
+            + " a re-close returns 200 with firstClose=false and re-emits nothing.")
 @RestController
 @RequestMapping("/api/v1/closes")
 public class WithinCompanyCloseController {
@@ -43,6 +52,13 @@ public class WithinCompanyCloseController {
    * @param request the period {@code YYYY-MM} + an OPTIONAL base-currency cross-check (the base
    *     currency is derived from the ledger, not the body; a supplied mismatch fails loud)
    */
+  @Operation(
+      summary = "Close the bound company's accounting period",
+      description =
+          "Closes the bound company's period (YYYY-MM). The body carries the period and an optional"
+              + " base-currency cross-check; a supplied mismatch with the ledger's derived currency"
+              + " fails loud. Emits ConsolidationClosed and one TrialBalancePublished per group the"
+              + " company belongs to. Idempotent: re-close returns 200 with firstClose=false.")
   @PostMapping
   public ResponseEntity<WithinCompanyCloseResponse> close(
       @Valid @RequestBody WithinCompanyCloseRequest request) {

@@ -3,6 +3,8 @@ package id.co.nativeapp.restaurant.menu.controller;
 import id.co.nativeapp.restaurant.menu.dto.CreateMenuItemRequest;
 import id.co.nativeapp.restaurant.menu.dto.MenuItemResponse;
 import id.co.nativeapp.restaurant.menu.service.MenuService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;
@@ -30,6 +32,7 @@ import org.springframework.web.bind.annotation.RestController;
  *       with a {@code Location} header.
  * </ul>
  */
+@Tag(name = "Menu", description = "Menu item catalogue management and cashier read")
 @RestController
 @RequestMapping("/api/v1/menu")
 public class MenuController {
@@ -45,6 +48,12 @@ public class MenuController {
    * {@code company_id} filter; the RLS policy on {@code menu_item} restricts results to the current
    * company.
    */
+  @Operation(
+      summary = "List active menu items for a business",
+      description =
+          "Returns active items for the given business, scoped by the bound tenant (RLS). No"
+              + " explicit company_id filter; the RLS policy on menu_item restricts results to the"
+              + " current company.")
   @GetMapping
   public ResponseEntity<List<MenuItemResponse>> getActiveMenu(@RequestParam UUID businessId) {
     return ResponseEntity.ok(menuService.findActiveByBusiness(businessId));
@@ -54,6 +63,12 @@ public class MenuController {
    * Creates a new active menu item. {@code 201 Created} + {@code Location} header on success.
    * Bean-validation on the body rejects missing/invalid fields with a {@code 400 ProblemDetail}.
    */
+  @Operation(
+      summary = "Create a menu item",
+      description =
+          "Creates a new active menu item. Returns 201 Created with a Location header on success."
+              + " Bean-validation on the body rejects missing/invalid fields with a 400"
+              + " ProblemDetail.")
   @PostMapping
   public ResponseEntity<MenuItemResponse> createMenuItem(
       @Valid @RequestBody CreateMenuItemRequest request) {

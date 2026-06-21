@@ -7,6 +7,8 @@ import id.co.nativeapp.employee.payroll.dto.RunPayrollCommand;
 import id.co.nativeapp.employee.payroll.dto.RunPayrollRequest;
 import id.co.nativeapp.employee.payroll.service.PayrollRunReader;
 import id.co.nativeapp.employee.payroll.service.PayrollRunService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;
@@ -38,6 +40,10 @@ import org.springframework.web.bind.annotation.RestController;
  * tenant is bound at the edge, so RLS scopes every lookup and {@code company_id} is stamped from
  * that scope, never the body (rule 5).
  */
+@Tag(
+    name = "Payroll Runs",
+    description =
+        "Execute payroll runs and read run summaries and masked payslips under the bound company")
 @RestController
 @RequestMapping("/api/v1/payroll-runs")
 public class PayrollRunController {
@@ -51,7 +57,13 @@ public class PayrollRunController {
     this.payrollRunReader = payrollRunReader;
   }
 
-  /** Calculate and post a payroll run. */
+  @Operation(
+      summary = "Calculate and post a payroll run",
+      description =
+          "Executes the full payroll pipeline (gate -> freeze -> compute -> allocate -> POSTED)"
+              + " for the requested period and employee set; returns 201 + Location. Emits"
+              + " PayrollPosted and LaborCostAllocated via the outbox. Salary figures are never"
+              + " exposed in events or logs (rule 6).")
   @PostMapping
   public ResponseEntity<PayrollRunResponse> runPayroll(
       @Valid @RequestBody RunPayrollRequest request) {
@@ -67,7 +79,11 @@ public class PayrollRunController {
     return ResponseEntity.created(URI.create("/api/v1/payroll-runs/" + body.id())).body(body);
   }
 
-  /** Get a run's company-level summary; {@code 404} if not visible to the tenant. */
+  @Operation(
+      summary = "Get a payroll run summary",
+      description =
+          "Returns the company-level summary for a run (totals, status, illustrative flag);"
+              + " 404 if the run is not visible to the bound tenant.")
   @GetMapping("/{runId}")
   public ResponseEntity<PayrollRunResponse> getRun(@PathVariable UUID runId) {
     return payrollRunReader
@@ -76,7 +92,11 @@ public class PayrollRunController {
         .orElseGet(() -> ResponseEntity.notFound().build());
   }
 
-  /** Get an employee's payslip lines for a run, MASKED (no plaintext salary on the wire). */
+  @Operation(
+      summary = "Get masked payslip lines for an employee",
+      description =
+          "Returns the payslip lines for a single employee within a run; salary amounts are"
+              + " masked — no plaintext salary crosses the boundary (rule 6).")
   @GetMapping("/{runId}/payslips/{employeeId}")
   public ResponseEntity<List<PayslipLineResponse>> getPayslip(
       @PathVariable UUID runId, @PathVariable UUID employeeId) {

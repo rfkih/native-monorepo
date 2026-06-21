@@ -4,6 +4,8 @@ import id.co.nativeapp.finance.statements.dto.BalanceSheetResponse;
 import id.co.nativeapp.finance.statements.dto.IncomeStatementResponse;
 import id.co.nativeapp.finance.statements.service.BalanceSheetReader;
 import id.co.nativeapp.finance.statements.service.IncomeStatementReader;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Pattern;
 import java.util.Optional;
 import org.springframework.http.ResponseEntity;
@@ -35,6 +37,12 @@ import org.springframework.web.bind.annotation.RestController;
  *   <li>Historical backfill — not in scope (on-read derivation only).
  * </ul>
  */
+@Tag(
+    name = "Financial Statements",
+    description =
+        "Financial statements read API — Income Statement and Balance Sheet derived from the"
+            + " double-entry GL. Both endpoints are read-only and tenant-scoped via RLS (rule 5)."
+            + " DTOs only at the boundary; no @Entity on the wire.")
 @RestController
 @RequestMapping("/api/v1/statements")
 @Validated
@@ -61,6 +69,12 @@ public class StatementsController {
    *
    * @param period the accounting period {@code YYYY-MM} (validated; an impossible month is a 400)
    */
+  @Operation(
+      summary = "Income Statement for a period",
+      description =
+          "Returns the Income Statement (Laba Rugi) for the given YYYY-MM period: REVENUE − EXPENSE"
+              + " = net, grouped by account. PERIOD-scoped: only journal entries whose period"
+              + " equals the param. 204 when no GL entries exist in the period at all.")
   @GetMapping("/income")
   public ResponseEntity<IncomeStatementResponse> incomeStatement(
       @RequestParam
@@ -84,6 +98,13 @@ public class StatementsController {
    * @param asOf the as-of period {@code YYYY-MM}; the balance sheet reflects the state at the end
    *     of this period
    */
+  @Operation(
+      summary = "Balance Sheet as of the end of a period",
+      description =
+          "Returns the Balance Sheet (Laporan Posisi Keuangan) as of the end of the given YYYY-MM"
+              + " period. CUMULATIVE: sums all GL activity from inception through asOf. Guarantees"
+              + " total assets == total liabilities + equity (incl. retained earnings); imbalance"
+              + " throws 500. 204 when no GL entries exist.")
   @GetMapping("/balance-sheet")
   public ResponseEntity<BalanceSheetResponse> balanceSheet(
       @RequestParam

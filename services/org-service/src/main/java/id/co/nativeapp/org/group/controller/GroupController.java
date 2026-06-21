@@ -11,6 +11,8 @@ import id.co.nativeapp.org.group.dto.GroupResponse;
 import id.co.nativeapp.org.group.dto.MembershipResponse;
 import id.co.nativeapp.org.group.dto.RemoveMemberCommand;
 import id.co.nativeapp.org.group.service.GroupService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.UUID;
@@ -48,6 +50,9 @@ import org.springframework.web.bind.annotation.RestController;
  * calls exactly one service method, and maps the result to a DTO — never an entity on the wire
  * (DTO-at-the-boundary).
  */
+@Tag(
+    name = "Consolidation groups",
+    description = "Define a consolidation group (led by the caller) and manage its membership")
 @RestController
 @RequestMapping("/api/v1/consolidation-groups")
 public class GroupController {
@@ -59,6 +64,11 @@ public class GroupController {
   }
 
   /** Define a consolidation group led by the caller; emits {@code GroupDefined}. */
+  @Operation(
+      summary = "Define a consolidation group",
+      description =
+          "Defines a group led by the caller (the lead company), fixing its reporting currency"
+              + " once; emits GroupDefined. Returns 201 with a Location header.")
   @PostMapping
   public ResponseEntity<GroupResponse> createGroup(@Valid @RequestBody CreateGroupRequest request) {
     CreateGroupCommand command =
@@ -76,6 +86,12 @@ public class GroupController {
    * no-op re-add of an already-ACTIVE member is NOT a creation, so it returns {@code 200 OK} (the
    * existing membership) with no {@code Location} — nothing was created.
    */
+  @Operation(
+      summary = "Add a member to a group",
+      description =
+          "Adds a member company to a group the caller leads; emits GroupMembershipChanged(ADDED)."
+              + " Returns 201 with a Location for a new membership, or 200 (no Location) on an"
+              + " idempotent re-add of an already-active member.")
   @PostMapping("/{groupId}/members")
   public ResponseEntity<MembershipResponse> addMember(
       @PathVariable UUID groupId, @Valid @RequestBody AddMemberRequest request) {
@@ -97,6 +113,12 @@ public class GroupController {
    * {@code GroupMembershipChanged(REMOVED)} on a real removal. {@code 204} when there was no active
    * membership to close (idempotent re-remove).
    */
+  @Operation(
+      summary = "Remove a member from a group",
+      description =
+          "Removes a member company from a group the caller leads by closing its effective window"
+              + " (no hard-delete); emits GroupMembershipChanged(REMOVED) on a real removal. 200"
+              + " with the closed membership, or 204 when there was no active membership to close.")
   @DeleteMapping("/{groupId}/members/{memberCompanyId}")
   public ResponseEntity<MembershipResponse> removeMember(
       @PathVariable UUID groupId, @PathVariable UUID memberCompanyId) {

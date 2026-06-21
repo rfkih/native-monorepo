@@ -1,6 +1,6 @@
 # 0004. Use springdoc-openapi (3.0.x) for OpenAPI docs, piloted in finance-service
 
-- **Status:** Accepted (pilot)
+- **Status:** Accepted (pilot) — extended fleet-wide by [ADR 0008](0008-openapi-docs-fleet-rollout.md)
 - **Date:** 2026-06-20
 - **Deciders:** rifki + Claude (pairing)
 - **Related:** [CLAUDE.md](../../CLAUDE.md) (REST/OpenAPI external; "no stack change without an ADR"),

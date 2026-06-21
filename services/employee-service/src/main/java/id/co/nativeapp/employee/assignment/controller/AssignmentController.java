@@ -5,6 +5,8 @@ import id.co.nativeapp.employee.assignment.dto.AddAssignmentCommand;
 import id.co.nativeapp.employee.assignment.dto.AddAssignmentRequest;
 import id.co.nativeapp.employee.assignment.dto.AssignmentResponse;
 import id.co.nativeapp.employee.assignment.service.AssignmentService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.UUID;
@@ -33,6 +35,11 @@ import org.springframework.web.bind.annotation.RestController;
  * write, and {@code company_id} is stamped from that scope, never the body (rule 5). No PII on this
  * resource.
  */
+@Tag(
+    name = "Assignments",
+    description =
+        "Add effective-dated assignments to an employee, enforcing the same-legal-employer"
+            + " invariant")
 @RestController
 @RequestMapping("/api/v1/employees/{employeeId}/assignments")
 public class AssignmentController {
@@ -43,10 +50,13 @@ public class AssignmentController {
     this.assignmentService = assignmentService;
   }
 
-  /**
-   * Add an assignment; enforces the same-legal-employer invariant and emits {@code
-   * AssignmentChanged}.
-   */
+  @Operation(
+      summary = "Add an assignment to an employee",
+      description =
+          "Creates an effective-dated assignment under the bound tenant, enforcing the"
+              + " same-legal-employer invariant (a concurrent assignment under a different legal"
+              + " employer is rejected with 409); an org unit unknown to the local read model is"
+              + " rejected with 400. Returns 201 + Location and emits AssignmentChanged.")
   @PostMapping
   public ResponseEntity<AssignmentResponse> addAssignment(
       @PathVariable UUID employeeId, @Valid @RequestBody AddAssignmentRequest request) {

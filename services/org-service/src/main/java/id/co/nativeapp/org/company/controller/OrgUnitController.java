@@ -7,6 +7,8 @@ import id.co.nativeapp.org.company.dto.OrgUnitResponse;
 import id.co.nativeapp.org.company.dto.PatchOrgUnitCommand;
 import id.co.nativeapp.org.company.dto.PatchOrgUnitRequest;
 import id.co.nativeapp.org.company.service.OrgUnitService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.UUID;
@@ -38,6 +40,9 @@ import org.springframework.web.bind.annotation.RestController;
  * calls exactly one service method, and maps the result to an {@link OrgUnitResponse} DTO — never
  * an entity on the wire (DTO-at-the-boundary).
  */
+@Tag(
+    name = "Org units",
+    description = "Manage the org tree (business unit > branch > outlet > team)")
 @RestController
 @RequestMapping("/api/v1/org-units")
 public class OrgUnitController {
@@ -49,6 +54,12 @@ public class OrgUnitController {
   }
 
   /** Create an org unit under an optional parent; emits {@code OrgUnitCreated}. */
+  @Operation(
+      summary = "Create an org unit",
+      description =
+          "Creates a node under an optional parent (parent->child type, same-company, and"
+              + " cycle-prevention rules enforced; a violation is a 400). Emits OrgUnitCreated."
+              + " Returns 201 with a Location header.")
   @PostMapping
   public ResponseEntity<OrgUnitResponse> createOrgUnit(
       @Valid @RequestBody CreateOrgUnitRequest request) {
@@ -64,6 +75,12 @@ public class OrgUnitController {
    * change. Deactivation cascades to the active subtree; reactivation requires an active parent;
    * deactivate + reactivate together is a {@code 400}.
    */
+  @Operation(
+      summary = "Update an org unit (rename / move / (de)activate)",
+      description =
+          "Renames, moves, deactivates, and/or reactivates a node; emits OrgUnitChanged per change."
+              + " Deactivation cascades to the active subtree; reactivation requires an active"
+              + " parent; a no-op or deactivate+reactivate together is a 400. Returns 200.")
   @PatchMapping("/{orgUnitId}")
   public ResponseEntity<OrgUnitResponse> patchOrgUnit(
       @PathVariable UUID orgUnitId, @Valid @RequestBody PatchOrgUnitRequest request) {

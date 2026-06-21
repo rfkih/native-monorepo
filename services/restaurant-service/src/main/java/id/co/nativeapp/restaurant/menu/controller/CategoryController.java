@@ -4,6 +4,8 @@ import id.co.nativeapp.restaurant.menu.dto.CategoryResponse;
 import id.co.nativeapp.restaurant.menu.dto.CreateCategoryRequest;
 import id.co.nativeapp.restaurant.menu.dto.ReorderCategoryRequest;
 import id.co.nativeapp.restaurant.menu.service.CategoryService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;
@@ -29,6 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
  *   <li>{@code PATCH /api/v1/menu/categories/{id}/deactivate} — deactivate a category.
  * </ul>
  */
+@Tag(name = "Menu Categories", description = "Menu category management (Phase 3 catalog richness)")
 @RestController
 @RequestMapping("/api/v1/menu/categories")
 public class CategoryController {
@@ -40,12 +43,20 @@ public class CategoryController {
   }
 
   /** Lists all categories for the given business, ordered by display_order then name. */
+  @Operation(
+      summary = "List categories for a business",
+      description =
+          "Lists all categories for the given business, ordered by display_order then name."
+              + " RLS-scoped to the current tenant.")
   @GetMapping
   public ResponseEntity<List<CategoryResponse>> listCategories(@RequestParam UUID businessId) {
     return ResponseEntity.ok(categoryService.findAllByBusiness(businessId));
   }
 
   /** Creates a new active category. Returns {@code 201 Created} with a {@code Location} header. */
+  @Operation(
+      summary = "Create a category",
+      description = "Creates a new active category. Returns 201 Created with a Location header.")
   @PostMapping
   public ResponseEntity<CategoryResponse> createCategory(
       @Valid @RequestBody CreateCategoryRequest request) {
@@ -55,6 +66,9 @@ public class CategoryController {
   }
 
   /** Updates the display order of a category. */
+  @Operation(
+      summary = "Reorder a category",
+      description = "Updates the display_order of a category.")
   @PatchMapping("/{id}/reorder")
   public ResponseEntity<CategoryResponse> reorder(
       @PathVariable UUID id, @Valid @RequestBody ReorderCategoryRequest request) {
@@ -62,12 +76,18 @@ public class CategoryController {
   }
 
   /** Activates a category, making it and its items visible in the cashier view. */
+  @Operation(
+      summary = "Activate a category",
+      description = "Activates a category, making it and its items visible in the cashier view.")
   @PatchMapping("/{id}/activate")
   public ResponseEntity<CategoryResponse> activate(@PathVariable UUID id) {
     return ResponseEntity.ok(categoryService.activate(id));
   }
 
   /** Deactivates a category, hiding it and its items from the cashier view. */
+  @Operation(
+      summary = "Deactivate a category",
+      description = "Deactivates a category, hiding it and its items from the cashier view.")
   @PatchMapping("/{id}/deactivate")
   public ResponseEntity<CategoryResponse> deactivate(@PathVariable UUID id) {
     return ResponseEntity.ok(categoryService.deactivate(id));

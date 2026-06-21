@@ -6,6 +6,8 @@ import id.co.nativeapp.finance.pnl.domain.ConsolidatedPnl;
 import id.co.nativeapp.finance.pnl.dto.PnlResponse;
 import id.co.nativeapp.finance.pnl.service.PnlReader;
 import id.co.nativeapp.money.Money;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Pattern;
 import java.util.Currency;
 import java.util.Optional;
@@ -40,6 +42,12 @@ import org.springframework.web.bind.annotation.RestController;
  * converted presentation fields. If EITHER leg has no resolvable rate the request fails loudly with
  * a {@code 422} (the advice), atomically — a half-converted P&amp;L is never returned.
  */
+@Tag(
+    name = "P&L",
+    description =
+        "Consolidated Profit & Loss query for the bound tenant. Returns revenue, expense, and net"
+            + " as the rule-8 Money pair (minor units + ISO-4217). Supports an optional"
+            + " presentation-currency param for a view-only per-request FX conversion.")
 @RestController
 @RequestMapping("/api/v1/pnl")
 @Validated
@@ -60,6 +68,13 @@ public class PnlController {
    * @param currency optional ISO-4217 code used only to render a zero P&amp;L for an empty period
    * @param presentation optional ISO-4217 code requesting a view-only conversion of the P&amp;L
    */
+  @Operation(
+      summary = "Consolidated P&L for a period",
+      description =
+          "Returns the tenant's revenue, expense, and net for the given YYYY-MM period as Money"
+              + " (minor units + ISO-4217). 204 when no postings exist and no currency hint is"
+              + " supplied. Optional 'presentation' param requests a view-only FX conversion at"
+              + " the period average rate; absent rate returns 422.")
   @GetMapping
   public ResponseEntity<PnlResponse> pnl(
       @RequestParam

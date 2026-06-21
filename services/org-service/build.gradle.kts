@@ -71,6 +71,13 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("io.micrometer:micrometer-registry-prometheus")
 
+    // OpenAPI docs (ADR 0004 / ADR 0008 — fleet rollout). springdoc generates /v3/api-docs (OpenAPI
+    // 3.1) and serves /swagger-ui from the live controllers — no hand-maintained spec to drift. The
+    // 3.0.x line is the one built for Spring Boot 4 / Framework 7 (2.8.x targets Boot 3 and returns a
+    // Base64-mangled /v3/api-docs on Framework 7); the version is catalog-pinned, not in the Boot BOM.
+    // In non-dev the docs sit behind the JWT chain and are not gateway-routed (dev/in-cluster only).
+    implementation(libs.springdoc.starter.webmvc.ui)
+
     // Schema migrations. Spring Boot 4 moves Flyway auto-configuration into the
     // dedicated spring-boot-starter-flyway (bundling flyway-core + the
     // spring-boot-flyway autoconfigure module); flyway-core alone no longer

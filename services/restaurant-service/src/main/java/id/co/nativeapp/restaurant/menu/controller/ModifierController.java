@@ -5,6 +5,8 @@ import id.co.nativeapp.restaurant.menu.dto.CreateModifierOptionRequest;
 import id.co.nativeapp.restaurant.menu.dto.ModifierGroupResponse;
 import id.co.nativeapp.restaurant.menu.dto.ModifierOptionResponse;
 import id.co.nativeapp.restaurant.menu.service.ModifierService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;
@@ -35,6 +37,9 @@ import org.springframework.web.bind.annotation.RestController;
  *   <li>{@code PATCH /api/v1/menu/{menuItemId}/un-86} — restore the menu item's availability.
  * </ul>
  */
+@Tag(
+    name = "Menu Modifiers",
+    description = "Modifier group/option management and 86/un-86 availability control")
 @RestController
 @RequestMapping("/api/v1/menu")
 public class ModifierController {
@@ -49,6 +54,12 @@ public class ModifierController {
    * Lists modifier groups (with their options) for a menu item. By default returns only available
    * options (cashier view); pass {@code adminView=true} to include unavailable options.
    */
+  @Operation(
+      summary = "List modifier groups for a menu item",
+      description =
+          "Lists modifier groups (with their options) for a menu item. By default returns only"
+              + " available options (cashier view); pass adminView=true to include unavailable"
+              + " options.")
   @GetMapping("/{menuItemId}/modifier-groups")
   public ResponseEntity<List<ModifierGroupResponse>> listGroups(
       @PathVariable UUID menuItemId, @RequestParam(defaultValue = "false") boolean adminView) {
@@ -63,6 +74,10 @@ public class ModifierController {
    * Creates a modifier group under a menu item. Returns {@code 201 Created} with a {@code Location}
    * header.
    */
+  @Operation(
+      summary = "Create a modifier group",
+      description =
+          "Creates a modifier group under a menu item. Returns 201 Created with a Location header.")
   @PostMapping("/{menuItemId}/modifier-groups")
   public ResponseEntity<ModifierGroupResponse> createGroup(
       @PathVariable UUID menuItemId, @Valid @RequestBody CreateModifierGroupRequest request) {
@@ -75,6 +90,10 @@ public class ModifierController {
   /**
    * Adds an option to a modifier group. Returns {@code 201 Created} with a {@code Location} header.
    */
+  @Operation(
+      summary = "Add an option to a modifier group",
+      description =
+          "Adds an option to a modifier group. Returns 201 Created with a Location header.")
   @PostMapping("/{menuItemId}/modifier-groups/{groupId}/options")
   public ResponseEntity<ModifierOptionResponse> createOption(
       @PathVariable UUID menuItemId,
@@ -93,6 +112,9 @@ public class ModifierController {
   }
 
   /** Marks a modifier option as unavailable (86). */
+  @Operation(
+      summary = "Mark a modifier option unavailable (86)",
+      description = "Marks a modifier option as unavailable (86) — hides it from the cashier.")
   @PatchMapping("/{menuItemId}/modifier-groups/{groupId}/options/{optionId}/86")
   public ResponseEntity<ModifierOptionResponse> markOptionUnavailable(
       @PathVariable UUID menuItemId, @PathVariable UUID groupId, @PathVariable UUID optionId) {
@@ -100,6 +122,9 @@ public class ModifierController {
   }
 
   /** Marks a modifier option as available again (un-86). */
+  @Operation(
+      summary = "Restore a modifier option availability (un-86)",
+      description = "Marks a modifier option as available again (un-86).")
   @PatchMapping("/{menuItemId}/modifier-groups/{groupId}/options/{optionId}/un-86")
   public ResponseEntity<ModifierOptionResponse> markOptionAvailable(
       @PathVariable UUID menuItemId, @PathVariable UUID groupId, @PathVariable UUID optionId) {
@@ -107,6 +132,9 @@ public class ModifierController {
   }
 
   /** Marks a menu item as unavailable for ordering (86). */
+  @Operation(
+      summary = "Mark a menu item unavailable (86)",
+      description = "Marks a menu item as unavailable for ordering (86).")
   @PatchMapping("/{menuItemId}/86")
   public ResponseEntity<Void> markItemUnavailable(@PathVariable UUID menuItemId) {
     modifierService.markItemUnavailable(menuItemId);
@@ -114,6 +142,9 @@ public class ModifierController {
   }
 
   /** Marks a menu item as available for ordering again (un-86). */
+  @Operation(
+      summary = "Restore a menu item availability (un-86)",
+      description = "Marks a menu item as available for ordering again (un-86).")
   @PatchMapping("/{menuItemId}/un-86")
   public ResponseEntity<Void> markItemAvailable(@PathVariable UUID menuItemId) {
     modifierService.markItemAvailable(menuItemId);

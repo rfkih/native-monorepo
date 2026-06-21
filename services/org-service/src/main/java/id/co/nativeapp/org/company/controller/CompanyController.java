@@ -12,6 +12,8 @@ import id.co.nativeapp.org.company.service.CompanyService;
 import id.co.nativeapp.org.config.DevTenantFilter;
 import id.co.nativeapp.org.config.TenantAccessDeniedException;
 import id.co.nativeapp.tenant.TenantContext;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.UUID;
@@ -41,6 +43,9 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>Returns {@code 201 Created} with a {@code Location} header pointing at the new resource.
  */
+@Tag(
+    name = "Companies",
+    description = "Create a company (tenant bootstrap) and add businesses under it")
 @RestController
 @RequestMapping("/api/v1/companies")
 public class CompanyController {
@@ -55,6 +60,12 @@ public class CompanyController {
    * Create a company (new tenant) with its base currency, default language, and first business, in
    * one transaction; emits {@code CompanyCreated}. Returns {@code 201} + {@code Location}.
    */
+  @Operation(
+      summary = "Create a company (tenant bootstrap)",
+      description =
+          "Creates a new company (and its tenant) with its immutable base currency, default"
+              + " language, and first business in one transaction; emits CompanyCreated. Returns"
+              + " 201 with a Location header.")
   @PostMapping
   public ResponseEntity<CompanyResponse> createCompany(
       @RequestHeader(value = DevTenantFilter.ACTOR_HEADER, required = false) String actor,
@@ -83,6 +94,12 @@ public class CompanyController {
    * {@link CompanyResponse} body, or {@code 404} (RFC 7807 {@code application/problem+json}) if no
    * company exists for the bound tenant.
    */
+  @Operation(
+      summary = "Get the current tenant's company",
+      description =
+          "Returns the company bound to the current tenant scope plus its first business id — the"
+              + " minimal data the console needs after OIDC login. 200 with the company, or 404 if"
+              + " none exists for the bound tenant.")
   @GetMapping("/current")
   public ResponseEntity<CompanyResponse> getCurrentCompany() {
     CompanyResponse body = companyService.getCurrentCompany();
@@ -100,6 +117,12 @@ public class CompanyController {
    * mismatch up front with a {@code 403} rather than accepting a path id that disagrees with the
    * bound scope; only a path id equal to the bound tenant proceeds.
    */
+  @Operation(
+      summary = "Add a business to a company",
+      description =
+          "Adds a business (org unit) under the company in the path, within that company's tenant"
+              + " scope. The path companyId must equal the bound tenant (else 403). Returns 201"
+              + " with a Location header.")
   @PostMapping("/{companyId}/businesses")
   public ResponseEntity<OrgUnitResponse> addBusiness(
       @PathVariable UUID companyId, @Valid @RequestBody CreateBusinessRequest request) {

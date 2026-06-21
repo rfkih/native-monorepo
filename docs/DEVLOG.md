@@ -66,6 +66,26 @@ cascade-deactivate + reactivation.)
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **OpenAPI docs — springdoc fleet rollout + `@Operation` ArchUnit enforcer (ADR 0008)** — the finance
+  springdoc pilot (ADR 0004) became the fleet standard. Every service exposing a business REST API —
+  **org, restaurant, carwash, employee, entitlement** + the **finance** pilot (6 services) — now serves
+  `/v3/api-docs` (OpenAPI 3.1) + `/swagger-ui`, with an `@Operation` on **every** handler (**56 handlers
+  across 20 controllers**) and a class-level `@Tag` on each `@RestController`. A new
+  `apiHandlersAreDocumentedWithAnOperation` ArchUnit rule in each `LayeredArchitectureTest` — and in
+  `service-template` (with `allowEmptyShould` so a fresh clone inherits it) — fails the build on any
+  `@RequestMapping`/`@GetMapping`/… handler missing an `@Operation` (the `config`
+  `HealthController`/`/healthz` is exempt via `resideOutsideOfPackage("..config..")`). A per-service
+  `OpenApiDocsSmokeTest` boots the real service and asserts `/v3/api-docs` is genuine OpenAPI JSON (not the
+  Base64 blob the Boot-3 springdoc 2.8.x line returns on Framework 7) documenting the live endpoints — six
+  smoke tests now guard the shared catalog-pinned springdoc version across the fleet. **Deliberate
+  exclusions:** notification-service (no business REST API — a pure event consumer) and the reactive
+  gateway (would need the webflux starter; routes no endpoints of its own). OpenAPI annotations are
+  **developer-facing docs, so HR-9 i18n does not apply**. Closes competitive-scorecard **#9** (Native ≥
+  blackheart: springdoc + `@Operation`/`@Tag` everywhere, PLUS an ArchUnit enforcer + smoke tests, where
+  blackheart relies on discipline). Verified green across the 7 touched modules: compile + every
+  `LayeredArchitectureTest` + every `OpenApiDocsSmokeTest` (Testcontainers) + checkstyle + spotless.
+  Follow-up (ENGINEERING-STANDARDS §1.3): `@ApiResponse`/`ProblemDetail` error-response modelling + a
+  "generated spec ⊇ published spec" contract test.
 - **Robust restaurant POS — 4 phases (ADR 0006/0007)** — the validation-slice POS (menu → atomic
   order → `SaleRecorded`) became a real point-of-sale, built + adversarially-reviewed phase by phase
   (every phase's mandatory money/tenancy review FAILED first and caught a real bug; all fixed +

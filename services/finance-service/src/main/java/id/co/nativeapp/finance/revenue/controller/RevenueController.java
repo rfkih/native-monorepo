@@ -5,6 +5,8 @@ import id.co.nativeapp.finance.fx.service.PresentationConverter;
 import id.co.nativeapp.finance.revenue.dto.RevenueResponse;
 import id.co.nativeapp.finance.revenue.service.RevenueReader;
 import id.co.nativeapp.money.Money;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Pattern;
 import java.util.Currency;
 import java.util.Optional;
@@ -39,6 +41,12 @@ import org.springframework.web.bind.annotation.RestController;
  * appliedRates}). If no rate resolves the request fails loudly with a {@code 422} (the advice) —
  * the native figure is never returned mislabelled as converted.
  */
+@Tag(
+    name = "Revenue",
+    description =
+        "Consolidated revenue query for the bound tenant. Returns the accumulated revenue for a"
+            + " period as the rule-8 Money pair (minor units + ISO-4217). Supports an optional"
+            + " presentation-currency param for a view-only per-request FX conversion.")
 @RestController
 @RequestMapping("/api/v1/revenue")
 @Validated
@@ -60,6 +68,13 @@ public class RevenueController {
    * @param currency optional ISO-4217 code used only to render a zero total for an empty period
    * @param presentation optional ISO-4217 code requesting a view-only conversion of the total
    */
+  @Operation(
+      summary = "Consolidated revenue for a period",
+      description =
+          "Returns the tenant's accumulated revenue for the given YYYY-MM period as Money (minor"
+              + " units + ISO-4217). 204 when no postings exist and no currency hint is supplied."
+              + " Optional 'presentation' param requests a view-only FX conversion at the period"
+              + " average rate; absent rate returns 422.")
   @GetMapping
   public ResponseEntity<RevenueResponse> revenue(
       @RequestParam

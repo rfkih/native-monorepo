@@ -13,6 +13,8 @@ import id.co.nativeapp.employee.employee.dto.UpdateEmployeeCommand;
 import id.co.nativeapp.employee.employee.dto.UpdateEmployeeRequest;
 import id.co.nativeapp.employee.employee.service.EmployeeReader;
 import id.co.nativeapp.employee.employee.service.EmployeeService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.UUID;
@@ -46,6 +48,11 @@ import org.springframework.web.bind.annotation.RestController;
  * by the gateway / dev filter, so RLS scopes every lookup and {@code company_id} is stamped from
  * that scope, never the body (rule 5).
  */
+@Tag(
+    name = "Employees",
+    description =
+        "Manage HR employee records (create, update, add contracts, read with assignments) under"
+            + " the bound company; PII is masked in every response")
 @RestController
 @RequestMapping("/api/v1/employees")
 public class EmployeeController {
@@ -58,7 +65,11 @@ public class EmployeeController {
     this.employeeReader = employeeReader;
   }
 
-  /** Create an employee; emits {@code EmployeeChanged}. PII masked in the response. */
+  @Operation(
+      summary = "Create an employee",
+      description =
+          "Creates an employee under the bound tenant; returns 201 + Location. PII (NIK, bank"
+              + " account) is masked in the response body. Emits EmployeeChanged via the outbox.")
   @PostMapping
   public ResponseEntity<EmployeeResponse> createEmployee(
       @Valid @RequestBody CreateEmployeeRequest request) {
@@ -70,7 +81,12 @@ public class EmployeeController {
     return ResponseEntity.created(URI.create("/api/v1/employees/" + body.id())).body(body);
   }
 
-  /** Partial update of an employee; emits {@code EmployeeChanged} on a real change. */
+  @Operation(
+      summary = "Partial update of an employee",
+      description =
+          "Applies a partial update to an employee record under the bound tenant; returns 200."
+              + " PII is masked in the response. Emits EmployeeChanged only on a real field"
+              + " change.")
   @PatchMapping("/{employeeId}")
   public ResponseEntity<EmployeeResponse> updateEmployee(
       @PathVariable UUID employeeId, @Valid @RequestBody UpdateEmployeeRequest request) {
@@ -86,7 +102,11 @@ public class EmployeeController {
     return ResponseEntity.ok(EmployeeResponse.from(updated));
   }
 
-  /** Add an employment contract to an employee. */
+  @Operation(
+      summary = "Add an employment contract to an employee",
+      description =
+          "Attaches an effective-dated employment contract (type, legal employer, effective"
+              + " period) to an existing employee; returns 201 + Location.")
   @PostMapping("/{employeeId}/contracts")
   public ResponseEntity<ContractResponse> addContract(
       @PathVariable UUID employeeId, @Valid @RequestBody AddContractRequest request) {
@@ -104,9 +124,11 @@ public class EmployeeController {
         .body(body);
   }
 
-  /**
-   * Get an employee (PII masked) with its assignments; {@code 404} if not visible to the tenant.
-   */
+  @Operation(
+      summary = "Get an employee with assignments",
+      description =
+          "Returns the employee (PII masked) with its full assignment history; 404 if not"
+              + " visible to the bound tenant.")
   @GetMapping("/{employeeId}")
   public ResponseEntity<EmployeeWithAssignmentsResponse> getEmployee(
       @PathVariable UUID employeeId) {

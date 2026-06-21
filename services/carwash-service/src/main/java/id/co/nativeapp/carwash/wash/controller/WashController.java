@@ -5,6 +5,8 @@ import id.co.nativeapp.carwash.wash.dto.RecordWashResult;
 import id.co.nativeapp.carwash.wash.dto.WashRequest;
 import id.co.nativeapp.carwash.wash.dto.WashResponse;
 import id.co.nativeapp.carwash.wash.service.WashService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.time.Instant;
@@ -34,6 +36,10 @@ import org.springframework.web.bind.annotation.RestController;
  * MetricPublished} set emitted), and {@code 200 OK} when a retry with the same {@code
  * idempotency_key} returned the pre-existing wash (no second event, no {@code Location}).
  */
+@Tag(
+    name = "Washes",
+    description =
+        "Record car-wash operations (wash / bay / upsell) and retrieve idempotent results")
 @RestController
 @RequestMapping("/api/v1/washes")
 public class WashController {
@@ -44,6 +50,13 @@ public class WashController {
     this.washService = washService;
   }
 
+  @Operation(
+      summary = "Record a wash",
+      description =
+          "Records a car-wash operation (bay + optional upsell) for the bound tenant. Returns 201"
+              + " Created with a Location header on the first write; returns 200 OK on a retry"
+              + " carrying the same idempotency_key (no second event). Rejected with 403 when the"
+              + " company is not entitled to the carwash module.")
   @PostMapping
   public ResponseEntity<WashResponse> recordWash(@Valid @RequestBody WashRequest request) {
     RecordWashCommand command =

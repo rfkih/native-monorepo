@@ -22,7 +22,7 @@
 - **Kafka** + **Schema Registry** (Avro), transactional **outbox** + **Debezium** CDC
 - **Redis** + **Caffeine**
 - **Keycloak** (OIDC, RS256 JWT), **Spring Cloud Gateway**
-- **gRPC** internal (rare), **REST/OpenAPI** external
+- **gRPC** internal (rare), **REST/OpenAPI** external (**springdoc-openapi 3.0.x** — docs fleet-wide, [ADR 0008](docs/adr/0008-openapi-docs-fleet-rollout.md))
 - **OpenTelemetry**; at split time: **Linkerd** (mTLS), **Vault**
 - Frontend: **Vite + React + TypeScript + Tailwind + shadcn/ui + TanStack Query + Recharts**; **react-i18next** for localization
 

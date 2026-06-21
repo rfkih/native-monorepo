@@ -5,6 +5,8 @@ import id.co.nativeapp.finance.consolidation.dto.GroupConsolidationResponse;
 import id.co.nativeapp.finance.consolidation.dto.GroupRequester;
 import id.co.nativeapp.finance.consolidation.service.GroupConsolidationService;
 import id.co.nativeapp.finance.consolidation.service.GroupRequesterFactory;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Pattern;
 import java.util.UUID;
@@ -47,6 +49,12 @@ import org.springframework.web.bind.annotation.RestController;
  * come from {@code GroupConsolidationAdvice} (the 403/404 denials) and the shared {@code
  * ApiExceptionHandler} (validation 400).
  */
+@Tag(
+    name = "Group Consolidation",
+    description =
+        "Authz-gated group consolidation READ and group CLOSE over a (group, period)."
+            + " The security crux lives in GroupConsolidationService — the groupId in the"
+            + " path is a candidate only, validated against the requester's provable lead binding.")
 @RestController
 @RequestMapping("/api/v1/groups/{groupId}/consolidation")
 @Validated
@@ -69,6 +77,13 @@ public class GroupConsolidationController {
    * @param groupId the consolidation group (candidate — validated against the requester's lead)
    * @param period the accounting period {@code YYYY-MM} (validated; an impossible month is a 400)
    */
+  @Operation(
+      summary = "Read group consolidation for a period",
+      description =
+          "Group-consolidation READ for (groupId, period). Returns 200 with the consolidated group"
+              + " total + provisional flags + eliminations status; 204 when no close exists for the"
+              + " period; 403/404 on a denied entitlement. The groupId is validated against the"
+              + " requester's lead — a group the requester does not lead returns 404.")
   @GetMapping
   public ResponseEntity<GroupConsolidationResponse> read(
       @PathVariable UUID groupId,
@@ -92,6 +107,12 @@ public class GroupConsolidationController {
    * @param period the accounting period {@code YYYY-MM} (validated)
    * @param closeRunSeq the close run sequence (a higher seq supersedes lower ones; {@code >= 1})
    */
+  @Operation(
+      summary = "Trigger a group close for a period (lead-admin only)",
+      description =
+          "Group CLOSE command for (groupId, period) at closeRunSeq (lead-admin only). Returns 200"
+              + " with the result state; 403/404 on a denied entitlement. A higher closeRunSeq"
+              + " supersedes lower ones.")
   @PostMapping("/close")
   public ResponseEntity<GroupCloseResponse> close(
       @PathVariable UUID groupId,

@@ -29,7 +29,7 @@
 | 6 | Test rigor | Testcontainers + ArchUnit + event-contract triad — §3 (test) | unit + Sonar | ✅ ahead |
 | 7 | Edge security | gateway JWT + RLS + role-gated routes — §6 (built this session) | JWT filter, single app | ✅ ahead |
 | 8 | Exactly-once / idempotency | unique key + conflict re-read + DLT — §3.2/§4 (test) | per-strategy idempotency | ✅ ahead |
-| 9 | **API docs (OpenAPI)** | springdoc + `@Operation` contract test — §1.3 (test) | ✅ springdoc 2.6 + `@Operation`/`@Tag` on all controllers | ⚠ **partial — springdoc 3.0.x pilot in finance ([ADR 0004](adr/0004-openapi-docs-springdoc.md)); remaining: `@Operation` coverage + ArchUnit enforcer + fleet rollout** |
+| 9 | **API docs (OpenAPI)** | springdoc + `@Operation` ArchUnit enforcer + per-service smoke test — §1.3 (ArchUnit + test) | springdoc 2.6 + `@Operation`/`@Tag` on all controllers | ✅ ahead — **springdoc 3.0.x fleet-wide (all 6 business services); `@Operation`/`@Tag` on every handler; an `apiHandlersAreDocumentedWithAnOperation` ArchUnit guard (also in `service-template`); 6 doc smoke tests ([ADR 0004](adr/0004-openapi-docs-springdoc.md) → [ADR 0008](adr/0008-openapi-docs-fleet-rollout.md))** |
 | 10 | **Distributed tracing** | OTel context across every hop — §5 (test) | metrics + Grafana dashboards; custom trace-IDs + MDC (no full OTel either) | ⚠ **gap (deferred) → code phase** |
 | 11 | **Error observability** | JSON logs → sink + RED + outbox-lag — §5; *(optional DB inbox)* | ✅ DB error-inbox + alerting | ⚠ **partial → code phase** |
 | 12 | Client resilience (timeouts) | explicit connect/read timeouts — §4 (startup check) | configured | ⚠ gap → code phase |
@@ -40,10 +40,12 @@
 (d) Re-benchmark against `blackheart-trading-engine` when its structure materially changes. (e) Row
 13 is earned by deploying, not coding — it is the one bar code alone cannot clear.
 
-**Close-the-gap priority (the "then code" phase):** 9 OpenAPI → 12 client timeouts → 10 tracing → 11
-error-sink/alerting. Each lands **with its enforcer** — e.g. an ArchUnit rule that every
-`@RequestMapping` handler carries an `@Operation`; a startup self-check that every `RestClient`/
-`WebClient` has non-null connect+read timeouts — so a closed gap cannot silently re-open.
+**Close-the-gap priority (the "then code" phase):** ~~9 OpenAPI~~ — **done** ([ADR 0008](adr/0008-openapi-docs-fleet-rollout.md):
+springdoc fleet-wide + the `apiHandlersAreDocumentedWithAnOperation` ArchUnit guard) → **12 client timeouts**
+(next) → 10 tracing → 11 error-sink/alerting fleet rollout. Each lands **with its enforcer** — the OpenAPI
+gap shipped with an ArchUnit rule that every `@RequestMapping` handler carries an `@Operation`; 12 lands with
+a startup self-check that every `RestClient`/`WebClient` has non-null connect+read timeouts — so a closed gap
+cannot silently re-open.
 
 ---
 
@@ -130,7 +132,7 @@ record PageResponse<T>(List<T> content, int page, int size, long totalElements, 
 // GET /api/v1/sales?page=0&size=20&sort=occurredAt,desc   (size capped at 100; sort field allow-listed)
 ```
 
-- **OpenAPI 3 is generated, not hand-written.** Each service exposes `/api/v1/openapi.json` (+ Swagger UI in non-prod) via springdoc. Every handler declares an `@Operation` summary and its error responses; the `ProblemDetail` schema is referenced from every 4xx/5xx. A contract test fails the build if a handler lacks a summary or the generated spec stops being a **superset** of the published spec — the API analogue of `SaleRecordedContractTest` for events. *(test)*
+- **OpenAPI 3 is generated, not hand-written.** Every service exposing a business REST API serves `/v3/api-docs` (OpenAPI 3.1) + `/swagger-ui` via springdoc — **fleet-wide** as of [ADR 0008](adr/0008-openapi-docs-fleet-rollout.md) (org, restaurant, carwash, employee, entitlement, finance; notification + the reactive gateway are excluded — see the ADR). Every handler declares an `@Operation` summary and its `@RestController` a class-level `@Tag`, **enforced** by the `apiHandlersAreDocumentedWithAnOperation` ArchUnit rule (a `@RequestMapping`/`@GetMapping`/… handler with no `@Operation` fails the build; the `config` `HealthController`/`/healthz` is exempt; the rule also rides in `service-template` so clones inherit it) and guarded at runtime by a per-service `OpenApiDocsSmokeTest` that asserts `/v3/api-docs` is genuine OpenAPI JSON documenting the live endpoints. *(ArchUnit + test)* **Fuller target (follow-up):** each `@Operation` also declaring its error responses with the `ProblemDetail` schema referenced from every 4xx/5xx, plus a contract test that the generated spec stays a **superset** of a published spec — the API analogue of `SaleRecordedContractTest` for events. *(review)*
 - **API evolution is backward-compatible within a major version** (mirrors HR-7 on the REST edge): never remove/rename a response field, tighten a request constraint, or repurpose a status; only add optional request fields and new response fields. A genuinely breaking change ships as `/api/v2`. *(review)*
 
 ---

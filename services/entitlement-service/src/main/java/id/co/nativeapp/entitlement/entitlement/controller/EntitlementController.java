@@ -4,6 +4,8 @@ import id.co.nativeapp.entitlement.entitlement.domain.TenantEntitlement;
 import id.co.nativeapp.entitlement.entitlement.dto.EntitlementResponse;
 import id.co.nativeapp.entitlement.entitlement.dto.GrantEntitlementRequest;
 import id.co.nativeapp.entitlement.entitlement.service.EntitlementService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;
@@ -27,6 +29,9 @@ import org.springframework.web.bind.annotation.RestController;
  * libs/security}); a malformed module key is a {@code 400} via the shared advice, an unknown module
  * a {@code 400}, and a revoke of a never-granted module a {@code 404}.
  */
+@Tag(
+    name = "Entitlements",
+    description = "Grant, revoke, and list module entitlements for the bound tenant")
 @RestController
 @RequestMapping("/api/v1/entitlements")
 public class EntitlementController {
@@ -42,6 +47,12 @@ public class EntitlementController {
    * (via the outbox), and invalidates the entitlement-check cache. Returns {@code 201 Created} with
    * a {@code Location} header pointing at the module's entitlement resource.
    */
+  @Operation(
+      summary = "Grant a module entitlement",
+      description =
+          "Persists the entitlement for the bound tenant, emits EntitlementGranted via the outbox,"
+              + " and invalidates the entitlement-check cache. Returns 201 Created with a Location"
+              + " header pointing at the module's entitlement resource.")
   @PostMapping
   public ResponseEntity<EntitlementResponse> grant(
       @Valid @RequestBody GrantEntitlementRequest request) {
@@ -56,6 +67,12 @@ public class EntitlementController {
    * EntitlementRevoked} (via the outbox), and invalidates the entitlement-check cache. Returns
    * {@code 204 No Content} (DELETE success, ENGINEERING-STANDARDS §1.1).
    */
+  @Operation(
+      summary = "Revoke a module entitlement",
+      description =
+          "Flips the entitlement to REVOKED, emits EntitlementRevoked via the outbox, and"
+              + " invalidates the entitlement-check cache. Returns 204 No Content on success, 404"
+              + " if the module was never granted.")
   @DeleteMapping("/{moduleKey}")
   public ResponseEntity<Void> revoke(@PathVariable String moduleKey) {
     entitlementService.revoke(moduleKey);
@@ -67,6 +84,12 @@ public class EntitlementController {
    * maps the native-query projection to {@link EntitlementResponse} before returning, so the
    * controller receives a ready-to-serialize list (no further mapping needed here).
    */
+  @Operation(
+      summary = "List module entitlements",
+      description =
+          "Returns the bound tenant's module entitlements, scoped by RLS. The service maps the"
+              + " native-query projection to the response before returning. Returns 200 with the"
+              + " list (empty if no modules have been granted).")
   @GetMapping
   public ResponseEntity<List<EntitlementResponse>> list() {
     return ResponseEntity.ok(entitlementService.list());

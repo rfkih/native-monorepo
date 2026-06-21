@@ -6,6 +6,8 @@ import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
 import id.co.nativeapp.restaurant.sale.dto.SaleRequest;
 import id.co.nativeapp.restaurant.sale.dto.SaleResponse;
 import id.co.nativeapp.restaurant.sale.service.SaleService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.time.Instant;
@@ -31,6 +33,7 @@ import org.springframework.web.bind.annotation.RestController;
  * retry with the same {@code idempotency_key} returned the pre-existing sale (no second event, no
  * {@code Location}).
  */
+@Tag(name = "Sales", description = "Record a sale and retrieve sale resources")
 @RestController
 @RequestMapping("/api/v1/sales")
 public class SaleController {
@@ -41,6 +44,13 @@ public class SaleController {
     this.saleService = saleService;
   }
 
+  @Operation(
+      summary = "Record a sale",
+      description =
+          "Records a new sale for the bound tenant and business. The tenant (company_id) and actor"
+              + " come from TenantContext, never from the body. Returns 201 Created with a Location"
+              + " header on success, or 200 OK when a retry with the same idempotency_key returns"
+              + " the pre-existing sale (no second SaleRecorded event emitted).")
   @PostMapping
   public ResponseEntity<SaleResponse> recordSale(@Valid @RequestBody SaleRequest request) {
     RecordSaleCommand command =

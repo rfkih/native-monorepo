@@ -52,6 +52,16 @@ class LayeredArchitectureTest {
   private static final Set<String> RLS_WIRING_TYPES =
       Set.of("RlsConnectionInitializer", "RlsTransactionSynchronizer", "RlsAutoApplyAspect");
 
+  /** The Spring request-mapping annotations that mark a controller method as an HTTP handler. */
+  private static final Set<Class<? extends java.lang.annotation.Annotation>> HANDLER_MAPPINGS =
+      Set.of(
+          org.springframework.web.bind.annotation.RequestMapping.class,
+          org.springframework.web.bind.annotation.GetMapping.class,
+          org.springframework.web.bind.annotation.PostMapping.class,
+          org.springframework.web.bind.annotation.PutMapping.class,
+          org.springframework.web.bind.annotation.PatchMapping.class,
+          org.springframework.web.bind.annotation.DeleteMapping.class);
+
   private static JavaClasses classes;
 
   @BeforeAll
@@ -217,6 +227,29 @@ class LayeredArchitectureTest {
     rule.check(classes);
   }
 
+  /**
+   * OpenAPI contract (ENGINEERING-STANDARDS §1.3 / ADR 0008): every HTTP handler on a business
+   * {@code @RestController} carries an {@code @Operation}, so the springdoc-generated {@code
+   * /v3/api-docs} has a human summary for each endpoint instead of a bare inferred operationId. The
+   * {@code config} {@code HealthController} ({@code /healthz}) is infrastructure, not a business
+   * API, so it is exempt ({@code resideOutsideOfPackage("..config..")}).
+   */
+  @Test
+  void apiHandlersAreDocumentedWithAnOperation() {
+    ArchRule rule =
+        classes()
+            .that()
+            .areAnnotatedWith(org.springframework.web.bind.annotation.RestController.class)
+            .and()
+            .resideOutsideOfPackage("..config..")
+            .should(documentEveryHandlerWithAnOperation())
+            .as(
+                "every @RequestMapping handler on a business @RestController carries an @Operation"
+                    + " (OpenAPI docs — ENGINEERING-STANDARDS §1.3)")
+            .allowEmptyShould(true);
+    rule.check(classes);
+  }
+
   @Test
   void springServicesAreNamedService() {
     ArchRule rule =
@@ -345,6 +378,32 @@ class LayeredArchitectureTest {
                               + " convention",
                           item.getName(), method.getName())));
             }
+          }
+        }
+      }
+    };
+  }
+
+  /**
+   * Positive condition (violated == bad): flags any HTTP handler method (one carrying a Spring
+   * request-mapping annotation) that has no {@code io.swagger.v3.oas.annotations.Operation} — the
+   * OpenAPI summary springdoc renders into {@code /v3/api-docs}.
+   */
+  private static ArchCondition<JavaClass> documentEveryHandlerWithAnOperation() {
+    return new ArchCondition<>("document every request-mapping handler with @Operation") {
+      @Override
+      public void check(JavaClass item, ConditionEvents events) {
+        for (JavaMethod method : item.getMethods()) {
+          boolean isHandler = HANDLER_MAPPINGS.stream().anyMatch(a -> method.isAnnotatedWith(a));
+          if (isHandler && !method.isAnnotatedWith(io.swagger.v3.oas.annotations.Operation.class)) {
+            events.add(
+                SimpleConditionEvent.violated(
+                    method,
+                    String.format(
+                        "%s.%s is an HTTP handler with no @Operation — add an OpenAPI"
+                            + " io.swagger.v3.oas.annotations.Operation summary"
+                            + " (ENGINEERING-STANDARDS §1.3)",
+                        item.getName(), method.getName())));
           }
         }
       }
