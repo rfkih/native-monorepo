@@ -38,6 +38,7 @@ dependencies {
     implementation(project(":libs:events"))
     implementation(project(":libs:contracts")) // event Avro schemas: single source of truth
     implementation(project(":libs:tenant"))
+    implementation(project(":libs:error-inbox"))
 
     // observability — the SHARED logback-native-json.xml (one-object-per-line JSON logs with the
     // trace/correlation MDC fields + a dev console fallback) this service's logback-spring.xml

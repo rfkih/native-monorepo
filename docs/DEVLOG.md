@@ -66,6 +66,29 @@ cascade-deactivate + reactivation.)
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **Error-inbox fleet rollout — `libs/error-inbox` (ADR 0009, scorecard #11)** — the finance error-inbox
+  pilot (ADR 0005) became a shared library and was rolled out to **every** event-consuming service. The
+  five service-agnostic pieces (`ErrorMessageRedactor`, `ErrorInboxWriter`, `AlertPayload`,
+  `AlertWebhookClient`, `ConsumeErrorRecorder`) now live once in **`libs/error-inbox`** with an
+  `ErrorInboxAutoConfiguration` that registers them (REQUIRES_NEW tx template + a
+  `@ConditionalOnMissingBean` Clock; the alert's `service` label comes from `spring.application.name`,
+  not a hardcoded constant). A **dedicated lib, not `libs/observability`** — the stateless gateway
+  depends on observability and must stay DB-free; error-inbox carries JDBC/Kafka/RestClient, so it is
+  consumed only by the event-consuming services. **finance** was migrated onto the lib (its in-service
+  copies + `ObservabilityConfig` deleted), and **carwash, employee, entitlement, notification** each
+  gained it: a `libs:error-inbox` dependency, an `error_log` Flyway migration (per-service DB — NOT
+  Auditable, NOT RLS; `company_id` nullable diagnostic context; PII redacted at write time as the
+  RLS-substitute mitigation, HR-6 — the ADR 0005 deviations carried forward verbatim), and a one-line
+  wrap of the existing DLT `DeadLetterPublishingRecoverer` in a `ConsumerRecordRecoverer` that records
+  the failure before publishing. **Deliberate exclusions:** org + restaurant (pure producers, no DLT to
+  guard) and the gateway (no consumers, no DB). So a poison money/business event is now recorded
+  (fingerprint-deduped) + milestone-alerted (PII-redacted egress) on the WHOLE fleet, from one
+  definition. Closes scorecard **#11** for the DB-inbox+alerting half (the RED-metrics/outbox-lag/Grafana
+  half stays a follow-up tied to #13). Verified: the lib's pure-unit tests (redaction, milestone
+  predicate, fail-safe swallow + PII-safe egress) + finance's `ErrorInboxWriterTest` (the lib bean vs
+  finance's real `error_log`) + the full Testcontainers suites of carwash/employee/entitlement/
+  notification (each boots with its new migration + the wired recorder) all green; ArchUnit + spotless
+  + checkstyle green.
 - **Client resilience — explicit outbound timeouts + startup self-check (scorecard #12)** — closed the
   "every outbound client sets explicit connect/read timeouts" gap (ENGINEERING-STANDARDS §4). Business
   services talk only via events (HR-2), so the outbound HTTP surface is just the **Keycloak JWKS fetch**

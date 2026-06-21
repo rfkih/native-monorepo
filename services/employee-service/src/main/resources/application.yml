@@ -57,6 +57,12 @@ spring:
 # the test suite overrides it via the NATIVE_PII_KEY system property in build.gradle.kts. The app
 # fails fast at startup if the key is missing or not a valid 32-byte base64 value.
 native:
+  # Error inbox + webhook alerting (ADR 0005/0009). A blank webhook-url (the default) disables all
+  # outbound HTTP — safe for dev/CI. Set NATIVE_ALERT_WEBHOOK_URL in prod for DLT-milestone alerts.
+  alert:
+    webhook-url: ${NATIVE_ALERT_WEBHOOK_URL:}
+    connect-timeout-ms: ${NATIVE_ALERT_CONNECT_TIMEOUT_MS:2000}
+    read-timeout-ms: ${NATIVE_ALERT_READ_TIMEOUT_MS:3000}
   pii:
     # base64 of the 32 ASCII bytes "native-dev-placeholder-pii-key32" — a dev-only placeholder, not a
     # real secret (the AES-256 key must decode to exactly 32 bytes).

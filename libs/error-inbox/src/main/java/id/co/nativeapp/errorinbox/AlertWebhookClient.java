@@ -95,12 +95,16 @@ public class AlertWebhookClient {
                 .retrieve()
                 .toBodilessEntity();
           } catch (Exception e) {
+            // Do NOT log the webhook URL or the exception message: a webhook URL commonly embeds a
+            // secret (e.g. a Slack/Telegram bot token in the path), and a client exception message
+            // typically echoes the full request URI — either would leak the secret to the log sink.
+            // The fingerprint correlates the failure to the error_log row; the endpoint is known
+            // from config. (HR-6: no secret reaches a log.)
             log.warn(
-                "alert-webhook: POST to {} failed (fingerprint={}, occurrences={}): {}",
-                webhookUrl,
+                "alert-webhook: POST failed (fingerprint={}, occurrences={}, cause={}); continuing",
                 payload.fingerprint(),
                 payload.occurrenceCount(),
-                e.getMessage());
+                e.getClass().getName());
           }
         });
   }

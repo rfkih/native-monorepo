@@ -57,6 +57,12 @@ spring:
 # The entitlement-check cache TTL safety net (invalidation by event is the primary mechanism; this
 # is only the backstop). A data/config value, externalized (ENGINEERING-STANDARDS §7).
 native:
+  # Error inbox + webhook alerting (ADR 0005/0009). A blank webhook-url (the default) disables all
+  # outbound HTTP — safe for dev/CI. Set NATIVE_ALERT_WEBHOOK_URL in prod for DLT-milestone alerts.
+  alert:
+    webhook-url: ${NATIVE_ALERT_WEBHOOK_URL:}
+    connect-timeout-ms: ${NATIVE_ALERT_CONNECT_TIMEOUT_MS:2000}
+    read-timeout-ms: ${NATIVE_ALERT_READ_TIMEOUT_MS:3000}
   entitlement:
     cache-ttl: ${ENTITLEMENT_CACHE_TTL:PT30M}
     # The DEFAULT modules a new company is granted when its CompanyCreated arrives. Data, not code

@@ -1,5 +1,6 @@
 package id.co.nativeapp.notification.config;
 
+import id.co.nativeapp.errorinbox.ConsumeErrorRecorder;
 import id.co.nativeapp.events.Base64ByteArraySerializer;
 import id.co.nativeapp.notification.notification.messaging.ConsolidationClosedDecodeException;
 import id.co.nativeapp.notification.notification.messaging.MissingEventIdException;
@@ -18,6 +19,7 @@ import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.ProducerFactory;
+import org.springframework.kafka.listener.ConsumerRecordRecoverer;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.util.backoff.FixedBackOff;
@@ -82,16 +84,27 @@ public class KafkaConfig {
    * Bounded-retry error handler that routes a poison record to {@code <topic>.DLT} after the retry
    * budget is exhausted. The deterministic poison failures are classified non-retryable so they are
    * DLT'd immediately.
+   *
+   * <p><strong>Error inbox (ADR 0005 / ADR 0009).</strong> Before the DLT publish the {@link
+   * ConsumeErrorRecorder} upserts the failure into {@code error_log} (fingerprint-deduped,
+   * occurrence-counted, PII-redacted) and fires a webhook alert on milestone occurrences. The
+   * recorder is guaranteed not to throw, so it never disrupts the DLT publishing path.
    */
   @Bean
   public DefaultErrorHandler kafkaErrorHandler(
-      KafkaTemplate<String, byte[]> deadLetterKafkaTemplate) {
+      KafkaTemplate<String, byte[]> deadLetterKafkaTemplate,
+      ConsumeErrorRecorder consumeErrorRecorder) {
     DeadLetterPublishingRecoverer recoverer =
         new DeadLetterPublishingRecoverer(
             deadLetterKafkaTemplate,
             (record, exception) -> new TopicPartition(record.topic() + DLT_SUFFIX, -1));
+    ConsumerRecordRecoverer wrapped =
+        (rec, ex) -> {
+          consumeErrorRecorder.record(rec, ex);
+          recoverer.accept(rec, ex);
+        };
     DefaultErrorHandler handler =
-        new DefaultErrorHandler(recoverer, new FixedBackOff(RETRY_INTERVAL_MS, MAX_RETRIES));
+        new DefaultErrorHandler(wrapped, new FixedBackOff(RETRY_INTERVAL_MS, MAX_RETRIES));
     handler.addNotRetryableExceptions(
         UncheckedIOException.class,
         ConsolidationClosedDecodeException.class,

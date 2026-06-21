@@ -2,7 +2,7 @@ package id.co.nativeapp.finance;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import id.co.nativeapp.finance.observability.service.ErrorInboxWriter;
+import id.co.nativeapp.errorinbox.ErrorInboxWriter;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;

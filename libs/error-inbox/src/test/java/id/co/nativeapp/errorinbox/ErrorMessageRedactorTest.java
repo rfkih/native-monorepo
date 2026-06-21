@@ -27,9 +27,19 @@ class ErrorMessageRedactorTest {
   }
 
   @Test
+  void masksDottedNpwp() {
+    // 15-digit NPWP printed with dot+hyphen grouping must be masked as a whole (≥10 digits).
+    assertThat(redactor.redact("NPWP 12.345.678.9-012.000 invalid"))
+        .doesNotContain("12.345.678.9-012.000")
+        .contains("***");
+  }
+
+  @Test
   void doesNotMaskShortNumbersInRedact() {
     // A short amount (5 digits) is not PII — left intact by redact().
     assertThat(redactor.redact("amount 12345 rejected")).contains("12345");
+    // An IPv4 address is only 9 digits across its dots — under the ≥10 threshold, so not masked.
+    assertThat(redactor.redact("connect to 192.168.1.1 refused")).contains("192.168.1.1");
   }
 
   @Test

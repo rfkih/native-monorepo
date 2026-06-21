@@ -31,7 +31,7 @@
 | 8 | Exactly-once / idempotency | unique key + conflict re-read + DLT — §3.2/§4 (test) | per-strategy idempotency | ✅ ahead |
 | 9 | **API docs (OpenAPI)** | springdoc + `@Operation` ArchUnit enforcer + per-service smoke test — §1.3 (ArchUnit + test) | springdoc 2.6 + `@Operation`/`@Tag` on all controllers | ✅ ahead — **springdoc 3.0.x fleet-wide (all 6 business services); `@Operation`/`@Tag` on every handler; an `apiHandlersAreDocumentedWithAnOperation` ArchUnit guard (also in `service-template`); 6 doc smoke tests ([ADR 0004](adr/0004-openapi-docs-springdoc.md) → [ADR 0008](adr/0008-openapi-docs-fleet-rollout.md))** |
 | 10 | **Distributed tracing** | OTel context across every hop — §5 (test) | metrics + Grafana dashboards; custom trace-IDs + MDC (no full OTel either) | ⚠ **gap (deferred) → code phase** |
-| 11 | **Error observability** | JSON logs → sink + RED + outbox-lag — §5; *(optional DB inbox)* | ✅ DB error-inbox + alerting | ⚠ **partial → code phase** |
+| 11 | **Error observability** | JSON logs → sink + RED + outbox-lag — §5; *(optional DB inbox)* | DB error-inbox + alerting | ✅ ahead (DB inbox) — **`libs/error-inbox` rolled out to every consuming service (finance/carwash/employee/entitlement/notification): fingerprint-deduped `error_log` + PII-redacted milestone alerts ([ADR 0005](adr/0005-error-inbox-and-alerting.md) → [ADR 0009](adr/0009-error-inbox-fleet-rollout.md))**. RED metrics / outbox-lag / Grafana dashboards still a follow-up (ties to #13) |
 | 12 | Client resilience (timeouts) | explicit connect/read timeouts + startup self-check — §4 (startup check) | configured | ✅ — **JWKS decoders (libs/security shared + gateway) and the finance alert webhook carry explicit connect/read timeouts; `OutboundClientTimeoutCheck` fails fast at boot on a non-positive timeout** |
 | 13 | **Deployed & proven** | CI + Kustomize authored — `deploy/` | ✅ live in prod | ❗ **infra-gated — owner action, not code** |
 
@@ -42,11 +42,12 @@
 
 **Close-the-gap priority (the "then code" phase):** ~~9 OpenAPI~~ **done** ([ADR 0008](adr/0008-openapi-docs-fleet-rollout.md):
 springdoc fleet-wide + the `apiHandlersAreDocumentedWithAnOperation` ArchUnit guard) → ~~12 client timeouts~~
-**done** (explicit JWKS/webhook timeouts + the `OutboundClientTimeoutCheck` startup self-check) → **10 tracing**
-(next) → 11 error-sink/alerting fleet rollout. Each lands **with its enforcer** — the OpenAPI gap shipped with
-an ArchUnit rule that every `@RequestMapping` handler carries an `@Operation`; the timeouts gap shipped with a
-startup self-check that fails fast on a non-positive connect/read timeout — so a closed gap cannot silently
-re-open.
+**done** (explicit JWKS/webhook timeouts + the `OutboundClientTimeoutCheck` startup self-check) → ~~11
+error-inbox fleet rollout~~ **done** (DB inbox [ADR 0009](adr/0009-error-inbox-fleet-rollout.md): `libs/error-inbox`
+on every consumer; RED/Grafana half still tied to #13) → **10 tracing** (next). Each lands **with its enforcer**
+— the OpenAPI gap shipped with an ArchUnit rule that every `@RequestMapping` handler carries an `@Operation`;
+the timeouts gap shipped with a startup self-check that fails fast on a non-positive connect/read timeout — so a
+closed gap cannot silently re-open.
 
 ---
 

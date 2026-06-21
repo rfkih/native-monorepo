@@ -1,6 +1,6 @@
 # 0005. Error-inbox + webhook alerting for production-error visibility (pilot: finance)
 
-- **Status:** Accepted (pilot)
+- **Status:** Accepted (pilot) — extracted to `libs/error-inbox` + extended fleet-wide by [ADR 0009](0009-error-inbox-fleet-rollout.md)
 - **Date:** 2026-06-20
 - **Deciders:** rifki + Claude (pairing)
 - **Related:** [ENGINEERING-STANDARDS §0 row 11](../ENGINEERING-STANDARDS.md) (the ≥-blackheart

@@ -2,6 +2,7 @@ package id.co.nativeapp.entitlement.config;
 
 import id.co.nativeapp.entitlement.entitlement.messaging.CompanyCreatedDecodeException;
 import id.co.nativeapp.entitlement.entitlement.messaging.MissingEventIdException;
+import id.co.nativeapp.errorinbox.ConsumeErrorRecorder;
 import id.co.nativeapp.events.Base64ByteArraySerializer;
 import java.io.UncheckedIOException;
 import java.util.HashMap;
@@ -18,6 +19,7 @@ import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.ProducerFactory;
+import org.springframework.kafka.listener.ConsumerRecordRecoverer;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.util.backoff.FixedBackOff;
@@ -78,18 +80,30 @@ public class KafkaConfig {
    * Bounded-retry error handler that routes a poison record to {@code <topic>.DLT} after the retry
    * budget is exhausted. The two deterministic poison failures are classified non-retryable so they
    * are DLT'd immediately.
+   *
+   * <p><strong>Error-inbox wiring (ADR 0005/0009).</strong> Before a record is published to the DLT
+   * the {@link ConsumeErrorRecorder} upserts a deduplicated, PII-redacted row into {@code
+   * error_log} in a {@code REQUIRES_NEW} transaction so the record survives a rolled-back business
+   * transaction. The DLT publish then proceeds as before.
    */
   @Bean
   public DefaultErrorHandler kafkaErrorHandler(
-      KafkaTemplate<String, byte[]> deadLetterKafkaTemplate) {
+      KafkaTemplate<String, byte[]> deadLetterKafkaTemplate,
+      ConsumeErrorRecorder consumeErrorRecorder) {
     // Pin the DLT destination to "<topic>.DLT" explicitly (the convention this codebase and
     // ENGINEERING-STANDARDS §4 name); the broker chooses the partition (-1).
     DeadLetterPublishingRecoverer recoverer =
         new DeadLetterPublishingRecoverer(
             deadLetterKafkaTemplate,
             (record, exception) -> new TopicPartition(record.topic() + DLT_SUFFIX, -1));
+    // Wrap the DLT recoverer so the error-inbox records BEFORE the DLT publish (ADR 0009).
+    ConsumerRecordRecoverer wrapped =
+        (rec, ex) -> {
+          consumeErrorRecorder.record(rec, ex);
+          recoverer.accept(rec, ex);
+        };
     DefaultErrorHandler handler =
-        new DefaultErrorHandler(recoverer, new FixedBackOff(RETRY_INTERVAL_MS, MAX_RETRIES));
+        new DefaultErrorHandler(wrapped, new FixedBackOff(RETRY_INTERVAL_MS, MAX_RETRIES));
     handler.addNotRetryableExceptions(
         UncheckedIOException.class,
         CompanyCreatedDecodeException.class,

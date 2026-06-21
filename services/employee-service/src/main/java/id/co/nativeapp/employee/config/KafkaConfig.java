@@ -4,6 +4,7 @@ import id.co.nativeapp.employee.org.messaging.MissingEventIdException;
 import id.co.nativeapp.employee.org.messaging.OrgUnitDecodeException;
 import id.co.nativeapp.employee.payroll.messaging.MissingPayrollEventIdException;
 import id.co.nativeapp.employee.payroll.messaging.PayrollEventDecodeException;
+import id.co.nativeapp.errorinbox.ConsumeErrorRecorder;
 import id.co.nativeapp.events.Base64ByteArraySerializer;
 import java.io.UncheckedIOException;
 import java.util.HashMap;
@@ -20,6 +21,7 @@ import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.ProducerFactory;
+import org.springframework.kafka.listener.ConsumerRecordRecoverer;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.util.backoff.FixedBackOff;
@@ -82,18 +84,32 @@ public class KafkaConfig {
    * Bounded-retry error handler that routes a poison record to {@code <topic>.DLT} after the retry
    * budget is exhausted. The two deterministic poison failures are classified non-retryable so they
    * are DLT'd immediately.
+   *
+   * <p><strong>Error-inbox wiring (ADR 0005 / ADR 0009).</strong> Before the {@link
+   * DeadLetterPublishingRecoverer} publishes to the DLT, the injected {@link ConsumeErrorRecorder}
+   * writes a redacted, fingerprinted row to {@code error_log} in a {@code REQUIRES_NEW} transaction
+   * that is independent of — and survives — any rolled-back business transaction. PII is redacted
+   * at write time inside the lib; no raw exception text is stored or logged here.
    */
   @Bean
   public DefaultErrorHandler kafkaErrorHandler(
-      KafkaTemplate<String, byte[]> deadLetterKafkaTemplate) {
+      KafkaTemplate<String, byte[]> deadLetterKafkaTemplate,
+      ConsumeErrorRecorder consumeErrorRecorder) {
     // Pin the DLT destination to "<topic>.DLT" explicitly (the convention this codebase and
     // ENGINEERING-STANDARDS §4 name); the broker chooses the partition (-1).
     DeadLetterPublishingRecoverer recoverer =
         new DeadLetterPublishingRecoverer(
             deadLetterKafkaTemplate,
             (record, exception) -> new TopicPartition(record.topic() + DLT_SUFFIX, -1));
+    // Record to the error-inbox BEFORE publishing to the DLT so the row exists even if the DLT
+    // publish itself fails. The lambda captures recoverer by reference — no field needed.
+    ConsumerRecordRecoverer wrapped =
+        (rec, ex) -> {
+          consumeErrorRecorder.record(rec, ex);
+          recoverer.accept(rec, ex);
+        };
     DefaultErrorHandler handler =
-        new DefaultErrorHandler(recoverer, new FixedBackOff(RETRY_INTERVAL_MS, MAX_RETRIES));
+        new DefaultErrorHandler(wrapped, new FixedBackOff(RETRY_INTERVAL_MS, MAX_RETRIES));
     handler.addNotRetryableExceptions(
         UncheckedIOException.class,
         OrgUnitDecodeException.class,

@@ -1,7 +1,7 @@
 package id.co.nativeapp.finance.config;
 
+import id.co.nativeapp.errorinbox.ConsumeErrorRecorder;
 import id.co.nativeapp.events.Base64ByteArraySerializer;
-import id.co.nativeapp.finance.observability.service.ConsumeErrorRecorder;
 import java.util.HashMap;
 import java.util.Map;
 import org.apache.kafka.clients.producer.ProducerConfig;
@@ -38,10 +38,10 @@ import org.springframework.util.backoff.FixedBackOff;
  * these retries cause never double-counts.
  *
  * <p><strong>Error inbox (ADR 0005).</strong> Before each DLT publish the {@link
- * id.co.nativeapp.finance.observability.service.ConsumeErrorRecorder} upserts the failure into the
- * {@code error_log} ops table (fingerprint dedup + occurrence count) and fires a webhook alert on
- * first occurrence and configured milestones. The recording runs in a {@code REQUIRES_NEW}
- * transaction so it survives the rolled-back business transaction.
+ * id.co.nativeapp.errorinbox.ConsumeErrorRecorder} upserts the failure into the {@code error_log}
+ * ops table (fingerprint dedup + occurrence count) and fires a webhook alert on first occurrence
+ * and configured milestones. The recording runs in a {@code REQUIRES_NEW} transaction so it
+ * survives the rolled-back business transaction.
  */
 @Configuration
 public class KafkaConfig {

@@ -59,6 +59,12 @@ spring:
 # carwash-service config — externalized, validated at startup (fail fast — ENGINEERING-STANDARDS §7).
 # No business config is hardcoded in Java.
 native:
+  # Error inbox + webhook alerting (ADR 0005/0009). A blank webhook-url (the default) disables all
+  # outbound HTTP — safe for dev/CI. Set NATIVE_ALERT_WEBHOOK_URL in prod for DLT-milestone alerts.
+  alert:
+    webhook-url: ${NATIVE_ALERT_WEBHOOK_URL:}
+    connect-timeout-ms: ${NATIVE_ALERT_CONNECT_TIMEOUT_MS:2000}
+    read-timeout-ms: ${NATIVE_ALERT_READ_TIMEOUT_MS:3000}
   carwash:
     # The entitlement module this vertical is gated on. record-wash is rejected with 403 unless the
     # company is entitled to this module (the "real gating in the verticals", Phase-2).
