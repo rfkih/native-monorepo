@@ -29,6 +29,11 @@ interface Props {
   locale: string
   /** Optional business name shown on the printed receipt. */
   businessName?: string
+  /**
+   * Human-readable table label resolved from the tables list (e.g. "T1").
+   * Null for takeaway/delivery or when tableId is absent.
+   */
+  tableLabel?: string | null
   onNew: () => void
 }
 
@@ -77,7 +82,7 @@ function orderTypeI18nKey(orderType: string | null): string | null {
   }
 }
 
-export function ReceiptView({ order, payment, locale, businessName, onNew }: Props) {
+export function ReceiptView({ order, payment, locale, businessName, tableLabel, onNew }: Props) {
   const { t } = useTranslation()
   const isPending = payment.status === 'PENDING'
   const isCash = payment.tenderType === 'CASH'
@@ -97,6 +102,7 @@ export function ReceiptView({ order, payment, locale, businessName, onNew }: Pro
         payment={payment}
         locale={locale}
         businessName={businessName}
+        tableLabel={tableLabel}
         t={t}
       />
 
@@ -295,10 +301,10 @@ export function ReceiptView({ order, payment, locale, businessName, onNew }: Pro
             </div>
           ) : null}
 
-          {order.orderType === 'DINE_IN' && order.tableId ? (
+          {order.orderType === 'DINE_IN' && tableLabel ? (
             <div className="flex items-baseline justify-between">
               <span className="text-ink-3">{t('pos.table.label')}</span>
-              <span className="font-medium text-ink">{order.tableId}</span>
+              <span className="font-medium text-ink">{tableLabel}</span>
             </div>
           ) : null}
 
@@ -341,10 +347,11 @@ interface PrintReceiptProps {
   payment: PaymentResponse
   locale: string
   businessName?: string
+  tableLabel?: string | null
   t: (key: string, opts?: Record<string, unknown>) => string
 }
 
-function PrintReceipt({ order, payment, locale, businessName, t }: PrintReceiptProps) {
+function PrintReceipt({ order, payment, locale, businessName, tableLabel, t }: PrintReceiptProps) {
   const currency = payment.currency
   const breakdown = order.breakdown
   const isCash = payment.tenderType === 'CASH'
@@ -395,7 +402,10 @@ function PrintReceipt({ order, payment, locale, businessName, t }: PrintReceiptP
         </div>
         <div className="pr-center" style={{ marginBottom: 2 }}>{printTime}</div>
         {orderTypeKey ? (
-          <div className="pr-center" style={{ marginBottom: 8 }}>{t(orderTypeKey)}</div>
+          <div className="pr-center" style={{ marginBottom: tableLabel ? 2 : 8 }}>{t(orderTypeKey)}</div>
+        ) : null}
+        {order.orderType === 'DINE_IN' && tableLabel ? (
+          <div className="pr-center" style={{ marginBottom: 8 }}>{t('pos.table.label')}: {tableLabel}</div>
         ) : null}
 
         <hr className="pr-rule" />

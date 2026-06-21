@@ -660,6 +660,11 @@ function PosInner({ session }: { session: CompanySession }) {
           payment={placedPayment}
           locale={locale}
           businessName={session.name}
+          tableLabel={
+            placedOrder.tableId
+              ? (tablesQuery.data ?? []).find((tbl) => tbl.tableId === placedOrder.tableId)?.label ?? null
+              : null
+          }
           onNew={handleNewOrder}
         />
       ) : null}

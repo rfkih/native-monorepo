@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { apiFetch } from '@/lib/api'
 import type { CompanySession } from '@/lib/session'
 
@@ -174,10 +174,15 @@ function tenantOf(session: CompanySession) {
 
 /**
  * Fetches a live price breakdown from POST /api/v1/orders/quote.
- * The query is keyed by lines + discountMinor so it re-runs on every cart or discount change.
- * A 400ms debounce is applied so rapid keystrokes don't flood the API.
+ * The query is keyed by the debounced lines + discountMinor so it re-runs on every cart or
+ * discount change (after 400 ms of inactivity to avoid flooding the API).
  * keepPreviousData keeps the last breakdown visible while the next one loads.
  * An empty cart short-circuits to null without any network call.
+ *
+ * The debounce is implemented via useState so the query key and the request body are always
+ * derived from the same settled snapshot — previously a useRef approach caused the queryFn to
+ * fire immediately with a stale ref body while the key already reflected the new cart, producing
+ * a breakdown that did not match the current cart lines.
  *
  * Phase 3: lines now carry selectedOptionIds — forwarded verbatim to the quote endpoint so the
  * server prices modifier deltas and returns the correct subtotal/tax/total breakdown.
@@ -187,28 +192,27 @@ export function useQuote(
   lines: OrderLineInput[],
   discountMinor: number,
 ) {
-  // Debounce: keep a stable ref to the pending timer. We expose a debounced copy of the
-  // query key so TanStack Query only triggers a fetch after 400 ms of inactivity.
+  // State-based debounce: both the query key and the request body read from `debounced`,
+  // so they are always identical and the server always receives the full current cart.
+  const [debounced, setDebounced] = useState<{ lines: OrderLineInput[]; discountMinor: number }>(
+    () => ({ lines, discountMinor }),
+  )
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const debounced = useRef<{ lines: OrderLineInput[]; discountMinor: number }>({
-    lines,
-    discountMinor,
-  })
 
   useEffect(() => {
     if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => {
-      debounced.current = { lines, discountMinor }
+      setDebounced({ lines, discountMinor })
     }, 400)
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
     }
   }, [lines, discountMinor])
 
-  const enabled = lines.length > 0
+  const enabled = debounced.lines.length > 0
 
   return useQuery({
-    queryKey: ['quote', session.companyId, session.businessId, lines, discountMinor],
+    queryKey: ['quote', session.companyId, session.businessId, debounced.lines, debounced.discountMinor],
     enabled,
     placeholderData: keepPreviousData,
     staleTime: 0,
@@ -218,8 +222,8 @@ export function useQuote(
         tenant: tenantOf(session),
         body: {
           businessId: session.businessId,
-          lines: debounced.current.lines,
-          discountMinor: debounced.current.discountMinor > 0 ? debounced.current.discountMinor : null,
+          lines: debounced.lines,
+          discountMinor: debounced.discountMinor > 0 ? debounced.discountMinor : null,
         },
       }),
   })
