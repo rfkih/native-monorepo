@@ -1,4 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
+import { useEffect, useRef } from 'react'
 import { apiFetch } from '@/lib/api'
 import type { CompanySession } from '@/lib/session'
 
@@ -15,6 +16,21 @@ export interface MenuItem {
 export interface OrderLineInput {
   menuItemId: string
   qty: number
+}
+
+/**
+ * Mirrors backend PriceBreakdownResponse. All amounts are integer minor units.
+ * When usesIllustrativeRules is true the tax / service-charge lines are placeholder
+ * amounts and the UI must badge them as estimated.
+ */
+export interface PriceBreakdownResponse {
+  subtotalMinor: number
+  discountMinor: number
+  serviceChargeMinor: number
+  taxMinor: number
+  grandTotalMinor: number
+  currency: string
+  usesIllustrativeRules: boolean
 }
 
 /** Matches backend PaymentResponse record (ADR 0006). All money is integer minor units. */
@@ -52,6 +68,8 @@ export interface OrderResponse {
   }[]
   /** Present when the order was paid in the same checkout call; null otherwise. */
   payment: PaymentResponse | null
+  /** Phase 2 price breakdown — present on every newly created order. */
+  breakdown: PriceBreakdownResponse | null
 }
 
 /** Payment block sent on checkout — tenderType must be CASH | QRIS | CARD. */
@@ -63,6 +81,60 @@ export interface CheckoutPaymentInput {
 
 function tenantOf(session: CompanySession) {
   return { companyId: session.companyId, actor: session.actor }
+}
+
+// ---------------------------------------------------------------------------
+// Quote hook — live price breakdown, debounced, no side-effects
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetches a live price breakdown from POST /api/v1/orders/quote.
+ * The query is keyed by lines + discountMinor so it re-runs on every cart or discount change.
+ * A 400ms debounce is applied so rapid keystrokes don't flood the API.
+ * keepPreviousData keeps the last breakdown visible while the next one loads.
+ * An empty cart short-circuits to null without any network call.
+ */
+export function useQuote(
+  session: CompanySession,
+  lines: OrderLineInput[],
+  discountMinor: number,
+) {
+  // Debounce: keep a stable ref to the pending timer. We expose a debounced copy of the
+  // query key so TanStack Query only triggers a fetch after 400 ms of inactivity.
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const debounced = useRef<{ lines: OrderLineInput[]; discountMinor: number }>({
+    lines,
+    discountMinor,
+  })
+
+  useEffect(() => {
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => {
+      debounced.current = { lines, discountMinor }
+    }, 400)
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+    }
+  }, [lines, discountMinor])
+
+  const enabled = lines.length > 0
+
+  return useQuery({
+    queryKey: ['quote', session.companyId, session.businessId, lines, discountMinor],
+    enabled,
+    placeholderData: keepPreviousData,
+    staleTime: 0,
+    queryFn: () =>
+      apiFetch<PriceBreakdownResponse>('/api/v1/orders/quote', {
+        method: 'POST',
+        tenant: tenantOf(session),
+        body: {
+          businessId: session.businessId,
+          lines: debounced.current.lines,
+          discountMinor: debounced.current.discountMinor > 0 ? debounced.current.discountMinor : null,
+        },
+      }),
+  })
 }
 
 export function useMenu(session: CompanySession) {
@@ -79,12 +151,14 @@ export function useMenu(session: CompanySession) {
 export interface CheckoutInput {
   lines: OrderLineInput[]
   payment?: CheckoutPaymentInput
+  /** Optional order-level discount in minor units (>= 0). Server clamps to subtotal. */
+  discountMinor?: number
 }
 
 export function useCheckout(session: CompanySession) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ lines, payment }: CheckoutInput) =>
+    mutationFn: ({ lines, payment, discountMinor }: CheckoutInput) =>
       apiFetch<OrderResponse>('/api/v1/orders', {
         method: 'POST',
         tenant: tenantOf(session),
@@ -93,6 +167,7 @@ export function useCheckout(session: CompanySession) {
           idempotencyKey: crypto.randomUUID(),
           lines,
           payment: payment ?? null,
+          discountMinor: discountMinor && discountMinor > 0 ? discountMinor : null,
         },
       }),
     onSuccess: (res) => {

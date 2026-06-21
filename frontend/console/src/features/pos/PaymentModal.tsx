@@ -8,6 +8,9 @@
  *            POST /api/v1/payments/{id}/capture. Clearly badged "Demo · pending provider".
  *   CARD  — same two-step as QRIS.
  *
+ * Phase 2: discountMinor is threaded into checkout; the authoritative grandTotalMinor from the
+ * price breakdown drives the charge amount rather than a client-side subtotal.
+ *
  * Money rule (rule 8): all amounts are integer minor units throughout. Displayed via formatMoney().
  * Strings rule (rule 9): every label is an i18n key — no hardcoded user-facing text.
  */
@@ -21,7 +24,12 @@ import { Spinner } from '@/components/ui/Spinner'
 import { Segmented } from '@/components/ui/Segmented'
 import { formatMoney } from '@/lib/money'
 import type { CompanySession } from '@/lib/session'
-import type { OrderLineInput, OrderResponse, PaymentResponse } from './api'
+import type {
+  OrderLineInput,
+  OrderResponse,
+  PaymentResponse,
+  PriceBreakdownResponse,
+} from './api'
 import { useCheckout, useCapturePayment } from './api'
 
 type TenderTab = 'CASH' | 'QRIS' | 'CARD'
@@ -29,7 +37,12 @@ type TenderTab = 'CASH' | 'QRIS' | 'CARD'
 interface Props {
   session: CompanySession
   lines: OrderLineInput[]
-  totalMinor: number
+  /** Server-authoritative grand total from the quote breakdown; drives the charge amount. */
+  grandTotalMinor: number
+  /** Optional order-level discount in minor units; passed to checkout. */
+  discountMinor: number
+  /** Live price breakdown from useQuote — rendered in the modal header. */
+  breakdown: PriceBreakdownResponse | null
   currency: string
   locale: string
   onSuccess: (order: OrderResponse, payment: PaymentResponse) => void
@@ -58,7 +71,9 @@ function quickChips(totalMinor: number, currency: string): number[] {
 export function PaymentModal({
   session,
   lines,
-  totalMinor,
+  grandTotalMinor,
+  discountMinor,
+  breakdown,
   currency,
   locale,
   onSuccess,
@@ -95,13 +110,8 @@ export function PaymentModal({
           </button>
         </div>
 
-        {/* Total row */}
-        <div className="flex items-baseline justify-between px-5 py-3 text-sm text-ink-3 border-b border-line">
-          <span>{t('pos.total')}</span>
-          <span className="tnum font-mono text-xl font-medium text-ink">
-            {formatMoney(totalMinor, currency, locale)}
-          </span>
-        </div>
+        {/* Inline breakdown */}
+        <ModalBreakdown breakdown={breakdown} grandTotalMinor={grandTotalMinor} currency={currency} locale={locale} />
 
         {/* Tender picker */}
         <div className="flex justify-center px-5 py-4">
@@ -118,7 +128,8 @@ export function PaymentModal({
           <CashPanel
             session={session}
             lines={lines}
-            totalMinor={totalMinor}
+            grandTotalMinor={grandTotalMinor}
+            discountMinor={discountMinor}
             currency={currency}
             locale={locale}
             onSuccess={onSuccess}
@@ -128,7 +139,8 @@ export function PaymentModal({
           <DigitalPanel
             session={session}
             lines={lines}
-            totalMinor={totalMinor}
+            grandTotalMinor={grandTotalMinor}
+            discountMinor={discountMinor}
             currency={currency}
             locale={locale}
             tenderType={tender}
@@ -142,13 +154,103 @@ export function PaymentModal({
 }
 
 // ---------------------------------------------------------------------------
+// Inline breakdown in the modal header
+// ---------------------------------------------------------------------------
+
+function ModalBreakdown({
+  breakdown,
+  grandTotalMinor,
+  currency,
+  locale,
+}: {
+  breakdown: PriceBreakdownResponse | null
+  grandTotalMinor: number
+  currency: string
+  locale: string
+}) {
+  const { t } = useTranslation()
+
+  if (!breakdown) {
+    // Fallback: just the total row
+    return (
+      <div className="flex items-baseline justify-between px-5 py-3 text-sm text-ink-3 border-b border-line">
+        <span>{t('pos.total')}</span>
+        <span className="tnum font-mono text-xl font-medium text-ink">
+          {formatMoney(grandTotalMinor, currency, locale)}
+        </span>
+      </div>
+    )
+  }
+
+  const illustrative = breakdown.usesIllustrativeRules
+
+  return (
+    <div className="border-b border-line px-5 py-3 space-y-1.5 text-sm">
+      {/* Subtotal */}
+      <div className="flex items-baseline justify-between text-ink-3">
+        <span>{t('pos.subtotal')}</span>
+        <span className="tnum font-mono">{formatMoney(breakdown.subtotalMinor, currency, locale)}</span>
+      </div>
+
+      {/* Discount */}
+      {breakdown.discountMinor > 0 ? (
+        <div className="flex items-baseline justify-between text-ink-3">
+          <span>{t('pos.discount')}</span>
+          <span className="tnum font-mono text-rose">
+            − {formatMoney(breakdown.discountMinor, currency, locale)}
+          </span>
+        </div>
+      ) : null}
+
+      {/* Service charge */}
+      <div className="flex items-center justify-between text-ink-3">
+        <span className="flex items-center gap-1.5">
+          {t('pos.serviceCharge')}
+          {illustrative ? <InlineEstimatedBadge hint={t('pos.illustrativeHint')} /> : null}
+        </span>
+        <span className="tnum font-mono">{formatMoney(breakdown.serviceChargeMinor, currency, locale)}</span>
+      </div>
+
+      {/* Tax */}
+      <div className="flex items-center justify-between text-ink-3">
+        <span className="flex items-center gap-1.5">
+          {t('pos.tax')}
+          {illustrative ? <InlineEstimatedBadge hint={t('pos.illustrativeHint')} /> : null}
+        </span>
+        <span className="tnum font-mono">{formatMoney(breakdown.taxMinor, currency, locale)}</span>
+      </div>
+
+      {/* Grand total */}
+      <div className="flex items-baseline justify-between border-t border-line pt-1.5 mt-0.5 font-medium">
+        <span className="text-ink">{t('pos.total')}</span>
+        <span className="tnum font-mono text-xl text-ink">
+          {formatMoney(breakdown.grandTotalMinor, currency, locale)}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function InlineEstimatedBadge({ hint }: { hint: string }) {
+  const { t } = useTranslation()
+  return (
+    <span title={hint} aria-label={hint}>
+      <Badge tone="amber" className="text-[10px] py-0 px-1.5">
+        {t('pos.estimated')}
+      </Badge>
+    </span>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Cash panel
 // ---------------------------------------------------------------------------
 
 interface CashPanelProps {
   session: CompanySession
   lines: OrderLineInput[]
-  totalMinor: number
+  grandTotalMinor: number
+  discountMinor: number
   currency: string
   locale: string
   onSuccess: (order: OrderResponse, payment: PaymentResponse) => void
@@ -158,7 +260,8 @@ interface CashPanelProps {
 function CashPanel({
   session,
   lines,
-  totalMinor,
+  grandTotalMinor,
+  discountMinor,
   currency,
   locale,
   onSuccess,
@@ -171,10 +274,10 @@ function CashPanel({
   const [keyStr, setKeyStr] = useState<string>('')
 
   const tenderedMinor = keyStr === '' ? 0 : parseInt(keyStr, 10)
-  const changeMinor = tenderedMinor - totalMinor
-  const canPay = tenderedMinor >= totalMinor && !checkout.isPending
+  const changeMinor = tenderedMinor - grandTotalMinor
+  const canPay = tenderedMinor >= grandTotalMinor && !checkout.isPending
 
-  const chips = quickChips(totalMinor, currency)
+  const chips = quickChips(grandTotalMinor, currency)
 
   function pressDigit(d: string) {
     if (keyStr === '0') return // prevent leading zero accumulation
@@ -193,7 +296,11 @@ function CashPanel({
   function pay() {
     if (!canPay) return
     checkout.mutate(
-      { lines, payment: { tenderType: 'CASH', tenderedMinor } },
+      {
+        lines,
+        payment: { tenderType: 'CASH', tenderedMinor },
+        discountMinor,
+      },
       {
         onSuccess: (res) => {
           if (res?.payment) {
@@ -260,7 +367,7 @@ function CashPanel({
         <p className="mb-3 text-xs text-rose">{(checkout.error as Error).message}</p>
       ) : null}
 
-      {!canPay && tenderedMinor > 0 && tenderedMinor < totalMinor ? (
+      {!canPay && tenderedMinor > 0 && tenderedMinor < grandTotalMinor ? (
         <p className="mb-3 text-xs text-amber-2">{t('pos.payment.insufficientTendered')}</p>
       ) : null}
 
@@ -268,7 +375,7 @@ function CashPanel({
         {checkout.isPending ? (
           <Spinner />
         ) : (
-          t('pos.payment.payAmount', { amount: formatMoney(totalMinor, currency, locale) })
+          t('pos.payment.payAmount', { amount: formatMoney(grandTotalMinor, currency, locale) })
         )}
       </Button>
     </div>
@@ -294,7 +401,8 @@ function KeypadButton({ label, onClick }: { label: string; onClick: () => void }
 interface DigitalPanelProps {
   session: CompanySession
   lines: OrderLineInput[]
-  totalMinor: number
+  grandTotalMinor: number
+  discountMinor: number
   currency: string
   locale: string
   tenderType: 'QRIS' | 'CARD'
@@ -305,7 +413,8 @@ interface DigitalPanelProps {
 function DigitalPanel({
   session,
   lines,
-  totalMinor,
+  grandTotalMinor,
+  discountMinor,
   currency,
   locale,
   tenderType,
@@ -322,7 +431,7 @@ function DigitalPanel({
 
   function initiatePayment() {
     checkout.mutate(
-      { lines, payment: { tenderType } },
+      { lines, payment: { tenderType }, discountMinor },
       {
         onSuccess: (res) => {
           if (res?.payment) {
@@ -356,19 +465,12 @@ function DigitalPanel({
           <p className="mt-1 leading-relaxed">{t('pos.payment.pendingHint')}</p>
         </div>
 
-        <div className="mb-4 flex items-baseline justify-between">
-          <span className="text-sm text-ink-3">{t('pos.total')}</span>
-          <span className="tnum font-mono text-xl font-medium text-ink">
-            {formatMoney(totalMinor, currency, locale)}
-          </span>
-        </div>
-
         {checkout.isError ? (
           <p className="mb-3 text-xs text-rose">{(checkout.error as Error).message}</p>
         ) : null}
 
         <Button className="w-full" disabled={checkout.isPending} onClick={initiatePayment}>
-          {checkout.isPending ? <Spinner /> : t('pos.payment.payAmount', { amount: formatMoney(totalMinor, currency, locale) })}
+          {checkout.isPending ? <Spinner /> : t('pos.payment.payAmount', { amount: formatMoney(grandTotalMinor, currency, locale) })}
         </Button>
       </div>
     )

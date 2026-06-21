@@ -9,6 +9,9 @@
  * network call is needed for the happy path. The useReceipt hook is exported
  * from api.ts for any future "re-print" feature.
  *
+ * Phase 2: renders the full price breakdown from order.breakdown (subtotal,
+ * discount, service charge, tax, grand total) when present.
+ *
  * Money rule (rule 8): all minor-unit amounts come from the server; formatMoney()
  * handles scaling and locale rendering (rule 9).
  */
@@ -64,6 +67,7 @@ export function ReceiptView({ order, payment, locale, onNew }: Props) {
   const isPending = payment.status === 'PENDING'
   const isCash = payment.tenderType === 'CASH'
   const currency = payment.currency
+  const breakdown = order.breakdown
 
   return (
     <div
@@ -125,18 +129,81 @@ export function ReceiptView({ order, payment, locale, onNew }: Props) {
           </ul>
         </div>
 
-        {/* Totals block */}
+        {/* Price breakdown block */}
         <div className="border-t border-line px-5 py-4 space-y-2">
-          <div className="flex items-baseline justify-between text-sm text-ink-3">
-            <span>{t('pos.receipt.subtotal')}</span>
-            <span className="tnum font-mono">{formatMoney(order.totalMinor, currency, locale)}</span>
-          </div>
-          <div className="flex items-baseline justify-between font-medium">
-            <span className="text-sm text-ink">{t('pos.receipt.total')}</span>
-            <span className="tnum font-mono text-xl text-ink">
-              {formatMoney(payment.amountMinor, currency, locale)}
-            </span>
-          </div>
+          {breakdown ? (
+            <>
+              {/* Subtotal */}
+              <div className="flex items-baseline justify-between text-sm text-ink-3">
+                <span>{t('pos.subtotal')}</span>
+                <span className="tnum font-mono">
+                  {formatMoney(breakdown.subtotalMinor, currency, locale)}
+                </span>
+              </div>
+
+              {/* Discount — only when applied */}
+              {breakdown.discountMinor > 0 ? (
+                <div className="flex items-baseline justify-between text-sm text-ink-3">
+                  <span>{t('pos.discount')}</span>
+                  <span className="tnum font-mono text-rose">
+                    − {formatMoney(breakdown.discountMinor, currency, locale)}
+                  </span>
+                </div>
+              ) : null}
+
+              {/* Service charge */}
+              <div className="flex items-center justify-between text-sm text-ink-3">
+                <span className="flex items-center gap-1.5">
+                  {t('pos.serviceCharge')}
+                  {breakdown.usesIllustrativeRules ? (
+                    <Badge tone="amber" className="text-[10px] py-0 px-1.5">
+                      {t('pos.estimated')}
+                    </Badge>
+                  ) : null}
+                </span>
+                <span className="tnum font-mono">
+                  {formatMoney(breakdown.serviceChargeMinor, currency, locale)}
+                </span>
+              </div>
+
+              {/* Tax */}
+              <div className="flex items-center justify-between text-sm text-ink-3">
+                <span className="flex items-center gap-1.5">
+                  {t('pos.tax')}
+                  {breakdown.usesIllustrativeRules ? (
+                    <Badge tone="amber" className="text-[10px] py-0 px-1.5">
+                      {t('pos.estimated')}
+                    </Badge>
+                  ) : null}
+                </span>
+                <span className="tnum font-mono">
+                  {formatMoney(breakdown.taxMinor, currency, locale)}
+                </span>
+              </div>
+
+              {/* Grand total */}
+              <div className="flex items-baseline justify-between border-t border-line pt-2 font-medium">
+                <span className="text-sm text-ink">{t('pos.receipt.total')}</span>
+                <span className="tnum font-mono text-xl text-ink">
+                  {formatMoney(breakdown.grandTotalMinor, currency, locale)}
+                </span>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Fallback for orders without a breakdown (idempotent re-reads) */}
+              <div className="flex items-baseline justify-between text-sm text-ink-3">
+                <span>{t('pos.receipt.subtotal')}</span>
+                <span className="tnum font-mono">{formatMoney(order.totalMinor, currency, locale)}</span>
+              </div>
+              <div className="flex items-baseline justify-between font-medium">
+                <span className="text-sm text-ink">{t('pos.receipt.total')}</span>
+                <span className="tnum font-mono text-xl text-ink">
+                  {formatMoney(payment.amountMinor, currency, locale)}
+                </span>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Payment details */}

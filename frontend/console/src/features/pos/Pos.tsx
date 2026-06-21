@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { Minus, Plus, Trash2, Utensils } from 'lucide-react'
+import { Minus, Plus, Trash2, Utensils, Info } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -9,8 +9,16 @@ import { Spinner } from '@/components/ui/Spinner'
 import { useSession, type CompanySession } from '@/lib/session'
 import { localeOf } from '@/i18n'
 import { cn } from '@/lib/cn'
-import { formatMoney } from '@/lib/money'
-import { useMenu, useSeedMenu, type MenuItem, type OrderResponse, type PaymentResponse } from './api'
+import { formatMoney, isoMinorExponent } from '@/lib/money'
+import {
+  useMenu,
+  useSeedMenu,
+  useQuote,
+  type MenuItem,
+  type OrderResponse,
+  type PaymentResponse,
+  type PriceBreakdownResponse,
+} from './api'
 import { PaymentModal } from './PaymentModal'
 import { ReceiptView } from './ReceiptView'
 
@@ -29,6 +37,9 @@ function PosInner({ session }: { session: CompanySession }) {
   const seed = useSeedMenu(session)
 
   const [cart, setCart] = useState<Record<string, number>>({})
+  // discountInput is the raw string the user types; discountMinor is the parsed integer.
+  const [discountInput, setDiscountInput] = useState<string>('')
+  const [discountError, setDiscountError] = useState<string | null>(null)
 
   // Modal state: null = no modal, 'payment' = payment modal, 'receipt' = receipt overlay
   const [modal, setModal] = useState<'payment' | 'receipt' | null>(null)
@@ -38,11 +49,28 @@ function PosInner({ session }: { session: CompanySession }) {
   const items = menuQuery.data ?? []
   const byId = new Map(items.map((i) => [i.id, i]))
   const currency = items[0]?.currency ?? session.baseCurrency
-  const totalMinor = Object.entries(cart).reduce(
-    (sum, [id, qty]) => sum + (byId.get(id)?.priceMinor ?? 0) * qty,
+
+  // Parse discount: the input is in major units (e.g. "5000" IDR or "5.00" USD).
+  // Convert to minor units for the API. For IDR exponent=0 means major=minor.
+  const discountMinor = parseDiscountInput(discountInput, currency)
+
+  const cartLines = Object.entries(cart)
+    .filter(([, qty]) => qty > 0)
+    .map(([menuItemId, qty]) => ({ menuItemId, qty }))
+
+  const lineCount = Object.values(cart).reduce((a, b) => a + b, 0)
+
+  // Live price quote from the server
+  const quoteQuery = useQuote(session, cartLines, discountMinor)
+  const breakdown = quoteQuery.data ?? null
+
+  // Authoritative grand total: use server breakdown when available, else fall back to
+  // client-side subtotal (before the first quote returns).
+  const clientSubtotalMinor = cartLines.reduce(
+    (sum, { menuItemId, qty }) => sum + (byId.get(menuItemId)?.priceMinor ?? 0) * qty,
     0,
   )
-  const lineCount = Object.values(cart).reduce((a, b) => a + b, 0)
+  const grandTotalMinor = breakdown?.grandTotalMinor ?? clientSubtotalMinor
 
   function add(id: string) {
     setCart((c) => ({ ...c, [id]: (c[id] ?? 0) + 1 }))
@@ -57,6 +85,20 @@ function PosInner({ session }: { session: CompanySession }) {
     })
   }
 
+  function handleDiscountChange(raw: string) {
+    setDiscountInput(raw)
+    if (raw === '' || raw === '0') {
+      setDiscountError(null)
+      return
+    }
+    const parsed = Number(raw)
+    if (isNaN(parsed) || parsed < 0) {
+      setDiscountError(t('pos.discountInvalid'))
+    } else {
+      setDiscountError(null)
+    }
+  }
+
   function openPayment() {
     setModal('payment')
   }
@@ -65,6 +107,8 @@ function PosInner({ session }: { session: CompanySession }) {
     setPlacedOrder(order)
     setPlacedPayment(payment)
     setCart({})
+    setDiscountInput('')
+    setDiscountError(null)
     setModal('receipt')
   }
 
@@ -74,7 +118,6 @@ function PosInner({ session }: { session: CompanySession }) {
     setModal(null)
   }
 
-  const cartLines = Object.entries(cart).map(([menuItemId, qty]) => ({ menuItemId, qty }))
   const grouped = groupByCategory(items)
 
   return (
@@ -138,56 +181,93 @@ function PosInner({ session }: { session: CompanySession }) {
           {lineCount === 0 ? (
             <p className="px-5 py-10 text-center text-sm text-ink-3">{t('pos.cartEmpty')}</p>
           ) : (
-            <ul className="divide-y divide-line">
-              {Object.entries(cart).map(([id, qty]) => {
-                const item = byId.get(id)
-                if (!item) return null
-                return (
-                  <li key={id} className="flex items-center gap-3 px-5 py-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium text-ink">{item.name}</div>
-                      <div className="tnum mt-0.5 font-mono text-xs text-ink-3">
-                        {formatMoney(item.priceMinor, item.currency, locale)}
+            <>
+              {/* Line items */}
+              <ul className="divide-y divide-line">
+                {Object.entries(cart).map(([id, qty]) => {
+                  const item = byId.get(id)
+                  if (!item) return null
+                  return (
+                    <li key={id} className="flex items-center gap-3 px-5 py-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-medium text-ink">{item.name}</div>
+                        <div className="tnum mt-0.5 font-mono text-xs text-ink-3">
+                          {formatMoney(item.priceMinor, item.currency, locale)}
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        aria-label="−"
-                        onClick={() => dec(id)}
-                        className="grid size-7 place-items-center rounded-md border border-line-strong text-ink-2 hover:bg-paper"
-                      >
-                        {qty === 1 ? <Trash2 className="size-3.5" /> : <Minus className="size-3.5" />}
-                      </button>
-                      <span className="tnum w-5 text-center font-mono text-sm text-ink">{qty}</span>
-                      <button
-                        type="button"
-                        aria-label="+"
-                        onClick={() => add(id)}
-                        className="grid size-7 place-items-center rounded-md border border-line-strong text-ink-2 hover:bg-paper"
-                      >
-                        <Plus className="size-3.5" />
-                      </button>
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          aria-label={t('pos.decreaseQty', { name: item.name })}
+                          onClick={() => dec(id)}
+                          className="grid size-7 place-items-center rounded-md border border-line-strong text-ink-2 hover:bg-paper"
+                        >
+                          {qty === 1 ? <Trash2 className="size-3.5" /> : <Minus className="size-3.5" />}
+                        </button>
+                        <span className="tnum w-5 text-center font-mono text-sm text-ink">{qty}</span>
+                        <button
+                          type="button"
+                          aria-label={t('pos.increaseQty', { name: item.name })}
+                          onClick={() => add(id)}
+                          className="grid size-7 place-items-center rounded-md border border-line-strong text-ink-2 hover:bg-paper"
+                        >
+                          <Plus className="size-3.5" />
+                        </button>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+
+              {/* Discount input */}
+              <div className="border-t border-line px-5 py-3">
+                <label htmlFor="pos-discount" className="block text-xs font-medium text-ink-3 mb-1.5">
+                  {t('pos.addDiscount')}
+                </label>
+                <input
+                  id="pos-discount"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="1"
+                  value={discountInput}
+                  onChange={(e) => handleDiscountChange(e.target.value)}
+                  placeholder="0"
+                  aria-describedby={discountError ? 'pos-discount-error' : undefined}
+                  className={cn(
+                    'w-full rounded-lg border bg-surface px-3 py-2 font-mono text-sm text-ink tnum',
+                    'transition-colors placeholder:text-ink-3/50',
+                    'focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/10',
+                    discountError ? 'border-rose' : 'border-line-strong',
+                  )}
+                />
+                {discountError ? (
+                  <p id="pos-discount-error" className="mt-1 text-xs text-rose" role="alert">
+                    {discountError}
+                  </p>
+                ) : null}
+              </div>
+
+              {/* Price breakdown */}
+              <div className="border-t border-line px-5 py-4">
+                <PriceBreakdown
+                  breakdown={breakdown}
+                  isLoading={quoteQuery.isFetching && !quoteQuery.isPlaceholderData}
+                  currency={currency}
+                  locale={locale}
+                  clientSubtotalMinor={clientSubtotalMinor}
+                />
+              </div>
+            </>
           )}
 
-          <div className="border-t border-line px-5 py-4">
-            <div className="flex items-baseline justify-between">
-              <span className="text-sm text-ink-3">{t('pos.total')}</span>
-              <span className="tnum font-mono text-2xl font-medium text-ink">
-                {formatMoney(totalMinor, currency, locale)}
-              </span>
-            </div>
+          <div className={cn('px-5 py-4', lineCount > 0 ? 'border-t border-line' : '')}>
             <Button
-              className="mt-4 w-full"
-              disabled={lineCount === 0}
+              className="w-full"
+              disabled={lineCount === 0 || !!discountError}
               onClick={openPayment}
             >
-              {t('pos.charge')} · {formatMoney(totalMinor, currency, locale)}
+              {t('pos.charge')} · {formatMoney(grandTotalMinor, currency, locale)}
             </Button>
           </div>
         </Card>
@@ -198,7 +278,9 @@ function PosInner({ session }: { session: CompanySession }) {
         <PaymentModal
           session={session}
           lines={cartLines}
-          totalMinor={totalMinor}
+          breakdown={breakdown}
+          grandTotalMinor={grandTotalMinor}
+          discountMinor={discountMinor}
           currency={currency}
           locale={locale}
           onSuccess={handlePaymentSuccess}
@@ -219,6 +301,137 @@ function PosInner({ session }: { session: CompanySession }) {
   )
 }
 
+// ---------------------------------------------------------------------------
+// PriceBreakdown sub-component
+// ---------------------------------------------------------------------------
+
+function PriceBreakdown({
+  breakdown,
+  isLoading,
+  currency,
+  locale,
+  clientSubtotalMinor,
+}: {
+  breakdown: PriceBreakdownResponse | null
+  isLoading: boolean
+  currency: string
+  locale: string
+  clientSubtotalMinor: number
+}) {
+  const { t } = useTranslation()
+
+  if (!breakdown) {
+    // Show a simple subtotal row while the first quote is in flight
+    return (
+      <div className="flex items-baseline justify-between">
+        <span className="text-sm text-ink-3">{t('pos.subtotal')}</span>
+        <span className="tnum font-mono text-sm text-ink">
+          {isLoading ? (
+            <span className="inline-block h-3.5 w-16 animate-pulse rounded bg-paper" />
+          ) : (
+            formatMoney(clientSubtotalMinor, currency, locale)
+          )}
+        </span>
+      </div>
+    )
+  }
+
+  const illustrative = breakdown.usesIllustrativeRules
+
+  return (
+    <div className="space-y-2 text-sm">
+      {/* Subtotal */}
+      <div className="flex items-baseline justify-between">
+        <span className="text-ink-3">{t('pos.subtotal')}</span>
+        <span className="tnum font-mono text-ink">
+          {formatMoney(breakdown.subtotalMinor, currency, locale)}
+        </span>
+      </div>
+
+      {/* Discount — only shown when > 0 */}
+      {breakdown.discountMinor > 0 ? (
+        <div className="flex items-baseline justify-between">
+          <span className="text-ink-3">{t('pos.discount')}</span>
+          <span className="tnum font-mono text-rose">
+            − {formatMoney(breakdown.discountMinor, currency, locale)}
+          </span>
+        </div>
+      ) : null}
+
+      {/* Service charge */}
+      <div className="flex items-center justify-between">
+        <span className="flex items-center gap-1.5 text-ink-3">
+          {t('pos.serviceCharge')}
+          {illustrative ? (
+            <EstimatedBadge hint={t('pos.illustrativeHint')} />
+          ) : null}
+        </span>
+        <span className="tnum font-mono text-ink">
+          {formatMoney(breakdown.serviceChargeMinor, currency, locale)}
+        </span>
+      </div>
+
+      {/* Tax */}
+      <div className="flex items-center justify-between">
+        <span className="flex items-center gap-1.5 text-ink-3">
+          {t('pos.tax')}
+          {illustrative ? (
+            <EstimatedBadge hint={t('pos.illustrativeHint')} />
+          ) : null}
+        </span>
+        <span className="tnum font-mono text-ink">
+          {formatMoney(breakdown.taxMinor, currency, locale)}
+        </span>
+      </div>
+
+      {/* Grand total */}
+      <div className="flex items-baseline justify-between border-t border-line pt-2 mt-1">
+        <span className="font-medium text-ink">{t('pos.total')}</span>
+        <span className="tnum font-mono text-xl font-medium text-ink">
+          {isLoading ? (
+            <span className="inline-block h-5 w-20 animate-pulse rounded bg-paper" />
+          ) : (
+            formatMoney(breakdown.grandTotalMinor, currency, locale)
+          )}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+/** Small amber "Estimated" badge with a title tooltip for the illustrative rates hint. */
+function EstimatedBadge({ hint }: { hint: string }) {
+  const { t } = useTranslation()
+  return (
+    <span title={hint} aria-label={hint} className="inline-flex items-center gap-0.5">
+      <Badge tone="amber" className="text-[10px] py-0 px-1.5">
+        {t('pos.estimated')}
+      </Badge>
+      <Info className="size-3 text-amber-2/70" aria-hidden="true" />
+    </span>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Parse the discount field: the user types in MAJOR units (e.g. "5000" IDR = Rp 5.000).
+ * We convert to minor units for the API. Returns 0 for empty / invalid input.
+ */
+function parseDiscountInput(input: string, currency: string): number {
+  if (!input || input.trim() === '') return 0
+  const major = Number(input)
+  if (isNaN(major) || major < 0) return 0
+  const exp = isoMinorExponent(currency)
+  return Math.round(major * 10 ** exp)
+}
+
+// ---------------------------------------------------------------------------
+// Item card
+// ---------------------------------------------------------------------------
+
 function ItemCard({
   item,
   qty,
@@ -230,10 +443,12 @@ function ItemCard({
   locale: string
   onAdd: () => void
 }) {
+  const { t } = useTranslation()
   return (
     <button
       type="button"
       onClick={onAdd}
+      aria-label={t('pos.addItem', { name: item.name })}
       className={cn(
         'relative flex flex-col items-start rounded-card border bg-surface p-4 text-left transition-all',
         'hover:-translate-y-0.5 hover:border-emerald/40 hover:shadow-[0_10px_30px_-18px_rgba(13,106,74,0.5)]',
