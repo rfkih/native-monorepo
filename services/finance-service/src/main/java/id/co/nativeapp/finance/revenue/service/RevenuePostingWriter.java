@@ -119,6 +119,10 @@ public class RevenuePostingWriter {
   }
 
   private void postRevenue(SaleRecordedEvent event) {
+    // Phase 2: assert the reconciliation identity FIRST. A violated identity is a poison event
+    // from a misconfigured producer → DLT (the transaction rolls back before writing anything).
+    event.assertReconciliationIdentity();
+
     Money amount = event.amount();
     String period = LedgerPosting.periodOf(event.occurredAt());
     TenantContext.Tenant tenant = TenantContext.require();
@@ -143,47 +147,53 @@ public class RevenuePostingWriter {
     posting.setCompanyId(companyId);
     ledgerRepository.save(posting);
 
-    // 3) Atomically accumulate the consolidated-revenue read model for this
-    //    tenant+period+currency in the SAME transaction. A single INSERT ... ON CONFLICT
-    //    DO UPDATE adds onto the stored total with no read-modify-write window, so concurrent
-    //    distinct sales for the same key never lose an update (§3.2) and never collide on the
-    //    unique constraint in a way that would DLT-drop valid revenue.
+    // 3) Phase 2 READ-MODEL FIX: accumulate NET revenue (subtotal − discount), NOT the grand
+    //    total. The grand total includes service charge and tax — accumulating it as revenue would
+    //    double-count those components on the P&L. Legacy events (no breakdown) fall back to
+    //    subtotal == amount, which preserves Phase 1 behaviour exactly.
+    //
+    //    netRevenue = subtotal − discount (= taxableBase in the pricing formula).
+    Money subtotal = event.effectiveSubtotal();
+    Money discount = event.effectiveDiscount();
+    Money netRevenue = subtotal.minus(discount);
     String currencyCode = amount.currency().getCurrencyCode();
+
+    // 3a) consolidated_revenue read model: accumulate the NET revenue (subtotal − discount).
     jdbcTemplate.update(
         UPSERT_REVENUE_SQL,
         UUID.randomUUID(),
         period,
-        amount.amountMinor(),
+        netRevenue.amountMinor(),
         currencyCode,
         actor,
         actor,
         companyId);
 
-    // 4) Atomically accumulate the consolidated P&L read model's REVENUE leg (same
-    //    no-read-modify-write upsert), in the SAME transaction. The P&L's net = revenue -
-    //    expense; this moves the revenue leg.
-    pnlReadModel.addRevenue(period, amount, companyId, actor);
+    // 3b) consolidated_pnl REVENUE leg: accumulate NET revenue, with the illustrative flag from
+    //     the event OR'd in (sticky: once illustrative, always illustrative for that period).
+    pnlReadModel.addRevenue(
+        period, netRevenue, companyId, actor, event.effectiveUsesIllustrative());
 
-    // 5) Double-entry GL journal — SAME transaction, SAME processOnce claim. Build a balanced
-    //    journal entry from the illustrative posting template (SALE: Dr <clearing> / Cr REVENUE)
-    //    and save it alongside the dimensional posting. The clearing account is routed by tender
-    //    type (ADR 0006 slice 2): null/CASH → CASH_CLEARING (unchanged default), QRIS →
-    //    QRIS_CLEARING, CARD → CARD_CLEARING. The source_event_id UNIQUE constraint on
-    //    journal_entry is the DB backstop — a re-delivered event is already claimed by processOnce
-    //    above, so this line is never reached on a re-delivery.
+    // 4) Double-entry GL journal — SAME transaction, SAME processOnce claim. Use the Phase 2
+    //    breakdown-aware builder so the SALE v2 template's GROSS_REVENUE / DISCOUNT /
+    //    SERVICE_CHARGE / TAX basis values resolve correctly. Zero-amount lines are omitted.
+    //    The clearing account is routed by tender type (ADR 0006 slice 2).
     AccountRole clearingRole = resolveClearingRole(event.tenderType());
-    // Use the override form when the tender is not the default (avoids null args for CASH/null).
     JournalEntry glEntry =
-        journalPostingService.buildEntry(
+        journalPostingService.buildEntryForSale(
             EventKind.SALE,
             period,
-            amount,
             event.occurredAt(),
             event.eventId(),
             "SaleRecorded",
-            false,
+            event,
             clearingRole == AccountRole.CASH_CLEARING ? null : clearingRole);
     glEntry.setCompanyId(companyId);
+    // Phase 2: link the SALE journal entry to the sale aggregate so ReversalPostingWriter can
+    // look up the original lines by saleId for per-leg void/refund unwind (V18).
+    if (event.saleId() != null) {
+      glEntry.setSaleAggregateId(event.saleId());
+    }
     // saveAndFlush flushes the journal_entry INSERT to Postgres immediately so the FK on
     // journal_line.entry_id is satisfied when the line INSERTs follow in the same transaction.
     journalEntryRepository.saveAndFlush(glEntry);

@@ -94,6 +94,15 @@ public class JournalEntry extends Auditable {
   private boolean usesIllustrativeRules;
 
   /**
+   * The sale aggregate id from restaurant-service (the {@code sale} table UUID), set for SALE
+   * entries only (null for EXPENSE, LABOR, SALE_VOID, SALE_REFUND entries). Populated by {@link
+   * id.co.nativeapp.finance.revenue.service.RevenuePostingWriter}; used by the reversal writer to
+   * look up the original SALE entry's lines for per-leg unwind (Phase 2 — V18).
+   */
+  @Column(name = "sale_aggregate_id", nullable = true)
+  private UUID saleAggregateId;
+
+  /**
    * The lines validated by {@link #balanced} — transient (not persisted here; the writer saves each
    * line explicitly via the line repository after saving the entry header).
    */
@@ -240,6 +249,22 @@ public class JournalEntry extends Auditable {
 
   public boolean isUsesIllustrativeRules() {
     return usesIllustrativeRules;
+  }
+
+  /**
+   * The sale aggregate id (set for SALE entries by the revenue posting writer; null otherwise).
+   * Used by the reversal writer to look up the original lines for per-leg unwind.
+   */
+  public UUID getSaleAggregateId() {
+    return saleAggregateId;
+  }
+
+  /**
+   * Sets the sale aggregate id. Called by {@code RevenuePostingWriter} immediately after {@link
+   * #balanced} constructs the SALE entry, before the first save.
+   */
+  public void setSaleAggregateId(UUID saleAggregateId) {
+    this.saleAggregateId = saleAggregateId;
   }
 
   /** The validated lines (transient — the writer saves them separately after the entry header). */

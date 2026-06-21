@@ -7,6 +7,7 @@ import id.co.nativeapp.finance.gl.domain.JournalLine;
 import id.co.nativeapp.finance.gl.domain.PostingTemplate;
 import id.co.nativeapp.finance.gl.domain.TemplateLine;
 import id.co.nativeapp.finance.gl.domain.UnbalancedJournalException;
+import id.co.nativeapp.finance.revenue.messaging.SaleRecordedEvent;
 import id.co.nativeapp.money.Money;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -195,8 +196,153 @@ public class JournalPostingService {
   }
 
   /**
-   * Resolves a line amount from the amount basis. Only {@code "GROSS"} is supported in this phase;
-   * {@code NET} / {@code TAX} / {@code RATE:<pct>} are reserved for the SME/tax phase.
+   * Phase 2 overload: builds a balanced {@link JournalEntry} for a {@code SaleRecorded} event with
+   * breakdown fields (subtotal, discount, service charge, tax). Omits any line whose resolved
+   * amount is zero (e.g. a DISCOUNT line when there is no discount — {@code JournalEntry.balanced}
+   * rejects zero-sided lines). The entry is NOT persisted — the caller saves it inside a
+   * {@code @Transactional}.
+   *
+   * <p>The posting template v2 (SALE event_kind) carries {@code amount_basis} values of {@code
+   * GROSS_REVENUE}, {@code DISCOUNT}, {@code SERVICE_CHARGE}, and {@code TAX} alongside the
+   * standard {@code GROSS} (grand-total clearing debit). The resolver selects the correct breakdown
+   * field; finance NEVER recomputes the amounts.
+   *
+   * @param eventKind must be {@link EventKind#SALE}
+   * @param period the accounting period {@code YYYY-MM}
+   * @param occurredAt the event's occurred-at instant
+   * @param sourceEventId the consumed event UUID (idempotency key)
+   * @param description human-readable description for the journal header
+   * @param event the decoded {@link SaleRecordedEvent} carrying the breakdown; must not be null
+   * @param clearingRoleOverride optional clearing-account role override (tender routing)
+   * @return a balanced {@link JournalEntry} with only non-zero lines, ready to be saved
+   */
+  @SuppressWarnings("checkstyle:ParameterNumber")
+  public JournalEntry buildEntryForSale(
+      EventKind eventKind,
+      String period,
+      Instant occurredAt,
+      UUID sourceEventId,
+      String description,
+      SaleRecordedEvent event,
+      AccountRole clearingRoleOverride) {
+
+    Objects.requireNonNull(eventKind, "eventKind");
+    Objects.requireNonNull(period, "period");
+    Objects.requireNonNull(occurredAt, "occurredAt");
+    Objects.requireNonNull(sourceEventId, "sourceEventId");
+    Objects.requireNonNull(description, "description");
+    Objects.requireNonNull(event, "event");
+
+    UUID entryId = UUID.randomUUID();
+    String currency = event.amount().currency().getCurrencyCode();
+    Money gross = event.amount();
+
+    PostingTemplate template = templateResolver.resolve(eventKind, occurredAt);
+    if (template == null) {
+      log.warn(
+          "No posting_template found for eventKind={} occurredAt={}; routing to suspense",
+          eventKind,
+          occurredAt);
+      return buildSuspenseEntry(
+          entryId, period, occurredAt, description, currency, sourceEventId, gross);
+    }
+
+    List<JournalLine> lines = new ArrayList<>(template.lines().size());
+
+    for (TemplateLine tl : template.lines()) {
+      AccountRole effectiveRole =
+          (clearingRoleOverride != null && tl.accountRole() == AccountRole.CASH_CLEARING)
+              ? clearingRoleOverride
+              : tl.accountRole();
+
+      // Resolve amount using breakdown-aware resolver.
+      Money amount = resolveAmount(tl.amountBasis(), gross, event);
+
+      // Omit any line whose amount is zero (e.g. DISCOUNT when discount=0, TAX when tax=0).
+      // JournalEntry.balanced rejects zero-sided lines; we simply skip them here.
+      if (amount.isZero()) {
+        continue;
+      }
+
+      String accountCode = roleResolver.resolve(effectiveRole, occurredAt);
+      if (accountCode == null) {
+        log.warn(
+            "No role_account_map found for role={} eventKind={} occurredAt={};"
+                + " routing line {} to suspense — money NOT dropped",
+            effectiveRole,
+            eventKind,
+            occurredAt,
+            tl.lineNo());
+        accountCode = RoleAccountResolver.SUSPENSE_ACCOUNT_CODE;
+      }
+
+      JournalLine line =
+          switch (tl.side()) {
+            case DEBIT -> JournalLine.debit(entryId, tl.lineNo(), accountCode, amount);
+            case CREDIT -> JournalLine.credit(entryId, tl.lineNo(), accountCode, amount);
+          };
+      lines.add(line);
+    }
+
+    boolean usesIllustrative = template.usesIllustrative() || event.effectiveUsesIllustrative();
+
+    try {
+      return JournalEntry.balanced(
+          entryId,
+          period,
+          occurredAt,
+          description,
+          currency,
+          sourceEventId,
+          usesIllustrative,
+          lines);
+    } catch (UnbalancedJournalException e) {
+      log.error(
+          "Phase 2 SALE posting template produced an unbalanced entry (misconfigured seed data);"
+              + " falling back to suspense — money NOT dropped",
+          e);
+      return buildSuspenseEntry(
+          entryId, period, occurredAt, description, currency, sourceEventId, gross);
+    }
+  }
+
+  /**
+   * Resolves a line amount from the amount basis and a {@link SaleRecordedEvent} breakdown. Extends
+   * the original single-arg form to support Phase 2 basis values:
+   *
+   * <ul>
+   *   <li>{@code "GROSS"} — the grand total ({@link SaleRecordedEvent#amount()})
+   *   <li>{@code "GROSS_REVENUE"} — the subtotal ({@link SaleRecordedEvent#effectiveSubtotal()})
+   *   <li>{@code "DISCOUNT"} — the discount ({@link SaleRecordedEvent#effectiveDiscount()})
+   *   <li>{@code "SERVICE_CHARGE"} — the service charge ({@link
+   *       SaleRecordedEvent#effectiveServiceCharge()})
+   *   <li>{@code "TAX"} — the tax amount ({@link SaleRecordedEvent#effectiveTax()})
+   * </ul>
+   *
+   * <p>Amounts are NEVER recomputed in finance — each basis just SELECTS a field carried on the
+   * event. A null {@code event} falls back to the original GROSS-only behaviour.
+   */
+  static Money resolveAmount(String amountBasis, Money gross, SaleRecordedEvent event) {
+    if (event == null) {
+      return resolveAmount(amountBasis, gross);
+    }
+    return switch (amountBasis.toUpperCase()) {
+      case "GROSS" -> gross;
+      case "GROSS_REVENUE" -> event.effectiveSubtotal();
+      case "DISCOUNT" -> event.effectiveDiscount();
+      case "SERVICE_CHARGE" -> event.effectiveServiceCharge();
+      case "TAX" -> event.effectiveTax();
+      default ->
+          throw new IllegalStateException(
+              "Unsupported amount_basis: '"
+                  + amountBasis
+                  + "' — supported values: GROSS, GROSS_REVENUE, DISCOUNT, SERVICE_CHARGE, TAX");
+    };
+  }
+
+  /**
+   * Resolves a line amount from the amount basis. Only {@code "GROSS"} is supported for non-SALE
+   * events; use {@link #resolveAmount(String, Money, SaleRecordedEvent)} for Phase 2 breakdown.
    */
   private static Money resolveAmount(String amountBasis, Money gross) {
     if ("GROSS".equalsIgnoreCase(amountBasis)) {
@@ -205,7 +351,7 @@ public class JournalPostingService {
     throw new IllegalStateException(
         "Unsupported amount_basis: '"
             + amountBasis
-            + "' — only GROSS is implemented in this phase");
+            + "' — only GROSS is implemented for non-SALE events");
   }
 
   /**

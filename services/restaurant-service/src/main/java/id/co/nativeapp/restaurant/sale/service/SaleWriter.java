@@ -86,10 +86,11 @@ public class SaleWriter {
     Sale saved = repository.saveAndFlush(sale);
 
     // Build the SaleRecorded GenericRecord from the .avsc and serialize it for the
-    // outbox payload (no Avro codegen). Pass the tender_type from the command so
-    // finance can route the GL clearing account by tender (ADR 0006, slice 2);
-    // null for legacy/no-payment sales (carwash always leaves it null).
-    GenericRecord event = SaleRecordedSchema.toRecord(saved, companyId, command.tenderType());
+    // outbox payload (no Avro codegen). Pass the tender_type (ADR 0006, slice 2) and the
+    // Phase 2 breakdown (null for legacy / carwash callers — all breakdown fields on the
+    // wire are null, finance falls back to subtotal==amount_minor).
+    GenericRecord event =
+        SaleRecordedSchema.toRecord(saved, companyId, command.tenderType(), command.breakdown());
     byte[] payload = AvroSerde.serialize(event);
 
     // The outbox INSERT runs on this transaction's connection (rule 3): it commits
@@ -135,7 +136,8 @@ public class SaleWriter {
     sale.setCompanyId(companyId);
     Sale saved = repository.saveAndFlush(sale);
 
-    GenericRecord event = SaleRecordedSchema.toRecord(saved, companyId, command.tenderType());
+    GenericRecord event =
+        SaleRecordedSchema.toRecord(saved, companyId, command.tenderType(), command.breakdown());
     byte[] payload = AvroSerde.serialize(event);
     outboxWriter.write(
         SaleRecordedSchema.AGGREGATE_TYPE,

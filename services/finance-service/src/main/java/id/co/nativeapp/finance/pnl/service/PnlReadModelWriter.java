@@ -96,10 +96,23 @@ public class PnlReadModelWriter {
 
   /**
    * Accumulates a posting's amount onto the period's REVENUE leg (atomic upsert). Revenue is never
-   * illustrative-derived, so the illustrative flag is contributed as {@code false}.
+   * illustrative-derived (by legacy callers), so the illustrative flag is contributed as {@code
+   * false}.
    */
   public void addRevenue(String period, Money amount, String companyId, String actor) {
     accumulate(UPSERT_REVENUE_SQL, period, amount, companyId, actor, false);
+  }
+
+  /**
+   * Accumulates a posting's amount onto the period's REVENUE leg, carrying the {@code
+   * usesIllustrativeRules} flag (Phase 2 — a sale derived from illustrative tax rules propagates
+   * the flag to the P&amp;L read model, exactly as labor does for payroll). The flag is OR-ed into
+   * the row monotonically (sticky): once an illustrative sale contaminates the period's revenue,
+   * the flag stays true until a period-close recompute.
+   */
+  public void addRevenue(
+      String period, Money amount, String companyId, String actor, boolean usesIllustrative) {
+    accumulate(UPSERT_REVENUE_SQL, period, amount, companyId, actor, usesIllustrative);
   }
 
   /**

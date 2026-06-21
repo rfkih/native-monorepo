@@ -57,29 +57,32 @@ class CashPaymentAcceptanceTest extends PostgresRlsTestBase {
   @Test
   void cashCheckoutCapturesPaymentWithChangeAndRecordsOneSale() throws Exception {
     UUID itemId = seedItem(15_000L);
+    // Phase 2 pricing (demo tenant has illustrative rules seeded):
+    // subtotal = 2 × 15,000 = 30,000 | SC 5% = 1,500 | taxBase = 31,500 | tax 10% = 3,150
+    // grandTotal = 30,000 + 1,500 + 3,150 = 34,650
     CheckoutRequest req =
         new CheckoutRequest(
             BUSINESS_ID,
             "cash-001",
-            List.of(new OrderLineRequest(itemId, 2)), // total 30_000
-            new PaymentRequest(TenderType.CASH, 50_000L)); // change 20_000
+            List.of(new OrderLineRequest(itemId, 2)), // subtotal 30,000; grandTotal 34,650
+            new PaymentRequest(TenderType.CASH, 50_000L)); // change = 50,000 - 34,650 = 15,350
 
     CheckoutResult result =
         TenantContext.callAs(TENANT_A, ACTOR_A, () -> orderService.checkout(req));
 
     assertThat(result.created()).isTrue();
     OrderResponse order = result.order();
-    assertThat(order.totalMinor()).isEqualTo(30_000L);
+    assertThat(order.totalMinor()).isEqualTo(34_650L);
     assertThat(order.saleId()).isNotNull();
 
     PaymentResponse payment = order.payment();
     assertThat(payment).isNotNull();
     assertThat(payment.tenderType()).isEqualTo("CASH");
     assertThat(payment.status()).isEqualTo("CAPTURED");
-    assertThat(payment.amountMinor()).isEqualTo(30_000L);
+    assertThat(payment.amountMinor()).isEqualTo(34_650L);
     assertThat(payment.currency()).isEqualTo("IDR");
     assertThat(payment.tenderedMinor()).isEqualTo(50_000L);
-    assertThat(payment.changeMinor()).isEqualTo(20_000L);
+    assertThat(payment.changeMinor()).isEqualTo(15_350L);
     assertThat(payment.providerPending()).isFalse();
     assertThat(payment.saleId()).isEqualTo(order.saleId());
 
@@ -91,12 +94,14 @@ class CashPaymentAcceptanceTest extends PostgresRlsTestBase {
   @Test
   void exactCashLeavesZeroChange() throws Exception {
     UUID itemId = seedItem(12_000L);
+    // Phase 2 pricing: subtotal = 12,000 | SC 5% = 600 | taxBase = 12,600 | tax 10% = 1,260
+    // grandTotal = 12,000 + 600 + 1,260 = 13,860. Tender exactly 13,860 for zero change.
     CheckoutRequest req =
         new CheckoutRequest(
             BUSINESS_ID,
             "cash-exact",
             List.of(new OrderLineRequest(itemId, 1)),
-            new PaymentRequest(TenderType.CASH, 12_000L));
+            new PaymentRequest(TenderType.CASH, 13_860L)); // exact grandTotal
 
     CheckoutResult result =
         TenantContext.callAs(TENANT_A, ACTOR_A, () -> orderService.checkout(req));

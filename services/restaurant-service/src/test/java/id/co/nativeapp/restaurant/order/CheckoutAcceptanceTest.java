@@ -79,11 +79,14 @@ class CheckoutAcceptanceTest extends PostgresRlsTestBase {
 
     assertThat(first.created()).isTrue();
     UUID orderId = first.order().orderId();
-    assertThat(first.order().totalMinor()).isEqualTo(30_000L); // 15_000 * 2
+    // Phase 2 pricing: 2 × IDR 15,000 = subtotal 30,000 + SC 5% (1,500) + tax 10% of 31,500 (3,150)
+    // grandTotal = 30,000 + 1,500 + 3,150 = 34,650. The demo tenant has illustrative rules seeded.
+    assertThat(first.order().totalMinor()).isEqualTo(34_650L);
     assertThat(first.order().currency()).isEqualTo("IDR");
     assertThat(first.order().saleId()).isNotNull();
     assertThat(first.order().lines()).hasSize(1);
     assertThat(first.order().lines().get(0).name()).isEqualTo("Nasi Goreng");
+    // Line total is the qty × unit price (before breakdown); grand total is on the order.
     assertThat(first.order().lines().get(0).lineTotalMinor()).isEqualTo(30_000L);
 
     // Assert: exactly one SaleRecorded in the outbox.
@@ -94,10 +97,15 @@ class CheckoutAcceptanceTest extends PostgresRlsTestBase {
     assertThat(outboxRow.get("aggregate_type")).isEqualTo("sale");
     assertThat(outboxRow.get("company_id")).hasToString(TENANT_A);
 
-    // The Avro payload carries the correct order total.
+    // The Avro payload carries the Phase 2 grand total and breakdown fields.
     GenericRecord decoded =
         AvroSerde.deserialize((byte[]) outboxRow.get("payload"), SaleRecordedSchema.schema());
-    assertThat(decoded.get("amount_minor")).isEqualTo(30_000L);
+    assertThat(decoded.get("amount_minor")).isEqualTo(34_650L); // grand total
+    assertThat(decoded.get("subtotal_minor")).isEqualTo(30_000L);
+    assertThat(decoded.get("service_charge_minor")).isEqualTo(1_500L);
+    assertThat(decoded.get("tax_minor")).isEqualTo(3_150L);
+    assertThat(decoded.get("discount_minor")).isEqualTo(0L); // zero discount (no promo applied)
+    assertThat((Boolean) decoded.get("uses_illustrative_rules")).isTrue(); // illustrative rules
     assertThat(decoded.get("currency").toString()).isEqualTo("IDR");
     assertThat(decoded.get("business_id").toString()).isEqualTo(BUSINESS_ID.toString());
     assertThat(decoded.get("company_id").toString()).isEqualTo(TENANT_A);
@@ -112,7 +120,7 @@ class CheckoutAcceptanceTest extends PostgresRlsTestBase {
 
     assertThat(retry.created()).isFalse();
     assertThat(retry.order().orderId()).isEqualTo(orderId);
-    assertThat(retry.order().totalMinor()).isEqualTo(30_000L);
+    assertThat(retry.order().totalMinor()).isEqualTo(34_650L);
 
     // Still exactly one SaleRecorded after the retry.
     assertThat(saleRecordedRows()).hasSize(1);

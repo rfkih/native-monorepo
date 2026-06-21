@@ -3,7 +3,9 @@ package id.co.nativeapp.finance.gl.repository;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.projection.GlCumulativeTrialBalanceLineView;
 import id.co.nativeapp.finance.gl.projection.GlTrialBalanceLineView;
+import id.co.nativeapp.finance.gl.projection.JournalEntrySaleView;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -42,6 +44,38 @@ public interface JournalEntryRepository extends JpaRepository<JournalEntry, UUID
    * GlTrialBalanceLineView} — the six columns the reader needs, not the full entity (CLAUDE.md
    * §"Queries are native + projection").
    */
+  /**
+   * Looks up the original SALE {@link JournalEntry} by the producing sale aggregate id (the {@code
+   * sale_aggregate_id} column set by {@code RevenuePostingWriter} at posting time). Used by {@code
+   * ReversalPostingWriter} to resolve the original SALE entry's id so its lines can be negated for
+   * per-leg void/refund unwind (Phase 2 — V18).
+   *
+   * <p>RLS applies: the GUC set by the aspect on the surrounding {@code @Transactional} scopes the
+   * lookup to the current tenant — a void event for tenant A cannot resolve a SALE entry belonging
+   * to tenant B. The query returns at most one row because {@code sale_aggregate_id} is logically
+   * 1:1 with a SALE entry for a given tenant (a sale produces exactly one journal entry).
+   *
+   * <p>Returns {@link Optional#empty()} when no matching entry exists (the original SALE was never
+   * posted, or the sale predates Phase 2); in that case the reversal writer falls back to the
+   * 2-line GROSS template (the same behaviour as Phase 1).
+   *
+   * <p><strong>Projection only.</strong> Selects only the three columns the reversal writer needs
+   * ({@code id}, {@code currency}, {@code uses_illustrative_rules}) — never {@code SELECT *}.
+   */
+  @Query(
+      value =
+          """
+          SELECT je.id                       AS id,
+                 je.currency                 AS currency,
+                 je.uses_illustrative_rules  AS uses_illustrative_rules
+            FROM journal_entry je
+           WHERE je.sale_aggregate_id = :saleAggregateId
+           LIMIT 1
+          """,
+      nativeQuery = true)
+  Optional<JournalEntrySaleView> findBySaleAggregateId(
+      @Param("saleAggregateId") UUID saleAggregateId);
+
   @Query(
       value =
           """

@@ -43,7 +43,7 @@ schema. Until then a row here is documentation of intent, not a shippable contra
 | **`AssignmentChanged`** | **employee-service** | **verticals, finance** | **employee_id, org_unit_id, reporting_to, effective_from/to** | **LIVE (#19)** |
 | **`MetricPublished`** | **carwash-service** (verticals) | **employee** | **metric_key, period, grain, subject_id, value, source_business_id** | **LIVE (#20)** |
 | **`PeriodSealed`** | **verticals** | **employee, finance** | **company_id, business_id, period** | **LIVE (employee consumer #23)** |
-| **`SaleRecorded`** | **restaurant-service + carwash-service** (verticals) | **finance** | **sale_id, company_id, business_id, amount_minor, currency, occurred_at** | **LIVE (M1.4 / #20)** |
+| **`SaleRecorded`** | **restaurant-service + carwash-service** (verticals) | **finance** | **sale_id, company_id, business_id, amount_minor, currency, occurred_at; Phase 2: subtotal_minor, discount_minor, service_charge_minor, tax_minor, tax_rule_version, uses_illustrative_rules (all nullable)** | **LIVE (M1.4 / #20 / Phase 2 breakdown)** |
 | **`SaleVoided`** | **restaurant-service** | **finance** | **void_id, sale_id, payment_id, company_id, business_id, amount_minor, currency, occurred_at, tender_type** | **LIVE (ADR 0006, slice 4)** |
 | **`SaleRefunded`** | **restaurant-service** | **finance** | **refund_id, sale_id, payment_id, company_id, business_id, refund_amount_minor, currency, total_refunded_minor, occurred_at, tender_type** | **LIVE (ADR 0006, slice 4)** |
 | **`ExpenseRecorded`** | **verticals** | **finance** | **expense_id, company_id, business_id, amount_minor, currency, gl_hint, occurred_at** | **LIVE (finance consumer #21)** |
@@ -254,10 +254,20 @@ whole rupiah for IDR); `currency` is the ISO-4217 code. `occurred_at` is epoch m
 | `sale_id` | `string` | Sale aggregate id (UUID as string); the partition key |
 | `company_id` | `string` | Owning tenant (UUID as string) |
 | `business_id` | `string` | Originating business unit (UUID as string) |
-| `amount_minor` | `long` | Amount in the currency's minor units — never a float |
+| `amount_minor` | `long` | **Grand total** in the currency's minor units — the customer-pays amount. Never a float |
 | `currency` | `string` | ISO-4217 currency code (e.g. `IDR`, `USD`) |
 | `occurred_at` | `long` (`timestamp-millis`) | When the sale occurred, epoch millis UTC |
 | `tender_type` | `["null","string"]` (default `null`) | Payment tender: `CASH` \| `QRIS` \| `CARD`, or `null` for legacy/no-payment sales. Finance routes the GL debit clearing account by tender: `null`/`CASH` → `CASH_CLEARING`, `QRIS` → `QRIS_CLEARING`, `CARD` → `CARD_CLEARING`. Backward-compatible addition — ADR 0006 slice 2 |
+| `subtotal_minor` | `["null","long"]` (default `null`) | Sum of order-line totals **before** discount/tax/service-charge, in minor units. `null` for legacy producers (carwash); finance falls back to `subtotal == amount` (Phase 1). Phase 2 addition |
+| `discount_minor` | `["null","long"]` (default `null`) | Order-level discount in minor units, or `null` (treated as 0 by finance). Phase 2 addition |
+| `service_charge_minor` | `["null","long"]` (default `null`) | Service charge in minor units, or `null` (treated as 0 by finance). Phase 2 addition |
+| `tax_minor` | `["null","long"]` (default `null`) | Tax amount in minor units, or `null` (treated as 0 by finance). Phase 2 addition |
+| `tax_rule_version` | `["null","string"]` (default `null`) | The `rule_version` label of the resolved tax rule (e.g. `PB1_RESTAURANT-v1`), or `null` for legacy producers. Informational — finance stores it for audit |
+| `uses_illustrative_rules` | `["null","boolean"]` (default `null`) | `true` when any resolved tax/service-charge rule was `ILLUSTRATIVE_PLACEHOLDER`; `null` treated as `false` by finance. Sticky in the finance GL: an entry is flagged illustrative when this is `true` OR when the posting template is illustrative |
+
+**Reconciliation identity (Phase 2).** When all four breakdown fields are non-null, finance asserts:
+`subtotal_minor - discount_minor + service_charge_minor + tax_minor == amount_minor`. A violated
+identity is a poison event (misconfigured producer); finance routes the record to the DLT.
 
 **Avro schema** (single source of truth in `libs/contracts/src/main/resources/avro/SaleRecorded.avsc`)
 
@@ -266,15 +276,21 @@ whole rupiah for IDR); `currency` is the ISO-4217 code. `occurred_at` is epoch m
   "type": "record",
   "name": "SaleRecorded",
   "namespace": "id.co.nativeapp.events.restaurant",
-  "doc": "Emitted by a vertical (restaurant-service) when a sale is recorded; consumed by finance-service to post to the ledger. Money is an integer minor-units amount plus an ISO-4217 currency code, never a float (CLAUDE.md rule 8).",
+  "doc": "Emitted by a vertical (restaurant-service) when a sale is recorded; consumed by finance-service to post to the ledger. Money is an integer minor-units amount plus an ISO-4217 currency code, never a float (CLAUDE.md rule 8). amount_minor is the GRAND TOTAL (customer-pays). Phase 2 adds optional breakdown fields (all null for legacy producers): subtotal_minor, discount_minor, service_charge_minor, tax_minor, tax_rule_version, uses_illustrative_rules.",
   "fields": [
     {"name": "sale_id", "type": "string", "doc": "The sale aggregate id (UUID as string); also the Kafka partition key."},
     {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string)."},
     {"name": "business_id", "type": "string", "doc": "The originating business unit (UUID as string)."},
-    {"name": "amount_minor", "type": "long", "doc": "Amount in the currency's minor units (e.g. cents for USD, whole rupiah for IDR). Never a float."},
+    {"name": "amount_minor", "type": "long", "doc": "GRAND TOTAL in the currency's minor units (e.g. cents for USD, whole rupiah for IDR). Never a float. The customer-pays amount: subtotal - discount + service_charge + tax."},
     {"name": "currency", "type": "string", "doc": "ISO-4217 currency code, e.g. IDR or USD."},
     {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the sale occurred, epoch millis (UTC)."},
-    {"name": "tender_type", "type": ["null", "string"], "default": null, "doc": "Payment tender type: CASH | QRIS | CARD, or null for legacy/no-payment sales. Finance routes the GL debit clearing account by tender (null/CASH → CASH_CLEARING, QRIS → QRIS_CLEARING, CARD → CARD_CLEARING). Backward-compatible — ADR 0006 slice 2."}
+    {"name": "tender_type", "type": ["null", "string"], "default": null, "doc": "Payment tender type: CASH | QRIS | CARD, or null for legacy/no-payment sales. Finance routes the GL debit clearing account by tender (null/CASH -> CASH_CLEARING, QRIS -> QRIS_CLEARING, CARD -> CARD_CLEARING). Backward-compatible -- ADR 0006 slice 2."},
+    {"name": "subtotal_minor", "type": ["null", "long"], "default": null, "doc": "Sum of order-line totals before discount/tax/service-charge, in minor units. null for legacy producers; finance falls back to subtotal == amount. Phase 2 addition."},
+    {"name": "discount_minor", "type": ["null", "long"], "default": null, "doc": "Order-level discount in minor units, or null (treated as 0 by finance). Phase 2 addition."},
+    {"name": "service_charge_minor", "type": ["null", "long"], "default": null, "doc": "Service charge in minor units, or null (treated as 0 by finance). Phase 2 addition."},
+    {"name": "tax_minor", "type": ["null", "long"], "default": null, "doc": "Tax amount in minor units, or null (treated as 0 by finance). Phase 2 addition."},
+    {"name": "tax_rule_version", "type": ["null", "string"], "default": null, "doc": "The rule_version label of the resolved tax rule (e.g. PB1_RESTAURANT-v1), or null for legacy producers. Informational."},
+    {"name": "uses_illustrative_rules", "type": ["null", "boolean"], "default": null, "doc": "true when any resolved tax/service-charge rule was ILLUSTRATIVE_PLACEHOLDER; null treated as false by finance. The GL entry is flagged illustrative when this is true OR when the posting template is illustrative."}
   ]
 }
 ```
@@ -285,7 +301,9 @@ Never add a required field without a default, never remove or rename a field, ne
 change a field's type. The contract test
 (`SaleRecordedContractTest`) enforces this — it asserts the schema is
 backward-compatible with itself and with an added-optional-field variant, and rejects
-a new required field without a default.
+a new required field without a default. The Phase 2 breakdown fields are all
+`["null","type"]` with `default: null`, so existing consumers (carwash producer copy,
+finance consumer copy) that do not yet read them continue to function unchanged.
 
 ### `ExpenseRecorded`
 

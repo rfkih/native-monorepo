@@ -9,8 +9,8 @@ import java.util.UUID;
  * posting service. An immutable record carrying exactly the fields finance needs from the contract,
  * already parsed out of the raw Avro {@link org.apache.avro.generic.GenericRecord}: the source
  * event id (used for idempotency), the owning tenant, the originating business, the sale amount as
- * {@link Money} (never a float), when it occurred (drives the period), and the optional tender type
- * (ADR 0006 slice 2 — drives GL clearing-account routing).
+ * {@link Money} (never a float), when it occurred (drives the period), the optional tender type
+ * (ADR 0006 slice 2 — drives GL clearing-account routing), and the Phase 2 price breakdown fields.
  *
  * <p>{@code companyId} is the tenant the consumer binds the handler to (via {@code
  * TenantContext.callAs}); it is carried on the event, never taken from a request.
@@ -19,21 +19,176 @@ import java.util.UUID;
  * "CARD"}, or {@code null} for legacy/no-payment sales). Finance maps {@code null}/{@code "CASH"}
  * to {@code CASH_CLEARING}, {@code "QRIS"} to {@code QRIS_CLEARING}, and {@code "CARD"} to {@code
  * CARD_CLEARING} (the existing carwash / direct-sale paths remain unchanged).
+ *
+ * <p><strong>Phase 2 breakdown fields</strong> ({@code subtotalMinor}, {@code discountMinor},
+ * {@code serviceChargeMinor}, {@code taxMinor}, {@code taxRuleVersion}, {@code
+ * usesIllustrativeRules}) are all nullable. A legacy producer (carwash) leaves them all null;
+ * finance falls back to {@code subtotal == amount} (the grand total), posts no
+ * discount/service-charge/tax legs, and accumulates {@code subtotal} as net revenue — exactly the
+ * Phase 1 behaviour. Finance NEVER recomputes the amounts — each basis just selects a field carried
+ * on the event.
+ *
+ * @param eventId the source event UUID (idempotency key — the outbox row UUID)
+ * @param saleId the sale aggregate UUID from restaurant-service (the {@code sale_id} Avro field);
+ *     used by the reversal writer to look up the original GL entry for per-leg unwind (Phase 2)
+ * @param companyId the owning tenant (UUID as string)
+ * @param businessId the originating business unit
+ * @param amount the GRAND TOTAL as {@link Money} (never a float) — the customer-pays amount
+ * @param occurredAt when the sale occurred (drives the accounting period)
+ * @param tenderType the optional tender type string, or null for legacy sales
+ * @param subtotalMinor sum of line totals before discount/tax, or null for legacy producers
+ * @param discountMinor order-level discount in minor units, or null (treated as 0)
+ * @param serviceChargeMinor service charge in minor units, or null (treated as 0)
+ * @param taxMinor tax amount in minor units, or null (treated as 0)
+ * @param taxRuleVersion the rule_version label of the resolved tax rule, or null
+ * @param usesIllustrativeRules true when any resolved rule was ILLUSTRATIVE_PLACEHOLDER, or null
+ *     (treated as false)
  */
 public record SaleRecordedEvent(
     UUID eventId,
+    UUID saleId,
     String companyId,
     UUID businessId,
     Money amount,
     Instant occurredAt,
-    String tenderType) {
+    String tenderType,
+    Long subtotalMinor,
+    Long discountMinor,
+    Long serviceChargeMinor,
+    Long taxMinor,
+    String taxRuleVersion,
+    Boolean usesIllustrativeRules) {
 
   /**
-   * Backward-compatible constructor for callers that pre-date the {@code tenderType} field (e.g.
-   * tests written before slice 2). Sets {@code tenderType} to {@code null}.
+   * Backward-compatible constructor for callers that pre-date the Phase 2 breakdown fields (e.g.
+   * tests written before Phase 2, or legacy producers). Sets saleId to null, all breakdown fields
+   * to null, and tender type to null.
    */
   public SaleRecordedEvent(
       UUID eventId, String companyId, UUID businessId, Money amount, Instant occurredAt) {
-    this(eventId, companyId, businessId, amount, occurredAt, null);
+    this(
+        eventId,
+        null,
+        companyId,
+        businessId,
+        amount,
+        occurredAt,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
+  }
+
+  /**
+   * Backward-compatible constructor for callers that have a tender type but no breakdown (Phase 1).
+   * Sets saleId and all breakdown fields to null.
+   */
+  public SaleRecordedEvent(
+      UUID eventId,
+      String companyId,
+      UUID businessId,
+      Money amount,
+      Instant occurredAt,
+      String tenderType) {
+    this(
+        eventId,
+        null,
+        companyId,
+        businessId,
+        amount,
+        occurredAt,
+        tenderType,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
+  }
+
+  /**
+   * Resolves the effective subtotal: if {@code subtotalMinor} is present, return it as a {@link
+   * Money}; otherwise fall back to {@code amount} (grand total == subtotal for legacy events with
+   * no discount/tax/service-charge breakdown).
+   */
+  public Money effectiveSubtotal() {
+    if (subtotalMinor != null) {
+      return Money.ofMinor(subtotalMinor, amount.currency().getCurrencyCode());
+    }
+    return amount;
+  }
+
+  /** Resolves the effective discount: zero when {@code discountMinor} is null. */
+  public Money effectiveDiscount() {
+    if (discountMinor != null) {
+      return Money.ofMinor(discountMinor, amount.currency().getCurrencyCode());
+    }
+    return Money.ofMinor(0L, amount.currency().getCurrencyCode());
+  }
+
+  /** Resolves the effective service charge: zero when {@code serviceChargeMinor} is null. */
+  public Money effectiveServiceCharge() {
+    if (serviceChargeMinor != null) {
+      return Money.ofMinor(serviceChargeMinor, amount.currency().getCurrencyCode());
+    }
+    return Money.ofMinor(0L, amount.currency().getCurrencyCode());
+  }
+
+  /** Resolves the effective tax: zero when {@code taxMinor} is null. */
+  public Money effectiveTax() {
+    if (taxMinor != null) {
+      return Money.ofMinor(taxMinor, amount.currency().getCurrencyCode());
+    }
+    return Money.ofMinor(0L, amount.currency().getCurrencyCode());
+  }
+
+  /**
+   * Whether this event uses illustrative rules. Returns false when {@code usesIllustrativeRules} is
+   * null (legacy producers).
+   */
+  public boolean effectiveUsesIllustrative() {
+    return Boolean.TRUE.equals(usesIllustrativeRules);
+  }
+
+  /**
+   * Asserts the finance-side reconciliation identity: subtotal − discount + serviceCharge + tax ==
+   * grandTotal. A violated identity indicates a poison event from a misconfigured producer; the
+   * caller routes the record to the DLT.
+   *
+   * <p>Only checked when breakdown fields are present (i.e. not a legacy/carwash event). A legacy
+   * event (all-null breakdown) trivially satisfies the identity as {@code subtotal == grandTotal}.
+   *
+   * @throws IllegalStateException if the identity is violated and breakdown fields are present
+   */
+  public void assertReconciliationIdentity() {
+    if (subtotalMinor == null) {
+      // Legacy event: no breakdown to check; subtotal == grand total by definition.
+      return;
+    }
+    String ccy = amount.currency().getCurrencyCode();
+    Money subtotal = Money.ofMinor(subtotalMinor, ccy);
+    Money discount = effectiveDiscount();
+    Money serviceCharge = effectiveServiceCharge();
+    Money tax = effectiveTax();
+    Money expected = subtotal.minus(discount).plus(serviceCharge).plus(tax);
+    if (!expected.equals(amount)) {
+      throw new IllegalStateException(
+          "SaleRecorded reconciliation identity violated: subtotal("
+              + subtotalMinor
+              + ") - discount("
+              + (discountMinor == null ? 0 : discountMinor)
+              + ") + serviceCharge("
+              + (serviceChargeMinor == null ? 0 : serviceChargeMinor)
+              + ") + tax("
+              + (taxMinor == null ? 0 : taxMinor)
+              + ") = "
+              + expected.amountMinor()
+              + " != grandTotal("
+              + amount.amountMinor()
+              + ") — poison event, routing to DLT");
+    }
   }
 }

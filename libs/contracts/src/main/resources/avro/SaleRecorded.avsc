@@ -2,14 +2,20 @@
   "type": "record",
   "name": "SaleRecorded",
   "namespace": "id.co.nativeapp.events.restaurant",
-  "doc": "Emitted by a vertical (restaurant-service) when a sale is recorded; consumed by finance-service to post to the ledger. Money is an integer minor-units amount plus an ISO-4217 currency code, never a float (CLAUDE.md rule 8).",
+  "doc": "Emitted by a vertical (restaurant-service) when a sale is recorded; consumed by finance-service to post to the ledger. Money is an integer minor-units amount plus an ISO-4217 currency code, never a float (CLAUDE.md rule 8). amount_minor is the GRAND TOTAL (the amount the customer pays). Phase 2 adds an optional price breakdown (subtotal, discount, service charge, tax) for the finance GL to build a multi-line journal entry. A legacy producer (carwash) sends all-null breakdown fields; finance falls back to subtotal==grand total, no tax/discount.",
   "fields": [
     {"name": "sale_id", "type": "string", "doc": "The sale aggregate id (UUID as string); also the Kafka partition key."},
     {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string)."},
     {"name": "business_id", "type": "string", "doc": "The originating business unit (UUID as string)."},
-    {"name": "amount_minor", "type": "long", "doc": "Amount in the currency's minor units (e.g. cents for USD, whole rupiah for IDR). Never a float."},
+    {"name": "amount_minor", "type": "long", "doc": "Grand total amount in the currency's minor units — the amount the customer pays. Never a float."},
     {"name": "currency", "type": "string", "doc": "ISO-4217 currency code, e.g. IDR or USD."},
     {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the sale occurred, epoch millis (UTC)."},
-    {"name": "tender_type", "type": ["null", "string"], "default": null, "doc": "The payment tender type: CASH | QRIS | CARD, or null for legacy/no-payment sales. Finance routes the GL debit clearing account by tender (null/CASH -> CASH_CLEARING, QRIS -> QRIS_CLEARING, CARD -> CARD_CLEARING). Backward-compatible: old producers leave it null; old readers ignore it."}
+    {"name": "tender_type", "type": ["null", "string"], "default": null, "doc": "The payment tender type: CASH | QRIS | CARD, or null for legacy/no-payment sales. Finance routes the GL debit clearing account by tender (null/CASH -> CASH_CLEARING, QRIS -> QRIS_CLEARING, CARD -> CARD_CLEARING). Backward-compatible: old producers leave it null; old readers ignore it."},
+    {"name": "subtotal_minor", "type": ["null", "long"], "default": null, "doc": "Phase 2 price breakdown: sum of line totals before discount and tax, in the currency's minor units. Null for legacy producers (carwash). When null, finance treats subtotal == amount_minor."},
+    {"name": "discount_minor", "type": ["null", "long"], "default": null, "doc": "Phase 2 price breakdown: order-level discount amount in minor units (clamped to <= subtotal). Null for legacy producers. When null or 0, no SALES_DISCOUNT GL leg is posted."},
+    {"name": "service_charge_minor", "type": ["null", "long"], "default": null, "doc": "Phase 2 price breakdown: service charge amount in minor units. Null for legacy producers. When null or 0, no SERVICE_CHARGE_REVENUE GL leg is posted."},
+    {"name": "tax_minor", "type": ["null", "long"], "default": null, "doc": "Phase 2 price breakdown: tax amount in minor units (PB1 / PPN — regime is SME-gated; ILLUSTRATIVE). Null for legacy producers. When null or 0, no TAX_PAYABLE GL leg is posted."},
+    {"name": "tax_rule_version", "type": ["null", "string"], "default": null, "doc": "Phase 2: the rule_version label of the resolved tax rule (e.g. ILLUSTRATIVE-2026.1), for traceability. Null for legacy producers or when no tax rule is seeded."},
+    {"name": "uses_illustrative_rules", "type": ["null", "boolean"], "default": null, "doc": "Phase 2: true when any resolved tax/service-charge rule was provenance=ILLUSTRATIVE_PLACEHOLDER. Propagated to finance GL entries as uses_illustrative_rules. Null for legacy producers (treated as false by finance)."}
   ]
 }

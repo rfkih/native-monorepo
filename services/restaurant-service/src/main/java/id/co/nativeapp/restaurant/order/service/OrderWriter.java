@@ -17,6 +17,8 @@ import id.co.nativeapp.restaurant.order.repository.OrderRepository;
 import id.co.nativeapp.restaurant.payment.dto.PaymentResponse;
 import id.co.nativeapp.restaurant.payment.service.PaymentInstruction;
 import id.co.nativeapp.restaurant.payment.service.PaymentWriter;
+import id.co.nativeapp.restaurant.pricing.domain.PriceBreakdown;
+import id.co.nativeapp.restaurant.pricing.service.TaxChargeService;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
 import id.co.nativeapp.restaurant.sale.service.SaleWriter;
@@ -51,8 +53,12 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>Loads the requested menu items (RLS-scoped) and validates all are active, share the same
  *       currency (single-currency only — no mixed-currency orders, rule 8), and belong to the same
  *       business as the request ({@code businessId} check — W4).
- *   <li>Snapshots name + unit price, computes line totals and order total as integer minor units
+ *   <li>Snapshots name + unit price, computes line totals and subtotal as integer minor units
  *       ({@link Math#multiplyExact} / {@link Math#addExact} — never a float).
+ *   <li>Resolves effective tax + service-charge rules (Phase 2 pricing) and computes a {@link
+ *       PriceBreakdown} (subtotal → discount → taxableBase → serviceCharge → tax → grandTotal).
+ *       Rejects a zero-or-negative grandTotal (a fully-comped order is not a sale → 400). The order
+ *       total is stored as the grandTotal (the customer-pays amount).
  *   <li>Persists the {@link Order} + {@link OrderLine}s.
  *   <li>Calls {@link SaleWriter#recordInCurrentTx} with propagation {@code MANDATORY} so the sale
  *       row and its {@code SaleRecorded} outbox row join this same transaction. Order rows + sale
@@ -73,18 +79,21 @@ public class OrderWriter {
   private final MenuItemRepository menuItemRepository;
   private final SaleWriter saleWriter;
   private final PaymentWriter paymentWriter;
+  private final TaxChargeService taxChargeService;
 
   public OrderWriter(
       OrderRepository orderRepository,
       OrderLineRepository lineRepository,
       MenuItemRepository menuItemRepository,
       SaleWriter saleWriter,
-      PaymentWriter paymentWriter) {
+      PaymentWriter paymentWriter,
+      TaxChargeService taxChargeService) {
     this.orderRepository = orderRepository;
     this.lineRepository = lineRepository;
     this.menuItemRepository = menuItemRepository;
     this.saleWriter = saleWriter;
     this.paymentWriter = paymentWriter;
+    this.taxChargeService = taxChargeService;
   }
 
   /**
@@ -161,7 +170,7 @@ public class OrderWriter {
     Currency currency = Currency.getInstance(currencyCode);
 
     // ------------------------------------------------------------------
-    // 3. Compute line totals + order total (integer minor units, exact).
+    // 3. Compute line totals + subtotal (integer minor units, exact).
     // ------------------------------------------------------------------
     Money runningTotal = Money.zero(currency);
     List<OrderLine> linesToAdd = new ArrayList<>(request.lines().size());
@@ -177,10 +186,35 @@ public class OrderWriter {
     }
 
     // ------------------------------------------------------------------
-    // 4. Persist order + lines.
+    // 3b. Phase 2 pricing: resolve tax + service charge, compute breakdown.
+    //
+    //     The breakdown resolves effective tax_charge_rule rows (RLS-scoped to this
+    //     tenant) at the order's occurred-at date. If any resolved rule is
+    //     ILLUSTRATIVE_PLACEHOLDER, usesIllustrativeRules=true is set on SaleRecorded.
+    //
+    //     Discount: currently no order-level discount request field; pass 0 bp and no
+    //     fixed discount (zero discount, clamp has no effect). A future CheckoutRequest
+    //     field can wire discountBp / fixedDiscountMinor here without changing the formula.
+    //
+    //     grandTotal is the customer-pays amount (taxableBase + serviceCharge + tax).
+    //     Reject a zero-or-negative grandTotal: a fully-comped order is not a sale.
     // ------------------------------------------------------------------
     Instant now = Instant.now();
-    Order order = new Order(request.businessId(), runningTotal, now, request.idempotencyKey());
+    PriceBreakdown breakdown = taxChargeService.resolve(runningTotal, 0L, null, now);
+    Money grandTotal = breakdown.grandTotal();
+    if (!grandTotal.isPositive()) {
+      throw new IllegalArgumentException(
+          "Order grand total must be positive after discount/tax/service-charge; got "
+              + grandTotal.amountMinor()
+              + " "
+              + grandTotal.currency().getCurrencyCode()
+              + " — a fully-comped order is not a sale");
+    }
+
+    // ------------------------------------------------------------------
+    // 4. Persist order + lines (total stored is the GRAND TOTAL, the amount-due).
+    // ------------------------------------------------------------------
+    Order order = new Order(request.businessId(), grandTotal, now, request.idempotencyKey());
     order.setCompanyId(companyId);
     for (OrderLine line : linesToAdd) {
       line.setCompanyId(companyId);
@@ -208,18 +242,19 @@ public class OrderWriter {
     if (!isDigitalPayment) {
       // CASH or no-payment path: record sale synchronously in this transaction.
       // Thread the tender type so finance can route the GL clearing account (ADR 0006, slice 2).
-      // null when no payment block is present (legacy / direct-sale path; finance defaults to
-      // CASH_CLEARING, keeping the carwash / SaleService paths unchanged).
+      // Thread the Phase 2 breakdown so finance can build the multi-line GL journal entry.
+      // amountMinor = grandTotal (the customer-pays amount; @Positive validates this).
       String tenderTypeName =
           (request.payment() != null) ? request.payment().tenderType().name() : null;
       RecordSaleCommand saleCommand =
           new RecordSaleCommand(
               request.businessId(),
-              runningTotal.amountMinor(),
+              grandTotal.amountMinor(),
               currencyCode,
               now,
               request.idempotencyKey(),
-              tenderTypeName);
+              tenderTypeName,
+              breakdown);
       RecordSaleResult saleResult = saleWriter.recordInCurrentTx(saleCommand);
 
       // Link the sale id back to the order → status COMPLETED.
@@ -229,12 +264,13 @@ public class OrderWriter {
       response = OrderResponse.from(saved);
       if (request.payment() != null) {
         // CASH: capture synchronously against the just-recorded sale.
+        // The payment amount is the grandTotal (what the customer owes).
         PaymentInstruction instruction =
             new PaymentInstruction(
                 saved.getId(),
                 request.businessId(),
                 request.payment().tenderType(),
-                runningTotal,
+                grandTotal,
                 request.payment().tenderedMinor(),
                 request.idempotencyKey() + ":pay");
         PaymentResponse paymentResponse =
@@ -252,7 +288,7 @@ public class OrderWriter {
               saved.getId(),
               request.businessId(),
               request.payment().tenderType(),
-              runningTotal,
+              grandTotal,
               null, // digital tenders carry no tendered amount
               request.idempotencyKey() + ":pay");
       PaymentResponse paymentResponse =

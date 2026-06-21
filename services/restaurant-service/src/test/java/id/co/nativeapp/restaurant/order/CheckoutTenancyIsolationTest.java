@@ -103,7 +103,9 @@ class CheckoutTenancyIsolationTest extends PostgresRlsTestBase {
         TenantContext.callAs(TENANT_A, ACTOR_A, () -> orderService.checkout(ownReq));
 
     assertThat(result.created()).isTrue();
-    assertThat(result.order().totalMinor()).isEqualTo(12_000L);
+    // Phase 2 pricing: subtotal 12,000 | SC 5% = 600 | taxBase = 12,600 | tax 10% = 1,260
+    // grandTotal = 12,000 + 600 + 1,260 = 13,860 (demo tenant has illustrative rules seeded).
+    assertThat(result.order().totalMinor()).isEqualTo(13_860L);
     assertThat(result.order().saleId()).isNotNull();
   }
 

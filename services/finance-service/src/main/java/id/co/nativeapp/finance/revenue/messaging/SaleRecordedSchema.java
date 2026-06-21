@@ -55,7 +55,8 @@ public final class SaleRecordedSchema {
    * <p>The money is reconstructed as {@code libs/money} {@link Money} from the integer {@code
    * amount_minor} + ISO-4217 {@code currency} (never a float); {@code occurred_at} is epoch millis
    * UTC. The optional {@code tender_type} (nullable string) is decoded — {@code null} for old
-   * events / carwash; the enum name string for POS sales.
+   * events / carwash; the enum name string for POS sales. The optional Phase 2 breakdown fields are
+   * decoded — all {@code null} for legacy producers (carwash, direct-sale path).
    *
    * @param eventId the event's UUID (the outbox row / Debezium message id) — the idempotency key
    * @param payload the raw Avro bytes off the topic
@@ -64,17 +65,34 @@ public final class SaleRecordedSchema {
     GenericRecord record = AvroSerde.deserialize(payload, SCHEMA);
     Money amount =
         Money.ofMinor((long) record.get("amount_minor"), record.get("currency").toString());
+    // sale_id: the producing sale aggregate UUID — used by reversal writer for per-leg lookup.
+    UUID saleId = UUID.fromString(record.get("sale_id").toString());
     // tender_type is ["null","string"] with default null; old events have it absent (reads as
     // null).
     Object tenderTypeRaw = record.get("tender_type");
     String tenderType = (tenderTypeRaw != null) ? tenderTypeRaw.toString() : null;
+    // Phase 2 breakdown fields — all ["null", ...] with default null; old events read as null.
+    Long subtotalMinor = (Long) record.get("subtotal_minor");
+    Long discountMinor = (Long) record.get("discount_minor");
+    Long serviceChargeMinor = (Long) record.get("service_charge_minor");
+    Long taxMinor = (Long) record.get("tax_minor");
+    Object taxRuleVersionRaw = record.get("tax_rule_version");
+    String taxRuleVersion = (taxRuleVersionRaw != null) ? taxRuleVersionRaw.toString() : null;
+    Boolean usesIllustrative = (Boolean) record.get("uses_illustrative_rules");
     return new SaleRecordedEvent(
         eventId,
+        saleId,
         record.get("company_id").toString(),
         UUID.fromString(record.get("business_id").toString()),
         amount,
         Instant.ofEpochMilli((long) record.get("occurred_at")),
-        tenderType);
+        tenderType,
+        subtotalMinor,
+        discountMinor,
+        serviceChargeMinor,
+        taxMinor,
+        taxRuleVersion,
+        usesIllustrative);
   }
 
   private static Schema parse() {
