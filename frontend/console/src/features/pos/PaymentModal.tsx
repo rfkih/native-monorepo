@@ -30,7 +30,7 @@ import type {
   PaymentResponse,
   PriceBreakdownResponse,
 } from './api'
-import { useCheckout, useCapturePayment } from './api'
+import { useCheckout, useCapturePayment, usePayParked } from './api'
 
 type TenderTab = 'CASH' | 'QRIS' | 'CARD'
 
@@ -47,6 +47,12 @@ interface Props {
   locale: string
   onSuccess: (order: OrderResponse, payment: PaymentResponse) => void
   onClose: () => void
+  /** Phase 4: when set, the modal finalises a PARKED order rather than creating a new checkout. */
+  parkedOrderId?: string | null
+  /** Phase 4: order type forwarded to checkout. */
+  orderType?: string
+  /** Phase 4: table UUID forwarded to checkout (DINE_IN only). */
+  tableId?: string | null
 }
 
 // Quick-cash chip amounts in IDR minor units (= whole rupiah, exponent 0).
@@ -78,6 +84,9 @@ export function PaymentModal({
   locale,
   onSuccess,
   onClose,
+  parkedOrderId,
+  orderType,
+  tableId,
 }: Props) {
   const { t } = useTranslation()
   const [tender, setTender] = useState<TenderTab>('CASH')
@@ -134,6 +143,9 @@ export function PaymentModal({
             locale={locale}
             onSuccess={onSuccess}
             onClose={onClose}
+            parkedOrderId={parkedOrderId}
+            orderType={orderType}
+            tableId={tableId}
           />
         ) : (
           <DigitalPanel
@@ -146,6 +158,9 @@ export function PaymentModal({
             tenderType={tender}
             onSuccess={onSuccess}
             onClose={onClose}
+            parkedOrderId={parkedOrderId}
+            orderType={orderType}
+            tableId={tableId}
           />
         )}
       </Card>
@@ -255,6 +270,9 @@ interface CashPanelProps {
   locale: string
   onSuccess: (order: OrderResponse, payment: PaymentResponse) => void
   onClose: () => void
+  parkedOrderId?: string | null
+  orderType?: string
+  tableId?: string | null
 }
 
 function CashPanel({
@@ -266,16 +284,22 @@ function CashPanel({
   locale,
   onSuccess,
   onClose,
+  parkedOrderId,
+  orderType,
+  tableId,
 }: CashPanelProps) {
   const { t } = useTranslation()
   const checkout = useCheckout(session)
+  const payParked = usePayParked(session)
+
+  const isBusy = checkout.isPending || payParked.isPending
 
   // tenderedMinor is held as an integer; the keypad appends digits to a string, then parsed.
   const [keyStr, setKeyStr] = useState<string>('')
 
   const tenderedMinor = keyStr === '' ? 0 : parseInt(keyStr, 10)
   const changeMinor = tenderedMinor - grandTotalMinor
-  const canPay = tenderedMinor >= grandTotalMinor && !checkout.isPending
+  const canPay = tenderedMinor >= grandTotalMinor && !isBusy
 
   const chips = quickChips(grandTotalMinor, currency)
 
@@ -295,22 +319,42 @@ function CashPanel({
 
   function pay() {
     if (!canPay) return
-    checkout.mutate(
-      {
-        lines,
-        payment: { tenderType: 'CASH', tenderedMinor },
-        discountMinor,
-      },
-      {
-        onSuccess: (res) => {
-          if (res?.payment) {
-            onSuccess(res, res.payment)
-          } else {
-            onClose()
-          }
+
+    if (parkedOrderId) {
+      // Resume path: finalise a PARKED order
+      payParked.mutate(
+        { orderId: parkedOrderId, payment: { tenderType: 'CASH', tenderedMinor } },
+        {
+          onSuccess: (res) => {
+            if (res?.payment) {
+              onSuccess(res, res.payment)
+            } else {
+              onClose()
+            }
+          },
         },
-      },
-    )
+      )
+    } else {
+      // Normal checkout path
+      checkout.mutate(
+        {
+          lines,
+          payment: { tenderType: 'CASH', tenderedMinor },
+          discountMinor,
+          orderType,
+          tableId,
+        },
+        {
+          onSuccess: (res) => {
+            if (res?.payment) {
+              onSuccess(res, res.payment)
+            } else {
+              onClose()
+            }
+          },
+        },
+      )
+    }
   }
 
   return (
@@ -363,8 +407,10 @@ function CashPanel({
         </span>
       </div>
 
-      {checkout.isError ? (
-        <p className="mb-3 text-xs text-rose">{(checkout.error as Error).message}</p>
+      {(checkout.isError || payParked.isError) ? (
+        <p className="mb-3 text-xs text-rose">
+          {((checkout.error ?? payParked.error) as Error).message}
+        </p>
       ) : null}
 
       {!canPay && tenderedMinor > 0 && tenderedMinor < grandTotalMinor ? (
@@ -372,11 +418,7 @@ function CashPanel({
       ) : null}
 
       <Button className="w-full" disabled={!canPay} onClick={pay}>
-        {checkout.isPending ? (
-          <Spinner />
-        ) : (
-          t('pos.payment.payAmount', { amount: formatMoney(grandTotalMinor, currency, locale) })
-        )}
+        {isBusy ? <Spinner /> : t('pos.payment.payAmount', { amount: formatMoney(grandTotalMinor, currency, locale) })}
       </Button>
     </div>
   )
@@ -408,6 +450,9 @@ interface DigitalPanelProps {
   tenderType: 'QRIS' | 'CARD'
   onSuccess: (order: OrderResponse, payment: PaymentResponse) => void
   onClose: () => void
+  parkedOrderId?: string | null
+  orderType?: string
+  tableId?: string | null
 }
 
 function DigitalPanel({
@@ -420,27 +465,46 @@ function DigitalPanel({
   tenderType,
   onSuccess,
   onClose,
+  parkedOrderId,
+  orderType,
+  tableId,
 }: DigitalPanelProps) {
   const { t } = useTranslation()
   const checkout = useCheckout(session)
+  const payParked = usePayParked(session)
   const capture = useCapturePayment(session)
 
-  // After checkout we hold the PENDING order + payment to drive the "Mark as paid" step.
+  // After initiation we hold the PENDING order + payment to drive the "Mark as paid" step.
   const [pendingOrder, setPendingOrder] = useState<OrderResponse | null>(null)
   const [pendingPayment, setPendingPayment] = useState<PaymentResponse | null>(null)
 
   function initiatePayment() {
-    checkout.mutate(
-      { lines, payment: { tenderType }, discountMinor },
-      {
-        onSuccess: (res) => {
-          if (res?.payment) {
-            setPendingOrder(res)
-            setPendingPayment(res.payment)
-          }
+    if (parkedOrderId) {
+      // Resume path: finalise a PARKED order with a digital tender → AWAITING_PAYMENT
+      payParked.mutate(
+        { orderId: parkedOrderId, payment: { tenderType } },
+        {
+          onSuccess: (res) => {
+            if (res?.payment) {
+              setPendingOrder(res)
+              setPendingPayment(res.payment)
+            }
+          },
         },
-      },
-    )
+      )
+    } else {
+      checkout.mutate(
+        { lines, payment: { tenderType }, discountMinor, orderType, tableId },
+        {
+          onSuccess: (res) => {
+            if (res?.payment) {
+              setPendingOrder(res)
+              setPendingPayment(res.payment)
+            }
+          },
+        },
+      )
+    }
   }
 
   function confirmPayment() {
@@ -454,6 +518,8 @@ function DigitalPanel({
     })
   }
 
+  const isInitiating = checkout.isPending || payParked.isPending
+
   // Phase 1 — invite cashier to initiate the digital payment
   if (!pendingPayment) {
     return (
@@ -465,12 +531,14 @@ function DigitalPanel({
           <p className="mt-1 leading-relaxed">{t('pos.payment.pendingHint')}</p>
         </div>
 
-        {checkout.isError ? (
-          <p className="mb-3 text-xs text-rose">{(checkout.error as Error).message}</p>
+        {(checkout.isError || payParked.isError) ? (
+          <p className="mb-3 text-xs text-rose">
+            {((checkout.error ?? payParked.error) as Error).message}
+          </p>
         ) : null}
 
-        <Button className="w-full" disabled={checkout.isPending} onClick={initiatePayment}>
-          {checkout.isPending ? <Spinner /> : t('pos.payment.payAmount', { amount: formatMoney(grandTotalMinor, currency, locale) })}
+        <Button className="w-full" disabled={isInitiating} onClick={initiatePayment}>
+          {isInitiating ? <Spinner /> : t('pos.payment.payAmount', { amount: formatMoney(grandTotalMinor, currency, locale) })}
         </Button>
       </div>
     )

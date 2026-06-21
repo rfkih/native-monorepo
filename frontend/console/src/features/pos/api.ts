@@ -3,6 +3,36 @@ import { useEffect, useRef } from 'react'
 import { apiFetch } from '@/lib/api'
 import type { CompanySession } from '@/lib/session'
 
+// ---------------------------------------------------------------------------
+// Table types
+// ---------------------------------------------------------------------------
+
+export interface TableResponse {
+  tableId: string
+  businessId: string
+  label: string
+  capacity: number
+  area: string | null
+  active: boolean
+  occupied: boolean
+}
+
+// ---------------------------------------------------------------------------
+// Parked order summary (GET /api/v1/orders?status=PARKED)
+// ---------------------------------------------------------------------------
+
+export interface ParkedOrderSummary {
+  orderId: string
+  businessId: string
+  totalMinor: number
+  currency: string
+  /** null for TAKEAWAY / DELIVERY */
+  tableLabel: string | null
+  lineCount: number
+  occurredAt: string
+  orderType: string
+}
+
 export interface ModifierOptionResponse {
   id: string
   groupId: string
@@ -119,6 +149,12 @@ export interface OrderResponse {
   payment: PaymentResponse | null
   /** Phase 2 price breakdown — present on every newly created order. */
   breakdown: PriceBreakdownResponse | null
+  /** Phase 4: PENDING | PARKED | COMPLETED | AWAITING_PAYMENT */
+  status: string | null
+  /** Phase 4: DINE_IN | TAKEAWAY | DELIVERY */
+  orderType: string | null
+  /** Phase 4: table UUID (DINE_IN only) */
+  tableId: string | null
 }
 
 /** Payment block sent on checkout — tenderType must be CASH | QRIS | CARD. */
@@ -216,12 +252,16 @@ export interface CheckoutInput {
   payment?: CheckoutPaymentInput
   /** Optional order-level discount in minor units (>= 0). Server clamps to subtotal. */
   discountMinor?: number
+  /** Phase 4: DINE_IN | TAKEAWAY | DELIVERY */
+  orderType?: string
+  /** Phase 4: table UUID (DINE_IN only) */
+  tableId?: string | null
 }
 
 export function useCheckout(session: CompanySession) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ lines, payment, discountMinor }: CheckoutInput) =>
+    mutationFn: ({ lines, payment, discountMinor, orderType, tableId }: CheckoutInput) =>
       apiFetch<OrderResponse>('/api/v1/orders', {
         method: 'POST',
         tenant: tenantOf(session),
@@ -231,6 +271,8 @@ export function useCheckout(session: CompanySession) {
           lines,
           payment: payment ?? null,
           discountMinor: discountMinor && discountMinor > 0 ? discountMinor : null,
+          orderType: orderType ?? null,
+          tableId: tableId ?? null,
         },
       }),
     onSuccess: (res) => {
@@ -238,6 +280,166 @@ export function useCheckout(session: CompanySession) {
       if (res?.payment?.status === 'CAPTURED') {
         void qc.invalidateQueries({ queryKey: ['pnl'] })
       }
+      // Occupancy may have changed — invalidate table list.
+      void qc.invalidateQueries({ queryKey: ['tables', session.companyId, session.businessId] })
+    },
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Park (hold) order — POST /api/v1/orders/park → PARKED OrderResponse
+// ---------------------------------------------------------------------------
+
+export interface ParkInput {
+  lines: OrderLineInput[]
+  orderType?: string
+  tableId?: string | null
+  discountMinor?: number
+}
+
+export function useParkOrder(session: CompanySession) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ lines, orderType, tableId, discountMinor }: ParkInput) =>
+      apiFetch<OrderResponse>('/api/v1/orders/park', {
+        method: 'POST',
+        tenant: tenantOf(session),
+        body: {
+          businessId: session.businessId,
+          idempotencyKey: crypto.randomUUID(),
+          lines,
+          orderType: orderType ?? null,
+          tableId: tableId ?? null,
+          discountMinor: discountMinor && discountMinor > 0 ? discountMinor : null,
+        },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['parked-orders', session.companyId, session.businessId] })
+      void qc.invalidateQueries({ queryKey: ['tables', session.companyId, session.businessId] })
+    },
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Parked orders list — GET /api/v1/orders?status=PARKED&businessId=...
+// ---------------------------------------------------------------------------
+
+export function useParkedOrders(session: CompanySession) {
+  return useQuery({
+    queryKey: ['parked-orders', session.companyId, session.businessId],
+    queryFn: () =>
+      apiFetch<ParkedOrderSummary[]>('/api/v1/orders', {
+        tenant: tenantOf(session),
+        query: { status: 'PARKED', businessId: session.businessId },
+      }),
+    staleTime: 10_000,
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Get one order — GET /api/v1/orders/{id}  (resume a parked order)
+// ---------------------------------------------------------------------------
+
+export function useGetOrder(session: CompanySession, orderId: string | null) {
+  return useQuery({
+    queryKey: ['order', session.companyId, orderId],
+    enabled: orderId != null,
+    queryFn: () =>
+      apiFetch<OrderResponse>(`/api/v1/orders/${orderId}`, {
+        tenant: tenantOf(session),
+      }),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Pay parked order — POST /api/v1/orders/{id}/pay
+// ---------------------------------------------------------------------------
+
+export interface PayParkedInput {
+  orderId: string
+  payment?: CheckoutPaymentInput
+}
+
+export function usePayParked(session: CompanySession) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ orderId, payment }: PayParkedInput) =>
+      apiFetch<OrderResponse>(`/api/v1/orders/${orderId}/pay`, {
+        method: 'POST',
+        tenant: tenantOf(session),
+        body: { payment: payment ?? null },
+      }),
+    onSuccess: (res) => {
+      if (res?.payment?.status === 'CAPTURED') {
+        void qc.invalidateQueries({ queryKey: ['pnl'] })
+      }
+      void qc.invalidateQueries({ queryKey: ['parked-orders', session.companyId, session.businessId] })
+      void qc.invalidateQueries({ queryKey: ['tables', session.companyId, session.businessId] })
+    },
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Tables — GET /api/v1/tables?businessId=...
+// ---------------------------------------------------------------------------
+
+export function useTables(session: CompanySession) {
+  return useQuery({
+    queryKey: ['tables', session.companyId, session.businessId],
+    queryFn: () =>
+      apiFetch<TableResponse[]>('/api/v1/tables', {
+        tenant: tenantOf(session),
+        query: { businessId: session.businessId },
+      }),
+    staleTime: 30_000,
+  })
+}
+
+export interface CreateTableInput {
+  label: string
+  capacity: number
+  area?: string
+}
+
+export function useCreateTable(session: CompanySession) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ label, capacity, area }: CreateTableInput) =>
+      apiFetch<TableResponse>('/api/v1/tables', {
+        method: 'POST',
+        tenant: tenantOf(session),
+        body: { businessId: session.businessId, label, capacity, area: area || null },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['tables', session.companyId, session.businessId] })
+    },
+  })
+}
+
+export function useActivateTable(session: CompanySession) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (tableId: string) =>
+      apiFetch<TableResponse>(`/api/v1/tables/${tableId}/activate`, {
+        method: 'PATCH',
+        tenant: tenantOf(session),
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['tables', session.companyId, session.businessId] })
+    },
+  })
+}
+
+export function useDeactivateTable(session: CompanySession) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (tableId: string) =>
+      apiFetch<TableResponse>(`/api/v1/tables/${tableId}/deactivate`, {
+        method: 'PATCH',
+        tenant: tenantOf(session),
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['tables', session.companyId, session.businessId] })
     },
   })
 }

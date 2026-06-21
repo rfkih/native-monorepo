@@ -16,7 +16,7 @@
  * handles scaling and locale rendering (rule 9).
  */
 import { useTranslation } from 'react-i18next'
-import { Check, Clock } from 'lucide-react'
+import { Check, Clock, Printer } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -27,6 +27,8 @@ interface Props {
   order: OrderResponse
   payment: PaymentResponse
   locale: string
+  /** Optional business name shown on the printed receipt. */
+  businessName?: string
   onNew: () => void
 }
 
@@ -62,20 +64,48 @@ function tenderKey(tenderType: string): string {
   }
 }
 
-export function ReceiptView({ order, payment, locale, onNew }: Props) {
+function orderTypeI18nKey(orderType: string | null): string | null {
+  switch (orderType) {
+    case 'DINE_IN':
+      return 'pos.orderType.dineIn'
+    case 'TAKEAWAY':
+      return 'pos.orderType.takeaway'
+    case 'DELIVERY':
+      return 'pos.orderType.delivery'
+    default:
+      return null
+  }
+}
+
+export function ReceiptView({ order, payment, locale, businessName, onNew }: Props) {
   const { t } = useTranslation()
   const isPending = payment.status === 'PENDING'
   const isCash = payment.tenderType === 'CASH'
   const currency = payment.currency
   const breakdown = order.breakdown
+  const orderTypeKey = orderTypeI18nKey(order.orderType ?? null)
+
+  function handlePrint() {
+    window.print()
+  }
 
   return (
-    <div
-      className="fixed inset-0 z-40 grid place-items-center bg-ink/30 p-4 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-label={t('pos.receipt.title')}
-    >
+    <>
+      {/* Print-only receipt (hidden on screen, shown when printing) */}
+      <PrintReceipt
+        order={order}
+        payment={payment}
+        locale={locale}
+        businessName={businessName}
+        t={t}
+      />
+
+      <div
+        className="print:hidden fixed inset-0 z-40 grid place-items-center bg-ink/30 p-4 backdrop-blur-sm"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('pos.receipt.title')}
+      >
       <Card className="reveal w-full max-w-sm overflow-hidden">
         {/* Status icon */}
         <div className="flex flex-col items-center px-5 pt-7 pb-4 text-center">
@@ -256,15 +286,177 @@ export function ReceiptView({ order, payment, locale, onNew }: Props) {
             <span className="text-ink-3">{t('pos.receipt.status')}</span>
             <Badge tone={isPending ? 'amber' : 'emerald'}>{t(statusKey(payment.status))}</Badge>
           </div>
+
+          {/* Order type + table */}
+          {orderTypeKey ? (
+            <div className="flex items-baseline justify-between">
+              <span className="text-ink-3">{t('pos.orderType.label')}</span>
+              <span className="font-medium text-ink">{t(orderTypeKey)}</span>
+            </div>
+          ) : null}
+
+          {order.orderType === 'DINE_IN' && order.tableId ? (
+            <div className="flex items-baseline justify-between">
+              <span className="text-ink-3">{t('pos.table.label')}</span>
+              <span className="font-medium text-ink">{order.tableId}</span>
+            </div>
+          ) : null}
+
+          {/* Timestamp */}
+          <div className="flex items-baseline justify-between">
+            <span className="text-ink-3">{t('pos.receipt.time')}</span>
+            <span className="tnum font-mono text-ink">
+              {new Intl.DateTimeFormat(locale, {
+                dateStyle: 'medium',
+                timeStyle: 'short',
+              }).format(new Date())}
+            </span>
+          </div>
         </div>
 
         {/* CTA */}
-        <div className="border-t border-line px-5 py-4">
-          <Button className="w-full" onClick={onNew}>
+        <div className="border-t border-line px-5 py-4 flex gap-2">
+          <Button variant="outline" className="flex-1" onClick={handlePrint}>
+            <Printer className="size-4" />
+            {t('pos.receipt.print')}
+          </Button>
+          <Button className="flex-1" onClick={onNew}>
             {t('pos.receipt.newOrder')}
           </Button>
         </div>
       </Card>
-    </div>
+      </div>
+    </>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// PrintReceipt — hidden on screen, visible only when window.print() is called.
+// Uses inline styles to ensure thermal-style B/W output without Tailwind classes
+// being toggled by the print media query.
+// ---------------------------------------------------------------------------
+
+interface PrintReceiptProps {
+  order: OrderResponse
+  payment: PaymentResponse
+  locale: string
+  businessName?: string
+  t: (key: string, opts?: Record<string, unknown>) => string
+}
+
+function PrintReceipt({ order, payment, locale, businessName, t }: PrintReceiptProps) {
+  const currency = payment.currency
+  const breakdown = order.breakdown
+  const isCash = payment.tenderType === 'CASH'
+
+  const printTime = new Intl.DateTimeFormat(locale, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date())
+
+  const orderTypeKey = (() => {
+    switch (order.orderType) {
+      case 'DINE_IN': return 'pos.orderType.dineIn'
+      case 'TAKEAWAY': return 'pos.orderType.takeaway'
+      case 'DELIVERY': return 'pos.orderType.delivery'
+      default: return null
+    }
+  })()
+
+  return (
+    <>
+      {/* Global print styles injected inline so they survive the shadow DOM / bundler */}
+      <style>{`
+        @media print {
+          body > *:not(#native-print-receipt) { display: none !important; }
+          #native-print-receipt { display: block !important; }
+          @page { margin: 10mm; size: 80mm auto; }
+        }
+        #native-print-receipt {
+          display: none;
+          font-family: 'Courier New', Courier, monospace;
+          font-size: 12px;
+          color: #000;
+          background: #fff;
+          max-width: 300px;
+          margin: 0 auto;
+        }
+        #native-print-receipt .pr-center { text-align: center; }
+        #native-print-receipt .pr-bold { font-weight: bold; }
+        #native-print-receipt .pr-rule { border: none; border-top: 1px dashed #000; margin: 6px 0; }
+        #native-print-receipt .pr-row { display: flex; justify-content: space-between; margin: 2px 0; }
+        #native-print-receipt .pr-total { font-size: 15px; font-weight: bold; }
+      `}</style>
+
+      <div id="native-print-receipt" aria-hidden="true">
+        {/* Header */}
+        <div className="pr-center pr-bold" style={{ fontSize: 14, marginBottom: 4 }}>
+          {businessName ?? 'Native POS'}
+        </div>
+        <div className="pr-center" style={{ marginBottom: 2 }}>{printTime}</div>
+        {orderTypeKey ? (
+          <div className="pr-center" style={{ marginBottom: 8 }}>{t(orderTypeKey)}</div>
+        ) : null}
+
+        <hr className="pr-rule" />
+
+        {/* Items */}
+        {order.lines.map((line, idx) => (
+          <div key={`${line.menuItemId}-${idx}`}>
+            <div className="pr-row">
+              <span>{line.name} × {line.qty}</span>
+              <span>{formatMoney(line.lineTotalMinor, currency, locale)}</span>
+            </div>
+            {line.modifiers && line.modifiers.length > 0 ? (
+              line.modifiers.map((mod) => (
+                <div key={mod.optionId} className="pr-row" style={{ paddingLeft: 8, fontSize: 10 }}>
+                  <span>{mod.nameSnapshot}</span>
+                  {mod.priceDeltaMinor !== 0 ? (
+                    <span>
+                      {mod.priceDeltaMinor > 0 ? '+' : ''}
+                      {formatMoney(mod.priceDeltaMinor, currency, locale)}
+                    </span>
+                  ) : null}
+                </div>
+              ))
+            ) : null}
+          </div>
+        ))}
+
+        <hr className="pr-rule" />
+
+        {/* Breakdown */}
+        {breakdown ? (
+          <>
+            <div className="pr-row"><span>{t('pos.subtotal')}</span><span>{formatMoney(breakdown.subtotalMinor, currency, locale)}</span></div>
+            {breakdown.discountMinor > 0 ? (
+              <div className="pr-row"><span>{t('pos.discount')}</span><span>-{formatMoney(breakdown.discountMinor, currency, locale)}</span></div>
+            ) : null}
+            <div className="pr-row"><span>{t('pos.serviceCharge')}</span><span>{formatMoney(breakdown.serviceChargeMinor, currency, locale)}</span></div>
+            <div className="pr-row"><span>{t('pos.tax')}</span><span>{formatMoney(breakdown.taxMinor, currency, locale)}</span></div>
+            <hr className="pr-rule" />
+            <div className="pr-row pr-total"><span>{t('pos.receipt.total')}</span><span>{formatMoney(breakdown.grandTotalMinor, currency, locale)}</span></div>
+          </>
+        ) : (
+          <div className="pr-row pr-total"><span>{t('pos.receipt.total')}</span><span>{formatMoney(payment.amountMinor, currency, locale)}</span></div>
+        )}
+
+        <hr className="pr-rule" />
+
+        {/* Payment */}
+        <div className="pr-row"><span>{t('pos.receipt.tender')}</span><span>{t(tenderKey(payment.tenderType))}</span></div>
+        {isCash && payment.tenderedMinor != null ? (
+          <div className="pr-row"><span>{t('pos.receipt.tendered')}</span><span>{formatMoney(payment.tenderedMinor, currency, locale)}</span></div>
+        ) : null}
+        {isCash && payment.changeMinor != null ? (
+          <div className="pr-row"><span>{t('pos.receipt.change')}</span><span>{formatMoney(payment.changeMinor, currency, locale)}</span></div>
+        ) : null}
+
+        <hr className="pr-rule" />
+        <div className="pr-center" style={{ marginTop: 8, fontSize: 10 }}>
+          {t('pos.receipt.thankYou')}
+        </div>
+      </div>
+    </>
   )
 }

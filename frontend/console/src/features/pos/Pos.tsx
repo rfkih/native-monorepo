@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { Minus, Plus, Trash2, Utensils, Info } from 'lucide-react'
+import { Minus, Plus, Trash2, Utensils, Info, PauseCircle, ClipboardList, Table2, Settings } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -16,16 +16,29 @@ import {
   useCategories,
   useSeedMenu,
   useQuote,
+  useTables,
+  useParkOrder,
+  useParkedOrders,
+  useGetOrder,
   type MenuItem,
   type CategoryResponse,
   type OrderResponse,
   type PaymentResponse,
   type PriceBreakdownResponse,
   type OrderLineInput,
+  type TableResponse,
 } from './api'
 import { PaymentModal } from './PaymentModal'
 import { ReceiptView } from './ReceiptView'
 import { ModifierModal } from './ModifierModal'
+import { TableManagement } from './TableManagement'
+import { ParkedTray } from './ParkedTray'
+
+// ---------------------------------------------------------------------------
+// Order types
+// ---------------------------------------------------------------------------
+
+type OrderType = 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY'
 
 // ---------------------------------------------------------------------------
 // Cart line — extends OrderLineInput with the display info we need client-side
@@ -52,27 +65,63 @@ function PosInner({ session }: { session: CompanySession }) {
   const locale = localeOf(i18n.language)
   const menuQuery = useMenu(session)
   const categoriesQuery = useCategories(session)
+  const tablesQuery = useTables(session)
+  const parkedQuery = useParkedOrders(session)
   const seed = useSeedMenu(session)
+  const parkOrder = useParkOrder(session)
 
-  // Cart: list of CartLine (order preserved, same item may appear multiple times with diff modifiers
-  // but typically a single line per menuItemId with qty; for simplicity we merge same-option configs).
+  // Cart: list of CartLine
   const [cart, setCart] = useState<CartLine[]>([])
+
+  // Phase 4: order type + table
+  const [orderType, setOrderType] = useState<OrderType>('DINE_IN')
+  const [selectedTableId, setSelectedTableId] = useState<string | null>(null)
 
   // discountInput is the raw string the user types; discountMinor is the parsed integer.
   const [discountInput, setDiscountInput] = useState<string>('')
   const [discountError, setDiscountError] = useState<string | null>(null)
 
-  // Modal state
+  // Modal / panel state
   const [modal, setModal] = useState<'payment' | 'receipt' | null>(null)
   const [modifierItem, setModifierItem] = useState<MenuItem | null>(null)
   const [placedOrder, setPlacedOrder] = useState<OrderResponse | null>(null)
   const [placedPayment, setPlacedPayment] = useState<PaymentResponse | null>(null)
+  const [showTableMgmt, setShowTableMgmt] = useState(false)
+  const [showParkedTray, setShowParkedTray] = useState(false)
+
+  // Resume: parked order being resumed (loaded via useGetOrder)
+  const [resumingOrderId, setResumingOrderId] = useState<string | null>(null)
+  const [resumedOrder, setResumedOrder] = useState<OrderResponse | null>(null)
+  const resumeQuery = useGetOrder(session, resumingOrderId)
+
+  // When the resumed order loads, populate cart state
+  const [resumeLoaded, setResumeLoaded] = useState(false)
+
+  if (resumeQuery.data && resumingOrderId && !resumeLoaded) {
+    const ro = resumeQuery.data
+    // Rebuild cart lines from the resumed order
+    const rebuiltCart: CartLine[] = ro.lines.map((l) => ({
+      menuItemId: l.menuItemId,
+      qty: l.qty,
+      selectedOptionIds: l.modifiers.map((m) => m.optionId),
+      effectiveUnitPriceMinor: l.unitPriceMinor,
+      selectedOptionNames: l.modifiers.map((m) => m.nameSnapshot),
+    }))
+    setCart(rebuiltCart)
+    setOrderType((ro.orderType as OrderType) ?? 'DINE_IN')
+    setSelectedTableId(ro.tableId ?? null)
+    setResumedOrder(ro)
+    setResumeLoaded(true)
+    setShowParkedTray(false)
+  }
 
   // Active category tab — null means "all" / first available
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null)
 
   const items = menuQuery.data ?? []
   const categories = (categoriesQuery.data ?? []).filter((c) => c.active)
+  const tables = (tablesQuery.data ?? []).filter((tbl) => tbl.active)
+  const parkedCount = parkedQuery.data?.length ?? 0
 
   const currency = items[0]?.currency ?? session.baseCurrency
 
@@ -90,50 +139,56 @@ function PosInner({ session }: { session: CompanySession }) {
 
   // Live price quote from the server
   const quoteQuery = useQuote(session, cartLines, discountMinor)
-  const breakdown = quoteQuery.data ?? null
+  const breakdown = quoteQuery.data ?? resumedOrder?.breakdown ?? null
 
-  // Authoritative grand total: use server breakdown when available, else fall back to
-  // client-side subtotal (before the first quote returns).
+  // Authoritative grand total
   const clientSubtotalMinor = cart.reduce(
     (sum, l) => sum + l.effectiveUnitPriceMinor * l.qty,
     0,
   )
-  const grandTotalMinor = breakdown?.grandTotalMinor ?? clientSubtotalMinor
+  const grandTotalMinor = breakdown?.grandTotalMinor ?? (resumedOrder?.totalMinor ?? clientSubtotalMinor)
 
   // ---------------------------------------------------------------------------
   // Category grouping
   // ---------------------------------------------------------------------------
 
-  // Derive the ordered category list: prefer backend categories, fall back to item.category strings.
   const orderedCategories = deriveCategories(items, categories)
-
-  // Selected category tab value — default to first available
   const resolvedCategoryId: string = activeCategoryId ?? orderedCategories[0]?.id ?? ''
-
-  // Segment options for the category bar
   const categoryOptions = orderedCategories.map((c) => ({ value: c.id, label: c.name }))
 
-  // Filter items by active category
   const visibleItems = items.filter((item) => {
     if (orderedCategories.length === 0) return true
     const cat = orderedCategories.find((c) => c.id === resolvedCategoryId)
     if (!cat) return true
-    // Match by categoryId (UUID) or by category string (legacy)
     if (item.categoryId) return item.categoryId === resolvedCategoryId
     return item.category === cat.legacyKey
   })
+
+  // ---------------------------------------------------------------------------
+  // Order type options
+  // ---------------------------------------------------------------------------
+
+  const orderTypeOptions: { value: OrderType; label: string }[] = [
+    { value: 'DINE_IN', label: t('pos.orderType.dineIn') },
+    { value: 'TAKEAWAY', label: t('pos.orderType.takeaway') },
+    { value: 'DELIVERY', label: t('pos.orderType.delivery') },
+  ]
+
+  function handleOrderTypeChange(v: OrderType) {
+    setOrderType(v)
+    // Clear table selection when switching away from dine-in
+    if (v !== 'DINE_IN') setSelectedTableId(null)
+  }
 
   // ---------------------------------------------------------------------------
   // Cart manipulation
   // ---------------------------------------------------------------------------
 
   function handleItemTap(item: MenuItem) {
-    // If the item has modifier groups, open the picker first.
     if (item.modifierGroups.length > 0) {
       setModifierItem(item)
       return
     }
-    // No modifiers — add directly with base price.
     addToCart(item.id, [], item.priceMinor, [])
   }
 
@@ -144,7 +199,6 @@ function PosInner({ session }: { session: CompanySession }) {
     selectedOptionNames: string[],
   ) {
     setCart((prev) => {
-      // Find a matching line (same item + same option selection)
       const key = lineKey(menuItemId, selectedOptionIds)
       const idx = prev.findIndex((l) => lineKey(l.menuItemId, l.selectedOptionIds) === key)
       if (idx !== -1) {
@@ -161,7 +215,6 @@ function PosInner({ session }: { session: CompanySession }) {
 
   function handleModifierConfirm(selectedOptionIds: string[], effectivePriceMinor: number) {
     if (!modifierItem) return
-    // Collect names of selected options for the cart display
     const names = modifierItem.modifierGroups
       .flatMap((g) => g.options)
       .filter((o) => selectedOptionIds.includes(o.id))
@@ -202,6 +255,47 @@ function PosInner({ session }: { session: CompanySession }) {
   }
 
   // ---------------------------------------------------------------------------
+  // Hold / Park
+  // ---------------------------------------------------------------------------
+
+  function handleHold() {
+    if (lineCount === 0) return
+    parkOrder.mutate(
+      {
+        lines: cartLines,
+        orderType,
+        tableId: orderType === 'DINE_IN' ? selectedTableId : null,
+        discountMinor: discountMinor > 0 ? discountMinor : undefined,
+      },
+      {
+        onSuccess: () => {
+          clearCart()
+        },
+      },
+    )
+  }
+
+  function clearCart() {
+    setCart([])
+    setDiscountInput('')
+    setDiscountError(null)
+    setResumingOrderId(null)
+    setResumedOrder(null)
+    setResumeLoaded(false)
+    setSelectedTableId(null)
+  }
+
+  // ---------------------------------------------------------------------------
+  // Resume
+  // ---------------------------------------------------------------------------
+
+  function handleResume(orderId: string) {
+    setResumingOrderId(orderId)
+    setResumeLoaded(false)
+    setResumedOrder(null)
+  }
+
+  // ---------------------------------------------------------------------------
   // Payment
   // ---------------------------------------------------------------------------
 
@@ -212,9 +306,7 @@ function PosInner({ session }: { session: CompanySession }) {
   function handlePaymentSuccess(order: OrderResponse, payment: PaymentResponse) {
     setPlacedOrder(order)
     setPlacedPayment(payment)
-    setCart([])
-    setDiscountInput('')
-    setDiscountError(null)
+    clearCart()
     setModal('receipt')
   }
 
@@ -225,6 +317,12 @@ function PosInner({ session }: { session: CompanySession }) {
   }
 
   // ---------------------------------------------------------------------------
+  // Determine selected table object (for display)
+  // ---------------------------------------------------------------------------
+
+  const selectedTable = tables.find((t) => t.tableId === selectedTableId) ?? null
+
+  // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
 
@@ -233,10 +331,75 @@ function PosInner({ session }: { session: CompanySession }) {
       {/* Menu */}
       <div>
         <header className="mb-5">
-          <h1 className="font-display text-3xl font-semibold tracking-tight text-ink">
-            {t('pos.title')}
-          </h1>
-          <p className="mt-1 text-sm text-ink-3">{t('pos.subtitle', { name: session.name })}</p>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h1 className="font-display text-3xl font-semibold tracking-tight text-ink">
+                {t('pos.title')}
+              </h1>
+              <p className="mt-1 text-sm text-ink-3">{t('pos.subtitle', { name: session.name })}</p>
+            </div>
+
+            {/* Parked tray button */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowParkedTray(true)}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
+                  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
+                  parkedCount > 0
+                    ? 'border-amber/40 bg-amber-tint text-amber-2 hover:bg-amber-tint/70'
+                    : 'border-line-strong bg-surface text-ink-2 hover:border-ink-3',
+                )}
+                aria-label={t('pos.parked.trayTitle')}
+              >
+                <ClipboardList className="size-4" aria-hidden="true" />
+                {t('pos.parked.parkedLabel')}
+                {parkedCount > 0 ? (
+                  <Badge tone="amber" className="ml-1 text-[10px] px-1.5 py-0">
+                    {parkedCount}
+                  </Badge>
+                ) : null}
+              </button>
+            </div>
+          </div>
+
+          {/* Order type selector */}
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <Segmented
+              options={orderTypeOptions}
+              value={orderType}
+              onChange={handleOrderTypeChange}
+              ariaLabel={t('pos.orderType.label')}
+            />
+
+            {/* Table management shortcut (dine-in only) */}
+            {orderType === 'DINE_IN' ? (
+              <button
+                type="button"
+                onClick={() => setShowTableMgmt(true)}
+                className={cn(
+                  'flex items-center gap-1 rounded-lg border border-line-strong bg-surface px-2.5 py-1.5 text-xs text-ink-2',
+                  'hover:border-ink-3 transition-colors',
+                  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
+                )}
+                aria-label={t('pos.table.management')}
+              >
+                <Settings className="size-3.5" aria-hidden="true" />
+                {t('pos.table.management')}
+              </button>
+            ) : null}
+          </div>
+
+          {/* Table picker — shown when DINE_IN */}
+          {orderType === 'DINE_IN' ? (
+            <TablePicker
+              tables={tables}
+              selectedTableId={selectedTableId}
+              onSelect={setSelectedTableId}
+              isLoading={tablesQuery.isLoading}
+            />
+          ) : null}
         </header>
 
         {menuQuery.isLoading ? (
@@ -288,9 +451,33 @@ function PosInner({ session }: { session: CompanySession }) {
       <div className="lg:sticky lg:top-24 lg:self-start">
         <Card className="overflow-hidden">
           <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
-            <h2 className="font-display text-lg font-semibold text-ink">{t('pos.cart')}</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="font-display text-lg font-semibold text-ink">{t('pos.cart')}</h2>
+              {resumedOrder ? (
+                <Badge tone="amber" className="text-[10px] px-1.5 py-0">
+                  {t('pos.parked.resuming')}
+                </Badge>
+              ) : null}
+            </div>
             {lineCount > 0 ? <Badge tone="emerald">{lineCount}</Badge> : null}
           </div>
+
+          {/* Order type + table summary in cart */}
+          {lineCount > 0 ? (
+            <div className="flex items-center gap-2 border-b border-line px-5 py-2 text-xs text-ink-3">
+              <span className="font-medium text-ink-2">{t(orderTypeOptions.find(o => o.value === orderType)?.label ? `pos.orderType.${orderType === 'DINE_IN' ? 'dineIn' : orderType === 'TAKEAWAY' ? 'takeaway' : 'delivery'}` : 'pos.orderType.dineIn')}</span>
+              {orderType === 'DINE_IN' && selectedTable ? (
+                <>
+                  <span>·</span>
+                  <Table2 className="size-3" aria-hidden="true" />
+                  <span>{selectedTable.label}</span>
+                </>
+              ) : null}
+              {orderType === 'DINE_IN' && !selectedTable ? (
+                <span className="italic">{t('pos.table.noTableSelected')}</span>
+              ) : null}
+            </div>
+          ) : null}
 
           {lineCount === 0 ? (
             <p className="px-5 py-10 text-center text-sm text-ink-3">{t('pos.cartEmpty')}</p>
@@ -390,15 +577,51 @@ function PosInner({ session }: { session: CompanySession }) {
             </>
           )}
 
-          <div className={cn('px-5 py-4', lineCount > 0 ? 'border-t border-line' : '')}>
+          {/* Action buttons: Hold + Charge */}
+          <div className={cn('px-5 py-4 flex gap-2', lineCount > 0 ? 'border-t border-line' : '')}>
+            {/* Hold button — only when cart is non-empty and not already resuming (avoid double-park) */}
+            {lineCount > 0 && !resumedOrder ? (
+              <Button
+                variant="outline"
+                className="flex-none"
+                disabled={lineCount === 0 || parkOrder.isPending}
+                onClick={handleHold}
+                aria-label={t('pos.parked.hold')}
+                title={t('pos.parked.hold')}
+              >
+                {parkOrder.isPending ? <Spinner /> : <PauseCircle className="size-4" />}
+                {t('pos.parked.hold')}
+              </Button>
+            ) : null}
+
             <Button
-              className="w-full"
-              disabled={lineCount === 0 || !!discountError}
+              className="w-full flex-1"
+              disabled={lineCount === 0 || !!discountError || resumeQuery.isLoading}
               onClick={openPayment}
             >
-              {t('pos.charge')} · {formatMoney(grandTotalMinor, currency, locale)}
+              {resumeQuery.isLoading ? (
+                <Spinner />
+              ) : (
+                <>
+                  {t('pos.charge')} · {formatMoney(grandTotalMinor, currency, locale)}
+                </>
+              )}
             </Button>
           </div>
+
+          {/* Park error */}
+          {parkOrder.isError ? (
+            <p className="px-5 pb-3 text-xs text-rose" role="alert">
+              {(parkOrder.error as Error).message}
+            </p>
+          ) : null}
+
+          {/* Park success toast */}
+          {parkOrder.isSuccess && lineCount === 0 ? (
+            <p className="px-5 pb-3 text-xs text-emerald-2" role="status">
+              {t('pos.parked.holdSuccess')}
+            </p>
+          ) : null}
         </Card>
       </div>
 
@@ -424,6 +647,9 @@ function PosInner({ session }: { session: CompanySession }) {
           locale={locale}
           onSuccess={handlePaymentSuccess}
           onClose={() => setModal(null)}
+          parkedOrderId={resumedOrder?.orderId ?? null}
+          orderType={orderType}
+          tableId={orderType === 'DINE_IN' ? selectedTableId : null}
         />
       ) : null}
 
@@ -433,9 +659,115 @@ function PosInner({ session }: { session: CompanySession }) {
           order={placedOrder}
           payment={placedPayment}
           locale={locale}
+          businessName={session.name}
           onNew={handleNewOrder}
         />
       ) : null}
+
+      {/* Table management panel */}
+      {showTableMgmt ? (
+        <TableManagement
+          session={session}
+          onClose={() => setShowTableMgmt(false)}
+        />
+      ) : null}
+
+      {/* Parked orders tray */}
+      {showParkedTray ? (
+        <ParkedTray
+          session={session}
+          locale={locale}
+          onResume={handleResume}
+          onClose={() => setShowParkedTray(false)}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// TablePicker
+// ---------------------------------------------------------------------------
+
+function TablePicker({
+  tables,
+  selectedTableId,
+  onSelect,
+  isLoading,
+}: {
+  tables: TableResponse[]
+  selectedTableId: string | null
+  onSelect: (tableId: string | null) => void
+  isLoading: boolean
+}) {
+  const { t } = useTranslation()
+
+  if (isLoading) {
+    return (
+      <div className="mt-3 flex items-center gap-2 text-xs text-ink-3">
+        <Spinner />
+        {t('common.loading')}
+      </div>
+    )
+  }
+
+  if (tables.length === 0) {
+    return (
+      <p className="mt-3 text-xs text-ink-3 italic">
+        {t('pos.table.noTables')} — {t('pos.table.noTableHint')}
+      </p>
+    )
+  }
+
+  return (
+    <div className="mt-3" role="group" aria-label={t('pos.table.selectTable')}>
+      <p className="mb-2 text-xs font-medium text-ink-3">{t('pos.table.selectTable')}</p>
+      <div className="flex flex-wrap gap-2">
+        {/* "No table" option */}
+        <button
+          type="button"
+          onClick={() => onSelect(null)}
+          aria-pressed={selectedTableId === null}
+          className={cn(
+            'rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
+            'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
+            selectedTableId === null
+              ? 'border-emerald bg-emerald-tint text-emerald-2'
+              : 'border-line-strong bg-surface text-ink-2 hover:border-ink-3',
+          )}
+        >
+          {t('pos.table.noTable')}
+        </button>
+
+        {tables.map((tbl) => (
+          <button
+            key={tbl.tableId}
+            type="button"
+            disabled={tbl.occupied && selectedTableId !== tbl.tableId}
+            onClick={() => onSelect(tbl.tableId)}
+            aria-pressed={selectedTableId === tbl.tableId}
+            aria-label={
+              tbl.occupied
+                ? t('pos.table.occupiedLabel', { label: tbl.label })
+                : t('pos.table.selectLabel', { label: tbl.label })
+            }
+            className={cn(
+              'relative rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
+              'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
+              tbl.occupied && selectedTableId !== tbl.tableId
+                ? 'cursor-not-allowed border-line bg-paper opacity-50 text-ink-3'
+                : selectedTableId === tbl.tableId
+                ? 'border-emerald bg-emerald-tint text-emerald-2'
+                : 'border-line-strong bg-surface text-ink-2 hover:border-ink-3',
+            )}
+          >
+            {tbl.label}
+            {tbl.occupied ? (
+              <span className="absolute -right-1 -top-1 block size-2 rounded-full bg-amber" aria-hidden="true" />
+            ) : null}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
