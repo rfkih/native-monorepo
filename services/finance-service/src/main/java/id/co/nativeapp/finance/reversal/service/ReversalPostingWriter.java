@@ -42,17 +42,26 @@ import org.springframework.transaction.annotation.Transactional;
  * handler. The {@code source_event_id UNIQUE} constraint on {@code ledger_posting} + {@code
  * journal_entry} are the database backstops.
  *
- * <p><strong>Phase 2 per-leg reversal (void only).</strong> When the original SALE entry can be
- * looked up via {@code journal_entry.sale_aggregate_id} (set by {@code RevenuePostingWriter} for
- * SALE entries — V18), the reversal negates each component line exactly: debit ↔ credit swap. This
- * reverses GROSS_REVENUE, DISCOUNT, SERVICE_CHARGE_REVENUE, and TAX_PAYABLE legs individually. When
- * no original SALE entry is found (legacy/carwash sales predating Phase 2, or void of a non-POS
- * sale), the writer falls back to the 2-line GROSS template (Phase 1 behaviour).
+ * <p><strong>Phase 2 per-leg reversal (void + full refund).</strong> When the original SALE entry
+ * can be looked up via {@code journal_entry.sale_aggregate_id} (set by {@code RevenuePostingWriter}
+ * for SALE entries — V18), the reversal negates each component line exactly: debit ↔ credit swap.
+ * This reverses GROSS_REVENUE, DISCOUNT, SERVICE_CHARGE_REVENUE, and TAX_PAYABLE legs individually.
+ * When no original SALE entry is found (legacy/carwash sales predating Phase 2, or void of a
+ * non-POS sale), the writer falls back to the 2-line GROSS template (Phase 1 behaviour).
  *
  * <p><strong>Read-model reversal.</strong> The {@code consolidated_revenue} and {@code
- * consolidated_pnl} read models are accumulated with the negated amount (grand total for voids,
- * refundAmount for refunds). The GL journal entry is the authoritative record; the read-model
- * amounts are approximations acceptable for the dashboard.
+ * consolidated_pnl} read models are unwound by the <em>net revenue</em> (GROSS_REVENUE credit minus
+ * SALES_DISCOUNT debit from the original SALE entry), NOT the grand total. The sale path
+ * accumulated net revenue; the void/full-refund path must unwind by the same amount so the read
+ * model nets to zero. Legacy sales (no original SALE entry found) carry net == gross, preserving
+ * Phase 1 behaviour. The illustrative flag from the original SALE entry is OR-propagated onto the
+ * reversal read-model write (sticky monotonic rule).
+ *
+ * <p><strong>Partial refund.</strong> Partial refunds (refundAmount &lt; originalGrandTotal)
+ * require proration of each original leg by {@code refundAmount / originalGrandTotal}. Because
+ * integer rounding cannot be made exactly balanced in the general case, partial refunds are
+ * rejected with {@link PartialRefundNotSupportedException} (HTTP 400) — a clear, documented
+ * boundary. Full refunds are handled per-leg exactly like a void.
  */
 @Component
 public class ReversalPostingWriter {
@@ -129,7 +138,6 @@ public class ReversalPostingWriter {
 
   private void postVoidReversal(SaleVoidedEvent event) {
     Money amount = event.amount();
-    Money negated = amount.negate();
     String period = LedgerPosting.periodOf(event.occurredAt());
     TenantContext.Tenant tenant = TenantContext.require();
     String companyId = tenant.companyId();
@@ -138,47 +146,61 @@ public class ReversalPostingWriter {
     String glAccountCode = glAccountResolver.resolveRevenue(event.occurredAt());
 
     // 1) Contra dimensional ledger posting (negated amount, REVENUE type, REVERSAL role).
+    Money negatedGross = amount.negate();
     LedgerPosting posting =
         new LedgerPosting(
             PostingType.REVENUE,
             event.businessId(),
             period,
-            negated,
+            negatedGross,
             glAccountCode,
             event.voidId());
     posting.markAsReversal();
     posting.setCompanyId(companyId);
     ledgerRepository.save(posting);
 
-    // 2) Unwind consolidated-revenue + P&L read models with the negated grand-total amount.
-    //    The read model was accumulated with net revenue (subtotal − discount) in Phase 2, but
-    //    SaleVoidedEvent does not carry a breakdown. Using grand total for the unwind is a known
-    //    Phase 2 approximation; the GL journal entry (per-leg negation below) is authoritative.
-    String currencyCode = amount.currency().getCurrencyCode();
-    jdbcTemplate.update(
-        UPSERT_REVENUE_SQL,
-        UUID.randomUUID(),
-        period,
-        negated.amountMinor(),
-        currencyCode,
-        actor,
-        actor,
-        companyId);
-
-    // 3) Unwind the P&L read model's REVENUE leg.
-    pnlReadModel.addRevenue(period, negated, companyId, actor);
-
-    // 4) Phase 2 per-leg GL reversal: if the original SALE entry exists (via sale_aggregate_id
-    //    set by RevenuePostingWriter — V18), negate each component line exactly (debit ↔ credit).
-    //    Otherwise fall back to the SALE_VOID 2-line GROSS template (legacy/carwash behaviour).
+    // 2+3) Phase 2 per-leg GL reversal: look up the original SALE entry by sale_aggregate_id
+    //      (set by RevenuePostingWriter — V18). When found, negate each component line exactly
+    //      (debit ↔ credit) and derive the NET revenue to unwind from the original entry's lines:
+    //      netRevenue = GROSS_REVENUE credit − SALES_DISCOUNT debit.
+    //      When no original SALE entry is found (legacy/carwash), fall back to the 2-line GROSS
+    //      template and unwind by the grand total (net == gross for legacy sales).
     Optional<JournalEntrySaleView> originalEntry =
         (event.saleId() != null)
             ? journalEntryRepository.findBySaleAggregateId(event.saleId())
             : Optional.empty();
 
     if (originalEntry.isPresent()) {
-      buildAndSavePerLegReversalEntry(
-          originalEntry.get(),
+      JournalEntrySaleView origEntryView = originalEntry.get();
+      List<JournalLineReversalView> originalLines =
+          journalLineRepository.findLinesByEntryId(origEntryView.getId());
+
+      // Resolve the net revenue to unwind from the V19 net_revenue_minor column (the precomputed
+      // net = subtotal − discount stored by RevenuePostingWriter at SALE posting time). For entries
+      // predating V19 (null), fall back to the grand total (net == gross for Phase 1/legacy).
+      String currencyCode = amount.currency().getCurrencyCode();
+      Money netRevenue = resolveNetRevenue(origEntryView, amount, currencyCode);
+      Money negatedNet = netRevenue.negate();
+      boolean usesIllustrative = origEntryView.getUsesIllustrativeRules();
+
+      // Unwind consolidated_revenue by the NET amount (not grand total).
+      jdbcTemplate.update(
+          UPSERT_REVENUE_SQL,
+          UUID.randomUUID(),
+          period,
+          negatedNet.amountMinor(),
+          currencyCode,
+          actor,
+          actor,
+          companyId);
+
+      // Unwind P&L REVENUE leg by the NET amount; OR-propagate the original illustrative flag.
+      pnlReadModel.addRevenue(period, negatedNet, companyId, actor, usesIllustrative);
+
+      // Per-leg contra GL entry (uses pre-fetched lines to avoid a second DB round-trip).
+      buildAndSavePerLegReversalEntryFromLines(
+          origEntryView,
+          originalLines,
           period,
           event.occurredAt(),
           event.voidId(),
@@ -188,6 +210,19 @@ public class ReversalPostingWriter {
       log.debug(
           "SaleVoided: no original SALE entry found for saleId={}; using GROSS template fall-back",
           event.saleId());
+      // Legacy/carwash: net == grand total; unwind by grand total.
+      String currencyCode = amount.currency().getCurrencyCode();
+      jdbcTemplate.update(
+          UPSERT_REVENUE_SQL,
+          UUID.randomUUID(),
+          period,
+          negatedGross.amountMinor(),
+          currencyCode,
+          actor,
+          actor,
+          companyId);
+      pnlReadModel.addRevenue(period, negatedGross, companyId, actor, false);
+
       AccountRole clearingRole = resolveClearingRole(event.tenderType());
       JournalEntry glEntry =
           journalPostingService.buildEntry(
@@ -205,7 +240,6 @@ public class ReversalPostingWriter {
 
   private void postRefundReversal(SaleRefundedEvent event) {
     Money refundAmount = event.refundAmount();
-    Money negated = refundAmount.negate();
     String period = LedgerPosting.periodOf(event.occurredAt());
     TenantContext.Tenant tenant = TenantContext.require();
     String companyId = tenant.companyId();
@@ -214,71 +248,136 @@ public class ReversalPostingWriter {
     String glAccountCode = glAccountResolver.resolveRevenue(event.occurredAt());
 
     // 1) Contra dimensional ledger posting (negated refund amount, REVENUE type, REVERSAL role).
+    Money negatedRefund = refundAmount.negate();
     LedgerPosting posting =
         new LedgerPosting(
             PostingType.REVENUE,
             event.businessId(),
             period,
-            negated,
+            negatedRefund,
             glAccountCode,
             event.refundId());
     posting.markAsReversal();
     posting.setCompanyId(companyId);
     ledgerRepository.save(posting);
 
-    // 2) Unwind consolidated-revenue read model by the negated refund amount.
-    String currencyCode = refundAmount.currency().getCurrencyCode();
-    jdbcTemplate.update(
-        UPSERT_REVENUE_SQL,
-        UUID.randomUUID(),
-        period,
-        negated.amountMinor(),
-        currencyCode,
-        actor,
-        actor,
-        companyId);
+    // 2+3) Full vs partial refund: look up the original SALE entry by sale_aggregate_id.
+    //      FULL refund: reverse per-leg (same as void), unwind read models by the original NET.
+    //      PARTIAL refund: integer proration cannot be guaranteed to produce a balanced GL entry,
+    //      so partial refunds are rejected with PartialRefundNotSupportedException (HTTP 400).
+    //      Legacy (no original SALE entry): fall back to the 2-line GROSS template.
+    Optional<JournalEntrySaleView> originalEntry =
+        (event.saleId() != null)
+            ? journalEntryRepository.findBySaleAggregateId(event.saleId())
+            : Optional.empty();
 
-    // 3) Unwind the P&L read model's REVENUE leg.
-    pnlReadModel.addRevenue(period, negated, companyId, actor);
+    if (originalEntry.isPresent()) {
+      JournalEntrySaleView origEntryView = originalEntry.get();
+      List<JournalLineReversalView> originalLines =
+          journalLineRepository.findLinesByEntryId(origEntryView.getId());
 
-    // 4) SALE_REFUND GL journal entry (2-line GROSS template). Per-leg refund reversal is deferred
-    //    until SaleRefunded v2 carries per-component breakdown fields (a future event evolution).
-    AccountRole clearingRole = resolveClearingRole(event.tenderType());
-    JournalEntry glEntry =
-        journalPostingService.buildEntry(
-            EventKind.SALE_REFUND,
-            period,
-            refundAmount,
-            event.occurredAt(),
-            event.refundId(),
-            "SaleRefunded",
-            false,
-            clearingRole == AccountRole.CASH_CLEARING ? null : clearingRole);
-    saveEntryAndLines(glEntry, companyId);
+      // Compute the original grand total from the original GL entry lines (Σdebit = grand total
+      // for a SALE entry, since the CLEARING debit == the customer-pays amount).
+      long originalGrandTotalMinor =
+          originalLines.stream().mapToLong(JournalLineReversalView::getDebitMinor).sum();
+      long refundMinor = refundAmount.amountMinor();
+
+      if (refundMinor < originalGrandTotalMinor) {
+        // Partial refund: reject. Proration would require distributing each leg proportionally
+        // with integer rounding that cannot be guaranteed balanced. Ship a clear 400 error
+        // rather than an incoherent or unbalanced GL posting. The processOnce claim is
+        // NOT yet consumed (this throw rolls back the transaction).
+        throw new PartialRefundNotSupportedException(
+            "Partial refund not yet supported: refundAmount="
+                + refundMinor
+                + " < originalGrandTotal="
+                + originalGrandTotalMinor
+                + " for saleId="
+                + event.saleId()
+                + ". Full per-leg reversal is supported; partial proration is deferred.");
+      }
+
+      // Full refund: resolve net revenue from V19 net_revenue_minor and unwind read models by NET.
+      String currencyCode = refundAmount.currency().getCurrencyCode();
+      Money netRevenue = resolveNetRevenue(origEntryView, refundAmount, currencyCode);
+      Money negatedNet = netRevenue.negate();
+      boolean usesIllustrative = origEntryView.getUsesIllustrativeRules();
+
+      jdbcTemplate.update(
+          UPSERT_REVENUE_SQL,
+          UUID.randomUUID(),
+          period,
+          negatedNet.amountMinor(),
+          currencyCode,
+          actor,
+          actor,
+          companyId);
+      pnlReadModel.addRevenue(period, negatedNet, companyId, actor, usesIllustrative);
+
+      // Per-leg contra GL entry (uses pre-fetched lines).
+      buildAndSavePerLegReversalEntryFromLines(
+          origEntryView,
+          originalLines,
+          period,
+          event.occurredAt(),
+          event.refundId(),
+          "SaleRefunded (per-leg full unwind)",
+          companyId);
+    } else {
+      log.debug(
+          "SaleRefunded: no original SALE entry found for saleId={}; using GROSS template fall-back",
+          event.saleId());
+      // Legacy/carwash path: net == grand total.
+      String currencyCode = refundAmount.currency().getCurrencyCode();
+      jdbcTemplate.update(
+          UPSERT_REVENUE_SQL,
+          UUID.randomUUID(),
+          period,
+          negatedRefund.amountMinor(),
+          currencyCode,
+          actor,
+          actor,
+          companyId);
+      pnlReadModel.addRevenue(period, negatedRefund, companyId, actor, false);
+
+      AccountRole clearingRole = resolveClearingRole(event.tenderType());
+      JournalEntry glEntry =
+          journalPostingService.buildEntry(
+              EventKind.SALE_REFUND,
+              period,
+              refundAmount,
+              event.occurredAt(),
+              event.refundId(),
+              "SaleRefunded",
+              false,
+              clearingRole == AccountRole.CASH_CLEARING ? null : clearingRole);
+      saveEntryAndLines(glEntry, companyId);
+    }
   }
 
   /**
-   * Builds and saves a balanced contra journal entry by negating each line of the original SALE
-   * entry (debit ↔ credit swap). The contra entry uses the same account codes as the original,
-   * reversing the CLEARING debit → CLEARING credit and each revenue/liability credit → debit. This
-   * unwinds all Phase 2 component legs: GROSS_REVENUE, SALES_DISCOUNT, SERVICE_CHARGE_REVENUE, and
-   * TAX_PAYABLE exactly.
+   * Builds and saves a balanced contra journal entry by negating each pre-fetched line of the
+   * original SALE entry (debit ↔ credit swap). The contra entry uses the same account codes as the
+   * original, reversing the CLEARING debit → CLEARING credit and each revenue/liability credit →
+   * debit. This unwinds all Phase 2 component legs: GROSS_REVENUE, SALES_DISCOUNT,
+   * SERVICE_CHARGE_REVENUE, and TAX_PAYABLE exactly.
    *
-   * <p>If the original entry has no lines (should not occur for a valid SALE entry), logs an error
+   * <p>If {@code originalLines} is empty (should not occur for a valid SALE entry), logs an error
    * and returns without saving — the {@code processOnce} claim has already been consumed, so the
    * event is not re-delivered and the operator must investigate (money is not silently dropped from
    * the GL; the dimensional ledger posting was already written in step 1 above).
+   *
+   * <p>The caller is responsible for pre-fetching the lines to avoid a redundant DB round-trip when
+   * the caller also needs the lines to derive the net revenue (e.g. for read-model unwind).
    */
-  private void buildAndSavePerLegReversalEntry(
+  private void buildAndSavePerLegReversalEntryFromLines(
       JournalEntrySaleView originalEntry,
+      List<JournalLineReversalView> originalLines,
       String period,
       Instant occurredAt,
       UUID sourceEventId,
       String description,
       String companyId) {
-
-    List<JournalLineReversalView> originalLines =
-        journalLineRepository.findLinesByEntryId(originalEntry.getId());
 
     if (originalLines.isEmpty()) {
       log.error(
@@ -324,6 +423,26 @@ public class ReversalPostingWriter {
             usesIllustrative,
             contraLines);
     saveEntryAndLines(contraEntry, companyId);
+  }
+
+  /**
+   * Resolves the net revenue for read-model unwind from the V19 {@code net_revenue_minor} column
+   * stored on the original SALE journal entry at posting time. This is the precomputed {@code
+   * subtotal − discount} value that {@link
+   * id.co.nativeapp.finance.revenue.service.RevenuePostingWriter} accumulated.
+   *
+   * <p>Falls back to the grand total ({@code grandTotal}) for SALE entries predating V19 (null
+   * {@code net_revenue_minor}) — for Phase 1/legacy sales, net == grand total, so the fallback is
+   * correct.
+   */
+  private static Money resolveNetRevenue(
+      JournalEntrySaleView originalEntry, Money grandTotal, String currencyCode) {
+    Long netMinor = originalEntry.getNetRevenueMinor();
+    if (netMinor != null) {
+      return Money.ofMinor(netMinor, currencyCode);
+    }
+    // V19 column absent (pre-V19 or non-Phase-2 entry): net == gross for legacy Phase 1 sales.
+    return grandTotal;
   }
 
   private void saveEntryAndLines(JournalEntry glEntry, String companyId) {

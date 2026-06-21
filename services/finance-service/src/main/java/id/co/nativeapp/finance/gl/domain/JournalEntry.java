@@ -103,6 +103,18 @@ public class JournalEntry extends Auditable {
   private UUID saleAggregateId;
 
   /**
+   * The precomputed net revenue in minor units (subtotal − discount) for SALE entries, stored at
+   * posting time by {@link id.co.nativeapp.finance.revenue.service.RevenuePostingWriter}. Used by
+   * the void/full-refund reversal path to unwind the consolidated-revenue and consolidated-pnl read
+   * models by exactly the same amount that was accumulated (Phase 2 — V19).
+   *
+   * <p>NULL for non-SALE entries (EXPENSE, LABOR, reversals) and for SALE entries predating V19
+   * (legacy); those fall back to unwinding by the grand total (net == gross for legacy sales).
+   */
+  @Column(name = "net_revenue_minor", nullable = true)
+  private Long netRevenueMinor;
+
+  /**
    * The lines validated by {@link #balanced} — transient (not persisted here; the writer saves each
    * line explicitly via the line repository after saving the entry header).
    */
@@ -265,6 +277,23 @@ public class JournalEntry extends Auditable {
    */
   public void setSaleAggregateId(UUID saleAggregateId) {
     this.saleAggregateId = saleAggregateId;
+  }
+
+  /**
+   * Returns the net revenue in minor units for this SALE entry, or {@code null} for non-SALE
+   * entries and entries predating V19.
+   */
+  public Long getNetRevenueMinor() {
+    return netRevenueMinor;
+  }
+
+  /**
+   * Sets the precomputed net revenue (subtotal − discount) for a SALE entry. Called by {@code
+   * RevenuePostingWriter} immediately after {@link #balanced} constructs the SALE entry, before the
+   * first save. Must not be called for non-SALE entries.
+   */
+  public void setNetRevenueMinor(Long netRevenueMinor) {
+    this.netRevenueMinor = netRevenueMinor;
   }
 
   /** The validated lines (transient — the writer saves them separately after the entry header). */

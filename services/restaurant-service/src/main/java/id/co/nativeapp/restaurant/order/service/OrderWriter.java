@@ -200,7 +200,16 @@ public class OrderWriter {
     //     Reject a zero-or-negative grandTotal: a fully-comped order is not a sale.
     // ------------------------------------------------------------------
     Instant now = Instant.now();
-    PriceBreakdown breakdown = taxChargeService.resolve(runningTotal, 0L, null, now);
+    // Thread the optional order-level discount into the pricing formula.
+    // A non-null discountMinor is a fixed discount (overrides the percent discount).
+    // A null discountMinor means no discount (0 bp, no fixed discount).
+    Money fixedDiscount =
+        (request.discountMinor() != null)
+            ? Money.ofMinor(request.discountMinor(), currencyCode)
+            : null;
+    long discountBp = 0L; // no percent discount from the API; only fixed-amount supported
+    PriceBreakdown breakdown =
+        taxChargeService.resolve(runningTotal, discountBp, fixedDiscount, now);
     Money grandTotal = breakdown.grandTotal();
     if (!grandTotal.isPositive()) {
       throw new IllegalArgumentException(

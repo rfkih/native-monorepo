@@ -194,6 +194,10 @@ public class RevenuePostingWriter {
     if (event.saleId() != null) {
       glEntry.setSaleAggregateId(event.saleId());
     }
+    // Phase 2 V19: store the precomputed net revenue (subtotal − discount) on the SALE entry so
+    // the reversal writer can unwind the read models by exactly the same amount that was
+    // accumulated — without account-code-dependent line inspection (which would be fragile).
+    glEntry.setNetRevenueMinor(netRevenue.amountMinor());
     // saveAndFlush flushes the journal_entry INSERT to Postgres immediately so the FK on
     // journal_line.entry_id is satisfied when the line INSERTs follow in the same transaction.
     journalEntryRepository.saveAndFlush(glEntry);

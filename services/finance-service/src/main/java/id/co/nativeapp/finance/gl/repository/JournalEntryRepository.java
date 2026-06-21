@@ -67,7 +67,8 @@ public interface JournalEntryRepository extends JpaRepository<JournalEntry, UUID
           """
           SELECT je.id                       AS id,
                  je.currency                 AS currency,
-                 je.uses_illustrative_rules  AS uses_illustrative_rules
+                 je.uses_illustrative_rules  AS uses_illustrative_rules,
+                 je.net_revenue_minor        AS net_revenue_minor
             FROM journal_entry je
            WHERE je.sale_aggregate_id = :saleAggregateId
            LIMIT 1

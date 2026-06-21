@@ -28,4 +28,13 @@ public interface JournalEntrySaleView {
    * the reversal entry so the void/refund is also flagged illustrative when the original was.
    */
   boolean getUsesIllustrativeRules();
+
+  /**
+   * The precomputed net revenue in minor units (subtotal − discount) stored by {@code
+   * RevenuePostingWriter} at posting time (Phase 2 — V19). Used by the reversal writer to unwind
+   * the consolidated_revenue and consolidated_pnl read models by exactly the same amount that was
+   * accumulated. Returns {@code null} for SALE entries predating V19 (legacy); the reversal writer
+   * falls back to the grand total (net == gross for legacy Phase 1 sales).
+   */
+  Long getNetRevenueMinor();
 }

@@ -143,7 +143,11 @@ public class KafkaConfig {
         // deterministic producer contract violation (a company has one immutable base currency) —
         // it can NEVER succeed on retry, so DLT it immediately rather than burning the retry
         // budget.
-        id.co.nativeapp.finance.pnl.domain.MismatchedPostingCurrencyException.class);
+        id.co.nativeapp.finance.pnl.domain.MismatchedPostingCurrencyException.class,
+        // A partial refund (refundAmount < originalGrandTotal) cannot be posted per-leg with exact
+        // integer arithmetic; it is deterministically unsupported until SaleRefunded v2 carries
+        // pre-computed prorated amounts. DLT it immediately — retrying cannot fix it.
+        id.co.nativeapp.finance.reversal.service.PartialRefundNotSupportedException.class);
     // NOTE: GroupMembershipChanged's / TrialBalancePublished's UnknownGroupException is
     // deliberately
     // NOT listed — it is a TRANSIENT reorder (GroupDefined not yet consumed), so it MUST be
