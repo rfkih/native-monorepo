@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
@@ -22,6 +23,7 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
+import org.springframework.web.client.RestTemplate;
 
 /**
  * The DEFAULT (non-dev) security path for every business service: local RS256 JWT validation plus
@@ -108,13 +110,27 @@ public class JwtSecurityConfig {
    * edge, mirroring the gateway's decoder. The signature is validated against Keycloak's JWKS
    * ({@code jwk-set-uri}); the issuer ({@code iss}) is checked against the trusted realm issuer
    * when configured.
+   *
+   * <p>The JWKS fetch runs on a {@link RestTemplate} carrying EXPLICIT connect/read timeouts from
+   * {@link JwksClientProperties} (§4). Spring Security's default ({@code
+   * RestTemplateWithNimbusDefaultTimeouts}) already bounds this fetch to {@code 500ms}/{@code
+   * 500ms}; passing our own {@code restOperations(...)} (defaulting to the same {@code 500ms})
+   * makes that timeout explicit, externalized, and startup-asserted — owned config rather than a
+   * transitive framework constant that could shift on a version bump (see {@link
+   * JwksClientProperties}).
    */
   @Bean
-  JwtDecoder jwtDecoder(OAuth2ResourceServerProperties properties) {
+  JwtDecoder jwtDecoder(OAuth2ResourceServerProperties properties, JwksClientProperties jwksProps) {
     OAuth2ResourceServerProperties.Jwt jwt = properties.getJwt();
+
+    SimpleClientHttpRequestFactory jwksRequestFactory = new SimpleClientHttpRequestFactory();
+    jwksRequestFactory.setConnectTimeout(jwksProps.getConnectTimeout());
+    jwksRequestFactory.setReadTimeout(jwksProps.getReadTimeout());
+
     NimbusJwtDecoder decoder =
         NimbusJwtDecoder.withJwkSetUri(jwt.getJwkSetUri())
             .jwsAlgorithm(SignatureAlgorithm.RS256)
+            .restOperations(new RestTemplate(jwksRequestFactory))
             .build();
 
     List<OAuth2TokenValidator<Jwt>> validators = new ArrayList<>();

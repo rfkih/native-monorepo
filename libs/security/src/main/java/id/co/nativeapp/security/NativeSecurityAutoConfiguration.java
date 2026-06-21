@@ -2,6 +2,7 @@ package id.co.nativeapp.security;
 
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 
 /**
@@ -33,8 +34,21 @@ import org.springframework.context.annotation.Import;
  * POST /api/v1/companies}) on which a token with no {@code company_id} claim must NOT be {@code
  * 403}'d — consumed by the non-dev {@link JwtSecurityConfig} when it installs {@link
  * TenantBindingFilter}.
+ *
+ * <p>It binds {@link JwksClientProperties} ({@code native.security.jwks.*}) — the explicit
+ * connect/read timeouts {@link JwtSecurityConfig} feeds into the JWKS decoder's {@code
+ * restOperations} (§4) — and registers the {@link OutboundClientTimeoutCheck} startup self-check
+ * that fails fast on a non-positive timeout. The check runs in every profile (the timeouts bind
+ * even in {@code dev}, where the JWKS decoder is not built), keeping the "no infinite-timeout
+ * client" rule enforced fleet-wide.
  */
 @AutoConfiguration
-@EnableConfigurationProperties(TenantOptionalProperties.class)
+@EnableConfigurationProperties({TenantOptionalProperties.class, JwksClientProperties.class})
 @Import({JwtSecurityConfig.class, DevSecurityConfig.class})
-public class NativeSecurityAutoConfiguration {}
+public class NativeSecurityAutoConfiguration {
+
+  @Bean
+  OutboundClientTimeoutCheck outboundClientTimeoutCheck(JwksClientProperties jwksClientProperties) {
+    return new OutboundClientTimeoutCheck(jwksClientProperties);
+  }
+}

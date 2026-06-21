@@ -66,6 +66,28 @@ cascade-deactivate + reactivation.)
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **Client resilience — explicit outbound timeouts + startup self-check (scorecard #12)** — closed the
+  "every outbound client sets explicit connect/read timeouts" gap (ENGINEERING-STANDARDS §4). Business
+  services talk only via events (HR-2), so the outbound HTTP surface is just the **Keycloak JWKS fetch**
+  and the **finance alert webhook**. *(Security review caught a wrong premise mid-implementation and it
+  was corrected before commit: on the pinned Spring Security 7.1.0, `NimbusJwtDecoder.withJwkSetUri(...)`
+  is NOT infinite — its default `RestTemplateWithNimbusDefaultTimeouts` already bounds the fetch to
+  500ms/500ms via Nimbus' `RemoteJWKSet.DEFAULT_HTTP_*`. So this is not an infinite-hang fix; an earlier
+  draft defaulting to 2s/3s would have **loosened** the framework's 500ms — a regression — and was
+  reverted.)* What the change delivers: the shared `libs/security JwtSecurityConfig` (every business
+  service) and the gateway's own `JwtDecoderConfig` feed EXPLICIT timeouts into the decoder's
+  `restOperations`, sourced from `@Validated @ConfigurationProperties` (`native.security.jwks.*`,
+  `@NotNull`, defaults **500ms/500ms** to MATCH the framework — never a back-door loosening). The value
+  is now owned config: externalized (a slow-Keycloak env can widen it with no code change, §7), asserted
+  positive at boot, and immune to a silent shift if a future library bump changes the framework default.
+  A new `OutboundClientTimeoutCheck` (registered in `NativeSecurityAutoConfiguration`, runs in every
+  profile) **fails fast at boot** on a null/zero/negative timeout (`0s` = infinite in
+  `SimpleClientHttpRequestFactory`); the gateway carve-out (no libs/security dep) makes the same
+  assertion in its decoder constructor. The finance `AlertWebhookClient` already carried explicit
+  timeouts (ADR 0005). Verified: fail-fast unit tests (libs/security + gateway) + the existing
+  real-Keycloak JWKS proofs (libs/security defense-in-depth + gateway JWT routing + org secured
+  bootstrap) all green — the `restOperations`-wired decoder still validates tokens end-to-end. Scorecard
+  **#12 → ✅**.
 - **OpenAPI docs — springdoc fleet rollout + `@Operation` ArchUnit enforcer (ADR 0008)** — the finance
   springdoc pilot (ADR 0004) became the fleet standard. Every service exposing a business REST API —
   **org, restaurant, carwash, employee, entitlement** + the **finance** pilot (6 services) — now serves

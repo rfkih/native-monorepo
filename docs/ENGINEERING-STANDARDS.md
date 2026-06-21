@@ -32,7 +32,7 @@
 | 9 | **API docs (OpenAPI)** | springdoc + `@Operation` ArchUnit enforcer + per-service smoke test — §1.3 (ArchUnit + test) | springdoc 2.6 + `@Operation`/`@Tag` on all controllers | ✅ ahead — **springdoc 3.0.x fleet-wide (all 6 business services); `@Operation`/`@Tag` on every handler; an `apiHandlersAreDocumentedWithAnOperation` ArchUnit guard (also in `service-template`); 6 doc smoke tests ([ADR 0004](adr/0004-openapi-docs-springdoc.md) → [ADR 0008](adr/0008-openapi-docs-fleet-rollout.md))** |
 | 10 | **Distributed tracing** | OTel context across every hop — §5 (test) | metrics + Grafana dashboards; custom trace-IDs + MDC (no full OTel either) | ⚠ **gap (deferred) → code phase** |
 | 11 | **Error observability** | JSON logs → sink + RED + outbox-lag — §5; *(optional DB inbox)* | ✅ DB error-inbox + alerting | ⚠ **partial → code phase** |
-| 12 | Client resilience (timeouts) | explicit connect/read timeouts — §4 (startup check) | configured | ⚠ gap → code phase |
+| 12 | Client resilience (timeouts) | explicit connect/read timeouts + startup self-check — §4 (startup check) | configured | ✅ — **JWKS decoders (libs/security shared + gateway) and the finance alert webhook carry explicit connect/read timeouts; `OutboundClientTimeoutCheck` fails fast at boot on a non-positive timeout** |
 | 13 | **Deployed & proven** | CI + Kustomize authored — `deploy/` | ✅ live in prod | ❗ **infra-gated — owner action, not code** |
 
 **Maintenance protocol.** (a) Any PR touching a dimension updates its Status in the same PR. (b) A
@@ -40,12 +40,13 @@
 (d) Re-benchmark against `blackheart-trading-engine` when its structure materially changes. (e) Row
 13 is earned by deploying, not coding — it is the one bar code alone cannot clear.
 
-**Close-the-gap priority (the "then code" phase):** ~~9 OpenAPI~~ — **done** ([ADR 0008](adr/0008-openapi-docs-fleet-rollout.md):
-springdoc fleet-wide + the `apiHandlersAreDocumentedWithAnOperation` ArchUnit guard) → **12 client timeouts**
-(next) → 10 tracing → 11 error-sink/alerting fleet rollout. Each lands **with its enforcer** — the OpenAPI
-gap shipped with an ArchUnit rule that every `@RequestMapping` handler carries an `@Operation`; 12 lands with
-a startup self-check that every `RestClient`/`WebClient` has non-null connect+read timeouts — so a closed gap
-cannot silently re-open.
+**Close-the-gap priority (the "then code" phase):** ~~9 OpenAPI~~ **done** ([ADR 0008](adr/0008-openapi-docs-fleet-rollout.md):
+springdoc fleet-wide + the `apiHandlersAreDocumentedWithAnOperation` ArchUnit guard) → ~~12 client timeouts~~
+**done** (explicit JWKS/webhook timeouts + the `OutboundClientTimeoutCheck` startup self-check) → **10 tracing**
+(next) → 11 error-sink/alerting fleet rollout. Each lands **with its enforcer** — the OpenAPI gap shipped with
+an ArchUnit rule that every `@RequestMapping` handler carries an `@Operation`; the timeouts gap shipped with a
+startup self-check that fails fast on a non-positive connect/read timeout — so a closed gap cannot silently
+re-open.
 
 ---
 
@@ -291,7 +292,7 @@ tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
 
 ## 4. Resilience
 
-- **Every outbound client sets explicit connect + read/response timeouts** (HTTP `RestClient`/`WebClient`, JDBC, gRPC, Kafka, Redis, Keycloak JWKS) via `@ConfigurationProperties` — never a library default (often infinite). A startup self-check fails fast if any registered `RestClient`/`WebClient` has a null connect or read timeout. None are configured today — this is a real gap. *(ArchUnit / startup check)*
+- **Every outbound client sets explicit connect + read/response timeouts** (HTTP `RestClient`/`WebClient`, JDBC, gRPC, Kafka, Redis, Keycloak JWKS) via `@ConfigurationProperties` — **owned config, not left to a transitive library's internal default** (which can be infinite, or can shift on a version bump). Because business services talk only via events (HR-2), the outbound **HTTP** surface is small and now fully covered: the **Keycloak JWKS fetch** (every service via libs/security's `JwtSecurityConfig`, and the gateway via its `JwtDecoderConfig`) feeds explicit timeouts into the Nimbus decoder's `restOperations`, and the **finance alert webhook** (`AlertWebhookClient`, ADR 0005) sets them on its `SimpleClientHttpRequestFactory`. *(On the pinned Spring Security 7.1.0 the JWKS default is already a bounded 500ms/500ms — `RestTemplateWithNimbusDefaultTimeouts` — so the JWKS timeouts default to that same 500ms: making them explicit must never be a back-door loosening, only externalization + a startup assertion + immunity to a framework-default change.)* The shared JWKS timeouts are `@Validated @ConfigurationProperties` (`native.security.jwks.*`, `@NotNull`, default 500ms), and a startup self-check (`OutboundClientTimeoutCheck`, run in every profile) **fails fast at boot** if a configured timeout is null/zero/negative (`0s` = infinite); the gateway carve-out (no libs/security dep) makes the same assertion in its decoder constructor. *(startup check)*
 - **Retries only for idempotent operations**, with bounded exponential backoff + jitter (Resilience4j `maxAttempts ≤ 4`, `ofExponentialRandomBackoff`). **Non-idempotent writes** (`POST /sales`, any aggregate INSERT) are **never** wrapped in a retry — exactly-once is the `(company_id, idempotency_key)` unique constraint + `SaleService` conflict re-read, not a retried write. *(ArchUnit: no `@Retryable` on a write/`@Service` create path.)*
 
 ```java
