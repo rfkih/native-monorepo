@@ -89,6 +89,16 @@ class CheckoutAcceptanceTest extends PostgresRlsTestBase {
     // Line total is the qty × unit price (before breakdown); grand total is on the order.
     assertThat(first.order().lines().get(0).lineTotalMinor()).isEqualTo(30_000L);
 
+    // The order response carries the price breakdown so the UI can itemise the receipt.
+    assertThat(first.order().breakdown()).isNotNull();
+    assertThat(first.order().breakdown().subtotalMinor()).isEqualTo(30_000L);
+    assertThat(first.order().breakdown().discountMinor()).isEqualTo(0L);
+    assertThat(first.order().breakdown().serviceChargeMinor()).isEqualTo(1_500L);
+    assertThat(first.order().breakdown().taxMinor()).isEqualTo(3_150L);
+    assertThat(first.order().breakdown().grandTotalMinor()).isEqualTo(34_650L);
+    assertThat(first.order().breakdown().currency()).isEqualTo("IDR");
+    assertThat(first.order().breakdown().usesIllustrativeRules()).isTrue();
+
     // Assert: exactly one SaleRecorded in the outbox.
     List<Map<String, Object>> outboxRows = saleRecordedRows();
     assertThat(outboxRows).hasSize(1);

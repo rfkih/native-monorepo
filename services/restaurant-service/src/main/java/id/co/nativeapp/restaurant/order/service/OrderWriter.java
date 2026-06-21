@@ -270,7 +270,7 @@ public class OrderWriter {
       saved.linkSale(saleResult.sale().id());
       orderRepository.saveAndFlush(saved);
 
-      response = OrderResponse.from(saved);
+      response = OrderResponse.from(saved, breakdown);
       if (request.payment() != null) {
         // CASH: capture synchronously against the just-recorded sale.
         // The payment amount is the grandTotal (what the customer owes).
@@ -302,7 +302,7 @@ public class OrderWriter {
               request.idempotencyKey() + ":pay");
       PaymentResponse paymentResponse =
           paymentWriter.recordPendingDigitalInCurrentTx(instruction, now);
-      response = OrderResponse.from(saved).withPayment(paymentResponse);
+      response = OrderResponse.from(saved, breakdown).withPayment(paymentResponse);
     }
 
     return new CheckoutResult(response, true);
@@ -350,7 +350,7 @@ public class OrderWriter {
 
   private static OrderResponse toOrderResponse(OrderView view, List<OrderLineResponse> lines) {
     // An existing-order re-read (idempotent retry / conflict recovery) returns the order without a
-    // payment block — the payment was returned on the original successful checkout response.
+    // payment block or breakdown — the breakdown was returned on the original checkout response.
     return new OrderResponse(
         view.getId(),
         view.getBusinessId(),
@@ -358,6 +358,7 @@ public class OrderWriter {
         view.getCurrency().strip(),
         view.getSaleId(),
         lines,
+        null,
         null);
   }
 }
