@@ -13,6 +13,8 @@ import id.co.nativeapp.restaurant.order.dto.OrderLineModifierResponse;
 import id.co.nativeapp.restaurant.order.dto.OrderLineRequest;
 import id.co.nativeapp.restaurant.order.dto.OrderLineResponse;
 import id.co.nativeapp.restaurant.order.dto.OrderResponse;
+import id.co.nativeapp.restaurant.order.dto.ParkOrderRequest;
+import id.co.nativeapp.restaurant.order.dto.PayParkedRequest;
 import id.co.nativeapp.restaurant.order.projection.OrderLineModifierView;
 import id.co.nativeapp.restaurant.order.projection.OrderLineView;
 import id.co.nativeapp.restaurant.order.projection.OrderView;
@@ -27,6 +29,7 @@ import id.co.nativeapp.restaurant.pricing.service.TaxChargeService;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
 import id.co.nativeapp.restaurant.sale.service.SaleWriter;
+import id.co.nativeapp.restaurant.table.repository.RestaurantTableRepository;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Instant;
@@ -59,19 +62,20 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>Loads the requested menu items (RLS-scoped) and validates all are active, share the same
  *       currency (single-currency only — no mixed-currency orders, rule 8), and belong to the same
  *       business as the request ({@code businessId} check — W4).
+ *   <li>Validates {@code tableId}: only allowed for DINE_IN; must belong to the same business.
  *   <li>Snapshots name + unit price, computes line totals and subtotal as integer minor units
  *       ({@link Math#multiplyExact} / {@link Math#addExact} — never a float).
  *   <li>Resolves effective tax + service-charge rules (Phase 2 pricing) and computes a {@link
  *       PriceBreakdown} (subtotal → discount → taxableBase → serviceCharge → tax → grandTotal).
- *       Rejects a zero-or-negative grandTotal (a fully-comped order is not a sale → 400). The order
- *       total is stored as the grandTotal (the customer-pays amount).
+ *       Rejects a zero-or-negative grandTotal (a fully-comped order is not a sale → 400).
  *   <li>Persists the {@link Order} + {@link OrderLine}s.
  *   <li>Calls {@link SaleWriter#recordInCurrentTx} with propagation {@code MANDATORY} so the sale
- *       row and its {@code SaleRecorded} outbox row join this same transaction. Order rows + sale
- *       row + outbox row all commit (or all roll back) as one physical transaction (rule 3, C1
- *       fix). The {@link id.co.nativeapp.restaurant.sale.service.PostOutboxHook PostOutboxHook}
- *       test seam fires inside this transaction, so a throwing hook proves atomicity.
+ *       row and its {@code SaleRecorded} outbox row join this same transaction (rule 3, C1 fix).
  * </ol>
+ *
+ * <p><strong>Park = saved cart, no revenue.</strong> {@link #park} persists an order in {@code
+ * PARKED} status — identical validation to checkout, but writes NO sale, NO payment, NO outbox row.
+ * Revenue is recognised only when {@link #payParked} finalises the order.
  *
  * <p>The {@code (company_id, idempotency_key)} UNIQUE constraint on {@code restaurant_order} (a
  * concurrent collision) is handled by the orchestrating {@link OrderService} via a separate-
@@ -79,6 +83,8 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Component
 public class OrderWriter {
+
+  private static final String DINE_IN = "DINE_IN";
 
   private final OrderRepository orderRepository;
   private final OrderLineRepository lineRepository;
@@ -88,6 +94,7 @@ public class OrderWriter {
   private final SaleWriter saleWriter;
   private final PaymentWriter paymentWriter;
   private final TaxChargeService taxChargeService;
+  private final RestaurantTableRepository tableRepository;
 
   public OrderWriter(
       OrderRepository orderRepository,
@@ -97,7 +104,8 @@ public class OrderWriter {
       ModifierValidationReader modifierValidator,
       SaleWriter saleWriter,
       PaymentWriter paymentWriter,
-      TaxChargeService taxChargeService) {
+      TaxChargeService taxChargeService,
+      RestaurantTableRepository tableRepository) {
     this.orderRepository = orderRepository;
     this.lineRepository = lineRepository;
     this.modifierRepository = modifierRepository;
@@ -106,6 +114,7 @@ public class OrderWriter {
     this.saleWriter = saleWriter;
     this.paymentWriter = paymentWriter;
     this.taxChargeService = taxChargeService;
+    this.tableRepository = tableRepository;
   }
 
   /**
@@ -114,7 +123,8 @@ public class OrderWriter {
    * @throws org.springframework.dao.DataIntegrityViolationException if a concurrent racer already
    *     inserted the {@code (company_id, idempotency_key)} row
    * @throws IllegalArgumentException if any requested menu item is unknown/inactive, or if the
-   *     items span more than one currency
+   *     items span more than one currency, or if tableId is supplied for a non-DINE_IN order, or if
+   *     tableId does not belong to the request's business
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public CheckoutResult checkout(CheckoutRequest request) {
@@ -127,183 +137,37 @@ public class OrderWriter {
       return toIdempotentResult(existing.get(), companyId);
     }
 
+    String orderType = resolveOrderType(request.orderType());
+    UUID tableId = request.tableId();
+
     // ------------------------------------------------------------------
     // 1. Load requested menu items (RLS-scoped; chunk IN by <=1000).
     // ------------------------------------------------------------------
-    List<UUID> requestedIds = request.lines().stream().map(OrderLineRequest::menuItemId).toList();
-
-    // Chunk IN clauses at <=1000 per the house convention (CLAUDE.md).
-    List<MenuItemView> itemViews = new ArrayList<>();
-    for (int i = 0; i < requestedIds.size(); i += 1000) {
-      List<UUID> chunk = requestedIds.subList(i, Math.min(i + 1000, requestedIds.size()));
-      itemViews.addAll(menuItemRepository.findViewsByIds(chunk));
-    }
-
-    Map<UUID, MenuItemView> itemMap =
-        itemViews.stream().collect(Collectors.toMap(MenuItemView::getId, Function.identity()));
+    CartContext cart = buildCart(request.businessId(), request.lines(), request.discountMinor());
 
     // ------------------------------------------------------------------
-    // 2. Validate: all requested items must exist, be active, available,
-    //    belong to the request's business, and share the SAME currency
-    //    (single-currency only — no mixing, rule 8).
+    // 2. Validate order type + table id (Phase 4).
     // ------------------------------------------------------------------
-    Set<UUID> foundIds = itemMap.keySet();
-    for (OrderLineRequest lineReq : request.lines()) {
-      if (!foundIds.contains(lineReq.menuItemId())) {
-        throw new IllegalArgumentException(
-            "Menu item not found or not visible: " + lineReq.menuItemId());
-      }
-      MenuItemView view = itemMap.get(lineReq.menuItemId());
-      if (!view.isActive()) {
-        throw new IllegalArgumentException("Menu item is inactive: " + lineReq.menuItemId());
-      }
-      // Phase 3: reject unavailable (86'd) items.
-      if (!view.isAvailable()) {
-        throw new IllegalArgumentException(
-            "Menu item is not available (86'd): " + lineReq.menuItemId());
-      }
-      // W4: reject items whose business_id does not match the checkout's businessId.
-      // A cross-business item arriving here means the caller forged or mis-routed the
-      // request — reject it as a domain error (mapped to 400 by ApiExceptionHandler).
-      if (!request.businessId().equals(view.getBusinessId())) {
-        throw new IllegalArgumentException(
-            "Menu item "
-                + lineReq.menuItemId()
-                + " belongs to business "
-                + view.getBusinessId()
-                + ", not "
-                + request.businessId());
-      }
-    }
-
-    // Currency homogeneity check: all items must share one currency.
-    Set<String> currencies =
-        itemViews.stream().map(v -> v.getCurrency().strip()).collect(Collectors.toSet());
-    if (currencies.size() != 1) {
-      throw new IllegalArgumentException(
-          "All menu items in one order must share the same currency; found: " + currencies);
-    }
-    String currencyCode = currencies.iterator().next();
-    Currency currency = Currency.getInstance(currencyCode);
+    validateTableId(orderType, tableId, request.businessId());
 
     // ------------------------------------------------------------------
-    // 3. Validate + resolve modifier options via shared ModifierValidationReader.
-    //    The validator de-dupes option ids, checks availability + ownership,
-    //    enforces min/max_select on ALL groups (not just required), enforces
-    //    SINGLE selection-type, and rejects a negative effective unit price.
-    //    This is identical logic to the quote path so they cannot diverge.
-    // ------------------------------------------------------------------
-    ModifierValidationReader.ValidationContext modCtx =
-        modifierValidator.loadContext(request.lines());
-
-    List<List<ModifierOptionView>> resolvedModifiersByLine =
-        new ArrayList<>(request.lines().size());
-
-    for (OrderLineRequest lineReq : request.lines()) {
-      MenuItemView view = itemMap.get(lineReq.menuItemId());
-      List<ModifierOptionView> resolved =
-          modifierValidator.validateLine(lineReq, view.getPriceMinor(), modCtx);
-      resolvedModifiersByLine.add(resolved);
-    }
-
-    // ------------------------------------------------------------------
-    // 3b. Compute line totals + subtotal (integer minor units, exact).
-    //     effectiveUnitPrice = baseUnitPrice + Σ priceDeltaMinor (modifiers)
-    //     lineTotal = effectiveUnitPrice × qty
-    // ------------------------------------------------------------------
-    Money runningTotal = Money.zero(currency);
-    List<OrderLine> linesToAdd = new ArrayList<>(request.lines().size());
-
-    for (int i = 0; i < request.lines().size(); i++) {
-      OrderLineRequest lineReq = request.lines().get(i);
-      List<ModifierOptionView> lineModifiers = resolvedModifiersByLine.get(i);
-      MenuItemView view = itemMap.get(lineReq.menuItemId());
-      // Strip CHAR(3) padding from the DB.
-      Money unitPrice = Money.ofMinor(view.getPriceMinor(), view.getCurrency().strip());
-
-      // Sum modifier deltas (exact integer math, no float).
-      long modifierDelta = 0L;
-      for (ModifierOptionView opt : lineModifiers) {
-        modifierDelta = Math.addExact(modifierDelta, opt.getPriceDeltaMinor());
-      }
-
-      OrderLine line =
-          new OrderLine(
-              lineReq.menuItemId(), view.getName(), unitPrice, modifierDelta, lineReq.qty());
-
-      // Attach modifier snapshots (receipt-reproducible).
-      for (ModifierOptionView opt : lineModifiers) {
-        OrderLineModifier snap =
-            new OrderLineModifier(opt.getId(), opt.getName(), opt.getPriceDeltaMinor());
-        line.addModifier(snap);
-      }
-
-      runningTotal = runningTotal.plus(Money.ofMinor(line.getLineTotalMinor(), currencyCode));
-      linesToAdd.add(line);
-    }
-
-    // ------------------------------------------------------------------
-    // 3c. Phase 2 pricing: resolve tax + service charge, compute breakdown.
-    //
-    //     The breakdown resolves effective tax_charge_rule rows (RLS-scoped to this
-    //     tenant) at the order's occurred-at date. If any resolved rule is
-    //     ILLUSTRATIVE_PLACEHOLDER, usesIllustrativeRules=true is set on SaleRecorded.
-    //
-    //     Discount: currently no order-level discount request field; pass 0 bp and no
-    //     fixed discount (zero discount, clamp has no effect). A future CheckoutRequest
-    //     field can wire discountBp / fixedDiscountMinor here without changing the formula.
-    //
-    //     grandTotal is the customer-pays amount (taxableBase + serviceCharge + tax).
-    //     Reject a zero-or-negative grandTotal: a fully-comped order is not a sale.
+    // 3. Persist order + lines + modifier snapshots (total = GRAND TOTAL).
     // ------------------------------------------------------------------
     Instant now = Instant.now();
-    // Thread the optional order-level discount into the pricing formula.
-    // A non-null discountMinor is a fixed discount (overrides the percent discount).
-    // A null discountMinor means no discount (0 bp, no fixed discount).
-    Money fixedDiscount =
-        (request.discountMinor() != null)
-            ? Money.ofMinor(request.discountMinor(), currencyCode)
-            : null;
-    long discountBp = 0L; // no percent discount from the API; only fixed-amount supported
-    PriceBreakdown breakdown =
-        taxChargeService.resolve(runningTotal, discountBp, fixedDiscount, now);
-    Money grandTotal = breakdown.grandTotal();
-    if (!grandTotal.isPositive()) {
-      throw new IllegalArgumentException(
-          "Order grand total must be positive after discount/tax/service-charge; got "
-              + grandTotal.amountMinor()
-              + " "
-              + grandTotal.currency().getCurrencyCode()
-              + " — a fully-comped order is not a sale");
-    }
-
-    // ------------------------------------------------------------------
-    // 4. Persist order + lines + modifier snapshots (total = GRAND TOTAL).
-    // ------------------------------------------------------------------
-    Order order = new Order(request.businessId(), grandTotal, now, request.idempotencyKey());
+    Order order =
+        new Order(
+            request.businessId(),
+            cart.breakdown().grandTotal(),
+            now,
+            request.idempotencyKey(),
+            orderType,
+            tableId);
     order.setCompanyId(companyId);
-    for (OrderLine line : linesToAdd) {
-      line.setCompanyId(companyId);
-      // Set company_id on each modifier snapshot (Auditable + RLS rule 4/5).
-      for (OrderLineModifier mod : line.getModifiers()) {
-        mod.setCompanyId(companyId);
-      }
-      order.addLine(line);
-    }
+    persistLines(order, cart.linesToAdd(), companyId);
     Order saved = orderRepository.saveAndFlush(order);
 
     // ------------------------------------------------------------------
-    // 5. Record the sale / payment based on tender type (ADR 0006).
-    //
-    //    CASH (or no payment): record the sale synchronously — exactly one
-    //    SaleRecorded outbox row is emitted in THIS transaction.  Revenue
-    //    is recognised immediately together with the order.
-    //
-    //    DIGITAL (QRIS / CARD): do NOT record a sale at checkout.  Revenue
-    //    is deferred to the explicit capture call (revenue-at-capture
-    //    invariant, ADR 0006).  Only a PENDING payment row is written here;
-    //    the order stays without a sale_id until capture commits it.
-    //    SaleRecorded is emitted only at capture time.
+    // 4. Record the sale / payment based on tender type (ADR 0006).
     // ------------------------------------------------------------------
     OrderResponse response;
     boolean isDigitalPayment =
@@ -311,36 +175,31 @@ public class OrderWriter {
 
     if (!isDigitalPayment) {
       // CASH or no-payment path: record sale synchronously in this transaction.
-      // Thread the tender type so finance can route the GL clearing account (ADR 0006, slice 2).
-      // Thread the Phase 2 breakdown so finance can build the multi-line GL journal entry.
-      // amountMinor = grandTotal (the customer-pays amount; @Positive validates this).
       String tenderTypeName =
           (request.payment() != null) ? request.payment().tenderType().name() : null;
       RecordSaleCommand saleCommand =
           new RecordSaleCommand(
               request.businessId(),
-              grandTotal.amountMinor(),
-              currencyCode,
+              cart.breakdown().grandTotal().amountMinor(),
+              cart.currencyCode(),
               now,
               request.idempotencyKey(),
               tenderTypeName,
-              breakdown);
+              cart.breakdown());
       RecordSaleResult saleResult = saleWriter.recordInCurrentTx(saleCommand);
 
       // Link the sale id back to the order → status COMPLETED.
       saved.linkSale(saleResult.sale().id());
       orderRepository.saveAndFlush(saved);
 
-      response = OrderResponse.from(saved, breakdown);
+      response = OrderResponse.from(saved, cart.breakdown());
       if (request.payment() != null) {
-        // CASH: capture synchronously against the just-recorded sale.
-        // The payment amount is the grandTotal (what the customer owes).
         PaymentInstruction instruction =
             new PaymentInstruction(
                 saved.getId(),
                 request.businessId(),
                 request.payment().tenderType(),
-                grandTotal,
+                cart.breakdown().grandTotal(),
                 request.payment().tenderedMinor(),
                 request.idempotencyKey() + ":pay");
         PaymentResponse paymentResponse =
@@ -349,7 +208,6 @@ public class OrderWriter {
       }
     } else {
       // DIGITAL path: persist a PENDING payment; no sale, no SaleRecorded yet.
-      // The order stays in AWAITING_PAYMENT status (no sale_id until capture).
       saved.markAwaitingPayment();
       orderRepository.saveAndFlush(saved);
 
@@ -358,15 +216,157 @@ public class OrderWriter {
               saved.getId(),
               request.businessId(),
               request.payment().tenderType(),
-              grandTotal,
-              null, // digital tenders carry no tendered amount
+              cart.breakdown().grandTotal(),
+              null,
               request.idempotencyKey() + ":pay");
       PaymentResponse paymentResponse =
           paymentWriter.recordPendingDigitalInCurrentTx(instruction, now);
-      response = OrderResponse.from(saved, breakdown).withPayment(paymentResponse);
+      response = OrderResponse.from(saved, cart.breakdown()).withPayment(paymentResponse);
     }
 
     return new CheckoutResult(response, true);
+  }
+
+  /**
+   * Parks a cart as a PARKED order — no sale, no payment, no outbox row. Idempotent on {@code
+   * (company_id, idempotency_key)} like checkout.
+   *
+   * <p>Revenue is recognised ONLY when {@link #payParked} is called. This is the park invariant:
+   * asserting that a PARKED order has no sale_id and no outbox row is the test oracle.
+   *
+   * @throws org.springframework.dao.DataIntegrityViolationException on concurrent collision
+   * @throws IllegalArgumentException on invalid items, cross-business table, or tableId on
+   *     non-DINE_IN
+   */
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public CheckoutResult park(ParkOrderRequest request) {
+    String companyId = TenantContext.require().companyId();
+
+    // Idempotency fast path.
+    Optional<OrderView> existing =
+        orderRepository.findViewByIdempotencyKey(request.idempotencyKey());
+    if (existing.isPresent()) {
+      return toIdempotentResult(existing.get(), companyId);
+    }
+
+    String orderType = resolveOrderType(request.orderType());
+    UUID tableId = request.tableId();
+
+    // Validate items + pricing (same as checkout).
+    CartContext cart = buildCart(request.businessId(), request.lines(), request.discountMinor());
+
+    // Validate order type + table id.
+    validateTableId(orderType, tableId, request.businessId());
+
+    Instant now = Instant.now();
+    Order order =
+        new Order(
+            request.businessId(),
+            cart.breakdown().grandTotal(),
+            now,
+            request.idempotencyKey(),
+            orderType,
+            tableId);
+    order.markParked(); // PENDING → PARKED (no sale written here)
+    order.setCompanyId(companyId);
+    persistLines(order, cart.linesToAdd(), companyId);
+    Order saved = orderRepository.saveAndFlush(order);
+
+    // No SaleWriter call, no PaymentWriter call, no outbox row — park invariant.
+    return new CheckoutResult(OrderResponse.from(saved, cart.breakdown()), true);
+  }
+
+  /**
+   * Finalises a PARKED order: records the Sale + optional payment, transitions PARKED → COMPLETED
+   * (cash / no-payment) or AWAITING_PAYMENT (digital). This is the moment revenue is recognised for
+   * a parked order.
+   *
+   * <p>Idempotent: re-paying a COMPLETED order returns the existing state without side effects;
+   * re-paying an AWAITING_PAYMENT order delegates idempotency to the payment layer.
+   *
+   * @throws IllegalArgumentException if the order is not found, not PARKED, or already paid
+   */
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public OrderResponse payParked(UUID orderId, PayParkedRequest request) {
+    String companyId = TenantContext.require().companyId();
+
+    // Load the full aggregate (write path — needs all fields to check status + total).
+    Order order =
+        orderRepository
+            .findById(orderId)
+            .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
+
+    if ("COMPLETED".equals(order.getStatus())) {
+      // Idempotent: already paid — return the current state without side effects.
+      return OrderResponse.from(order);
+    }
+
+    if (!"PARKED".equals(order.getStatus())) {
+      throw new IllegalArgumentException(
+          "Order "
+              + orderId
+              + " cannot be paid in its current status: "
+              + order.getStatus()
+              + ". Only PARKED orders can be finalised via /pay.");
+    }
+
+    Instant now = Instant.now();
+    String currencyCode = order.getTotal().currency().getCurrencyCode();
+    String saleIdempotencyKey = orderId + ":park-sale";
+
+    boolean isDigitalPayment =
+        request.payment() != null && request.payment().tenderType().isDigital();
+
+    if (!isDigitalPayment) {
+      // CASH or no-payment: record the sale now — revenue recognised here.
+      String tenderTypeName =
+          (request.payment() != null) ? request.payment().tenderType().name() : null;
+      RecordSaleCommand saleCommand =
+          new RecordSaleCommand(
+              order.getBusinessId(),
+              order.getTotal().amountMinor(),
+              currencyCode,
+              now,
+              saleIdempotencyKey,
+              tenderTypeName,
+              null); // breakdown not stored on-order; pass null (finance falls back to amount)
+      RecordSaleResult saleResult = saleWriter.recordInCurrentTx(saleCommand);
+
+      order.linkSale(saleResult.sale().id()); // PARKED → COMPLETED
+      orderRepository.saveAndFlush(order);
+
+      OrderResponse response = OrderResponse.from(order);
+      if (request.payment() != null) {
+        PaymentInstruction instruction =
+            new PaymentInstruction(
+                order.getId(),
+                order.getBusinessId(),
+                request.payment().tenderType(),
+                order.getTotal(),
+                request.payment().tenderedMinor(),
+                saleIdempotencyKey + ":pay");
+        PaymentResponse paymentResponse =
+            paymentWriter.captureCashInCurrentTx(instruction, saleResult.sale().id(), now);
+        response = response.withPayment(paymentResponse);
+      }
+      return response;
+    } else {
+      // DIGITAL: persist a PENDING payment; defer revenue to capture.
+      order.markAwaitingPayment(); // PARKED → AWAITING_PAYMENT
+      orderRepository.saveAndFlush(order);
+
+      PaymentInstruction instruction =
+          new PaymentInstruction(
+              order.getId(),
+              order.getBusinessId(),
+              request.payment().tenderType(),
+              order.getTotal(),
+              null,
+              saleIdempotencyKey + ":pay");
+      PaymentResponse paymentResponse =
+          paymentWriter.recordPendingDigitalInCurrentTx(instruction, now);
+      return OrderResponse.from(order).withPayment(paymentResponse);
+    }
   }
 
   /**
@@ -385,23 +385,184 @@ public class OrderWriter {
             });
   }
 
+  /**
+   * Fetches a single order by id in a FRESH read-only transaction. Used for the GET /orders/{id}
+   * resume path — returns the full order view including lines and modifiers.
+   */
+  @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
+  public Optional<OrderResponse> findById(UUID orderId) {
+    return orderRepository
+        .findViewById(orderId)
+        .map(
+            view -> {
+              List<OrderLineView> lineViews = lineRepository.findViewsByOrderId(view.getId());
+              List<OrderLineResponse> lines = buildLineResponses(lineViews);
+              return toOrderResponse(view, lines);
+            });
+  }
+
+  // -------------------------------------------------------------------------
+  // Shared helpers
+  // -------------------------------------------------------------------------
+
+  /**
+   * Validates + builds the cart context (item loading, currency check, modifier resolution,
+   * subtotal, pricing). Shared between checkout and park so they cannot diverge.
+   */
+  private CartContext buildCart(
+      UUID businessId, List<OrderLineRequest> lineRequests, Long discountMinor) {
+
+    // 1. Load requested menu items (RLS-scoped; chunk IN by <=1000).
+    List<UUID> requestedIds = lineRequests.stream().map(OrderLineRequest::menuItemId).toList();
+    List<MenuItemView> itemViews = new ArrayList<>();
+    for (int i = 0; i < requestedIds.size(); i += 1000) {
+      List<UUID> chunk = requestedIds.subList(i, Math.min(i + 1000, requestedIds.size()));
+      itemViews.addAll(menuItemRepository.findViewsByIds(chunk));
+    }
+    Map<UUID, MenuItemView> itemMap =
+        itemViews.stream().collect(Collectors.toMap(MenuItemView::getId, Function.identity()));
+
+    // 2. Validate items.
+    Set<UUID> foundIds = itemMap.keySet();
+    for (OrderLineRequest lineReq : lineRequests) {
+      if (!foundIds.contains(lineReq.menuItemId())) {
+        throw new IllegalArgumentException(
+            "Menu item not found or not visible: " + lineReq.menuItemId());
+      }
+      MenuItemView view = itemMap.get(lineReq.menuItemId());
+      if (!view.isActive()) {
+        throw new IllegalArgumentException("Menu item is inactive: " + lineReq.menuItemId());
+      }
+      if (!view.isAvailable()) {
+        throw new IllegalArgumentException(
+            "Menu item is not available (86'd): " + lineReq.menuItemId());
+      }
+      if (!businessId.equals(view.getBusinessId())) {
+        throw new IllegalArgumentException(
+            "Menu item "
+                + lineReq.menuItemId()
+                + " belongs to business "
+                + view.getBusinessId()
+                + ", not "
+                + businessId);
+      }
+    }
+
+    // 3. Currency homogeneity check.
+    Set<String> currencies =
+        itemViews.stream().map(v -> v.getCurrency().strip()).collect(Collectors.toSet());
+    if (currencies.size() != 1) {
+      throw new IllegalArgumentException(
+          "All menu items in one order must share the same currency; found: " + currencies);
+    }
+    String currencyCode = currencies.iterator().next();
+    Currency currency = Currency.getInstance(currencyCode);
+
+    // 4. Modifier validation.
+    ModifierValidationReader.ValidationContext modCtx = modifierValidator.loadContext(lineRequests);
+    List<List<ModifierOptionView>> resolvedModifiersByLine = new ArrayList<>(lineRequests.size());
+    for (OrderLineRequest lineReq : lineRequests) {
+      MenuItemView view = itemMap.get(lineReq.menuItemId());
+      resolvedModifiersByLine.add(
+          modifierValidator.validateLine(lineReq, view.getPriceMinor(), modCtx));
+    }
+
+    // 5. Compute line totals + subtotal.
+    Money runningTotal = Money.zero(currency);
+    List<OrderLine> linesToAdd = new ArrayList<>(lineRequests.size());
+    for (int i = 0; i < lineRequests.size(); i++) {
+      OrderLineRequest lineReq = lineRequests.get(i);
+      List<ModifierOptionView> lineModifiers = resolvedModifiersByLine.get(i);
+      MenuItemView view = itemMap.get(lineReq.menuItemId());
+      Money unitPrice = Money.ofMinor(view.getPriceMinor(), view.getCurrency().strip());
+
+      long modifierDelta = 0L;
+      for (ModifierOptionView opt : lineModifiers) {
+        modifierDelta = Math.addExact(modifierDelta, opt.getPriceDeltaMinor());
+      }
+
+      OrderLine line =
+          new OrderLine(
+              lineReq.menuItemId(), view.getName(), unitPrice, modifierDelta, lineReq.qty());
+      for (ModifierOptionView opt : lineModifiers) {
+        line.addModifier(
+            new OrderLineModifier(opt.getId(), opt.getName(), opt.getPriceDeltaMinor()));
+      }
+      runningTotal = runningTotal.plus(Money.ofMinor(line.getLineTotalMinor(), currencyCode));
+      linesToAdd.add(line);
+    }
+
+    // 6. Phase 2 pricing.
+    Money fixedDiscount =
+        (discountMinor != null) ? Money.ofMinor(discountMinor, currencyCode) : null;
+    PriceBreakdown breakdown =
+        taxChargeService.resolve(runningTotal, 0L, fixedDiscount, Instant.now());
+    Money grandTotal = breakdown.grandTotal();
+    if (!grandTotal.isPositive()) {
+      throw new IllegalArgumentException(
+          "Order grand total must be positive after discount/tax/service-charge; got "
+              + grandTotal.amountMinor()
+              + " "
+              + grandTotal.currency().getCurrencyCode()
+              + " — a fully-comped order is not a sale");
+    }
+
+    return new CartContext(currencyCode, linesToAdd, breakdown);
+  }
+
+  /**
+   * Validates that {@code tableId} is only supplied for DINE_IN orders and that the referenced
+   * table belongs to the same business. RLS ensures the table is visible to the current tenant.
+   */
+  private void validateTableId(String orderType, UUID tableId, UUID businessId) {
+    if (tableId == null) {
+      return;
+    }
+    if (!DINE_IN.equals(orderType)) {
+      throw new IllegalArgumentException(
+          "tableId is only allowed for DINE_IN orders; orderType is " + orderType);
+    }
+    // Verify table exists and belongs to this business (RLS enforces tenant scope).
+    tableRepository
+        .findById(tableId)
+        .filter(t -> businessId.equals(t.getBusinessId()))
+        .orElseThrow(
+            () ->
+                new IllegalArgumentException(
+                    "Table "
+                        + tableId
+                        + " not found or does not belong to business "
+                        + businessId));
+  }
+
+  /** Attaches lines (+ their modifier snapshots) to the order and sets company_id on each. */
+  private void persistLines(Order order, List<OrderLine> linesToAdd, String companyId) {
+    for (OrderLine line : linesToAdd) {
+      line.setCompanyId(companyId);
+      for (OrderLineModifier mod : line.getModifiers()) {
+        mod.setCompanyId(companyId);
+      }
+      order.addLine(line);
+    }
+  }
+
+  /** Resolves the effective order type, defaulting to DINE_IN when null. */
+  private static String resolveOrderType(String orderType) {
+    return (orderType == null || orderType.isBlank()) ? DINE_IN : orderType;
+  }
+
   private CheckoutResult toIdempotentResult(OrderView view, String companyId) {
     List<OrderLineView> lineViews = lineRepository.findViewsByOrderId(view.getId());
     List<OrderLineResponse> lines = buildLineResponses(lineViews);
     return new CheckoutResult(toOrderResponse(view, lines), false);
   }
 
-  /**
-   * Loads modifier snapshots for a batch of line views and builds {@link OrderLineResponse}s. Lives
-   * in the service layer so the ArchUnit rule ({@code projection} accessed only by {@code service}
-   * and {@code repository}) is respected.
-   */
+  /** Loads modifier snapshots for a batch of line views and builds {@link OrderLineResponse}s. */
   private List<OrderLineResponse> buildLineResponses(List<OrderLineView> lineViews) {
     if (lineViews.isEmpty()) {
       return List.of();
     }
     List<UUID> lineIds = lineViews.stream().map(OrderLineView::getId).toList();
-    // Chunk modifier load at <=1000.
     Map<UUID, List<OrderLineModifierView>> modByLine = new HashMap<>();
     for (int i = 0; i < lineIds.size(); i += 1000) {
       List<UUID> chunk = lineIds.subList(i, Math.min(i + 1000, lineIds.size()));
@@ -415,12 +576,6 @@ public class OrderWriter {
         .toList();
   }
 
-  /**
-   * Maps a read-path {@link OrderLineView} projection (plus its modifier projections) to the
-   * response shape. Lives in the service layer so the ArchUnit rule ({@code projection} accessed
-   * only by {@code service} and {@code repository}) is respected — the {@code dto} layer must not
-   * depend on {@code projection}.
-   */
   private static OrderLineResponse toLineResponse(
       OrderLineView view, List<OrderLineModifierView> modViews) {
     List<OrderLineModifierResponse> modResponses =
@@ -440,8 +595,6 @@ public class OrderWriter {
   }
 
   private static OrderResponse toOrderResponse(OrderView view, List<OrderLineResponse> lines) {
-    // An existing-order re-read (idempotent retry / conflict recovery) returns the order without a
-    // payment block or breakdown — the breakdown was returned on the original checkout response.
     return new OrderResponse(
         view.getId(),
         view.getBusinessId(),
@@ -450,6 +603,13 @@ public class OrderWriter {
         view.getSaleId(),
         lines,
         null,
-        null);
+        null,
+        view.getStatus(),
+        view.getOrderType(),
+        view.getTableId());
   }
+
+  /** Immutable value holding the validated cart: resolved lines, breakdown, and currency. */
+  private record CartContext(
+      String currencyCode, List<OrderLine> linesToAdd, PriceBreakdown breakdown) {}
 }

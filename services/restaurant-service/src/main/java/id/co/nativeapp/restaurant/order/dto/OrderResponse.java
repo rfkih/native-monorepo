@@ -7,10 +7,14 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Response body for a checked-out order. {@code payment} is present when the order was paid in the
- * same checkout call (cash), and null otherwise (no payment, or an existing-order re-read). {@code
- * breakdown} carries the Phase 2 price breakdown (subtotal, discount, service charge, tax, grand
- * total) populated at checkout; it is present on every newly created order.
+ * Response body for a checked-out or parked order. {@code payment} is present when the order was
+ * paid in the same checkout/pay call (cash), and null otherwise. {@code breakdown} carries the
+ * Phase 2 price breakdown populated at checkout/park; it is present on every newly created order.
+ *
+ * <p>Phase 4 additions: {@code orderType} (DINE_IN / TAKEAWAY / DELIVERY) and {@code tableId}
+ * (nullable; only set for DINE_IN orders with an assigned table). These fields are always present
+ * on newly created orders; they may be {@code null} on idempotent re-reads of pre-Phase-4 orders
+ * whose DB rows carry the DEFAULT values.
  */
 public record OrderResponse(
     UUID orderId,
@@ -20,7 +24,37 @@ public record OrderResponse(
     UUID saleId,
     List<OrderLineResponse> lines,
     PaymentResponse payment,
-    PriceBreakdownResponse breakdown) {
+    PriceBreakdownResponse breakdown,
+    String status,
+    String orderType,
+    UUID tableId) {
+
+  /**
+   * Backwards-compatible constructor for callers that do not supply Phase 4 fields (pre-existing
+   * tests and the idempotent re-read path).
+   */
+  public OrderResponse(
+      UUID orderId,
+      UUID businessId,
+      long totalMinor,
+      String currency,
+      UUID saleId,
+      List<OrderLineResponse> lines,
+      PaymentResponse payment,
+      PriceBreakdownResponse breakdown) {
+    this(
+        orderId,
+        businessId,
+        totalMinor,
+        currency,
+        saleId,
+        lines,
+        payment,
+        breakdown,
+        null,
+        null,
+        null);
+  }
 
   /**
    * Maps the write-path aggregate (with its in-memory lines) to the response shape, with the
@@ -37,7 +71,10 @@ public record OrderResponse(
         order.getSaleId(),
         lineResponses,
         null,
-        PriceBreakdownResponse.from(bd));
+        PriceBreakdownResponse.from(bd),
+        order.getStatus(),
+        order.getOrderType(),
+        order.getTableId());
   }
 
   /**
@@ -56,17 +93,41 @@ public record OrderResponse(
         order.getSaleId(),
         lineResponses,
         null,
-        null);
+        null,
+        order.getStatus(),
+        order.getOrderType(),
+        order.getTableId());
   }
 
   /** Returns a copy of this response with the given payment attached. */
   public OrderResponse withPayment(PaymentResponse paymentResponse) {
     return new OrderResponse(
-        orderId, businessId, totalMinor, currency, saleId, lines, paymentResponse, breakdown);
+        orderId,
+        businessId,
+        totalMinor,
+        currency,
+        saleId,
+        lines,
+        paymentResponse,
+        breakdown,
+        status,
+        orderType,
+        tableId);
   }
 
   /** Returns a copy of this response with the given breakdown attached. */
   public OrderResponse withBreakdown(PriceBreakdownResponse bd) {
-    return new OrderResponse(orderId, businessId, totalMinor, currency, saleId, lines, payment, bd);
+    return new OrderResponse(
+        orderId,
+        businessId,
+        totalMinor,
+        currency,
+        saleId,
+        lines,
+        payment,
+        bd,
+        status,
+        orderType,
+        tableId);
   }
 }

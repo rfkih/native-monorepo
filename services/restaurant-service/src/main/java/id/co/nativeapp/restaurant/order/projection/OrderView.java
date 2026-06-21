@@ -28,4 +28,10 @@ public interface OrderView {
   Instant getOccurredAt();
 
   String getIdempotencyKey();
+
+  /** Phase 4: order type (DINE_IN / TAKEAWAY / DELIVERY). */
+  String getOrderType();
+
+  /** Phase 4: nullable table id (DINE_IN only). */
+  UUID getTableId();
 }

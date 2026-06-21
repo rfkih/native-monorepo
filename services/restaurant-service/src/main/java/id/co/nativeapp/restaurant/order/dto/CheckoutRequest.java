@@ -24,17 +24,21 @@ import java.util.UUID;
  *     Clamped to &le; subtotal by {@link
  *     id.co.nativeapp.restaurant.pricing.service.TaxChargeService} so the discount can never exceed
  *     the order subtotal. A {@code null} value means no discount (same as passing 0).
+ * @param orderType Phase 4: DINE_IN / TAKEAWAY / DELIVERY; defaults to DINE_IN when null
+ * @param tableId Phase 4: nullable table reference; only valid for DINE_IN orders
  */
 public record CheckoutRequest(
     @NotNull UUID businessId,
     @NotBlank String idempotencyKey,
     @NotEmpty @Valid List<OrderLineRequest> lines,
     @Valid PaymentRequest payment,
-    @Min(0) Long discountMinor) {
+    @Min(0) Long discountMinor,
+    String orderType,
+    UUID tableId) {
 
   /** Convenience for a checkout with no payment and no discount (the original three-arg shape). */
   public CheckoutRequest(UUID businessId, String idempotencyKey, List<OrderLineRequest> lines) {
-    this(businessId, idempotencyKey, lines, null, null);
+    this(businessId, idempotencyKey, lines, null, null, null, null);
   }
 
   /**
@@ -46,6 +50,19 @@ public record CheckoutRequest(
       String idempotencyKey,
       List<OrderLineRequest> lines,
       PaymentRequest payment) {
-    this(businessId, idempotencyKey, lines, payment, null);
+    this(businessId, idempotencyKey, lines, payment, null, null, null);
+  }
+
+  /**
+   * Convenience for a checkout with a payment and a discount but no Phase 4 fields
+   * (backwards-compatible five-arg shape).
+   */
+  public CheckoutRequest(
+      UUID businessId,
+      String idempotencyKey,
+      List<OrderLineRequest> lines,
+      PaymentRequest payment,
+      Long discountMinor) {
+    this(businessId, idempotencyKey, lines, payment, discountMinor, null, null);
   }
 }

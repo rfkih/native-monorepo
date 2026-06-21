@@ -31,6 +31,10 @@ import java.util.UUID;
  * one {@code SaleRecorded} event flows into finance (rule 3). The returned sale id is stored on
  * this aggregate for traceability.
  *
+ * <p>Phase 4: an order carries an optional {@code orderType} (DINE_IN / TAKEAWAY / DELIVERY;
+ * default DINE_IN) and a nullable {@code tableId} (only for DINE_IN). A PARKED order is a saved
+ * cart — no sale, no payment, no revenue — that can be resumed later via {@code /pay}.
+ *
  * <p>A {@code protected} no-arg constructor exists only for JPA; application code uses the public
  * constructor which validates its invariants.
  */
@@ -68,6 +72,14 @@ public class Order extends Auditable {
   @Column(name = "idempotency_key", nullable = false, updatable = false)
   private String idempotencyKey;
 
+  /** Phase 4: DINE_IN / TAKEAWAY / DELIVERY — default DINE_IN. */
+  @Column(name = "order_type", nullable = false, length = 16)
+  private String orderType;
+
+  /** Phase 4: nullable; only set for DINE_IN orders that reference a specific table. */
+  @Column(name = "table_id")
+  private UUID tableId;
+
   @OneToMany(
       mappedBy = "order",
       cascade = CascadeType.ALL,
@@ -89,12 +101,34 @@ public class Order extends Auditable {
    * @param idempotencyKey the client's request id (dedupe key with company_id)
    */
   public Order(UUID businessId, Money total, Instant occurredAt, String idempotencyKey) {
+    this(businessId, total, occurredAt, idempotencyKey, "DINE_IN", null);
+  }
+
+  /**
+   * Creates a new order in PENDING status with explicit order type and optional table.
+   *
+   * @param businessId the originating business unit
+   * @param total the pre-computed order total as {@link Money} (never a float)
+   * @param occurredAt when the order was placed
+   * @param idempotencyKey the client's request id (dedupe key with company_id)
+   * @param orderType DINE_IN / TAKEAWAY / DELIVERY (must not be null)
+   * @param tableId nullable; only valid for DINE_IN orders
+   */
+  public Order(
+      UUID businessId,
+      Money total,
+      Instant occurredAt,
+      String idempotencyKey,
+      String orderType,
+      UUID tableId) {
     this.id = UUID.randomUUID();
     this.businessId = Objects.requireNonNull(businessId, "businessId");
     this.status = "PENDING";
     this.total = MoneyEmbeddable.of(Objects.requireNonNull(total, "total"));
     this.occurredAt = Objects.requireNonNull(occurredAt, "occurredAt");
     this.idempotencyKey = Objects.requireNonNull(idempotencyKey, "idempotencyKey");
+    this.orderType = Objects.requireNonNull(orderType, "orderType");
+    this.tableId = tableId;
   }
 
   /**
@@ -120,6 +154,19 @@ public class Order extends Auditable {
    */
   public void markAwaitingPayment() {
     this.status = "AWAITING_PAYMENT";
+  }
+
+  /**
+   * Phase 4: Transitions this order to {@code PARKED} status. A parked order is a saved cart — it
+   * carries NO sale, NO payment, and NO revenue. Revenue is recognised only when {@code /pay} is
+   * called and the order is finalised. The {@code sale_id} remains null until {@link #linkSale} is
+   * called at pay-time.
+   *
+   * <p>This invariant is equivalent to the {@code AWAITING_PAYMENT} digital-capture invariant: no
+   * SaleRecorded outbox row is written when parking an order.
+   */
+  public void markParked() {
+    this.status = "PARKED";
   }
 
   public UUID getId() {
@@ -153,5 +200,15 @@ public class Order extends Auditable {
 
   public List<OrderLine> getLines() {
     return Collections.unmodifiableList(lines);
+  }
+
+  /** Phase 4: the order type (DINE_IN / TAKEAWAY / DELIVERY). */
+  public String getOrderType() {
+    return orderType;
+  }
+
+  /** Phase 4: nullable; the table this order is associated with (DINE_IN only). */
+  public UUID getTableId() {
+    return tableId;
   }
 }
