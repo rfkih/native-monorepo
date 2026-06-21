@@ -115,15 +115,36 @@ export function ReceiptView({ order, payment, locale, onNew }: Props) {
             </p>
           </div>
           <ul className="divide-y divide-line">
-            {order.lines.map((line) => (
-              <li key={line.menuItemId} className="flex items-baseline justify-between px-5 py-2.5">
-                <div className="min-w-0 flex-1">
-                  <span className="truncate text-sm text-ink">{line.name}</span>
-                  <span className="ml-2 text-xs text-ink-3">× {line.qty}</span>
+            {order.lines.map((line, idx) => (
+              <li key={`${line.menuItemId}-${idx}`} className="px-5 py-2.5">
+                <div className="flex items-baseline justify-between">
+                  <div className="min-w-0 flex-1">
+                    <span className="truncate text-sm text-ink">{line.name}</span>
+                    <span className="ml-2 text-xs text-ink-3">× {line.qty}</span>
+                  </div>
+                  <span className="tnum ml-3 font-mono text-sm text-ink">
+                    {formatMoney(line.lineTotalMinor, currency, locale)}
+                  </span>
                 </div>
-                <span className="tnum ml-3 font-mono text-sm text-ink">
-                  {formatMoney(line.lineTotalMinor, currency, locale)}
-                </span>
+                {/* Modifier snapshots */}
+                {line.modifiers && line.modifiers.length > 0 ? (
+                  <ul className="mt-1 space-y-0.5 pl-0">
+                    {line.modifiers.map((mod) => (
+                      <li
+                        key={mod.optionId}
+                        className="flex items-baseline justify-between text-xs text-ink-3"
+                      >
+                        <span>{mod.nameSnapshot}</span>
+                        {mod.priceDeltaMinor !== 0 ? (
+                          <span className="tnum ml-2 font-mono">
+                            {mod.priceDeltaMinor > 0 ? '+' : ''}
+                            {formatMoney(mod.priceDeltaMinor, currency, locale)}
+                          </span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
               </li>
             ))}
           </ul>

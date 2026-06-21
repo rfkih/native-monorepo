@@ -3,19 +3,66 @@ import { useEffect, useRef } from 'react'
 import { apiFetch } from '@/lib/api'
 import type { CompanySession } from '@/lib/session'
 
+export interface ModifierOptionResponse {
+  id: string
+  groupId: string
+  businessId: string
+  name: string
+  /** Signed price delta in minor units — 0 means no extra charge. */
+  priceDeltaMinor: number
+  available: boolean
+  displayOrder: number
+}
+
+export interface ModifierGroupResponse {
+  id: string
+  menuItemId: string
+  businessId: string
+  name: string
+  /** "SINGLE" (radio) or "MULTI" (checkbox). */
+  selectionType: 'SINGLE' | 'MULTI'
+  required: boolean
+  minSelect: number
+  maxSelect: number
+  displayOrder: number
+  options: ModifierOptionResponse[]
+}
+
+export interface CategoryResponse {
+  id: string
+  businessId: string
+  name: string
+  displayOrder: number
+  active: boolean
+}
+
 export interface MenuItem {
   id: string
   businessId: string
   name: string
   category: string
+  /** UUID of the linked MenuCategory — null for legacy items not yet assigned. */
+  categoryId: string | null
   priceMinor: number
   currency: string
   active: boolean
+  /** 86 flag: false = sold out; cashier read may omit the item or set this to false. */
+  available: boolean
+  /** Populated on the cashier read path (GET /api/v1/menu). */
+  modifierGroups: ModifierGroupResponse[]
+}
+
+export interface OrderLineModifierResponse {
+  optionId: string
+  nameSnapshot: string
+  priceDeltaMinor: number
 }
 
 export interface OrderLineInput {
   menuItemId: string
   qty: number
+  /** Modifier option UUIDs selected by the customer; empty array when no modifiers chosen. */
+  selectedOptionIds: string[]
 }
 
 /**
@@ -65,6 +112,8 @@ export interface OrderResponse {
     unitPriceMinor: number
     qty: number
     lineTotalMinor: number
+    /** Phase 3: modifier snapshots chosen for this line. */
+    modifiers: OrderLineModifierResponse[]
   }[]
   /** Present when the order was paid in the same checkout call; null otherwise. */
   payment: PaymentResponse | null
@@ -93,6 +142,9 @@ function tenantOf(session: CompanySession) {
  * A 400ms debounce is applied so rapid keystrokes don't flood the API.
  * keepPreviousData keeps the last breakdown visible while the next one loads.
  * An empty cart short-circuits to null without any network call.
+ *
+ * Phase 3: lines now carry selectedOptionIds — forwarded verbatim to the quote endpoint so the
+ * server prices modifier deltas and returns the correct subtotal/tax/total breakdown.
  */
 export function useQuote(
   session: CompanySession,
@@ -142,6 +194,17 @@ export function useMenu(session: CompanySession) {
     queryKey: ['menu', session.companyId, session.businessId],
     queryFn: () =>
       apiFetch<MenuItem[]>('/api/v1/menu', {
+        tenant: tenantOf(session),
+        query: { businessId: session.businessId },
+      }),
+  })
+}
+
+export function useCategories(session: CompanySession) {
+  return useQuery({
+    queryKey: ['menu-categories', session.companyId, session.businessId],
+    queryFn: () =>
+      apiFetch<CategoryResponse[]>('/api/v1/menu/categories', {
         tenant: tenantOf(session),
         query: { businessId: session.businessId },
       }),

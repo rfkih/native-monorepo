@@ -6,23 +6,40 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
+import { Segmented } from '@/components/ui/Segmented'
 import { useSession, type CompanySession } from '@/lib/session'
 import { localeOf } from '@/i18n'
 import { cn } from '@/lib/cn'
 import { formatMoney, isoMinorExponent } from '@/lib/money'
 import {
   useMenu,
+  useCategories,
   useSeedMenu,
   useQuote,
   type MenuItem,
+  type CategoryResponse,
   type OrderResponse,
   type PaymentResponse,
   type PriceBreakdownResponse,
+  type OrderLineInput,
 } from './api'
 import { PaymentModal } from './PaymentModal'
 import { ReceiptView } from './ReceiptView'
+import { ModifierModal } from './ModifierModal'
 
-const CATEGORY_ORDER = ['mains', 'drinks', 'desserts']
+// ---------------------------------------------------------------------------
+// Cart line — extends OrderLineInput with the display info we need client-side
+// ---------------------------------------------------------------------------
+
+interface CartLine {
+  menuItemId: string
+  qty: number
+  selectedOptionIds: string[]
+  /** Effective unit price (base + Σ modifier deltas) in minor units. */
+  effectiveUnitPriceMinor: number
+  /** Human-readable names of selected options — shown under the item in the cart. */
+  selectedOptionNames: string[]
+}
 
 export function Pos() {
   const { company } = useSession()
@@ -34,31 +51,42 @@ function PosInner({ session }: { session: CompanySession }) {
   const { t, i18n } = useTranslation()
   const locale = localeOf(i18n.language)
   const menuQuery = useMenu(session)
+  const categoriesQuery = useCategories(session)
   const seed = useSeedMenu(session)
 
-  const [cart, setCart] = useState<Record<string, number>>({})
+  // Cart: list of CartLine (order preserved, same item may appear multiple times with diff modifiers
+  // but typically a single line per menuItemId with qty; for simplicity we merge same-option configs).
+  const [cart, setCart] = useState<CartLine[]>([])
+
   // discountInput is the raw string the user types; discountMinor is the parsed integer.
   const [discountInput, setDiscountInput] = useState<string>('')
   const [discountError, setDiscountError] = useState<string | null>(null)
 
-  // Modal state: null = no modal, 'payment' = payment modal, 'receipt' = receipt overlay
+  // Modal state
   const [modal, setModal] = useState<'payment' | 'receipt' | null>(null)
+  const [modifierItem, setModifierItem] = useState<MenuItem | null>(null)
   const [placedOrder, setPlacedOrder] = useState<OrderResponse | null>(null)
   const [placedPayment, setPlacedPayment] = useState<PaymentResponse | null>(null)
 
+  // Active category tab — null means "all" / first available
+  const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null)
+
   const items = menuQuery.data ?? []
-  const byId = new Map(items.map((i) => [i.id, i]))
+  const categories = (categoriesQuery.data ?? []).filter((c) => c.active)
+
   const currency = items[0]?.currency ?? session.baseCurrency
 
   // Parse discount: the input is in major units (e.g. "5000" IDR or "5.00" USD).
-  // Convert to minor units for the API. For IDR exponent=0 means major=minor.
   const discountMinor = parseDiscountInput(discountInput, currency)
 
-  const cartLines = Object.entries(cart)
-    .filter(([, qty]) => qty > 0)
-    .map(([menuItemId, qty]) => ({ menuItemId, qty }))
+  // Build API-shaped lines for quote/checkout
+  const cartLines: OrderLineInput[] = cart.map(({ menuItemId, qty, selectedOptionIds }) => ({
+    menuItemId,
+    qty,
+    selectedOptionIds,
+  }))
 
-  const lineCount = Object.values(cart).reduce((a, b) => a + b, 0)
+  const lineCount = cart.reduce((sum, l) => sum + l.qty, 0)
 
   // Live price quote from the server
   const quoteQuery = useQuote(session, cartLines, discountMinor)
@@ -66,24 +94,98 @@ function PosInner({ session }: { session: CompanySession }) {
 
   // Authoritative grand total: use server breakdown when available, else fall back to
   // client-side subtotal (before the first quote returns).
-  const clientSubtotalMinor = cartLines.reduce(
-    (sum, { menuItemId, qty }) => sum + (byId.get(menuItemId)?.priceMinor ?? 0) * qty,
+  const clientSubtotalMinor = cart.reduce(
+    (sum, l) => sum + l.effectiveUnitPriceMinor * l.qty,
     0,
   )
   const grandTotalMinor = breakdown?.grandTotalMinor ?? clientSubtotalMinor
 
-  function add(id: string) {
-    setCart((c) => ({ ...c, [id]: (c[id] ?? 0) + 1 }))
+  // ---------------------------------------------------------------------------
+  // Category grouping
+  // ---------------------------------------------------------------------------
+
+  // Derive the ordered category list: prefer backend categories, fall back to item.category strings.
+  const orderedCategories = deriveCategories(items, categories)
+
+  // Selected category tab value — default to first available
+  const resolvedCategoryId: string = activeCategoryId ?? orderedCategories[0]?.id ?? ''
+
+  // Segment options for the category bar
+  const categoryOptions = orderedCategories.map((c) => ({ value: c.id, label: c.name }))
+
+  // Filter items by active category
+  const visibleItems = items.filter((item) => {
+    if (orderedCategories.length === 0) return true
+    const cat = orderedCategories.find((c) => c.id === resolvedCategoryId)
+    if (!cat) return true
+    // Match by categoryId (UUID) or by category string (legacy)
+    if (item.categoryId) return item.categoryId === resolvedCategoryId
+    return item.category === cat.legacyKey
+  })
+
+  // ---------------------------------------------------------------------------
+  // Cart manipulation
+  // ---------------------------------------------------------------------------
+
+  function handleItemTap(item: MenuItem) {
+    // If the item has modifier groups, open the picker first.
+    if (item.modifierGroups.length > 0) {
+      setModifierItem(item)
+      return
+    }
+    // No modifiers — add directly with base price.
+    addToCart(item.id, [], item.priceMinor, [])
   }
-  function dec(id: string) {
-    setCart((c) => {
-      const next = { ...c }
-      const q = (next[id] ?? 0) - 1
-      if (q <= 0) delete next[id]
-      else next[id] = q
+
+  function addToCart(
+    menuItemId: string,
+    selectedOptionIds: string[],
+    effectiveUnitPriceMinor: number,
+    selectedOptionNames: string[],
+  ) {
+    setCart((prev) => {
+      // Find a matching line (same item + same option selection)
+      const key = lineKey(menuItemId, selectedOptionIds)
+      const idx = prev.findIndex((l) => lineKey(l.menuItemId, l.selectedOptionIds) === key)
+      if (idx !== -1) {
+        const next = [...prev]
+        next[idx] = { ...next[idx], qty: next[idx].qty + 1 }
+        return next
+      }
+      return [
+        ...prev,
+        { menuItemId, qty: 1, selectedOptionIds, effectiveUnitPriceMinor, selectedOptionNames },
+      ]
+    })
+  }
+
+  function handleModifierConfirm(selectedOptionIds: string[], effectivePriceMinor: number) {
+    if (!modifierItem) return
+    // Collect names of selected options for the cart display
+    const names = modifierItem.modifierGroups
+      .flatMap((g) => g.options)
+      .filter((o) => selectedOptionIds.includes(o.id))
+      .map((o) => o.name)
+    addToCart(modifierItem.id, selectedOptionIds, effectivePriceMinor, names)
+    setModifierItem(null)
+  }
+
+  function decCartLine(index: number) {
+    setCart((prev) => {
+      const next = [...prev]
+      const line = next[index]
+      if (line.qty <= 1) {
+        next.splice(index, 1)
+      } else {
+        next[index] = { ...line, qty: line.qty - 1 }
+      }
       return next
     })
   }
+
+  // ---------------------------------------------------------------------------
+  // Discount
+  // ---------------------------------------------------------------------------
 
   function handleDiscountChange(raw: string) {
     setDiscountInput(raw)
@@ -99,6 +201,10 @@ function PosInner({ session }: { session: CompanySession }) {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Payment
+  // ---------------------------------------------------------------------------
+
   function openPayment() {
     setModal('payment')
   }
@@ -106,7 +212,7 @@ function PosInner({ session }: { session: CompanySession }) {
   function handlePaymentSuccess(order: OrderResponse, payment: PaymentResponse) {
     setPlacedOrder(order)
     setPlacedPayment(payment)
-    setCart({})
+    setCart([])
     setDiscountInput('')
     setDiscountError(null)
     setModal('receipt')
@@ -118,7 +224,9 @@ function PosInner({ session }: { session: CompanySession }) {
     setModal(null)
   }
 
-  const grouped = groupByCategory(items)
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
@@ -147,25 +255,31 @@ function PosInner({ session }: { session: CompanySession }) {
             </Button>
           </Card>
         ) : (
-          <div className="space-y-7">
-            {grouped.map(([category, group]) => (
-              <section key={category}>
-                <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-ink-3">
-                  {t(`pos.category.${category}`, category)}
-                </h2>
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {group.map((item) => (
-                    <ItemCard
-                      key={item.id}
-                      item={item}
-                      qty={cart[item.id] ?? 0}
-                      locale={locale}
-                      onAdd={() => add(item.id)}
-                    />
-                  ))}
-                </div>
-              </section>
-            ))}
+          <div>
+            {/* Category tab bar — shown when there are backend categories */}
+            {categoryOptions.length > 1 ? (
+              <div className="mb-5 overflow-x-auto">
+                <Segmented
+                  options={categoryOptions}
+                  value={resolvedCategoryId}
+                  onChange={(v) => setActiveCategoryId(v)}
+                  ariaLabel={t('pos.categories')}
+                />
+              </div>
+            ) : null}
+
+            {/* Item grid */}
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {visibleItems.map((item) => (
+                <ItemCard
+                  key={item.id}
+                  item={item}
+                  qty={cartQtyFor(cart, item.id)}
+                  locale={locale}
+                  onAdd={() => handleItemTap(item)}
+                />
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -184,36 +298,51 @@ function PosInner({ session }: { session: CompanySession }) {
             <>
               {/* Line items */}
               <ul className="divide-y divide-line">
-                {Object.entries(cart).map(([id, qty]) => {
-                  const item = byId.get(id)
+                {cart.map((line, idx) => {
+                  const item = items.find((i) => i.id === line.menuItemId)
                   if (!item) return null
                   return (
-                    <li key={id} className="flex items-center gap-3 px-5 py-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-medium text-ink">{item.name}</div>
-                        <div className="tnum mt-0.5 font-mono text-xs text-ink-3">
-                          {formatMoney(item.priceMinor, item.currency, locale)}
+                    <li key={`${line.menuItemId}-${idx}`} className="px-5 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-medium text-ink">{item.name}</div>
+                          <div className="tnum mt-0.5 font-mono text-xs text-ink-3">
+                            {formatMoney(line.effectiveUnitPriceMinor, item.currency, locale)}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            aria-label={t('pos.decreaseQty', { name: item.name })}
+                            onClick={() => decCartLine(idx)}
+                            className="grid size-7 place-items-center rounded-md border border-line-strong text-ink-2 hover:bg-paper"
+                          >
+                            {line.qty === 1 ? <Trash2 className="size-3.5" /> : <Minus className="size-3.5" />}
+                          </button>
+                          <span className="tnum w-5 text-center font-mono text-sm text-ink">{line.qty}</span>
+                          <button
+                            type="button"
+                            aria-label={t('pos.increaseQty', { name: item.name })}
+                            onClick={() => handleItemTap(item)}
+                            className="grid size-7 place-items-center rounded-md border border-line-strong text-ink-2 hover:bg-paper"
+                          >
+                            <Plus className="size-3.5" />
+                          </button>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          aria-label={t('pos.decreaseQty', { name: item.name })}
-                          onClick={() => dec(id)}
-                          className="grid size-7 place-items-center rounded-md border border-line-strong text-ink-2 hover:bg-paper"
-                        >
-                          {qty === 1 ? <Trash2 className="size-3.5" /> : <Minus className="size-3.5" />}
-                        </button>
-                        <span className="tnum w-5 text-center font-mono text-sm text-ink">{qty}</span>
-                        <button
-                          type="button"
-                          aria-label={t('pos.increaseQty', { name: item.name })}
-                          onClick={() => add(id)}
-                          className="grid size-7 place-items-center rounded-md border border-line-strong text-ink-2 hover:bg-paper"
-                        >
-                          <Plus className="size-3.5" />
-                        </button>
-                      </div>
+                      {/* Modifier names under the line */}
+                      {line.selectedOptionNames.length > 0 ? (
+                        <div className="mt-1 pl-0 flex flex-wrap gap-1">
+                          {line.selectedOptionNames.map((name) => (
+                            <span
+                              key={name}
+                              className="text-[11px] text-ink-3 leading-tight"
+                            >
+                              {name}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
                     </li>
                   )
                 })}
@@ -273,6 +402,16 @@ function PosInner({ session }: { session: CompanySession }) {
         </Card>
       </div>
 
+      {/* Modifier picker modal */}
+      {modifierItem ? (
+        <ModifierModal
+          item={modifierItem}
+          locale={locale}
+          onConfirm={handleModifierConfirm}
+          onClose={() => setModifierItem(null)}
+        />
+      ) : null}
+
       {/* Payment modal */}
       {modal === 'payment' ? (
         <PaymentModal
@@ -321,7 +460,6 @@ function PriceBreakdown({
   const { t } = useTranslation()
 
   if (!breakdown) {
-    // Show a simple subtotal row while the first quote is in flight
     return (
       <div className="flex items-baseline justify-between">
         <span className="text-sm text-ink-3">{t('pos.subtotal')}</span>
@@ -340,7 +478,6 @@ function PriceBreakdown({
 
   return (
     <div className="space-y-2 text-sm">
-      {/* Subtotal */}
       <div className="flex items-baseline justify-between">
         <span className="text-ink-3">{t('pos.subtotal')}</span>
         <span className="tnum font-mono text-ink">
@@ -348,7 +485,6 @@ function PriceBreakdown({
         </span>
       </div>
 
-      {/* Discount — only shown when > 0 */}
       {breakdown.discountMinor > 0 ? (
         <div className="flex items-baseline justify-between">
           <span className="text-ink-3">{t('pos.discount')}</span>
@@ -358,33 +494,26 @@ function PriceBreakdown({
         </div>
       ) : null}
 
-      {/* Service charge */}
       <div className="flex items-center justify-between">
         <span className="flex items-center gap-1.5 text-ink-3">
           {t('pos.serviceCharge')}
-          {illustrative ? (
-            <EstimatedBadge hint={t('pos.illustrativeHint')} />
-          ) : null}
+          {illustrative ? <EstimatedBadge hint={t('pos.illustrativeHint')} /> : null}
         </span>
         <span className="tnum font-mono text-ink">
           {formatMoney(breakdown.serviceChargeMinor, currency, locale)}
         </span>
       </div>
 
-      {/* Tax */}
       <div className="flex items-center justify-between">
         <span className="flex items-center gap-1.5 text-ink-3">
           {t('pos.tax')}
-          {illustrative ? (
-            <EstimatedBadge hint={t('pos.illustrativeHint')} />
-          ) : null}
+          {illustrative ? <EstimatedBadge hint={t('pos.illustrativeHint')} /> : null}
         </span>
         <span className="tnum font-mono text-ink">
           {formatMoney(breakdown.taxMinor, currency, locale)}
         </span>
       </div>
 
-      {/* Grand total */}
       <div className="flex items-baseline justify-between border-t border-line pt-2 mt-1">
         <span className="font-medium text-ink">{t('pos.total')}</span>
         <span className="tnum font-mono text-xl font-medium text-ink">
@@ -399,7 +528,6 @@ function PriceBreakdown({
   )
 }
 
-/** Small amber "Estimated" badge with a title tooltip for the illustrative rates hint. */
 function EstimatedBadge({ hint }: { hint: string }) {
   const { t } = useTranslation()
   return (
@@ -410,22 +538,6 @@ function EstimatedBadge({ hint }: { hint: string }) {
       <Info className="size-3 text-amber-2/70" aria-hidden="true" />
     </span>
   )
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Parse the discount field: the user types in MAJOR units (e.g. "5000" IDR = Rp 5.000).
- * We convert to minor units for the API. Returns 0 for empty / invalid input.
- */
-function parseDiscountInput(input: string, currency: string): number {
-  if (!input || input.trim() === '') return 0
-  const major = Number(input)
-  if (isNaN(major) || major < 0) return 0
-  const exp = isoMinorExponent(currency)
-  return Math.round(major * 10 ** exp)
 }
 
 // ---------------------------------------------------------------------------
@@ -444,26 +556,52 @@ function ItemCard({
   onAdd: () => void
 }) {
   const { t } = useTranslation()
+  const unavailable = !item.available
+
   return (
     <button
       type="button"
-      onClick={onAdd}
-      aria-label={t('pos.addItem', { name: item.name })}
+      onClick={unavailable ? undefined : onAdd}
+      disabled={unavailable}
+      aria-label={
+        unavailable
+          ? t('pos.soldOutLabel', { name: item.name })
+          : t('pos.addItem', { name: item.name })
+      }
+      aria-disabled={unavailable}
       className={cn(
         'relative flex flex-col items-start rounded-card border bg-surface p-4 text-left transition-all',
-        'hover:-translate-y-0.5 hover:border-emerald/40 hover:shadow-[0_10px_30px_-18px_rgba(13,106,74,0.5)]',
-        qty > 0 ? 'border-emerald ring-1 ring-emerald/20' : 'border-line',
+        unavailable
+          ? 'cursor-not-allowed opacity-50'
+          : [
+              'hover:-translate-y-0.5 hover:border-emerald/40 hover:shadow-[0_10px_30px_-18px_rgba(13,106,74,0.5)]',
+              qty > 0 ? 'border-emerald ring-1 ring-emerald/20' : 'border-line',
+            ],
+        !unavailable && qty > 0 ? 'border-emerald ring-1 ring-emerald/20' : !unavailable ? 'border-line' : 'border-line',
       )}
     >
-      {qty > 0 ? (
+      {!unavailable && qty > 0 ? (
         <span className="tnum absolute right-3 top-3 grid size-6 place-items-center rounded-full bg-emerald font-mono text-xs font-medium text-white">
           {qty}
         </span>
       ) : null}
-      <span className="font-medium text-ink">{item.name}</span>
-      <span className="tnum mt-2 font-mono text-sm text-emerald-2">
+
+      {unavailable ? (
+        <span className="absolute right-3 top-3">
+          <Badge tone="neutral" className="text-[10px] px-1.5 py-0">
+            {t('pos.soldOut')}
+          </Badge>
+        </span>
+      ) : null}
+
+      <span className={cn('font-medium', unavailable ? 'text-ink-3' : 'text-ink')}>{item.name}</span>
+      <span className={cn('tnum mt-2 font-mono text-sm', unavailable ? 'text-ink-3/50' : 'text-emerald-2')}>
         {formatMoney(item.priceMinor, item.currency, locale)}
       </span>
+
+      {item.modifierGroups.length > 0 && !unavailable ? (
+        <span className="mt-1.5 text-[11px] text-ink-3">{t('pos.hasOptions')}</span>
+      ) : null}
     </button>
   )
 }
@@ -484,16 +622,80 @@ function NoCompany() {
   )
 }
 
-function groupByCategory(items: MenuItem[]): [string, MenuItem[]][] {
-  const map = new Map<string, MenuItem[]>()
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function parseDiscountInput(input: string, currency: string): number {
+  if (!input || input.trim() === '') return 0
+  const major = Number(input)
+  if (isNaN(major) || major < 0) return 0
+  const exp = isoMinorExponent(currency)
+  return Math.round(major * 10 ** exp)
+}
+
+/**
+ * A virtual category row: may be a real backend category (with a UUID id) or a synthetic
+ * fallback built from the item.category string (legacyKey).
+ */
+interface VirtualCategory {
+  id: string
+  name: string
+  /** The raw category string key used by legacy items not yet linked to a backend category. */
+  legacyKey: string
+}
+
+/**
+ * Derive an ordered list of virtual categories for the tab bar.
+ *
+ * Priority:
+ * 1. Active backend categories ordered by displayOrder.
+ * 2. Fallback: unique item.category strings for items not covered by any backend category,
+ *    appended after backend categories.
+ */
+function deriveCategories(
+  items: MenuItem[],
+  backendCategories: CategoryResponse[],
+): VirtualCategory[] {
+  const result: VirtualCategory[] = backendCategories.map((c) => ({
+    id: c.id,
+    name: c.name,
+    legacyKey: c.name.toLowerCase(),
+  }))
+
+  // Find items whose categoryId doesn't match any backend category
+  const backendIds = new Set(backendCategories.map((c) => c.id))
+  const legacyKeys = new Set<string>()
   for (const item of items) {
-    const list = map.get(item.category) ?? []
-    list.push(item)
-    map.set(item.category, list)
+    if (!item.categoryId || !backendIds.has(item.categoryId)) {
+      if (item.category && !legacyKeys.has(item.category)) {
+        legacyKeys.add(item.category)
+        // Check if a backend category already covers this key
+        const covered = backendCategories.some(
+          (c) => c.name.toLowerCase() === item.category.toLowerCase(),
+        )
+        if (!covered) {
+          result.push({ id: item.category, name: item.category, legacyKey: item.category })
+        }
+      }
+    }
   }
-  const order = (c: string) => {
-    const i = CATEGORY_ORDER.indexOf(c)
-    return i === -1 ? CATEGORY_ORDER.length : i
-  }
-  return [...map.entries()].sort((a, b) => order(a[0]) - order(b[0]))
+
+  return result
+}
+
+/**
+ * Sum qty across all cart lines for a given menuItemId (supports multiple lines with
+ * different modifier selections for the same item).
+ */
+function cartQtyFor(cart: CartLine[], menuItemId: string): number {
+  return cart.filter((l) => l.menuItemId === menuItemId).reduce((s, l) => s + l.qty, 0)
+}
+
+/**
+ * A stable string key for a cart line — used to find existing lines when adding.
+ * Items with identical menuItemId + sorted selectedOptionIds are merged.
+ */
+function lineKey(menuItemId: string, selectedOptionIds: string[]): string {
+  return `${menuItemId}::${[...selectedOptionIds].sort().join(',')}`
 }
