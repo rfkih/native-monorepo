@@ -76,4 +76,31 @@ public interface ModifierOptionRepository extends JpaRepository<ModifierOption, 
           """,
       nativeQuery = true)
   List<ModifierOptionView> findViewsByIds(@Param("ids") List<UUID> ids);
+
+  /**
+   * Batch-loads all available options for a set of modifier group ids. Used by the cashier
+   * menu-list read to embed available options in one query rather than one-per-group. RLS-scoped;
+   * callers must chunk {@code groupIds} to at most 1 000 per call (IN-clause convention,
+   * CLAUDE.md).
+   *
+   * <p>Only options with {@code available = TRUE} are returned (unavailable / 86'd options are
+   * excluded, consistent with the cashier view).
+   */
+  @Query(
+      value =
+          """
+          SELECT mo.id                AS id,
+                 mo.group_id          AS group_id,
+                 mo.business_id       AS business_id,
+                 mo.name              AS name,
+                 mo.price_delta_minor AS price_delta_minor,
+                 mo.available         AS available,
+                 mo.display_order     AS display_order
+            FROM menu_item_modifier_option mo
+           WHERE mo.group_id IN (:groupIds)
+             AND mo.available = TRUE
+           ORDER BY mo.group_id, mo.display_order, mo.id
+          """,
+      nativeQuery = true)
+  List<ModifierOptionView> findAvailableViewsByGroupIds(@Param("groupIds") List<UUID> groupIds);
 }

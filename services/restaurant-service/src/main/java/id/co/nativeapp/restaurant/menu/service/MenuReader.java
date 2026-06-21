@@ -1,9 +1,17 @@
 package id.co.nativeapp.restaurant.menu.service;
 
 import id.co.nativeapp.restaurant.menu.dto.MenuItemResponse;
+import id.co.nativeapp.restaurant.menu.dto.ModifierGroupResponse;
 import id.co.nativeapp.restaurant.menu.projection.MenuItemView;
+import id.co.nativeapp.restaurant.menu.projection.ModifierGroupView;
+import id.co.nativeapp.restaurant.menu.projection.ModifierOptionView;
 import id.co.nativeapp.restaurant.menu.repository.MenuItemRepository;
+import id.co.nativeapp.restaurant.menu.repository.ModifierGroupRepository;
+import id.co.nativeapp.restaurant.menu.repository.ModifierOptionRepository;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,21 +28,93 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 public class MenuReader {
 
-  private final MenuItemRepository repository;
+  private static final int CHUNK_SIZE = 1000;
 
-  public MenuReader(MenuItemRepository repository) {
+  private final MenuItemRepository repository;
+  private final ModifierGroupRepository groupRepository;
+  private final ModifierOptionRepository optionRepository;
+
+  public MenuReader(
+      MenuItemRepository repository,
+      ModifierGroupRepository groupRepository,
+      ModifierOptionRepository optionRepository) {
     this.repository = repository;
+    this.groupRepository = groupRepository;
+    this.optionRepository = optionRepository;
   }
 
   /**
-   * Active menu items for a business, projected to the response shape. No {@code WHERE company_id}
-   * — RLS auto-applies (rule 5).
+   * Active menu items for a business, projected to the response shape, with each item's active
+   * modifier groups and available options embedded. No {@code WHERE company_id} — RLS auto-applies
+   * (rule 5).
+   *
+   * <p>No N+1: modifier groups and options are batch-loaded in at most two additional native-query
+   * projection reads (chunked at {@value CHUNK_SIZE} ids per IN clause), then assembled into a
+   * {@code Map<itemId, List<ModifierGroupResponse>>} in the service layer before being attached to
+   * each {@link MenuItemResponse}.
    */
   @Transactional(readOnly = true)
   public List<MenuItemResponse> findActiveByBusiness(UUID businessId) {
-    return repository.findActiveByBusiness(businessId).stream()
-        .map(MenuReader::toResponse)
+    List<MenuItemView> items = repository.findActiveByBusiness(businessId);
+    if (items.isEmpty()) {
+      return List.of();
+    }
+
+    // --- batch-load groups (query 1 of 2) ---
+    List<UUID> itemIds = items.stream().map(MenuItemView::getId).toList();
+    List<ModifierGroupView> allGroups = batchLoadGroups(itemIds);
+
+    // --- batch-load available options (query 2 of 2) ---
+    Map<UUID, List<ModifierGroupView>> groupsByItemId = new HashMap<>();
+    for (ModifierGroupView g : allGroups) {
+      groupsByItemId.computeIfAbsent(g.getMenuItemId(), k -> new ArrayList<>()).add(g);
+    }
+
+    List<UUID> groupIds = allGroups.stream().map(ModifierGroupView::getId).toList();
+    Map<UUID, List<ModifierOptionView>> optionsByGroupId = new HashMap<>();
+    if (!groupIds.isEmpty()) {
+      List<ModifierOptionView> allOptions = batchLoadOptions(groupIds);
+      for (ModifierOptionView o : allOptions) {
+        optionsByGroupId.computeIfAbsent(o.getGroupId(), k -> new ArrayList<>()).add(o);
+      }
+    }
+
+    // --- assemble responses ---
+    return items.stream()
+        .map(
+            item -> {
+              List<ModifierGroupView> groups = groupsByItemId.getOrDefault(item.getId(), List.of());
+              List<ModifierGroupResponse> groupResponses =
+                  groups.stream()
+                      .map(
+                          g ->
+                              ModifierReader.toGroupResponse(
+                                  g,
+                                  optionsByGroupId.getOrDefault(g.getId(), List.of()).stream()
+                                      .map(ModifierReader::toOptionResponse)
+                                      .toList()))
+                      .toList();
+              return toResponse(item, groupResponses);
+            })
         .toList();
+  }
+
+  private List<ModifierGroupView> batchLoadGroups(List<UUID> itemIds) {
+    List<ModifierGroupView> result = new ArrayList<>();
+    for (int i = 0; i < itemIds.size(); i += CHUNK_SIZE) {
+      List<UUID> chunk = itemIds.subList(i, Math.min(i + CHUNK_SIZE, itemIds.size()));
+      result.addAll(groupRepository.findActiveViewsByMenuItemIds(chunk));
+    }
+    return result;
+  }
+
+  private List<ModifierOptionView> batchLoadOptions(List<UUID> groupIds) {
+    List<ModifierOptionView> result = new ArrayList<>();
+    for (int i = 0; i < groupIds.size(); i += CHUNK_SIZE) {
+      List<UUID> chunk = groupIds.subList(i, Math.min(i + CHUNK_SIZE, groupIds.size()));
+      result.addAll(optionRepository.findAvailableViewsByGroupIds(chunk));
+    }
+    return result;
   }
 
   /**
@@ -42,10 +122,11 @@ public class MenuReader {
    * right-pads it) so strip before returning. Lives in the service layer so the ArchUnit rule
    * ({@code projection} accessed only by {@code service} and {@code repository}) is respected.
    *
-   * <p>Phase 3: includes {@code categoryId} and {@code available}. Modifier groups are NOT loaded
-   * on the cashier read path to keep the payload lean; the admin path loads them separately.
+   * <p>Phase 3: includes {@code categoryId}, {@code available}, and the item's active modifier
+   * groups with their available options (populated on the cashier read path via a batch load — see
+   * {@link #findActiveByBusiness}).
    */
-  static MenuItemResponse toResponse(MenuItemView view) {
+  static MenuItemResponse toResponse(MenuItemView view, List<ModifierGroupResponse> groups) {
     return new MenuItemResponse(
         view.getId(),
         view.getBusinessId(),
@@ -56,6 +137,6 @@ public class MenuReader {
         view.getCurrency().strip(),
         view.isActive(),
         view.isAvailable(),
-        java.util.List.of());
+        groups);
   }
 }

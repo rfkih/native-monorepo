@@ -84,4 +84,33 @@ public interface ModifierGroupRepository extends JpaRepository<ModifierGroup, UU
           """,
       nativeQuery = true)
   List<ModifierGroupView> findRequiredViewsByMenuItemId(@Param("menuItemId") UUID menuItemId);
+
+  /**
+   * Batch-loads all active modifier groups for a set of menu item ids. Used by the cashier
+   * menu-list read to embed modifier groups in one query rather than one-per-item. RLS-scoped;
+   * callers must chunk {@code menuItemIds} to at most 1 000 per call (IN-clause convention,
+   * CLAUDE.md).
+   *
+   * <p>Only active groups are returned (inactive groups are excluded; options may still be
+   * individually unavailable and are filtered separately).
+   */
+  @Query(
+      value =
+          """
+          SELECT mg.id             AS id,
+                 mg.menu_item_id   AS menu_item_id,
+                 mg.business_id    AS business_id,
+                 mg.name           AS name,
+                 mg.selection_type AS selection_type,
+                 mg.required       AS required,
+                 mg.min_select     AS min_select,
+                 mg.max_select     AS max_select,
+                 mg.display_order  AS display_order
+            FROM menu_item_modifier_group mg
+           WHERE mg.menu_item_id IN (:menuItemIds)
+           ORDER BY mg.menu_item_id, mg.display_order, mg.id
+          """,
+      nativeQuery = true)
+  List<ModifierGroupView> findActiveViewsByMenuItemIds(
+      @Param("menuItemIds") List<UUID> menuItemIds);
 }
