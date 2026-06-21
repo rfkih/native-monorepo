@@ -27,7 +27,10 @@ controller/service/repository/domain/dto/messaging layer sub-packages**, ArchUni
 
 **Open follow-ups (tracked):** notification real provider (needs a transport choice); payroll
 expected-source registry (needs a rule); error-inbox/alerting **fleet rollout** beyond the finance
-pilot + Grafana dashboards (ADR 0005; scorecard gap #11/#13). (DONE: the P3d deferred operational items —
+pilot + Grafana dashboards (ADR 0005; scorecard gap #11/#13); **POS indirect-tax + accounting** —
+the PB1-vs-PPN identity, rates, service-charge-revenue-vs-tip treatment, and GL account mappings ship
+`ILLUSTRATIVE_PLACEHOLDER` and need a tax/accounting SME (ADR 0006); **real QRIS/card PSP adapter +
+settlement webhook** (ADR 0007, needs a provider choice). (DONE: the P3d deferred operational items —
 `member_group_index` backfill, the within-company concurrent-close lock, the within-close MVC tests;
 the finance-expansion posting-currency robustness guard; and the org-tree move/deactivate semantics —
 cascade-deactivate + reactivation.)
@@ -63,6 +66,27 @@ cascade-deactivate + reactivation.)
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **Robust restaurant POS — 4 phases (ADR 0006/0007)** — the validation-slice POS (menu → atomic
+  order → `SaleRecorded`) became a real point-of-sale, built + adversarially-reviewed phase by phase
+  (every phase's mandatory money/tenancy review FAILED first and caught a real bug; all fixed +
+  tested). **P1 Payments:** a provider-agnostic tender port — **cash live** (tendered + change), **QRIS/
+  card flagged-pending** (a `DigitalProvider` that never moves money; real adapter deferred to ADR
+  0007), the load-bearing **revenue-recognised-at-capture** invariant (a digital tender is PENDING
+  with no sale until capture), and **void/refund** driving a balanced finance reversal. *(Review caught:
+  the void/refund events had no finance listener — reversals were dead in prod.)* **P2 Pricing:** an
+  order price breakdown (PB1 restaurant tax + service charge + order discount), round-once `Money`
+  math, posted to the GL as a balanced 5-leg entry (tax→liability, discount→contra-revenue), with a
+  read-only `/orders/quote` for the live cart total. *(Review caught: a void under-stated revenue
+  (unwound by gross not net) and a refund left tax over-collected.)* **P3 Catalog:** categories,
+  per-item modifiers/variants with price deltas, 86'ing/availability. *(Review caught: a quote↔checkout
+  price drift; a back-fill migration dead under FORCE-RLS.)* **P4 Order ops:** dine-in/takeaway/delivery,
+  tables + occupancy, **hold/park → resume → pay-parked** (no revenue until pay), printable receipt.
+  *(Review caught: the gateway lacked a `/tables/**` route; pay-parked dropped the tax split.)* All
+  indirect-tax law is **flagged-illustrative** (PB1≈10% vs PPN 11%, service-charge-as-revenue-vs-tip,
+  COA mappings — `ILLUSTRATIVE_PLACEHOLDER` + `uses_illustrative_rules` propagated to the books and
+  badged "Estimated" in the UI; an SME must confirm). Verified live end-to-end (Keycloak → gateway →
+  restaurant → finance): a cash sale with a Size modifier on a dine-in table, tax breakdown, receipt.
+  restaurant 155 · finance 323 · gateway 22 tests green.
 - **Error-inbox + webhook alerting (finance pilot, ADR 0005)** — a DLT'd money event is no longer a
   silent failure. The Kafka DLT recoverer records each consume failure into a per-service
   `error_log` ops table (V14) via a fingerprint-deduped `INSERT … ON CONFLICT` upsert
