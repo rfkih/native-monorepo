@@ -80,6 +80,16 @@ public class Order extends Auditable {
   @Column(name = "table_id")
   private UUID tableId;
 
+  /**
+   * Phase 4: the order-level fixed discount in minor units, as supplied at park/checkout time.
+   * Persisted so {@code payParked} can recompute the same {@link
+   * id.co.nativeapp.restaurant.pricing.domain.PriceBreakdown} at pay time without storing the full
+   * breakdown (avoids schema duplication; breakdown is always re-derivable from lines + discount +
+   * the effective rule at the time of the call). {@code null} means no fixed discount was applied.
+   */
+  @Column(name = "discount_minor")
+  private Long discountMinor;
+
   @OneToMany(
       mappedBy = "order",
       cascade = CascadeType.ALL,
@@ -101,11 +111,43 @@ public class Order extends Auditable {
    * @param idempotencyKey the client's request id (dedupe key with company_id)
    */
   public Order(UUID businessId, Money total, Instant occurredAt, String idempotencyKey) {
-    this(businessId, total, occurredAt, idempotencyKey, "DINE_IN", null);
+    this(businessId, total, occurredAt, idempotencyKey, "DINE_IN", null, null);
   }
 
   /**
-   * Creates a new order in PENDING status with explicit order type and optional table.
+   * Creates a new order in PENDING status with explicit order type, optional table, and optional
+   * discount.
+   *
+   * @param businessId the originating business unit
+   * @param total the pre-computed order total as {@link Money} (never a float)
+   * @param occurredAt when the order was placed
+   * @param idempotencyKey the client's request id (dedupe key with company_id)
+   * @param orderType DINE_IN / TAKEAWAY / DELIVERY (must not be null)
+   * @param tableId nullable; only valid for DINE_IN orders
+   * @param discountMinor optional fixed discount in minor units; {@code null} if none
+   */
+  public Order(
+      UUID businessId,
+      Money total,
+      Instant occurredAt,
+      String idempotencyKey,
+      String orderType,
+      UUID tableId,
+      Long discountMinor) {
+    this.id = UUID.randomUUID();
+    this.businessId = Objects.requireNonNull(businessId, "businessId");
+    this.status = "PENDING";
+    this.total = MoneyEmbeddable.of(Objects.requireNonNull(total, "total"));
+    this.occurredAt = Objects.requireNonNull(occurredAt, "occurredAt");
+    this.idempotencyKey = Objects.requireNonNull(idempotencyKey, "idempotencyKey");
+    this.orderType = Objects.requireNonNull(orderType, "orderType");
+    this.tableId = tableId;
+    this.discountMinor = discountMinor;
+  }
+
+  /**
+   * Creates a new order in PENDING status with explicit order type and optional table (no
+   * discount). Kept for callers that do not supply a discount.
    *
    * @param businessId the originating business unit
    * @param total the pre-computed order total as {@link Money} (never a float)
@@ -121,14 +163,7 @@ public class Order extends Auditable {
       String idempotencyKey,
       String orderType,
       UUID tableId) {
-    this.id = UUID.randomUUID();
-    this.businessId = Objects.requireNonNull(businessId, "businessId");
-    this.status = "PENDING";
-    this.total = MoneyEmbeddable.of(Objects.requireNonNull(total, "total"));
-    this.occurredAt = Objects.requireNonNull(occurredAt, "occurredAt");
-    this.idempotencyKey = Objects.requireNonNull(idempotencyKey, "idempotencyKey");
-    this.orderType = Objects.requireNonNull(orderType, "orderType");
-    this.tableId = tableId;
+    this(businessId, total, occurredAt, idempotencyKey, orderType, tableId, null);
   }
 
   /**
@@ -140,8 +175,25 @@ public class Order extends Auditable {
     line.setOrder(this);
   }
 
-  /** Links the sale record created on checkout to this order. */
+  /**
+   * Links the sale record to this order and transitions to {@code COMPLETED}.
+   *
+   * <p>Legal source states: {@code PENDING}, {@code PARKED}, {@code AWAITING_PAYMENT}. Calling this
+   * on an already-{@code COMPLETED} order throws {@link IllegalStateException} — the sale has
+   * already been recorded and a second linkSale call would overwrite {@code sale_id} and lose the
+   * audit trail.
+   */
   public void linkSale(UUID saleId) {
+    if ("COMPLETED".equals(this.status)) {
+      throw new IllegalStateException(
+          "Order " + id + " is already COMPLETED; linkSale may not be called twice.");
+    }
+    if (!"PENDING".equals(this.status)
+        && !"PARKED".equals(this.status)
+        && !"AWAITING_PAYMENT".equals(this.status)) {
+      throw new IllegalStateException(
+          "linkSale requires PENDING, PARKED, or AWAITING_PAYMENT; current status: " + status);
+    }
     this.saleId = Objects.requireNonNull(saleId, "saleId");
     this.status = "COMPLETED";
   }
@@ -151,8 +203,14 @@ public class Order extends Auditable {
    * submitted at checkout. The sale is NOT recorded here — it is created only when the digital
    * payment is captured (ADR 0006 revenue-at-capture invariant). The {@code sale_id} remains null
    * until {@link #linkSale} is called at capture time.
+   *
+   * <p>Legal source state: {@code PENDING} or {@code PARKED}.
    */
   public void markAwaitingPayment() {
+    if (!"PENDING".equals(this.status) && !"PARKED".equals(this.status)) {
+      throw new IllegalStateException(
+          "markAwaitingPayment requires PENDING or PARKED; current status: " + status);
+    }
     this.status = "AWAITING_PAYMENT";
   }
 
@@ -164,8 +222,13 @@ public class Order extends Auditable {
    *
    * <p>This invariant is equivalent to the {@code AWAITING_PAYMENT} digital-capture invariant: no
    * SaleRecorded outbox row is written when parking an order.
+   *
+   * <p>Legal source state: {@code PENDING}.
    */
   public void markParked() {
+    if (!"PENDING".equals(this.status)) {
+      throw new IllegalStateException("markParked requires PENDING; current status: " + status);
+    }
     this.status = "PARKED";
   }
 
@@ -210,5 +273,14 @@ public class Order extends Auditable {
   /** Phase 4: nullable; the table this order is associated with (DINE_IN only). */
   public UUID getTableId() {
     return tableId;
+  }
+
+  /**
+   * Phase 4: the fixed discount applied at park/checkout time, in currency minor units. {@code
+   * null} means no fixed discount. Stored so {@code payParked} can recompute the same breakdown at
+   * pay time without persisting the entire breakdown.
+   */
+  public Long getDiscountMinor() {
+    return discountMinor;
   }
 }

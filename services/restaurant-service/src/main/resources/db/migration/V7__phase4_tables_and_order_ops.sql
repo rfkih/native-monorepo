@@ -57,63 +57,31 @@ CREATE INDEX IF NOT EXISTS idx_restaurant_table_business
 -- 2. Extend restaurant_order
 -- ---------------------------------------------------------------------------
 
--- Drop any existing status / type check constraints so we can replace them.
--- Covers: auto-named inline constraint from V2, plus our named version if partially applied.
+-- Drop any pre-existing status check constraint (V2 shipped a bare VARCHAR with no CHECK;
+-- DROP IF EXISTS is a safety net in case a partial apply left an orphaned constraint).
 ALTER TABLE restaurant_order
     DROP CONSTRAINT IF EXISTS restaurant_order_status_check,
     DROP CONSTRAINT IF EXISTS ck_order_status,
     DROP CONSTRAINT IF EXISTS ck_order_type;
 
--- Add order_type column if not present.
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-         WHERE table_name = 'restaurant_order' AND column_name = 'order_type'
-    ) THEN
-        ALTER TABLE restaurant_order
-            ADD COLUMN order_type VARCHAR(16) NOT NULL DEFAULT 'DINE_IN';
-    END IF;
-END $$;
+-- Add order_type column.
+ALTER TABLE restaurant_order
+    ADD COLUMN IF NOT EXISTS order_type VARCHAR(16) NOT NULL DEFAULT 'DINE_IN';
 
--- Add table_id column if not present.
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-         WHERE table_name = 'restaurant_order' AND column_name = 'table_id'
-    ) THEN
-        ALTER TABLE restaurant_order
-            ADD COLUMN table_id UUID NULL
-                REFERENCES restaurant_table (id);
-    END IF;
-END $$;
+-- Add table_id column.
+ALTER TABLE restaurant_order
+    ADD COLUMN IF NOT EXISTS table_id UUID NULL
+        REFERENCES restaurant_table (id);
 
--- Add the status constraint covering all statuses including PARKED.
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.table_constraints
-         WHERE table_name = 'restaurant_order' AND constraint_name = 'ck_order_status'
-    ) THEN
-        ALTER TABLE restaurant_order
-            ADD CONSTRAINT ck_order_status
-                CHECK (status IN ('PENDING', 'AWAITING_PAYMENT', 'COMPLETED', 'PARKED'));
-    END IF;
-END $$;
+-- Status check constraint: includes PARKED (Phase 4 addition).
+ALTER TABLE restaurant_order
+    ADD CONSTRAINT ck_order_status
+        CHECK (status IN ('PENDING', 'AWAITING_PAYMENT', 'COMPLETED', 'PARKED'));
 
--- Add order_type constraint.
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.table_constraints
-         WHERE table_name = 'restaurant_order' AND constraint_name = 'ck_order_type'
-    ) THEN
-        ALTER TABLE restaurant_order
-            ADD CONSTRAINT ck_order_type
-                CHECK (order_type IN ('DINE_IN', 'TAKEAWAY', 'DELIVERY'));
-    END IF;
-END $$;
+-- Order-type check constraint.
+ALTER TABLE restaurant_order
+    ADD CONSTRAINT ck_order_type
+        CHECK (order_type IN ('DINE_IN', 'TAKEAWAY', 'DELIVERY'));
 
 CREATE INDEX IF NOT EXISTS idx_restaurant_order_status_business
     ON restaurant_order (company_id, business_id, status);

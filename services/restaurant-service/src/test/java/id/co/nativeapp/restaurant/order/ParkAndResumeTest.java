@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import id.co.nativeapp.restaurant.PostgresRlsTestBase;
 import id.co.nativeapp.restaurant.menu.dto.CreateMenuItemRequest;
 import id.co.nativeapp.restaurant.menu.service.MenuService;
+import id.co.nativeapp.restaurant.order.dto.CheckoutRequest;
 import id.co.nativeapp.restaurant.order.dto.CheckoutResult;
 import id.co.nativeapp.restaurant.order.dto.OrderLineRequest;
 import id.co.nativeapp.restaurant.order.dto.OrderResponse;
@@ -23,6 +24,11 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -458,6 +464,218 @@ class ParkAndResumeTest extends PostgresRlsTestBase {
   }
 
   // -----------------------------------------------------------------------
+  // H1 — parked-then-paid breakdown matches direct checkout
+  // -----------------------------------------------------------------------
+
+  @Test
+  void parkedThenPaidBreakdownMatchesDirectCheckout() throws Exception {
+    UUID itemId = seedItem(20_000L);
+
+    // Direct checkout: breakdown is computed at checkout time.
+    CheckoutResult directResult =
+        TenantContext.callAs(
+            TENANT_A,
+            ACTOR,
+            () ->
+                orderService.checkout(
+                    new CheckoutRequest(
+                        BUSINESS,
+                        "direct-breakdown-" + UUID.randomUUID(),
+                        List.of(new OrderLineRequest(itemId, 2)))));
+    var directBreakdown = directResult.order().breakdown();
+    assertThat(directBreakdown).isNotNull();
+
+    // Park + pay: breakdown must be recomputed at pay time.
+    CheckoutResult parked =
+        TenantContext.callAs(
+            TENANT_A,
+            ACTOR,
+            () ->
+                orderService.park(
+                    new ParkOrderRequest(
+                        BUSINESS,
+                        "parked-breakdown-" + UUID.randomUUID(),
+                        List.of(new OrderLineRequest(itemId, 2)))));
+
+    OrderResponse paid =
+        TenantContext.callAs(
+            TENANT_A,
+            ACTOR,
+            () ->
+                orderService.payParked(
+                    parked.order().orderId(),
+                    new PayParkedRequest(new PaymentRequest(TenderType.CASH, 50_000L))));
+
+    var parkedBreakdown = paid.breakdown();
+    assertThat(parkedBreakdown).isNotNull();
+    assertThat(parkedBreakdown.subtotalMinor())
+        .as("subtotal matches direct checkout")
+        .isEqualTo(directBreakdown.subtotalMinor());
+    assertThat(parkedBreakdown.discountMinor())
+        .as("discount matches direct checkout")
+        .isEqualTo(directBreakdown.discountMinor());
+    assertThat(parkedBreakdown.serviceChargeMinor())
+        .as("serviceCharge matches direct checkout")
+        .isEqualTo(directBreakdown.serviceChargeMinor());
+    assertThat(parkedBreakdown.taxMinor())
+        .as("tax matches direct checkout")
+        .isEqualTo(directBreakdown.taxMinor());
+    assertThat(parkedBreakdown.grandTotalMinor())
+        .as("grandTotal matches direct checkout")
+        .isEqualTo(directBreakdown.grandTotalMinor());
+  }
+
+  // -----------------------------------------------------------------------
+  // W2 — cross-tenant forged tableId
+  // -----------------------------------------------------------------------
+
+  @Test
+  void crossTenantForgedTableIdIsRejected() throws Exception {
+    // Tenant A creates a table.
+    UUID tenantATableId =
+        TenantContext.callAs(
+            TENANT_A,
+            ACTOR,
+            () ->
+                tableService
+                    .create(new CreateTableRequest(BUSINESS, "XTEN-T1", 4, null))
+                    .tableId());
+
+    // Tenant B creates an item in their own business.
+    UUID tenantBItemId =
+        TenantContext.callAs(
+            TENANT_B,
+            ACTOR,
+            () ->
+                menuService
+                    .createItem(
+                        new CreateMenuItemRequest(BUSINESS, "B-Item", "MAIN", 5_000L, "IDR"))
+                    .id());
+
+    // Tenant B attempts checkout using Tenant A's tableId.
+    // RLS makes Tenant A's table invisible to Tenant B → "not found or does not belong".
+    assertThatThrownBy(
+            () ->
+                TenantContext.callAs(
+                    TENANT_B,
+                    ACTOR,
+                    () ->
+                        orderService.checkout(
+                            new CheckoutRequest(
+                                BUSINESS,
+                                "xten-table-" + UUID.randomUUID(),
+                                List.of(new OrderLineRequest(tenantBItemId, 1)),
+                                null,
+                                null,
+                                "DINE_IN",
+                                tenantATableId))))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("not found or does not belong");
+  }
+
+  // -----------------------------------------------------------------------
+  // W3 — digital pay-parked no-revenue
+  // -----------------------------------------------------------------------
+
+  @Test
+  void payingParkedOrderWithDigitalTenderTransitionsToAwaitingPaymentWithNoSaleRecorded()
+      throws Exception {
+    UUID itemId = seedItem(18_000L);
+
+    CheckoutResult parked =
+        TenantContext.callAs(
+            TENANT_A,
+            ACTOR,
+            () ->
+                orderService.park(
+                    new ParkOrderRequest(
+                        BUSINESS,
+                        "park-digital-" + UUID.randomUUID(),
+                        List.of(new OrderLineRequest(itemId, 1)))));
+
+    UUID orderId = parked.order().orderId();
+    assertThat(saleRecordedCountAsAdmin()).as("no revenue before /pay").isZero();
+
+    // Pay with digital (QRIS) — must transition PARKED → AWAITING_PAYMENT.
+    OrderResponse awaitingPayment =
+        TenantContext.callAs(
+            TENANT_A,
+            ACTOR,
+            () ->
+                orderService.payParked(
+                    orderId, new PayParkedRequest(new PaymentRequest(TenderType.QRIS, null))));
+
+    assertThat(awaitingPayment.status()).isEqualTo("AWAITING_PAYMENT");
+    assertThat(awaitingPayment.saleId()).isNull(); // no revenue yet
+    assertThat(awaitingPayment.payment()).isNotNull();
+    assertThat(awaitingPayment.payment().status()).isEqualTo("PENDING");
+
+    // No SaleRecorded emitted — no-revenue-until-capture invariant on the parked path.
+    assertThat(saleRecordedCountAsAdmin())
+        .as("zero SaleRecorded for digital pay-parked (no-revenue invariant)")
+        .isZero();
+    assertThat(paymentCountAsAdmin()).as("one PENDING payment row").isEqualTo(1L);
+  }
+
+  // -----------------------------------------------------------------------
+  // H2 — concurrent payParked double-pay safety
+  // -----------------------------------------------------------------------
+
+  @Test
+  void concurrentPayParkedYieldsExactlyOneSaleAndOneOutboxRow() throws Exception {
+    UUID itemId = seedItem(25_000L);
+
+    CheckoutResult parked =
+        TenantContext.callAs(
+            TENANT_A,
+            ACTOR,
+            () ->
+                orderService.park(
+                    new ParkOrderRequest(
+                        BUSINESS,
+                        "park-concurrent-" + UUID.randomUUID(),
+                        List.of(new OrderLineRequest(itemId, 1)))));
+
+    UUID orderId = parked.order().orderId();
+
+    // Two threads race to payParked the same PARKED order.
+    CyclicBarrier barrier = new CyclicBarrier(2);
+    Callable<OrderResponse> attempt =
+        () ->
+            TenantContext.callAs(
+                TENANT_A,
+                ACTOR,
+                () -> {
+                  barrier.await();
+                  return orderService.payParked(
+                      orderId, new PayParkedRequest(new PaymentRequest(TenderType.CASH, 30_000L)));
+                });
+
+    ExecutorService pool = Executors.newFixedThreadPool(2);
+    try {
+      Future<OrderResponse> f1 = pool.submit(attempt);
+      Future<OrderResponse> f2 = pool.submit(attempt);
+
+      // Both callers must return COMPLETED — no 500.
+      OrderResponse r1 = f1.get();
+      OrderResponse r2 = f2.get();
+
+      assertThat(r1.status()).isEqualTo("COMPLETED");
+      assertThat(r2.status()).isEqualTo("COMPLETED");
+      assertThat(r1.orderId()).isEqualTo(r2.orderId());
+    } finally {
+      pool.shutdownNow();
+    }
+
+    // Exactly one SaleRecorded in the outbox.
+    assertThat(saleRecordedCountAsAdmin())
+        .as("exactly one SaleRecorded after concurrent payParked")
+        .isEqualTo(1L);
+    // Exactly one sale row.
+    assertThat(saleRowCountAsAdmin()).as("exactly one sale row").isEqualTo(1L);
+  }
+
+  // -----------------------------------------------------------------------
   // Helpers
   // -----------------------------------------------------------------------
 
@@ -479,6 +697,17 @@ class ParkAndResumeTest extends PostgresRlsTestBase {
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
         Statement st = admin.createStatement();
         ResultSet rs = st.executeQuery("SELECT count(*) FROM payment")) {
+      rs.next();
+      return rs.getLong(1);
+    }
+  }
+
+  private long saleRowCountAsAdmin() throws Exception {
+    try (Connection admin =
+            java.sql.DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        Statement st = admin.createStatement();
+        ResultSet rs = st.executeQuery("SELECT count(*) FROM sale")) {
       rs.next();
       return rs.getLong(1);
     }

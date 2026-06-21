@@ -161,7 +161,8 @@ public class OrderWriter {
             now,
             request.idempotencyKey(),
             orderType,
-            tableId);
+            tableId,
+            request.discountMinor());
     order.setCompanyId(companyId);
     persistLines(order, cart.linesToAdd(), companyId);
     Order saved = orderRepository.saveAndFlush(order);
@@ -266,7 +267,8 @@ public class OrderWriter {
             now,
             request.idempotencyKey(),
             orderType,
-            tableId);
+            tableId,
+            request.discountMinor());
     order.markParked(); // PENDING → PARKED (no sale written here)
     order.setCompanyId(companyId);
     persistLines(order, cart.linesToAdd(), companyId);
@@ -314,6 +316,11 @@ public class OrderWriter {
     String currencyCode = order.getTotal().currency().getCurrencyCode();
     String saleIdempotencyKey = orderId + ":park-sale";
 
+    // Recompute the price breakdown from the persisted lines (H1 fix).
+    // The subtotal is the sum of line totals; the discount is whatever was stored on the order at
+    // park time. This reproduces the same breakdown shape as the equivalent direct checkout.
+    PriceBreakdown breakdown = recomputeBreakdown(order, currencyCode, now);
+
     boolean isDigitalPayment =
         request.payment() != null && request.payment().tenderType().isDigital();
 
@@ -329,13 +336,13 @@ public class OrderWriter {
               now,
               saleIdempotencyKey,
               tenderTypeName,
-              null); // breakdown not stored on-order; pass null (finance falls back to amount)
+              breakdown);
       RecordSaleResult saleResult = saleWriter.recordInCurrentTx(saleCommand);
 
       order.linkSale(saleResult.sale().id()); // PARKED → COMPLETED
       orderRepository.saveAndFlush(order);
 
-      OrderResponse response = OrderResponse.from(order);
+      OrderResponse response = OrderResponse.from(order, breakdown);
       if (request.payment() != null) {
         PaymentInstruction instruction =
             new PaymentInstruction(
@@ -365,7 +372,7 @@ public class OrderWriter {
               saleIdempotencyKey + ":pay");
       PaymentResponse paymentResponse =
           paymentWriter.recordPendingDigitalInCurrentTx(instruction, now);
-      return OrderResponse.from(order).withPayment(paymentResponse);
+      return OrderResponse.from(order, breakdown).withPayment(paymentResponse);
     }
   }
 
@@ -607,6 +614,25 @@ public class OrderWriter {
         view.getStatus(),
         view.getOrderType(),
         view.getTableId());
+  }
+
+  /**
+   * Recomputes the {@link PriceBreakdown} for a parked order at pay time. The subtotal is the sum
+   * of the persisted line totals; the fixed discount is whatever was stored on the order at park
+   * time. This produces the same breakdown shape as an equivalent direct checkout of the same cart
+   * (H1 fix — parked-then-paid SaleRecorded carries identical breakdown legs).
+   */
+  private PriceBreakdown recomputeBreakdown(Order order, String currencyCode, Instant now) {
+    List<OrderLineView> lineViews = lineRepository.findViewsByOrderId(order.getId());
+    Money subtotal = Money.zero(Currency.getInstance(currencyCode));
+    for (OrderLineView lv : lineViews) {
+      subtotal = subtotal.plus(Money.ofMinor(lv.getLineTotalMinor(), currencyCode));
+    }
+    Money fixedDiscount =
+        (order.getDiscountMinor() != null)
+            ? Money.ofMinor(order.getDiscountMinor(), currencyCode)
+            : null;
+    return taxChargeService.resolve(subtotal, 0L, fixedDiscount, now);
   }
 
   /** Immutable value holding the validated cart: resolved lines, breakdown, and currency. */

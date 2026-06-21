@@ -60,6 +60,23 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
   }
 
   @Test
+  void aCashierCanReachThePosTablesRoute() throws Exception {
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/tables/x")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/tables/x");
+  }
+
+  @Test
   void aCashierIsDeniedTheDashboardPnlRouteWith403AndItNeverReachesTheDownstream()
       throws Exception {
     String token =

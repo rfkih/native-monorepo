@@ -87,4 +87,68 @@ class OrderTotalTest {
     assertThat(order.getStatus()).isEqualTo("PENDING");
     assertThat(order.getSaleId()).isNull();
   }
+
+  // ---------------------------------------------------------------------------
+  // W1 — state-transition guard tests
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void markParkedRequiresPending() {
+    Money total = Money.ofMinor(20_000L, "IDR");
+    Order order = new Order(BUSINESS_ID, total, NOW, "guard-park-1");
+    order.markParked(); // PENDING → PARKED (legal)
+
+    // Second markParked on a PARKED order must fail.
+    assertThatThrownBy(order::markParked)
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("PENDING");
+  }
+
+  @Test
+  void markAwaitingPaymentRequiresPendingOrParked() {
+    Money total = Money.ofMinor(20_000L, "IDR");
+    Order orderFromPending = new Order(BUSINESS_ID, total, NOW, "guard-awp-1");
+    orderFromPending.markAwaitingPayment(); // PENDING → AWAITING_PAYMENT (legal)
+    assertThat(orderFromPending.getStatus()).isEqualTo("AWAITING_PAYMENT");
+
+    Order orderFromParked = new Order(BUSINESS_ID, total, NOW, "guard-awp-2");
+    orderFromParked.markParked();
+    orderFromParked.markAwaitingPayment(); // PARKED → AWAITING_PAYMENT (legal)
+    assertThat(orderFromParked.getStatus()).isEqualTo("AWAITING_PAYMENT");
+  }
+
+  @Test
+  void markAwaitingPaymentFromCompletedIsRejected() {
+    Money total = Money.ofMinor(20_000L, "IDR");
+    Order order = new Order(BUSINESS_ID, total, NOW, "guard-awp-3");
+    order.linkSale(UUID.randomUUID()); // PENDING → COMPLETED
+
+    assertThatThrownBy(order::markAwaitingPayment)
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("PENDING or PARKED");
+  }
+
+  @Test
+  void linkSaleOnCompletedOrderIsRejected() {
+    Money total = Money.ofMinor(20_000L, "IDR");
+    Order order = new Order(BUSINESS_ID, total, NOW, "guard-link-1");
+    order.linkSale(UUID.randomUUID()); // PENDING → COMPLETED (legal)
+
+    // Calling linkSale again on a COMPLETED order must fail.
+    assertThatThrownBy(() -> order.linkSale(UUID.randomUUID()))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("already COMPLETED");
+  }
+
+  @Test
+  void linkSaleFromParkedIsAllowed() {
+    Money total = Money.ofMinor(20_000L, "IDR");
+    Order order = new Order(BUSINESS_ID, total, NOW, "guard-link-2");
+    order.markParked();
+    UUID saleId = UUID.randomUUID();
+    order.linkSale(saleId); // PARKED → COMPLETED (legal)
+
+    assertThat(order.getSaleId()).isEqualTo(saleId);
+    assertThat(order.getStatus()).isEqualTo("COMPLETED");
+  }
 }
