@@ -28,7 +28,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * <p>Every problem carries a stable kebab-case {@code type} URI ({@code
  * https://errors.nativeapp.id/<slug>}), a numeric {@code status}, a {@code title}, the request
  * {@code instance} path, and — when a trace is in flight — a {@code traceId} property read from the
- * SLF4J {@code MDC} (the {@code trace_id} key the logging pattern already uses), so no heavy OTel
+ * SLF4J {@code MDC} (the {@code traceId} key the logging pattern already uses), so no heavy OTel
  * dependency is pulled in just to surface it.
  *
  * <p>Three fault shapes are handled, matching the contract the per-service copies pinned:
@@ -96,7 +96,7 @@ public class ApiExceptionHandler {
     ProblemDetail problem = problem(HttpStatus.INTERNAL_SERVER_ERROR, "internal-error", request);
     problem.setTitle("Internal Server Error");
     problem.setDetail("An unexpected error occurred.");
-    log.error("Unhandled exception [traceId={}]", MDC.get("trace_id"), ex);
+    log.error("Unhandled exception [traceId={}]", MDC.get("traceId"), ex);
     return problem;
   }
 
@@ -104,7 +104,7 @@ public class ApiExceptionHandler {
     ProblemDetail problem = ProblemDetail.forStatus(status);
     problem.setType(URI.create(TYPE_BASE + slug));
     problem.setInstance(URI.create(request.getRequestURI()));
-    String traceId = MDC.get("trace_id");
+    String traceId = MDC.get("traceId");
     if (traceId != null) {
       problem.setProperty("traceId", traceId);
     }

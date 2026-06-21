@@ -32,7 +32,7 @@ import org.slf4j.MDC;
  *   <li>NIK / bank-account / salary DIGITS are absent from the encoded line when they are present
  *       only in non-allow-listed MDC keys (a stray {@code MDC.put} of PII would be caught here);
  *       and
- *   <li>ONLY the three allow-listed MDC keys ({@code trace_id}, {@code span_id}, {@code
+ *   <li>ONLY the three allow-listed MDC keys ({@code traceId}, {@code spanId}, {@code
  *       correlation_id}) are promoted to top-level JSON fields.
  * </ul>
  *
@@ -50,7 +50,7 @@ class PiiAbsentFromEncodedJsonLogTest {
 
   /** The shared JSON appender's MDC allow-list — the ONLY keys promoted to top-level fields. */
   private static final List<String> ALLOW_LISTED_MDC_KEYS =
-      List.of("trace_id", "span_id", "correlation_id");
+      List.of("traceId", "spanId", "correlation_id");
 
   @Test
   void piiInANonAllowListedMdcKeyNeverReachesTheEncodedJsonLine() {
@@ -68,9 +68,9 @@ class PiiAbsentFromEncodedJsonLogTest {
     event.setThreadName("test-thread");
     event.setMDCPropertyMap(
         Map.of(
-            "trace_id",
+            "traceId",
             "0af7651916cd43dd8448eb211c80319c",
-            "span_id",
+            "spanId",
             "b7ad6b7169203331",
             "correlation_id",
             "11111111-2222-3333-4444-555555555555",
@@ -98,8 +98,8 @@ class PiiAbsentFromEncodedJsonLogTest {
     // (2) The three allow-listed keys ARE promoted to top-level fields (so the allow-list is real,
     //     not vacuously dropping everything).
     assertThat(json)
-        .contains("\"trace_id\":\"0af7651916cd43dd8448eb211c80319c\"")
-        .contains("\"span_id\":\"b7ad6b7169203331\"")
+        .contains("\"traceId\":\"0af7651916cd43dd8448eb211c80319c\"")
+        .contains("\"spanId\":\"b7ad6b7169203331\"")
         .contains("\"correlation_id\":\"11111111-2222-3333-4444-555555555555\"");
     // The service custom field is present (proves we mirrored the shared appender, not a bare one).
     assertThat(json).contains("\"service\":\"employee-service\"");

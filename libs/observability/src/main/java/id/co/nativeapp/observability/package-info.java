@@ -8,7 +8,7 @@
  *   <li><strong>Structured JSON logging.</strong> The classpath resource {@code
  *       logback-native-json.xml} defines one JSON object per line — carrying {@code service},
  *       {@code level}, {@code logger}, {@code message}, the correlation id, and the OpenTelemetry
- *       {@code trace_id}/{@code span_id} from MDC — plus a dev-profile console fallback. Each
+ *       {@code traceId}/{@code spanId} from MDC — plus a dev-profile console fallback. Each
  *       service's tiny {@code logback-spring.xml} {@code <include>}s it, so the log format is
  *       defined once. The {@code logstash-logback-encoder} it references is exposed as an {@code
  *       api} dependency.

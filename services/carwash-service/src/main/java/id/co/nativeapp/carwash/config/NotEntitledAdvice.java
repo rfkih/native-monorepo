@@ -23,9 +23,9 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * config — it is one narrow service-specific mapping, the same pattern entitlement-service's {@code
  * EntitlementNotFoundAdvice} and org-service's {@code TenantAccessDeniedAdvice} follow.
  *
- * <p>The {@code traceId} (from the SLF4J {@code MDC} {@code trace_id} key) and the stable
- * kebab-case {@code type} URI are emitted the same way the shared advice does, so the {@code
- * ProblemDetail} shape stays uniform and the React forms can map the {@code type} to an i18n key.
+ * <p>The {@code traceId} (from the SLF4J {@code MDC} {@code traceId} key) and the stable kebab-case
+ * {@code type} URI are emitted the same way the shared advice does, so the {@code ProblemDetail}
+ * shape stays uniform and the React forms can map the {@code type} to an i18n key.
  */
 @RestControllerAdvice
 public class NotEntitledAdvice {
@@ -40,7 +40,7 @@ public class NotEntitledAdvice {
     problem.setTitle("Forbidden");
     problem.setDetail(ex.getMessage());
     problem.setInstance(URI.create(request.getRequestURI()));
-    String traceId = MDC.get("trace_id");
+    String traceId = MDC.get("traceId");
     if (traceId != null) {
       problem.setProperty("traceId", traceId);
     }

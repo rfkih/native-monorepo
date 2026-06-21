@@ -98,7 +98,7 @@ public class EmployeeApiAdvice {
     ProblemDetail problem = ProblemDetail.forStatus(status);
     problem.setType(URI.create(TYPE_BASE + slug));
     problem.setInstance(URI.create(request.getRequestURI()));
-    String traceId = MDC.get("trace_id");
+    String traceId = MDC.get("traceId");
     if (traceId != null) {
       problem.setProperty("traceId", traceId);
     }

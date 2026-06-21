@@ -70,7 +70,7 @@ public class ConstraintViolationAdvice {
     problem.setTitle("Validation failed");
     problem.setDetail("One or more parameters are invalid.");
     problem.setInstance(URI.create(request.getRequestURI()));
-    String traceId = MDC.get("trace_id");
+    String traceId = MDC.get("traceId");
     if (traceId != null) {
       problem.setProperty("traceId", traceId);
     }
@@ -92,7 +92,7 @@ public class ConstraintViolationAdvice {
     problem.setTitle("FX rate unavailable");
     problem.setDetail(ex.getMessage());
     problem.setInstance(URI.create(request.getRequestURI()));
-    String traceId = MDC.get("trace_id");
+    String traceId = MDC.get("traceId");
     if (traceId != null) {
       problem.setProperty("traceId", traceId);
     }
@@ -154,7 +154,7 @@ public class ConstraintViolationAdvice {
     problem.setTitle(title);
     problem.setDetail(detail);
     problem.setInstance(URI.create(request.getRequestURI()));
-    String traceId = MDC.get("trace_id");
+    String traceId = MDC.get("traceId");
     if (traceId != null) {
       problem.setProperty("traceId", traceId);
     }

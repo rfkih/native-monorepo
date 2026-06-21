@@ -30,7 +30,7 @@
 | 7 | Edge security | gateway JWT + RLS + role-gated routes — §6 (built this session) | JWT filter, single app | ✅ ahead |
 | 8 | Exactly-once / idempotency | unique key + conflict re-read + DLT — §3.2/§4 (test) | per-strategy idempotency | ✅ ahead |
 | 9 | **API docs (OpenAPI)** | springdoc + `@Operation` ArchUnit enforcer + per-service smoke test — §1.3 (ArchUnit + test) | springdoc 2.6 + `@Operation`/`@Tag` on all controllers | ✅ ahead — **springdoc 3.0.x fleet-wide (all 6 business services); `@Operation`/`@Tag` on every handler; an `apiHandlersAreDocumentedWithAnOperation` ArchUnit guard (also in `service-template`); 6 doc smoke tests ([ADR 0004](adr/0004-openapi-docs-springdoc.md) → [ADR 0008](adr/0008-openapi-docs-fleet-rollout.md))** |
-| 10 | **Distributed tracing** | OTel context across every hop — §5 (test) | metrics + Grafana dashboards; custom trace-IDs + MDC (no full OTel either) | ⚠ **gap (deferred) → code phase** |
+| 10 | **Distributed tracing** | OTel context across every hop — §5 (test) | metrics + Grafana dashboards; custom trace-IDs + MDC (no full OTel either) | ✅ ahead (OTel + MDC + HTTP) — **Micrometer Tracing + OpenTelemetry wired fleet-wide via libs/observability; real `traceId`/`spanId` in the JSON logs, W3C propagation across the gateway→service edge, full sampling, export-off-by-default ([ADR 0010](adr/0010-distributed-tracing-otel.md))**. Outbox→Kafka trace continuity + a real collector are infra-gated follow-ups |
 | 11 | **Error observability** | JSON logs → sink + RED + outbox-lag — §5; *(optional DB inbox)* | DB error-inbox + alerting | ✅ ahead (DB inbox) — **`libs/error-inbox` rolled out to every consuming service (finance/carwash/employee/entitlement/notification): fingerprint-deduped `error_log` + PII-redacted milestone alerts ([ADR 0005](adr/0005-error-inbox-and-alerting.md) → [ADR 0009](adr/0009-error-inbox-fleet-rollout.md))**. RED metrics / outbox-lag / Grafana dashboards still a follow-up (ties to #13) |
 | 12 | Client resilience (timeouts) | explicit connect/read timeouts + startup self-check — §4 (startup check) | configured | ✅ — **JWKS decoders (libs/security shared + gateway) and the finance alert webhook carry explicit connect/read timeouts; `OutboundClientTimeoutCheck` fails fast at boot on a non-positive timeout** |
 | 13 | **Deployed & proven** | CI + Kustomize authored — `deploy/` | ✅ live in prod | ❗ **infra-gated — owner action, not code** |
@@ -44,7 +44,10 @@
 springdoc fleet-wide + the `apiHandlersAreDocumentedWithAnOperation` ArchUnit guard) → ~~12 client timeouts~~
 **done** (explicit JWKS/webhook timeouts + the `OutboundClientTimeoutCheck` startup self-check) → ~~11
 error-inbox fleet rollout~~ **done** (DB inbox [ADR 0009](adr/0009-error-inbox-fleet-rollout.md): `libs/error-inbox`
-on every consumer; RED/Grafana half still tied to #13) → **10 tracing** (next). Each lands **with its enforcer**
+on every consumer; RED/Grafana half still tied to #13) → ~~10 tracing~~ **done** (OTel + MDC + HTTP propagation
+fleet-wide, [ADR 0010](adr/0010-distributed-tracing-otel.md); outbox→Kafka continuity + collector infra-gated).
+**The four "then code" scorecard gaps (9, 12, 11, 10) are now closed; the remainder of 10/11 is infra-gated
+(#13).** Each lands **with its enforcer**
 — the OpenAPI gap shipped with an ArchUnit rule that every `@RequestMapping` handler carries an `@Operation`;
 the timeouts gap shipped with a startup self-check that fails fast on a non-positive connect/read timeout — so a
 closed gap cannot silently re-open.
@@ -317,7 +320,7 @@ void on(ConsumerRecord<String, byte[]> rec) {
 
 ## 5. Observability
 
-- **Structured JSON logs, one object per line**, carrying `service`, `level`, `logger`, `message`, the correlation/request id, and OTel `trace_id` + `span_id` from MDC. The current plain-text console pattern is not machine-parseable by Loki — replace it with a JSON encoder (logstash-logback-encoder) wired in a **shared `logback-spring.xml` in service-template** so every service inherits it identically. *(review)*
+- **Structured JSON logs, one object per line**, carrying `service`, `level`, `logger`, `message`, the correlation/request id, and the OTel `traceId` + `spanId` from MDC (populated by the Micrometer Tracing bridge — ADR 0010). The current plain-text console pattern is not machine-parseable by Loki — replace it with a JSON encoder (logstash-logback-encoder) wired in a **shared `logback-spring.xml` in service-template** so every service inherits it identically. *(review)*
 
 ```xml
 <!-- logback-spring.xml (shared in service-template) — JSON logs with trace correlation -->
@@ -330,7 +333,7 @@ void on(ConsumerRecord<String, byte[]> rec) {
 ```
 
 - **RED metrics via Micrometer/Prometheus**: request Rate + Error rate + Duration on HTTP and on each consumer, plus **outbox lag** (unpublished rows — the early warning that Debezium/relay is behind) and consumer dedupe-skip count. Dotted Micrometer names. **`company_id` is NEVER a metric tag** (thousands of tenants → unbounded cardinality → Prometheus outage) — it stays in logs/traces only. *(test)*
-- **Continuous distributed tracing across every hop.** Trace context propagates over Kafka headers (producer stamps W3C `traceparent` into the outbox row's `headers` column; consumer extracts it) and over every sync edge. No handler starts a fresh **root** span for an inbound request/event that already carries context — otherwise operations→event→finance→dashboard latency is unattributable. *(test)*
+- **Continuous distributed tracing across every hop.** Micrometer Tracing + OpenTelemetry is wired fleet-wide from `libs/observability` ([ADR 0010](adr/0010-distributed-tracing-otel.md)): real `traceId`/`spanId` populate the JSON logs (above), full sampling, and W3C `traceparent` propagates across the **sync edge** (gateway → service) — no handler starts a fresh **root** span for an inbound request that already carries context. **Still deferred (infra-gated):** trace context over the **Kafka hop** (producer stamps `traceparent` into the outbox row; Debezium maps it to a header; consumer extracts it), and a real OTLP collector — so today an event hop starts a new trace on the consumer. *(test)*
 
 ---
 

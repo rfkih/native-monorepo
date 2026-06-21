@@ -66,6 +66,28 @@ cascade-deactivate + reactivation.)
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **Distributed tracing — Micrometer Tracing + OpenTelemetry fleet-wide (ADR 0010, scorecard #10)** —
+  §5 called for OTel trace context across every hop + `traceId`/`spanId` in the JSON logs, but **no
+  tracing was wired**: every log line carried an empty `[,]`, and the RFC-7807 advice + error-inbox read
+  a `trace_id` MDC key nothing ever populated. Wired **Micrometer Tracing + the OpenTelemetry bridge**
+  from `libs/observability` (the one dependency every service + the gateway already has) via
+  `spring-boot-starter-opentelemetry` — Spring Boot 4.0 split tracing into per-concern modules, and the
+  bare bridge alone falls back to a **no-op tracer**. Aligned the shared logback MDC keys to Micrometer's
+  `traceId`/`spanId`, and every `MDC.get("trace_id")` reader (the advice in each service, libs/security's
+  `ApiExceptionHandler`, the error-inbox `ConsumeErrorRecorder`) to `traceId` — so the real trace id now
+  flows into error responses' `traceId` and `error_log.trace_id` (the DB column keeps its name). Full
+  sampling (1.0) via a lowest-precedence `ObservabilityEnvironmentPostProcessor` default; OTLP span +
+  metric export **disabled by default** (no collector yet → nothing shipped, no connection-failure
+  noise). W3C `traceparent` propagation across the gateway→service sync edge is Spring Boot's
+  auto-instrumentation. **Deferred (infra-gated):** the outbox→Debezium→Kafka trace continuity (producer
+  stamps `traceparent` into the outbox; connector maps it; consumer extracts it — needs a schema
+  migration on every producer + connector changes + the live CDC loop) and a real OTLP collector (#13).
+  Closes scorecard **#10** for the OTel + MDC + HTTP-propagation half (ahead of blackheart's custom IDs).
+  Verified: a `TracingWiringTest` (real Tracer + 1.0 sampling + a valid 32-hex W3C trace id) + the WHOLE
+  fleet's Testcontainers suites green across all 8 services + the libs — the fleet-wide classpath +
+  MDC-key change re-verified end to end (the employee PII-log drift guard updated to the new allow-list);
+  checkstyle + spotless green. With #10 done, the four "then code" scorecard gaps — **9, 12, 11, 10** —
+  are all closed; their infra-gated remainders fold into #13.
 - **Error-inbox fleet rollout — `libs/error-inbox` (ADR 0009, scorecard #11)** — the finance error-inbox
   pilot (ADR 0005) became a shared library and was rolled out to **every** event-consuming service. The
   five service-agnostic pieces (`ErrorMessageRedactor`, `ErrorInboxWriter`, `AlertPayload`,

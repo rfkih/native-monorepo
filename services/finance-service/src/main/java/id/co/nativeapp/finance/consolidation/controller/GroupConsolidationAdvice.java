@@ -62,7 +62,7 @@ public class GroupConsolidationAdvice {
 
   private static ProblemDetail decorate(ProblemDetail problem, HttpServletRequest request) {
     problem.setInstance(URI.create(request.getRequestURI()));
-    String traceId = MDC.get("trace_id");
+    String traceId = MDC.get("traceId");
     if (traceId != null) {
       problem.setProperty("traceId", traceId);
     }

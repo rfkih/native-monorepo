@@ -17,7 +17,7 @@ import org.springframework.core.NestedExceptionUtils;
  *
  * <ol>
  *   <li>Derives {@code source} from the consumer record's topic.
- *   <li>Pulls the W3C {@code trace_id} from MDC (nullable — not available on a Kafka thread).
+ *   <li>Pulls the W3C {@code traceId} from MDC (nullable — not available on a Kafka thread).
  *   <li>Delegates to {@link ErrorInboxWriter} to upsert the error and get the post-upsert {@code
  *       occurrence_count}.
  *   <li>If {@link #shouldAlert(long)} is true, builds an {@link AlertPayload} and fires it via
@@ -60,7 +60,7 @@ public class ConsumeErrorRecorder {
   public void record(ConsumerRecord<?, ?> rec, Exception ex) {
     try {
       String source = "kafka:" + rec.topic();
-      String traceId = MDC.get("trace_id");
+      String traceId = MDC.get("traceId");
 
       ErrorInboxWriter.Recorded recorded = errorInboxWriter.record(ex, source, null, traceId);
 

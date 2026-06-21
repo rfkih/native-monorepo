@@ -23,7 +23,7 @@
 - **Redis** + **Caffeine**
 - **Keycloak** (OIDC, RS256 JWT), **Spring Cloud Gateway**
 - **gRPC** internal (rare), **REST/OpenAPI** external (**springdoc-openapi 3.0.x** — docs fleet-wide, [ADR 0008](docs/adr/0008-openapi-docs-fleet-rollout.md))
-- **OpenTelemetry**; at split time: **Linkerd** (mTLS), **Vault**
+- **OpenTelemetry** (Micrometer Tracing bridge, wired fleet-wide — [ADR 0010](docs/adr/0010-distributed-tracing-otel.md)); at split time: **Linkerd** (mTLS), **Vault**
 - Frontend: **Vite + React + TypeScript + Tailwind + shadcn/ui + TanStack Query + Recharts**; **react-i18next** for localization
 
 ## Hard architecture rules — NEVER violate

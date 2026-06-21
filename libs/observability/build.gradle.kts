@@ -28,6 +28,28 @@ dependencies {
     // It reuses the jackson-databind Spring Boot already manages — no second JSON stack.
     api("net.logstash.logback:logstash-logback-encoder:8.1")
 
+    // Distributed tracing (ADR 0010, ENGINEERING-STANDARDS §5 #10). Spring Boot 4.0 split tracing
+    // out of actuator-autoconfigure into per-concern modules; this is the Micrometer-Tracing +
+    // OpenTelemetry one — it brings the micrometer-tracing-bridge-otel bridge AND the Spring Boot
+    // auto-configuration that actually WIRES it (the Tracer, the OTel SDK TracerProvider, and W3C
+    // `traceparent` propagation across every HTTP hop). It populates the `traceId`/`spanId` MDC keys
+    // the shared logback config promotes, so every log line correlates to its span. Exposed as `api`
+    // so EVERY consumer (the gateway edge included — this lib is the universal observability
+    // dependency) is traced from one declaration. Version BOM-managed (Spring Boot 4.1). NO exporter
+    // is wired: spans are created and context propagates in-process / across hops, but shipping them
+    // to an OTLP collector is an infra-gated, environment-specific follow-up (ADR 0010). The default
+    // sample rate is forced to 1.0 by ObservabilityEnvironmentPostProcessor (overridable).
+    // The Spring Boot OpenTelemetry STARTER is what makes Boot build a REAL OTel SdkTracerProvider
+    // and wire the Micrometer bridge — with only the bare bridge module the bridge falls back to a
+    // no-op tracer whose spans carry no trace id. It pulls the OTLP exporters; actual network export
+    // is DISABLED by default (ObservabilityEnvironmentPostProcessor sets
+    // management.tracing.export.enabled=false AND management.otlp.metrics.export.enabled=false), so
+    // NO collector is contacted — the SDK is real, ids populate the MDC + propagate over HTTP, but
+    // nothing is shipped until an environment wires a collector and flips those flags (ADR 0010). The
+    // starter also brings an OTLP metrics registry; it sits alongside the existing Prometheus scrape
+    // registry and, with metrics export off, is inert.
+    api("org.springframework.boot:spring-boot-starter-opentelemetry")
+
     // The shared `kafka` READINESS health indicator (ENGINEERING-STANDARDS §7) +
     // its auto-configuration. Spring Boot 4 ships NO built-in Kafka health
     // contributor, so a service that names `kafka` in its readiness group needs one
