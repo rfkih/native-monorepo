@@ -2,11 +2,8 @@ package id.co.nativeapp.restaurant.order.service;
 
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.restaurant.menu.projection.MenuItemView;
-import id.co.nativeapp.restaurant.menu.projection.ModifierGroupView;
 import id.co.nativeapp.restaurant.menu.projection.ModifierOptionView;
 import id.co.nativeapp.restaurant.menu.repository.MenuItemRepository;
-import id.co.nativeapp.restaurant.menu.repository.ModifierGroupRepository;
-import id.co.nativeapp.restaurant.menu.repository.ModifierOptionRepository;
 import id.co.nativeapp.restaurant.order.domain.Order;
 import id.co.nativeapp.restaurant.order.domain.OrderLine;
 import id.co.nativeapp.restaurant.order.domain.OrderLineModifier;
@@ -87,8 +84,7 @@ public class OrderWriter {
   private final OrderLineRepository lineRepository;
   private final OrderLineModifierRepository modifierRepository;
   private final MenuItemRepository menuItemRepository;
-  private final ModifierGroupRepository modifierGroupRepository;
-  private final ModifierOptionRepository modifierOptionRepository;
+  private final ModifierValidationReader modifierValidator;
   private final SaleWriter saleWriter;
   private final PaymentWriter paymentWriter;
   private final TaxChargeService taxChargeService;
@@ -98,8 +94,7 @@ public class OrderWriter {
       OrderLineRepository lineRepository,
       OrderLineModifierRepository modifierRepository,
       MenuItemRepository menuItemRepository,
-      ModifierGroupRepository modifierGroupRepository,
-      ModifierOptionRepository modifierOptionRepository,
+      ModifierValidationReader modifierValidator,
       SaleWriter saleWriter,
       PaymentWriter paymentWriter,
       TaxChargeService taxChargeService) {
@@ -107,8 +102,7 @@ public class OrderWriter {
     this.lineRepository = lineRepository;
     this.modifierRepository = modifierRepository;
     this.menuItemRepository = menuItemRepository;
-    this.modifierGroupRepository = modifierGroupRepository;
-    this.modifierOptionRepository = modifierOptionRepository;
+    this.modifierValidator = modifierValidator;
     this.saleWriter = saleWriter;
     this.paymentWriter = paymentWriter;
     this.taxChargeService = taxChargeService;
@@ -193,120 +187,22 @@ public class OrderWriter {
     Currency currency = Currency.getInstance(currencyCode);
 
     // ------------------------------------------------------------------
-    // 3. Validate + resolve modifier options (Phase 3).
-    //    For each line that has selectedOptionIds:
-    //    a) Load all requested option ids (chunk at <=1000).
-    //    b) Verify each option exists (RLS-scoped), is available, and
-    //       its group belongs to THIS menu item.
-    //    c) Enforce group required/min_select/max_select constraints.
-    //    d) Compute the modifier price delta for the line.
+    // 3. Validate + resolve modifier options via shared ModifierValidationReader.
+    //    The validator de-dupes option ids, checks availability + ownership,
+    //    enforces min/max_select on ALL groups (not just required), enforces
+    //    SINGLE selection-type, and rejects a negative effective unit price.
+    //    This is identical logic to the quote path so they cannot diverge.
     // ------------------------------------------------------------------
-    // Collect ALL distinct option ids across all lines for a bulk load.
-    List<UUID> allOptionIds =
-        request.lines().stream().flatMap(lr -> lr.selectedOptionIds().stream()).distinct().toList();
+    ModifierValidationReader.ValidationContext modCtx =
+        modifierValidator.loadContext(request.lines());
 
-    Map<UUID, ModifierOptionView> optionMap = new HashMap<>();
-    if (!allOptionIds.isEmpty()) {
-      for (int i = 0; i < allOptionIds.size(); i += 1000) {
-        List<UUID> chunk = allOptionIds.subList(i, Math.min(i + 1000, allOptionIds.size()));
-        modifierOptionRepository.findViewsByIds(chunk).forEach(o -> optionMap.put(o.getId(), o));
-      }
-    }
-
-    // Collect ALL distinct group ids referenced by the loaded options for a bulk load.
-    List<UUID> allGroupIds =
-        optionMap.values().stream().map(ModifierOptionView::getGroupId).distinct().toList();
-
-    Map<UUID, ModifierGroupView> groupMap = new HashMap<>();
-    if (!allGroupIds.isEmpty()) {
-      for (int i = 0; i < allGroupIds.size(); i += 1000) {
-        List<UUID> chunk = allGroupIds.subList(i, Math.min(i + 1000, allGroupIds.size()));
-        modifierGroupRepository.findViewsByIds(chunk).forEach(g -> groupMap.put(g.getId(), g));
-      }
-    }
-
-    // Per-line modifier validation and delta computation.
-    // modifiersByLine[i] = list of (optionId, nameSnapshot, priceDeltaMinor) for line i.
     List<List<ModifierOptionView>> resolvedModifiersByLine =
         new ArrayList<>(request.lines().size());
 
     for (OrderLineRequest lineReq : request.lines()) {
-      List<UUID> selectedIds = lineReq.selectedOptionIds();
-      List<ModifierOptionView> resolved = new ArrayList<>(selectedIds.size());
-
-      if (!selectedIds.isEmpty()) {
-        // Load required groups for this item to enforce required/min/max constraints.
-        List<ModifierGroupView> requiredGroups =
-            modifierGroupRepository.findRequiredViewsByMenuItemId(lineReq.menuItemId());
-
-        // Validate each selected option.
-        Map<UUID, List<UUID>> selectionsByGroup = new HashMap<>();
-        for (UUID optionId : selectedIds) {
-          ModifierOptionView option = optionMap.get(optionId);
-          if (option == null) {
-            throw new IllegalArgumentException(
-                "Modifier option not found or not visible: " + optionId);
-          }
-          if (!option.isAvailable()) {
-            throw new IllegalArgumentException(
-                "Modifier option is not available: " + optionId + " (" + option.getName() + ")");
-          }
-          ModifierGroupView group = groupMap.get(option.getGroupId());
-          if (group == null || !group.getMenuItemId().equals(lineReq.menuItemId())) {
-            throw new IllegalArgumentException(
-                "Modifier option "
-                    + optionId
-                    + " does not belong to menu item "
-                    + lineReq.menuItemId());
-          }
-          selectionsByGroup
-              .computeIfAbsent(option.getGroupId(), k -> new ArrayList<>())
-              .add(optionId);
-          resolved.add(option);
-        }
-
-        // Enforce max_select per group.
-        for (Map.Entry<UUID, List<UUID>> entry : selectionsByGroup.entrySet()) {
-          ModifierGroupView group = groupMap.get(entry.getKey());
-          if (group != null && entry.getValue().size() > group.getMaxSelect()) {
-            throw new IllegalArgumentException(
-                "Too many selections for modifier group '"
-                    + group.getName()
-                    + "': max "
-                    + group.getMaxSelect()
-                    + ", got "
-                    + entry.getValue().size());
-          }
-        }
-
-        // Enforce required groups / min_select.
-        for (ModifierGroupView rg : requiredGroups) {
-          List<UUID> chosen = selectionsByGroup.getOrDefault(rg.getId(), List.of());
-          if (chosen.size() < rg.getMinSelect()) {
-            throw new IllegalArgumentException(
-                "Required modifier group '"
-                    + rg.getName()
-                    + "' needs at least "
-                    + rg.getMinSelect()
-                    + " selection(s), got "
-                    + chosen.size());
-          }
-        }
-      } else {
-        // No options selected — still enforce required groups.
-        List<ModifierGroupView> requiredGroups =
-            modifierGroupRepository.findRequiredViewsByMenuItemId(lineReq.menuItemId());
-        for (ModifierGroupView rg : requiredGroups) {
-          if (rg.getMinSelect() > 0) {
-            throw new IllegalArgumentException(
-                "Required modifier group '"
-                    + rg.getName()
-                    + "' needs at least "
-                    + rg.getMinSelect()
-                    + " selection(s), got 0");
-          }
-        }
-      }
+      MenuItemView view = itemMap.get(lineReq.menuItemId());
+      List<ModifierOptionView> resolved =
+          modifierValidator.validateLine(lineReq, view.getPriceMinor(), modCtx);
       resolvedModifiersByLine.add(resolved);
     }
 

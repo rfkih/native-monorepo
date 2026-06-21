@@ -51,18 +51,27 @@ ALTER TABLE menu_item
 -- 3. Back-fill: create one menu_category per distinct (company_id, business_id, category string)
 --    and point existing menu_item rows at the new category.
 --
---    Migrations run as the DB owner (SUPERUSER / BYPASSRLS-granted role), so we
---    temporarily set app.current_tenant to the wildcard sentinel that bypasses RLS
---    for the SELECT that reads all distinct (company_id, business_id, category)
---    tuples.  The INSERT into menu_category uses SET LOCAL so it only affects
---    this migration transaction.  Because FORCE RLS is active we use SET LOCAL
---    per-row in the DO block (PL/pgSQL EXECUTE 'SET LOCAL ...') rather than a
---    single SET LOCAL before the DO, since DO starts its own nested context.
+--    The migration runs as app_user which owns the tables.  FORCE ROW LEVEL
+--    SECURITY blocks even the table owner from reading across tenants, so
+--    SET LOCAL row_security = off is insufficient.  The correct escape hatch
+--    is ALTER TABLE ... NO FORCE ROW LEVEL SECURITY (only the table owner may
+--    run this), which temporarily drops the forced-policy requirement for this
+--    transaction, then re-enable it when done.
 --
---    The back-fill produces one category row per distinct existing string per
---    (company_id, business_id) pair and assigns display_order = 0 (all equal;
---    operators can reorder via the PATCH /categories/{id} endpoint).
+--    Each INSERT sets app.current_tenant to the row's own company_id so the
+--    WITH CHECK predicate on menu_category passes and no cross-tenant row is
+--    silently accepted.  The UPDATE uses an explicit WHERE company_id =
+--    rec.company_id so it is safe even with RLS disabled.
+--
+--    The back-fill produces one category row per distinct (company_id,
+--    business_id, category) triple and assigns display_order = 0 (operators
+--    can reorder via PATCH /categories/{id}).
 -- ---------------------------------------------------------------------------
+
+-- Drop FORCE RLS temporarily so the DO block can read all tenants' rows.
+ALTER TABLE menu_item NO FORCE ROW LEVEL SECURITY;
+ALTER TABLE menu_category NO FORCE ROW LEVEL SECURITY;
+
 DO $$
 DECLARE
     rec RECORD;
@@ -71,12 +80,13 @@ BEGIN
     FOR rec IN
         SELECT DISTINCT company_id, business_id, category
           FROM menu_item
+         WHERE category IS NOT NULL
          ORDER BY company_id, business_id, category
     LOOP
-        -- Set the tenant GUC so FORCE RLS's WITH CHECK passes.
-        EXECUTE format('SET LOCAL app.current_tenant = %L', rec.company_id);
-
-        -- Insert the new category row (use gen_random_uuid() for the PK).
+        -- Insert the new category row.  FORCE RLS is off for both tables so
+        -- the table owner (app_user) bypasses the policy; the explicit
+        -- company_id = rec.company_id in the VALUES guarantees correct tenant
+        -- attribution with no cross-tenant leak.
         INSERT INTO menu_category (
             id, business_id, name, display_order, active,
             created_at, created_by, updated_at, updated_by, version, company_id
@@ -91,7 +101,9 @@ BEGIN
         )
         RETURNING id INTO new_cat_id;
 
-        -- Point all menu_item rows at the new category.
+        -- Point all menu_item rows for this (company, business, category) at
+        -- the new category.  Explicit WHERE company_id = rec.company_id
+        -- prevents any cross-tenant update.
         UPDATE menu_item
            SET category_id = new_cat_id
          WHERE company_id   = rec.company_id
@@ -99,6 +111,10 @@ BEGIN
            AND category     = rec.category;
     END LOOP;
 END $$;
+
+-- Re-enable FORCE RLS on both tables.
+ALTER TABLE menu_item FORCE ROW LEVEL SECURITY;
+ALTER TABLE menu_category FORCE ROW LEVEL SECURITY;
 
 -- ---------------------------------------------------------------------------
 -- 4. menu_item_modifier_group

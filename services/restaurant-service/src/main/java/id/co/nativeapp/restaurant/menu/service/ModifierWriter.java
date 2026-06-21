@@ -46,9 +46,13 @@ public class ModifierWriter {
   public ModifierGroupResponse createGroup(UUID menuItemId, CreateModifierGroupRequest request) {
     String companyId = TenantContext.require().companyId();
     // Load the menu item to confirm it exists and is visible (RLS-scoped).
-    menuItemRepository
-        .findById(menuItemId)
-        .orElseThrow(() -> new NoSuchElementException("Menu item not found: " + menuItemId));
+    // Derive business_id from the loaded entity — never trust the request body
+    // (fixing finding #5: business_id trusted from request body).
+    MenuItem item =
+        menuItemRepository
+            .findById(menuItemId)
+            .orElseThrow(() -> new NoSuchElementException("Menu item not found: " + menuItemId));
+    UUID businessId = item.getBusinessId();
 
     if (request.maxSelect() < request.minSelect()) {
       throw new IllegalArgumentException(
@@ -61,7 +65,7 @@ public class ModifierWriter {
     ModifierGroup group =
         new ModifierGroup(
             menuItemId,
-            request.businessId(),
+            businessId,
             request.name(),
             request.selectionType(),
             request.required(),
@@ -78,17 +82,17 @@ public class ModifierWriter {
   public ModifierOptionResponse createOption(UUID groupId, CreateModifierOptionRequest request) {
     String companyId = TenantContext.require().companyId();
     // Load the group to confirm it exists and is visible (RLS-scoped).
-    groupRepository
-        .findById(groupId)
-        .orElseThrow(() -> new NoSuchElementException("Modifier group not found: " + groupId));
+    // Derive business_id from the loaded group entity — never trust the request body
+    // (fixing finding #5: business_id trusted from request body).
+    ModifierGroup group =
+        groupRepository
+            .findById(groupId)
+            .orElseThrow(() -> new NoSuchElementException("Modifier group not found: " + groupId));
+    UUID businessId = group.getBusinessId();
 
     ModifierOption option =
         new ModifierOption(
-            groupId,
-            request.businessId(),
-            request.name(),
-            request.priceDeltaMinor(),
-            request.displayOrder());
+            groupId, businessId, request.name(), request.priceDeltaMinor(), request.displayOrder());
     option.setCompanyId(companyId);
     ModifierOption saved = optionRepository.saveAndFlush(option);
     return ModifierOptionResponse.from(saved);
