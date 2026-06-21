@@ -45,6 +45,12 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // Allow extra hostnames when the dev server is reached through a tunnel/reverse proxy
+    // (e.g. a Tailscale Funnel host). Comma-separated in VITE_ALLOWED_HOSTS; default keeps
+    // Vite's normal localhost-only host check.
+    allowedHosts: process.env.VITE_ALLOWED_HOSTS
+      ? process.env.VITE_ALLOWED_HOSTS.split(',')
+      : undefined,
     proxy,
   },
 })
