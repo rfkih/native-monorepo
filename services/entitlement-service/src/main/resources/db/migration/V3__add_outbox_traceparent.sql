@@ -1,0 +1,11 @@
+-- Add the nullable traceparent column to the outbox table (ADR 0010 #13 —
+-- outbox→Kafka trace continuity). The column stores the W3C traceparent string
+-- captured at write time; Debezium maps it to a Kafka header so the consumer can
+-- restore the trace context and emit a child span rather than a new root.
+--
+-- The column is intentionally nullable: rows written before this migration and rows
+-- written when no span is in scope carry NULL, which consumers treat as "start a new
+-- root span" — safe and backward-compatible.
+--
+-- This table is NOT Auditable and NOT under RLS (infrastructure table — see V1 comment).
+ALTER TABLE outbox ADD COLUMN IF NOT EXISTS traceparent VARCHAR(64) NULL;

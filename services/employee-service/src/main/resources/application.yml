@@ -49,6 +49,11 @@ spring:
       # returns, so a crash mid-handle redelivers (at-least-once); the idempotent
       # consumer (ProcessedEventStore) makes redelivery safe.
       ack-mode: record
+      # ADR 0010 #13 — outbox→Kafka trace continuity: propagate the W3C traceparent
+      # Kafka header into a Micrometer child span on the listener. Applies to the
+      # auto-configured factory; the custom kafkaListenerContainerFactory also sets
+      # observationEnabled(true) in code so both paths are covered.
+      observation-enabled: true
 
 # PII column-level encryption key (rule 6). A base64-encoded 32-byte AES-256 key, sourced from the
 # NATIVE_PII_KEY environment variable. IN PRODUCTION this env value is injected from VAULT (a

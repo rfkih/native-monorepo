@@ -55,6 +55,11 @@ spring:
       # crash mid-handle redelivers (at-least-once); the idempotent consumer (ProcessedEventStore)
       # makes redelivery safe.
       ack-mode: record
+      # ADR 0010 #13 — outbox→Kafka trace continuity: propagate the W3C traceparent
+      # Kafka header into a Micrometer child span on the listener. Applies to the
+      # auto-configured factory; the custom kafkaListenerContainerFactory also sets
+      # observationEnabled(true) in code so both paths are covered.
+      observation-enabled: true
 
 # carwash-service config — externalized, validated at startup (fail fast — ENGINEERING-STANDARDS §7).
 # No business config is hardcoded in Java.

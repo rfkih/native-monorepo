@@ -42,12 +42,14 @@ dependencies {
     // The Spring Boot OpenTelemetry STARTER is what makes Boot build a REAL OTel SdkTracerProvider
     // and wire the Micrometer bridge — with only the bare bridge module the bridge falls back to a
     // no-op tracer whose spans carry no trace id. It pulls the OTLP exporters; actual network export
-    // is DISABLED by default (ObservabilityEnvironmentPostProcessor sets
-    // management.tracing.export.enabled=false AND management.otlp.metrics.export.enabled=false), so
-    // NO collector is contacted — the SDK is real, ids populate the MDC + propagate over HTTP, but
-    // nothing is shipped until an environment wires a collector and flips those flags (ADR 0010). The
-    // starter also brings an OTLP metrics registry; it sits alongside the existing Prometheus scrape
-    // registry and, with metrics export off, is inert.
+    // is off by default because (a) no OTLP endpoint is configured so OtlpTracingConnectionDetails
+    // never materialises and the span exporter bean is never created, and (b) the OTLP metrics push
+    // registry is disabled via management.otlp.metrics.export.enabled=false. The SDK is real: ids
+    // populate the MDC + W3C traceparent propagates over HTTP and Kafka, but nothing is shipped to
+    // a collector until an environment sets management.opentelemetry.tracing.export.otlp.endpoint
+    // and flips the metrics flag (ADR 0010). NOTE: management.tracing.export.enabled must NOT be
+    // set to false — doing so gates the W3C TextMapPropagator bean and breaks Kafka trace continuity
+    // (the outbox→CDC→Kafka hop would start a new root span on every consumer invocation).
     api("org.springframework.boot:spring-boot-starter-opentelemetry")
 
     // The shared `kafka` READINESS health indicator (ENGINEERING-STANDARDS §7) +

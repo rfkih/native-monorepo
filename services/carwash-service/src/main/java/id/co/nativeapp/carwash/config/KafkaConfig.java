@@ -70,6 +70,12 @@ public class KafkaConfig {
         new ConcurrentKafkaListenerContainerFactory<>();
     factory.setConsumerFactory(consumerFactory);
     factory.setCommonErrorHandler(kafkaErrorHandler);
+    // ADR 0010 #13 — outbox→Kafka trace continuity: enable Micrometer observation on this custom
+    // container factory so Spring Kafka extracts the incoming W3C `traceparent` Kafka header and
+    // makes the listener span a child of the producer span. The global
+    // spring.kafka.listener.observation-enabled property only applies to Spring Boot's
+    // auto-configured factory; custom factories require this explicit call.
+    factory.getContainerProperties().setObservationEnabled(true);
     return factory;
   }
 

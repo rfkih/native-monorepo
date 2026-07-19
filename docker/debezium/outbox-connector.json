@@ -52,7 +52,12 @@
 
     "//headers": "Expose the outbox row id + company_id as Kafka headers. The consumer dedupes by",
     "//headers2": "the `id` header (the durable event id), not by Kafka offset (HR-3).",
-    "transforms.outbox.table.fields.additional.placement": "id:header:id,company_id:header:company_id",
+    "//headers3": "traceparent: the W3C trace-context header stamped at write time (ADR 0010 #13 —",
+    "//headers4": "outbox→Kafka trace continuity). Absent (NULL) when no span was active; consumers",
+    "//headers5": "that find no traceparent header start a new root span — safe and backward-compatible.",
+    "//headers6": "Every per-service connector copy inherits this mapping (the column and the placement",
+    "//headers7": "are identical across all outbox tables; only the DB/slot/prefix differ per service).",
+    "transforms.outbox.table.fields.additional.placement": "id:header:id,company_id:header:company_id,traceparent:header:traceparent",
 
     "//converters": "The value is the base64 STRING of the Avro bytes (binary.handling.mode=base64),",
     "//converters2": "so ship it with a StringConverter — NOT a Confluent Avro/JSON converter and NOT",

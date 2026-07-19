@@ -50,6 +50,8 @@ class OutboxWriterTest extends JdbcTestSupport {
     assertEquals("SaleRecorded", record.eventType());
     assertArrayEquals(payload, record.payload());
     assertEquals("{\"traceId\":\"abc\"}", record.headers());
+    // No TraceparentSupplier wired — NOOP supplier means null traceparent.
+    assertNull(record.traceparent(), "no-supplier path must store null traceparent");
     assertEquals(COMPANY, record.companyId());
     assertEquals(occurredAt, record.occurredAt());
   }
@@ -106,5 +108,6 @@ class OutboxWriterTest extends JdbcTestSupport {
 
     OutboxRecord record = stubRelay.poll().get(0);
     assertNull(record.headers(), "null headers must round-trip as null");
+    assertNull(record.traceparent(), "no-supplier path must store null traceparent");
   }
 }

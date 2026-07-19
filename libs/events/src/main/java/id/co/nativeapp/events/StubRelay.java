@@ -22,7 +22,7 @@ import org.springframework.jdbc.core.RowMapper;
 public class StubRelay {
 
   private static final String SELECT_UNPUBLISHED_SQL =
-      "SELECT id, aggregate_type, aggregate_id, event_type, payload, headers, company_id, occurred_at "
+      "SELECT id, aggregate_type, aggregate_id, event_type, payload, headers, traceparent, company_id, occurred_at "
           + "FROM outbox WHERE published_at IS NULL ORDER BY occurred_at, id";
 
   private static final String MARK_PUBLISHED_SQL =
@@ -37,6 +37,7 @@ public class StubRelay {
               rs.getString("event_type"),
               rs.getBytes("payload"),
               rs.getString("headers"),
+              rs.getString("traceparent"),
               rs.getObject("company_id", UUID.class),
               rs.getTimestamp("occurred_at").toInstant());
 

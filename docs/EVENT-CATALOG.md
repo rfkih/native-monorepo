@@ -24,6 +24,15 @@ says a consumer "reads the outbox payload as **raw Avro bytes** via `libs/events
 AvroSerde`", that is the post-base64-decode payload; `AvroSerde`'s raw-bytes contract is
 unchanged.
 
+**Kafka record headers.** Each Kafka record carries three standard headers in addition
+to the value:
+
+| Header | Source | Purpose |
+|---|---|---|
+| `id` | outbox `id` column | The durable event UUID; consumers dedupe on this (not the Kafka offset) |
+| `company_id` | outbox `company_id` column | The owning tenant |
+| `traceparent` | outbox `traceparent` column (nullable) | W3C trace-context header (ADR 0010 #13 — outbox→Kafka trace continuity). Stamped by `OutboxWriter` from the active Micrometer span at write time; absent when the column is NULL (no span in scope). Consumers restore the trace context via Spring Kafka observation (`setObservationEnabled(true)`) so their listener span is a child of the producer span. A missing header starts a new root span — safe and backward-compatible. |
+
 ---
 
 ## Starter event table (planned contracts)

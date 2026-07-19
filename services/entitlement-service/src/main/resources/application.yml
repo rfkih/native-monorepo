@@ -53,6 +53,11 @@ spring:
       # Manual-immediate ack: the container commits the offset only after the handler returns, so a
       # crash mid-handle redelivers (at-least-once); the idempotent consumer makes redelivery safe.
       ack-mode: record
+      # ADR 0010 #13 — outbox→Kafka trace continuity: propagate the W3C traceparent
+      # Kafka header into a Micrometer child span on the listener. Applies to the
+      # auto-configured factory; the custom kafkaListenerContainerFactory also sets
+      # observationEnabled(true) in code so both paths are covered.
+      observation-enabled: true
 
 # The entitlement-check cache TTL safety net (invalidation by event is the primary mechanism; this
 # is only the backstop). A data/config value, externalized (ENGINEERING-STANDARDS §7).

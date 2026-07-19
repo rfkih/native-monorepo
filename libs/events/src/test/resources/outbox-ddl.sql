@@ -17,12 +17,18 @@ CREATE TABLE IF NOT EXISTS outbox (
     event_type     VARCHAR(255)             NOT NULL,
     payload        BYTEA                    NOT NULL,
     headers        TEXT                     NULL,
+    traceparent    VARCHAR(64)              NULL,
     company_id     UUID                     NOT NULL,
     occurred_at    TIMESTAMP WITH TIME ZONE NOT NULL,
     published_at   TIMESTAMP WITH TIME ZONE NULL
 );
 
--- The relay polls for unpublished rows in occurrence order.
+-- The relay polls for unpublished rows in occurrence order. The production baseline creates this
+-- index as a partial index: WHERE published_at IS NULL — which is also the predicate the
+-- OutboxLagMetrics COUNT query uses. H2 (used in libs/events unit tests) does not support partial
+-- indexes even in PostgreSQL compatibility mode, so the WHERE clause is omitted here. The index
+-- structure (occurred_at, id) mirrors prod; the partial predicate can only be proven on a real
+-- PostgreSQL 16 instance (covered by the Testcontainers tests in each service).
 CREATE INDEX IF NOT EXISTS idx_outbox_unpublished ON outbox (occurred_at, id);
 
 CREATE TABLE IF NOT EXISTS processed_event (

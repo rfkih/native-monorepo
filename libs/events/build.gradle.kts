@@ -30,6 +30,20 @@ dependencies {
     // governed by the Spring Boot 4 BOM (kafka-clients 4.2.1).
     compileOnly("org.apache.kafka:kafka-clients")
 
+    // MicrometerTraceparentSupplier reads the current span from io.micrometer.tracing.Tracer.
+    // compileOnly keeps the class compilable without forcing Micrometer Tracing onto DB-only
+    // modules (e.g. org-service / restaurant-service test classpaths that don't use the Kafka path).
+    // Every service that wires MicrometerTraceparentSupplier already has micrometer-tracing at
+    // runtime via libs/observability's `api("org.springframework.boot:spring-boot-starter-opentelemetry")`.
+    // The gateway depends on libs/observability but NOT on libs/events, so this compileOnly never
+    // leaks JDBC/Avro concerns into the gateway. Version governed by the Spring Boot 4 BOM.
+    compileOnly("io.micrometer:micrometer-tracing")
+
+    // OutboxLagMetrics registers a Micrometer Gauge via MeterRegistry (micrometer-core).
+    // compileOnly: every producer service already has micrometer-core at runtime via
+    // spring-boot-starter-actuator. The version is governed by the Spring Boot 4 BOM.
+    compileOnly("io.micrometer:micrometer-core")
+
     // Fast plumbing tests (outbox writer, Avro serde, happy-path idempotency) run on H2 in
     // PostgreSQL compatibility mode so the JDBC plumbing is exercised for real.
     testImplementation("com.h2database:h2")

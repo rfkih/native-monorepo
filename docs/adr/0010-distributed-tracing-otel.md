@@ -33,27 +33,42 @@ are traced from a single declaration.
    `ConsumeErrorRecorder` — was updated to `MDC.get("traceId")`, so the real trace id now flows into
    error responses' `traceId` property and `error_log.trace_id` (the DB column keeps its snake-case
    name).
-3. **Full sampling, export off:** `ObservabilityEnvironmentPostProcessor` (a lowest-precedence,
-   overridable default) sets `management.tracing.sampling.probability=1.0` (Boot's 0.1 would leave
-   ~90% of log lines without a trace id — Native is low-volume B2B) and DISABLES OTLP span+metric
-   export (`management.tracing.export.enabled=false`, `management.otlp.metrics.export.enabled=false`)
-   so no collector is contacted by default — the SDK is real, ids populate the MDC and propagate over
-   HTTP, but nothing is shipped until an environment wires a collector and flips those flags.
+3. **Full sampling, OTLP export off by default:** `ObservabilityEnvironmentPostProcessor` (a
+   lowest-precedence, overridable default) sets `management.tracing.sampling.probability=1.0`
+   (Boot's 0.1 would leave ~90% of log lines without a trace id — Native is low-volume B2B) and
+   disables the OTLP metrics push registry (`management.otlp.metrics.export.enabled=false`). The
+   OTLP span exporter is absent without a configured endpoint — `OtlpTracingConnectionDetails`
+   requires `management.opentelemetry.tracing.export.otlp.endpoint` which is not set, so the exporter
+   bean is never created and no collector is contacted. **`management.tracing.export.enabled` must NOT
+   be set to `false`**: Spring Boot 4.1 gates the W3C `TextMapPropagator` bean behind
+   `@ConditionalOnEnabledTracingExport`; setting that flag false suppresses the propagator, making
+   every Kafka consumer start a new root span instead of continuing the producer trace (ADR 0010 #13).
 4. **HTTP/W3C propagation** across the single sanctioned sync edge (gateway → service) is Spring Boot's
    automatic instrumentation — an inbound `traceparent` continues the trace; no handler starts a fresh
    root span for a request that already carries context.
 
-## Deferred (the infra-gated remainder of #10)
-- **Outbox → Kafka trace continuity** (the distinctive cross-service piece): the producer stamping the
-  W3C `traceparent` into the outbox row, Debezium mapping it to a Kafka header, and each consumer
-  extracting it so the consume span is a child not a root. This needs an **outbox-schema migration on
-  every producer DB** + a Debezium connector change (`additional.placement`) + the **live CDC loop** to
-  verify end-to-end — the same infra-gated validation the DEVLOG treats as a separate milestone. Until
-  then, a trace is continuous within a service and across the HTTP edge, but an event hop starts a new
-  trace on the consumer.
+## Implemented follow-up: Outbox → Kafka trace continuity (#13)
+The cross-service propagation gap described in the original "Deferred" section is now closed:
+- **Producer side:** every `OutboxWriter` records `tracer.currentSpan()` as a W3C `traceparent` string
+  in the `outbox.traceparent` column (a nullable `VARCHAR(64)` added by `V*__add_outbox_traceparent.sql`
+  on all 7 producer DBs). `MicrometerTraceparentSupplier` reads the current span; `TraceparentSupplier.NOOP`
+  is used in tests that do not need span context.
+- **Debezium connector:** `additional.placement=traceparent:header:traceparent` maps the DB column to a
+  Kafka header. All Debezium connector configs updated.
+- **Consumer side:** `spring.kafka.listener.observation-enabled=true` (all consumer `application.yml`
+  files) + `factory.getContainerProperties().setObservationEnabled(true)` (all custom `KafkaConfig`
+  beans). Spring Kafka calls `PropagatingReceiverTracingObservationHandler.onStart()` which calls
+  `OtelPropagator.extract()` with the W3C `traceparent` header, creating a child span whose `traceId`
+  matches the producer's. The child span is placed in OTel thread-local scope via `openScope()` before
+  the listener method runs. Contract test: `TraceContinuityConsumeAcceptanceTest` in finance-service.
+- **Outbox-lag metric:** `OutboxLagMetrics` registers a Micrometer gauge `native.outbox.unpublished`
+  (label `service`). The gauge is sampled by the Micrometer registry on demand (e.g. per Prometheus
+  scrape interval) — there is no fixed 30 s schedule; the COUNT query runs when the registry pulls
+  the gauge value.
+
+## Remaining deferred
 - **A real OTLP collector + export** (Tempo/Jaeger/Grafana) — infra, ties to scorecard #13.
-- **Kafka consumer-span observation** (`spring.kafka.listener.observation-enabled`) — pairs with the
-  outbox propagation above.
+  Activate by setting `management.opentelemetry.tracing.export.otlp.endpoint` per environment.
 
 ## Consequences
 - Every log line now correlates to its span (`traceId`/`spanId` populate the JSON logs); the HTTP edge
@@ -65,5 +80,8 @@ are traced from a single declaration.
 - **Log field rename** (`trace_id`/`span_id` → `traceId`/`spanId`): safe because the old fields were
   never populated, so no dashboard/query depended on them; a log-format drift guard
   (employee's `PiiAbsentFromEncodedJsonLogTest`) was updated to the new allow-list.
-- **No collector noise:** export is off by default, so a service with no OTLP collector does not log a
-  connection failure on every flush.
+- **No collector noise:** the OTLP span exporter is never created without a configured endpoint; no
+  connection failure is logged on flush. The OTLP metrics exporter is explicitly disabled.
+- **Full Kafka trace continuity:** every consumer span is a child of the producer span. The trace
+  survives the outbox → Debezium CDC → Kafka → listener hop end-to-end. `TraceContinuityConsumeAcceptanceTest`
+  is the regression guard.
