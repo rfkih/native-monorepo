@@ -3,6 +3,7 @@ package id.co.nativeapp.org.company.controller;
 import id.co.nativeapp.org.company.domain.OrgUnit;
 import id.co.nativeapp.org.company.dto.CreateOrgUnitCommand;
 import id.co.nativeapp.org.company.dto.CreateOrgUnitRequest;
+import id.co.nativeapp.org.company.dto.OrgUnitListResponse;
 import id.co.nativeapp.org.company.dto.OrgUnitResponse;
 import id.co.nativeapp.org.company.dto.PatchOrgUnitCommand;
 import id.co.nativeapp.org.company.dto.PatchOrgUnitRequest;
@@ -11,8 +12,10 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -51,6 +54,28 @@ public class OrgUnitController {
 
   public OrgUnitController(OrgUnitService orgUnitService) {
     this.orgUnitService = orgUnitService;
+  }
+
+  /**
+   * Returns the full org tree for the bound company as a deterministically ordered flat list (by
+   * {@code effective_from}, then {@code id}). The frontend assembles the tree from this flat list
+   * keyed on {@code id} and {@code parentId}. Includes both active and inactive units — the page
+   * shows deactivate/reactivate state. RLS scopes the read to the bound company (rule 5); no
+   * {@code WHERE company_id} is in the query.
+   *
+   * <p>Note: {@code ORDER BY effective_from, id} is a deterministic row ordering, not a topological
+   * parent-before-child guarantee; the frontend builds the tree by {@code parentId} lookup.
+   */
+  @Operation(
+      summary = "List all org units (flat, deterministically ordered)",
+      description =
+          "Returns all org units for the bound company as a flat list ordered deterministically"
+              + " (effective_from then id). The frontend builds the tree by parentId. Includes"
+              + " active and inactive nodes. 200 always (empty list when no org units exist)."
+              + " RLS-scoped (rule 5).")
+  @GetMapping
+  public ResponseEntity<List<OrgUnitListResponse>> listOrgUnits() {
+    return ResponseEntity.ok(orgUnitService.findAllForCurrentTenant());
   }
 
   /** Create an org unit under an optional parent; emits {@code OrgUnitCreated}. */

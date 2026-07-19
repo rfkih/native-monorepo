@@ -4,9 +4,13 @@ import id.co.nativeapp.org.group.domain.ConsolidationGroup;
 import id.co.nativeapp.org.group.domain.GroupMembership;
 import id.co.nativeapp.org.group.dto.AddMemberCommand;
 import id.co.nativeapp.org.group.dto.AddMemberResult;
+import id.co.nativeapp.org.group.dto.ConsolidationGroupListResponse;
 import id.co.nativeapp.org.group.dto.CreateGroupCommand;
+import id.co.nativeapp.org.group.dto.GroupMembershipListResponse;
 import id.co.nativeapp.org.group.dto.RemoveMemberCommand;
 import id.co.nativeapp.tenant.TenantContext;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.stereotype.Service;
 
 /**
@@ -25,9 +29,11 @@ import org.springframework.stereotype.Service;
 public class GroupService {
 
   private final GroupWriter writer;
+  private final GroupReader reader;
 
-  public GroupService(GroupWriter writer) {
+  public GroupService(GroupWriter writer, GroupReader reader) {
     this.writer = writer;
+    this.reader = reader;
   }
 
   /**
@@ -64,5 +70,44 @@ public class GroupService {
   public GroupMembership removeMember(RemoveMemberCommand command) {
     TenantContext.require();
     return writer.removeMember(command);
+  }
+
+  /**
+   * All consolidation groups the bound tenant leads, as a flat list. No {@code WHERE company_id} —
+   * RLS scopes the result (rule 5). Projection-to-DTO mapping happens here in the service layer
+   * (projection is not exposed to the controller — CODE-STRUCTURE §3.3).
+   *
+   * @return the list of consolidation groups for the current lead tenant
+   */
+  public List<ConsolidationGroupListResponse> findAllGroupsForCurrentTenant() {
+    TenantContext.require();
+    return reader.findAllGroupsForCurrentTenant().stream()
+        .map(
+            v ->
+                new ConsolidationGroupListResponse(
+                    v.getId(), v.getName(), v.getLeadCompanyId(), v.getReportingCurrency().strip()))
+        .toList();
+  }
+
+  /**
+   * All memberships for a group the bound tenant leads. RLS automatically scopes to the bound
+   * lead; if the group is not visible (the caller does not lead it, or it does not exist), this
+   * returns an empty list — the controller maps an empty result to {@code 404}.
+   * Projection-to-DTO mapping happens here in the service layer (CODE-STRUCTURE §3.3).
+   *
+   * @param groupId the consolidation group to list members for
+   * @return the membership DTOs for the group
+   */
+  public List<GroupMembershipListResponse> findMembersForGroup(UUID groupId) {
+    TenantContext.require();
+    return reader.findMembersForGroup(groupId).stream()
+        .map(
+            v ->
+                new GroupMembershipListResponse(
+                    v.getMemberCompanyId(),
+                    v.getEffectiveFrom(),
+                    v.getEffectiveTo(),
+                    GroupMembership.OPEN_ENDED.equals(v.getEffectiveTo())))
+        .toList();
   }
 }

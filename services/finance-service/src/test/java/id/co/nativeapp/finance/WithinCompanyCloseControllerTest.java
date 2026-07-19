@@ -12,6 +12,7 @@ import id.co.nativeapp.finance.config.ConstraintViolationAdvice;
 import id.co.nativeapp.finance.withinclose.controller.WithinCompanyCloseController;
 import id.co.nativeapp.finance.withinclose.domain.MultiCurrencyTrialBalanceException;
 import id.co.nativeapp.finance.withinclose.dto.WithinCompanyCloseResult;
+import id.co.nativeapp.finance.withinclose.service.CloseHistoryReader;
 import id.co.nativeapp.finance.withinclose.service.WithinCompanyCloseService;
 import id.co.nativeapp.security.ApiExceptionHandler;
 import java.util.List;
@@ -45,6 +46,7 @@ class WithinCompanyCloseControllerTest {
   @Autowired private MockMvc mockMvc;
 
   @MockitoBean private WithinCompanyCloseService closeService;
+  @MockitoBean private CloseHistoryReader closeHistoryReader;
 
   @Test
   void aFirstCloseReturns200WithTheOutcomeAndPublishedGroups() throws Exception {

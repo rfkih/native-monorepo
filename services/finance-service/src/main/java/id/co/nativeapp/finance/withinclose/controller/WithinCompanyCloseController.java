@@ -1,13 +1,17 @@
 package id.co.nativeapp.finance.withinclose.controller;
 
+import id.co.nativeapp.finance.withinclose.dto.CloseHistoryResponse;
 import id.co.nativeapp.finance.withinclose.dto.WithinCompanyCloseRequest;
 import id.co.nativeapp.finance.withinclose.dto.WithinCompanyCloseResponse;
 import id.co.nativeapp.finance.withinclose.dto.WithinCompanyCloseResult;
+import id.co.nativeapp.finance.withinclose.service.CloseHistoryReader;
 import id.co.nativeapp.finance.withinclose.service.WithinCompanyCloseService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -41,9 +45,34 @@ import org.springframework.web.bind.annotation.RestController;
 public class WithinCompanyCloseController {
 
   private final WithinCompanyCloseService closeService;
+  private final CloseHistoryReader closeHistoryReader;
 
-  public WithinCompanyCloseController(WithinCompanyCloseService closeService) {
+  public WithinCompanyCloseController(
+      WithinCompanyCloseService closeService, CloseHistoryReader closeHistoryReader) {
     this.closeService = closeService;
+    this.closeHistoryReader = closeHistoryReader;
+  }
+
+  /**
+   * Returns the close history for the bound company — all {@code within_company_close} records,
+   * most-recent period first. RLS scopes the read to the bound company (rule 5); no {@code WHERE
+   * company_id} is in the query. Returns {@code 200} always (empty list when no closes exist).
+   *
+   * <p>The console's "period close" page uses this list to render a history of past closes with
+   * their {@code period}, {@code baseCurrency}, {@code reconciled}, and {@code
+   * usesIllustrativeRules} flags.
+   */
+  @Operation(
+      summary = "List historical closes for the bound company",
+      description =
+          "Returns all within-company close records for the bound company (most-recent period"
+              + " first). 200 always (empty list when no closes exist). RLS-scoped (rule 5)."
+              + " Each item: closeId, period (YYYY-MM), baseCurrency (ISO-4217), firstClose"
+              + " (always true — only real first-close rows are persisted), reconciled,"
+              + " usesIllustrativeRules.")
+  @GetMapping
+  public ResponseEntity<List<CloseHistoryResponse>> listCloses() {
+    return ResponseEntity.ok(closeHistoryReader.findAllForCurrentTenant());
   }
 
   /**

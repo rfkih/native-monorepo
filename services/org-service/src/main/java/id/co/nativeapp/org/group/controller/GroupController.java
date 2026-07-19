@@ -5,8 +5,10 @@ import id.co.nativeapp.org.group.domain.GroupMembership;
 import id.co.nativeapp.org.group.dto.AddMemberCommand;
 import id.co.nativeapp.org.group.dto.AddMemberRequest;
 import id.co.nativeapp.org.group.dto.AddMemberResult;
+import id.co.nativeapp.org.group.dto.ConsolidationGroupListResponse;
 import id.co.nativeapp.org.group.dto.CreateGroupCommand;
 import id.co.nativeapp.org.group.dto.CreateGroupRequest;
+import id.co.nativeapp.org.group.dto.GroupMembershipListResponse;
 import id.co.nativeapp.org.group.dto.GroupResponse;
 import id.co.nativeapp.org.group.dto.MembershipResponse;
 import id.co.nativeapp.org.group.dto.RemoveMemberCommand;
@@ -15,9 +17,11 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -61,6 +65,51 @@ public class GroupController {
 
   public GroupController(GroupService groupService) {
     this.groupService = groupService;
+  }
+
+  /**
+   * Lists all consolidation groups the bound tenant leads. RLS scopes the read to the bound
+   * company (rule 5); no {@code WHERE company_id} is in the query. Returns {@code 200} with an
+   * empty list when the company leads no groups.
+   */
+  @Operation(
+      summary = "List consolidation groups led by the current company",
+      description =
+          "Returns all consolidation groups for which the bound company is the lead. 200 always"
+              + " (empty list when the company leads no groups). RLS-scoped (rule 5).")
+  @GetMapping
+  public ResponseEntity<List<ConsolidationGroupListResponse>> listGroups() {
+    return ResponseEntity.ok(groupService.findAllGroupsForCurrentTenant());
+  }
+
+  /**
+   * Lists all members of a consolidation group the bound tenant leads. RLS scopes the read to the
+   * bound company, so a group the caller does not lead (or an unknown group id) returns an empty
+   * list — mapped to {@code 404}. Returns {@code 200} with the member list (may be empty when the
+   * group has no members yet).
+   *
+   * <p>The convention for "group not led by caller": the sibling DELETE path returns {@code 204}
+   * (idempotent re-remove of nothing), but a GET for members of a non-existent group returns
+   * {@code 404} — the caller explicitly requested a resource that does not exist.
+   */
+  @Operation(
+      summary = "List members of a consolidation group",
+      description =
+          "Returns all members of the given group (which the bound company must lead). 200 with the"
+              + " member list; 404 when the group does not exist or the caller does not lead it"
+              + " (RLS makes non-lead groups invisible — fail closed). RLS-scoped (rule 5).")
+  @GetMapping("/{groupId}/members")
+  public ResponseEntity<List<GroupMembershipListResponse>> listMembers(
+      @PathVariable UUID groupId) {
+    List<GroupMembershipListResponse> members = groupService.findMembersForGroup(groupId);
+    // Treat an empty result as "group not found or not led by caller" — 404.
+    // A group with genuine zero members would also be empty; that is acceptable because zero-member
+    // groups carry no consolidation meaning. If the product evolves to support empty groups,
+    // add a group-existence check here.
+    if (members.isEmpty()) {
+      return ResponseEntity.notFound().build();
+    }
+    return ResponseEntity.ok(members);
   }
 
   /** Define a consolidation group led by the caller; emits {@code GroupDefined}. */

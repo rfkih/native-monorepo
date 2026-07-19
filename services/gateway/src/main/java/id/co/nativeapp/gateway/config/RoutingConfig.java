@@ -65,6 +65,34 @@ public class RoutingConfig {
         .build();
   }
 
+  @Bean
+  RouterFunction<ServerResponse> orgUnitsRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("org-service-org-units")
+        .route(path("/api/v1/org-units/**"), http())
+        .before(uri(routes.orgService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  @Bean
+  RouterFunction<ServerResponse> consolidationGroupsRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("org-service-consolidation-groups")
+        .route(path("/api/v1/consolidation-groups/**"), http())
+        .before(uri(routes.orgService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
   // ---------------------------------------------------------------------------
   // restaurant-service (cashier POS)
   // ---------------------------------------------------------------------------
@@ -176,6 +204,34 @@ public class RoutingConfig {
       TenantContextHeaderFilter tenantFilter) {
     return GatewayRouterFunctions.route("finance-service-statements")
         .route(path("/api/v1/statements/**"), http())
+        .before(uri(routes.financeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  @Bean
+  RouterFunction<ServerResponse> groupsRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("finance-service-groups")
+        .route(path("/api/v1/groups/**"), http())
+        .before(uri(routes.financeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  @Bean
+  RouterFunction<ServerResponse> closesRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("finance-service-closes")
+        .route(path("/api/v1/closes/**"), http())
         .before(uri(routes.financeService()))
         .filter(new RateLimitFilter(limiter))
         .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))

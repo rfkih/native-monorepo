@@ -2,8 +2,10 @@ package id.co.nativeapp.org.company.service;
 
 import id.co.nativeapp.org.company.domain.OrgUnit;
 import id.co.nativeapp.org.company.dto.CreateOrgUnitCommand;
+import id.co.nativeapp.org.company.dto.OrgUnitListResponse;
 import id.co.nativeapp.org.company.dto.PatchOrgUnitCommand;
 import id.co.nativeapp.tenant.TenantContext;
+import java.util.List;
 import org.springframework.stereotype.Service;
 
 /**
@@ -20,9 +22,11 @@ import org.springframework.stereotype.Service;
 public class OrgUnitService {
 
   private final OrgUnitWriter writer;
+  private final OrgUnitReader reader;
 
-  public OrgUnitService(OrgUnitWriter writer) {
+  public OrgUnitService(OrgUnitWriter writer, OrgUnitReader reader) {
     this.writer = writer;
+    this.reader = reader;
   }
 
   /**
@@ -46,5 +50,22 @@ public class OrgUnitService {
   public OrgUnit patch(PatchOrgUnitCommand command) {
     TenantContext.require();
     return writer.patch(command);
+  }
+
+  /**
+   * All org units visible to the bound tenant, as a flat list ordered parent-before-child. No
+   * {@code WHERE company_id} — RLS scopes the result (rule 5). Projection-to-DTO mapping happens
+   * here in the service layer (projection is not exposed to the controller — CODE-STRUCTURE §3.3).
+   *
+   * @return the flat org-unit list for the current tenant
+   */
+  public List<OrgUnitListResponse> findAllForCurrentTenant() {
+    TenantContext.require();
+    return reader.findAllForCurrentTenant().stream()
+        .map(
+            v ->
+                new OrgUnitListResponse(
+                    v.getId(), v.getName(), v.getType(), v.getParentId(), v.isActive()))
+        .toList();
   }
 }

@@ -1,6 +1,8 @@
 package id.co.nativeapp.finance.withinclose.repository;
 
 import id.co.nativeapp.finance.withinclose.domain.WithinCompanyClose;
+import id.co.nativeapp.finance.withinclose.projection.WithinCompanyCloseView;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -18,6 +20,28 @@ public interface WithinCompanyCloseRepository extends JpaRepository<WithinCompan
 
   /** The close row for a period within the bound company, if it has already closed. */
   Optional<WithinCompanyClose> findByPeriod(String period);
+
+  /**
+   * All close records for the bound company, projected to {@link WithinCompanyCloseView}, ordered
+   * most-recent period first. No {@code WHERE company_id} — the result set is constrained solely
+   * by the auto-applied RLS policy (rule 5). Used on pure read paths where the entity is only
+   * inspected, never mutated or saved.
+   *
+   * @return the close history for the bound company
+   */
+  @Query(
+      value =
+          """
+          SELECT wcc.id                      AS id,
+                 wcc.period                  AS period,
+                 wcc.base_currency           AS base_currency,
+                 wcc.reconciled              AS reconciled,
+                 wcc.uses_illustrative_rules AS uses_illustrative_rules
+            FROM within_company_close wcc
+           ORDER BY wcc.period DESC, wcc.id
+          """,
+      nativeQuery = true)
+  List<WithinCompanyCloseView> findAllViews();
 
   /**
    * Takes a DETERMINISTIC per-{@code (company, period)} transaction-scoped advisory lock that
