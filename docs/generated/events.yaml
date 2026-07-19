@@ -168,6 +168,40 @@ events:
       - { name: amount_minor, type: "long" }
       - { name: currency, type: "string" }
       - { name: occurred_at, type: "timestamp-millis" }
+      - { name: tender_type, type: "null|string" }
+      - { name: subtotal_minor, type: "null|long" }
+      - { name: discount_minor, type: "null|long" }
+      - { name: service_charge_minor, type: "null|long" }
+      - { name: tax_minor, type: "null|long" }
+      - { name: tax_rule_version, type: "null|string" }
+      - { name: uses_illustrative_rules, type: "null|boolean" }
+  - name: SaleRefunded
+    namespace: id.co.nativeapp.events.restaurant
+    schema: libs/contracts/src/main/resources/avro/SaleRefunded.avsc
+    fields:
+      - { name: refund_id, type: "string" }
+      - { name: sale_id, type: "string" }
+      - { name: payment_id, type: "string" }
+      - { name: company_id, type: "string" }
+      - { name: business_id, type: "string" }
+      - { name: refund_amount_minor, type: "long" }
+      - { name: currency, type: "string" }
+      - { name: total_refunded_minor, type: "long" }
+      - { name: occurred_at, type: "timestamp-millis" }
+      - { name: tender_type, type: "null|string" }
+  - name: SaleVoided
+    namespace: id.co.nativeapp.events.restaurant
+    schema: libs/contracts/src/main/resources/avro/SaleVoided.avsc
+    fields:
+      - { name: void_id, type: "string" }
+      - { name: sale_id, type: "string" }
+      - { name: payment_id, type: "string" }
+      - { name: company_id, type: "string" }
+      - { name: business_id, type: "string" }
+      - { name: amount_minor, type: "long" }
+      - { name: currency, type: "string" }
+      - { name: occurred_at, type: "timestamp-millis" }
+      - { name: tender_type, type: "null|string" }
   - name: TrialBalancePublished
     namespace: id.co.nativeapp.events.finance
     schema: libs/contracts/src/main/resources/avro/TrialBalancePublished.avsc

@@ -3,19 +3,19 @@
 services:
   - name: carwash-service
     module: ":services:carwash-service"
-    migrations: { count: 1, range: "V1..V1" }
+    migrations: { count: 3, range: "V1..V3" }
     events: true
   - name: employee-service
     module: ":services:employee-service"
-    migrations: { count: 3, range: "V1..V3" }
+    migrations: { count: 5, range: "V1..V5" }
     events: true
   - name: entitlement-service
     module: ":services:entitlement-service"
-    migrations: { count: 1, range: "V1..V1" }
+    migrations: { count: 3, range: "V1..V3" }
     events: true
   - name: finance-service
     module: ":services:finance-service"
-    migrations: { count: 12, range: "V1..V12" }
+    migrations: { count: 20, range: "V1..V20" }
     events: true
   - name: gateway
     module: ":services:gateway"
@@ -23,13 +23,13 @@ services:
     events: false
   - name: notification-service
     module: ":services:notification-service"
-    migrations: { count: 1, range: "V1..V1" }
+    migrations: { count: 3, range: "V1..V3" }
     events: true
   - name: org-service
     module: ":services:org-service"
-    migrations: { count: 3, range: "V1..V3" }
+    migrations: { count: 4, range: "V1..V4" }
     events: true
   - name: restaurant-service
     module: ":services:restaurant-service"
-    migrations: { count: 1, range: "V1..V1" }
+    migrations: { count: 9, range: "V1..V9" }
     events: true
