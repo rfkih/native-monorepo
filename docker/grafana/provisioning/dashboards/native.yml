@@ -1,0 +1,20 @@
+# Grafana dashboard provisioning — Native observability overlay (scorecard #13).
+#
+# Loads all dashboard JSON files from docker/grafana/dashboards/ on startup.
+# Files are read-only (disableDeletion + updateIntervalSeconds keeps them in
+# sync with the repo). An operator can still save local overrides in the UI
+# (they won't be persisted back to the file).
+
+apiVersion: 1
+
+providers:
+  - name: native-dashboards
+    orgId: 1
+    type: file
+    disableDeletion: true
+    updateIntervalSeconds: 30
+    allowUiUpdates: false
+    options:
+      # Path inside the Grafana container (mounted from docker/grafana/dashboards/).
+      path: /etc/grafana/dashboards
+      foldersFromFilesStructure: false

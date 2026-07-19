@@ -1,0 +1,290 @@
+{
+  "__inputs": [],
+  "__requires": [
+    { "type": "grafana", "id": "grafana", "name": "Grafana", "version": "11.0.0" },
+    { "type": "datasource", "id": "prometheus", "name": "Prometheus", "version": "1.0.0" }
+  ],
+  "annotations": { "list": [] },
+  "description": "Event / consumer health — Kafka consumer lag, Spring Kafka listener seconds, and outbox unpublished gauge (native_outbox_unpublished, tagged by service). Scorecard #13.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 20,
+      "title": "Outbox lag — unpublished events waiting for Debezium CDC",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "native-prometheus" },
+      "description": "Gauge native.outbox.unpublished (Prometheus: native_outbox_unpublished), tagged by service. A parallel work-stream adds this gauge to each service's OutboxMetrics component (Micrometer Gauge over the outbox table count). A non-zero value that does not drain indicates Debezium CDC has stalled or the connector is not running.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 100 },
+              { "color": "red", "value": 1000 }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 1 },
+      "id": 1,
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "native-prometheus" },
+          "expr": "native_outbox_unpublished{service=~\"$service\"}",
+          "legendFormat": "{{service}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Outbox Unpublished Count per Service (native_outbox_unpublished)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "native-prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 5 },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 7 },
+      "id": 2,
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "native-prometheus" },
+          "expr": "native_outbox_unpublished{service=~\"$service\"}",
+          "legendFormat": "{{service}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Outbox Unpublished Count — trend (should trend to zero)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 },
+      "id": 21,
+      "title": "Kafka consumer listener — processing rate and latency",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "native-prometheus" },
+      "description": "Rate of successfully processed Kafka listener invocations per second. Metric: spring_kafka_listener_seconds_count from spring-kafka Micrometer instrumentation (KafkaListenerObservation, enabled when spring.kafka.listener.observation-enabled=true — see ADR 0010 deferred items).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 5 },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "id": 3,
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "lastNotNull"] },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "native-prometheus" },
+          "expr": "sum(rate(spring_kafka_listener_seconds_count{service=~\"$service\"}[$__rate_interval])) by (service, name)",
+          "legendFormat": "{{service}} {{name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Kafka Listener Throughput (spring_kafka_listener_seconds_count)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "native-prometheus" },
+      "description": "p99 processing latency per listener. Spikes here indicate slow consumer handlers (DB contention, downstream calls, etc.).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 5 },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "id": 4,
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "lastNotNull"] },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "native-prometheus" },
+          "expr": "histogram_quantile(0.99, sum(rate(spring_kafka_listener_seconds_bucket{service=~\"$service\"}[$__rate_interval])) by (le, service, name))",
+          "legendFormat": "p99 {{service}} {{name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Kafka Listener p99 Latency (spring_kafka_listener_seconds_bucket)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 24 },
+      "id": 22,
+      "title": "Kafka consumer group lag — records behind the head",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "native-prometheus" },
+      "description": "kafka_consumer_fetch_manager_records_lag from the Micrometer Kafka consumer metrics (auto-enabled by Spring Kafka Micrometer integration). Shows how far behind each consumer group is from the latest produced offset. Sustained lag = a consumer that cannot keep up.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 100 },
+              { "color": "red", "value": 1000 }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 25 },
+      "id": 5,
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "native-prometheus" },
+          "expr": "kafka_consumer_fetch_manager_records_lag{service=~\"$service\"}",
+          "legendFormat": "{{service}} topic={{topic}} partition={{partition}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Kafka Consumer Records Lag (current) — kafka_consumer_fetch_manager_records_lag",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "native-prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 5 },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 31 },
+      "id": 6,
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "native-prometheus" },
+          "expr": "kafka_consumer_fetch_manager_records_lag{service=~\"$service\"}",
+          "legendFormat": "{{service}} {{topic}} p{{partition}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Kafka Consumer Lag — trend",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 39 },
+      "id": 23,
+      "title": "Error inbox — DLT events recorded",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "native-prometheus" },
+      "description": "Rate of events written to the error_log table by libs/error-inbox (ADR 0009). A rising rate indicates poison messages reaching the DLT — investigate the error_log table and the alert webhook.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 5 },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 40 },
+      "id": 7,
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "lastNotNull"] },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "native-prometheus" },
+          "expr": "sum(rate(spring_kafka_listener_seconds_count{service=~\"$service\", exception!=\"\"}[$__rate_interval])) by (service)",
+          "legendFormat": "{{service}} listener errors",
+          "refId": "A"
+        }
+      ],
+      "title": "Kafka Listener Error Rate (exception label present on spring_kafka_listener_seconds_count)",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["native", "events", "kafka", "outbox"],
+  "templating": {
+    "list": [
+      {
+        "current": { "selected": true, "text": "All", "value": "$__all" },
+        "datasource": { "type": "prometheus", "uid": "native-prometheus" },
+        "definition": "label_values(native_outbox_unpublished, service)",
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "service",
+        "options": [],
+        "query": {
+          "query": "label_values(native_outbox_unpublished, service)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query",
+        "label": "Service"
+      }
+    ]
+  },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Native — Events (Kafka consumer + outbox lag)",
+  "uid": "native-events",
+  "version": 1
+}

@@ -98,6 +98,7 @@ turns each `outbox` row into one Kafka record:
 | `payload` (bytea) | the message **value**, **base64-encoded on the wire** | Avro bytes shipped as base64 text — Debezium decodes the `bytea` payload as a `ByteBuffer` that `ByteArrayConverter` cannot ship, so the connector sets `binary.handling.mode=base64` and a `StringConverter`; the value is still the Avro bytes, no Confluent serde |
 | `id` | a Kafka **header** `id` | the durable **event id** the consumer dedupes on (not the offset) |
 | `company_id` | a Kafka **header** `company_id` | the owning tenant |
+| `traceparent` | a Kafka **header** `traceparent` | W3C trace-context header (ADR 0010 #13 — outbox→Kafka trace continuity); absent when the column is NULL (no span active) — consumers restore the trace context so their listener span is a child of the producer span; a missing header starts a new root span |
 | `occurred_at` | the record timestamp | |
 
 The value on the wire is the **base64-encoded Avro bytes** (a transport encoding, not a
@@ -128,4 +129,101 @@ present for governance and future producers, not the consume hot path.
 ```bash
 docker compose -f docker/compose.dev.yml down          # keep the Postgres volume
 docker compose -f docker/compose.dev.yml down -v        # also drop data + replication slots
+```
+
+---
+
+## Observability stack (scorecard #13)
+
+**Config-only / author-only** — the same status as the rest of this directory. Not exercised
+against a live multi-service run; treat it as the target config for a local dev observability
+session.
+
+### Components
+
+| Container | Host port | Purpose |
+|---|---|---|
+| `prometheus` | 9090 | Scrapes `/actuator/prometheus` on all 8 services every 15 s |
+| `tempo` | 3200 (query), 4317 (gRPC), 4318 (HTTP) | OTLP trace backend; receives spans from services |
+| `grafana` | 3000 | Dashboards; creds `admin` / `admin`; anonymous viewer also enabled |
+
+Provisioned datasources: **Prometheus** (default) + **Tempo** (with trace-to-metrics
+correlation back to Prometheus). Provisioned dashboards:
+
+| File | Dashboard | What it shows |
+|---|---|---|
+| `grafana/dashboards/native-red.json` | Native — RED | Rate, Errors, Duration from `http_server_requests_seconds` (templated by service) |
+| `grafana/dashboards/native-events.json` | Native — Events | Kafka consumer lag (`kafka_consumer_fetch_manager_records_lag`), listener throughput/latency (`spring_kafka_listener_seconds_*`), outbox lag (`native_outbox_unpublished` — added by the outbox-metrics work stream) |
+| `grafana/dashboards/native-jvm.json` | Native — JVM / Process | Heap, non-heap, GC pause, CPU, threads, buffer pools |
+
+### Bring up the observability overlay
+
+Compose with the dev stack (the typical case):
+
+```bash
+docker compose -f docker/compose.dev.yml -f docker/compose.observability.yml up -d
+```
+
+Or stand up the observability containers alone (no Postgres/Kafka/Keycloak):
+
+```bash
+docker compose -f docker/compose.observability.yml up -d
+```
+
+Open Grafana at http://localhost:9090 (Prometheus) and http://localhost:3000 (Grafana).
+
+### Scrape targets — port placeholders
+
+Services run on the host (not containerised); Prometheus reaches them via
+`host.docker.internal`. The ports in `docker/prometheus/prometheus.yml` are **suggested
+defaults** — the operator must start each service with the matching `SERVER_PORT`:
+
+| Service | Suggested `SERVER_PORT` |
+|---|---|
+| gateway | 8090 |
+| org-service | 8091 |
+| restaurant-service | 8092 |
+| carwash-service | 8093 |
+| employee-service | 8094 |
+| finance-service | 8095 |
+| entitlement-service | 8096 |
+| notification-service | 8097 |
+
+Edit `docker/prometheus/prometheus.yml` targets to match your actual ports, then reload
+Prometheus without restarting:
+
+```bash
+curl -X POST http://localhost:9090/-/reload
+```
+
+### Enable OTLP span export (ADR 0010)
+
+OTLP export is **OFF by default** (ADR 0010 `ObservabilityEnvironmentPostProcessor` sets
+`management.tracing.export.enabled=false` so no collector is contacted by default — the
+SDK is real and trace IDs populate the MDC, but nothing is shipped). When this overlay is
+running, opt a service in by setting environment variables at startup:
+
+```bash
+MANAGEMENT_OTLP_TRACING_ENDPOINT=http://localhost:4318/v1/traces \
+MANAGEMENT_TRACING_ENABLED=true \
+MANAGEMENT_OTLP_TRACING_EXPORT_ENABLED=true \
+  ./gradlew :services:<svc>:bootRun
+```
+
+Tempo listens on:
+- `localhost:4318` — HTTP/protobuf (recommended; no gRPC stubs needed in the JVM)
+- `localhost:4317` — gRPC
+
+After spans arrive, open Grafana Explore → Tempo datasource to search by trace ID or
+service name. The Tempo datasource is wired with trace-to-metrics correlation: clicking a
+span opens the native-red dashboard pre-filtered to that service and time window.
+
+### Tear down the overlay
+
+```bash
+# Keep volumes (metric / trace data persists for the next session):
+docker compose -f docker/compose.dev.yml -f docker/compose.observability.yml down
+
+# Also wipe metric / trace data:
+docker compose -f docker/compose.dev.yml -f docker/compose.observability.yml down -v
 ```

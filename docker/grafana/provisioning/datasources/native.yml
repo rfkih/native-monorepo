@@ -1,0 +1,74 @@
+# Grafana datasource provisioning — Native observability overlay (scorecard #13).
+#
+# Provisions two datasources on Grafana startup:
+#   1. Prometheus  — for metrics (Micrometer + Actuator, fleet-wide)
+#   2. Tempo       — for distributed traces (OTLP via spring-boot-starter-opentelemetry, ADR 0010)
+#
+# Trace-to-metrics correlation links a Tempo trace to the native-red dashboard
+# (service-level RED metrics filtered by the service label on the span).
+#
+# Trace-to-logs correlation is not wired here: logs are written to stdout/file in
+# the dev stack, not ingested into Loki. Add a Loki datasource + correlationLinks
+# entry when a log aggregator is added to the overlay.
+
+apiVersion: 1
+
+datasources:
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Prometheus — scrapes /actuator/prometheus on all 8 services.
+  # Set as the default datasource so panels that omit datasource= pick it up.
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: Prometheus
+    type: prometheus
+    uid: native-prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: "15s"
+      # Micrometer exemplars carry trace IDs; tell Prometheus (and Grafana) where
+      # to look them up — links a histogram bucket exemplar to the Tempo trace.
+      exemplarTraceIdDestinations:
+        - name: traceId
+          datasourceUid: native-tempo
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Grafana Tempo — receives OTLP spans from services when export is enabled
+  # (ADR 0010: export OFF by default; set MANAGEMENT_OTLP_TRACING_EXPORT_ENABLED=true
+  # + MANAGEMENT_OTLP_TRACING_ENDPOINT=http://localhost:4318/v1/traces to opt in).
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: Tempo
+    type: tempo
+    uid: native-tempo
+    access: proxy
+    url: http://tempo:3200
+    isDefault: false
+    editable: false
+    jsonData:
+      httpMethod: GET
+      tracesToMetrics:
+        # Link a trace span to the native-red dashboard (RED metrics for the
+        # same service and time window) — trace-to-metrics correlation.
+        datasourceUid: native-prometheus
+        tags:
+          - key: service.name
+            value: service
+        queries:
+          - name: "Request rate"
+            query: >-
+              sum(rate(http_server_requests_seconds_count{service="$${__tags.service}"}[5m]))
+          - name: "Error rate"
+            query: >-
+              sum(rate(http_server_requests_seconds_count{service="$${__tags.service}",status=~"5.."}[5m]))
+              /
+              sum(rate(http_server_requests_seconds_count{service="$${__tags.service}"}[5m]))
+      serviceMap:
+        datasourceUid: native-prometheus
+      nodeGraph:
+        enabled: true
+      search:
+        hide: false
+      lokiSearch:
+        datasourceUid: ""

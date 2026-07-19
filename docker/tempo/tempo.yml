@@ -1,0 +1,56 @@
+# Grafana Tempo configuration — local dev observability overlay (scorecard #13).
+#
+# Minimal single-process config appropriate for a local dev machine.
+# NOT production-tuned: no replication, no object storage, local disk only.
+# All spans are retained for 24 h (enough for an interactive dev session).
+
+stream_over_http_enabled: true
+
+server:
+  http_listen_port: 3200
+
+# Accept OTLP spans over both gRPC (4317) and HTTP (4318).
+# Spring Boot's spring-boot-starter-opentelemetry sends over HTTP/protobuf by
+# default; use MANAGEMENT_OTLP_TRACING_ENDPOINT=http://localhost:4318/v1/traces.
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+
+ingester:
+  trace_idle_period: 10s
+  max_block_bytes: 1_000_000
+  max_block_duration: 5m
+
+compactor:
+  compaction:
+    block_retention: 24h
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /tmp/tempo/blocks
+    wal:
+      path: /tmp/tempo/wal
+
+metrics_generator:
+  # Derive RED metrics from span data and expose them as a Prometheus scrape
+  # (lets Grafana correlate traces with the service-level metrics dashboard).
+  registry:
+    external_labels:
+      source: tempo
+  storage:
+    path: /tmp/tempo/generator/wal
+  processors:
+    - service-graphs
+    - span-metrics
+
+overrides:
+  defaults:
+    metrics_generator:
+      processors: [service-graphs, span-metrics]

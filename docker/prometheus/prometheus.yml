@@ -1,0 +1,144 @@
+# Native — Prometheus scrape configuration (scorecard #13 observability overlay).
+#
+# All services expose /actuator/prometheus (Micrometer + Spring Boot Actuator, fleet-wide).
+# Services run on the HOST (not containerised in the dev stack — see docker/README.md
+# "Bring it up" and the RUNBOOK "Run the dev stack + the services locally") so targets
+# use host.docker.internal, which resolves from inside a Docker container to the host
+# loopback (127.0.0.1 on Linux; host gateway on macOS/Windows Docker Desktop).
+#
+# PORT PLACEHOLDERS — the services do not have fixed ports in the repo; the RUNBOOK
+# recommends running each service with SERVER_PORT=80NN. The ports below are the
+# SUGGESTED defaults an operator should use when starting each service. Adjust the
+# targets here (or via env/config-reload) to match your actual SERVER_PORT values.
+#
+# Suggested port assignment (documented here, NOT enforced in code):
+#   gateway              8090
+#   org-service          8091
+#   restaurant-service   8092
+#   carwash-service      8093
+#   employee-service     8094
+#   finance-service      8095
+#   entitlement-service  8096
+#   notification-service 8097
+#
+# After changing a port, hot-reload Prometheus:
+#   curl -X POST http://localhost:9090/-/reload
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  # Attach these labels to every time series scraped from this instance so
+  # dashboards can identify the data source in multi-Prometheus setups.
+  external_labels:
+    environment: local-dev
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Scrape configs — one job per service, service name as a label.
+# metrics_path is Spring Boot Actuator's Prometheus endpoint (all 8 services).
+# Each service already emits a `service` label from management.metrics.tags.service
+# in its application.yml; the job_name here acts as a human-readable grouping label
+# in Prometheus and the Grafana template variable.
+# ─────────────────────────────────────────────────────────────────────────────
+
+scrape_configs:
+
+  # Prometheus self-scrape (useful for debugging Prometheus itself).
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # ---------------------------------------------------------------------------
+  # gateway — the single sync edge; no DB/Kafka indicators.
+  # Default: SERVER_PORT=8090
+  # ---------------------------------------------------------------------------
+  - job_name: gateway
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:8090"]
+        labels:
+          service: gateway
+
+  # ---------------------------------------------------------------------------
+  # org-service — pure event producer; no Kafka consumer indicator.
+  # Default: SERVER_PORT=8091
+  # ---------------------------------------------------------------------------
+  - job_name: org-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:8091"]
+        labels:
+          service: org-service
+
+  # ---------------------------------------------------------------------------
+  # restaurant-service — pure event producer (SaleRecorded outbox).
+  # Default: SERVER_PORT=8092
+  # ---------------------------------------------------------------------------
+  - job_name: restaurant-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:8092"]
+        labels:
+          service: restaurant-service
+
+  # ---------------------------------------------------------------------------
+  # carwash-service — event consumer (EntitlementGranted/Revoked, staff events).
+  # Default: SERVER_PORT=8093
+  # ---------------------------------------------------------------------------
+  - job_name: carwash-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:8093"]
+        labels:
+          service: carwash-service
+
+  # ---------------------------------------------------------------------------
+  # employee-service — event consumer (OrgUnitCreated/Changed).
+  # Default: SERVER_PORT=8094
+  # ---------------------------------------------------------------------------
+  - job_name: employee-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:8094"]
+        labels:
+          service: employee-service
+
+  # ---------------------------------------------------------------------------
+  # finance-service — event consumer (SaleRecorded); ledger/revenue read model.
+  # Default: SERVER_PORT=8095
+  # ---------------------------------------------------------------------------
+  - job_name: finance-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:8095"]
+        labels:
+          service: finance-service
+
+  # ---------------------------------------------------------------------------
+  # entitlement-service — event consumer (CompanyCreated); module grants.
+  # Default: SERVER_PORT=8096
+  # ---------------------------------------------------------------------------
+  - job_name: entitlement-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:8096"]
+        labels:
+          service: entitlement-service
+
+  # ---------------------------------------------------------------------------
+  # notification-service — event consumer (ConsolidationClosed).
+  # Default: SERVER_PORT=8097
+  # ---------------------------------------------------------------------------
+  - job_name: notification-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:8097"]
+        labels:
+          service: notification-service
+
+  # ---------------------------------------------------------------------------
+  # Grafana Tempo — exposes its own /metrics endpoint (span-derived RED metrics
+  # from the metrics_generator processors wired in tempo.yml).
+  # ---------------------------------------------------------------------------
+  - job_name: tempo
+    static_configs:
+      - targets: ["tempo:3200"]

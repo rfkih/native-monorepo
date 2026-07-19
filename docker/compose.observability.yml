@@ -1,0 +1,134 @@
+# Native — observability overlay (scorecard #13).
+#
+# A SEPARATE, COMPOSABLE overlay — do NOT merge this into compose.dev.yml.
+# Bring it up alongside the dev stack:
+#
+#   docker compose -f docker/compose.dev.yml -f docker/compose.observability.yml up -d
+#
+# Or stand it up alone (metrics/traces only, without the event infra):
+#
+#   docker compose -f docker/compose.observability.yml up -d
+#
+# Tear down (keep volumes):
+#   docker compose -f docker/compose.dev.yml -f docker/compose.observability.yml down
+#
+# Tear down + wipe:
+#   docker compose -f docker/compose.dev.yml -f docker/compose.observability.yml down -v
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# OTLP span export (ADR 0010)
+# ─────────────────────────────────────────────────────────────────────────────
+# Export is OFF by default. ADR 0010 set management.tracing.export.enabled=false
+# so services never contact a collector unless one is present. When this overlay
+# is running, start a service with:
+#
+#   MANAGEMENT_OTLP_TRACING_ENDPOINT=http://localhost:4318/v1/traces \
+#   MANAGEMENT_TRACING_ENABLED=true \
+#   MANAGEMENT_OTLP_TRACING_EXPORT_ENABLED=true \
+#     ./gradlew :services:<svc>:bootRun
+#
+# Tempo listens on localhost:4317 (gRPC) and localhost:4318 (HTTP/protobuf).
+# Use 4318 (HTTP) to avoid needing gRPC stubs in the JVM; Spring Boot 4.x
+# spring-boot-starter-opentelemetry ships the HTTP exporter out of the box.
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# NOTE: This is config (author-only / unverified vs a real cluster), exactly
+# like the existing deploy/ Kustomize work. It has not been exercised against a
+# live multi-service run; an operator must validate port mappings, credential
+# files, and scrape targets for their environment. See docker/README.md §Observability.
+
+name: native-obs
+
+services:
+  # ---------------------------------------------------------------------------
+  # Prometheus — scrapes /actuator/prometheus on each service.
+  # Services run on the host (not containerised in the dev stack per docker/README),
+  # so targets use host.docker.internal (the host loopback visible from inside a
+  # Docker container). See docker/prometheus/prometheus.yml for port comments.
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.53.3
+    container_name: native-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle           # POST /-/reload to hot-reload the config
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - native-prometheus-data:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Grafana Tempo — the OTLP trace backend.
+  # Receives spans over HTTP (port 4318) or gRPC (port 4317).
+  # Exposes its query API on port 3200 (used by the Grafana Tempo datasource).
+  # ---------------------------------------------------------------------------
+  tempo:
+    image: grafana/tempo:2.6.1
+    container_name: native-tempo
+    command:
+      - -config.file=/etc/tempo/tempo.yml
+    ports:
+      - "3200:3200"   # Tempo query API (Grafana datasource)
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP HTTP receiver  <-- services should export here
+    volumes:
+      - ./tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - native-tempo-data:/tmp/tempo
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3200/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Grafana — dashboards + datasource provisioning.
+  # Dev creds: admin / admin  (change GF_SECURITY_ADMIN_PASSWORD for anything real).
+  # Dashboards provisioned from docker/grafana/dashboards/*.json.
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:11.3.2
+    container_name: native-grafana
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      tempo:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      # Dev credentials — change or inject via env for any real environment.
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      # Allow unauthenticated read-only access (useful for a shared local screen).
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      # Disable the first-run wizard so the provisioned dashboards are immediately visible.
+      GF_USERS_DEFAULT_THEME: light
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/dashboards/native-red.json
+      # Tempo data source — tells Grafana where to find the Tempo API.
+      GF_FEATURE_TOGGLES_ENABLE: traceqlEditor
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/etc/grafana/dashboards:ro
+      - native-grafana-data:/var/lib/grafana
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  native-prometheus-data:
+  native-tempo-data:
+  native-grafana-data:
