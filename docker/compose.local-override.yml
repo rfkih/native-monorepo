@@ -1,0 +1,39 @@
+# LOCAL, uncommitted override (not part of the project config).
+#
+# Reason: this machine already runs another stack (blackheart-*) whose Kafka holds host port 9092.
+# To let the two coexist, remap the Native dev Kafka EXTERNAL listener to host port 19092. The
+# in-cluster listener (kafka:29092) is unchanged, so Debezium Connect is unaffected; only host
+# clients (the finance-service consumer) must use localhost:19092.
+#
+# Usage:
+#   docker compose -f docker/compose.dev.yml -f docker/compose.local-override.yml up -d --wait postgres kafka connect
+# and run the services with KAFKA_BOOTSTRAP_SERVERS=localhost:19092.
+services:
+  postgres:
+    # backend-postgres-1 (another local project) holds host 5432; remap Native Postgres to 15432.
+    # The in-cluster listener (postgres:5432) is unchanged, so Debezium Connect is unaffected; only
+    # host clients (the restaurant/finance services) must use localhost:15432 in their DB_URL.
+    ports: !override
+      - "15432:5432"
+  kafka:
+    # !override replaces the base ports list (compose merges sequences by default, which would keep 9092).
+    ports: !override
+      - "19092:9092"
+    environment:
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,EXTERNAL://localhost:19092
+  keycloak:
+    # blackheart-app holds host 8080; remap Keycloak to 18080 for the OIDC verification.
+    ports: !override
+      - "18080:8080"
+    # Public OIDC over Tailscale Funnel: Keycloak is exposed at https://a8.tailbf9662.ts.net:10000,
+    # so its issuer/frontend URLs (and token `iss`) must be that public URL. start-dev honours
+    # KC_HOSTNAME; KC_PROXY_HEADERS lets it trust Funnel's X-Forwarded-* (TLS terminates at Funnel).
+    environment:
+      KC_HOSTNAME: https://a8.tailbf9662.ts.net:10000
+      KC_HOSTNAME_STRICT: "false"
+      KC_PROXY_HEADERS: xforwarded
+  connect:
+    # pristina-app holds host 8083; remap Debezium Connect's REST API to 18083.
+    # In-cluster (connect↔kafka:29092) is unchanged; register connectors at http://localhost:18083.
+    ports: !override
+      - "18083:8083"

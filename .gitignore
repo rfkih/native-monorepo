@@ -1,6 +1,8 @@
 .gradle/
 build/
 **/build/
+# Kotlin build-tools daemon working dir (e.g. build-logic/.kotlin) — transient, never source
+**/.kotlin/
 # Eclipse/JDT + VS Code Java compiled-output dirs (one per module) — never source
 bin/
 .idea/

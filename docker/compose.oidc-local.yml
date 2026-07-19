@@ -1,0 +1,19 @@
+# LOCAL, uncommitted override for running the REAL OIDC login path against plain localhost
+# (no Tailscale Funnel). Layer this AFTER compose.local-override.yml so its funnel KC_HOSTNAME
+# is replaced by a localhost issuer:
+#
+#   docker compose -f docker/compose.dev.yml -f docker/compose.local-override.yml \
+#     -f docker/compose.oidc-local.yml up -d keycloak redis
+#
+# Keycloak then issues tokens with iss=http://localhost:18080/realms/native, which the browser
+# (oidc-client-ts) and the gateway (KEYCLOAK_ISSUER_URI) both use. Port stays 18080 (from
+# compose.local-override.yml); only the hostname/issuer differs from the funnel recipe.
+services:
+  keycloak:
+    environment:
+      KC_HOSTNAME: http://localhost:18080
+  redis:
+    # host 6379 is already allocated by another local stack; remap Native's Redis to 16379.
+    # The gateway must then run with REDIS_PORT=16379.
+    ports: !override
+      - "16379:6379"

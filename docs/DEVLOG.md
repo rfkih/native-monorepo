@@ -17,8 +17,12 @@ controller/service/repository/domain/dto/messaging layer sub-packages**, ArchUni
 - Frontends — **console slice live** (`frontend/console`: onboarding wizard, consolidated revenue/P&L
   dashboard, and a **cashier POS**, en/id, Intl money). Now behind **real Keycloak OIDC login** with
   **role-gated surfaces** (cashier → POS only; owner/manager → dashboard + POS), proven on the running
-  authenticated stack. Remaining: the rest of the console (org tree, group consolidation, closes) +
-  the employee PWA — design decisions, never autonomous.
+  authenticated stack. **The org-tree, group-consolidation, and period-close console pages are now
+  built** (`frontend/console`: `/org`, `/groups`, `/close` — owner/manager-gated, en/id, Intl money,
+  illustrative badges) over new RLS-scoped read-endpoints (org-service GET /api/v1/org-units, GET
+  /api/v1/consolidation-groups[/{id}/members]; finance GET /api/v1/closes; gateway DASHBOARD_ROLES
+  routes; real-DB two-tenant RLS isolation tests guard the RLS-only reads). Remaining: the employee
+  PWA — design decisions, never autonomous.
 - **Official DJP/BPJS statutory figures** — payroll ships `ILLUSTRATIVE_PLACEHOLDER` data (provenance
   column + loud seed + runtime flag); a tax SME must seed real effective-dated figures.
 - **Full IAS-21 multi-currency consolidation** (CTA/OCI, historical-rate equity, opening-balance
@@ -26,8 +30,7 @@ controller/service/repository/domain/dto/messaging layer sub-packages**, ArchUni
 - Live infra (a real registry/cluster/secrets for the deploy; a real notification transport).
 
 **Open follow-ups (tracked):** notification real provider (needs a transport choice); payroll
-expected-source registry (needs a rule); error-inbox/alerting **fleet rollout** beyond the finance
-pilot + Grafana dashboards (ADR 0005; scorecard gap #11/#13); **POS indirect-tax + accounting** —
+expected-source registry (needs a rule); **POS indirect-tax + accounting** —
 the PB1-vs-PPN identity, rates, service-charge-revenue-vs-tip treatment, and GL account mappings ship
 `ILLUSTRATIVE_PLACEHOLDER` and need a tax/accounting SME (ADR 0006); **real QRIS/card PSP adapter +
 settlement webhook** (ADR 0007, needs a provider choice). (DONE: the P3d deferred operational items —
@@ -66,6 +69,68 @@ cascade-deactivate + reactivation.)
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **Fix: `management.tracing.export.enabled=false` broke W3C propagation (ADR 0010 #13, 2026-06-22)** —
+  Root-cause found and fixed. `TraceContinuityConsumeAcceptanceTest` was consistently failing: every
+  Kafka listener started a new root span instead of continuing the producer trace. Investigation via
+  Spring Boot 4.1 source: `@ConditionalOnEnabledTracingExport` gates the W3C `TextMapPropagator` bean
+  in `OpenTelemetryPropagationConfigurations`; when `management.tracing.export.enabled=false`, that
+  condition evaluates false, so only `TextMapPropagator.noop()` is registered via `NoPropagation`,
+  making `OtelPropagator.extract()` always return an invalid span context (→ new root span). The
+  property was set in `ObservabilityEnvironmentPostProcessor` to suppress OTLP connection-failure
+  noise, but was unnecessary: the OTLP span exporter is never created without an endpoint, because
+  `OtlpTracingConfigurations.Exporters` requires `@ConditionalOnBean(OtlpTracingConnectionDetails.class)`
+  and that bean only materialises when `management.opentelemetry.tracing.export.otlp.endpoint` is
+  set. Fix: removed `management.tracing.export.enabled=false` from the post-processor defaults.
+  Only `management.otlp.metrics.export.enabled=false` remains (disabling the OTLP metrics push
+  registry). `TraceContinuityConsumeAcceptanceTest` now passes; ADR 0010 and `build.gradle.kts`
+  comments updated to explain the constraint.
+- **Trace continuity through the CDC pipeline + outbox-lag metric (ADR 0010 #13, 2026-06-22)** —
+  Closed the outbox→Debezium→Kafka trace gap: producer services now stamp the W3C `traceparent`
+  (current Micrometer span) into a new nullable `traceparent VARCHAR(64)` column on every `outbox`
+  table (one Flyway `ALTER TABLE` migration per the 7 producer services). `libs/events` gained a
+  `TraceparentSupplier` functional interface, a `MicrometerTraceparentSupplier` implementation
+  (reads from `io.micrometer.tracing.Tracer`; both are `compileOnly` so DB-only modules are
+  unaffected), and an updated `OutboxWriter` that accepts the supplier. `OutboxRecord` was extended
+  with a nullable `traceparent` field (not in `requireNonNull`). All 7 `EventsConfig` classes were
+  wired with `ObjectProvider<Tracer>` (degrades to NOOP if no Tracer present). The Debezium connector
+  template (`docker/debezium/outbox-connector.json`) appends `traceparent:header:traceparent` to
+  `table.fields.additional.placement` so Debezium maps the column to a Kafka header. All 5 consumer
+  `KafkaConfig` classes set `factory.getContainerProperties().setObservationEnabled(true)` on the
+  custom container factory, and `spring.kafka.listener.observation-enabled: true` was added to each
+  consumer's `application.yml` — so Spring Kafka extracts the header and makes the listener span a
+  child of the producer span via the Micrometer OTel bridge. The outbox-lag gauge
+  `native.outbox.unpublished` (tag: `service`, COUNT WHERE published_at IS NULL via the existing
+  partial index) was added as `OutboxLagMetrics` in `libs/events` and registered in every producer's
+  `EventsConfig`. **Dependency decision:** `micrometer-tracing` and `micrometer-core` added as
+  `compileOnly` in `libs/events` — the gateway depends on `libs/observability` (not `libs/events`),
+  so the DB-free gateway stayed clean; services already have both at runtime via
+  `libs/observability`'s `api("spring-boot-starter-opentelemetry")`. **Tests:** (a)
+  `OutboxWriterTraceparentTest` — four unit tests on H2 proving supplier-present → stored, supplier-null
+  → NULL, NOOP constructor → NULL, direct-record write → round-trip; (b)
+  `TraceContinuityConsumeAcceptanceTest` — consumer-side Testcontainers Kafka + PostgreSQL 16 test
+  that publishes a record with a known `traceparent` header and asserts the listener span's traceId
+  equals the header's traceId (proves framework propagation end-to-end). `docs/EVENT-CATALOG.md`
+  updated with the `traceparent` header row. **Remaining of #13:** OTLP collector + Grafana (handled
+  by the parallel observability backend work stream).
+- **Observability backend + dashboards — Prometheus / Grafana / Tempo overlay (scorecard #13, 2026-06-22)** —
+  Added the metrics/trace BACKEND infra as a composable Docker Compose overlay (`docker/compose.observability.yml`)
+  that sits alongside the dev stack but does not bloat `compose.dev.yml`. Three containers: **Prometheus**
+  (`prom/prometheus:v2.53.3`) scraping `/actuator/prometheus` on all 8 services at 15 s intervals (one job
+  per service, `service` label), **Grafana Tempo** (`grafana/tempo:2.6.1`) receiving OTLP spans over HTTP
+  port 4318 / gRPC port 4317, and **Grafana** (`grafana/grafana:11.3.2`) with fully provisioned datasources
+  (Prometheus + Tempo, trace-to-metrics correlation wired) and three dashboards: `native-red.json` (RED
+  method per service from `http_server_requests_seconds_*`, templated `$service` variable), `native-events.json`
+  (Kafka consumer lag via `kafka_consumer_fetch_manager_records_lag`, listener throughput/latency via
+  `spring_kafka_listener_seconds_*`, outbox lag via `native_outbox_unpublished` gauge — the gauge itself is
+  authored by a parallel work stream), and `native-jvm.json` (heap/non-heap, GC pause, CPU, threads, buffer
+  pools from standard Micrometer JVM metrics). OTLP export remains **OFF by default** (ADR 0010 decision
+  preserved — the SDK is real and trace IDs populate MDC, nothing is shipped until an operator sets
+  `MANAGEMENT_OTLP_TRACING_EXPORT_ENABLED=true` + `MANAGEMENT_OTLP_TRACING_ENDPOINT=http://localhost:4318/v1/traces`).
+  All YAML validated with `python3 -m yaml.safe_load`; all dashboard JSON validated with `python3 -m json.tool`.
+  **Config-only / author-only** — same status as the rest of `docker/` (not exercised against a live
+  multi-service run; a real cluster would need port assignments confirmed and Tempo storage adjusted).
+  Closes scorecard **#13** for the local dev observability backend half (Vault/Linkerd at the service-split
+  point remain deferred per CLAUDE.md). See `docker/README.md §Observability stack` for bring-up instructions.
 - **Distributed tracing — Micrometer Tracing + OpenTelemetry fleet-wide (ADR 0010, scorecard #10)** —
   §5 called for OTel trace context across every hop + `traceId`/`spanId` in the JSON logs, but **no
   tracing was wired**: every log line carried an empty `[,]`, and the RFC-7807 advice + error-inbox read
@@ -256,6 +321,17 @@ cascade-deactivate + reactivation.)
   `CURRENCY_MISMATCH` guard + the within-close `MultiCurrencyTrialBalanceException`; the `PnlReader`
   multi-currency branch stays as a defense-in-depth backstop. Adversarially reviewed (PASS); full
   finance build green.
+- **Console read-endpoints: org tree, group consolidation, period close (2026-06-22)** — added three
+  GET endpoints required by the console dashboard pages: `GET /api/v1/org-units` (flat org-unit list,
+  RLS-scoped, native+projection), `GET /api/v1/consolidation-groups` (groups the current company leads)
+  and `GET /api/v1/consolidation-groups/{groupId}/members` (group members, 404 if not led by caller)
+  in org-service; `GET /api/v1/closes` (close history, most-recent first) in finance-service. Gateway
+  routes added for all four with `DASHBOARD_ROLES` (`owner`, `manager`). Projection-to-DTO mapping
+  kept strictly in the service layer (`OrgUnitReader`, `GroupReader`, `CloseHistoryReader`) per
+  CODE-STRUCTURE §3.3 (ArchUnit `featureLayersRespectTheLayeredArchitecture` enforces no Dto→Projection
+  access). `WithinCompanyCloseControllerTest` updated to declare `@MockitoBean CloseHistoryReader` for
+  the new controller constructor arg. org-service 93/93 tests green; finance-service 298/299 green
+  (1 pre-existing `TraceContinuityConsumeAcceptanceTest` flakiness from ADR 0010 tracing, unrelated).
 - **P3d deferred operational items (#46)** — (a) V12 backfills the non-RLS `member_group_index` from
   the FORCE-RLS `group_member` for pre-V10 memberships (whose `GroupMembershipChanged` was already
   deduped and will never re-fire, so a within-company close would silently emit no
