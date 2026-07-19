@@ -71,22 +71,29 @@ export function OnboardingWizard() {
   }
 
   return (
-    <div className="mx-auto max-w-xl">
+    <div className="mx-auto max-w-[680px]">
+      {/* Centered header */}
       <header className="mb-8 text-center">
-        <h1 className="font-display text-3xl font-semibold tracking-tight text-ink">
+        <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">
           {t('onboarding.title')}
         </h1>
-        <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-ink-3">
+        <p className="mx-auto mt-1.5 max-w-md text-sm leading-relaxed text-ink-3">
           {t('onboarding.subtitle')}
         </p>
       </header>
 
+      {/* Stepper */}
       <Stepper steps={steps} current={step} />
 
-      <Card className="mt-6 p-7" key={step}>
+      {/* Step card */}
+      <Card className="mt-6 rounded-[20px] p-7" key={step}>
         <div className="reveal">
           {step === 0 && (
-            <Field label={t('onboarding.companyName')} htmlFor="companyName">
+            <Field
+              label={t('onboarding.companyName')}
+              htmlFor="companyName"
+              hint={t('onboarding.companyNamePlaceholder')}
+            >
               <TextInput
                 id="companyName"
                 autoFocus
@@ -176,20 +183,24 @@ export function OnboardingWizard() {
           )}
 
           {mutation.isError && (
-            <p className="mt-4 rounded-lg border border-rose/30 bg-rose-tint px-3.5 py-2.5 text-sm text-rose">
+            <p className="mt-4 rounded-xl border border-loss/30 bg-tint-loss px-3.5 py-2.5 text-sm text-loss">
               {(mutation.error as Error).message}
             </p>
           )}
         </div>
 
-        <div className="mt-7 flex items-center justify-between gap-3">
+        {/* Footer nav */}
+        <div className="mt-6 flex items-center gap-2.5">
           <Button
-            variant="ghost"
+            variant="outline"
             onClick={() => setStep((s) => Math.max(0, s - 1))}
             disabled={step === 0 || mutation.isPending}
+            className={cn(step === 0 && 'invisible')}
+            aria-hidden={step === 0}
           >
             <ArrowLeft className="size-4" /> {t('common.back')}
           </Button>
+          <span className="flex-1" />
           {step < 3 ? (
             <Button onClick={() => setStep((s) => s + 1)} disabled={!canAdvance}>
               {t('common.continue')} <ArrowRight className="size-4" />
@@ -215,34 +226,37 @@ export function OnboardingWizard() {
 
 function Stepper({ steps, current }: { steps: string[]; current: number }) {
   return (
-    <ol className="flex items-center justify-center">
+    <ol className="flex items-center justify-center gap-0">
       {steps.map((label, i) => {
         const state = i < current ? 'done' : i === current ? 'active' : 'todo'
         return (
           <li key={label} className="flex items-center">
             <span className="flex items-center gap-2">
+              {/* Step circle */}
               <span
                 className={cn(
-                  'tnum grid size-6 place-items-center rounded-full border text-xs font-medium',
-                  state === 'done'
-                    ? 'border-emerald bg-emerald text-white'
-                    : state === 'active'
-                      ? 'border-emerald text-emerald-2'
-                      : 'border-line-strong text-ink-3',
+                  'tnum grid size-7 place-items-center rounded-full text-[13px] font-bold',
+                  state === 'done' || state === 'active'
+                    ? 'bg-brand-500 text-white'
+                    : 'bg-ink-50 text-ink-3',
                 )}
               >
                 {state === 'done' ? <Check className="size-3.5" /> : i + 1}
               </span>
+              {/* Step label */}
               <span
                 className={cn(
-                  'hidden text-xs font-medium sm:block',
-                  state === 'todo' ? 'text-ink-3' : 'text-ink',
+                  'hidden text-[12.5px] font-semibold sm:block',
+                  state === 'active' ? 'text-ink' : 'text-ink-3',
                 )}
               >
                 {label}
               </span>
             </span>
-            {i < steps.length - 1 ? <span className="mx-3 h-px w-5 bg-line-strong sm:w-8" /> : null}
+            {/* Connector */}
+            {i < steps.length - 1 ? (
+              <span className="mx-3 h-px w-5 bg-line-strong sm:w-8" />
+            ) : null}
           </li>
         )
       })}
@@ -261,9 +275,12 @@ function ReviewPanel({
 }) {
   return (
     <div>
-      <dl className="divide-y divide-line">
+      <dl>
         {rows.map((row) => (
-          <div key={row.label} className="flex items-center justify-between gap-4 py-3">
+          <div
+            key={row.label}
+            className="flex items-center justify-between gap-4 border-b border-line py-2.5"
+          >
             <dt className="text-sm text-ink-3">{row.label}</dt>
             <dd className="flex items-center gap-2 text-right text-sm font-medium text-ink">
               {row.value || '—'}
@@ -290,22 +307,27 @@ function SuccessPanel({
 }) {
   const { t } = useTranslation()
   return (
-    <div className="reveal mx-auto max-w-md">
-      <Card className="p-8 text-center">
-        <div className="mx-auto grid size-12 place-items-center rounded-full bg-emerald-tint text-emerald">
-          <Check className="size-6" />
+    <div className="reveal mx-auto max-w-[680px]">
+      <Card className="rounded-[24px] p-12 text-center">
+        {/* Check circle */}
+        <div className="mx-auto grid size-16 place-items-center rounded-full bg-brand-50 text-brand-600">
+          <Check className="size-7" />
         </div>
-        <h2 className="mt-4 font-display text-2xl font-semibold text-ink">
+
+        <h2 className="mt-5 font-display text-[28px] font-bold tracking-[-0.02em] text-ink">
           {t('onboarding.createdTitle')}
         </h2>
         <p className="mt-1.5 text-sm text-ink-3">{t('onboarding.createdBody')}</p>
-        <div className="mt-5 rounded-lg border border-line bg-paper px-4 py-3 text-left">
-          <div className="text-sm font-medium text-ink">{company.name}</div>
+
+        {/* Company summary pill */}
+        <div className="mx-auto mt-6 max-w-xs rounded-xl border border-line bg-paper px-4 py-3 text-left">
+          <div className="text-sm font-semibold text-ink">{company.name}</div>
           <div className="mt-0.5 font-mono text-xs text-ink-3">
             {company.baseCurrency} · {company.id.slice(0, 8)}…
           </div>
         </div>
-        <Button className="mt-6 w-full" onClick={onContinue}>
+
+        <Button className="mt-7 w-full max-w-xs" onClick={onContinue}>
           {t('onboarding.goToDashboard')} <ArrowRight className="size-4" />
         </Button>
       </Card>

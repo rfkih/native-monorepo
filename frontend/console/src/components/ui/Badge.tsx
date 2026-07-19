@@ -1,12 +1,14 @@
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/cn'
 
-type Tone = 'neutral' | 'amber' | 'emerald'
+type Tone = 'neutral' | 'amber' | 'emerald' | 'info' | 'loss'
 
 const tones: Record<Tone, string> = {
-  neutral: 'bg-paper text-ink-2 border-line-strong',
-  amber: 'bg-amber-tint text-amber-2 border-amber/30',
-  emerald: 'bg-emerald-tint text-emerald-2 border-emerald/25',
+  neutral: 'bg-ink-50 text-ink-2',
+  amber: 'bg-tint-warning text-amber-2',
+  emerald: 'bg-tint-profit text-brand-700',
+  info: 'bg-tint-info text-info',
+  loss: 'bg-tint-loss text-loss',
 }
 
 export function Badge({
@@ -21,7 +23,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium',
+        'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold',
         tones[tone],
         className,
       )}

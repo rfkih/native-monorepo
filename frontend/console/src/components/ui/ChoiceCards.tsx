@@ -29,10 +29,10 @@ export function ChoiceCards<T extends string>({
           <label
             key={option.value}
             className={cn(
-              'relative flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition-all',
+              'relative flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition-all',
               active
-                ? 'border-emerald bg-emerald-tint/50 ring-4 ring-emerald/10'
-                : 'border-line-strong bg-surface hover:border-ink-3',
+                ? 'border-brand-500 bg-brand-50 ring-4 ring-brand-500/12'
+                : 'border-line bg-surface hover:border-ink-3',
             )}
           >
             <input
@@ -46,10 +46,10 @@ export function ChoiceCards<T extends string>({
             <span
               className={cn(
                 'mt-0.5 grid size-4 shrink-0 place-items-center rounded-full border',
-                active ? 'border-emerald' : 'border-line-strong',
+                active ? 'border-brand-500' : 'border-line-strong',
               )}
             >
-              {active ? <span className="size-2 rounded-full bg-emerald" /> : null}
+              {active ? <span className="size-2 rounded-full bg-brand-500" /> : null}
             </span>
             <span className="min-w-0 flex-1">
               <span className="flex items-center justify-between gap-2">

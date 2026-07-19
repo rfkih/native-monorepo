@@ -107,7 +107,7 @@ export function ReceiptView({ order, payment, locale, businessName, tableLabel, 
       />
 
       <div
-        className="print:hidden fixed inset-0 z-40 grid place-items-center bg-ink/30 p-4 backdrop-blur-sm"
+        className="fixed inset-0 z-40 grid place-items-center bg-black/40 p-4 backdrop-blur-sm print:hidden"
         role="dialog"
         aria-modal="true"
         aria-label={t('pos.receipt.title')}
@@ -120,7 +120,7 @@ export function ReceiptView({ order, payment, locale, businessName, tableLabel, 
               <Clock className="size-7" />
             </div>
           ) : (
-            <div className="mx-auto grid size-14 place-items-center rounded-full bg-emerald text-white">
+            <div className="mx-auto grid size-14 place-items-center rounded-full bg-brand-500 text-white">
               <Check className="size-7" />
             </div>
           )}
@@ -202,7 +202,7 @@ export function ReceiptView({ order, payment, locale, businessName, tableLabel, 
               {breakdown.discountMinor > 0 ? (
                 <div className="flex items-baseline justify-between text-sm text-ink-3">
                   <span>{t('pos.discount')}</span>
-                  <span className="tnum font-mono text-rose">
+                  <span className="tnum font-mono text-loss">
                     − {formatMoney(breakdown.discountMinor, currency, locale)}
                   </span>
                 </div>
@@ -282,7 +282,7 @@ export function ReceiptView({ order, payment, locale, businessName, tableLabel, 
           {isCash && payment.changeMinor != null ? (
             <div className="flex items-baseline justify-between">
               <span className="text-ink-3">{t('pos.receipt.change')}</span>
-              <span className="tnum font-mono font-medium text-emerald-2">
+              <span className="tnum font-mono font-medium text-brand-700">
                 {formatMoney(payment.changeMinor, currency, locale)}
               </span>
             </div>

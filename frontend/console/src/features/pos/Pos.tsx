@@ -1,13 +1,27 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { Minus, Plus, Trash2, Utensils, Info, PauseCircle, ClipboardList, Table2, Settings } from 'lucide-react'
+import {
+  ArrowLeft,
+  Minus,
+  Moon,
+  Plus,
+  Sun,
+  Trash2,
+  Utensils,
+  Info,
+  PauseCircle,
+  ClipboardList,
+  Table2,
+  Settings,
+} from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
 import { Segmented } from '@/components/ui/Segmented'
 import { useSession, type CompanySession } from '@/lib/session'
+import { useTheme } from '@/lib/theme'
 import { localeOf } from '@/i18n'
 import { cn } from '@/lib/cn'
 import { formatMoney, isoMinorExponent } from '@/lib/money'
@@ -62,6 +76,7 @@ export function Pos() {
 
 function PosInner({ session }: { session: CompanySession }) {
   const { t, i18n } = useTranslation()
+  const { theme, toggle } = useTheme()
   const locale = localeOf(i18n.language)
   const menuQuery = useMenu(session)
   const categoriesQuery = useCategories(session)
@@ -327,134 +342,144 @@ function PosInner({ session }: { session: CompanySession }) {
   // ---------------------------------------------------------------------------
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-      {/* Menu */}
-      <div>
-        <header className="mb-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h1 className="font-display text-3xl font-semibold tracking-tight text-ink">
-                {t('pos.title')}
-              </h1>
-              <p className="mt-1 text-sm text-ink-3">{t('pos.subtitle', { name: session.name })}</p>
-            </div>
-
-            {/* Parked tray button */}
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setShowParkedTray(true)}
-                className={cn(
-                  'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
-                  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
-                  parkedCount > 0
-                    ? 'border-amber/40 bg-amber-tint text-amber-2 hover:bg-amber-tint/70'
-                    : 'border-line-strong bg-surface text-ink-2 hover:border-ink-3',
-                )}
-                aria-label={t('pos.parked.trayTitle')}
-              >
-                <ClipboardList className="size-4" aria-hidden="true" />
-                {t('pos.parked.parkedLabel')}
-                {parkedCount > 0 ? (
-                  <Badge tone="amber" className="ml-1 text-[10px] px-1.5 py-0">
-                    {parkedCount}
-                  </Badge>
-                ) : null}
-              </button>
-            </div>
+    <div className="min-h-screen bg-paper lg:grid lg:place-items-center lg:p-6 lg:[background:radial-gradient(120%_120%_at_50%_-10%,var(--color-hover),var(--color-paper))]">
+      {/* On large screens the POS sits in a centered tablet frame (matching the design comp);
+          on smaller/touch screens it renders fullscreen, where a bezel would only waste space. */}
+      <div className="flex min-h-screen w-full flex-col lg:h-[calc(100vh-3rem)] lg:max-h-[880px] lg:min-h-0 lg:w-[1280px] lg:max-w-full lg:rounded-[34px] lg:bg-[#0c0e11] lg:p-3 lg:shadow-lg">
+        <div className="flex min-h-screen flex-col bg-paper lg:h-full lg:min-h-0 lg:overflow-hidden lg:rounded-[24px]">
+      {/* POS header (the front-office chrome — this surface renders outside the back-office shell) */}
+      <header className="sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b border-line bg-surface px-4 py-3 sm:px-5">
+        <Link
+          to="/"
+          aria-label={t('a11y.backToDashboard')}
+          title={t('a11y.backToDashboard')}
+          className="grid size-[38px] shrink-0 place-items-center rounded-xl border border-line text-ink-3 transition-colors hover:bg-hover hover:text-ink"
+        >
+          <ArrowLeft className="size-[18px]" />
+        </Link>
+        <div className="min-w-0">
+          <div className="font-display text-[17px] font-bold leading-tight tracking-[-0.01em] text-ink">
+            {t('pos.title')}
           </div>
+          <div className="truncate text-xs text-ink-3">{session.name}</div>
+        </div>
 
-          {/* Order type selector */}
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <Segmented
-              options={orderTypeOptions}
-              value={orderType}
-              onChange={handleOrderTypeChange}
-              ariaLabel={t('pos.orderType.label')}
-            />
+        <div className="flex-1" />
 
-            {/* Table management shortcut (dine-in only) */}
-            {orderType === 'DINE_IN' ? (
-              <button
-                type="button"
-                onClick={() => setShowTableMgmt(true)}
-                className={cn(
-                  'flex items-center gap-1 rounded-lg border border-line-strong bg-surface px-2.5 py-1.5 text-xs text-ink-2',
-                  'hover:border-ink-3 transition-colors',
-                  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
-                )}
-                aria-label={t('pos.table.management')}
-              >
-                <Settings className="size-3.5" aria-hidden="true" />
-                {t('pos.table.management')}
-              </button>
-            ) : null}
-          </div>
+        <Segmented
+          options={orderTypeOptions}
+          value={orderType}
+          onChange={handleOrderTypeChange}
+          ariaLabel={t('pos.orderType.label')}
+        />
 
+        <button
+          type="button"
+          onClick={() => setShowParkedTray(true)}
+          aria-label={t('pos.parked.trayTitle')}
+          className="relative inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink-2 transition-colors hover:bg-hover"
+        >
+          <ClipboardList className="size-4" aria-hidden="true" />
+          <span className="hidden sm:inline">{t('pos.parked.parkedLabel')}</span>
+          {parkedCount > 0 ? (
+            <span className="grid h-[18px] min-w-[18px] place-items-center rounded-full bg-brand-500 px-1.5 text-[11px] font-bold text-white">
+              {parkedCount}
+            </span>
+          ) : null}
+        </button>
+
+        <button
+          type="button"
+          onClick={toggle}
+          aria-label={t('a11y.toggleTheme')}
+          title={t('a11y.toggleTheme')}
+          className="grid size-[38px] shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-colors hover:bg-hover hover:text-ink"
+        >
+          {theme === 'dark' ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}
+        </button>
+      </header>
+
+      {/* Body: menu (scrolls) + order rail (fixed) */}
+      <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[1fr_380px] lg:grid-rows-1">
+        {/* Menu side */}
+        <div className="min-h-0 overflow-y-auto px-4 py-5 sm:px-5 lg:px-6">
           {/* Table picker — shown when DINE_IN */}
           {orderType === 'DINE_IN' ? (
-            <TablePicker
-              tables={tables}
-              selectedTableId={selectedTableId}
-              onSelect={setSelectedTableId}
-              isLoading={tablesQuery.isLoading}
-            />
-          ) : null}
-        </header>
-
-        {menuQuery.isLoading ? (
-          <div className="grid place-items-center py-24 text-emerald">
-            <Spinner />
-          </div>
-        ) : items.length === 0 ? (
-          <Card className="p-10 text-center">
-            <div className="mx-auto grid size-12 place-items-center rounded-full bg-emerald-tint text-emerald">
-              <Utensils className="size-6" />
-            </div>
-            <h2 className="mt-4 font-display text-xl font-semibold text-ink">{t('pos.emptyMenu')}</h2>
-            <p className="mx-auto mt-1.5 max-w-xs text-sm text-ink-3">{t('pos.emptyMenuHint')}</p>
-            <Button className="mt-5" onClick={() => seed.mutate()} disabled={seed.isPending}>
-              {seed.isPending ? <Spinner /> : null} {t('pos.loadSample')}
-            </Button>
-          </Card>
-        ) : (
-          <div>
-            {/* Category tab bar — shown when there are backend categories */}
-            {categoryOptions.length > 1 ? (
-              <div className="mb-5 overflow-x-auto">
-                <Segmented
-                  options={categoryOptions}
-                  value={resolvedCategoryId}
-                  onChange={(v) => setActiveCategoryId(v)}
-                  ariaLabel={t('pos.categories')}
-                />
+            <div className="mb-5">
+              <div className="mb-2 flex items-center justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowTableMgmt(true)}
+                  aria-label={t('pos.table.management')}
+                  className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-2 transition-colors hover:bg-hover"
+                >
+                  <Settings className="size-3.5" aria-hidden="true" />
+                  {t('pos.table.management')}
+                </button>
               </div>
-            ) : null}
-
-            {/* Item grid */}
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {visibleItems.map((item) => (
-                <ItemCard
-                  key={item.id}
-                  item={item}
-                  qty={cartQtyFor(cart, item.id)}
-                  locale={locale}
-                  onAdd={() => handleItemTap(item)}
-                />
-              ))}
+              <TablePicker
+                tables={tables}
+                selectedTableId={selectedTableId}
+                onSelect={setSelectedTableId}
+                isLoading={tablesQuery.isLoading}
+              />
             </div>
-          </div>
-        )}
-      </div>
+          ) : null}
 
-      {/* Cart rail */}
-      <div className="lg:sticky lg:top-24 lg:self-start">
-        <Card className="overflow-hidden">
+          {menuQuery.isLoading ? (
+            <div className="grid place-items-center py-24 text-brand-500">
+              <Spinner />
+            </div>
+          ) : items.length === 0 ? (
+            <Card className="mx-auto max-w-md p-10 text-center">
+              <div className="mx-auto grid size-12 place-items-center rounded-full bg-brand-50 text-brand-600">
+                <Utensils className="size-6" />
+              </div>
+              <h2 className="mt-4 font-display text-xl font-semibold text-ink">
+                {t('pos.emptyMenu')}
+              </h2>
+              <p className="mx-auto mt-1.5 max-w-xs text-sm text-ink-3">{t('pos.emptyMenuHint')}</p>
+              <Button className="mt-5" onClick={() => seed.mutate()} disabled={seed.isPending}>
+                {seed.isPending ? <Spinner /> : null} {t('pos.loadSample')}
+              </Button>
+            </Card>
+          ) : (
+            <div>
+              {/* Category tab bar — shown when there are backend categories */}
+              {categoryOptions.length > 1 ? (
+                <div className="mb-5 overflow-x-auto">
+                  <Segmented
+                    options={categoryOptions}
+                    value={resolvedCategoryId}
+                    onChange={(v) => setActiveCategoryId(v)}
+                    ariaLabel={t('pos.categories')}
+                  />
+                </div>
+              ) : null}
+
+              {/* Item grid */}
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {visibleItems.map((item) => (
+                  <ItemCard
+                    key={item.id}
+                    item={item}
+                    qty={cartQtyFor(cart, item.id)}
+                    locale={locale}
+                    onAdd={() => handleItemTap(item)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Order rail */}
+        <aside className="flex min-h-0 flex-col bg-surface max-lg:border-t lg:border-l border-line">
           <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
             <div className="flex items-center gap-2">
               <h2 className="font-display text-lg font-semibold text-ink">{t('pos.cart')}</h2>
               {resumedOrder ? (
-                <Badge tone="amber" className="text-[10px] px-1.5 py-0">
+                <Badge tone="amber" className="px-1.5 py-0 text-[10px]">
                   {t('pos.parked.resuming')}
                 </Badge>
               ) : null}
@@ -465,7 +490,11 @@ function PosInner({ session }: { session: CompanySession }) {
           {/* Order type + table summary in cart */}
           {lineCount > 0 ? (
             <div className="flex items-center gap-2 border-b border-line px-5 py-2 text-xs text-ink-3">
-              <span className="font-medium text-ink-2">{t(orderTypeOptions.find(o => o.value === orderType)?.label ? `pos.orderType.${orderType === 'DINE_IN' ? 'dineIn' : orderType === 'TAKEAWAY' ? 'takeaway' : 'delivery'}` : 'pos.orderType.dineIn')}</span>
+              <span className="font-medium text-ink-2">
+                {t(
+                  `pos.orderType.${orderType === 'DINE_IN' ? 'dineIn' : orderType === 'TAKEAWAY' ? 'takeaway' : 'delivery'}`,
+                )}
+              </span>
               {orderType === 'DINE_IN' && selectedTable ? (
                 <>
                   <span>·</span>
@@ -479,11 +508,11 @@ function PosInner({ session }: { session: CompanySession }) {
             </div>
           ) : null}
 
-          {lineCount === 0 ? (
-            <p className="px-5 py-10 text-center text-sm text-ink-3">{t('pos.cartEmpty')}</p>
-          ) : (
-            <>
-              {/* Line items */}
+          {/* Lines (scrollable) */}
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {lineCount === 0 ? (
+              <p className="px-5 py-10 text-center text-sm text-ink-3">{t('pos.cartEmpty')}</p>
+            ) : (
               <ul className="divide-y divide-line">
                 {cart.map((line, idx) => {
                   const item = items.find((i) => i.id === line.menuItemId)
@@ -502,16 +531,22 @@ function PosInner({ session }: { session: CompanySession }) {
                             type="button"
                             aria-label={t('pos.decreaseQty', { name: item.name })}
                             onClick={() => decCartLine(idx)}
-                            className="grid size-7 place-items-center rounded-md border border-line-strong text-ink-2 hover:bg-paper"
+                            className="grid size-7 place-items-center rounded-lg border border-line text-ink-2 transition-colors hover:bg-hover"
                           >
-                            {line.qty === 1 ? <Trash2 className="size-3.5" /> : <Minus className="size-3.5" />}
+                            {line.qty === 1 ? (
+                              <Trash2 className="size-3.5" />
+                            ) : (
+                              <Minus className="size-3.5" />
+                            )}
                           </button>
-                          <span className="tnum w-5 text-center font-mono text-sm text-ink">{line.qty}</span>
+                          <span className="tnum w-5 text-center font-mono text-sm text-ink">
+                            {line.qty}
+                          </span>
                           <button
                             type="button"
                             aria-label={t('pos.increaseQty', { name: item.name })}
                             onClick={() => handleItemTap(item)}
-                            className="grid size-7 place-items-center rounded-md border border-line-strong text-ink-2 hover:bg-paper"
+                            className="grid size-7 place-items-center rounded-lg border border-line text-ink-2 transition-colors hover:bg-hover"
                           >
                             <Plus className="size-3.5" />
                           </button>
@@ -519,12 +554,9 @@ function PosInner({ session }: { session: CompanySession }) {
                       </div>
                       {/* Modifier names under the line */}
                       {line.selectedOptionNames.length > 0 ? (
-                        <div className="mt-1 pl-0 flex flex-wrap gap-1">
+                        <div className="mt-1 flex flex-wrap gap-1 pl-0">
                           {line.selectedOptionNames.map((name) => (
-                            <span
-                              key={name}
-                              className="text-[11px] text-ink-3 leading-tight"
-                            >
+                            <span key={name} className="text-[11px] leading-tight text-ink-3">
                               {name}
                             </span>
                           ))}
@@ -534,95 +566,101 @@ function PosInner({ session }: { session: CompanySession }) {
                   )
                 })}
               </ul>
-
-              {/* Discount input */}
-              <div className="border-t border-line px-5 py-3">
-                <label htmlFor="pos-discount" className="block text-xs font-medium text-ink-3 mb-1.5">
-                  {t('pos.addDiscount')}
-                </label>
-                <input
-                  id="pos-discount"
-                  type="number"
-                  inputMode="decimal"
-                  min="0"
-                  step="1"
-                  value={discountInput}
-                  onChange={(e) => handleDiscountChange(e.target.value)}
-                  placeholder="0"
-                  aria-describedby={discountError ? 'pos-discount-error' : undefined}
-                  className={cn(
-                    'w-full rounded-lg border bg-surface px-3 py-2 font-mono text-sm text-ink tnum',
-                    'transition-colors placeholder:text-ink-3/50',
-                    'focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/10',
-                    discountError ? 'border-rose' : 'border-line-strong',
-                  )}
-                />
-                {discountError ? (
-                  <p id="pos-discount-error" className="mt-1 text-xs text-rose" role="alert">
-                    {discountError}
-                  </p>
-                ) : null}
-              </div>
-
-              {/* Price breakdown */}
-              <div className="border-t border-line px-5 py-4">
-                <PriceBreakdown
-                  breakdown={breakdown}
-                  isLoading={quoteQuery.isFetching && !quoteQuery.isPlaceholderData}
-                  currency={currency}
-                  locale={locale}
-                  clientSubtotalMinor={clientSubtotalMinor}
-                />
-              </div>
-            </>
-          )}
-
-          {/* Action buttons: Hold + Charge */}
-          <div className={cn('px-5 py-4 flex gap-2', lineCount > 0 ? 'border-t border-line' : '')}>
-            {/* Hold button — only when cart is non-empty and not already resuming (avoid double-park) */}
-            {lineCount > 0 && !resumedOrder ? (
-              <Button
-                variant="outline"
-                className="flex-none"
-                disabled={lineCount === 0 || parkOrder.isPending}
-                onClick={handleHold}
-                aria-label={t('pos.parked.hold')}
-                title={t('pos.parked.hold')}
-              >
-                {parkOrder.isPending ? <Spinner /> : <PauseCircle className="size-4" />}
-                {t('pos.parked.hold')}
-              </Button>
-            ) : null}
-
-            <Button
-              className="w-full flex-1"
-              disabled={lineCount === 0 || !!discountError || resumeQuery.isLoading}
-              onClick={openPayment}
-            >
-              {resumeQuery.isLoading ? (
-                <Spinner />
-              ) : (
-                <>
-                  {t('pos.charge')} · {formatMoney(grandTotalMinor, currency, locale)}
-                </>
-              )}
-            </Button>
+            )}
           </div>
 
-          {/* Park error */}
-          {parkOrder.isError ? (
-            <p className="px-5 pb-3 text-xs text-rose" role="alert">
-              {(parkOrder.error as Error).message}
-            </p>
-          ) : null}
+          {/* Footer: discount + breakdown + actions (pinned) */}
+          <div className="border-t border-line">
+            {lineCount > 0 ? (
+              <>
+                <div className="px-5 py-3">
+                  <label
+                    htmlFor="pos-discount"
+                    className="mb-1.5 block text-xs font-medium text-ink-3"
+                  >
+                    {t('pos.addDiscount')}
+                  </label>
+                  <input
+                    id="pos-discount"
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="1"
+                    value={discountInput}
+                    onChange={(e) => handleDiscountChange(e.target.value)}
+                    placeholder="0"
+                    aria-describedby={discountError ? 'pos-discount-error' : undefined}
+                    className={cn(
+                      'tnum w-full rounded-xl border bg-surface px-3 py-2 font-mono text-sm text-ink',
+                      'transition-colors placeholder:text-ink-3/50',
+                      'focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/12',
+                      discountError ? 'border-loss' : 'border-line',
+                    )}
+                  />
+                  {discountError ? (
+                    <p id="pos-discount-error" className="mt-1 text-xs text-loss" role="alert">
+                      {discountError}
+                    </p>
+                  ) : null}
+                </div>
 
-          {/* Park success toast */}
-          {parkOrder.isSuccess && lineCount === 0 ? (
-            <p className="px-5 pb-3 text-xs text-emerald-2" role="status">
-              {t('pos.parked.holdSuccess')}
-            </p>
-          ) : null}
-        </Card>
+                <div className="border-t border-line px-5 py-4">
+                  <PriceBreakdown
+                    breakdown={breakdown}
+                    isLoading={quoteQuery.isFetching && !quoteQuery.isPlaceholderData}
+                    currency={currency}
+                    locale={locale}
+                    clientSubtotalMinor={clientSubtotalMinor}
+                  />
+                </div>
+              </>
+            ) : null}
+
+            <div className={cn('flex gap-2 px-5 py-4', lineCount > 0 ? 'border-t border-line' : '')}>
+              {lineCount > 0 && !resumedOrder ? (
+                <Button
+                  variant="outline"
+                  className="flex-none"
+                  disabled={lineCount === 0 || parkOrder.isPending}
+                  onClick={handleHold}
+                  aria-label={t('pos.parked.hold')}
+                  title={t('pos.parked.hold')}
+                >
+                  {parkOrder.isPending ? <Spinner /> : <PauseCircle className="size-4" />}
+                  {t('pos.parked.hold')}
+                </Button>
+              ) : null}
+
+              <Button
+                className="w-full flex-1"
+                disabled={lineCount === 0 || !!discountError || resumeQuery.isLoading}
+                onClick={openPayment}
+              >
+                {resumeQuery.isLoading ? (
+                  <Spinner />
+                ) : (
+                  <>
+                    {t('pos.charge')} · {formatMoney(grandTotalMinor, currency, locale)}
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {/* Park error */}
+            {parkOrder.isError ? (
+              <p className="px-5 pb-3 text-xs text-loss" role="alert">
+                {(parkOrder.error as Error).message}
+              </p>
+            ) : null}
+
+            {/* Park success toast */}
+            {parkOrder.isSuccess && lineCount === 0 ? (
+              <p className="px-5 pb-3 text-xs text-brand-700" role="status">
+                {t('pos.parked.holdSuccess')}
+              </p>
+            ) : null}
+          </div>
+        </aside>
       </div>
 
       {/* Modifier picker modal */}
@@ -686,6 +724,8 @@ function PosInner({ session }: { session: CompanySession }) {
           onClose={() => setShowParkedTray(false)}
         />
       ) : null}
+        </div>
+      </div>
     </div>
   )
 }
@@ -725,53 +765,86 @@ function TablePicker({
   }
 
   return (
-    <div className="mt-3" role="group" aria-label={t('pos.table.selectTable')}>
-      <p className="mb-2 text-xs font-medium text-ink-3">{t('pos.table.selectTable')}</p>
-      <div className="flex flex-wrap gap-2">
+    <div role="group" aria-label={t('pos.table.selectTable')}>
+      <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.05em] text-ink-3">
+        {t('pos.table.selectTable')}
+      </p>
+      <div className="flex flex-wrap gap-2.5">
         {/* "No table" option */}
         <button
           type="button"
           onClick={() => onSelect(null)}
           aria-pressed={selectedTableId === null}
           className={cn(
-            'rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
-            'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
+            'w-[74px] rounded-[13px] border-[1.5px] py-2.5 text-center transition-colors',
+            'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500',
             selectedTableId === null
-              ? 'border-emerald bg-emerald-tint text-emerald-2'
-              : 'border-line-strong bg-surface text-ink-2 hover:border-ink-3',
+              ? 'border-brand-500 bg-brand-500'
+              : 'border-line bg-surface hover:bg-hover',
           )}
         >
-          {t('pos.table.noTable')}
-        </button>
-
-        {tables.map((tbl) => (
-          <button
-            key={tbl.tableId}
-            type="button"
-            disabled={tbl.occupied && selectedTableId !== tbl.tableId}
-            onClick={() => onSelect(tbl.tableId)}
-            aria-pressed={selectedTableId === tbl.tableId}
-            aria-label={
-              tbl.occupied
-                ? t('pos.table.occupiedLabel', { label: tbl.label })
-                : t('pos.table.selectLabel', { label: tbl.label })
-            }
+          <div
             className={cn(
-              'relative rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
-              'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
-              tbl.occupied && selectedTableId !== tbl.tableId
-                ? 'cursor-not-allowed border-line bg-paper opacity-50 text-ink-3'
-                : selectedTableId === tbl.tableId
-                ? 'border-emerald bg-emerald-tint text-emerald-2'
-                : 'border-line-strong bg-surface text-ink-2 hover:border-ink-3',
+              'text-[15px] font-bold',
+              selectedTableId === null ? 'text-white' : 'text-ink',
             )}
           >
-            {tbl.label}
-            {tbl.occupied ? (
-              <span className="absolute -right-1 -top-1 block size-2 rounded-full bg-amber" aria-hidden="true" />
-            ) : null}
-          </button>
-        ))}
+            —
+          </div>
+          <div
+            className={cn(
+              'mt-0.5 text-[10.5px]',
+              selectedTableId === null ? 'text-white/80' : 'text-ink-3',
+            )}
+          >
+            {t('pos.table.noTable')}
+          </div>
+        </button>
+
+        {tables.map((tbl) => {
+          const selected = selectedTableId === tbl.tableId
+          const blocked = tbl.occupied && !selected
+          return (
+            <button
+              key={tbl.tableId}
+              type="button"
+              disabled={blocked}
+              onClick={() => onSelect(tbl.tableId)}
+              aria-pressed={selected}
+              aria-label={
+                tbl.occupied
+                  ? t('pos.table.occupiedLabel', { label: tbl.label })
+                  : t('pos.table.selectLabel', { label: tbl.label })
+              }
+              className={cn(
+                'w-[74px] rounded-[13px] border-[1.5px] py-2.5 text-center transition-colors',
+                'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500',
+                selected
+                  ? 'border-brand-500 bg-brand-500'
+                  : blocked
+                    ? 'cursor-not-allowed border-line bg-paper opacity-60'
+                    : 'border-line bg-surface hover:bg-hover',
+              )}
+            >
+              <div
+                className={cn(
+                  'text-[15px] font-bold',
+                  selected ? 'text-white' : blocked ? 'text-ink-3' : 'text-ink',
+                )}
+              >
+                {tbl.label}
+              </div>
+              <div
+                className={cn(
+                  'mt-0.5 text-[10.5px]',
+                  selected ? 'text-white/80' : 'text-ink-3',
+                )}
+              >
+                {t('pos.table.capacity', { n: tbl.capacity })}
+              </div>
+            </button>
+          )
+        })}
       </div>
     </div>
   )
@@ -802,7 +875,7 @@ function PriceBreakdown({
         <span className="text-sm text-ink-3">{t('pos.subtotal')}</span>
         <span className="tnum font-mono text-sm text-ink">
           {isLoading ? (
-            <span className="inline-block h-3.5 w-16 animate-pulse rounded bg-paper" />
+            <span className="inline-block h-3.5 w-16 animate-pulse rounded bg-ink-100" />
           ) : (
             formatMoney(clientSubtotalMinor, currency, locale)
           )}
@@ -812,6 +885,12 @@ function PriceBreakdown({
   }
 
   const illustrative = breakdown.usesIllustrativeRules
+  // Effective rates derived from the amounts the server returned — the rate itself isn't in the
+  // response, so we surface what was actually applied rather than a hardcoded figure.
+  const rateBase = breakdown.subtotalMinor - breakdown.discountMinor
+  const serviceRate = rateBase > 0 ? breakdown.serviceChargeMinor / rateBase : null
+  const taxBase = rateBase + breakdown.serviceChargeMinor
+  const taxRate = taxBase > 0 ? breakdown.taxMinor / taxBase : null
 
   return (
     <div className="space-y-2 text-sm">
@@ -825,7 +904,7 @@ function PriceBreakdown({
       {breakdown.discountMinor > 0 ? (
         <div className="flex items-baseline justify-between">
           <span className="text-ink-3">{t('pos.discount')}</span>
-          <span className="tnum font-mono text-rose">
+          <span className="tnum font-mono text-loss">
             − {formatMoney(breakdown.discountMinor, currency, locale)}
           </span>
         </div>
@@ -834,6 +913,7 @@ function PriceBreakdown({
       <div className="flex items-center justify-between">
         <span className="flex items-center gap-1.5 text-ink-3">
           {t('pos.serviceCharge')}
+          {serviceRate != null ? <RateChip rate={serviceRate} locale={locale} /> : null}
           {illustrative ? <EstimatedBadge hint={t('pos.illustrativeHint')} /> : null}
         </span>
         <span className="tnum font-mono text-ink">
@@ -844,6 +924,7 @@ function PriceBreakdown({
       <div className="flex items-center justify-between">
         <span className="flex items-center gap-1.5 text-ink-3">
           {t('pos.tax')}
+          {taxRate != null ? <RateChip rate={taxRate} locale={locale} /> : null}
           {illustrative ? <EstimatedBadge hint={t('pos.illustrativeHint')} /> : null}
         </span>
         <span className="tnum font-mono text-ink">
@@ -851,11 +932,11 @@ function PriceBreakdown({
         </span>
       </div>
 
-      <div className="flex items-baseline justify-between border-t border-line pt-2 mt-1">
-        <span className="font-medium text-ink">{t('pos.total')}</span>
-        <span className="tnum font-mono text-xl font-medium text-ink">
+      <div className="mt-1 flex items-baseline justify-between border-t border-line pt-2">
+        <span className="font-semibold text-ink">{t('pos.total')}</span>
+        <span className="tnum font-mono text-xl font-bold text-ink">
           {isLoading ? (
-            <span className="inline-block h-5 w-20 animate-pulse rounded bg-paper" />
+            <span className="inline-block h-5 w-20 animate-pulse rounded bg-ink-100" />
           ) : (
             formatMoney(breakdown.grandTotalMinor, currency, locale)
           )}
@@ -873,6 +954,15 @@ function EstimatedBadge({ hint }: { hint: string }) {
         {t('pos.estimated')}
       </Badge>
       <Info className="size-3 text-amber-2/70" aria-hidden="true" />
+    </span>
+  )
+}
+
+/** The effective rate (e.g. "10%") applied to a service-charge / tax line. */
+function RateChip({ rate, locale }: { rate: number; locale: string }) {
+  return (
+    <span className="tnum rounded-full bg-ink-50 px-1.5 py-0.5 text-[10px] font-semibold text-ink-2">
+      {new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 }).format(rate)}
     </span>
   )
 }
@@ -907,32 +997,37 @@ function ItemCard({
       }
       aria-disabled={unavailable}
       className={cn(
-        'relative flex flex-col items-start rounded-card border bg-surface p-4 text-left transition-all',
+        'relative flex flex-col items-start rounded-2xl border bg-surface p-4 text-left shadow-sm transition-all',
         unavailable
-          ? 'cursor-not-allowed opacity-50'
-          : [
-              'hover:-translate-y-0.5 hover:border-emerald/40 hover:shadow-[0_10px_30px_-18px_rgba(13,106,74,0.5)]',
-              qty > 0 ? 'border-emerald ring-1 ring-emerald/20' : 'border-line',
-            ],
-        !unavailable && qty > 0 ? 'border-emerald ring-1 ring-emerald/20' : !unavailable ? 'border-line' : 'border-line',
+          ? 'cursor-not-allowed border-line opacity-55'
+          : qty > 0
+            ? 'border-brand-500 ring-1 ring-brand-500/25 hover:-translate-y-0.5'
+            : 'border-line hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md',
       )}
     >
       {!unavailable && qty > 0 ? (
-        <span className="tnum absolute right-3 top-3 grid size-6 place-items-center rounded-full bg-emerald font-mono text-xs font-medium text-white">
+        <span className="tnum absolute right-3 top-3 grid size-6 place-items-center rounded-full bg-brand-500 font-mono text-xs font-bold text-white">
           {qty}
         </span>
       ) : null}
 
       {unavailable ? (
         <span className="absolute right-3 top-3">
-          <Badge tone="neutral" className="text-[10px] px-1.5 py-0">
+          <Badge tone="neutral" className="px-1.5 py-0 text-[10px]">
             {t('pos.soldOut')}
           </Badge>
         </span>
       ) : null}
 
-      <span className={cn('font-medium', unavailable ? 'text-ink-3' : 'text-ink')}>{item.name}</span>
-      <span className={cn('tnum mt-2 font-mono text-sm', unavailable ? 'text-ink-3/50' : 'text-emerald-2')}>
+      <span className={cn('font-semibold', unavailable ? 'text-ink-3' : 'text-ink')}>
+        {item.name}
+      </span>
+      <span
+        className={cn(
+          'tnum mt-2 font-mono text-sm font-semibold',
+          unavailable ? 'text-ink-3/50' : 'text-brand-700',
+        )}
+      >
         {formatMoney(item.priceMinor, item.currency, locale)}
       </span>
 
@@ -946,16 +1041,18 @@ function ItemCard({
 function NoCompany() {
   const { t } = useTranslation()
   return (
-    <Card className="mx-auto max-w-md p-10 text-center">
-      <h2 className="font-display text-xl font-semibold text-ink">{t('dashboard.noCompany')}</h2>
-      <p className="mt-2 text-sm text-ink-3">{t('pos.noCompanyHint')}</p>
-      <Link
-        to="/onboarding"
-        className="mt-5 inline-block rounded-lg bg-emerald px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-2"
-      >
-        {t('nav.onboarding')}
-      </Link>
-    </Card>
+    <div className="grid min-h-screen place-items-center bg-paper px-5">
+      <Card className="w-full max-w-md p-10 text-center">
+        <h2 className="font-display text-xl font-semibold text-ink">{t('dashboard.noCompany')}</h2>
+        <p className="mt-2 text-sm text-ink-3">{t('pos.noCompanyHint')}</p>
+        <Link
+          to="/onboarding"
+          className="mt-5 inline-block rounded-xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-600"
+        >
+          {t('nav.onboarding')}
+        </Link>
+      </Card>
+    </div>
   )
 }
 

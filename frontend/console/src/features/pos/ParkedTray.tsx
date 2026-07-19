@@ -33,12 +33,12 @@ export function ParkedTray({ session, locale, onResume, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-end bg-ink/30 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-start justify-end bg-black/40 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={t('pos.parked.trayTitle')}
     >
-      <div className="flex h-full w-full max-w-sm flex-col bg-surface shadow-xl">
+      <div className="reveal flex h-full w-full max-w-sm flex-col bg-surface shadow-lg">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <div className="flex items-center gap-2">
@@ -53,7 +53,7 @@ export function ParkedTray({ session, locale, onResume, onClose }: Props) {
             type="button"
             onClick={onClose}
             aria-label={t('common.cancel')}
-            className="grid size-8 place-items-center rounded-lg text-ink-3 hover:bg-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+            className="grid size-8 place-items-center rounded-lg text-ink-3 hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
           >
             <X className="size-4" />
           </button>
@@ -62,7 +62,7 @@ export function ParkedTray({ session, locale, onResume, onClose }: Props) {
         {/* List */}
         <div className="flex-1 overflow-y-auto overscroll-contain p-5">
           {parkedQuery.isLoading ? (
-            <div className="grid place-items-center py-16 text-emerald">
+            <div className="grid place-items-center py-16 text-brand-500">
               <Spinner />
             </div>
           ) : parked.length === 0 ? (
@@ -116,9 +116,9 @@ function ParkedEntry({
         type="button"
         onClick={() => onResume(order.orderId)}
         className={cn(
-          'w-full rounded-xl border border-line bg-surface px-4 py-3 text-left transition-all',
-          'hover:border-emerald/40 hover:shadow-[0_4px_16px_-8px_rgba(13,106,74,0.3)]',
-          'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
+          'w-full rounded-2xl border border-line bg-surface px-4 py-3 text-left transition-all',
+          'hover:border-brand-300 hover:shadow-md',
+          'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500',
         )}
       >
         {/* Top row: type badge + table + total */}
@@ -147,7 +147,7 @@ function ParkedEntry({
           <span>{timeStr}</span>
         </div>
 
-        <div className="mt-2 text-xs font-medium text-emerald-2">{t('pos.parked.resume')}</div>
+        <div className="mt-2 text-xs font-semibold text-brand-700">{t('pos.parked.resume')}</div>
       </button>
     </li>
   )

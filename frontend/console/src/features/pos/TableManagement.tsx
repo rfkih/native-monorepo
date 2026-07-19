@@ -39,12 +39,12 @@ export function TableManagement({ session, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-end bg-ink/30 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-start justify-end bg-black/40 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={t('pos.table.management')}
     >
-      <div className="flex h-full w-full max-w-sm flex-col bg-surface shadow-xl">
+      <div className="reveal flex h-full w-full max-w-sm flex-col bg-surface shadow-lg">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <h2 className="font-display text-lg font-semibold text-ink">
@@ -54,7 +54,7 @@ export function TableManagement({ session, onClose }: Props) {
             type="button"
             onClick={onClose}
             aria-label={t('common.cancel')}
-            className="grid size-8 place-items-center rounded-lg text-ink-3 hover:bg-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+            className="grid size-8 place-items-center rounded-lg text-ink-3 hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
           >
             <X className="size-4" />
           </button>
@@ -63,7 +63,7 @@ export function TableManagement({ session, onClose }: Props) {
         {/* Table list */}
         <div className="flex-1 overflow-y-auto overscroll-contain p-5">
           {tablesQuery.isLoading ? (
-            <div className="grid place-items-center py-16 text-emerald">
+            <div className="grid place-items-center py-16 text-brand-500">
               <Spinner />
             </div>
           ) : tables.length === 0 ? (
@@ -148,7 +148,7 @@ function TableRow({
           type="button"
           onClick={() => deactivate.mutate(table.tableId)}
           className={cn(
-            'text-xs text-ink-3 hover:text-rose focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
+            'text-xs text-ink-3 hover:text-loss focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500',
             'rounded px-2 py-1',
           )}
         >
@@ -159,7 +159,7 @@ function TableRow({
           type="button"
           onClick={() => activate.mutate(table.tableId)}
           className={cn(
-            'text-xs text-emerald-2 hover:text-emerald focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
+            'text-xs text-brand-700 hover:text-brand-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500',
             'rounded px-2 py-1',
           )}
         >
@@ -217,10 +217,10 @@ function CreateTableForm({
   }
 
   const inputCls = cn(
-    'w-full rounded-lg border bg-surface px-3 py-2 text-sm text-ink',
+    'w-full rounded-xl border bg-surface px-3 py-2 text-sm text-ink',
     'transition-colors placeholder:text-ink-3/50',
-    'focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/10',
-    'border-line-strong',
+    'focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/12',
+    'border-line',
   )
 
   return (
@@ -279,7 +279,7 @@ function CreateTableForm({
       </div>
 
       {error ? (
-        <p className="text-xs text-rose" role="alert">
+        <p className="text-xs text-loss" role="alert">
           {error}
         </p>
       ) : null}

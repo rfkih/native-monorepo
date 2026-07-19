@@ -12,20 +12,24 @@ export function AccessDenied() {
   const { t } = useTranslation()
   const auth = useAuth()
   return (
-    <Card className="mx-auto max-w-md p-10 text-center">
-      <div className="mx-auto grid size-12 place-items-center rounded-full bg-amber-tint text-amber-2">
-        <ShieldAlert className="size-6" />
-      </div>
-      <h2 className="mt-4 font-display text-xl font-semibold text-ink">{t('auth.deniedTitle')}</h2>
-      <p className="mx-auto mt-2 max-w-sm text-sm text-ink-3">{t('auth.deniedBody')}</p>
-      {auth.actor ? (
-        <p className="mt-1 text-xs text-ink-3">
-          {t('auth.signedInAs')} <span className="font-medium text-ink-2">{auth.actor}</span>
-        </p>
-      ) : null}
-      <Button className="mt-6" onClick={auth.logout}>
-        {t('auth.signOut')}
-      </Button>
-    </Card>
+    <div className="grid min-h-screen place-items-center bg-paper px-5">
+      <Card className="w-full max-w-md p-10 text-center">
+        <div className="mx-auto grid size-12 place-items-center rounded-full bg-tint-warning text-amber-2">
+          <ShieldAlert className="size-6" />
+        </div>
+        <h2 className="mt-4 font-display text-xl font-semibold text-ink">
+          {t('auth.deniedTitle')}
+        </h2>
+        <p className="mx-auto mt-2 max-w-sm text-sm text-ink-3">{t('auth.deniedBody')}</p>
+        {auth.actor ? (
+          <p className="mt-1 text-xs text-ink-3">
+            {t('auth.signedInAs')} <span className="font-medium text-ink-2">{auth.actor}</span>
+          </p>
+        ) : null}
+        <Button className="mt-6" onClick={auth.logout}>
+          {t('auth.signOut')}
+        </Button>
+      </Card>
+    </div>
   )
 }

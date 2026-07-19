@@ -10,8 +10,8 @@ import { formatPeriod } from '@/lib/period'
  * shared chart palette. One source so the two surfaces can't drift.
  */
 
-export const EMERALD = '#0d6a4a'
-export const ROSE = '#8f322b'
+export const EMERALD = '#16b364'
+export const ROSE = '#e5484d'
 
 /** Month stepper (prev/next around a localized YYYY-MM label). */
 export function PeriodNav({
@@ -30,12 +30,12 @@ export function PeriodNav({
   nextLabel: string
 }) {
   return (
-    <div className="inline-flex items-center gap-1 rounded-lg border border-line-strong bg-surface p-1">
+    <div className="inline-flex items-center gap-1 rounded-xl border border-line bg-surface p-1">
       <button
         type="button"
         aria-label={prevLabel}
         onClick={onPrev}
-        className="grid size-8 place-items-center rounded-md text-ink-3 transition-colors hover:bg-paper hover:text-ink"
+        className="grid size-8 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-hover hover:text-ink"
       >
         <ChevronLeft className="size-4" />
       </button>
@@ -46,7 +46,7 @@ export function PeriodNav({
         type="button"
         aria-label={nextLabel}
         onClick={onNext}
-        className="grid size-8 place-items-center rounded-md text-ink-3 transition-colors hover:bg-paper hover:text-ink"
+        className="grid size-8 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-hover hover:text-ink"
       >
         <ChevronRight className="size-4" />
       </button>
@@ -73,12 +73,12 @@ export function KpiTile({
   emphatic?: boolean
 }) {
   return (
-    <Card className={cn('p-5', emphatic && 'ring-1 ring-emerald/15')}>
-      <div className="text-[11px] uppercase tracking-wider text-ink-3">{label}</div>
+    <Card className={cn('p-5', emphatic && 'outline outline-2 -outline-offset-2 outline-brand-200')}>
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">{label}</div>
       {loading ? (
-        <div className="mt-3 h-7 w-28 animate-pulse rounded bg-line" />
+        <div className="mt-3 h-7 w-28 animate-pulse rounded bg-ink-100" />
       ) : (
-        <div className={cn('tnum mt-2 font-mono text-2xl font-medium', tone ?? 'text-ink')}>
+        <div className={cn('tnum mt-2 font-mono text-[25px] font-semibold', tone ?? 'text-ink')}>
           {formatMoney(minor, currency, locale)}
         </div>
       )}

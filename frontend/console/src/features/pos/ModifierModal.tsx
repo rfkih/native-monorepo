@@ -129,7 +129,7 @@ export function ModifierModal({ item, locale, onConfirm, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-ink/30 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={t('pos.modifiers.modalLabel', { name: item.name })}
@@ -145,7 +145,7 @@ export function ModifierModal({ item, locale, onConfirm, onClose }: Props) {
             type="button"
             onClick={onClose}
             aria-label={t('common.cancel')}
-            className="shrink-0 grid size-8 place-items-center rounded-lg text-ink-3 hover:bg-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+            className="grid size-8 shrink-0 place-items-center rounded-lg text-ink-3 hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
           >
             <X className="size-4" />
           </button>
@@ -294,7 +294,7 @@ function SingleGroup({
         <span
           className={cn(
             'tnum font-mono text-xs',
-            opt.priceDeltaMinor > 0 ? 'text-ink-2' : 'text-emerald-2',
+            opt.priceDeltaMinor > 0 ? 'text-ink-2' : 'text-brand-700',
           )}
         >
           {opt.priceDeltaMinor > 0 ? '+' : ''}
@@ -339,10 +339,10 @@ function MultiGroup({
           <label
             key={opt.id}
             className={cn(
-              'relative flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition-all',
+              'relative flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition-all',
               checked
-                ? 'border-emerald bg-emerald-tint/50 ring-4 ring-emerald/10'
-                : 'border-line-strong bg-surface hover:border-ink-3',
+                ? 'border-brand-500 bg-brand-50 ring-4 ring-brand-500/12'
+                : 'border-line bg-surface hover:border-ink-3',
             )}
           >
             <input
@@ -356,7 +356,7 @@ function MultiGroup({
             <span
               className={cn(
                 'mt-0.5 grid size-4 shrink-0 place-items-center rounded border',
-                checked ? 'border-emerald bg-emerald' : 'border-line-strong',
+                checked ? 'border-brand-500 bg-brand-500' : 'border-line-strong',
               )}
               aria-hidden="true"
             >

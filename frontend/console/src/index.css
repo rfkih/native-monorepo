@@ -1,40 +1,134 @@
 @import 'tailwindcss';
 
 /*
- * Native console — the "ledger" design system.
- * Warm paper + ink, hairline rules, a single confident emerald, amber reserved for
- * provisional/flagged (stub-FX) figures, rose for negatives. Tabular mono for all money.
+ * Native console — the "Native Console" design system.
+ * Plus Jakarta Sans + a single confident brand green (#16B364), cool neutral inks, a soft
+ * elevation/shadow scale, rounded surfaces, and a manual light/dark theme. Tabular mono for money.
+ *
+ * The legacy semantic tokens (paper/surface/ink/line/emerald/amber/rose) are kept and REPOINTED
+ * to this palette so existing components recolor for free; the richer ramp (brand-*, ink-*, bg-*,
+ * profit/loss/warning/info + tint-*) is used directly on redesigned surfaces. Dark mode reassigns
+ * the same variables under :root[data-theme=dark] — every var()-based utility follows automatically.
  */
+
+/* Manual dark variant: driven by data-theme on <html>, NOT prefers-color-scheme (we toggle it). */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
 @theme {
-  --font-display: 'Fraunces', ui-serif, Georgia, serif;
-  --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
 
-  --color-paper: #f6f2ea;
-  --color-surface: #fffefa;
-  --color-ink: #1b1813;
-  --color-ink-2: #4a443b;
-  --color-ink-3: #847c6e;
-  --color-line: #e6dfd1;
-  --color-line-strong: #d2c9b6;
+  /* Brand green ramp */
+  --color-brand-50: #e8f8ee;
+  --color-brand-100: #c8eed5;
+  --color-brand-200: #97deb1;
+  --color-brand-300: #5fcb8b;
+  --color-brand-400: #2ebc72;
+  --color-brand-500: #16b364;
+  --color-brand-600: #0e9f50;
+  --color-brand-700: #0a7e3f;
+  --color-brand-800: #075e2f;
 
-  --color-emerald: #0d6a4a;
-  --color-emerald-2: #0a553c;
-  --color-emerald-tint: #e7efe8;
-  --color-amber: #9a6512;
+  /* Cool neutral ink ramp (900 = primary text … 50 = faintest fill) */
+  --color-ink-900: #0e1116;
+  --color-ink-800: #1c2027;
+  --color-ink-700: #384151;
+  --color-ink-600: #4f5867;
+  --color-ink-500: #6b7280;
+  --color-ink-400: #8a93a0;
+  --color-ink-300: #a8b0bc;
+  --color-ink-200: #cdd2da;
+  --color-ink-100: #e5e8ec;
+  --color-ink-50: #f2f5f7;
+
+  /* Surface elevation */
+  --color-canvas: #ffffff; /* bg-base — deepest layer */
+  --color-hover: #eef3ef; /* row / control hover */
+
+  /* Semantic */
+  --color-profit: #16b364;
+  --color-loss: #e5484d;
+  --color-warning: #f5a623;
+  --color-info: #3b82f6;
+  --color-tint-profit: #e8f8ee;
+  --color-tint-loss: #fceaeb;
+  --color-tint-warning: #fef4e2;
+  --color-tint-info: #e6effe;
+
+  /* --- Legacy semantic aliases, repointed to the new (light) palette --- */
+  --color-paper: #f4f8f5; /* page background  → bg-surface */
+  --color-surface: #ffffff; /* cards / sidebar  → bg-elevated */
+  --color-ink: #0e1116; /* → ink-900 */
+  --color-ink-2: #384151; /* → ink-700 (secondary) */
+  --color-ink-3: #8a93a0; /* → ink-400 (muted) */
+  --color-line: #e5e8ec; /* → ink-100 */
+  --color-line-strong: #cdd2da; /* → ink-200 */
+  --color-emerald: #0e9f50; /* brand-600 — safe as fill or text */
+  --color-emerald-2: #0a7e3f; /* brand-700 — darker accent / hover */
+  --color-emerald-tint: #e8f8ee;
+  --color-amber: #9a6a10; /* readable amber text for flagged figures */
   --color-amber-2: #7c5210;
-  --color-amber-tint: #f5ead2;
-  --color-rose: #8f322b;
-  --color-rose-tint: #f0e1dc;
+  --color-amber-tint: #fef4e2;
+  --color-rose: #e5484d; /* loss / negative */
+  --color-rose-tint: #fceaeb;
 
-  --radius-card: 0.75rem;
+  /* Elevation shadow scale */
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05), 0 1px 1px rgba(15, 23, 42, 0.03);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.07), 0 1px 3px rgba(15, 23, 42, 0.04);
+  --shadow-lg: 0 14px 38px rgba(15, 23, 42, 0.1), 0 3px 10px rgba(15, 23, 42, 0.05);
+
+  --radius-card: 1.25rem; /* 20px */
+
+  /* Reusable entrance animations (from the comp) */
+  --animate-fade-up: fade-up 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  --animate-pop: pop 0.3s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+/* Dark theme — reassign the same variables; var()-based utilities follow automatically. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --color-ink-900: #f2f5f8;
+  --color-ink-800: #e1e6ec;
+  --color-ink-700: #c5ccd5;
+  --color-ink-600: #a3abb6;
+  --color-ink-500: #8c95a2;
+  --color-ink-400: #7a8493;
+  --color-ink-300: #5a6371;
+  --color-ink-200: #3a4150;
+  --color-ink-100: #2a2f3a;
+  --color-ink-50: #1e232c;
+
+  --color-canvas: #0e1116;
+  --color-hover: #1e232c;
+
+  --color-tint-profit: rgba(22, 179, 100, 0.16);
+  --color-tint-loss: rgba(229, 72, 77, 0.16);
+  --color-tint-warning: rgba(245, 166, 35, 0.15);
+  --color-tint-info: rgba(59, 130, 246, 0.16);
+
+  /* legacy aliases → dark */
+  --color-paper: #101319; /* page bg */
+  --color-surface: #171b22; /* cards / sidebar */
+  --color-ink: #f2f5f8;
+  --color-ink-2: #c5ccd5;
+  --color-ink-3: #7a8493;
+  --color-line: #2a2f3a;
+  --color-line-strong: #3a4150;
+  --color-emerald-tint: rgba(22, 179, 100, 0.16);
+  --color-amber: #f5c06b; /* readable on dark */
+  --color-amber-2: #f0c674;
+  --color-amber-tint: rgba(245, 166, 35, 0.15);
+  --color-rose: #ff6b70;
+  --color-rose-tint: rgba(229, 72, 77, 0.16);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.55), 0 3px 10px rgba(0, 0, 0, 0.4);
 }
 
 @layer base {
-  :root {
-    color-scheme: light;
-  }
-
   html {
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
@@ -46,18 +140,35 @@
     background-color: var(--color-paper);
     color: var(--color-ink);
     font-family: var(--font-sans);
-    /* a soft emerald glow up top for depth, over warm paper */
-    background-image: radial-gradient(
-      130% 90% at 50% -20%,
-      rgba(13, 106, 74, 0.07),
-      transparent 55%
-    );
-    background-attachment: fixed;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  /* Smooth the theme flip, but never fight reduced-motion. */
+  @media (prefers-reduced-motion: no-preference) {
+    body {
+      transition: background-color 0.25s ease, color 0.25s ease;
+    }
   }
 
   ::selection {
-    background: var(--color-emerald);
+    background: var(--color-brand-500);
     color: #fff;
+  }
+
+  /* Quiet, themeable scrollbars */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-ink-200);
+    border-radius: 8px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
   }
 }
 
@@ -70,23 +181,42 @@
   .hairline {
     border-color: var(--color-line);
   }
-
-  @keyframes reveal-up {
-    from {
-      opacity: 0;
-      transform: translateY(8px);
-    }
-    to {
-      opacity: 1;
-      transform: none;
-    }
-  }
   .reveal {
-    animation: reveal-up 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    animation: var(--animate-fade-up);
   }
   @media (prefers-reduced-motion: reduce) {
     .reveal {
       animation: none;
     }
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
   }
 }

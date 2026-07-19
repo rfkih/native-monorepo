@@ -1,5 +1,5 @@
 import { Suspense, lazy } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import { Shell } from '@/app/Shell'
 import { Spinner } from '@/components/ui/Spinner'
 import { hasAnyRole, useAuth } from '@/lib/authContext'
@@ -19,13 +19,22 @@ const BalanceSheet = lazy(() =>
   import('@/features/statements/BalanceSheet').then((m) => ({ default: m.BalanceSheet })),
 )
 const Pos = lazy(() => import('@/features/pos/Pos').then((m) => ({ default: m.Pos })))
+const OrgTree = lazy(() =>
+  import('@/features/org/OrgTree').then((m) => ({ default: m.OrgTree })),
+)
+const GroupConsolidation = lazy(() =>
+  import('@/features/groups/GroupConsolidation').then((m) => ({ default: m.GroupConsolidation })),
+)
+const PeriodClose = lazy(() =>
+  import('@/features/close/PeriodClose').then((m) => ({ default: m.PeriodClose })),
+)
 const AccessDenied = lazy(() =>
   import('@/features/auth/AccessDenied').then((m) => ({ default: m.AccessDenied })),
 )
 
 function CenteredSpinner() {
   return (
-    <div className="grid place-items-center py-24 text-emerald">
+    <div className="grid place-items-center py-24 text-brand-600">
       <Spinner />
     </div>
   )
@@ -47,7 +56,7 @@ export function App() {
   // Wait for the auth redirect to resolve and the signed-in company to load before routing.
   if (!auth.ready || loading) {
     return (
-      <div className="grid min-h-screen place-items-center text-emerald">
+      <div className="grid min-h-screen place-items-center text-brand-600">
         <Spinner />
       </div>
     )
@@ -58,20 +67,28 @@ export function App() {
 
   if (!canDashboard && !canPos) {
     return (
-      <Shell>
-        <Suspense fallback={<CenteredSpinner />}>
-          <AccessDenied />
-        </Suspense>
-      </Shell>
+      <Suspense fallback={<CenteredSpinner />}>
+        <AccessDenied />
+      </Suspense>
     )
   }
 
   const home = canDashboard ? '/' : '/pos'
 
   return (
-    <Shell>
-      <Suspense fallback={<CenteredSpinner />}>
-        <Routes>
+    <Suspense fallback={<CenteredSpinner />}>
+      <Routes>
+        {/* The POS is a full-screen "front office" — it renders OUTSIDE the sidebar/topbar shell. */}
+        {canPos && <Route path="/pos" element={<Pos />} />}
+
+        {/* Everything else shares the back-office shell, mounted once via a layout route. */}
+        <Route
+          element={
+            <Shell>
+              <Outlet />
+            </Shell>
+          }
+        >
           {canDashboard && <Route path="/onboarding" element={<OnboardingWizard />} />}
           {canDashboard && (
             <Route
@@ -91,10 +108,27 @@ export function App() {
               element={company ? <BalanceSheet /> : <Navigate to="/onboarding" replace />}
             />
           )}
-          {canPos && <Route path="/pos" element={<Pos />} />}
+          {canDashboard && (
+            <Route
+              path="/org"
+              element={company ? <OrgTree /> : <Navigate to="/onboarding" replace />}
+            />
+          )}
+          {canDashboard && (
+            <Route
+              path="/groups"
+              element={company ? <GroupConsolidation /> : <Navigate to="/onboarding" replace />}
+            />
+          )}
+          {canDashboard && (
+            <Route
+              path="/close"
+              element={company ? <PeriodClose /> : <Navigate to="/onboarding" replace />}
+            />
+          )}
           <Route path="*" element={<Navigate to={home} replace />} />
-        </Routes>
-      </Suspense>
-    </Shell>
+        </Route>
+      </Routes>
+    </Suspense>
   )
 }

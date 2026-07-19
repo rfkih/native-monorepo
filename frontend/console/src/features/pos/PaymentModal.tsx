@@ -100,7 +100,7 @@ export function PaymentModal({
   return (
     // Overlay — same backdrop pattern as ChargeSuccess in Pos.tsx
     <div
-      className="fixed inset-0 z-40 grid place-items-center bg-ink/30 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-40 grid place-items-center bg-black/40 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={t('pos.payment.title')}
@@ -113,7 +113,7 @@ export function PaymentModal({
             type="button"
             onClick={onClose}
             aria-label={t('pos.payment.cancel')}
-            className="grid size-8 place-items-center rounded-lg text-ink-3 hover:bg-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+            className="grid size-8 place-items-center rounded-lg text-ink-3 hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
           >
             <X className="size-4" />
           </button>
@@ -211,7 +211,7 @@ function ModalBreakdown({
       {breakdown.discountMinor > 0 ? (
         <div className="flex items-baseline justify-between text-ink-3">
           <span>{t('pos.discount')}</span>
-          <span className="tnum font-mono text-rose">
+          <span className="tnum font-mono text-loss">
             − {formatMoney(breakdown.discountMinor, currency, locale)}
           </span>
         </div>
@@ -369,10 +369,10 @@ function CashPanel({
               type="button"
               onClick={() => setChip(chip)}
               className={[
-                'rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
+                'rounded-xl border px-3 py-1.5 text-xs font-semibold transition-colors',
                 tenderedMinor === chip
-                  ? 'border-emerald bg-emerald-tint text-emerald-2'
-                  : 'border-line-strong bg-surface text-ink-2 hover:border-ink-3',
+                  ? 'border-brand-500 bg-brand-50 text-brand-700'
+                  : 'border-line bg-surface text-ink-2 hover:bg-hover',
               ].join(' ')}
             >
               {i === 0 ? t('pos.payment.exactAmount') : formatMoney(chip, currency, locale)}
@@ -400,15 +400,15 @@ function CashPanel({
       </div>
 
       {/* Change line */}
-      <div className="mb-4 flex items-baseline justify-between rounded-lg bg-emerald-tint px-4 py-2.5">
-        <span className="text-sm font-medium text-emerald-2">{t('pos.payment.change')}</span>
-        <span className="tnum font-mono text-lg font-semibold text-emerald-2">
+      <div className="mb-4 flex items-baseline justify-between rounded-xl bg-tint-profit px-4 py-2.5">
+        <span className="text-sm font-semibold text-brand-700">{t('pos.payment.change')}</span>
+        <span className="tnum font-mono text-lg font-bold text-brand-700">
           {changeMinor >= 0 ? formatMoney(changeMinor, currency, locale) : '—'}
         </span>
       </div>
 
       {(checkout.isError || payParked.isError) ? (
-        <p className="mb-3 text-xs text-rose">
+        <p className="mb-3 text-xs text-loss">
           {((checkout.error ?? payParked.error) as Error).message}
         </p>
       ) : null}
@@ -429,7 +429,7 @@ function KeypadButton({ label, onClick }: { label: string; onClick: () => void }
     <button
       type="button"
       onClick={onClick}
-      className="tnum flex h-11 items-center justify-center rounded-lg border border-line-strong bg-surface font-mono text-base font-medium text-ink transition-colors hover:bg-paper active:bg-emerald-tint/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+      className="tnum flex h-11 items-center justify-center rounded-xl border border-line bg-surface font-mono text-base font-semibold text-ink transition-colors hover:bg-hover active:bg-brand-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
     >
       {label}
     </button>
@@ -532,7 +532,7 @@ function DigitalPanel({
         </div>
 
         {(checkout.isError || payParked.isError) ? (
-          <p className="mb-3 text-xs text-rose">
+          <p className="mb-3 text-xs text-loss">
             {((checkout.error ?? payParked.error) as Error).message}
           </p>
         ) : null}
@@ -563,7 +563,7 @@ function DigitalPanel({
       </div>
 
       {capture.isError ? (
-        <p className="mb-3 text-xs text-rose">{t('pos.payment.errorCapture')}</p>
+        <p className="mb-3 text-xs text-loss">{t('pos.payment.errorCapture')}</p>
       ) : null}
 
       <Button className="w-full" disabled={capture.isPending} onClick={confirmPayment}>

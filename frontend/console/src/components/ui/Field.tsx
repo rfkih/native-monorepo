@@ -33,9 +33,9 @@ export function TextInput({ className, ...props }: InputHTMLAttributes<HTMLInput
   return (
     <input
       className={cn(
-        'w-full rounded-lg border border-line-strong bg-surface px-3.5 py-2.5 text-sm text-ink',
+        'w-full rounded-xl border border-line bg-surface px-3.5 py-3 text-sm text-ink',
         'transition-colors placeholder:text-ink-3/70',
-        'focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/10',
+        'focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/12',
         className,
       )}
       {...props}
