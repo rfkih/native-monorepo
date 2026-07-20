@@ -29,3 +29,4 @@ boundary, a security posture. Routine, local choices do not need one — use a c
 | [0008](0008-openapi-docs-fleet-rollout.md) | Roll springdoc-openapi out fleet-wide with an `@Operation` ArchUnit enforcer | Accepted |
 | [0009](0009-error-inbox-fleet-rollout.md) | Extract the error-inbox into `libs/error-inbox` and roll it out fleet-wide | Accepted |
 | [0010](0010-distributed-tracing-otel.md) | Wire distributed tracing (Micrometer Tracing + OpenTelemetry) fleet-wide | Accepted |
+| [0011](0011-keycloak-admin-via-spring-restclient.md) | Use Spring RestClient for Keycloak Admin API calls (no keycloak-admin-client library) | Accepted |

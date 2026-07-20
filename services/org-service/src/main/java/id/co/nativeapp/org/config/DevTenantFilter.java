@@ -110,9 +110,18 @@ public class DevTenantFilter extends OncePerRequestFilter implements Ordered {
   }
 
   /**
-   * Liveness/readiness probes never carry a tenant header, and the create-company bootstrap creates
-   * its own tenant, so {@code /healthz}, {@code /actuator/**}, and {@code POST /api/v1/companies}
-   * are not filtered at all — they pass through unscoped.
+   * Liveness/readiness probes never carry a tenant header, and certain public / bootstrap endpoints
+   * create their own scope, so they are not filtered at all — they pass through unscoped.
+   *
+   * <p>Exempt paths:
+   *
+   * <ul>
+   *   <li>{@code /healthz} and {@code /actuator/**} — probe/scrape endpoints;
+   *   <li>{@code POST /api/v1/companies} — the authenticated tenant-bootstrap that generates its
+   *       own company id and opens its own {@code TenantContext} scope;
+   *   <li>{@code POST /api/v1/signup} — the fully public sign-up endpoint that also creates a new
+   *       tenant (it calls {@code createCompany} internally and manages its own scope).
+   * </ul>
    */
   @Override
   protected boolean shouldNotFilter(HttpServletRequest request) {
@@ -122,7 +131,11 @@ public class DevTenantFilter extends OncePerRequestFilter implements Ordered {
     }
     // The create-company bootstrap: POST /api/v1/companies (exactly — not its
     // sub-resources such as /api/v1/companies/{id}/businesses, which ARE tenant-bound).
-    return "POST".equalsIgnoreCase(request.getMethod()) && path.equals("/api/v1/companies");
+    if ("POST".equalsIgnoreCase(request.getMethod()) && path.equals("/api/v1/companies")) {
+      return true;
+    }
+    // The public sign-up endpoint: unauthenticated, creates its own tenant scope internally.
+    return "POST".equalsIgnoreCase(request.getMethod()) && path.equals("/api/v1/signup");
   }
 
   private static boolean isUuid(String value) {

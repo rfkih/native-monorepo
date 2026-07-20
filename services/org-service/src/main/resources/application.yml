@@ -56,6 +56,18 @@ management:
 # (ENGINEERING-STANDARDS §5), included via this service's logback-spring.xml — dev keeps a console
 # pattern, every non-dev profile emits one JSON object per line.
 
+# Keycloak Admin REST client — active in ALL profiles (the signup endpoint uses it regardless of
+# the JWT/dev security profile). The client secret defaults to the dev-realm value and is
+# overridden in production via KEYCLOAK_ADMIN_SECRET (from Vault / env).
+native:
+  keycloak-admin:
+    base-url: ${KEYCLOAK_BASE_URL:http://localhost:8080}
+    realm: native
+    client-id: native-admin
+    client-secret: ${KEYCLOAK_ADMIN_SECRET:native-admin-secret}
+    connect-timeout: 2s
+    read-timeout: 5s
+
 ---
 # Defense-in-depth local JWT validation (#16, libs/security) — NON-DEV ONLY.
 #
@@ -95,3 +107,8 @@ native:
     # sub-resources (e.g. /api/v1/companies/{id}/businesses) remain strictly tenant-scoped.
     tenant-optional:
       - "POST /api/v1/companies"
+    # The public sign-up endpoint: fully unauthenticated (no token at all). The security chain
+    # permitAlls it; TenantBindingFilter skips it via shouldNotFilter. Default is empty — only
+    # org-service opts in.
+    public-paths:
+      - "POST /api/v1/signup"

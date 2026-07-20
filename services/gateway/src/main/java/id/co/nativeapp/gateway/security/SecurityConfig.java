@@ -45,7 +45,10 @@ public class SecurityConfig {
                         "/actuator/health/liveness",
                         "/actuator/health/readiness",
                         "/actuator/info",
-                        "/actuator/prometheus")
+                        "/actuator/prometheus",
+                        // Public sign-up: unauthenticated at the edge — no JWT required.
+                        // The request is forwarded to org-service which owns the actual logic.
+                        "/api/v1/signup")
                     .permitAll()
                     .anyRequest()
                     .authenticated())

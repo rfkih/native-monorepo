@@ -4,6 +4,18 @@
   "sslRequired": "none",
   "accessTokenLifespan": 300,
   "registrationAllowed": false,
+  "components": {
+    "org.keycloak.userprofile.UserProfileProvider": [
+      {
+        "providerId": "declarative-user-profile",
+        "config": {
+          "kc.user.profile.config": [
+            "{\"unmanagedAttributePolicy\":\"ADMIN_EDIT\",\"attributes\":[{\"name\":\"username\",\"displayName\":\"${username}\",\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]}},{\"name\":\"email\",\"displayName\":\"${email}\",\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]}}]}"
+          ]
+        }
+      }
+    ]
+  },
   "roles": {
     "realm": [
       { "name": "owner", "description": "Company owner — full console access" },
@@ -12,6 +24,20 @@
     ]
   },
   "clients": [
+    {
+      "clientId": "native-admin",
+      "name": "Native admin service-account client",
+      "description": "Confidential client for the org-service to manage Keycloak users via the Admin REST API (client-credentials only; no user-facing flows).",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "native-admin-secret",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "redirectUris": [],
+      "webOrigins": []
+    },
     {
       "clientId": "native-gateway",
       "name": "Native gateway client",
@@ -109,6 +135,16 @@
         { "type": "password", "value": "owner-password", "temporary": false }
       ],
       "realmRoles": ["owner", "manager"]
+    },
+    {
+      "username": "service-account-native-admin",
+      "enabled": true,
+      "email": "service-account-native-admin@placeholder.nativeapp.id",
+      "emailVerified": true,
+      "serviceAccountClientId": "native-admin",
+      "clientRoles": {
+        "realm-management": ["manage-users", "view-users", "query-users", "view-realm"]
+      }
     },
     {
       "username": "tenantless-user",

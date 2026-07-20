@@ -3,6 +3,7 @@ package id.co.nativeapp.gateway;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import okhttp3.mockwebserver.RecordedRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpHeaders;
@@ -328,5 +329,59 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
 
     assertThat(response).isEqualTo("ok");
     assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/closes");
+  }
+
+  // ---------------------------------------------------------------------------
+  // Public sign-up route — no Authorization header required
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void signupIsReachableWithNoAuthorizationHeader() throws Exception {
+    // The signup route must be reachable with NO Authorization header — the gateway's
+    // SecurityConfig
+    // permitAlls /api/v1/signup and the signupRoute bean applies no RoleAuthorizationFilter.
+    String response =
+        gatewayClient()
+            .post()
+            .uri("/api/v1/signup")
+            .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+            .body(
+                """
+                {"companyName":"Test","baseCurrency":"IDR","defaultLanguage":"id",
+                 "firstBusinessName":"Outlet","firstBusinessType":"outlet",
+                 "ownerEmail":"test@example.co.id","ownerPassword":"secret"}
+                """)
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    // The request was forwarded to org-service (the stub).
+    assertThat(receivedRequests).hasSize(1);
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/signup");
+  }
+
+  @Test
+  void signupForwardedRequestDoesNotCarryTenantOrActorOrRolesHeaders() throws Exception {
+    // The TenantContextHeaderFilter is NOT applied on the signup route. The downstream must NOT
+    // receive X-Company-Id / X-Actor / X-Roles headers (they come only from a validated JWT, and
+    // the signup request has no JWT).
+    gatewayClient()
+        .post()
+        .uri("/api/v1/signup")
+        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+        .body(
+            """
+            {"companyName":"Test","baseCurrency":"IDR","defaultLanguage":"id",
+             "firstBusinessName":"Outlet","firstBusinessType":"outlet",
+             "ownerEmail":"test2@example.co.id","ownerPassword":"secret"}
+            """)
+        .retrieve()
+        .body(String.class);
+
+    assertThat(receivedRequests).hasSize(1);
+    RecordedRequest forwarded = theForwardedRequest();
+    assertThat(forwarded.getHeader("X-Company-Id")).isNull();
+    assertThat(forwarded.getHeader("X-Actor")).isNull();
+    assertThat(forwarded.getHeader("X-Roles")).isNull();
   }
 }

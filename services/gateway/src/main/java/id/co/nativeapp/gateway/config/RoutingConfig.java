@@ -49,6 +49,33 @@ public class RoutingConfig {
   private static final String[] DASHBOARD_ROLES = {"owner", "manager"};
 
   // ---------------------------------------------------------------------------
+  // org-service (public — unauthenticated)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Public sign-up route — forwarded to org-service with NO authentication, NO role check, and NO
+   * tenant-context header injection: the request carries no JWT, so there is no tenant to inject
+   * and {@link TenantContextHeaderFilter} is deliberately absent. The org-service permits this
+   * exact path ({@code native.security.public-paths}) and owns the logic once it arrives
+   * token-free.
+   *
+   * <p><strong>SECURITY FOLLOW-UP (deferred, must land before public exposure).</strong> The
+   * existing {@link RateLimitFilter} keys its token bucket on the JWT {@code (company_id, sub)} and
+   * returns {@code 401} when there is no token — so it CANNOT protect an anonymous endpoint and is
+   * intentionally NOT applied here. That leaves sign-up without gateway throttling. Before this is
+   * exposed publicly it needs a dedicated anonymous limiter (per-client-IP, resolved from a trusted
+   * {@code X-Forwarded-For} at the ingress boundary) and/or a CAPTCHA/proof-of-work. Tracked as an
+   * Increment-1 follow-up and flagged for the security review.
+   */
+  @Bean
+  RouterFunction<ServerResponse> signupRoute(GatewayRouteProperties routes) {
+    return GatewayRouterFunctions.route("org-service-signup")
+        .route(path("/api/v1/signup"), http())
+        .before(uri(routes.orgService()))
+        .build();
+  }
+
+  // ---------------------------------------------------------------------------
   // org-service (owner dashboard)
   // ---------------------------------------------------------------------------
   @Bean
