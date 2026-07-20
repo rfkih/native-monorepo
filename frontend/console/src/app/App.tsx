@@ -28,6 +28,9 @@ const GroupConsolidation = lazy(() =>
 const PeriodClose = lazy(() =>
   import('@/features/close/PeriodClose').then((m) => ({ default: m.PeriodClose })),
 )
+const Team = lazy(() =>
+  import('@/features/team/Team').then((m) => ({ default: m.Team })),
+)
 const AccessDenied = lazy(() =>
   import('@/features/auth/AccessDenied').then((m) => ({ default: m.AccessDenied })),
 )
@@ -143,6 +146,12 @@ export function App() {
             <Route
               path="/close"
               element={company ? <PeriodClose /> : <Navigate to="/onboarding" replace />}
+            />
+          )}
+          {canDashboard && (
+            <Route
+              path="/team"
+              element={company ? <Team /> : <Navigate to="/onboarding" replace />}
             />
           )}
           <Route path="*" element={<Navigate to={home} replace />} />

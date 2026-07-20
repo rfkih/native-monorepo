@@ -16,6 +16,7 @@ import {
   Scale,
   Store,
   Sun,
+  UsersRound,
   X,
 } from 'lucide-react'
 import { Wordmark } from '@/components/Wordmark'
@@ -58,6 +59,7 @@ export function Shell({ children }: { children: ReactNode }) {
             { to: '/org', label: t('nav.org'), icon: Network },
             { to: '/groups', label: t('nav.groups'), icon: Layers },
             { to: '/close', label: t('nav.close'), icon: CalendarCheck },
+            { to: '/team', label: t('nav.team'), icon: UsersRound },
             { to: '/onboarding', label: t('nav.onboarding'), icon: Building2 },
           ],
         },
