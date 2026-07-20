@@ -79,11 +79,24 @@ public final class TenantBindingFilter extends OncePerRequestFilter implements O
   private final List<RequestMatcher> tenantOptionalMatchers;
 
   /**
+   * Fully public (unauthenticated) endpoints — the compiled form of {@code
+   * native.security.public-paths}. These carry no JWT at all, so {@link #shouldNotFilter} must
+   * return {@code true} for them; otherwise the filter body would see a {@code null} JWT and emit
+   * {@code 401} despite the path being {@code permitAll} in the security chain (filters run
+   * regardless of {@code permitAll}). Empty by default.
+   */
+  private final List<RequestMatcher> publicPathMatchers;
+
+  /**
    * @param tenantOptionalMatchers the tenant-optional (bootstrap) endpoint matchers; never {@code
    *     null} (pass an empty list for the strict default)
+   * @param publicPathMatchers the fully public (unauthenticated) endpoint matchers; never {@code
+   *     null} (pass an empty list if there are none)
    */
-  public TenantBindingFilter(List<RequestMatcher> tenantOptionalMatchers) {
+  public TenantBindingFilter(
+      List<RequestMatcher> tenantOptionalMatchers, List<RequestMatcher> publicPathMatchers) {
     this.tenantOptionalMatchers = List.copyOf(tenantOptionalMatchers);
+    this.publicPathMatchers = List.copyOf(publicPathMatchers);
   }
 
   @Override
@@ -136,14 +149,29 @@ public final class TenantBindingFilter extends OncePerRequestFilter implements O
   }
 
   /**
-   * Liveness/readiness probes never carry a token and are {@code permitAll} in the chain, so {@code
-   * /healthz} and {@code /actuator/**} are not filtered at all — they pass through unscoped. Every
-   * other path is secured by the chain, so a request that reaches the body here is authenticated.
+   * Liveness/readiness probes and fully public endpoints never carry a token, so they must be
+   * skipped entirely rather than entering the filter body (which expects a validated JWT and would
+   * emit {@code 401} on a {@code null} authentication). Skipped paths:
+   *
+   * <ul>
+   *   <li>{@code /healthz} and {@code /actuator/**} — probe/scrape endpoints, always {@code
+   *       permitAll} in the chain;
+   *   <li>any path in {@code publicPathMatchers} — the compiled form of {@code
+   *       native.security.public-paths} (e.g. {@code POST /api/v1/signup}).
+   * </ul>
    */
   @Override
   protected boolean shouldNotFilter(HttpServletRequest request) {
     String path = request.getRequestURI();
-    return path.equals("/healthz") || path.startsWith("/actuator");
+    if (path.equals("/healthz") || path.startsWith("/actuator")) {
+      return true;
+    }
+    for (RequestMatcher matcher : publicPathMatchers) {
+      if (matcher.matches(request)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /** {@code true} if this request matches a configured tenant-optional (bootstrap) endpoint. */

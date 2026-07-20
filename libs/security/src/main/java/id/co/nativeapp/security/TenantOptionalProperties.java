@@ -9,24 +9,26 @@ import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.validation.annotation.Validated;
 
 /**
- * Externalized list of <strong>tenant-optional (bootstrap) endpoints</strong> — the narrow set of
+ * Externalized list of <strong>tenant-optional (bootstrap) endpoints</strong> and <strong>fully
+ * public (unauthenticated) endpoints</strong>, both bound under {@code native.security}.
+ *
+ * <p><strong>Tenant-optional ({@code native.security.tenant-optional}).</strong> The narrow set of
  * authenticated endpoints on which a valid token that carries no {@code company_id} claim must NOT
  * be rejected {@code 403} by {@link TenantBindingFilter}, because they CREATE the tenant rather
- * than operate within one (ENGINEERING-STANDARDS §7, externalized config).
+ * than operate within one (ENGINEERING-STANDARDS §7, externalized config). The motivating case is
+ * the org-service tenant bootstrap: {@code POST /api/v1/companies}. Authentication is still
+ * required; only the missing-tenant {@code 403} is waived.
  *
- * <p>The motivating case is the org-service tenant bootstrap: {@code POST /api/v1/companies} is the
- * owner creating their FIRST company, so the inbound token has no tenant yet. The endpoint is still
- * authenticated (the {@code SecurityFilterChain} rejects a missing/invalid/expired token with
- * {@code 401}); it is only the missing-{@code company_id} {@code 403} that is waived, and only for
- * the endpoints listed here. Every other {@code /api/v1/**} request keeps the strict behaviour: a
- * valid token with no tenant claim is a {@code 403} authZ denial.
+ * <p><strong>Public paths ({@code native.security.public-paths}).</strong> Fully unauthenticated
+ * endpoints that must be reachable with NO bearer token — for example, the public sign-up endpoint
+ * {@code POST /api/v1/signup}. These are {@code permitAll} in the Spring Security filter chain AND
+ * skipped by {@link TenantBindingFilter} (which runs for all requests and would otherwise see no
+ * JWT and emit {@code 401}). The default is EMPTY so no service exposes anything public unless it
+ * explicitly opts in.
  *
- * <p>Each entry is a {@code "METHOD /ant-path"} pair — an HTTP method, a single space, then an Ant
- * path (e.g. {@code "POST /api/v1/companies"}). The {@code @Pattern} rejects a malformed entry at
- * startup (fail fast) rather than silently widening or narrowing the exemption. The default is an
- * EMPTY list: a service opts an endpoint in explicitly via {@code native.security.tenant-optional},
- * so no endpoint is tenant-optional unless a service deliberately declares it — never the whole
- * API.
+ * <p>Each entry in either list is a {@code "METHOD /ant-path"} pair — an HTTP method, a single
+ * space, then a path (e.g. {@code "POST /api/v1/signup"}). The {@code @Pattern} rejects a malformed
+ * entry at startup (fail fast).
  */
 @Validated
 @ConfigurationProperties("native.security")
@@ -38,6 +40,9 @@ public class TenantOptionalProperties {
   private List<@Pattern(regexp = ENTRY_REGEX, message = "must be 'METHOD /ant-path'") String>
       tenantOptional = List.of();
 
+  private List<@Pattern(regexp = ENTRY_REGEX, message = "must be 'METHOD /ant-path'") String>
+      publicPaths = List.of();
+
   public List<String> getTenantOptional() {
     return tenantOptional;
   }
@@ -46,12 +51,17 @@ public class TenantOptionalProperties {
     this.tenantOptional = (tenantOptional == null) ? List.of() : List.copyOf(tenantOptional);
   }
 
+  public List<String> getPublicPaths() {
+    return publicPaths;
+  }
+
+  public void setPublicPaths(List<String> publicPaths) {
+    this.publicPaths = (publicPaths == null) ? List.of() : List.copyOf(publicPaths);
+  }
+
   /**
-   * Compiles the configured {@code "METHOD /ant-path"} entries into {@link RequestMatcher}s the
-   * {@link TenantBindingFilter} tests each request against. Method + path are matched together (via
-   * {@link PathPatternRequestMatcher}), so {@code "POST /api/v1/companies"} matches only that
-   * method on exactly that path — a {@code GET}, or a sub-resource such as {@code
-   * /api/v1/companies/{id}/businesses}, does NOT match and stays strictly tenant-scoped.
+   * Compiles the configured {@code "METHOD /ant-path"} tenant-optional entries into {@link
+   * RequestMatcher}s the {@link TenantBindingFilter} tests each request against.
    *
    * @return one matcher per configured entry (empty if none are configured)
    */
@@ -59,13 +69,24 @@ public class TenantOptionalProperties {
     return tenantOptional.stream().map(TenantOptionalProperties::toMatcher).toList();
   }
 
-  private static RequestMatcher toMatcher(String entry) {
+  /**
+   * Compiles the configured {@code "METHOD /ant-path"} public-path entries into {@link
+   * RequestMatcher}s. Used by {@link JwtSecurityConfig} to {@code permitAll} these paths AND by
+   * {@link TenantBindingFilter#shouldNotFilter} so token-less public requests are not intercepted.
+   *
+   * @return one matcher per configured entry (empty if none are configured)
+   */
+  public List<RequestMatcher> publicPathMatchers() {
+    return publicPaths.stream().map(TenantOptionalProperties::toMatcher).toList();
+  }
+
+  static RequestMatcher toMatcher(String entry) {
     String[] parts = entry.strip().split("\\s+", 2);
     if (parts.length != 2) {
       // @Pattern validation already guarantees the two-part shape; this guards a programmatic
       // misuse (binding bypassed) so it fails loudly rather than producing a wrong matcher.
       throw new IllegalArgumentException(
-          "tenant-optional entry must be 'METHOD /ant-path': " + entry);
+          "security path entry must be 'METHOD /ant-path': " + entry);
     }
     HttpMethod method = HttpMethod.valueOf(parts[0].strip().toUpperCase(java.util.Locale.ROOT));
     return PathPatternRequestMatcher.pathPattern(method, parts[1].strip());

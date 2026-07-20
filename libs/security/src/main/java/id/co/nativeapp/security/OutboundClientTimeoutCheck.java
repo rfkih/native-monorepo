@@ -40,9 +40,10 @@ public class OutboundClientTimeoutCheck implements InitializingBean {
 
   /**
    * Fails fast if {@code value} is null, zero, or negative — an outbound client must never run with
-   * an infinite/zero timeout.
+   * an infinite/zero timeout. Public so callers outside {@code libs/security} (e.g. a feature that
+   * wires its own outbound client) can reuse the same check rather than duplicating the logic.
    */
-  static void requirePositive(String name, Duration value) {
+  public static void requirePositive(String name, Duration value) {
     if (value == null || value.isZero() || value.isNegative()) {
       throw new IllegalStateException(
           name

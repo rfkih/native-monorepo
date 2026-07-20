@@ -23,6 +23,7 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.client.RestTemplate;
 
 /**
@@ -75,13 +76,27 @@ public class JwtSecurityConfig {
   @Bean
   SecurityFilterChain nativeJwtSecurityFilterChain(HttpSecurity http, JwtDecoder jwtDecoder)
       throws Exception {
-    return http.authorizeHttpRequests(
-            auth ->
-                auth.requestMatchers(
-                        "/healthz", "/actuator/health/**", "/actuator/info", "/actuator/prometheus")
-                    .permitAll()
-                    .anyRequest()
-                    .authenticated())
+    // Compile public-path matchers once; they are used both in the security chain (permitAll) and
+    // in TenantBindingFilter (shouldNotFilter), so token-less public requests are fully exempt at
+    // both points.
+    List<RequestMatcher> publicMatchers = tenantOptionalProperties.publicPathMatchers();
+
+    var authConfig =
+        http.authorizeHttpRequests(
+            auth -> {
+              // Probes are always open (no token, no tenant).
+              auth.requestMatchers(
+                      "/healthz", "/actuator/health/**", "/actuator/info", "/actuator/prometheus")
+                  .permitAll();
+              // Public paths (e.g. POST /api/v1/signup) — fully unauthenticated.
+              for (RequestMatcher matcher : publicMatchers) {
+                auth.requestMatchers(matcher).permitAll();
+              }
+              // Everything else requires a valid bearer token.
+              auth.anyRequest().authenticated();
+            });
+
+    return authConfig
         .oauth2ResourceServer(
             oauth2 ->
                 oauth2
@@ -90,9 +105,10 @@ public class JwtSecurityConfig {
         // Bind TenantContext from the validated token AFTER the bearer token has been authenticated
         // (so the SecurityContext holds the Jwt) but before the request reaches a controller. The
         // tenant-optional matchers let configured bootstrap endpoints (e.g. POST /api/v1/companies)
-        // proceed with an authenticated-but-tenant-less token instead of a 403.
+        // proceed with an authenticated-but-tenant-less token instead of a 403. The public-path
+        // matchers cause shouldNotFilter to skip token-less requests entirely.
         .addFilterAfter(
-            new TenantBindingFilter(tenantOptionalProperties.toRequestMatchers()),
+            new TenantBindingFilter(tenantOptionalProperties.toRequestMatchers(), publicMatchers),
             BearerTokenAuthenticationFilter.class)
         .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .csrf(csrf -> csrf.disable())
