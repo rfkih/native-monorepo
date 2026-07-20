@@ -113,6 +113,13 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
         apply(user)
         return
       }
+      // Public routes that must render without a login redirect.
+      // /signup is the self-service registration page — an unauthenticated visitor
+      // lands here before any Keycloak session exists.
+      if (window.location.pathname === '/signup') {
+        setState({ ready: true, authenticated: false, companyId: null, actor: '', roles: [] })
+        return
+      }
       // No valid session → start the login redirect (App shows a spinner while ready=false).
       await manager.signinRedirect()
     }

@@ -1,5 +1,5 @@
 import { Suspense, lazy } from 'react'
-import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
+import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import { Shell } from '@/app/Shell'
 import { Spinner } from '@/components/ui/Spinner'
 import { hasAnyRole, useAuth } from '@/lib/authContext'
@@ -31,6 +31,9 @@ const PeriodClose = lazy(() =>
 const AccessDenied = lazy(() =>
   import('@/features/auth/AccessDenied').then((m) => ({ default: m.AccessDenied })),
 )
+const Signup = lazy(() =>
+  import('@/features/signup/Signup').then((m) => ({ default: m.Signup })),
+)
 
 function CenteredSpinner() {
   return (
@@ -40,11 +43,15 @@ function CenteredSpinner() {
   )
 }
 
+/** True for routes that must be reachable without authentication. */
+const PUBLIC_PATHS = new Set(['/signup'])
+
 /**
  * Role-gated routing (one app, two surfaces):
  *  - owner / manager → dashboard (+ onboarding) AND may open the POS.
  *  - cashier → ONLY the POS; every other path redirects to /pos (the dashboard is never mounted).
  *  - neither role → an access-denied screen.
+ *  - /signup → always rendered before any auth check (public self-service registration).
  *
  * This is the UI half of the separation; the gateway enforces the same boundary on the API
  * (a cashier token cannot reach the finance/dashboard routes), so a bypassed guard still fails closed.
@@ -52,6 +59,18 @@ function CenteredSpinner() {
 export function App() {
   const auth = useAuth()
   const { company, loading } = useSession()
+  const { pathname } = useLocation()
+
+  // Public routes render immediately — no auth redirect, no role check, no spinner.
+  if (PUBLIC_PATHS.has(pathname)) {
+    return (
+      <Suspense fallback={<CenteredSpinner />}>
+        <Routes>
+          <Route path="/signup" element={<Signup />} />
+        </Routes>
+      </Suspense>
+    )
+  }
 
   // Wait for the auth redirect to resolve and the signed-in company to load before routing.
   if (!auth.ready || loading) {
