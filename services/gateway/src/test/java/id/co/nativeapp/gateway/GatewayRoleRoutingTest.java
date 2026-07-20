@@ -332,6 +332,67 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
   }
 
   // ---------------------------------------------------------------------------
+  // /api/v1/users — team management (owner/manager dashboard route)
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void aCashierIsDeniedTheUsersRouteWith403() throws Exception {
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/users")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void anOwnerCanReachTheUsersRoute() throws Exception {
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/users")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/users");
+  }
+
+  @Test
+  void theUsersRouteInjectsTenantHeadersFromTheJwt() throws Exception {
+    String token = obtainAccessToken();
+
+    gatewayClient()
+        .get()
+        .uri("/api/v1/users")
+        .header(HttpHeaders.AUTHORIZATION, bearer(token))
+        .retrieve()
+        .body(String.class);
+
+    assertThat(receivedRequests).hasSize(1);
+    okhttp3.mockwebserver.RecordedRequest forwarded = theForwardedRequest();
+    // The gateway must inject the JWT-derived tenant headers.
+    assertThat(forwarded.getHeader("X-Company-Id")).isEqualTo(EXPECTED_COMPANY_ID);
+    assertThat(forwarded.getHeader("X-Actor")).isNotBlank();
+    assertThat(forwarded.getHeader("X-Roles")).isNotBlank();
+  }
+
+  // ---------------------------------------------------------------------------
   // Public sign-up route — no Authorization header required
   // ---------------------------------------------------------------------------
 

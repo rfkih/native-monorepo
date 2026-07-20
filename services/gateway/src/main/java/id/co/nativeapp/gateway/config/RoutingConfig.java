@@ -79,6 +79,20 @@ public class RoutingConfig {
   // org-service (owner dashboard)
   // ---------------------------------------------------------------------------
   @Bean
+  RouterFunction<ServerResponse> usersRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("org-service-users")
+        .route(path("/api/v1/users/**"), http())
+        .before(uri(routes.orgService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  @Bean
   RouterFunction<ServerResponse> companiesRoute(
       GatewayRouteProperties routes,
       RedisTokenBucketRateLimiter limiter,
