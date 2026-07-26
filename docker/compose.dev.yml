@@ -163,6 +163,10 @@ services:
       # company_id attribute, and the protocol mappers that put company_id + roles into
       # the RS256 access token the gateway (M1.1) validates. See docker/README.md.
       - ./keycloak:/opt/keycloak/data/import:ro
+      # Custom login theme ("native") — matches the console's brand. start-dev disables theme
+      # caching, so edits under themes/native are picked up without a restart. loginTheme is set
+      # on the realm (native-realm.json). Mounted separately from the import dir above.
+      - ./keycloak/themes/native:/opt/keycloak/themes/native:ro
 
   # ---------------------------------------------------------------------------
   # Redis — backs the gateway's distributed per-tenant token-bucket rate limit

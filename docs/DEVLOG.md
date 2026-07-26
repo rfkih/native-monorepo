@@ -69,6 +69,33 @@ cascade-deactivate + reactivation.)
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **Signup flow hardening — enterprise-gap fixes (2026-07-25)** — closed the register-flow gaps found
+  in the Odoo/enterprise gap analysis. Backend (org-service): server-side whitelists for
+  currency/language/business-type (`@Pattern` — a direct API call can no longer create an EUR or
+  `"xx"`-language tenant); ToS consent required (`termsAccepted` `@AssertTrue`, consent instant
+  recorded as the Keycloak `terms_accepted_at` user attribute); email verification support
+  (`emailVerified=false` + config-gated `VERIFY_EMAIL` required action via
+  `native.keycloak-admin.require-email-verification` — default false because dev has no SMTP,
+  **production must enable it**; the signup response carries `emailVerificationRequired` so the UI
+  shows the right success state); **signup flow inverted** (Keycloak user FIRST under a
+  pre-generated company id, company second) so the failure residual flips from an
+  uncompensatable orphaned tenant row (bootstrap events already outboxed) to a single idempotent
+  compensating `deleteUser` — only a double failure leaves an orphaned KC user (ERROR-logged);
+  Keycloak admin token cache got a lock-free fast path (was: every admin call synchronized).
+  Gateway: the public `/api/v1/signup` route is now throttled by a dedicated
+  `AnonymousRateLimitFilter` — per-client-IP Redis token bucket (`rate-limit.signup.*`, default
+  10/hour burst 10), spoof-safe by default (X-Forwarded-For honored ONLY when
+  `trust-forwarded-for` is explicitly enabled, and then only its last entry). Console: signup
+  rework — 4 consolidated steps (was 5), real `<form>` per step (Enter advances), confirm-password +
+  dependency-free strength meter, ToS checkbox, review rows link back to their step, all API errors
+  mapped to i18n keys (raw English RFC-7807 details no longer shown to id-locale users), and
+  post-signup sign-in passes `login_hint` so Keycloak pre-fills the just-registered email.
+  Proven: SignupAcceptanceTest (8, real KC26+PG), GatewaySignupRateLimitTest (2, real Redis),
+  AnonymousRateLimitFilterTest (4 — incl. the multi-line XFF flattening regression from the
+  security review's LOW finding); both service suites + console build green; security-engineer
+  review PASS. Remaining
+  follow-ups (deliberate): CAPTCHA/Turnstile on top of the IP throttle, realm SMTP config +
+  enabling verification in prod, idempotency-key on the signup POST, funnel analytics.
 - **Fix: `management.tracing.export.enabled=false` broke W3C propagation (ADR 0010 #13, 2026-06-22)** —
   Root-cause found and fixed. `TraceContinuityConsumeAcceptanceTest` was consistently failing: every
   Kafka listener started a new root span instead of continuing the producer trace. Investigation via

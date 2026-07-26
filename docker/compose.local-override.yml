@@ -32,6 +32,22 @@ services:
       KC_HOSTNAME: https://a8.tailbf9662.ts.net:10000
       KC_HOSTNAME_STRICT: "false"
       KC_PROXY_HEADERS: xforwarded
+      # PERSISTENT user store: back Keycloak with the native-postgres `keycloak` DB (same
+      # persistent volume as the service DBs) instead of the in-container H2 that start-dev
+      # defaults to — runtime-created users now survive container recreation. The DB/role are
+      # created by docker/postgres/init/02-keycloak-db.sql on a fresh volume (created manually
+      # on the existing one). CONSEQUENCE: --import-realm only imports into an EMPTY database,
+      # so edits to native-realm.json NO LONGER auto-apply on recreate. To force a re-import:
+      #   docker exec native-postgres psql -U postgres -c "DROP DATABASE keycloak WITH (FORCE)"
+      #   docker exec native-postgres psql -U postgres -c "CREATE DATABASE keycloak OWNER keycloak"
+      # then recreate the keycloak container (this wipes Keycloak users — the old behavior).
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak
+    depends_on:
+      postgres:
+        condition: service_healthy
   connect:
     # pristina-app holds host 8083; remap Debezium Connect's REST API to 18083.
     # In-cluster (connect↔kafka:29092) is unchanged; register connectors at http://localhost:18083.

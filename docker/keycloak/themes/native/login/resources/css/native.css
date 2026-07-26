@@ -1,0 +1,165 @@
+/*
+ * Native login theme — re-skins the stock Keycloak keycloak.v2 (PatternFly v5) login page to match
+ * the console's design system (Plus Jakarta Sans, the brand-green ramp, the soft "paper" surfaces
+ * and rounded cards). Pure CSS on top of the inherited templates: it overrides PatternFly's design
+ * tokens (so buttons/links/focus recolour for free) plus a few structural selectors — no template
+ * or FreeMarker changes, so login behaviour is untouched.
+ */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+:root {
+  --nt-brand: #16b364;
+  --nt-brand-600: #0e9f50;
+  --nt-brand-700: #0a7e3f;
+  --nt-ink: #0e1116;
+  --nt-ink-2: #384151;
+  --nt-ink-3: #8a93a0;
+  --nt-line: #e5e8ec;
+  --nt-paper: #f4f8f5;
+  --nt-surface: #ffffff;
+
+  /* Recolour PatternFly's global design tokens → brand green (primary buttons, links, active). */
+  --pf-v5-global--primary-color--100: var(--nt-brand);
+  --pf-v5-global--primary-color--200: var(--nt-brand-600);
+  --pf-v5-global--link--Color: var(--nt-brand-600);
+  --pf-v5-global--link--Color--hover: var(--nt-brand-700);
+  --pf-v5-global--active-color--100: var(--nt-brand);
+  --pf-v5-global--active-color--200: var(--nt-brand-600);
+  --pf-v5-global--BorderColor--100: var(--nt-line);
+}
+
+/* Brand font across the page (override PatternFly's Red Hat stack). */
+body,
+input,
+button,
+select,
+textarea,
+.pf-v5-c-login,
+.pf-v5-c-form,
+.pf-v5-c-title,
+.pf-v5-c-button {
+  font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif !important;
+}
+
+/* Page background — the console's soft paper + a faint brand glow (mirrors the landing hero). */
+body#keycloak-bg {
+  background: radial-gradient(90% 90% at 50% -8%, #e8f8ee 0%, var(--nt-paper) 55%) fixed !important;
+  color: var(--nt-ink);
+}
+
+/* Login card */
+.pf-v5-c-login__main {
+  border: 1px solid var(--nt-line);
+  border-radius: 20px;
+  box-shadow:
+    0 14px 38px rgba(15, 23, 42, 0.1),
+    0 3px 10px rgba(15, 23, 42, 0.05);
+  background: var(--nt-surface);
+  overflow: hidden;
+}
+
+.pf-v5-c-login__main-header,
+.pf-v5-c-login__main-body,
+.pf-v5-c-login__main-footer {
+  padding-left: 2rem;
+  padding-right: 2rem;
+}
+
+/* Title */
+#kc-page-title,
+.pf-v5-c-title {
+  color: var(--nt-ink) !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.02em;
+}
+
+/* Field labels */
+.pf-v5-c-form__label-text {
+  color: var(--nt-ink-2) !important;
+  font-weight: 600 !important;
+}
+
+/* Inputs */
+.pf-v5-c-form-control,
+input.pf-v5-c-form-control,
+.pf-v5-c-form-control > input {
+  border-radius: 12px !important;
+  border: 1px solid var(--nt-line) !important;
+  background: var(--nt-surface) !important;
+  color: var(--nt-ink) !important;
+  --pf-v5-c-form-control--BorderTopColor: var(--nt-line);
+  --pf-v5-c-form-control--BorderRightColor: var(--nt-line);
+  --pf-v5-c-form-control--BorderBottomColor: var(--nt-line);
+  --pf-v5-c-form-control--BorderLeftColor: var(--nt-line);
+  --pf-v5-c-form-control--focus--BorderBottomColor: var(--nt-brand);
+}
+.pf-v5-c-form-control:focus,
+.pf-v5-c-form-control:focus-within,
+input.pf-v5-c-form-control:focus {
+  outline: none !important;
+  border-color: var(--nt-brand) !important;
+  box-shadow: 0 0 0 4px rgba(22, 179, 100, 0.14) !important;
+}
+
+/* Primary button (Sign in) */
+.pf-v5-c-button.pf-m-primary {
+  background: var(--nt-brand) !important;
+  border-radius: 12px !important;
+  font-weight: 700 !important;
+  border: none !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+  transition: background-color 0.15s ease;
+}
+.pf-v5-c-button.pf-m-primary:hover,
+.pf-v5-c-button.pf-m-primary:focus {
+  background: var(--nt-brand-600) !important;
+}
+
+/* Secondary / link buttons */
+.pf-v5-c-button.pf-m-control,
+.pf-v5-c-button.pf-m-secondary {
+  border-radius: 12px !important;
+}
+
+/* Links */
+a {
+  color: var(--nt-brand-600);
+}
+a:hover {
+  color: var(--nt-brand-700);
+}
+
+/* Checkbox accent (remember me) */
+.pf-v5-c-check__input {
+  accent-color: var(--nt-brand);
+}
+
+/* Header brand wordmark — injected via the realm's displayNameHtml as .native-wordmark. */
+#kc-header,
+#kc-header-wrapper {
+  color: var(--nt-ink);
+  padding-bottom: 1.25rem;
+}
+.native-wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+  color: var(--nt-ink);
+}
+.native-wordmark .mark {
+  display: inline-grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  background: linear-gradient(135deg, var(--nt-brand), var(--nt-brand-700));
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+}
+
+/* Alerts (errors) — soften to the console's tint style. */
+.pf-v5-c-alert.pf-m-danger {
+  border-radius: 12px;
+}
