@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import {
   ArrowLeft,
+  BookOpen,
   Minus,
   Moon,
   Plus,
@@ -14,13 +15,20 @@ import {
   ClipboardList,
   Table2,
   Settings,
+  ShoppingBag,
+  X,
+  ImageOff,
+  ChevronDown,
+  Store,
+  ChefHat,
+  LogOut,
 } from 'lucide-react'
-import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
 import { Segmented } from '@/components/ui/Segmented'
 import { useSession, type CompanySession } from '@/lib/session'
+import { useAuth } from '@/lib/authContext'
 import { useTheme } from '@/lib/theme'
 import { localeOf } from '@/i18n'
 import { cn } from '@/lib/cn'
@@ -47,6 +55,9 @@ import { ReceiptView } from './ReceiptView'
 import { ModifierModal } from './ModifierModal'
 import { TableManagement } from './TableManagement'
 import { ParkedTray } from './ParkedTray'
+import { TableFloor } from './TableFloor'
+import { BillDetail } from './BillDetail'
+import { useBills } from './billsApi'
 
 // ---------------------------------------------------------------------------
 // Order types
@@ -77,11 +88,13 @@ export function Pos() {
 function PosInner({ session }: { session: CompanySession }) {
   const { t, i18n } = useTranslation()
   const { theme, toggle } = useTheme()
+  const auth = useAuth()
   const locale = localeOf(i18n.language)
   const menuQuery = useMenu(session)
   const categoriesQuery = useCategories(session)
   const tablesQuery = useTables(session)
   const parkedQuery = useParkedOrders(session)
+  const billsQuery = useBills(session)
   const seed = useSeedMenu(session)
   const parkOrder = useParkOrder(session)
 
@@ -103,6 +116,11 @@ function PosInner({ session }: { session: CompanySession }) {
   const [placedPayment, setPlacedPayment] = useState<PaymentResponse | null>(null)
   const [showTableMgmt, setShowTableMgmt] = useState(false)
   const [showParkedTray, setShowParkedTray] = useState(false)
+  const [showTableFloor, setShowTableFloor] = useState(false)
+  // openBillId: when non-null the POS is in "bill mode" — showing BillDetail
+  const [openBillId, setOpenBillId] = useState<string | null>(null)
+  // Below lg the order rail is a slide-up drawer opened from the sticky "view order" bar.
+  const [cartOpen, setCartOpen] = useState(false)
 
   // Resume: parked order being resumed (loaded via useGetOrder)
   const [resumingOrderId, setResumingOrderId] = useState<string | null>(null)
@@ -137,6 +155,13 @@ function PosInner({ session }: { session: CompanySession }) {
   const categories = (categoriesQuery.data ?? []).filter((c) => c.active)
   const tables = (tablesQuery.data ?? []).filter((tbl) => tbl.active)
   const parkedCount = parkedQuery.data?.length ?? 0
+  // Count of tables with open bills (derived — not using the API's occupied flag).
+  const openBillsList = billsQuery.data ?? []
+  const occupiedCount = new Set(
+    openBillsList.filter((b) => b.tableId != null).map((b) => b.tableId as string),
+  ).size
+  // Total open bill count for the badge (shows takeaway + dine-in).
+  const billsCount = openBillsList.length
 
   const currency = items[0]?.currency ?? session.baseCurrency
 
@@ -200,6 +225,8 @@ function PosInner({ session }: { session: CompanySession }) {
   // ---------------------------------------------------------------------------
 
   function handleItemTap(item: MenuItem) {
+    // Guard: combined sold-out rule (manual 86 OR tracked stock at zero)
+    if (!item.available || (item.stockQuantity != null && item.stockQuantity <= 0)) return
     if (item.modifierGroups.length > 0) {
       setModifierItem(item)
       return
@@ -298,6 +325,7 @@ function PosInner({ session }: { session: CompanySession }) {
     setResumedOrder(null)
     setResumeLoaded(false)
     setSelectedTableId(null)
+    setCartOpen(false)
   }
 
   // ---------------------------------------------------------------------------
@@ -342,129 +370,157 @@ function PosInner({ session }: { session: CompanySession }) {
   // ---------------------------------------------------------------------------
 
   return (
-    <div className="min-h-screen bg-paper lg:grid lg:place-items-center lg:p-6 lg:[background:radial-gradient(120%_120%_at_50%_-10%,var(--color-hover),var(--color-paper))]">
-      {/* On large screens the POS sits in a centered tablet frame (matching the design comp);
-          on smaller/touch screens it renders fullscreen, where a bezel would only waste space. */}
-      <div className="flex min-h-screen w-full flex-col lg:h-[calc(100vh-3rem)] lg:max-h-[880px] lg:min-h-0 lg:w-[1280px] lg:max-w-full lg:rounded-[34px] lg:bg-[#0c0e11] lg:p-3 lg:shadow-lg">
-        <div className="flex min-h-screen flex-col bg-paper lg:h-full lg:min-h-0 lg:overflow-hidden lg:rounded-[24px]">
-      {/* POS header (the front-office chrome — this surface renders outside the back-office shell) */}
-      <header className="sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b border-line bg-surface px-4 py-3 sm:px-5">
-        <Link
-          to="/"
-          aria-label={t('a11y.backToDashboard')}
-          title={t('a11y.backToDashboard')}
-          className="grid size-[38px] shrink-0 place-items-center rounded-xl border border-line text-ink-3 transition-colors hover:bg-hover hover:text-ink"
-        >
-          <ArrowLeft className="size-[18px]" />
-        </Link>
-        <div className="min-w-0">
-          <div className="font-display text-[17px] font-bold leading-tight tracking-[-0.01em] text-ink">
-            {t('pos.title')}
-          </div>
-          <div className="truncate text-xs text-ink-3">{session.name}</div>
-        </div>
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-paper">
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <header className="sticky top-0 z-10 border-b border-line bg-surface/95 backdrop-blur-sm">
+        {/* Main row */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 sm:px-6">
+          <Link
+            to="/"
+            aria-label={t('a11y.backToDashboard')}
+            title={t('a11y.backToDashboard')}
+            className="grid size-9 shrink-0 place-items-center rounded-xl border border-line text-ink-3 transition-all hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+          >
+            <ArrowLeft className="size-4" />
+          </Link>
 
-        <div className="flex-1" />
-
-        <Segmented
-          options={orderTypeOptions}
-          value={orderType}
-          onChange={handleOrderTypeChange}
-          ariaLabel={t('pos.orderType.label')}
-        />
-
-        <button
-          type="button"
-          onClick={() => setShowParkedTray(true)}
-          aria-label={t('pos.parked.trayTitle')}
-          className="relative inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink-2 transition-colors hover:bg-hover"
-        >
-          <ClipboardList className="size-4" aria-hidden="true" />
-          <span className="hidden sm:inline">{t('pos.parked.parkedLabel')}</span>
-          {parkedCount > 0 ? (
-            <span className="grid h-[18px] min-w-[18px] place-items-center rounded-full bg-brand-500 px-1.5 text-[11px] font-bold text-white">
-              {parkedCount}
+          {/* Business identity */}
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-sm">
+              <Store className="size-[18px]" />
             </span>
-          ) : null}
-        </button>
-
-        <button
-          type="button"
-          onClick={toggle}
-          aria-label={t('a11y.toggleTheme')}
-          title={t('a11y.toggleTheme')}
-          className="grid size-[38px] shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-colors hover:bg-hover hover:text-ink"
-        >
-          {theme === 'dark' ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}
-        </button>
-      </header>
-
-      {/* Body: menu (scrolls) + order rail (fixed) */}
-      <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[1fr_380px] lg:grid-rows-1">
-        {/* Menu side */}
-        <div className="min-h-0 overflow-y-auto px-4 py-5 sm:px-5 lg:px-6">
-          {/* Table picker — shown when DINE_IN */}
-          {orderType === 'DINE_IN' ? (
-            <div className="mb-5">
-              <div className="mb-2 flex items-center justify-end">
-                <button
-                  type="button"
-                  onClick={() => setShowTableMgmt(true)}
-                  aria-label={t('pos.table.management')}
-                  className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-2 transition-colors hover:bg-hover"
-                >
-                  <Settings className="size-3.5" aria-hidden="true" />
-                  {t('pos.table.management')}
-                </button>
+            <div className="min-w-0">
+              <div className="truncate font-display text-[17px] font-bold leading-tight text-ink">
+                {session.name}
               </div>
-              <TablePicker
+              <div className="text-[11px] leading-tight text-ink-3">{t('pos.title')}</div>
+            </div>
+          </div>
+
+          {/* Order type + table — inline from sm; drops to its own row on phones */}
+          <div className="order-last flex w-full items-center gap-2 overflow-x-auto sm:order-none sm:w-auto sm:overflow-visible">
+            <Segmented
+              options={orderTypeOptions}
+              value={orderType}
+              onChange={handleOrderTypeChange}
+              ariaLabel={t('pos.orderType.label')}
+            />
+            {orderType === 'DINE_IN' ? (
+              <TableSelect
                 tables={tables}
                 selectedTableId={selectedTableId}
                 onSelect={setSelectedTableId}
-                isLoading={tablesQuery.isLoading}
+                onManage={() => setShowTableMgmt(true)}
               />
-            </div>
-          ) : null}
+            ) : null}
+          </div>
 
+          {/* Action cluster */}
+          <div className="flex items-center gap-2">
+            {/* Menu link */}
+            <Link
+              to="/menu"
+              aria-label={t('nav.menu')}
+              title={t('nav.menu')}
+              className="grid size-9 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+            >
+              <BookOpen className="size-4" />
+            </Link>
+
+            {/* Kitchen display */}
+            <Link
+              to="/kitchen"
+              aria-label={t('nav.kitchen')}
+              title={t('nav.kitchen')}
+              className="grid size-9 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+            >
+              <ChefHat className="size-4" />
+            </Link>
+
+            {/* Tables button */}
+            <button
+              type="button"
+              onClick={() => setShowTableFloor(true)}
+              aria-label={t('bills.floorTitle')}
+              className="relative grid size-9 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+            >
+              <Table2 className="size-4" aria-hidden="true" />
+              {billsCount > 0 ? (
+                <span className="absolute -right-1 -top-1 grid h-[16px] min-w-[16px] place-items-center rounded-full bg-brand-500 px-1 text-[9px] font-bold text-white">
+                  {occupiedCount > 0 ? occupiedCount : billsCount}
+                </span>
+              ) : null}
+            </button>
+
+            {/* Parked button */}
+            <button
+              type="button"
+              onClick={() => setShowParkedTray(true)}
+              aria-label={t('pos.parked.trayTitle')}
+              className="relative grid size-9 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+            >
+              <ClipboardList className="size-4" aria-hidden="true" />
+              {parkedCount > 0 ? (
+                <span className="absolute -right-1 -top-1 grid h-[16px] min-w-[16px] place-items-center rounded-full bg-amber-500 px-1 text-[9px] font-bold text-white">
+                  {parkedCount}
+                </span>
+              ) : null}
+            </button>
+
+            {/* Theme toggle */}
+            <button
+              type="button"
+              onClick={toggle}
+              aria-label={t('a11y.toggleTheme')}
+              title={t('a11y.toggleTheme')}
+              className="grid size-9 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
+            >
+              {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
+            </button>
+
+            {/* Logout */}
+            <button
+              type="button"
+              onClick={auth.logout}
+              aria-label={t('nav.logout')}
+              title={t('nav.logout')}
+              className="grid size-9 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-loss/40 hover:bg-tint-loss hover:text-loss focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+            >
+              <LogOut className="size-4" />
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* ── Body ───────────────────────────────────────────────────────────── */}
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
+        {/* ── Menu side ─────────────────────────────────────────────────── */}
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 pb-28 sm:px-6 lg:px-8 lg:pb-8">
+          {/* ── Menu grid ─────────────────────────────────────────────── */}
           {menuQuery.isLoading ? (
-            <div className="grid place-items-center py-24 text-brand-500">
-              <Spinner />
-            </div>
+            <MenuSkeleton />
           ) : items.length === 0 ? (
-            <Card className="mx-auto max-w-md p-10 text-center">
-              <div className="mx-auto grid size-12 place-items-center rounded-full bg-brand-50 text-brand-600">
-                <Utensils className="size-6" />
-              </div>
-              <h2 className="mt-4 font-display text-xl font-semibold text-ink">
-                {t('pos.emptyMenu')}
-              </h2>
-              <p className="mx-auto mt-1.5 max-w-xs text-sm text-ink-3">{t('pos.emptyMenuHint')}</p>
-              <Button className="mt-5" onClick={() => seed.mutate()} disabled={seed.isPending}>
-                {seed.isPending ? <Spinner /> : null} {t('pos.loadSample')}
-              </Button>
-            </Card>
+            <EmptyMenu onLoad={() => seed.mutate()} isLoading={seed.isPending} />
           ) : (
             <div>
-              {/* Category tab bar — shown when there are backend categories */}
+              {/* Category pill bar */}
               {categoryOptions.length > 1 ? (
-                <div className="mb-5 overflow-x-auto">
-                  <Segmented
-                    options={categoryOptions}
-                    value={resolvedCategoryId}
-                    onChange={(v) => setActiveCategoryId(v)}
-                    ariaLabel={t('pos.categories')}
-                  />
-                </div>
+                <CategoryBar
+                  options={categoryOptions}
+                  value={resolvedCategoryId}
+                  onChange={(v) => setActiveCategoryId(v)}
+                />
               ) : null}
 
-              {/* Item grid */}
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {visibleItems.map((item) => (
+              {/* Item grid — 2-up → 3-up → 4-up (Square-style: fewer, larger tiles) */}
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                {visibleItems.map((item, idx) => (
                   <ItemCard
                     key={item.id}
                     item={item}
                     qty={cartQtyFor(cart, item.id)}
                     locale={locale}
+                    index={idx}
                     onAdd={() => handleItemTap(item)}
                   />
                 ))}
@@ -473,96 +529,85 @@ function PosInner({ session }: { session: CompanySession }) {
           )}
         </div>
 
-        {/* Order rail */}
-        <aside className="flex min-h-0 flex-col bg-surface max-lg:border-t lg:border-l border-line">
-          <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
-            <div className="flex items-center gap-2">
-              <h2 className="font-display text-lg font-semibold text-ink">{t('pos.cart')}</h2>
+        {/* ── Order rail ────────────────────────────────────────────────── */}
+        {/* Inline right column on lg+; slide-up drawer below lg */}
+        <aside
+          className={cn(
+            'fixed inset-0 z-40 flex min-h-0 flex-col bg-surface shadow-lg',
+            'transition-transform duration-300 ease-out',
+            cartOpen ? 'translate-y-0' : 'translate-y-full',
+            'lg:static lg:z-auto lg:w-[400px] lg:shrink-0 lg:translate-y-0',
+            'lg:border-l lg:border-line lg:shadow-none lg:transition-none xl:w-[440px]',
+          )}
+        >
+          {/* Rail header */}
+          <div className="flex items-center justify-between border-b border-line px-5 py-4 sm:px-6">
+            <div className="flex items-center gap-2.5">
+              <h2 className="font-display text-base font-bold text-ink">{t('pos.cart')}</h2>
+              {lineCount > 0 ? (
+                <span className="grid h-5 min-w-5 place-items-center rounded-full bg-brand-500 px-1.5 text-[11px] font-bold text-white">
+                  {lineCount}
+                </span>
+              ) : null}
               {resumedOrder ? (
                 <Badge tone="amber" className="px-1.5 py-0 text-[10px]">
                   {t('pos.parked.resuming')}
                 </Badge>
               ) : null}
             </div>
-            {lineCount > 0 ? <Badge tone="emerald">{lineCount}</Badge> : null}
-          </div>
-
-          {/* Order type + table summary in cart */}
-          {lineCount > 0 ? (
-            <div className="flex items-center gap-2 border-b border-line px-5 py-2 text-xs text-ink-3">
-              <span className="font-medium text-ink-2">
-                {t(
-                  `pos.orderType.${orderType === 'DINE_IN' ? 'dineIn' : orderType === 'TAKEAWAY' ? 'takeaway' : 'delivery'}`,
-                )}
-              </span>
-              {orderType === 'DINE_IN' && selectedTable ? (
-                <>
-                  <span>·</span>
-                  <Table2 className="size-3" aria-hidden="true" />
-                  <span>{selectedTable.label}</span>
-                </>
+            <div className="flex items-center gap-2">
+              {/* Order type + table chip */}
+              {lineCount > 0 ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-line bg-paper px-2 py-0.5 text-[11px] font-medium text-ink-3">
+                  {orderType === 'DINE_IN' ? (
+                    <Table2 className="size-3" aria-hidden="true" />
+                  ) : (
+                    <ShoppingBag className="size-3" aria-hidden="true" />
+                  )}
+                  {t(
+                    `pos.orderType.${orderType === 'DINE_IN' ? 'dineIn' : orderType === 'TAKEAWAY' ? 'takeaway' : 'delivery'}`,
+                  )}
+                  {orderType === 'DINE_IN' && selectedTable ? (
+                    <> · {selectedTable.label}</>
+                  ) : null}
+                </span>
               ) : null}
-              {orderType === 'DINE_IN' && !selectedTable ? (
-                <span className="italic">{t('pos.table.noTableSelected')}</span>
-              ) : null}
+              <button
+                type="button"
+                onClick={() => setCartOpen(false)}
+                aria-label={t('common.close')}
+                className="grid size-8 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-hover hover:text-ink lg:hidden"
+              >
+                <X className="size-4" />
+              </button>
             </div>
-          ) : null}
+          </div>
 
           {/* Lines (scrollable) */}
           <div className="min-h-0 flex-1 overflow-y-auto">
             {lineCount === 0 ? (
-              <p className="px-5 py-10 text-center text-sm text-ink-3">{t('pos.cartEmpty')}</p>
+              /* Empty cart state */
+              <div className="flex flex-col items-center justify-center px-8 py-20 text-center">
+                <div className="mb-5 grid size-16 place-items-center rounded-3xl bg-brand-50 text-brand-400">
+                  <ShoppingBag className="size-7" aria-hidden="true" />
+                </div>
+                <p className="font-display text-base font-bold text-ink">{t('pos.cartEmpty')}</p>
+                <p className="mt-1.5 text-sm text-ink-3">{t('pos.cartEmptyHint')}</p>
+              </div>
             ) : (
               <ul className="divide-y divide-line">
                 {cart.map((line, idx) => {
                   const item = items.find((i) => i.id === line.menuItemId)
                   if (!item) return null
                   return (
-                    <li key={`${line.menuItemId}-${idx}`} className="px-5 py-3">
-                      <div className="flex items-center gap-3">
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-medium text-ink">{item.name}</div>
-                          <div className="tnum mt-0.5 font-mono text-xs text-ink-3">
-                            {formatMoney(line.effectiveUnitPriceMinor, item.currency, locale)}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            aria-label={t('pos.decreaseQty', { name: item.name })}
-                            onClick={() => decCartLine(idx)}
-                            className="grid size-7 place-items-center rounded-lg border border-line text-ink-2 transition-colors hover:bg-hover"
-                          >
-                            {line.qty === 1 ? (
-                              <Trash2 className="size-3.5" />
-                            ) : (
-                              <Minus className="size-3.5" />
-                            )}
-                          </button>
-                          <span className="tnum w-5 text-center font-mono text-sm text-ink">
-                            {line.qty}
-                          </span>
-                          <button
-                            type="button"
-                            aria-label={t('pos.increaseQty', { name: item.name })}
-                            onClick={() => handleItemTap(item)}
-                            className="grid size-7 place-items-center rounded-lg border border-line text-ink-2 transition-colors hover:bg-hover"
-                          >
-                            <Plus className="size-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                      {/* Modifier names under the line */}
-                      {line.selectedOptionNames.length > 0 ? (
-                        <div className="mt-1 flex flex-wrap gap-1 pl-0">
-                          {line.selectedOptionNames.map((name) => (
-                            <span key={name} className="text-[11px] leading-tight text-ink-3">
-                              {name}
-                            </span>
-                          ))}
-                        </div>
-                      ) : null}
-                    </li>
+                    <CartLineRow
+                      key={`${line.menuItemId}-${idx}`}
+                      line={line}
+                      item={item}
+                      locale={locale}
+                      onIncrease={() => handleItemTap(item)}
+                      onDecrease={() => decCartLine(idx)}
+                    />
                   )
                 })}
               </ul>
@@ -573,10 +618,11 @@ function PosInner({ session }: { session: CompanySession }) {
           <div className="border-t border-line">
             {lineCount > 0 ? (
               <>
-                <div className="px-5 py-3">
+                {/* Discount input */}
+                <div className="px-5 pt-4 pb-3 sm:px-6">
                   <label
                     htmlFor="pos-discount"
-                    className="mb-1.5 block text-xs font-medium text-ink-3"
+                    className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3"
                   >
                     {t('pos.addDiscount')}
                   </label>
@@ -591,9 +637,9 @@ function PosInner({ session }: { session: CompanySession }) {
                     placeholder="0"
                     aria-describedby={discountError ? 'pos-discount-error' : undefined}
                     className={cn(
-                      'tnum w-full rounded-xl border bg-surface px-3 py-2 font-mono text-sm text-ink',
-                      'transition-colors placeholder:text-ink-3/50',
-                      'focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/12',
+                      'tnum w-full rounded-xl border bg-paper px-3 py-2 font-mono text-sm text-ink',
+                      'transition-colors placeholder:text-ink-3/40',
+                      'focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/10',
                       discountError ? 'border-loss' : 'border-line',
                     )}
                   />
@@ -604,7 +650,8 @@ function PosInner({ session }: { session: CompanySession }) {
                   ) : null}
                 </div>
 
-                <div className="border-t border-line px-5 py-4">
+                {/* Breakdown */}
+                <div className="border-t border-line px-5 py-4 sm:px-6">
                   <PriceBreakdown
                     breakdown={breakdown}
                     isLoading={quoteQuery.isFetching && !quoteQuery.isPlaceholderData}
@@ -616,11 +663,24 @@ function PosInner({ session }: { session: CompanySession }) {
               </>
             ) : null}
 
-            <div className={cn('flex gap-2 px-5 py-4', lineCount > 0 ? 'border-t border-line' : '')}>
+            {/* Grand total + charge button */}
+            <div className={cn('px-5 pb-5 sm:px-6 sm:pb-6', lineCount > 0 ? 'border-t border-line pt-4' : 'pt-4')}>
+              {lineCount > 0 ? (
+                <div className="mb-4 flex items-baseline justify-between">
+                  <span className="font-display text-sm font-semibold text-ink-2">
+                    {t('pos.total')}
+                  </span>
+                  <span className="tnum font-display text-2xl font-bold text-ink">
+                    {formatMoney(grandTotalMinor, currency, locale)}
+                  </span>
+                </div>
+              ) : null}
+
+              {/* Hold button — secondary, only when cart has items and not resuming */}
               {lineCount > 0 && !resumedOrder ? (
                 <Button
                   variant="outline"
-                  className="flex-none"
+                  className="mb-2 w-full"
                   disabled={lineCount === 0 || parkOrder.isPending}
                   onClick={handleHold}
                   aria-label={t('pos.parked.hold')}
@@ -631,39 +691,43 @@ function PosInner({ session }: { session: CompanySession }) {
                 </Button>
               ) : null}
 
+              {/* Charge — the Square-style focal point: huge, bold, full-width green */}
               <Button
-                className="w-full flex-1"
+                className="w-full rounded-2xl py-4 text-base font-bold shadow-md"
                 disabled={lineCount === 0 || !!discountError || resumeQuery.isLoading}
                 onClick={openPayment}
               >
                 {resumeQuery.isLoading ? (
                   <Spinner />
+                ) : lineCount === 0 ? (
+                  t('pos.charge')
                 ) : (
                   <>
-                    {t('pos.charge')} · {formatMoney(grandTotalMinor, currency, locale)}
+                    {t('pos.charge')}
+                    <span className="mx-1 opacity-60">·</span>
+                    {formatMoney(grandTotalMinor, currency, locale)}
                   </>
                 )}
               </Button>
+
+              {/* Park error / success */}
+              {parkOrder.isError ? (
+                <p className="mt-2 text-xs text-loss" role="alert">
+                  {(parkOrder.error as Error).message}
+                </p>
+              ) : null}
+              {parkOrder.isSuccess && lineCount === 0 ? (
+                <p className="mt-2 text-xs text-brand-700" role="status">
+                  {t('pos.parked.holdSuccess')}
+                </p>
+              ) : null}
             </div>
-
-            {/* Park error */}
-            {parkOrder.isError ? (
-              <p className="px-5 pb-3 text-xs text-loss" role="alert">
-                {(parkOrder.error as Error).message}
-              </p>
-            ) : null}
-
-            {/* Park success toast */}
-            {parkOrder.isSuccess && lineCount === 0 ? (
-              <p className="px-5 pb-3 text-xs text-brand-700" role="status">
-                {t('pos.parked.holdSuccess')}
-              </p>
-            ) : null}
           </div>
         </aside>
       </div>
 
-      {/* Modifier picker modal */}
+      {/* ── Modals ─────────────────────────────────────────────────────────── */}
+
       {modifierItem ? (
         <ModifierModal
           item={modifierItem}
@@ -673,7 +737,6 @@ function PosInner({ session }: { session: CompanySession }) {
         />
       ) : null}
 
-      {/* Payment modal */}
       {modal === 'payment' ? (
         <PaymentModal
           session={session}
@@ -691,7 +754,6 @@ function PosInner({ session }: { session: CompanySession }) {
         />
       ) : null}
 
-      {/* Receipt overlay */}
       {modal === 'receipt' && placedOrder && placedPayment ? (
         <ReceiptView
           order={placedOrder}
@@ -707,15 +769,10 @@ function PosInner({ session }: { session: CompanySession }) {
         />
       ) : null}
 
-      {/* Table management panel */}
       {showTableMgmt ? (
-        <TableManagement
-          session={session}
-          onClose={() => setShowTableMgmt(false)}
-        />
+        <TableManagement session={session} onClose={() => setShowTableMgmt(false)} />
       ) : null}
 
-      {/* Parked orders tray */}
       {showParkedTray ? (
         <ParkedTray
           session={session}
@@ -724,9 +781,366 @@ function PosInner({ session }: { session: CompanySession }) {
           onClose={() => setShowParkedTray(false)}
         />
       ) : null}
+
+      {showTableFloor ? (
+        <TableFloor
+          session={session}
+          locale={locale}
+          tables={tables}
+          onOpenBill={(billId) => {
+            setOpenBillId(billId)
+            setShowTableFloor(false)
+          }}
+          onClose={() => setShowTableFloor(false)}
+        />
+      ) : null}
+
+      {openBillId ? (
+        <BillDetail
+          session={session}
+          locale={locale}
+          billId={openBillId}
+          tableLabel={
+            (() => {
+              const bill = openBillsList.find((b) => b.id === openBillId)
+              if (!bill?.tableId) return null
+              return tables.find((tbl) => tbl.tableId === bill.tableId)?.label ?? null
+            })()
+          }
+          onBack={() => {
+            setOpenBillId(null)
+            setShowTableFloor(true)
+          }}
+          onPaid={() => {
+            setOpenBillId(null)
+          }}
+        />
+      ) : null}
+
+      {/* Mobile "view order" sticky bar — big green Square-style button */}
+      {lineCount > 0 && !cartOpen ? (
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 px-4 py-4 shadow-lg backdrop-blur-sm lg:hidden">
+          <button
+            type="button"
+            onClick={() => setCartOpen(true)}
+            className="flex w-full items-center gap-3 rounded-2xl bg-brand-500 px-5 py-3.5 text-white shadow-md transition-all hover:bg-brand-600 active:scale-[0.99]"
+          >
+            <ShoppingBag className="size-5 shrink-0" aria-hidden="true" />
+            <span className="flex-1 text-left text-sm font-bold">{t('pos.viewOrder')}</span>
+            <span className="tnum rounded-full bg-white/20 px-2.5 py-0.5 text-xs font-bold">
+              {lineCount}
+            </span>
+            <span className="tnum font-display text-base font-bold">
+              {formatMoney(grandTotalMinor, currency, locale)}
+            </span>
+          </button>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// CategoryBar — tactile horizontal pill bar
+// ---------------------------------------------------------------------------
+
+function CategoryBar({
+  options,
+  value,
+  onChange,
+}: {
+  options: { value: string; label: string }[]
+  value: string
+  onChange: (v: string) => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <div
+      role="tablist"
+      aria-label={t('pos.categories')}
+      className="mb-6 flex gap-2.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    >
+      {options.map((opt) => {
+        const active = opt.value === value
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(opt.value)}
+            className={cn(
+              'shrink-0 rounded-full px-5 py-2 text-sm font-semibold transition-all',
+              'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500',
+              active
+                ? 'bg-brand-500 text-white shadow-sm'
+                : 'border border-line bg-surface text-ink-2 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700',
+            )}
+          >
+            {opt.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// MenuSkeleton — shimmer tile placeholders during initial load
+// ---------------------------------------------------------------------------
+
+function MenuSkeleton() {
+  return (
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+      {Array.from({ length: 8 }).map((_, i) => (
+        <div
+          key={i}
+          className="overflow-hidden rounded-2xl border border-line bg-surface shadow-sm"
+          aria-hidden="true"
+        >
+          <div className="shimmer aspect-square w-full" />
+          <div className="space-y-2.5 p-4">
+            <div className="shimmer h-4 w-3/4 rounded-md" />
+            <div className="shimmer h-3.5 w-1/3 rounded-md" />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// EmptyMenu — polished empty state
+// ---------------------------------------------------------------------------
+
+function EmptyMenu({ onLoad, isLoading }: { onLoad: () => void; isLoading: boolean }) {
+  const { t } = useTranslation()
+  return (
+    <div className="flex flex-col items-center justify-center px-6 py-20 text-center">
+      <div className="mb-5 grid size-16 place-items-center rounded-2xl bg-brand-50 text-brand-500">
+        <Utensils className="size-7" aria-hidden="true" />
+      </div>
+      <h2 className="font-display text-xl font-bold text-ink">{t('pos.emptyMenu')}</h2>
+      <p className="mx-auto mt-2 max-w-xs text-sm text-ink-3">{t('pos.emptyMenuHint')}</p>
+      <Button className="mt-6 shadow-sm" onClick={onLoad} disabled={isLoading}>
+        {isLoading ? <Spinner /> : null}
+        {t('pos.loadSample')}
+      </Button>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// ItemCard — the centerpiece tile
+// ---------------------------------------------------------------------------
+
+function ItemCard({
+  item,
+  qty,
+  locale,
+  index,
+  onAdd,
+}: {
+  item: MenuItem
+  qty: number
+  locale: string
+  index: number
+  onAdd: () => void
+}) {
+  const { t } = useTranslation()
+  const stockSoldOut = item.stockQuantity != null && item.stockQuantity <= 0
+  const unavailable = !item.available || stockSoldOut
+  const isLowStock =
+    item.stockQuantity != null && item.stockQuantity > 0 && item.stockQuantity <= 5
+
+  // Stagger the entrance animation by tile index (cap at 12 to keep delays reasonable)
+  const delayMs = Math.min(index, 12) * 40
+
+  return (
+    <button
+      type="button"
+      onClick={unavailable ? undefined : onAdd}
+      disabled={unavailable}
+      aria-label={
+        unavailable
+          ? t('pos.soldOutLabel', { name: item.name })
+          : t('pos.addItem', { name: item.name })
+      }
+      aria-disabled={unavailable}
+      style={{ animationDelay: `${delayMs}ms` }}
+      className={cn(
+        'reveal group relative flex flex-col overflow-hidden rounded-2xl border bg-surface text-left',
+        'transition-all duration-200',
+        unavailable
+          ? 'cursor-not-allowed border-line opacity-55'
+          : qty > 0
+            ? 'border-brand-500 shadow-md ring-2 ring-brand-500/20 hover:-translate-y-0.5 hover:shadow-lg active:scale-[0.98]'
+            : 'border-line shadow-sm hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md active:scale-[0.98]',
+      )}
+    >
+      {/* ── Photo block — square for bold Square-style tiles ── */}
+      <div className="relative aspect-square w-full overflow-hidden bg-brand-50">
+        {item.imageUrl ? (
+          <img
+            src={item.imageUrl}
+            alt={item.name}
+            loading="lazy"
+            className={cn(
+              'h-full w-full object-cover transition-transform duration-300',
+              !unavailable && 'group-hover:scale-[1.04]',
+              unavailable && 'grayscale',
+            )}
+          />
+        ) : (
+          /* Tasteful placeholder: brand-tinted gradient + icon */
+          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-brand-50 to-brand-100">
+            <Utensils className="size-10 text-brand-300" aria-hidden="true" />
+          </div>
+        )}
+
+        {/* Qty badge — top-right, overlapping the photo */}
+        {!unavailable && qty > 0 ? (
+          <span className="tnum absolute right-2.5 top-2.5 grid h-6 min-w-6 place-items-center rounded-full bg-brand-500 px-1.5 font-mono text-xs font-bold text-white shadow-sm">
+            {qty}
+          </span>
+        ) : null}
+
+        {/* Sold-out overlay chip */}
+        {unavailable ? (
+          <span className="absolute right-2.5 top-2.5 rounded-full bg-ink/70 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm">
+            {t('pos.soldOut')}
+          </span>
+        ) : isLowStock ? (
+          <span className="absolute right-2.5 top-2.5 rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm">
+            {t('menu.stock.lowStock', { count: item.stockQuantity })}
+          </span>
+        ) : null}
+
+        {/* Floating add button — bottom-right of photo, always visible when in cart */}
+        {!unavailable ? (
+          <span
+            aria-hidden="true"
+            className={cn(
+              'absolute bottom-2.5 right-2.5 grid size-8 place-items-center rounded-full shadow-md transition-all duration-200',
+              qty > 0
+                ? 'scale-110 bg-brand-500 text-white'
+                : 'scale-90 bg-brand-500 text-white opacity-0 group-hover:scale-100 group-hover:opacity-100',
+            )}
+          >
+            <Plus className="size-4" />
+          </span>
+        ) : null}
+      </div>
+
+      {/* ── Content area ── */}
+      <div className="flex flex-1 flex-col px-3.5 pb-3.5 pt-3">
+        <span
+          className={cn(
+            'line-clamp-2 text-sm font-semibold leading-snug',
+            unavailable ? 'text-ink-3' : 'text-ink',
+          )}
+        >
+          {item.name}
+        </span>
+
+        <div className="mt-2 flex items-end justify-between">
+          <span
+            className={cn(
+              'tnum font-display text-[15px] font-bold',
+              unavailable ? 'text-ink-3/50' : 'text-brand-700',
+            )}
+          >
+            {formatMoney(item.priceMinor, item.currency, locale)}
+          </span>
+
+          {item.modifierGroups.length > 0 && !unavailable ? (
+            <span className="rounded-full bg-brand-50 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700">
+              {t('pos.hasOptions')}
+            </span>
+          ) : null}
         </div>
       </div>
-    </div>
+    </button>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// CartLineRow
+// ---------------------------------------------------------------------------
+
+function CartLineRow({
+  line,
+  item,
+  locale,
+  onIncrease,
+  onDecrease,
+}: {
+  line: CartLine
+  item: MenuItem
+  locale: string
+  onIncrease: () => void
+  onDecrease: () => void
+}) {
+  const { t } = useTranslation()
+  const lineTotal = line.effectiveUnitPriceMinor * line.qty
+
+  return (
+    <li className="px-5 py-4 sm:px-6">
+      <div className="flex items-start gap-3.5">
+        {/* Item thumbnail — slightly larger for airy feel */}
+        <div className="size-12 shrink-0 overflow-hidden rounded-xl border border-line bg-brand-50">
+          {item.imageUrl ? (
+            <img src={item.imageUrl} alt="" className="h-full w-full object-cover" aria-hidden="true" />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center">
+              <ImageOff className="size-4 text-brand-200" aria-hidden="true" />
+            </div>
+          )}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-ink">{item.name}</p>
+          {/* Modifier names */}
+          {line.selectedOptionNames.length > 0 ? (
+            <p className="mt-0.5 text-[11px] leading-snug text-ink-3">
+              {line.selectedOptionNames.join(', ')}
+            </p>
+          ) : null}
+        </div>
+
+        {/* Line total */}
+        <span className="tnum flex-none font-mono text-sm font-semibold text-ink">
+          {formatMoney(lineTotal, item.currency, locale)}
+        </span>
+      </div>
+
+      {/* Qty stepper — inset to align with content */}
+      <div className="mt-3 flex items-center gap-2.5 pl-[3.875rem]">
+        <button
+          type="button"
+          aria-label={t('pos.decreaseQty', { name: item.name })}
+          onClick={onDecrease}
+          className="grid size-8 place-items-center rounded-lg border border-line text-ink-2 transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500"
+        >
+          {line.qty === 1 ? (
+            <Trash2 className="size-3.5 text-loss" />
+          ) : (
+            <Minus className="size-3.5" />
+          )}
+        </button>
+        <span className="tnum w-7 text-center font-mono text-sm font-bold text-ink">
+          {line.qty}
+        </span>
+        <button
+          type="button"
+          aria-label={t('pos.increaseQty', { name: item.name })}
+          onClick={onIncrease}
+          className="grid size-8 place-items-center rounded-lg border border-brand-500 bg-brand-50 text-brand-600 transition-colors hover:bg-brand-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500"
+        >
+          <Plus className="size-3.5" />
+        </button>
+      </div>
+    </li>
   )
 }
 
@@ -734,118 +1148,57 @@ function PosInner({ session }: { session: CompanySession }) {
 // TablePicker
 // ---------------------------------------------------------------------------
 
-function TablePicker({
+function TableSelect({
   tables,
   selectedTableId,
   onSelect,
-  isLoading,
+  onManage,
 }: {
   tables: TableResponse[]
   selectedTableId: string | null
   onSelect: (tableId: string | null) => void
-  isLoading: boolean
+  onManage: () => void
 }) {
   const { t } = useTranslation()
-
-  if (isLoading) {
-    return (
-      <div className="mt-3 flex items-center gap-2 text-xs text-ink-3">
-        <Spinner />
-        {t('common.loading')}
-      </div>
-    )
-  }
-
-  if (tables.length === 0) {
-    return (
-      <p className="mt-3 text-xs text-ink-3 italic">
-        {t('pos.table.noTables')} — {t('pos.table.noTableHint')}
-      </p>
-    )
-  }
-
+  const active = tables.filter((tb) => tb.active)
   return (
-    <div role="group" aria-label={t('pos.table.selectTable')}>
-      <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.05em] text-ink-3">
-        {t('pos.table.selectTable')}
-      </p>
-      <div className="flex flex-wrap gap-2.5">
-        {/* "No table" option */}
-        <button
-          type="button"
-          onClick={() => onSelect(null)}
-          aria-pressed={selectedTableId === null}
-          className={cn(
-            'w-[74px] rounded-[13px] border-[1.5px] py-2.5 text-center transition-colors',
-            'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500',
-            selectedTableId === null
-              ? 'border-brand-500 bg-brand-500'
-              : 'border-line bg-surface hover:bg-hover',
-          )}
+    <div className="flex shrink-0 items-center gap-1.5">
+      <div className="relative">
+        <Table2
+          className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-ink-3"
+          aria-hidden="true"
+        />
+        <select
+          value={selectedTableId ?? ''}
+          onChange={(e) => onSelect(e.target.value || null)}
+          aria-label={t('pos.table.selectTable')}
+          className="h-9 max-w-[190px] appearance-none truncate rounded-xl border border-line bg-surface pl-8 pr-8 text-sm font-medium text-ink transition-colors hover:border-brand-300 focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/12"
         >
-          <div
-            className={cn(
-              'text-[15px] font-bold',
-              selectedTableId === null ? 'text-white' : 'text-ink',
-            )}
-          >
-            —
-          </div>
-          <div
-            className={cn(
-              'mt-0.5 text-[10.5px]',
-              selectedTableId === null ? 'text-white/80' : 'text-ink-3',
-            )}
-          >
-            {t('pos.table.noTable')}
-          </div>
-        </button>
-
-        {tables.map((tbl) => {
-          const selected = selectedTableId === tbl.tableId
-          const blocked = tbl.occupied && !selected
-          return (
-            <button
-              key={tbl.tableId}
-              type="button"
-              disabled={blocked}
-              onClick={() => onSelect(tbl.tableId)}
-              aria-pressed={selected}
-              aria-label={
-                tbl.occupied
-                  ? t('pos.table.occupiedLabel', { label: tbl.label })
-                  : t('pos.table.selectLabel', { label: tbl.label })
-              }
-              className={cn(
-                'w-[74px] rounded-[13px] border-[1.5px] py-2.5 text-center transition-colors',
-                'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500',
-                selected
-                  ? 'border-brand-500 bg-brand-500'
-                  : blocked
-                    ? 'cursor-not-allowed border-line bg-paper opacity-60'
-                    : 'border-line bg-surface hover:bg-hover',
-              )}
+          <option value="">{t('pos.table.noTable')}</option>
+          {active.map((tb) => (
+            <option
+              key={tb.tableId}
+              value={tb.tableId}
+              disabled={tb.occupied && tb.tableId !== selectedTableId}
             >
-              <div
-                className={cn(
-                  'text-[15px] font-bold',
-                  selected ? 'text-white' : blocked ? 'text-ink-3' : 'text-ink',
-                )}
-              >
-                {tbl.label}
-              </div>
-              <div
-                className={cn(
-                  'mt-0.5 text-[10.5px]',
-                  selected ? 'text-white/80' : 'text-ink-3',
-                )}
-              >
-                {t('pos.table.capacity', { n: tbl.capacity })}
-              </div>
-            </button>
-          )
-        })}
+              {tb.label} · {t('pos.table.capacity', { n: tb.capacity })}
+            </option>
+          ))}
+        </select>
+        <ChevronDown
+          className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2 text-ink-3"
+          aria-hidden="true"
+        />
       </div>
+      <button
+        type="button"
+        onClick={onManage}
+        aria-label={t('pos.table.management')}
+        title={t('pos.table.management')}
+        className="grid size-9 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+      >
+        <Settings className="size-4" aria-hidden="true" />
+      </button>
     </div>
   )
 }
@@ -875,7 +1228,7 @@ function PriceBreakdown({
         <span className="text-sm text-ink-3">{t('pos.subtotal')}</span>
         <span className="tnum font-mono text-sm text-ink">
           {isLoading ? (
-            <span className="inline-block h-3.5 w-16 animate-pulse rounded bg-ink-100" />
+            <span className="inline-block h-3.5 w-16 rounded bg-ink-100 shimmer" />
           ) : (
             formatMoney(clientSubtotalMinor, currency, locale)
           )}
@@ -885,8 +1238,6 @@ function PriceBreakdown({
   }
 
   const illustrative = breakdown.usesIllustrativeRules
-  // Effective rates derived from the amounts the server returned — the rate itself isn't in the
-  // response, so we surface what was actually applied rather than a hardcoded figure.
   const rateBase = breakdown.subtotalMinor - breakdown.discountMinor
   const serviceRate = rateBase > 0 ? breakdown.serviceChargeMinor / rateBase : null
   const taxBase = rateBase + breakdown.serviceChargeMinor
@@ -931,17 +1282,6 @@ function PriceBreakdown({
           {formatMoney(breakdown.taxMinor, currency, locale)}
         </span>
       </div>
-
-      <div className="mt-1 flex items-baseline justify-between border-t border-line pt-2">
-        <span className="font-semibold text-ink">{t('pos.total')}</span>
-        <span className="tnum font-mono text-xl font-bold text-ink">
-          {isLoading ? (
-            <span className="inline-block h-5 w-20 animate-pulse rounded bg-ink-100" />
-          ) : (
-            formatMoney(breakdown.grandTotalMinor, currency, locale)
-          )}
-        </span>
-      </div>
     </div>
   )
 }
@@ -950,7 +1290,7 @@ function EstimatedBadge({ hint }: { hint: string }) {
   const { t } = useTranslation()
   return (
     <span title={hint} aria-label={hint} className="inline-flex items-center gap-0.5">
-      <Badge tone="amber" className="text-[10px] py-0 px-1.5">
+      <Badge tone="amber" className="px-1.5 py-0 text-[10px]">
         {t('pos.estimated')}
       </Badge>
       <Info className="size-3 text-amber-2/70" aria-hidden="true" />
@@ -968,90 +1308,26 @@ function RateChip({ rate, locale }: { rate: number; locale: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Item card
+// NoCompany
 // ---------------------------------------------------------------------------
-
-function ItemCard({
-  item,
-  qty,
-  locale,
-  onAdd,
-}: {
-  item: MenuItem
-  qty: number
-  locale: string
-  onAdd: () => void
-}) {
-  const { t } = useTranslation()
-  const unavailable = !item.available
-
-  return (
-    <button
-      type="button"
-      onClick={unavailable ? undefined : onAdd}
-      disabled={unavailable}
-      aria-label={
-        unavailable
-          ? t('pos.soldOutLabel', { name: item.name })
-          : t('pos.addItem', { name: item.name })
-      }
-      aria-disabled={unavailable}
-      className={cn(
-        'relative flex flex-col items-start rounded-2xl border bg-surface p-4 text-left shadow-sm transition-all',
-        unavailable
-          ? 'cursor-not-allowed border-line opacity-55'
-          : qty > 0
-            ? 'border-brand-500 ring-1 ring-brand-500/25 hover:-translate-y-0.5'
-            : 'border-line hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md',
-      )}
-    >
-      {!unavailable && qty > 0 ? (
-        <span className="tnum absolute right-3 top-3 grid size-6 place-items-center rounded-full bg-brand-500 font-mono text-xs font-bold text-white">
-          {qty}
-        </span>
-      ) : null}
-
-      {unavailable ? (
-        <span className="absolute right-3 top-3">
-          <Badge tone="neutral" className="px-1.5 py-0 text-[10px]">
-            {t('pos.soldOut')}
-          </Badge>
-        </span>
-      ) : null}
-
-      <span className={cn('font-semibold', unavailable ? 'text-ink-3' : 'text-ink')}>
-        {item.name}
-      </span>
-      <span
-        className={cn(
-          'tnum mt-2 font-mono text-sm font-semibold',
-          unavailable ? 'text-ink-3/50' : 'text-brand-700',
-        )}
-      >
-        {formatMoney(item.priceMinor, item.currency, locale)}
-      </span>
-
-      {item.modifierGroups.length > 0 && !unavailable ? (
-        <span className="mt-1.5 text-[11px] text-ink-3">{t('pos.hasOptions')}</span>
-      ) : null}
-    </button>
-  )
-}
 
 function NoCompany() {
   const { t } = useTranslation()
   return (
     <div className="grid min-h-screen place-items-center bg-paper px-5">
-      <Card className="w-full max-w-md p-10 text-center">
-        <h2 className="font-display text-xl font-semibold text-ink">{t('dashboard.noCompany')}</h2>
+      <div className="w-full max-w-md rounded-card border border-line bg-surface p-10 text-center shadow-sm">
+        <div className="mx-auto mb-4 grid size-14 place-items-center rounded-2xl bg-brand-50 text-brand-500">
+          <Utensils className="size-6" aria-hidden="true" />
+        </div>
+        <h2 className="font-display text-xl font-bold text-ink">{t('dashboard.noCompany')}</h2>
         <p className="mt-2 text-sm text-ink-3">{t('pos.noCompanyHint')}</p>
         <Link
           to="/onboarding"
-          className="mt-5 inline-block rounded-xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-600"
+          className="mt-6 inline-block rounded-xl bg-brand-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-600"
         >
           {t('nav.onboarding')}
         </Link>
-      </Card>
+      </div>
     </div>
   )
 }

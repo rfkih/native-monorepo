@@ -24,6 +24,7 @@ import { Spinner } from '@/components/ui/Spinner'
 import { Segmented } from '@/components/ui/Segmented'
 import { formatMoney } from '@/lib/money'
 import type { CompanySession } from '@/lib/session'
+import { ApiError } from '@/lib/api'
 import type {
   OrderLineInput,
   OrderResponse,
@@ -33,6 +34,26 @@ import type {
 import { useCheckout, useCapturePayment, usePayParked } from './api'
 
 type TenderTab = 'CASH' | 'QRIS' | 'CARD'
+
+/**
+ * Detects a 422 insufficient-stock problem+json and returns a structured object
+ * with itemName and available so the UI can surface a precise message.
+ * Returns null for any other error shape.
+ */
+function parseInsufficientStock(
+  err: unknown,
+): { itemName: string; available: number } | null {
+  if (!(err instanceof ApiError)) return null
+  if (err.status !== 422) return null
+  const p = err.problem
+  if (!p) return null
+  if (typeof p.type !== 'string' || !p.type.includes('insufficient-stock')) return null
+  const raw = p as Record<string, unknown>
+  if (typeof raw.itemName === 'string' && typeof raw.available === 'number') {
+    return { itemName: raw.itemName, available: raw.available }
+  }
+  return null
+}
 
 interface Props {
   session: CompanySession
@@ -409,7 +430,16 @@ function CashPanel({
 
       {(checkout.isError || payParked.isError) ? (
         <p className="mb-3 text-xs text-loss">
-          {((checkout.error ?? payParked.error) as Error).message}
+          {(() => {
+            const stockErr = parseInsufficientStock(checkout.error ?? payParked.error)
+            if (stockErr) {
+              return t('pos.payment.insufficientStock', {
+                itemName: stockErr.itemName,
+                available: stockErr.available,
+              })
+            }
+            return ((checkout.error ?? payParked.error) as Error).message
+          })()}
         </p>
       ) : null}
 
@@ -533,7 +563,16 @@ function DigitalPanel({
 
         {(checkout.isError || payParked.isError) ? (
           <p className="mb-3 text-xs text-loss">
-            {((checkout.error ?? payParked.error) as Error).message}
+            {(() => {
+              const stockErr = parseInsufficientStock(checkout.error ?? payParked.error)
+              if (stockErr) {
+                return t('pos.payment.insufficientStock', {
+                  itemName: stockErr.itemName,
+                  available: stockErr.available,
+                })
+              }
+              return ((checkout.error ?? payParked.error) as Error).message
+            })()}
           </p>
         ) : null}
 

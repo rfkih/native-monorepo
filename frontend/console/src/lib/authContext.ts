@@ -20,7 +20,11 @@ export interface AuthState {
   actor: string
   /** Curated business roles the principal holds. */
   roles: BusinessRole[]
-  login: () => void
+  /**
+   * Starts the login redirect. `loginHint` (an email) pre-fills the IdP's username field —
+   * used right after signup so the user never re-types the address they just registered.
+   */
+  login: (loginHint?: string) => void
   logout: () => void
 }
 

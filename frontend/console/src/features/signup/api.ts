@@ -9,11 +9,15 @@ export interface SignupRequest {
   firstBusinessType: string
   ownerEmail: string
   ownerPassword: string
+  /** ToS consent — also enforced server-side (@AssertTrue). */
+  termsAccepted: boolean
 }
 
 export interface SignupResponse {
   companyId: string
   ownerEmail: string
+  /** True when the realm requires email verification before first login. */
+  emailVerificationRequired: boolean
 }
 
 /**

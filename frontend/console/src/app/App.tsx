@@ -1,4 +1,4 @@
-import { Suspense, lazy } from 'react'
+import { Suspense, lazy, useEffect, useRef } from 'react'
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import { Shell } from '@/app/Shell'
 import { Spinner } from '@/components/ui/Spinner'
@@ -34,8 +34,17 @@ const Team = lazy(() =>
 const AccessDenied = lazy(() =>
   import('@/features/auth/AccessDenied').then((m) => ({ default: m.AccessDenied })),
 )
+const MenuManagement = lazy(() =>
+  import('@/features/menu/MenuManagement').then((m) => ({ default: m.MenuManagement })),
+)
+const Kitchen = lazy(() =>
+  import('@/features/kitchen/Kitchen').then((m) => ({ default: m.Kitchen })),
+)
 const Signup = lazy(() =>
   import('@/features/signup/Signup').then((m) => ({ default: m.Signup })),
+)
+const Landing = lazy(() =>
+  import('@/features/landing/Landing').then((m) => ({ default: m.Landing })),
 )
 
 function CenteredSpinner() {
@@ -46,11 +55,33 @@ function CenteredSpinner() {
   )
 }
 
+function FullScreenSpinner() {
+  return (
+    <div className="grid min-h-screen place-items-center text-brand-600">
+      <Spinner />
+    </div>
+  )
+}
+
+/** The /login route — immediately starts the Keycloak login redirect (a bookmarkable entry point). */
+function LoginLauncher() {
+  const auth = useAuth()
+  const fired = useRef(false)
+  useEffect(() => {
+    if (fired.current) return
+    fired.current = true
+    auth.login()
+  }, [auth])
+  return <FullScreenSpinner />
+}
+
 /** True for routes that must be reachable without authentication. */
 const PUBLIC_PATHS = new Set(['/signup'])
 
 /**
- * Role-gated routing (one app, two surfaces):
+ * Role-gated routing (one app, two surfaces + a public front door):
+ *  - UNAUTHENTICATED → the public marketing site: "/" landing, /login (Keycloak redirect launcher),
+ *    /signup (self-service registration). No auto-bounce to the IdP — login is user-initiated.
  *  - owner / manager → dashboard (+ onboarding) AND may open the POS.
  *  - cashier → ONLY the POS; every other path redirects to /pos (the dashboard is never mounted).
  *  - neither role → an access-denied screen.
@@ -75,13 +106,29 @@ export function App() {
     )
   }
 
-  // Wait for the auth redirect to resolve and the signed-in company to load before routing.
-  if (!auth.ready || loading) {
+  // Wait for the OIDC provider to resolve the session (silent restore or redirect callback).
+  if (!auth.ready) {
+    return <FullScreenSpinner />
+  }
+
+  // Unauthenticated → the public marketing site. Login is EXPLICIT: the landing "Sign in" button
+  // and the /login route trigger the Keycloak redirect. A deep-link to any protected path lands
+  // here (and the gateway independently rejects tokenless API calls), so guards still fail closed.
+  if (!auth.authenticated) {
     return (
-      <div className="grid min-h-screen place-items-center text-brand-600">
-        <Spinner />
-      </div>
+      <Suspense fallback={<CenteredSpinner />}>
+        <Routes>
+          <Route path="/" element={<Landing />} />
+          <Route path="/login" element={<LoginLauncher />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
     )
+  }
+
+  // Authenticated → wait for the signed-in company to load, then route the role-gated app.
+  if (loading) {
+    return <FullScreenSpinner />
   }
 
   const canDashboard = hasAnyRole(auth.roles, 'owner', 'manager')
@@ -102,6 +149,8 @@ export function App() {
       <Routes>
         {/* The POS is a full-screen "front office" — it renders OUTSIDE the sidebar/topbar shell. */}
         {canPos && <Route path="/pos" element={<Pos />} />}
+        {canPos && <Route path="/menu" element={<MenuManagement />} />}
+        {canPos && <Route path="/kitchen" element={<Kitchen />} />}
 
         {/* Everything else shares the back-office shell, mounted once via a layout route. */}
         <Route

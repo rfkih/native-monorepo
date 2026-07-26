@@ -113,15 +113,13 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
         apply(user)
         return
       }
-      // Public routes that must render without a login redirect.
-      // /signup is the self-service registration page — an unauthenticated visitor
-      // lands here before any Keycloak session exists.
-      if (window.location.pathname === '/signup') {
-        setState({ ready: true, authenticated: false, companyId: null, actor: '', roles: [] })
-        return
-      }
-      // No valid session → start the login redirect (App shows a spinner while ready=false).
-      await manager.signinRedirect()
+      // No valid session → render the PUBLIC marketing site (the landing page, /signup, /login)
+      // instead of force-redirecting to Keycloak. Login is now EXPLICIT: the landing page's
+      // "Sign in" button and the /login route call auth.login() → manager.signinRedirect(). This
+      // gives an unauthenticated visitor an actual front door rather than an immediate bounce to
+      // the IdP. Protected paths still fail closed — App routes any unauthenticated deep-link back
+      // to the landing, and the gateway rejects any tenant-scoped API call without a valid token.
+      setState({ ready: true, authenticated: false, companyId: null, actor: '', roles: [] })
     }
 
     void init()
@@ -140,7 +138,9 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AuthState>(
     () => ({
       ...state,
-      login: () => void manager.signinRedirect(),
+      // login_hint pre-fills Keycloak's username field (used by the post-signup hand-off).
+      login: (loginHint?: string) =>
+        void manager.signinRedirect(loginHint ? { login_hint: loginHint } : undefined),
       logout: () => {
         setAccessToken(null)
         void manager.signoutRedirect()

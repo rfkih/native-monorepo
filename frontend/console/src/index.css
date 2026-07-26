@@ -83,6 +83,8 @@
   /* Reusable entrance animations (from the comp) */
   --animate-fade-up: fade-up 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
   --animate-pop: pop 0.3s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  /* Continuous, gentle float for the landing's floating accent cards. */
+  --animate-float: float 7s ease-in-out infinite;
 }
 
 /* Dark theme — reassign the same variables; var()-based utilities follow automatically. */
@@ -184,9 +186,27 @@
   .reveal {
     animation: var(--animate-fade-up);
   }
+  /* Continuous, gentle float for the hero's floating accent cards. */
+  .floaty {
+    animation: var(--animate-float);
+  }
+  /* POS tile shimmer skeleton */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      var(--color-ink-100) 25%,
+      var(--color-ink-50) 50%,
+      var(--color-ink-100) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.4s ease-in-out infinite;
+  }
   @media (prefers-reduced-motion: reduce) {
-    .reveal {
+    .reveal,
+    .floaty,
+    .shimmer {
       animation: none;
+      background: var(--color-ink-100);
     }
   }
 }
@@ -211,6 +231,15 @@
     transform: scale(1);
   }
 }
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-9px);
+  }
+}
 @keyframes pulse-dot {
   0%,
   100% {
@@ -218,5 +247,54 @@
   }
   50% {
     opacity: 0.4;
+  }
+}
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/*
+ * Print isolation — the customer receipt (#native-thermal-receipt-paper) and the
+ * kitchen ticket (#native-kot-print) each inject their own <style> with a rule
+ * that hides all OTHER body children when printing. At most one of these IDs is
+ * present in the DOM at a time, so only the active print target is visible.
+ * This block is the safety net: ensure the app chrome is always hidden.
+ */
+@media print {
+  /* Reliable print isolation. The print target (receipt paper or KOT) is nested deep inside
+     #root, so hiding the app with `display:none` on body children ALSO hid the target (a
+     display:none ancestor can't be undone by a descendant) → blank pages. Use `visibility`
+     instead: hide everything, then re-show ONLY the active target + its descendants — a
+     visible child DOES override a hidden ancestor. Then pull the target to the page origin. */
+  body * {
+    visibility: hidden !important;
+  }
+  #native-thermal-receipt-paper,
+  #native-thermal-receipt-paper *,
+  #native-kot-print,
+  #native-kot-print * {
+    visibility: visible !important;
+  }
+  #native-thermal-receipt-paper,
+  #native-kot-print {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    display: block !important;
+    box-shadow: none !important;
+  }
+  @page {
+    size: 80mm auto;
+    margin: 6mm;
+  }
+  /* prefers-reduced-motion: print is always "no motion" */
+  .reveal,
+  .floaty {
+    animation: none !important;
   }
 }

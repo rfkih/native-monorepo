@@ -78,8 +78,18 @@ export interface MenuItem {
   active: boolean
   /** 86 flag: false = sold out; cashier read may omit the item or set this to false. */
   available: boolean
+  /**
+   * Stock quantity: null = infinite/untracked (manual sold-out toggle only);
+   * a number ≥ 0 = tracked (auto-deducts on sale; 0 means sold out).
+   */
+  stockQuantity: number | null
   /** Populated on the cashier read path (GET /api/v1/menu). */
   modifierGroups: ModifierGroupResponse[]
+  /**
+   * Optional item photo stored as a data URL (base64-encoded JPEG) or an
+   * external URL.  Null when no photo has been attached.
+   */
+  imageUrl: string | null
 }
 
 export interface OrderLineModifierResponse {
@@ -509,6 +519,49 @@ export function useReceipt(session: CompanySession, paymentId: string | null) {
       apiFetch<PaymentResponse>(`/api/v1/payments/${paymentId}/receipt`, {
         tenant: tenantOf(session),
       }),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Stock management — PUT /api/v1/menu/{itemId}/stock (set absolute) and
+//                   POST /api/v1/menu/{itemId}/stock/add (add/subtract)
+// ---------------------------------------------------------------------------
+
+/**
+ * Set absolute stock quantity for an item.
+ * Pass { quantity: number } to enable tracking, { quantity: null } to make it infinite/untracked.
+ */
+export function useSetStock(session: CompanySession) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ itemId, quantity }: { itemId: string; quantity: number | null }) =>
+      apiFetch<MenuItem>(`/api/v1/menu/${itemId}/stock`, {
+        method: 'PUT',
+        tenant: tenantOf(session),
+        body: { quantity },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['menu', session.companyId, session.businessId] })
+    },
+  })
+}
+
+/**
+ * Add (or subtract, if negative) stock to a tracked item.
+ * The backend floors at 0 and returns 422 if the item is untracked.
+ */
+export function useAddStock(session: CompanySession) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ itemId, amount }: { itemId: string; amount: number }) =>
+      apiFetch<MenuItem>(`/api/v1/menu/${itemId}/stock/add`, {
+        method: 'POST',
+        tenant: tenantOf(session),
+        body: { amount },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['menu', session.companyId, session.businessId] })
+    },
   })
 }
 

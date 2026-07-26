@@ -15,3 +15,6 @@ __pycache__/
 
 # Claude Code — personal/local overrides (bypass mode, machine-specific allows). Shared rules live in .claude/settings.json (committed).
 .claude/settings.local.json
+
+# Local dev screenshot helpers — machine-specific paths + a local seed login, never source
+frontend/console/*shot.mjs
