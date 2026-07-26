@@ -4,6 +4,8 @@ import id.co.nativeapp.restaurant.menu.dto.CreateModifierGroupRequest;
 import id.co.nativeapp.restaurant.menu.dto.CreateModifierOptionRequest;
 import id.co.nativeapp.restaurant.menu.dto.ModifierGroupResponse;
 import id.co.nativeapp.restaurant.menu.dto.ModifierOptionResponse;
+import id.co.nativeapp.restaurant.menu.dto.UpdateModifierGroupRequest;
+import id.co.nativeapp.restaurant.menu.dto.UpdateModifierOptionRequest;
 import id.co.nativeapp.restaurant.menu.service.ModifierService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -12,6 +14,7 @@ import java.net.URI;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -28,7 +31,15 @@ import org.springframework.web.bind.annotation.RestController;
  *   <li>{@code GET /api/v1/menu/{menuItemId}/modifier-groups} — list groups+options for a menu
  *       item. Add {@code ?adminView=true} to include unavailable options.
  *   <li>{@code POST /api/v1/menu/{menuItemId}/modifier-groups} — create a modifier group.
+ *   <li>{@code PATCH /api/v1/menu/{menuItemId}/modifier-groups/{groupId}} — edit a group (patch
+ *       semantics; only non-null fields applied).
+ *   <li>{@code DELETE /api/v1/menu/{menuItemId}/modifier-groups/{groupId}} — hard-delete a group
+ *       and all its options (safe: order/bill tables snapshot, no FK).
  *   <li>{@code POST /api/v1/menu/{menuItemId}/modifier-groups/{groupId}/options} — add an option.
+ *   <li>{@code PATCH /api/v1/menu/{menuItemId}/modifier-groups/{groupId}/options/{optionId}} —
+ *       edit an option (patch semantics).
+ *   <li>{@code DELETE /api/v1/menu/{menuItemId}/modifier-groups/{groupId}/options/{optionId}} —
+ *       hard-delete an option (safe: order/bill tables snapshot, no FK).
  *   <li>{@code PATCH /api/v1/menu/{menuItemId}/modifier-groups/{groupId}/options/{optionId}/86} —
  *       mark option unavailable.
  *   <li>{@code PATCH /api/v1/menu/{menuItemId}/modifier-groups/{groupId}/options/{optionId}/un-86}
@@ -88,6 +99,45 @@ public class ModifierController {
   }
 
   /**
+   * Edits a modifier group (patch semantics — only non-null fields are applied). Returns the
+   * updated group. 404 if the group is not found or not visible to the current tenant.
+   */
+  @Operation(
+      summary = "Edit a modifier group (patch semantics)",
+      description =
+          "Applies a partial update to a modifier group. Only non-null fields in the request body"
+              + " are applied. The same invariants as create apply (maxSelect >= minSelect,"
+              + " SINGLE => maxSelect 1). Returns 404 if the group does not exist or is not"
+              + " visible to the current tenant.")
+  @PatchMapping("/{menuItemId}/modifier-groups/{groupId}")
+  public ResponseEntity<ModifierGroupResponse> updateGroup(
+      @PathVariable UUID menuItemId,
+      @PathVariable UUID groupId,
+      @Valid @RequestBody UpdateModifierGroupRequest request) {
+    return ResponseEntity.ok(modifierService.updateGroup(groupId, request));
+  }
+
+  /**
+   * Hard-deletes a modifier group and all its options. Safe because {@code order_line_modifier} and
+   * {@code bill_line_modifier} snapshot the option name and price at order time (no enforced FK).
+   * Returns {@code 204 No Content}. 404 if the group is not found or not visible to the current
+   * tenant.
+   */
+  @Operation(
+      summary = "Delete a modifier group and all its options",
+      description =
+          "Hard-deletes the modifier group and all its options. Safe because order/bill tables"
+              + " snapshot the option name and price at order time (no enforced FK to the live"
+              + " option). Returns 204 No Content. Returns 404 if the group does not exist or is"
+              + " not visible to the current tenant.")
+  @DeleteMapping("/{menuItemId}/modifier-groups/{groupId}")
+  public ResponseEntity<Void> deleteGroup(
+      @PathVariable UUID menuItemId, @PathVariable UUID groupId) {
+    modifierService.deleteGroup(groupId);
+    return ResponseEntity.noContent().build();
+  }
+
+  /**
    * Adds an option to a modifier group. Returns {@code 201 Created} with a {@code Location} header.
    */
   @Operation(
@@ -109,6 +159,46 @@ public class ModifierController {
                     + "/options/"
                     + created.id()))
         .body(created);
+  }
+
+  /**
+   * Edits a modifier option (patch semantics — only non-null fields are applied). Returns the
+   * updated option. 404 if the option is not found or not visible to the current tenant.
+   */
+  @Operation(
+      summary = "Edit a modifier option (patch semantics)",
+      description =
+          "Applies a partial update to a modifier option. Only non-null fields in the request body"
+              + " are applied. Returns 404 if the option does not exist or is not visible to the"
+              + " current tenant.")
+  @PatchMapping("/{menuItemId}/modifier-groups/{groupId}/options/{optionId}")
+  public ResponseEntity<ModifierOptionResponse> updateOption(
+      @PathVariable UUID menuItemId,
+      @PathVariable UUID groupId,
+      @PathVariable UUID optionId,
+      @Valid @RequestBody UpdateModifierOptionRequest request) {
+    return ResponseEntity.ok(modifierService.updateOption(optionId, request));
+  }
+
+  /**
+   * Hard-deletes a modifier option. Safe because {@code order_line_modifier} and {@code
+   * bill_line_modifier} snapshot the option name and price at order time (no enforced FK). Returns
+   * {@code 204 No Content}. 404 if the option is not found or not visible to the current tenant.
+   */
+  @Operation(
+      summary = "Delete a modifier option",
+      description =
+          "Hard-deletes the modifier option. Safe because order/bill tables snapshot the option"
+              + " name and price at order time (no enforced FK to the live option). Returns 204 No"
+              + " Content. Returns 404 if the option does not exist or is not visible to the"
+              + " current tenant.")
+  @DeleteMapping("/{menuItemId}/modifier-groups/{groupId}/options/{optionId}")
+  public ResponseEntity<Void> deleteOption(
+      @PathVariable UUID menuItemId,
+      @PathVariable UUID groupId,
+      @PathVariable UUID optionId) {
+    modifierService.deleteOption(optionId);
+    return ResponseEntity.noContent().build();
   }
 
   /** Marks a modifier option as unavailable (86). */

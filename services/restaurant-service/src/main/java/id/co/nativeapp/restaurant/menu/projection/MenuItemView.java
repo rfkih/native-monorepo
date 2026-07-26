@@ -1,6 +1,7 @@
 package id.co.nativeapp.restaurant.menu.projection;
 
 import java.util.UUID;
+import org.springframework.lang.Nullable;
 
 /**
  * Read projection over the {@code menu_item} row — only the columns a response needs, never the
@@ -31,4 +32,13 @@ public interface MenuItemView {
   boolean isActive();
 
   boolean isAvailable();
+
+  /** Current stock quantity; {@code null} when the item is untracked (infinite supply). */
+  @Nullable Integer getStockQuantity();
+
+  /**
+   * Optional image URL (base64 data URL or external HTTP(S) URL); {@code null} when no image has
+   * been set.
+   */
+  @Nullable String getImageUrl();
 }

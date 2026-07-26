@@ -2,6 +2,7 @@ package id.co.nativeapp.restaurant.menu.controller;
 
 import id.co.nativeapp.restaurant.menu.dto.CreateMenuItemRequest;
 import id.co.nativeapp.restaurant.menu.dto.MenuItemResponse;
+import id.co.nativeapp.restaurant.menu.dto.UpdateMenuItemRequest;
 import id.co.nativeapp.restaurant.menu.service.MenuService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -10,7 +11,10 @@ import java.net.URI;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -74,5 +78,54 @@ public class MenuController {
       @Valid @RequestBody CreateMenuItemRequest request) {
     MenuItemResponse created = menuService.createItem(request);
     return ResponseEntity.created(URI.create("/api/v1/menu/" + created.id())).body(created);
+  }
+
+  /**
+   * Soft-deletes a menu item (sets {@code active = false}). The item immediately disappears from
+   * {@code GET /api/v1/menu} but existing orders/sales that reference it are unaffected. Scoped to
+   * the bound tenant (RLS) — an item belonging to another company is invisible and returns {@code
+   * 404}.
+   *
+   * @param itemId the menu item id
+   * @return {@code 204 No Content} on success; {@code 404} if not found or not visible
+   */
+  @Operation(
+      summary = "Delete (soft-delete) a menu item",
+      description =
+          "Soft-deletes a menu item by setting active=false. The item disappears from GET /api/v1/menu"
+              + " but historical order/sale references are unaffected. Returns 204 No Content on"
+              + " success, 404 if the item is not found or not visible to the bound tenant.")
+  @DeleteMapping("/{itemId}")
+  public ResponseEntity<Void> deleteMenuItem(@PathVariable UUID itemId) {
+    menuService.deleteItem(itemId);
+    return ResponseEntity.noContent().build();
+  }
+
+  /**
+   * Partially updates a menu item. Only the fields supplied in the request body are applied; absent
+   * (null) fields are left unchanged. The item's currency cannot be changed — {@code priceMinor}
+   * updates the price amount only.
+   *
+   * <p>imageUrl convention: {@code null} or omitted from JSON = leave unchanged; empty string
+   * ({@code ""}) = clear the image; any other value = set/replace the image.
+   *
+   * @param itemId the menu item id
+   * @param request partial update body (all fields optional)
+   * @return {@code 200 OK} with the updated {@link MenuItemResponse}; {@code 404} if not found or
+   *     not visible to the bound tenant; {@code 400} if validation fails (e.g. imageUrl &gt; 3MB or
+   *     priceMinor &le; 0)
+   */
+  @Operation(
+      summary = "Partially update a menu item",
+      description =
+          "Applies a partial update to a menu item — only non-null fields are changed. The item's"
+              + " currency cannot be changed; priceMinor updates the price amount only. For imageUrl:"
+              + " null/absent = leave unchanged, empty string = clear the image, any other value ="
+              + " set/replace. Returns 200 OK with the updated item, 404 if not found or not visible"
+              + " to the bound tenant, 400 on validation failure.")
+  @PatchMapping("/{itemId}")
+  public ResponseEntity<MenuItemResponse> patchMenuItem(
+      @PathVariable UUID itemId, @Valid @RequestBody UpdateMenuItemRequest request) {
+    return ResponseEntity.ok(menuService.updateItem(itemId, request));
   }
 }

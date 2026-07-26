@@ -4,6 +4,7 @@ import id.co.nativeapp.money.Money;
 import id.co.nativeapp.restaurant.menu.projection.MenuItemView;
 import id.co.nativeapp.restaurant.menu.projection.ModifierOptionView;
 import id.co.nativeapp.restaurant.menu.repository.MenuItemRepository;
+import id.co.nativeapp.restaurant.menu.service.StockDeductionWriter;
 import id.co.nativeapp.restaurant.order.domain.Order;
 import id.co.nativeapp.restaurant.order.domain.OrderLine;
 import id.co.nativeapp.restaurant.order.domain.OrderLineModifier;
@@ -95,6 +96,7 @@ public class OrderWriter {
   private final PaymentWriter paymentWriter;
   private final TaxChargeService taxChargeService;
   private final RestaurantTableRepository tableRepository;
+  private final StockDeductionWriter stockDeductionWriter;
 
   public OrderWriter(
       OrderRepository orderRepository,
@@ -105,7 +107,8 @@ public class OrderWriter {
       SaleWriter saleWriter,
       PaymentWriter paymentWriter,
       TaxChargeService taxChargeService,
-      RestaurantTableRepository tableRepository) {
+      RestaurantTableRepository tableRepository,
+      StockDeductionWriter stockDeductionWriter) {
     this.orderRepository = orderRepository;
     this.lineRepository = lineRepository;
     this.modifierRepository = modifierRepository;
@@ -115,6 +118,7 @@ public class OrderWriter {
     this.paymentWriter = paymentWriter;
     this.taxChargeService = taxChargeService;
     this.tableRepository = tableRepository;
+    this.stockDeductionWriter = stockDeductionWriter;
   }
 
   /**
@@ -175,7 +179,10 @@ public class OrderWriter {
         request.payment() != null && request.payment().tenderType().isDigital();
 
     if (!isDigitalPayment) {
-      // CASH or no-payment path: record sale synchronously in this transaction.
+      // CASH or no-payment path: deduct stock (tracked items only) then record sale — all in this
+      // transaction. A stock shortfall throws InsufficientStockException → rolls back everything.
+      stockDeductionWriter.deductForLines(cart.linesToAdd(), cart.itemViews());
+
       String tenderTypeName =
           (request.payment() != null) ? request.payment().tenderType().name() : null;
       RecordSaleCommand saleCommand =
@@ -316,15 +323,21 @@ public class OrderWriter {
     String currencyCode = order.getTotal().currency().getCurrencyCode();
     String saleIdempotencyKey = orderId + ":park-sale";
 
+    // Load persisted lines once — used for breakdown recomputation AND stock deduction.
+    List<OrderLineView> parkedLineViews = lineRepository.findViewsByOrderId(order.getId());
+
     // Recompute the price breakdown from the persisted lines (H1 fix).
     // The subtotal is the sum of line totals; the discount is whatever was stored on the order at
     // park time. This reproduces the same breakdown shape as the equivalent direct checkout.
-    PriceBreakdown breakdown = recomputeBreakdown(order, currencyCode, now);
+    PriceBreakdown breakdown = recomputeBreakdownFromViews(order, parkedLineViews, currencyCode);
 
     boolean isDigitalPayment =
         request.payment() != null && request.payment().tenderType().isDigital();
 
     if (!isDigitalPayment) {
+      // Deduct stock for tracked items (same tx — roll back everything on shortfall).
+      deductStockForParkedLines(parkedLineViews, currencyCode);
+
       // CASH or no-payment: record the sale now — revenue recognised here.
       String tenderTypeName =
           (request.payment() != null) ? request.payment().tenderType().name() : null;
@@ -453,6 +466,14 @@ public class OrderWriter {
                 + ", not "
                 + businessId);
       }
+      // Stock availability pre-check (fast fail before writing anything): if the item is tracked
+      // and its current stock is 0, reject immediately. The definitive concurrency-safe check is
+      // the atomic UPDATE in StockDeductionWriter; this is an early guard for the common case.
+      Integer stock = view.getStockQuantity();
+      if (stock != null && stock == 0) {
+        throw new id.co.nativeapp.restaurant.menu.domain.InsufficientStockException(
+            lineReq.menuItemId(), view.getName(), lineReq.qty(), 0);
+      }
     }
 
     // 3. Currency homogeneity check.
@@ -514,7 +535,7 @@ public class OrderWriter {
               + " — a fully-comped order is not a sale");
     }
 
-    return new CartContext(currencyCode, linesToAdd, breakdown);
+    return new CartContext(currencyCode, linesToAdd, breakdown, itemViews);
   }
 
   /**
@@ -617,13 +638,14 @@ public class OrderWriter {
   }
 
   /**
-   * Recomputes the {@link PriceBreakdown} for a parked order at pay time. The subtotal is the sum
-   * of the persisted line totals; the fixed discount is whatever was stored on the order at park
-   * time. This produces the same breakdown shape as an equivalent direct checkout of the same cart
-   * (H1 fix — parked-then-paid SaleRecorded carries identical breakdown legs).
+   * Recomputes the {@link PriceBreakdown} for a parked order at pay time from pre-loaded line
+   * views. The subtotal is the sum of the persisted line totals; the fixed discount is whatever was
+   * stored on the order at park time. This produces the same breakdown shape as an equivalent
+   * direct checkout of the same cart (H1 fix — parked-then-paid SaleRecorded carries identical
+   * breakdown legs).
    */
-  private PriceBreakdown recomputeBreakdown(Order order, String currencyCode, Instant now) {
-    List<OrderLineView> lineViews = lineRepository.findViewsByOrderId(order.getId());
+  private PriceBreakdown recomputeBreakdownFromViews(
+      Order order, List<OrderLineView> lineViews, String currencyCode) {
     Money subtotal = Money.zero(Currency.getInstance(currencyCode));
     for (OrderLineView lv : lineViews) {
       subtotal = subtotal.plus(Money.ofMinor(lv.getLineTotalMinor(), currencyCode));
@@ -632,10 +654,55 @@ public class OrderWriter {
         (order.getDiscountMinor() != null)
             ? Money.ofMinor(order.getDiscountMinor(), currencyCode)
             : null;
-    return taxChargeService.resolve(subtotal, 0L, fixedDiscount, now);
+    return taxChargeService.resolve(subtotal, 0L, fixedDiscount, Instant.now());
   }
 
-  /** Immutable value holding the validated cart: resolved lines, breakdown, and currency. */
+  /**
+   * Deducts stock for tracked items when paying a parked order. Loads the current {@link
+   * MenuItemView}s for the parked lines by their ids, then delegates to {@link
+   * StockDeductionWriter#deductForLines} which runs in the caller's transaction ({@code
+   * MANDATORY}).
+   *
+   * <p>The lines are represented as {@link OrderLineView}s at this point (the order's lines were
+   * persisted at park time); we adapt them to the interface {@link StockDeductionWriter} expects by
+   * constructing a list of lightweight adapters carrying only menuItemId and qty.
+   */
+  private void deductStockForParkedLines(List<OrderLineView> lineViews, String currencyCode) {
+    if (lineViews.isEmpty()) {
+      return;
+    }
+    // Load current item views to get stock_quantity state (RLS-scoped).
+    List<UUID> menuItemIds = lineViews.stream().map(OrderLineView::getMenuItemId).toList();
+    List<MenuItemView> menuItemViews = new ArrayList<>();
+    for (int i = 0; i < menuItemIds.size(); i += 1000) {
+      List<UUID> chunk = menuItemIds.subList(i, Math.min(i + 1000, menuItemIds.size()));
+      menuItemViews.addAll(menuItemRepository.findViewsByIds(chunk));
+    }
+
+    // Build synthetic OrderLine-like objects for the deduction writer.
+    // We use the domain OrderLine constructor but only need menuItemId + qty.
+    // Instead, we pass the line view data via a list of transient OrderLine adapters.
+    // Since StockDeductionWriter only calls getMenuItemId() and getQty(), we can build
+    // real-enough OrderLine objects from the view data.
+    List<OrderLine> adaptedLines = new ArrayList<>();
+    for (OrderLineView lv : lineViews) {
+      // Use Money.ofMinor with the order currency to satisfy the constructor.
+      Money unitPrice = Money.ofMinor(lv.getUnitPriceMinor(), currencyCode);
+      OrderLine adapted =
+          new OrderLine(lv.getMenuItemId(), lv.getNameSnapshot(), unitPrice, lv.getQty());
+      adaptedLines.add(adapted);
+    }
+
+    stockDeductionWriter.deductForLines(adaptedLines, menuItemViews);
+  }
+
+  /**
+   * Immutable value holding the validated cart: resolved lines, breakdown, currency, and the item
+   * views used for stock-deduction tracking.
+   */
   private record CartContext(
-      String currencyCode, List<OrderLine> linesToAdd, PriceBreakdown breakdown) {}
+      String currencyCode,
+      List<OrderLine> linesToAdd,
+      PriceBreakdown breakdown,
+      List<MenuItemView> itemViews) {}
 }

@@ -6,6 +6,7 @@ import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -103,4 +104,15 @@ public interface ModifierOptionRepository extends JpaRepository<ModifierOption, 
           """,
       nativeQuery = true)
   List<ModifierOptionView> findAvailableViewsByGroupIds(@Param("groupIds") List<UUID> groupIds);
+
+  /**
+   * Hard-deletes all options belonging to a modifier group. Called as part of group deletion. RLS
+   * is active — only rows visible to the current tenant are deleted. Must be invoked within an
+   * active {@link org.springframework.transaction.annotation.Transactional} context.
+   */
+  @Modifying
+  @Query(
+      value = "DELETE FROM menu_item_modifier_option WHERE group_id = :groupId",
+      nativeQuery = true)
+  void deleteByGroupId(@Param("groupId") UUID groupId);
 }

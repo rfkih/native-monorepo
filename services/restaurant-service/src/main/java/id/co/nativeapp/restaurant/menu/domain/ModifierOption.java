@@ -111,4 +111,24 @@ public class ModifierOption extends Auditable {
   public void markAvailable() {
     this.available = true;
   }
+
+  /**
+   * Applies a partial update (patch semantics). Only non-null arguments are applied.
+   *
+   * @param newName new option name, or {@code null} for no change
+   * @param newPriceDeltaMinor new signed price delta in minor units (never a float), or {@code
+   *     null} for no change
+   * @param newDisplayOrder new sort position, or {@code null} for no change
+   */
+  public void update(String newName, Long newPriceDeltaMinor, Integer newDisplayOrder) {
+    if (newName != null) {
+      this.name = newName;
+    }
+    if (newPriceDeltaMinor != null) {
+      this.priceDeltaMinor = newPriceDeltaMinor;
+    }
+    if (newDisplayOrder != null) {
+      this.displayOrder = newDisplayOrder;
+    }
+  }
 }

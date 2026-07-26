@@ -125,6 +125,10 @@ public class MenuReader {
    * <p>Phase 3: includes {@code categoryId}, {@code available}, and the item's active modifier
    * groups with their available options (populated on the cashier read path via a batch load — see
    * {@link #findActiveByBusiness}).
+   *
+   * <p>Stock increment: includes {@code stockQuantity} ({@code null} = untracked / infinite).
+   *
+   * <p>Image increment: includes {@code imageUrl} ({@code null} = no image set).
    */
   static MenuItemResponse toResponse(MenuItemView view, List<ModifierGroupResponse> groups) {
     return new MenuItemResponse(
@@ -137,6 +141,8 @@ public class MenuReader {
         view.getCurrency().strip(),
         view.isActive(),
         view.isAvailable(),
+        view.getStockQuantity(),
+        view.getImageUrl(),
         groups);
   }
 }

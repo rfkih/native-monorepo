@@ -59,7 +59,8 @@ public abstract class PostgresRlsTestBase {
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
         Statement st = admin.createStatement()) {
       st.execute(
-          "TRUNCATE TABLE payment, order_line_modifier, order_line, restaurant_order,"
+          "TRUNCATE TABLE bill_line_modifier, bill_line, bill,"
+              + " payment, order_line_modifier, order_line, restaurant_order,"
               + " restaurant_table, menu_item_modifier_option, menu_item_modifier_group, menu_item,"
               + " menu_category, sale, outbox CASCADE");
     } catch (SQLException ignored) {

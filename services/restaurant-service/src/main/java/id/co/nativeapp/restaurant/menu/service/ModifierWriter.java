@@ -7,6 +7,8 @@ import id.co.nativeapp.restaurant.menu.dto.CreateModifierGroupRequest;
 import id.co.nativeapp.restaurant.menu.dto.CreateModifierOptionRequest;
 import id.co.nativeapp.restaurant.menu.dto.ModifierGroupResponse;
 import id.co.nativeapp.restaurant.menu.dto.ModifierOptionResponse;
+import id.co.nativeapp.restaurant.menu.dto.UpdateModifierGroupRequest;
+import id.co.nativeapp.restaurant.menu.dto.UpdateModifierOptionRequest;
 import id.co.nativeapp.restaurant.menu.repository.MenuItemRepository;
 import id.co.nativeapp.restaurant.menu.repository.ModifierGroupRepository;
 import id.co.nativeapp.restaurant.menu.repository.ModifierOptionRepository;
@@ -148,5 +150,81 @@ public class ModifierWriter {
             .orElseThrow(() -> new NoSuchElementException("Menu item not found: " + menuItemId));
     item.markAvailable();
     menuItemRepository.saveAndFlush(item);
+  }
+
+  /**
+   * Applies a partial update to a modifier group. Only non-null request fields are changed. Returns
+   * the updated group response. Throws {@link NoSuchElementException} if the group is not found or
+   * not visible to the current tenant (RLS).
+   */
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public ModifierGroupResponse updateGroup(UUID groupId, UpdateModifierGroupRequest request) {
+    TenantContext.require();
+    ModifierGroup group =
+        groupRepository
+            .findById(groupId)
+            .orElseThrow(() -> new NoSuchElementException("Modifier group not found: " + groupId));
+    group.update(
+        request.name(),
+        request.selectionType(),
+        request.required(),
+        request.minSelect(),
+        request.maxSelect(),
+        request.displayOrder());
+    ModifierGroup saved = groupRepository.saveAndFlush(group);
+    return ModifierGroupResponse.from(saved);
+  }
+
+  /**
+   * Hard-deletes a modifier group and all its options. Because {@code order_line_modifier} and
+   * {@code bill_line_modifier} snapshot the option name and price at order time (no enforced FK),
+   * this delete is safe — historical records remain intact. Throws {@link NoSuchElementException}
+   * if the group is not found or not visible to the current tenant (RLS).
+   */
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public void deleteGroup(UUID groupId) {
+    TenantContext.require();
+    // Verify the group exists and is visible to the current tenant before deleting.
+    groupRepository
+        .findById(groupId)
+        .orElseThrow(() -> new NoSuchElementException("Modifier group not found: " + groupId));
+    // Hard-delete all options first (no FK cascade from group → options in the domain layer).
+    optionRepository.deleteByGroupId(groupId);
+    groupRepository.deleteById(groupId);
+  }
+
+  /**
+   * Applies a partial update to a modifier option. Only non-null request fields are changed.
+   * Returns the updated option response. Throws {@link NoSuchElementException} if the option is not
+   * found or not visible to the current tenant (RLS).
+   */
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public ModifierOptionResponse updateOption(UUID optionId, UpdateModifierOptionRequest request) {
+    TenantContext.require();
+    ModifierOption option =
+        optionRepository
+            .findById(optionId)
+            .orElseThrow(
+                () -> new NoSuchElementException("Modifier option not found: " + optionId));
+    option.update(request.name(), request.priceDeltaMinor(), request.displayOrder());
+    ModifierOption saved = optionRepository.saveAndFlush(option);
+    return ModifierOptionResponse.from(saved);
+  }
+
+  /**
+   * Hard-deletes a modifier option. Because {@code order_line_modifier} and {@code
+   * bill_line_modifier} snapshot the option name and price at order time (no enforced FK), this
+   * delete is safe — historical records remain intact. Throws {@link NoSuchElementException} if the
+   * option is not found or not visible to the current tenant (RLS).
+   */
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public void deleteOption(UUID optionId) {
+    TenantContext.require();
+    // Verify the option exists and is visible to the current tenant before deleting.
+    optionRepository
+        .findById(optionId)
+        .orElseThrow(
+            () -> new NoSuchElementException("Modifier option not found: " + optionId));
+    optionRepository.deleteById(optionId);
   }
 }

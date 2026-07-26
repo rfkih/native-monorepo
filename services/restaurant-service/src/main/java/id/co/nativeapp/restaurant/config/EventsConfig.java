@@ -25,16 +25,16 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * transactional outbox).
  *
  * <p>W3C traceparent capture (ADR 0010 #13): the {@link OutboxWriter} is given a {@link
- * TraceparentSupplier} backed by the Micrometer {@link Tracer} so the current span's traceparent
- * is stamped into the outbox row at write time. Debezium maps the {@code traceparent} column to a
+ * TraceparentSupplier} backed by the Micrometer {@link Tracer} so the current span's traceparent is
+ * stamped into the outbox row at write time. Debezium maps the {@code traceparent} column to a
  * Kafka header, and consumers restore the trace context so their listener span is a child of the
  * producer span — closing the outbox→Kafka trace gap. The {@link Tracer} is injected via {@link
  * ObjectProvider} so a missing bean degrades gracefully to a no-op supplier rather than failing the
  * context.
  *
- * <p>Outbox-lag metric (ADR 0010 #13): {@link OutboxLagMetrics} registers a Micrometer gauge
- * {@code native.outbox.unpublished} (tag: {@code service}) that counts unpublished outbox rows so
- * Grafana can alert on Debezium relay lag.
+ * <p>Outbox-lag metric (ADR 0010 #13): {@link OutboxLagMetrics} registers a Micrometer gauge {@code
+ * native.outbox.unpublished} (tag: {@code service}) that counts unpublished outbox rows so Grafana
+ * can alert on Debezium relay lag.
  */
 @Configuration
 public class EventsConfig {

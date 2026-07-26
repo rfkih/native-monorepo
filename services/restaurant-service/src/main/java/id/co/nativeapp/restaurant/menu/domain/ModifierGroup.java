@@ -139,4 +139,67 @@ public class ModifierGroup extends Auditable {
   public int getDisplayOrder() {
     return displayOrder;
   }
+
+  /**
+   * Applies a partial update (patch semantics). Only non-null arguments are applied. Enforces the
+   * same invariants as the constructor: {@code SINGLE} implies {@code maxSelect == 1}, {@code
+   * minSelect >= 0}, {@code maxSelect >= minSelect}, and a required group must have {@code minSelect
+   * >= 1}.
+   *
+   * @param newName new name, or {@code null} for no change
+   * @param newSelectionType {@code SINGLE}, {@code MULTI}, or {@code null} for no change
+   * @param newRequired new required flag, or {@code null} for no change
+   * @param newMinSelect new minimum selections, or {@code null} for no change
+   * @param newMaxSelect new maximum selections, or {@code null} for no change
+   * @param newDisplayOrder new display order, or {@code null} for no change
+   */
+  public void update(
+      String newName,
+      String newSelectionType,
+      Boolean newRequired,
+      Integer newMinSelect,
+      Integer newMaxSelect,
+      Integer newDisplayOrder) {
+    if (newName != null) {
+      this.name = newName;
+    }
+    if (newSelectionType != null) {
+      if (!"SINGLE".equals(newSelectionType) && !"MULTI".equals(newSelectionType)) {
+        throw new IllegalArgumentException(
+            "selectionType must be SINGLE or MULTI, got: " + newSelectionType);
+      }
+      this.selectionType = newSelectionType;
+    }
+    if (newRequired != null) {
+      this.required = newRequired;
+    }
+    if (newMinSelect != null) {
+      if (newMinSelect < 0) {
+        throw new IllegalArgumentException("minSelect must be >= 0, got: " + newMinSelect);
+      }
+      this.minSelect = newMinSelect;
+    }
+    if (newMaxSelect != null) {
+      if (newMaxSelect < 1) {
+        throw new IllegalArgumentException("maxSelect must be >= 1, got: " + newMaxSelect);
+      }
+      this.maxSelect = newMaxSelect;
+    }
+    // Validate combined state after applying patches.
+    if (this.maxSelect < this.minSelect) {
+      throw new IllegalArgumentException(
+          "maxSelect ("
+              + this.maxSelect
+              + ") must be >= minSelect ("
+              + this.minSelect
+              + ")");
+    }
+    if ("SINGLE".equals(this.selectionType) && this.maxSelect != 1) {
+      throw new IllegalArgumentException(
+          "SINGLE selectionType requires maxSelect == 1, got: " + this.maxSelect);
+    }
+    if (newDisplayOrder != null) {
+      this.displayOrder = newDisplayOrder;
+    }
+  }
 }

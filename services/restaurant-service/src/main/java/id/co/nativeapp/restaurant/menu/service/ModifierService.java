@@ -4,6 +4,8 @@ import id.co.nativeapp.restaurant.menu.dto.CreateModifierGroupRequest;
 import id.co.nativeapp.restaurant.menu.dto.CreateModifierOptionRequest;
 import id.co.nativeapp.restaurant.menu.dto.ModifierGroupResponse;
 import id.co.nativeapp.restaurant.menu.dto.ModifierOptionResponse;
+import id.co.nativeapp.restaurant.menu.dto.UpdateModifierGroupRequest;
+import id.co.nativeapp.restaurant.menu.dto.UpdateModifierOptionRequest;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
 import java.util.UUID;
@@ -72,5 +74,29 @@ public class ModifierService {
   public void markItemAvailable(UUID menuItemId) {
     TenantContext.require();
     writer.markItemAvailable(menuItemId);
+  }
+
+  /** Applies a partial update to a modifier group. */
+  public ModifierGroupResponse updateGroup(UUID groupId, UpdateModifierGroupRequest request) {
+    TenantContext.require();
+    return writer.updateGroup(groupId, request);
+  }
+
+  /** Hard-deletes a modifier group and all its options. */
+  public void deleteGroup(UUID groupId) {
+    TenantContext.require();
+    writer.deleteGroup(groupId);
+  }
+
+  /** Applies a partial update to a modifier option. */
+  public ModifierOptionResponse updateOption(UUID optionId, UpdateModifierOptionRequest request) {
+    TenantContext.require();
+    return writer.updateOption(optionId, request);
+  }
+
+  /** Hard-deletes a modifier option. */
+  public void deleteOption(UUID optionId) {
+    TenantContext.require();
+    writer.deleteOption(optionId);
   }
 }
