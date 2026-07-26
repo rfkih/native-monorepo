@@ -20,7 +20,7 @@ import { Field, TextInput } from '@/components/ui/Field'
 import { ChoiceCards } from '@/components/ui/ChoiceCards'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
-import { Wordmark } from '@/components/Wordmark'
+import { BrandMark } from '@/components/Wordmark'
 import { cn } from '@/lib/cn'
 import { AUTH_MODE } from '@/lib/config'
 import { useAuth } from '@/lib/authContext'
@@ -75,44 +75,93 @@ interface FormErrors {
   terms?: string
 }
 
-// ── Stepper ───────────────────────────────────────────────────────────────────
+// ── Step progress (design 5a) — a mono "Step n of N" label + segment bar ──────
 
-function Stepper({ steps, current }: { steps: string[]; current: number }) {
+function StepProgress({
+  current,
+  total,
+  label,
+  stepName,
+}: {
+  current: number
+  total: number
+  label: string
+  stepName: string
+}) {
   return (
-    <ol className="flex items-center justify-center gap-0">
-      {steps.map((label, i) => {
-        const state = i < current ? 'done' : i === current ? 'active' : 'todo'
-        return (
-          <li
-            key={label}
-            className="flex items-center"
-            aria-current={state === 'active' ? 'step' : undefined}
-          >
-            <span className="flex items-center gap-2">
-              <span
-                className={cn(
-                  'tnum grid size-7 place-items-center rounded-full text-[13px] font-bold',
-                  state === 'done' || state === 'active'
-                    ? 'bg-brand-500 text-white'
-                    : 'bg-ink-50 text-ink-3',
-                )}
-              >
-                {state === 'done' ? <Check className="size-3.5" /> : i + 1}
+    <div aria-label={`${label} · ${stepName}`} aria-current="step">
+      <div className="flex items-center gap-3">
+        <span className="font-mono text-xs font-semibold text-ink-3">{label}</span>
+        <span className="flex flex-1 gap-[5px]" aria-hidden>
+          {Array.from({ length: total }, (_, i) => (
+            <span
+              key={i}
+              className={cn(
+                'h-1 flex-1 rounded-full transition-colors',
+                i <= current ? 'bg-emerald' : 'bg-ink-100',
+              )}
+            />
+          ))}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+// ── Brand panel (design 5a) — one cyan surface carries all the brand weight ───
+
+function BrandPanel() {
+  const { t } = useTranslation()
+  const proofs = [t('signup.proof1'), t('signup.proof2'), t('signup.proof3')]
+  return (
+    <aside className="relative hidden w-[512px] shrink-0 flex-col overflow-hidden bg-brand-700 p-12 lg:flex">
+      {/* Soft background shapes */}
+      <div
+        aria-hidden
+        className="absolute -top-40 -right-56 size-[560px] rounded-full bg-white/[0.055]"
+      />
+      <div
+        aria-hidden
+        className="absolute -bottom-32 -left-36 size-[360px] rounded-full bg-white/[0.04]"
+      />
+
+      {/* Mark — on dark the bright end takes over and the glyph goes dark */}
+      <div className="relative flex items-center gap-[11px]">
+        <span className="grid size-9 place-items-center rounded-xl bg-brand-300">
+          <BrandMark size={20} stroke="var(--color-brand-900, #04303a)" strokeWidth={2.6} />
+        </span>
+        <span className="font-display text-lg font-extrabold tracking-[-0.02em] text-white">
+          {t('app.name')}
+        </span>
+      </div>
+
+      <div className="flex-1" />
+
+      <div className="relative">
+        <h1 className="max-w-[14ch] font-display text-[40px] font-extrabold leading-[1.1] tracking-[-0.03em] text-white [text-wrap:pretty]">
+          {t('signup.heroTitle')}
+        </h1>
+        <p className="mt-[18px] max-w-[38ch] text-[17px] leading-relaxed text-white/[0.78] [text-wrap:pretty]">
+          {t('signup.heroBody')}
+        </p>
+        <ul className="mt-9 flex flex-col gap-3.5">
+          {proofs.map((proof) => (
+            <li key={proof} className="flex items-start gap-3">
+              <span className="mt-px grid size-[22px] shrink-0 place-items-center rounded-full bg-white/[0.16]">
+                <Check className="size-[13px] text-brand-200" strokeWidth={3} aria-hidden />
               </span>
-              <span
-                className={cn(
-                  'hidden text-[12.5px] font-semibold sm:block',
-                  state === 'active' ? 'text-ink' : 'text-ink-3',
-                )}
-              >
-                {label}
-              </span>
-            </span>
-            {i < steps.length - 1 ? <span className="mx-3 h-px w-5 bg-line-strong sm:w-8" /> : null}
-          </li>
-        )
-      })}
-    </ol>
+              <span className="text-[15px] leading-normal text-white/90">{proof}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="flex-1" />
+
+      <p className="relative border-t border-white/[0.16] pt-7 text-[13px] leading-relaxed text-white/[0.65]">
+        {t('signup.heroFootnote')}
+      </p>
+    </aside>
   )
 }
 
@@ -198,8 +247,9 @@ function SuccessPanel({
   const { t } = useTranslation()
   return (
     <div className="reveal mx-auto max-w-[540px]">
-      <Card className="rounded-[24px] p-10 text-center">
-        <div className="mx-auto grid size-16 place-items-center rounded-full bg-brand-50 text-brand-600">
+      <Card className="rounded-[28px] p-10 text-center">
+        {/* Green means done — the one non-profit place it is allowed */}
+        <div className="mx-auto grid size-16 place-items-center rounded-full bg-tint-profit text-profit">
           <Check className="size-7" />
         </div>
         <h2 className="mt-5 font-display text-[26px] font-bold tracking-[-0.02em] text-ink">
@@ -422,41 +472,61 @@ export function Signup() {
     )
   }
 
-  // ── Form ───────────────────────────────────────────────────────────────────
+  // ── Form — design 5a split canvas: the cyan does the persuading, the form stays quiet ──
 
   return (
-    <div className="flex min-h-screen flex-col bg-canvas">
-      {/* Top bar */}
-      <header className="flex h-14 items-center border-b border-line px-6">
-        <Wordmark />
-        <span className="ml-auto text-sm text-ink-3">
-          {t('signup.alreadyHaveAccount')}{' '}
+    <div className="flex min-h-screen bg-canvas">
+      <BrandPanel />
+
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
+        {/* Phone: the panel folds into a short cyan band that keeps the mark and headline */}
+        <div className="relative overflow-hidden bg-brand-700 px-6 pb-7 pt-5 lg:hidden">
+          <div
+            aria-hidden
+            className="absolute -top-28 -right-36 size-80 rounded-full bg-white/[0.055]"
+          />
+          <div className="relative flex items-center gap-2.5">
+            <span className="grid size-8 place-items-center rounded-xl bg-brand-300">
+              <BrandMark size={18} stroke="var(--color-brand-900, #04303a)" strokeWidth={2.6} />
+            </span>
+            <span className="font-display text-[17px] font-extrabold tracking-[-0.02em] text-white">
+              {t('app.name')}
+            </span>
+          </div>
+          <h1 className="relative mt-5 max-w-[15ch] font-display text-[26px] font-extrabold leading-[1.15] tracking-[-0.025em] text-white [text-wrap:pretty]">
+            {t('signup.heroTitle')}
+          </h1>
+        </div>
+
+        {/* Sign-in escape hatch */}
+        <header className="flex h-16 shrink-0 items-center justify-end gap-2 px-6 lg:px-12">
+          <span className="text-sm text-ink-3">{t('signup.alreadyHaveAccount')}</span>
           <Link
             to="/"
-            className="font-semibold text-brand-600 hover:underline focus-visible:outline-2 focus-visible:outline-brand-500"
+            className="text-sm font-bold text-emerald-2 hover:underline focus-visible:outline-2 focus-visible:outline-emerald"
           >
             {t('signup.signIn')}
           </Link>
-        </span>
-      </header>
-
-      {/* Content */}
-      <main className="mx-auto w-full max-w-[680px] flex-1 px-4 pb-16 pt-10">
-        {/* Page header */}
-        <header className="mb-8 text-center">
-          <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">
-            {t('signup.title')}
-          </h1>
-          <p className="mx-auto mt-1.5 max-w-md text-sm leading-relaxed text-ink-3">
-            {t('signup.subtitle')}
-          </p>
         </header>
 
-        {/* Stepper */}
-        <Stepper steps={steps} current={step} />
+        {/* Step form — a real form so Enter advances (and submits on Review) */}
+        <main
+          className="mx-auto flex w-full max-w-[464px] flex-1 flex-col justify-center px-6 pb-14 lg:px-6"
+          key={step}
+        >
+          <StepProgress
+            current={step}
+            total={steps.length}
+            label={t('signup.stepOf', { n: step + 1, total: steps.length })}
+            stepName={steps[step]}
+          />
 
-        {/* Step card — a real form so Enter advances (and submits on Review) */}
-        <Card className="mt-6 rounded-[20px] p-7" key={step}>
+          <h2 className="mt-[22px] font-display text-[28px] font-extrabold tracking-[-0.02em] text-ink">
+            {t('signup.title')}
+          </h2>
+          <p className="mt-2 text-[15px] leading-relaxed text-ink-3">{t('signup.subtitle')}</p>
+
+          <div className="mt-7">
           <form
             noValidate
             onSubmit={(e) => {
@@ -632,7 +702,7 @@ export function Signup() {
                           setTermsAccepted(e.target.checked)
                           if (errors.terms) setErrors((p) => ({ ...p, terms: undefined }))
                         }}
-                        className="mt-0.5 size-4 shrink-0 accent-brand-500"
+                        className="mt-0.5 size-4 shrink-0 accent-emerald"
                       />
                       <span className="text-sm leading-relaxed text-ink">
                         {t('signup.termsLabel')}
@@ -696,28 +766,28 @@ export function Signup() {
               )}
             </div>
 
-            {/* Footer navigation */}
-            <div className="mt-6 flex items-center gap-2.5">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setErrors({})
-                  setStep((s) => Math.max(0, s - 1))
-                }}
-                disabled={step === 0 || mutation.isPending}
-                className={cn(step === 0 && 'invisible')}
-                aria-hidden={step === 0}
-              >
-                <ArrowLeft className="size-4" /> {t('common.back')}
-              </Button>
-              <span className="flex-1" />
+            {/* Footer navigation — one full-width primary leads (design 5a) */}
+            <div className="mt-[26px] flex items-center gap-2.5">
+              {step > 0 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="xl"
+                  onClick={() => {
+                    setErrors({})
+                    setStep((s) => Math.max(0, s - 1))
+                  }}
+                  disabled={mutation.isPending}
+                >
+                  <ArrowLeft className="size-4" /> {t('common.back')}
+                </Button>
+              ) : null}
               {step < STEP_REVIEW ? (
-                <Button type="submit">
-                  {t('common.continue')} <ArrowRight className="size-4" />
+                <Button type="submit" size="xl" className="flex-1">
+                  {t('common.continue')} <ArrowRight className="size-[17px]" />
                 </Button>
               ) : (
-                <Button type="submit" disabled={mutation.isPending}>
+                <Button type="submit" size="xl" className="flex-1" disabled={mutation.isPending}>
                   {mutation.isPending ? (
                     <>
                       <Spinner /> {t('signup.creating')}
@@ -731,8 +801,9 @@ export function Signup() {
               )}
             </div>
           </form>
-        </Card>
-      </main>
+          </div>
+        </main>
+      </div>
     </div>
   )
 }

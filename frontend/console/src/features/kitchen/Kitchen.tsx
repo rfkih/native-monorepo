@@ -111,7 +111,7 @@ function KitchenInner({ session }: { session: CompanySession }) {
 
           {/* Identity */}
           <div className="flex min-w-0 flex-1 items-center gap-2.5">
-            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-sm">
+            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-800 text-white shadow-sm">
               <ChefHat className="size-[18px]" />
             </span>
             <div className="min-w-0">
@@ -136,7 +136,7 @@ function KitchenInner({ session }: { session: CompanySession }) {
 
           {/* Active ticket count badge */}
           {activeTickets.length > 0 ? (
-            <div className="flex items-center gap-1.5 rounded-full bg-brand-500 px-3 py-1 text-xs font-bold text-white shadow-sm">
+            <div className="flex items-center gap-1.5 rounded-full bg-emerald px-3 py-1 text-xs font-bold text-on-emerald shadow-sm">
               <ChefHat className="size-3.5" aria-hidden="true" />
               {t('kitchen.activeCount', { count: activeTickets.length })}
             </div>
@@ -287,9 +287,9 @@ function TicketCard({ bill, tables, session, onBump }: TicketCardProps) {
           onClick={onBump}
           className={cn(
             'flex w-full items-center justify-center gap-2 rounded-xl py-3 text-base font-bold',
-            'bg-brand-500 text-white shadow-sm',
-            'transition-all hover:bg-brand-600 active:scale-[0.98]',
-            'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700',
+            'bg-emerald text-on-emerald shadow-sm',
+            'transition-all hover:bg-emerald-2 active:scale-[0.98]',
+            'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
             'motion-reduce:transition-none',
           )}
           aria-label={t('kitchen.readyAriaLabel', { label: tableLabel })}
@@ -335,7 +335,7 @@ function NoCompany() {
         <p className="mt-2 text-sm text-ink-3">{t('kitchen.noCompanyHint')}</p>
         <Link
           to="/onboarding"
-          className="mt-6 inline-block rounded-xl bg-brand-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-600"
+          className="mt-6 inline-block rounded-xl bg-emerald px-5 py-2.5 text-sm font-bold text-on-emerald shadow-sm transition-colors hover:bg-emerald-2"
         >
           {t('nav.onboarding')}
         </Link>

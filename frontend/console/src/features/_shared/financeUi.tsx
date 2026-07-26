@@ -10,8 +10,6 @@ import { formatPeriod } from '@/lib/period'
  * shared chart palette. One source so the two surfaces can't drift.
  */
 
-export const EMERALD = '#16b364'
-export const ROSE = '#e5484d'
 
 /** Month stepper (prev/next around a localized YYYY-MM label). */
 export function PeriodNav({
@@ -73,7 +71,7 @@ export function KpiTile({
   emphatic?: boolean
 }) {
   return (
-    <Card className={cn('p-5', emphatic && 'outline outline-2 -outline-offset-2 outline-brand-200')}>
+    <Card className={cn('p-5', emphatic && 'outline outline-2 -outline-offset-2 outline-brand-100')}>
       <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">{label}</div>
       {loading ? (
         <div className="mt-3 h-7 w-28 animate-pulse rounded bg-ink-100" />

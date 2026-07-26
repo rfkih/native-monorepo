@@ -8,26 +8,13 @@ import { Segmented } from '@/components/ui/Segmented'
 import { useSession } from '@/lib/session'
 import { cn } from '@/lib/cn'
 import { localeOf } from '@/i18n'
-import { formatMoney } from '@/lib/money'
+import { formatMoney, formatPercent } from '@/lib/money'
 import { currentPeriod, formatPeriod, shiftPeriod } from '@/lib/period'
 import { EmptyState, PeriodNav } from '@/features/_shared/financeUi'
 import { usePnl, usePnlTrend, type PnlResponse } from './api'
 
 /** How many trailing months the sparkline + revenue-delta look back over. */
 const TREND_MONTHS = 8
-
-/**
- * Illustrative per-outlet split. The consolidated totals fed in are REAL (from the P&L); only the
- * allocation across outlets is illustrative — rendered strictly behind the "Illustrative split"
- * badge so it can never be mistaken for verified per-outlet figures. Revenue/expense shares each
- * sum to 1.0; the per-outlet margins fall out of the (real) totals × these shares.
- */
-const ILLUSTRATIVE_OUTLET_SPLIT = [
-  { revShare: 0.36, expShare: 0.34 },
-  { revShare: 0.27, expShare: 0.27 },
-  { revShare: 0.21, expShare: 0.22 },
-  { revShare: 0.16, expShare: 0.17 },
-]
 
 export function Dashboard() {
   const { t, i18n } = useTranslation()
@@ -92,27 +79,6 @@ export function Dashboard() {
     if (!p.loaded) return acc
     return acc == null || p.fig.net > acc.net ? { period: p.period, net: p.fig.net } : acc
   }, null)
-
-  // Real totals × illustrative split (badged).
-  const maxOutletRev = Math.max(1, ...ILLUSTRATIVE_OUTLET_SPLIT.map((s) => figures.revenue * s.revShare))
-  const maxOutletVal = Math.max(
-    1,
-    ...ILLUSTRATIVE_OUTLET_SPLIT.flatMap((s) => [figures.revenue * s.revShare, figures.expense * s.expShare]),
-  )
-  const outlets = ILLUSTRATIVE_OUTLET_SPLIT.map((s, i) => {
-    const rev = Math.round(figures.revenue * s.revShare)
-    const exp = Math.round(figures.expense * s.expShare)
-    const net = rev - exp
-    return {
-      n: i + 1,
-      rev,
-      exp,
-      margin: rev > 0 ? net / rev : 0,
-      contribW: `${(rev / maxOutletRev) * 100}%`,
-      revH: `${(rev / maxOutletVal) * 100}%`,
-      expH: `${(exp / maxOutletVal) * 100}%`,
-    }
-  })
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -196,8 +162,8 @@ export function Dashboard() {
               ) : (
                 <div
                   className={cn(
-                    'tnum my-4 font-display text-[clamp(2.4rem,6vw,3.4rem)] font-extrabold leading-none tracking-[-0.03em]',
-                    profit ? 'text-brand-700' : 'text-loss',
+                    'tnum my-4 font-mono text-[clamp(2.2rem,5.4vw,3rem)] font-bold leading-none tracking-[-0.03em]',
+                    profit ? 'text-profit-ink' : 'text-loss',
                   )}
                 >
                   {formatMoney(figures.net, displayCurrency, locale)}
@@ -227,7 +193,7 @@ export function Dashboard() {
                 <Stat
                   label={t('dashboard.margin')}
                   value={marginLabel}
-                  valueClass="text-brand-700"
+                  valueClass="text-profit-ink"
                   loading={query.isLoading}
                 />
               </div>
@@ -252,44 +218,26 @@ export function Dashboard() {
 
           {/* Outlet contribution + at a glance / ready-to-close */}
           <div className="grid gap-[18px] lg:grid-cols-[1.5fr_1fr]">
-            {/* Outlet contribution — real totals, illustrative split */}
+            {/* Outlet contribution — only real POSTED figures may appear here (audit finding 15).
+                There is no per-outlet ledger feed yet, so the panel shows an honest empty state
+                instead of inventing a breakdown. */}
             <Card className="p-6">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <h2 className="font-display text-lg font-semibold text-ink">
                   {t('dashboard.outletContribution')}
                 </h2>
-                <Badge tone="amber">
-                  <TriangleAlert className="size-3" /> {t('dashboard.illustrativeSplit')}
-                </Badge>
+                <span className="text-[13px] text-ink-3">{t('dashboard.postedToLedger')}</span>
               </div>
-              {outlets.map((o) => (
-                <div key={o.n} className="border-b border-ink-50 py-2.5 last:border-0">
-                  <div className="mb-1.5 flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div className="grid size-[34px] shrink-0 place-items-center rounded-[9px] bg-brand-50 font-mono text-[11px] font-bold text-brand-700">
-                        O{o.n}
-                      </div>
-                      <div className="text-sm font-semibold text-ink">
-                        {t('dashboard.illustrativeOutlet', { n: o.n })}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="tnum font-mono text-sm font-semibold text-ink">
-                        {formatMoney(o.rev, displayCurrency, locale)}
-                      </div>
-                      <div className="text-[11px] font-semibold text-brand-700">
-                        {formatPercent(o.margin, locale)} {t('dashboard.marginShort')}
-                      </div>
-                    </div>
+              <div className="grid min-h-[220px] place-items-center rounded-xl border border-dashed border-line-strong px-6 py-10 text-center">
+                <div>
+                  <div className="text-sm font-semibold text-ink-2">
+                    {t('dashboard.noOutletData')}
                   </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-ink-50">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-brand-500 to-brand-300"
-                      style={{ width: o.contribW }}
-                    />
-                  </div>
+                  <p className="mx-auto mt-1.5 max-w-[36ch] text-[13px] leading-relaxed text-ink-3">
+                    {t('dashboard.noOutletDataHint')}
+                  </p>
                 </div>
-              ))}
+              </div>
             </Card>
 
             <div className="flex flex-col gap-[18px]">
@@ -303,13 +251,13 @@ export function Dashboard() {
                     label={t('dashboard.margin')}
                     value={marginLabel}
                     sub={profit ? t('dashboard.healthy') : t('dashboard.negative')}
-                    valueClass="text-brand-700"
+                    valueClass="text-profit-ink"
                   />
                   <Glance
                     label={t('dashboard.netTrend')}
                     value={prev ? signedPercent(netTrend, locale) : '—'}
                     sub={t('dashboard.months', { count: TREND_MONTHS })}
-                    valueClass={netTrend >= 0 ? 'text-brand-700' : 'text-loss'}
+                    valueClass={netTrend >= 0 ? 'text-profit-ink' : 'text-loss'}
                   />
                   <Glance
                     label={t('dashboard.bestMonth')}
@@ -320,23 +268,25 @@ export function Dashboard() {
                     label={t('dashboard.netProfit')}
                     value={profit ? t('dashboard.positive') : t('dashboard.negative')}
                     sub={formatPeriod(period, locale)}
-                    valueClass={profit ? 'text-brand-700' : 'text-loss'}
+                    valueClass={profit ? 'text-profit-ink' : 'text-loss'}
                   />
                 </div>
               </Card>
 
-              {/* Ready to close CTA */}
-              <Card className="border-brand-100 bg-gradient-to-br from-surface to-brand-50 p-6">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-500 px-2.5 py-1 text-[11px] font-semibold text-white">
+              {/* Ready to close — flat cyan tint, one leading button (no gradient, no pill). */}
+              <Card className="border-emerald-line bg-emerald-tint p-6 shadow-none">
+                <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-emerald-2">
                   {t('dashboard.readyToClose')}
-                </span>
-                <div className="mt-3 font-display text-lg font-semibold text-ink">
+                </div>
+                <div className="mt-2 font-display text-lg font-bold text-ink">
                   {formatPeriod(period, locale)}
                 </div>
-                <p className="mt-1 text-[13px] text-ink-3">{t('dashboard.readyToCloseBody')}</p>
+                <p className="mt-1.5 text-[13px] leading-relaxed text-ink-2">
+                  {t('dashboard.readyToCloseBody')}
+                </p>
                 <Link
                   to="/close"
-                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-600"
+                  className="mt-[18px] flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald text-sm font-bold text-on-emerald transition-colors hover:bg-emerald-2"
                 >
                   {t('dashboard.reviewClose')}
                   <ArrowRight className="size-4" />
@@ -353,7 +303,7 @@ export function Dashboard() {
               label={t('dashboard.revenue')}
               value={formatMoney(figures.revenue, displayCurrency, locale)}
               note={prev ? `${signedPercent(revDelta, locale)} ${t('dashboard.vsPrev', { month: prevMonthLabel })}` : undefined}
-              noteClass="text-brand-700"
+              noteClass={revDelta >= 0 ? 'text-profit-ink' : 'text-loss'}
               loading={query.isLoading}
             />
             <Kpi
@@ -365,59 +315,39 @@ export function Dashboard() {
             <Kpi
               label={t('dashboard.netProfit')}
               value={formatMoney(figures.net, displayCurrency, locale)}
-              valueClass={profit ? 'text-brand-700' : 'text-loss'}
+              valueClass={profit ? 'text-profit-ink' : 'text-loss'}
               note={profit ? t('dashboard.positive') : t('dashboard.negative')}
-              noteClass={profit ? 'text-brand-700' : 'text-loss'}
+              noteClass={profit ? 'text-profit-ink' : 'text-loss'}
               emphatic
               loading={query.isLoading}
             />
             <Kpi
               label={t('dashboard.margin')}
               value={marginLabel}
-              valueClass="text-brand-700"
+              valueClass="text-profit-ink"
               note={profit ? t('dashboard.healthy') : t('dashboard.negative')}
               loading={query.isLoading}
             />
           </div>
 
           <div className="grid gap-[18px] lg:grid-cols-[1.4fr_1fr]">
-            {/* Revenue vs expense per outlet — real totals, illustrative split */}
+            {/* Per-outlet revenue vs expense — real posted figures only (audit finding 15). */}
             <Card className="p-6">
-              <div className="mb-1 flex items-center justify-between gap-3">
+              <div className="mb-4 flex items-center justify-between gap-3">
                 <h2 className="font-display text-lg font-semibold text-ink">
                   {t('dashboard.revenueVsExpense')}
                 </h2>
-                <Badge tone="amber">
-                  <TriangleAlert className="size-3" /> {t('dashboard.illustrativeSplit')}
-                </Badge>
+                <span className="text-[13px] text-ink-3">{t('dashboard.postedToLedger')}</span>
               </div>
-              <div className="mb-4 flex gap-4 text-xs text-ink-3">
-                <Legend color="var(--color-brand-500)" label={t('dashboard.revenue')} />
-                <Legend color="var(--color-loss)" label={t('dashboard.expense')} />
-              </div>
-              <div className="flex h-[230px] items-end justify-around gap-4 pt-2">
-                {outlets.map((o) => (
-                  <div
-                    key={o.n}
-                    className="flex h-full flex-1 flex-col items-center justify-end gap-2.5"
-                  >
-                    <div className="flex h-full w-full items-end justify-center gap-1.5">
-                      <div
-                        title={t('dashboard.revenue')}
-                        className="w-6 rounded-t-md bg-gradient-to-t from-brand-500 to-brand-400"
-                        style={{ height: o.revH }}
-                      />
-                      <div
-                        title={t('dashboard.expense')}
-                        className="w-6 rounded-t-md bg-loss/85"
-                        style={{ height: o.expH }}
-                      />
-                    </div>
-                    <div className="text-center text-[11.5px] font-semibold text-ink-2">
-                      {t('dashboard.illustrativeOutlet', { n: o.n })}
-                    </div>
+              <div className="grid min-h-[230px] place-items-center rounded-xl border border-dashed border-line-strong px-6 py-10 text-center">
+                <div>
+                  <div className="text-sm font-semibold text-ink-2">
+                    {t('dashboard.noOutletData')}
                   </div>
-                ))}
+                  <p className="mx-auto mt-1.5 max-w-[36ch] text-[13px] leading-relaxed text-ink-3">
+                    {t('dashboard.noOutletDataHint')}
+                  </p>
+                </div>
               </div>
             </Card>
 
@@ -433,7 +363,7 @@ export function Dashboard() {
                   {
                     label: t('dashboard.netProfit'),
                     share: Math.max(0, 1 - expenseRatio),
-                    color: 'var(--color-brand-500)',
+                    color: 'var(--color-profit)',
                   },
                 ]}
                 locale={locale}
@@ -530,20 +460,11 @@ function DeltaPill({ value, locale }: { value: number; locale: string }) {
   return (
     <span
       className={cn(
-        'tnum inline-flex items-center gap-1 rounded-full px-3 py-1.5 font-mono text-[13px] font-semibold',
-        up ? 'bg-tint-profit text-brand-700' : 'bg-tint-loss text-loss',
+        'tnum inline-flex items-center gap-1 rounded-full px-3 py-1.5 font-mono text-[13px] font-bold',
+        up ? 'bg-tint-profit text-profit-ink' : 'bg-tint-loss text-loss',
       )}
     >
       {up ? '▲' : '▼'} {formatPercent(Math.abs(value), locale)}
-    </span>
-  )
-}
-
-function Legend({ color, label }: { color: string; label: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className="size-2.5 rounded-[3px]" style={{ backgroundColor: color }} aria-hidden />
-      {label}
     </span>
   )
 }
@@ -582,10 +503,12 @@ function AllocationBar({
 function Sparkline({ spark }: { spark: SparkPath }) {
   return (
     <svg viewBox="0 0 560 200" preserveAspectRatio="none" className="block h-[200px] w-full">
+      {/* Charts are brand-neutral cyan (design 2a) — the net FIGURE is green, the chart is not.
+          Tokens, not literals, so dark mode follows (audit finding 03). */}
       <defs>
         <linearGradient id="spark-fill" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0" stopColor="#16B364" stopOpacity="0.26" />
-          <stop offset="1" stopColor="#16B364" stopOpacity="0" />
+          <stop offset="0" stopColor="var(--color-brand-500)" stopOpacity="0.2" />
+          <stop offset="1" stopColor="var(--color-brand-500)" stopOpacity="0" />
         </linearGradient>
       </defs>
       {spark.area ? <path d={spark.area} fill="url(#spark-fill)" /> : null}
@@ -593,13 +516,20 @@ function Sparkline({ spark }: { spark: SparkPath }) {
         <path
           d={spark.line}
           fill="none"
-          stroke="#16B364"
-          strokeWidth="2.6"
+          stroke="var(--color-brand-500)"
+          strokeWidth="2.8"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
       ) : null}
-      <circle cx={spark.lx} cy={spark.ly} r="5.5" fill="var(--color-surface)" stroke="#16B364" strokeWidth="2.5" />
+      <circle
+        cx={spark.lx}
+        cy={spark.ly}
+        r="5.5"
+        fill="var(--color-surface)"
+        stroke="var(--color-brand-500)"
+        strokeWidth="2.5"
+      />
     </svg>
   )
 }
@@ -620,14 +550,6 @@ function readFigures(data: PnlResponse | null, converted: boolean): Figures {
     }
   }
   return { revenue: data.revenueMinor, expense: data.expenseMinor, net: data.netMinor }
-}
-
-function formatPercent(value: number, locale: string): string {
-  return new Intl.NumberFormat(locale, {
-    style: 'percent',
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
-  }).format(value)
 }
 
 function signedPercent(value: number, locale: string): string {

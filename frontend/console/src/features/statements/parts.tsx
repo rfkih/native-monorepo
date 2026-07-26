@@ -1,49 +1,53 @@
-import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, XAxis } from 'recharts'
-import { formatAmount, minorToMajor } from '@/lib/money'
+// The month stepper, money tile, and empty panel are shared with the Dashboard — one source so
+// the finance surfaces can't drift. Re-exported here so the statements pages import everything
+// statement-related from a single module.
+export { KpiTile, PeriodNav, EmptyState as StatementEmptyState } from '@/features/_shared/financeUi'
 
-// The month stepper, money tile, empty panel, and base palette are shared with the Dashboard — one
-// source so the finance surfaces can't drift. Re-exported here so the statements pages import
-// everything statement-related from a single module.
-export { EMERALD, ROSE, KpiTile, PeriodNav, EmptyState as StatementEmptyState } from '@/features/_shared/financeUi'
+import { Card } from '@/components/ui/Card'
 
-// Balance-sheet composition palette (assets / liabilities / equity) — statement-specific.
-export const SLATE = '#3f5a73'
-export const GOLD = '#8a6d2f'
-
-/** A grouped bar of headline figures (e.g. revenue vs expense; assets / liabilities / equity). */
-export function SummaryBars({
-  data,
-  currency,
+/** The 2b/2c statement summary card: color chip + uppercase label + mono figure (+ optional note). */
+export function SummaryCard({
+  chipClass,
+  label,
+  value,
+  valueClass,
+  note,
+  noteClass,
+  emphatic,
 }: {
-  data: { label: string; minor: number; fill: string }[]
-  currency: string
+  chipClass: string
+  label: string
+  value: string
+  valueClass?: string
+  note?: string
+  noteClass?: string
+  emphatic?: boolean
 }) {
-  const chartData = data.map((d) => ({
-    label: d.label,
-    major: minorToMajor(d.minor, currency),
-    fill: d.fill,
-  }))
   return (
-    <ResponsiveContainer width="100%" height="100%">
-      <BarChart
-        data={chartData}
-        margin={{ top: 8, right: 8, left: 8, bottom: 0 }}
-        barCategoryGap="30%"
+    <Card
+      className={
+        emphatic
+          ? 'border-transparent p-5 shadow-md outline outline-2 -outline-offset-2 outline-brand-100'
+          : 'p-5'
+      }
+    >
+      <div className="flex items-center gap-2">
+        <span className={`size-2.5 rounded-[3px] ${chipClass}`} aria-hidden />
+        <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+          {label}
+        </span>
+      </div>
+      <div
+        className={`tnum mt-2.5 font-mono text-[26px] leading-tight ${
+          emphatic ? 'font-bold' : 'font-semibold'
+        } ${valueClass ?? 'text-ink'}`}
       >
-        <CartesianGrid vertical={false} stroke="#e6dfd1" />
-        <XAxis
-          dataKey="label"
-          tickLine={false}
-          axisLine={{ stroke: '#d2c9b6' }}
-          tick={{ fill: '#847c6e', fontSize: 12 }}
-        />
-        <Bar dataKey="major" radius={[6, 6, 0, 0]} maxBarSize={120} isAnimationActive>
-          {chartData.map((entry) => (
-            <Cell key={entry.label} fill={entry.fill} />
-          ))}
-        </Bar>
-      </BarChart>
-    </ResponsiveContainer>
+        {value}
+      </div>
+      {note ? (
+        <div className={`mt-1.5 text-xs font-semibold ${noteClass ?? 'text-ink-3'}`}>{note}</div>
+      ) : null}
+    </Card>
   )
 }
 
@@ -64,6 +68,7 @@ export function LineSection({
   currency,
   locale,
   emptyLabel,
+  format,
 }: {
   heading: string
   lines: DisplayLine[]
@@ -72,39 +77,54 @@ export function LineSection({
   currency: string
   locale: string
   emptyLabel: string
+  format: (minor: number, currency: string, locale: string) => string
 }) {
   return (
     <div>
-      <div className="mb-1 text-[11px] font-medium uppercase tracking-wider text-ink-3">
+      <div className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
         {heading}
       </div>
-      <table className="w-full text-sm">
-        <tbody>
-          {lines.length === 0 ? (
-            <tr>
-              <td className="py-1.5 text-ink-3">{emptyLabel}</td>
-              <td />
-            </tr>
-          ) : (
-            lines.map((line) => (
-              <tr key={line.accountCode} className="border-b border-line/60">
-                <td className="py-1.5 text-ink-2">{line.label ?? line.accountCode}</td>
-                <td className="tnum py-1.5 text-right font-mono text-ink">
-                  {formatAmount(line.amountMinor, currency, locale)}
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-        <tfoot>
-          <tr className="border-t border-line-strong">
-            <td className="py-1.5 font-medium text-ink">{totalLabel}</td>
-            <td className="tnum py-1.5 text-right font-mono font-medium text-ink">
-              {formatAmount(totalMinor, currency, locale)}
-            </td>
-          </tr>
-        </tfoot>
-      </table>
+      {lines.length === 0 ? (
+        <div className="py-2 text-sm text-ink-3">{emptyLabel}</div>
+      ) : (
+        lines.map((line) => (
+          <div
+            key={line.accountCode}
+            className="flex items-center border-b border-ink-50 py-[9px] last:border-0"
+          >
+            <span className="w-24 shrink-0 font-mono text-xs text-ink-3">{line.accountCode}</span>
+            <span className="flex-1 truncate text-sm text-ink-2">
+              {line.label ?? line.accountCode}
+            </span>
+            <span className="tnum font-mono text-sm text-ink">
+              {format(line.amountMinor, currency, locale)}
+            </span>
+          </div>
+        ))
+      )}
+      <div className="mt-1 flex items-center border-t-[1.5px] border-line-strong pt-3">
+        <span className="flex-1 text-sm font-semibold text-ink">{totalLabel}</span>
+        <span className="tnum font-mono text-sm font-semibold text-ink">
+          {format(totalMinor, currency, locale)}
+        </span>
+      </div>
     </div>
   )
+}
+
+/**
+ * Client-side CSV download for a loaded statement — the export path the statements never had
+ * (audit finding 16). Quotes every cell; Excel/Sheets open it directly.
+ */
+export function downloadCsv(filename: string, rows: (string | number)[][]) {
+  const csv = rows
+    .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(','))
+    .join('\r\n')
+  const blob = new Blob([`﻿${csv}`], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
 }

@@ -189,8 +189,9 @@ function AreaChart() {
     <svg viewBox="0 0 320 96" className="h-24 w-full" preserveAspectRatio="none" aria-hidden>
       <defs>
         <linearGradient id="revfill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#16b364" stopOpacity="0.26" />
-          <stop offset="1" stopColor="#16b364" stopOpacity="0" />
+          {/* Charts are brand-neutral cyan — tokens, not literals (audit finding 03) */}
+          <stop offset="0" stopColor="var(--color-brand-500)" stopOpacity="0.22" />
+          <stop offset="1" stopColor="var(--color-brand-500)" stopOpacity="0" />
         </linearGradient>
       </defs>
       {/* faint gridlines */}
@@ -331,7 +332,7 @@ export function ConsolidationDiagram() {
       </div>
 
       {/* group node */}
-      <div className="relative mx-auto mt-[54px] w-[54%] rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-500 to-brand-700 p-3 text-center shadow-md">
+      <div className="relative mx-auto mt-[54px] w-[54%] rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-600 to-brand-800 p-3 text-center shadow-md">
         <div className="text-[11px] font-bold uppercase tracking-wide text-white/80">
           {t('landing.groupLabel')}
         </div>

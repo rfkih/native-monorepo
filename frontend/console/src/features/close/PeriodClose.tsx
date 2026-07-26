@@ -128,7 +128,7 @@ export function PeriodClose() {
       {/* Open period banner */}
       <Card className="bg-gradient-to-br from-surface to-brand-50 border-brand-100 flex flex-wrap items-center justify-between gap-4 rounded-[20px] border p-7">
         <div className="space-y-2">
-          <span className="inline-flex rounded-full bg-brand-500 px-2.5 py-1 text-[11px] font-semibold text-white">
+          <span className="inline-flex rounded-full bg-emerald px-2.5 py-1 text-[11px] font-bold text-on-emerald">
             {t('close.openPeriod')}
           </span>
           <div className="font-display text-[22px] font-bold text-ink">
@@ -143,8 +143,8 @@ export function PeriodClose() {
 
       {/* Result toast */}
       {lastResult ? (
-        <Card className="flex items-start gap-3 border-brand-100 bg-tint-profit p-4">
-          <Check className="mt-0.5 size-4 shrink-0 text-brand-700" />
+        <Card className="flex items-start gap-3 border-profit/25 bg-tint-profit p-4">
+          <Check className="mt-0.5 size-4 shrink-0 text-profit-ink" />
           <p className="text-sm text-ink">
             {lastResult.firstClose
               ? t('close.result.success', { period: formatPeriod(lastResult.period, locale) })
@@ -201,7 +201,7 @@ export function PeriodClose() {
                   <span className="font-semibold text-ink">
                     {formatPeriod(item.period, locale)}
                   </span>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-tint-profit px-2.5 py-0.5 text-xs font-semibold text-brand-700">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-tint-profit px-2.5 py-0.5 text-xs font-semibold text-profit-ink">
                     <Check className="size-3" aria-hidden />
                     {t('close.yes')}
                   </span>
@@ -218,7 +218,7 @@ export function PeriodClose() {
                 {/* Reconciled */}
                 <div>
                   {item.reconciled ? (
-                    <Badge tone="emerald">
+                    <Badge tone="profit">
                       <Check className="size-3" /> {t('close.yes')}
                     </Badge>
                   ) : (
@@ -229,7 +229,7 @@ export function PeriodClose() {
                 {/* First close */}
                 <div>
                   {item.firstClose ? (
-                    <Badge tone="emerald">
+                    <Badge tone="profit">
                       <Check className="size-3" /> {t('close.yes')}
                     </Badge>
                   ) : (

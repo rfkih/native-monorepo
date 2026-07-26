@@ -1,32 +1,23 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { TriangleAlert } from 'lucide-react'
+import { Download, Printer, TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { useSession } from '@/lib/session'
 import { localeOf } from '@/i18n'
-import { formatMoney, formatAmount } from '@/lib/money'
+import { formatMoney, formatAmount, formatPercent } from '@/lib/money'
 import { currentPeriod, shiftPeriod } from '@/lib/period'
 import { useIncomeStatement } from './api'
-import { PeriodNav, StatementEmptyState } from './parts'
+import { downloadCsv, LineSection, PeriodNav, StatementEmptyState, SummaryCard } from './parts'
 
 /**
- * Income Statement (Laba Rugi) — restyled to the Native design system.
- * Two-column layout: left = revenue/expense line table with net profit highlight;
- * right = expense composition stacked bar + legend.
- * All data hooks, queries, and i18n keys are preserved unchanged.
+ * Income Statement (Laba Rugi) — design 2b: the parchment palette retired.
+ * Summary cards, then a composition chart whose series carry meaning (cyan revenue,
+ * red expense, green net — green means profit only), then the account tables.
+ * All data hooks, queries, and existing i18n keys are preserved unchanged.
  */
-
-const COMPOSITION_COLORS = [
-  '#16b364',
-  '#2ebc72',
-  '#5fcb8b',
-  '#97deb1',
-  '#f5a623',
-  '#a8b0bc',
-]
-
 export function IncomeStatement() {
   const { t, i18n } = useTranslation()
   const { company } = useSession()
@@ -56,34 +47,56 @@ export function IncomeStatement() {
   const profit = net >= 0
   const showEmpty = !query.isLoading && !query.isError && data == null
 
-  // Derive expense composition shares from the expense line items the API returns
-  const expenseLines = data?.expenseLines ?? []
+  const totalRevenue = data?.totalRevenueMinor ?? 0
   const totalExpense = data?.totalExpenseMinor ?? 0
-  const compositionSegments = expenseLines.map((l, i) => ({
-    accountCode: l.accountCode,
-    amountMinor: l.netMinor,
-    color: COMPOSITION_COLORS[i % COMPOSITION_COLORS.length],
-    share: totalExpense > 0 ? l.netMinor / totalExpense : 0,
-  }))
+  const expenseRatio = totalRevenue > 0 ? totalExpense / totalRevenue : 0
+  const netRatio = totalRevenue > 0 ? Math.max(0, net) / totalRevenue : 0
+
+  const exportCsv = () => {
+    if (!data) return
+    downloadCsv(`income-statement-${period}.csv`, [
+      [t('statements.incomeTitle'), period, currency],
+      [],
+      [t('statements.revenue')],
+      ...data.revenueLines.map((l) => [l.accountCode, l.netMinor]),
+      [t('statements.totalRevenue'), data.totalRevenueMinor],
+      [],
+      [t('statements.expense')],
+      ...data.expenseLines.map((l) => [l.accountCode, l.netMinor]),
+      [t('statements.totalExpense'), data.totalExpenseMinor],
+      [],
+      [profit ? t('statements.netProfit') : t('statements.netLoss'), data.netMinor],
+    ])
+  }
 
   return (
-    <div className="flex flex-col gap-[18px]">
+    <div className="flex flex-col gap-5">
       {/* Page header */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">
+          <h1 className="font-display text-[28px] font-extrabold tracking-[-0.02em] text-ink">
             {t('statements.incomeTitle')}
           </h1>
-          <p className="mt-1.5 text-sm text-ink-3">{t('statements.incomeSubtitle')}</p>
+          <p className="mt-1.5 text-[15px] text-ink-3">{t('statements.incomeSubtitle')}</p>
         </div>
-        <PeriodNav
-          period={period}
-          locale={locale}
-          onPrev={() => setPeriod((p) => shiftPeriod(p, -1))}
-          onNext={() => setPeriod((p) => shiftPeriod(p, 1))}
-          prevLabel={t('statements.prevPeriod')}
-          nextLabel={t('statements.nextPeriod')}
-        />
+        <div className="flex flex-wrap items-center gap-2.5 print:hidden">
+          <PeriodNav
+            period={period}
+            locale={locale}
+            onPrev={() => setPeriod((p) => shiftPeriod(p, -1))}
+            onNext={() => setPeriod((p) => shiftPeriod(p, 1))}
+            prevLabel={t('statements.prevPeriod')}
+            nextLabel={t('statements.nextPeriod')}
+          />
+          <Button variant="outline" onClick={() => window.print()}>
+            <Printer className="size-[15px]" aria-hidden />
+            {t('statements.print')}
+          </Button>
+          <Button onClick={exportCsv} disabled={!data}>
+            <Download className="size-[15px]" aria-hidden />
+            {t('statements.export')}
+          </Button>
+        </div>
       </div>
 
       {/* Illustrative badge */}
@@ -95,165 +108,141 @@ export function IncomeStatement() {
         </div>
       ) : null}
 
-      {/* Error */}
+      {/* Error / empty / content */}
       {query.isError ? (
         <Card className="p-8 text-center text-sm text-loss">{t('statements.error')}</Card>
       ) : showEmpty ? (
         <StatementEmptyState title={t('statements.noData')} hint={t('statements.noDataHint')} />
+      ) : query.isLoading && !data ? (
+        <Card className="flex justify-center p-10 text-emerald">
+          <Spinner />
+        </Card>
       ) : (
-        <div className="grid gap-[18px] lg:grid-cols-[1.5fr_1fr]">
-          {/* LEFT — Revenue & Expense lines + Net profit highlight */}
-          <Card className="p-2 px-7 pb-6">
-            {/* Revenue section */}
-            <div className="mb-1 mt-5 text-[11px] font-bold uppercase tracking-[0.06em] text-brand-700">
-              {t('statements.revenue')}
-            </div>
+        <>
+          {/* Summary cards */}
+          <div className="grid gap-4 sm:grid-cols-3">
+            <SummaryCard
+              chipClass="bg-brand-500"
+              label={t('statements.revenue')}
+              value={formatMoney(totalRevenue, currency, locale)}
+            />
+            <SummaryCard
+              chipClass="bg-loss"
+              label={t('statements.expense')}
+              value={formatMoney(totalExpense, currency, locale)}
+              note={t('statements.ofRevenue', { pct: formatPercent(expenseRatio, locale) })}
+            />
+            <SummaryCard
+              chipClass="bg-profit"
+              label={profit ? t('statements.netProfit') : t('statements.netLoss')}
+              value={formatMoney(net, currency, locale)}
+              valueClass={profit ? 'text-profit-ink' : 'text-loss'}
+              note={
+                totalRevenue > 0
+                  ? t('statements.marginPct', {
+                      pct: formatPercent(net / totalRevenue, locale),
+                    })
+                  : undefined
+              }
+              noteClass={profit ? 'text-profit-ink' : 'text-loss'}
+              emphatic
+            />
+          </div>
 
-            {query.isLoading ? (
-              <div className="my-4 flex justify-center text-brand-500">
-                <Spinner />
-              </div>
-            ) : (
-              <>
-                {(data?.revenueLines ?? []).map((l) => (
-                  <div
-                    key={l.accountCode}
-                    className="flex justify-between border-b border-line py-2.5"
-                  >
-                    <span className="text-sm text-ink-2">{l.accountCode}</span>
-                    <span className="tnum font-mono text-sm text-ink">
-                      {formatAmount(l.netMinor, currency, locale)}
-                    </span>
-                  </div>
-                ))}
-
-                {/* Total revenue */}
-                <div className="flex justify-between border-b border-line-strong py-2.5">
-                  <span className="text-sm font-semibold text-ink">
-                    {t('statements.totalRevenue')}
-                  </span>
-                  <span className="tnum font-mono text-sm font-semibold text-ink">
-                    {formatAmount(data?.totalRevenueMinor ?? 0, currency, locale)}
-                  </span>
-                </div>
-              </>
-            )}
-
-            {/* Expense section */}
-            <div className="mb-1 mt-5 text-[11px] font-bold uppercase tracking-[0.06em] text-loss">
-              {t('statements.expense')}
-            </div>
-
-            {query.isLoading ? (
-              <div className="my-4 flex justify-center text-brand-500">
-                <Spinner />
-              </div>
-            ) : (
-              <>
-                {(data?.expenseLines ?? []).map((l) => (
-                  <div
-                    key={l.accountCode}
-                    className="flex justify-between border-b border-line py-2.5"
-                  >
-                    <span className="text-sm text-ink-2">{l.accountCode}</span>
-                    <span className="tnum font-mono text-sm text-ink">
-                      {formatAmount(l.netMinor, currency, locale)}
-                    </span>
-                  </div>
-                ))}
-
-                {/* Total expense */}
-                <div className="flex justify-between border-b border-line-strong py-2.5">
-                  <span className="text-sm font-semibold text-ink">
-                    {t('statements.totalExpense')}
-                  </span>
-                  <span className="tnum font-mono text-sm font-semibold text-ink">
-                    {formatAmount(data?.totalExpenseMinor ?? 0, currency, locale)}
-                  </span>
-                </div>
-              </>
-            )}
-
-            {/* Net profit / loss highlight box */}
-            <div
-              className={`mt-3.5 flex items-center justify-between rounded-[14px] px-4 py-4 ${
-                profit ? 'bg-brand-50' : 'bg-tint-loss'
-              }`}
-            >
-              <span className={`font-bold ${profit ? 'text-brand-800' : 'text-loss'}`}>
-                {profit ? t('statements.netProfit') : t('statements.netLoss')}
-              </span>
-              {query.isLoading ? (
-                <div className="h-7 w-32 animate-pulse rounded-lg bg-ink-100" />
-              ) : (
-                <span
-                  className={`tnum font-mono text-[22px] font-extrabold ${
-                    profit ? 'text-brand-700' : 'text-loss'
-                  }`}
-                >
-                  {formatMoney(net, currency, locale)}
-                </span>
-              )}
-            </div>
-          </Card>
-
-          {/* RIGHT — Expense composition */}
+          {/* Composition — gridlines are ink, the series carry the meaning */}
           <Card className="p-6">
-            <div className="mb-1">
-              <h2 className="font-display text-lg font-semibold text-ink">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="font-display text-lg font-semibold tracking-[-0.01em] text-ink">
                 {t('statements.composition')}
               </h2>
-              <p className="mt-0.5 text-xs text-ink-3">{t('statements.expense')}</p>
+              <div className="flex gap-4 text-xs text-ink-3">
+                <LegendSwatch className="bg-brand-500" label={t('statements.revenue')} />
+                <LegendSwatch className="bg-loss" label={t('statements.expense')} />
+                <LegendSwatch className="bg-profit" label={t('statements.net')} />
+              </div>
             </div>
-
-            {query.isLoading ? (
-              <div className="mt-6 flex justify-center text-brand-500">
-                <Spinner />
+            <div className="relative mt-[18px] h-[188px]">
+              <div aria-hidden className="absolute inset-0 flex flex-col justify-between">
+                <span className="h-px bg-line" />
+                <span className="h-px bg-ink-50" />
+                <span className="h-px bg-ink-50" />
+                <span className="h-px bg-ink-50" />
+                <span className="h-px bg-line" />
               </div>
-            ) : compositionSegments.length === 0 ? (
-              <p className="mt-6 text-sm text-ink-3">{t('statements.noLines')}</p>
-            ) : (
-              <div className="mt-5 space-y-4">
-                {/* Horizontal stacked bar */}
-                <div className="flex h-3 overflow-hidden rounded-full">
-                  {compositionSegments.map((seg) => (
-                    <div
-                      key={seg.accountCode}
-                      style={{ width: `${seg.share * 100}%`, backgroundColor: seg.color }}
-                    />
-                  ))}
-                </div>
-
-                {/* Legend rows */}
-                <div className="mt-3 space-y-0.5">
-                  {compositionSegments.map((seg) => (
-                    <div
-                      key={seg.accountCode}
-                      className="flex justify-between py-1.5"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="size-2.5 shrink-0 rounded-[3px]"
-                          style={{ backgroundColor: seg.color }}
-                          aria-hidden
-                        />
-                        <span className="text-sm text-ink-2">{seg.accountCode}</span>
-                      </div>
-                      <span className="tnum font-mono text-sm text-ink">
-                        {new Intl.NumberFormat(locale, {
-                          style: 'percent',
-                          minimumFractionDigits: 1,
-                          maximumFractionDigits: 1,
-                        }).format(seg.share)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+              <div className="relative flex h-full items-end justify-around gap-10 px-6 sm:px-14">
+                <CompositionBar className="bg-brand-500" height={totalRevenue > 0 ? 1 : 0} />
+                <CompositionBar className="bg-loss" height={expenseRatio} />
+                <CompositionBar className="bg-profit" height={netRatio} />
               </div>
-            )}
+            </div>
+            <div className="flex justify-around gap-10 px-6 pt-2.5 sm:px-14">
+              <span className="max-w-[150px] flex-1 text-center text-[13px] font-semibold text-ink-2">
+                {t('statements.revenue')}
+              </span>
+              <span className="max-w-[150px] flex-1 text-center text-[13px] font-semibold text-ink-2">
+                {t('statements.expense')}
+              </span>
+              <span className="max-w-[150px] flex-1 text-center text-[13px] font-semibold text-ink-2">
+                {t('statements.net')}
+              </span>
+            </div>
           </Card>
-        </div>
+
+          {/* Account tables */}
+          <div className="grid gap-5 lg:grid-cols-2">
+            <Card className="p-6">
+              <LineSection
+                heading={t('statements.revenueAccounts')}
+                lines={(data?.revenueLines ?? []).map((l) => ({
+                  accountCode: l.accountCode,
+                  amountMinor: l.netMinor,
+                }))}
+                totalLabel={t('statements.totalRevenue')}
+                totalMinor={totalRevenue}
+                currency={currency}
+                locale={locale}
+                emptyLabel={t('statements.noLines')}
+                format={formatAmount}
+              />
+            </Card>
+            <Card className="p-6">
+              <LineSection
+                heading={t('statements.expenseAccounts')}
+                lines={(data?.expenseLines ?? []).map((l) => ({
+                  accountCode: l.accountCode,
+                  amountMinor: l.netMinor,
+                }))}
+                totalLabel={t('statements.totalExpense')}
+                totalMinor={totalExpense}
+                currency={currency}
+                locale={locale}
+                emptyLabel={t('statements.noLines')}
+                format={formatAmount}
+              />
+            </Card>
+          </div>
+        </>
       )}
+    </div>
+  )
+}
+
+function LegendSwatch({ className, label }: { className: string; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className={`size-2.5 rounded-[3px] ${className}`} aria-hidden />
+      {label}
+    </span>
+  )
+}
+
+function CompositionBar({ className, height }: { className: string; height: number }) {
+  return (
+    <div className="flex h-full max-w-[150px] flex-1 items-end">
+      <div
+        className={`w-full rounded-t-md ${className}`}
+        style={{ height: `${Math.min(100, Math.max(0, height * 100))}%` }}
+      />
     </div>
   )
 }

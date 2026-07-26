@@ -2,8 +2,13 @@
 
 /*
  * Native console — the "Native Console" design system.
- * Plus Jakarta Sans + a single confident brand green (#16B364), cool neutral inks, a soft
+ * Plus Jakarta Sans + a deep-cyan brand (hue held at 193°), cool neutral inks, a soft
  * elevation/shadow scale, rounded surfaces, and a manual light/dark theme. Tabular mono for money.
+ *
+ * Brand rules from the design foundations (design/Native Console.dc.html §1a):
+ *   600 (#0B7F99) fills — white on it is 4.7:1;  700 (#095F73) speaks — text/links, 7.3:1;
+ *   500 (#0E8FAB) is for icons, charts and strokes ONLY (3.5:1 — not a text colour).
+ *   Green is freed: it means PROFIT / done and nothing else (profit dot #16B364, profit ink #0A7E3F).
  *
  * The legacy semantic tokens (paper/surface/ink/line/emerald/amber/rose) are kept and REPOINTED
  * to this palette so existing components recolor for free; the richer ramp (brand-*, ink-*, bg-*,
@@ -19,16 +24,17 @@
   --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
 
-  /* Brand green ramp */
-  --color-brand-50: #e8f8ee;
-  --color-brand-100: #c8eed5;
-  --color-brand-200: #97deb1;
-  --color-brand-300: #5fcb8b;
-  --color-brand-400: #2ebc72;
-  --color-brand-500: #16b364;
-  --color-brand-600: #0e9f50;
-  --color-brand-700: #0a7e3f;
-  --color-brand-800: #075e2f;
+  /* Brand cyan ramp — hue 193° (600 fills, 700 speaks, 500 icons/charts/strokes only) */
+  --color-brand-50: #e4f6fa;
+  --color-brand-100: #bfe9f1;
+  --color-brand-200: #8bd5e3;
+  --color-brand-300: #4fbdd1;
+  --color-brand-400: #1fa2bc;
+  --color-brand-500: #0e8fab;
+  --color-brand-600: #0b7f99;
+  --color-brand-700: #095f73;
+  --color-brand-800: #064654;
+  --color-brand-900: #04303a;
 
   /* Cool neutral ink ramp (900 = primary text … 50 = faintest fill) */
   --color-ink-900: #0e1116;
@@ -44,10 +50,11 @@
 
   /* Surface elevation */
   --color-canvas: #ffffff; /* bg-base — deepest layer */
-  --color-hover: #eef3ef; /* row / control hover */
+  --color-hover: #f1f5f6; /* row / control hover (2d shows the hovered row on #F1F5F6) */
 
-  /* Semantic */
-  --color-profit: #16b364;
+  /* Semantic — green means profit and nothing else */
+  --color-profit: #16b364; /* dots, check fills, funding bar */
+  --color-profit-ink: #0a7e3f; /* profit TEXT — 4.6:1 on white */
   --color-loss: #e5484d;
   --color-warning: #f5a623;
   --color-info: #3b82f6;
@@ -57,16 +64,18 @@
   --color-tint-info: #e6effe;
 
   /* --- Legacy semantic aliases, repointed to the new (light) palette --- */
-  --color-paper: #f4f8f5; /* page background  → bg-surface */
+  --color-paper: #f6f9fa; /* page background  → bg-surface */
   --color-surface: #ffffff; /* cards / sidebar  → bg-elevated */
   --color-ink: #0e1116; /* → ink-900 */
   --color-ink-2: #384151; /* → ink-700 (secondary) */
-  --color-ink-3: #8a93a0; /* → ink-400 (muted) */
+  --color-ink-3: #6b7280; /* → ink-500 (muted text — audit 07: never lighter than this) */
   --color-line: #e5e8ec; /* → ink-100 */
   --color-line-strong: #cdd2da; /* → ink-200 */
-  --color-emerald: #0e9f50; /* brand-600 — safe as fill or text */
-  --color-emerald-2: #0a7e3f; /* brand-700 — darker accent / hover */
-  --color-emerald-tint: #e8f8ee;
+  --color-emerald: #0b7f99; /* brand-600 — solid fills, buttons */
+  --color-emerald-2: #095f73; /* brand-700 — text, links, hover */
+  --color-emerald-tint: #e4f6fa; /* brand-50 — tinted fills */
+  --color-on-emerald: #ffffff; /* label on a brand fill (dark mode flips it) */
+  --color-emerald-line: #bfe9f1; /* brand-100 — border around tinted fills */
   --color-amber: #9a6a10; /* readable amber text for flagged figures */
   --color-amber-2: #7c5210;
   --color-amber-tint: #fef4e2;
@@ -105,20 +114,26 @@
   --color-canvas: #0e1116;
   --color-hover: #1e232c;
 
+  --color-profit-ink: #5fcb8b; /* profit text readable on dark */
   --color-tint-profit: rgba(22, 179, 100, 0.16);
   --color-tint-loss: rgba(229, 72, 77, 0.16);
   --color-tint-warning: rgba(245, 166, 35, 0.15);
   --color-tint-info: rgba(59, 130, 246, 0.16);
 
-  /* legacy aliases → dark */
+  /* legacy aliases → dark. On dark the bright end of the cyan takes over
+     and the label on a brand fill goes dark (6.4:1 on #4FBDD1). */
   --color-paper: #101319; /* page bg */
   --color-surface: #171b22; /* cards / sidebar */
   --color-ink: #f2f5f8;
   --color-ink-2: #c5ccd5;
-  --color-ink-3: #7a8493;
+  --color-ink-3: #8c95a2;
   --color-line: #2a2f3a;
   --color-line-strong: #3a4150;
-  --color-emerald-tint: rgba(22, 179, 100, 0.16);
+  --color-emerald: #4fbdd1; /* brand-300 — dark primary fill */
+  --color-emerald-2: #8bd5e3; /* brand-200 — dark text/links */
+  --color-emerald-tint: rgba(14, 143, 171, 0.18);
+  --color-on-emerald: #04303a; /* dark label on the bright fill */
+  --color-emerald-line: rgba(79, 189, 209, 0.35);
   --color-amber: #f5c06b; /* readable on dark */
   --color-amber-2: #f0c674;
   --color-amber-tint: rgba(245, 166, 35, 0.15);
@@ -154,8 +169,8 @@
   }
 
   ::selection {
-    background: var(--color-brand-500);
-    color: #fff;
+    background: var(--color-emerald);
+    color: var(--color-on-emerald);
   }
 
   /* Quiet, themeable scrollbars */
@@ -270,8 +285,12 @@
      #root, so hiding the app with `display:none` on body children ALSO hid the target (a
      display:none ancestor can't be undone by a descendant) → blank pages. Use `visibility`
      instead: hide everything, then re-show ONLY the active target + its descendants — a
-     visible child DOES override a hidden ancestor. Then pull the target to the page origin. */
-  body * {
+     visible child DOES override a hidden ancestor. Then pull the target to the page origin.
+     Scoped with :has() so it only bites while a receipt/KOT is actually mounted — the
+     statements print as ordinary pages (audit finding 16); each receipt injects its own
+     80mm @page rule. */
+  body:has(#native-thermal-receipt-paper) *,
+  body:has(#native-kot-print) * {
     visibility: hidden !important;
   }
   #native-thermal-receipt-paper,
@@ -287,10 +306,6 @@
     top: 0 !important;
     display: block !important;
     box-shadow: none !important;
-  }
-  @page {
-    size: 80mm auto;
-    margin: 6mm;
   }
   /* prefers-reduced-motion: print is always "no motion" */
   .reveal,

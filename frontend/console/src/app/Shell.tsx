@@ -74,9 +74,9 @@ export function Shell({ children }: { children: ReactNode }) {
   const active = flat.find(isActive)
 
   return (
-    <div className="min-h-screen lg:grid lg:grid-cols-[252px_1fr]">
+    <div className="min-h-screen lg:grid lg:grid-cols-[240px_1fr]">
       {/* Desktop sidebar */}
-      <aside className="sticky top-0 hidden h-screen flex-col gap-[3px] overflow-y-auto border-r border-line bg-surface px-4 py-5 lg:flex">
+      <aside className="sticky top-0 hidden h-screen flex-col gap-[3px] overflow-y-auto border-r border-line bg-surface px-4 py-5 print:hidden lg:flex">
         <Sidebar
           groups={groups}
           isActive={isActive}
@@ -115,7 +115,7 @@ export function Shell({ children }: { children: ReactNode }) {
 
       {/* Main column */}
       <div className="flex min-w-0 flex-col">
-        <header className="sticky top-0 z-20 flex h-16 items-center gap-4 border-b border-line bg-surface px-5 lg:px-8">
+        <header className="sticky top-0 z-20 flex h-16 items-center gap-4 border-b border-line bg-surface px-5 print:hidden lg:px-8">
           {/* mobile menu + logo */}
           <button
             type="button"
@@ -141,7 +141,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <div className="flex-1" />
 
           {company ? (
-            <div className="hidden items-center gap-2 rounded-full bg-paper px-3.5 py-1.5 text-[13px] font-semibold text-ink sm:flex">
+            <div className="hidden h-9 items-center gap-2 rounded-full bg-ink-50 px-3.5 text-[13px] font-semibold text-ink sm:flex">
               <span className="size-[7px] rounded-full bg-profit" />
               {company.name}
             </div>
@@ -152,7 +152,7 @@ export function Shell({ children }: { children: ReactNode }) {
             onClick={toggle}
             aria-label={t('a11y.toggleTheme')}
             title={t('a11y.toggleTheme')}
-            className="grid size-[38px] place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-colors hover:bg-hover hover:text-ink"
+            className="grid size-10 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-colors hover:bg-hover hover:text-ink"
           >
             {theme === 'dark' ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}
           </button>
@@ -174,7 +174,7 @@ export function Shell({ children }: { children: ReactNode }) {
           )}
         </header>
 
-        <main className="mx-auto w-full max-w-[1180px] px-5 py-8 lg:px-8 lg:py-10">{children}</main>
+        <main className="mx-auto w-full max-w-[1200px] px-5 py-7 lg:px-8">{children}</main>
       </div>
     </div>
   )
@@ -201,7 +201,7 @@ function Sidebar({
 
       {groups.map((group) => (
         <div key={group.heading} className="contents">
-          <div className="px-3 pb-1.5 pt-2.5 text-[10px] font-bold uppercase tracking-[0.09em] text-ink-3">
+          <div className="px-3 pb-1.5 pt-2.5 text-[11px] font-bold uppercase tracking-[0.09em] text-ink-3">
             {group.heading}
           </div>
           {group.items.map((item) => {
@@ -214,9 +214,9 @@ function Sidebar({
                 onClick={onNavigate}
                 aria-current={activeItem ? 'page' : undefined}
                 className={cn(
-                  'flex items-center gap-[11px] rounded-xl px-3 py-2.5 text-sm transition-colors',
+                  'flex h-11 items-center gap-[11px] rounded-xl px-3 text-sm transition-colors',
                   activeItem
-                    ? 'bg-brand-50 font-semibold text-brand-700'
+                    ? 'bg-emerald-tint font-semibold text-emerald-2'
                     : 'font-medium text-ink-2 hover:bg-hover hover:text-ink',
                 )}
               >
@@ -233,7 +233,7 @@ function Sidebar({
           <Link
             to="/pos"
             onClick={onNavigate}
-            className="flex items-center gap-[11px] rounded-2xl border border-brand-200 bg-brand-50 px-3.5 py-3 text-sm font-semibold text-brand-700 transition-colors hover:bg-brand-100"
+            className="flex h-14 items-center gap-[11px] rounded-[20px] border border-emerald-line bg-emerald-tint px-3.5 text-sm font-bold text-emerald-2 transition-colors hover:bg-brand-100/60"
           >
             <Store className="size-[18px] shrink-0" strokeWidth={1.9} />
             {openPosLabel}
@@ -254,7 +254,7 @@ function Avatar() {
     .map((p) => p[0]?.toUpperCase())
     .join('')
   return (
-    <div className="grid size-9 place-items-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-[13px] font-bold text-white">
+    <div className="grid size-10 place-items-center rounded-full bg-emerald-tint text-[13px] font-bold text-emerald-2">
       {initials || 'NA'}
     </div>
   )

@@ -49,6 +49,15 @@ export function formatAmount(minor: number, currency: string, locale: string): s
   })
 }
 
+/** Locale-aware percent with one fraction digit — the single formatter every finance surface uses. */
+export function formatPercent(value: number, locale: string): string {
+  return new Intl.NumberFormat(locale, {
+    style: 'percent',
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }).format(value)
+}
+
 function isoDisplayDigits(currency: string): number {
   try {
     return (

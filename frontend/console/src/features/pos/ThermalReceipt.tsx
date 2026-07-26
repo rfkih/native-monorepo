@@ -322,8 +322,11 @@ export function ThermalReceipt({
       {/* ------------------------------------------------------------------ */}
       <style>{`
         /* Print ISOLATION is global (index.css) via visibility — a display:none ancestor
-           would blank this nested paper. Here we only tweak the paper itself for print. */
+           would blank this nested paper. Here we only tweak the paper itself for print.
+           The 80mm @page rule lives HERE (not in index.css) so the statements can print
+           on normal paper — each print surface owns its own page size. */
         @media print {
+          @page { size: 80mm auto; margin: 6mm; }
           #native-thermal-receipt-paper { width: auto !important; max-width: 100% !important; }
           #native-thermal-receipt-paper .torn-edge { display: none !important; }
         }

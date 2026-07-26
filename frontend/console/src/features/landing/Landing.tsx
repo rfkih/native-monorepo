@@ -163,7 +163,7 @@ function Hero({ onSignIn, onGetStarted }: { onSignIn: () => void; onGetStarted: 
         {/* Left — copy + CTAs, staggered entrance */}
         <div>
           <span
-            className="reveal inline-flex items-center gap-2 rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-xs font-bold tracking-wide text-brand-700"
+            className="reveal inline-flex items-center gap-2 rounded-full border border-brand-100 bg-brand-50 px-3.5 py-1.5 text-xs font-bold tracking-wide text-brand-700"
             style={{ animationDelay: '40ms' }}
           >
             <span className="size-1.5 rounded-full bg-brand-500" />
@@ -189,13 +189,14 @@ function Hero({ onSignIn, onGetStarted }: { onSignIn: () => void; onGetStarted: 
             className="reveal mt-8 flex flex-col gap-3 sm:flex-row sm:items-center"
             style={{ animationDelay: '250ms' }}
           >
-            <Button onClick={onGetStarted} className="w-full px-5 py-3 text-[15px] sm:w-auto">
+            <Button onClick={onGetStarted} size="xl" className="w-full sm:w-auto">
               {t('landing.heroPrimary')} <ArrowRight className="size-4" />
             </Button>
             <Button
               variant="outline"
               onClick={onSignIn}
-              className="w-full px-5 py-3 text-[15px] sm:w-auto"
+              size="xl"
+              className="w-full sm:w-auto"
             >
               {t('landing.heroSecondary')}
             </Button>
@@ -222,7 +223,7 @@ function Hero({ onSignIn, onGetStarted }: { onSignIn: () => void; onGetStarted: 
 function Underline() {
   return (
     <svg
-      className="absolute -bottom-1.5 left-0 h-2.5 w-full text-brand-400"
+      className="absolute -bottom-1.5 left-0 h-2.5 w-full text-brand-300"
       viewBox="0 0 200 12"
       fill="none"
       preserveAspectRatio="none"
@@ -353,7 +354,7 @@ function Steps() {
           {steps.map((s, i) => (
             <Reveal key={s.title} delay={i * 90}>
               <li className="relative h-full rounded-card border border-line bg-surface p-6 shadow-sm">
-                <span className="tnum grid size-10 place-items-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-[16px] font-extrabold text-white shadow-sm">
+                <span className="tnum grid size-10 place-items-center rounded-full bg-gradient-to-br from-brand-600 to-brand-800 text-[16px] font-extrabold text-white shadow-sm">
                   {i + 1}
                 </span>
                 <h3 className="mt-4 font-display text-[18px] font-bold text-ink">{s.title}</h3>
@@ -386,7 +387,7 @@ function Testimonial() {
           {t('landing.quoteText')}
         </blockquote>
         <div className="mt-7 flex items-center justify-center gap-3">
-          <span className="grid size-11 place-items-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-[14px] font-bold text-white">
+          <span className="grid size-11 place-items-center rounded-full bg-gradient-to-br from-brand-600 to-brand-800 text-[14px] font-bold text-white">
             {initials}
           </span>
           <div className="text-left">
@@ -425,7 +426,8 @@ function CtaBand({ onSignIn, onGetStarted }: { onSignIn: () => void; onGetStarte
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Button
               onClick={onGetStarted}
-              className="w-full bg-white px-6 py-3 text-[15px] text-brand-700 shadow-sm hover:bg-white/90 sm:w-auto"
+              size="xl"
+              className="w-full bg-white text-brand-700 shadow-sm hover:bg-white/90 sm:w-auto"
             >
               {t('landing.ctaButton')} <ArrowRight className="size-4" />
             </Button>

@@ -7,7 +7,7 @@
  */
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Check, Copy, Plus, TriangleAlert, UserX } from 'lucide-react'
+import { Check, Copy, Plus, Search, TriangleAlert, UserX } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -64,30 +64,34 @@ function DialogOverlay({
   )
 }
 
-// ── Role badge ────────────────────────────────────────────────────────────────
+// ── Role badge — tinted fill + legible ink; only the owner carries the brand tint ──
 
 function RoleBadge({ role }: { role: string }) {
   const { t } = useTranslation()
-  const tone =
-    role === 'owner'
-      ? ('info' as const)
-      : role === 'manager'
-        ? ('amber' as const)
-        : ('neutral' as const)
+  const tone = role === 'owner' ? ('emerald' as const) : ('neutral' as const)
   const label = ROLES.includes(role as Role)
     ? t(`team.role.${role as Role}`)
     : role
   return <Badge tone={tone}>{label}</Badge>
 }
 
-// ── Status badge ─────────────────────────────────────────────────────────────
+// ── Status — a dot plus text, green only when the account is live ─────────────
 
-function StatusBadge({ enabled }: { enabled: boolean }) {
+function StatusDot({ enabled }: { enabled: boolean }) {
   const { t } = useTranslation()
   return (
-    <Badge tone={enabled ? 'emerald' : 'neutral'}>
+    <span
+      className={cn(
+        'inline-flex items-center gap-1.5 text-[13px] font-semibold',
+        enabled ? 'text-profit-ink' : 'text-ink-3',
+      )}
+    >
+      <span
+        className={cn('size-[7px] rounded-full', enabled ? 'bg-profit' : 'bg-ink-300')}
+        aria-hidden
+      />
       {enabled ? t('team.statusActive') : t('team.statusDisabled')}
-    </Badge>
+    </span>
   )
 }
 
@@ -112,7 +116,7 @@ function CopyButton({ text }: { text: string }) {
       onClick={handleCopy}
       className={cn(
         'grid size-8 place-items-center rounded-lg transition-colors',
-        'text-ink-3 hover:bg-tint-profit/60 hover:text-brand-600',
+        'text-ink-3 hover:bg-emerald-tint/60 hover:text-brand-600',
         'focus-visible:outline-2 focus-visible:outline-brand-500',
       )}
     >
@@ -382,6 +386,7 @@ function DeactivateDialog({
 
 // ── Member row ────────────────────────────────────────────────────────────────
 
+/** The 2d table row: person · role · status · hover-revealed actions. */
 function MemberRow({
   member,
   isSelf,
@@ -395,36 +400,55 @@ function MemberRow({
 }) {
   const { t } = useTranslation()
   const primaryRole = member.roles.find((r) => ROLES.includes(r as Role)) ?? member.roles[0] ?? ''
+  const initials = (member.username || member.email)
+    .split(/[\s@._-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase())
+    .join('')
 
   return (
     <div
       className={cn(
-        'group flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl px-3 py-3 transition-colors hover:bg-hover',
-        !member.enabled && 'opacity-50',
+        'group grid grid-cols-[minmax(0,2fr)_minmax(96px,1fr)_minmax(96px,1fr)_auto] items-center gap-4 border-b border-ink-50 px-6 py-3.5 transition-colors last:border-0 hover:bg-hover',
+        !member.enabled && 'opacity-60',
       )}
     >
-      {/* Identity */}
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-[14px] font-semibold text-ink">{member.email}</p>
-        {member.username && member.username !== member.email ? (
-          <p className="mt-0.5 truncate text-xs text-ink-3">{member.username}</p>
-        ) : null}
+      {/* Person */}
+      <div className="flex min-w-0 items-center gap-3">
+        <span
+          className={cn(
+            'grid size-[38px] shrink-0 place-items-center rounded-full text-[13px] font-bold',
+            primaryRole === 'owner' ? 'bg-emerald-tint text-emerald-2' : 'bg-ink-50 text-ink-2',
+          )}
+          aria-hidden
+        >
+          {initials || '—'}
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-ink">{member.email}</p>
+          {member.username && member.username !== member.email ? (
+            <p className="mt-px truncate text-xs text-ink-3">{member.username}</p>
+          ) : null}
+        </div>
       </div>
 
-      {/* Badges */}
-      <div className="flex shrink-0 flex-wrap items-center gap-2">
+      {/* Role */}
+      <span>
         <RoleBadge role={primaryRole} />
-        <StatusBadge enabled={member.enabled} />
-      </div>
+      </span>
+
+      {/* Status */}
+      <StatusDot enabled={member.enabled} />
 
       {/* Row actions — hidden for the current user (self-lockout prevention) */}
       {!isSelf ? (
-        <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 [div:hover>&]:opacity-100">
+        <div className="flex shrink-0 items-center justify-end gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
           <button
             type="button"
             aria-label={t('team.changeRole')}
             title={t('team.changeRole')}
-            className="rounded-md px-2 py-1 text-xs text-ink-3 hover:bg-paper hover:text-ink focus-visible:outline-2 focus-visible:outline-brand-500"
+            className="rounded-lg px-2 py-1 text-xs font-semibold text-ink-3 hover:bg-ink-50 hover:text-ink focus-visible:outline-2 focus-visible:outline-emerald"
             onClick={() => onChangeRole(member)}
           >
             {t('team.changeRole')}
@@ -434,7 +458,7 @@ function MemberRow({
               type="button"
               aria-label={t('team.deactivate')}
               title={t('team.deactivate')}
-              className="rounded-md px-2 py-1 text-xs text-loss/80 hover:bg-tint-loss hover:text-loss focus-visible:outline-2 focus-visible:outline-loss"
+              className="rounded-lg px-2 py-1 text-xs font-semibold text-loss/80 hover:bg-tint-loss hover:text-loss focus-visible:outline-2 focus-visible:outline-loss"
               onClick={() => onDeactivate(member)}
             >
               <UserX className="mr-1 inline size-3" />
@@ -445,7 +469,7 @@ function MemberRow({
       ) : (
         /* Reserve space so rows have consistent height when the action buttons are absent */
         <div className="shrink-0" aria-hidden="true">
-          <span className="rounded-md px-2 py-1 text-xs text-transparent select-none">
+          <span className="px-2 py-1 text-xs text-transparent select-none">
             {t('team.changeRole')}
           </span>
         </div>
@@ -465,6 +489,8 @@ export function Team() {
   const { company } = useSession()
   const { actor: currentActor } = useAuth()
   const [dialog, setDialog] = useState<DialogState | null>(null)
+  const [search, setSearch] = useState('')
+  const [roleFilter, setRoleFilter] = useState<'all' | Role>('all')
 
   const query = useTeam({
     companyId: company?.companyId ?? '',
@@ -477,28 +503,65 @@ export function Team() {
   }
 
   const members = query.data ?? []
+  const needle = search.trim().toLowerCase()
+  const visible = members.filter((m) => {
+    if (roleFilter !== 'all' && !m.roles.includes(roleFilter)) return false
+    if (!needle) return true
+    return (
+      m.email.toLowerCase().includes(needle) ||
+      (m.username ?? '').toLowerCase().includes(needle)
+    )
+  })
 
   function closeDialog() {
     setDialog(null)
   }
 
   return (
-    <div className="flex flex-col gap-[18px]">
+    <div className="flex flex-col gap-5">
       {/* Page header */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">
+          <h1 className="font-display text-[28px] font-extrabold tracking-[-0.02em] text-ink">
             {t('team.title')}
           </h1>
-          <p className="mt-1.5 text-sm text-ink-3">{t('team.subtitle')}</p>
+          <p className="mt-1.5 text-[15px] text-ink-3">{t('team.subtitle')}</p>
         </div>
-        <Button type="button" onClick={() => setDialog({ kind: 'invite' })}>
+        <Button type="button" size="md" onClick={() => setDialog({ kind: 'invite' })}>
           <Plus className="size-4" />
           {t('team.inviteMember')}
         </Button>
       </div>
 
-      {/* Member list */}
+      {/* Search + role filter */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative w-full max-w-[320px]">
+          <Search
+            className="pointer-events-none absolute left-3.5 top-1/2 z-10 size-[17px] -translate-y-1/2 text-ink-3"
+            aria-hidden
+          />
+          <TextInput
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t('team.searchPlaceholder')}
+            aria-label={t('team.searchPlaceholder')}
+            className="h-11 pl-10 pr-4 text-sm"
+          />
+        </div>
+        <Segmented
+          ariaLabel={t('team.title')}
+          value={roleFilter}
+          onChange={setRoleFilter}
+          className="h-11"
+          options={[
+            { value: 'all', label: t('team.filterAll') },
+            ...ROLES.map((r) => ({ value: r, label: t(`team.role.${r}`) })),
+          ]}
+        />
+      </div>
+
+      {/* Member table */}
       {query.isError ? (
         <Card className="p-8 text-center text-sm text-loss">
           <TriangleAlert className="mx-auto mb-2 size-5" />
@@ -506,14 +569,29 @@ export function Team() {
         </Card>
       ) : query.isLoading ? (
         <Card className="p-10 text-center">
-          <Spinner className="mx-auto text-brand-500" />
+          <Spinner className="mx-auto text-emerald" />
         </Card>
       ) : members.length === 0 ? (
         <EmptyState title={t('team.empty')} hint={t('team.emptyHint')} />
       ) : (
-        <Card className="rounded-[20px] p-2.5">
-          <div>
-            {members.map((member) => (
+        <Card className="overflow-hidden p-0">
+          {/* Header row */}
+          <div className="grid grid-cols-[minmax(0,2fr)_minmax(96px,1fr)_minmax(96px,1fr)_auto] gap-4 border-b border-line bg-paper px-6 py-3.5">
+            <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+              {t('team.colPerson')}
+            </span>
+            <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+              {t('team.colRole')}
+            </span>
+            <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+              {t('team.colStatus')}
+            </span>
+            <span aria-hidden />
+          </div>
+          {visible.length === 0 ? (
+            <p className="px-6 py-8 text-center text-sm text-ink-3">{t('team.noMatches')}</p>
+          ) : (
+            visible.map((member) => (
               <MemberRow
                 key={member.id}
                 member={member}
@@ -521,8 +599,8 @@ export function Team() {
                 onChangeRole={(m) => setDialog({ kind: 'changeRole', member: m })}
                 onDeactivate={(m) => setDialog({ kind: 'deactivate', member: m })}
               />
-            ))}
-          </div>
+            ))
+          )}
         </Card>
       )}
 

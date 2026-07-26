@@ -85,7 +85,7 @@ function NoCompany() {
         <p className="mt-2 text-sm text-ink-3">{t('menu.noCompanyHint')}</p>
         <Link
           to="/onboarding"
-          className="mt-5 inline-block rounded-xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-600"
+          className="mt-5 inline-block rounded-xl bg-emerald px-4 py-2.5 text-sm font-bold text-on-emerald shadow-sm transition-colors hover:bg-emerald-2"
         >
           {t('nav.onboarding')}
         </Link>
@@ -1349,7 +1349,7 @@ function StockControl({
               <button
                 type="button"
                 onClick={() => setDialog('add')}
-                className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-brand-600 transition-colors hover:bg-tint-profit focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500"
+                className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-brand-600 transition-colors hover:bg-emerald-tint focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500"
                 aria-label={t('menu.stock.addStock')}
               >
                 {t('menu.stock.addStock')}
@@ -1378,7 +1378,7 @@ function StockControl({
             <button
               type="button"
               onClick={() => setDialog('set')}
-              className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-brand-600 transition-colors hover:bg-tint-profit focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500"
+              className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-brand-600 transition-colors hover:bg-emerald-tint focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500"
               aria-label={t('menu.stock.trackAction')}
             >
               {t('menu.stock.trackAction')}
@@ -1472,7 +1472,7 @@ function OptionRow({
             'disabled:cursor-not-allowed disabled:opacity-50',
             option.available
               ? 'text-ink-3 hover:bg-paper hover:text-ink'
-              : 'text-brand-600 hover:bg-tint-profit hover:text-brand-700',
+              : 'text-brand-600 hover:bg-emerald-tint hover:text-brand-700',
           )}
         >
           {isPending ? (
@@ -1763,7 +1763,7 @@ function GroupBlock({
               <button
                 type="button"
                 onClick={onAddOption}
-                className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-brand-600 transition-colors hover:bg-tint-profit focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+                className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-brand-600 transition-colors hover:bg-emerald-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
               >
                 <Plus className="size-3.5" aria-hidden="true" />
                 {t('menu.group.addOption')}
@@ -1914,7 +1914,7 @@ function ItemRow({
               'disabled:cursor-not-allowed disabled:opacity-50',
               item.available
                 ? 'text-ink-2 hover:bg-tint-loss/60 hover:text-loss'
-                : 'text-brand-600 hover:bg-tint-profit hover:text-brand-700',
+                : 'text-brand-600 hover:bg-emerald-tint hover:text-brand-700',
             )}
           >
             {isPending ? (

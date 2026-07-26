@@ -237,7 +237,7 @@ function Stepper({ steps, current }: { steps: string[]; current: number }) {
                 className={cn(
                   'tnum grid size-7 place-items-center rounded-full text-[13px] font-bold',
                   state === 'done' || state === 'active'
-                    ? 'bg-brand-500 text-white'
+                    ? 'bg-emerald text-on-emerald'
                     : 'bg-ink-50 text-ink-3',
                 )}
               >

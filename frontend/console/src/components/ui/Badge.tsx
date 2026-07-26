@@ -1,12 +1,18 @@
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/cn'
 
-type Tone = 'neutral' | 'amber' | 'emerald' | 'info' | 'loss'
+/**
+ * Tinted-fill + legible-ink badges. `emerald` is the BRAND tone (cyan) — use `profit`
+ * for anything that means money made or work done (Paid / Sent / Active): green is
+ * reserved for profit, and nothing else.
+ */
+type Tone = 'neutral' | 'amber' | 'emerald' | 'profit' | 'info' | 'loss'
 
 const tones: Record<Tone, string> = {
   neutral: 'bg-ink-50 text-ink-2',
   amber: 'bg-tint-warning text-amber-2',
-  emerald: 'bg-tint-profit text-brand-700',
+  emerald: 'bg-emerald-tint text-emerald-2',
+  profit: 'bg-tint-profit text-profit-ink',
   info: 'bg-tint-info text-info',
   loss: 'bg-tint-loss text-loss',
 }

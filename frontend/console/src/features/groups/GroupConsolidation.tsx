@@ -342,12 +342,12 @@ function GroupDetail({
             </div>
             <div className="flex shrink-0 flex-col items-end gap-2">
               {data ? (
-                <span className="rounded-full bg-tint-profit px-3 py-1.5 text-xs font-semibold text-brand-700">
+                <span className="rounded-full bg-tint-profit px-3 py-1.5 text-xs font-semibold text-profit-ink">
                   {t(`groups.states.${data.state}` as Parameters<typeof t>[0])} #{data.closeRunSeq}
                 </span>
               ) : null}
               <Button
-                className="px-3.5 py-2 text-xs"
+                className="px-3.5 text-xs"
                 onClick={() => onDialog({ kind: 'runClose', groupId: group.id, period, nextSeq })}
               >
                 <Play className="size-3.5" /> {t('groups.runGroupClose')}
@@ -549,7 +549,7 @@ function GroupDetail({
                   className={cn(
                     'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold',
                     data.eliminations.allReconciled
-                      ? 'bg-tint-profit text-brand-700'
+                      ? 'bg-tint-profit text-profit-ink'
                       : 'bg-tint-warning text-warning',
                   )}
                 >

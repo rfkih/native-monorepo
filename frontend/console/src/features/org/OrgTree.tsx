@@ -76,7 +76,7 @@ function NodeActions({
           type="button"
           aria-label={t('org.addChild')}
           title={t('org.addChild')}
-          className="grid size-7 place-items-center rounded-md text-ink-3 hover:bg-tint-profit/60 hover:text-brand-600 focus-visible:outline-2 focus-visible:outline-brand-500"
+          className="grid size-7 place-items-center rounded-md text-ink-3 hover:bg-emerald-tint/60 hover:text-brand-600 focus-visible:outline-2 focus-visible:outline-brand-500"
           onClick={() => onAddChild(unit.id)}
         >
           <Plus className="size-3.5" />
@@ -106,7 +106,7 @@ function NodeActions({
           type="button"
           aria-label={t('org.reactivate')}
           title={t('org.reactivate')}
-          className="rounded-md px-2 py-1 text-xs text-brand-600/80 hover:bg-tint-profit hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-brand-500"
+          className="rounded-md px-2 py-1 text-xs text-brand-600/80 hover:bg-emerald-tint hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-brand-500"
           onClick={() => onReactivate(unit)}
         >
           {t('org.reactivate')}

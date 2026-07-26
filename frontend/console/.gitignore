@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Vite dep-optimizer cache + local design-verification screenshots
+.vite
+shots
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
