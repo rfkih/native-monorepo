@@ -211,6 +211,14 @@ class SignupAcceptanceTest {
   }
 
   @Test
+  void aSignupBodyMissingTheTermsFieldEntirelyReturns400() {
+    // A body with termsAccepted ABSENT (not just false). Jackson 3 fails null-into-primitive by
+    // default, so with a primitive boolean this 500'd via the catch-all; the Boolean wrapper +
+    // @NotNull must turn it into a clean 400 (regression: found live, 2026-07-26).
+    assertBadRequest(signupBody(uniqueEmail()).replace(",\n  \"termsAccepted\": true", ""));
+  }
+
+  @Test
   void aSignupWithoutAcceptedTermsReturns400() {
     // Consent is validated server-side (@AssertTrue) — unchecked terms cannot be bypassed by
     // calling the API directly.

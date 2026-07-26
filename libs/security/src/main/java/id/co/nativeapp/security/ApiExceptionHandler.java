@@ -11,6 +11,7 @@ import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -41,7 +42,14 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  *   <li>{@link IllegalArgumentException} — a value the domain rejects, most importantly a bad/blank
  *       ISO-4217 currency code from {@code libs/money} {@code Money.ofMinor} ({@code
  *       Currency.getInstance} throws {@code IllegalArgumentException} for an unknown code) → {@code
- *       400} with the message as {@code detail}; and
+ *       400} with the message as {@code detail};
+ *   <li>{@link HttpMessageNotReadableException} — a request body that cannot be deserialized at all
+ *       (truncated JSON, a field of the wrong type, {@code null} into a primitive — Jackson 3
+ *       enables {@code FAIL_ON_NULL_FOR_PRIMITIVES} by default) → {@code 400}: the fault is the
+ *       client's, and letting it fall to the catch-all misclassifies it as a server {@code 500}
+ *       (found via the signup flow — a body missing a primitive {@code boolean} field 500'd). The
+ *       {@code detail} stays generic: Jackson messages embed reference chains and source snippets
+ *       that must not leak; and
  *   <li>any other {@link Exception} — an unexpected fault → {@code 500} whose {@code detail} is a
  *       generic, non-leaking message (the real exception is logged server-side with the {@code
  *       traceId}, never returned to the client; HR-6).
@@ -84,6 +92,21 @@ public class ApiExceptionHandler {
     ProblemDetail problem = problem(HttpStatus.BAD_REQUEST, "invalid-argument", request);
     problem.setTitle("Invalid argument");
     problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /**
+   * An undeserializable request body (truncated JSON, wrong-typed field, null into a primitive) →
+   * 400. The detail is deliberately generic — Jackson's message embeds reference chains and source
+   * fragments that must not reach the client (HR-6); the real cause is logged at DEBUG.
+   */
+  @ExceptionHandler(HttpMessageNotReadableException.class)
+  public ProblemDetail handleUnreadableBody(
+      HttpMessageNotReadableException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.BAD_REQUEST, "malformed-request-body", request);
+    problem.setTitle("Malformed request body");
+    problem.setDetail("The request body is malformed or has a field of the wrong type.");
+    log.debug("Unreadable request body [traceId={}]", MDC.get("traceId"), ex);
     return problem;
   }
 

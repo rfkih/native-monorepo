@@ -3,6 +3,7 @@ package id.co.nativeapp.org.user.dto;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
@@ -36,7 +37,11 @@ import jakarta.validation.constraints.Size;
  *     for uniqueness before creating the tenant
  * @param ownerPassword the owner's initial password — NEVER logged anywhere in this codebase
  * @param termsAccepted whether the owner accepted the Terms of Service; must be {@code true} —
- *     consent is recorded on the Keycloak user as {@code terms_accepted_at}
+ *     consent is recorded on the Keycloak user as {@code terms_accepted_at}. Deliberately the
+ *     {@code Boolean} wrapper, not the primitive: Jackson 3 enables {@code
+ *     FAIL_ON_NULL_FOR_PRIMITIVES} by default, so a body MISSING the field would fail
+ *     deserialization (→ 500 via the catch-all) instead of reaching bean validation; with the
+ *     wrapper, absent/null → {@code @NotNull} → a clean 400.
  */
 public record SignupRequest(
     @NotBlank String companyName,
@@ -46,4 +51,4 @@ public record SignupRequest(
     @NotBlank @Pattern(regexp = "business_unit|branch|outlet", message = "unsupported business type") String firstBusinessType,
     @NotBlank @Email String ownerEmail,
     @NotBlank @Size(min = 8, max = 128) String ownerPassword,
-    @AssertTrue(message = "terms must be accepted") boolean termsAccepted) {}
+    @NotNull @AssertTrue(message = "terms must be accepted") Boolean termsAccepted) {}
