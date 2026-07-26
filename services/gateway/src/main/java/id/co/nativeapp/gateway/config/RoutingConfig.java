@@ -6,11 +6,14 @@ import static org.springframework.web.servlet.function.RequestPredicates.path;
 
 import id.co.nativeapp.gateway.filter.RoleAuthorizationFilter;
 import id.co.nativeapp.gateway.filter.TenantContextHeaderFilter;
+import id.co.nativeapp.gateway.ratelimit.AnonymousRateLimitFilter;
 import id.co.nativeapp.gateway.ratelimit.RateLimitFilter;
 import id.co.nativeapp.gateway.ratelimit.RedisTokenBucketRateLimiter;
 import org.springframework.cloud.gateway.server.mvc.handler.GatewayRouterFunctions;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.web.servlet.function.RouterFunction;
 import org.springframework.web.servlet.function.ServerResponse;
 
@@ -59,19 +62,21 @@ public class RoutingConfig {
    * exact path ({@code native.security.public-paths}) and owns the logic once it arrives
    * token-free.
    *
-   * <p><strong>SECURITY FOLLOW-UP (deferred, must land before public exposure).</strong> The
-   * existing {@link RateLimitFilter} keys its token bucket on the JWT {@code (company_id, sub)} and
-   * returns {@code 401} when there is no token — so it CANNOT protect an anonymous endpoint and is
-   * intentionally NOT applied here. That leaves sign-up without gateway throttling. Before this is
-   * exposed publicly it needs a dedicated anonymous limiter (per-client-IP, resolved from a trusted
-   * {@code X-Forwarded-For} at the ingress boundary) and/or a CAPTCHA/proof-of-work. Tracked as an
-   * Increment-1 follow-up and flagged for the security review.
+   * <p>The route IS throttled: the tenant {@link RateLimitFilter} keys on the JWT {@code
+   * (company_id, sub)} and cannot protect an anonymous endpoint, so this route carries the
+   * dedicated {@link AnonymousRateLimitFilter} instead — a per-client-IP token bucket with its own
+   * (much tighter) knobs under {@code native.gateway.rate-limit.signup}. A CAPTCHA/proof-of-work
+   * challenge remains a follow-up on top of the IP throttle.
    */
   @Bean
-  RouterFunction<ServerResponse> signupRoute(GatewayRouteProperties routes) {
+  RouterFunction<ServerResponse> signupRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      RateLimitProperties rateLimits) {
     return GatewayRouterFunctions.route("org-service-signup")
         .route(path("/api/v1/signup"), http())
         .before(uri(routes.orgService()))
+        .filter(new AnonymousRateLimitFilter(limiter, rateLimits.signup()))
         .build();
   }
 
@@ -88,6 +93,35 @@ public class RoutingConfig {
         .before(uri(routes.orgService()))
         .filter(new RateLimitFilter(limiter))
         .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
+   * {@code GET /api/v1/companies/current} — the caller reading their OWN bound company. Allowed for
+   * every business role INCLUDING {@code cashier}: the cashier POS needs the company's {@code
+   * firstBusinessId} (to ring up sales) plus its name/base currency to render. This is a
+   * tenant-scoped read of the caller's own company — no cross-tenant exposure — so it is safe on
+   * the POS surface, unlike the rest of {@code /api/v1/companies/**} (company creation /
+   * management), which stays owner/manager-only via {@link #companiesRoute}.
+   *
+   * <p>{@code @Order(HIGHEST_PRECEDENCE)} is load-bearing: RouterFunction beans are matched in
+   * order (first match wins, NOT most-specific wins), and the general {@code /companies/**} route
+   * below would otherwise swallow this exact path and 403 the cashier. Ordering this route first
+   * makes the specific match take precedence; every other {@code /companies/**} path falls through
+   * to the dashboard-gated route.
+   */
+  @Bean
+  @Order(Ordered.HIGHEST_PRECEDENCE)
+  RouterFunction<ServerResponse> currentCompanyRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("org-service-current-company")
+        .route(path("/api/v1/companies/current"), http())
+        .before(uri(routes.orgService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(POS_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -200,6 +234,20 @@ public class RoutingConfig {
       TenantContextHeaderFilter tenantFilter) {
     return GatewayRouterFunctions.route("restaurant-service-tables")
         .route(path("/api/v1/tables/**"), http())
+        .before(uri(routes.restaurantService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(POS_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  @Bean
+  RouterFunction<ServerResponse> billsRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("restaurant-service-bills")
+        .route(path("/api/v1/bills/**"), http())
         .before(uri(routes.restaurantService()))
         .filter(new RateLimitFilter(limiter))
         .filter(new RoleAuthorizationFilter(POS_ROLES))

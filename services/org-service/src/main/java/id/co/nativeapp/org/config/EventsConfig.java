@@ -26,8 +26,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * id.co.nativeapp.restaurant.config.EventsConfig} for the pattern. The {@link Tracer} is injected
  * via {@link ObjectProvider} so a missing bean degrades gracefully to a no-op supplier.
  *
- * <p>Outbox-lag metric (ADR 0010 #13): {@link OutboxLagMetrics} registers a Micrometer gauge
- * {@code native.outbox.unpublished} (tag: {@code service}).
+ * <p>Outbox-lag metric (ADR 0010 #13): {@link OutboxLagMetrics} registers a Micrometer gauge {@code
+ * native.outbox.unpublished} (tag: {@code service}).
  */
 @Configuration
 public class EventsConfig {

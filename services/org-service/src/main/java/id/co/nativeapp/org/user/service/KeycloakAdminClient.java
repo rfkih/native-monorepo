@@ -68,10 +68,14 @@ public class KeycloakAdminClient {
   private final KeycloakAdminProperties props;
   private final RestClient restClient;
 
-  /** Cached admin access token and the instant it expires (minus the buffer). */
-  private volatile String cachedToken;
+  /**
+   * Cached admin token + its (buffered) expiry, held as one immutable pair behind a single volatile
+   * reference so the lock-free fast path in {@link #acquireToken()} always reads a consistent
+   * (token, expiry) generation.
+   */
+  private record CachedToken(String token, Instant expiresAt) {}
 
-  private volatile Instant tokenExpiresAt = Instant.EPOCH;
+  private volatile CachedToken cachedToken = new CachedToken(null, Instant.EPOCH);
 
   public KeycloakAdminClient(KeycloakAdminProperties props) {
     this.props = props;
@@ -120,16 +124,24 @@ public class KeycloakAdminClient {
    * Creates a Keycloak user with the given email/username, sets their initial password, tags them
    * with the {@code company_id} user attribute, and returns the new user's Keycloak id (UUID).
    *
+   * <p>The user is created with {@code emailVerified=false}. When {@link
+   * KeycloakAdminProperties#isRequireEmailVerification()} is set, the {@code VERIFY_EMAIL} required
+   * action is added so Keycloak forces the owner to verify the address at first login (needs realm
+   * SMTP). The signup ToS consent instant is recorded as the {@code terms_accepted_at} user
+   * attribute (the realm's unmanaged-attribute policy preserves it).
+   *
    * <p><strong>The password parameter is NEVER logged.</strong>
    *
    * @param email the user's email (also used as username)
    * @param password the initial password — NEVER logged
    * @param companyId the new tenant's company id, set as the {@code company_id} user attribute so
    *     Keycloak maps it into the JWT claim
+   * @param termsAcceptedAt the instant the owner accepted the Terms of Service (consent record)
    * @return the Keycloak user id (UUID string) extracted from the {@code Location} response header
    * @throws KeycloakAdminException if the Admin API is unreachable or user creation fails
    */
-  public String createUser(String email, String password, String companyId) {
+  public String createUser(
+      String email, String password, String companyId, Instant termsAcceptedAt) {
     String token = acquireToken();
     String url = props.getBaseUrl() + "/admin/realms/" + props.getRealm() + "/users";
 
@@ -141,8 +153,16 @@ public class KeycloakAdminClient {
             email,
             "enabled",
             true,
+            "emailVerified",
+            false,
+            "requiredActions",
+            props.isRequireEmailVerification() ? List.of("VERIFY_EMAIL") : List.of(),
             "attributes",
-            Map.of("company_id", List.of(companyId)),
+            Map.of(
+                "company_id",
+                List.of(companyId),
+                "terms_accepted_at",
+                List.of(termsAcceptedAt.toString())),
             "credentials",
             List.of(Map.of("type", "password", "value", password, "temporary", false)));
 
@@ -403,6 +423,47 @@ public class KeycloakAdminClient {
   }
 
   /**
+   * Whether the realm-level signup policy requires email verification — surfaced so the signup
+   * response can tell the client which success state to render.
+   */
+  public boolean emailVerificationRequired() {
+    return props.isRequireEmailVerification();
+  }
+
+  /**
+   * Deletes the Keycloak user identified by {@code userId} — the signup compensation path: if the
+   * company (tenant) creation fails after the owner's Keycloak user was created, the user is
+   * removed so the email address is not permanently blocked by a half-completed signup.
+   *
+   * <p>Idempotent for compensation purposes: a {@code 404} (already gone) is treated as success.
+   *
+   * @param userId the Keycloak user UUID
+   * @throws KeycloakAdminException if the Admin API is unreachable or returns an unexpected error
+   */
+  public void deleteUser(String userId) {
+    String token = acquireToken();
+    String url = props.getBaseUrl() + "/admin/realms/" + props.getRealm() + "/users/" + userId;
+    try {
+      restClient
+          .delete()
+          .uri(URI.create(url))
+          .header("Authorization", "Bearer " + token)
+          .retrieve()
+          .toBodilessEntity();
+      log.info("Deleted Keycloak user {}", userId);
+    } catch (RestClientResponseException e) {
+      if (e.getStatusCode() == HttpStatus.NOT_FOUND) {
+        return; // already gone — compensation goal achieved
+      }
+      throw new KeycloakAdminException(
+          "Keycloak user delete for " + userId + " failed with status " + e.getStatusCode(), e);
+    } catch (RestClientException e) {
+      throw new KeycloakAdminException(
+          "Keycloak user delete for " + userId + " failed — connection error", e);
+    }
+  }
+
+  /**
    * Enables or disables the Keycloak user identified by {@code userId}.
    *
    * @param userId the Keycloak user UUID
@@ -602,14 +663,31 @@ public class KeycloakAdminClient {
    * Obtains (or returns the cached) admin access token via the client-credentials grant. The token
    * is cached until {@link #TOKEN_EXPIRY_BUFFER_SECONDS} seconds before its actual expiry.
    *
-   * <p><strong>The client secret is NEVER logged.</strong>
+   * <p>Lock-free fast path: a valid cached token is returned without synchronization, so admin
+   * calls across the service do not serialize behind one monitor. Only an actual refresh takes the
+   * lock (double-checked inside {@link #refreshToken()}).
    *
    * @throws KeycloakAdminException if the token endpoint is unreachable or returns an error
    */
+  private String acquireToken() {
+    CachedToken cached = cachedToken;
+    if (cached.token() != null && Instant.now().isBefore(cached.expiresAt())) {
+      return cached.token();
+    }
+    return refreshToken();
+  }
+
+  /**
+   * Fetches a fresh admin token (client-credentials grant), re-checking the cache under the lock so
+   * concurrent callers trigger exactly one refresh.
+   *
+   * <p><strong>The client secret is NEVER logged.</strong>
+   */
   @SuppressWarnings("unchecked")
-  private synchronized String acquireToken() {
-    if (cachedToken != null && Instant.now().isBefore(tokenExpiresAt)) {
-      return cachedToken;
+  private synchronized String refreshToken() {
+    CachedToken cached = cachedToken;
+    if (cached.token() != null && Instant.now().isBefore(cached.expiresAt())) {
+      return cached.token();
     }
 
     String tokenUrl =
@@ -644,16 +722,17 @@ public class KeycloakAdminClient {
       throw new KeycloakAdminException("Keycloak token response missing access_token");
     }
 
-    cachedToken = (String) tokenResponse.get("access_token");
+    String token = (String) tokenResponse.get("access_token");
     int expiresIn =
         tokenResponse.containsKey("expires_in")
             ? ((Number) tokenResponse.get("expires_in")).intValue()
             : 300;
-    tokenExpiresAt =
-        Instant.now().plusSeconds(Math.max(0, expiresIn - TOKEN_EXPIRY_BUFFER_SECONDS));
+    cachedToken =
+        new CachedToken(
+            token, Instant.now().plusSeconds(Math.max(0, expiresIn - TOKEN_EXPIRY_BUFFER_SECONDS)));
 
     log.debug("Acquired Keycloak admin token; expires in {}s", expiresIn);
-    return cachedToken;
+    return token;
   }
 
   /** URL-encodes a query-parameter or form value. */

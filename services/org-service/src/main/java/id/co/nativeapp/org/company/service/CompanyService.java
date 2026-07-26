@@ -63,8 +63,24 @@ public class CompanyService {
    */
   public CreateCompanyResult createCompany(CreateCompanyCommand command) {
     // The new tenant id: generated here, never taken from the request (rule 5).
-    UUID newCompanyId = UUID.randomUUID();
+    return createCompany(command, UUID.randomUUID());
+  }
 
+  /**
+   * Creates a company under a caller-supplied tenant id — used by the signup orchestration, which
+   * generates the id up front so the owner's Keycloak user can be created (with its {@code
+   * company_id} attribute) BEFORE the company row exists, keeping the compensation path a single
+   * Keycloak user delete.
+   *
+   * <p>Rule 5 still holds: {@code newCompanyId} is always generated <em>server-side</em> (here or
+   * in {@link id.co.nativeapp.org.user.service.SignupService}) — it never originates from a request
+   * body or header.
+   *
+   * @param command the create-company command (carries the request-edge actor)
+   * @param newCompanyId the server-generated tenant id to bootstrap under
+   * @return the new company + first business
+   */
+  public CreateCompanyResult createCompany(CreateCompanyCommand command, UUID newCompanyId) {
     try {
       // Bind the NEW tenant id (and the request-edge actor) for the bootstrap insert,
       // so the auto-RLS aspect sets app.current_tenant = newCompanyId and the WITH

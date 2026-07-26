@@ -332,6 +332,73 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
   }
 
   // ---------------------------------------------------------------------------
+  // /api/v1/companies/current — the caller's OWN company (POS needs it → cashier-allowed)
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void aCashierCanReachTheCurrentCompanyRoute() throws Exception {
+    // The cashier POS loads GET /companies/current for the company's firstBusinessId +
+    // name/currency.
+    // It is a tenant-scoped read of the caller's own company, so a cashier MUST be allowed —
+    // without
+    // this the POS shows "No company selected" (regression guard for the currentCompanyRoute bean).
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/companies/current")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/companies/current");
+  }
+
+  @Test
+  void anOwnerCanReachTheCurrentCompanyRoute() throws Exception {
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/companies/current")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/companies/current");
+  }
+
+  @Test
+  void aCashierIsDeniedOtherCompaniesRoutesWith403() throws Exception {
+    // Only the EXACT /companies/current path is cashier-allowed; every other /companies/** path
+    // (company creation / management) stays owner/manager-only — proves the route ordering is
+    // specific, not a blanket broadening of the companies surface.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/companies/" + EXPECTED_COMPANY_ID)
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  // ---------------------------------------------------------------------------
   // /api/v1/users — team management (owner/manager dashboard route)
   // ---------------------------------------------------------------------------
 

@@ -60,8 +60,8 @@ public class OrgUnitController {
    * Returns the full org tree for the bound company as a deterministically ordered flat list (by
    * {@code effective_from}, then {@code id}). The frontend assembles the tree from this flat list
    * keyed on {@code id} and {@code parentId}. Includes both active and inactive units — the page
-   * shows deactivate/reactivate state. RLS scopes the read to the bound company (rule 5); no
-   * {@code WHERE company_id} is in the query.
+   * shows deactivate/reactivate state. RLS scopes the read to the bound company (rule 5); no {@code
+   * WHERE company_id} is in the query.
    *
    * <p>Note: {@code ORDER BY effective_from, id} is a deterministic row ordering, not a topological
    * parent-before-child guarantee; the frontend builds the tree by {@code parentId} lookup.

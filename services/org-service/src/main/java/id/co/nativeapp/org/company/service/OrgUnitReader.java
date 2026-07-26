@@ -28,10 +28,10 @@ public class OrgUnitReader {
   }
 
   /**
-   * All org units visible to the bound tenant, ordered deterministically (by {@code effective_from},
-   * then {@code id}). The frontend assembles the tree from this flat list keyed on {@code id} and
-   * {@code parentId} — {@code ORDER BY effective_from, id} is a deterministic row ordering, not a
-   * topological parent-before-child guarantee.
+   * All org units visible to the bound tenant, ordered deterministically (by {@code
+   * effective_from}, then {@code id}). The frontend assembles the tree from this flat list keyed on
+   * {@code id} and {@code parentId} — {@code ORDER BY effective_from, id} is a deterministic row
+   * ordering, not a topological parent-before-child guarantee.
    *
    * <p>No {@code WHERE company_id} — RLS constrains the result set to the bound company (rule 5).
    * Uses the {@link OrgUnitView} native-query projection — never {@code SELECT *} of the entity

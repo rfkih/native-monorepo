@@ -18,4 +18,5 @@ import java.util.UUID;
  * @param parentId the parent org-unit id, or {@code null} for a top-level node
  * @param active whether the node is currently active
  */
-public record OrgUnitListResponse(UUID id, String name, String type, UUID parentId, boolean active) {}
+public record OrgUnitListResponse(
+    UUID id, String name, String type, UUID parentId, boolean active) {}

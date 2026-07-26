@@ -19,8 +19,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
- * Web-slice coverage for {@code GET /api/v1/org-units}: 200 with the org-unit list, and 200 with
- * an empty list when no units exist. No DB. Mirrors the StatementsControllerTest style.
+ * Web-slice coverage for {@code GET /api/v1/org-units}: 200 with the org-unit list, and 200 with an
+ * empty list when no units exist. No DB. Mirrors the StatementsControllerTest style.
  *
  * <p>The service now returns {@link OrgUnitListResponse} directly (projection-to-DTO mapping in the
  * service layer — CODE-STRUCTURE §3.3), so the mock returns the DTO directly.

@@ -2,6 +2,7 @@ package id.co.nativeapp.gateway.ratelimit;
 
 import id.co.nativeapp.gateway.config.RateLimitProperties;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,7 +60,8 @@ public class RedisTokenBucketRateLimiter {
   }
 
   /**
-   * Atomically attempts to take one token from the bucket for {@code (companyId, sub)}.
+   * Atomically attempts to take one token from the per-tenant bucket for {@code (companyId, sub)},
+   * using the tenant-bucket knobs from {@link RateLimitProperties}.
    *
    * <p><strong>Fail-closed:</strong> if Redis is unreachable or the script fails, this returns
    * {@code false} (deny), so a Redis outage tightens — never disables — the limit.
@@ -68,7 +70,26 @@ public class RedisTokenBucketRateLimiter {
    *     with {@code 429} (including when Redis is unavailable).
    */
   public boolean tryAcquire(String companyId, String sub) {
-    String key = KEY_PREFIX + companyId + ':' + sub;
+    return tryAcquire(
+        companyId + ':' + sub, props.capacity(), props.refillTokens(), props.refillPeriod());
+  }
+
+  /**
+   * Atomically attempts to take one token from the bucket named {@code bucketKey} with explicit
+   * bucket knobs — the generic form backing both the per-tenant bucket and the anonymous per-IP
+   * signup bucket (which has its own, much tighter parameters).
+   *
+   * <p><strong>Fail-closed:</strong> as above — Redis unavailability denies.
+   *
+   * @param bucketKey the bucket identity (namespaced by the caller, e.g. {@code anon:signup:<ip>})
+   * @param capacity the bucket size (max burst)
+   * @param refillTokens tokens restored every {@code refillPeriod}
+   * @param refillPeriod the refill window
+   * @return {@code true} if the request is within the limit, {@code false} to reject with 429
+   */
+  public boolean tryAcquire(
+      String bucketKey, long capacity, long refillTokens, Duration refillPeriod) {
+    String key = KEY_PREFIX + bucketKey;
     long now = clock.millis();
     try {
       @SuppressWarnings("unchecked")
@@ -76,9 +97,9 @@ public class RedisTokenBucketRateLimiter {
           redis.execute(
               script,
               List.of(key),
-              Long.toString(props.capacity()),
-              Long.toString(props.refillTokens()),
-              Long.toString(props.refillPeriod().toMillis()),
+              Long.toString(capacity),
+              Long.toString(refillTokens),
+              Long.toString(refillPeriod.toMillis()),
               Long.toString(now),
               "1");
       return result != null && !result.isEmpty() && result.get(0) == 1L;
@@ -93,12 +114,19 @@ public class RedisTokenBucketRateLimiter {
   }
 
   /**
-   * The {@code Retry-After} hint (seconds) a {@code 429} response advertises — the refill period
-   * rounded up to whole seconds (at least 1), so a client backs off until at least one token is
-   * available again.
+   * The {@code Retry-After} hint (seconds) a {@code 429} response advertises — the tenant-bucket
+   * refill period rounded up to whole seconds (at least 1).
    */
   public long retryAfterSeconds() {
-    long seconds = props.refillPeriod().toSeconds();
+    return retryAfterSeconds(props.refillPeriod());
+  }
+
+  /**
+   * The {@code Retry-After} hint (seconds) for a bucket with the given refill period — at least 1,
+   * so a client backs off until at least one token is available again.
+   */
+  public long retryAfterSeconds(Duration refillPeriod) {
+    long seconds = refillPeriod.toSeconds();
     return Math.max(1L, seconds);
   }
 }

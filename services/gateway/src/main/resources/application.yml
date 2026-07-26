@@ -55,6 +55,15 @@ native:
       capacity: ${RATE_LIMIT_CAPACITY:20}
       refill-tokens: ${RATE_LIMIT_REFILL_TOKENS:20}
       refill-period: ${RATE_LIMIT_REFILL_PERIOD:1s}
+      # Anonymous per-client-IP bucket for the PUBLIC /api/v1/signup route (no JWT to key
+      # on). Deliberately tight: one signup creates a whole tenant. trust-forwarded-for
+      # must ONLY be enabled behind an ingress that appends the real client IP to
+      # X-Forwarded-For — otherwise the header is ignored (spoof-safe default).
+      signup:
+        capacity: ${SIGNUP_RATE_LIMIT_CAPACITY:10}
+        refill-tokens: ${SIGNUP_RATE_LIMIT_REFILL_TOKENS:10}
+        refill-period: ${SIGNUP_RATE_LIMIT_REFILL_PERIOD:1h}
+        trust-forwarded-for: ${SIGNUP_RATE_LIMIT_TRUST_XFF:false}
 
 management:
   endpoints:

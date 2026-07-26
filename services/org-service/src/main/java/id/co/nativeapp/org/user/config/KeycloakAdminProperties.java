@@ -44,6 +44,17 @@ public class KeycloakAdminProperties {
   /** HTTP read timeout for Keycloak Admin REST calls. Default {@code 5s}. */
   @NotNull private Duration readTimeout = Duration.ofSeconds(5);
 
+  /**
+   * When {@code true}, a signed-up owner is created with the {@code VERIFY_EMAIL} required action
+   * (and {@code emailVerified=false}), so Keycloak forces email verification at first login.
+   *
+   * <p>Default {@code false} because verification needs a working realm SMTP configuration —
+   * enabling it without SMTP locks every new owner out at the verify screen. <strong>Production
+   * MUST set this {@code true}</strong> (with realm SMTP configured): without it anyone can
+   * register an address they do not own, and a typo in the email is an unrecoverable account.
+   */
+  private boolean requireEmailVerification = false;
+
   public URI getBaseUrl() {
     return baseUrl;
   }
@@ -90,5 +101,13 @@ public class KeycloakAdminProperties {
 
   public void setReadTimeout(Duration readTimeout) {
     this.readTimeout = readTimeout;
+  }
+
+  public boolean isRequireEmailVerification() {
+    return requireEmailVerification;
+  }
+
+  public void setRequireEmailVerification(boolean requireEmailVerification) {
+    this.requireEmailVerification = requireEmailVerification;
   }
 }

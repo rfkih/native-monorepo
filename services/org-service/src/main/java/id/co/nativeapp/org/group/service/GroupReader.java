@@ -15,9 +15,9 @@ import org.springframework.transaction.annotation.Transactional;
  * /api/v1/consolidation-groups/{groupId}/members} paths.
  *
  * <p>A separate {@code @Component} (not a private method on {@link GroupService}) so the read-only
- * transaction is invoked through the Spring proxy — a self-invocation would bypass the {@code
- * @Transactional} advice and the {@link RlsAutoApplyAspect} that sets the tenant GUC, which is the
- * load-bearing mechanism that scopes every query to the bound company (rule 5).
+ * transaction is invoked through the Spring proxy — a self-invocation would bypass the
+ * {@code @Transactional} advice and the {@link RlsAutoApplyAspect} that sets the tenant GUC, which
+ * is the load-bearing mechanism that scopes every query to the bound company (rule 5).
  *
  * <p>{@code readOnly = true} signals PostgreSQL that no write will follow, allowing the driver to
  * skip acquiring a write lock and a replica to serve the read.

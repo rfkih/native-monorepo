@@ -90,10 +90,10 @@ public class GroupService {
   }
 
   /**
-   * All memberships for a group the bound tenant leads. RLS automatically scopes to the bound
-   * lead; if the group is not visible (the caller does not lead it, or it does not exist), this
-   * returns an empty list — the controller maps an empty result to {@code 404}.
-   * Projection-to-DTO mapping happens here in the service layer (CODE-STRUCTURE §3.3).
+   * All memberships for a group the bound tenant leads. RLS automatically scopes to the bound lead;
+   * if the group is not visible (the caller does not lead it, or it does not exist), this returns
+   * an empty list — the controller maps an empty result to {@code 404}. Projection-to-DTO mapping
+   * happens here in the service layer (CODE-STRUCTURE §3.3).
    *
    * @param groupId the consolidation group to list members for
    * @return the membership DTOs for the group

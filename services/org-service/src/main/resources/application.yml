@@ -67,6 +67,11 @@ native:
     client-secret: ${KEYCLOAK_ADMIN_SECRET:native-admin-secret}
     connect-timeout: 2s
     read-timeout: 5s
+    # Signed-up owners get the VERIFY_EMAIL required action (blocks first login until the
+    # address is verified). Default false: local/dev realms have no SMTP, and enabling it
+    # without SMTP locks every new owner out at the verify screen. Production MUST set
+    # KEYCLOAK_REQUIRE_EMAIL_VERIFICATION=true (with realm SMTP configured).
+    require-email-verification: ${KEYCLOAK_REQUIRE_EMAIL_VERIFICATION:false}
 
 ---
 # Defense-in-depth local JWT validation (#16, libs/security) — NON-DEV ONLY.

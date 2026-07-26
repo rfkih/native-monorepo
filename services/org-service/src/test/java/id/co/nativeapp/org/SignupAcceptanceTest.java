@@ -134,6 +134,8 @@ class SignupAcceptanceTest {
     assertThat(node.has("companyId")).isTrue();
     assertThat(node.get("companyId").asString()).isNotBlank();
     assertThat(node.get("ownerEmail").asString()).isEqualTo(email);
+    // The test realm has require-email-verification unset (default false).
+    assertThat(node.get("emailVerificationRequired").asBoolean()).isFalse();
 
     // Company row was persisted.
     assertThat(rowCountAsAdmin("company")).isEqualTo(1L);
@@ -186,9 +188,45 @@ class SignupAcceptanceTest {
         """
         {"companyName":"Acme","baseCurrency":"IDR","defaultLanguage":"id",
          "firstBusinessName":"Main","firstBusinessType":"outlet",
-         "ownerEmail":"","ownerPassword":"secret"}
+         "ownerEmail":"","ownerPassword":"secret","termsAccepted":true}
         """;
-    assertThatThrownBy(() -> callSignup(missingEmail))
+    assertBadRequest(missingEmail);
+  }
+
+  @Test
+  void anUnsupportedCurrencyReturns400() {
+    // EUR is a real ISO-4217 code but NOT platform-supported — the server-side whitelist must
+    // reject it; a direct API call bypasses the client's option list.
+    assertBadRequest(signupBody(uniqueEmail()).replace("\"IDR\"", "\"EUR\""));
+  }
+
+  @Test
+  void anUnsupportedLanguageReturns400() {
+    assertBadRequest(signupBody(uniqueEmail()).replace("\"id\"", "\"xx\""));
+  }
+
+  @Test
+  void anUnsupportedBusinessTypeReturns400() {
+    assertBadRequest(signupBody(uniqueEmail()).replace("\"outlet\"", "\"franchise\""));
+  }
+
+  @Test
+  void aSignupWithoutAcceptedTermsReturns400() {
+    // Consent is validated server-side (@AssertTrue) — unchecked terms cannot be bypassed by
+    // calling the API directly.
+    assertBadRequest(
+        signupBody(uniqueEmail()).replace("\"termsAccepted\": true", "\"termsAccepted\": false"));
+
+    // No side effects: the rejected signup must not have created a company row.
+    try {
+      assertThat(rowCountAsAdmin("company")).isZero();
+    } catch (SQLException ignored) {
+      // Tables not created yet — equally proves nothing was persisted.
+    }
+  }
+
+  private void assertBadRequest(String body) {
+    assertThatThrownBy(() -> callSignup(body))
         .isInstanceOf(HttpClientErrorException.class)
         .satisfies(
             ex ->
@@ -219,7 +257,8 @@ class SignupAcceptanceTest {
           "firstBusinessName": "Main Outlet",
           "firstBusinessType": "outlet",
           "ownerEmail": "%s",
-          "ownerPassword": "secret-password-123"
+          "ownerPassword": "secret-password-123",
+          "termsAccepted": true
         }
         """
         .formatted(email);
@@ -253,6 +292,13 @@ class SignupAcceptanceTest {
       JsonNode companyIds = user.path("attributes").path("company_id");
       assertThat(companyIds.isArray()).isTrue();
       assertThat(companyIds.get(0).asString()).isEqualTo(expectedCompanyId);
+
+      // Signed-up owners start unverified (verification is enforced when the realm requires it),
+      // and the ToS consent instant is recorded as a user attribute.
+      assertThat(user.path("emailVerified").asBoolean()).isFalse();
+      JsonNode termsAcceptedAt = user.path("attributes").path("terms_accepted_at");
+      assertThat(termsAcceptedAt.isArray()).isTrue();
+      assertThat(termsAcceptedAt.get(0).asString()).isNotBlank();
     }
   }
 

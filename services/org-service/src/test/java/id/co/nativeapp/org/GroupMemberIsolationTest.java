@@ -16,12 +16,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 /**
- * RLS tenant-isolation proof for {@code GET /api/v1/consolidation-groups/{groupId}/members} —
- * the {@link id.co.nativeapp.org.group.repository.GroupMembershipRepository#findMemberViews} query.
+ * RLS tenant-isolation proof for {@code GET /api/v1/consolidation-groups/{groupId}/members} — the
+ * {@link id.co.nativeapp.org.group.repository.GroupMembershipRepository#findMemberViews} query.
  *
  * <p>Company A (the lead) creates a group and adds a member. The {@code findMemberViews} query
  * carries <em>no</em> {@code WHERE company_id} — the result set is constrained solely by the
  * auto-applied RLS policy (rule 5). This test proves that:
+ *
  * <ol>
  *   <li>A sees the member it added (the query and RLS WITH CHECK both hold).
  *   <li>B, bound as a different tenant, sees an empty result for the same {@code groupId} (RLS
@@ -47,15 +48,13 @@ class GroupMemberIsolationTest extends PostgresRlsTestBase {
     UUID companyA =
         companyService
             .createCompany(
-                new CreateCompanyCommand(
-                    "MemberLeadA", "IDR", "id", "A HQ", "outlet", "owner-a"))
+                new CreateCompanyCommand("MemberLeadA", "IDR", "id", "A HQ", "outlet", "owner-a"))
             .company()
             .getId();
     UUID companyB =
         companyService
             .createCompany(
-                new CreateCompanyCommand(
-                    "MemberB", "USD", "en", "B HQ", "outlet", "owner-b"))
+                new CreateCompanyCommand("MemberB", "USD", "en", "B HQ", "outlet", "owner-b"))
             .company()
             .getId();
 
@@ -64,24 +63,21 @@ class GroupMemberIsolationTest extends PostgresRlsTestBase {
         TenantContext.callAs(
             companyA.toString(),
             "owner-a",
-            () -> groupService.createGroup(new CreateGroupCommand("A Members Group", "IDR"))
-                .getId());
+            () ->
+                groupService.createGroup(new CreateGroupCommand("A Members Group", "IDR")).getId());
 
     // A adds company B as a member (still bound as lead A).
     TenantContext.runAs(
         companyA.toString(),
         "owner-a",
-        () ->
-            groupService.addMember(new AddMemberCommand(groupId, companyB)));
+        () -> groupService.addMember(new AddMemberCommand(groupId, companyB)));
 
     // --- assertion: A sees the member it added -----------------------------------------------
 
     List<GroupMembershipListResponse> aView =
         TenantContext.callAs(
             companyA.toString(), "owner-a", () -> groupService.findMembersForGroup(groupId));
-    assertThat(aView)
-        .as("Lead A must see the member it added")
-        .isNotEmpty();
+    assertThat(aView).as("Lead A must see the member it added").isNotEmpty();
     assertThat(aView.stream().map(GroupMembershipListResponse::memberCompanyId).toList())
         .contains(companyB);
 

@@ -68,9 +68,9 @@ public class GroupController {
   }
 
   /**
-   * Lists all consolidation groups the bound tenant leads. RLS scopes the read to the bound
-   * company (rule 5); no {@code WHERE company_id} is in the query. Returns {@code 200} with an
-   * empty list when the company leads no groups.
+   * Lists all consolidation groups the bound tenant leads. RLS scopes the read to the bound company
+   * (rule 5); no {@code WHERE company_id} is in the query. Returns {@code 200} with an empty list
+   * when the company leads no groups.
    */
   @Operation(
       summary = "List consolidation groups led by the current company",
@@ -89,8 +89,8 @@ public class GroupController {
    * group has no members yet).
    *
    * <p>The convention for "group not led by caller": the sibling DELETE path returns {@code 204}
-   * (idempotent re-remove of nothing), but a GET for members of a non-existent group returns
-   * {@code 404} — the caller explicitly requested a resource that does not exist.
+   * (idempotent re-remove of nothing), but a GET for members of a non-existent group returns {@code
+   * 404} — the caller explicitly requested a resource that does not exist.
    */
   @Operation(
       summary = "List members of a consolidation group",
@@ -99,8 +99,7 @@ public class GroupController {
               + " member list; 404 when the group does not exist or the caller does not lead it"
               + " (RLS makes non-lead groups invisible — fail closed). RLS-scoped (rule 5).")
   @GetMapping("/{groupId}/members")
-  public ResponseEntity<List<GroupMembershipListResponse>> listMembers(
-      @PathVariable UUID groupId) {
+  public ResponseEntity<List<GroupMembershipListResponse>> listMembers(@PathVariable UUID groupId) {
     List<GroupMembershipListResponse> members = groupService.findMembersForGroup(groupId);
     // Treat an empty result as "group not found or not led by caller" — 404.
     // A group with genuine zero members would also be empty; that is acceptable because zero-member
