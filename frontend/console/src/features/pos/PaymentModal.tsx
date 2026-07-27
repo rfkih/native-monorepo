@@ -24,7 +24,7 @@ import { Spinner } from '@/components/ui/Spinner'
 import { Segmented } from '@/components/ui/Segmented'
 import { formatMoney } from '@/lib/money'
 import type { CompanySession } from '@/lib/session'
-import { ApiError } from '@/lib/api'
+import { ApiError, isOutletNotAssigned } from '@/lib/api'
 import type {
   OrderLineInput,
   OrderResponse,
@@ -431,14 +431,18 @@ function CashPanel({
       {(checkout.isError || payParked.isError) ? (
         <p className="mb-3 text-xs text-loss">
           {(() => {
-            const stockErr = parseInsufficientStock(checkout.error ?? payParked.error)
+            const err = checkout.error ?? payParked.error
+            if (isOutletNotAssigned(err)) {
+              return t('pos.payment.outletNotAssigned')
+            }
+            const stockErr = parseInsufficientStock(err)
             if (stockErr) {
               return t('pos.payment.insufficientStock', {
                 itemName: stockErr.itemName,
                 available: stockErr.available,
               })
             }
-            return ((checkout.error ?? payParked.error) as Error).message
+            return (err as Error).message
           })()}
         </p>
       ) : null}
@@ -564,14 +568,18 @@ function DigitalPanel({
         {(checkout.isError || payParked.isError) ? (
           <p className="mb-3 text-xs text-loss">
             {(() => {
-              const stockErr = parseInsufficientStock(checkout.error ?? payParked.error)
+              const err = checkout.error ?? payParked.error
+              if (isOutletNotAssigned(err)) {
+                return t('pos.payment.outletNotAssigned')
+              }
+              const stockErr = parseInsufficientStock(err)
               if (stockErr) {
                 return t('pos.payment.insufficientStock', {
                   itemName: stockErr.itemName,
                   available: stockErr.available,
                 })
               }
-              return ((checkout.error ?? payParked.error) as Error).message
+              return (err as Error).message
             })()}
           </p>
         ) : null}

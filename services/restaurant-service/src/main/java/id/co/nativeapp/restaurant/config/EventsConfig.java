@@ -3,6 +3,7 @@ package id.co.nativeapp.restaurant.config;
 import id.co.nativeapp.events.MicrometerTraceparentSupplier;
 import id.co.nativeapp.events.OutboxLagMetrics;
 import id.co.nativeapp.events.OutboxWriter;
+import id.co.nativeapp.events.ProcessedEventStore;
 import id.co.nativeapp.events.TraceparentSupplier;
 import id.co.nativeapp.restaurant.sale.service.PostOutboxHook;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -60,6 +61,17 @@ public class EventsConfig {
       MeterRegistry meterRegistry,
       @Value("${spring.application.name}") String serviceName) {
     return new OutboxLagMetrics(jdbcTemplate, meterRegistry, serviceName);
+  }
+
+  /**
+   * The idempotent-consumer dedupe store used by {@link
+   * id.co.nativeapp.restaurant.outletref.service.UserOutletAssignmentRefWriter}. Keyed by the
+   * globally-unique event UUID; no tenant scope needed (the event id is unique across all tenants).
+   * Requires the {@code processed_event} table (V15 migration).
+   */
+  @Bean
+  public ProcessedEventStore processedEventStore(JdbcTemplate jdbcTemplate) {
+    return new ProcessedEventStore(jdbcTemplate);
   }
 
   /**

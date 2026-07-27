@@ -53,3 +53,15 @@ services:
     # In-cluster (connect↔kafka:29092) is unchanged; register connectors at http://localhost:18083.
     ports: !override
       - "18083:8083"
+  redis:
+    # blackheart-redis / backend-redis hold host 6379; remap Native Redis to 16379.
+    # No host client uses Redis yet (services do not configure spring.data.redis) — in-cluster
+    # access (redis:6379) is unchanged.
+    ports: !override
+      - "16379:6379"
+  schema-registry:
+    # blackheart holds host 8081; remap Schema Registry to 18081. No host client uses it (the
+    # fleet reads Avro schemas from libs/contracts on the classpath, not Confluent serdes) —
+    # in-cluster access (schema-registry:8081) is unchanged.
+    ports: !override
+      - "18081:8081"

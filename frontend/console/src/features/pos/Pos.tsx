@@ -40,6 +40,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
+import { isOutletNotAssigned } from '@/lib/api'
 import { useSession, type CompanySession } from '@/lib/session'
 import { useAuth } from '@/lib/authContext'
 import { useTheme } from '@/lib/theme'
@@ -1475,7 +1476,9 @@ function OpenBillDialog({
             </div>
             {openBill.isError ? (
               <p className="text-xs text-loss" role="alert">
-                {(openBill.error as Error).message}
+                {isOutletNotAssigned(openBill.error)
+                  ? t('pos.payment.outletNotAssigned')
+                  : (openBill.error as Error).message}
               </p>
             ) : null}
           </div>

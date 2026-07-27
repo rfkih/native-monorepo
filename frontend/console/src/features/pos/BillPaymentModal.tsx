@@ -20,7 +20,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
 import { Segmented } from '@/components/ui/Segmented'
 import { formatMoney } from '@/lib/money'
-import { ApiError } from '@/lib/api'
+import { ApiError, isOutletNotAssigned } from '@/lib/api'
 import type { CompanySession } from '@/lib/session'
 import type { PriceBreakdownResponse } from './api'
 import { usePayBill, type BillResponse } from './billsApi'
@@ -348,6 +348,9 @@ function BillCashPanel({
       {payBill.isError ? (
         <p className="mb-3 text-xs text-loss" role="alert">
           {(() => {
+            if (isOutletNotAssigned(payBill.error)) {
+              return t('pos.payment.outletNotAssigned')
+            }
             const stockErr = parseInsufficientStock(payBill.error)
             if (stockErr) {
               return t('pos.payment.insufficientStock', {
@@ -440,6 +443,9 @@ function BillDigitalPanel({
       {payBill.isError ? (
         <p className="mb-3 text-xs text-loss" role="alert">
           {(() => {
+            if (isOutletNotAssigned(payBill.error)) {
+              return t('pos.payment.outletNotAssigned')
+            }
             const stockErr = parseInsufficientStock(payBill.error)
             if (stockErr) {
               return t('pos.payment.insufficientStock', {

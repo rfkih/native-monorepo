@@ -337,6 +337,8 @@ export const id = {
       cancel: 'Batal',
       insufficientStock: '{{itemName}} hanya memiliki stok {{available}}.',
       insufficientStockGeneric: 'Satu atau lebih item kehabisan stok.',
+      outletNotAssigned:
+        'Anda tidak ditugaskan di gerai ini. Minta manajer menugaskan Anda, atau ganti gerai.',
     },
     receipt: {
       title: 'Struk',
@@ -643,6 +645,7 @@ export const id = {
     errorSelfLockout: 'Anda tidak dapat mengubah akses sendiri.',
     errorGeneric: 'Terjadi kesalahan. Silakan coba lagi.',
     allOutlets: 'Semua gerai',
+    noOutletsAssigned: 'Belum ditugaskan ke gerai',
     outletCount: '{{count}} gerai',
     editOutlets: 'Gerai',
     role: {

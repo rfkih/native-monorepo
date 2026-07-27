@@ -342,6 +342,8 @@ export const en = {
       cancel: 'Cancel',
       insufficientStock: '{{itemName}} only has {{available}} in stock.',
       insufficientStockGeneric: 'One or more items are out of stock.',
+      outletNotAssigned:
+        "You're not assigned to this outlet. Ask a manager to assign you, or switch outlet.",
     },
     receipt: {
       title: 'Receipt',
@@ -648,6 +650,7 @@ export const en = {
     errorSelfLockout: 'You cannot change your own access.',
     errorGeneric: 'Something went wrong. Please try again.',
     allOutlets: 'All outlets',
+    noOutletsAssigned: 'No outlets assigned',
     outletCount: '{{count}} outlets',
     editOutlets: 'Outlets',
     role: {

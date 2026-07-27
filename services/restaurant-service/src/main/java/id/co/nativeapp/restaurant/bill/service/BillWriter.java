@@ -26,6 +26,7 @@ import id.co.nativeapp.restaurant.order.domain.OrderLine;
 import id.co.nativeapp.restaurant.order.dto.OrderLineRequest;
 import id.co.nativeapp.restaurant.order.dto.PriceBreakdownResponse;
 import id.co.nativeapp.restaurant.order.service.ModifierValidationReader;
+import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
 import id.co.nativeapp.restaurant.pricing.domain.PriceBreakdown;
 import id.co.nativeapp.restaurant.pricing.service.TaxChargeService;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
@@ -85,6 +86,7 @@ public class BillWriter {
   private final SaleWriter saleWriter;
   private final StockDeductionWriter stockDeductionWriter;
   private final RestaurantTableRepository tableRepository;
+  private final OutletAccessGuard outletAccessGuard;
 
   public BillWriter(
       BillRepository billRepository,
@@ -95,7 +97,8 @@ public class BillWriter {
       TaxChargeService taxChargeService,
       SaleWriter saleWriter,
       StockDeductionWriter stockDeductionWriter,
-      RestaurantTableRepository tableRepository) {
+      RestaurantTableRepository tableRepository,
+      OutletAccessGuard outletAccessGuard) {
     this.billRepository = billRepository;
     this.lineRepository = lineRepository;
     this.modifierRepository = modifierRepository;
@@ -105,6 +108,7 @@ public class BillWriter {
     this.saleWriter = saleWriter;
     this.stockDeductionWriter = stockDeductionWriter;
     this.tableRepository = tableRepository;
+    this.outletAccessGuard = outletAccessGuard;
   }
 
   // -------------------------------------------------------------------------
@@ -120,6 +124,10 @@ public class BillWriter {
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public BillResponse open(OpenBillRequest request) {
     String companyId = TenantContext.require().companyId();
+
+    // Phase 5 enforcement: a cashier may only open a bill at an outlet they are assigned to —
+    // the same OutletAccessGuard as OrderWriter, so bills cannot sidestep the order-path guard.
+    outletAccessGuard.enforce(request.businessId());
 
     if (request.tableId() != null) {
       validateTableId(request.tableId(), request.businessId());
@@ -285,6 +293,10 @@ public class BillWriter {
         billRepository
             .findById(billId)
             .orElseThrow(() -> new BillNotFoundException(billId));
+
+    // Phase 5 enforcement at the money moment: even if the bill was opened by someone else (or the
+    // cashier's assignment was revoked mid-shift), paying it requires outlet access.
+    outletAccessGuard.enforce(bill.getBusinessId());
 
     // Idempotent: already PAID — return current state without side effects.
     if ("PAID".equals(bill.getStatus())) {

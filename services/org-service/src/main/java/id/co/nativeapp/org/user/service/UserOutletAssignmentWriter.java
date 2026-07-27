@@ -1,13 +1,17 @@
 package id.co.nativeapp.org.user.service;
 
+import id.co.nativeapp.events.AvroSerde;
+import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.org.company.domain.OrgUnit;
 import id.co.nativeapp.org.company.domain.OrgUnitType;
 import id.co.nativeapp.org.company.repository.OrgUnitRepository;
 import id.co.nativeapp.org.user.domain.UserOutletAssignment;
+import id.co.nativeapp.org.user.messaging.UserOutletAssignmentChangedSchema;
 import id.co.nativeapp.org.user.repository.UserOutletAssignmentRepository;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
@@ -15,6 +19,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.apache.avro.generic.GenericRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -44,6 +49,14 @@ import org.springframework.transaction.annotation.Transactional;
  * written — each must resolve RLS-scoped to an active org unit of type {@code OUTLET}. A single
  * invalid id aborts the whole operation with a 400.
  *
+ * <p><strong>Event emission (rule 3 — transactional outbox).</strong> After each row mutation,
+ * {@link #replaceAssignments} writes a {@code UserOutletAssignmentChanged} outbox row in the SAME
+ * transaction: one {@code UNASSIGNED} event per row closed, one {@code ASSIGNED} event per row
+ * created or reopened. All DB writes and all outbox rows commit (or roll back) atomically. The
+ * aggregate id on the outbox row is the {@code assignment_id} UUID — Debezium keys the Kafka
+ * record by it, so the ordering guarantee is per-(user, outlet) tuple (an {@code assignment_id}
+ * is stable for its tuple), NOT per-user across outlets (see the event catalog entry).
+ *
  * <p><strong>PII / observability.</strong> User ids (Keycloak subs) are stable, non-PII identifiers
  * and are safe to log. Outlet names are not logged — only UUIDs appear in log statements.
  */
@@ -54,14 +67,17 @@ public class UserOutletAssignmentWriter {
 
   private final UserOutletAssignmentRepository assignmentRepository;
   private final OrgUnitRepository orgUnitRepository;
+  private final OutboxWriter outboxWriter;
   private final Clock clock;
 
   public UserOutletAssignmentWriter(
       UserOutletAssignmentRepository assignmentRepository,
       OrgUnitRepository orgUnitRepository,
+      OutboxWriter outboxWriter,
       Clock clock) {
     this.assignmentRepository = assignmentRepository;
     this.orgUnitRepository = orgUnitRepository;
+    this.outboxWriter = outboxWriter;
     this.clock = clock;
   }
 
@@ -96,6 +112,9 @@ public class UserOutletAssignmentWriter {
     Map<UUID, UserOutletAssignment> existingByOutlet =
         existing.stream().collect(Collectors.toMap(UserOutletAssignment::getOrgUnitId, a -> a));
 
+    UUID companyId = UUID.fromString(TenantContext.require().companyId());
+    Instant now = clock.instant();
+
     // 1. Close rows that are currently active but not in the desired set.
     for (UserOutletAssignment assignment : existing) {
       if (assignment.isActive() && !desired.contains(assignment.getOrgUnitId())) {
@@ -103,6 +122,9 @@ public class UserOutletAssignmentWriter {
         assignmentRepository.save(assignment);
         log.info(
             "Closed outlet assignment: userId={}, orgUnitId={}", userId, assignment.getOrgUnitId());
+        // Emit UNASSIGNED outbox event in this same transaction (rule 3).
+        emitEvent(assignment, UserOutletAssignmentChangedSchema.toUnassigned(assignment),
+            companyId, now);
       }
     }
 
@@ -115,16 +137,42 @@ public class UserOutletAssignmentWriter {
         newAssignment.setCompanyId(TenantContext.require().companyId());
         assignmentRepository.save(newAssignment);
         log.info("Inserted outlet assignment: userId={}, orgUnitId={}", userId, outletId);
+        // Emit ASSIGNED outbox event in this same transaction (rule 3).
+        emitEvent(newAssignment, UserOutletAssignmentChangedSchema.toAssigned(newAssignment),
+            companyId, now);
       } else if (!existing_.isActive()) {
         // Pre-existing inactive row — reopen it (preserves history, respects UNIQUE constraint).
         existing_.reopen();
         assignmentRepository.save(existing_);
         log.info("Reopened outlet assignment: userId={}, orgUnitId={}", userId, outletId);
+        // Emit ASSIGNED outbox event in this same transaction (rule 3).
+        emitEvent(existing_, UserOutletAssignmentChangedSchema.toAssigned(existing_),
+            companyId, now);
       }
       // else: already active → no-op (idempotent)
     }
 
     assignmentRepository.flush();
+  }
+
+  /**
+   * Writes one {@code UserOutletAssignmentChanged} outbox row in the caller's transaction. The
+   * outbox aggregate id — and therefore the Kafka partition key (Debezium keys the record by the
+   * {@code aggregate_id} column) — is the {@code assignment_id} UUID, which is stable per
+   * (user, outlet) tuple: re-deliveries and later state changes of the same assignment land on the
+   * same partition in order. The outbox row commits atomically with the surrounding DB writes
+   * (rule 3).
+   */
+  private void emitEvent(
+      UserOutletAssignment assignment, GenericRecord record, UUID companyId, Instant occurredAt) {
+    outboxWriter.write(
+        UserOutletAssignmentChangedSchema.AGGREGATE_TYPE,
+        assignment.getId().toString(),   // aggregate_id = assignment_id (the PK, unique per row)
+        UserOutletAssignmentChangedSchema.EVENT_TYPE,
+        AvroSerde.serialize(record),
+        null,
+        companyId,
+        occurredAt);
   }
 
   /**

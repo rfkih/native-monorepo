@@ -26,6 +26,7 @@ import {
 } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
+import { isOutletNotAssigned } from '@/lib/api'
 import { formatMoney } from '@/lib/money'
 import { cn } from '@/lib/cn'
 import type { CompanySession } from '@/lib/session'
@@ -159,7 +160,9 @@ export function TableFloor({ session, locale, tables, onOpenBill, onClose }: Pro
           {/* Error from opening a bill */}
           {openBill.isError ? (
             <p className="rounded-xl border border-loss/30 bg-loss/10 px-4 py-3 text-sm text-loss" role="alert">
-              {(openBill.error as Error).message}
+              {isOutletNotAssigned(openBill.error)
+                ? t('pos.payment.outletNotAssigned')
+                : (openBill.error as Error).message}
             </p>
           ) : null}
 

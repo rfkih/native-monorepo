@@ -62,7 +62,8 @@ public abstract class PostgresRlsTestBase {
           "TRUNCATE TABLE bill_line_modifier, bill_line, bill,"
               + " payment, order_line_modifier, order_line, restaurant_order,"
               + " restaurant_table, menu_item_modifier_option, menu_item_modifier_group, menu_item,"
-              + " menu_category, sale, outbox CASCADE");
+              + " menu_category, sale, outbox, user_outlet_assignment_ref,"
+              + " processed_event CASCADE");
     } catch (SQLException ignored) {
       // Tables not created yet (pre-Flyway) — nothing to reset.
     }
@@ -70,6 +71,13 @@ public abstract class PostgresRlsTestBase {
 
   /**
    * Wire Spring's datasource to the unprivileged app role (Flyway runs as it, owning the table).
+   *
+   * <p>Also pins {@code spring.kafka.bootstrap-servers} to a non-routable address: no test in this
+   * suite needs a broker (the {@code UserOutletAssignmentChanged} consumer is exercised at the
+   * service layer), but the Phase-5 {@code @KafkaListener} container starts with the context and
+   * would otherwise connect to whatever happens to be listening on the developer's {@code
+   * localhost:9092} — on this machine a FOREIGN Kafka broker from an unrelated stack. Pointing it
+   * at a closed port keeps the listener retrying harmlessly in the background.
    */
   @DynamicPropertySource
   static void datasourceProperties(DynamicPropertyRegistry registry) {
@@ -77,6 +85,7 @@ public abstract class PostgresRlsTestBase {
     registry.add("spring.datasource.username", () -> APP_USER);
     registry.add("spring.datasource.password", () -> APP_PASSWORD);
     registry.add("spring.datasource.driver-class-name", () -> "org.postgresql.Driver");
+    registry.add("spring.kafka.bootstrap-servers", () -> "localhost:1");
   }
 
   private static void provisionAppRole() {

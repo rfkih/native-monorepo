@@ -2,6 +2,7 @@ package id.co.nativeapp.restaurant.config;
 
 import id.co.nativeapp.restaurant.menu.domain.InsufficientStockException;
 import id.co.nativeapp.restaurant.menu.domain.UntrackedStockException;
+import id.co.nativeapp.restaurant.outletref.domain.OutletNotAssignedException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
 import java.util.NoSuchElementException;
@@ -68,6 +69,32 @@ public class StockExceptionHandler {
     problem.setTitle("Untracked stock");
     problem.setDetail(ex.getMessage());
     problem.setProperty("menuItemId", ex.getMenuItemId().toString());
+    return problem;
+  }
+
+  /**
+   * {@link OutletNotAssignedException} → {@code 403 Forbidden} RFC-7807 ProblemDetail.
+   *
+   * <p>Emitted by {@link id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard} (shared
+   * by the order and open-bill write paths) when a cashier attempts to ring a sale at an outlet
+   * they are not assigned to (Phase 5 enforcement policy).
+   * The type URI {@code https://errors.nativeapp.id/outlet-not-assigned} is the stable contract the
+   * UI maps to an i18n key. Detail does NOT leak the outlet id (no PII risk, but avoids
+   * confirming which outlet ids exist in the tenant).
+   */
+  @ExceptionHandler(OutletNotAssignedException.class)
+  public ProblemDetail handleOutletNotAssigned(
+      OutletNotAssignedException ex, HttpServletRequest request) {
+    ProblemDetail problem =
+        ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
+    problem.setType(URI.create(OutletNotAssignedException.TYPE));
+    problem.setInstance(URI.create(request.getRequestURI()));
+    problem.setTitle("Outlet not assigned");
+    problem.setDetail("The cashier is not assigned to this outlet.");
+    String traceId = MDC.get("traceId");
+    if (traceId != null) {
+      problem.setProperty("traceId", traceId);
+    }
     return problem;
   }
 

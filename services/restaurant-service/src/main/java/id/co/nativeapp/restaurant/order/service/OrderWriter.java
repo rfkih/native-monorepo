@@ -22,6 +22,7 @@ import id.co.nativeapp.restaurant.order.projection.OrderView;
 import id.co.nativeapp.restaurant.order.repository.OrderLineModifierRepository;
 import id.co.nativeapp.restaurant.order.repository.OrderLineRepository;
 import id.co.nativeapp.restaurant.order.repository.OrderRepository;
+import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
 import id.co.nativeapp.restaurant.payment.dto.PaymentResponse;
 import id.co.nativeapp.restaurant.payment.service.PaymentInstruction;
 import id.co.nativeapp.restaurant.payment.service.PaymentWriter;
@@ -97,6 +98,7 @@ public class OrderWriter {
   private final TaxChargeService taxChargeService;
   private final RestaurantTableRepository tableRepository;
   private final StockDeductionWriter stockDeductionWriter;
+  private final OutletAccessGuard outletAccessGuard;
 
   public OrderWriter(
       OrderRepository orderRepository,
@@ -108,7 +110,8 @@ public class OrderWriter {
       PaymentWriter paymentWriter,
       TaxChargeService taxChargeService,
       RestaurantTableRepository tableRepository,
-      StockDeductionWriter stockDeductionWriter) {
+      StockDeductionWriter stockDeductionWriter,
+      OutletAccessGuard outletAccessGuard) {
     this.orderRepository = orderRepository;
     this.lineRepository = lineRepository;
     this.modifierRepository = modifierRepository;
@@ -119,6 +122,7 @@ public class OrderWriter {
     this.taxChargeService = taxChargeService;
     this.tableRepository = tableRepository;
     this.stockDeductionWriter = stockDeductionWriter;
+    this.outletAccessGuard = outletAccessGuard;
   }
 
   /**
@@ -133,6 +137,10 @@ public class OrderWriter {
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public CheckoutResult checkout(CheckoutRequest request) {
     String companyId = TenantContext.require().companyId();
+
+    // Phase 5 enforcement: cashier must be assigned to the outlet being rung (policy — owner/
+    // manager bypass, cashier default-closed, zero-rows grandfather — lives in OutletAccessGuard).
+    outletAccessGuard.enforce(request.businessId());
 
     // Idempotency fast path: return the existing order without a second SaleRecorded.
     Optional<OrderView> existing =
@@ -250,6 +258,9 @@ public class OrderWriter {
   public CheckoutResult park(ParkOrderRequest request) {
     String companyId = TenantContext.require().companyId();
 
+    // Phase 5 enforcement: same guard as checkout — cashier must be assigned to this outlet.
+    outletAccessGuard.enforce(request.businessId());
+
     // Idempotency fast path.
     Optional<OrderView> existing =
         orderRepository.findViewByIdempotencyKey(request.idempotencyKey());
@@ -300,10 +311,14 @@ public class OrderWriter {
     String companyId = TenantContext.require().companyId();
 
     // Load the full aggregate (write path — needs all fields to check status + total).
+    // Phase 5 enforcement: apply the outlet guard against the order's businessId, loaded once.
     Order order =
         orderRepository
             .findById(orderId)
             .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
+
+    // Phase 5 enforcement against the order's persisted businessId.
+    outletAccessGuard.enforce(order.getBusinessId());
 
     if ("COMPLETED".equals(order.getStatus())) {
       // Idempotent: already paid — return the current state without side effects.

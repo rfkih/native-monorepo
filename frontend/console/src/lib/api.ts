@@ -37,6 +37,21 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Detects the Phase-5 403 outlet-not-assigned problem+json (stable type URI
+ * `https://errors.nativeapp.id/outlet-not-assigned`) thrown when a cashier rings a sale at an
+ * outlet they are not assigned to. Surfaces on checkout / pay-parked / open-bill / pay-bill.
+ * The caller maps it to the `pos.payment.outletNotAssigned` i18n key.
+ */
+export function isOutletNotAssigned(err: unknown): boolean {
+  return (
+    err instanceof ApiError &&
+    err.status === 403 &&
+    typeof err.problem?.type === 'string' &&
+    err.problem.type.includes('outlet-not-assigned')
+  )
+}
+
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   body?: unknown

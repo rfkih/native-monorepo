@@ -1,0 +1,15 @@
+{
+  "type": "record",
+  "name": "UserOutletAssignmentChanged",
+  "namespace": "id.co.nativeapp.events.org",
+  "doc": "Emitted by org-service inside the replace-set transaction when a user's outlet assignment changes: one event per row CREATED/REOPENED (change_kind=ASSIGNED) and one per row CLOSED (change_kind=UNASSIGNED). Consumed by restaurant-service (and the other verticals) to maintain a local user_outlet_assignment_ref read model used for server-side outlet-scoping enforcement. Carries POST-CHANGE state; consumers upsert idempotently on conflict (company_id, user_id, org_unit_id). Ids only — no PII. Partition key is assignment_id (the outbox aggregate_id), which is stable per (user, outlet) tuple: events for one assignment land on the same partition in order. Per-user ordering ACROSS outlets is NOT guaranteed.",
+  "fields": [
+    {"name": "assignment_id", "type": "string", "doc": "The org-service user_outlet_assignment row id (UUID as string); the PK the consumer uses when inserting. Also the outbox aggregate_id and therefore the Kafka partition key — stable per (user, outlet) tuple."},
+    {"name": "user_id", "type": "string", "doc": "The Keycloak subject id (sub claim) of the assigned user. Stable, non-PII identifier."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant / company id (UUID as string). The consumer binds TenantContext to this value before the upsert so RLS applies."},
+    {"name": "org_unit_id", "type": "string", "doc": "The outlet org-unit id (UUID as string) this assignment targets."},
+    {"name": "change_kind", "type": "string", "doc": "What changed: ASSIGNED (the row was created or reopened — active=true) | UNASSIGNED (the row was closed — active=false). A string (not an Avro enum) so adding a kind is backward-compatible."},
+    {"name": "effective_from", "type": {"type": "int", "logicalType": "date"}, "doc": "The date the assignment became (or becomes) effective (epoch day). For an UNASSIGNED event this is the original open date; for ASSIGNED it is today."},
+    {"name": "effective_to", "type": {"type": "int", "logicalType": "date"}, "doc": "The date the assignment ceases to be effective (epoch day). 9999-12-31 sentinel when open-ended (ASSIGNED); today's date when closed (UNASSIGNED)."}
+  ]
+}

@@ -80,6 +80,11 @@ dependencies {
     implementation("org.flywaydb:flyway-database-postgresql")
     runtimeOnly("org.postgresql:postgresql")
 
+    // Kafka consumer (Phase 5 — UserOutletAssignmentChanged listener). Spring Boot 4 bundles
+    // spring-kafka into the dedicated spring-boot-starter-kafka module; spring-kafka alone no longer
+    // provides the auto-configured KafkaProperties bean that our KafkaConfig reads.
+    implementation("org.springframework.boot:spring-boot-starter-kafka")
+
     // Tests: the Spring Boot test starter (JUnit 5, AssertJ, MockMvc), the
     // @WebMvcTest slice (Spring Boot 4 splits it into its own module), and a real
     // PostgreSQL 16 via Testcontainers — RLS is a PostgreSQL feature no embedded

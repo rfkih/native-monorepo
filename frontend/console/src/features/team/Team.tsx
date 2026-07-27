@@ -568,13 +568,17 @@ function MemberRow({
     .map((p) => p[0]?.toUpperCase())
     .join('')
 
-  // PRE-ENFORCEMENT SEMANTICS: an empty assignment set means "unrestricted", so 0 renders
-  // as "All outlets". Phase 5 flips cashiers to default-closed (0 assignments = cannot ring);
-  // when that lands, this copy must become role-aware (cashier + 0 => a warning, not "All").
+  // Phase 5 (enforcement live) — role-aware copy: owner/manager BYPASS the outlet guard, so
+  // 0 assignments genuinely means "All outlets" for them. A cashier is DEFAULT-CLOSED (0
+  // assignments = cannot ring once the tenant adopts outlet scoping), so 0 renders as an
+  // amber "No outlets assigned" warning instead.
   const outletCount = member.outletCount ?? 0
+  const cashierUnassigned = outletCount === 0 && primaryRole === 'cashier'
   const outletSummary =
     outletCount === 0
-      ? t('team.allOutlets')
+      ? cashierUnassigned
+        ? t('team.noOutletsAssigned')
+        : t('team.allOutlets')
       : t('team.outletCount', { count: outletCount })
 
   return (
@@ -609,7 +613,14 @@ function MemberRow({
       </span>
 
       {/* Outlets */}
-      <span className="truncate text-[13px] text-ink-2">{outletSummary}</span>
+      <span
+        className={cn(
+          'truncate text-[13px]',
+          cashierUnassigned ? 'font-semibold text-amber-2' : 'text-ink-2',
+        )}
+      >
+        {outletSummary}
+      </span>
 
       {/* Status */}
       <StatusDot enabled={member.enabled} />

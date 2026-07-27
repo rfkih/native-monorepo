@@ -58,6 +58,7 @@ schema. Until then a row here is documentation of intent, not a shippable contra
 | **`ExpenseRecorded`** | **verticals** | **finance** | **expense_id, company_id, business_id, amount_minor, currency, gl_hint, occurred_at** | **LIVE (finance consumer #21)** |
 | **`PayrollPosted`** | **employee-service** | **finance** | **payroll_run_id, run_seq, company_id, period, base_currency, totals, rule_versions, uses_illustrative_rules, posted_at** | **LIVE (#23); finance consumer #23** |
 | **`LaborCostAllocated`** | **employee-service** | **finance** | **payroll_run_id, run_seq, company_id, period, outlet_id, gl_account, amount_minor, currency, uses_illustrative_rules, unallocated** | **LIVE (#23); finance consumer #23** |
+| **`UserOutletAssignmentChanged`** | **org-service** | **restaurant-service** (Phase 5 outlet-scoping) | **assignment_id, user_id, company_id, org_unit_id, change_kind, effective_from, effective_to** | **LIVE (Phase 5)** |
 | **`GroupDefined`** | **org-service** | **finance** | **group_id, lead_company_id, reporting_currency, name** | **LIVE (P3d SEAM 1); finance consumer P3d SEAM 1** |
 | **`GroupMembershipChanged`** | **org-service** | **finance** | **group_id, member_company_id, change_kind, effective_from, effective_to** | **LIVE (P3d SEAM 1); finance consumer P3d SEAM 1** |
 | **`TrialBalancePublished`** | **finance** (member within-company close) | **finance** (group consolidation) | **company_id, group_id, period, base_currency, reconciled, uses_illustrative_rules, lines[]** | **LIVE (CONSUMER P3d SEAM 2 group_trial_balance ingest; PRODUCER P3d SEAM 4a within-company close)** |
@@ -1025,6 +1026,117 @@ reads it). A record without a valid `id` header (and, for `MetricPublished`, a `
 the payload carries no `company_id`) fails closed to `<topic>.DLT`. The contract tests
 (`PayrollConsumerContractTest`) assert the `MetricPublished` consumer copy stays
 backward-compatible with carwash's producer schema (rule 7).
+
+### `UserOutletAssignmentChanged`
+
+Emitted by org-service inside the `UserOutletAssignmentWriter.replaceAssignments` transaction — the
+**replace-set** that atomically reconciles a user's outlet assignment set (PUT semantics). One event is
+emitted per row that CHANGES STATE: a row created or reopened emits `change_kind=ASSIGNED`; a row
+closed emits `change_kind=UNASSIGNED`. All events for a single replace-set call commit in ONE
+transaction with the DB writes (rule 3). Consumed by restaurant-service (Phase 5 — server-side
+outlet-scoping enforcement) to maintain a local `user_outlet_assignment_ref` read model. The consumer
+upserts idempotently: `ASSIGNED` sets `active=true`, `UNASSIGNED` sets `active=false`, on conflict
+`(company_id, user_id, org_unit_id)`. Carries post-change state. Ids only — no PII.
+
+- **Producer:** `org-service` (via transactional outbox, rule 3, in the same transaction as the
+  `user_outlet_assignment` write — rule 3)
+- **Consumers:** `restaurant-service` (local `user_outlet_assignment_ref` read model, Phase 5
+  outlet-scoping; the OrderWriter gate reads this table for cashier enforcement)
+- **Aggregate type / partition key:** `user_outlet_assignment` / `assignment_id` (the outbox
+  `aggregate_id`). An `assignment_id` is stable per (user, outlet) tuple, so all events for one
+  assignment land on the same partition in order — the guarantee the consumer's last-writer-wins
+  upsert needs. Per-USER ordering across different outlets is NOT guaranteed.
+- **Outbox `event_type`:** `UserOutletAssignmentChanged`
+- **Topic:** `UserOutletAssignmentChanged`
+- **Schema (single source of truth):** `libs/contracts/src/main/resources/avro/UserOutletAssignmentChanged.avsc`
+  (ADR 0003 — shared schema home; both producer and consumer resolve against the classpath artifact)
+- **Full name:** `id.co.nativeapp.events.org.UserOutletAssignmentChanged`
+
+Effective dates are Avro `date` logical-type ints (epoch day), matching the `AssignmentChanged` and
+`GroupMembershipChanged` precedents. An open-ended assignment uses the far-future `9999-12-31`
+sentinel in `effective_to`, never null (ENGINEERING-STANDARDS §2.5). For an `UNASSIGNED` event
+`effective_to` carries the closing date (today); for an `ASSIGNED` event it is `9999-12-31`.
+
+**Key fields**
+
+| Field | Avro type | Meaning |
+|---|---|---|
+| `assignment_id` | `string` | The org-service `user_outlet_assignment` row id (UUID as string); the restaurant consumer uses this as the PK on insert. Also the outbox `aggregate_id` and therefore the Kafka partition key |
+| `user_id` | `string` | The Keycloak subject id (`sub` claim) of the assigned user |
+| `company_id` | `string` | The owning tenant / company id (UUID as string); the consumer binds `TenantContext` to this value before the upsert so RLS applies |
+| `org_unit_id` | `string` | The outlet org-unit id (UUID as string) this assignment targets |
+| `change_kind` | `string` | `ASSIGNED` (row created or reopened — `active=true`) \| `UNASSIGNED` (row closed — `active=false`). A string (not an Avro enum) so adding a kind is backward-compatible |
+| `effective_from` | `int` (`date`) | The date the assignment became effective (epoch day) |
+| `effective_to` | `int` (`date`) | The date the assignment ceases to be effective (epoch day); `9999-12-31` sentinel when open-ended |
+
+**Avro schema** (single source of truth at `libs/contracts/src/main/resources/avro/UserOutletAssignmentChanged.avsc`)
+
+```json
+{
+  "type": "record",
+  "name": "UserOutletAssignmentChanged",
+  "namespace": "id.co.nativeapp.events.org",
+  "doc": "Emitted by org-service inside the replace-set transaction when a user's outlet assignment changes: one event per row CREATED/REOPENED (change_kind=ASSIGNED) and one per row CLOSED (change_kind=UNASSIGNED). Consumed by restaurant-service (and the other verticals) to maintain a local user_outlet_assignment_ref read model used for server-side outlet-scoping enforcement. Carries POST-CHANGE state; consumers upsert idempotently on conflict (company_id, user_id, org_unit_id). Ids only — no PII. Partition key is assignment_id (the outbox aggregate_id), which is stable per (user, outlet) tuple: events for one assignment land on the same partition in order. Per-user ordering ACROSS outlets is NOT guaranteed.",
+  "fields": [
+    {"name": "assignment_id", "type": "string", "doc": "The org-service user_outlet_assignment row id (UUID as string); the PK the consumer uses when inserting. Also the outbox aggregate_id and therefore the Kafka partition key — stable per (user, outlet) tuple."},
+    {"name": "user_id", "type": "string", "doc": "The Keycloak subject id (sub claim) of the assigned user. Stable, non-PII identifier."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant / company id (UUID as string). The consumer binds TenantContext to this value before the upsert so RLS applies."},
+    {"name": "org_unit_id", "type": "string", "doc": "The outlet org-unit id (UUID as string) this assignment targets."},
+    {"name": "change_kind", "type": "string", "doc": "What changed: ASSIGNED (the row was created or reopened — active=true) | UNASSIGNED (the row was closed — active=false). A string (not an Avro enum) so adding a kind is backward-compatible."},
+    {"name": "effective_from", "type": {"type": "int", "logicalType": "date"}, "doc": "The date the assignment became (or becomes) effective (epoch day). For an UNASSIGNED event this is the original open date; for ASSIGNED it is today."},
+    {"name": "effective_to", "type": {"type": "int", "logicalType": "date"}, "doc": "The date the assignment ceases to be effective (epoch day). 9999-12-31 sentinel when open-ended (ASSIGNED); today's date when closed (UNASSIGNED)."}
+  ]
+}
+```
+
+**Idempotency (consumer).** The restaurant consumer dedupes by the event UUID from the Kafka `id`
+header (`ProcessedEventStore.processOnce`). A re-delivered event is a clean no-op. The upsert
+targets `ON CONFLICT ON CONSTRAINT uq_user_outlet_assignment_ref_scope (company_id, user_id,
+org_unit_id) DO UPDATE` so the same ASSIGNED event delivered twice merely sets `active=true` again —
+no row is duplicated. A missing or non-UUID `id` header is a producer-side contract violation: the
+consumer fails closed (routes to `UserOutletAssignmentChanged.DLT`).
+
+**Compatibility.** Only backward-compatible evolution is allowed: add fields with a default (e.g. an
+optional `outlet_name` as `["null","string"]` with `default: null`). Never add a required field
+without a default, never remove or rename a field, never change a field's type. The contract test
+(`UserOutletAssignmentChangedContractTest`, restaurant-service) enforces the triad — parse + `AvroSerde`
+round-trip + add-optional compatible / new-required broken.
+
+### `UserOutletAssignmentChanged` — restaurant-service consumer view
+
+restaurant-service **consumes** the org-service `UserOutletAssignmentChanged` (the producer contract
+is documented above) into a **local `user_outlet_assignment_ref` read model** — the table the
+`OutletAccessGuard` reads (from both the `OrderWriter` and `BillWriter` paths) to enforce that a
+cashier may only ring sales at an outlet they are assigned to (Phase 5 enforcement policy, signed
+off). The consumer reads the schema from
+`libs/contracts` on the classpath (`avro/UserOutletAssignmentChanged.avsc`, the single source of truth
+— ADR 0003), reads the outbox payload as **raw Avro bytes** via `libs/events AvroSerde` (no Schema
+Registry serde), and dedupes by the event UUID (`ProcessedEventStore`) so a re-delivery never
+double-applies. The upsert runs inside a `TenantContext` scope bound to the event's `company_id` (RLS
+applies — rule 5). The `UserOutletAssignmentChangedContractTest` asserts the schema stays
+backward-compatible with the producer schema (rule 7).
+
+**Enforcement policy (signed off, Phase 5).** Applied by the shared `OutletAccessGuard`
+(`outletref.service`) in EVERY sale-recording write path — the order paths (`checkout`, `park`,
+`payParked`) AND the open-bill paths (`open`, `payBill`), so bill tabs cannot sidestep the guard:
+
+- **Owner / manager** — bypass the check entirely (no assignment rows required).
+- **Cashier** — must have an `ACTIVE` row in `user_outlet_assignment_ref` for
+  `(user_id, org_unit_id = businessId)`. A cashier with ZERO rows for the company is rejected (`403
+  outlet-not-assigned`) — **default-closed**.
+- **Grandfather clause** — if the company has **ZERO rows** in `user_outlet_assignment_ref`
+  (across all users, RLS-scoped to the tenant), outlet scoping has never been adopted by that
+  tenant and the cashier is **ALLOWED** (preserves pre-outlet behavior for tenants that never
+  assigned anyone — such tenants only ever ring their implicit first business anyway, since the
+  console binds the POS to `firstBusinessId` until an outlet is picked). The moment the first
+  assignment event lands for the company, the clause stops applying and every cashier is
+  default-closed. Adoption is detected purely from local `user_outlet_assignment_ref` presence —
+  restaurant-service has no org-unit read model, so it cannot (and does not need to) resolve
+  "the first business" itself.
+
+**Topic consumed:** `UserOutletAssignmentChanged`.
+
+---
 
 ### `GroupDefined`
 

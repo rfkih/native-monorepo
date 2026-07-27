@@ -69,6 +69,39 @@ cascade-deactivate + reactivation.)
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **Outlet-scoping increment — the org tree means something (phases 1–5, 2026-07-27)** — five
+  independently-shipped phases make `business_id` a real, named, enforced outlet dimension.
+  **P1** finance `outlet_revenue` read model (keyed company/outlet/period/currency, fed by the same
+  SaleRecorded consumer + void/refund reversal path) + `GET /api/v1/pnl/outlets`. **P2** finance
+  consumes OrgUnitCreated/Changed into `org_unit_ref` → `/pnl/outlets` gains `outletName`; dashboard
+  per-outlet panel shows real named rows. **P3** POS outlet picker (per-tab sessionStorage,
+  `CompanySession.activeOutletId`, "ringing for «Outlet»" indicator) + org `GET /api/v1/outlets`.
+  **P4** org `user_outlet_assignment` (user_id = KC sub, effective-dated, V5) +
+  `GET/PUT /api/v1/users/{id}/outlets` + `/users/me/outlets` + Team outlets editor; picker intersects
+  with the caller's assignments. **P5 (NEW EVENT + enforcement)** `UserOutletAssignmentChanged`
+  (org outbox, emitted inside the replace-set tx; Avro in libs/contracts; partition key =
+  `assignment_id` → per-(user,outlet) ordering, NOT per-user) consumed by restaurant into
+  `user_outlet_assignment_ref` (V14, Auditable+FORCE RLS; `processed_event` V15 for event-UUID
+  idempotency; DLT fail-closed on missing/non-UUID id header or undecodable payload). Enforcement
+  policy (signed off): owner/manager bypass; cashier default-closed with an ACTIVE
+  (actor, businessId) row required; grandfather = company with ZERO ref rows (scoping never
+  adopted) → allow. The guard (`OutletAccessGuard`, outletref.service) covers EVERY sale-recording
+  path — OrderWriter checkout/park/payParked AND BillWriter open/payBill (the bill gap was found
+  post-resume and closed: bills record sales via SaleWriter and would otherwise sidestep the
+  order-path guard). 403 = RFC-7807 `…/outlet-not-assigned`, mapped to i18n copy (en/id) on all four
+  POS surfaces; Team page renders cashier+0-assignments as an amber warning (owner/manager keep
+  "All outlets" — they bypass). Proven: full suites green (enforcement 9/9 branches, contract triad,
+  consumer idempotency + cross-tenant isolation, producer outbox 4/4, listener fail-closed 4/4) AND
+  live E2E on the real stack: org PUT → outbox → Debezium (`org-outbox-connector`, registered
+  2026-07-27) → Kafka → restaurant ref row → curl checkout as an unassigned cashier = 403
+  problem+json / assigned outlet = sale recorded. Code-review PASS (fix-round applied: partition-key
+  contract corrected in catalog+avsc, readiness comment de-overstated, dead code removed).
+  **Known limitations (deliberate):** (1) the `kafka` readiness indicator checks broker
+  reachability only — on a first deploy with earliest-offset replay, enforcement can briefly run
+  against a partially-hydrated ref table (a caught-up/lag gate is a tracked follow-up); (2) the
+  guard runs before the idempotency fast path, so a retry of an already-completed order after
+  mid-shift revocation returns 403 rather than replaying the original response (security-first
+  ordering, accepted); (3) restaurant-service is the only enforcing vertical so far.
 - **Signup flow hardening — enterprise-gap fixes (2026-07-25)** — closed the register-flow gaps found
   in the Odoo/enterprise gap analysis. Backend (org-service): server-side whitelists for
   currency/language/business-type (`@Pattern` — a direct API call can no longer create an EUR or

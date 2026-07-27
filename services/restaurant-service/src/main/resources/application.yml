@@ -27,6 +27,27 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: false
 
+  kafka:
+    # UserOutletAssignmentChanged topic value is the org-service outbox Avro payload shipped by
+    # Debezium: binary.handling.mode=base64 means the wire value is base64-encoded text arriving
+    # via a StringConverter. libs/events Base64ByteArrayDeserializer decodes it back to raw Avro
+    # bytes which the listener hands to AvroSerde against the shared libs/contracts schema.
+    # No Confluent kafka-avro-serializer / Schema Registry serde used.
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${KAFKA_GROUP_ID:restaurant-service}
+      # Earliest offset: a freshly-deployed consumer must replay all assignment events so the
+      # user_outlet_assignment_ref read model is fully hydrated before enforcement begins.
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: id.co.nativeapp.events.Base64ByteArrayDeserializer
+    listener:
+      # Record-level ack: offset committed only after the handler returns — at-least-once
+      # delivery. ProcessedEventStore (idempotent on event UUID) makes redelivery safe.
+      ack-mode: record
+      # ADR 0010 #13 — outbox→Kafka trace continuity.
+      observation-enabled: true
+
 management:
   endpoints:
     web:
@@ -42,13 +63,18 @@ management:
       # /actuator/health/** the gateway permits must NEVER leak DB/broker internals (version,
       # cluster-id, node-count, connection details). `never` keeps the body a bare {"status":...}.
       show-details: never
-      # Readiness aggregates the DB indicator (ENGINEERING-STANDARDS §7): NOT_READY while
-      # the schema/read model is hydrating or the DB is unreachable. restaurant-service is
-      # an event PRODUCER (outbox + Debezium), not a consumer, so no `kafka` indicator here.
-      # Liveness stays the cheap /healthz probe (no DB hit).
+      # Readiness aggregates the DB AND Kafka indicators (ENGINEERING-STANDARDS §7): NOT_READY
+      # while the DB or the Kafka broker is unreachable. Phase 5 adds restaurant as a Kafka
+      # consumer (UserOutletAssignmentChanged), so broker reachability now affects the
+      # outlet-enforcement read model. NOTE the kafka indicator checks BROKER REACHABILITY only —
+      # it does NOT gate on the consumer being caught up, so on a first deploy (earliest-offset
+      # replay) enforcement may briefly run against a partially-hydrated
+      # user_outlet_assignment_ref (known limitation, tracked in DEVLOG; the zero-rows grandfather
+      # keeps never-adopted tenants unaffected). Liveness stays the cheap /healthz probe
+      # (no DB/broker hit).
       group:
         readiness:
-          include: readinessState, db
+          include: readinessState, db, kafka
   metrics:
     tags:
       service: restaurant-service
