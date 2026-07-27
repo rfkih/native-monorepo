@@ -270,19 +270,16 @@ function AddUnitDialog({
   const mutation = useCreateOrgUnit({ companyId, actor })
 
   const parent = parentId ? (allUnits.find((u) => u.id === parentId) ?? null) : null
-  // Mirror of the backend hierarchy rule (OrgUnitType.allowedParentTypes): a branch only
-  // under a business unit; an outlet under a branch OR directly under a business unit
-  // (the business unit acts as the branch); a team only under an outlet.
+  // Mirror of the backend hierarchy rule (OrgUnitType.allowedParentTypes, ADR 0012): an
+  // outlet only under a business unit; a team only under an outlet.
   const types: OrgUnitType[] = !parent
     ? ['BUSINESS_UNIT']
     : parent.type === 'BUSINESS_UNIT'
-      ? ['BRANCH', 'OUTLET']
-      : parent.type === 'BRANCH'
-        ? ['OUTLET']
-        : parent.type === 'OUTLET'
-          ? ['TEAM']
-          : []
-  const [type, setType] = useState<OrgUnitType>(types[0] ?? 'BRANCH')
+      ? ['OUTLET']
+      : parent.type === 'OUTLET'
+        ? ['TEAM']
+        : []
+  const [type, setType] = useState<OrgUnitType>(types[0] ?? 'OUTLET')
 
   const parentName = parent?.name ?? (parentId ?? t('org.addDialog.noParent'))
 

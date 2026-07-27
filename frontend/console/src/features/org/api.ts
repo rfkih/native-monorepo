@@ -31,8 +31,8 @@ export function useOutlets(companyId: string | null, actor = '') {
   })
 }
 
-/** Org unit types as returned by the backend. */
-export type OrgUnitType = 'BUSINESS_UNIT' | 'BRANCH' | 'OUTLET' | 'TEAM'
+/** Org unit types as returned by the backend (ADR 0012 — flat tree, no branch level). */
+export type OrgUnitType = 'BUSINESS_UNIT' | 'OUTLET' | 'TEAM'
 
 /** Mirror of org-service OrgUnitListResponse. */
 export interface OrgUnit {

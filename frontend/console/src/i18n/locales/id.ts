@@ -436,14 +436,13 @@ export const id = {
     active: 'Aktif',
     type: {
       BUSINESS_UNIT: 'Unit bisnis',
-      BRANCH: 'Cabang',
       OUTLET: 'Gerai',
       TEAM: 'Tim',
     },
     addDialog: {
       title: 'Tambah unit organisasi',
       nameLabel: 'Nama',
-      namePlaceholder: 'mis. Cabang Jakarta',
+      namePlaceholder: 'mis. Gerai Jakarta',
       typeLabel: 'Jenis',
       parentLabel: 'Induk',
       noParent: 'Tidak ada (tingkat atas)',

@@ -441,14 +441,13 @@ export const en = {
     active: 'Active',
     type: {
       BUSINESS_UNIT: 'Business unit',
-      BRANCH: 'Branch',
       OUTLET: 'Outlet',
       TEAM: 'Team',
     },
     addDialog: {
       title: 'Add org unit',
       nameLabel: 'Name',
-      namePlaceholder: 'e.g. Jakarta Branch',
+      namePlaceholder: 'e.g. Jakarta Outlet',
       typeLabel: 'Type',
       parentLabel: 'Parent',
       noParent: 'None (top-level)',
