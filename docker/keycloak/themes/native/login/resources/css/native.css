@@ -1,30 +1,48 @@
 /*
  * Native login theme — re-skins the stock Keycloak keycloak.v2 (PatternFly v5) login page to match
- * the console's design system (Plus Jakarta Sans, the brand-green ramp, the soft "paper" surfaces
- * and rounded cards). Pure CSS on top of the inherited templates: it overrides PatternFly's design
- * tokens (so buttons/links/focus recolour for free) plus a few structural selectors — no template
- * or FreeMarker changes, so login behaviour is untouched.
+ * the console's "Native Console" design system: Plus Jakarta Sans, the DEEP-CYAN brand ramp
+ * (hue 193°), cool neutral inks, soft paper surfaces and rounded cards.
+ *
+ * It echoes the sign-up page's split canvas (design 5a): on wide screens a cyan brand rail carries
+ * the mark on the left while the login form sits quiet on the right; below that breakpoint it folds
+ * back to a centred card. Pure CSS on top of the inherited templates — it overrides PatternFly's
+ * design tokens (buttons/links/focus recolour for free) plus a few structural selectors, with no
+ * template or FreeMarker changes, so login behaviour and i18n are untouched.
+ *
+ * Brand rule (from the design foundations): green is RETIRED as the brand — it now means profit/done
+ * only. The brand is cyan: 600 (#0B7F99) fills, 700 (#095F73) speaks (text/links).
  */
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
 :root {
-  --nt-brand: #16b364;
-  --nt-brand-600: #0e9f50;
-  --nt-brand-700: #0a7e3f;
+  /* Deep-cyan brand ramp — mirrors frontend/console/src/index.css */
+  --nt-brand-50: #e4f6fa;
+  --nt-brand-100: #bfe9f1;
+  --nt-brand-200: #8bd5e3;
+  --nt-brand-300: #4fbdd1;
+  --nt-brand-500: #0e8fab;
+  --nt-brand-600: #0b7f99; /* primary fills — white on it is 4.7:1 */
+  --nt-brand-700: #095f73; /* text / links / hover — 7.3:1 */
+  --nt-brand-800: #064654;
+  --nt-brand-900: #04303a;
+
   --nt-ink: #0e1116;
   --nt-ink-2: #384151;
-  --nt-ink-3: #8a93a0;
+  --nt-ink-3: #6b7280;
   --nt-line: #e5e8ec;
-  --nt-paper: #f4f8f5;
+  --nt-paper: #f6f9fa;
   --nt-surface: #ffffff;
 
-  /* Recolour PatternFly's global design tokens → brand green (primary buttons, links, active). */
-  --pf-v5-global--primary-color--100: var(--nt-brand);
-  --pf-v5-global--primary-color--200: var(--nt-brand-600);
-  --pf-v5-global--link--Color: var(--nt-brand-600);
-  --pf-v5-global--link--Color--hover: var(--nt-brand-700);
-  --pf-v5-global--active-color--100: var(--nt-brand);
-  --pf-v5-global--active-color--200: var(--nt-brand-600);
+  /* Width of the cyan brand rail on wide screens (and the matching form offset). */
+  --nt-rail: min(46vw, 600px);
+
+  /* Recolour PatternFly's global design tokens → brand cyan (primary buttons, links, active). */
+  --pf-v5-global--primary-color--100: var(--nt-brand-600);
+  --pf-v5-global--primary-color--200: var(--nt-brand-700);
+  --pf-v5-global--link--Color: var(--nt-brand-700);
+  --pf-v5-global--link--Color--hover: var(--nt-brand-800);
+  --pf-v5-global--active-color--100: var(--nt-brand-600);
+  --pf-v5-global--active-color--200: var(--nt-brand-700);
   --pf-v5-global--BorderColor--100: var(--nt-line);
 }
 
@@ -41,16 +59,52 @@ textarea,
   font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif !important;
 }
 
-/* Page background — the console's soft paper + a faint brand glow (mirrors the landing hero). */
+/* Page background — the console's cool paper + a faint cyan glow (mirrors the app canvas). */
 body#keycloak-bg {
-  background: radial-gradient(90% 90% at 50% -8%, #e8f8ee 0%, var(--nt-paper) 55%) fixed !important;
+  background: radial-gradient(80% 80% at 50% -10%, var(--nt-brand-50) 0%, var(--nt-paper) 60%) fixed !important;
   color: var(--nt-ink);
+}
+
+/* Keep the form column above the fixed brand rail. */
+.pf-v5-c-login,
+.pf-v5-c-login__container {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Split canvas (design 5a) — a cyan brand rail on the left, form on the right ──────────────
+   Wide screens only. The rail is a fixed pseudo-element (so it never intercepts form clicks) and
+   the page is padded to sit the login card in the remaining space. Below 62rem it all folds away
+   and the card centres normally, so narrow/mobile keeps the plain, robust layout. */
+@media (min-width: 62rem) {
+  body#keycloak-bg {
+    padding-left: var(--nt-rail) !important;
+  }
+  body#keycloak-bg::before {
+    content: '';
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: var(--nt-rail);
+    z-index: 0;
+    background:
+      url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='132'%20height='132'%20viewBox='0%200%20132%20132'%3E%3Crect%20width='132'%20height='132'%20rx='36'%20fill='rgba(255,255,255,0.12)'/%3E%3Cpath%20d='M30,96L56,58L78,80L104,34'%20fill='none'%20stroke='white'%20stroke-width='9'%20stroke-linecap='round'%20stroke-linejoin='round'/%3E%3C/svg%3E")
+        no-repeat center 42% / 132px 132px,
+      radial-gradient(58% 46% at 88% 10%, rgba(255, 255, 255, 0.1), transparent 70%),
+      radial-gradient(52% 42% at 6% 94%, rgba(255, 255, 255, 0.08), transparent 70%),
+      linear-gradient(157deg, var(--nt-brand-600) 0%, #073c49 100%);
+    box-shadow: inset -1px 0 0 rgba(4, 48, 58, 0.35);
+  }
+  /* The rail carries the mark on wide screens, so drop the in-card wordmark there (matches 5a). */
+  #kc-header,
+  #kc-header-wrapper {
+    display: none !important;
+  }
 }
 
 /* Login card */
 .pf-v5-c-login__main {
   border: 1px solid var(--nt-line);
-  border-radius: 20px;
+  border-radius: 24px;
   box-shadow:
     0 14px 38px rgba(15, 23, 42, 0.1),
     0 3px 10px rgba(15, 23, 42, 0.05);
@@ -61,8 +115,14 @@ body#keycloak-bg {
 .pf-v5-c-login__main-header,
 .pf-v5-c-login__main-body,
 .pf-v5-c-login__main-footer {
-  padding-left: 2rem;
-  padding-right: 2rem;
+  padding-left: 2.25rem;
+  padding-right: 2.25rem;
+}
+.pf-v5-c-login__main-header {
+  padding-top: 2.25rem;
+}
+.pf-v5-c-login__main-footer {
+  padding-bottom: 2rem;
 }
 
 /* Title */
@@ -91,19 +151,19 @@ input.pf-v5-c-form-control,
   --pf-v5-c-form-control--BorderRightColor: var(--nt-line);
   --pf-v5-c-form-control--BorderBottomColor: var(--nt-line);
   --pf-v5-c-form-control--BorderLeftColor: var(--nt-line);
-  --pf-v5-c-form-control--focus--BorderBottomColor: var(--nt-brand);
+  --pf-v5-c-form-control--focus--BorderBottomColor: var(--nt-brand-600);
 }
 .pf-v5-c-form-control:focus,
 .pf-v5-c-form-control:focus-within,
 input.pf-v5-c-form-control:focus {
   outline: none !important;
-  border-color: var(--nt-brand) !important;
-  box-shadow: 0 0 0 4px rgba(22, 179, 100, 0.14) !important;
+  border-color: var(--nt-brand-600) !important;
+  box-shadow: 0 0 0 4px rgba(11, 127, 153, 0.16) !important;
 }
 
 /* Primary button (Sign in) */
 .pf-v5-c-button.pf-m-primary {
-  background: var(--nt-brand) !important;
+  background: var(--nt-brand-600) !important;
   border-radius: 12px !important;
   font-weight: 700 !important;
   border: none !important;
@@ -112,7 +172,7 @@ input.pf-v5-c-form-control:focus {
 }
 .pf-v5-c-button.pf-m-primary:hover,
 .pf-v5-c-button.pf-m-primary:focus {
-  background: var(--nt-brand-600) !important;
+  background: var(--nt-brand-700) !important;
 }
 
 /* Secondary / link buttons */
@@ -123,18 +183,19 @@ input.pf-v5-c-form-control:focus {
 
 /* Links */
 a {
-  color: var(--nt-brand-600);
+  color: var(--nt-brand-700);
 }
 a:hover {
-  color: var(--nt-brand-700);
+  color: var(--nt-brand-800);
 }
 
 /* Checkbox accent (remember me) */
 .pf-v5-c-check__input {
-  accent-color: var(--nt-brand);
+  accent-color: var(--nt-brand-600);
 }
 
-/* Header brand wordmark — injected via the realm's displayNameHtml as .native-wordmark. */
+/* Header brand wordmark — injected via the realm's displayNameHtml as .native-wordmark.
+   Shown on narrow/mobile (the rail is hidden there); the rail carries it on wide screens. */
 #kc-header,
 #kc-header-wrapper {
   color: var(--nt-ink);
@@ -155,7 +216,7 @@ a:hover {
   width: 38px;
   height: 38px;
   border-radius: 11px;
-  background: linear-gradient(135deg, var(--nt-brand), var(--nt-brand-700));
+  background: linear-gradient(135deg, var(--nt-brand-500), var(--nt-brand-800));
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
 }
 

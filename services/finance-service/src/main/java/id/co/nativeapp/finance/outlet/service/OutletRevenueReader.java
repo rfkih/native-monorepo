@@ -48,7 +48,10 @@ public class OutletRevenueReader {
     String currency = rows.getFirst().getCurrency().strip();
     List<OutletRevenueResponse.OutletRow> outlets =
         rows.stream()
-            .map(r -> new OutletRevenueResponse.OutletRow(r.getBusinessId(), r.getRevenueMinor()))
+            .map(
+                r ->
+                    new OutletRevenueResponse.OutletRow(
+                        r.getBusinessId(), r.getRevenueMinor(), r.getOutletName()))
             .toList();
     return Optional.of(new OutletRevenueResponse(period, currency, outlets));
   }

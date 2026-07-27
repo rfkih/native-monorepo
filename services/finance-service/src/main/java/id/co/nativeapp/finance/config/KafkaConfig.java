@@ -144,6 +144,8 @@ public class KafkaConfig {
         id.co.nativeapp.finance.grouptb.messaging.TrialBalancePublishedDecodeException.class,
         id.co.nativeapp.finance.reversal.messaging.SaleVoidedDecodeException.class,
         id.co.nativeapp.finance.reversal.messaging.SaleRefundedDecodeException.class,
+        id.co.nativeapp.finance.orgref.messaging.OrgUnitRefDecodeException.class,
+        id.co.nativeapp.finance.orgref.messaging.OrgUnitRefMissingEventIdException.class,
         id.co.nativeapp.finance.revenue.messaging.MissingEventIdException.class,
         // A posting whose currency diverges from the period's established base currency (#26) is a
         // deterministic producer contract violation (a company has one immutable base currency) —

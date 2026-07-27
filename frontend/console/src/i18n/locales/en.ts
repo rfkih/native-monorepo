@@ -222,6 +222,8 @@ export const en = {
     reviewClose: 'Review period close',
     revenueAllocation: 'Revenue allocation',
     shareOfRevenue: 'share of revenue',
+    ofRevenueShare: '{{pct}} of revenue',
+    moreOutlets: '+{{n}} more',
     error: 'Could not load the dashboard.',
     noCompany: 'No company selected',
     noCompanyHint: 'Create a company to see its consolidated position.',

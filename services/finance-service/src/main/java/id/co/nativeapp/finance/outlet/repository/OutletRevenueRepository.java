@@ -21,18 +21,25 @@ import org.springframework.data.jpa.repository.Query;
 public interface OutletRevenueRepository extends JpaRepository<OutletRevenue, UUID> {
 
   /**
-   * All outlet-revenue accumulators for a period (within the bound tenant via RLS), ordered by
-   * {@code revenue_minor} descending so the dashboard's outlet list is already ranked.
+   * All outlet-revenue accumulators for a period (within the bound tenant via RLS), LEFT-JOINed
+   * against {@code org_unit_ref} to resolve the outlet's display name, ordered by {@code
+   * revenue_minor} descending so the dashboard's outlet list is already ranked.
    *
-   * <p>Selects only {@code business_id} and {@code revenue_minor} into a projection — never the
-   * full accumulator row (read paths select only what they need, via projection interfaces).
+   * <p>The JOIN is a LEFT JOIN so a {@code business_id} with no {@code org_unit_ref} row (the
+   * org-unit event not yet consumed) still returns the revenue row — with {@code outlet_name =
+   * null}. The read NEVER blocks on hydration (rule 2 — the ref row may lag). Both tables are under
+   * FORCE RLS scoped to the session tenant GUC, so no cross-tenant data leaks through the join.
+   *
+   * <p>Selects only the needed columns into the {@link OutletRevenueView} projection — never the
+   * full entity row (read paths select only what they need, via projection interfaces).
    */
   @Query(
       value =
-          "SELECT business_id, revenue_minor, currency"
-              + " FROM outlet_revenue"
-              + " WHERE period = :period"
-              + " ORDER BY revenue_minor DESC",
+          "SELECT or_.business_id, or_.revenue_minor, or_.currency, our.name AS outlet_name"
+              + " FROM outlet_revenue or_"
+              + " LEFT JOIN org_unit_ref our ON our.org_unit_id = or_.business_id"
+              + " WHERE or_.period = :period"
+              + " ORDER BY or_.revenue_minor DESC",
       nativeQuery = true)
   List<OutletRevenueView> findByPeriodOrderByRevenueDesc(String period);
 }

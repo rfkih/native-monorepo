@@ -46,8 +46,8 @@ class OutletRevenueControllerTest {
             "2026-07",
             "IDR",
             List.of(
-                new OutletRevenueResponse.OutletRow(outlet1, 300_000L),
-                new OutletRevenueResponse.OutletRow(outlet2, 100_000L)));
+                new OutletRevenueResponse.OutletRow(outlet1, 300_000L, "Main Outlet"),
+                new OutletRevenueResponse.OutletRow(outlet2, 100_000L, null)));
 
     when(outletRevenueReader.outletsForPeriod("2026-07")).thenReturn(Optional.of(response));
 
@@ -58,8 +58,10 @@ class OutletRevenueControllerTest {
         .andExpect(jsonPath("$.currency").value("IDR"))
         .andExpect(jsonPath("$.outlets[0].businessId").value(outlet1.toString()))
         .andExpect(jsonPath("$.outlets[0].revenueMinor").value(300_000L))
+        .andExpect(jsonPath("$.outlets[0].outletName").value("Main Outlet"))
         .andExpect(jsonPath("$.outlets[1].businessId").value(outlet2.toString()))
-        .andExpect(jsonPath("$.outlets[1].revenueMinor").value(100_000L));
+        .andExpect(jsonPath("$.outlets[1].revenueMinor").value(100_000L))
+        .andExpect(jsonPath("$.outlets[1].outletName").doesNotExist());
   }
 
   @Test

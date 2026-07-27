@@ -26,6 +26,10 @@ public record OutletRevenueResponse(String period, String currency, List<OutletR
    *     SaleRecorded.business_id})
    * @param revenueMinor accumulated net revenue in minor units; may be negative if refunds outpace
    *     sales within the period
+   * @param outletName the org-unit display name resolved from the {@code org_unit_ref} local read
+   *     model, or {@code null} when the ref row has not yet been hydrated by the consumer (names
+   *     may lag until the {@code OrgUnitCreated} event is consumed — callers must tolerate {@code
+   *     null})
    */
-  public record OutletRow(UUID businessId, long revenueMinor) {}
+  public record OutletRow(UUID businessId, long revenueMinor, String outletName) {}
 }

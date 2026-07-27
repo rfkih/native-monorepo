@@ -217,6 +217,8 @@ export const id = {
     reviewClose: 'Tinjau penutupan periode',
     revenueAllocation: 'Alokasi pendapatan',
     shareOfRevenue: 'porsi dari pendapatan',
+    ofRevenueShare: '{{pct}} dari pendapatan',
+    moreOutlets: '+{{n}} lainnya',
     error: 'Tidak dapat memuat dasbor.',
     noCompany: 'Belum ada perusahaan dipilih',
     noCompanyHint: 'Buat perusahaan untuk melihat posisi terkonsolidasinya.',

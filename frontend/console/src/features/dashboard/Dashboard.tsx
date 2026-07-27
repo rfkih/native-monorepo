@@ -11,7 +11,7 @@ import { localeOf } from '@/i18n'
 import { formatMoney, formatPercent } from '@/lib/money'
 import { currentPeriod, formatPeriod, shiftPeriod } from '@/lib/period'
 import { EmptyState, PeriodNav } from '@/features/_shared/financeUi'
-import { usePnl, usePnlTrend, type PnlResponse } from './api'
+import { usePnl, usePnlTrend, useOutletRevenue, type PnlResponse, type OutletRow } from './api'
 
 /** How many trailing months the sparkline + revenue-delta look back over. */
 const TREND_MONTHS = 8
@@ -44,6 +44,13 @@ export function Dashboard() {
     period,
     presentation,
     months: TREND_MONTHS,
+    enabled: !!company,
+  })
+
+  const outletQuery = useOutletRevenue({
+    companyId: company?.companyId ?? '',
+    actor: company?.actor ?? '',
+    period,
     enabled: !!company,
   })
 
@@ -218,27 +225,19 @@ export function Dashboard() {
 
           {/* Outlet contribution + at a glance / ready-to-close */}
           <div className="grid gap-[18px] lg:grid-cols-[1.5fr_1fr]">
-            {/* Outlet contribution — only real POSTED figures may appear here (audit finding 15).
-                There is no per-outlet ledger feed yet, so the panel shows an honest empty state
-                instead of inventing a breakdown. */}
-            <Card className="p-6">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <h2 className="font-display text-lg font-semibold text-ink">
-                  {t('dashboard.outletContribution')}
-                </h2>
-                <span className="text-[13px] text-ink-3">{t('dashboard.postedToLedger')}</span>
-              </div>
-              <div className="grid min-h-[220px] place-items-center rounded-xl border border-dashed border-line-strong px-6 py-10 text-center">
-                <div>
-                  <div className="text-sm font-semibold text-ink-2">
-                    {t('dashboard.noOutletData')}
-                  </div>
-                  <p className="mx-auto mt-1.5 max-w-[36ch] text-[13px] leading-relaxed text-ink-3">
-                    {t('dashboard.noOutletDataHint')}
-                  </p>
-                </div>
-              </div>
-            </Card>
+            {/* Outlet contribution — real POSTED figures only (audit finding 15). */}
+            <OutletContributionPanel
+              title={t('dashboard.outletContribution')}
+              loading={outletQuery.isLoading}
+              outlets={outletQuery.data?.outlets ?? null}
+              currency={outletQuery.data?.currency ?? company.baseCurrency}
+              locale={locale}
+              noDataLabel={t('dashboard.noOutletData')}
+              noDataHint={t('dashboard.noOutletDataHint')}
+              postedLabel={t('dashboard.postedToLedger')}
+              ofRevenueKey={(pct) => t('dashboard.ofRevenueShare', { pct })}
+              moreKey={(n) => t('dashboard.moreOutlets', { n })}
+            />
 
             <div className="flex flex-col gap-[18px]">
               {/* At a glance — real, derived from the trailing window */}
@@ -331,25 +330,20 @@ export function Dashboard() {
           </div>
 
           <div className="grid gap-[18px] lg:grid-cols-[1.4fr_1fr]">
-            {/* Per-outlet revenue vs expense — real posted figures only (audit finding 15). */}
-            <Card className="p-6">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <h2 className="font-display text-lg font-semibold text-ink">
-                  {t('dashboard.revenueVsExpense')}
-                </h2>
-                <span className="text-[13px] text-ink-3">{t('dashboard.postedToLedger')}</span>
-              </div>
-              <div className="grid min-h-[230px] place-items-center rounded-xl border border-dashed border-line-strong px-6 py-10 text-center">
-                <div>
-                  <div className="text-sm font-semibold text-ink-2">
-                    {t('dashboard.noOutletData')}
-                  </div>
-                  <p className="mx-auto mt-1.5 max-w-[36ch] text-[13px] leading-relaxed text-ink-3">
-                    {t('dashboard.noOutletDataHint')}
-                  </p>
-                </div>
-              </div>
-            </Card>
+            {/* Per-outlet revenue — real posted figures only (audit finding 15).
+                Expense is not available per-outlet yet; panel title kept as-is from design. */}
+            <OutletContributionPanel
+              title={t('dashboard.revenueVsExpense')}
+              loading={outletQuery.isLoading}
+              outlets={outletQuery.data?.outlets ?? null}
+              currency={outletQuery.data?.currency ?? company.baseCurrency}
+              locale={locale}
+              noDataLabel={t('dashboard.noOutletData')}
+              noDataHint={t('dashboard.noOutletDataHint')}
+              postedLabel={t('dashboard.postedToLedger')}
+              ofRevenueKey={(pct) => t('dashboard.ofRevenueShare', { pct })}
+              moreKey={(n) => t('dashboard.moreOutlets', { n })}
+            />
 
             {/* Revenue allocation — real expense vs net composition */}
             <Card className="p-6">
@@ -373,6 +367,156 @@ export function Dashboard() {
         </div>
       )}
     </div>
+  )
+}
+
+/** Maximum visible outlet rows before a "+N more" overflow line is shown. */
+const OUTLET_ROW_CAP = 6
+
+/**
+ * Derives up to two uppercase letters from an outlet name, for use as the monogram tile initials.
+ * When the name is null (org-unit cache not yet hydrated) we fall back to the first 8 chars of the
+ * businessId UUID in mono — the id itself is not copy, so it bypasses i18n.
+ */
+function outletInitials(name: string | null, businessId: string): string {
+  if (!name) return businessId.replace(/-/g, '').slice(0, 4).toUpperCase()
+  const parts = name.trim().split(/\s+/)
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
+
+/**
+ * The "Outlet contribution" panel — shared by Overview and Analytics views.
+ *
+ * Design spec 2a: 34 px rounded-xl monogram tile (bg-emerald-tint / text-emerald-2, mono 11 px
+ * initials), outlet name 14 px semibold, right-aligned mono amount, 6 px progress bar
+ * (bg-ink-50 track / bg-emerald fill) proportional to MAX outlet revenue. Revenue share of total
+ * shown as sub-line ("34.2% of revenue"). Rows capped at OUTLET_ROW_CAP with a "+N more" line.
+ */
+function OutletContributionPanel({
+  title,
+  loading,
+  outlets,
+  currency,
+  locale,
+  noDataLabel,
+  noDataHint,
+  postedLabel,
+  ofRevenueKey,
+  moreKey,
+}: {
+  title: string
+  loading: boolean
+  outlets: OutletRow[] | null
+  currency: string
+  locale: string
+  noDataLabel: string
+  noDataHint: string
+  postedLabel: string
+  ofRevenueKey: (pct: string) => string
+  moreKey: (n: number) => string
+}) {
+  const hasData = outlets !== null && outlets.length > 0
+  const visible = hasData ? outlets!.slice(0, OUTLET_ROW_CAP) : []
+  const overflow = hasData ? Math.max(0, outlets!.length - OUTLET_ROW_CAP) : 0
+  const maxRevenue = hasData ? Math.max(...outlets!.map((o) => o.revenueMinor)) : 0
+  const totalRevenue = hasData ? outlets!.reduce((acc, o) => acc + o.revenueMinor, 0) : 0
+
+  return (
+    <Card className="p-6">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="font-display text-lg font-semibold text-ink">{title}</h2>
+        <span className="text-[13px] text-ink-3">{postedLabel}</span>
+      </div>
+
+      {loading ? (
+        /* Skeleton: three shimmering rows */
+        <div className="space-y-px" aria-busy="true" aria-label={noDataLabel}>
+          {[80, 62, 45].map((w) => (
+            <div key={w} className="py-3.5">
+              <div className="flex items-center gap-3">
+                <div className="size-[34px] shrink-0 animate-pulse rounded-xl bg-ink-100" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3.5 animate-pulse rounded bg-ink-100" style={{ width: `${w}%` }} />
+                  <div className="h-2.5 w-20 animate-pulse rounded bg-ink-100" />
+                </div>
+                <div className="h-4 w-24 animate-pulse rounded bg-ink-100" />
+              </div>
+              <div className="mt-2.5 h-1.5 animate-pulse rounded-full bg-ink-100" />
+            </div>
+          ))}
+        </div>
+      ) : hasData ? (
+        <div>
+          {visible.map((outlet, idx) => {
+            const isLast = idx === visible.length - 1 && overflow === 0
+            const barWidth = maxRevenue > 0 ? (outlet.revenueMinor / maxRevenue) * 100 : 0
+            const shareOfTotal = totalRevenue > 0 ? outlet.revenueMinor / totalRevenue : 0
+            const initials = outletInitials(outlet.outletName, outlet.businessId)
+            const displayName = outlet.outletName ?? (
+              <span className="font-mono text-[13px] text-ink-3">
+                {outlet.businessId.slice(0, 8)}
+              </span>
+            )
+
+            return (
+              <div
+                key={outlet.businessId}
+                className={cn('py-3.5', !isLast && 'border-b border-ink-50')}
+              >
+                <div className="flex items-center gap-3">
+                  {/* Monogram tile */}
+                  <span
+                    className="grid size-[34px] shrink-0 place-items-center rounded-xl bg-emerald-tint font-mono text-[11px] font-bold text-emerald-2"
+                    aria-hidden="true"
+                  >
+                    {initials}
+                  </span>
+
+                  {/* Name */}
+                  <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-ink">
+                    {displayName}
+                  </span>
+
+                  {/* Amount + share */}
+                  <span className="shrink-0 text-right">
+                    <span className="tnum block font-mono text-[14px] font-semibold text-ink">
+                      {formatMoney(outlet.revenueMinor, currency, locale)}
+                    </span>
+                    <span className="mt-0.5 block text-[11px] font-semibold text-emerald-2">
+                      {ofRevenueKey(formatPercent(shareOfTotal, locale))}
+                    </span>
+                  </span>
+                </div>
+
+                {/* Progress bar */}
+                <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-ink-50">
+                  <div
+                    className="h-full rounded-full bg-emerald motion-safe:transition-[width] motion-safe:duration-500"
+                    style={{ width: `${barWidth.toFixed(1)}%` }}
+                    role="presentation"
+                  />
+                </div>
+              </div>
+            )
+          })}
+
+          {overflow > 0 ? (
+            <div className="pt-3 text-center text-[13px] text-ink-3">{moreKey(overflow)}</div>
+          ) : null}
+        </div>
+      ) : (
+        /* Genuine empty state — 204 or empty outlets array */
+        <div className="grid min-h-[220px] place-items-center rounded-xl border border-dashed border-line-strong px-6 py-10 text-center">
+          <div>
+            <div className="text-sm font-semibold text-ink-2">{noDataLabel}</div>
+            <p className="mx-auto mt-1.5 max-w-[36ch] text-[13px] leading-relaxed text-ink-3">
+              {noDataHint}
+            </p>
+          </div>
+        </div>
+      )}
+    </Card>
   )
 }
 

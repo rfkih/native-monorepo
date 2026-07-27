@@ -44,8 +44,8 @@ schema. Until then a row here is documentation of intent, not a shippable contra
 | Event | Producer | Consumers | Key fields | Status |
 |---|---|---|---|---|
 | **`CompanyCreated`** | **org-service** | **entitlement, finance, verticals** | **company_id, legal_employer_id, base_currency, default_language** | **LIVE (M1.2)** |
-| **`OrgUnitCreated`** | **org-service** | **employee, verticals, finance** | **org_unit_id, type, parent_id, company_id** | **LIVE (#18)** |
-| **`OrgUnitChanged`** | **org-service** | **employee, verticals, finance** | **org_unit_id, type, parent_id, company_id** | **LIVE (#18)** |
+| **`OrgUnitCreated`** | **org-service** | **employee, verticals, finance** | **org_unit_id, type, parent_id, company_id** | **LIVE (#18); finance consumer Phase 2 outlet-scoping** |
+| **`OrgUnitChanged`** | **org-service** | **employee, verticals, finance** | **org_unit_id, type, parent_id, company_id** | **LIVE (#18); finance consumer Phase 2 outlet-scoping** |
 | **`EntitlementGranted`** | **entitlement-service** | **shell, all services** | **company_id, module_key** | **LIVE** |
 | **`EntitlementRevoked`** | **entitlement-service** | **shell, all services** | **company_id, module_key** | **LIVE** |
 | **`EmployeeChanged`** | **employee-service** | **verticals** | **employee_id, company_id, status** | **LIVE (#19)** |
@@ -660,6 +660,23 @@ runs inside a `TenantContext` scope bound to the event's `company_id`, so RLS ap
 schemas (rule 7). On creating an assignment, the target org_unit's `legal_employer_id` is resolved
 from this read model and a concurrent assignment under a DIFFERENT legal employer is rejected
 (`409`).
+
+### `OrgUnitCreated` / `OrgUnitChanged` — finance-service consumer view
+
+finance-service **consumes** the org-service `OrgUnitCreated` / `OrgUnitChanged` (the producer
+contracts are documented above) into a **local org-unit name cache** (`org_unit_ref` table: `org_unit_id
+-> {company_id, type, parent_id, name, active}`) — the reference the `GET /api/v1/pnl/outlets`
+endpoint LEFT-JOINs to resolve outlet display names without a synchronous call to org-service (rule
+2). It reads the schemas from `libs/contracts` on the classpath (`avro/OrgUnitCreated.avsc` /
+`avro/OrgUnitChanged.avsc`, the single source of truth — ADR 0003), reads the outbox payload as
+**raw Avro bytes** via `libs/events AvroSerde` (no Schema Registry serde), and dedupes by the event
+UUID (`ProcessedEventStore`) so a re-delivery never double-applies. The upsert runs inside a
+`TenantContext` scope bound to the event's `company_id` (RLS applies — rule 5). Names may lag by up
+to one event-delivery cycle after a rename; callers must tolerate `outletName: null` (not-yet-known
+is not an error — the revenue row is returned regardless). The `OrgUnitConsumerContractTest`
+(finance) asserts both schemas stay backward-compatible with the producer schemas (rule 7).
+
+**Topics consumed:** `OrgUnitCreated`, `OrgUnitChanged`.
 
 ### `EntitlementGranted` / `EntitlementRevoked` — carwash-service consumer view
 
