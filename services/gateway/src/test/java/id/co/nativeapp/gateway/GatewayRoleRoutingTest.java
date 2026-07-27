@@ -500,6 +500,96 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
   }
 
   // ---------------------------------------------------------------------------
+  // /api/v1/users/me/outlets — caller's own outlet assignments (cashier-allowed)
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void aCashierCanReachTheMeOutletsRoute() throws Exception {
+    // Cashiers are the primary POS users; they must be able to read their own outlet assignments
+    // for the POS picker intersection. The /me/outlets route is POS_ROLES-gated and must be ordered
+    // BEFORE the general /users/** route at the gateway so the cashier is not 403'd by the
+    // dashboard-gated users route.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/users/me/outlets")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/users/me/outlets");
+  }
+
+  @Test
+  void anOwnerCanAlsoReachTheMeOutletsRoute() throws Exception {
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/users/me/outlets")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/users/me/outlets");
+  }
+
+  @Test
+  void aCashierIsStillDeniedTheGeneralUsersRouteWith403() throws Exception {
+    // Regression guard: /me/outlets being POS-allowed must NOT broaden the general /users/ surface.
+    // A cashier must still be denied the general team-management list (/users, not /users/me).
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/users")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void aCashierIsStillDeniedUsersByIdOutletsRouteWith403() throws Exception {
+    // A cashier must NOT be able to read another user's outlet assignments via /{userId}/outlets
+    // (only their own via /me/outlets). The /{userId}/outlets path falls through to the
+    // DASHBOARD_ROLES-gated /users/** route.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/users/some-user-id/outlets")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  // ---------------------------------------------------------------------------
   // Public sign-up route — no Authorization header required
   // ---------------------------------------------------------------------------
 

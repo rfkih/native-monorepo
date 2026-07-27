@@ -1,6 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api'
 
+/** A single outlet assignment row returned by GET /api/v1/users/{userId}/outlets and GET /api/v1/users/me/outlets. */
+export interface UserOutlet {
+  orgUnitId: string
+  name: string
+}
+
 /** A company teammate as returned by GET /api/v1/users. */
 export interface TeamMember {
   id: string
@@ -8,6 +14,8 @@ export interface TeamMember {
   email: string
   roles: string[]
   enabled: boolean
+  /** Number of outlets explicitly assigned to this user; 0 means unrestricted ("all outlets"). */
+  outletCount: number
 }
 
 /** POST /api/v1/users response — contains a one-time temporaryPassword. */
@@ -89,6 +97,51 @@ export function useDeactivateMember(params: { companyId: string; actor: string }
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['team', companyId] })
+    },
+  })
+}
+
+/**
+ * GET /api/v1/users/{userId}/outlets — the explicit outlet assignments for a specific user.
+ * Owner/manager-gated. An empty list means the user is unrestricted ("all outlets").
+ */
+export function useUserOutlets(params: {
+  userId: string
+  companyId: string
+  actor: string
+  enabled: boolean
+}) {
+  const { userId, companyId, actor, enabled } = params
+  return useQuery<UserOutlet[]>({
+    enabled: enabled && !!userId,
+    queryKey: ['userOutlets', companyId, userId],
+    queryFn: async () => {
+      const result = await apiFetch<UserOutlet[]>(`/api/v1/users/${userId}/outlets`, {
+        tenant: { companyId, actor },
+      })
+      return result ?? []
+    },
+  })
+}
+
+/**
+ * PUT /api/v1/users/{userId}/outlets — replace the outlet assignment set for a user.
+ * Sending an empty array restores "unrestricted" (all outlets).
+ * Invalidates both the team list and the specific user's outlet query.
+ */
+export function useSetUserOutlets(params: { companyId: string; actor: string }) {
+  const { companyId, actor } = params
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ userId, orgUnitIds }: { userId: string; orgUnitIds: string[] }) =>
+      apiFetch<UserOutlet[]>(`/api/v1/users/${userId}/outlets`, {
+        method: 'PUT',
+        tenant: { companyId, actor },
+        body: { orgUnitIds },
+      }),
+    onSuccess: (_data, { userId }) => {
+      void queryClient.invalidateQueries({ queryKey: ['team', companyId] })
+      void queryClient.invalidateQueries({ queryKey: ['userOutlets', companyId, userId] })
     },
   })
 }

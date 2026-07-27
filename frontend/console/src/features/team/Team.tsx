@@ -7,7 +7,7 @@
  */
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Check, Copy, Plus, Search, TriangleAlert, UserX } from 'lucide-react'
+import { Check, Copy, Plus, Search, Store, TriangleAlert, UserX } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -15,6 +15,7 @@ import { Spinner } from '@/components/ui/Spinner'
 import { Field, TextInput } from '@/components/ui/Field'
 import { Segmented } from '@/components/ui/Segmented'
 import { EmptyState } from '@/features/_shared/financeUi'
+import { useOutlets } from '@/features/org/api'
 import { useSession } from '@/lib/session'
 import { useAuth } from '@/lib/authContext'
 import { cn } from '@/lib/cn'
@@ -23,6 +24,8 @@ import {
   useInviteMember,
   useUpdateMember,
   useDeactivateMember,
+  useUserOutlets,
+  useSetUserOutlets,
   type TeamMember,
   type InviteResponse,
 } from './api'
@@ -37,6 +40,7 @@ type DialogState =
   | { kind: 'invite' }
   | { kind: 'changeRole'; member: TeamMember }
   | { kind: 'deactivate'; member: TeamMember }
+  | { kind: 'editOutlets'; member: TeamMember }
 
 // ── DialogOverlay (same pattern as OrgTree.tsx) ───────────────────────────────
 
@@ -384,19 +388,176 @@ function DeactivateDialog({
   )
 }
 
+// ── Edit-outlets dialog ───────────────────────────────────────────────────────
+
+function EditOutletsDialog({
+  member,
+  companyId,
+  actor,
+  onClose,
+}: {
+  member: TeamMember
+  companyId: string
+  actor: string
+  onClose: () => void
+}) {
+  const { t } = useTranslation()
+
+  // All company outlets (the option list)
+  const outletsQuery = useOutlets(companyId, actor)
+  const allOutlets = outletsQuery.data ?? []
+
+  // The user's current assignment
+  const assignedQuery = useUserOutlets({
+    userId: member.id,
+    companyId,
+    actor,
+    enabled: true,
+  })
+  const assignedOutlets = assignedQuery.data ?? []
+
+  // Local selection state — initialised once the assigned list loads
+  const [selected, setSelected] = useState<Set<string> | null>(null)
+
+  // Once we have both lists, seed local state (only once)
+  if (selected === null && !assignedQuery.isLoading && !outletsQuery.isLoading) {
+    setSelected(new Set(assignedOutlets.map((o) => o.orgUnitId)))
+  }
+
+  const mutation = useSetUserOutlets({ companyId, actor })
+
+  function toggleOutlet(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev ?? [])
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  function handleSave() {
+    mutation.mutate(
+      { userId: member.id, orgUnitIds: Array.from(selected ?? []) },
+      { onSuccess: () => onClose() },
+    )
+  }
+
+  function apiErrorMessage(): string {
+    if (!mutation.isError) return ''
+    const err = mutation.error as { status?: number } | null
+    if (err?.status === 400) return t('team.editOutletsDialog.errorInvalid')
+    if (err?.status === 404) return t('team.editOutletsDialog.errorNotFound')
+    return t('team.errorGeneric')
+  }
+
+  const isLoading = outletsQuery.isLoading || assignedQuery.isLoading
+
+  return (
+    <DialogOverlay onClose={onClose}>
+      <div className="space-y-4">
+        <h2 className="font-display text-lg font-semibold text-ink">
+          {t('team.editOutletsDialog.title')}
+        </h2>
+        <p className="text-sm text-ink-2">
+          {t('team.editOutletsDialog.body', { email: member.email })}
+        </p>
+
+        {isLoading ? (
+          <div className="flex justify-center py-6">
+            <Spinner className="text-emerald" />
+          </div>
+        ) : allOutlets.length === 0 ? (
+          <p className="rounded-xl border border-line bg-paper px-4 py-3 text-sm text-ink-3">
+            {t('team.editOutletsDialog.noOutlets')}
+          </p>
+        ) : (
+          <div
+            role="group"
+            aria-label={t('team.editOutletsDialog.title')}
+            className="max-h-[300px] overflow-y-auto rounded-xl border border-line"
+          >
+            {allOutlets.map((outlet, idx) => {
+              const isChecked = selected?.has(outlet.id) ?? false
+              const checkboxId = `outlet-assign-${outlet.id}`
+              return (
+                <label
+                  key={outlet.id}
+                  htmlFor={checkboxId}
+                  className={cn(
+                    'flex h-11 cursor-pointer items-center gap-3 px-4 transition-colors hover:bg-hover',
+                    'focus-within:outline-2 focus-within:outline-offset-[-2px] focus-within:outline-emerald',
+                    idx !== allOutlets.length - 1 && 'border-b border-ink-50',
+                  )}
+                >
+                  <input
+                    id={checkboxId}
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={() => toggleOutlet(outlet.id)}
+                    className="size-4 shrink-0 cursor-pointer accent-emerald focus-visible:outline-2 focus-visible:outline-emerald"
+                  />
+                  <span className="flex min-w-0 flex-1 items-center gap-2 text-sm text-ink">
+                    <Store className="size-3.5 shrink-0 text-ink-3" aria-hidden />
+                    <span className="truncate">{outlet.name}</span>
+                  </span>
+                </label>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Selection hint: 0 checked = unrestricted */}
+        {allOutlets.length > 0 && selected !== null ? (
+          <p className="text-xs text-ink-3">
+            {selected.size === 0
+              ? t('team.editOutletsDialog.hintAllOutlets')
+              : t('team.editOutletsDialog.hintSelected', { count: selected.size })}
+          </p>
+        ) : null}
+
+        {mutation.isError ? (
+          <p className="rounded-xl border border-loss/30 bg-tint-loss px-3 py-2 text-sm text-loss">
+            {apiErrorMessage()}
+          </p>
+        ) : null}
+
+        <div className="flex justify-end gap-3">
+          <Button type="button" variant="outline" onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            type="button"
+            onClick={handleSave}
+            disabled={mutation.isPending || isLoading || allOutlets.length === 0}
+          >
+            {mutation.isPending
+              ? t('team.editOutletsDialog.saving')
+              : t('team.editOutletsDialog.save')}
+          </Button>
+        </div>
+      </div>
+    </DialogOverlay>
+  )
+}
+
 // ── Member row ────────────────────────────────────────────────────────────────
 
-/** The 2d table row: person · role · status · hover-revealed actions. */
+/** The 2d table row: person · role · outlets · status · hover-revealed actions. */
 function MemberRow({
   member,
   isSelf,
   onChangeRole,
   onDeactivate,
+  onEditOutlets,
 }: {
   member: TeamMember
   isSelf: boolean
   onChangeRole: (m: TeamMember) => void
   onDeactivate: (m: TeamMember) => void
+  onEditOutlets: (m: TeamMember) => void
 }) {
   const { t } = useTranslation()
   const primaryRole = member.roles.find((r) => ROLES.includes(r as Role)) ?? member.roles[0] ?? ''
@@ -407,10 +568,19 @@ function MemberRow({
     .map((p) => p[0]?.toUpperCase())
     .join('')
 
+  // PRE-ENFORCEMENT SEMANTICS: an empty assignment set means "unrestricted", so 0 renders
+  // as "All outlets". Phase 5 flips cashiers to default-closed (0 assignments = cannot ring);
+  // when that lands, this copy must become role-aware (cashier + 0 => a warning, not "All").
+  const outletCount = member.outletCount ?? 0
+  const outletSummary =
+    outletCount === 0
+      ? t('team.allOutlets')
+      : t('team.outletCount', { count: outletCount })
+
   return (
     <div
       className={cn(
-        'group grid grid-cols-[minmax(0,2fr)_minmax(96px,1fr)_minmax(96px,1fr)_auto] items-center gap-4 border-b border-ink-50 px-6 py-3.5 transition-colors last:border-0 hover:bg-hover',
+        'group grid grid-cols-[minmax(0,2fr)_minmax(80px,1fr)_minmax(100px,1fr)_minmax(80px,1fr)_auto] items-center gap-4 border-b border-ink-50 px-6 py-3.5 transition-colors last:border-0 hover:bg-hover',
         !member.enabled && 'opacity-60',
       )}
     >
@@ -438,12 +608,24 @@ function MemberRow({
         <RoleBadge role={primaryRole} />
       </span>
 
+      {/* Outlets */}
+      <span className="truncate text-[13px] text-ink-2">{outletSummary}</span>
+
       {/* Status */}
       <StatusDot enabled={member.enabled} />
 
       {/* Row actions — hidden for the current user (self-lockout prevention) */}
       {!isSelf ? (
         <div className="flex shrink-0 items-center justify-end gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+          <button
+            type="button"
+            aria-label={t('team.editOutlets')}
+            title={t('team.editOutlets')}
+            className="rounded-lg px-2 py-1 text-xs font-semibold text-ink-3 hover:bg-ink-50 hover:text-ink focus-visible:outline-2 focus-visible:outline-emerald"
+            onClick={() => onEditOutlets(member)}
+          >
+            {t('team.editOutlets')}
+          </button>
           <button
             type="button"
             aria-label={t('team.changeRole')}
@@ -576,12 +758,15 @@ export function Team() {
       ) : (
         <Card className="overflow-hidden p-0">
           {/* Header row */}
-          <div className="grid grid-cols-[minmax(0,2fr)_minmax(96px,1fr)_minmax(96px,1fr)_auto] gap-4 border-b border-line bg-paper px-6 py-3.5">
+          <div className="grid grid-cols-[minmax(0,2fr)_minmax(80px,1fr)_minmax(100px,1fr)_minmax(80px,1fr)_auto] gap-4 border-b border-line bg-paper px-6 py-3.5">
             <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
               {t('team.colPerson')}
             </span>
             <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
               {t('team.colRole')}
+            </span>
+            <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+              {t('team.colOutlets')}
             </span>
             <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
               {t('team.colStatus')}
@@ -598,6 +783,7 @@ export function Team() {
                 isSelf={member.email === currentActor || member.username === currentActor}
                 onChangeRole={(m) => setDialog({ kind: 'changeRole', member: m })}
                 onDeactivate={(m) => setDialog({ kind: 'deactivate', member: m })}
+                onEditOutlets={(m) => setDialog({ kind: 'editOutlets', member: m })}
               />
             ))
           )}
@@ -622,6 +808,14 @@ export function Team() {
       ) : null}
       {dialog?.kind === 'deactivate' ? (
         <DeactivateDialog
+          member={dialog.member}
+          companyId={company.companyId}
+          actor={company.actor}
+          onClose={closeDialog}
+        />
+      ) : null}
+      {dialog?.kind === 'editOutlets' ? (
+        <EditOutletsDialog
           member={dialog.member}
           companyId={company.companyId}
           actor={company.actor}

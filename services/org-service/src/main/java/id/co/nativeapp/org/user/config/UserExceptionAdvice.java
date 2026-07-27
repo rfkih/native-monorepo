@@ -1,5 +1,6 @@
 package id.co.nativeapp.org.user.config;
 
+import id.co.nativeapp.org.user.service.InvalidOutletAssignmentException;
 import id.co.nativeapp.org.user.service.InvalidRoleException;
 import id.co.nativeapp.org.user.service.SelfLockoutException;
 import id.co.nativeapp.org.user.service.UserNotFoundException;
@@ -74,6 +75,24 @@ public class UserExceptionAdvice {
     ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
     problem.setType(URI.create(TYPE_BASE + "self-lockout"));
     problem.setTitle("Conflict");
+    problem.setDetail(ex.getMessage());
+    problem.setInstance(URI.create(request.getRequestURI()));
+    addTraceId(problem);
+    return problem;
+  }
+
+  /**
+   * An outlet assignment request that includes an org-unit id that is not an active {@code OUTLET}
+   * in the caller's tenant → {@code 400 Bad Request}. The message includes the offending UUID
+   * (non-PII) and the reason so the client can surface which entry in the submitted list was
+   * invalid.
+   */
+  @ExceptionHandler(InvalidOutletAssignmentException.class)
+  public ProblemDetail handleInvalidOutletAssignment(
+      InvalidOutletAssignmentException ex, HttpServletRequest request) {
+    ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+    problem.setType(URI.create(TYPE_BASE + "invalid-outlet-assignment"));
+    problem.setTitle("Bad Request");
     problem.setDetail(ex.getMessage());
     problem.setInstance(URI.create(request.getRequestURI()));
     addTraceId(problem);

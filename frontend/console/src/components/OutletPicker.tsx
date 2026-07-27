@@ -14,10 +14,42 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useQuery } from '@tanstack/react-query'
 import { Check, ChevronDown, Store } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { useSession } from '@/lib/session'
-import { useOutlets } from '@/features/org/api'
+import { useOutlets, type OutletSummary } from '@/features/org/api'
+import { apiFetch } from '@/lib/api'
+
+// ---------------------------------------------------------------------------
+// useMyOutlets — caller's own outlet assignments
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/v1/users/me/outlets — the signed-in user's own outlet assignments.
+ * Allowed for all POS roles. Returns null (not an empty array) on any error so
+ * callers can distinguish "load failed" from "user has an empty assignment set".
+ */
+function useMyOutlets(companyId: string | null, actor: string) {
+  return useQuery<OutletSummary[] | null>({
+    enabled: !!companyId,
+    queryKey: ['myOutlets', companyId],
+    retry: false,
+    queryFn: async () => {
+      try {
+        const result = await apiFetch<Array<{ orgUnitId: string; name: string }>>(
+          '/api/v1/users/me/outlets',
+          { tenant: { companyId: companyId!, actor } },
+        )
+        if (!result) return null
+        // Normalise to OutletSummary shape (orgUnitId → id)
+        return result.map((r) => ({ id: r.orgUnitId, name: r.name }))
+      } catch {
+        return null
+      }
+    },
+  })
+}
 
 // ---------------------------------------------------------------------------
 // OutletPicker component
@@ -27,7 +59,22 @@ export function OutletPicker() {
   const { t } = useTranslation()
   const { company, activeOutletId, setActiveOutlet } = useSession()
   const outletsQuery = useOutlets(company?.companyId ?? null, company?.actor ?? '')
-  const outlets = outletsQuery.data ?? []
+  const allOutlets = outletsQuery.data ?? []
+
+  const myOutletsQuery = useMyOutlets(company?.companyId ?? null, company?.actor ?? '')
+  // myOutlets is null when the request errored; an empty array means unrestricted.
+  const myOutlets = myOutletsQuery.data
+
+  /**
+   * Intersection logic:
+   * - If "me" returned a NON-EMPTY list: restrict to only those outlets (by id, preserving
+   *   the name ordering from the company outlet list so the picker stays sorted).
+   * - If "me" returned an EMPTY list OR errored (null): show the full company list.
+   */
+  const outlets: OutletSummary[] =
+    myOutlets && myOutlets.length > 0
+      ? allOutlets.filter((o) => myOutlets.some((m) => m.id === o.id))
+      : allOutlets
 
   const [open, setOpen] = useState(false)
   // Pending outlet id — waiting for user to confirm the switch.
@@ -36,7 +83,7 @@ export function OutletPicker() {
   const triggerRef = useRef<HTMLButtonElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // Self-heal: if the stored outlet id is absent from the fetched list, default to outlets[0].
+  // Self-heal: if the stored outlet id is absent from the RESTRICTED list, default to outlets[0].
   useEffect(() => {
     if (outlets.length === 0) return
     const valid = outlets.some((o) => o.id === activeOutletId)

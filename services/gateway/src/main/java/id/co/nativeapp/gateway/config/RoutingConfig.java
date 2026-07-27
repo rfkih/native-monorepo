@@ -83,6 +83,34 @@ public class RoutingConfig {
   // ---------------------------------------------------------------------------
   // org-service (owner dashboard)
   // ---------------------------------------------------------------------------
+
+  /**
+   * {@code GET /api/v1/users/me/outlets} — the caller's own outlet assignments for the POS outlet
+   * picker intersection. Allowed for every business role INCLUDING {@code cashier}: cashiers are
+   * the primary POS users and need to know which outlets they are assigned to. This is a
+   * tenant-scoped read of the caller's own data — no cross-tenant exposure.
+   *
+   * <p>{@code @Order(HIGHEST_PRECEDENCE)} is load-bearing: RouterFunction beans are matched in
+   * order (first match wins, NOT most-specific wins), and the general {@code /users/**} route below
+   * would otherwise swallow this exact path and {@code 403} the cashier. Ordering this route first
+   * makes the specific match take precedence; every other {@code /users/**} path falls through to
+   * the dashboard-gated route — exactly the same pattern as {@link #currentCompanyRoute}.
+   */
+  @Bean
+  @Order(Ordered.HIGHEST_PRECEDENCE)
+  RouterFunction<ServerResponse> userMeOutletsRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("org-service-user-me-outlets")
+        .route(path("/api/v1/users/me/outlets"), http())
+        .before(uri(routes.orgService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(POS_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
   @Bean
   RouterFunction<ServerResponse> usersRoute(
       GatewayRouteProperties routes,

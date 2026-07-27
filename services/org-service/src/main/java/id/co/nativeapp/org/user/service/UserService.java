@@ -6,6 +6,7 @@ import id.co.nativeapp.org.user.dto.UserResponse;
 import id.co.nativeapp.org.user.service.KeycloakAdminClient.InviteResult;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,9 +44,11 @@ public class UserService {
   private static final Set<String> ALLOWED_ROLES = Set.of("owner", "manager", "cashier");
 
   private final KeycloakAdminClient keycloak;
+  private final UserOutletAssignmentService outletAssignments;
 
-  public UserService(KeycloakAdminClient keycloak) {
+  public UserService(KeycloakAdminClient keycloak, UserOutletAssignmentService outletAssignments) {
     this.keycloak = keycloak;
+    this.outletAssignments = outletAssignments;
   }
 
   // ---------------------------------------------------------------------------
@@ -63,7 +66,25 @@ public class UserService {
   public List<UserResponse> listUsers() {
     String companyId = TenantContext.require().companyId();
     List<KeycloakUser> users = keycloak.listUsersByCompanyId(companyId);
-    return users.stream().map(UserService::toResponse).toList();
+
+    // Enrich each user with their active outlet count in one grouped query (no N+1).
+    // Goes through the assignment SERVICE (not the reader) so the empty-user-list guard
+    // applies — a bare IN () is a Postgres syntax error.
+    // The user list from a single company is small (< 1 000), so no partitioning needed here.
+    List<String> userIds = users.stream().map(KeycloakUser::id).toList();
+    Map<String, Long> countByUser = outletAssignments.outletCountsByUserIds(userIds);
+
+    return users.stream()
+        .map(
+            u ->
+                new UserResponse(
+                    u.id(),
+                    u.username(),
+                    u.email(),
+                    u.roles(),
+                    u.enabled(),
+                    countByUser.getOrDefault(u.id(), 0L).intValue()))
+        .toList();
   }
 
   // ---------------------------------------------------------------------------
@@ -256,6 +277,7 @@ public class UserService {
    * (ArchUnit layering rule).
    */
   private static UserResponse toResponse(KeycloakUser user) {
-    return new UserResponse(user.id(), user.username(), user.email(), user.roles(), user.enabled());
+    return UserResponse.withoutCount(
+        user.id(), user.username(), user.email(), user.roles(), user.enabled());
   }
 }
