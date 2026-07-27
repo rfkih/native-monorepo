@@ -421,6 +421,14 @@ export const en = {
     signedInAs: 'Signed in as',
     signOut: 'Sign out',
   },
+  outletGate: {
+    title: 'No outlet to ring on',
+    body: 'This company has no active outlet yet, or none is assigned to you. Sales, menus, and kitchen tickets always belong to an outlet.',
+    cta: 'Open the org tree',
+    errorTitle: 'Could not load outlets',
+    errorBody: 'The outlet list failed to load. Check your connection and try again.',
+    retry: 'Retry',
+  },
   org: {
     title: 'Org tree',
     subtitle: 'The organisational hierarchy for this company.',

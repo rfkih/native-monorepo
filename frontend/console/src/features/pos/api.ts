@@ -3,22 +3,6 @@ import { useEffect, useRef, useState } from 'react'
 import { apiFetch } from '@/lib/api'
 import type { CompanySession } from '@/lib/session'
 
-/**
- * Returns a copy of `session` with `businessId` replaced by the active outlet id
- * (when one is selected). All POS/menu/kitchen hooks pass this through, so every
- * query key and request body automatically tracks the current outlet.
- *
- * When `activeOutletId` is null the session is returned unchanged, preserving the
- * fallback-to-first-business behaviour (no outlets tenant, or outlet not yet chosen).
- */
-export function withEffectiveOutlet(
-  session: CompanySession,
-  activeOutletId: string | null,
-): CompanySession {
-  if (!activeOutletId || activeOutletId === session.businessId) return session
-  return { ...session, businessId: activeOutletId }
-}
-
 // ---------------------------------------------------------------------------
 // Table types
 // ---------------------------------------------------------------------------

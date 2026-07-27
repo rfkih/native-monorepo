@@ -34,7 +34,8 @@ import { apiFetch } from '@/lib/api'
 import { Spinner } from '@/components/ui/Spinner'
 import { OutletPicker } from '@/components/OutletPicker'
 import { useBill, type BillSummaryResponse } from '@/features/pos/billsApi'
-import { useTables, type TableResponse, withEffectiveOutlet } from '@/features/pos/api'
+import { useTables, type TableResponse } from '@/features/pos/api'
+import { OutletGate } from '@/components/OutletGate'
 import { useBumpStore } from './bumpStore'
 
 // ---------------------------------------------------------------------------
@@ -60,13 +61,17 @@ function useBillsLive(session: CompanySession) {
 // ---------------------------------------------------------------------------
 
 export function Kitchen() {
-  const { company, activeOutletId } = useSession()
+  const { company } = useSession()
   if (!company) return <NoCompany />
-  // Substitute businessId with the active outlet so KDS tickets match the terminal's outlet.
-  const session = withEffectiveOutlet(company, activeOutletId)
-  // key forces a full remount when the effective outlet changes, resetting bumped-state
-  // and any local KDS state so it does not carry over to a different outlet.
-  return <KitchenInner key={session.businessId} session={session} />
+  // The gate resolves a REAL outlet id so KDS tickets match the terminal's outlet
+  // (ADR 0012 — no business-unit fallback). key forces a full remount when the effective
+  // outlet changes, resetting bumped-state and any local KDS state so it does not carry
+  // over to a different outlet.
+  return (
+    <OutletGate company={company}>
+      {(session) => <KitchenInner key={session.businessId} session={session} />}
+    </OutletGate>
+  )
 }
 
 // ---------------------------------------------------------------------------

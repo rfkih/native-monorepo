@@ -2,7 +2,8 @@
  * OutletPicker — compact outlet selector for POS, Menu, and Kitchen headers.
  *
  * Rules:
- * - 0 active outlets → renders nothing (no picker shown, fallback to company's first business).
+ * - 0 active outlets → renders nothing (the OutletGate blocks the surface — there is no
+ *   fallback to the company's first business since ADR 0012).
  * - ≥1 outlets → renders a button (bg-emerald-tint, 1.5px border-emerald, outlet name + chevron)
  *   that opens an accessible dropdown listing outlets; the currently active one is checked.
  * - If outlets exist but none is selected (or the stored id is stale/foreign), defaults to the
@@ -14,42 +15,10 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useQuery } from '@tanstack/react-query'
 import { Check, ChevronDown, Store } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { useSession } from '@/lib/session'
-import { useOutlets, type OutletSummary } from '@/features/org/api'
-import { apiFetch } from '@/lib/api'
-
-// ---------------------------------------------------------------------------
-// useMyOutlets — caller's own outlet assignments
-// ---------------------------------------------------------------------------
-
-/**
- * GET /api/v1/users/me/outlets — the signed-in user's own outlet assignments.
- * Allowed for all POS roles. Returns null (not an empty array) on any error so
- * callers can distinguish "load failed" from "user has an empty assignment set".
- */
-function useMyOutlets(companyId: string | null, actor: string) {
-  return useQuery<OutletSummary[] | null>({
-    enabled: !!companyId,
-    queryKey: ['myOutlets', companyId],
-    retry: false,
-    queryFn: async () => {
-      try {
-        const result = await apiFetch<Array<{ orgUnitId: string; name: string }>>(
-          '/api/v1/users/me/outlets',
-          { tenant: { companyId: companyId!, actor } },
-        )
-        if (!result) return null
-        // Normalise to OutletSummary shape (orgUnitId → id)
-        return result.map((r) => ({ id: r.orgUnitId, name: r.name }))
-      } catch {
-        return null
-      }
-    },
-  })
-}
+import { useResolvedOutlets } from '@/features/org/useResolvedOutlets'
 
 // ---------------------------------------------------------------------------
 // OutletPicker component
@@ -58,23 +27,9 @@ function useMyOutlets(companyId: string | null, actor: string) {
 export function OutletPicker() {
   const { t } = useTranslation()
   const { company, activeOutletId, setActiveOutlet } = useSession()
-  const outletsQuery = useOutlets(company?.companyId ?? null, company?.actor ?? '')
-  const allOutlets = outletsQuery.data ?? []
-
-  const myOutletsQuery = useMyOutlets(company?.companyId ?? null, company?.actor ?? '')
-  // myOutlets is null when the request errored; an empty array means unrestricted.
-  const myOutlets = myOutletsQuery.data
-
-  /**
-   * Intersection logic:
-   * - If "me" returned a NON-EMPTY list: restrict to only those outlets (by id, preserving
-   *   the name ordering from the company outlet list so the picker stays sorted).
-   * - If "me" returned an EMPTY list OR errored (null): show the full company list.
-   */
-  const outlets: OutletSummary[] =
-    myOutlets && myOutlets.length > 0
-      ? allOutlets.filter((o) => myOutlets.some((m) => m.id === o.id))
-      : allOutlets
+  // Shared resolution (company outlets ∩ own assignments + self-heal) — the same hook the
+  // OutletGate renders on, so the picker and the gate can never disagree (ADR 0012).
+  const { outlets } = useResolvedOutlets()
 
   const [open, setOpen] = useState(false)
   // Pending outlet id — waiting for user to confirm the switch.
@@ -82,15 +37,6 @@ export function OutletPicker() {
 
   const triggerRef = useRef<HTMLButtonElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-
-  // Self-heal: if the stored outlet id is absent from the RESTRICTED list, default to outlets[0].
-  useEffect(() => {
-    if (outlets.length === 0) return
-    const valid = outlets.some((o) => o.id === activeOutletId)
-    if (!valid) {
-      setActiveOutlet(outlets[0].id)
-    }
-  }, [outlets, activeOutletId, setActiveOutlet])
 
   // Close on outside click or Escape; return focus to trigger on close.
   useEffect(() => {
@@ -115,7 +61,8 @@ export function OutletPicker() {
     }
   }, [open])
 
-  // No outlets → no picker (fallback behaviour, invisible to the user).
+  // No outlets → no picker (the OutletGate blocks the surface in that state; this guard is
+  // defense-in-depth for the brief window while queries resolve).
   if (!company || outlets.length === 0) return null
 
   // The displayed outlet: prefer the stored id; fall back to first (while self-heal effect fires).

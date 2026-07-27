@@ -43,7 +43,8 @@ import { localeOf } from '@/i18n'
 import { cn } from '@/lib/cn'
 import { formatMoney, isoMinorExponent } from '@/lib/money'
 import { OutletPicker } from '@/components/OutletPicker'
-import { useMenu, useSetStock, useAddStock, withEffectiveOutlet } from '@/features/pos/api'
+import { useMenu, useSetStock, useAddStock } from '@/features/pos/api'
+import { OutletGate } from '@/components/OutletGate'
 import type { MenuItem, ModifierGroupResponse, ModifierOptionResponse } from '@/features/pos/api'
 import {
   useAdminModifierGroups,
@@ -68,13 +69,16 @@ import { resizeImageFile } from './image'
 // ---------------------------------------------------------------------------
 
 export function MenuManagement() {
-  const { company, activeOutletId } = useSession()
+  const { company } = useSession()
   if (!company) return <NoCompany />
-  // Substitute businessId with the active outlet so menu edits target the correct outlet.
-  const session = withEffectiveOutlet(company, activeOutletId)
-  // key forces a full remount when the effective outlet changes, resetting any local
-  // dialog/edit state so it cannot bleed across outlets.
-  return <MenuManagementInner key={session.businessId} session={session} />
+  // The gate resolves a REAL outlet id so menu edits target the correct outlet (ADR 0012 —
+  // no business-unit fallback). key forces a full remount when the effective outlet
+  // changes, resetting any local dialog/edit state so it cannot bleed across outlets.
+  return (
+    <OutletGate company={company}>
+      {(session) => <MenuManagementInner key={session.businessId} session={session} />}
+    </OutletGate>
+  )
 }
 
 // ---------------------------------------------------------------------------

@@ -416,6 +416,14 @@ export const id = {
     signedInAs: 'Masuk sebagai',
     signOut: 'Keluar',
   },
+  outletGate: {
+    title: 'Belum ada gerai untuk transaksi',
+    body: 'Perusahaan ini belum memiliki gerai aktif, atau belum ada gerai yang ditugaskan kepada Anda. Penjualan, menu, dan tiket dapur selalu terikat pada sebuah gerai.',
+    cta: 'Buka struktur organisasi',
+    errorTitle: 'Gagal memuat daftar gerai',
+    errorBody: 'Daftar gerai gagal dimuat. Periksa koneksi Anda lalu coba lagi.',
+    retry: 'Coba lagi',
+  },
   org: {
     title: 'Struktur organisasi',
     subtitle: 'Hierarki organisasi untuk perusahaan ini.',

@@ -48,13 +48,13 @@ import { localeOf } from '@/i18n'
 import { cn } from '@/lib/cn'
 import { formatMoney, isoMinorExponent } from '@/lib/money'
 import { OutletPicker } from '@/components/OutletPicker'
+import { OutletGate } from '@/components/OutletGate'
 import {
   useMenu,
   useCategories,
   useSeedMenu,
   useTables,
   useParkedOrders,
-  withEffectiveOutlet,
   type MenuItem,
   type CategoryResponse,
   type OrderLineInput,
@@ -88,13 +88,17 @@ interface CartLine {
 // ---------------------------------------------------------------------------
 
 export function Pos() {
-  const { company, activeOutletId } = useSession()
+  const { company } = useSession()
   if (!company) return <NoCompany />
-  // Substitute businessId with the active outlet for all POS data calls.
-  const session = withEffectiveOutlet(company, activeOutletId)
-  // key forces a full remount when the effective outlet changes — cart, openBillId,
-  // discount, and resume state all reset implicitly, preventing cross-outlet state bleed.
-  return <PosInner key={session.businessId} session={session} />
+  // The gate resolves a REAL outlet id (never the business-unit id — ADR 0012) and blocks
+  // until it has one. key forces a full remount when the effective outlet changes — cart,
+  // openBillId, discount, and resume state all reset implicitly, preventing cross-outlet
+  // state bleed.
+  return (
+    <OutletGate company={company}>
+      {(session) => <PosInner key={session.businessId} session={session} />}
+    </OutletGate>
+  )
 }
 
 // ---------------------------------------------------------------------------
