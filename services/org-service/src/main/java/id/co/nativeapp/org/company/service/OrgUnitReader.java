@@ -1,6 +1,7 @@
 package id.co.nativeapp.org.company.service;
 
 import id.co.nativeapp.org.company.projection.OrgUnitView;
+import id.co.nativeapp.org.company.projection.OutletView;
 import id.co.nativeapp.org.company.repository.OrgUnitRepository;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import java.util.List;
@@ -42,5 +43,20 @@ public class OrgUnitReader {
   @Transactional(readOnly = true)
   public List<OrgUnitView> findAllForCurrentTenant() {
     return orgUnitRepository.findAllViews();
+  }
+
+  /**
+   * Active OUTLET nodes visible to the bound tenant, ordered by name. No {@code WHERE company_id} —
+   * RLS constrains the result set to the bound company (rule 5). Used by the POS outlet picker
+   * ({@code GET /api/v1/outlets}).
+   *
+   * <p>Uses the {@link OutletView} projection — only {@code id} and {@code name} are selected
+   * (CLAUDE.md §3.3).
+   *
+   * @return active outlets for the current tenant, ordered by name
+   */
+  @Transactional(readOnly = true)
+  public List<OutletView> findActiveOutletsForCurrentTenant() {
+    return orgUnitRepository.findActiveOutlets();
   }
 }

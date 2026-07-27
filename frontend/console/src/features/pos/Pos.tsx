@@ -46,12 +46,14 @@ import { useTheme } from '@/lib/theme'
 import { localeOf } from '@/i18n'
 import { cn } from '@/lib/cn'
 import { formatMoney, isoMinorExponent } from '@/lib/money'
+import { OutletPicker } from '@/components/OutletPicker'
 import {
   useMenu,
   useCategories,
   useSeedMenu,
   useTables,
   useParkedOrders,
+  withEffectiveOutlet,
   type MenuItem,
   type CategoryResponse,
   type OrderLineInput,
@@ -85,9 +87,13 @@ interface CartLine {
 // ---------------------------------------------------------------------------
 
 export function Pos() {
-  const { company } = useSession()
+  const { company, activeOutletId } = useSession()
   if (!company) return <NoCompany />
-  return <PosInner session={company} />
+  // Substitute businessId with the active outlet for all POS data calls.
+  const session = withEffectiveOutlet(company, activeOutletId)
+  // key forces a full remount when the effective outlet changes — cart, openBillId,
+  // discount, and resume state all reset implicitly, preventing cross-outlet state bleed.
+  return <PosInner key={session.businessId} session={session} />
 }
 
 // ---------------------------------------------------------------------------
@@ -378,6 +384,9 @@ function PosInner({ session }: { session: CompanySession }) {
             {session.name}
           </span>
         </span>
+
+        {/* Outlet picker — visible when the tenant has ≥1 OUTLET org units */}
+        <OutletPicker />
 
         {/* Search field — flex-1 */}
         <div className="relative flex-1">

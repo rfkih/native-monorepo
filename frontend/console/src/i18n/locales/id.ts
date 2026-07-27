@@ -401,6 +401,11 @@ export const id = {
       resuming: 'Melanjutkan',
       lineCount: '{{n}} item',
     },
+    outletSelectorLabel: 'Melayani {{name}}',
+    outletSelectorAriaLabel: 'Pilih outlet',
+    switchOutletConfirmTitle: 'Ganti outlet?',
+    switchOutletConfirmBody: 'Item yang belum dikirim di terminal ini akan dihapus.',
+    switchOutletConfirmAction: 'Ganti',
   },
   auth: {
     deniedTitle: 'Tidak ada akses',

@@ -42,7 +42,8 @@ import { useTheme } from '@/lib/theme'
 import { localeOf } from '@/i18n'
 import { cn } from '@/lib/cn'
 import { formatMoney, isoMinorExponent } from '@/lib/money'
-import { useMenu, useSetStock, useAddStock } from '@/features/pos/api'
+import { OutletPicker } from '@/components/OutletPicker'
+import { useMenu, useSetStock, useAddStock, withEffectiveOutlet } from '@/features/pos/api'
 import type { MenuItem, ModifierGroupResponse, ModifierOptionResponse } from '@/features/pos/api'
 import {
   useAdminModifierGroups,
@@ -67,9 +68,13 @@ import { resizeImageFile } from './image'
 // ---------------------------------------------------------------------------
 
 export function MenuManagement() {
-  const { company } = useSession()
+  const { company, activeOutletId } = useSession()
   if (!company) return <NoCompany />
-  return <MenuManagementInner session={company} />
+  // Substitute businessId with the active outlet so menu edits target the correct outlet.
+  const session = withEffectiveOutlet(company, activeOutletId)
+  // key forces a full remount when the effective outlet changes, resetting any local
+  // dialog/edit state so it cannot bleed across outlets.
+  return <MenuManagementInner key={session.businessId} session={session} />
 }
 
 // ---------------------------------------------------------------------------
@@ -2059,6 +2064,9 @@ function MenuManagementInner({ session }: { session: CompanySession }) {
           </div>
           <div className="truncate text-xs text-ink-3">{session.name}</div>
         </div>
+
+        {/* Outlet picker — tracks which outlet menu edits and KDS tickets belong to */}
+        <OutletPicker />
 
         <Button onClick={() => setShowCreateItem(true)} className="shrink-0">
           <Plus className="size-4" />

@@ -406,6 +406,11 @@ export const en = {
       resuming: 'Resuming',
       lineCount: '{{n}} item(s)',
     },
+    outletSelectorLabel: 'Ringing for {{name}}',
+    outletSelectorAriaLabel: 'Select outlet',
+    switchOutletConfirmTitle: 'Switch outlet?',
+    switchOutletConfirmBody: 'Unsent items on this terminal will be cleared.',
+    switchOutletConfirmAction: 'Switch',
   },
   auth: {
     deniedTitle: 'No access',

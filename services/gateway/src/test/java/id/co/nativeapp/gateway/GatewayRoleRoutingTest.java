@@ -332,6 +332,46 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
   }
 
   // ---------------------------------------------------------------------------
+  // /api/v1/outlets — POS outlet picker (cashier-allowed; distinct from /org-units)
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void aCashierCanReachTheOutletsRoute() throws Exception {
+    // Cashiers are the primary POS users and need the outlet picker to open a sale.
+    // Regression guard: the outletsRoute bean must be POS_ROLES-gated (not DASHBOARD_ROLES),
+    // fixing the review-critical where cashiers were denied their own outlet list.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/outlets")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/outlets");
+  }
+
+  @Test
+  void anOwnerCanAlsoReachTheOutletsRoute() throws Exception {
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/outlets")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/outlets");
+  }
+
+  // ---------------------------------------------------------------------------
   // /api/v1/companies/current — the caller's OWN company (POS needs it → cashier-allowed)
   // ---------------------------------------------------------------------------
 

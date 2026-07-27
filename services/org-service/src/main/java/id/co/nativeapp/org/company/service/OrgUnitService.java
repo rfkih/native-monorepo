@@ -3,6 +3,7 @@ package id.co.nativeapp.org.company.service;
 import id.co.nativeapp.org.company.domain.OrgUnit;
 import id.co.nativeapp.org.company.dto.CreateOrgUnitCommand;
 import id.co.nativeapp.org.company.dto.OrgUnitListResponse;
+import id.co.nativeapp.org.company.dto.OutletResponse;
 import id.co.nativeapp.org.company.dto.PatchOrgUnitCommand;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
@@ -66,6 +67,20 @@ public class OrgUnitService {
             v ->
                 new OrgUnitListResponse(
                     v.getId(), v.getName(), v.getType(), v.getParentId(), v.isActive()))
+        .toList();
+  }
+
+  /**
+   * Active OUTLET nodes visible to the bound tenant, ordered by name. No {@code WHERE company_id} —
+   * RLS scopes the result (rule 5). Backs the POS outlet picker ({@code GET /api/v1/outlets}).
+   * Projection-to-DTO mapping happens here in the service layer (CODE-STRUCTURE §3.3).
+   *
+   * @return active outlets for the current tenant, ordered by name; empty list when none exist
+   */
+  public List<OutletResponse> listActiveOutlets() {
+    TenantContext.require();
+    return reader.findActiveOutletsForCurrentTenant().stream()
+        .map(v -> new OutletResponse(v.getId(), v.getName()))
         .toList();
   }
 }

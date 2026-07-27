@@ -32,8 +32,9 @@ import { localeOf } from '@/i18n'
 import { cn } from '@/lib/cn'
 import { apiFetch } from '@/lib/api'
 import { Spinner } from '@/components/ui/Spinner'
+import { OutletPicker } from '@/components/OutletPicker'
 import { useBill, type BillSummaryResponse } from '@/features/pos/billsApi'
-import { useTables, type TableResponse } from '@/features/pos/api'
+import { useTables, type TableResponse, withEffectiveOutlet } from '@/features/pos/api'
 import { useBumpStore } from './bumpStore'
 
 // ---------------------------------------------------------------------------
@@ -59,9 +60,13 @@ function useBillsLive(session: CompanySession) {
 // ---------------------------------------------------------------------------
 
 export function Kitchen() {
-  const { company } = useSession()
+  const { company, activeOutletId } = useSession()
   if (!company) return <NoCompany />
-  return <KitchenInner session={company} />
+  // Substitute businessId with the active outlet so KDS tickets match the terminal's outlet.
+  const session = withEffectiveOutlet(company, activeOutletId)
+  // key forces a full remount when the effective outlet changes, resetting bumped-state
+  // and any local KDS state so it does not carry over to a different outlet.
+  return <KitchenInner key={session.businessId} session={session} />
 }
 
 // ---------------------------------------------------------------------------
@@ -141,6 +146,9 @@ function KitchenInner({ session }: { session: CompanySession }) {
               {t('kitchen.activeCount', { count: activeTickets.length })}
             </div>
           ) : null}
+
+          {/* Outlet picker — tracks which outlet this KDS terminal is serving */}
+          <OutletPicker />
 
           {/* Refresh indicator */}
           {billsQuery.isFetching ? (

@@ -154,6 +154,28 @@ public class RoutingConfig {
         .build();
   }
 
+  /**
+   * POS outlet picker — {@code GET /api/v1/outlets} returns active outlets for the bound company.
+   *
+   * <p>Allowed for every business role including {@code cashier}: cashiers are the primary POS
+   * users and need the outlet list to open a sale. This is a tenant-scoped read of the caller's own
+   * company's outlets (no cross-tenant exposure), distinct from the full org-tree management
+   * endpoint ({@code /api/v1/org-units/**}) which remains owner/manager-only.
+   */
+  @Bean
+  RouterFunction<ServerResponse> outletsRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("org-service-outlets")
+        .route(path("/api/v1/outlets"), http())
+        .before(uri(routes.orgService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(POS_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
   @Bean
   RouterFunction<ServerResponse> consolidationGroupsRoute(
       GatewayRouteProperties routes,

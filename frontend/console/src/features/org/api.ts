@@ -1,6 +1,36 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api'
 
+// ---------------------------------------------------------------------------
+// Outlet shape returned by the cashier-accessible endpoint
+// ---------------------------------------------------------------------------
+
+export interface OutletSummary {
+  id: string
+  name: string
+}
+
+/**
+ * GET /api/v1/outlets — active outlets for the current company, ordered by name.
+ * Returns an empty array when the tenant has no outlets or the request fails,
+ * so the picker silently hides rather than breaking the POS.
+ *
+ * Pass null for companyId to disable the query (no company session yet).
+ */
+export function useOutlets(companyId: string | null, actor = '') {
+  return useQuery<OutletSummary[]>({
+    enabled: !!companyId,
+    queryKey: ['outlets', companyId],
+    retry: false,
+    queryFn: async () => {
+      const result = await apiFetch<OutletSummary[]>('/api/v1/outlets', {
+        tenant: { companyId: companyId!, actor },
+      })
+      return result ?? []
+    },
+  })
+}
+
 /** Org unit types as returned by the backend. */
 export type OrgUnitType = 'BUSINESS_UNIT' | 'BRANCH' | 'OUTLET' | 'TEAM'
 

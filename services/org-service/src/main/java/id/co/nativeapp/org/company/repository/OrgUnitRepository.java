@@ -2,6 +2,7 @@ package id.co.nativeapp.org.company.repository;
 
 import id.co.nativeapp.org.company.domain.OrgUnit;
 import id.co.nativeapp.org.company.projection.OrgUnitView;
+import id.co.nativeapp.org.company.projection.OutletView;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import java.util.List;
 import java.util.UUID;
@@ -61,4 +62,25 @@ public interface OrgUnitRepository extends JpaRepository<OrgUnit, UUID> {
           """,
       nativeQuery = true)
   List<OrgUnitView> findAllViews();
+
+  /**
+   * Active OUTLET nodes visible to the bound tenant, projected to {@link OutletView} and ordered by
+   * name. No {@code WHERE company_id} — the result set is constrained solely by the auto-applied
+   * RLS policy (rule 5). Used by the POS outlet picker ({@code GET /api/v1/outlets}).
+   *
+   * <p>Selects only the two columns the picker needs ({@code id}, {@code name}) — never {@code
+   * SELECT *} of the entity (CLAUDE.md §3.3).
+   */
+  @Query(
+      value =
+          """
+          SELECT ou.id   AS id,
+                 ou.name AS name
+            FROM org_unit ou
+           WHERE ou.type = 'OUTLET'
+             AND ou.active = true
+           ORDER BY ou.name
+          """,
+      nativeQuery = true)
+  List<OutletView> findActiveOutlets();
 }
