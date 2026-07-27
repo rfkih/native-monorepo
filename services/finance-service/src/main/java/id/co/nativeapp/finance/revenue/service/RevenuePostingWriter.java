@@ -73,6 +73,26 @@ public class RevenuePostingWriter {
           version     = consolidated_revenue.version + 1
       """;
 
+  /**
+   * Atomic accumulate for the {@code outlet_revenue} per-outlet read model: insert a fresh
+   * accumulator for a {@code (company_id, business_id, period, currency)} or, if one already
+   * exists, add this posting's net-revenue minor units onto the stored total in a single statement.
+   * Same concurrency guarantee as {@link #UPSERT_REVENUE_SQL} — no read-modify-write window. RLS
+   * {@code WITH CHECK} binds {@code company_id} on the insert path.
+   */
+  private static final String UPSERT_OUTLET_REVENUE_SQL =
+      """
+      INSERT INTO outlet_revenue
+          (id, business_id, period, revenue_minor, currency,
+           created_at, created_by, updated_at, updated_by, version, company_id)
+      VALUES (?, ?, ?, ?, ?, now(), ?, now(), ?, 0, ?)
+      ON CONFLICT (company_id, business_id, period, currency) DO UPDATE SET
+          revenue_minor = outlet_revenue.revenue_minor + EXCLUDED.revenue_minor,
+          updated_at    = now(),
+          updated_by    = EXCLUDED.updated_by,
+          version       = outlet_revenue.version + 1
+      """;
+
   private final LedgerPostingRepository ledgerRepository;
   private final ProcessedEventStore processedEvents;
   private final JdbcTemplate jdbcTemplate;
@@ -162,6 +182,22 @@ public class RevenuePostingWriter {
     jdbcTemplate.update(
         UPSERT_REVENUE_SQL,
         UUID.randomUUID(),
+        period,
+        netRevenue.amountMinor(),
+        currencyCode,
+        actor,
+        actor,
+        companyId);
+
+    // 3a-ii) outlet_revenue read model: accumulate the same NET revenue per (business_id, period).
+    //        Keyed on (company_id, business_id, period, currency) — one accumulator per outlet per
+    //        period. Runs in the SAME transaction as the consolidated_revenue upsert and the
+    //        processOnce claim, so the outlet slice is always consistent with the consolidated
+    // total.
+    jdbcTemplate.update(
+        UPSERT_OUTLET_REVENUE_SQL,
+        UUID.randomUUID(),
+        event.businessId(),
         period,
         netRevenue.amountMinor(),
         currencyCode,

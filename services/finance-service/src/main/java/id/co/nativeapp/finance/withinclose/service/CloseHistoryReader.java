@@ -28,9 +28,9 @@ public class CloseHistoryReader {
   }
 
   /**
-   * All close records for the bound company, most-recent period first. No {@code WHERE
-   * company_id} — RLS constrains the result set (rule 5). Projection-to-DTO mapping happens here
-   * in the service layer (projection is not exposed to the controller — CODE-STRUCTURE §3.3).
+   * All close records for the bound company, most-recent period first. No {@code WHERE company_id}
+   * — RLS constrains the result set (rule 5). Projection-to-DTO mapping happens here in the service
+   * layer (projection is not exposed to the controller — CODE-STRUCTURE §3.3).
    *
    * @return the close history for the current tenant
    */

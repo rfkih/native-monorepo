@@ -11,7 +11,8 @@ package id.co.nativeapp.finance.withinclose.dto;
  * @param firstClose always {@code true} for historical records (only real first-close rows exist;
  *     the idempotent re-close path does not persist a second row)
  * @param reconciled whether the trial balance reconciled (always {@code true} in practice)
- * @param usesIllustrativeRules whether any posting in the period was illustrative-placeholder-derived
+ * @param usesIllustrativeRules whether any posting in the period was
+ *     illustrative-placeholder-derived
  */
 public record CloseHistoryResponse(
     String closeId,

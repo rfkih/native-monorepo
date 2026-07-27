@@ -30,12 +30,12 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * emitted event is never published unless the close that produced it committed.
  *
  * <p>W3C traceparent capture (ADR 0010 #13): the {@link OutboxWriter} is given a {@link
- * TraceparentSupplier} backed by the Micrometer {@link Tracer} so the current span's traceparent
- * is stamped into the outbox row at write time. The {@link Tracer} is injected via {@link
+ * TraceparentSupplier} backed by the Micrometer {@link Tracer} so the current span's traceparent is
+ * stamped into the outbox row at write time. The {@link Tracer} is injected via {@link
  * ObjectProvider} so a missing bean degrades gracefully to a no-op supplier.
  *
- * <p>Outbox-lag metric (ADR 0010 #13): {@link OutboxLagMetrics} registers a Micrometer gauge
- * {@code native.outbox.unpublished} (tag: {@code service}).
+ * <p>Outbox-lag metric (ADR 0010 #13): {@link OutboxLagMetrics} registers a Micrometer gauge {@code
+ * native.outbox.unpublished} (tag: {@code service}).
  */
 @Configuration
 public class EventsConfig {

@@ -26,12 +26,13 @@ import org.springframework.boot.test.context.SpringBootTest;
  * <p>Company A runs a within-company close; the {@code findAllViews} query carries <em>no</em>
  * {@code WHERE company_id} — the result set is constrained solely by the auto-applied RLS policy
  * (rule 5). This test proves that:
+ *
  * <ol>
- *   <li>A sees its own close row (the query + native-projection alias mapping + the
- *       {@link id.co.nativeapp.finance.withinclose.projection.WithinCompanyCloseView#getId}
- *       {@code String} coercion over a real UUID column all work end-to-end against a real DB).
- *   <li>B, bound as a different tenant, sees an empty result (RLS blocks A's rows from B's
- *       session GUC even though the query has no {@code WHERE company_id}).
+ *   <li>A sees its own close row (the query + native-projection alias mapping + the {@link
+ *       id.co.nativeapp.finance.withinclose.projection.WithinCompanyCloseView#getId} {@code String}
+ *       coercion over a real UUID column all work end-to-end against a real DB).
+ *   <li>B, bound as a different tenant, sees an empty result (RLS blocks A's rows from B's session
+ *       GUC even though the query has no {@code WHERE company_id}).
  * </ol>
  *
  * <p>Seeding goes through {@link WithinCompanyCloseService} (the real production write path) rather
@@ -60,21 +61,18 @@ class CloseHistoryTenancyIsolationTest extends PostgresRlsTestBase {
   /**
    * Primary assertion: A's close rows are invisible to B under RLS.
    *
-   * <p>This also exercises the full real-DB path of {@link CloseHistoryReader#findAllForCurrentTenant}:
-   * the native query → {@code WithinCompanyCloseView} projection interface → getId() String coercion
-   * over a real UUID column → DTO mapping. If the alias mapping or the String getId() coercion
-   * were broken, the seed step itself would surface the defect before the isolation assertion runs.
+   * <p>This also exercises the full real-DB path of {@link
+   * CloseHistoryReader#findAllForCurrentTenant}: the native query → {@code WithinCompanyCloseView}
+   * projection interface → getId() String coercion over a real UUID column → DTO mapping. If the
+   * alias mapping or the String getId() coercion were broken, the seed step itself would surface
+   * the defect before the isolation assertion runs.
    */
   @Test
   void closeHistoryPostedUnderTenantAIsInvisibleToTenantB() throws Exception {
     // Seed a ledger posting for A so the close has something to gather.
     revenuePostingService.handle(
         new SaleRecordedEvent(
-            UUID.randomUUID(),
-            TENANT_A,
-            BUSINESS_A,
-            Money.ofMinor(3_000_000L, "IDR"),
-            IN_PERIOD));
+            UUID.randomUUID(), TENANT_A, BUSINESS_A, Money.ofMinor(3_000_000L, "IDR"), IN_PERIOD));
 
     // Run a within-company close as A (binds A as the session tenant; company_id stamped from GUC).
     TenantContext.runAs(TENANT_A, "closer-a", () -> closeService.close(PERIOD, "IDR"));
@@ -83,13 +81,12 @@ class CloseHistoryTenancyIsolationTest extends PostgresRlsTestBase {
     List<CloseHistoryResponse> aView =
         TenantContext.callAs(
             TENANT_A, "reader-a", () -> closeHistoryReader.findAllForCurrentTenant());
-    assertThat(aView)
-        .as("Tenant A must see its own close history")
-        .hasSize(1);
+    assertThat(aView).as("Tenant A must see its own close history").hasSize(1);
 
     CloseHistoryResponse closeRow = aView.getFirst();
     // getId() on WithinCompanyCloseView returns String over a UUID column.
-    // Deliberate coercion: the projection returns the UUID as String so CloseHistoryResponse.closeId
+    // Deliberate coercion: the projection returns the UUID as String so
+    // CloseHistoryResponse.closeId
     // is a String, consistent with the JSON API surface. The real-DB test confirms this coercion
     // works (Postgres will cast uuid→text transparently for the String-typed projection getter).
     assertThat(closeRow.closeId())
@@ -120,6 +117,7 @@ class CloseHistoryTenancyIsolationTest extends PostgresRlsTestBase {
         Statement st = admin.createStatement()) {
       st.execute(
           "TRUNCATE TABLE ledger_posting, consolidated_revenue, consolidated_pnl,"
+              + " outlet_revenue,"
               + " payroll_run_ledger, group_ref, group_member, group_lead,"
               + " group_trial_balance, consolidation_ledger, consolidation_summary,"
               + " intercompany_match, group_membership_pending, processed_event,"

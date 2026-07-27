@@ -23,8 +23,8 @@ import org.springframework.test.web.servlet.MockMvc;
  * exist, and a 200 with an empty list when no closes have been performed yet. Both service
  * dependencies are mocked — no DB. Mirrors the {@code StatementsControllerTest} style.
  *
- * <p>The reader now returns {@link CloseHistoryResponse} directly (projection-to-DTO mapping in
- * the service layer — CODE-STRUCTURE §3.3), so the mock returns DTO instances.
+ * <p>The reader now returns {@link CloseHistoryResponse} directly (projection-to-DTO mapping in the
+ * service layer — CODE-STRUCTURE §3.3), so the mock returns DTO instances.
  */
 @WebMvcTest(WithinCompanyCloseController.class)
 @Import(ConstraintViolationAdvice.class)

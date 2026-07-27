@@ -23,8 +23,8 @@ public interface WithinCompanyCloseRepository extends JpaRepository<WithinCompan
 
   /**
    * All close records for the bound company, projected to {@link WithinCompanyCloseView}, ordered
-   * most-recent period first. No {@code WHERE company_id} — the result set is constrained solely
-   * by the auto-applied RLS policy (rule 5). Used on pure read paths where the entity is only
+   * most-recent period first. No {@code WHERE company_id} — the result set is constrained solely by
+   * the auto-applied RLS policy (rule 5). Used on pure read paths where the entity is only
    * inspected, never mutated or saved.
    *
    * @return the close history for the bound company

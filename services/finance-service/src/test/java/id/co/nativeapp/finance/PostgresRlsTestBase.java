@@ -62,6 +62,7 @@ abstract class PostgresRlsTestBase {
       // reference data.
       st.execute(
           "TRUNCATE TABLE ledger_posting, consolidated_revenue, consolidated_pnl,"
+              + " outlet_revenue,"
               + " payroll_run_ledger, group_ref, group_member, group_lead,"
               + " group_trial_balance, consolidation_ledger, consolidation_summary,"
               + " intercompany_match, group_membership_pending, processed_event,"

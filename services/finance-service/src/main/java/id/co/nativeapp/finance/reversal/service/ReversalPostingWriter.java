@@ -81,6 +81,27 @@ public class ReversalPostingWriter {
           version     = consolidated_revenue.version + 1
       """;
 
+  /**
+   * Atomic accumulate/unwind for the {@code outlet_revenue} per-outlet read model. Used by the void
+   * and refund reversal paths to subtract (negate) the original net-revenue amount from the outlet
+   * accumulator in the SAME transaction as the consolidated_revenue unwind, keeping the outlet
+   * slice consistent with the consolidated total. {@code revenue_minor} may go negative during a
+   * period close if refunds arrive before all sales in a redelivery burst — that is correct and
+   * expected (the V21 migration has no CHECK constraint on {@code revenue_minor}).
+   */
+  private static final String UPSERT_OUTLET_REVENUE_SQL =
+      """
+      INSERT INTO outlet_revenue
+          (id, business_id, period, revenue_minor, currency,
+           created_at, created_by, updated_at, updated_by, version, company_id)
+      VALUES (?, ?, ?, ?, ?, now(), ?, now(), ?, 0, ?)
+      ON CONFLICT (company_id, business_id, period, currency) DO UPDATE SET
+          revenue_minor = outlet_revenue.revenue_minor + EXCLUDED.revenue_minor,
+          updated_at    = now(),
+          updated_by    = EXCLUDED.updated_by,
+          version       = outlet_revenue.version + 1
+      """;
+
   private final LedgerPostingRepository ledgerRepository;
   private final ProcessedEventStore processedEvents;
   private final JdbcTemplate jdbcTemplate;
@@ -194,6 +215,18 @@ public class ReversalPostingWriter {
           actor,
           companyId);
 
+      // Unwind outlet_revenue by the same NET amount, keyed on the event's business_id.
+      jdbcTemplate.update(
+          UPSERT_OUTLET_REVENUE_SQL,
+          UUID.randomUUID(),
+          event.businessId(),
+          period,
+          negatedNet.amountMinor(),
+          currencyCode,
+          actor,
+          actor,
+          companyId);
+
       // Unwind P&L REVENUE leg by the NET amount; OR-propagate the original illustrative flag.
       pnlReadModel.addRevenue(period, negatedNet, companyId, actor, usesIllustrative);
 
@@ -221,6 +254,19 @@ public class ReversalPostingWriter {
           actor,
           actor,
           companyId);
+
+      // Unwind outlet_revenue by the grand total (net == gross for legacy sales).
+      jdbcTemplate.update(
+          UPSERT_OUTLET_REVENUE_SQL,
+          UUID.randomUUID(),
+          event.businessId(),
+          period,
+          negatedGross.amountMinor(),
+          currencyCode,
+          actor,
+          actor,
+          companyId);
+
       pnlReadModel.addRevenue(period, negatedGross, companyId, actor, false);
 
       AccountRole clearingRole = resolveClearingRole(event.tenderType());
@@ -312,6 +358,19 @@ public class ReversalPostingWriter {
           actor,
           actor,
           companyId);
+
+      // Unwind outlet_revenue by the same NET amount, keyed on the event's business_id.
+      jdbcTemplate.update(
+          UPSERT_OUTLET_REVENUE_SQL,
+          UUID.randomUUID(),
+          event.businessId(),
+          period,
+          negatedNet.amountMinor(),
+          currencyCode,
+          actor,
+          actor,
+          companyId);
+
       pnlReadModel.addRevenue(period, negatedNet, companyId, actor, usesIllustrative);
 
       // Per-leg contra GL entry (uses pre-fetched lines).
@@ -338,6 +397,19 @@ public class ReversalPostingWriter {
           actor,
           actor,
           companyId);
+
+      // Unwind outlet_revenue by the grand total (net == gross for legacy sales).
+      jdbcTemplate.update(
+          UPSERT_OUTLET_REVENUE_SQL,
+          UUID.randomUUID(),
+          event.businessId(),
+          period,
+          negatedRefund.amountMinor(),
+          currencyCode,
+          actor,
+          actor,
+          companyId);
+
       pnlReadModel.addRevenue(period, negatedRefund, companyId, actor, false);
 
       AccountRole clearingRole = resolveClearingRole(event.tenderType());

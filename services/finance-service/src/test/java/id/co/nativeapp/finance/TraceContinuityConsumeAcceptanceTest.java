@@ -37,29 +37,29 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
  * Debezium emits after the producer stamps the outbox {@code traceparent} column). Asserts that:
  *
  * <ul>
- *   <li>The {@link SaleRecordedListener} listener runs INSIDE a Micrometer span whose
- *       {@code traceId} matches the {@code traceId} extracted from the inbound {@code traceparent}
- *       header — confirming that Spring Kafka observation + the Micrometer tracing bridge restores
- *       the trace context across the Kafka hop.
+ *   <li>The {@link SaleRecordedListener} listener runs INSIDE a Micrometer span whose {@code
+ *       traceId} matches the {@code traceId} extracted from the inbound {@code traceparent} header
+ *       — confirming that Spring Kafka observation + the Micrometer tracing bridge restores the
+ *       trace context across the Kafka hop.
  *   <li>The existing {@code id}-header idempotency logic is untouched; the test stamps a valid
  *       event id header alongside the traceparent.
  * </ul>
  *
- * <p>The test uses a {@link MockitoSpyBean} on {@link RevenuePostingService} and intercepts
- * {@code handle()} ONLY for the specific event published in this test (matched by {@code saleId})
- * to avoid capturing trace context from unrelated events left in the shared Kafka topic by other
- * test classes that share the same Testcontainers broker.
+ * <p>The test uses a {@link MockitoSpyBean} on {@link RevenuePostingService} and intercepts {@code
+ * handle()} ONLY for the specific event published in this test (matched by {@code saleId}) to avoid
+ * capturing trace context from unrelated events left in the shared Kafka topic by other test
+ * classes that share the same Testcontainers broker.
  *
  * <p>Mirror pattern: this test extends {@link KafkaPostgresTestBase} (a real Testcontainers Kafka
  * broker + PostgreSQL 16, the same infrastructure as {@link SaleRecordedConsumeAcceptanceTest}).
  *
- * <p><strong>Root-cause note:</strong> the {@code TextMapPropagator} bean that wires W3C
- * {@code traceparent} extraction is gated by {@code @ConditionalOnEnabledTracingExport}. If
- * {@code management.tracing.export.enabled=false} is set fleet-wide the propagator bean is not
- * created and every Kafka listener starts a new root span. The {@link
- * id.co.nativeapp.observability.ObservabilityEnvironmentPostProcessor} therefore must NOT set
- * that flag; disabling OTLP span export is achieved by leaving the endpoint unconfigured, which
- * prevents the {@code OtlpTracingConnectionDetails} bean from materialising (ADR 0010 #13).
+ * <p><strong>Root-cause note:</strong> the {@code TextMapPropagator} bean that wires W3C {@code
+ * traceparent} extraction is gated by {@code @ConditionalOnEnabledTracingExport}. If {@code
+ * management.tracing.export.enabled=false} is set fleet-wide the propagator bean is not created and
+ * every Kafka listener starts a new root span. The {@link
+ * id.co.nativeapp.observability.ObservabilityEnvironmentPostProcessor} therefore must NOT set that
+ * flag; disabling OTLP span export is achieved by leaving the endpoint unconfigured, which prevents
+ * the {@code OtlpTracingConnectionDetails} bean from materialising (ADR 0010 #13).
  */
 @SpringBootTest
 class TraceContinuityConsumeAcceptanceTest extends KafkaPostgresTestBase {
@@ -128,9 +128,7 @@ class TraceContinuityConsumeAcceptanceTest extends KafkaPostgresTestBase {
         .untilAsserted(
             () ->
                 assertThat(capturedTraceId.get())
-                    .as(
-                        "handle() must have been called for saleId=%s with a span in scope",
-                        saleId)
+                    .as("handle() must have been called for saleId=%s with a span in scope", saleId)
                     .isNotNull());
 
     // The traceId inside the listener must match the traceId from the inbound traceparent.
