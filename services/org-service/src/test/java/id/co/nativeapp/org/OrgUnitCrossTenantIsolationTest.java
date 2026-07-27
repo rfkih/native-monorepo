@@ -18,7 +18,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 /**
  * Acceptance (d) — cross-tenant isolation for the FULL org tree, via auto-applied RLS.
  *
- * <p>Company A builds a multi-level tree (branch + outlet under its root business unit). Inside
+ * <p>Company A builds a multi-level tree (outlet + team under its root business unit). Inside
  * company B's scope, NONE of A's org units are visible — the read path ({@link
  * CompanyService#findOrgUnitsForCurrentTenant()}) carries no {@code WHERE company_id} and relies
  * solely on {@link id.co.nativeapp.tenant.RlsAutoApplyAspect} setting the tenant GUC (rule 5). Runs
@@ -44,18 +44,17 @@ class OrgUnitCrossTenantIsolationTest extends PostgresRlsTestBase {
             "a",
             () -> companyService.findOrgUnitsForCurrentTenant().getFirst().getId());
 
-    // A builds branch > outlet under its root business unit.
+    // A builds outlet > team under its root business unit.
     List<UUID> aUnitIds =
         TenantContext.callAs(
             companyA.toString(),
             "a",
             () -> {
-              OrgUnit branch =
-                  orgUnitService.create(new CreateOrgUnitCommand("Branch", "branch", rootA));
               OrgUnit outlet =
-                  orgUnitService.create(
-                      new CreateOrgUnitCommand("Outlet", "outlet", branch.getId()));
-              return List.of(rootA, branch.getId(), outlet.getId());
+                  orgUnitService.create(new CreateOrgUnitCommand("Outlet", "outlet", rootA));
+              OrgUnit team =
+                  orgUnitService.create(new CreateOrgUnitCommand("Team", "team", outlet.getId()));
+              return List.of(rootA, outlet.getId(), team.getId());
             });
 
     UUID companyB =

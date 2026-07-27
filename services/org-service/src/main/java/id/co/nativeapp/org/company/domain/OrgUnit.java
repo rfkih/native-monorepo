@@ -13,19 +13,19 @@ import java.util.UUID;
 
 /**
  * An {@code org_unit} — a node in a company's self-referencing org tree ({@code business_unit >
- * branch > outlet > team}, where a business unit may also act as the branch so outlets can hang
- * directly under it). The first node created with a company (the "business") is a {@link
- * OrgUnitType#BUSINESS_UNIT} with a {@code null} parent; branches, outlets, and teams hang below
- * it, each under a type from its legal parent set ({@link OrgUnitType}).
+ * outlet > team}; ADR 0012 — the tree is flat, an outlet IS the physical selling location). The
+ * first node created with a company (the "business") is a {@link OrgUnitType#BUSINESS_UNIT} with a
+ * {@code null} parent; outlets and teams hang below it, each under a type from its legal parent set
+ * ({@link OrgUnitType}).
  *
  * <p><strong>The aggregate owns the hierarchy invariant.</strong> Construction validates that the
  * node's {@code type} may legally sit under the supplied parent type ({@link
  * OrgUnitType#canBeChildOf}); a root type ({@code business_unit}) demands a {@code null} parent,
- * and every other type demands a parent from its legal parent set. The same rule is
- * re-checked on a {@link #moveTo move}. The two things the aggregate cannot see in isolation — that
- * the parent is in the SAME company, and that a move would create a CYCLE — are enforced one layer
- * out, in the writer (the company constraint is also enforced a second time by RLS); the aggregate
- * guards a direct self-parent.
+ * and every other type demands a parent from its legal parent set. The same rule is re-checked on a
+ * {@link #moveTo move}. The two things the aggregate cannot see in isolation — that the parent is
+ * in the SAME company, and that a move would create a CYCLE — are enforced one layer out, in the
+ * writer (the company constraint is also enforced a second time by RLS); the aggregate guards a
+ * direct self-parent.
  *
  * <p><strong>Effective-dated.</strong> Each node carries {@code effective_from}/{@code
  * effective_to}; an open-ended row uses the far-future sentinel {@link #OPEN_ENDED} ({@code
@@ -84,7 +84,7 @@ public class OrgUnit extends Auditable {
    * @param type the org-unit kind; must be non-null
    * @param parentId the parent org unit, or {@code null} for a top-level node
    * @param parentType the parent's type, or {@code null} when {@code parentId} is {@code null};
-   *     used to validate the {@code business_unit > branch > outlet > team} nesting
+   *     used to validate the {@code business_unit > outlet > team} nesting
    * @param legalEmployerId the legal employer this node belongs to; must be non-null
    * @param effectiveFrom the date the node becomes effective; must be non-null
    * @throws IllegalArgumentException if the type may not sit under the parent type (mapped to 400)
@@ -110,8 +110,8 @@ public class OrgUnit extends Auditable {
   /**
    * Validates that a node of {@code type} may sit under {@code parentId} (whose type is {@code
    * parentType}). A root type demands a {@code null} parent; every other type demands a parent
-   * whose type is in its legal parent set (e.g. an outlet accepts a branch OR a business unit
-   * acting as one). Throws {@link IllegalArgumentException} (→ 400) otherwise.
+   * whose type is in its legal parent set (e.g. an outlet accepts a business unit parent). Throws
+   * {@link IllegalArgumentException} (→ 400) otherwise.
    */
   private static void requireLegalPlacement(
       OrgUnitType type, UUID parentId, OrgUnitType parentType) {

@@ -39,7 +39,7 @@ class OrgUnitListControllerTest {
   @Test
   void listOrgUnitsReturns200WithFlatList() throws Exception {
     OrgUnitListResponse stub =
-        new OrgUnitListResponse(UNIT_ID, "North Branch", "BRANCH", PARENT_ID, true);
+        new OrgUnitListResponse(UNIT_ID, "North Outlet", "OUTLET", PARENT_ID, true);
 
     when(orgUnitService.findAllForCurrentTenant()).thenReturn(List.of(stub));
 
@@ -47,8 +47,8 @@ class OrgUnitListControllerTest {
         .perform(get("/api/v1/org-units"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$[0].id").value(UNIT_ID.toString()))
-        .andExpect(jsonPath("$[0].name").value("North Branch"))
-        .andExpect(jsonPath("$[0].type").value("BRANCH"))
+        .andExpect(jsonPath("$[0].name").value("North Outlet"))
+        .andExpect(jsonPath("$[0].type").value("OUTLET"))
         .andExpect(jsonPath("$[0].parentId").value(PARENT_ID.toString()))
         .andExpect(jsonPath("$[0].active").value(true));
   }

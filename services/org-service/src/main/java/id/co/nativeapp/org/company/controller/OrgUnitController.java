@@ -24,8 +24,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * {@code /api/v1/org-units} — manage the full org tree (business_unit &gt; branch &gt; outlet &gt;
- * team) under the bound company.
+ * {@code /api/v1/org-units} — manage the full org tree (business_unit &gt; outlet &gt; team) under
+ * the bound company.
  *
  * <p>Both endpoints are tenant-scoped: the gateway/{@code DevTenantFilter} binds the tenant from
  * the validated JWT before the handler runs, so RLS scopes every lookup to the bound company and
@@ -43,9 +43,7 @@ import org.springframework.web.bind.annotation.RestController;
  * calls exactly one service method, and maps the result to an {@link OrgUnitResponse} DTO — never
  * an entity on the wire (DTO-at-the-boundary).
  */
-@Tag(
-    name = "Org units",
-    description = "Manage the org tree (business unit > branch > outlet > team)")
+@Tag(name = "Org units", description = "Manage the org tree (business unit > outlet > team)")
 @RestController
 @RequestMapping("/api/v1/org-units")
 public class OrgUnitController {

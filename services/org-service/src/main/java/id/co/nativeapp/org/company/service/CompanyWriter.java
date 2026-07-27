@@ -113,9 +113,9 @@ public class CompanyWriter {
 
     // The first business is the ROOT of the org tree: a top-level BUSINESS_UNIT (no
     // parent). It is always a business_unit regardless of the requested businessType —
-    // the company's root business unit is the top of the business_unit > branch >
-    // outlet > team hierarchy (sub-types are added later under it). businessType is kept
-    // in the signature for API compatibility but does not override the root kind.
+    // the company's root business unit is the top of the business_unit > outlet > team
+    // hierarchy (sub-types are added later under it). businessType is kept in the
+    // signature for API compatibility but does not override the root kind.
     OrgUnit firstBusiness =
         new OrgUnit(businessName, OrgUnitType.BUSINESS_UNIT, null, null, legalEmployerId, today());
     firstBusiness.setCompanyId(tenant);
@@ -159,9 +159,9 @@ public class CompanyWriter {
     String tenant = TenantContext.require().companyId();
 
     // A "business" added to a company is a top-level node — a root BUSINESS_UNIT (the
-    // top of the business_unit > branch > outlet > team tree). The nested sub-types are
-    // added under it via the org-unit endpoint (OrgUnitWriter). RLS confines the row to
-    // the bound tenant; company_id is stamped from the scope, never the body (rule 5).
+    // top of the business_unit > outlet > team tree). The nested sub-types are added
+    // under it via the org-unit endpoint (OrgUnitWriter). RLS confines the row to the
+    // bound tenant; company_id is stamped from the scope, never the body (rule 5).
     OrgUnit orgUnit =
         new OrgUnit(
             command.name(),

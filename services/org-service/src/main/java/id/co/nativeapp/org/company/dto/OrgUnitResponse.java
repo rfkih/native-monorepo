@@ -10,7 +10,7 @@ import java.util.UUID;
  *
  * @param id the org-unit id
  * @param name the display name
- * @param type the org-unit type (e.g. {@code "BRANCH"})
+ * @param type the org-unit type (e.g. {@code "OUTLET"})
  * @param parentId the parent org-unit id, or {@code null} for a top-level node
  * @param legalEmployerId the legal employer this node belongs to
  * @param companyId the owning tenant

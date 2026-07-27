@@ -43,32 +43,27 @@ class OrgUnitControllerTest {
 
   @MockitoBean private OrgUnitService orgUnitService;
 
-  private OrgUnit branch() {
-    OrgUnit branch =
+  private OrgUnit businessUnit() {
+    OrgUnit unit =
         new OrgUnit(
-            "North Branch",
-            OrgUnitType.BUSINESS_UNIT,
-            null,
-            null,
-            COMPANY,
-            LocalDate.of(2026, 1, 1));
-    branch.setCompanyId(COMPANY.toString());
-    return branch;
+            "North Unit", OrgUnitType.BUSINESS_UNIT, null, null, COMPANY, LocalDate.of(2026, 1, 1));
+    unit.setCompanyId(COMPANY.toString());
+    return unit;
   }
 
   @Test
   void creatingAnOrgUnitReturns201WithALocationHeader() throws Exception {
-    OrgUnit created = branch();
+    OrgUnit created = businessUnit();
     when(orgUnitService.create(any())).thenReturn(created);
     String body =
         """
-        {"name":"North Branch","type":"business_unit"}
+        {"name":"North Unit","type":"business_unit"}
         """;
     mockMvc
         .perform(post("/api/v1/org-units").contentType(MediaType.APPLICATION_JSON).content(body))
         .andExpect(status().isCreated())
         .andExpect(header().string("Location", "/api/v1/org-units/" + created.getId()))
-        .andExpect(jsonPath("$.name").value("North Branch"))
+        .andExpect(jsonPath("$.name").value("North Unit"))
         .andExpect(jsonPath("$.type").value("BUSINESS_UNIT"));
   }
 
@@ -92,7 +87,7 @@ class OrgUnitControllerTest {
   void aBlankNameIsRejectedWithAValidationProblemDetail() throws Exception {
     String body =
         """
-        {"name":"","type":"branch"}
+        {"name":"","type":"outlet"}
         """;
     mockMvc
         .perform(post("/api/v1/org-units").contentType(MediaType.APPLICATION_JSON).content(body))
@@ -104,7 +99,7 @@ class OrgUnitControllerTest {
 
   @Test
   void patchingANodeReturns200() throws Exception {
-    when(orgUnitService.patch(any())).thenReturn(branch());
+    when(orgUnitService.patch(any())).thenReturn(businessUnit());
     String body =
         """
         {"name":"Renamed"}

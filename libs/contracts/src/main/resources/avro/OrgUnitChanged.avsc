@@ -6,7 +6,7 @@
   "fields": [
     {"name": "org_unit_id", "type": "string", "doc": "The org_unit aggregate id (UUID as string); also the Kafka partition key."},
     {"name": "company_id", "type": "string", "doc": "The owning tenant / company id (UUID as string)."},
-    {"name": "type", "type": "string", "doc": "The org-unit kind: business_unit | branch | outlet | team (immutable once created)."},
+    {"name": "type", "type": "string", "doc": "The org-unit kind: business_unit | outlet | team (immutable once created)."},
     {"name": "parent_id", "type": ["null", "string"], "default": null, "doc": "The CURRENT parent org_unit id (UUID as string) after the change, or null for a top-level node."},
     {"name": "change_kind", "type": "string", "doc": "What changed: RENAMED | MOVED | DEACTIVATED | REACTIVATED. A string (not an Avro enum), so adding a kind is backward-compatible; consumers that key on the 'active' flag handle DEACTIVATED/REACTIVATED uniformly."},
     {"name": "name", "type": "string", "doc": "The org-unit display name after the change."},

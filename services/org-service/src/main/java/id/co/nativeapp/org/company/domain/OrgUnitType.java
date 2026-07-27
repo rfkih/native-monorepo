@@ -6,41 +6,32 @@ import java.util.Set;
  * The kind of an {@link OrgUnit} in the company's self-referencing org tree, and the source of
  * truth for the <strong>allowed parent → child hierarchy</strong>.
  *
- * <p>The tree nests {@code business_unit > branch > outlet > team}, with ONE sanctioned shortcut: a
- * {@code BUSINESS_UNIT} may <em>act as a branch</em>, so an {@code OUTLET} can hang directly under
- * it — a small company does not have to invent an artificial branch layer. A {@code BRANCH} cannot
- * stand alone (it always hangs under a {@code BUSINESS_UNIT}), and a {@code TEAM} still requires a
- * real {@code OUTLET} (a branch does NOT double as an outlet):
+ * <p>The tree nests {@code business_unit > outlet > team} (ADR 0012 — the tree is flat: an outlet
+ * IS the physical selling location; there is no intermediate branch level):
  *
  * <ul>
  *   <li>{@link #BUSINESS_UNIT} — a top-level node; its parent MUST be {@code null}.
- *   <li>{@link #BRANCH} — hangs under a {@code BUSINESS_UNIT} only.
- *   <li>{@link #OUTLET} — hangs under a {@code BRANCH}, or directly under a {@code BUSINESS_UNIT}
- *       acting as the branch.
+ *   <li>{@link #OUTLET} — hangs under a {@code BUSINESS_UNIT}.
  *   <li>{@link #TEAM} — hangs under an {@code OUTLET} (the leaf level).
  * </ul>
  *
- * <p>So a {@code TEAM} directly under a {@code BUSINESS_UNIT} or {@code BRANCH} is rejected — the
- * only sanctioned level-skip is the outlet-under-business-unit one above. Persisted as its {@code
- * name()} via {@code EnumType.STRING}, so the {@code org_unit.type} column is human-readable and
- * stable against reordering.
+ * <p>So a {@code TEAM} directly under a {@code BUSINESS_UNIT} is rejected — a team belongs to a
+ * physical outlet. Persisted as its {@code name()} via {@code EnumType.STRING}, so the {@code
+ * org_unit.type} column is human-readable and stable against reordering.
  */
 public enum OrgUnitType {
   BUSINESS_UNIT,
-  BRANCH,
   OUTLET,
   TEAM;
 
   /**
    * The legal parent types for this kind — empty for a root type ({@link #BUSINESS_UNIT}), which
-   * has no parent. This is the one place the nesting (including the business-unit-acts-as-branch
-   * shortcut) is encoded.
+   * has no parent. This is the one place the nesting is encoded.
    */
   public Set<OrgUnitType> allowedParentTypes() {
     return switch (this) {
       case BUSINESS_UNIT -> Set.of();
-      case BRANCH -> Set.of(BUSINESS_UNIT);
-      case OUTLET -> Set.of(BRANCH, BUSINESS_UNIT);
+      case OUTLET -> Set.of(BUSINESS_UNIT);
       case TEAM -> Set.of(OUTLET);
     };
   }
@@ -65,12 +56,11 @@ public enum OrgUnitType {
   }
 
   /**
-   * A human-readable list of this type's legal parents (e.g. {@code "BRANCH or BUSINESS_UNIT"}) for
-   * error messages; callers must not invoke it on a root type.
+   * A human-readable list of this type's legal parents (e.g. {@code "BUSINESS_UNIT"}) for error
+   * messages; callers must not invoke it on a root type.
    */
   public String describeAllowedParents() {
-    return String.join(
-        " or ", allowedParentTypes().stream().map(Enum::name).sorted().toList());
+    return String.join(" or ", allowedParentTypes().stream().map(Enum::name).sorted().toList());
   }
 
   /**

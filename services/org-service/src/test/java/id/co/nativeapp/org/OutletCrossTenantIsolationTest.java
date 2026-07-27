@@ -19,8 +19,8 @@ import org.springframework.boot.test.context.SpringBootTest;
  * Acceptance tests for {@code GET /api/v1/outlets} (via {@link OrgUnitService#listActiveOutlets}):
  *
  * <ul>
- *   <li>Only ACTIVE OUTLET-type nodes are returned — inactive outlets and non-OUTLET types (branch,
- *       business_unit, team) are excluded.
+ *   <li>Only ACTIVE OUTLET-type nodes are returned — inactive outlets and non-OUTLET types
+ *       (business_unit, team) are excluded.
  *   <li>Results are ordered by name.
  *   <li>RLS cross-tenant isolation: company B cannot see company A's outlets.
  * </ul>
@@ -53,21 +53,17 @@ class OutletCrossTenantIsolationTest extends PostgresRlsTestBase {
             t.companyId().toString(),
             "owner-acme",
             () -> {
-              // branch under root business unit
-              var branch =
-                  orgUnitService.create(
-                      new CreateOrgUnitCommand("North Branch", "branch", t.rootBusinessUnitId()));
-              // two active outlets under the branch
+              // two active outlets under the root business unit
               var outletZ =
                   orgUnitService.create(
-                      new CreateOrgUnitCommand("Zebra Outlet", "outlet", branch.getId()));
+                      new CreateOrgUnitCommand("Zebra Outlet", "outlet", t.rootBusinessUnitId()));
               var outletA =
                   orgUnitService.create(
-                      new CreateOrgUnitCommand("Apple Outlet", "outlet", branch.getId()));
+                      new CreateOrgUnitCommand("Apple Outlet", "outlet", t.rootBusinessUnitId()));
               // one inactive outlet (deactivated)
               var outletInactive =
                   orgUnitService.create(
-                      new CreateOrgUnitCommand("Closed Outlet", "outlet", branch.getId()));
+                      new CreateOrgUnitCommand("Closed Outlet", "outlet", t.rootBusinessUnitId()));
               orgUnitService.patch(
                   new PatchOrgUnitCommand(outletInactive.getId(), null, false, null, true, false));
               // a team — must NOT appear even though it is active
@@ -112,11 +108,10 @@ class OutletCrossTenantIsolationTest extends PostgresRlsTestBase {
         a.companyId().toString(),
         "owner-a",
         () -> {
-          var branch =
-              orgUnitService.create(
-                  new CreateOrgUnitCommand("A Branch", "branch", a.rootBusinessUnitId()));
-          orgUnitService.create(new CreateOrgUnitCommand("A Outlet 1", "outlet", branch.getId()));
-          orgUnitService.create(new CreateOrgUnitCommand("A Outlet 2", "outlet", branch.getId()));
+          orgUnitService.create(
+              new CreateOrgUnitCommand("A Outlet 1", "outlet", a.rootBusinessUnitId()));
+          orgUnitService.create(
+              new CreateOrgUnitCommand("A Outlet 2", "outlet", a.rootBusinessUnitId()));
           return null;
         });
 

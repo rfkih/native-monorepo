@@ -26,7 +26,7 @@ public interface OrgUnitView {
 
   String getName();
 
-  /** The org-unit type string (e.g. {@code "BRANCH"}), as stored in the {@code type} column. */
+  /** The org-unit type string (e.g. {@code "OUTLET"}), as stored in the {@code type} column. */
   String getType();
 
   UUID getParentId();

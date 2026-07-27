@@ -40,8 +40,8 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <ul>
  *   <li><em>type rule</em> — the {@link OrgUnit} aggregate validates that the child's type may sit
- *       under the parent's type ({@code business_unit > branch > outlet > team}); the writer loads
- *       the parent to supply its type.
+ *       under the parent's type ({@code business_unit > outlet > team}); the writer loads the
+ *       parent to supply its type.
  *   <li><em>same company</em> — a parent in another tenant is invisible under RLS, so {@code
  *       findById} returns empty and the writer rejects an unknown parent with a {@code 400}; the
  *       parent therefore can only ever be one in the same company.
@@ -55,8 +55,8 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <ul>
  *   <li><em>deactivate CASCADES</em> — deactivating a node also deactivates every active descendant
- *       (one {@code DEACTIVATED} event each), so a branch and its outlets/teams go down together;
- *       no active node is left orphaned under an inactive parent.
+ *       (one {@code DEACTIVATED} event each), so an outlet and its teams go down together; no
+ *       active node is left orphaned under an inactive parent.
  *   <li><em>reactivate requires an active parent</em> — a node can be reactivated ({@code
  *       REACTIVATED}) only if its parent is active (reactivate top-down); it does NOT cascade to
  *       descendants. {@code deactivate} and {@code reactivate} in one patch is rejected ({@code
@@ -189,12 +189,12 @@ public class OrgUnitWriter {
 
   /**
    * Deactivates {@code root} and every ACTIVE node in its subtree, emitting one {@code DEACTIVATED}
-   * event per node that changed — so deactivating a branch takes its outlets and teams down with it
-   * (the tree invariant: no active node left under an inactive ancestor, #25). The subtree is
-   * walked over the bound tenant's org units ({@code findAll} is RLS-scoped; an org tree is small),
-   * parent → children, breadth-first. A {@code visited} set makes it cycle-safe even though the
-   * writer already prevents cycles. Already-inactive descendants are skipped (no event). All
-   * deactivations and their events commit in the one patch transaction.
+   * event per node that changed — so deactivating an outlet takes its teams down with it (the tree
+   * invariant: no active node left under an inactive ancestor, #25). The subtree is walked over the
+   * bound tenant's org units ({@code findAll} is RLS-scoped; an org tree is small), parent →
+   * children, breadth-first. A {@code visited} set makes it cycle-safe even though the writer
+   * already prevents cycles. Already-inactive descendants are skipped (no event). All deactivations
+   * and their events commit in the one patch transaction.
    */
   private void cascadeDeactivate(OrgUnit root, UUID companyId) {
     LocalDate asOf = today();

@@ -13,8 +13,7 @@ import java.util.UUID;
  *
  * @param id the org-unit id
  * @param name the display name
- * @param type the org-unit type string ({@code BUSINESS_UNIT}, {@code BRANCH}, {@code OUTLET},
- *     {@code TEAM})
+ * @param type the org-unit type string ({@code BUSINESS_UNIT}, {@code OUTLET}, {@code TEAM})
  * @param parentId the parent org-unit id, or {@code null} for a top-level node
  * @param active whether the node is currently active
  */

@@ -128,8 +128,9 @@ added-optional-field variant, and rejects a new required field without a default
 ### `OrgUnitCreated`
 
 Emitted by org-service when an `org_unit` (a node in the company's self-referencing org
-tree — `business_unit > branch > outlet > team`) is created, including the company's
-root business unit created during the company bootstrap (#18 — the full org tree).
+tree — `business_unit > outlet > team`, ADR 0012) is created, including the company's
+root business unit AND its seeded default outlet created during the company bootstrap
+(#18 — the full org tree; ADR 0012 — every new business unit seeds one default outlet).
 Consumed by employee-service, the verticals, and finance-service so each caches its
 slice of the org tree without a synchronous call (rule 2).
 
@@ -139,13 +140,13 @@ slice of the org tree without a synchronous call (rule 2).
   org dimensions).
 - **Aggregate type / partition key:** `org_unit` / `org_unit_id`
 - **Outbox `event_type`:** `OrgUnitCreated`
-- **Schema:** `services/org-service/src/main/resources/avro/OrgUnitCreated.avsc`
+- **Schema (single source of truth, ADR 0003):** `libs/contracts/src/main/resources/avro/OrgUnitCreated.avsc`
 - **Full name:** `id.co.nativeapp.events.org.OrgUnitCreated`
 
 The org tree is strictly nested and enforced in the `OrgUnit` aggregate: a `business_unit`
-is a top-level node (`parent_id` null); a `branch` hangs under a `business_unit`; an
-`outlet` under a `branch`; a `team` under an `outlet`. `parent_id` is therefore a nullable
-union (`["null","string"]`, default `null`).
+is a top-level node (`parent_id` null); an `outlet` hangs under a `business_unit`; a `team`
+under an `outlet`. `parent_id` is therefore a nullable union (`["null","string"]`, default
+`null`).
 
 **Key fields** (ARCHITECTURE.md §5: `org_unit_id`, `type`, `parent_id`, `company_id`)
 
@@ -153,7 +154,7 @@ union (`["null","string"]`, default `null`).
 |---|---|---|
 | `org_unit_id` | `string` | The org_unit aggregate id (UUID as string); the partition key |
 | `company_id` | `string` | The owning tenant / company id (UUID as string) |
-| `type` | `string` | The org-unit kind: `business_unit` \| `branch` \| `outlet` \| `team` |
+| `type` | `string` | The org-unit kind: `business_unit` \| `outlet` \| `team` |
 | `parent_id` | `["null","string"]` (default `null`) | The parent org_unit id, or null for a top-level node |
 | `legal_employer_id` | `string` | The legal employer this node belongs to (UUID as string) |
 | `name` | `string` | The org-unit display name |
@@ -165,11 +166,11 @@ union (`["null","string"]`, default `null`).
   "type": "record",
   "name": "OrgUnitCreated",
   "namespace": "id.co.nativeapp.events.org",
-  "doc": "Emitted by org-service when an org_unit (a node in the company's business_unit > branch > outlet > team tree) is created; consumed by employee-service, the verticals, and finance-service so each can cache its slice of the org tree without a synchronous call (rule 2). Key fields per ARCHITECTURE.md §5: org_unit_id, type, parent_id, company_id.",
+  "doc": "Emitted by org-service when an org_unit (a node in the company's business_unit > outlet > team tree, ADR 0012) is created; consumed by employee-service, the verticals, and finance-service so each can cache its slice of the org tree without a synchronous call (rule 2). Key fields per ARCHITECTURE.md §5: org_unit_id, type, parent_id, company_id.",
   "fields": [
     {"name": "org_unit_id", "type": "string", "doc": "The org_unit aggregate id (UUID as string); also the Kafka partition key."},
     {"name": "company_id", "type": "string", "doc": "The owning tenant / company id (UUID as string)."},
-    {"name": "type", "type": "string", "doc": "The org-unit kind: business_unit | branch | outlet | team."},
+    {"name": "type", "type": "string", "doc": "The org-unit kind: business_unit | outlet | team."},
     {"name": "parent_id", "type": ["null", "string"], "default": null, "doc": "The parent org_unit id (UUID as string), or null for a top-level node (a business_unit)."},
     {"name": "legal_employer_id", "type": "string", "doc": "The legal employer this node belongs to (UUID as string)."},
     {"name": "name", "type": "string", "doc": "The org-unit display name."}
@@ -187,7 +188,7 @@ against-break).
 Emitted by org-service when an `org_unit` is **renamed**, **moved** to a new parent,
 **deactivated**, or **reactivated** via `PATCH /api/v1/org-units/{orgUnitId}` (#18, #25). One
 event per effective change. **Deactivation cascades** to the node's active subtree (one
-`DEACTIVATED` event per node), so deactivating a branch takes its outlets/teams down too;
+`DEACTIVATED` event per node), so deactivating an outlet takes its teams down too;
 **reactivation** (`REACTIVATED`) applies to the node alone and requires an active parent.
 Consumed by the same set as `OrgUnitCreated` to update their cached slice of the org tree; it
 carries the node's new state so a consumer applies it idempotently (the employee-service
@@ -199,7 +200,7 @@ uniformly).
   `OrgUnitCreated`).
 - **Aggregate type / partition key:** `org_unit` / `org_unit_id`
 - **Outbox `event_type`:** `OrgUnitChanged`
-- **Schema:** `services/org-service/src/main/resources/avro/OrgUnitChanged.avsc`
+- **Schema (single source of truth, ADR 0003):** `libs/contracts/src/main/resources/avro/OrgUnitChanged.avsc`
 - **Full name:** `id.co.nativeapp.events.org.OrgUnitChanged`
 
 **Key fields** (ARCHITECTURE.md §5: `org_unit_id`, `type`, `parent_id`, `company_id`)
@@ -225,7 +226,7 @@ uniformly).
   "fields": [
     {"name": "org_unit_id", "type": "string", "doc": "The org_unit aggregate id (UUID as string); also the Kafka partition key."},
     {"name": "company_id", "type": "string", "doc": "The owning tenant / company id (UUID as string)."},
-    {"name": "type", "type": "string", "doc": "The org-unit kind: business_unit | branch | outlet | team (immutable once created)."},
+    {"name": "type", "type": "string", "doc": "The org-unit kind: business_unit | outlet | team (immutable once created)."},
     {"name": "parent_id", "type": ["null", "string"], "default": null, "doc": "The CURRENT parent org_unit id (UUID as string) after the change, or null for a top-level node."},
     {"name": "change_kind", "type": "string", "doc": "What changed: RENAMED | MOVED | DEACTIVATED | REACTIVATED. A string (not an Avro enum), so adding a kind is backward-compatible; consumers that key on the 'active' flag handle DEACTIVATED/REACTIVATED uniformly."},
     {"name": "name", "type": "string", "doc": "The org-unit display name after the change."},

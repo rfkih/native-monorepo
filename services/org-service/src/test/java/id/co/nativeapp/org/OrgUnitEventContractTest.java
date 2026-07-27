@@ -44,13 +44,13 @@ class OrgUnitEventContractTest {
     GenericRecord withParent = new GenericData.Record(schema);
     withParent.put("org_unit_id", UNIT);
     withParent.put("company_id", TENANT);
-    withParent.put("type", "BRANCH");
+    withParent.put("type", "OUTLET");
     withParent.put("parent_id", PARENT);
     withParent.put("legal_employer_id", TENANT);
-    withParent.put("name", "North Branch");
+    withParent.put("name", "North Outlet");
     GenericRecord decodedWithParent =
         AvroSerde.deserialize(AvroSerde.serialize(withParent), schema);
-    assertThat(decodedWithParent.get("type").toString()).isEqualTo("BRANCH");
+    assertThat(decodedWithParent.get("type").toString()).isEqualTo("OUTLET");
     assertThat(decodedWithParent.get("parent_id").toString()).isEqualTo(PARENT);
 
     // A top-level node has a null parent_id (the nullable union).

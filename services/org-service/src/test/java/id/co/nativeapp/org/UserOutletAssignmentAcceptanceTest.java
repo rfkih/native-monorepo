@@ -31,12 +31,13 @@ import org.springframework.boot.test.context.SpringBootTest;
  * injecting the service layer directly and binding {@link TenantContext} manually — same pattern as
  * {@link OrgUnitCrossTenantIsolationTest}.
  *
- * <p>Because {@link id.co.nativeapp.org.user.service.UserOutletAssignmentService#listOutletsForUser}
- * and {@link id.co.nativeapp.org.user.service.UserOutletAssignmentService#replaceOutletsForUser}
- * call through to {@link id.co.nativeapp.org.user.service.KeycloakAdminClient} for the
- * cross-tenant guard, this test invokes the reader/writer directly via the service without the KC
- * guard path — see {@link UserOutletAssignmentService#listOutletsForMe()} for the "me" path and
- * {@link id.co.nativeapp.org.user.service.UserOutletAssignmentReader} for the raw read path used in
+ * <p>Because {@link
+ * id.co.nativeapp.org.user.service.UserOutletAssignmentService#listOutletsForUser} and {@link
+ * id.co.nativeapp.org.user.service.UserOutletAssignmentService#replaceOutletsForUser} call through
+ * to {@link id.co.nativeapp.org.user.service.KeycloakAdminClient} for the cross-tenant guard, this
+ * test invokes the reader/writer directly via the service without the KC guard path — see {@link
+ * UserOutletAssignmentService#listOutletsForMe()} for the "me" path and {@link
+ * id.co.nativeapp.org.user.service.UserOutletAssignmentReader} for the raw read path used in
  * isolation tests.
  */
 @SpringBootTest
@@ -67,17 +68,10 @@ class UserOutletAssignmentAcceptanceTest extends PostgresRlsTestBase {
         t.companyId().toString(),
         ACTOR,
         () -> {
-          OrgUnit outlet = orgUnitService.create(new CreateOrgUnitCommand(outletName, "outlet", t.rootId()));
+          OrgUnit outlet =
+              orgUnitService.create(new CreateOrgUnitCommand(outletName, "outlet", t.rootId()));
           return outlet.getId();
         });
-  }
-
-  /** Creates a BRANCH under the root business unit. */
-  private UUID createBranch(TenantSetup t, String branchName) throws Exception {
-    return TenantContext.callAs(
-        t.companyId().toString(),
-        ACTOR,
-        () -> orgUnitService.create(new CreateOrgUnitCommand(branchName, "branch", t.rootId())).getId());
   }
 
   // -------------------------------------------------------------------------
@@ -101,9 +95,10 @@ class UserOutletAssignmentAcceptanceTest extends PostgresRlsTestBase {
         TenantContext.callAs(
             t.companyId().toString(),
             ACTOR,
-            () -> assignmentReader.findActiveByUserId(USER_A).stream()
-                .map(v -> new UserOutletAssignmentResponse(v.getOrgUnitId(), v.getName()))
-                .toList());
+            () ->
+                assignmentReader.findActiveByUserId(USER_A).stream()
+                    .map(v -> new UserOutletAssignmentResponse(v.getOrgUnitId(), v.getName()))
+                    .toList());
 
     assertThat(result).hasSize(2);
     assertThat(result.stream().map(UserOutletAssignmentResponse::orgUnitId).toList())
@@ -130,9 +125,7 @@ class UserOutletAssignmentAcceptanceTest extends PostgresRlsTestBase {
 
     List<id.co.nativeapp.org.user.projection.UserOutletAssignmentView> active =
         TenantContext.callAs(
-            t.companyId().toString(),
-            ACTOR,
-            () -> assignmentReader.findActiveByUserId(USER_A));
+            t.companyId().toString(), ACTOR, () -> assignmentReader.findActiveByUserId(USER_A));
 
     assertThat(active).hasSize(1);
     assertThat(active.get(0).getOrgUnitId()).isEqualTo(outletX);
@@ -157,9 +150,7 @@ class UserOutletAssignmentAcceptanceTest extends PostgresRlsTestBase {
 
     List<id.co.nativeapp.org.user.projection.UserOutletAssignmentView> active =
         TenantContext.callAs(
-            t.companyId().toString(),
-            ACTOR,
-            () -> assignmentReader.findActiveByUserId(USER_A));
+            t.companyId().toString(), ACTOR, () -> assignmentReader.findActiveByUserId(USER_A));
 
     assertThat(active).hasSize(2);
   }
@@ -183,9 +174,7 @@ class UserOutletAssignmentAcceptanceTest extends PostgresRlsTestBase {
 
     List<id.co.nativeapp.org.user.projection.UserOutletAssignmentView> afterRemove =
         TenantContext.callAs(
-            t.companyId().toString(),
-            ACTOR,
-            () -> assignmentReader.findActiveByUserId(USER_A));
+            t.companyId().toString(), ACTOR, () -> assignmentReader.findActiveByUserId(USER_A));
     assertThat(afterRemove).isEmpty();
 
     // Re-add X — should reopen the existing row (no UNIQUE constraint violation).
@@ -196,33 +185,31 @@ class UserOutletAssignmentAcceptanceTest extends PostgresRlsTestBase {
 
     List<id.co.nativeapp.org.user.projection.UserOutletAssignmentView> afterReadd =
         TenantContext.callAs(
-            t.companyId().toString(),
-            ACTOR,
-            () -> assignmentReader.findActiveByUserId(USER_A));
+            t.companyId().toString(), ACTOR, () -> assignmentReader.findActiveByUserId(USER_A));
     assertThat(afterReadd).hasSize(1);
     assertThat(afterReadd.get(0).getOrgUnitId()).isEqualTo(outletX);
   }
 
   // -------------------------------------------------------------------------
-  // Validation: assigning a BRANCH returns 400
+  // Validation: assigning a non-OUTLET org unit returns 400
   // -------------------------------------------------------------------------
 
   @Test
-  void assigningABranchUnitReturns400() throws Exception {
-    TenantSetup t = bootstrap("AcmeBranch400");
-    UUID branchId = createBranch(t, "North Branch");
+  void assigningABusinessUnitReturns400() throws Exception {
+    TenantSetup t = bootstrap("AcmeNonOutlet400");
+    UUID businessUnitId = t.rootId();
 
     assertThatThrownBy(
-        () ->
-            TenantContext.callAs(
-                t.companyId().toString(),
-                ACTOR,
-                () -> {
-                  assignmentWriter.replaceAssignments(USER_A, List.of(branchId));
-                  return null;
-                }))
+            () ->
+                TenantContext.callAs(
+                    t.companyId().toString(),
+                    ACTOR,
+                    () -> {
+                      assignmentWriter.replaceAssignments(USER_A, List.of(businessUnitId));
+                      return null;
+                    }))
         .isInstanceOf(InvalidOutletAssignmentException.class)
-        .hasMessageContaining(branchId.toString());
+        .hasMessageContaining(businessUnitId.toString());
   }
 
   @Test
@@ -239,14 +226,14 @@ class UserOutletAssignmentAcceptanceTest extends PostgresRlsTestBase {
                 new PatchOrgUnitCommand(outletId, null, false, null, true, false)));
 
     assertThatThrownBy(
-        () ->
-            TenantContext.callAs(
-                t.companyId().toString(),
-                ACTOR,
-                () -> {
-                  assignmentWriter.replaceAssignments(USER_A, List.of(outletId));
-                  return null;
-                }))
+            () ->
+                TenantContext.callAs(
+                    t.companyId().toString(),
+                    ACTOR,
+                    () -> {
+                      assignmentWriter.replaceAssignments(USER_A, List.of(outletId));
+                      return null;
+                    }))
         .isInstanceOf(InvalidOutletAssignmentException.class)
         .hasMessageContaining("not active");
   }
@@ -257,14 +244,14 @@ class UserOutletAssignmentAcceptanceTest extends PostgresRlsTestBase {
     UUID unknownId = UUID.randomUUID();
 
     assertThatThrownBy(
-        () ->
-            TenantContext.callAs(
-                t.companyId().toString(),
-                ACTOR,
-                () -> {
-                  assignmentWriter.replaceAssignments(USER_A, List.of(unknownId));
-                  return null;
-                }))
+            () ->
+                TenantContext.callAs(
+                    t.companyId().toString(),
+                    ACTOR,
+                    () -> {
+                      assignmentWriter.replaceAssignments(USER_A, List.of(unknownId));
+                      return null;
+                    }))
         .isInstanceOf(InvalidOutletAssignmentException.class)
         .hasMessageContaining(unknownId.toString());
   }
@@ -287,9 +274,7 @@ class UserOutletAssignmentAcceptanceTest extends PostgresRlsTestBase {
     // listOutletsForMe reads from TenantContext.actor() == USER_A.
     List<UserOutletAssignmentResponse> result =
         TenantContext.callAs(
-            t.companyId().toString(),
-            USER_A,
-            () -> assignmentService.listOutletsForMe());
+            t.companyId().toString(), USER_A, () -> assignmentService.listOutletsForMe());
 
     assertThat(result).hasSize(1);
     assertThat(result.get(0).orgUnitId()).isEqualTo(outletId);

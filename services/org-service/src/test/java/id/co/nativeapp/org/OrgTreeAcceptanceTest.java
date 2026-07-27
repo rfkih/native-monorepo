@@ -27,9 +27,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * RLS-enforcing PostgreSQL (the unprivileged {@code app_user}; see {@link PostgresRlsTestBase}).
  *
  * <ul>
- *   <li><strong>(a)</strong> a nested {@code business_unit > branch > outlet > team} tree persists
- *       under the right parent + company, each node emitting exactly one {@code OrgUnitCreated}
- *       with the right type/parent_id;
+ *   <li><strong>(a)</strong> a nested {@code business_unit > outlet > team} tree (ADR 0012 — flat,
+ *       no branch level) persists under the right parent + company, each node emitting exactly one
+ *       {@code OrgUnitCreated} with the right type/parent_id;
  *   <li><strong>(b)</strong> an illegal parent→child type, an unknown/cross-tenant parent, and a
  *       cycle are each rejected with an {@code IllegalArgumentException} (→ 400 ProblemDetail) and
  *       write nothing;
@@ -57,43 +57,38 @@ class OrgTreeAcceptanceTest extends PostgresRlsTestBase {
   void aNestedTreePersistsUnderTheRightParentAndEmitsOneOrgUnitCreatedPerNode() throws Exception {
     Tenant t = bootstrapCompany("Alpha", "owner-a");
 
-    // Build branch > outlet > team under the bootstrap root business unit, in A's scope.
+    // Build outlet > team under the bootstrap root business unit, in A's scope.
     UUID[] ids =
         TenantContext.callAs(
             t.companyId().toString(),
             "owner-a",
             () -> {
-              OrgUnit branch =
-                  orgUnitService.create(
-                      new CreateOrgUnitCommand("North Branch", "branch", t.rootBusinessUnitId()));
               OrgUnit outlet =
                   orgUnitService.create(
-                      new CreateOrgUnitCommand("Outlet 1", "outlet", branch.getId()));
+                      new CreateOrgUnitCommand("Outlet 1", "outlet", t.rootBusinessUnitId()));
               OrgUnit team =
                   orgUnitService.create(
                       new CreateOrgUnitCommand("Kitchen Team", "team", outlet.getId()));
-              return new UUID[] {branch.getId(), outlet.getId(), team.getId()};
+              return new UUID[] {outlet.getId(), team.getId()};
             });
-    UUID branchId = ids[0];
-    UUID outletId = ids[1];
-    UUID teamId = ids[2];
+    UUID outletId = ids[0];
+    UUID teamId = ids[1];
 
     // Each node persisted under the right parent (read over the admin connection).
-    assertThat(parentOf(branchId)).isEqualTo(t.rootBusinessUnitId());
-    assertThat(parentOf(outletId)).isEqualTo(branchId);
+    assertThat(parentOf(outletId)).isEqualTo(t.rootBusinessUnitId());
     assertThat(parentOf(teamId)).isEqualTo(outletId);
     // And under the right company.
-    assertThat(companyOf(branchId)).isEqualTo(t.companyId().toString());
+    assertThat(companyOf(outletId)).isEqualTo(t.companyId().toString());
     assertThat(companyOf(teamId)).isEqualTo(t.companyId().toString());
 
-    // Exactly one OrgUnitCreated per node — the 3 new ones + the bootstrap root = 4 total.
+    // Exactly one OrgUnitCreated per node — the 2 new ones + the bootstrap root = 3 total.
     List<Map<String, Object>> created = orgUnitCreatedRows();
-    assertThat(created).hasSize(4);
+    assertThat(created).hasSize(3);
 
-    // The branch event carries type=BRANCH and parent_id=root.
-    GenericRecord branchEvent = decodeCreated(created, branchId);
-    assertThat(branchEvent.get("type").toString()).isEqualTo("BRANCH");
-    assertThat(branchEvent.get("parent_id").toString())
+    // The outlet event carries type=OUTLET and parent_id=root.
+    GenericRecord outletEvent = decodeCreated(created, outletId);
+    assertThat(outletEvent.get("type").toString()).isEqualTo("OUTLET");
+    assertThat(outletEvent.get("parent_id").toString())
         .isEqualTo(t.rootBusinessUnitId().toString());
 
     GenericRecord teamEvent = decodeCreated(created, teamId);
@@ -111,7 +106,7 @@ class OrgTreeAcceptanceTest extends PostgresRlsTestBase {
         t.companyId().toString(),
         "owner-b",
         () -> {
-          // A team directly under the root business_unit skips branch+outlet — illegal.
+          // A team directly under the root business_unit skips the outlet level — illegal.
           assertThatThrownBy(
                   () ->
                       orgUnitService.create(
@@ -129,7 +124,7 @@ class OrgTreeAcceptanceTest extends PostgresRlsTestBase {
     Tenant a = bootstrapCompany("Gamma", "owner-g");
     Tenant b = bootstrapCompany("Delta", "owner-d");
 
-    // B tries to parent a branch under A's root business unit — invisible under RLS, so the
+    // B tries to parent an outlet under A's root business unit — invisible under RLS, so the
     // parent lookup is empty -> 400, proving the same-company parent constraint.
     TenantContext.callAs(
         b.companyId().toString(),
@@ -138,7 +133,7 @@ class OrgTreeAcceptanceTest extends PostgresRlsTestBase {
           assertThatThrownBy(
                   () ->
                       orgUnitService.create(
-                          new CreateOrgUnitCommand("X Branch", "branch", a.rootBusinessUnitId())))
+                          new CreateOrgUnitCommand("X Outlet", "outlet", a.rootBusinessUnitId())))
               .isInstanceOf(IllegalArgumentException.class);
           return null;
         });
@@ -152,17 +147,17 @@ class OrgTreeAcceptanceTest extends PostgresRlsTestBase {
         t.companyId().toString(),
         "owner-e",
         () -> {
-          // root(BU) > branch > outlet
-          OrgUnit branch =
+          // root(BU) > outlet
+          OrgUnit outlet =
               orgUnitService.create(
-                  new CreateOrgUnitCommand("Branch", "branch", t.rootBusinessUnitId()));
-          orgUnitService.create(new CreateOrgUnitCommand("Outlet", "outlet", branch.getId()));
-          // Moving the root business_unit under its own descendant branch would create a cycle.
+                  new CreateOrgUnitCommand("Outlet", "outlet", t.rootBusinessUnitId()));
+          orgUnitService.create(new CreateOrgUnitCommand("Team", "team", outlet.getId()));
+          // Moving the root business_unit under its own descendant outlet would create a cycle.
           assertThatThrownBy(
                   () ->
                       orgUnitService.patch(
                           new PatchOrgUnitCommand(
-                              t.rootBusinessUnitId(), null, true, branch.getId(), false, false)))
+                              t.rootBusinessUnitId(), null, true, outlet.getId(), false, false)))
               .isInstanceOf(IllegalArgumentException.class);
           return null;
         });
@@ -172,33 +167,30 @@ class OrgTreeAcceptanceTest extends PostgresRlsTestBase {
   void renamingAndMovingANodeEachEmitOneOrgUnitChanged() throws Exception {
     Tenant t = bootstrapCompany("Zeta", "owner-z");
 
-    UUID outletId =
+    UUID teamId =
         TenantContext.callAs(
             t.companyId().toString(),
             "owner-z",
             () -> {
-              OrgUnit branchA =
+              OrgUnit outletA =
                   orgUnitService.create(
-                      new CreateOrgUnitCommand("Branch A", "branch", t.rootBusinessUnitId()));
-              OrgUnit branchB =
+                      new CreateOrgUnitCommand("Outlet A", "outlet", t.rootBusinessUnitId()));
+              OrgUnit outletB =
                   orgUnitService.create(
-                      new CreateOrgUnitCommand("Branch B", "branch", t.rootBusinessUnitId()));
-              OrgUnit outlet =
-                  orgUnitService.create(
-                      new CreateOrgUnitCommand("Outlet", "outlet", branchA.getId()));
+                      new CreateOrgUnitCommand("Outlet B", "outlet", t.rootBusinessUnitId()));
+              OrgUnit team =
+                  orgUnitService.create(new CreateOrgUnitCommand("Team", "team", outletA.getId()));
 
-              // Rename the outlet.
+              // Rename the team.
               orgUnitService.patch(
-                  new PatchOrgUnitCommand(
-                      outlet.getId(), "Renamed Outlet", false, null, false, false));
-              // Move it under branch B.
+                  new PatchOrgUnitCommand(team.getId(), "Renamed Team", false, null, false, false));
+              // Move it under outlet B.
               orgUnitService.patch(
-                  new PatchOrgUnitCommand(
-                      outlet.getId(), null, true, branchB.getId(), false, false));
-              return outlet.getId();
+                  new PatchOrgUnitCommand(team.getId(), null, true, outletB.getId(), false, false));
+              return team.getId();
             });
 
-    List<Map<String, Object>> changed = orgUnitChangedRows(outletId);
+    List<Map<String, Object>> changed = orgUnitChangedRows(teamId);
     assertThat(changed).hasSize(2);
 
     GenericRecord rename = decodeChanged(changed.get(0));
@@ -206,42 +198,42 @@ class OrgTreeAcceptanceTest extends PostgresRlsTestBase {
     // One RENAMED and one MOVED, in order.
     assertThat(List.of(rename.get("change_kind").toString(), move.get("change_kind").toString()))
         .containsExactly("RENAMED", "MOVED");
-    assertThat(move.get("name").toString()).isEqualTo("Renamed Outlet");
+    assertThat(move.get("name").toString()).isEqualTo("Renamed Team");
 
-    // The final stored parent is branch B.
-    assertThat(parentOf(outletId)).isNotNull();
+    // The final stored parent is outlet B.
+    assertThat(parentOf(teamId)).isNotNull();
   }
 
   @Test
   void deactivatingANodeClosesItsPeriodAndEmitsOrgUnitChanged() throws Exception {
     Tenant t = bootstrapCompany("Eta", "owner-h");
 
-    UUID branchId =
+    UUID outletId =
         TenantContext.callAs(
             t.companyId().toString(),
             "owner-h",
             () -> {
-              OrgUnit branch =
+              OrgUnit outlet =
                   orgUnitService.create(
-                      new CreateOrgUnitCommand("Branch", "branch", t.rootBusinessUnitId()));
+                      new CreateOrgUnitCommand("Outlet", "outlet", t.rootBusinessUnitId()));
               OrgUnit patched =
                   orgUnitService.patch(
-                      new PatchOrgUnitCommand(branch.getId(), null, false, null, true, false));
+                      new PatchOrgUnitCommand(outlet.getId(), null, false, null, true, false));
               assertThat(patched.isActive()).isFalse();
-              return branch.getId();
+              return outlet.getId();
             });
 
-    List<Map<String, Object>> changed = orgUnitChangedRows(branchId);
+    List<Map<String, Object>> changed = orgUnitChangedRows(outletId);
     assertThat(changed).hasSize(1);
     GenericRecord deactivated = decodeChanged(changed.get(0));
     assertThat(deactivated.get("change_kind").toString()).isEqualTo("DEACTIVATED");
     assertThat(deactivated.get("active")).isEqualTo(false);
     // active flag is closed in the DB.
-    assertThat(isActive(branchId)).isFalse();
+    assertThat(isActive(outletId)).isFalse();
   }
 
   @Test
-  void deactivatingABranchCascadesToItsActiveSubtree() throws Exception {
+  void deactivatingAnOutletCascadesToItsActiveSubtree() throws Exception {
     Tenant t = bootstrapCompany("Theta", "owner-t");
 
     UUID[] ids =
@@ -249,25 +241,20 @@ class OrgTreeAcceptanceTest extends PostgresRlsTestBase {
             t.companyId().toString(),
             "owner-t",
             () -> {
-              OrgUnit branch =
-                  orgUnitService.create(
-                      new CreateOrgUnitCommand("Branch", "branch", t.rootBusinessUnitId()));
               OrgUnit outlet =
                   orgUnitService.create(
-                      new CreateOrgUnitCommand("Outlet", "outlet", branch.getId()));
+                      new CreateOrgUnitCommand("Outlet", "outlet", t.rootBusinessUnitId()));
               OrgUnit team =
                   orgUnitService.create(new CreateOrgUnitCommand("Team", "team", outlet.getId()));
-              // Deactivate the BRANCH — it must cascade down to the outlet and the team.
+              // Deactivate the OUTLET — it must cascade down to the team.
               orgUnitService.patch(
-                  new PatchOrgUnitCommand(branch.getId(), null, false, null, true, false));
-              return new UUID[] {branch.getId(), outlet.getId(), team.getId()};
+                  new PatchOrgUnitCommand(outlet.getId(), null, false, null, true, false));
+              return new UUID[] {outlet.getId(), team.getId()};
             });
 
-    // The whole subtree is inactive; the bootstrap root business unit (a sibling ancestor) stays
-    // up.
+    // The whole subtree is inactive; the bootstrap root business unit (the parent) stays up.
     assertThat(isActive(ids[0])).isFalse();
     assertThat(isActive(ids[1])).isFalse();
-    assertThat(isActive(ids[2])).isFalse();
     assertThat(isActive(t.rootBusinessUnitId())).isTrue();
 
     // Exactly one DEACTIVATED event per node in the subtree.
@@ -289,23 +276,22 @@ class OrgTreeAcceptanceTest extends PostgresRlsTestBase {
             t.companyId().toString(),
             "owner-i",
             () -> {
-              OrgUnit branch =
-                  orgUnitService.create(
-                      new CreateOrgUnitCommand("Branch", "branch", t.rootBusinessUnitId()));
               OrgUnit outlet =
                   orgUnitService.create(
-                      new CreateOrgUnitCommand("Outlet", "outlet", branch.getId()));
-              // Deactivate the branch — branch + outlet both go inactive (cascade).
+                      new CreateOrgUnitCommand("Outlet", "outlet", t.rootBusinessUnitId()));
+              OrgUnit team =
+                  orgUnitService.create(new CreateOrgUnitCommand("Team", "team", outlet.getId()));
+              // Deactivate the outlet — outlet + team both go inactive (cascade).
               orgUnitService.patch(
-                  new PatchOrgUnitCommand(branch.getId(), null, false, null, true, false));
-              return new UUID[] {branch.getId(), outlet.getId()};
+                  new PatchOrgUnitCommand(outlet.getId(), null, false, null, true, false));
+              return new UUID[] {outlet.getId(), team.getId()};
             });
-    UUID branchId = ids[0];
-    UUID outletId = ids[1];
-    assertThat(isActive(branchId)).isFalse();
+    UUID outletId = ids[0];
+    UUID teamId = ids[1];
     assertThat(isActive(outletId)).isFalse();
+    assertThat(isActive(teamId)).isFalse();
 
-    // Reactivating the OUTLET while its parent branch is still inactive is rejected (the
+    // Reactivating the TEAM while its parent outlet is still inactive is rejected (the
     // invariant).
     TenantContext.callAs(
         t.companyId().toString(),
@@ -314,43 +300,44 @@ class OrgTreeAcceptanceTest extends PostgresRlsTestBase {
           assertThatThrownBy(
                   () ->
                       orgUnitService.patch(
-                          new PatchOrgUnitCommand(outletId, null, false, null, false, true)))
+                          new PatchOrgUnitCommand(teamId, null, false, null, false, true)))
               .isInstanceOf(IllegalArgumentException.class);
           return null;
         });
-    assertThat(isActive(outletId)).isFalse();
+    assertThat(isActive(teamId)).isFalse();
 
-    // Reactivate the branch (its parent, the root BU, is active) — succeeds, does NOT cascade down.
+    // Reactivate the outlet (its parent, the root BU, is active) — succeeds, does NOT cascade
+    // down.
     TenantContext.callAs(
         t.companyId().toString(),
         "owner-i",
         () -> {
           OrgUnit reactivated =
               orgUnitService.patch(
-                  new PatchOrgUnitCommand(branchId, null, false, null, false, true));
+                  new PatchOrgUnitCommand(outletId, null, false, null, false, true));
           assertThat(reactivated.isActive()).isTrue();
           return null;
         });
-    assertThat(isActive(branchId)).isTrue();
-    assertThat(isActive(outletId)).isFalse(); // reactivation did NOT cascade to the outlet
+    assertThat(isActive(outletId)).isTrue();
+    assertThat(isActive(teamId)).isFalse(); // reactivation did NOT cascade to the team
 
-    // Now the outlet's parent is active, so reactivating the outlet succeeds.
+    // Now the team's parent is active, so reactivating the team succeeds.
     TenantContext.callAs(
         t.companyId().toString(),
         "owner-i",
         () -> {
-          orgUnitService.patch(new PatchOrgUnitCommand(outletId, null, false, null, false, true));
+          orgUnitService.patch(new PatchOrgUnitCommand(teamId, null, false, null, false, true));
           return null;
         });
-    assertThat(isActive(outletId)).isTrue();
+    assertThat(isActive(teamId)).isTrue();
 
-    // The branch emitted a DEACTIVATED then a REACTIVATED (order-independent — a fixed clock could
+    // The outlet emitted a DEACTIVATED then a REACTIVATED (order-independent — a fixed clock could
     // stamp both with the same occurred_at).
-    List<String> branchKinds =
-        orgUnitChangedRows(branchId).stream()
+    List<String> outletKinds =
+        orgUnitChangedRows(outletId).stream()
             .map(row -> decodeChanged(row).get("change_kind").toString())
             .toList();
-    assertThat(branchKinds).containsExactlyInAnyOrder("DEACTIVATED", "REACTIVATED");
+    assertThat(outletKinds).containsExactlyInAnyOrder("DEACTIVATED", "REACTIVATED");
   }
 
   @Test
@@ -361,24 +348,24 @@ class OrgTreeAcceptanceTest extends PostgresRlsTestBase {
         t.companyId().toString(),
         "owner-k",
         () -> {
-          OrgUnit branch1 =
+          OrgUnit outlet1 =
               orgUnitService.create(
-                  new CreateOrgUnitCommand("Branch 1", "branch", t.rootBusinessUnitId()));
-          OrgUnit branch2 =
+                  new CreateOrgUnitCommand("Outlet 1", "outlet", t.rootBusinessUnitId()));
+          OrgUnit outlet2 =
               orgUnitService.create(
-                  new CreateOrgUnitCommand("Branch 2", "branch", t.rootBusinessUnitId()));
-          OrgUnit outlet =
-              orgUnitService.create(new CreateOrgUnitCommand("Outlet", "outlet", branch1.getId()));
-          // Deactivate branch2 (a leaf) — now inactive.
+                  new CreateOrgUnitCommand("Outlet 2", "outlet", t.rootBusinessUnitId()));
+          OrgUnit team =
+              orgUnitService.create(new CreateOrgUnitCommand("Team", "team", outlet1.getId()));
+          // Deactivate outlet2 (a leaf) — now inactive.
           orgUnitService.patch(
-              new PatchOrgUnitCommand(branch2.getId(), null, false, null, true, false));
-          // Moving the ACTIVE outlet under the INACTIVE branch2 is rejected (type-legal, but it
+              new PatchOrgUnitCommand(outlet2.getId(), null, false, null, true, false));
+          // Moving the ACTIVE team under the INACTIVE outlet2 is rejected (type-legal, but it
           // would orphan an active node under an inactive ancestor).
           assertThatThrownBy(
                   () ->
                       orgUnitService.patch(
                           new PatchOrgUnitCommand(
-                              outlet.getId(), null, true, branch2.getId(), false, false)))
+                              team.getId(), null, true, outlet2.getId(), false, false)))
               .isInstanceOf(IllegalArgumentException.class);
           return null;
         });
@@ -410,17 +397,17 @@ class OrgTreeAcceptanceTest extends PostgresRlsTestBase {
         t.companyId().toString(),
         "owner-m",
         () -> {
-          OrgUnit branch =
+          OrgUnit outlet =
               orgUnitService.create(
-                  new CreateOrgUnitCommand("Branch", "branch", t.rootBusinessUnitId()));
-          // Deactivate the branch, then try to create an outlet under it — a new node is always
+                  new CreateOrgUnitCommand("Outlet", "outlet", t.rootBusinessUnitId()));
+          // Deactivate the outlet, then try to create a team under it — a new node is always
           // active, so this would orphan an active node under an inactive ancestor. Rejected.
           orgUnitService.patch(
-              new PatchOrgUnitCommand(branch.getId(), null, false, null, true, false));
+              new PatchOrgUnitCommand(outlet.getId(), null, false, null, true, false));
           assertThatThrownBy(
                   () ->
                       orgUnitService.create(
-                          new CreateOrgUnitCommand("Outlet", "outlet", branch.getId())))
+                          new CreateOrgUnitCommand("Team", "team", outlet.getId())))
               .isInstanceOf(IllegalArgumentException.class);
           return null;
         });
@@ -431,36 +418,34 @@ class OrgTreeAcceptanceTest extends PostgresRlsTestBase {
     Tenant a = bootstrapCompany("Nu", "owner-n");
     Tenant b = bootstrapCompany("Xi", "owner-x");
 
-    // B builds branch > outlet under its own root and leaves them active.
+    // B builds outlet > team under its own root and leaves them active.
     UUID[] bIds =
         TenantContext.callAs(
             b.companyId().toString(),
             "owner-x",
             () -> {
-              OrgUnit branch =
-                  orgUnitService.create(
-                      new CreateOrgUnitCommand("B Branch", "branch", b.rootBusinessUnitId()));
               OrgUnit outlet =
                   orgUnitService.create(
-                      new CreateOrgUnitCommand("B Outlet", "outlet", branch.getId()));
-              return new UUID[] {branch.getId(), outlet.getId()};
+                      new CreateOrgUnitCommand("B Outlet", "outlet", b.rootBusinessUnitId()));
+              OrgUnit team =
+                  orgUnitService.create(new CreateOrgUnitCommand("B Team", "team", outlet.getId()));
+              return new UUID[] {outlet.getId(), team.getId()};
             });
 
-    // A builds its own branch > outlet and cascade-deactivates the branch.
+    // A builds its own outlet > team and cascade-deactivates the outlet.
     UUID[] aIds =
         TenantContext.callAs(
             a.companyId().toString(),
             "owner-n",
             () -> {
-              OrgUnit branch =
-                  orgUnitService.create(
-                      new CreateOrgUnitCommand("A Branch", "branch", a.rootBusinessUnitId()));
               OrgUnit outlet =
                   orgUnitService.create(
-                      new CreateOrgUnitCommand("A Outlet", "outlet", branch.getId()));
+                      new CreateOrgUnitCommand("A Outlet", "outlet", a.rootBusinessUnitId()));
+              OrgUnit team =
+                  orgUnitService.create(new CreateOrgUnitCommand("A Team", "team", outlet.getId()));
               orgUnitService.patch(
-                  new PatchOrgUnitCommand(branch.getId(), null, false, null, true, false));
-              return new UUID[] {branch.getId(), outlet.getId()};
+                  new PatchOrgUnitCommand(outlet.getId(), null, false, null, true, false));
+              return new UUID[] {outlet.getId(), team.getId()};
             });
 
     // A's subtree went down; B's identical subtree is completely untouched (the cascade's findAll

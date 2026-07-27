@@ -15,7 +15,7 @@ import java.util.UUID;
  * ({@link OrgUnit} / {@link OrgUnitType}), also mapped to {@code 400}.
  *
  * @param name the org-unit name
- * @param type the org-unit type (e.g. {@code "branch"}); validated by {@link OrgUnitType}
+ * @param type the org-unit type (e.g. {@code "outlet"}); validated by {@link OrgUnitType}
  * @param parentId the parent org unit, or {@code null} for a top-level node (a business_unit)
  */
 public record CreateOrgUnitRequest(@NotBlank String name, @NotBlank String type, UUID parentId) {}
