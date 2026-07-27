@@ -53,9 +53,9 @@ import org.springframework.transaction.annotation.Transactional;
  * {@link #replaceAssignments} writes a {@code UserOutletAssignmentChanged} outbox row in the SAME
  * transaction: one {@code UNASSIGNED} event per row closed, one {@code ASSIGNED} event per row
  * created or reopened. All DB writes and all outbox rows commit (or roll back) atomically. The
- * aggregate id on the outbox row is the {@code assignment_id} UUID — Debezium keys the Kafka
- * record by it, so the ordering guarantee is per-(user, outlet) tuple (an {@code assignment_id}
- * is stable for its tuple), NOT per-user across outlets (see the event catalog entry).
+ * aggregate id on the outbox row is the {@code assignment_id} UUID — Debezium keys the Kafka record
+ * by it, so the ordering guarantee is per-(user, outlet) tuple (an {@code assignment_id} is stable
+ * for its tuple), NOT per-user across outlets (see the event catalog entry).
  *
  * <p><strong>PII / observability.</strong> User ids (Keycloak subs) are stable, non-PII identifiers
  * and are safe to log. Outlet names are not logged — only UUIDs appear in log statements.
@@ -123,8 +123,8 @@ public class UserOutletAssignmentWriter {
         log.info(
             "Closed outlet assignment: userId={}, orgUnitId={}", userId, assignment.getOrgUnitId());
         // Emit UNASSIGNED outbox event in this same transaction (rule 3).
-        emitEvent(assignment, UserOutletAssignmentChangedSchema.toUnassigned(assignment),
-            companyId, now);
+        emitEvent(
+            assignment, UserOutletAssignmentChangedSchema.toUnassigned(assignment), companyId, now);
       }
     }
 
@@ -138,16 +138,19 @@ public class UserOutletAssignmentWriter {
         assignmentRepository.save(newAssignment);
         log.info("Inserted outlet assignment: userId={}, orgUnitId={}", userId, outletId);
         // Emit ASSIGNED outbox event in this same transaction (rule 3).
-        emitEvent(newAssignment, UserOutletAssignmentChangedSchema.toAssigned(newAssignment),
-            companyId, now);
+        emitEvent(
+            newAssignment,
+            UserOutletAssignmentChangedSchema.toAssigned(newAssignment),
+            companyId,
+            now);
       } else if (!existing_.isActive()) {
         // Pre-existing inactive row — reopen it (preserves history, respects UNIQUE constraint).
         existing_.reopen();
         assignmentRepository.save(existing_);
         log.info("Reopened outlet assignment: userId={}, orgUnitId={}", userId, outletId);
         // Emit ASSIGNED outbox event in this same transaction (rule 3).
-        emitEvent(existing_, UserOutletAssignmentChangedSchema.toAssigned(existing_),
-            companyId, now);
+        emitEvent(
+            existing_, UserOutletAssignmentChangedSchema.toAssigned(existing_), companyId, now);
       }
       // else: already active → no-op (idempotent)
     }
@@ -158,16 +161,15 @@ public class UserOutletAssignmentWriter {
   /**
    * Writes one {@code UserOutletAssignmentChanged} outbox row in the caller's transaction. The
    * outbox aggregate id — and therefore the Kafka partition key (Debezium keys the record by the
-   * {@code aggregate_id} column) — is the {@code assignment_id} UUID, which is stable per
-   * (user, outlet) tuple: re-deliveries and later state changes of the same assignment land on the
-   * same partition in order. The outbox row commits atomically with the surrounding DB writes
-   * (rule 3).
+   * {@code aggregate_id} column) — is the {@code assignment_id} UUID, which is stable per (user,
+   * outlet) tuple: re-deliveries and later state changes of the same assignment land on the same
+   * partition in order. The outbox row commits atomically with the surrounding DB writes (rule 3).
    */
   private void emitEvent(
       UserOutletAssignment assignment, GenericRecord record, UUID companyId, Instant occurredAt) {
     outboxWriter.write(
         UserOutletAssignmentChangedSchema.AGGREGATE_TYPE,
-        assignment.getId().toString(),   // aggregate_id = assignment_id (the PK, unique per row)
+        assignment.getId().toString(), // aggregate_id = assignment_id (the PK, unique per row)
         UserOutletAssignmentChangedSchema.EVENT_TYPE,
         AvroSerde.serialize(record),
         null,

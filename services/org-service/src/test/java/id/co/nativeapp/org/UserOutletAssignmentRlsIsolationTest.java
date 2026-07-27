@@ -53,15 +53,15 @@ class UserOutletAssignmentRlsIsolationTest extends PostgresRlsTestBase {
             () -> {
               OrgUnit outlet =
                   orgUnitService.create(
-                      new CreateOrgUnitCommand("A Outlet", "outlet",
+                      new CreateOrgUnitCommand(
+                          "A Outlet",
+                          "outlet",
                           companyService.findOrgUnitsForCurrentTenant().getFirst().getId()));
               return outlet.getId();
             });
 
     TenantContext.runAs(
-        companyA.toString(),
-        "a",
-        () -> writer.replaceAssignments(USER_A, List.of(outletA)));
+        companyA.toString(), "a", () -> writer.replaceAssignments(USER_A, List.of(outletA)));
 
     // --- Tenant B: create a DIFFERENT company ---
     UUID companyB =
@@ -73,10 +73,7 @@ class UserOutletAssignmentRlsIsolationTest extends PostgresRlsTestBase {
 
     // --- Inside B's scope: User A's assignments from A are invisible ---
     List<UserOutletAssignmentView> visibleToB =
-        TenantContext.callAs(
-            companyB.toString(),
-            "b",
-            () -> reader.findActiveByUserId(USER_A));
+        TenantContext.callAs(companyB.toString(), "b", () -> reader.findActiveByUserId(USER_A));
 
     assertThat(visibleToB)
         .as("RLS must isolate company A's user assignments from company B's scope")
@@ -84,10 +81,7 @@ class UserOutletAssignmentRlsIsolationTest extends PostgresRlsTestBase {
 
     // --- Sanity: inside A's scope the assignment is visible ---
     List<UserOutletAssignmentView> visibleToA =
-        TenantContext.callAs(
-            companyA.toString(),
-            "a",
-            () -> reader.findActiveByUserId(USER_A));
+        TenantContext.callAs(companyA.toString(), "a", () -> reader.findActiveByUserId(USER_A));
 
     assertThat(visibleToA).hasSize(1);
     assertThat(visibleToA.get(0).getOrgUnitId()).isEqualTo(outletA);

@@ -27,8 +27,8 @@ import org.springframework.test.web.servlet.MockMvc;
  * Web-slice coverage for the user ↔ outlet assignment endpoints:
  *
  * <ul>
- *   <li>{@code GET /api/v1/users/me/outlets} — 200 + caller's assignments; uses
- *       {@link UserOutletAssignmentService#listOutletsForMe()}.
+ *   <li>{@code GET /api/v1/users/me/outlets} — 200 + caller's assignments; uses {@link
+ *       UserOutletAssignmentService#listOutletsForMe()}.
  *   <li>{@code GET /api/v1/users/{userId}/outlets} — 200 + assignments; 404 on unknown user.
  *   <li>{@code PUT /api/v1/users/{userId}/outlets} — 200 + resulting set; 400 on invalid outlet;
  *       404 on unknown user.
@@ -111,8 +111,7 @@ class UserOutletAssignmentControllerTest {
 
   @Test
   void putOutletsReturns200WithResultingList() throws Exception {
-    when(service.replaceOutletsForUser(
-            Mockito.eq(USER_ID), Mockito.anyList()))
+    when(service.replaceOutletsForUser(Mockito.eq(USER_ID), Mockito.anyList()))
         .thenReturn(
             List.of(
                 new UserOutletAssignmentResponse(OUTLET_ID, "Alpha Outlet"),
@@ -125,7 +124,8 @@ class UserOutletAssignmentControllerTest {
                 .content(
                     """
                     {"orgUnitIds": ["%s", "%s"]}
-                    """.formatted(OUTLET_ID, OUTLET_ID_2)))
+                    """
+                        .formatted(OUTLET_ID, OUTLET_ID_2)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.length()").value(2));
   }
@@ -154,11 +154,14 @@ class UserOutletAssignmentControllerTest {
         .perform(
             put("/api/v1/users/{userId}/outlets", USER_ID)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("""
+                .content(
+                    """
                     {"orgUnitIds": ["%s"]}
-                    """.formatted(OUTLET_ID)))
+                    """
+                        .formatted(OUTLET_ID)))
         .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/invalid-outlet-assignment"));
+        .andExpect(
+            jsonPath("$.type").value("https://errors.nativeapp.id/invalid-outlet-assignment"));
   }
 
   @Test
@@ -170,9 +173,11 @@ class UserOutletAssignmentControllerTest {
         .perform(
             put("/api/v1/users/{userId}/outlets", USER_ID)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("""
+                .content(
+                    """
                     {"orgUnitIds": ["%s"]}
-                    """.formatted(OUTLET_ID)))
+                    """
+                        .formatted(OUTLET_ID)))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/user-not-found"));
   }

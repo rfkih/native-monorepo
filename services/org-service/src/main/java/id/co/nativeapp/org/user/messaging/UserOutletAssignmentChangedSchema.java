@@ -21,15 +21,17 @@ import org.apache.avro.generic.GenericRecord;
  *
  * <p><strong>Effective dates as Avro {@code date} ints (epoch day).</strong> {@code effective_from}
  * and {@code effective_to} are stored as {@code int} (Avro {@code date} logical type — days since
- * epoch) matching the {@code AssignmentChanged} and {@code GroupMembershipChanged} precedents in the
- * event catalog. Consumers read them as epoch-day ints.
+ * epoch) matching the {@code AssignmentChanged} and {@code GroupMembershipChanged} precedents in
+ * the event catalog. Consumers read them as epoch-day ints.
  */
 public final class UserOutletAssignmentChangedSchema {
 
   /** Classpath location of the {@code .avsc} (from {@code libs/contracts}; also in the catalog). */
   public static final String RESOURCE = "avro/UserOutletAssignmentChanged.avsc";
 
-  /** The event name as it appears in the outbox {@code event_type} column and on the Kafka topic. */
+  /**
+   * The event name as it appears in the outbox {@code event_type} column and on the Kafka topic.
+   */
   public static final String EVENT_TYPE = "UserOutletAssignmentChanged";
 
   /** The producing aggregate kind (outbox {@code aggregate_type}). */
@@ -73,8 +75,8 @@ public final class UserOutletAssignmentChangedSchema {
 
   /**
    * Builds an {@code UNASSIGNED} {@link GenericRecord} from a persisted assignment row that was
-   * <em>closed</em>. {@code effective_to} carries today's date (the closing date, already stamped on
-   * the domain object by {@link UserOutletAssignment#close(java.time.LocalDate)}).
+   * <em>closed</em>. {@code effective_to} carries today's date (the closing date, already stamped
+   * on the domain object by {@link UserOutletAssignment#close(java.time.LocalDate)}).
    *
    * @param assignment the persisted domain object (active = false after the write)
    */
@@ -105,9 +107,7 @@ public final class UserOutletAssignmentChangedSchema {
 
   private static Schema parse() {
     try (InputStream in =
-        UserOutletAssignmentChangedSchema.class
-            .getClassLoader()
-            .getResourceAsStream(RESOURCE)) {
+        UserOutletAssignmentChangedSchema.class.getClassLoader().getResourceAsStream(RESOURCE)) {
       if (in == null) {
         throw new IllegalStateException("Avro schema not found on classpath: " + RESOURCE);
       }

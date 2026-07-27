@@ -22,9 +22,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 /**
  * Producer-side outbox test for the {@code UserOutletAssignmentChanged} event (Phase 5).
  *
- * <p>Verifies that {@link UserOutletAssignmentWriter#replaceAssignments} writes the correct
- * {@code UserOutletAssignmentChanged} outbox rows in the SAME transaction as the assignment DB
- * writes (transactional outbox — rule 3, CLAUDE.md). Scenarios covered:
+ * <p>Verifies that {@link UserOutletAssignmentWriter#replaceAssignments} writes the correct {@code
+ * UserOutletAssignmentChanged} outbox rows in the SAME transaction as the assignment DB writes
+ * (transactional outbox — rule 3, CLAUDE.md). Scenarios covered:
  *
  * <ol>
  *   <li><strong>ASSIGN</strong>: a new outlet in the desired set → one {@code ASSIGNED} outbox row.
@@ -37,13 +37,15 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * </ol>
  *
  * <p>Each outbox row is verified:
+ *
  * <ul>
- *   <li>{@code event_type = "UserOutletAssignmentChanged"}, {@code aggregate_type = "user_outlet_assignment"}
- *   <li>the Avro payload deserializes to the correct {@code change_kind}, {@code user_id},
- *       {@code org_unit_id}, and {@code company_id}
- *   <li>the {@code aggregate_id} on the outbox row is the assignment UUID — Debezium keys the
- *       Kafka record by it, so partition ordering is per-(user, outlet) tuple (see the event
- *       catalog entry)
+ *   <li>{@code event_type = "UserOutletAssignmentChanged"}, {@code aggregate_type =
+ *       "user_outlet_assignment"}
+ *   <li>the Avro payload deserializes to the correct {@code change_kind}, {@code user_id}, {@code
+ *       org_unit_id}, and {@code company_id}
+ *   <li>the {@code aggregate_id} on the outbox row is the assignment UUID — Debezium keys the Kafka
+ *       record by it, so partition ordering is per-(user, outlet) tuple (see the event catalog
+ *       entry)
  * </ul>
  */
 @SpringBootTest
@@ -100,15 +102,17 @@ class UserOutletAssignmentOutboxTest extends PostgresRlsTestBase {
     // created during bootstrap, plus 1 for the user assignment → we care only about USER_A's.
     List<Map<String, Object>> userRows =
         rows.stream()
-            .filter(r -> {
-              GenericRecord rec = decodePayload(r);
-              return USER_A.equals(rec.get("user_id").toString());
-            })
+            .filter(
+                r -> {
+                  GenericRecord rec = decodePayload(r);
+                  return USER_A.equals(rec.get("user_id").toString());
+                })
             .toList();
 
     assertThat(userRows).hasSize(1);
     Map<String, Object> row = userRows.getFirst();
-    assertThat(row.get("aggregate_type")).isEqualTo(UserOutletAssignmentChangedSchema.AGGREGATE_TYPE);
+    assertThat(row.get("aggregate_type"))
+        .isEqualTo(UserOutletAssignmentChangedSchema.AGGREGATE_TYPE);
 
     GenericRecord payload = decodePayload(row);
     assertThat(payload.get("change_kind").toString()).isEqualTo("ASSIGNED");
@@ -128,8 +132,12 @@ class UserOutletAssignmentOutboxTest extends PostgresRlsTestBase {
 
     // Assign first.
     TenantContext.callAs(
-        t.companyId().toString(), ACTOR,
-        () -> { assignmentWriter.replaceAssignments(USER_A, List.of(outletId)); return null; });
+        t.companyId().toString(),
+        ACTOR,
+        () -> {
+          assignmentWriter.replaceAssignments(USER_A, List.of(outletId));
+          return null;
+        });
 
     // Clear outbox rows to get a clean baseline for the unassign operation.
     jdbcTemplate.update(
@@ -137,8 +145,12 @@ class UserOutletAssignmentOutboxTest extends PostgresRlsTestBase {
 
     // Remove all outlets from the user's set → close the row.
     TenantContext.callAs(
-        t.companyId().toString(), ACTOR,
-        () -> { assignmentWriter.replaceAssignments(USER_A, List.of()); return null; });
+        t.companyId().toString(),
+        ACTOR,
+        () -> {
+          assignmentWriter.replaceAssignments(USER_A, List.of());
+          return null;
+        });
 
     List<Map<String, Object>> rows = outboxRows(UserOutletAssignmentChangedSchema.EVENT_TYPE);
     List<Map<String, Object>> userRows =
@@ -163,11 +175,19 @@ class UserOutletAssignmentOutboxTest extends PostgresRlsTestBase {
 
     // Assign then unassign.
     TenantContext.callAs(
-        t.companyId().toString(), ACTOR,
-        () -> { assignmentWriter.replaceAssignments(USER_A, List.of(outletId)); return null; });
+        t.companyId().toString(),
+        ACTOR,
+        () -> {
+          assignmentWriter.replaceAssignments(USER_A, List.of(outletId));
+          return null;
+        });
     TenantContext.callAs(
-        t.companyId().toString(), ACTOR,
-        () -> { assignmentWriter.replaceAssignments(USER_A, List.of()); return null; });
+        t.companyId().toString(),
+        ACTOR,
+        () -> {
+          assignmentWriter.replaceAssignments(USER_A, List.of());
+          return null;
+        });
 
     // Clear the outbox so only the reopen event remains after.
     jdbcTemplate.update(
@@ -175,8 +195,12 @@ class UserOutletAssignmentOutboxTest extends PostgresRlsTestBase {
 
     // Reopen: assign the same outlet again.
     TenantContext.callAs(
-        t.companyId().toString(), ACTOR,
-        () -> { assignmentWriter.replaceAssignments(USER_A, List.of(outletId)); return null; });
+        t.companyId().toString(),
+        ACTOR,
+        () -> {
+          assignmentWriter.replaceAssignments(USER_A, List.of(outletId));
+          return null;
+        });
 
     List<Map<String, Object>> rows = outboxRows(UserOutletAssignmentChangedSchema.EVENT_TYPE);
     List<Map<String, Object>> userRows =
@@ -201,8 +225,12 @@ class UserOutletAssignmentOutboxTest extends PostgresRlsTestBase {
 
     // First assign (creates the row + ASSIGNED event).
     TenantContext.callAs(
-        t.companyId().toString(), ACTOR,
-        () -> { assignmentWriter.replaceAssignments(USER_A, List.of(outletId)); return null; });
+        t.companyId().toString(),
+        ACTOR,
+        () -> {
+          assignmentWriter.replaceAssignments(USER_A, List.of(outletId));
+          return null;
+        });
 
     int countBeforeNoop =
         outboxRows(UserOutletAssignmentChangedSchema.EVENT_TYPE).stream()
@@ -212,8 +240,12 @@ class UserOutletAssignmentOutboxTest extends PostgresRlsTestBase {
 
     // Second call with the same set → no-op (assignment already active).
     TenantContext.callAs(
-        t.companyId().toString(), ACTOR,
-        () -> { assignmentWriter.replaceAssignments(USER_A, List.of(outletId)); return null; });
+        t.companyId().toString(),
+        ACTOR,
+        () -> {
+          assignmentWriter.replaceAssignments(USER_A, List.of(outletId));
+          return null;
+        });
 
     int countAfterNoop =
         outboxRows(UserOutletAssignmentChangedSchema.EVENT_TYPE).stream()

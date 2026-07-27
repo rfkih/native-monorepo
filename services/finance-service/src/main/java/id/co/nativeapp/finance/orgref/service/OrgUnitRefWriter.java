@@ -32,8 +32,8 @@ import org.springframework.transaction.annotation.Transactional;
  * OrgUnitChanged} carry the node's FULL current state (name, type, parent, active), so the upsert
  * always converges to the producer's last-known state regardless of delivery order. The conflict
  * target is the TENANT-COMPOSITE unique constraint, not the bare PK: if two tenants ever collided
- * on an {@code org_unit_id}, the second tenant's insert would trip the PK violation and fail
- * closed to the DLT rather than updating the first tenant's row.
+ * on an {@code org_unit_id}, the second tenant's insert would trip the PK violation and fail closed
+ * to the DLT rather than updating the first tenant's row.
  */
 @Component
 public class OrgUnitRefWriter {

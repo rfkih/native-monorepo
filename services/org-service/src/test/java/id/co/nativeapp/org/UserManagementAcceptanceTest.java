@@ -120,7 +120,8 @@ class UserManagementAcceptanceTest {
   void resetDatabase() {
     try (Connection admin = adminConnection();
         Statement st = admin.createStatement()) {
-      st.execute("TRUNCATE TABLE company, org_unit, legal_employer, user_outlet_assignment, outbox");
+      st.execute(
+          "TRUNCATE TABLE company, org_unit, legal_employer, user_outlet_assignment, outbox");
     } catch (SQLException ignored) {
       // Not yet migrated (first run) — nothing to reset.
     }
