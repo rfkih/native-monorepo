@@ -35,7 +35,7 @@ class OrgUnitCrossTenantIsolationTest extends PostgresRlsTestBase {
   void aDeepOrgTreeBuiltUnderTenantAIsInvisibleToTenantB() throws Exception {
     UUID companyA =
         companyService
-            .createCompany(new CreateCompanyCommand("Alpha", "IDR", "id", "A HQ", "outlet", "a"))
+            .createCompany(new CreateCompanyCommand("Alpha", "IDR", "id", "A HQ", "a"))
             .company()
             .getId();
     UUID rootA =
@@ -64,7 +64,7 @@ class OrgUnitCrossTenantIsolationTest extends PostgresRlsTestBase {
 
     UUID companyB =
         companyService
-            .createCompany(new CreateCompanyCommand("Beta", "USD", "en", "B HQ", "outlet", "b"))
+            .createCompany(new CreateCompanyCommand("Beta", "USD", "en", "B HQ", "b"))
             .company()
             .getId();
 

@@ -81,7 +81,6 @@ public class CompanyWriter {
    * @param baseCurrency the ISO-4217 base currency (validated + made immutable by {@link Company})
    * @param defaultLanguage the company default language
    * @param businessName the first business (org-unit) name
-   * @param businessType the first business (org-unit) type
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public CreateCompanyResult create(
@@ -89,8 +88,7 @@ public class CompanyWriter {
       String name,
       String baseCurrency,
       String defaultLanguage,
-      String businessName,
-      String businessType) {
+      String businessName) {
 
     // The tenant the auto-RLS aspect has bound to this transaction; it MUST equal the
     // new company id, so the company is its own tenant and the WITH CHECK passes.
@@ -112,10 +110,8 @@ public class CompanyWriter {
     Company savedCompany = companyRepository.save(company);
 
     // The first business is the ROOT of the org tree: a top-level BUSINESS_UNIT (no
-    // parent). It is always a business_unit regardless of the requested businessType —
-    // the company's root business unit is the top of the business_unit > outlet > team
-    // hierarchy (sub-types are added later under it). businessType is kept in the
-    // signature for API compatibility but does not override the root kind.
+    // parent) — the top of the business_unit > outlet > team hierarchy (sub-types are
+    // added under it via the org-unit endpoint; a default outlet is seeded below).
     OrgUnit firstBusiness =
         new OrgUnit(businessName, OrgUnitType.BUSINESS_UNIT, null, null, legalEmployerId, today());
     firstBusiness.setCompanyId(tenant);
@@ -158,7 +154,7 @@ public class CompanyWriter {
    * RlsAutoApplyAspect} sets the GUC to the existing tenant and the RLS {@code WITH CHECK} confines
    * the row to it.
    *
-   * @param command the create-business command (company id from the path, validated name/type)
+   * @param command the create-business command (company id from the path, validated name)
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public OrgUnit addBusiness(CreateBusinessCommand command) {

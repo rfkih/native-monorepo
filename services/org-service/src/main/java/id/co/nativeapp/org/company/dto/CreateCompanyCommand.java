@@ -11,17 +11,14 @@ package id.co.nativeapp.org.company.dto;
  * ({@code TenantContext.callAs(newCompanyId, actor, ...)}). The {@code company_id} is NOT here — it
  * is generated server-side as the new tenant id (rule 5: tenant is never trusted from the body).
  *
+ * <p>The first business is always created as the root {@code business_unit} with a seeded default
+ * outlet (ADR 0012) — there is no business-type choice.
+ *
  * @param name the company name
  * @param baseCurrency the ISO-4217 base currency code (immutable once set)
  * @param defaultLanguage the company default language
  * @param businessName the first business (org-unit) name
- * @param businessType the first business (org-unit) type
  * @param actor the acting principal from the request edge (JWT {@code sub} / {@code X-Actor})
  */
 public record CreateCompanyCommand(
-    String name,
-    String baseCurrency,
-    String defaultLanguage,
-    String businessName,
-    String businessType,
-    String actor) {}
+    String name, String baseCurrency, String defaultLanguage, String businessName, String actor) {}

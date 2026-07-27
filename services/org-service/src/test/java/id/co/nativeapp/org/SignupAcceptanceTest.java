@@ -188,7 +188,7 @@ class SignupAcceptanceTest {
     String missingEmail =
         """
         {"companyName":"Acme","baseCurrency":"IDR","defaultLanguage":"id",
-         "firstBusinessName":"Main","firstBusinessType":"outlet",
+         "firstBusinessName":"Main",
          "ownerEmail":"","ownerPassword":"secret","termsAccepted":true}
         """;
     assertBadRequest(missingEmail);
@@ -207,8 +207,17 @@ class SignupAcceptanceTest {
   }
 
   @Test
-  void anUnsupportedBusinessTypeReturns400() {
-    assertBadRequest(signupBody(uniqueEmail()).replace("\"outlet\"", "\"franchise\""));
+  void anUnknownFirstBusinessTypePropertyIsIgnoredNotRejected() throws Exception {
+    // ADR 0012 removed the business-type choice from the wire. An OLD request body still
+    // carrying firstBusinessType must be accepted (unknown JSON properties are ignored by
+    // deserialization) — no compat shim, no 400.
+    String legacyBody =
+        signupBody(uniqueEmail())
+            .replace(
+                "\"firstBusinessName\": \"Main Outlet\",",
+                "\"firstBusinessName\": \"Main Outlet\",\n  \"firstBusinessType\": \"branch\",");
+    String responseBody = callSignup(legacyBody);
+    assertThat(responseBody).contains("companyId");
   }
 
   @Test
@@ -264,7 +273,6 @@ class SignupAcceptanceTest {
           "baseCurrency": "IDR",
           "defaultLanguage": "id",
           "firstBusinessName": "Main Outlet",
-          "firstBusinessType": "outlet",
           "ownerEmail": "%s",
           "ownerPassword": "secret-password-123",
           "termsAccepted": true

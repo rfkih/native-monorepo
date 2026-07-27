@@ -40,15 +40,13 @@ class OrgUnitAndGroupReadIsolationTest extends PostgresRlsTestBase {
     UUID companyA =
         companyService
             .createCompany(
-                new CreateCompanyCommand(
-                    "IsolationA", "IDR", "id", "A Outlet", "outlet", "owner-a"))
+                new CreateCompanyCommand("IsolationA", "IDR", "id", "A Outlet", "owner-a"))
             .company()
             .getId();
     UUID companyB =
         companyService
             .createCompany(
-                new CreateCompanyCommand(
-                    "IsolationB", "USD", "en", "B Outlet", "outlet", "owner-b"))
+                new CreateCompanyCommand("IsolationB", "USD", "en", "B Outlet", "owner-b"))
             .company()
             .getId();
 
@@ -79,14 +77,12 @@ class OrgUnitAndGroupReadIsolationTest extends PostgresRlsTestBase {
   void consolidationGroupsCreatedByCompanyAareInvisibleToCompanyB() throws Exception {
     UUID companyA =
         companyService
-            .createCompany(
-                new CreateCompanyCommand("GroupLeadA", "IDR", "id", "A HQ", "outlet", "owner-a"))
+            .createCompany(new CreateCompanyCommand("GroupLeadA", "IDR", "id", "A HQ", "owner-a"))
             .company()
             .getId();
     UUID companyB =
         companyService
-            .createCompany(
-                new CreateCompanyCommand("GroupMemberB", "USD", "en", "B HQ", "outlet", "owner-b"))
+            .createCompany(new CreateCompanyCommand("GroupMemberB", "USD", "en", "B HQ", "owner-b"))
             .company()
             .getId();
 

@@ -43,7 +43,7 @@ class CompanyControllerValidationTest {
     String body =
         """
             {"name":"Acme","baseCurrency":"","defaultLanguage":"id",
-             "firstBusiness":{"name":"Outlet 1","type":"outlet"}}
+             "firstBusiness":{"name":"Outlet 1"}}
             """;
     mockMvc
         .perform(post("/api/v1/companies").contentType(MediaType.APPLICATION_JSON).content(body))
@@ -80,7 +80,7 @@ class CompanyControllerValidationTest {
     String body =
         """
             {"name":"Acme","baseCurrency":"ZZZ","defaultLanguage":"id",
-             "firstBusiness":{"name":"Outlet 1","type":"outlet"}}
+             "firstBusiness":{"name":"Outlet 1"}}
             """;
     mockMvc
         .perform(post("/api/v1/companies").contentType(MediaType.APPLICATION_JSON).content(body))

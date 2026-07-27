@@ -13,9 +13,8 @@ import jakarta.validation.constraints.NotNull;
  *
  * <p>The bean-validation constraints are checked by {@code @Valid} on the handler param: a
  * missing/blank field fails fast with a {@code 400} from {@link ApiExceptionHandler}. The ISO-4217
- * validity of {@code baseCurrency} and the {@code OrgUnitType} validity of {@code
- * firstBusiness.type} are enforced by the domain ({@link Company} / {@link OrgUnitType}), also
- * mapped to {@code 400}.
+ * validity of {@code baseCurrency} is enforced by the domain ({@link Company}), also mapped to
+ * {@code 400}.
  *
  * <p>{@code company_id} and the actor are intentionally absent — creating a company bootstraps a
  * NEW tenant whose id is generated server-side, and the actor comes from the request edge (the
@@ -34,10 +33,11 @@ public record CreateCompanyRequest(
 
   /**
    * The first-business payload nested in a create-company request (and the body of
-   * create-business).
+   * create-business). A business is ALWAYS created as a root {@code business_unit} with a seeded
+   * default outlet (ADR 0012), so there is no {@code type} field; an unknown {@code type} property
+   * in an old request body is ignored by deserialization, not rejected.
    *
    * @param name the business / org-unit name
-   * @param type the org-unit type (e.g. {@code "business_unit"}); validated by {@link OrgUnitType}
    */
-  public record BusinessRequest(@NotBlank String name, @NotBlank String type) {}
+  public record BusinessRequest(@NotBlank String name) {}
 }

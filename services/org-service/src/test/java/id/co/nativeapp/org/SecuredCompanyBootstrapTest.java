@@ -139,7 +139,7 @@ class SecuredCompanyBootstrapTest {
             .body(
                 """
                 {"name":"Warung Padang","baseCurrency":"IDR","defaultLanguage":"id",
-                 "firstBusiness":{"name":"Main Outlet","type":"outlet"}}
+                 "firstBusiness":{"name":"Main Outlet"}}
                 """)
             .retrieve()
             .body(String.class);
@@ -165,7 +165,7 @@ class SecuredCompanyBootstrapTest {
                     .uri(COMPANIES + "/" + someCompany + "/businesses")
                     .header(HttpHeaders.AUTHORIZATION, bearer(tenantless))
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body("{\"name\":\"Second Outlet\",\"type\":\"outlet\"}")
+                    .body("{\"name\":\"Second Outlet\"}")
                     .retrieve()
                     .body(String.class))
         .isInstanceOf(HttpClientErrorException.class)

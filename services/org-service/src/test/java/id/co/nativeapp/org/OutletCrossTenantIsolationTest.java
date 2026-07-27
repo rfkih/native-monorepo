@@ -40,7 +40,7 @@ class OutletCrossTenantIsolationTest extends PostgresRlsTestBase {
   private Tenant bootstrapCompany(String name, String actor) {
     var result =
         companyService.createCompany(
-            new CreateCompanyCommand(name, "IDR", "id", name + " HQ", "outlet", actor));
+            new CreateCompanyCommand(name, "IDR", "id", name + " HQ", actor));
     return new Tenant(result.company().getId(), result.firstBusiness().getId());
   }
 

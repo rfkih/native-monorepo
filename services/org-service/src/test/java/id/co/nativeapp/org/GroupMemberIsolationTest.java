@@ -47,14 +47,12 @@ class GroupMemberIsolationTest extends PostgresRlsTestBase {
 
     UUID companyA =
         companyService
-            .createCompany(
-                new CreateCompanyCommand("MemberLeadA", "IDR", "id", "A HQ", "outlet", "owner-a"))
+            .createCompany(new CreateCompanyCommand("MemberLeadA", "IDR", "id", "A HQ", "owner-a"))
             .company()
             .getId();
     UUID companyB =
         companyService
-            .createCompany(
-                new CreateCompanyCommand("MemberB", "USD", "en", "B HQ", "outlet", "owner-b"))
+            .createCompany(new CreateCompanyCommand("MemberB", "USD", "en", "B HQ", "owner-b"))
             .company()
             .getId();
 

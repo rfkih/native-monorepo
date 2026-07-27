@@ -44,7 +44,7 @@ class CreateCompanyAcceptanceTest extends PostgresRlsTestBase {
   void creatingACompanyPersistsCurrencyAndLanguageAndWritesExactlyOneCompanyCreated()
       throws Exception {
     CreateCompanyCommand command =
-        new CreateCompanyCommand("Warung Padang", "IDR", "id", "Main Outlet", "outlet", ACTOR);
+        new CreateCompanyCommand("Warung Padang", "IDR", "id", "Main Outlet", ACTOR);
 
     // No TenantContext scope here — create-company bootstraps its own tenant.
     CreateCompanyResult result = companyService.createCompany(command);

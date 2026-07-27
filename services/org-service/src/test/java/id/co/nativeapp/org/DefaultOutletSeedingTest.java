@@ -40,7 +40,7 @@ class DefaultOutletSeedingTest extends PostgresRlsTestBase {
   void companyBootstrapSeedsOneDefaultOutletUnderTheRootBusinessUnit() throws Exception {
     var result =
         companyService.createCompany(
-            new CreateCompanyCommand("SeedCo", "IDR", "id", "Warung Seed", "outlet", "owner-s"));
+            new CreateCompanyCommand("SeedCo", "IDR", "id", "Warung Seed", "owner-s"));
     UUID companyId = result.company().getId();
     UUID rootId = result.firstBusiness().getId();
 
@@ -79,16 +79,14 @@ class DefaultOutletSeedingTest extends PostgresRlsTestBase {
   void addingABusinessSeedsItsOwnDefaultOutlet() throws Exception {
     var result =
         companyService.createCompany(
-            new CreateCompanyCommand("AddCo", "IDR", "id", "First Biz", "outlet", "owner-a"));
+            new CreateCompanyCommand("AddCo", "IDR", "id", "First Biz", "owner-a"));
     UUID companyId = result.company().getId();
 
     OrgUnit secondBu =
         TenantContext.callAs(
             companyId.toString(),
             "owner-a",
-            () ->
-                companyService.addBusiness(
-                    new CreateBusinessCommand(companyId, "Second Biz", "business_unit")));
+            () -> companyService.addBusiness(new CreateBusinessCommand(companyId, "Second Biz")));
 
     // The new BU has its own seeded outlet, named after it.
     List<Map<String, Object>> outlets =

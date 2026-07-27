@@ -19,12 +19,16 @@ import jakarta.validation.constraints.Size;
  * a minimum length HERE, not just in the browser (security review, Increment 1). Password
  * complexity beyond length is enforced by Keycloak's realm password policy.
  *
- * <p><strong>Whitelists are enforced HERE, not just in the client.</strong> {@code baseCurrency},
- * {@code defaultLanguage}, and {@code firstBusinessType} are {@code @Pattern}-restricted to the
- * platform's supported sets — a direct API call cannot create a tenant in an unsupported
- * configuration (e.g. an EUR company the finance stack cannot consolidate, or a {@code "xx"}
- * language no locale bundle exists for). Widening a set is a deliberate platform decision (new i18n
- * bundle / FX support), so the whitelist lives with the platform, not the client.
+ * <p><strong>Whitelists are enforced HERE, not just in the client.</strong> {@code baseCurrency}
+ * and {@code defaultLanguage} are {@code @Pattern}-restricted to the platform's supported sets — a
+ * direct API call cannot create a tenant in an unsupported configuration (e.g. an EUR company the
+ * finance stack cannot consolidate, or a {@code "xx"} language no locale bundle exists for).
+ * Widening a set is a deliberate platform decision (new i18n bundle / FX support), so the whitelist
+ * lives with the platform, not the client.
+ *
+ * <p>The first business is ALWAYS created as the root {@code business_unit} with a seeded default
+ * outlet (ADR 0012) — there is no business-type choice; an unknown {@code firstBusinessType}
+ * property in an old request body is ignored by deserialization, not rejected.
  *
  * @param companyName the company display name (used as-is in the tenant bootstrap)
  * @param baseCurrency the ISO-4217 base currency code for the new company (immutable once set);
@@ -32,7 +36,6 @@ import jakarta.validation.constraints.Size;
  * @param defaultLanguage the default language code for the new company; must be one of the
  *     platform-supported languages
  * @param firstBusinessName the name of the first business (org-unit) to create under the company
- * @param firstBusinessType the type of the first business; must be a supported org-unit type
  * @param ownerEmail the email address of the owner; becomes the Keycloak username and is checked
  *     for uniqueness before creating the tenant
  * @param ownerPassword the owner's initial password — NEVER logged anywhere in this codebase
@@ -48,7 +51,6 @@ public record SignupRequest(
     @NotBlank @Pattern(regexp = "IDR|USD", message = "unsupported currency") String baseCurrency,
     @NotBlank @Pattern(regexp = "en|id", message = "unsupported language") String defaultLanguage,
     @NotBlank String firstBusinessName,
-    @NotBlank @Pattern(regexp = "business_unit|branch|outlet", message = "unsupported business type") String firstBusinessType,
     @NotBlank @Email String ownerEmail,
     @NotBlank @Size(min = 8, max = 128) String ownerPassword,
     @NotNull @AssertTrue(message = "terms must be accepted") Boolean termsAccepted) {}

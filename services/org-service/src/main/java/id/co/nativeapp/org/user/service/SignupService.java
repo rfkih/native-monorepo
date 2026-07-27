@@ -93,7 +93,6 @@ public class SignupService {
               request.baseCurrency(),
               request.defaultLanguage(),
               request.firstBusinessName(),
-              request.firstBusinessType(),
               request.ownerEmail() // actor = the signing-up owner's email
               ),
           companyId);

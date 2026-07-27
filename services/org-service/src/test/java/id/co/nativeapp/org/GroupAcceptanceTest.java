@@ -146,7 +146,7 @@ class GroupAcceptanceTest extends PostgresRlsTestBase {
 
   private UUID bootstrapCompany(String name, String baseCurrency) {
     return companyService
-        .createCompany(new CreateCompanyCommand(name, baseCurrency, "id", "HQ", "outlet", "owner"))
+        .createCompany(new CreateCompanyCommand(name, baseCurrency, "id", "HQ", "owner"))
         .company()
         .getId();
   }

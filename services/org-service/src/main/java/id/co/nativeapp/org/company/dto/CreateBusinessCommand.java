@@ -8,8 +8,10 @@ import java.util.UUID;
  * tenant-scoped endpoint, so the service stamps {@code company_id} from {@link
  * id.co.nativeapp.tenant.TenantContext}, not from this command.
  *
+ * <p>A business is always created as a root {@code business_unit} with a seeded default outlet (ADR
+ * 0012) — there is no type choice.
+ *
  * @param companyId the owning company (from the path)
  * @param name the org-unit name
- * @param type the org-unit type
  */
-public record CreateBusinessCommand(UUID companyId, String name, String type) {}
+public record CreateBusinessCommand(UUID companyId, String name) {}

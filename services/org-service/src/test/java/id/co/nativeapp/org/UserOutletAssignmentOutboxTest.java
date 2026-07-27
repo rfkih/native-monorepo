@@ -64,7 +64,7 @@ class UserOutletAssignmentOutboxTest extends PostgresRlsTestBase {
   private TenantSetup bootstrap(String name) {
     var r =
         companyService.createCompany(
-            new CreateCompanyCommand(name, "IDR", "id", name + " HQ", "outlet", ACTOR));
+            new CreateCompanyCommand(name, "IDR", "id", name + " HQ", ACTOR));
     return new TenantSetup(r.company().getId(), r.firstBusiness().getId());
   }
 
