@@ -28,7 +28,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *       OrgUnitCreated}/{@code OrgUnitChanged} listener: its {@code processOnce} claim runs on the
  *       caller's transactional connection, so the dedupe insert and the read-model upsert commit
  *       together — a re-delivered org event never double-applies.
- *   <li>{@link OutboxLagMetrics} — Micrometer gauge {@code native.outbox.unpublished} (ADR 0010 #13).
+ *   <li>{@link OutboxLagMetrics} — Micrometer gauge {@code native.outbox.unpublished} (ADR 0010
+ *       #13).
  * </ul>
  *
  * <p>Both are plain {@link JdbcTemplate} wrappers (framework-light by design), declared here bound
