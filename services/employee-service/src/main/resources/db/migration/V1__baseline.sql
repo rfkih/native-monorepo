@@ -176,7 +176,7 @@ CREATE TABLE org_unit_projection (
     -- The org-unit's legal employer (the value the invariant resolves to).
     legal_employer_id UUID         NOT NULL,
 
-    -- The org-unit kind (business_unit | branch | outlet | team) and whether it is active.
+    -- The org-unit kind (business_unit | outlet | team, ADR 0012) and whether it is active.
     type              VARCHAR(32)  NOT NULL,
     active            BOOLEAN      NOT NULL,
 

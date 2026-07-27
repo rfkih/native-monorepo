@@ -30,15 +30,16 @@ CREATE TABLE org_unit_ref (
     -- event. Primary key — one row per org unit. Opaque reference; no FK across boundaries.
     org_unit_id     UUID         NOT NULL PRIMARY KEY,
 
-    -- The node type as published by org-service (business_unit | branch | outlet | team).
-    -- The /pnl/outlets reader filters on type = 'outlet' within the bound tenant.
+    -- The node type as published by org-service (business_unit | outlet | team, ADR 0012).
+    -- Stored opaquely; the /pnl/outlets reader joins on org_unit_id with NO type predicate
+    -- (outlet_revenue.business_id is an outlet id by construction since ADR 0012).
     type            VARCHAR(32)  NOT NULL,
 
     -- The parent org-unit in the org tree, NULL for root nodes (e.g. the top-level
     -- business unit). Nullable; no FK constraint (database-per-service rule 1).
     parent_id       UUID         NULL,
 
-    -- The human-readable display name (e.g. "Main Branch", "Drive-Through Outlet").
+    -- The human-readable display name (e.g. "Drive-Through Outlet").
     -- May lag by up to one event-delivery cycle after a rename — callers must tolerate.
     name            VARCHAR(255) NOT NULL,
 
@@ -72,6 +73,7 @@ CREATE POLICY org_unit_ref_tenant_isolation ON org_unit_ref
     USING (company_id = current_setting('app.current_tenant', true))
     WITH CHECK (company_id = current_setting('app.current_tenant', true));
 
--- The /pnl/outlets reader filters by (company_id, type) to resolve outlet names within
--- the bound tenant; index that access path to avoid sequential scans on the hot query.
+-- Historical note: the /pnl/outlets reader actually joins on org_unit_id (the PK) with no
+-- type predicate — this (company_id, type) index predates that and is retained as harmless;
+-- tenant-scoped scans still use it.
 CREATE INDEX idx_org_unit_ref_company_type ON org_unit_ref (company_id, type);

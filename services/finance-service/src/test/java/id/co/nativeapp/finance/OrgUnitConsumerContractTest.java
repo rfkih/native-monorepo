@@ -123,11 +123,11 @@ class OrgUnitConsumerContractTest {
     produced.put("type", "outlet");
     produced.put("parent_id", null);
     produced.put("legal_employer_id", "11111111-1111-1111-1111-111111111111");
-    produced.put("name", "North Branch");
+    produced.put("name", "North Outlet");
 
     byte[] wire = AvroSerde.serialize(produced);
     GenericRecord decoded = AvroSerde.deserialize(wire, producer, consumer);
-    assertThat(decoded.get("name").toString()).isEqualTo("North Branch");
+    assertThat(decoded.get("name").toString()).isEqualTo("North Outlet");
     assertThat(decoded.get("type").toString()).isEqualTo("outlet");
   }
 

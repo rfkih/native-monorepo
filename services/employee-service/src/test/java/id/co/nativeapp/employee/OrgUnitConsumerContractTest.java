@@ -120,14 +120,14 @@ class OrgUnitConsumerContractTest {
     GenericRecord produced = new GenericData.Record(producer);
     produced.put("org_unit_id", "22222222-2222-2222-2222-222222222222");
     produced.put("company_id", "11111111-1111-1111-1111-111111111111");
-    produced.put("type", "BRANCH");
+    produced.put("type", "OUTLET");
     produced.put("parent_id", null);
     produced.put("legal_employer_id", "11111111-1111-1111-1111-111111111111");
-    produced.put("name", "North Branch");
+    produced.put("name", "North Outlet");
 
     byte[] wire = AvroSerde.serialize(produced);
     GenericRecord decoded = AvroSerde.deserialize(wire, producer, consumer);
-    assertThat(decoded.get("type").toString()).isEqualTo("BRANCH");
+    assertThat(decoded.get("type").toString()).isEqualTo("OUTLET");
   }
 
   @Test
