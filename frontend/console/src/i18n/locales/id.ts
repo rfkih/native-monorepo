@@ -438,6 +438,7 @@ export const id = {
       typeLabel: 'Jenis',
       parentLabel: 'Induk',
       noParent: 'Tidak ada (tingkat atas)',
+      noChildAllowed: 'Tim adalah tingkat terbawah — tidak ada yang bisa dibuat di bawahnya.',
       submit: 'Buat',
       submitting: 'Membuat…',
       errorTitle: 'Tidak dapat membuat unit',

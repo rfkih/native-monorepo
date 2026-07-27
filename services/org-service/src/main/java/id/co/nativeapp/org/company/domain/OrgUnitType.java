@@ -1,26 +1,29 @@
 package id.co.nativeapp.org.company.domain;
 
-import java.util.Optional;
+import java.util.Set;
 
 /**
  * The kind of an {@link OrgUnit} in the company's self-referencing org tree, and the source of
  * truth for the <strong>allowed parent → child hierarchy</strong>.
  *
- * <p>The tree is strictly nested: {@code business_unit > branch > outlet > team}. Each level has
- * exactly one legal parent type (and {@link #BUSINESS_UNIT} is the root, with no parent), so the
- * hierarchy is enforced structurally rather than by scattered {@code if} checks:
+ * <p>The tree nests {@code business_unit > branch > outlet > team}, with ONE sanctioned shortcut: a
+ * {@code BUSINESS_UNIT} may <em>act as a branch</em>, so an {@code OUTLET} can hang directly under
+ * it — a small company does not have to invent an artificial branch layer. A {@code BRANCH} cannot
+ * stand alone (it always hangs under a {@code BUSINESS_UNIT}), and a {@code TEAM} still requires a
+ * real {@code OUTLET} (a branch does NOT double as an outlet):
  *
  * <ul>
  *   <li>{@link #BUSINESS_UNIT} — a top-level node; its parent MUST be {@code null}.
- *   <li>{@link #BRANCH} — hangs under a {@code BUSINESS_UNIT}.
- *   <li>{@link #OUTLET} — hangs under a {@code BRANCH}.
+ *   <li>{@link #BRANCH} — hangs under a {@code BUSINESS_UNIT} only.
+ *   <li>{@link #OUTLET} — hangs under a {@code BRANCH}, or directly under a {@code BUSINESS_UNIT}
+ *       acting as the branch.
  *   <li>{@link #TEAM} — hangs under an {@code OUTLET} (the leaf level).
  * </ul>
  *
- * <p>So a {@code TEAM} directly under a {@code BUSINESS_UNIT} (skipping {@code BRANCH}/{@code
- * OUTLET}) is rejected — the model forbids skipping levels. Persisted as its {@code name()} via
- * {@code EnumType.STRING}, so the {@code org_unit.type} column is human-readable and stable against
- * reordering.
+ * <p>So a {@code TEAM} directly under a {@code BUSINESS_UNIT} or {@code BRANCH} is rejected — the
+ * only sanctioned level-skip is the outlet-under-business-unit one above. Persisted as its {@code
+ * name()} via {@code EnumType.STRING}, so the {@code org_unit.type} column is human-readable and
+ * stable against reordering.
  */
 public enum OrgUnitType {
   BUSINESS_UNIT,
@@ -29,22 +32,22 @@ public enum OrgUnitType {
   TEAM;
 
   /**
-   * The single legal parent type for this kind, or {@link Optional#empty()} for a root type ({@link
-   * #BUSINESS_UNIT}), which has no parent. This is the one place the {@code business_unit > branch
-   * > outlet > team} nesting is encoded.
+   * The legal parent types for this kind — empty for a root type ({@link #BUSINESS_UNIT}), which
+   * has no parent. This is the one place the nesting (including the business-unit-acts-as-branch
+   * shortcut) is encoded.
    */
-  public Optional<OrgUnitType> requiredParentType() {
+  public Set<OrgUnitType> allowedParentTypes() {
     return switch (this) {
-      case BUSINESS_UNIT -> Optional.empty();
-      case BRANCH -> Optional.of(BUSINESS_UNIT);
-      case OUTLET -> Optional.of(BRANCH);
-      case TEAM -> Optional.of(OUTLET);
+      case BUSINESS_UNIT -> Set.of();
+      case BRANCH -> Set.of(BUSINESS_UNIT);
+      case OUTLET -> Set.of(BRANCH, BUSINESS_UNIT);
+      case TEAM -> Set.of(OUTLET);
     };
   }
 
   /** {@code true} if this is a top-level (root) type — i.e. it must have a {@code null} parent. */
   public boolean isRoot() {
-    return requiredParentType().isEmpty();
+    return allowedParentTypes().isEmpty();
   }
 
   /**
@@ -55,9 +58,19 @@ public enum OrgUnitType {
    * @param parentType the prospective parent's type, or {@code null} for a top-level placement
    */
   public boolean canBeChildOf(OrgUnitType parentType) {
-    return requiredParentType()
-        .map(required -> required == parentType)
-        .orElseGet(() -> parentType == null);
+    if (parentType == null) {
+      return isRoot();
+    }
+    return allowedParentTypes().contains(parentType);
+  }
+
+  /**
+   * A human-readable list of this type's legal parents (e.g. {@code "BRANCH or BUSINESS_UNIT"}) for
+   * error messages; callers must not invoke it on a root type.
+   */
+  public String describeAllowedParents() {
+    return String.join(
+        " or ", allowedParentTypes().stream().map(Enum::name).sorted().toList());
   }
 
   /**

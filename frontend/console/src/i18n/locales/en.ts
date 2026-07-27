@@ -443,6 +443,7 @@ export const en = {
       typeLabel: 'Type',
       parentLabel: 'Parent',
       noParent: 'None (top-level)',
+      noChildAllowed: 'A team is the leaf level — nothing can be created under it.',
       submit: 'Create',
       submitting: 'Creating…',
       errorTitle: 'Could not create unit',

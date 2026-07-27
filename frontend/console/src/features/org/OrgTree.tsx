@@ -267,13 +267,24 @@ function AddUnitDialog({
 }) {
   const { t } = useTranslation()
   const [name, setName] = useState('')
-  const [type, setType] = useState<OrgUnitType>('BRANCH')
   const mutation = useCreateOrgUnit({ companyId, actor })
-  const types: OrgUnitType[] = ['BUSINESS_UNIT', 'BRANCH', 'OUTLET', 'TEAM']
 
-  const parentName = parentId
-    ? (allUnits.find((u) => u.id === parentId)?.name ?? parentId)
-    : t('org.addDialog.noParent')
+  const parent = parentId ? (allUnits.find((u) => u.id === parentId) ?? null) : null
+  // Mirror of the backend hierarchy rule (OrgUnitType.allowedParentTypes): a branch only
+  // under a business unit; an outlet under a branch OR directly under a business unit
+  // (the business unit acts as the branch); a team only under an outlet.
+  const types: OrgUnitType[] = !parent
+    ? ['BUSINESS_UNIT']
+    : parent.type === 'BUSINESS_UNIT'
+      ? ['BRANCH', 'OUTLET']
+      : parent.type === 'BRANCH'
+        ? ['OUTLET']
+        : parent.type === 'OUTLET'
+          ? ['TEAM']
+          : []
+  const [type, setType] = useState<OrgUnitType>(types[0] ?? 'BRANCH')
+
+  const parentName = parent?.name ?? (parentId ?? t('org.addDialog.noParent'))
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -303,18 +314,24 @@ function AddUnitDialog({
         </Field>
 
         <Field label={t('org.addDialog.typeLabel')} htmlFor="add-type">
-          <select
-            id="add-type"
-            value={type}
-            onChange={(e) => setType(e.target.value as OrgUnitType)}
-            className="w-full rounded-xl border border-line bg-surface px-3.5 py-3 text-sm text-ink focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/12"
-          >
-            {types.map((tp) => (
-              <option key={tp} value={tp}>
-                {t(`org.type.${tp}` as Parameters<typeof t>[0])}
-              </option>
-            ))}
-          </select>
+          {types.length === 0 ? (
+            <p className="rounded-xl border border-amber/30 bg-amber-tint px-3.5 py-2.5 text-xs leading-relaxed text-amber">
+              {t('org.addDialog.noChildAllowed')}
+            </p>
+          ) : (
+            <select
+              id="add-type"
+              value={type}
+              onChange={(e) => setType(e.target.value as OrgUnitType)}
+              className="w-full rounded-xl border border-line bg-surface px-3.5 py-3 text-sm text-ink focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15"
+            >
+              {types.map((tp) => (
+                <option key={tp} value={tp}>
+                  {t(`org.type.${tp}` as Parameters<typeof t>[0])}
+                </option>
+              ))}
+            </select>
+          )}
         </Field>
 
         {mutation.isError ? (
@@ -325,7 +342,7 @@ function AddUnitDialog({
           <Button type="button" variant="outline" onClick={onClose}>
             {t('common.cancel')}
           </Button>
-          <Button type="submit" disabled={mutation.isPending || !name.trim()}>
+          <Button type="submit" disabled={mutation.isPending || !name.trim() || types.length === 0}>
             {mutation.isPending ? t('org.addDialog.submitting') : t('org.addDialog.submit')}
           </Button>
         </div>

@@ -40,9 +40,29 @@ class OrgUnitHierarchyTest {
   }
 
   @Test
+  void anOutletDirectlyUnderABusinessUnitIsAccepted() {
+    // A branch cannot stand alone, but a business unit can ACT as the branch: a small
+    // company hangs outlets straight under the business unit without an artificial
+    // branch layer.
+    OrgUnit bu = node(OrgUnitType.BUSINESS_UNIT, null, null);
+    OrgUnit outlet = node(OrgUnitType.OUTLET, bu.getId(), OrgUnitType.BUSINESS_UNIT);
+
+    assertThat(outlet.getParentId()).isEqualTo(bu.getId());
+  }
+
+  @Test
   void aTeamDirectlyUnderABusinessUnitIsRejected() {
     UUID buId = UUID.randomUUID();
     assertThatThrownBy(() -> node(OrgUnitType.TEAM, buId, OrgUnitType.BUSINESS_UNIT))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("OUTLET");
+  }
+
+  @Test
+  void aTeamDirectlyUnderABranchIsRejected() {
+    // Only the business unit doubles as a branch; a branch does NOT double as an outlet.
+    UUID branchId = UUID.randomUUID();
+    assertThatThrownBy(() -> node(OrgUnitType.TEAM, branchId, OrgUnitType.BRANCH))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("OUTLET");
   }
@@ -83,6 +103,12 @@ class OrgUnitHierarchyTest {
     assertThatThrownBy(() -> branch.moveTo(UUID.randomUUID(), OrgUnitType.OUTLET))
         .isInstanceOf(IllegalArgumentException.class);
 
+    // An outlet may move from its branch to sit directly under a business unit — the
+    // business unit acts as the branch.
+    OrgUnit outlet = node(OrgUnitType.OUTLET, branch.getId(), OrgUnitType.BRANCH);
+    assertThat(outlet.moveTo(bu1.getId(), OrgUnitType.BUSINESS_UNIT)).isTrue();
+    assertThat(outlet.getParentId()).isEqualTo(bu1.getId());
+
     // A node cannot become its own parent.
     assertThatThrownBy(() -> branch.moveTo(branch.getId(), OrgUnitType.BUSINESS_UNIT))
         .isInstanceOf(IllegalArgumentException.class);
@@ -122,13 +148,17 @@ class OrgUnitHierarchyTest {
   }
 
   @Test
-  void orgUnitTypeEncodesTheSingleLegalParent() {
+  void orgUnitTypeEncodesTheLegalParents() {
     assertThat(OrgUnitType.BUSINESS_UNIT.isRoot()).isTrue();
-    assertThat(OrgUnitType.BRANCH.requiredParentType()).contains(OrgUnitType.BUSINESS_UNIT);
-    assertThat(OrgUnitType.OUTLET.requiredParentType()).contains(OrgUnitType.BRANCH);
-    assertThat(OrgUnitType.TEAM.requiredParentType()).contains(OrgUnitType.OUTLET);
+    assertThat(OrgUnitType.BRANCH.allowedParentTypes())
+        .containsExactly(OrgUnitType.BUSINESS_UNIT);
+    // An outlet's parent is a branch OR a business unit acting as one.
+    assertThat(OrgUnitType.OUTLET.allowedParentTypes())
+        .containsExactlyInAnyOrder(OrgUnitType.BRANCH, OrgUnitType.BUSINESS_UNIT);
+    assertThat(OrgUnitType.TEAM.allowedParentTypes()).containsExactly(OrgUnitType.OUTLET);
     assertThat(OrgUnitType.OUTLET.canBeChildOf(OrgUnitType.BRANCH)).isTrue();
-    assertThat(OrgUnitType.OUTLET.canBeChildOf(OrgUnitType.BUSINESS_UNIT)).isFalse();
+    assertThat(OrgUnitType.OUTLET.canBeChildOf(OrgUnitType.BUSINESS_UNIT)).isTrue();
+    assertThat(OrgUnitType.OUTLET.canBeChildOf(OrgUnitType.OUTLET)).isFalse();
     assertThat(OrgUnitType.from("business_unit")).isEqualTo(OrgUnitType.BUSINESS_UNIT);
     assertThatThrownBy(() -> OrgUnitType.from("squad"))
         .isInstanceOf(IllegalArgumentException.class);
