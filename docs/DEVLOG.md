@@ -102,6 +102,32 @@ cascade-deactivate + reactivation.)
   guard runs before the idempotency fast path, so a retry of an already-completed order after
   mid-shift revocation returns 403 rather than replaying the original response (security-first
   ordering, accepted); (3) restaurant-service is the only enforcing vertical so far.
+- **Outlet-enforcement hardening — close the SaleWriter choke-point bypass (2026-07-27, follow-up
+  to phase 5)** — a post-commit adversarial bug hunt (two independent agents) found the phase-5
+  guard was on `OrderWriter`/`BillWriter` but NOT on `SaleWriter`, the choke point every
+  revenue-recognizing path funnels through. Two real, cashier-reachable bypasses: **(F1, critical)**
+  the legacy `POST /api/v1/sales` (`SaleController → SaleWriter.create`, client-supplied
+  `businessId`, gateway-routed to `POS_ROLES`) minted `SaleRecorded` at ANY outlet with no check;
+  **(F2, high)** `PaymentCaptureWriter.capture → SaleWriter.recordInCurrentTx` recognized digital
+  revenue with no outlet re-check. Fix: `OutletAccessGuard.enforce(businessId)` at both `SaleWriter`
+  entry points — in `create` placed AFTER the idempotency fast path (an idempotent replay of an
+  already-recorded sale still returns 200; only a NEW sale at an unassigned outlet is rejected), in
+  `recordInCurrentTx` at the top (the sole guard for capture). The `OrderWriter`/`BillWriter` guards
+  stay as fail-fast + coverage for the no-sale paths (park, bill-open). Tests: direct-sale 403 +
+  grandfather-allow, capture 403 + assigned-capture success.
+  **Documented-not-fixed findings (both hunts, tracked for a later increment):** (a) the
+  grandfather clause fails OPEN if the local ref cache diverges from org-service (consumer down /
+  DLT / lag → `countAllForCompany()==0` → allow) — adoption is inferred from cache cardinality, not
+  an explicit company flag; (b) the **grandfather cliff**: the company's FIRST-ever assignment
+  flips every never-assigned cashier to default-closed mid-shift with no "you are enabling
+  enforcement for the whole company" signal; (c) roles come from the `X-Roles` header, not the
+  validated JWT, so the owner/manager bypass is only as strong as network isolation while tenant
+  isolation is token-bound (matters only off-gateway; mTLS deferred); (d) the guard-before-
+  idempotency ordering on the order/bill call sites (F2/#4) can 403 a legitimate retry after
+  mid-shift revocation; (e) the `/users/me/outlets` gateway route isn't method-constrained (latent).
+  Verified CORRECT by the hunts (no change needed): consumer ordering/reopen (stable `assignment_id`
+  per tuple), `processOnce`+upsert atomicity, the multi-outlet replace-set diff, epoch-day/sentinel
+  range, and RLS fail-closed on an unset GUC.
 - **Signup flow hardening — enterprise-gap fixes (2026-07-25)** — closed the register-flow gaps found
   in the Odoo/enterprise gap analysis. Backend (org-service): server-side whitelists for
   currency/language/business-type (`@Pattern` — a direct API call can no longer create an EUR or

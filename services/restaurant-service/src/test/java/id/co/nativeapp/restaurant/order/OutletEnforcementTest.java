@@ -18,7 +18,14 @@ import id.co.nativeapp.restaurant.order.service.OrderService;
 import id.co.nativeapp.restaurant.outletref.domain.OutletNotAssignedException;
 import id.co.nativeapp.restaurant.outletref.messaging.UserOutletAssignmentEvent;
 import id.co.nativeapp.restaurant.outletref.service.UserOutletAssignmentRefService;
+import id.co.nativeapp.restaurant.payment.domain.TenderType;
+import id.co.nativeapp.restaurant.payment.dto.PaymentRequest;
+import id.co.nativeapp.restaurant.payment.dto.PaymentResponse;
+import id.co.nativeapp.restaurant.payment.service.PaymentCaptureService;
+import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
+import id.co.nativeapp.restaurant.sale.service.SaleService;
 import id.co.nativeapp.tenant.TenantContext;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -68,6 +75,8 @@ class OutletEnforcementTest extends PostgresRlsTestBase {
   @Autowired private MenuService menuService;
   @Autowired private OrderService orderService;
   @Autowired private BillService billService;
+  @Autowired private SaleService saleService;
+  @Autowired private PaymentCaptureService captureService;
   @Autowired private UserOutletAssignmentRefService assignmentService;
 
   /**
@@ -273,12 +282,28 @@ class OutletEnforcementTest extends PostgresRlsTestBase {
   // -----------------------------------------------------------------------
 
   private void assignCashierTo(UUID outletId) {
+    assignCashierWithId(UUID.randomUUID(), outletId);
+  }
+
+  private void assignCashierWithId(UUID assignmentId, UUID outletId) {
     UserOutletAssignmentEvent seed =
         new UserOutletAssignmentEvent(
-            UUID.randomUUID(), UUID.randomUUID(), CASHIER_ACTOR, TENANT,
+            UUID.randomUUID(), assignmentId, CASHIER_ACTOR, TENANT,
             outletId, "ASSIGNED",
             (int) LocalDate.of(2026, 7, 27).toEpochDay(),
             (int) LocalDate.of(9999, 12, 31).toEpochDay());
+    assignmentService.apply(seed);
+  }
+
+  private void unassign(UUID assignmentId, UUID outletId) {
+    // A fresh eventId (first arg) so ProcessedEventStore doesn't dedupe it as already-seen; the
+    // UNASSIGNED upsert conflicts on (company, user, org_unit) and flips active=false.
+    UserOutletAssignmentEvent seed =
+        new UserOutletAssignmentEvent(
+            UUID.randomUUID(), assignmentId, CASHIER_ACTOR, TENANT,
+            outletId, "UNASSIGNED",
+            (int) LocalDate.of(2026, 7, 27).toEpochDay(),
+            (int) LocalDate.of(2026, 7, 28).toEpochDay());
     assignmentService.apply(seed);
   }
 
@@ -348,5 +373,151 @@ class OutletEnforcementTest extends PostgresRlsTestBase {
               return billService.payBill(opened.id(), new PayBillRequest());
             });
     assertThat(paid.status()).isEqualTo("PAID");
+  }
+
+  // -----------------------------------------------------------------------
+  // 6. Choke-point guard (SaleWriter) — closes the direct-sale + capture bypass
+  // -----------------------------------------------------------------------
+
+  /**
+   * The legacy {@code POST /api/v1/sales} path (SaleController → SaleService → SaleWriter.create)
+   * is cashier-reachable at the gateway and carries a client-supplied {@code businessId}. Before the
+   * choke-point guard it recorded a {@code SaleRecorded} with NO outlet check — a cashier could mint
+   * revenue at any outlet. The guard in {@code SaleWriter.create} must reject it.
+   */
+  @Test
+  void cashierCannotRecordDirectSaleAtUnassignedOutletWhenScopingIsAdopted() {
+    // Scoping adopted: cashier assigned to a DIFFERENT outlet only.
+    assignCashierTo(OTHER_BUSINESS_ID);
+
+    setRoles("cashier");
+    RecordSaleCommand command =
+        new RecordSaleCommand(
+            BUSINESS_ID, 15_000L, "IDR", Instant.now(), UUID.randomUUID().toString());
+
+    assertThatThrownBy(
+            () -> TenantContext.callAs(TENANT, CASHIER_ACTOR, () -> saleService.recordSale(command)))
+        .isInstanceOf(OutletNotAssignedException.class);
+  }
+
+  /** The grandfather clause still lets a direct sale through when scoping was never adopted. */
+  @Test
+  void cashierCanRecordDirectSaleWhenCompanyHasZeroAssignmentRows() throws Exception {
+    setRoles("cashier");
+    RecordSaleCommand command =
+        new RecordSaleCommand(
+            BUSINESS_ID, 15_000L, "IDR", Instant.now(), UUID.randomUUID().toString());
+
+    var result = TenantContext.callAs(TENANT, CASHIER_ACTOR, () -> saleService.recordSale(command));
+    assertThat(result.created()).isTrue();
+  }
+
+  /**
+   * The guard in {@code SaleWriter.create} sits AFTER the idempotency fast-path ON PURPOSE: an
+   * idempotent REPLAY of an already-recorded sale must still return the existing sale (200,
+   * {@code created=false}) even if the cashier's assignment was revoked between the two calls — no
+   * NEW revenue is minted, so there is nothing to block. This test pins that ordering so a future
+   * refactor that hoists the guard above the fast-path (re-introducing a 403-on-legitimate-retry)
+   * fails here.
+   */
+  @Test
+  void idempotentReplayOfRecordedSaleStillReturns200AfterAssignmentRevoked() throws Exception {
+    UUID assignmentId = UUID.randomUUID();
+    assignCashierWithId(assignmentId, BUSINESS_ID);
+    String idempotencyKey = UUID.randomUUID().toString();
+
+    setRoles("cashier");
+    // First sale: cashier is assigned → recorded (201 / created=true).
+    var first =
+        TenantContext.callAs(
+            TENANT,
+            CASHIER_ACTOR,
+            () ->
+                saleService.recordSale(
+                    new RecordSaleCommand(
+                        BUSINESS_ID, 15_000L, "IDR", Instant.now(), idempotencyKey)));
+    assertThat(first.created()).isTrue();
+
+    // Assignment is revoked (a different outlet stays assigned, so scoping is still adopted).
+    unassign(assignmentId, BUSINESS_ID);
+    assignCashierTo(OTHER_BUSINESS_ID);
+
+    // Replay with the SAME idempotency key → the existing sale is echoed (200 / created=false),
+    // NOT a 403 — the idempotency fast-path returns before the guard.
+    var replay =
+        TenantContext.callAs(
+            TENANT,
+            CASHIER_ACTOR,
+            () ->
+                saleService.recordSale(
+                    new RecordSaleCommand(
+                        BUSINESS_ID, 15_000L, "IDR", Instant.now(), idempotencyKey)));
+    assertThat(replay.created()).isFalse();
+    assertThat(replay.sale().id()).isEqualTo(first.sale().id());
+  }
+
+  /**
+   * Digital-payment capture ({@code PaymentCaptureService.capture} → {@code
+   * PaymentCaptureWriter.capture} → {@code SaleWriter.recordInCurrentTx}) recognizes revenue at the
+   * money moment. Before the choke-point guard it had NO outlet check, so an unassigned cashier
+   * could capture (recognize revenue for) a pending digital payment at any outlet. The guard in
+   * {@code recordInCurrentTx} must reject it — even though a bypassing manager created the order.
+   */
+  @Test
+  void cashierNotAssignedCannotCaptureDigitalPaymentWhenScopingIsAdopted() throws Exception {
+    // Scoping adopted: cashier assigned to a DIFFERENT outlet only.
+    assignCashierTo(OTHER_BUSINESS_ID);
+    UUID menuItemId = createMenuItem(BUSINESS_ID);
+
+    // A manager (bypass) creates a QRIS order at BUSINESS_ID → PENDING payment, no sale yet.
+    setRoles("manager");
+    UUID paymentId =
+        TenantContext.callAs(
+            TENANT,
+            OWNER_ACTOR,
+            () -> {
+              CheckoutResult checkout =
+                  orderService.checkout(
+                      new CheckoutRequest(
+                          BUSINESS_ID,
+                          UUID.randomUUID().toString(),
+                          List.of(new OrderLineRequest(menuItemId, 1)),
+                          new PaymentRequest(TenderType.QRIS, null)));
+              return checkout.order().payment().paymentId();
+            });
+
+    // The unassigned cashier tries to capture (recognize revenue) → 403 at the money moment.
+    setRoles("cashier");
+    assertThatThrownBy(
+            () -> TenantContext.callAs(TENANT, CASHIER_ACTOR, () -> captureService.capture(paymentId)))
+        .isInstanceOf(OutletNotAssignedException.class);
+  }
+
+  /**
+   * Capture succeeds for a cashier who IS assigned to the outlet — proves the guard doesn't break
+   * the legitimate digital-capture path.
+   */
+  @Test
+  void cashierAssignedCanCaptureDigitalPayment() throws Exception {
+    assignCashierTo(BUSINESS_ID);
+    UUID menuItemId = createMenuItem(BUSINESS_ID);
+
+    setRoles("cashier");
+    PaymentResponse captured =
+        TenantContext.callAs(
+            TENANT,
+            CASHIER_ACTOR,
+            () -> {
+              CheckoutResult checkout =
+                  orderService.checkout(
+                      new CheckoutRequest(
+                          BUSINESS_ID,
+                          UUID.randomUUID().toString(),
+                          List.of(new OrderLineRequest(menuItemId, 1)),
+                          new PaymentRequest(TenderType.QRIS, null)));
+              return captureService.capture(checkout.order().payment().paymentId());
+            });
+    assertThat(captured.status()).isEqualTo("CAPTURED");
+    assertThat(captured.saleId()).isNotNull();
   }
 }

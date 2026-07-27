@@ -3,6 +3,7 @@ package id.co.nativeapp.restaurant.sale.service;
 import id.co.nativeapp.events.AvroSerde;
 import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.money.Money;
+import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
 import id.co.nativeapp.restaurant.sale.domain.Sale;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
@@ -36,12 +37,17 @@ public class SaleWriter {
   private final SaleRepository repository;
   private final OutboxWriter outboxWriter;
   private final PostOutboxHook postOutboxHook;
+  private final OutletAccessGuard outletAccessGuard;
 
   public SaleWriter(
-      SaleRepository repository, OutboxWriter outboxWriter, PostOutboxHook postOutboxHook) {
+      SaleRepository repository,
+      OutboxWriter outboxWriter,
+      PostOutboxHook postOutboxHook,
+      OutletAccessGuard outletAccessGuard) {
     this.repository = repository;
     this.outboxWriter = outboxWriter;
     this.postOutboxHook = postOutboxHook;
+    this.outletAccessGuard = outletAccessGuard;
   }
 
   /**
@@ -69,6 +75,14 @@ public class SaleWriter {
     if (existing.isPresent()) {
       return new RecordSaleResult(toResponse(existing.get()), false);
     }
+
+    // Phase 5 enforcement — CHOKE-POINT guard. Every revenue-recognizing path funnels through a
+    // SaleWriter method, so guarding here closes any caller that reaches the SaleRecorded emit
+    // WITHOUT an upstream OrderWriter/BillWriter guard — notably the legacy POST /api/v1/sales
+    // (cashier-reachable, client-supplied businessId). Placed AFTER the idempotency fast path so
+    // an idempotent replay of an already-recorded sale still returns 200 (no NEW revenue minted);
+    // only a genuinely new sale at an unassigned outlet is rejected.
+    outletAccessGuard.enforce(command.businessId());
 
     // Validate the amount through libs/money Money (ISO-4217; integer minor units,
     // never a float). Money.ofMinor rejects an unknown currency code with
@@ -129,6 +143,12 @@ public class SaleWriter {
   @Transactional(propagation = Propagation.MANDATORY)
   public RecordSaleResult recordInCurrentTx(RecordSaleCommand command) {
     String companyId = TenantContext.require().companyId();
+
+    // Phase 5 enforcement — CHOKE-POINT guard (see create()). This is the sole guard for
+    // PaymentCaptureWriter.capture (digital-tender revenue recognition), which records a sale in
+    // the caller's tx without passing through an OrderWriter/BillWriter guard. Redundant-but-
+    // harmless for the checkout/payParked/payBill paths, which already fail-fast-guard upstream.
+    outletAccessGuard.enforce(command.businessId());
 
     Money amount = Money.ofMinor(command.amountMinor(), command.currency());
     Sale sale =
