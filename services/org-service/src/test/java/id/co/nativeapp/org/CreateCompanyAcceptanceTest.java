@@ -62,7 +62,8 @@ class CreateCompanyAcceptanceTest extends PostgresRlsTestBase {
     // The rows landed under the new tenant (counted over the admin BYPASSRLS conn,
     // since company/org_unit are FORCE RLS and have no session GUC on a raw query).
     assertThat(rowCountAsAdmin("company")).isEqualTo(1L);
-    assertThat(rowCountAsAdmin("org_unit")).isEqualTo(1L);
+    // Root business unit + its seeded default outlet (ADR 0012).
+    assertThat(rowCountAsAdmin("org_unit")).isEqualTo(2L);
 
     // EXACTLY ONE CompanyCreated in the outbox.
     List<Map<String, Object>> rows = outboxRows();

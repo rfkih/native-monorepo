@@ -81,9 +81,10 @@ class OrgTreeAcceptanceTest extends PostgresRlsTestBase {
     assertThat(companyOf(outletId)).isEqualTo(t.companyId().toString());
     assertThat(companyOf(teamId)).isEqualTo(t.companyId().toString());
 
-    // Exactly one OrgUnitCreated per node — the 2 new ones + the bootstrap root = 3 total.
+    // Exactly one OrgUnitCreated per node — the 2 new ones + the bootstrap root + its seeded
+    // default outlet (ADR 0012) = 4 total.
     List<Map<String, Object>> created = orgUnitCreatedRows();
-    assertThat(created).hasSize(3);
+    assertThat(created).hasSize(4);
 
     // The outlet event carries type=OUTLET and parent_id=root.
     GenericRecord outletEvent = decodeCreated(created, outletId);

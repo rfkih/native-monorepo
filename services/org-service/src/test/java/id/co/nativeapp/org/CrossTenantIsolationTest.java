@@ -69,8 +69,9 @@ class CrossTenantIsolationTest extends PostgresRlsTestBase {
                 companyService.findOrgUnitsForCurrentTenant().stream()
                     .map(OrgUnitView::getId)
                     .toList());
-    // A sees exactly its one org unit (the first business); none of B's.
-    assertThat(orgUnitsVisibleToA).hasSize(1);
+    // A sees exactly its two org units (the first business + its seeded default outlet,
+    // ADR 0012); none of B's.
+    assertThat(orgUnitsVisibleToA).hasSize(2);
 
     UUID aOrgUnitId = orgUnitsVisibleToA.getFirst();
 
@@ -94,7 +95,7 @@ class CrossTenantIsolationTest extends PostgresRlsTestBase {
                 companyService.findOrgUnitsForCurrentTenant().stream()
                     .map(OrgUnitView::getId)
                     .toList());
-    assertThat(orgUnitsVisibleToB).hasSize(1);
+    assertThat(orgUnitsVisibleToB).hasSize(2);
     assertThat(orgUnitsVisibleToB).doesNotContain(aOrgUnitId);
   }
 }

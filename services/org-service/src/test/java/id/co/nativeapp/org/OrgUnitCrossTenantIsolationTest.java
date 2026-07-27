@@ -42,7 +42,12 @@ class OrgUnitCrossTenantIsolationTest extends PostgresRlsTestBase {
         TenantContext.callAs(
             companyA.toString(),
             "a",
-            () -> companyService.findOrgUnitsForCurrentTenant().getFirst().getId());
+            () ->
+                companyService.findOrgUnitsForCurrentTenant().stream()
+                    .filter(u -> "BUSINESS_UNIT".equals(u.getType()))
+                    .findFirst()
+                    .orElseThrow()
+                    .getId());
 
     // A builds outlet > team under its root business unit.
     List<UUID> aUnitIds =
@@ -63,7 +68,8 @@ class OrgUnitCrossTenantIsolationTest extends PostgresRlsTestBase {
             .company()
             .getId();
 
-    // Inside B's scope: B sees only its own single root business unit, none of A's tree.
+    // Inside B's scope: B sees only its own root business unit + its seeded default outlet
+    // (ADR 0012), none of A's tree.
     List<UUID> visibleToB =
         TenantContext.callAs(
             companyB.toString(),
@@ -72,7 +78,7 @@ class OrgUnitCrossTenantIsolationTest extends PostgresRlsTestBase {
                 companyService.findOrgUnitsForCurrentTenant().stream()
                     .map(OrgUnitView::getId)
                     .toList());
-    assertThat(visibleToB).hasSize(1);
+    assertThat(visibleToB).hasSize(2);
     assertThat(visibleToB).doesNotContainAnyElementsOf(aUnitIds);
   }
 }

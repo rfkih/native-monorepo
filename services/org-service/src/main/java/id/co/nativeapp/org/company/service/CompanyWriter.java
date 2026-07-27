@@ -143,6 +143,12 @@ public class CompanyWriter {
     // from these events; the bootstrap node is the first one.
     writeOrgUnitCreated(savedBusiness, newCompanyId);
 
+    // ADR 0012: every new business unit seeds ONE default outlet (named after the business
+    // unit) so the POS always has a real OUTLET to bind to — sales are never keyed on the
+    // business-unit id. Same transaction: the outlet row and its event commit atomically
+    // with the company bootstrap.
+    seedDefaultOutlet(savedBusiness, tenant, newCompanyId);
+
     return new CreateCompanyResult(savedCompany, savedBusiness);
   }
 
@@ -174,7 +180,31 @@ public class CompanyWriter {
     OrgUnit saved = orgUnitRepository.save(orgUnit);
     orgUnitRepository.flush();
     writeOrgUnitCreated(saved, UUID.fromString(tenant));
+    // ADR 0012: a new business unit seeds its own default outlet (same rationale and
+    // transaction shape as the company bootstrap).
+    seedDefaultOutlet(saved, tenant, UUID.fromString(tenant));
     return saved;
+  }
+
+  /**
+   * Seeds the default OUTLET under a freshly created business unit (ADR 0012): named after the
+   * business unit (the backend has no i18n — the owner renames it via the org-tree PATCH), active,
+   * effective today, same legal employer. Runs on the caller's transaction; the outlet row and its
+   * {@code OrgUnitCreated} outbox row commit atomically with the business unit (rule 3).
+   */
+  private void seedDefaultOutlet(OrgUnit businessUnit, String tenant, UUID companyId) {
+    OrgUnit outlet =
+        new OrgUnit(
+            businessUnit.getName(),
+            OrgUnitType.OUTLET,
+            businessUnit.getId(),
+            OrgUnitType.BUSINESS_UNIT,
+            businessUnit.getLegalEmployerId(),
+            today());
+    outlet.setCompanyId(tenant);
+    OrgUnit savedOutlet = orgUnitRepository.save(outlet);
+    orgUnitRepository.flush();
+    writeOrgUnitCreated(savedOutlet, companyId);
   }
 
   /**

@@ -76,24 +76,35 @@ class OutletCrossTenantIsolationTest extends PostgresRlsTestBase {
         TenantContext.callAs(
             t.companyId().toString(), "owner-acme", () -> orgUnitService.listActiveOutlets());
 
-    // Only the 2 active outlets — inactive and non-OUTLET types excluded.
-    assertThat(outlets).hasSize(2);
-    // Ordered by name: "Apple Outlet" < "Zebra Outlet"
-    assertThat(outlets.get(0).name()).isEqualTo("Apple Outlet");
-    assertThat(outlets.get(1).name()).isEqualTo("Zebra Outlet");
+    // The 2 active outlets + the bootstrap-seeded "Acme HQ" (ADR 0012) — inactive and
+    // non-OUTLET types excluded.
+    assertThat(outlets).hasSize(3);
+    // Ordered by name: "Acme HQ" < "Apple Outlet" < "Zebra Outlet"
+    assertThat(outlets.get(0).name()).isEqualTo("Acme HQ");
+    assertThat(outlets.get(1).name()).isEqualTo("Apple Outlet");
+    assertThat(outlets.get(2).name()).isEqualTo("Zebra Outlet");
     // Response shape: {id, name} only.
-    assertThat(outlets.get(0).id()).isEqualTo(outletIds.get(0));
-    assertThat(outlets.get(1).id()).isEqualTo(outletIds.get(1));
+    assertThat(outlets.get(1).id()).isEqualTo(outletIds.get(0));
+    assertThat(outlets.get(2).id()).isEqualTo(outletIds.get(1));
   }
 
   @Test
   void listActiveOutletsReturnsEmptyListWhenNoActiveOutletsExist() throws Exception {
     Tenant t = bootstrapCompany("EmptyCo", "owner-empty");
 
-    // No outlets created — only the bootstrap root business unit exists.
+    // The bootstrap seeds one default outlet (ADR 0012); deactivating it leaves the company
+    // with no ACTIVE outlets — the picker list must then be empty.
     List<OutletResponse> outlets =
         TenantContext.callAs(
-            t.companyId().toString(), "owner-empty", () -> orgUnitService.listActiveOutlets());
+            t.companyId().toString(),
+            "owner-empty",
+            () -> {
+              List<OutletResponse> seeded = orgUnitService.listActiveOutlets();
+              assertThat(seeded).hasSize(1); // the seeded default outlet
+              orgUnitService.patch(
+                  new PatchOrgUnitCommand(seeded.get(0).id(), null, false, null, true, false));
+              return orgUnitService.listActiveOutlets();
+            });
 
     assertThat(outlets).isEmpty();
   }
@@ -115,11 +126,13 @@ class OutletCrossTenantIsolationTest extends PostgresRlsTestBase {
           return null;
         });
 
-    // Tenant B sees NO outlets — RLS scopes the query to B's company only.
+    // Tenant B sees ONLY its own bootstrap-seeded outlet — RLS scopes the query to B's
+    // company, so none of A's outlets leak across.
     List<OutletResponse> visibleToB =
         TenantContext.callAs(
             b.companyId().toString(), "owner-b", () -> orgUnitService.listActiveOutlets());
 
-    assertThat(visibleToB).isEmpty();
+    assertThat(visibleToB).hasSize(1);
+    assertThat(visibleToB.get(0).name()).isEqualTo("TenantB HQ");
   }
 }

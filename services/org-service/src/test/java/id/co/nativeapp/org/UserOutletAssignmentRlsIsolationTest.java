@@ -56,7 +56,11 @@ class UserOutletAssignmentRlsIsolationTest extends PostgresRlsTestBase {
                       new CreateOrgUnitCommand(
                           "A Outlet",
                           "outlet",
-                          companyService.findOrgUnitsForCurrentTenant().getFirst().getId()));
+                          companyService.findOrgUnitsForCurrentTenant().stream()
+                              .filter(u -> "BUSINESS_UNIT".equals(u.getType()))
+                              .findFirst()
+                              .orElseThrow()
+                              .getId()));
               return outlet.getId();
             });
 

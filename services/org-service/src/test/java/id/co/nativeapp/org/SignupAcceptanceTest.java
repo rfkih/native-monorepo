@@ -138,9 +138,9 @@ class SignupAcceptanceTest {
     // The test realm has require-email-verification unset (default false).
     assertThat(node.get("emailVerificationRequired").asBoolean()).isFalse();
 
-    // Company row was persisted.
+    // Company row was persisted (root business unit + its seeded default outlet, ADR 0012).
     assertThat(rowCountAsAdmin("company")).isEqualTo(1L);
-    assertThat(rowCountAsAdmin("org_unit")).isEqualTo(1L);
+    assertThat(rowCountAsAdmin("org_unit")).isEqualTo(2L);
 
     // Keycloak user has the correct company_id attribute and the owner role.
     String companyId = node.get("companyId").asString();
