@@ -24,8 +24,8 @@ import org.hibernate.type.SqlTypes;
  * bill finalises it: deducts stock and records the {@code SaleRecorded} outbox event in the same
  * transaction (rule 3). The {@code sale_id} is set only when the bill transitions to PAID.
  *
- * <p>Extends {@link Auditable} (rule 4); covered by the {@code bill_tenant_isolation} RLS policy
- * in {@code V11__bill_tabs.sql} (rule 5). Money is stored as {@code BIGINT} minor units + {@code
+ * <p>Extends {@link Auditable} (rule 4); covered by the {@code bill_tenant_isolation} RLS policy in
+ * {@code V11__bill_tabs.sql} (rule 5). Money is stored as {@code BIGINT} minor units + {@code
  * CHAR(3)} currency — never a float (rule 8).
  *
  * <p>A {@code protected} no-arg constructor exists only for JPA; application code uses the public
@@ -55,17 +55,17 @@ public class Bill extends Auditable {
   private String status;
 
   /**
-   * ISO-4217 currency code, CHAR(3). All lines on this bill share this currency (enforced at
-   * append time — same as order/cart single-currency rule). {@link SqlTypes#CHAR} makes Hibernate's
-   * {@code ddl-auto=validate} agree with the migrated {@code CHAR(3)} (PostgreSQL bpchar) column.
+   * ISO-4217 currency code, CHAR(3). All lines on this bill share this currency (enforced at append
+   * time — same as order/cart single-currency rule). {@link SqlTypes#CHAR} makes Hibernate's {@code
+   * ddl-auto=validate} agree with the migrated {@code CHAR(3)} (PostgreSQL bpchar) column.
    */
   @JdbcTypeCode(SqlTypes.CHAR)
   @Column(name = "currency", nullable = false, length = 3)
   private String currency;
 
   /**
-   * Optional order-level discount in minor units. Stored so pay can recompute the breakdown
-   * without persisting it. {@code null} means no discount.
+   * Optional order-level discount in minor units. Stored so pay can recompute the breakdown without
+   * persisting it. {@code null} means no discount.
    */
   @Column(name = "discount_minor")
   private Long discountMinor;
@@ -158,9 +158,9 @@ public class Bill extends Auditable {
   }
 
   /**
-   * Sets the currency on first item append. Only valid when the current currency is "XXX"
-   * (the placeholder set at open time before the first round of items). Called by the bill service
-   * layer on the first {@code appendLines} call.
+   * Sets the currency on first item append. Only valid when the current currency is "XXX" (the
+   * placeholder set at open time before the first round of items). Called by the bill service layer
+   * on the first {@code appendLines} call.
    *
    * @throws IllegalStateException if the bill's currency has already been set to a real currency
    */
@@ -180,7 +180,12 @@ public class Bill extends Auditable {
   private void requireOpen(String operation) {
     if (!"OPEN".equals(this.status)) {
       throw new IllegalStateException(
-          operation + " requires an OPEN bill; current status: " + status + " (bill id: " + id + ")");
+          operation
+              + " requires an OPEN bill; current status: "
+              + status
+              + " (bill id: "
+              + id
+              + ")");
     }
   }
 

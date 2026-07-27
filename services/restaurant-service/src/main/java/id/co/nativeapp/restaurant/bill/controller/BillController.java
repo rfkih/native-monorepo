@@ -82,8 +82,8 @@ public class BillController {
   }
 
   /**
-   * Returns the full bill — header, lines (with modifiers), and a live price breakdown. Returns
-   * 200 OK.
+   * Returns the full bill — header, lines (with modifiers), and a live price breakdown. Returns 200
+   * OK.
    */
   @Operation(
       summary = "Get a bill",
@@ -110,9 +110,7 @@ public class BillController {
     return ResponseEntity.ok(billService.appendLines(id, request));
   }
 
-  /**
-   * Removes a line from an OPEN bill (before pay). Returns 204 No Content.
-   */
+  /** Removes a line from an OPEN bill (before pay). Returns 204 No Content. */
   @Operation(
       summary = "Remove a line from an OPEN bill",
       description =
@@ -141,9 +139,7 @@ public class BillController {
     return ResponseEntity.ok(billService.payBill(id, request));
   }
 
-  /**
-   * Cancels an OPEN bill (no sale, no stock change). Returns 204 No Content.
-   */
+  /** Cancels an OPEN bill (no sale, no stock change). Returns 204 No Content. */
   @Operation(
       summary = "Cancel a bill",
       description =

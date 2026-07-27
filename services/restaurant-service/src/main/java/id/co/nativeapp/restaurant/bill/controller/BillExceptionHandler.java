@@ -15,8 +15,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 /**
  * Maps bill-domain exceptions to RFC-7807 {@link ProblemDetail} responses.
  *
- * <p>Ordered before the shared {@link id.co.nativeapp.security.ApiExceptionHandler} (which owns
- * the catch-all {@link Exception} → 500 mapping) so these narrower handlers win.
+ * <p>Ordered before the shared {@link id.co.nativeapp.security.ApiExceptionHandler} (which owns the
+ * catch-all {@link Exception} → 500 mapping) so these narrower handlers win.
  *
  * <ul>
  *   <li>{@link BillNotFoundException} → {@code 404 Not Found}
