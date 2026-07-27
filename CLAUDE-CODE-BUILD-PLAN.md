@@ -72,14 +72,14 @@ Thinnest loop: **create company (set base currency + default language) → log i
 
 ## Phase 2 — Expand on validated ground
 - **entitlement-service** + the `entitlement-check` library; real gating in the verticals.
-- **org-service (full)** — business unit, branch, outlet, team, legal_employer; the company-as-keystone boundaries.
+- **org-service (full)** — business unit, outlet, team (ADR 0012 — flat tree, no branch level), legal_employer; the company-as-keystone boundaries.
 - **employee-service (records only)** — `employee`, `employment_contract`, `assignment`; publish `EmployeeChanged`/`AssignmentChanged`; verticals build a local staff read model (hydration: compacted topics + snapshot API).
 - **A second vertical** (carwash) from the proven pattern.
 - **finance-service** — mapping rules + the dimensional ledger proper; expenses.
 
 ## Phase 3 — HR depth, multi-currency, group consolidation
 - **Payroll engine** — versioned `statutory_rule`, gross-to-net, `rule_version`, `gl_account`, `PayrollPosted` + `LaborCostAllocated`. Seed + verify current-year Indonesian statutory figures (DJP, BPJS). Completeness gate (`PeriodSealed`).
-- **Compensation engine; mobility + approval sagas;** multi-branch aggregate-then-allocate (same-`legal_employer` invariant).
+- **Compensation engine; mobility + approval sagas;** multi-outlet aggregate-then-allocate (same-`legal_employer` invariant).
 - **Multi-currency** — finance-service `fx_rate` (effective-dated) + presentation-currency conversion (view books in another currency) + **currency translation for cross-currency consolidation** (closing rate for balances, average for P&L). Add a rate source.
 - **Group consolidation** — related-party tagging, `consolidation_ledger`, elimination, close process (lock → match → flag → `ConsolidationClosed`).
 - **Employee app** — the mobile-first PWA (schedule, payslip, leave, POS), localized + currency-aware.

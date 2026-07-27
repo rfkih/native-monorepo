@@ -60,8 +60,8 @@ Each entry: **Responsibility · Owns · Publishes · Consumes · Notes.**
 - **Notes:** Injects authenticated context downstream. Redis-backed token-bucket rate limit per `company_id` + user.
 
 ### org-service
-- **Responsibility:** the tenant structure — owner/account, company (legal employer), business unit, branch, outlet, team, and the org tree.
-- **Owns:** `account`, `company` (incl. `base_currency` **[immutable]** and `default_language`, both set at creation), `org_unit` (self-referencing: type = business_unit | branch | outlet | team), `legal_employer`.
+- **Responsibility:** the tenant structure — owner/account, company (legal employer), business unit, outlet, team, and the org tree ([ADR 0012](docs/adr/0012-flatten-org-tree-remove-branch.md): flat tree, an outlet IS the physical selling location; every new business unit seeds one default outlet).
+- **Owns:** `account`, `company` (incl. `base_currency` **[immutable]** and `default_language`, both set at creation), `org_unit` (self-referencing: type = business_unit | outlet | team), `legal_employer`.
 - **Publishes:** `CompanyCreated`, `OrgUnitCreated`, `OrgUnitChanged`.
 - **Consumes:** —
 - **Notes:** Foundational; nearly every other service caches its slice of this tree. The company is the keystone boundary (console scope = legal employer = consolidation scope = entitlement scope). **Base currency and default language are set in the company-creation flow and stored here — base currency is effectively immutable once transactions exist; the dashboard never toggles them.**
@@ -81,7 +81,7 @@ Each entry: **Responsibility · Owns · Publishes · Consumes · Notes.**
 - **Notes (key invariants):**
   - Org/team/manager live on the **assignment**, not the employee; an employee holds multiple concurrent assignments.
   - Concurrent assignments must all resolve to the **same `legal_employer`** — enforce at assignment creation (reject cross-company concurrency).
-  - Payroll for multi-branch staff is **aggregate-then-allocate**: each assignment's gross runs independently; statutory (BPJS, PPh 21) is computed **once** on the person's combined total; cost is allocated back to each outlet by earnings share.
+  - Payroll for multi-outlet staff is **aggregate-then-allocate**: each assignment's gross runs independently; statutory (BPJS, PPh 21) is computed **once** on the person's combined total; cost is allocated back to each outlet by earnings share.
   - Payroll is a data-driven rules engine; payslip lines stamp `rule_version` for byte-identical re-runs. **Seed real current-year Indonesian statutory figures, verified against DJP and BPJS.**
   - Internally sub-modular (records, assignments, compensation, payroll, leave); split payroll into its own service only under real pressure.
 

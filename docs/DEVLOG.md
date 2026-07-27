@@ -69,6 +69,21 @@ cascade-deactivate + reactivation.)
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **Org-tree flattening — outlet IS the branch (ADR 0012, 2026-07-28)** — nine atomic commits
+  remove the BRANCH level (`business_unit > outlet > team`; `OrgUnitType` is the single encoding),
+  seed **one default OUTLET under every new business unit** (company bootstrap AND add-business,
+  named after the BU, same tx + own OrgUnitCreated via the outbox), and delete the console's silent
+  business-unit fallback: POS/Menu/Kitchen render inside a new **OutletGate** fed by a shared
+  `useResolvedOutlets` hook (company outlets ∩ own assignments + outlets[0] self-heal, hoisted out
+  of OutletPicker so gate and picker cannot disagree) — `businessId` on a POS surface is now ALWAYS
+  a real outlet id. The ignored `firstBusinessType`/`type` came off the signup/create-company wire
+  (old bodies still accepted — unknown JSON fields ignored, proven by test); the signup/onboarding
+  business-type picker (dead UI) was removed. Wire compat: the events' `type` is a free Avro string
+  — doc-string/catalog-only changes; consumers store type opaquely (proven by their contract
+  tests). Migration-comment edits changed Flyway checksums → dev stack reset documented in RUNBOOK
+  ("2026-07 org-tree flattening — dev data"), which also gives the keep-data per-BU outlet recipe.
+  Follow-up (unchanged): restaurant-service still trusts client `businessId` (no org ref table to
+  enforce type=OUTLET server-side).
 - **Outlet-scoping increment — the org tree means something (phases 1–5, 2026-07-27)** — five
   independently-shipped phases make `business_id` a real, named, enforced outlet dimension.
   **P1** finance `outlet_revenue` read model (keyed company/outlet/period/currency, fed by the same

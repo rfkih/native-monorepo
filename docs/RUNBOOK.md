@@ -69,6 +69,24 @@ finance (same `X-Company-Id`) shows the consolidated revenue move.
    the in-cluster `kafka:29092` listener is unaffected). Schema-registry (8081) is optional — the consume
    path uses raw Avro bytes, not the registry.
 
+## 2026-07 org-tree flattening (ADR 0012) — dev data
+
+The org tree lost its BRANCH level and every new business unit seeds a default outlet; two
+migration-file comments also changed, which breaks **Flyway checksum validation** on databases
+that already ran them.
+
+- **Primary path — full stack reset** (required if a service fails `Flyway validate` at boot):
+  `docker compose -f docker/compose.dev.yml down -v` then bring the stack back up and re-signup.
+  Keycloak users survive if KC uses the persistent `keycloak` DB volume — only re-seed companies.
+- **Keep-data alternative** (pre-ADR tenants with zero outlets): per business unit, create the
+  outlet through the API so the OrgUnitCreated event flows through the outbox and downstream
+  ref tables stay consistent — `POST /api/v1/org-units {"name":"<name>","type":"outlet",
+  "parentId":"<business-unit-id>"}` as that tenant — then re-create menu/tables under the outlet
+  via the console. Historical restaurant/finance rows keyed to the business-unit id remain
+  (visible as a business-unit-named row in outlet P&L) — cosmetic, pre-GA.
+- The console POS/Menu/Kitchen now BLOCK on an "outlet gate" until the tenant has an active
+  outlet the signed-in user may ring on; companies created after ADR 0012 always have one.
+
 ## Tear down
 ```bash
 docker compose -f docker/compose.dev.yml down       # keep the Postgres volume (data persists)

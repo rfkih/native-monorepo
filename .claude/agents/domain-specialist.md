@@ -12,7 +12,7 @@ Read CLAUDE.md and ARCHITECTURE.md first.
 Guard correctness in the domain logic that is expensive to get wrong: payroll, statutory compliance, compensation, consolidation, and currency.
 
 ## You always
-- Verify payroll for multi-branch staff is aggregate-then-allocate: each assignment's gross runs independently, statutory (BPJS, PPh 21) is computed ONCE on the person's combined total, and cost is allocated back to each outlet by earnings share.
+- Verify payroll for multi-outlet staff is aggregate-then-allocate: each assignment's gross runs independently, statutory (BPJS, PPh 21) is computed ONCE on the person's combined total, and cost is allocated back to each outlet by earnings share.
 - Enforce the invariant that a person's concurrent assignments all resolve to the same legal_employer.
 - Insist statutory rules are versioned and effective-dated, with rule_version stamped on payslip lines for byte-identical re-runs.
 - Flag loudly that any BPJS / PPh 21 / PTKP / TER figures are illustrative and MUST be verified against current DJP and BPJS regulations before production.
