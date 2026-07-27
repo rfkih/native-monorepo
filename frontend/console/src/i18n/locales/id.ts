@@ -144,7 +144,6 @@ export const id = {
     defaultLanguageHint: 'Bawaan untuk anggota tim baru. Tiap pengguna bisa menggantinya sendiri.',
     firstBusinessName: 'Nama bisnis',
     firstBusinessNamePlaceholder: 'mis. Restoran Jakarta',
-    businessType: 'Jenis bisnis',
     reviewHint: 'Perusahaan dan bisnis pertamanya dibuat bersamaan, dalam satu langkah.',
     create: 'Buat perusahaan',
     creating: 'Membuat…',
@@ -161,11 +160,6 @@ export const id = {
   lang: {
     en: 'English',
     id: 'Bahasa Indonesia',
-  },
-  businessType: {
-    business_unit: 'Unit bisnis',
-    branch: 'Cabang',
-    outlet: 'Gerai',
   },
   dashboard: {
     title: 'Posisi terkonsolidasi',
@@ -582,7 +576,6 @@ export const id = {
     permanentNote: 'Mata uang dasar dan bahasa bawaan dikunci saat pembuatan dan tidak dapat diubah lagi.',
     firstBusinessName: 'Nama bisnis',
     firstBusinessNamePlaceholder: 'mis. Restoran Jakarta',
-    businessType: 'Jenis bisnis',
     ownerEmail: 'Email pemilik',
     ownerEmailPlaceholder: 'anda@contoh.com',
     ownerPassword: 'Kata sandi',

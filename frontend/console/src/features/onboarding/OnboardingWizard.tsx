@@ -16,7 +16,6 @@ import { createCompany, type CompanyResponse } from './api'
 
 const CURRENCIES = ['IDR', 'USD'] as const
 const LANGS = ['en', 'id'] as const
-const BUSINESS_TYPES = ['business_unit', 'branch', 'outlet'] as const
 
 export function OnboardingWizard() {
   const { t, i18n } = useTranslation()
@@ -30,7 +29,6 @@ export function OnboardingWizard() {
     i18n.language === 'id' ? 'id' : 'en',
   )
   const [bizName, setBizName] = useState('')
-  const [bizType, setBizType] = useState<string>('business_unit')
   const [created, setCreated] = useState<CompanyResponse | null>(null)
 
   const mutation = useMutation({
@@ -40,7 +38,7 @@ export function OnboardingWizard() {
           name: name.trim(),
           baseCurrency,
           defaultLanguage,
-          firstBusiness: { name: bizName.trim(), type: bizType },
+          firstBusiness: { name: bizName.trim() },
         },
         DEV_ACTOR,
       ),
@@ -148,15 +146,6 @@ export function OnboardingWizard() {
                   placeholder={t('onboarding.firstBusinessNamePlaceholder')}
                 />
               </Field>
-              <Field label={t('onboarding.businessType')}>
-                <ChoiceCards
-                  name="bizType"
-                  columns={1}
-                  value={bizType}
-                  onChange={setBizType}
-                  options={BUSINESS_TYPES.map((b) => ({ value: b, title: t(`businessType.${b}`) }))}
-                />
-              </Field>
             </div>
           )}
 
@@ -177,7 +166,6 @@ export function OnboardingWizard() {
                   fixed: true,
                 },
                 { label: t('onboarding.firstBusinessName'), value: bizName },
-                { label: t('onboarding.businessType'), value: t(`businessType.${bizType}`) },
               ]}
             />
           )}

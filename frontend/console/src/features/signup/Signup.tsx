@@ -30,7 +30,6 @@ import { useSignup, type SignupRequest, type SignupResponse } from './api'
 // same whitelists authoritatively (SignupRequest @Pattern) — these lists are the UI copy of them.
 const CURRENCIES = ['IDR', 'USD'] as const
 const LANGS = ['en', 'id'] as const
-const BUSINESS_TYPES = ['business_unit', 'branch', 'outlet'] as const
 
 const PASSWORD_MIN_LENGTH = 8
 
@@ -362,7 +361,6 @@ export function Signup() {
     i18n.language === 'id' ? 'id' : 'en',
   )
   const [firstBusinessName, setFirstBusinessName] = useState('')
-  const [firstBusinessType, setFirstBusinessType] = useState<string>('business_unit')
   const [ownerEmail, setOwnerEmail] = useState('')
   const [ownerPassword, setOwnerPassword] = useState('')
   const [ownerPasswordConfirm, setOwnerPasswordConfirm] = useState('')
@@ -424,7 +422,6 @@ export function Signup() {
       baseCurrency,
       defaultLanguage,
       firstBusinessName: firstBusinessName.trim(),
-      firstBusinessType,
       ownerEmail: ownerEmail.trim(),
       ownerPassword,
       termsAccepted,
@@ -574,18 +571,6 @@ export function Signup() {
                       placeholder={t('signup.firstBusinessNamePlaceholder')}
                     />
                   </Field>
-                  <Field label={t('signup.businessType')}>
-                    <ChoiceCards
-                      name="bizType"
-                      columns={1}
-                      value={firstBusinessType}
-                      onChange={setFirstBusinessType}
-                      options={BUSINESS_TYPES.map((b) => ({
-                        value: b,
-                        title: t(`businessType.${b}`),
-                      }))}
-                    />
-                  </Field>
                 </div>
               )}
 
@@ -728,11 +713,6 @@ export function Signup() {
                     {
                       label: t('signup.firstBusinessName'),
                       value: firstBusinessName,
-                      step: STEP_COMPANY,
-                    },
-                    {
-                      label: t('signup.businessType'),
-                      value: t(`businessType.${firstBusinessType}`),
                       step: STEP_COMPANY,
                     },
                     {

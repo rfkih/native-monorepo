@@ -151,7 +151,6 @@ export const en = {
     defaultLanguageHint: 'The default for new teammates. Each user can override their own.',
     firstBusinessName: 'Business name',
     firstBusinessNamePlaceholder: 'e.g. Jakarta Restaurant',
-    businessType: 'Business type',
     reviewHint: 'The company and its first business are created together, in one step.',
     create: 'Create company',
     creating: 'Creating…',
@@ -168,11 +167,6 @@ export const en = {
   lang: {
     en: 'English',
     id: 'Bahasa Indonesia',
-  },
-  businessType: {
-    business_unit: 'Business unit',
-    branch: 'Branch',
-    outlet: 'Outlet',
   },
   dashboard: {
     title: 'Consolidated position',
@@ -587,7 +581,6 @@ export const en = {
     permanentNote: 'The base currency and default language are fixed at creation and cannot be changed later.',
     firstBusinessName: 'Business name',
     firstBusinessNamePlaceholder: 'e.g. Jakarta Restaurant',
-    businessType: 'Business type',
     ownerEmail: 'Owner email',
     ownerEmailPlaceholder: 'you@example.com',
     ownerPassword: 'Password',

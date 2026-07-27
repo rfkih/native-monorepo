@@ -6,7 +6,6 @@ export interface SignupRequest {
   baseCurrency: string
   defaultLanguage: string
   firstBusinessName: string
-  firstBusinessType: string
   ownerEmail: string
   ownerPassword: string
   /** ToS consent — also enforced server-side (@AssertTrue). */
