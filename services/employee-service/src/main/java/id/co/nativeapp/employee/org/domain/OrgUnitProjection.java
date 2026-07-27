@@ -52,7 +52,7 @@ public class OrgUnitProjection extends Auditable {
    *
    * @param orgUnitId the org-unit id (the projection key)
    * @param legalEmployerId the org-unit's legal employer
-   * @param type the org-unit kind (business_unit | branch | outlet | team)
+   * @param type the org-unit kind (business_unit | outlet | team, ADR 0012)
    * @param active whether the org unit is active
    */
   public OrgUnitProjection(UUID orgUnitId, UUID legalEmployerId, String type, boolean active) {

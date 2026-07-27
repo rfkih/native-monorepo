@@ -17,7 +17,7 @@ import java.util.UUID;
  * @param eventId the event's UUID — the idempotency key ({@code id} Kafka header)
  * @param orgUnitId the org-unit id (the {@code org_unit_ref} primary key)
  * @param companyId the tenant the consumer binds the write to (via {@code TenantContext.callAs})
- * @param type the org-unit kind (business_unit | branch | outlet | team)
+ * @param type the org-unit kind (business_unit | outlet | team, ADR 0012)
  * @param parentId the parent org-unit id, or {@code null} for a top-level node
  * @param name the org-unit display name
  * @param active whether the org unit is currently active

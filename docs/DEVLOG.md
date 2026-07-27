@@ -83,7 +83,11 @@ cascade-deactivate + reactivation.)
   tests). Migration-comment edits changed Flyway checksums → dev stack reset documented in RUNBOOK
   ("2026-07 org-tree flattening — dev data"), which also gives the keep-data per-BU outlet recipe.
   Follow-up (unchanged): restaurant-service still trusts client `businessId` (no org ref table to
-  enforce type=OUTLET server-side).
+  enforce type=OUTLET server-side). Review (fresh context) = PASS; deferred suggestions: treat a
+  `/users/me/outlets` load error as a gate error instead of fail-open to the full outlet list
+  (reads only — sale writes are backstopped by OutletAccessGuard); memoize `useResolvedOutlets`'
+  outlets array; drop the now-unused `idx_org_unit_ref_company_type` in a future migration; add a
+  create-company old-body back-compat test mirroring the signup one.
 - **Outlet-scoping increment — the org tree means something (phases 1–5, 2026-07-27)** — five
   independently-shipped phases make `business_id` a real, named, enforced outlet dimension.
   **P1** finance `outlet_revenue` read model (keyed company/outlet/period/currency, fed by the same

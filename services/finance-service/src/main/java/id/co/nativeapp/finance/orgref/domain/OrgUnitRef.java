@@ -58,7 +58,7 @@ public class OrgUnitRef extends Auditable {
    *
    * @param orgUnitId the org-unit id (the primary key, opaque UUID reference — no FK across service
    *     boundaries)
-   * @param type the org-unit kind (business_unit | branch | outlet | team)
+   * @param type the org-unit kind (business_unit | outlet | team, ADR 0012)
    * @param parentId the parent org-unit id, or {@code null} for a top-level node
    * @param name the org-unit display name
    * @param active whether the org unit is currently active in org-service
