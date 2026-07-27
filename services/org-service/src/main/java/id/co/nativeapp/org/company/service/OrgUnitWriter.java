@@ -123,6 +123,33 @@ public class OrgUnitWriter {
         null,
         companyId,
         saved.getCreatedAt());
+
+    // ADR 0012: EVERY new business unit seeds one default outlet — including a root
+    // BUSINESS_UNIT created through this endpoint (the org-tree page), not just the
+    // company-bootstrap / add-business paths in CompanyWriter. Same transaction, so the
+    // outlet row and its OrgUnitCreated commit atomically with the business unit.
+    if (type == OrgUnitType.BUSINESS_UNIT) {
+      OrgUnit outlet =
+          new OrgUnit(
+              saved.getName(),
+              OrgUnitType.OUTLET,
+              saved.getId(),
+              OrgUnitType.BUSINESS_UNIT,
+              saved.getLegalEmployerId(),
+              today());
+      outlet.setCompanyId(tenant);
+      OrgUnit savedOutlet = orgUnitRepository.save(outlet);
+      orgUnitRepository.flush();
+      GenericRecord outletEvent = OrgUnitCreatedSchema.toRecord(savedOutlet);
+      outboxWriter.write(
+          OrgUnitCreatedSchema.AGGREGATE_TYPE,
+          savedOutlet.getId().toString(),
+          OrgUnitCreatedSchema.EVENT_TYPE,
+          AvroSerde.serialize(outletEvent),
+          null,
+          companyId,
+          savedOutlet.getCreatedAt());
+    }
     return saved;
   }
 

@@ -6,6 +6,7 @@ import id.co.nativeapp.events.AvroSerde;
 import id.co.nativeapp.org.company.domain.OrgUnit;
 import id.co.nativeapp.org.company.dto.CreateBusinessCommand;
 import id.co.nativeapp.org.company.dto.CreateCompanyCommand;
+import id.co.nativeapp.org.company.dto.CreateOrgUnitCommand;
 import id.co.nativeapp.org.company.dto.OutletResponse;
 import id.co.nativeapp.org.company.messaging.OrgUnitCreatedSchema;
 import id.co.nativeapp.org.company.service.CompanyService;
@@ -97,6 +98,36 @@ class DefaultOutletSeedingTest extends PostgresRlsTestBase {
     assertThat(outlets).hasSize(2); // bootstrap outlet + the new BU's outlet
     assertThat(outlets.get(1).get("name")).isEqualTo("Second Biz");
     assertThat(outlets.get(1).get("parent_id")).isEqualTo(secondBu.getId());
+
+    // Four OrgUnitCreated events total: 2 BUs + 2 seeded outlets.
+    assertThat(orgUnitCreatedRows(companyId)).hasSize(4);
+  }
+
+  @Test
+  void aRootBusinessUnitCreatedViaTheOrgUnitEndpointSeedsItsOwnDefaultOutlet() throws Exception {
+    var result =
+        companyService.createCompany(
+            new CreateCompanyCommand("OrgUnitCo", "IDR", "id", "First Biz", "owner-o"));
+    UUID companyId = result.company().getId();
+
+    // The org-tree page creates top-level business units via POST /api/v1/org-units — that
+    // path must seed a default outlet too (ADR 0012), not just the CompanyWriter paths.
+    OrgUnit thirdBu =
+        TenantContext.callAs(
+            companyId.toString(),
+            "owner-o",
+            () ->
+                orgUnitService.create(
+                    new CreateOrgUnitCommand("Tree-Made Biz", "business_unit", null)));
+
+    List<Map<String, Object>> outlets =
+        adminQuery(
+            "SELECT id, name, parent_id FROM org_unit "
+                + "WHERE company_id = ? AND type = 'OUTLET' ORDER BY created_at",
+            companyId.toString());
+    assertThat(outlets).hasSize(2); // bootstrap outlet + the tree-made BU's outlet
+    assertThat(outlets.get(1).get("name")).isEqualTo("Tree-Made Biz");
+    assertThat(outlets.get(1).get("parent_id")).isEqualTo(thirdBu.getId());
 
     // Four OrgUnitCreated events total: 2 BUs + 2 seeded outlets.
     assertThat(orgUnitCreatedRows(companyId)).hasSize(4);
