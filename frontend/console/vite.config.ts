@@ -10,6 +10,7 @@ import { fileURLToPath, URL } from 'node:url'
 const ORG = process.env.VITE_ORG_URL ?? 'http://localhost:8082'
 const FINANCE = process.env.VITE_FINANCE_URL ?? 'http://localhost:8085'
 const RESTAURANT = process.env.VITE_RESTAURANT_URL ?? 'http://localhost:8086'
+const EMPLOYEE = process.env.VITE_EMPLOYEE_URL ?? 'http://localhost:8084'
 
 // When VITE_GATEWAY_URL is set (the oidc dev recipe), proxy ALL /api/** to the single gateway
 // origin (the bearer token flows through it, same as production). Otherwise fall back to the
@@ -29,6 +30,10 @@ const proxy: Record<string, ProxyOptions> = GATEWAY
       '/api/v1/statements': { target: FINANCE, changeOrigin: true },
       '/api/v1/closes': { target: FINANCE, changeOrigin: true },
       '/api/v1/groups': { target: FINANCE, changeOrigin: true },
+      // employee-service (HR + payroll)
+      '/api/v1/employees': { target: EMPLOYEE, changeOrigin: true },
+      '/api/v1/payroll-runs': { target: EMPLOYEE, changeOrigin: true },
+      '/api/v1/payroll-setup': { target: EMPLOYEE, changeOrigin: true },
       // restaurant-service (POS)
       '/api/v1/menu': { target: RESTAURANT, changeOrigin: true },
       '/api/v1/orders': { target: RESTAURANT, changeOrigin: true },
