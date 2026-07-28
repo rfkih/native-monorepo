@@ -19,10 +19,50 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api'
 import type { CompanySession } from '@/lib/session'
-import type { MenuItem, ModifierGroupResponse, ModifierOptionResponse } from '@/features/pos/api'
+import type {
+  CategoryResponse,
+  MenuItem,
+  ModifierGroupResponse,
+  ModifierOptionResponse,
+} from '@/features/pos/api'
 
-// Re-export shared types so MenuManagement.tsx can import from one place.
-export type { MenuItem, ModifierGroupResponse, ModifierOptionResponse }
+// Re-export shared types + the category query so MenuManagement.tsx imports from one place.
+export type { CategoryResponse, MenuItem, ModifierGroupResponse, ModifierOptionResponse }
+export { useCategories } from '@/features/pos/api'
+
+// ---------------------------------------------------------------------------
+// Menu categories — the picklist behind the item's category field.
+// POST   /api/v1/menu/categories                    — create a category
+// PATCH  /api/v1/menu/categories/{id}/deactivate    — hide a category
+// (list is useCategories, GET /api/v1/menu/categories?businessId=…)
+// ---------------------------------------------------------------------------
+
+const CATEGORIES_KEY = (s: CompanySession) => ['menu-categories', s.companyId, s.businessId]
+
+export function useCreateCategory(session: CompanySession) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ name, displayOrder }: { name: string; displayOrder: number }) =>
+      apiFetch<CategoryResponse>('/api/v1/menu/categories', {
+        method: 'POST',
+        tenant: tenantOf(session),
+        body: { businessId: session.businessId, name, displayOrder },
+      }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: CATEGORIES_KEY(session) }),
+  })
+}
+
+export function useDeactivateCategory(session: CompanySession) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<CategoryResponse>(`/api/v1/menu/categories/${id}/deactivate`, {
+        method: 'PATCH',
+        tenant: tenantOf(session),
+      }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: CATEGORIES_KEY(session) }),
+  })
+}
 
 // ---------------------------------------------------------------------------
 // Helper

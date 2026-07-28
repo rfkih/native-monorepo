@@ -48,6 +48,9 @@ import { OutletGate } from '@/components/OutletGate'
 import type { MenuItem, ModifierGroupResponse, ModifierOptionResponse } from '@/features/pos/api'
 import {
   useAdminModifierGroups,
+  useCategories,
+  useCreateCategory,
+  useDeactivateCategory,
   useCreateMenuItem,
   useUpdateMenuItem,
   useDeleteItem,
@@ -246,6 +249,187 @@ function ImagePicker({
 // Create item dialog
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Menu categories — a picklist (managed categories ∪ starter templates) that
+// replaces the old free-text field, plus a dedicated manager to build the list.
+// ---------------------------------------------------------------------------
+
+/** Starter category templates offered in the picker + the manager (i18n keys). */
+const CATEGORY_TEMPLATE_KEYS = [
+  'appetizers',
+  'mains',
+  'sides',
+  'desserts',
+  'beverages',
+  'coffeeTea',
+  'snacks',
+  'specials',
+] as const
+
+const SELECT_CLASS =
+  'h-[52px] w-full rounded-xl border border-line bg-surface px-4 text-[15px] text-ink transition-colors focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15'
+
+function dedupeCaseInsensitive(names: string[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const n of names) {
+    const trimmed = n.trim()
+    const key = trimmed.toLowerCase()
+    if (trimmed && !seen.has(key)) {
+      seen.add(key)
+      out.push(trimmed)
+    }
+  }
+  return out
+}
+
+/** A category dropdown: the business's managed categories first, then starter templates. */
+function CategorySelect({
+  session,
+  value,
+  onChange,
+  id,
+}: {
+  session: CompanySession
+  value: string
+  onChange: (value: string) => void
+  id: string
+}) {
+  const { t } = useTranslation()
+  const categories = useCategories(session)
+  const managed = (categories.data ?? []).filter((c) => c.active).map((c) => c.name)
+  const templates = CATEGORY_TEMPLATE_KEYS.map((k) => t(`menu.categoryTemplates.${k}`))
+  // Keep any current value that is neither managed nor a template (e.g. an item created before this
+  // change) so editing never silently drops it.
+  const options = dedupeCaseInsensitive([...(value ? [value] : []), ...managed, ...templates])
+  return (
+    <select
+      id={id}
+      className={SELECT_CLASS}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      required
+    >
+      <option value="" disabled>
+        {t('menu.createItem.categoryPlaceholder')}
+      </option>
+      {options.map((o) => (
+        <option key={o} value={o}>
+          {o}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+/** The "separate menu" for building the category list: add from templates or custom, and hide. */
+function CategoryManagerDialog({
+  session,
+  onClose,
+}: {
+  session: CompanySession
+  onClose: () => void
+}) {
+  const { t } = useTranslation()
+  const categories = useCategories(session)
+  const create = useCreateCategory(session)
+  const deactivate = useDeactivateCategory(session)
+  const [custom, setCustom] = useState('')
+
+  const managed = (categories.data ?? []).filter((c) => c.active)
+  const managedLower = new Set(managed.map((c) => c.name.toLowerCase()))
+  const suggestions = CATEGORY_TEMPLATE_KEYS.map((k) => t(`menu.categoryTemplates.${k}`)).filter(
+    (n) => !managedLower.has(n.toLowerCase()),
+  )
+
+  function add(name: string) {
+    const trimmed = name.trim()
+    if (!trimmed || managedLower.has(trimmed.toLowerCase()) || create.isPending) return
+    create.mutate({ name: trimmed, displayOrder: managed.length })
+  }
+
+  return (
+    <DialogOverlay onClose={onClose}>
+      <div className="space-y-4">
+        <h2 className="font-display text-lg font-semibold text-ink">{t('menu.categories.title')}</h2>
+        <p className="text-sm text-ink-3">{t('menu.categories.subtitle')}</p>
+
+        {managed.length === 0 ? (
+          <p className="text-sm text-ink-3">{t('menu.categories.empty')}</p>
+        ) : (
+          <ul className="space-y-1.5">
+            {managed.map((c) => (
+              <li
+                key={c.id}
+                className="flex items-center justify-between rounded-xl bg-surface px-3 py-2 text-sm"
+              >
+                <span className="text-ink">{c.name}</span>
+                <button
+                  type="button"
+                  onClick={() => deactivate.mutate(c.id)}
+                  className="text-xs text-ink-3 hover:text-loss"
+                >
+                  {t('menu.categories.hide')}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {suggestions.length > 0 ? (
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium text-ink-3">{t('menu.categories.templatesHint')}</p>
+            <div className="flex flex-wrap gap-2">
+              {suggestions.map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => add(name)}
+                  className="rounded-full border border-line px-3 py-1 text-xs text-ink-2 hover:border-emerald hover:text-emerald"
+                >
+                  + {name}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="flex gap-2">
+          <input
+            className={cn(SELECT_CLASS, 'flex-1')}
+            value={custom}
+            onChange={(e) => setCustom(e.target.value)}
+            placeholder={t('menu.categories.customPlaceholder')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                add(custom)
+                setCustom('')
+              }
+            }}
+          />
+          <Button
+            type="button"
+            onClick={() => {
+              add(custom)
+              setCustom('')
+            }}
+            disabled={custom.trim().length === 0}
+          >
+            {t('menu.categories.add')}
+          </Button>
+        </div>
+
+        <div className="flex justify-end">
+          <Button type="button" variant="outline" onClick={onClose}>
+            {t('common.close')}
+          </Button>
+        </div>
+      </div>
+    </DialogOverlay>
+  )
+}
+
 function CreateItemDialog({
   session,
   onClose,
@@ -313,13 +497,11 @@ function CreateItemDialog({
         </Field>
 
         <Field label={t('menu.createItem.categoryLabel')} htmlFor="menu-item-category">
-          <TextInput
+          <CategorySelect
+            session={session}
             id="menu-item-category"
-            type="text"
             value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            placeholder={t('menu.createItem.categoryPlaceholder')}
-            required
+            onChange={setCategory}
           />
         </Field>
 
@@ -442,13 +624,11 @@ function EditItemDialog({
         </Field>
 
         <Field label={t('menu.createItem.categoryLabel')} htmlFor="edit-item-category">
-          <TextInput
+          <CategorySelect
+            session={session}
             id="edit-item-category"
-            type="text"
             value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            placeholder={t('menu.createItem.categoryPlaceholder')}
-            required
+            onChange={setCategory}
           />
         </Field>
 
@@ -2036,6 +2216,7 @@ function MenuManagementInner({ session }: { session: CompanySession }) {
 
   const menuQuery = useMenu(session)
   const [showCreateItem, setShowCreateItem] = useState(false)
+  const [showManageCategories, setShowManageCategories] = useState(false)
   const [managingOptionsFor, setManagingOptionsFor] = useState<MenuItem | null>(null)
 
   const items = menuQuery.data ?? []
@@ -2071,6 +2252,15 @@ function MenuManagementInner({ session }: { session: CompanySession }) {
 
         {/* Outlet picker — tracks which outlet menu edits and KDS tickets belong to */}
         <OutletPicker />
+
+        <Button
+          variant="outline"
+          onClick={() => setShowManageCategories(true)}
+          className="shrink-0"
+        >
+          <span className="hidden sm:inline">{t('menu.categories.manage')}</span>
+          <span className="sm:hidden">{t('menu.categories.manageShort')}</span>
+        </Button>
 
         <Button onClick={() => setShowCreateItem(true)} className="shrink-0">
           <Plus className="size-4" />
@@ -2136,6 +2326,13 @@ function MenuManagementInner({ session }: { session: CompanySession }) {
         <CreateItemDialog
           session={session}
           onClose={() => setShowCreateItem(false)}
+        />
+      ) : null}
+
+      {showManageCategories ? (
+        <CategoryManagerDialog
+          session={session}
+          onClose={() => setShowManageCategories(false)}
         />
       ) : null}
 
