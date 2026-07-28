@@ -16,6 +16,7 @@ import { createCompany, type CompanyResponse } from './api'
 
 const CURRENCIES = ['IDR', 'USD'] as const
 const LANGS = ['en', 'id'] as const
+const VERTICALS = ['restaurant', 'carwash', 'barbershop'] as const
 
 export function OnboardingWizard() {
   const { t, i18n } = useTranslation()
@@ -29,6 +30,7 @@ export function OnboardingWizard() {
     i18n.language === 'id' ? 'id' : 'en',
   )
   const [bizName, setBizName] = useState('')
+  const [vertical, setVertical] = useState<string>('restaurant')
   const [created, setCreated] = useState<CompanyResponse | null>(null)
 
   const mutation = useMutation({
@@ -38,7 +40,7 @@ export function OnboardingWizard() {
           name: name.trim(),
           baseCurrency,
           defaultLanguage,
-          firstBusiness: { name: bizName.trim() },
+          firstBusiness: { name: bizName.trim(), vertical },
         },
         DEV_ACTOR,
       ),
@@ -146,6 +148,18 @@ export function OnboardingWizard() {
                   placeholder={t('onboarding.firstBusinessNamePlaceholder')}
                 />
               </Field>
+              <Field label={t('onboarding.vertical')} hint={t('onboarding.verticalHint')}>
+                <ChoiceCards
+                  name="vertical"
+                  columns={1}
+                  value={vertical}
+                  onChange={setVertical}
+                  options={VERTICALS.map((v) => ({
+                    value: v,
+                    title: t(`vertical.${v}` as Parameters<typeof t>[0]),
+                  }))}
+                />
+              </Field>
             </div>
           )}
 
@@ -166,6 +180,10 @@ export function OnboardingWizard() {
                   fixed: true,
                 },
                 { label: t('onboarding.firstBusinessName'), value: bizName },
+                {
+                  label: t('onboarding.vertical'),
+                  value: t(`vertical.${vertical}` as Parameters<typeof t>[0]),
+                },
               ]}
             />
           )}

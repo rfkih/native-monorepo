@@ -4,7 +4,7 @@ export interface CreateCompanyRequest {
   name: string
   baseCurrency: string
   defaultLanguage: string
-  firstBusiness: { name: string }
+  firstBusiness: { name: string; vertical: string }
 }
 
 export interface CompanyResponse {

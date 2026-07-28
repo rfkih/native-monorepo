@@ -37,6 +37,29 @@ export function OrgUnitTypeBadge({ type }: { type: OrgUnitType }) {
   )
 }
 
+/**
+ * Vertical badge pill — renders nothing for a null vertical (outlet/team nodes inherit their
+ * business unit's). Restaurant gets the brand tone; other verticals the info tint.
+ */
+export function VerticalBadge({ vertical }: { vertical: string | null }) {
+  const { t } = useTranslation()
+  if (!vertical) return null
+  const classes =
+    vertical === 'restaurant'
+      ? 'bg-emerald-tint text-emerald-2'
+      : 'bg-tint-info text-info'
+  return (
+    <span
+      className={cn(
+        'rounded-full px-2.5 py-0.5 text-[11px] font-semibold',
+        classes,
+      )}
+    >
+      {t(`vertical.${vertical}` as Parameters<typeof t>[0], { defaultValue: vertical })}
+    </span>
+  )
+}
+
 /** Simple modal overlay — closes on backdrop click or Escape. */
 export function DialogOverlay({
   children,
@@ -91,12 +114,22 @@ export function AddUnitDialog({
         ? ['TEAM']
         : []
   const [type, setType] = useState<OrgUnitType>(types[0] ?? 'OUTLET')
+  // Only a BUSINESS_UNIT carries a vertical (server-required there, rejected elsewhere).
+  const [vertical, setVertical] = useState<string>('restaurant')
 
   const parentName = parent?.name ?? (parentId ?? t('org.addDialog.noParent'))
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    mutation.mutate({ name: name.trim(), type, parentId }, { onSuccess: () => { onClose() } })
+    mutation.mutate(
+      {
+        name: name.trim(),
+        type,
+        parentId,
+        ...(type === 'BUSINESS_UNIT' ? { vertical } : {}),
+      },
+      { onSuccess: () => { onClose() } },
+    )
   }
 
   return (
@@ -141,6 +174,23 @@ export function AddUnitDialog({
             </select>
           )}
         </Field>
+
+        {type === 'BUSINESS_UNIT' ? (
+          <Field label={t('org.addDialog.verticalLabel')} htmlFor="add-vertical">
+            <select
+              id="add-vertical"
+              value={vertical}
+              onChange={(e) => setVertical(e.target.value)}
+              className="w-full rounded-xl border border-line bg-surface px-3.5 py-3 text-sm text-ink focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15"
+            >
+              {(['restaurant', 'carwash', 'barbershop'] as const).map((v) => (
+                <option key={v} value={v}>
+                  {t(`vertical.${v}` as Parameters<typeof t>[0])}
+                </option>
+              ))}
+            </select>
+          </Field>
+        ) : null}
 
         {mutation.isError ? (
           <p className="text-sm text-loss">{t('org.addDialog.errorTitle')}</p>

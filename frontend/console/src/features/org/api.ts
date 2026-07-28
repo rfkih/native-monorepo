@@ -5,9 +5,17 @@ import { apiFetch } from '@/lib/api'
 // Outlet shape returned by the cashier-accessible endpoint
 // ---------------------------------------------------------------------------
 
+/** The whitelisted business verticals (server-authoritative; UI copy of the list). */
+export type Vertical = 'restaurant' | 'carwash' | 'barbershop'
+
 export interface OutletSummary {
   id: string
   name: string
+  /**
+   * The parent business unit's vertical (an outlet inherits it). Optional/nullable for wire
+   * compat; consumers FAIL OPEN to 'restaurant' on null (never brick a POS on cache staleness).
+   */
+  vertical?: string | null
 }
 
 /**
@@ -39,6 +47,8 @@ export interface OrgUnit {
   id: string
   name: string
   type: OrgUnitType
+  /** Lowercase vertical key — non-null only for a BUSINESS_UNIT. */
+  vertical: string | null
   parentId: string | null
   active: boolean
 }
@@ -48,6 +58,7 @@ export interface OrgUnitResponse {
   id: string
   name: string
   type: OrgUnitType
+  vertical: string | null
   parentId: string | null
   active: boolean
 }
@@ -58,6 +69,8 @@ export interface CreateOrgUnitBody {
   /** Must match a valid OrgUnitType string; validated by the domain. */
   type: string
   parentId: string | null
+  /** REQUIRED for a business_unit, omitted otherwise (the server rejects it on outlet/team). */
+  vertical?: string
 }
 
 /**

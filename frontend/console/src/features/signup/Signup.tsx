@@ -30,6 +30,7 @@ import { useSignup, type SignupRequest, type SignupResponse } from './api'
 // same whitelists authoritatively (SignupRequest @Pattern) — these lists are the UI copy of them.
 const CURRENCIES = ['IDR', 'USD'] as const
 const LANGS = ['en', 'id'] as const
+const VERTICALS = ['restaurant', 'carwash', 'barbershop'] as const
 
 const PASSWORD_MIN_LENGTH = 8
 
@@ -361,6 +362,7 @@ export function Signup() {
     i18n.language === 'id' ? 'id' : 'en',
   )
   const [firstBusinessName, setFirstBusinessName] = useState('')
+  const [vertical, setVertical] = useState<string>('restaurant')
   const [ownerEmail, setOwnerEmail] = useState('')
   const [ownerPassword, setOwnerPassword] = useState('')
   const [ownerPasswordConfirm, setOwnerPasswordConfirm] = useState('')
@@ -422,6 +424,7 @@ export function Signup() {
       baseCurrency,
       defaultLanguage,
       firstBusinessName: firstBusinessName.trim(),
+      vertical,
       ownerEmail: ownerEmail.trim(),
       ownerPassword,
       termsAccepted,
@@ -571,6 +574,18 @@ export function Signup() {
                       placeholder={t('signup.firstBusinessNamePlaceholder')}
                     />
                   </Field>
+                  <Field label={t('signup.vertical')} hint={t('signup.verticalHint')}>
+                    <ChoiceCards
+                      name="vertical"
+                      columns={1}
+                      value={vertical}
+                      onChange={setVertical}
+                      options={VERTICALS.map((v) => ({
+                        value: v,
+                        title: t(`vertical.${v}` as Parameters<typeof t>[0]),
+                      }))}
+                    />
+                  </Field>
                 </div>
               )}
 
@@ -713,6 +728,11 @@ export function Signup() {
                     {
                       label: t('signup.firstBusinessName'),
                       value: firstBusinessName,
+                      step: STEP_COMPANY,
+                    },
+                    {
+                      label: t('signup.vertical'),
+                      value: t(`vertical.${vertical}` as Parameters<typeof t>[0]),
                       step: STEP_COMPANY,
                     },
                     {
