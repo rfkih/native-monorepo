@@ -5,6 +5,7 @@ import java.net.URI;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -101,6 +102,39 @@ public class KeycloakAdminClient {
             + props.getRealm()
             + "/users?email="
             + encode(email)
+            + "&exact=true";
+    try {
+      ResponseEntity<List> response =
+          restClient
+              .get()
+              .uri(URI.create(url))
+              .header("Authorization", "Bearer " + token)
+              .retrieve()
+              .toEntity(List.class);
+      List<?> users = response.getBody();
+      return users != null && !users.isEmpty();
+    } catch (RestClientResponseException e) {
+      throw new KeycloakAdminException(
+          "Keycloak user lookup failed with status " + e.getStatusCode(), e);
+    } catch (RestClientException e) {
+      throw new KeycloakAdminException("Keycloak user lookup failed — connection error", e);
+    }
+  }
+
+  /**
+   * Returns {@code true} if a Keycloak user with the given username already exists in the realm
+   * (exact match on the username). The login identifier must be unique.
+   *
+   * @throws KeycloakAdminException if the Admin API is unreachable or returns an unexpected error
+   */
+  public boolean usernameExists(String username) {
+    String token = acquireToken();
+    String url =
+        props.getBaseUrl()
+            + "/admin/realms/"
+            + props.getRealm()
+            + "/users?username="
+            + encode(username)
             + "&exact=true";
     try {
       ResponseEntity<List> response =
@@ -357,15 +391,17 @@ public class KeycloakAdminClient {
    *
    * <p><strong>The generated password is NEVER logged.</strong>
    *
-   * @param email the new user's email (also used as username)
+   * @param username the login identifier for the new user
+   * @param email the new user's email, or {@code null}/blank if none (email is OPTIONAL)
    * @param companyId the tenant company id to set as the {@code company_id} user attribute
    * @param roles the realm roles to assign (validated by the caller; assigned sequentially)
    * @return the {@link InviteResult} containing the new Keycloak user id and the one-time temporary
    *     password — NEVER log or store the password
-   * @throws EmailAlreadyExistsException if a Keycloak account already exists for this email
+   * @throws UsernameAlreadyExistsException if a Keycloak account already exists for this username
    * @throws KeycloakAdminException if the Admin API is unreachable or returns an unexpected error
    */
-  public InviteResult createInvitedUser(String email, String companyId, List<String> roles) {
+  public InviteResult createInvitedUser(
+      String username, String email, String companyId, List<String> roles) {
     // Generate a secure temporary password. It is never assigned to any variable that touches a
     // log statement — the char[] is converted to String and stored only in the returned record.
     String tempPassword = generateTemporaryPassword();
@@ -373,20 +409,19 @@ public class KeycloakAdminClient {
     String token = acquireToken();
     String url = props.getBaseUrl() + "/admin/realms/" + props.getRealm() + "/users";
 
-    Map<String, Object> body =
-        Map.of(
-            "username",
-            email,
-            "email",
-            email,
-            "enabled",
-            true,
-            "attributes",
-            Map.of("company_id", List.of(companyId)),
-            "requiredActions",
-            List.of("UPDATE_PASSWORD"),
-            "credentials",
-            List.of(Map.of("type", "password", "value", tempPassword, "temporary", true)));
+    // The login is keyed by username; email is OPTIONAL — only sent to Keycloak when provided (a
+    // null/blank email would otherwise create an empty-string email that collides across users).
+    Map<String, Object> body = new HashMap<>();
+    body.put("username", username);
+    if (email != null && !email.isBlank()) {
+      body.put("email", email);
+    }
+    body.put("enabled", true);
+    body.put("attributes", Map.of("company_id", List.of(companyId)));
+    body.put("requiredActions", List.of("UPDATE_PASSWORD"));
+    body.put(
+        "credentials",
+        List.of(Map.of("type", "password", "value", tempPassword, "temporary", true)));
 
     try {
       ResponseEntity<Void> response =
@@ -415,7 +450,9 @@ public class KeycloakAdminClient {
       return new InviteResult(userId, tempPassword);
     } catch (RestClientResponseException e) {
       if (e.getStatusCode() == HttpStatus.CONFLICT) {
-        throw new EmailAlreadyExistsException(email);
+        // The login identifier is the username; a create conflict is a duplicate username (the
+        // optional email is pre-checked separately in UserService).
+        throw new UsernameAlreadyExistsException(username);
       }
       throw new KeycloakAdminException(
           "Keycloak invited-user creation failed with status " + e.getStatusCode(), e);

@@ -97,17 +97,22 @@ public class UserService {
    * Invites a new teammate into the caller's company by creating a Keycloak user with a
    * server-generated temporary password and the {@code UPDATE_PASSWORD} required action.
    *
-   * <p>The company id on the new user comes from {@link TenantContext#require()} (rule 5). A
-   * duplicate email is rejected with {@link EmailAlreadyExistsException} (409). An invalid role is
-   * rejected with {@link InvalidRoleException} (400).
+   * <p>The company id on the new user comes from {@link TenantContext#require()} (rule 5). The
+   * login is keyed by {@code username}; a duplicate username is rejected with {@link
+   * UsernameAlreadyExistsException} (409). {@code email} is OPTIONAL (some employees have none) —
+   * when present it is stored as contact metadata and a duplicate email is rejected with {@link
+   * EmailAlreadyExistsException} (409). An invalid role is rejected with {@link
+   * InvalidRoleException} (400).
    *
-   * @param email the invitee's email — NEVER logged here
+   * @param username the login identifier — NEVER logged here
+   * @param email the invitee's email, or {@code null}/blank if none — NEVER logged here
    * @param role the primary role
    * @param additionalRoles further roles for the same login (e.g. an employee who can also run the
    *     POS gets {@code employee} + {@code cashier}); null/empty for just the primary
    * @return the invite response containing the temporary password (returned ONCE — not stored)
    */
-  public InviteUserResponse inviteUser(String email, String role, List<String> additionalRoles) {
+  public InviteUserResponse inviteUser(
+      String username, String email, String role, List<String> additionalRoles) {
     // Primary first, then de-duplicated extras — every role passes the same whitelist.
     List<String> roles = new ArrayList<>();
     roles.add(role);
@@ -122,21 +127,26 @@ public class UserService {
 
     String companyId = TenantContext.require().companyId();
 
-    // Pre-check the email before creating the user to surface the 409 cleanly.
-    if (keycloak.usernameOrEmailExists(email)) {
-      throw new EmailAlreadyExistsException(email);
+    // Pre-check the login identifier (and the email, when given) to surface the 409 cleanly.
+    if (keycloak.usernameExists(username)) {
+      throw new UsernameAlreadyExistsException(username);
+    }
+    String email0 = (email == null || email.isBlank()) ? null : email.strip();
+    if (email0 != null && keycloak.usernameOrEmailExists(email0)) {
+      throw new EmailAlreadyExistsException(email0);
     }
 
     // createInvitedUser returns the Keycloak userId AND the generated temporary password.
     // The password is NEVER logged — the InviteResult carries it only to pass it to the response.
-    InviteResult result = keycloak.createInvitedUser(email, companyId, roles);
+    InviteResult result = keycloak.createInvitedUser(username, email0, companyId, roles);
 
     log.info(
         "Invited user created: userId={}, companyId={}, roles={}",
         result.userId(),
         companyId,
         roles);
-    return new InviteUserResponse(result.userId(), email, role, roles, result.temporaryPassword());
+    return new InviteUserResponse(
+        result.userId(), username, email0, role, roles, result.temporaryPassword());
   }
 
   // ---------------------------------------------------------------------------

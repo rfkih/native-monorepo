@@ -2,6 +2,7 @@ package id.co.nativeapp.org.user.config;
 
 import id.co.nativeapp.org.user.service.EmailAlreadyExistsException;
 import id.co.nativeapp.org.user.service.KeycloakAdminException;
+import id.co.nativeapp.org.user.service.UsernameAlreadyExistsException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
 import org.slf4j.Logger;
@@ -49,6 +50,22 @@ public class SignupExceptionAdvice {
     problem.setType(URI.create(TYPE_BASE + "email-already-exists"));
     problem.setTitle("Conflict");
     problem.setDetail("An account with this email address already exists.");
+    problem.setInstance(URI.create(request.getRequestURI()));
+    addTraceId(problem);
+    return problem;
+  }
+
+  /**
+   * An invite whose {@code username} already has a Keycloak account → {@code 409 Conflict}. The
+   * username itself is NOT echoed in the detail (credential hygiene — HR-6).
+   */
+  @ExceptionHandler(UsernameAlreadyExistsException.class)
+  public ProblemDetail handleUsernameAlreadyExists(
+      UsernameAlreadyExistsException ex, HttpServletRequest request) {
+    ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+    problem.setType(URI.create(TYPE_BASE + "username-already-exists"));
+    problem.setTitle("Conflict");
+    problem.setDetail("An account with this username already exists.");
     problem.setInstance(URI.create(request.getRequestURI()));
     addTraceId(problem);
     return problem;

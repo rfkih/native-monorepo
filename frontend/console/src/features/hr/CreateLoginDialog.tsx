@@ -2,8 +2,10 @@
  * CreateLoginDialog — mint a console login for an HR employee. Orchestrates two calls: the
  * org-service invite (role `employee`, optionally + `cashier` for POS capability; returns the
  * ONE-TIME temporary password) and the employee-service login-link (Keycloak sub → employee).
- * If the link fails after the invite succeeded, the dialog stays open in a retry-link state —
- * the invite is not repeatable (the email now exists), but the link is idempotent.
+ * The login is keyed by a username (defaulted from the employee's name); email is OPTIONAL, since
+ * some employees have no email address. If the link fails after the invite succeeded, the dialog
+ * stays open in a retry-link state — the invite is not repeatable (the username now exists), but
+ * the link is idempotent.
  *
  * The temporary password is displayed ONCE, never cached, never logged.
  */
@@ -28,6 +30,13 @@ export function CreateLoginDialog({
   onClose: () => void
 }) {
   const { t } = useTranslation()
+  // A sensible default username derived from the employee's name (owner can edit). Some employees
+  // have no email, so the login is keyed by this username; email is optional contact metadata.
+  const suggestedUsername = employee.fullName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '.')
+    .replace(/(^\.|\.$)/g, '')
+  const [username, setUsername] = useState(suggestedUsername)
   const [email, setEmail] = useState('')
   const [posCapable, setPosCapable] = useState(false)
   const [invite, setInvite] = useState<InviteResponse | null>(null)
@@ -52,7 +61,8 @@ export function CreateLoginDialog({
     setBusy(true)
     try {
       const result = await inviteMember.mutateAsync({
-        email: email.trim(),
+        username: username.trim(),
+        email: email.trim() || undefined,
         role: 'employee',
         additionalRoles: posCapable ? ['cashier'] : [],
       })
@@ -135,6 +145,20 @@ export function CreateLoginDialog({
         </h2>
 
         <Field
+          label={t('hr.createLogin.username')}
+          htmlFor="login-username"
+          hint={t('hr.createLogin.usernameHint')}
+        >
+          <TextInput
+            id="login-username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            required
+            autoFocus
+          />
+        </Field>
+
+        <Field
           label={t('hr.createLogin.email')}
           htmlFor="login-email"
           hint={t('hr.createLogin.emailHint')}
@@ -144,8 +168,6 @@ export function CreateLoginDialog({
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            required
-            autoFocus
           />
         </Field>
 
@@ -169,7 +191,7 @@ export function CreateLoginDialog({
         {inviteMember.isError ? (
           <p className="text-sm text-loss">
             {(inviteMember.error as { status?: number } | null)?.status === 409
-              ? t('hr.createLogin.emailTaken')
+              ? t('hr.createLogin.usernameTaken')
               : t('hr.assign.error')}
           </p>
         ) : null}
@@ -178,7 +200,7 @@ export function CreateLoginDialog({
           <Button type="button" variant="outline" onClick={onClose}>
             {t('common.cancel')}
           </Button>
-          <Button type="submit" disabled={busy || !email.trim()}>
+          <Button type="submit" disabled={busy || username.trim().length < 3}>
             {busy ? t('hr.createLogin.creating') : t('hr.createLogin.submit')}
           </Button>
         </div>

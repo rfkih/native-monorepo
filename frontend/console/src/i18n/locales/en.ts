@@ -542,13 +542,17 @@ export const en = {
     },
     createLogin: {
       title: 'Create login — {{name}}',
-      email: 'Email address',
-      emailHint: 'Becomes the username. The employee signs in with it and a one-time password.',
+      username: 'Username',
+      usernameHint:
+        'The employee signs in with this and a one-time password. Letters, numbers and dots — no spaces.',
+      email: 'Email address (optional)',
+      emailHint: 'Optional — for password resets and notifications. Leave blank if they have none.',
       posCheckbox: 'Can run the POS',
       posCheckboxHint:
         'Also grants the cashier role, so this login can open the POS and ring sales — which is what feeds their own-sales commission.',
       submit: 'Create login',
       creating: 'Creating…',
+      usernameTaken: 'A login with that username already exists.',
       emailTaken: 'A login with that email already exists.',
       doneTitle: 'Login created for {{name}}',
       doneBody:

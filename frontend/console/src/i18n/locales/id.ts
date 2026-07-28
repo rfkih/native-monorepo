@@ -538,13 +538,18 @@ export const id = {
     },
     createLogin: {
       title: 'Buat login — {{name}}',
-      email: 'Alamat email',
-      emailHint: 'Menjadi nama pengguna. Karyawan masuk dengannya plus kata sandi sekali pakai.',
+      username: 'Nama pengguna',
+      usernameHint:
+        'Karyawan masuk dengan ini plus kata sandi sekali pakai. Huruf, angka, dan titik — tanpa spasi.',
+      email: 'Alamat email (opsional)',
+      emailHint:
+        'Opsional — untuk reset kata sandi dan notifikasi. Kosongkan jika tidak punya email.',
       posCheckbox: 'Bisa menjalankan POS',
       posCheckboxHint:
         'Juga memberi peran kasir, sehingga login ini bisa membuka POS dan mencatat penjualan — sumber komisi penjualan pribadinya.',
       submit: 'Buat login',
       creating: 'Membuat…',
+      usernameTaken: 'Login dengan nama pengguna itu sudah ada.',
       emailTaken: 'Login dengan email itu sudah ada.',
       doneTitle: 'Login dibuat untuk {{name}}',
       doneBody:

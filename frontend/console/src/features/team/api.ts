@@ -21,15 +21,19 @@ export interface TeamMember {
 /** POST /api/v1/users response — contains a one-time temporaryPassword. */
 export interface InviteResponse {
   id: string
-  email: string
+  username: string
+  /** Optional — null when the login was created without an email. */
+  email: string | null
   role: string
   roles: string[]
   temporaryPassword: string
 }
 
-/** POST /api/v1/users body. */
+/** POST /api/v1/users body. The login is keyed by username; email is optional. */
 export interface InviteMemberBody {
-  email: string
+  username: string
+  /** Optional contact email — omit for a login with no email address. */
+  email?: string
   role: string
   /** Extra roles for the same login (e.g. an employee who can also run the POS adds cashier). */
   additionalRoles?: string[]

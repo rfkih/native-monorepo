@@ -166,7 +166,7 @@ class UserManagementAcceptanceTest {
             .contentType(MediaType.APPLICATION_JSON)
             .body(
                 """
-                {"email": "%s", "role": "cashier"}
+                {"username": "%1$s", "email": "%1$s", "role": "cashier"}
                 """
                     .formatted(email))
             .retrieve()
@@ -185,6 +185,35 @@ class UserManagementAcceptanceTest {
   }
 
   @Test
+  void inviteWithAUsernameAndNoEmailSucceeds() throws Exception {
+    // Some employees have no email address — the login is keyed by username, email is optional.
+    String username = "no.email." + java.util.UUID.randomUUID().toString().substring(0, 8);
+    String tokenA = tokenForOwnerA();
+
+    String body =
+        appClient()
+            .post()
+            .uri("/api/v1/users")
+            .header(HttpHeaders.AUTHORIZATION, bearer(tokenA))
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(
+                """
+                {"username": "%s", "role": "employee"}
+                """
+                    .formatted(username))
+            .retrieve()
+            .body(String.class);
+
+    JsonNode node = JSON.readValue(body, JsonNode.class);
+    assertThat(node.get("id").asString()).isNotBlank();
+    assertThat(node.get("username").asString()).isEqualTo(username);
+    // No email provided → the response carries no email (absent or explicit null).
+    assertThat(node.hasNonNull("email")).isFalse();
+    assertThat(node.get("role").asString()).isEqualTo("employee");
+    assertThat(node.get("temporaryPassword").asString()).isNotBlank();
+  }
+
+  @Test
   void inviteWithDuplicateEmailReturns409() throws Exception {
     String email = uniqueEmail();
     String tokenA = tokenForOwnerA();
@@ -197,7 +226,7 @@ class UserManagementAcceptanceTest {
         .contentType(MediaType.APPLICATION_JSON)
         .body(
             """
-            {"email": "%s", "role": "manager"}
+            {"username": "%1$s", "email": "%1$s", "role": "manager"}
             """
                 .formatted(email))
         .retrieve()
@@ -213,7 +242,7 @@ class UserManagementAcceptanceTest {
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(
                         """
-                        {"email": "%s", "role": "cashier"}
+                        {"username": "%1$s", "email": "%1$s", "role": "cashier"}
                         """
                             .formatted(email))
                     .retrieve()
@@ -242,7 +271,7 @@ class UserManagementAcceptanceTest {
         .contentType(MediaType.APPLICATION_JSON)
         .body(
             """
-            {"email": "%s", "role": "cashier"}
+            {"username": "%1$s", "email": "%1$s", "role": "cashier"}
             """
                 .formatted(emailA))
         .retrieve()
@@ -368,7 +397,7 @@ class UserManagementAcceptanceTest {
             .contentType(MediaType.APPLICATION_JSON)
             .body(
                 """
-                {"email": "%s", "role": "employee"}
+                {"username": "%1$s", "email": "%1$s", "role": "employee"}
                 """
                     .formatted(email))
             .retrieve()
@@ -392,7 +421,7 @@ class UserManagementAcceptanceTest {
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(
                         """
-                        {"email": "%s", "role": "superadmin"}
+                        {"username": "%1$s", "email": "%1$s", "role": "superadmin"}
                         """
                             .formatted(uniqueEmail()))
                     .retrieve()
@@ -420,7 +449,7 @@ class UserManagementAcceptanceTest {
             .contentType(MediaType.APPLICATION_JSON)
             .body(
                 """
-                {"email": "%s", "role": "cashier"}
+                {"username": "%1$s", "email": "%1$s", "role": "cashier"}
                 """
                     .formatted(email))
             .retrieve()
@@ -543,7 +572,7 @@ class UserManagementAcceptanceTest {
             .contentType(MediaType.APPLICATION_JSON)
             .body(
                 """
-                {"email": "%s", "role": "cashier"}
+                {"username": "%1$s", "email": "%1$s", "role": "cashier"}
                 """
                     .formatted(email))
             .retrieve()
@@ -579,7 +608,7 @@ class UserManagementAcceptanceTest {
             .contentType(MediaType.APPLICATION_JSON)
             .body(
                 """
-                {"email": "%s", "role": "cashier"}
+                {"username": "%1$s", "email": "%1$s", "role": "cashier"}
                 """
                     .formatted(email))
             .retrieve()

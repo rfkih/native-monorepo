@@ -11,10 +11,16 @@ import java.util.List;
  * explicit so clients are not tempted to cache it. Do NOT log responses containing this field.
  *
  * @param id the Keycloak user UUID of the newly created user
- * @param email the invitee's email address
+ * @param username the login identifier
+ * @param email the invitee's email address, or {@code null} if none was provided
  * @param role the primary assigned business role
  * @param roles every assigned business role (primary first)
  * @param temporaryPassword the one-time temporary password — NEVER log or cache this
  */
 public record InviteUserResponse(
-    String id, String email, String role, List<String> roles, String temporaryPassword) {}
+    String id,
+    String username,
+    String email,
+    String role,
+    List<String> roles,
+    String temporaryPassword) {}

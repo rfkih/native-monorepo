@@ -97,7 +97,8 @@ public class UserController {
   public ResponseEntity<InviteUserResponse> inviteUser(
       @Valid @RequestBody InviteUserRequest request) {
     InviteUserResponse body =
-        userService.inviteUser(request.email(), request.role(), request.additionalRoles());
+        userService.inviteUser(
+            request.username(), request.email(), request.role(), request.additionalRoles());
     return ResponseEntity.created(URI.create("/api/v1/users/" + body.id())).body(body);
   }
 

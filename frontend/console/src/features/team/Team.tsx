@@ -152,7 +152,8 @@ function InviteDialog({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     mutation.mutate(
-      { email: email.trim(), role },
+      // A teammate invite is email-based: the email doubles as the login username.
+      { username: email.trim(), email: email.trim(), role },
       {
         onSuccess: (res) => {
           if (res) setResult(res)
