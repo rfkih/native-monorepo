@@ -307,8 +307,6 @@ export function OrgUnitDetail() {
       ) : null}
       {tab === 'payroll' ? (
         <PayrollTab
-          unit={unit}
-          childOutlets={childOutlets}
           units={units}
           companyId={company.companyId}
           actor={company.actor}

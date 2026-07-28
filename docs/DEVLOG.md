@@ -89,7 +89,22 @@ cascade-deactivate + reactivation.)
   employees' ids and lists all company runs; re-run = an ADDITIONAL posting (no reversal event
   yet — UI warns, follow-up); salary reads masked-only (authorized-HR read deferred); HR
   employees separate from Keycloak login users (People tab relabeled "App access"). V6 =
-  read-path indexes only.
+  read-path indexes only. Adversarial fresh-context review: **FAIL → fixed same day.** The
+  CRITICAL: the console ran payroll per-unit, but finance treats (period, run_seq) as
+  **company-wide supersession** — a higher run REVERSES every earlier ACTIVE run's labor postings,
+  so a second unit's run would erase the first unit's labor cost off the ledger. Fix: **a console
+  payroll run is always COMPANY-WIDE** (every payable employee regardless of which unit tab; the
+  gate checks every active BU seal), and the re-run copy now states the supersession truthfully
+  (the MAJOR was that it claimed the exact opposite). Also fixed: same-day salary-replace guard
+  (was a dead-end 400), FAILED-run rows labeled in history, ILIKE wildcard escaping on the name
+  search. Follow-ups noted: a binding test for the frontend ISO-exponent mirror of Money;
+  the k=1 single-employee outlet allocation residual stays as documented/signed-off. Separately
+  hardened all user input (server whitelists: NIK exactly 16 digits, bank 6–32 digits, PTKP
+  TK0–3/K0–3, employment-type enum, role ≤128, name ≤255 — malformed PII is rejected BEFORE
+  encryption; console mirrors them inline and every disabled Save now says WHY, incl. the
+  unit-not-synced-to-HR state). Dev gotcha: employee-service's `org_unit_projection` only
+  hydrates from events — a reset employee DB misses org units whose events left Kafka; dev
+  backfill = COPY org_unit rows across (superuser bypasses RLS).
 - **Business-unit verticals — restaurant | carwash | barbershop (2026-07-28)** — `org_unit.vertical`
   (org V6: nullable VARCHAR(32); backfill existing BUs → `restaurant`. **The V6 backfill was
   silently swallowed by FORCE RLS** — Flyway runs as the table owner with no tenant GUC, the

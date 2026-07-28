@@ -1,9 +1,15 @@
 /**
  * Payroll tab of the org-unit hub. The statutory rates behind every run are ILLUSTRATIVE
  * PLACEHOLDERS until OFFICIAL rows are seeded — a persistent amber banner says so whenever the
- * provenance is not OFFICIAL (never hide it). A "run" is COMPANY-scoped (period + run_seq): running
- * from a unit tab means running for the unit's employees; a re-run posts an ADDITIONAL run to the
- * books (no reversal), so the re-run copy warns. Salary is PII — payslip lines render masked.
+ * provenance is not OFFICIAL (never hide it).
+ *
+ * A payroll run is COMPANY-WIDE, never per-unit: finance treats (period, run_seq) as a
+ * supersession chain — a higher run_seq REVERSES every earlier ACTIVE run's labor postings for
+ * the period and replaces them. A partial (per-unit) run would therefore erase the other units'
+ * labor cost off the ledger, so the Run button here always includes EVERY payable employee of the
+ * company regardless of which unit's tab it sits on (review-critical; do not "optimize" back to
+ * unit scope). Re-running is the correction flow: it supersedes the period's earlier runs.
+ * Salary is PII — payslip lines render masked.
  */
 
 import { useMemo, useState } from 'react'
@@ -32,16 +38,12 @@ import {
 } from './api'
 
 export function PayrollTab({
-  unit,
-  childOutlets,
   units,
   companyId,
   actor,
   baseCurrency,
   locale,
 }: {
-  unit: OrgUnit
-  childOutlets: OrgUnit[]
   units: OrgUnit[]
   companyId: string
   actor: string
@@ -56,16 +58,12 @@ export function PayrollTab({
   const setup = usePayrollSetup({ companyId, actor, enabled: true })
   const seed = useSeedIllustrative({ companyId, actor })
 
-  const unitIds = useMemo(
-    () =>
-      unit.type === 'BUSINESS_UNIT' ? [unit.id, ...childOutlets.map((o) => o.id)] : [unit.id],
-    [unit, childOutlets],
-  )
-  const employeesQuery = useEmployees({ companyId, actor, orgUnitIds: unitIds, enabled: true })
+  // COMPANY-WIDE scope (see the file javadoc: a partial run would supersede-and-erase the other
+  // units' labor cost in finance). ACTIVE employees only; only those WITH compensation are payable
+  // (an employee without a covering package would silently compute a zero base).
+  const employeesQuery = useEmployees({ companyId, actor, orgUnitIds: [], enabled: true })
   const runsQuery = usePayrollRuns({ companyId, actor, period, enabled: true })
 
-  // Scope: ACTIVE employees currently assigned in this unit; only those WITH compensation can be
-  // paid (an employee without a covering package would silently compute a zero base).
   const scoped = useMemo(() => {
     const byId = new Map<string, { hasCompensation: boolean }>()
     for (const row of employeesQuery.data ?? []) {
@@ -79,7 +77,11 @@ export function PayrollTab({
   }, [employeesQuery.data])
   const payableIds = [...scoped.entries()].filter(([, v]) => v.hasCompensation).map(([id]) => id)
 
-  const buId = unit.type === 'BUSINESS_UNIT' ? unit.id : (unit.parentId ?? unit.id)
+  // The completeness gate checks every ACTIVE business unit's period seal (company-wide run).
+  const buIds = useMemo(
+    () => units.filter((u) => u.type === 'BUSINESS_UNIT' && u.active).map((u) => u.id),
+    [units],
+  )
   const runs = runsQuery.data ?? []
   const selectedRun = runs.find((r) => r.id === selectedRunId) ?? runs[0] ?? null
 
@@ -194,7 +196,9 @@ export function PayrollTab({
                             dateStyle: 'medium',
                             timeStyle: 'short',
                           }).format(new Date(run.postedAt))
-                        : run.status}
+                        : run.status === 'FAILED'
+                          ? t('hr.payroll.history.failedLabel')
+                          : run.status}
                     </span>
                     <span className="tnum ml-auto font-mono text-sm font-semibold text-ink">
                       {formatMoney(run.netTotalMinor, run.baseCurrency, locale)}
@@ -228,7 +232,7 @@ export function PayrollTab({
         <RunPayrollDialog
           period={period}
           employeeIds={payableIds}
-          buId={buId}
+          buIds={buIds}
           baseCurrency={baseCurrency}
           companyId={companyId}
           actor={actor}
@@ -415,7 +419,7 @@ function RunDetail({
 function RunPayrollDialog({
   period,
   employeeIds,
-  buId,
+  buIds,
   baseCurrency,
   companyId,
   actor,
@@ -423,7 +427,7 @@ function RunPayrollDialog({
 }: {
   period: string
   employeeIds: string[]
-  buId: string
+  buIds: string[]
   baseCurrency: string
   companyId: string
   actor: string
@@ -485,7 +489,7 @@ function RunPayrollDialog({
               <Button type="button" variant="outline" onClick={onClose}>
                 {t('common.cancel')}
               </Button>
-              <Button type="button" onClick={() => run([buId])} disabled={mutation.isPending}>
+              <Button type="button" onClick={() => run(buIds)} disabled={mutation.isPending}>
                 {mutation.isPending ? t('hr.payroll.run.running') : t('hr.payroll.run.cta')}
               </Button>
             </div>
