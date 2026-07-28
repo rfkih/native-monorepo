@@ -66,6 +66,17 @@ class TenantJwtAuthoritiesConverterTest {
   }
 
   @Test
+  void theEmployeeRoleSurvivesTheCuratedWhitelist() {
+    // The employee self-service surface depends on the role reaching X-Roles; a whitelist
+    // omission would strip it at the edge and silently 403 every /me call.
+    Jwt token = jwt(Map.of("realm_access", Map.of("roles", List.of("employee", "cashier"))));
+
+    List<String> roles = TenantJwtAuthoritiesConverter.extractRoles(token);
+
+    assertThat(roles).containsExactly("employee", "cashier");
+  }
+
+  @Test
   void dropsKeycloakInfrastructureRolesKeepingOnlyCuratedBusinessRoles() {
     // realm_access carries the Keycloak default noise; only the curated business roles survive.
     Jwt token =

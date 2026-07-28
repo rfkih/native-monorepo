@@ -7,7 +7,7 @@ import { createContext, useContext } from 'react'
  * The curated business roles mirror the gateway's
  * `TenantJwtAuthoritiesConverter.BUSINESS_ROLES`.
  */
-export const BUSINESS_ROLES = ['owner', 'manager', 'cashier'] as const
+export const BUSINESS_ROLES = ['owner', 'manager', 'cashier', 'employee'] as const
 export type BusinessRole = (typeof BUSINESS_ROLES)[number]
 
 export interface AuthState {

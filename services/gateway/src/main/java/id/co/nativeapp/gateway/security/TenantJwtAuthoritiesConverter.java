@@ -47,7 +47,8 @@ public final class TenantJwtAuthoritiesConverter
    * authorities / {@code X-Roles}; Keycloak's infrastructure roles ({@code default-roles-native},
    * {@code offline_access}, {@code uma_authorization}, ...) are dropped at the edge.
    */
-  public static final Set<String> BUSINESS_ROLES = Set.of("owner", "manager", "cashier");
+  public static final Set<String> BUSINESS_ROLES =
+      Set.of("owner", "manager", "cashier", "employee");
 
   @Override
   public AbstractAuthenticationToken convert(Jwt jwt) {

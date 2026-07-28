@@ -31,7 +31,7 @@ import {
 } from './api'
 
 /** The roles the invite/change-role UI offers. */
-const ROLES = ['owner', 'manager', 'cashier'] as const
+const ROLES = ['owner', 'manager', 'cashier', 'employee'] as const
 type Role = (typeof ROLES)[number]
 
 // ── Dialog state union ────────────────────────────────────────────────────────

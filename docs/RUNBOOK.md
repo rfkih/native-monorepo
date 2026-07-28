@@ -46,6 +46,17 @@ gateway `8090`. employee-service is gateway-routed via `EMPLOYEE_SERVICE_URI` (e
 `http://localhost:8084`); the Vite dev proxy reaches it via `VITE_EMPLOYEE_URL` in the header-trust
 recipe. The console HR/payroll surfaces (org-unit hub → Employees/Payroll tabs) need it running.
 
+**Adding a realm role to a RUNNING Keycloak** (realm-JSON edits do NOT auto-apply, and a re-import
+requires dropping the KC db — which WIPES users): create it via the admin API instead, e.g. the
+`employee` role:
+```bash
+TOKEN=$(curl -s -X POST http://localhost:18080/realms/master/protocol/openid-connect/token \
+  -d 'grant_type=password&client_id=admin-cli&username=admin&password=admin' | jq -r .access_token)
+curl -s -X POST http://localhost:18080/admin/realms/native/roles \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"name":"employee","description":"Self-service employee — /me surface only"}'
+```
+
 ## GOTCHAS (each cost real debugging — read before running locally)
 1. **Host `DB_*` env vars override the service defaults.** The yml uses `${DB_PASSWORD:default}`; if the
    shell has `DB_PASSWORD`/`DB_USERNAME`/`DB_URL` set (e.g. another project), Spring picks the host value
