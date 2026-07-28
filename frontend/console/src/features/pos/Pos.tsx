@@ -95,7 +95,7 @@ export function Pos() {
   // openBillId, discount, and resume state all reset implicitly, preventing cross-outlet
   // state bleed.
   return (
-    <OutletGate company={company}>
+    <OutletGate company={company} requiredVertical="restaurant">
       {(session) => <PosInner key={session.businessId} session={session} />}
     </OutletGate>
   )

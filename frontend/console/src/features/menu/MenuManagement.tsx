@@ -75,7 +75,7 @@ export function MenuManagement() {
   // no business-unit fallback). key forces a full remount when the effective outlet
   // changes, resetting any local dialog/edit state so it cannot bleed across outlets.
   return (
-    <OutletGate company={company}>
+    <OutletGate company={company} requiredVertical="restaurant">
       {(session) => <MenuManagementInner key={session.businessId} session={session} />}
     </OutletGate>
   )

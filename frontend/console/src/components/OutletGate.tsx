@@ -1,12 +1,15 @@
 /**
- * OutletGate — blocks the POS surfaces (POS, Menu, Kitchen) until a REAL outlet is resolved.
+ * OutletGate — blocks the POS surfaces (POS, Menu, Kitchen) until a REAL outlet OF THE
+ * REQUIRED VERTICAL is resolved.
  *
  * ADR 0012: sales and all restaurant data must be keyed on an OUTLET id, never the
  * business-unit id. The gate renders a spinner while outlets resolve (no gate flash), an
  * error panel with retry when the outlet list cannot load, a blocking "no outlet" screen
  * when the company has none (unreachable for companies created after the default-outlet
- * seeding; still possible on partial hydration or for pre-ADR dev tenants), and otherwise
- * hands its children a session whose businessId IS the effective outlet id.
+ * seeding; still possible on partial hydration or for pre-ADR dev tenants), a per-vertical
+ * coming-soon panel when `requiredVertical` is set and the effective outlet belongs to a
+ * different vertical (carwash/barbershop have no POS yet), and otherwise hands its children
+ * a session whose businessId IS the effective outlet id.
  */
 
 import type { ReactNode } from 'react'
@@ -14,18 +17,23 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { Store } from 'lucide-react'
 import { Spinner } from '@/components/ui/Spinner'
+import { VerticalComingSoon } from '@/components/VerticalComingSoon'
 import { useResolvedOutlets } from '@/features/org/useResolvedOutlets'
+import type { Vertical } from '@/features/org/api'
 import type { CompanySession } from '@/lib/session'
 
 export function OutletGate({
   company,
+  requiredVertical,
   children,
 }: {
   company: CompanySession
+  /** When set, the effective outlet's vertical must match or a coming-soon panel renders. */
+  requiredVertical?: Vertical
   children: (session: CompanySession) => ReactNode
 }) {
   const { t } = useTranslation()
-  const { status, effectiveOutletId, refetch } = useResolvedOutlets()
+  const { outlets, status, effectiveOutletId, refetch } = useResolvedOutlets()
 
   if (status === 'loading') {
     return (
@@ -71,6 +79,18 @@ export function OutletGate({
         </div>
       </div>
     )
+  }
+
+  // Vertical gate: the effective outlet's vertical comes from the SAME resolved list the
+  // picker uses (useOutlets carries it; useMyOutlets' normalized shape does not). FAIL OPEN
+  // to 'restaurant' on a null/missing vertical — the V6 backfill guarantees it server-side,
+  // so a null can only be cache staleness; never brick a live POS terminal on that.
+  if (requiredVertical) {
+    const effectiveOutlet = outlets.find((o) => o.id === effectiveOutletId)
+    const effectiveVertical = effectiveOutlet?.vertical ?? 'restaurant'
+    if (effectiveVertical !== requiredVertical) {
+      return <VerticalComingSoon vertical={effectiveVertical} />
+    }
   }
 
   return <>{children({ ...company, businessId: effectiveOutletId })}</>

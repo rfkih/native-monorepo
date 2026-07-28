@@ -68,7 +68,7 @@ export function Kitchen() {
   // outlet changes, resetting bumped-state and any local KDS state so it does not carry
   // over to a different outlet.
   return (
-    <OutletGate company={company}>
+    <OutletGate company={company} requiredVertical="restaurant">
       {(session) => <KitchenInner key={session.businessId} session={session} />}
     </OutletGate>
   )
