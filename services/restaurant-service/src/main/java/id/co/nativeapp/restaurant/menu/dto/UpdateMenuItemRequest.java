@@ -24,8 +24,8 @@ import org.springframework.lang.Nullable;
  * </ul>
  *
  * <p>This means a client that wants to clear the image sends {@code "imageUrl": ""}, and a client
- * that wants to leave it untouched omits the field entirely. The domain method
- * {@link id.co.nativeapp.restaurant.menu.domain.MenuItem#update} enforces the same rule.
+ * that wants to leave it untouched omits the field entirely. The domain method {@link
+ * id.co.nativeapp.restaurant.menu.domain.MenuItem#update} enforces the same rule.
  */
 public record UpdateMenuItemRequest(
     @Nullable String name,

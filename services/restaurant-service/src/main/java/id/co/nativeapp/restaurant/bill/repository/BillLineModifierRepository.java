@@ -18,8 +18,8 @@ import org.springframework.data.repository.query.Param;
 public interface BillLineModifierRepository extends JpaRepository<BillLineModifier, UUID> {
 
   /**
-   * All modifier snapshots for a set of bill line ids. Chunked IN queries (≤1000) are the
-   * caller's responsibility. RLS-scoped automatically.
+   * All modifier snapshots for a set of bill line ids. Chunked IN queries (≤1000) are the caller's
+   * responsibility. RLS-scoped automatically.
    */
   @Query(
       value =

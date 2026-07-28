@@ -17,8 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 /**
- * Integration tests for menu-item image support + the {@code PATCH /api/v1/menu/{itemId}}
- * endpoint.
+ * Integration tests for menu-item image support + the {@code PATCH /api/v1/menu/{itemId}} endpoint.
  *
  * <p>Convention tested: for {@code imageUrl} in PATCH — {@code null} (absent) = leave unchanged;
  * empty string = clear the image; any other non-null value = set/replace the image.
@@ -35,10 +34,10 @@ class MenuItemImageEditTest extends PostgresRlsTestBase {
   private static final UUID BUSINESS = UUID.fromString("c3c3c3c3-c3c3-c3c3-c3c3-c3c3c3c3c3c3");
 
   // A compact fake data URL (well under the 3 MB cap)
-  private static final String SAMPLE_IMAGE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+  private static final String SAMPLE_IMAGE =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
-  @Autowired
-  private MenuService menuService;
+  @Autowired private MenuService menuService;
 
   // ---------------------------------------------------------------------------
   // CREATE with imageUrl
@@ -124,9 +123,7 @@ class MenuItemImageEditTest extends PostgresRlsTestBase {
     TenantContext.callAs(
         TENANT,
         ACTOR,
-        () ->
-            menuService.updateItem(
-                itemId, new UpdateMenuItemRequest(null, null, 14_000L, null)));
+        () -> menuService.updateItem(itemId, new UpdateMenuItemRequest(null, null, 14_000L, null)));
 
     List<MenuItemResponse> items =
         TenantContext.callAs(TENANT, ACTOR, () -> menuService.findActiveByBusiness(BUSINESS));
@@ -147,9 +144,7 @@ class MenuItemImageEditTest extends PostgresRlsTestBase {
     TenantContext.callAs(
         TENANT,
         ACTOR,
-        () ->
-            menuService.updateItem(
-                itemId, new UpdateMenuItemRequest(null, "GRILL", null, null)));
+        () -> menuService.updateItem(itemId, new UpdateMenuItemRequest(null, "GRILL", null, null)));
 
     List<MenuItemResponse> items =
         TenantContext.callAs(TENANT, ACTOR, () -> menuService.findActiveByBusiness(BUSINESS));
@@ -297,8 +292,7 @@ class MenuItemImageEditTest extends PostgresRlsTestBase {
         jakarta.validation.Validation.buildDefaultValidatorFactory();
     jakarta.validation.Validator validator = factory.getValidator();
 
-    var request =
-        new CreateMenuItemRequest(BUSINESS, "X", "MAIN", 1_000L, "IDR", huge);
+    var request = new CreateMenuItemRequest(BUSINESS, "X", "MAIN", 1_000L, "IDR", huge);
     var violations = validator.validate(request);
 
     assertThat(violations)
@@ -337,8 +331,7 @@ class MenuItemImageEditTest extends PostgresRlsTestBase {
         () ->
             menuService
                 .createItem(
-                    new CreateMenuItemRequest(
-                        BUSINESS, name, "MAIN", priceMinor, "IDR", imageUrl))
+                    new CreateMenuItemRequest(BUSINESS, name, "MAIN", priceMinor, "IDR", imageUrl))
                 .id());
   }
 }

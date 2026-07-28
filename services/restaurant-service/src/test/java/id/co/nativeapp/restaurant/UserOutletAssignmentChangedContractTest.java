@@ -19,9 +19,9 @@ import org.junit.jupiter.api.Test;
  *
  * <ol>
  *   <li>The consumer schema parses from the classpath with the expected shape and full name.
- *   <li>A {@link GenericRecord} round-trips through {@link AvroSerde} — the exact path the
- *       {@link id.co.nativeapp.restaurant.outletref.messaging.UserOutletAssignmentListener} takes
- *       off the wire.
+ *   <li>A {@link GenericRecord} round-trips through {@link AvroSerde} — the exact path the {@link
+ *       id.co.nativeapp.restaurant.outletref.messaging.UserOutletAssignmentListener} takes off the
+ *       wire.
  *   <li>The consumer schema is BACKWARD-COMPATIBLE with the producer schema (docs/EVENT-CATALOG.md
  *       anchor): a restaurant reader can decode bytes the org-service producer wrote.
  *   <li>Producer bytes decoded under the consumer schema produce the correct {@link
@@ -30,8 +30,8 @@ import org.junit.jupiter.api.Test;
  *       a breaking change — the gate that prevents a consumer from silently hardening the contract.
  * </ol>
  *
- * <p>No Spring context, no database, no Kafka — just Avro schema + serde logic. Runs as a fast
- * unit test in every CI pass.
+ * <p>No Spring context, no database, no Kafka — just Avro schema + serde logic. Runs as a fast unit
+ * test in every CI pass.
  */
 class UserOutletAssignmentChangedContractTest {
 

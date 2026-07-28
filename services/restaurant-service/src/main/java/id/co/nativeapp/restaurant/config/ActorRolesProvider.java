@@ -16,11 +16,11 @@ import org.springframework.web.context.request.ServletRequestAttributes;
  * direct access to {@code HttpServletRequest} — consult the caller's roles without threading them
  * as parameters through the entire call chain or changing the shared {@code TenantContext} record.
  *
- * <p>In the {@code dev} profile the {@link
- * id.co.nativeapp.restaurant.config.DevTenantFilter} trusts the inbound {@code X-Roles} header; in
- * the non-dev (production) profile the gateway has already validated the JWT and stripped any
- * client-supplied copy before injecting its own (see {@code TenantContextHeaderFilter} in the
- * gateway module). Either way the header is trusted at this point.
+ * <p>In the {@code dev} profile the {@link id.co.nativeapp.restaurant.config.DevTenantFilter}
+ * trusts the inbound {@code X-Roles} header; in the non-dev (production) profile the gateway has
+ * already validated the JWT and stripped any client-supplied copy before injecting its own (see
+ * {@code TenantContextHeaderFilter} in the gateway module). Either way the header is trusted at
+ * this point.
  *
  * <p>Outside of a request context (e.g. in Kafka consumer threads or tests that call the service
  * layer directly without a request) {@link #currentRoles} returns an empty collection — meaning no

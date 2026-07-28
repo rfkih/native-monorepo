@@ -143,8 +143,8 @@ public class ModifierGroup extends Auditable {
   /**
    * Applies a partial update (patch semantics). Only non-null arguments are applied. Enforces the
    * same invariants as the constructor: {@code SINGLE} implies {@code maxSelect == 1}, {@code
-   * minSelect >= 0}, {@code maxSelect >= minSelect}, and a required group must have {@code minSelect
-   * >= 1}.
+   * minSelect >= 0}, {@code maxSelect >= minSelect}, and a required group must have {@code
+   * minSelect >= 1}.
    *
    * @param newName new name, or {@code null} for no change
    * @param newSelectionType {@code SINGLE}, {@code MULTI}, or {@code null} for no change
@@ -188,11 +188,7 @@ public class ModifierGroup extends Auditable {
     // Validate combined state after applying patches.
     if (this.maxSelect < this.minSelect) {
       throw new IllegalArgumentException(
-          "maxSelect ("
-              + this.maxSelect
-              + ") must be >= minSelect ("
-              + this.minSelect
-              + ")");
+          "maxSelect (" + this.maxSelect + ") must be >= minSelect (" + this.minSelect + ")");
     }
     if ("SINGLE".equals(this.selectionType) && this.maxSelect != 1) {
       throw new IllegalArgumentException(

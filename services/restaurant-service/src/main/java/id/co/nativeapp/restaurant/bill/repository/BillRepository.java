@@ -21,9 +21,9 @@ import org.springframework.data.repository.query.Param;
 public interface BillRepository extends JpaRepository<Bill, UUID> {
 
   /**
-   * Fetches a single bill's header by id (RLS-scoped). Used for the write path after a
-   * {@code findById} to get a projection quickly; the write path uses {@link #findById} for the
-   * full aggregate.
+   * Fetches a single bill's header by id (RLS-scoped). Used for the write path after a {@code
+   * findById} to get a projection quickly; the write path uses {@link #findById} for the full
+   * aggregate.
    */
   @Query(
       value =
@@ -47,7 +47,8 @@ public interface BillRepository extends JpaRepository<Bill, UUID> {
    * Returns a summary with the running total (aggregated from bill_line) and line count.
    *
    * <p>When {@code tableId} is not null the query also filters by table_id — passed via a second
-   * query to avoid dynamic SQL in a native query (see {@link #findSummaryByBusinessIdAndStatusAndTable}).
+   * query to avoid dynamic SQL in a native query (see {@link
+   * #findSummaryByBusinessIdAndStatusAndTable}).
    */
   @Query(
       value =
@@ -74,8 +75,8 @@ public interface BillRepository extends JpaRepository<Bill, UUID> {
       @Param("businessId") UUID businessId, @Param("status") String status);
 
   /**
-   * Lists bills for a business + status filtered by table_id. Used when the caller passes a
-   * {@code tableId} query param.
+   * Lists bills for a business + status filtered by table_id. Used when the caller passes a {@code
+   * tableId} query param.
    */
   @Query(
       value =

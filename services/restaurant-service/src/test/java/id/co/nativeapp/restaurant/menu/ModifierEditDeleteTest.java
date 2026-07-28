@@ -164,8 +164,7 @@ class ModifierEditDeleteTest extends PostgresRlsTestBase {
                     ACTOR,
                     () ->
                         modifierService.updateGroup(
-                            groupId,
-                            new UpdateModifierGroupRequest(null, null, null, 5, 2, null))))
+                            groupId, new UpdateModifierGroupRequest(null, null, null, 5, 2, null))))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("maxSelect");
   }
@@ -350,9 +349,7 @@ class ModifierEditDeleteTest extends PostgresRlsTestBase {
   void deleteUnknownOptionThrowsNotFound() {
     UUID unknown = UUID.randomUUID();
     assertThatThrownBy(
-            () ->
-                TenantContext.runAs(
-                    TENANT_A, ACTOR, () -> modifierService.deleteOption(unknown)))
+            () -> TenantContext.runAs(TENANT_A, ACTOR, () -> modifierService.deleteOption(unknown)))
         .isInstanceOf(NoSuchElementException.class)
         .hasMessageContaining(unknown.toString());
   }
@@ -430,8 +427,7 @@ class ModifierEditDeleteTest extends PostgresRlsTestBase {
 
     assertThatThrownBy(
             () ->
-                TenantContext.runAs(
-                    TENANT_B, ACTOR, () -> modifierService.deleteOption(optionId)))
+                TenantContext.runAs(TENANT_B, ACTOR, () -> modifierService.deleteOption(optionId)))
         .isInstanceOf(NoSuchElementException.class);
 
     // Option still exists.

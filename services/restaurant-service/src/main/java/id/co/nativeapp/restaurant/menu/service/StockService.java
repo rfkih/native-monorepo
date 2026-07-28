@@ -20,8 +20,8 @@ public class StockService {
   }
 
   /**
-   * Sets the absolute stock quantity for a menu item. {@code null} → infinite / untracked.
-   * Non-null must be &ge; 0.
+   * Sets the absolute stock quantity for a menu item. {@code null} → infinite / untracked. Non-null
+   * must be &ge; 0.
    */
   public MenuItemResponse setStock(UUID menuItemId, Integer quantity) {
     TenantContext.require();

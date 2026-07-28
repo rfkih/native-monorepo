@@ -72,14 +72,14 @@ class BillAcceptanceTest extends PostgresRlsTestBase {
         ACTOR,
         () ->
             menuService
-                .createItem(new CreateMenuItemRequest(BUSINESS, "Nasi Goreng", "MAIN", price, "IDR"))
+                .createItem(
+                    new CreateMenuItemRequest(BUSINESS, "Nasi Goreng", "MAIN", price, "IDR"))
                 .id());
   }
 
   private UUID seedTrackedItem(long price, int stock) throws Exception {
     UUID id = seedItem(price);
-    executeAsAdmin(
-        "UPDATE menu_item SET stock_quantity = " + stock + " WHERE id = '" + id + "'");
+    executeAsAdmin("UPDATE menu_item SET stock_quantity = " + stock + " WHERE id = '" + id + "'");
     return id;
   }
 
@@ -87,7 +87,10 @@ class BillAcceptanceTest extends PostgresRlsTestBase {
     return TenantContext.callAs(
         TENANT_A,
         ACTOR,
-        () -> tableService.create(new CreateTableRequest(BUSINESS, "T-Bill-1", 4, "Indoor")).tableId());
+        () ->
+            tableService
+                .create(new CreateTableRequest(BUSINESS, "T-Bill-1", 4, "Indoor"))
+                .tableId());
   }
 
   // -----------------------------------------------------------------------
@@ -119,16 +122,14 @@ class BillAcceptanceTest extends PostgresRlsTestBase {
 
     // List OPEN bills for the business — both guests appear.
     List<BillSummaryResponse> list =
-        TenantContext.callAs(
-            TENANT_A, ACTOR, () -> billService.list(BUSINESS, "OPEN", null));
+        TenantContext.callAs(TENANT_A, ACTOR, () -> billService.list(BUSINESS, "OPEN", null));
     assertThat(list).hasSize(2);
     assertThat(list.stream().map(BillSummaryResponse::guestLabel))
         .containsExactlyInAnyOrder("Guest A", "Guest B");
 
     // Filter by table — same result.
     List<BillSummaryResponse> byTable =
-        TenantContext.callAs(
-            TENANT_A, ACTOR, () -> billService.list(BUSINESS, "OPEN", tableId));
+        TenantContext.callAs(TENANT_A, ACTOR, () -> billService.list(BUSINESS, "OPEN", tableId));
     assertThat(byTable).hasSize(2);
 
     // Append a line to Guest A.
@@ -138,8 +139,7 @@ class BillAcceptanceTest extends PostgresRlsTestBase {
             ACTOR,
             () ->
                 billService.appendLines(
-                    guestA.id(),
-                    new AppendLinesRequest(List.of(new OrderLineRequest(itemId, 2)))));
+                    guestA.id(), new AppendLinesRequest(List.of(new OrderLineRequest(itemId, 2)))));
 
     assertThat(afterAppend.lines()).hasSize(1);
     assertThat(afterAppend.lines().get(0).nameSnapshot()).isEqualTo("Nasi Goreng");
@@ -149,10 +149,12 @@ class BillAcceptanceTest extends PostgresRlsTestBase {
 
     // Running total on list now shows the correct subtotal for Guest A.
     List<BillSummaryResponse> updatedList =
-        TenantContext.callAs(
-            TENANT_A, ACTOR, () -> billService.list(BUSINESS, "OPEN", null));
+        TenantContext.callAs(TENANT_A, ACTOR, () -> billService.list(BUSINESS, "OPEN", null));
     BillSummaryResponse guestASummary =
-        updatedList.stream().filter(s -> "Guest A".equals(s.guestLabel())).findFirst().orElseThrow();
+        updatedList.stream()
+            .filter(s -> "Guest A".equals(s.guestLabel()))
+            .findFirst()
+            .orElseThrow();
     assertThat(guestASummary.runningTotalMinor()).isEqualTo(30_000L);
     assertThat(guestASummary.lineCount()).isEqualTo(1);
   }
@@ -170,8 +172,7 @@ class BillAcceptanceTest extends PostgresRlsTestBase {
         ACTOR,
         () ->
             billService.appendLines(
-                bill.id(),
-                new AppendLinesRequest(List.of(new OrderLineRequest(itemId, 3)))));
+                bill.id(), new AppendLinesRequest(List.of(new OrderLineRequest(itemId, 3)))));
 
     // Pay the bill.
     BillResponse paid =
@@ -198,8 +199,7 @@ class BillAcceptanceTest extends PostgresRlsTestBase {
     assertThat(decoded.get("currency").toString()).isEqualTo("IDR");
 
     // Stock deducted.
-    int stockAfter =
-        rowAsAdmin("SELECT stock_quantity FROM menu_item WHERE id = '" + itemId + "'");
+    int stockAfter = rowAsAdmin("SELECT stock_quantity FROM menu_item WHERE id = '" + itemId + "'");
     assertThat(stockAfter).isEqualTo(7); // 10 - 3
 
     // Bill row is PAID.
@@ -256,17 +256,14 @@ class BillAcceptanceTest extends PostgresRlsTestBase {
     assertThatThrownBy(
             () ->
                 TenantContext.callAs(
-                    TENANT_A,
-                    ACTOR,
-                    () -> billService.payBill(bill.id(), new PayBillRequest())))
+                    TENANT_A, ACTOR, () -> billService.payBill(bill.id(), new PayBillRequest())))
         .isInstanceOf(id.co.nativeapp.restaurant.menu.domain.InsufficientStockException.class);
 
     // No SaleRecorded emitted.
     assertThat(saleRecordedRows()).isEmpty();
 
     // Stock unchanged.
-    int stockAfter =
-        rowAsAdmin("SELECT stock_quantity FROM menu_item WHERE id = '" + itemId + "'");
+    int stockAfter = rowAsAdmin("SELECT stock_quantity FROM menu_item WHERE id = '" + itemId + "'");
     assertThat(stockAfter).isEqualTo(2);
 
     // Bill is still OPEN.
@@ -281,7 +278,9 @@ class BillAcceptanceTest extends PostgresRlsTestBase {
 
     BillResponse bill =
         TenantContext.callAs(
-            TENANT_A, ACTOR, () -> billService.open(new OpenBillRequest(BUSINESS, null, "Cancel me")));
+            TENANT_A,
+            ACTOR,
+            () -> billService.open(new OpenBillRequest(BUSINESS, null, "Cancel me")));
 
     TenantContext.callAs(
         TENANT_A,
@@ -290,17 +289,19 @@ class BillAcceptanceTest extends PostgresRlsTestBase {
             billService.appendLines(
                 bill.id(), new AppendLinesRequest(List.of(new OrderLineRequest(itemId, 2)))));
 
-    TenantContext.callAs(TENANT_A, ACTOR, () -> {
-      billService.cancelBill(bill.id());
-      return null;
-    });
+    TenantContext.callAs(
+        TENANT_A,
+        ACTOR,
+        () -> {
+          billService.cancelBill(bill.id());
+          return null;
+        });
 
     // No sale, no outbox event.
     assertThat(saleRecordedRows()).isEmpty();
 
     // Stock unchanged.
-    int stockAfter =
-        rowAsAdmin("SELECT stock_quantity FROM menu_item WHERE id = '" + itemId + "'");
+    int stockAfter = rowAsAdmin("SELECT stock_quantity FROM menu_item WHERE id = '" + itemId + "'");
     assertThat(stockAfter).isEqualTo(5);
 
     // Bill is CANCELLED — cannot pay it.
@@ -329,17 +330,19 @@ class BillAcceptanceTest extends PostgresRlsTestBase {
                 billService.appendLines(
                     bill.id(),
                     new AppendLinesRequest(
-                        List.of(
-                            new OrderLineRequest(itemA, 1), new OrderLineRequest(itemB, 1)))));
+                        List.of(new OrderLineRequest(itemA, 1), new OrderLineRequest(itemB, 1)))));
 
     assertThat(afterAppend.lines()).hasSize(2);
     UUID lineAId = afterAppend.lines().get(0).id();
 
     // Remove line A.
-    TenantContext.callAs(TENANT_A, ACTOR, () -> {
-      billService.removeLine(bill.id(), lineAId);
-      return null;
-    });
+    TenantContext.callAs(
+        TENANT_A,
+        ACTOR,
+        () -> {
+          billService.removeLine(bill.id(), lineAId);
+          return null;
+        });
 
     // Verify only one line remains.
     BillResponse current =
@@ -354,7 +357,9 @@ class BillAcceptanceTest extends PostgresRlsTestBase {
 
     BillResponse billA =
         TenantContext.callAs(
-            TENANT_A, ACTOR, () -> billService.open(new OpenBillRequest(BUSINESS, null, "Tenant A")));
+            TENANT_A,
+            ACTOR,
+            () -> billService.open(new OpenBillRequest(BUSINESS, null, "Tenant A")));
 
     TenantContext.callAs(
         TENANT_A,

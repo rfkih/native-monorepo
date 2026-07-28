@@ -19,17 +19,17 @@ import org.springframework.transaction.annotation.Transactional;
  * transaction (propagation {@code MANDATORY}).
  *
  * <p>This writer is invoked by {@link id.co.nativeapp.restaurant.order.service.OrderWriter
- * OrderWriter} for the cash/no-payment checkout path and the {@code payParked} path — both of
- * which record a {@code SaleRecorded} outbox event. Because propagation is {@code MANDATORY}, the
- * UPDATE runs on the same physical connection as the order + sale + outbox writes, so a deduction
- * failure rolls back everything (no partial sale, no phantom SaleRecorded).
+ * OrderWriter} for the cash/no-payment checkout path and the {@code payParked} path — both of which
+ * record a {@code SaleRecorded} outbox event. Because propagation is {@code MANDATORY}, the UPDATE
+ * runs on the same physical connection as the order + sale + outbox writes, so a deduction failure
+ * rolls back everything (no partial sale, no phantom SaleRecorded).
  *
- * <p><strong>Concurrency safety:</strong> the underlying {@code
- * MenuItemRepository#deductStock} UPDATE is gated on {@code stock_quantity IS NOT NULL AND
- * stock_quantity >= qty}. If the row is locked by a concurrent checkout the UPDATE waits and then
- * either succeeds (stock was sufficient) or returns 0 rows (stock was exhausted). A 0-row result on
- * a tracked item causes {@link InsufficientStockException} to be thrown, which rolls back the
- * enclosing transaction — no oversell.
+ * <p><strong>Concurrency safety:</strong> the underlying {@code MenuItemRepository#deductStock}
+ * UPDATE is gated on {@code stock_quantity IS NOT NULL AND stock_quantity >= qty}. If the row is
+ * locked by a concurrent checkout the UPDATE waits and then either succeeds (stock was sufficient)
+ * or returns 0 rows (stock was exhausted). A 0-row result on a tracked item causes {@link
+ * InsufficientStockException} to be thrown, which rolls back the enclosing transaction — no
+ * oversell.
  *
  * <p>Untracked items ({@code stock_quantity IS NULL}) are silently skipped: the UPDATE WHERE clause
  * excludes them (0 rows updated is the correct outcome, and the caller treats 0 rows as "untracked"
@@ -81,11 +81,7 @@ public class StockDeductionWriter {
     // lines, though the UI typically prevents it; we handle it correctly anyway).
     Map<UUID, Integer> qtyByItem =
         lines.stream()
-            .collect(
-                Collectors.toMap(
-                    OrderLine::getMenuItemId,
-                    OrderLine::getQty,
-                    Integer::sum));
+            .collect(Collectors.toMap(OrderLine::getMenuItemId, OrderLine::getQty, Integer::sum));
 
     List<UUID> trackedIds = new ArrayList<>();
     for (Map.Entry<UUID, Integer> entry : qtyByItem.entrySet()) {

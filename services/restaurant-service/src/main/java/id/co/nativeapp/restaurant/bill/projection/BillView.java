@@ -3,8 +3,8 @@ package id.co.nativeapp.restaurant.bill.projection;
 import java.util.UUID;
 
 /**
- * Read projection over the {@code bill} row — only the columns a list/summary response needs,
- * never the {@link id.co.nativeapp.tenant.Auditable Auditable} bookkeeping.
+ * Read projection over the {@code bill} row — only the columns a list/summary response needs, never
+ * the {@link id.co.nativeapp.tenant.Auditable Auditable} bookkeeping.
  *
  * <p>Backs the native read queries on {@link
  * id.co.nativeapp.restaurant.bill.repository.BillRepository}. Lives in the {@code projection}

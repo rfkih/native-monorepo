@@ -27,8 +27,8 @@ import org.springframework.web.bind.annotation.RestController;
  * </ul>
  *
  * <p>Both endpoints are tenant-scoped (RLS auto-applied via the {@code @Transactional} aspect) and
- * return a {@link MenuItemResponse} reflecting the updated state, including the new
- * {@code stockQuantity}.
+ * return a {@link MenuItemResponse} reflecting the updated state, including the new {@code
+ * stockQuantity}.
  */
 @Tag(name = "Menu Stock", description = "Per-item stock tracking: set absolute qty or add a delta")
 @RestController

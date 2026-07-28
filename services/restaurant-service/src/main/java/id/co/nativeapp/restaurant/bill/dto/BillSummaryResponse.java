@@ -3,8 +3,8 @@ package id.co.nativeapp.restaurant.bill.dto;
 import java.util.UUID;
 
 /**
- * Wire shape for a bill summary on the list endpoint — header + running total + line count.
- * No line detail and no breakdown (use GET /api/v1/bills/{id} for the full view).
+ * Wire shape for a bill summary on the list endpoint — header + running total + line count. No line
+ * detail and no breakdown (use GET /api/v1/bills/{id} for the full view).
  *
  * @param id the bill id
  * @param businessId the originating business unit

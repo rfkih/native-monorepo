@@ -38,6 +38,7 @@ import org.springframework.util.backoff.FixedBackOff;
  *
  * <p><strong>Non-retryable exceptions.</strong> Deterministically poison payloads are classified as
  * non-retryable so the retry budget is not wasted:
+ *
  * <ul>
  *   <li>{@link UserOutletAssignmentDecodeException} — the value is not a valid Avro payload;
  *   <li>{@link UserOutletAssignmentMissingEventIdException} — the record has no valid {@code id}
@@ -99,9 +100,9 @@ public class KafkaConfig {
 
   /**
    * The {@link KafkaTemplate} the DLT recoverer publishes with. Uses a {@link
-   * Base64ByteArraySerializer} for the value (the raw Avro bytes after
-   * {@link id.co.nativeapp.events.Base64ByteArrayDeserializer} decoded them) so the poison record
-   * lands on {@code <topic>.DLT} in the same wire format as the source topic.
+   * Base64ByteArraySerializer} for the value (the raw Avro bytes after {@link
+   * id.co.nativeapp.events.Base64ByteArrayDeserializer} decoded them) so the poison record lands on
+   * {@code <topic>.DLT} in the same wire format as the source topic.
    */
   @Bean
   public KafkaTemplate<String, byte[]> deadLetterKafkaTemplate(KafkaProperties kafkaProperties) {

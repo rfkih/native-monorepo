@@ -116,8 +116,7 @@ class StockTrackingTest extends PostgresRlsTestBase {
     TenantContext.callAs(TENANT, ACTOR, () -> stockService.setStock(itemId, 7));
 
     List<MenuItemResponse> items =
-        TenantContext.callAs(
-            TENANT, ACTOR, () -> menuService.findActiveByBusiness(BUSINESS_ID));
+        TenantContext.callAs(TENANT, ACTOR, () -> menuService.findActiveByBusiness(BUSINESS_ID));
 
     MenuItemResponse found =
         items.stream()
@@ -133,8 +132,7 @@ class StockTrackingTest extends PostgresRlsTestBase {
     // item left untracked
 
     List<MenuItemResponse> items =
-        TenantContext.callAs(
-            TENANT, ACTOR, () -> menuService.findActiveByBusiness(BUSINESS_ID));
+        TenantContext.callAs(TENANT, ACTOR, () -> menuService.findActiveByBusiness(BUSINESS_ID));
 
     MenuItemResponse found =
         items.stream()
@@ -159,9 +157,7 @@ class StockTrackingTest extends PostgresRlsTestBase {
         () ->
             orderService.checkout(
                 new CheckoutRequest(
-                    BUSINESS_ID,
-                    "stock-deduct-001",
-                    List.of(new OrderLineRequest(itemId, 3)))));
+                    BUSINESS_ID, "stock-deduct-001", List.of(new OrderLineRequest(itemId, 3)))));
 
     // Verify stock was deducted: 10 - 3 = 7
     Integer remaining = stockQuantityAsAdmin(itemId);
@@ -251,9 +247,7 @@ class StockTrackingTest extends PostgresRlsTestBase {
             () ->
                 orderService.checkout(
                     new CheckoutRequest(
-                        BUSINESS_ID,
-                        "stock-exact-001",
-                        List.of(new OrderLineRequest(itemId, 2)))));
+                        BUSINESS_ID, "stock-exact-001", List.of(new OrderLineRequest(itemId, 2)))));
 
     assertThat(result.created()).isTrue();
     Integer remaining = stockQuantityAsAdmin(itemId);
@@ -281,8 +275,7 @@ class StockTrackingTest extends PostgresRlsTestBase {
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
         Statement st = admin.createStatement();
         ResultSet rs =
-            st.executeQuery(
-                "SELECT stock_quantity FROM menu_item WHERE id = '" + itemId + "'")) {
+            st.executeQuery("SELECT stock_quantity FROM menu_item WHERE id = '" + itemId + "'")) {
       rs.next();
       int val = rs.getInt(1);
       return rs.wasNull() ? null : val;

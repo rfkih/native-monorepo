@@ -43,8 +43,9 @@ public class MenuWriter {
     // IllegalArgumentException, which ApiExceptionHandler maps to 400.
     Money price = Money.ofMinor(request.priceMinor(), request.currency());
 
-    MenuItem item = new MenuItem(
-        request.businessId(), request.name(), request.category(), price, request.imageUrl());
+    MenuItem item =
+        new MenuItem(
+            request.businessId(), request.name(), request.category(), price, request.imageUrl());
     item.setCompanyId(companyId);
     MenuItem saved = repository.saveAndFlush(item);
     return MenuItemResponse.from(saved);

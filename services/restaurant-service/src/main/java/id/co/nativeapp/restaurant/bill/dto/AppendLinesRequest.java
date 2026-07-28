@@ -6,8 +6,7 @@ import jakarta.validation.constraints.NotEmpty;
 import java.util.List;
 
 /**
- * Request body for {@code POST /api/v1/bills/{id}/lines} — append a round of items to an OPEN
- * bill.
+ * Request body for {@code POST /api/v1/bills/{id}/lines} — append a round of items to an OPEN bill.
  *
  * @param lines the lines to append; must be non-empty with qty &ge; 1 per line
  */

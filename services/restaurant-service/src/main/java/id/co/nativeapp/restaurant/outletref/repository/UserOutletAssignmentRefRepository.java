@@ -9,14 +9,15 @@ import org.springframework.stereotype.Repository;
  * user → outlet assignments used for order-write enforcement (Phase 5).
  *
  * <p>Implemented as a plain {@link JdbcTemplate} wrapper (no Spring Data JPA entity, no full-entity
- * load) because this is a read model, not an aggregate: we need exactly one {@code EXISTS} query
- * on the hot guard path, and a separate count query for the grandfather-clause check. Both run under
+ * load) because this is a read model, not an aggregate: we need exactly one {@code EXISTS} query on
+ * the hot guard path, and a separate count query for the grandfather-clause check. Both run under
  * an active {@link id.co.nativeapp.tenant.TenantContext} so the RLS GUC is set by the auto-RLS
- * aspect ({@link id.co.nativeapp.tenant.RlsAutoApplyAspect}) on the enclosing {@code @Transactional}
- * (rule 5 — the caller's transaction is the unit of work that sets the GUC).
+ * aspect ({@link id.co.nativeapp.tenant.RlsAutoApplyAspect}) on the enclosing
+ * {@code @Transactional} (rule 5 — the caller's transaction is the unit of work that sets the GUC).
  *
  * <p>Queries are native SQL (CLAUDE.md — all {@code @Query}s must be native; here it is raw JDBC
- * for a read model, same principle). No {@code SELECT *} and no full entity loaded (CLAUDE.md rule).
+ * for a read model, same principle). No {@code SELECT *} and no full entity loaded (CLAUDE.md
+ * rule).
  */
 @Repository
 public class UserOutletAssignmentRefRepository {
@@ -60,9 +61,7 @@ public class UserOutletAssignmentRefRepository {
    */
   public long countAllForCompany() {
     Long count =
-        jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM user_outlet_assignment_ref",
-            Long.class);
+        jdbcTemplate.queryForObject("SELECT COUNT(*) FROM user_outlet_assignment_ref", Long.class);
     return count != null ? count : 0L;
   }
 }

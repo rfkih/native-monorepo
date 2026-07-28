@@ -53,8 +53,8 @@ import org.springframework.web.context.request.ServletRequestAttributes;
  * </ol>
  *
  * <p>The guard ({@code OutletAccessGuard}) is shared by BOTH sale-recording write paths — orders
- * ({@code checkout}/{@code park}/{@code payParked}) and open bills ({@code open}/{@code payBill})
- * — so the bill tests below prove the bills flow cannot sidestep the order-path guard.
+ * ({@code checkout}/{@code park}/{@code payParked}) and open bills ({@code open}/{@code payBill}) —
+ * so the bill tests below prove the bills flow cannot sidestep the order-path guard.
  *
  * <p>The {@link id.co.nativeapp.restaurant.config.ActorRolesProvider} reads the {@code X-Roles}
  * header from the current HTTP request. These tests bind a {@link MockHttpServletRequest} directly
@@ -138,8 +138,12 @@ class OutletEnforcementTest extends PostgresRlsTestBase {
     UUID assignmentId = UUID.randomUUID();
     UserOutletAssignmentEvent existing =
         new UserOutletAssignmentEvent(
-            UUID.randomUUID(), assignmentId, CASHIER_ACTOR, TENANT,
-            BUSINESS_ID, "ASSIGNED",
+            UUID.randomUUID(),
+            assignmentId,
+            CASHIER_ACTOR,
+            TENANT,
+            BUSINESS_ID,
+            "ASSIGNED",
             (int) LocalDate.of(2026, 7, 27).toEpochDay(),
             (int) LocalDate.of(9999, 12, 31).toEpochDay());
     assignmentService.apply(existing);
@@ -160,8 +164,12 @@ class OutletEnforcementTest extends PostgresRlsTestBase {
     // Seed a row for a different user so grandfather doesn't apply.
     UserOutletAssignmentEvent seed =
         new UserOutletAssignmentEvent(
-            UUID.randomUUID(), UUID.randomUUID(), "other-cashier", TENANT,
-            BUSINESS_ID, "ASSIGNED",
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            "other-cashier",
+            TENANT,
+            BUSINESS_ID,
+            "ASSIGNED",
             (int) LocalDate.of(2026, 7, 27).toEpochDay(),
             (int) LocalDate.of(9999, 12, 31).toEpochDay());
     assignmentService.apply(seed);
@@ -187,8 +195,12 @@ class OutletEnforcementTest extends PostgresRlsTestBase {
     // Assign CASHIER_ACTOR to BUSINESS_ID.
     UserOutletAssignmentEvent assignEvent =
         new UserOutletAssignmentEvent(
-            UUID.randomUUID(), UUID.randomUUID(), CASHIER_ACTOR, TENANT,
-            BUSINESS_ID, "ASSIGNED",
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            CASHIER_ACTOR,
+            TENANT,
+            BUSINESS_ID,
+            "ASSIGNED",
             (int) LocalDate.of(2026, 7, 27).toEpochDay(),
             (int) LocalDate.of(9999, 12, 31).toEpochDay());
     assignmentService.apply(assignEvent);
@@ -213,8 +225,12 @@ class OutletEnforcementTest extends PostgresRlsTestBase {
     // Assign cashier to a DIFFERENT outlet.
     UserOutletAssignmentEvent seedOtherOutlet =
         new UserOutletAssignmentEvent(
-            UUID.randomUUID(), UUID.randomUUID(), CASHIER_ACTOR, TENANT,
-            OTHER_BUSINESS_ID, "ASSIGNED",
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            CASHIER_ACTOR,
+            TENANT,
+            OTHER_BUSINESS_ID,
+            "ASSIGNED",
             (int) LocalDate.of(2026, 7, 27).toEpochDay(),
             (int) LocalDate.of(9999, 12, 31).toEpochDay());
     assignmentService.apply(seedOtherOutlet);
@@ -236,15 +252,23 @@ class OutletEnforcementTest extends PostgresRlsTestBase {
     UUID assignmentId = UUID.randomUUID();
     UserOutletAssignmentEvent assign =
         new UserOutletAssignmentEvent(
-            UUID.randomUUID(), assignmentId, CASHIER_ACTOR, TENANT,
-            BUSINESS_ID, "ASSIGNED",
+            UUID.randomUUID(),
+            assignmentId,
+            CASHIER_ACTOR,
+            TENANT,
+            BUSINESS_ID,
+            "ASSIGNED",
             (int) LocalDate.of(2026, 7, 27).toEpochDay(),
             (int) LocalDate.of(9999, 12, 31).toEpochDay());
     assignmentService.apply(assign);
     UserOutletAssignmentEvent unassign =
         new UserOutletAssignmentEvent(
-            UUID.randomUUID(), assignmentId, CASHIER_ACTOR, TENANT,
-            BUSINESS_ID, "UNASSIGNED",
+            UUID.randomUUID(),
+            assignmentId,
+            CASHIER_ACTOR,
+            TENANT,
+            BUSINESS_ID,
+            "UNASSIGNED",
             (int) LocalDate.of(2026, 7, 27).toEpochDay(),
             (int) LocalDate.of(2026, 7, 28).toEpochDay());
     assignmentService.apply(unassign);
@@ -288,8 +312,12 @@ class OutletEnforcementTest extends PostgresRlsTestBase {
   private void assignCashierWithId(UUID assignmentId, UUID outletId) {
     UserOutletAssignmentEvent seed =
         new UserOutletAssignmentEvent(
-            UUID.randomUUID(), assignmentId, CASHIER_ACTOR, TENANT,
-            outletId, "ASSIGNED",
+            UUID.randomUUID(),
+            assignmentId,
+            CASHIER_ACTOR,
+            TENANT,
+            outletId,
+            "ASSIGNED",
             (int) LocalDate.of(2026, 7, 27).toEpochDay(),
             (int) LocalDate.of(9999, 12, 31).toEpochDay());
     assignmentService.apply(seed);
@@ -300,8 +328,12 @@ class OutletEnforcementTest extends PostgresRlsTestBase {
     // UNASSIGNED upsert conflicts on (company, user, org_unit) and flips active=false.
     UserOutletAssignmentEvent seed =
         new UserOutletAssignmentEvent(
-            UUID.randomUUID(), assignmentId, CASHIER_ACTOR, TENANT,
-            outletId, "UNASSIGNED",
+            UUID.randomUUID(),
+            assignmentId,
+            CASHIER_ACTOR,
+            TENANT,
+            outletId,
+            "UNASSIGNED",
             (int) LocalDate.of(2026, 7, 27).toEpochDay(),
             (int) LocalDate.of(2026, 7, 28).toEpochDay());
     assignmentService.apply(seed);
@@ -381,9 +413,9 @@ class OutletEnforcementTest extends PostgresRlsTestBase {
 
   /**
    * The legacy {@code POST /api/v1/sales} path (SaleController → SaleService → SaleWriter.create)
-   * is cashier-reachable at the gateway and carries a client-supplied {@code businessId}. Before the
-   * choke-point guard it recorded a {@code SaleRecorded} with NO outlet check — a cashier could mint
-   * revenue at any outlet. The guard in {@code SaleWriter.create} must reject it.
+   * is cashier-reachable at the gateway and carries a client-supplied {@code businessId}. Before
+   * the choke-point guard it recorded a {@code SaleRecorded} with NO outlet check — a cashier could
+   * mint revenue at any outlet. The guard in {@code SaleWriter.create} must reject it.
    */
   @Test
   void cashierCannotRecordDirectSaleAtUnassignedOutletWhenScopingIsAdopted() {
@@ -396,7 +428,8 @@ class OutletEnforcementTest extends PostgresRlsTestBase {
             BUSINESS_ID, 15_000L, "IDR", Instant.now(), UUID.randomUUID().toString());
 
     assertThatThrownBy(
-            () -> TenantContext.callAs(TENANT, CASHIER_ACTOR, () -> saleService.recordSale(command)))
+            () ->
+                TenantContext.callAs(TENANT, CASHIER_ACTOR, () -> saleService.recordSale(command)))
         .isInstanceOf(OutletNotAssignedException.class);
   }
 
@@ -414,9 +447,9 @@ class OutletEnforcementTest extends PostgresRlsTestBase {
 
   /**
    * The guard in {@code SaleWriter.create} sits AFTER the idempotency fast-path ON PURPOSE: an
-   * idempotent REPLAY of an already-recorded sale must still return the existing sale (200,
-   * {@code created=false}) even if the cashier's assignment was revoked between the two calls — no
-   * NEW revenue is minted, so there is nothing to block. This test pins that ordering so a future
+   * idempotent REPLAY of an already-recorded sale must still return the existing sale (200, {@code
+   * created=false}) even if the cashier's assignment was revoked between the two calls — no NEW
+   * revenue is minted, so there is nothing to block. This test pins that ordering so a future
    * refactor that hoists the guard above the fast-path (re-introducing a 403-on-legitimate-retry)
    * fails here.
    */
@@ -489,7 +522,9 @@ class OutletEnforcementTest extends PostgresRlsTestBase {
     // The unassigned cashier tries to capture (recognize revenue) → 403 at the money moment.
     setRoles("cashier");
     assertThatThrownBy(
-            () -> TenantContext.callAs(TENANT, CASHIER_ACTOR, () -> captureService.capture(paymentId)))
+            () ->
+                TenantContext.callAs(
+                    TENANT, CASHIER_ACTOR, () -> captureService.capture(paymentId)))
         .isInstanceOf(OutletNotAssignedException.class);
   }
 

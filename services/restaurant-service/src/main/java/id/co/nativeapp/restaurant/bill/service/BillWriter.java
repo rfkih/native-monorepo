@@ -147,8 +147,8 @@ public class BillWriter {
   // -------------------------------------------------------------------------
 
   /**
-   * Appends a round of items to an OPEN bill. Validates items, currency homogeneity (must match
-   * the bill's established currency after first round), modifiers, and stock pre-check.
+   * Appends a round of items to an OPEN bill. Validates items, currency homogeneity (must match the
+   * bill's established currency after first round), modifiers, and stock pre-check.
    *
    * @throws BillNotFoundException if the bill is not found
    * @throws BillNotOpenException if the bill is not OPEN
@@ -159,9 +159,7 @@ public class BillWriter {
     String companyId = TenantContext.require().companyId();
 
     Bill bill =
-        billRepository
-            .findById(billId)
-            .orElseThrow(() -> new BillNotFoundException(billId));
+        billRepository.findById(billId).orElseThrow(() -> new BillNotFoundException(billId));
 
     if (!"OPEN".equals(bill.getStatus())) {
       throw new BillNotOpenException(billId, bill.getStatus());
@@ -195,7 +193,8 @@ public class BillWriter {
       }
 
       BillLine line =
-          new BillLine(lineReq.menuItemId(), view.getName(), unitPrice, modifierDelta, lineReq.qty());
+          new BillLine(
+              lineReq.menuItemId(), view.getName(), unitPrice, modifierDelta, lineReq.qty());
       line.setCompanyId(companyId);
       for (ModifierOptionView opt : lineModifiers) {
         BillLineModifier modifier =
@@ -234,9 +233,7 @@ public class BillWriter {
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void removeLine(UUID billId, UUID lineId) {
     Bill bill =
-        billRepository
-            .findById(billId)
-            .orElseThrow(() -> new BillNotFoundException(billId));
+        billRepository.findById(billId).orElseThrow(() -> new BillNotFoundException(billId));
 
     if (!"OPEN".equals(bill.getStatus())) {
       throw new BillNotOpenException(billId, bill.getStatus());
@@ -263,19 +260,20 @@ public class BillWriter {
    * Pays a SUBSET or ALL remaining unpaid lines on an OPEN bill as one check.
    *
    * <p><strong>Full-bill pay (existing behaviour):</strong> when {@code request.lineIds()} is null
-   * or empty, every still-unpaid line is included in this check. This is exactly the pre-Increment-3
-   * behaviour; all existing tests continue to pass.
+   * or empty, every still-unpaid line is included in this check. This is exactly the
+   * pre-Increment-3 behaviour; all existing tests continue to pass.
    *
    * <p><strong>Split check (Increment 3):</strong> when {@code request.lineIds()} is non-empty,
    * only those lines (intersected with the bill's unpaid lines) are included. The bill stays OPEN
    * until all its lines are paid, then transitions to PAID automatically.
    *
    * <p><strong>Idempotency:</strong>
+   *
    * <ul>
    *   <li>If the bill is already PAID — return the current state without side effects.
-   *   <li>If a caller-supplied {@code idempotencyKey} matches a sale already recorded — short-circuit
-   *       (no second sale, no second stock deduction). The lines that were marked paid in the
-   *       original call retain their {@code paid=true} state.
+   *   <li>If a caller-supplied {@code idempotencyKey} matches a sale already recorded —
+   *       short-circuit (no second sale, no second stock deduction). The lines that were marked
+   *       paid in the original call retain their {@code paid=true} state.
    *   <li>If no explicit key is supplied, a deterministic key is derived from the bill id and the
    *       sorted set of target line ids so retries of the same logical check are safe.
    * </ul>
@@ -290,9 +288,7 @@ public class BillWriter {
   public BillResponse payBill(UUID billId, PayBillRequest request) {
     String actor = TenantContext.require().actor();
     Bill bill =
-        billRepository
-            .findById(billId)
-            .orElseThrow(() -> new BillNotFoundException(billId));
+        billRepository.findById(billId).orElseThrow(() -> new BillNotFoundException(billId));
 
     // Phase 5 enforcement at the money moment: even if the bill was opened by someone else (or the
     // cashier's assignment was revoked mid-shift), paying it requires outlet access.
@@ -304,7 +300,9 @@ public class BillWriter {
       List<BillLineResponse> lineResponses = buildLineResponses(lineViews);
       String currency = bill.getCurrency().strip();
       PriceBreakdown breakdown =
-          lineViews.isEmpty() ? null : computeBreakdown(lineViews, currency, bill.getDiscountMinor());
+          lineViews.isEmpty()
+              ? null
+              : computeBreakdown(lineViews, currency, bill.getDiscountMinor());
       return toBillResponse(bill, lineResponses, breakdown, currency);
     }
 
@@ -349,10 +347,10 @@ public class BillWriter {
         allLineViews.stream().collect(Collectors.toMap(BillLineView::getId, Function.identity()));
 
     // Separate unpaid from paid line views.
-    List<BillLineView> unpaidLineViews =
-        allLineViews.stream().filter(v -> !v.isPaid()).toList();
+    List<BillLineView> unpaidLineViews = allLineViews.stream().filter(v -> !v.isPaid()).toList();
 
-    Set<UUID> unpaidIds = unpaidLineViews.stream().map(BillLineView::getId).collect(Collectors.toSet());
+    Set<UUID> unpaidIds =
+        unpaidLineViews.stream().map(BillLineView::getId).collect(Collectors.toSet());
 
     List<BillLineView> targetLineViews;
     if (requestedLineIds != null) {
@@ -368,9 +366,8 @@ public class BillWriter {
         }
       }
       Set<UUID> requestedSet = Set.copyOf(requestedLineIds);
-      targetLineViews = unpaidLineViews.stream()
-          .filter(v -> requestedSet.contains(v.getId()))
-          .toList();
+      targetLineViews =
+          unpaidLineViews.stream().filter(v -> requestedSet.contains(v.getId())).toList();
     } else {
       // Full-bill pay — all unpaid lines.
       targetLineViews = unpaidLineViews;
@@ -490,9 +487,7 @@ public class BillWriter {
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void cancelBill(UUID billId) {
     Bill bill =
-        billRepository
-            .findById(billId)
-            .orElseThrow(() -> new BillNotFoundException(billId));
+        billRepository.findById(billId).orElseThrow(() -> new BillNotFoundException(billId));
 
     if (!"OPEN".equals(bill.getStatus())) {
       throw new BillNotOpenException(billId, bill.getStatus());
@@ -507,8 +502,8 @@ public class BillWriter {
   // -------------------------------------------------------------------------
 
   /**
-   * Fetches a single bill by id (full detail: header + lines + modifiers + live breakdown). Runs
-   * in a REQUIRES_NEW read-only transaction so RLS is active.
+   * Fetches a single bill by id (full detail: header + lines + modifiers + live breakdown). Runs in
+   * a REQUIRES_NEW read-only transaction so RLS is active.
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
   public Optional<BillResponse> findById(UUID billId) {
@@ -532,15 +527,15 @@ public class BillWriter {
   // -------------------------------------------------------------------------
 
   /**
-   * Returns the current bill state for an idempotent replay. If all lines are now paid but the
-   * bill aggregate is not yet marked PAID (can happen if the bill transition failed and then the
-   * client retries), marks the bill PAID using the provided sale id.
+   * Returns the current bill state for an idempotent replay. If all lines are now paid but the bill
+   * aggregate is not yet marked PAID (can happen if the bill transition failed and then the client
+   * retries), marks the bill PAID using the provided sale id.
    */
   private BillResponse idempotentResult(Bill bill, String currency, UUID saleId) {
     List<BillLineView> currentLineViews = lineRepository.findViewsByBillId(bill.getId());
     List<BillLineResponse> lineResponses = buildLineResponses(currentLineViews);
-    boolean allPaid = !currentLineViews.isEmpty()
-        && currentLineViews.stream().allMatch(BillLineView::isPaid);
+    boolean allPaid =
+        !currentLineViews.isEmpty() && currentLineViews.stream().allMatch(BillLineView::isPaid);
     if (allPaid && !"PAID".equals(bill.getStatus())) {
       bill.markPaid(saleId);
       billRepository.saveAndFlush(bill);
@@ -611,7 +606,8 @@ public class BillWriter {
       }
       Integer stock = view.getStockQuantity();
       if (stock != null && stock == 0) {
-        throw new InsufficientStockException(lineReq.menuItemId(), view.getName(), lineReq.qty(), 0);
+        throw new InsufficientStockException(
+            lineReq.menuItemId(), view.getName(), lineReq.qty(), 0);
       }
     }
 
@@ -692,10 +688,7 @@ public class BillWriter {
       modifierRepository
           .findViewsByBillLineIds(chunk)
           .forEach(
-              m ->
-                  modByLine
-                      .computeIfAbsent(m.getBillLineId(), k -> new ArrayList<>())
-                      .add(m));
+              m -> modByLine.computeIfAbsent(m.getBillLineId(), k -> new ArrayList<>()).add(m));
     }
     return lineViews.stream()
         .map(view -> toLineResponse(view, modByLine.getOrDefault(view.getId(), List.of())))
@@ -728,10 +721,7 @@ public class BillWriter {
    * of target line ids. Using SHA-256 keeps the key short regardless of line count.
    */
   private static String deriveCheckIdempotencyKey(UUID billId, List<BillLineView> targetLines) {
-    List<String> sortedIds = targetLines.stream()
-        .map(v -> v.getId().toString())
-        .sorted()
-        .toList();
+    List<String> sortedIds = targetLines.stream().map(v -> v.getId().toString()).sorted().toList();
     String raw = billId + ":check:" + String.join(",", sortedIds);
     try {
       MessageDigest digest = MessageDigest.getInstance("SHA-256");

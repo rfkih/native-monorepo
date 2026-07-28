@@ -13,9 +13,9 @@ import java.util.UUID;
  * <p><strong>Full-bill pay (existing behaviour):</strong> omit {@code lineIds} (null or empty).
  * Every still-unpaid line on the bill is included in this check.
  *
- * <p><strong>Split check:</strong> supply {@code lineIds} to restrict this check to a subset of
- * the bill's still-unpaid lines. The bill stays OPEN until all lines are paid, then transitions to
- * PAID automatically.
+ * <p><strong>Split check:</strong> supply {@code lineIds} to restrict this check to a subset of the
+ * bill's still-unpaid lines. The bill stays OPEN until all lines are paid, then transitions to PAID
+ * automatically.
  *
  * <p>The {@code idempotencyKey} is the caller-supplied idempotency key for the check's sale. When
  * null, one is derived deterministically from the bill id and the sorted set of target line ids so

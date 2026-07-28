@@ -21,8 +21,8 @@ import org.springframework.boot.test.context.SpringBootTest;
  * <ul>
  *   <li>DELETE returns 204 (via service — the controller delegates to service which calls writer).
  *   <li>After delete the item no longer appears in {@code GET /api/v1/menu}.
- *   <li>DELETE of an unknown id throws {@link NoSuchElementException} (→ 404 via
- *       {@link id.co.nativeapp.restaurant.config.StockExceptionHandler}).
+ *   <li>DELETE of an unknown id throws {@link NoSuchElementException} (→ 404 via {@link
+ *       id.co.nativeapp.restaurant.config.StockExceptionHandler}).
  * </ul>
  */
 @SpringBootTest
@@ -48,7 +48,13 @@ class MenuItemDeleteTest extends PostgresRlsTestBase {
     assertThat(before).extracting(MenuItemResponse::id).contains(itemId);
 
     // Delete.
-    TenantContext.callAs(TENANT, ACTOR, () -> { menuService.deleteItem(itemId); return null; });
+    TenantContext.callAs(
+        TENANT,
+        ACTOR,
+        () -> {
+          menuService.deleteItem(itemId);
+          return null;
+        });
 
     // After delete: item is gone from active menu.
     List<MenuItemResponse> after =
@@ -67,7 +73,12 @@ class MenuItemDeleteTest extends PostgresRlsTestBase {
     assertThatThrownBy(
             () ->
                 TenantContext.callAs(
-                    TENANT, ACTOR, () -> { menuService.deleteItem(unknown); return null; }))
+                    TENANT,
+                    ACTOR,
+                    () -> {
+                      menuService.deleteItem(unknown);
+                      return null;
+                    }))
         .isInstanceOf(NoSuchElementException.class)
         .hasMessageContaining(unknown.toString());
   }
@@ -89,7 +100,10 @@ class MenuItemDeleteTest extends PostgresRlsTestBase {
                 TenantContext.callAs(
                     otherTenant,
                     "hacker@other.co.id",
-                    () -> { menuService.deleteItem(itemId); return null; }))
+                    () -> {
+                      menuService.deleteItem(itemId);
+                      return null;
+                    }))
         .isInstanceOf(NoSuchElementException.class);
 
     // Item is still visible to the original tenant.

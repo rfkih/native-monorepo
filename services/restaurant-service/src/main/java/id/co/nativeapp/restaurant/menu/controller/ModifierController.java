@@ -36,8 +36,8 @@ import org.springframework.web.bind.annotation.RestController;
  *   <li>{@code DELETE /api/v1/menu/{menuItemId}/modifier-groups/{groupId}} — hard-delete a group
  *       and all its options (safe: order/bill tables snapshot, no FK).
  *   <li>{@code POST /api/v1/menu/{menuItemId}/modifier-groups/{groupId}/options} — add an option.
- *   <li>{@code PATCH /api/v1/menu/{menuItemId}/modifier-groups/{groupId}/options/{optionId}} —
- *       edit an option (patch semantics).
+ *   <li>{@code PATCH /api/v1/menu/{menuItemId}/modifier-groups/{groupId}/options/{optionId}} — edit
+ *       an option (patch semantics).
  *   <li>{@code DELETE /api/v1/menu/{menuItemId}/modifier-groups/{groupId}/options/{optionId}} —
  *       hard-delete an option (safe: order/bill tables snapshot, no FK).
  *   <li>{@code PATCH /api/v1/menu/{menuItemId}/modifier-groups/{groupId}/options/{optionId}/86} —
@@ -194,9 +194,7 @@ public class ModifierController {
               + " current tenant.")
   @DeleteMapping("/{menuItemId}/modifier-groups/{groupId}/options/{optionId}")
   public ResponseEntity<Void> deleteOption(
-      @PathVariable UUID menuItemId,
-      @PathVariable UUID groupId,
-      @PathVariable UUID optionId) {
+      @PathVariable UUID menuItemId, @PathVariable UUID groupId, @PathVariable UUID optionId) {
     modifierService.deleteOption(optionId);
     return ResponseEntity.noContent().build();
   }

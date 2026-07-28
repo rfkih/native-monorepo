@@ -16,9 +16,9 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Orchestrates bill lifecycle: open, append, list, get, pay, cancel.
  *
- * <p>Not itself {@code @Transactional} — transactional units live in {@link BillWriter} (writes)
- * so the proxy and the RLS aspect engage. Follows the same {@code OrderService} / {@code
- * SaleService} pattern exactly.
+ * <p>Not itself {@code @Transactional} — transactional units live in {@link BillWriter} (writes) so
+ * the proxy and the RLS aspect engage. Follows the same {@code OrderService} / {@code SaleService}
+ * pattern exactly.
  */
 @Service
 public class BillService {
@@ -69,8 +69,7 @@ public class BillService {
     return writer
         .findById(billId)
         .orElseThrow(
-            () ->
-                new id.co.nativeapp.restaurant.bill.domain.BillNotFoundException(billId));
+            () -> new id.co.nativeapp.restaurant.bill.domain.BillNotFoundException(billId));
   }
 
   /**
@@ -97,8 +96,8 @@ public class BillService {
   }
 
   /**
-   * Finalises an OPEN bill: deducts stock, records the sale, transitions to PAID.
-   * Idempotent on re-pay of a PAID bill.
+   * Finalises an OPEN bill: deducts stock, records the sale, transitions to PAID. Idempotent on
+   * re-pay of a PAID bill.
    *
    * @throws id.co.nativeapp.restaurant.bill.domain.BillNotFoundException if not found
    * @throws id.co.nativeapp.restaurant.bill.domain.BillNotOpenException if not OPEN (and not PAID)

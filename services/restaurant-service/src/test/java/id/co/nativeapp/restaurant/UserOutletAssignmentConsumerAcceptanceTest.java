@@ -24,18 +24,19 @@ import org.springframework.boot.test.context.SpringBootTest;
  *   <li>ASSIGNED event → row upserted with {@code active = TRUE}.
  *   <li>UNASSIGNED event → row upserted with {@code active = FALSE}.
  *   <li>Re-delivering the same event UUID is a no-op (idempotency via {@code processed_event}).
- *   <li>Events for different companies are isolated in separate RLS scopes (cross-tenant isolation).
+ *   <li>Events for different companies are isolated in separate RLS scopes (cross-tenant
+ *       isolation).
  * </ol>
  *
- * <p><strong>Admin connection for assertions.</strong> The repository queries use RLS (the
- * auto-RLS aspect fires only inside {@code @Transactional} boundaries). Post-apply assertions use
- * the BYPASSRLS superuser admin connection so the row counts are tenant-independent and not subject
- * to missing-GUC fail-closed behaviour. Cross-tenant isolation is proven by asserting that the
- * admin sees exactly 1 row for {@code COMPANY_A} but 0 for {@code COMPANY_B} after a COMPANY_A event.
+ * <p><strong>Admin connection for assertions.</strong> The repository queries use RLS (the auto-RLS
+ * aspect fires only inside {@code @Transactional} boundaries). Post-apply assertions use the
+ * BYPASSRLS superuser admin connection so the row counts are tenant-independent and not subject to
+ * missing-GUC fail-closed behaviour. Cross-tenant isolation is proven by asserting that the admin
+ * sees exactly 1 row for {@code COMPANY_A} but 0 for {@code COMPANY_B} after a COMPANY_A event.
  *
  * <p>The full {@code @SpringBootTest} context runs Flyway (creates the tables), validates the JPA
- * mapping, and engages the auto-RLS aspect — the same behavior as production. The Postgres container
- * is shared with other suite tests via the {@link PostgresRlsTestBase} singleton pattern.
+ * mapping, and engages the auto-RLS aspect — the same behavior as production. The Postgres
+ * container is shared with other suite tests via the {@link PostgresRlsTestBase} singleton pattern.
  */
 @SpringBootTest
 class UserOutletAssignmentConsumerAcceptanceTest extends PostgresRlsTestBase {
@@ -43,7 +44,8 @@ class UserOutletAssignmentConsumerAcceptanceTest extends PostgresRlsTestBase {
   private static final String COMPANY_A = "11111111-1111-1111-1111-111111111111";
   private static final String COMPANY_B = "22222222-2222-2222-2222-222222222222";
   private static final String USER_CASHIER = "kc-cashier-01";
-  private static final UUID ORG_UNIT_OUTLET = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+  private static final UUID ORG_UNIT_OUTLET =
+      UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
   private static final int FROM_DAY = (int) LocalDate.of(2026, 7, 27).toEpochDay();
   private static final int TO_DAY_OPEN = (int) LocalDate.of(9999, 12, 31).toEpochDay();
 
@@ -60,8 +62,14 @@ class UserOutletAssignmentConsumerAcceptanceTest extends PostgresRlsTestBase {
 
     UserOutletAssignmentEvent event =
         new UserOutletAssignmentEvent(
-            eventId, assignmentId, USER_CASHIER, COMPANY_A,
-            ORG_UNIT_OUTLET, "ASSIGNED", FROM_DAY, TO_DAY_OPEN);
+            eventId,
+            assignmentId,
+            USER_CASHIER,
+            COMPANY_A,
+            ORG_UNIT_OUTLET,
+            "ASSIGNED",
+            FROM_DAY,
+            TO_DAY_OPEN);
 
     boolean applied = service.apply(event);
 
@@ -81,16 +89,28 @@ class UserOutletAssignmentConsumerAcceptanceTest extends PostgresRlsTestBase {
     // First assign.
     UserOutletAssignmentEvent assign =
         new UserOutletAssignmentEvent(
-            UUID.randomUUID(), assignmentId, USER_CASHIER, COMPANY_A,
-            ORG_UNIT_OUTLET, "ASSIGNED", FROM_DAY, TO_DAY_OPEN);
+            UUID.randomUUID(),
+            assignmentId,
+            USER_CASHIER,
+            COMPANY_A,
+            ORG_UNIT_OUTLET,
+            "ASSIGNED",
+            FROM_DAY,
+            TO_DAY_OPEN);
     service.apply(assign);
 
     // Then unassign with a different event id (a new event).
     int closeDay = (int) LocalDate.of(2026, 7, 28).toEpochDay();
     UserOutletAssignmentEvent unassign =
         new UserOutletAssignmentEvent(
-            UUID.randomUUID(), assignmentId, USER_CASHIER, COMPANY_A,
-            ORG_UNIT_OUTLET, "UNASSIGNED", FROM_DAY, closeDay);
+            UUID.randomUUID(),
+            assignmentId,
+            USER_CASHIER,
+            COMPANY_A,
+            ORG_UNIT_OUTLET,
+            "UNASSIGNED",
+            FROM_DAY,
+            closeDay);
     boolean applied = service.apply(unassign);
 
     assertThat(applied).isTrue();
@@ -111,8 +131,14 @@ class UserOutletAssignmentConsumerAcceptanceTest extends PostgresRlsTestBase {
 
     UserOutletAssignmentEvent event =
         new UserOutletAssignmentEvent(
-            eventId, assignmentId, USER_CASHIER, COMPANY_A,
-            ORG_UNIT_OUTLET, "ASSIGNED", FROM_DAY, TO_DAY_OPEN);
+            eventId,
+            assignmentId,
+            USER_CASHIER,
+            COMPANY_A,
+            ORG_UNIT_OUTLET,
+            "ASSIGNED",
+            FROM_DAY,
+            TO_DAY_OPEN);
 
     // First delivery.
     boolean first = service.apply(event);
@@ -122,9 +148,14 @@ class UserOutletAssignmentConsumerAcceptanceTest extends PostgresRlsTestBase {
     int closeDay = (int) LocalDate.of(2026, 7, 28).toEpochDay();
     UserOutletAssignmentEvent duplicate =
         new UserOutletAssignmentEvent(
-            eventId,   // same event id — this is a redelivery
-            assignmentId, USER_CASHIER, COMPANY_A,
-            ORG_UNIT_OUTLET, "UNASSIGNED", FROM_DAY, closeDay);
+            eventId, // same event id — this is a redelivery
+            assignmentId,
+            USER_CASHIER,
+            COMPANY_A,
+            ORG_UNIT_OUTLET,
+            "UNASSIGNED",
+            FROM_DAY,
+            closeDay);
 
     boolean second = service.apply(duplicate);
     assertThat(second).isFalse(); // idempotency: skipped
@@ -145,8 +176,14 @@ class UserOutletAssignmentConsumerAcceptanceTest extends PostgresRlsTestBase {
     // Event for COMPANY_A.
     UserOutletAssignmentEvent event =
         new UserOutletAssignmentEvent(
-            eventId, assignmentId, USER_CASHIER, COMPANY_A,
-            ORG_UNIT_OUTLET, "ASSIGNED", FROM_DAY, TO_DAY_OPEN);
+            eventId,
+            assignmentId,
+            USER_CASHIER,
+            COMPANY_A,
+            ORG_UNIT_OUTLET,
+            "ASSIGNED",
+            FROM_DAY,
+            TO_DAY_OPEN);
     service.apply(event);
 
     // Admin can see the COMPANY_A row.
@@ -161,15 +198,17 @@ class UserOutletAssignmentConsumerAcceptanceTest extends PostgresRlsTestBase {
 
   /**
    * Counts ACTIVE assignment rows for the given (companyId, userId, orgUnitId) tuple using the
-   * admin connection, bypassing RLS. Useful for asserting post-upsert state without needing a live
-   * @Transactional scope.
+   * admin connection, bypassing RLS. Useful for asserting post-upsert state without needing a
+   * live @Transactional scope.
    */
   private long countActiveRowsAdmin(String companyId, String userId, UUID orgUnitId) {
-    try (Connection admin = java.sql.DriverManager.getConnection(
-             POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
-        PreparedStatement ps = admin.prepareStatement(
-            "SELECT COUNT(*) FROM user_outlet_assignment_ref "
-                + "WHERE company_id = ? AND user_id = ? AND org_unit_id = ? AND active = TRUE")) {
+    try (Connection admin =
+            java.sql.DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        PreparedStatement ps =
+            admin.prepareStatement(
+                "SELECT COUNT(*) FROM user_outlet_assignment_ref "
+                    + "WHERE company_id = ? AND user_id = ? AND org_unit_id = ? AND active = TRUE")) {
       // company_id is VARCHAR(64) in the schema, not UUID column.
       ps.setString(1, companyId);
       ps.setString(2, userId);
@@ -187,10 +226,12 @@ class UserOutletAssignmentConsumerAcceptanceTest extends PostgresRlsTestBase {
    * bypassing RLS.
    */
   private long countAllRowsAdmin(String companyId) {
-    try (Connection admin = java.sql.DriverManager.getConnection(
-             POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
-        PreparedStatement ps = admin.prepareStatement(
-            "SELECT COUNT(*) FROM user_outlet_assignment_ref WHERE company_id = ?")) {
+    try (Connection admin =
+            java.sql.DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        PreparedStatement ps =
+            admin.prepareStatement(
+                "SELECT COUNT(*) FROM user_outlet_assignment_ref WHERE company_id = ?")) {
       // company_id is VARCHAR(64) in the schema, not UUID column.
       ps.setString(1, companyId);
       try (ResultSet rs = ps.executeQuery()) {

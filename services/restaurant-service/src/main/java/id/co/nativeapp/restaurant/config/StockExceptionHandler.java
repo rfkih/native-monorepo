@@ -18,8 +18,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * Maps stock-domain exceptions to {@code 422 Unprocessable Entity} RFC-7807 ProblemDetail
  * responses.
  *
- * <p>Ordered before the shared {@link id.co.nativeapp.security.ApiExceptionHandler} (which owns
- * the catch-all {@link Exception} → 500 mapping) so these narrower handlers win.
+ * <p>Ordered before the shared {@link id.co.nativeapp.security.ApiExceptionHandler} (which owns the
+ * catch-all {@link Exception} → 500 mapping) so these narrower handlers win.
  *
  * <ul>
  *   <li>{@link InsufficientStockException} — checkout attempted to sell more than is in stock.
@@ -38,14 +38,13 @@ public class StockExceptionHandler {
    * {@link InsufficientStockException} → {@code 422 Unprocessable Entity}.
    *
    * <p>The detail includes the item name and id (catalog data, not PII) and the requested vs.
-   * available counts so the UI can display a meaningful message to the cashier. The sale is
-   * rolled back by the throwing transaction.
+   * available counts so the UI can display a meaningful message to the cashier. The sale is rolled
+   * back by the throwing transaction.
    */
   @ExceptionHandler(InsufficientStockException.class)
   public ProblemDetail handleInsufficientStock(
       InsufficientStockException ex, HttpServletRequest request) {
-    ProblemDetail problem =
-        problem(HttpStatus.UNPROCESSABLE_ENTITY, "insufficient-stock", request);
+    ProblemDetail problem = problem(HttpStatus.UNPROCESSABLE_ENTITY, "insufficient-stock", request);
     problem.setTitle("Insufficient stock");
     problem.setDetail(ex.getMessage());
     problem.setProperty("menuItemId", ex.getMenuItemId().toString());
@@ -64,8 +63,7 @@ public class StockExceptionHandler {
   @ExceptionHandler(UntrackedStockException.class)
   public ProblemDetail handleUntrackedStock(
       UntrackedStockException ex, HttpServletRequest request) {
-    ProblemDetail problem =
-        problem(HttpStatus.UNPROCESSABLE_ENTITY, "untracked-stock", request);
+    ProblemDetail problem = problem(HttpStatus.UNPROCESSABLE_ENTITY, "untracked-stock", request);
     problem.setTitle("Untracked stock");
     problem.setDetail(ex.getMessage());
     problem.setProperty("menuItemId", ex.getMenuItemId().toString());
@@ -75,18 +73,17 @@ public class StockExceptionHandler {
   /**
    * {@link OutletNotAssignedException} → {@code 403 Forbidden} RFC-7807 ProblemDetail.
    *
-   * <p>Emitted by {@link id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard} (shared
-   * by the order and open-bill write paths) when a cashier attempts to ring a sale at an outlet
-   * they are not assigned to (Phase 5 enforcement policy).
-   * The type URI {@code https://errors.nativeapp.id/outlet-not-assigned} is the stable contract the
-   * UI maps to an i18n key. Detail does NOT leak the outlet id (no PII risk, but avoids
-   * confirming which outlet ids exist in the tenant).
+   * <p>Emitted by {@link id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard} (shared by
+   * the order and open-bill write paths) when a cashier attempts to ring a sale at an outlet they
+   * are not assigned to (Phase 5 enforcement policy). The type URI {@code
+   * https://errors.nativeapp.id/outlet-not-assigned} is the stable contract the UI maps to an i18n
+   * key. Detail does NOT leak the outlet id (no PII risk, but avoids confirming which outlet ids
+   * exist in the tenant).
    */
   @ExceptionHandler(OutletNotAssignedException.class)
   public ProblemDetail handleOutletNotAssigned(
       OutletNotAssignedException ex, HttpServletRequest request) {
-    ProblemDetail problem =
-        ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
+    ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
     problem.setType(URI.create(OutletNotAssignedException.TYPE));
     problem.setInstance(URI.create(request.getRequestURI()));
     problem.setTitle("Outlet not assigned");
@@ -113,8 +110,7 @@ public class StockExceptionHandler {
     return problem;
   }
 
-  private static ProblemDetail problem(
-      HttpStatus status, String slug, HttpServletRequest request) {
+  private static ProblemDetail problem(HttpStatus status, String slug, HttpServletRequest request) {
     ProblemDetail problem = ProblemDetail.forStatus(status);
     problem.setType(URI.create(TYPE_BASE + slug));
     problem.setInstance(URI.create(request.getRequestURI()));

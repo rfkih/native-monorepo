@@ -223,8 +223,7 @@ public class ModifierWriter {
     // Verify the option exists and is visible to the current tenant before deleting.
     optionRepository
         .findById(optionId)
-        .orElseThrow(
-            () -> new NoSuchElementException("Modifier option not found: " + optionId));
+        .orElseThrow(() -> new NoSuchElementException("Modifier option not found: " + optionId));
     optionRepository.deleteById(optionId);
   }
 }

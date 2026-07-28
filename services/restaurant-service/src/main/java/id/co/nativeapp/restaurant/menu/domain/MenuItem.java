@@ -87,8 +87,8 @@ public class MenuItem extends Auditable {
 
   /**
    * Optional image — either a compact base64 data URL (e.g. {@code data:image/jpeg;base64,...}) or
-   * an external HTTP(S) URL. {@code NULL} means no image has been set. The application enforces a
-   * 3 MB soft cap via {@code @Size} validation on the request DTO; this column is unconstrained at
+   * an external HTTP(S) URL. {@code NULL} means no image has been set. The application enforces a 3
+   * MB soft cap via {@code @Size} validation on the request DTO; this column is unconstrained at
    * the DB layer so the sentinel sits in the right tier.
    */
   @Column(name = "image_url", nullable = true)
@@ -125,8 +125,8 @@ public class MenuItem extends Auditable {
    * @param price the price as {@link Money} (never a float, rule 8)
    * @param imageUrl optional image data URL or external URL; {@code null} = no image
    */
-  public MenuItem(UUID businessId, String name, String category, Money price,
-      @Nullable String imageUrl) {
+  public MenuItem(
+      UUID businessId, String name, String category, Money price, @Nullable String imageUrl) {
     this(businessId, name, category, price);
     this.imageUrl = imageUrl;
   }
@@ -171,8 +171,7 @@ public class MenuItem extends Auditable {
   }
 
   /** The optional image URL (data URL or external URL); {@code null} when not set. */
-  @Nullable
-  public String getImageUrl() {
+  @Nullable public String getImageUrl() {
     return imageUrl;
   }
 
@@ -196,8 +195,11 @@ public class MenuItem extends Auditable {
    * @param price new price; {@code null} = leave unchanged (currency cannot be changed)
    * @param imageUrl new image URL, or empty string to clear; {@code null} = leave unchanged
    */
-  public void update(@Nullable String name, @Nullable String category,
-      @Nullable Money price, @Nullable String imageUrl) {
+  public void update(
+      @Nullable String name,
+      @Nullable String category,
+      @Nullable Money price,
+      @Nullable String imageUrl) {
     if (name != null) {
       this.name = name;
     }

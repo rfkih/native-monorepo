@@ -33,8 +33,8 @@ import org.springframework.boot.test.context.SpringBootTest;
  * <ul>
  *   <li>Digital checkout of a TRACKED item does NOT change stock at checkout time.
  *   <li>After CAPTURE, stock is deducted by the ordered qty.
- *   <li>A capture that would exceed available stock → 422 {@link InsufficientStockException};
- *       no sale, no SaleRecorded, stock unchanged.
+ *   <li>A capture that would exceed available stock → 422 {@link InsufficientStockException}; no
+ *       sale, no SaleRecorded, stock unchanged.
  *   <li>An idempotent re-capture does not deduct twice.
  *   <li>An UNTRACKED item capture leaves stock NULL (no deduction, no error).
  * </ul>
@@ -73,7 +73,9 @@ class DigitalCaptureStockTest extends PostgresRlsTestBase {
     assertThat(stockQuantityAsAdmin(itemId))
         .as("stock must be deducted after capture: 10 - 3 = 7")
         .isEqualTo(7);
-    assertThat(saleRecordedCountAsAdmin()).as("exactly one SaleRecorded after capture").isEqualTo(1L);
+    assertThat(saleRecordedCountAsAdmin())
+        .as("exactly one SaleRecorded after capture")
+        .isEqualTo(1L);
   }
 
   // ---------------------------------------------------------------------------
@@ -91,9 +93,11 @@ class DigitalCaptureStockTest extends PostgresRlsTestBase {
     CheckoutResult checkout = doDigitalCheckout(itemId, 2, "digital-stock-overflow-001");
     UUID paymentId = checkout.order().payment().paymentId();
 
-    // Deplete stock to 1 via another (cash) sale so that the digital capture would need 2 but only 1 remains.
+    // Deplete stock to 1 via another (cash) sale so that the digital capture would need 2 but only
+    // 1 remains.
     UUID otherItem = createTrackedItem("Dummy", 5_000L, 0);
-    // Directly reduce stock via admin SQL to simulate concurrent depletion without another checkout.
+    // Directly reduce stock via admin SQL to simulate concurrent depletion without another
+    // checkout.
     setStockAsAdmin(itemId, 1); // only 1 left, but capture needs 2
 
     assertThatThrownBy(
@@ -106,7 +110,9 @@ class DigitalCaptureStockTest extends PostgresRlsTestBase {
     assertThat(rowCountAsAdmin("sale")).as("no sale row persisted").isZero();
 
     // Stock unchanged at 1 (the failed capture rolled back).
-    assertThat(stockQuantityAsAdmin(itemId)).as("stock unchanged after failed capture").isEqualTo(1);
+    assertThat(stockQuantityAsAdmin(itemId))
+        .as("stock unchanged after failed capture")
+        .isEqualTo(1);
   }
 
   // ---------------------------------------------------------------------------
@@ -136,9 +142,7 @@ class DigitalCaptureStockTest extends PostgresRlsTestBase {
     assertThat(stockQuantityAsAdmin(itemId))
         .as("stock must not change on re-capture: still 3")
         .isEqualTo(3);
-    assertThat(saleRecordedCountAsAdmin())
-        .as("no second SaleRecorded on re-capture")
-        .isEqualTo(1L);
+    assertThat(saleRecordedCountAsAdmin()).as("no second SaleRecorded on re-capture").isEqualTo(1L);
   }
 
   // ---------------------------------------------------------------------------
@@ -169,7 +173,9 @@ class DigitalCaptureStockTest extends PostgresRlsTestBase {
     assertThat(stockQuantityAsAdmin(itemId))
         .as("untracked item — stock_quantity stays NULL after capture")
         .isNull();
-    assertThat(saleRecordedCountAsAdmin()).as("SaleRecorded emitted for untracked item").isEqualTo(1L);
+    assertThat(saleRecordedCountAsAdmin())
+        .as("SaleRecorded emitted for untracked item")
+        .isEqualTo(1L);
   }
 
   // ---------------------------------------------------------------------------
@@ -183,7 +189,8 @@ class DigitalCaptureStockTest extends PostgresRlsTestBase {
             ACTOR,
             () ->
                 menuService
-                    .createItem(new CreateMenuItemRequest(BUSINESS, name, "MAIN", priceMinor, "IDR"))
+                    .createItem(
+                        new CreateMenuItemRequest(BUSINESS, name, "MAIN", priceMinor, "IDR"))
                     .id());
     TenantContext.callAs(TENANT, ACTOR, () -> stockService.setStock(itemId, stock));
     return itemId;
@@ -209,8 +216,7 @@ class DigitalCaptureStockTest extends PostgresRlsTestBase {
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
         Statement st = admin.createStatement();
         ResultSet rs =
-            st.executeQuery(
-                "SELECT stock_quantity FROM menu_item WHERE id = '" + itemId + "'")) {
+            st.executeQuery("SELECT stock_quantity FROM menu_item WHERE id = '" + itemId + "'")) {
       rs.next();
       int val = rs.getInt(1);
       return rs.wasNull() ? null : val;
@@ -240,14 +246,16 @@ class DigitalCaptureStockTest extends PostgresRlsTestBase {
     }
   }
 
-  /** Sets the stock_quantity directly via admin (BYPASSRLS) connection to simulate concurrent depletion. */
+  /**
+   * Sets the stock_quantity directly via admin (BYPASSRLS) connection to simulate concurrent
+   * depletion.
+   */
   private void setStockAsAdmin(UUID itemId, int qty) throws Exception {
     try (Connection admin =
             java.sql.DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
         Statement st = admin.createStatement()) {
-      st.execute(
-          "UPDATE menu_item SET stock_quantity = " + qty + " WHERE id = '" + itemId + "'");
+      st.execute("UPDATE menu_item SET stock_quantity = " + qty + " WHERE id = '" + itemId + "'");
     }
   }
 }

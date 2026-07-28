@@ -16,7 +16,8 @@ public class InsufficientStockException extends RuntimeException {
   private final int requested;
   private final int available;
 
-  public InsufficientStockException(UUID menuItemId, String itemName, int requested, int available) {
+  public InsufficientStockException(
+      UUID menuItemId, String itemName, int requested, int available) {
     super(
         "Insufficient stock for item '"
             + itemName

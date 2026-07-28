@@ -26,10 +26,10 @@ import org.springframework.stereotype.Component;
  *
  * <p><strong>Idempotency by event id, not offset.</strong> The dedupe key is the event's UUID taken
  * from the {@code id} Kafka header the Debezium outbox event router stamps. A record arriving
- * WITHOUT a valid {@code id} header is a producer-side contract violation: the listener fails closed
- * ({@link #eventIdOf}) so the record is DLT'd. Deduping by the durable event id (not the offset)
- * survives rebalances and compacted replay; the dedupe + upsert happen transactionally in {@link
- * id.co.nativeapp.restaurant.outletref.service.UserOutletAssignmentRefWriter}.
+ * WITHOUT a valid {@code id} header is a producer-side contract violation: the listener fails
+ * closed ({@link #eventIdOf}) so the record is DLT'd. Deduping by the durable event id (not the
+ * offset) survives rebalances and compacted replay; the dedupe + upsert happen transactionally in
+ * {@link id.co.nativeapp.restaurant.outletref.service.UserOutletAssignmentRefWriter}.
  *
  * <p><strong>Tenant from the event.</strong> There is no JWT on the consumer path; the handler is
  * bound to the event's {@code company_id} inside {@link UserOutletAssignmentRefService} so RLS

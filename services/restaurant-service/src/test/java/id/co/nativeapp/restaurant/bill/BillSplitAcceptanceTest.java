@@ -68,29 +68,25 @@ class BillSplitAcceptanceTest extends PostgresRlsTestBase {
         ACTOR,
         () ->
             menuService
-                .createItem(new CreateMenuItemRequest(BUSINESS, "Item-" + price, "MAIN", price, "IDR"))
+                .createItem(
+                    new CreateMenuItemRequest(BUSINESS, "Item-" + price, "MAIN", price, "IDR"))
                 .id());
   }
 
   private UUID seedTrackedItem(long price, int stock) throws Exception {
     UUID id = seedItem(price);
-    executeAsAdmin(
-        "UPDATE menu_item SET stock_quantity = " + stock + " WHERE id = '" + id + "'");
+    executeAsAdmin("UPDATE menu_item SET stock_quantity = " + stock + " WHERE id = '" + id + "'");
     return id;
   }
 
   private BillResponse openBill(String guestLabel) throws Exception {
     return TenantContext.callAs(
-        TENANT_A,
-        ACTOR,
-        () -> billService.open(new OpenBillRequest(BUSINESS, null, guestLabel)));
+        TENANT_A, ACTOR, () -> billService.open(new OpenBillRequest(BUSINESS, null, guestLabel)));
   }
 
   private BillResponse appendLines(UUID billId, List<OrderLineRequest> lines) throws Exception {
     return TenantContext.callAs(
-        TENANT_A,
-        ACTOR,
-        () -> billService.appendLines(billId, new AppendLinesRequest(lines)));
+        TENANT_A, ACTOR, () -> billService.appendLines(billId, new AppendLinesRequest(lines)));
   }
 
   private BillResponse payAll(UUID billId) throws Exception {
@@ -100,14 +96,16 @@ class BillSplitAcceptanceTest extends PostgresRlsTestBase {
 
   private BillResponse payLines(UUID billId, List<UUID> lineIds) throws Exception {
     return TenantContext.callAs(
-        TENANT_A, ACTOR,
+        TENANT_A,
+        ACTOR,
         () -> billService.payBill(billId, new PayBillRequest(null, null, lineIds, null)));
   }
 
   private BillResponse payLinesWithKey(UUID billId, List<UUID> lineIds, String idemKey)
       throws Exception {
     return TenantContext.callAs(
-        TENANT_A, ACTOR,
+        TENANT_A,
+        ACTOR,
         () -> billService.payBill(billId, new PayBillRequest(null, null, lineIds, idemKey)));
   }
 
@@ -143,9 +141,9 @@ class BillSplitAcceptanceTest extends PostgresRlsTestBase {
   // -----------------------------------------------------------------------
 
   /**
-   * Core split scenario: pay line A first (check 1), then line B (check 2).
-   * After check 1 the bill is still OPEN; after check 2 the bill is PAID.
-   * The sum of the two check amounts equals the whole-bill subtotal.
+   * Core split scenario: pay line A first (check 1), then line B (check 2). After check 1 the bill
+   * is still OPEN; after check 2 the bill is PAID. The sum of the two check amounts equals the
+   * whole-bill subtotal.
    */
   @Test
   void splitByItem_twoChecks_billPaidAfterAllLinesCovered() throws Exception {
@@ -156,7 +154,8 @@ class BillSplitAcceptanceTest extends PostgresRlsTestBase {
 
     // Append both items in one round.
     BillResponse afterAppend =
-        appendLines(bill.id(), List.of(new OrderLineRequest(itemA, 1), new OrderLineRequest(itemB, 1)));
+        appendLines(
+            bill.id(), List.of(new OrderLineRequest(itemA, 1), new OrderLineRequest(itemB, 1)));
     assertThat(afterAppend.lines()).hasSize(2);
 
     UUID lineAId = afterAppend.lines().get(0).id();
@@ -171,15 +170,17 @@ class BillSplitAcceptanceTest extends PostgresRlsTestBase {
 
     // Line A is paid, line B is not.
     Map<UUID, BillLineResponse> byId1 =
-        afterCheck1.lines().stream().collect(java.util.stream.Collectors.toMap(BillLineResponse::id, l -> l));
+        afterCheck1.lines().stream()
+            .collect(java.util.stream.Collectors.toMap(BillLineResponse::id, l -> l));
     assertThat(byId1.get(lineAId).paid()).isTrue();
     assertThat(byId1.get(lineBId).paid()).isFalse();
 
     // Exactly one SaleRecorded for 10,000 IDR.
     List<Map<String, Object>> outbox1 = saleRecordedRows();
     assertThat(outbox1).hasSize(1);
-    GenericRecord decoded1 = AvroSerde.deserialize(
-        (byte[]) outbox1.getFirst().get("payload"), SaleRecordedSchema.schema());
+    GenericRecord decoded1 =
+        AvroSerde.deserialize(
+            (byte[]) outbox1.getFirst().get("payload"), SaleRecordedSchema.schema());
     assertThat(decoded1.get("amount_minor")).isEqualTo(10_000L);
     UUID check1SaleId = UUID.fromString(decoded1.get("sale_id").toString());
 
@@ -192,25 +193,28 @@ class BillSplitAcceptanceTest extends PostgresRlsTestBase {
 
     // Both lines are paid.
     Map<UUID, BillLineResponse> byId2 =
-        afterCheck2.lines().stream().collect(java.util.stream.Collectors.toMap(BillLineResponse::id, l -> l));
+        afterCheck2.lines().stream()
+            .collect(java.util.stream.Collectors.toMap(BillLineResponse::id, l -> l));
     assertThat(byId2.get(lineAId).paid()).isTrue();
     assertThat(byId2.get(lineBId).paid()).isTrue();
 
     // Two SaleRecorded events; amounts sum to 30,000.
     List<Map<String, Object>> outbox2 = saleRecordedRows();
     assertThat(outbox2).hasSize(2);
-    long totalRevenue = outbox2.stream()
-        .mapToLong(row -> {
-          GenericRecord r = AvroSerde.deserialize((byte[]) row.get("payload"), SaleRecordedSchema.schema());
-          return (long) r.get("amount_minor");
-        })
-        .sum();
+    long totalRevenue =
+        outbox2.stream()
+            .mapToLong(
+                row -> {
+                  GenericRecord r =
+                      AvroSerde.deserialize(
+                          (byte[]) row.get("payload"), SaleRecordedSchema.schema());
+                  return (long) r.get("amount_minor");
+                })
+            .sum();
     assertThat(totalRevenue).isEqualTo(30_000L);
   }
 
-  /**
-   * Paying all remaining lines (full-bill pay) with no lineIds still works as before.
-   */
+  /** Paying all remaining lines (full-bill pay) with no lineIds still works as before. */
   @Test
   void fullBillPay_noLineIds_worksAsBeforeAndLinesPaidFlagIsTrue() throws Exception {
     UUID itemId = seedItem(15_000L);
@@ -224,13 +228,15 @@ class BillSplitAcceptanceTest extends PostgresRlsTestBase {
     assertThat(paid.saleId()).isNotNull();
     assertThat(paid.lines()).allMatch(BillLineResponse::paid);
     assertThat(saleRecordedRows()).hasSize(1);
-    GenericRecord decoded = AvroSerde.deserialize(
-        (byte[]) saleRecordedRows().getFirst().get("payload"), SaleRecordedSchema.schema());
+    GenericRecord decoded =
+        AvroSerde.deserialize(
+            (byte[]) saleRecordedRows().getFirst().get("payload"), SaleRecordedSchema.schema());
     assertThat(decoded.get("amount_minor")).isEqualTo(30_000L);
   }
 
   /**
-   * Attempting to pay a line that was already paid in a previous check → 400/IllegalArgumentException.
+   * Attempting to pay a line that was already paid in a previous check →
+   * 400/IllegalArgumentException.
    */
   @Test
   void payAlreadyPaidLine_throwsIllegalArgument() throws Exception {
@@ -239,7 +245,8 @@ class BillSplitAcceptanceTest extends PostgresRlsTestBase {
 
     BillResponse bill = openBill("Double-Pay");
     BillResponse afterAppend =
-        appendLines(bill.id(), List.of(new OrderLineRequest(itemA, 1), new OrderLineRequest(itemB, 1)));
+        appendLines(
+            bill.id(), List.of(new OrderLineRequest(itemA, 1), new OrderLineRequest(itemB, 1)));
 
     UUID lineAId = afterAppend.lines().get(0).id();
     UUID lineBId = afterAppend.lines().get(1).id();
@@ -256,9 +263,7 @@ class BillSplitAcceptanceTest extends PostgresRlsTestBase {
     assertThat(saleRecordedRows()).hasSize(1);
   }
 
-  /**
-   * Supplying lineIds that don't belong to this bill → IllegalArgumentException.
-   */
+  /** Supplying lineIds that don't belong to this bill → IllegalArgumentException. */
   @Test
   void payLineNotOnBill_throwsIllegalArgument() throws Exception {
     UUID itemId = seedItem(5_000L);
@@ -274,9 +279,10 @@ class BillSplitAcceptanceTest extends PostgresRlsTestBase {
   }
 
   /**
-   * Paying with no lineIds when all lines are already paid → nothing to pay → IllegalArgumentException.
-   * (Indirect: first pay all, then try full-pay → bill is PAID, returns idempotent result.)
-   * Separately test explicitly empty lineIds set via the "nothing to pay" guard.
+   * Paying with no lineIds when all lines are already paid → nothing to pay →
+   * IllegalArgumentException. (Indirect: first pay all, then try full-pay → bill is PAID, returns
+   * idempotent result.) Separately test explicitly empty lineIds set via the "nothing to pay"
+   * guard.
    */
   @Test
   void payEmptyTargetSet_whenAllLinesPaid_idempotentOrThrows() throws Exception {
@@ -285,7 +291,8 @@ class BillSplitAcceptanceTest extends PostgresRlsTestBase {
 
     BillResponse bill = openBill("Empty-Set");
     BillResponse afterAppend =
-        appendLines(bill.id(), List.of(new OrderLineRequest(itemA, 1), new OrderLineRequest(itemB, 1)));
+        appendLines(
+            bill.id(), List.of(new OrderLineRequest(itemA, 1), new OrderLineRequest(itemB, 1)));
 
     UUID lineAId = afterAppend.lines().get(0).id();
     UUID lineBId = afterAppend.lines().get(1).id();
@@ -308,20 +315,19 @@ class BillSplitAcceptanceTest extends PostgresRlsTestBase {
   }
 
   /**
-   * Insufficient stock on a check → 422; that check rolls back entirely.
-   * Lines from the current check stay unpaid, no sale recorded, stock unchanged.
-   * Lines already paid in a prior check remain paid and their stock deduction is irreversible.
+   * Insufficient stock on a check → 422; that check rolls back entirely. Lines from the current
+   * check stay unpaid, no sale recorded, stock unchanged. Lines already paid in a prior check
+   * remain paid and their stock deduction is irreversible.
    */
   @Test
   void insufficientStockOnSplitCheck_rollsBackOnlyThatCheck() throws Exception {
     UUID itemA = seedTrackedItem(10_000L, 5); // 5 in stock — plenty
-    UUID itemB = seedTrackedItem(5_000L, 1);  // only 1 in stock, but we'll try to buy 3
+    UUID itemB = seedTrackedItem(5_000L, 1); // only 1 in stock, but we'll try to buy 3
 
     BillResponse bill = openBill("Stock-Split");
     BillResponse afterAppend =
         appendLines(
-            bill.id(),
-            List.of(new OrderLineRequest(itemA, 2), new OrderLineRequest(itemB, 3)));
+            bill.id(), List.of(new OrderLineRequest(itemA, 2), new OrderLineRequest(itemB, 3)));
     assertThat(afterAppend.lines()).hasSize(2);
 
     UUID lineAId = afterAppend.lines().get(0).id();
@@ -331,7 +337,8 @@ class BillSplitAcceptanceTest extends PostgresRlsTestBase {
     BillResponse afterCheck1 = payLines(bill.id(), List.of(lineAId));
     assertThat(afterCheck1.status()).isEqualTo("OPEN");
     Map<UUID, BillLineResponse> byId1 =
-        afterCheck1.lines().stream().collect(java.util.stream.Collectors.toMap(BillLineResponse::id, l -> l));
+        afterCheck1.lines().stream()
+            .collect(java.util.stream.Collectors.toMap(BillLineResponse::id, l -> l));
     assertThat(byId1.get(lineAId).paid()).isTrue();
     assertThat(stockOf(itemA)).isEqualTo(3); // 5 - 2
 
@@ -353,14 +360,13 @@ class BillSplitAcceptanceTest extends PostgresRlsTestBase {
         TenantContext.callAs(TENANT_A, ACTOR, () -> billService.getById(bill.id()));
     assertThat(current.status()).isEqualTo("OPEN");
     Map<UUID, BillLineResponse> byIdCurrent =
-        current.lines().stream().collect(java.util.stream.Collectors.toMap(BillLineResponse::id, l -> l));
+        current.lines().stream()
+            .collect(java.util.stream.Collectors.toMap(BillLineResponse::id, l -> l));
     assertThat(byIdCurrent.get(lineAId).paid()).isTrue();
     assertThat(byIdCurrent.get(lineBId).paid()).isFalse();
   }
 
-  /**
-   * Idempotent re-pay of a check (same idempotencyKey) → no second sale.
-   */
+  /** Idempotent re-pay of a check (same idempotencyKey) → no second sale. */
   @Test
   void idempotentSplitCheckReplay_noSecondSale() throws Exception {
     UUID itemA = seedItem(10_000L);
@@ -368,7 +374,8 @@ class BillSplitAcceptanceTest extends PostgresRlsTestBase {
 
     BillResponse bill = openBill("Idem-Split");
     BillResponse afterAppend =
-        appendLines(bill.id(), List.of(new OrderLineRequest(itemA, 1), new OrderLineRequest(itemB, 1)));
+        appendLines(
+            bill.id(), List.of(new OrderLineRequest(itemA, 1), new OrderLineRequest(itemB, 1)));
 
     UUID lineAId = afterAppend.lines().get(0).id();
 
@@ -386,8 +393,8 @@ class BillSplitAcceptanceTest extends PostgresRlsTestBase {
   }
 
   /**
-   * Stock is deducted only for the lines in the current check — lines not in the check
-   * (even if they share the same menu item) are not deducted until their own check.
+   * Stock is deducted only for the lines in the current check — lines not in the check (even if
+   * they share the same menu item) are not deducted until their own check.
    */
   @Test
   void stockDeductedOnlyForTargetLines() throws Exception {

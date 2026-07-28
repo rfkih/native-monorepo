@@ -4,8 +4,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
-import org.springframework.lang.Nullable;
 import java.util.UUID;
+import org.springframework.lang.Nullable;
 
 /**
  * Request body for {@code POST /api/v1/menu}. The monetary price is {@code priceMinor} (integer
@@ -26,8 +26,8 @@ public record CreateMenuItemRequest(
     @Nullable @Size(max = 3_000_000) String imageUrl) {
 
   /**
-   * Convenience constructor for callers that do not supply an image (imageUrl defaults to
-   * {@code null}). Used by existing tests and non-image create flows.
+   * Convenience constructor for callers that do not supply an image (imageUrl defaults to {@code
+   * null}). Used by existing tests and non-image create flows.
    */
   public CreateMenuItemRequest(
       UUID businessId, String name, String category, Long priceMinor, String currency) {

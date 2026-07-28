@@ -16,6 +16,4 @@ import java.util.UUID;
  * @param guestLabel short label identifying the guest, e.g. "Guest A" or "Table 3 / Seat 2"
  */
 public record OpenBillRequest(
-    @NotNull UUID businessId,
-    UUID tableId,
-    @NotBlank @Size(max = 128) String guestLabel) {}
+    @NotNull UUID businessId, UUID tableId, @NotBlank @Size(max = 128) String guestLabel) {}

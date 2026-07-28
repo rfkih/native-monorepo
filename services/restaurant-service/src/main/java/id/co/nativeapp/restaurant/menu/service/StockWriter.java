@@ -30,8 +30,7 @@ public class StockWriter {
 
   /**
    * Sets the absolute stock quantity for a menu item. Passing {@code null} reverts it to infinite /
-   * untracked. A non-null value must be &ge; 0 (enforced by {@link
-   * MenuItem#setStock(Integer)}).
+   * untracked. A non-null value must be &ge; 0 (enforced by {@link MenuItem#setStock(Integer)}).
    *
    * <p>Runs in its own {@code REQUIRES_NEW} transaction so the RLS aspect engages (tenant GUC is
    * set on entry). The full aggregate is loaded (write path) so that the dirty-checking flush
