@@ -86,6 +86,14 @@ curl -s -X POST http://localhost:18080/admin/realms/native/roles \
    ports; remap if needed (Kafka host port + `KAFKA_ADVERTISED_LISTENERS` EXTERNAL must change together;
    the in-cluster `kafka:29092` listener is unaffected). Schema-registry (8081) is optional — the consume
    path uses raw Avro bytes, not the registry.
+8. **Own-sales commission needs a UUID actor — so test it over OIDC, not header-trust.** A sale emits
+   its `sales_amount`@`employee` metric keyed by `subject_id = X-Actor` (the JWT `sub`), and
+   `metric_input.subject_id` is a UUID column. The header-trust recipe's fixed `X-Actor` (e.g.
+   `owner@console.dev`) is NOT a UUID, so `SaleWriter` **skips** the metric emission (logged at debug;
+   the sale itself still records). Commission therefore accrues zero in header-trust mode. For the
+   end-to-end commission story, run the OIDC recipe (real Keycloak logins carry a UUID `sub`) and ring
+   the sales as the linked employee login. The employee's `employee.user_id` (V7 link) must equal that
+   login's `sub` for the payroll run to match the metric rows.
 
 ## 2026-07 org-tree flattening (ADR 0012) — dev data
 

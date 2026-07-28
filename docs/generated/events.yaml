@@ -124,6 +124,7 @@ events:
       - { name: change_kind, type: "string" }
       - { name: name, type: "string" }
       - { name: active, type: "boolean" }
+      - { name: vertical, type: "null|string" }
   - name: OrgUnitCreated
     namespace: id.co.nativeapp.events.org
     schema: libs/contracts/src/main/resources/avro/OrgUnitCreated.avsc
@@ -134,6 +135,7 @@ events:
       - { name: parent_id, type: "null|string" }
       - { name: legal_employer_id, type: "string" }
       - { name: name, type: "string" }
+      - { name: vertical, type: "null|string" }
   - name: PayrollPosted
     namespace: id.co.nativeapp.events.employee
     schema: libs/contracts/src/main/resources/avro/PayrollPosted.avsc
@@ -213,3 +215,14 @@ events:
       - { name: reconciled, type: "boolean" }
       - { name: uses_illustrative_rules, type: "boolean" }
       - { name: lines, type: "array<record:TrialBalanceLine>" }
+  - name: UserOutletAssignmentChanged
+    namespace: id.co.nativeapp.events.org
+    schema: libs/contracts/src/main/resources/avro/UserOutletAssignmentChanged.avsc
+    fields:
+      - { name: assignment_id, type: "string" }
+      - { name: user_id, type: "string" }
+      - { name: company_id, type: "string" }
+      - { name: org_unit_id, type: "string" }
+      - { name: change_kind, type: "string" }
+      - { name: effective_from, type: "date" }
+      - { name: effective_to, type: "date" }

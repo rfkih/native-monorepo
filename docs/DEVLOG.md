@@ -69,6 +69,46 @@ cascade-deactivate + reactivation.)
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **Employee logins + self-service /me + page grants + own-sales commission (2026-07-28)** — HR
+  employees became loggable-in users with a dashboard of their own and a commission on the sales they
+  ring. Six phases (A–F). **A/B — logins:** reused the org-service invite flow to create a Keycloak
+  login for an employee (temp password shown once, forced change), optionally POS-capable via a
+  checkbox (roles `[employee]` or `[employee, cashier]`; invite gained a `roles: string[]`, assigned
+  sequentially). A new `employee` realm role threads through gateway `BUSINESS_ROLES`, org
+  `ALLOWED_ROLES`, and the console. employee V7 = a nullable `user_id VARCHAR(64)` + partial-unique
+  index; `POST/DELETE /api/v1/employees/{id}/login-link` sets/clears it. **The Keycloak `sub` is the
+  universal join key** — gateway `X-Actor` = `jwt.getSubject()` = `TenantContext.actor()` =
+  `sale.created_by` = `user_outlet_assignment.user_id` = `employee.user_id`; the console OIDC auth had
+  to be taught to RETAIN `sub` (it defaulted to `preferred_username`). **C — /me:** gateway routes
+  `/api/v1/me/**` (ME_ROLES incl. employee); employee-service `me` feature resolves the caller
+  EXCLUSIVELY from actor→V7 link (never a request param, so a caller reads only their OWN rows). NIK/
+  bank stay MASKED even to the person; only payslip AMOUNTS decrypt — this is the FIRST caller of the
+  long-dormant `findPayslipAuthorized`. Console `/me` full-screen dashboard. **D — page grants (ADR
+  0013):** org V8 `user_page_grant`, subtractive UI-level gating (`GET /users/me/pages` →
+  `{mode, pageKeys}`; `GET|PUT /users/{id}/pages`). **Decision: grants NARROW the console; roles
+  remain the API authz boundary** (no event — no consumer; staleness is a fetch away, not baked into a
+  JWT). **E — commission = X% of the employee's OWN sales.** Three sub-decisions locked with the user:
+  own-sales % (not team/pool), REAL payslip amounts on /me, POS via optional checkbox. **The
+  load-bearing correctness fix:** the `MetricPublished` consumer projection was last-write-wins
+  (`applyValue` REPLACED the natural-key row) — wrong for any per-unit-of-activity producer; carwash
+  already undercounted same-day washes and a per-sale feed would collapse a day to its last ticket.
+  Changed to delta-ACCUMULATE (`applyDelta`, `value += delta`), safe under the event-UUID idempotency
+  guard. restaurant became the **second `MetricPublished` producer** (no schema change — the shared
+  avsc already lists the `employee` grain): every sale emits `sales_amount`@`employee`, subject = the
+  cashier's sub, in the SaleRecorded transaction, at both `SaleWriter` choke points. The engine gained
+  `PERCENT_OF_METRIC` (reusing `earning_rule`'s existing `percent_basis_points` + `metric_key` columns
+  — **no migration**): the run sums the employee's own-sub metric rows for the month and applies the
+  rate via `Money.applyBasisPoints`, reusing the single-period-grain guard (mixed grain → throw, never
+  double-count). Config API `GET/POST/DELETE .../compensation/{pkgId}/commission` (non-PII bp echoed;
+  open-duplicate → 409). `GET /api/v1/me/sales` previews rate×sales (labelled a preview — the payslip
+  is authoritative; currency from the open package, amount never read). Console: a commission control
+  in the salary dialog + a sales card on /me. **Dev caveat:** the header-trust recipe's fixed actor is
+  not a UUID, so `SaleWriter` skips the metric (subject_id is a UUID column); commission accrues only
+  over OIDC (real logins carry a UUID sub). **F — cleanup:** discovered restaurant-service carried a
+  backlog of pre-existing google-java-format violations (committed via worktree builds that skipped
+  `spotlessCheck`); isolated the reformat into its own `style` commit so the feature diff stayed clean.
+  Shipped as five commits (1 style + E1 delta + E2 producer + E3–E5 backend + console); each build
+  green.
 - **Employee management + payroll in the console (2026-07-28)** — the org-unit hub gains an
   **Employees** tab (Odoo-style HR records: create employee→contract→assignment chain with role
   presets [free-text `assignment.role`, no new aggregate], assign-to-outlet, end-assignment,

@@ -50,7 +50,7 @@ schema. Until then a row here is documentation of intent, not a shippable contra
 | **`EntitlementRevoked`** | **entitlement-service** | **shell, all services** | **company_id, module_key** | **LIVE** |
 | **`EmployeeChanged`** | **employee-service** | **verticals** | **employee_id, company_id, status** | **LIVE (#19)** |
 | **`AssignmentChanged`** | **employee-service** | **verticals, finance** | **employee_id, org_unit_id, reporting_to, effective_from/to** | **LIVE (#19)** |
-| **`MetricPublished`** | **carwash-service** (verticals) | **employee** | **metric_key, period, grain, subject_id, value, source_business_id** | **LIVE (#20)** |
+| **`MetricPublished`** | **carwash-service, restaurant-service** (verticals) | **employee** | **metric_key, period, grain, subject_id, value, source_business_id** | **LIVE (#20; restaurant own-sales commission)** |
 | **`PeriodSealed`** | **verticals** | **employee, finance** | **company_id, business_id, period** | **LIVE (employee consumer #23)** |
 | **`SaleRecorded`** | **restaurant-service + carwash-service** (verticals) | **finance** | **sale_id, company_id, business_id, amount_minor, currency, occurred_at; Phase 2: subtotal_minor, discount_minor, service_charge_minor, tax_minor, tax_rule_version, uses_illustrative_rules (all nullable)** | **LIVE (M1.4 / #20 / Phase 2 breakdown)** |
 | **`SaleVoided`** | **restaurant-service** | **finance** | **void_id, sale_id, payment_id, company_id, business_id, amount_minor, currency, occurred_at, tender_type** | **LIVE (ADR 0006, slice 4)** |
@@ -408,14 +408,30 @@ its **metric contract**: which `metric_key`s it emits, at which grains (`employe
 requesting a grain the vertical cannot emit; the producing vertical only DECLARES the contract and
 EMITS against it.
 
-- **Producer:** `carwash-service` (and the other verticals as they ship). carwash declares, at the
-  `outlet` grain: `wash_count` (a count of washes) and `upsell_amount` (upsell revenue in the wash
-  currency's minor units). On recording a wash it emits one `MetricPublished` per declared metric,
-  via the transactional outbox in the same transaction as the wash + `SaleRecorded`.
+- **Producers:**
+  - `carwash-service` declares, at the `outlet` grain: `wash_count` (a count of washes) and
+    `upsell_amount` (upsell revenue in the wash currency's minor units). On recording a wash it emits
+    one `MetricPublished` per declared metric, via the transactional outbox in the same transaction as
+    the wash + `SaleRecorded`.
+  - `restaurant-service` declares, at the **`employee` grain**: `sales_amount` (the sale's grand total
+    in the sale currency's minor units), `subject_id` = the cashier's Keycloak `sub` (also on
+    `sale.created_by`). Emitted **per sale** in the same transaction as `SaleRecorded` (both
+    `SaleWriter` choke points). This is the own-sales commission feed: an employee earns a percentage
+    of the sales they personally rang. Skipped when the bound actor is not a UUID (the header-trust
+    dev recipe's fixed actor) — `metric_input.subject_id` is a UUID column, so a non-UUID subject
+    cannot key a row; real logins always carry a UUID `sub`.
 - **Consumers:** `employee-service` (variable pay / commission).
-- **Aggregate type / partition key:** `metric` / `source_business_id` (the carwash outlet)
+- **Delta semantics.** A producer emits **one event per unit of activity** (per wash, per sale), so
+  the `value` is a **delta contribution** the consumer ACCUMULATES onto the natural-key
+  (`company_id, metric_key, period, grain, subject_id`) row — NOT a snapshot that replaces it. A day
+  with several sales at one outlet SUMS. Accumulation is safe because the consumer is idempotent by
+  event UUID (`ProcessedEventStore.processOnce`), so each event's contribution is applied exactly
+  once. (This corrected a former last-write-wins projection that undercounted same-period activity.)
+- **Aggregate type / partition key:** `metric` / `source_business_id` (the carwash outlet, or the
+  restaurant outlet the sale was rung at)
 - **Outbox `event_type`:** `MetricPublished`
-- **Schema:** `services/carwash-service/src/main/resources/avro/MetricPublished.avsc`
+- **Schema:** `services/carwash-service/src/main/resources/avro/MetricPublished.avsc` (producer schema
+  of record; `restaurant-service` loads the byte-identical shared `avro/MetricPublished.avsc`)
 - **Full name:** `id.co.nativeapp.events.carwash.MetricPublished`
 
 **Money is never a float (rule 8).** The `value` is a `long`: a count for `wash_count`, minor units
@@ -1035,12 +1051,16 @@ employee-service (#23) **consumes** `MetricPublished` (variable-pay/commission i
 reads the outbox payload as **raw Avro bytes** via `libs/events AvroSerde` (no Schema Registry
 serde), and dedupes by the event UUID (`ProcessedEventStore`) so a re-delivery never double-applies
 (rule 3). The projection write runs inside a `TenantContext` scope bound to the event's `company_id`
-(RLS applies — rule 5): `MetricPublished` projects into `metric_input` (`PER_METRIC_UNIT` earning
-rules read it — rule 2, never a sync call); `PeriodSealed` projects into `period_seal` (the gate
-reads it). A record without a valid `id` header (and, for `MetricPublished`, a `company_id` header —
-the payload carries no `company_id`) fails closed to `<topic>.DLT`. The contract tests
-(`PayrollConsumerContractTest`) assert the `MetricPublished` consumer copy stays
-backward-compatible with carwash's producer schema (rule 7).
+(RLS applies — rule 5): `MetricPublished` **accumulates** into `metric_input` (each event's `value`
+is a delta added onto the natural-key row, not a replacement — see the delta-semantics note above);
+`PER_METRIC_UNIT` and `PERCENT_OF_METRIC` earning rules read it (rule 2, never a sync call).
+`PERCENT_OF_METRIC` powers own-sales commission: it sums the employee's `sales_amount` rows at the
+`employee` grain (`subject_id` = the employee's `user_id`, i.e. their Keycloak `sub`) for the run
+month and applies the rule's basis-point rate via the `Money` type. `PeriodSealed` projects into
+`period_seal` (the gate reads it). A record without a valid `id` header (and, for `MetricPublished`,
+a `company_id` header — the payload carries no `company_id`) fails closed to `<topic>.DLT`. The
+contract tests (`PayrollConsumerContractTest`) assert the `MetricPublished` consumer copy stays
+backward-compatible with the producer schema (rule 7).
 
 ### `UserOutletAssignmentChanged`
 
