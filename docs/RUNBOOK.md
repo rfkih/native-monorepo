@@ -30,7 +30,9 @@ SPRING_PROFILES_ACTIVE=dev SERVER_PORT=80NN KAFKA_BOOTSTRAP_SERVERS=localhost:90
 NATIVE_DEV_TENANT_FILTER_ENABLED=true \
   "$JAVA25" -jar services/<svc>/build/libs/<svc>-0.1.0-SNAPSHOT.jar
 
-# 3) register the Debezium outbox connector (after the producing service has migrated its outbox table):
+# 3) register the Debezium outbox connectors (after the producing service has migrated its outbox
+#    table) — ONE PER SERVICE DB: outbox-connector.json (restaurant), org-outbox-connector.json,
+#    employee-outbox-connector.json (payroll -> finance labor cost NEVER flows without it):
 curl -fsS -X POST http://localhost:8083/connectors -H 'Content-Type: application/json' \
   -d @docker/debezium/outbox-connector.json
 curl -fsS http://localhost:8083/connectors/restaurant-outbox-connector/status   # task must be RUNNING
