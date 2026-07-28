@@ -268,6 +268,48 @@ class OrgUnitEventContractTest {
   }
 
   @Test
+  void anOldReaderWithoutVerticalDecodesANewOrgUnitChangedPayload() {
+    // Same back-compat pin as OrgUnitCreated: a consumer still on the pre-vertical schema copy
+    // must decode a Changed payload written WITH the vertical set, key fields intact.
+    Schema writer = OrgUnitChangedSchema.schema();
+    Schema oldReader =
+        new Schema.Parser()
+            .parse(
+                """
+                {
+                  "type": "record",
+                  "name": "OrgUnitChanged",
+                  "namespace": "id.co.nativeapp.events.org",
+                  "fields": [
+                    {"name": "org_unit_id", "type": "string"},
+                    {"name": "company_id", "type": "string"},
+                    {"name": "type", "type": "string"},
+                    {"name": "parent_id", "type": ["null", "string"], "default": null},
+                    {"name": "change_kind", "type": "string"},
+                    {"name": "name", "type": "string"},
+                    {"name": "active", "type": "boolean"}
+                  ]
+                }
+                """);
+
+    GenericRecord written = new GenericData.Record(writer);
+    written.put("org_unit_id", UNIT);
+    written.put("company_id", TENANT);
+    written.put("type", "BUSINESS_UNIT");
+    written.put("parent_id", null);
+    written.put("change_kind", "RENAMED");
+    written.put("name", "Wash Central");
+    written.put("active", true);
+    written.put("vertical", "carwash");
+
+    GenericRecord decoded = AvroSerde.deserialize(AvroSerde.serialize(written), writer, oldReader);
+    assertThat(decoded.get("org_unit_id").toString()).isEqualTo(UNIT);
+    assertThat(decoded.get("change_kind").toString()).isEqualTo("RENAMED");
+    assertThat(decoded.get("name").toString()).isEqualTo("Wash Central");
+    assertThat(decoded.get("active")).isEqualTo(true);
+  }
+
+  @Test
   void orgUnitChangedAddingARequiredFieldWithoutDefaultBreaksCompatibility() {
     Schema v1 = OrgUnitChangedSchema.schema();
     Schema incompatible =

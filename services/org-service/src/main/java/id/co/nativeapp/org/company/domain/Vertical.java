@@ -19,6 +19,15 @@ import java.util.Locale;
  * widening it is a deliberate platform change. A vertical is REQUIRED for a business unit,
  * forbidden for outlet/team nodes (outlets inherit via their parent), and IMMUTABLE after creation
  * (like the company base currency).
+ *
+ * <p><strong>Adding a vertical? Update every copy of the whitelist</strong> — this enum is the
+ * source of truth, but the literal {@code restaurant|carwash|barbershop} is repeated in the DTO
+ * {@code @Pattern} constraints ({@code SignupRequest}, {@code
+ * CreateCompanyRequest.BusinessRequest}, {@code CreateBusinessRequest}, {@code
+ * CreateOrgUnitRequest}) and in the console ({@code org/api.ts} {@code Vertical} type, the {@code
+ * VERTICALS} consts in Signup/Onboarding, the {@code AddUnitDialog} options, and the {@code
+ * VerticalComingSoon} icon map), plus the event catalog narrative. A missed backend copy fails safe
+ * (400 at the DTO boundary) but blocks the feature.
  */
 public enum Vertical {
   RESTAURANT("restaurant"),

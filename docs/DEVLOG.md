@@ -95,7 +95,12 @@ cascade-deactivate + reactivation.)
   a multi-vertical user) for carwash/barbershop outlets. **Client fails OPEN to restaurant on a
   null vertical** (backfill guarantees it server-side; never brick a POS terminal on cache
   staleness — do not "fix" this). No new ADR: the whitelist + ADR-0012-style semantics are
-  recorded here; a real carwash/barbershop POS is a later increment.
+  recorded here; a real carwash/barbershop POS is a later increment. Adversarial fresh-context
+  review: **PASS**, no critical/major (RLS self-join verified leak-free — the policy scopes both
+  aliases); follow-ups landed: an OrgUnitChanged old-reader pin for contract-test parity and a
+  whitelist-copies cross-link on the Vertical enum. Live-proven E2E: V7 backfill on the dev DB,
+  carwash signup → coming-soon POS (EN+ID), outlet switch → full POS, and finance's
+  pre-increment jar consuming the new-field events.
 - **Org-unit hub — Odoo-style record detail (2026-07-28)** — clicking a BUSINESS_UNIT or OUTLET
   in `/org` now opens `/org/:unitId` (the app's first param route): breadcrumb, sheet header
   (type badge + status + rename/(de|re)activate via dialogs lifted into `features/org/parts.tsx`),
