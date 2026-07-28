@@ -93,6 +93,45 @@ class EmployeeLoginLinkEndpointTest extends PostgresRlsTestBase {
   }
 
   @Test
+  void holdsTheOneTimePasswordThenPurgesItOnTheEmployeesFirstMeCall() throws Exception {
+    UUID e = createEmployee(TENANT_A, "Joko Tanpa", "3205000000000009", "5555666677770009");
+    String sub = UUID.randomUUID().toString();
+
+    // Link WITH a one-time password → it is held (encrypted) for the owner to hand over (ADR 0014).
+    mvc.perform(
+            post("/api/v1/employees/" + e + "/login-link")
+                .header("X-Company-Id", TENANT_A)
+                .header("X-Actor", ACTOR)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    json.writeValueAsString(
+                        Map.of("userId", sub, "temporaryPassword", "Temp1234!"))))
+        .andExpect(status().isOk());
+
+    // The owner/manager login-detail endpoint decrypts and shows it.
+    mvc.perform(
+            get("/api/v1/employees/" + e + "/login")
+                .header("X-Company-Id", TENANT_A)
+                .header("X-Actor", ACTOR))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.userId").value(sub))
+        .andExpect(jsonPath("$.temporaryPassword").value("Temp1234!"));
+
+    // The employee's FIRST authenticated /me call (actor = their own sub) is the activation signal.
+    mvc.perform(get("/api/v1/me/profile").header("X-Company-Id", TENANT_A).header("X-Actor", sub))
+        .andExpect(status().isOk());
+
+    // The held password is now purged; the login reads as active (temporaryPassword null).
+    mvc.perform(
+            get("/api/v1/employees/" + e + "/login")
+                .header("X-Company-Id", TENANT_A)
+                .header("X-Actor", ACTOR))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.userId").value(sub))
+        .andExpect(jsonPath("$.temporaryPassword").isEmpty());
+  }
+
+  @Test
   void guardsUnknownEmployeesAndCrossTenantAccess() throws Exception {
     UUID employeeId =
         createEmployee(TENANT_A, "Andi Wijaya", "3205000000000003", "5555666677770003");
@@ -123,6 +162,13 @@ class EmployeeLoginLinkEndpointTest extends PostgresRlsTestBase {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(Map.of("userId", " "))))
         .andExpect(status().isBadRequest());
+
+    // The credential-bearing login-detail read is RLS-scoped too: a cross-tenant caller → 404.
+    mvc.perform(
+            get("/api/v1/employees/" + employeeId + "/login")
+                .header("X-Company-Id", TENANT_B)
+                .header("X-Actor", ACTOR))
+        .andExpect(status().isNotFound());
   }
 
   // ---- helpers --------------------------------------------------------------------------------

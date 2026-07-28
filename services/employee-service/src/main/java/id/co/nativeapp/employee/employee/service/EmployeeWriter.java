@@ -143,11 +143,16 @@ public class EmployeeWriter {
    * to at most one employee per company: pre-checked here for a clean 409, with the V7 partial
    * unique index as the concurrency backstop.
    *
+   * <p>{@code tempPassword} (nullable) is the one-time login password to HOLD encrypted (ADR 0014)
+   * so the owner can hand it to the employee until first sign-in; the call is idempotent on the
+   * link, so the reset flow reuses it to replace the held password. Null leaves any held value
+   * unchanged.
+   *
    * @throws EmployeeNotFoundException unknown/foreign employee (→ 404)
    * @throws UserAlreadyLinkedException the login already belongs to another employee (→ 409)
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
-  public Employee linkUser(UUID employeeId, String userId) {
+  public Employee linkUser(UUID employeeId, String userId, String tempPassword) {
     TenantContext.require();
     Employee employee =
         employeeRepository
@@ -163,8 +168,30 @@ public class EmployeeWriter {
             });
 
     employee.linkUser(userId);
+    if (tempPassword != null && !tempPassword.isBlank()) {
+      employee.setLoginTempPassword(tempPassword, clock.instant());
+    }
     employeeRepository.flush();
     return employee;
+  }
+
+  /**
+   * Purges an employee's held one-time login password — the activation hook. Called on the
+   * employee's own first authenticated request (they can only reach it AFTER Keycloak forced the
+   * change), so the owner-visible value disappears once the employee has taken over their account.
+   * A no-op (no write) when nothing is held.
+   */
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public void purgeLoginTempPassword(UUID employeeId) {
+    TenantContext.require();
+    employeeRepository
+        .findById(employeeId)
+        .ifPresent(
+            employee -> {
+              if (employee.clearLoginTempPassword()) {
+                employeeRepository.flush();
+              }
+            });
   }
 
   /** Removes an employee's console-login link (the Keycloak login itself is untouched). */

@@ -5,10 +5,13 @@ import id.co.nativeapp.employee.me.dto.MyPayslipDetailResponse;
 import id.co.nativeapp.employee.me.dto.MyPayslipHeaderResponse;
 import id.co.nativeapp.employee.me.dto.MySalesResponse;
 import id.co.nativeapp.employee.me.service.MeReader;
+import id.co.nativeapp.employee.me.service.MeWriter;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -34,10 +37,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/me")
 public class MeController {
 
-  private final MeReader meReader;
+  private static final Logger log = LoggerFactory.getLogger(MeController.class);
 
-  public MeController(MeReader meReader) {
+  private final MeReader meReader;
+  private final MeWriter meWriter;
+
+  public MeController(MeReader meReader, MeWriter meWriter) {
     this.meReader = meReader;
+    this.meWriter = meWriter;
   }
 
   @Operation(
@@ -47,7 +54,17 @@ public class MeController {
               + " with the employee-not-linked problem type when the login has no employee link.")
   @GetMapping("/profile")
   public MeProfileResponse profile() {
-    return meReader.profile();
+    // Resolve the caller first (404s an unlinked login), THEN purge any held one-time password:
+    // reaching here proves the employee has authenticated, i.e. already changed it (ADR 0014).
+    MeProfileResponse profile = meReader.profile();
+    try {
+      meWriter.purgeTempPasswordForCaller();
+    } catch (RuntimeException e) {
+      // Best-effort (ADR 0014) — a purge failure must never break the employee's own dashboard;
+      // the TTL backstop still hides the stale value, and the next /me call retries the purge.
+      log.warn("Deferred login temp-password purge (will retry on next /me call)", e);
+    }
+    return profile;
   }
 
   @Operation(

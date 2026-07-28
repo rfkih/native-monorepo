@@ -54,9 +54,9 @@ public class EmployeeService {
    * @throws id.co.nativeapp.employee.employee.domain.UserAlreadyLinkedException the login already
    *     belongs to another employee (→ 409)
    */
-  public Employee linkUser(java.util.UUID employeeId, String userId) {
+  public Employee linkUser(java.util.UUID employeeId, String userId, String tempPassword) {
     TenantContext.require();
-    return writer.linkUser(employeeId, userId);
+    return writer.linkUser(employeeId, userId, tempPassword);
   }
 
   /** Removes an employee's console-login link (the Keycloak login itself is untouched). */

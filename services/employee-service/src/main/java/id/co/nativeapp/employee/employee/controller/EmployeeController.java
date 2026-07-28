@@ -8,6 +8,7 @@ import id.co.nativeapp.employee.employee.dto.ContractResponse;
 import id.co.nativeapp.employee.employee.dto.CreateEmployeeCommand;
 import id.co.nativeapp.employee.employee.dto.CreateEmployeeRequest;
 import id.co.nativeapp.employee.employee.dto.EmployeeListRowResponse;
+import id.co.nativeapp.employee.employee.dto.EmployeeLoginResponse;
 import id.co.nativeapp.employee.employee.dto.EmployeeResponse;
 import id.co.nativeapp.employee.employee.dto.EmployeeWithAssignmentsResponse;
 import id.co.nativeapp.employee.employee.dto.LoginLinkRequest;
@@ -159,7 +160,20 @@ public class EmployeeController {
   @PostMapping("/{employeeId}/login-link")
   public EmployeeResponse linkLogin(
       @PathVariable UUID employeeId, @Valid @RequestBody LoginLinkRequest request) {
-    return EmployeeResponse.from(employeeService.linkUser(employeeId, request.userId()));
+    return EmployeeResponse.from(
+        employeeService.linkUser(employeeId, request.userId(), request.temporaryPassword()));
+  }
+
+  @Operation(
+      summary = "Get an employee's login state (owner/manager)",
+      description =
+          "The linked login's subject id and — until the employee first signs in — the one-time"
+              + " password held for them, decrypted (ADR 0014). The username is resolved separately"
+              + " from the Team surface (Keycloak owns it). 404 if the employee is not visible to"
+              + " the bound tenant. This response carries a credential; it is never logged.")
+  @GetMapping("/{employeeId}/login")
+  public EmployeeLoginResponse getLogin(@PathVariable UUID employeeId) {
+    return employeeReader.loginDetail(employeeId);
   }
 
   @Operation(

@@ -3,13 +3,16 @@ package id.co.nativeapp.employee.employee.service;
 import id.co.nativeapp.employee.assignment.dto.AssignmentResponse;
 import id.co.nativeapp.employee.assignment.repository.AssignmentRepository;
 import id.co.nativeapp.employee.employee.domain.Employee;
+import id.co.nativeapp.employee.employee.domain.EmployeeNotFoundException;
 import id.co.nativeapp.employee.employee.dto.ContractResponse;
 import id.co.nativeapp.employee.employee.dto.EmployeeListRowResponse;
+import id.co.nativeapp.employee.employee.dto.EmployeeLoginResponse;
 import id.co.nativeapp.employee.employee.dto.EmployeeResponse;
 import id.co.nativeapp.employee.employee.dto.EmployeeWithAssignmentsResponse;
 import id.co.nativeapp.employee.employee.repository.EmployeeRepository;
 import id.co.nativeapp.employee.employee.repository.EmploymentContractRepository;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -34,6 +37,12 @@ public class EmployeeReader {
   static final int MAX_ORG_UNIT_IDS = 200;
 
   private static final Set<String> ALLOWED_STATUSES = Set.of("ACTIVE", "INACTIVE");
+
+  /**
+   * The held one-time login password is hidden after this long (ADR 0014 backstop) — covers an
+   * employee who changed their password out of band and never opened the app to trigger the purge.
+   */
+  private static final Duration TEMP_PASSWORD_TTL = Duration.ofDays(14);
 
   /** Dummy id bound when the caller passed no scope — Spring Data cannot expand an empty list. */
   private static final List<UUID> NO_SCOPE = List.of(new UUID(0L, 0L));
@@ -115,6 +124,25 @@ public class EmployeeReader {
   @Transactional(readOnly = true)
   public Optional<Employee> findEmployee(UUID employeeId) {
     return employeeRepository.findById(employeeId);
+  }
+
+  /**
+   * The employee's login state for the owner/manager detail surface — the AUTHORIZED decrypt of the
+   * held one-time password (ADR 0014). Loads the full aggregate (the ciphertext lives on the
+   * entity, so this is not a masked projection) and returns the decrypted temp ONLY if it is still
+   * fresh (within {@link #TEMP_PASSWORD_TTL}); otherwise the credential is treated as absent. The
+   * caller is owner/manager-gated at the gateway. NEVER logged.
+   *
+   * @throws EmployeeNotFoundException if no such employee is visible in the bound tenant (→ 404)
+   */
+  @Transactional(readOnly = true)
+  public EmployeeLoginResponse loginDetail(UUID employeeId) {
+    Employee employee =
+        employeeRepository
+            .findById(employeeId)
+            .orElseThrow(() -> new EmployeeNotFoundException(employeeId));
+    String temp = employee.loginTempPasswordIfFresh(clock.instant().minus(TEMP_PASSWORD_TTL));
+    return new EmployeeLoginResponse(employee.getUserId(), temp);
   }
 
   /**

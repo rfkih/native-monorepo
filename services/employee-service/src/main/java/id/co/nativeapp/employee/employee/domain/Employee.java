@@ -9,6 +9,7 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -68,6 +69,20 @@ public class Employee extends Auditable {
    */
   @Column(name = "user_id", length = 64)
   private String userId;
+
+  /**
+   * The one-time login password held for the owner to hand to the employee, until the employee
+   * first authenticates. A CREDENTIAL — column-encrypted at rest exactly like {@link #nik} (rule
+   * 6), never logged, never in the {@link #toString()}, and exposed ONLY via the owner/manager
+   * login-detail endpoint (ADR 0014). Null once purged (activation) or when never set.
+   */
+  @Convert(converter = PiiAttributeConverter.class)
+  @Column(name = "login_temp_password_enc")
+  private String loginTempPassword;
+
+  /** When {@link #loginTempPassword} was set — drives the TTL backstop that hides a stale value. */
+  @Column(name = "login_temp_password_set_at")
+  private Instant loginTempPasswordSetAt;
 
   protected Employee() {
     // for JPA
@@ -155,6 +170,58 @@ public class Employee extends Auditable {
   /** Removes the console-login link (the login itself lives in Keycloak, untouched). */
   public void unlinkUser() {
     this.userId = null;
+    clearLoginTempPassword();
+  }
+
+  /**
+   * Holds a fresh one-time login password (a credential — encrypted at rest, ADR 0014), stamping
+   * the set time for the TTL backstop. Replaces any previous value (a reset supersedes the old
+   * one).
+   *
+   * @param plaintext the temporary password to hold; must be non-blank
+   * @param now the set timestamp (the caller supplies the clock)
+   */
+  public void setLoginTempPassword(String plaintext, Instant now) {
+    this.loginTempPassword = requireNonBlank(plaintext, "loginTempPassword");
+    this.loginTempPasswordSetAt = Objects.requireNonNull(now, "now");
+  }
+
+  /**
+   * Purges the held one-time password (activation, unlink, or expiry).
+   *
+   * @return {@code true} if a value was actually cleared (so the caller can skip a no-op write)
+   */
+  public boolean clearLoginTempPassword() {
+    if (this.loginTempPassword == null && this.loginTempPasswordSetAt == null) {
+      return false;
+    }
+    this.loginTempPassword = null;
+    this.loginTempPasswordSetAt = null;
+    return true;
+  }
+
+  /** Whether a one-time login password is currently held (ignoring freshness). */
+  public boolean hasLoginTempPassword() {
+    return loginTempPassword != null;
+  }
+
+  /**
+   * The decrypted one-time login password IF it is still fresh (set at or after {@code cutoff}),
+   * else {@code null}. <strong>Restricted:</strong> this returns a credential — it is used ONLY by
+   * the owner/manager login-detail path and is never logged, evented, or placed in a general DTO
+   * (rule 6, ADR 0014). A value older than the TTL cutoff is treated as absent (the backstop for an
+   * employee who changed their password out of band and never opened the app).
+   */
+  public String loginTempPasswordIfFresh(Instant cutoff) {
+    if (loginTempPassword == null || loginTempPasswordSetAt == null) {
+      return null;
+    }
+    return loginTempPasswordSetAt.isBefore(cutoff) ? null : loginTempPassword;
+  }
+
+  /** When the held one-time password was set, or null if none is held. */
+  public Instant getLoginTempPasswordSetAt() {
+    return loginTempPasswordSetAt;
   }
 
   private static String requireNonBlank(String value, String field) {
