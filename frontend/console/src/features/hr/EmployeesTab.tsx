@@ -18,6 +18,7 @@ import type { OrgUnit } from '@/features/org/api'
 import { cn } from '@/lib/cn'
 import { useEmployees, type EmployeeListRow } from './api'
 import { CreateLoginDialog } from './CreateLoginDialog'
+import { EmployeeDetailDrawer } from './EmployeeDetailDrawer'
 import {
   AssignDialog,
   CompensationDialog,
@@ -34,6 +35,7 @@ type DialogState =
   | { kind: 'compensation'; employee: EmployeeListRow }
   | { kind: 'terminate'; employee: EmployeeListRow }
   | { kind: 'createLogin'; employee: EmployeeListRow }
+  | { kind: 'detail'; employee: EmployeeListRow }
 
 /** One employee, grouped from their (possibly several) current-assignment rows. */
 interface GroupedEmployee {
@@ -122,6 +124,7 @@ export function EmployeesTab({
               key={employee.employeeId}
               employee={employee}
               unitName={unitName}
+              onView={() => setDialog({ kind: 'detail', employee: employee.rows[0] })}
               onAssign={() => setDialog({ kind: 'assign', employee: employee.rows[0] })}
               onCompensation={() =>
                 setDialog({ kind: 'compensation', employee: employee.rows[0] })
@@ -192,6 +195,15 @@ export function EmployeesTab({
           onClose={() => setDialog(null)}
         />
       ) : null}
+      {dialog?.kind === 'detail' ? (
+        <EmployeeDetailDrawer
+          employee={dialog.employee}
+          companyId={companyId}
+          actor={actor}
+          onClose={() => setDialog(null)}
+          onCreateLogin={() => setDialog({ kind: 'createLogin', employee: dialog.employee })}
+        />
+      ) : null}
     </div>
   )
 }
@@ -199,6 +211,7 @@ export function EmployeesTab({
 function EmployeeRow({
   employee,
   unitName,
+  onView,
   onAssign,
   onCompensation,
   onEdit,
@@ -208,6 +221,7 @@ function EmployeeRow({
 }: {
   employee: GroupedEmployee
   unitName: (id: string | null) => string
+  onView: () => void
   onAssign: () => void
   onCompensation: () => void
   onEdit: () => void
@@ -231,11 +245,16 @@ function EmployeeRow({
 
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <span
-            className={cn('text-[14.5px] font-semibold', active ? 'text-ink' : 'text-ink-3')}
+          <button
+            type="button"
+            onClick={onView}
+            className={cn(
+              'rounded text-left text-[14.5px] font-semibold hover:underline focus-visible:outline-2 focus-visible:outline-brand-500',
+              active ? 'text-ink' : 'text-ink-3',
+            )}
           >
             {employee.fullName}
-          </span>
+          </button>
           {!active ? <Badge tone="amber">{t('hr.list.inactive')}</Badge> : null}
           {employee.hasCompensation ? (
             <Badge tone="emerald">{t('hr.list.compSet')}</Badge>

@@ -300,18 +300,83 @@ export function useAddAssignment(params: TenantParams) {
   })
 }
 
-/** POST /api/v1/employees/{id}/login-link — attach a console login (Keycloak sub) to an employee. */
+/**
+ * POST /api/v1/employees/{id}/login-link — attach a console login (Keycloak sub) to an employee,
+ * optionally holding the one-time password ENCRYPTED so the owner can hand it over until first
+ * sign-in (ADR 0014). Idempotent on the link, so the reset flow reuses it with a fresh password.
+ */
 export function useLinkLogin(params: TenantParams) {
   const { companyId, actor } = params
   const invalidate = useHrInvalidate(companyId)
   return useMutation({
-    mutationFn: ({ employeeId, userId }: { employeeId: string; userId: string }) =>
+    mutationFn: ({
+      employeeId,
+      userId,
+      temporaryPassword,
+    }: {
+      employeeId: string
+      userId: string
+      temporaryPassword?: string
+    }) =>
       apiFetch<EmployeeDetail['employee']>(`/api/v1/employees/${employeeId}/login-link`, {
         method: 'POST',
         tenant: { companyId, actor },
-        body: { userId },
+        body: { userId, temporaryPassword },
       }),
     onSuccess: (_d, { employeeId }) => invalidate(employeeId),
+  })
+}
+
+/** The login state of an employee (GET /api/v1/employees/{id}/login) — owner/manager only. */
+export interface EmployeeLogin {
+  /** The linked login's Keycloak subject id, or null when the employee has no login. */
+  userId: string | null
+  /**
+   * The decrypted one-time password held for the employee, present ONLY until they first sign in
+   * (and within the TTL). A CREDENTIAL — shown once to the owner, never persisted client-side.
+   */
+  temporaryPassword: string | null
+}
+
+/** DELETE /api/v1/employees/{id}/login-link — detach the login (the Keycloak account is untouched). */
+export function useUnlinkLogin(params: TenantParams) {
+  const { companyId, actor } = params
+  const invalidate = useHrInvalidate(companyId)
+  return useMutation({
+    mutationFn: ({ employeeId }: { employeeId: string }) =>
+      apiFetch<EmployeeDetail['employee']>(`/api/v1/employees/${employeeId}/login-link`, {
+        method: 'DELETE',
+        tenant: { companyId, actor },
+      }),
+    onSuccess: (_d, { employeeId }) => invalidate(employeeId),
+  })
+}
+
+/** GET /api/v1/employees/{id}/login — the employee's login state incl. the held one-time password. */
+export function useEmployeeLogin(params: TenantParams & { employeeId: string; enabled: boolean }) {
+  const { companyId, actor, employeeId, enabled } = params
+  return useQuery({
+    enabled,
+    queryKey: ['hr', 'employee-login', companyId, employeeId],
+    queryFn: () =>
+      apiFetch<EmployeeLogin>(`/api/v1/employees/${employeeId}/login`, {
+        tenant: { companyId, actor },
+      }),
+  })
+}
+
+/**
+ * POST /api/v1/users/{userId}/reset-password — issue a fresh one-time password for a login. Returns
+ * it once; the caller then re-holds it on the employee via login-link (ADR 0014).
+ */
+export function useResetPassword(params: TenantParams) {
+  const { companyId, actor } = params
+  return useMutation({
+    mutationFn: ({ userId }: { userId: string }) =>
+      apiFetch<{ userId: string; temporaryPassword: string }>(
+        `/api/v1/users/${userId}/reset-password`,
+        { method: 'POST', tenant: { companyId, actor } },
+      ),
   })
 }
 

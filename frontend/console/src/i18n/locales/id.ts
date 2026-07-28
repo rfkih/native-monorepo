@@ -563,6 +563,23 @@ export const id = {
         'Login sudah ada, tetapi penautan ke karyawan gagal. Ulangi penautan — login aman dipakai ulang.',
       retryLink: 'Ulangi penautan',
     },
+    detail: {
+      active: 'Aktif',
+      nik: 'NIK',
+      bank: 'Rekening bank',
+      loginTitle: 'Login',
+      noLogin: 'Belum ada login. Buat satu agar karyawan ini bisa masuk.',
+      username: 'Nama pengguna',
+      tempPassword: 'Kata sandi sekali pakai',
+      tempPasswordHint:
+        'Terlihat sampai karyawan pertama kali masuk dan mengganti sandinya — bagikan sekarang.',
+      passwordActive: 'Aktif',
+      passwordActiveHint: 'Karyawan sudah masuk dan menetapkan sandinya sendiri.',
+      resetPassword: 'Setel ulang sandi',
+      resetting: 'Menyetel ulang…',
+      removeLogin: 'Hapus login',
+      copyPassword: 'Salin sandi',
+    },
     roles: {
       chef: 'Koki',
       waiter: 'Pelayan',

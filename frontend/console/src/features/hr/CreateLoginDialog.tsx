@@ -46,9 +46,11 @@ export function CreateLoginDialog({
   const inviteMember = useInviteMember({ companyId, actor })
   const linkLogin = useLinkLogin({ companyId, actor })
 
-  async function link(userId: string) {
+  async function link(userId: string, temporaryPassword: string) {
     try {
-      await linkLogin.mutateAsync({ employeeId: employee.employeeId, userId })
+      // Hold the one-time password encrypted on the employee so the detail page can show it until
+      // the employee first signs in (ADR 0014).
+      await linkLogin.mutateAsync({ employeeId: employee.employeeId, userId, temporaryPassword })
       setLinkFailed(false)
     } catch {
       setLinkFailed(true)
@@ -68,7 +70,7 @@ export function CreateLoginDialog({
       })
       if (!result) throw new Error('empty invite response')
       setInvite(result)
-      await link(result.id)
+      await link(result.id, result.temporaryPassword)
     } catch {
       // invite error renders below; link failure flips to the retry state (invite kept).
     } finally {
@@ -80,7 +82,7 @@ export function CreateLoginDialog({
     if (!invite) return
     setBusy(true)
     try {
-      await link(invite.id)
+      await link(invite.id, invite.temporaryPassword)
     } catch {
       // stays in retry state
     } finally {

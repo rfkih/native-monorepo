@@ -566,6 +566,23 @@ export const en = {
         'The login exists, but attaching it to the employee failed. Retry the link — the login is safe to reuse.',
       retryLink: 'Retry link',
     },
+    detail: {
+      active: 'Active',
+      nik: 'NIK',
+      bank: 'Bank account',
+      loginTitle: 'Login',
+      noLogin: 'No login yet. Create one so this employee can sign in.',
+      username: 'Username',
+      tempPassword: 'One-time password',
+      tempPasswordHint:
+        'Visible until the employee first signs in and sets their own — share it with them now.',
+      passwordActive: 'Active',
+      passwordActiveHint: 'The employee has signed in and set their own password.',
+      resetPassword: 'Reset password',
+      resetting: 'Resetting…',
+      removeLogin: 'Remove login',
+      copyPassword: 'Copy password',
+    },
     roles: {
       chef: 'Chef',
       waiter: 'Waiter',
