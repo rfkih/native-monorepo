@@ -49,6 +49,7 @@ const Signup = lazy(() =>
 const Landing = lazy(() =>
   import('@/features/landing/Landing').then((m) => ({ default: m.Landing })),
 )
+const Me = lazy(() => import('@/features/me/Me').then((m) => ({ default: m.Me })))
 
 function CenteredSpinner() {
   return (
@@ -136,8 +137,9 @@ export function App() {
 
   const canDashboard = hasAnyRole(auth.roles, 'owner', 'manager')
   const canPos = hasAnyRole(auth.roles, 'owner', 'manager', 'cashier')
+  const canEmployee = hasAnyRole(auth.roles, 'employee')
 
-  if (!canDashboard && !canPos) {
+  if (!canDashboard && !canPos && !canEmployee) {
     return (
       <Suspense fallback={<CenteredSpinner />}>
         <AccessDenied />
@@ -145,7 +147,8 @@ export function App() {
     )
   }
 
-  const home = canDashboard ? '/' : '/pos'
+  // Landing per role: back office → POS → the employee self-service surface.
+  const home = canDashboard ? '/' : canPos ? '/pos' : '/me'
 
   return (
     <Suspense fallback={<CenteredSpinner />}>
@@ -154,6 +157,9 @@ export function App() {
         {canPos && <Route path="/pos" element={<Pos />} />}
         {canPos && <Route path="/menu" element={<MenuManagement />} />}
         {canPos && <Route path="/kitchen" element={<Kitchen />} />}
+
+        {/* The employee self-service surface — full-screen, any business role may open it. */}
+        <Route path="/me" element={<Me />} />
 
         {/* Everything else shares the back-office shell, mounted once via a layout route. */}
         <Route

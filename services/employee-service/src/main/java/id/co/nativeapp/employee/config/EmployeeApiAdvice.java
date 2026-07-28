@@ -5,6 +5,7 @@ import id.co.nativeapp.employee.assignment.domain.AssignmentNotFoundException;
 import id.co.nativeapp.employee.assignment.domain.ConflictingLegalEmployerException;
 import id.co.nativeapp.employee.employee.domain.EmployeeNotFoundException;
 import id.co.nativeapp.employee.employee.domain.UserAlreadyLinkedException;
+import id.co.nativeapp.employee.me.domain.EmployeeNotLinkedException;
 import id.co.nativeapp.employee.payroll.domain.CompensationAlreadyEndedException;
 import id.co.nativeapp.employee.payroll.domain.CompensationNotFoundException;
 import id.co.nativeapp.employee.payroll.domain.IncompletePeriodException;
@@ -127,6 +128,16 @@ public class EmployeeApiAdvice {
     ProblemDetail problem = problem(HttpStatus.NOT_FOUND, "compensation-not-found", request);
     problem.setTitle("Compensation package not found");
     // The message names only the package id (a UUID), never an amount (rule 6).
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /** A /me call from a login with no employee link → 404 with a distinct problem type. */
+  @ExceptionHandler(EmployeeNotLinkedException.class)
+  public ProblemDetail handleEmployeeNotLinked(
+      EmployeeNotLinkedException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.NOT_FOUND, "employee-not-linked", request);
+    problem.setTitle("Login not linked to an employee");
     problem.setDetail(ex.getMessage());
     return problem;
   }

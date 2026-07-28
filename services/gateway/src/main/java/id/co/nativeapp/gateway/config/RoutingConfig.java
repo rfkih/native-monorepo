@@ -51,6 +51,13 @@ public class RoutingConfig {
   /** Roles allowed on the owner/manager dashboard surface. */
   private static final String[] DASHBOARD_ROLES = {"owner", "manager"};
 
+  /**
+   * Roles allowed on the employee self-service surface ({@code /api/v1/me/**}) — every business
+   * role: the endpoints resolve the caller from the token's own sub, so there is no cross-user
+   * exposure to widen.
+   */
+  private static final String[] ME_ROLES = {"owner", "manager", "cashier", "employee"};
+
   // ---------------------------------------------------------------------------
   // org-service (public — unauthenticated)
   // ---------------------------------------------------------------------------
@@ -301,6 +308,30 @@ public class RoutingConfig {
         .before(uri(routes.restaurantService()))
         .filter(new RateLimitFilter(limiter))
         .filter(new RoleAuthorizationFilter(POS_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  // ---------------------------------------------------------------------------
+  // employee-service (self-service /me — every business role)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * The employee self-service surface: own profile / payslips / sales. Allowed for EVERY business
+   * role including {@code employee} — the downstream resolves the caller strictly from the injected
+   * {@code X-Actor} (the JWT sub), so the surface cannot read anyone else's data. A fresh path
+   * prefix (no overlap with the dashboard routes), so no {@code @Order} games are needed.
+   */
+  @Bean
+  RouterFunction<ServerResponse> meRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("employee-service-me")
+        .route(path("/api/v1/me/**"), http())
+        .before(uri(routes.employeeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(ME_ROLES))
         .filter(tenantFilter)
         .build();
   }

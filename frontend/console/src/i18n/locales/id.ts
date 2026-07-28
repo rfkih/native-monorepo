@@ -1,6 +1,44 @@
 import type { en } from './en'
 
 export const id = {
+  me: {
+    subtitle: 'Profil, penugasan, dan slip gaji Anda.',
+    error: 'Gagal memuat detail Anda. Coba lagi.',
+    toDashboard: 'Dasbor',
+    toPos: 'Buka POS',
+    notLinked: {
+      title: 'Login Anda belum tertaut ke karyawan',
+      hint: 'Minta manajer menautkannya dari tab Karyawan — setelah itu profil dan slip gaji Anda muncul di sini.',
+    },
+    profile: {
+      status: 'Status',
+      active: 'Aktif',
+      inactive: 'Nonaktif',
+      ptkp: 'Status PTKP',
+      nik: 'NIK',
+      bank: 'Rekening bank',
+    },
+    assignments: {
+      title: 'Penugasan',
+      empty: 'Anda tidak punya penugasan aktif.',
+    },
+    payslips: {
+      title: 'Slip gaji',
+      empty: 'Belum ada slip gaji. Muncul di sini setelah penggajian diproses.',
+      runSeq: 'Proses #{{seq}}',
+      illustrative: 'Ilustratif',
+      lines: '{{count}} baris',
+      gross: 'Bruto',
+      deductions: 'Potongan',
+      net: 'Gaji bersih',
+      component: 'Komponen',
+      kind: 'Jenis',
+      amount: 'Jumlah',
+      earning: 'Pendapatan',
+      deduction: 'Potongan',
+      employer: 'ditanggung pemberi kerja',
+    },
+  },
   app: {
     name: 'Native',
     tagline: 'Keuangan multi-entitas, terkonsolidasi.',

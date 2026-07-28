@@ -1,5 +1,6 @@
 package id.co.nativeapp.employee.payroll.repository;
 
+import id.co.nativeapp.employee.me.projection.MyPayslipHeaderView;
 import id.co.nativeapp.employee.payroll.domain.PayslipLine;
 import id.co.nativeapp.employee.payroll.projection.PayslipIndexView;
 import java.util.List;
@@ -39,4 +40,29 @@ public interface PayslipLineRepository extends JpaRepository<PayslipLine, UUID> 
           """,
       nativeQuery = true)
   List<PayslipIndexView> findPayslipIndex(@Param("runId") UUID runId);
+
+  /**
+   * The caller's OWN payslip index — run headers for every run carrying the employee's lines,
+   * newest first. NO amount columns are selected (the encrypted amounts are only decrypted on the
+   * own-row detail read). RLS applies to both tables (rule 5).
+   */
+  @Query(
+      value =
+          """
+          SELECT pl.payroll_run_id           AS run_id,
+                 pr.period                   AS period,
+                 pr.run_seq                  AS run_seq,
+                 pr.posted_at                AS posted_at,
+                 COUNT(*)                    AS line_count,
+                 BOOL_OR(pl.is_illustrative) AS illustrative
+            FROM payslip_line pl
+            JOIN payroll_run pr ON pr.id = pl.payroll_run_id
+           WHERE pl.employee_id = :employeeId
+             AND (CAST(:period AS text) IS NULL OR pr.period = CAST(:period AS text))
+           GROUP BY pl.payroll_run_id, pr.period, pr.run_seq, pr.posted_at
+           ORDER BY pr.period DESC, pr.run_seq DESC
+          """,
+      nativeQuery = true)
+  List<MyPayslipHeaderView> findMyPayslipHeaders(
+      @Param("employeeId") UUID employeeId, @Param("period") String period);
 }

@@ -712,6 +712,47 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
   }
 
   // ---------------------------------------------------------------------------
+  // /api/v1/me/** — employee self-service (every business role)
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void aCashierCanReachTheMeSurface() throws Exception {
+    // ME_ROLES includes every business role — the downstream resolves the caller from the
+    // injected X-Actor (the sub), so there is nothing to widen.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/me/profile")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    RecordedRequest forwarded = theForwardedRequest();
+    assertThat(forwarded.getPath()).isEqualTo("/api/v1/me/profile");
+    assertThat(forwarded.getHeader("X-Actor")).isNotBlank();
+  }
+
+  @Test
+  void anOwnerCanAlsoReachTheMeSurface() throws Exception {
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/me/payslips")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/me/payslips");
+  }
+
+  // ---------------------------------------------------------------------------
   // Public sign-up route — no Authorization header required
   // ---------------------------------------------------------------------------
 

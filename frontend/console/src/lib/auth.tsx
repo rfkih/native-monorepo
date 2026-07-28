@@ -34,6 +34,7 @@ function DevAuthProvider({ children }: { children: ReactNode }) {
       authenticated: true,
       companyId: null, // dev tenant comes from the onboarding session, not a token
       actor: DEV_ACTOR,
+      sub: null,
       roles: [...BUSINESS_ROLES],
       login: () => {},
       logout: () => {},
@@ -69,6 +70,7 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
     authenticated: false,
     companyId: null,
     actor: '',
+    sub: null,
     roles: [],
   })
 
@@ -79,7 +81,14 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
       if (!mounted) return
       if (!user || user.expired || !user.access_token) {
         setAccessToken(null)
-        setState({ ready: true, authenticated: false, companyId: null, actor: '', roles: [] })
+        setState({
+          ready: true,
+          authenticated: false,
+          companyId: null,
+          actor: '',
+          sub: null,
+          roles: [],
+        })
         return
       }
       setAccessToken(user.access_token)
@@ -92,6 +101,7 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
           (typeof claims.preferred_username === 'string' && claims.preferred_username) ||
           (typeof claims.sub === 'string' && claims.sub) ||
           'unknown',
+        sub: typeof claims.sub === 'string' ? claims.sub : null,
         roles: extractRoles(claims),
       })
     }
@@ -119,7 +129,14 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
       // gives an unauthenticated visitor an actual front door rather than an immediate bounce to
       // the IdP. Protected paths still fail closed — App routes any unauthenticated deep-link back
       // to the landing, and the gateway rejects any tenant-scoped API call without a valid token.
-      setState({ ready: true, authenticated: false, companyId: null, actor: '', roles: [] })
+      setState({
+        ready: true,
+        authenticated: false,
+        companyId: null,
+        actor: '',
+        sub: null,
+        roles: [],
+      })
     }
 
     void init()

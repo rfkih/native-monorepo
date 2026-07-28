@@ -18,6 +18,11 @@ export interface AuthState {
   companyId: string | null
   /** The acting principal (JWT `preferred_username`/`sub`, or the dev actor). */
   actor: string
+  /**
+   * The JWT subject (the Keycloak user id) — display/diagnostic only; the backend always derives
+   * identity from the verified token. Null in dev mode (no token).
+   */
+  sub: string | null
   /** Curated business roles the principal holds. */
   roles: BusinessRole[]
   /**
