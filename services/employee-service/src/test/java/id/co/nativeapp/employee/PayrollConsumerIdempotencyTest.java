@@ -64,6 +64,30 @@ class PayrollConsumerIdempotencyTest extends PostgresRlsTestBase {
         .isEqualTo(1L);
   }
 
+  @Test
+  void distinctMetricEventsOnTheSameNaturalKeyAccumulate() throws Exception {
+    // A producer emits one event per unit of activity (e.g. per sale); several in the same period
+    // at the same subject must SUM on the natural key — not last-write-wins.
+    UUID subject = UUID.randomUUID();
+    metricService.apply(
+        new MetricProjectedEvent(
+            UUID.randomUUID(), TENANT_A, "sales_amount", "2026-07", "employee", subject, 100_000L));
+    metricService.apply(
+        new MetricProjectedEvent(
+            UUID.randomUUID(), TENANT_A, "sales_amount", "2026-07", "employee", subject, 250_000L));
+    metricService.apply(
+        new MetricProjectedEvent(
+            UUID.randomUUID(), TENANT_A, "sales_amount", "2026-07", "employee", subject, 50_000L));
+
+    assertThat(
+            countAsAdmin(
+                "SELECT metric_value FROM metric_input WHERE subject_id = '" + subject + "'"))
+        .isEqualTo(400_000L);
+    assertThat(
+            countAsAdmin("SELECT COUNT(*) FROM metric_input WHERE subject_id = '" + subject + "'"))
+        .isEqualTo(1L);
+  }
+
   private long countAsAdmin(String sql) throws Exception {
     try (Connection admin =
             java.sql.DriverManager.getConnection(

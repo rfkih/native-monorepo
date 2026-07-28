@@ -47,8 +47,10 @@ public class MetricInputProjectionWriter {
         repository.findByMetricKeyAndPeriodAndGrainAndSubjectId(
             event.metricKey(), event.period(), event.grain(), event.subjectId());
     if (existing.isPresent()) {
+      // Accumulate — a producer emits one event per unit of activity (per wash / per sale), so
+      // multiple events on the same natural key SUM (safe: each event id applies exactly once).
       MetricInput metric = existing.get();
-      metric.applyValue(event.value());
+      metric.applyDelta(event.value());
       repository.save(metric);
       return;
     }
