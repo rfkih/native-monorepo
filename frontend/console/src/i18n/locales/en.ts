@@ -40,6 +40,13 @@ export const en = {
       deduction: 'Deduction',
       employer: 'employer-borne',
     },
+    sales: {
+      title: 'Sales this month',
+      mySales: 'My sales',
+      rate: 'Commission rate',
+      estimate: 'Estimated commission',
+      estimateHint: 'An estimate from your sales so far. Your payslip is the final figure.',
+    },
   },
   landing: {
     // header / nav
@@ -638,6 +645,14 @@ export const en = {
         'The current package started {{date}} — the new salary must start after it.',
       overlapError:
         'A package already covers part of that period. End it first — packages must not overlap.',
+    },
+    commission: {
+      title: 'Own-sales commission',
+      current: 'Earns {{percent}}% of their own sales',
+      set: 'Set',
+      clear: 'Remove',
+      placeholder: '% of sales (e.g. 5)',
+      hint: 'A percentage of the sales this employee rings under their own login. Needs a login and POS access.',
     },
     payroll: {
       illustrativeBanner: {

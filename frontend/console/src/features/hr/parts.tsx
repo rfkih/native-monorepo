@@ -18,13 +18,16 @@ import {
   ROLE_PRESETS,
   useAddAssignment,
   useAddContract,
+  useCommissions,
   useCompensation,
   useCreateCompensation,
   useCreateEmployee,
   useEmployee,
   useEndAssignment,
   useEndCompensation,
+  useEndCommission,
   useOrgUnitLookup,
+  useSetCommission,
   useUpdateEmployee,
   type EmployeeListRow,
 } from './api'
@@ -618,6 +621,16 @@ export function CompensationDialog({
           )}
         </div>
 
+        {/* Own-sales commission (only once an open package exists to attach it to). */}
+        {openPackage ? (
+          <CommissionControl
+            employeeId={employee.employeeId}
+            packageId={openPackage.id}
+            companyId={companyId}
+            actor={actor}
+          />
+        ) : null}
+
         <Field
           label={t('hr.compensation.base', { currency: baseCurrency })}
           htmlFor="comp-amount"
@@ -679,6 +692,90 @@ export function CompensationDialog({
         </div>
       </form>
     </DialogOverlay>
+  )
+}
+
+/**
+ * Own-sales commission on a compensation package — a percentage the employee earns on the sales
+ * they ring under their own login. Non-PII config (the % is echoed as its real value). Shows the
+ * current commission with a clear action, or a set form. Standalone from the base-pay form.
+ */
+function CommissionControl({
+  employeeId,
+  packageId,
+  companyId,
+  actor,
+}: {
+  employeeId: string
+  packageId: string
+  companyId: string
+  actor: string
+}) {
+  const { t } = useTranslation()
+  const commissions = useCommissions({ companyId, actor, employeeId, packageId, enabled: true })
+  const setCommission = useSetCommission({ companyId, actor })
+  const endCommission = useEndCommission({ companyId, actor })
+  const [percent, setPercent] = useState('')
+
+  const open = (commissions.data ?? []).find((c) => c.effectiveTo === OPEN_ENDED) ?? null
+
+  function handleSet() {
+    const pct = Number(percent)
+    if (!Number.isFinite(pct) || pct <= 0 || pct > 100) return
+    setCommission.mutate(
+      { employeeId, packageId, percentBasisPoints: Math.round(pct * 100) },
+      { onSuccess: () => setPercent('') },
+    )
+  }
+
+  return (
+    <div className="rounded-xl border border-line bg-paper px-3.5 py-3">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+        {t('hr.commission.title')}
+      </p>
+      {open ? (
+        <div className="mt-2 flex items-center justify-between gap-3">
+          <span className="text-sm text-ink">
+            {t('hr.commission.current', { percent: (open.percentBasisPoints / 100).toString() })}
+          </span>
+          <button
+            type="button"
+            onClick={() => endCommission.mutate({ employeeId, packageId, ruleId: open.id })}
+            disabled={endCommission.isPending}
+            className="rounded-md px-2 py-1 text-xs font-semibold text-loss/80 hover:bg-tint-loss hover:text-loss"
+          >
+            {t('hr.commission.clear')}
+          </button>
+        </div>
+      ) : (
+        <div className="mt-2 flex items-center gap-2">
+          <div className="relative flex-1">
+            <TextInput
+              id="commission-pct"
+              type="number"
+              min="0.1"
+              max="100"
+              step="0.1"
+              value={percent}
+              onChange={(e) => setPercent(e.target.value)}
+              placeholder={t('hr.commission.placeholder')}
+            />
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleSet}
+            disabled={setCommission.isPending || !percent}
+          >
+            {t('hr.commission.set')}
+          </Button>
+        </div>
+      )}
+      <p className="mt-1.5 text-xs text-ink-3">{t('hr.commission.hint')}</p>
+      {setCommission.isError ? (
+        <p className="mt-1 text-xs text-loss">{t('hr.assign.error')}</p>
+      ) : null}
+    </div>
   )
 }
 

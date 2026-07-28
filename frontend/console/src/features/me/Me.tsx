@@ -26,6 +26,7 @@ import {
   useMyPayslip,
   useMyPayslips,
   useMyProfile,
+  useMySales,
   type MyPayslipHeader,
 } from './api'
 
@@ -149,6 +150,9 @@ export function Me() {
               )}
             </section>
 
+            {/* Sales + commission */}
+            <SalesSection companyId={companyId} actor={actor} locale={locale} />
+
             {/* Payslips */}
             <PayslipsSection companyId={companyId} actor={actor} locale={locale} />
           </div>
@@ -164,6 +168,65 @@ function Detail({ label, children }: { label: string; children: React.ReactNode 
       <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">{label}</span>
       <span className="text-sm font-medium text-ink sm:mt-0.5 sm:block">{children}</span>
     </div>
+  )
+}
+
+function SalesSection({
+  companyId,
+  actor,
+  locale,
+}: {
+  companyId: string
+  actor: string
+  locale: string
+}) {
+  const { t } = useTranslation()
+  const sales = useMySales({ companyId, actor, enabled: true })
+
+  // Only render for logins that actually rang sales this month or carry a commission — a
+  // back-office login (no sales, no commission) gets nothing.
+  if (!sales.data) return null
+  const { salesMinor, currency, commissionBasisPoints, commissionEstimateMinor } = sales.data
+  if (salesMinor === 0 && commissionBasisPoints === null) return null
+
+  return (
+    <section>
+      <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+        {t('me.sales.title')}
+      </h2>
+      <div className="mt-2 grid gap-3 sm:grid-cols-3">
+        <KpiTile
+          label={t('me.sales.mySales')}
+          minor={salesMinor}
+          currency={currency}
+          locale={locale}
+          loading={false}
+        />
+        {commissionBasisPoints !== null ? (
+          <>
+            <Card className="flex flex-col justify-center p-5">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+                {t('me.sales.rate')}
+              </span>
+              <span className="tnum mt-1 font-mono text-2xl font-bold text-ink">
+                {(commissionBasisPoints / 100).toLocaleString(locale)}%
+              </span>
+            </Card>
+            <KpiTile
+              label={t('me.sales.estimate')}
+              minor={commissionEstimateMinor ?? 0}
+              currency={currency}
+              locale={locale}
+              loading={false}
+              emphatic
+            />
+          </>
+        ) : null}
+      </div>
+      {commissionBasisPoints !== null ? (
+        <p className="mt-1.5 text-xs text-ink-3">{t('me.sales.estimateHint')}</p>
+      ) : null}
+    </section>
   )
 }
 

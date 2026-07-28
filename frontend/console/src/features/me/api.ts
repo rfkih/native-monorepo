@@ -64,6 +64,14 @@ export interface MyPayslipDetail {
   lines: MyPayslipLine[]
 }
 
+export interface MySales {
+  period: string
+  salesMinor: number
+  currency: string
+  commissionBasisPoints: number | null
+  commissionEstimateMinor: number | null
+}
+
 interface TenantParams {
   companyId: string
   actor: string
@@ -117,5 +125,19 @@ export function useMyPayslip(
     queryKey: ['myPayslip', companyId, runId],
     queryFn: () =>
       apiFetch<MyPayslipDetail>(`/api/v1/me/payslips/${runId}`, { tenant: { companyId, actor } }),
+  })
+}
+
+/** GET /api/v1/me/sales — own sales + commission preview for the current month. */
+export function useMySales(params: TenantParams & { period?: string; enabled: boolean }) {
+  const { companyId, actor, period, enabled } = params
+  return useQuery({
+    enabled,
+    retry: false,
+    queryKey: ['mySales', companyId, period ?? 'current'],
+    queryFn: () => {
+      const qs = period ? `?period=${encodeURIComponent(period)}` : ''
+      return apiFetch<MySales>(`/api/v1/me/sales${qs}`, { tenant: { companyId, actor } })
+    },
   })
 }

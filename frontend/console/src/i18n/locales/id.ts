@@ -38,6 +38,13 @@ export const id = {
       deduction: 'Potongan',
       employer: 'ditanggung pemberi kerja',
     },
+    sales: {
+      title: 'Penjualan bulan ini',
+      mySales: 'Penjualan saya',
+      rate: 'Tarif komisi',
+      estimate: 'Perkiraan komisi',
+      estimateHint: 'Perkiraan dari penjualan Anda sejauh ini. Slip gaji adalah angka final.',
+    },
   },
   app: {
     name: 'Native',
@@ -634,6 +641,14 @@ export const id = {
       replaceDateConflict: 'Paket saat ini mulai {{date}} — gaji baru harus mulai setelahnya.',
       overlapError:
         'Sudah ada paket yang mencakup sebagian periode itu. Akhiri dulu — paket tidak boleh tumpang tindih.',
+    },
+    commission: {
+      title: 'Komisi penjualan sendiri',
+      current: 'Mendapat {{percent}}% dari penjualannya sendiri',
+      set: 'Tetapkan',
+      clear: 'Hapus',
+      placeholder: '% penjualan (mis. 5)',
+      hint: 'Persentase dari penjualan yang dicatat karyawan ini di bawah login-nya. Perlu login dan akses POS.',
     },
     payroll: {
       illustrativeBanner: {

@@ -414,6 +414,89 @@ export function useEndCompensation(params: TenantParams) {
 }
 
 // ---------------------------------------------------------------------------
+// Commission (own-sales; non-PII config — real basis points)
+// ---------------------------------------------------------------------------
+
+export interface CommissionRow {
+  id: string
+  metricKey: string
+  percentBasisPoints: number
+  effectiveFrom: string
+  effectiveTo: string
+}
+
+export function useCommissions(
+  params: TenantParams & { employeeId: string; packageId: string | null; enabled: boolean },
+) {
+  const { companyId, actor, employeeId, packageId, enabled } = params
+  return useQuery({
+    enabled: enabled && !!packageId,
+    queryKey: ['hrCommission', companyId, employeeId, packageId],
+    queryFn: async () => {
+      const result = await apiFetch<CommissionRow[]>(
+        `/api/v1/employees/${employeeId}/compensation/${packageId}/commission`,
+        { tenant: { companyId, actor } },
+      )
+      return result ?? []
+    },
+  })
+}
+
+export function useSetCommission(params: TenantParams) {
+  const { companyId, actor } = params
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      employeeId,
+      packageId,
+      percentBasisPoints,
+    }: {
+      employeeId: string
+      packageId: string
+      percentBasisPoints: number
+    }) =>
+      apiFetch<CommissionRow>(
+        `/api/v1/employees/${employeeId}/compensation/${packageId}/commission`,
+        {
+          method: 'POST',
+          tenant: { companyId, actor },
+          body: { percentBasisPoints, metricKey: 'sales_amount' },
+        },
+      ),
+    onSuccess: (_d, { employeeId, packageId }) => {
+      void queryClient.invalidateQueries({
+        queryKey: ['hrCommission', companyId, employeeId, packageId],
+      })
+    },
+  })
+}
+
+export function useEndCommission(params: TenantParams) {
+  const { companyId, actor } = params
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      employeeId,
+      packageId,
+      ruleId,
+    }: {
+      employeeId: string
+      packageId: string
+      ruleId: string
+    }) =>
+      apiFetch<CommissionRow>(
+        `/api/v1/employees/${employeeId}/compensation/${packageId}/commission/${ruleId}`,
+        { method: 'DELETE', tenant: { companyId, actor } },
+      ),
+    onSuccess: (_d, { employeeId, packageId }) => {
+      void queryClient.invalidateQueries({
+        queryKey: ['hrCommission', companyId, employeeId, packageId],
+      })
+    },
+  })
+}
+
+// ---------------------------------------------------------------------------
 // Payroll setup + runs
 // ---------------------------------------------------------------------------
 
