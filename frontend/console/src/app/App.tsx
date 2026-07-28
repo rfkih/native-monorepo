@@ -51,6 +51,19 @@ const Landing = lazy(() =>
   import('@/features/landing/Landing').then((m) => ({ default: m.Landing })),
 )
 const Me = lazy(() => import('@/features/me/Me').then((m) => ({ default: m.Me })))
+const Customers = lazy(() =>
+  import('@/features/ar/Customers').then((m) => ({ default: m.Customers })),
+)
+const InvoicesList = lazy(() =>
+  import('@/features/ar/InvoicesList').then((m) => ({ default: m.InvoicesList })),
+)
+const InvoiceDetail = lazy(() =>
+  import('@/features/ar/InvoiceDetail').then((m) => ({ default: m.InvoiceDetail })),
+)
+const NewInvoice = lazy(() =>
+  import('@/features/ar/NewInvoice').then((m) => ({ default: m.NewInvoice })),
+)
+const ArAging = lazy(() => import('@/features/ar/ArAging').then((m) => ({ default: m.ArAging })))
 
 function CenteredSpinner() {
   return (
@@ -222,6 +235,36 @@ export function App() {
             <Route
               path="/statements/balance-sheet"
               element={company ? <BalanceSheet /> : <Navigate to="/onboarding" replace />}
+            />
+          )}
+          {canDashboard && (
+            <Route
+              path="/invoices"
+              element={company ? <InvoicesList /> : <Navigate to="/onboarding" replace />}
+            />
+          )}
+          {canDashboard && (
+            <Route
+              path="/invoices/new"
+              element={company ? <NewInvoice /> : <Navigate to="/onboarding" replace />}
+            />
+          )}
+          {canDashboard && (
+            <Route
+              path="/invoices/:id"
+              element={company ? <InvoiceDetail /> : <Navigate to="/onboarding" replace />}
+            />
+          )}
+          {canDashboard && (
+            <Route
+              path="/customers"
+              element={company ? <Customers /> : <Navigate to="/onboarding" replace />}
+            />
+          )}
+          {canDashboard && (
+            <Route
+              path="/ar/aging"
+              element={company ? <ArAging /> : <Navigate to="/onboarding" replace />}
             />
           )}
           {orgAllowed && (

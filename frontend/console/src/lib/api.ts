@@ -60,6 +60,11 @@ export interface RequestOptions {
   /** Bootstrap call (e.g. create-company): sends X-Actor only. */
   actor?: string
   query?: Record<string, string | undefined>
+  /**
+   * Extra headers merged in after the auth/tenant headers (e.g. `Idempotency-Key`). Callers win on
+   * conflict — lets a call override a default if it ever needs to.
+   */
+  headers?: Record<string, string>
 }
 
 function buildQuery(query?: Record<string, string | undefined>): string {
@@ -85,6 +90,7 @@ export async function apiFetch<T>(path: string, opts: RequestOptions = {}): Prom
   } else if (opts.actor) {
     headers['X-Actor'] = opts.actor
   }
+  if (opts.headers) Object.assign(headers, opts.headers)
 
   const res = await fetch(API_BASE_URL + path + buildQuery(opts.query), {
     method: opts.method ?? 'GET',
