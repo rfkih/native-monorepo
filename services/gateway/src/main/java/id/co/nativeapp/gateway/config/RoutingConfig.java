@@ -484,4 +484,49 @@ public class RoutingConfig {
         .filter(tenantFilter)
         .build();
   }
+
+  /** AR customers (finance-service) — owner/manager only. */
+  @Bean
+  RouterFunction<ServerResponse> customersRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("finance-service-customers")
+        .route(path("/api/v1/customers/**"), http())
+        .before(uri(routes.financeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /** AR invoices (finance-service) — owner/manager only. */
+  @Bean
+  RouterFunction<ServerResponse> invoicesRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("finance-service-invoices")
+        .route(path("/api/v1/invoices/**"), http())
+        .before(uri(routes.financeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /** AR aging + other AR reads (finance-service) — owner/manager only. */
+  @Bean
+  RouterFunction<ServerResponse> arRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("finance-service-ar")
+        .route(path("/api/v1/ar/**"), http())
+        .before(uri(routes.financeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
 }
