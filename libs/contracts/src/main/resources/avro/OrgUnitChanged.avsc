@@ -10,6 +10,7 @@
     {"name": "parent_id", "type": ["null", "string"], "default": null, "doc": "The CURRENT parent org_unit id (UUID as string) after the change, or null for a top-level node."},
     {"name": "change_kind", "type": "string", "doc": "What changed: RENAMED | MOVED | DEACTIVATED | REACTIVATED. A string (not an Avro enum), so adding a kind is backward-compatible; consumers that key on the 'active' flag handle DEACTIVATED/REACTIVATED uniformly."},
     {"name": "name", "type": "string", "doc": "The org-unit display name after the change."},
-    {"name": "active", "type": "boolean", "doc": "Whether the node is active after the change (false after a deactivation, true after a reactivation)."}
+    {"name": "active", "type": "boolean", "doc": "Whether the node is active after the change (false after a deactivation, true after a reactivation)."},
+    {"name": "vertical", "type": ["null", "string"], "default": null, "doc": "The business vertical of a business_unit node (LOWERCASE module-key string: restaurant | carwash | barbershop — NOT the uppercase enum-name casing 'type' uses). IMMUTABLE — carried on every change event so consumers stay stateless. Null for outlet/team nodes and pre-vertical events. MUST remain the LAST field (positional decode safety)."}
   ]
 }

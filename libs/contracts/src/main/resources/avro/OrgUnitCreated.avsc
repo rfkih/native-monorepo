@@ -9,6 +9,7 @@
     {"name": "type", "type": "string", "doc": "The org-unit kind: business_unit | outlet | team."},
     {"name": "parent_id", "type": ["null", "string"], "default": null, "doc": "The parent org_unit id (UUID as string), or null for a top-level node (a business_unit)."},
     {"name": "legal_employer_id", "type": "string", "doc": "The legal employer this node belongs to (UUID as string)."},
-    {"name": "name", "type": "string", "doc": "The org-unit display name."}
+    {"name": "name", "type": "string", "doc": "The org-unit display name."},
+    {"name": "vertical", "type": ["null", "string"], "default": null, "doc": "The business vertical of a business_unit node, as a LOWERCASE module-key-style string (restaurant | carwash | barbershop) aligned with the entitlement module_catalog.module_key vocabulary — deliberately NOT the UPPERCASE enum-name casing 'type' uses. Null for outlet/team nodes (an outlet inherits its parent business_unit's vertical) and on events produced before this field existed (those business units are 'restaurant' by the org-service V6 backfill). Immutable after creation. MUST remain the LAST field (positional decode safety)."}
   ]
 }

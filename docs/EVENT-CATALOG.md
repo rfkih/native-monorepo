@@ -148,6 +148,16 @@ is a top-level node (`parent_id` null); an `outlet` hangs under a `business_unit
 under an `outlet`. `parent_id` is therefore a nullable union (`["null","string"]`, default
 `null`).
 
+A `business_unit` additionally carries a **`vertical`** — the kind of business it runs
+(`restaurant | carwash | barbershop`), REQUIRED at creation and immutable after. It is a
+**LOWERCASE module-key-style string** aligned with entitlement-service's
+`module_catalog.module_key` vocabulary — deliberately NOT the uppercase enum-name casing
+`type` uses. Outlet/team nodes carry `null` (an outlet inherits its parent business unit's
+vertical); events produced before the field existed also decode as `null` — those business
+units are `restaurant` by the org-service V6 backfill. Per-company entitlement (which
+modules a company MAY use) remains entitlement-service's separate, company-level concept;
+this field only aligns vocabulary with it. Consumers stay opaque to the field.
+
 **Key fields** (ARCHITECTURE.md §5: `org_unit_id`, `type`, `parent_id`, `company_id`)
 
 | Field | Avro type | Meaning |
@@ -158,6 +168,7 @@ under an `outlet`. `parent_id` is therefore a nullable union (`["null","string"]
 | `parent_id` | `["null","string"]` (default `null`) | The parent org_unit id, or null for a top-level node |
 | `legal_employer_id` | `string` | The legal employer this node belongs to (UUID as string) |
 | `name` | `string` | The org-unit display name |
+| `vertical` | `["null","string"]` (default `null`) | Business vertical of a `business_unit` (lowercase `restaurant` \| `carwash` \| `barbershop`); null for outlet/team + pre-V6 events |
 
 **Avro schema**
 
@@ -173,7 +184,8 @@ under an `outlet`. `parent_id` is therefore a nullable union (`["null","string"]
     {"name": "type", "type": "string", "doc": "The org-unit kind: business_unit | outlet | team."},
     {"name": "parent_id", "type": ["null", "string"], "default": null, "doc": "The parent org_unit id (UUID as string), or null for a top-level node (a business_unit)."},
     {"name": "legal_employer_id", "type": "string", "doc": "The legal employer this node belongs to (UUID as string)."},
-    {"name": "name", "type": "string", "doc": "The org-unit display name."}
+    {"name": "name", "type": "string", "doc": "The org-unit display name."},
+    {"name": "vertical", "type": ["null", "string"], "default": null, "doc": "The business vertical of a business_unit node, as a LOWERCASE module-key-style string (restaurant | carwash | barbershop) aligned with the entitlement module_catalog.module_key vocabulary — deliberately NOT the UPPERCASE enum-name casing 'type' uses. Null for outlet/team nodes (an outlet inherits its parent business_unit's vertical) and on events produced before this field existed (those business units are 'restaurant' by the org-service V6 backfill). Immutable after creation. MUST remain the LAST field (positional decode safety)."}
   ]
 }
 ```
@@ -181,7 +193,7 @@ under an `outlet`. `parent_id` is therefore a nullable union (`["null","string"]
 **Compatibility.** Backward-compatible only (add optional fields with a default; never a
 new required field without a default, never remove/rename/retype). Enforced by
 `OrgUnitEventContractTest` (parse + `AvroSerde` round-trip + back-compat for-change /
-against-break).
+against-break + the old-reader-decodes-new-writer pin for the appended `vertical`).
 
 ### `OrgUnitChanged`
 
@@ -214,6 +226,7 @@ uniformly).
 | `change_kind` | `string` | What changed: `RENAMED` \| `MOVED` \| `DEACTIVATED` \| `REACTIVATED` |
 | `name` | `string` | The org-unit display name after the change |
 | `active` | `boolean` | Whether the node is active after the change (false after deactivate, true after reactivate) |
+| `vertical` | `["null","string"]` (default `null`) | The node's (immutable) business vertical, carried on every change so consumers stay stateless; null for outlet/team + pre-V6 events |
 
 **Avro schema**
 
@@ -230,7 +243,8 @@ uniformly).
     {"name": "parent_id", "type": ["null", "string"], "default": null, "doc": "The CURRENT parent org_unit id (UUID as string) after the change, or null for a top-level node."},
     {"name": "change_kind", "type": "string", "doc": "What changed: RENAMED | MOVED | DEACTIVATED | REACTIVATED. A string (not an Avro enum), so adding a kind is backward-compatible; consumers that key on the 'active' flag handle DEACTIVATED/REACTIVATED uniformly."},
     {"name": "name", "type": "string", "doc": "The org-unit display name after the change."},
-    {"name": "active", "type": "boolean", "doc": "Whether the node is active after the change (false after a deactivation, true after a reactivation)."}
+    {"name": "active", "type": "boolean", "doc": "Whether the node is active after the change (false after a deactivation, true after a reactivation)."},
+    {"name": "vertical", "type": ["null", "string"], "default": null, "doc": "The business vertical of a business_unit node (LOWERCASE module-key string: restaurant | carwash | barbershop — NOT the uppercase enum-name casing 'type' uses). IMMUTABLE — carried on every change event so consumers stay stateless. Null for outlet/team nodes and pre-vertical events. MUST remain the LAST field (positional decode safety)."}
   ]
 }
 ```

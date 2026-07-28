@@ -93,6 +93,88 @@ class OrgUnitEventContractTest {
   }
 
   @Test
+  void orgUnitCreatedCarriesAnOptionalVerticalAsTheLastField() {
+    Schema schema = OrgUnitCreatedSchema.schema();
+    Schema.Field vertical = schema.getField("vertical");
+    assertThat(vertical).isNotNull();
+    assertThat(vertical.schema().getType()).isEqualTo(Schema.Type.UNION);
+    assertThat(vertical.schema().getTypes())
+        .extracting(Schema::getType)
+        .containsExactly(Schema.Type.NULL, Schema.Type.STRING);
+    assertThat(vertical.hasDefaultValue()).isTrue();
+    // MUST be the last field: AvroSerde decodes positionally, so appending anywhere else
+    // would mis-decode payloads for readers still on the previous schema.
+    assertThat(schema.getFields().getLast().name()).isEqualTo("vertical");
+  }
+
+  @Test
+  void orgUnitCreatedRoundTripsTheVerticalSetAndUnset() {
+    Schema schema = OrgUnitCreatedSchema.schema();
+
+    GenericRecord withVertical = new GenericData.Record(schema);
+    withVertical.put("org_unit_id", UNIT);
+    withVertical.put("company_id", TENANT);
+    withVertical.put("type", "BUSINESS_UNIT");
+    withVertical.put("parent_id", null);
+    withVertical.put("legal_employer_id", TENANT);
+    withVertical.put("name", "Wash HQ");
+    withVertical.put("vertical", "carwash");
+    GenericRecord decoded = AvroSerde.deserialize(AvroSerde.serialize(withVertical), schema);
+    assertThat(decoded.get("vertical").toString()).isEqualTo("carwash");
+
+    // Unset (an outlet/team node, or a pre-vertical producer) → null via the union default.
+    GenericRecord unset = new GenericData.Record(schema);
+    unset.put("org_unit_id", UNIT);
+    unset.put("company_id", TENANT);
+    unset.put("type", "OUTLET");
+    unset.put("parent_id", PARENT);
+    unset.put("legal_employer_id", TENANT);
+    unset.put("name", "Wash Outlet");
+    GenericRecord decodedUnset = AvroSerde.deserialize(AvroSerde.serialize(unset), schema);
+    assertThat(decodedUnset.get("vertical")).isNull();
+  }
+
+  @Test
+  void anOldReaderWithoutVerticalDecodesANewWriterPayload() {
+    // The load-bearing back-compat pin: a consumer still on the pre-vertical schema copy
+    // must decode a payload written WITH the vertical set, key fields intact.
+    Schema writer = OrgUnitCreatedSchema.schema();
+    Schema oldReader =
+        new Schema.Parser()
+            .parse(
+                """
+                {
+                  "type": "record",
+                  "name": "OrgUnitCreated",
+                  "namespace": "id.co.nativeapp.events.org",
+                  "fields": [
+                    {"name": "org_unit_id", "type": "string"},
+                    {"name": "company_id", "type": "string"},
+                    {"name": "type", "type": "string"},
+                    {"name": "parent_id", "type": ["null", "string"], "default": null},
+                    {"name": "legal_employer_id", "type": "string"},
+                    {"name": "name", "type": "string"}
+                  ]
+                }
+                """);
+
+    GenericRecord written = new GenericData.Record(writer);
+    written.put("org_unit_id", UNIT);
+    written.put("company_id", TENANT);
+    written.put("type", "BUSINESS_UNIT");
+    written.put("parent_id", null);
+    written.put("legal_employer_id", TENANT);
+    written.put("name", "Wash HQ");
+    written.put("vertical", "carwash");
+
+    GenericRecord decoded =
+        AvroSerde.deserialize(AvroSerde.serialize(written), writer, oldReader);
+    assertThat(decoded.get("org_unit_id").toString()).isEqualTo(UNIT);
+    assertThat(decoded.get("type").toString()).isEqualTo("BUSINESS_UNIT");
+    assertThat(decoded.get("name").toString()).isEqualTo("Wash HQ");
+  }
+
+  @Test
   void orgUnitCreatedAddingARequiredFieldWithoutDefaultBreaksCompatibility() {
     Schema v1 = OrgUnitCreatedSchema.schema();
     Schema incompatible =
@@ -174,6 +256,16 @@ class OrgUnitEventContractTest {
                 }
                 """);
     assertThat(AvroSerde.isBackwardCompatible(v1, v2)).isTrue();
+  }
+
+  @Test
+  void orgUnitChangedCarriesAnOptionalVerticalAsTheLastField() {
+    Schema schema = OrgUnitChangedSchema.schema();
+    Schema.Field vertical = schema.getField("vertical");
+    assertThat(vertical).isNotNull();
+    assertThat(vertical.schema().getType()).isEqualTo(Schema.Type.UNION);
+    assertThat(vertical.hasDefaultValue()).isTrue();
+    assertThat(schema.getFields().getLast().name()).isEqualTo("vertical");
   }
 
   @Test
