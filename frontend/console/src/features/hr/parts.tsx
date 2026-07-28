@@ -117,6 +117,7 @@ export function EmployeeFormDialog({
   const [role, setRole] = useState('')
   const [startDate, setStartDate] = useState(todayIso())
   const [failedStep, setFailedStep] = useState<'employee' | 'contract' | 'assignment' | null>(null)
+  const [clientError, setClientError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
   const createEmployee = useCreateEmployee({ companyId, actor })
@@ -126,9 +127,28 @@ export function EmployeeFormDialog({
   const lookup = useOrgUnitLookup({ companyId, actor, ids: [orgUnitId], enabled: !edit })
 
   const legalEmployerId = lookup.data?.[0]?.legalEmployerId ?? null
+  // Why Save might be disabled — surfaced as text, never a silently dead button.
+  const unitNotSynced = !edit && !lookup.isLoading && !lookup.isError && !legalEmployerId
+
+  /** Client-side sanity, mirroring the server whitelists (NIK 16 digits, bank 6–32 digits). */
+  function validate(): string | null {
+    if (!fullName.trim() || fullName.trim().length > 255) return 'hr.form.nameInvalid'
+    if (edit) return null
+    if (!/^\d{16}$/.test(nik.trim())) return 'hr.form.nikInvalid'
+    if (!/^\d{6,32}$/.test(bankAccount.trim())) return 'hr.form.bankInvalid'
+    if (!role.trim() || role.trim().length > 128) return 'hr.form.roleInvalid'
+    if (!startDate) return 'hr.form.dateInvalid'
+    return null
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    const invalid = validate()
+    if (invalid) {
+      setClientError(invalid)
+      return
+    }
+    setClientError(null)
     if (edit) {
       updateEmployee.mutate(
         { employeeId: edit.employeeId, body: { fullName: fullName.trim(), ptkpStatus } },
@@ -216,19 +236,23 @@ export function EmployeeFormDialog({
 
         {!edit ? (
           <>
-            <Field label={t('hr.form.nik')} htmlFor="hr-nik" hint={t('hr.form.piiHint')}>
+            <Field label={t('hr.form.nik')} htmlFor="hr-nik" hint={t('hr.form.nikHint')}>
               <TextInput
                 id="hr-nik"
                 value={nik}
-                onChange={(e) => setNik(e.target.value)}
+                onChange={(e) => setNik(e.target.value.replace(/\D/g, ''))}
+                inputMode="numeric"
+                maxLength={16}
                 required
               />
             </Field>
-            <Field label={t('hr.form.bankAccount')} htmlFor="hr-bank" hint={t('hr.form.piiHint')}>
+            <Field label={t('hr.form.bankAccount')} htmlFor="hr-bank" hint={t('hr.form.bankHint')}>
               <TextInput
                 id="hr-bank"
                 value={bankAccount}
-                onChange={(e) => setBankAccount(e.target.value)}
+                onChange={(e) => setBankAccount(e.target.value.replace(/\D/g, ''))}
+                inputMode="numeric"
+                maxLength={32}
                 required
               />
             </Field>
@@ -261,6 +285,13 @@ export function EmployeeFormDialog({
                   </option>
                 ))}
               </select>
+              {/* Save gates on the unit's legal employer — say so instead of a dead button. */}
+              {lookup.isLoading ? (
+                <p className="mt-1 text-xs text-ink-3">{t('hr.form.unitChecking')}</p>
+              ) : null}
+              {unitNotSynced || lookup.isError ? (
+                <p className="mt-1 text-xs text-loss">{t('hr.form.unitNotSynced')}</p>
+              ) : null}
             </Field>
             <Field label={t('hr.form.role')} htmlFor="hr-role">
               <RolePresetInput id="hr-role" value={role} onChange={setRole} />
@@ -277,6 +308,11 @@ export function EmployeeFormDialog({
           </>
         ) : null}
 
+        {clientError ? (
+          <p className="text-sm text-loss">
+            {t(clientError as Parameters<typeof t>[0])}
+          </p>
+        ) : null}
         {failedStep ? (
           <p className="text-sm text-loss">
             {t(
@@ -507,21 +543,29 @@ export function CompensationDialog({
   const effectiveContractId = contracts[contracts.length - 1]?.id ?? ''
 
   const openPackage = (packages.data ?? []).find((p) => p.effectiveTo === OPEN_ENDED) ?? null
+  // The replace flow ends the open package the day BEFORE the new start — impossible when the
+  // open package began on/after that date (the end would precede its start → server 400). Guard
+  // with an explanation instead of a dead-ended request.
+  const replaceDateConflict = openPackage !== null && openPackage.effectiveFrom >= effectiveFrom
 
   // Integer minor units — parse the major-unit input and scale by the ISO exponent (never a
-  // float on the wire; Math.round guards binary-representation dust).
+  // float on the wire; Math.round guards binary-representation dust). Sanity-capped so a fat
+  // finger cannot book an absurd salary (10^13 minor ≈ IDR 10 trillion).
+  const MAX_MINOR = 10_000_000_000_000
   const exponent = isoMinorExponent(baseCurrency)
   const parsedMajor = Number(amountMajor)
-  const basePayMinor =
+  const rawMinor =
     Number.isFinite(parsedMajor) && parsedMajor > 0
       ? Math.round(parsedMajor * 10 ** exponent)
       : null
+  const basePayMinor = rawMinor !== null && rawMinor > 0 && rawMinor <= MAX_MINOR ? rawMinor : null
+  const amountInvalid = amountMajor !== '' && basePayMinor === null
 
   const saving = createComp.isPending || endComp.isPending
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!basePayMinor || !effectiveContractId) return
+    if (!basePayMinor || !effectiveContractId || replaceDateConflict) return
     try {
       if (openPackage) {
         // Replace flow: end the open package the day before the new one starts.
@@ -599,6 +643,14 @@ export function CompensationDialog({
           />
         </Field>
 
+        {amountInvalid ? (
+          <p className="text-sm text-loss">{t('hr.compensation.amountInvalid')}</p>
+        ) : null}
+        {replaceDateConflict ? (
+          <p className="text-sm text-loss">
+            {t('hr.compensation.replaceDateConflict', { date: openPackage.effectiveFrom })}
+          </p>
+        ) : null}
         {!effectiveContractId && !detail.isLoading ? (
           <p className="text-sm text-loss">{t('hr.compensation.noContract')}</p>
         ) : null}
@@ -614,7 +666,10 @@ export function CompensationDialog({
           <Button type="button" variant="outline" onClick={onClose}>
             {t('common.cancel')}
           </Button>
-          <Button type="submit" disabled={saving || !basePayMinor || !effectiveContractId}>
+          <Button
+            type="submit"
+            disabled={saving || !basePayMinor || !effectiveContractId || replaceDateConflict}
+          >
             {saving
               ? t('hr.compensation.saving')
               : openPackage

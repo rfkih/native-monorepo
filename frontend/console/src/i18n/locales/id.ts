@@ -508,6 +508,16 @@ export const id = {
       nik: 'NIK',
       bankAccount: 'Rekening bank',
       piiHint: 'Disimpan terenkripsi; selanjutnya selalu ditampilkan tersamar.',
+      nikHint: '16 digit. Disimpan terenkripsi; selanjutnya selalu tersamar.',
+      bankHint: 'Hanya angka. Disimpan terenkripsi; selanjutnya selalu tersamar.',
+      nameInvalid: 'Isi nama (maksimal 255 karakter).',
+      nikInvalid: 'NIK harus tepat 16 digit.',
+      bankInvalid: 'Rekening bank harus 6–32 digit.',
+      roleInvalid: 'Isi peran kerja (maksimal 128 karakter).',
+      dateInvalid: 'Pilih tanggal mulai.',
+      unitChecking: 'Memeriksa unit…',
+      unitNotSynced:
+        'Unit ini belum tersinkron ke HR — tombol Simpan tetap nonaktif. Sinkronisasi berjalan otomatis sesaat setelah unit dibuat; jika terus begini, layanan HR mungkin mati.',
       employmentType: 'Jenis kepegawaian',
       typePermanent: 'Tetap',
       typeContract: 'Kontrak',
@@ -558,6 +568,8 @@ export const id = {
       replace: 'Ganti gaji',
       saving: 'Menyimpan…',
       noContract: 'Karyawan ini belum punya kontrak kerja — buat lewat Tambah karyawan.',
+      amountInvalid: 'Isi jumlah positif (maksimal 10.000.000.000 dalam satuan utama).',
+      replaceDateConflict: 'Paket saat ini mulai {{date}} — gaji baru harus mulai setelahnya.',
       overlapError:
         'Sudah ada paket yang mencakup sebagian periode itu. Akhiri dulu — paket tidak boleh tumpang tindih.',
     },
@@ -574,15 +586,15 @@ export const id = {
         seeding: 'Memuat…',
       },
       scope: {
-        count: '{{withComp}} dari {{total}} karyawan siap digaji',
-        noneWithComp: 'Belum ada karyawan di sini yang punya gaji',
+        count: 'Seluruh perusahaan: {{withComp}} dari {{total}} karyawan siap digaji',
+        noneWithComp: 'Belum ada karyawan di perusahaan ini yang punya gaji',
         noneHint: 'Tetapkan gaji di tab Karyawan dulu — penggajian hanya membayar yang punya gaji.',
       },
       run: {
         cta: 'Proses gaji',
         confirmTitle: 'Proses gaji?',
         confirmBody:
-          'Menghitung dan membukukan gaji {{period}} untuk {{count}} karyawan, dan mencatat biaya tenaga kerja ke laba rugi unit.',
+          'Proses gaji selalu untuk SELURUH PERUSAHAAN: menghitung dan membukukan gaji {{period}} untuk semua {{count}} karyawan siap digaji di semua unit, menggantikan proses periode ini sebelumnya. Biaya tenaga kerja masuk ke laba rugi tiap unit.',
         gateFailedBody:
           'Pembukuan {{period}} belum ditutup, jadi pemeriksaan kelengkapan menghentikan proses ini. Tutup periode dulu — atau proses tanpa pemeriksaan (proses ditandai tanpa gerbang).',
         runUngated: 'Proses tanpa pemeriksaan kelengkapan',
@@ -592,6 +604,7 @@ export const id = {
         runLabel: 'Proses #{{seq}}',
         empty: 'Belum ada proses gaji periode ini',
         emptyHint: 'Proses gaji untuk melihat total, slip gaji, dan biaya tenaga kerja per gerai.',
+        failedLabel: 'Gagal — tidak ada yang dibukukan',
       },
       kpi: {
         gross: 'Bruto',
@@ -612,7 +625,7 @@ export const id = {
       },
       rerun: {
         warning:
-          'Memproses lagi membukukan proses TAMBAHAN — tidak ada pembatalan. Hanya untuk koreksi periode.',
+          'Memproses lagi MENGGANTIKAN proses periode ini sebelumnya: pembukuan tenaga kerjanya dibalik dan diganti proses baru. Gunakan untuk koreksi periode — selalu seluruh perusahaan.',
       },
     },
   },

@@ -2,6 +2,7 @@ package id.co.nativeapp.employee.employee.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -16,7 +17,7 @@ import java.util.UUID;
  * @param effectiveTo the date it ends, or {@code null} for open-ended (the 9999-12-31 sentinel)
  */
 public record AddContractRequest(
-    @NotBlank String employmentType,
+    @NotBlank @Pattern(regexp = "PERMANENT|CONTRACT|INTERN|PROBATION") String employmentType,
     @NotNull UUID legalEmployerId,
     @NotNull LocalDate effectiveFrom,
     LocalDate effectiveTo) {}

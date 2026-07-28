@@ -512,6 +512,16 @@ export const en = {
       nik: 'NIK',
       bankAccount: 'Bank account',
       piiHint: 'Stored encrypted; shown masked everywhere after this.',
+      nikHint: '16 digits. Stored encrypted; shown masked everywhere after this.',
+      bankHint: 'Digits only. Stored encrypted; shown masked everywhere after this.',
+      nameInvalid: 'Enter a name (up to 255 characters).',
+      nikInvalid: 'The NIK must be exactly 16 digits.',
+      bankInvalid: 'The bank account must be 6–32 digits.',
+      roleInvalid: 'Enter a job role (up to 128 characters).',
+      dateInvalid: 'Pick a start date.',
+      unitChecking: 'Checking the unit…',
+      unitNotSynced:
+        'This unit is not synced to HR yet — Save stays disabled. It syncs automatically moments after the unit is created; if this persists, the HR service may be down.',
       employmentType: 'Employment type',
       typePermanent: 'Permanent',
       typeContract: 'Contract',
@@ -561,6 +571,9 @@ export const en = {
       replace: 'Replace salary',
       saving: 'Saving…',
       noContract: 'This employee has no employment contract yet — create one via Add employee.',
+      amountInvalid: 'Enter a positive amount (up to 10,000,000,000 in major units).',
+      replaceDateConflict:
+        'The current package started {{date}} — the new salary must start after it.',
       overlapError:
         'A package already covers part of that period. End it first — packages must not overlap.',
     },
@@ -577,15 +590,15 @@ export const en = {
         seeding: 'Seeding…',
       },
       scope: {
-        count: '{{withComp}} of {{total}} employees payable',
-        noneWithComp: 'No employee here has a salary yet',
+        count: 'Company-wide: {{withComp}} of {{total}} employees payable',
+        noneWithComp: 'No employee in this company has a salary yet',
         noneHint: 'Set salaries on the Employees tab first — payroll only pays employees with one.',
       },
       run: {
         cta: 'Run payroll',
         confirmTitle: 'Run payroll?',
         confirmBody:
-          'Calculates and posts {{period}} payroll for {{count}} employees, and books their labor cost into the unit P&L.',
+          'A payroll run is always COMPANY-WIDE: this calculates and posts {{period}} payroll for all {{count}} payable employees across every unit, replacing any earlier run for the period. Labor cost books into each unit’s P&L.',
         gateFailedBody:
           'The {{period}} books are not closed yet, so the completeness gate stopped this run. Close the period first — or run without the gate (the run is marked as ungated).',
         runUngated: 'Run without completeness gate',
@@ -595,6 +608,7 @@ export const en = {
         runLabel: 'Run #{{seq}}',
         empty: 'No payroll runs for this period',
         emptyHint: 'Run payroll to see totals, payslips, and labor cost by outlet here.',
+        failedLabel: 'Failed — nothing posted',
       },
       kpi: {
         gross: 'Gross',
@@ -615,7 +629,7 @@ export const en = {
       },
       rerun: {
         warning:
-          'Running again posts an ADDITIONAL run to the books — there is no reversal. Use only to correct a period.',
+          'Running again SUPERSEDES the period’s earlier runs: their labor postings are reversed on the books and replaced by the new run. Use it to correct a period — always company-wide.',
       },
     },
   },

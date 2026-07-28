@@ -76,7 +76,12 @@ public class EmployeeReader {
     if (hasUnits && orgUnitIds.size() > MAX_ORG_UNIT_IDS) {
       throw new IllegalArgumentException("orgUnitIds accepts at most " + MAX_ORG_UNIT_IDS + " ids");
     }
-    String query = (q == null || q.isBlank()) ? null : q.strip();
+    // Escape ILIKE wildcards so a user-typed % or _ matches literally (bound param — no
+    // injection either way; this is purely match semantics).
+    String query =
+        (q == null || q.isBlank())
+            ? null
+            : q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     LocalDate effective = asOf == null ? LocalDate.now(clock) : asOf;
     // Projection-to-DTO mapping happens here in the service layer (CODE-STRUCTURE §3.3).
     return employeeRepository
