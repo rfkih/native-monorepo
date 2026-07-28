@@ -11,7 +11,10 @@ import id.co.nativeapp.finance.revenue.messaging.SaleRecordedEvent;
 import id.co.nativeapp.money.Money;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Currency;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -303,6 +306,113 @@ public class JournalPostingService {
           e);
       return buildSuspenseEntry(
           entryId, period, occurredAt, description, currency, sourceEventId, gross);
+    }
+  }
+
+  /**
+   * Builds a balanced {@link JournalEntry} from an explicit map of {@code amount_basis → Money},
+   * resolving the effective {@link PostingTemplate} for {@code eventKind}. This is the
+   * finance-native counterpart of {@link #buildEntryForSale} for postings that do NOT originate
+   * from a {@code SaleRecorded} event — the AR invoice-issue / payment / void postings (Phase 1).
+   * Each template line's {@code amount_basis} selects an amount from {@code amountsByBasis}; a line
+   * whose amount is absent or zero is omitted ({@code JournalEntry.balanced} rejects zero-sided
+   * lines), so a non-taxable invoice's TAX line simply drops out. The entry is NOT persisted — the
+   * caller saves it inside a {@code @Transactional} unit of work and must call {@code
+   * entry.setCompanyId(...)} first.
+   *
+   * @param eventKind the posting kind (e.g. {@link EventKind#INVOICE_ISSUED})
+   * @param period the accounting period {@code YYYY-MM}
+   * @param occurredAt the posting instant (drives effective-dated resolution + the entry timestamp)
+   * @param sourceEventId the idempotency key (UNIQUE in the DB; e.g. the invoice or payment id)
+   * @param description a human-readable description for the journal header
+   * @param eventUsesIllustrative OR'd with the resolved template's flag onto the entry
+   * @param amountsByBasis amounts keyed by {@code amount_basis} — must contain {@code "GROSS"}
+   *     (whose currency is the entry currency); all values must share that currency
+   * @return a balanced {@link JournalEntry} with only the non-zero lines, ready to be saved
+   */
+  @SuppressWarnings("checkstyle:ParameterNumber")
+  public JournalEntry buildEntryFromBreakdown(
+      EventKind eventKind,
+      String period,
+      Instant occurredAt,
+      UUID sourceEventId,
+      String description,
+      boolean eventUsesIllustrative,
+      Map<String, Money> amountsByBasis) {
+
+    Objects.requireNonNull(eventKind, "eventKind");
+    Objects.requireNonNull(period, "period");
+    Objects.requireNonNull(occurredAt, "occurredAt");
+    Objects.requireNonNull(sourceEventId, "sourceEventId");
+    Objects.requireNonNull(description, "description");
+    Objects.requireNonNull(amountsByBasis, "amountsByBasis");
+
+    Money gross = amountsByBasis.get("GROSS");
+    if (gross == null) {
+      throw new IllegalArgumentException(
+          "amountsByBasis must contain a GROSS amount (the entry currency + total)");
+    }
+    UUID entryId = UUID.randomUUID();
+    Currency currency = gross.currency();
+    String currencyCode = currency.getCurrencyCode();
+
+    PostingTemplate template = templateResolver.resolve(eventKind, occurredAt);
+    if (template == null) {
+      log.warn(
+          "No posting_template found for eventKind={} occurredAt={}; routing to suspense"
+              + " (uses_illustrative=true) — money is NOT dropped, entry will be balanced",
+          eventKind,
+          occurredAt);
+      return buildSuspenseEntry(
+          entryId, period, occurredAt, description, currencyCode, sourceEventId, gross);
+    }
+
+    List<JournalLine> lines = new ArrayList<>(template.lines().size());
+    for (TemplateLine tl : template.lines()) {
+      Money amount =
+          amountsByBasis.getOrDefault(
+              tl.amountBasis().toUpperCase(Locale.ROOT), Money.zero(currency));
+      // Omit any line whose amount is zero (e.g. the TAX line of a non-taxable invoice).
+      if (amount.isZero()) {
+        continue;
+      }
+      String accountCode = roleResolver.resolve(tl.accountRole(), occurredAt);
+      if (accountCode == null) {
+        log.warn(
+            "No role_account_map found for role={} eventKind={} occurredAt={};"
+                + " routing line {} to suspense — money NOT dropped",
+            tl.accountRole(),
+            eventKind,
+            occurredAt,
+            tl.lineNo());
+        accountCode = RoleAccountResolver.SUSPENSE_ACCOUNT_CODE;
+      }
+      JournalLine line =
+          switch (tl.side()) {
+            case DEBIT -> JournalLine.debit(entryId, tl.lineNo(), accountCode, amount);
+            case CREDIT -> JournalLine.credit(entryId, tl.lineNo(), accountCode, amount);
+          };
+      lines.add(line);
+    }
+
+    try {
+      return JournalEntry.balanced(
+          entryId,
+          period,
+          occurredAt,
+          description,
+          currencyCode,
+          sourceEventId,
+          template.usesIllustrative() || eventUsesIllustrative,
+          lines);
+    } catch (UnbalancedJournalException e) {
+      log.error(
+          "Posting template for eventKind={} produced an unbalanced entry (misconfigured seed"
+              + " data); falling back to suspense entry — money NOT dropped",
+          eventKind,
+          e);
+      return buildSuspenseEntry(
+          entryId, period, occurredAt, description, currencyCode, sourceEventId, gross);
     }
   }
 

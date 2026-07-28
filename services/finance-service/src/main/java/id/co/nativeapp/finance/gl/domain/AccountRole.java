@@ -58,6 +58,18 @@ public enum AccountRole {
    * reserved for SME-confirmed tip-pool treatment. Maps to account 2110 (ILLUSTRATIVE).
    */
   SERVICE_CHARGE_PAYABLE,
+  /**
+   * Phase 1 AR: the Accounts Receivable control account. Debited when a customer invoice is issued
+   * (the amount the customer owes), credited when a payment is received. Maps to account 1200
+   * (ILLUSTRATIVE — SME-gated).
+   */
+  AR,
+  /**
+   * Phase 1 AR: output VAT payable — the credit for the tax leg of an issued customer invoice. The
+   * PPN regime + rate are SME-gated (ILLUSTRATIVE placeholder computed in {@code InvoiceWriter}).
+   * Maps to account 2200 (ILLUSTRATIVE).
+   */
+  VAT_OUTPUT,
   EXPENSE,
   LABOR_EXPENSE,
   LABOR_CLEARING,

@@ -14,5 +14,14 @@ public enum EventKind {
    * Partial or full refund of a captured sale after settlement — proportional contra of {@link
    * #SALE}.
    */
-  SALE_REFUND
+  SALE_REFUND,
+  /**
+   * Phase 1 AR: a customer invoice was issued — Dr AR / Cr revenue (+ Cr output VAT for a taxable
+   * invoice).
+   */
+  INVOICE_ISSUED,
+  /** Phase 1 AR: a payment was received against a customer invoice — Dr cash-clearing / Cr AR. */
+  PAYMENT_RECEIVED,
+  /** Phase 1 AR: a customer invoice was voided — the contra of {@link #INVOICE_ISSUED}. */
+  INVOICE_VOID
 }

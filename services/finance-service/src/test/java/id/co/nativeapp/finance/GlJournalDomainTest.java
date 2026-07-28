@@ -153,6 +153,9 @@ class GlJournalDomainTest {
             EventKind.EXPENSE,
             EventKind.LABOR,
             EventKind.SALE_VOID,
-            EventKind.SALE_REFUND);
+            EventKind.SALE_REFUND,
+            EventKind.INVOICE_ISSUED,
+            EventKind.PAYMENT_RECEIVED,
+            EventKind.INVOICE_VOID);
   }
 }
