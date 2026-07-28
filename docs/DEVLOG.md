@@ -69,6 +69,27 @@ cascade-deactivate + reactivation.)
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **Employee management + payroll in the console (2026-07-28)** — the org-unit hub gains an
+  **Employees** tab (Odoo-style HR records: create employee→contract→assignment chain with role
+  presets [free-text `assignment.role`, no new aggregate], assign-to-outlet, end-assignment,
+  masked salary packages, terminate) and a real **Payroll** tab (one-click illustrative setup,
+  per-unit run scope, run history with KPIs, masked payslips, labor-cost-by-outlet bars, loud
+  ILLUSTRATIVE banner whenever provenance ≠ OFFICIAL). employee-service — which already had the
+  engine — gained the console-facing APIs: employee LIST (`?orgUnitIds=` — **the BU rollup is
+  CLIENT-computed** from the org tree the console already has; `org_unit_projection` deliberately
+  gains no parent_id), assignment END (re-emits `AssignmentChanged` with the new `effective_to`;
+  consumers upsert by id — **zero event/schema changes in the whole increment**), the org-unit
+  legal-employer lookup, compensation CRUD (create validates contract ownership + **overlap→409**
+  because the run SUMS covering packages [double-pay guard]; every read masked, the list
+  projection never selects `base_pay_enc`), payroll-setup status/seed (delegating to the existing
+  idempotent illustrative seeder), run list per period, the **aggregated** allocation summary
+  (SUM per outlet+GL — per-employee rows would leak salary; all-zeros sentinel = UNALLOCATED),
+  and the payslip index. Gateway routes all three prefixes DASHBOARD_ROLES (HR is never a POS
+  surface). Decisions: runs stay COMPANY-scoped (period+run_seq) — a unit tab runs for its
+  employees' ids and lists all company runs; re-run = an ADDITIONAL posting (no reversal event
+  yet — UI warns, follow-up); salary reads masked-only (authorized-HR read deferred); HR
+  employees separate from Keycloak login users (People tab relabeled "App access"). V6 =
+  read-path indexes only.
 - **Business-unit verticals — restaurant | carwash | barbershop (2026-07-28)** — `org_unit.vertical`
   (org V6: nullable VARCHAR(32); backfill existing BUs → `restaurant`. **The V6 backfill was
   silently swallowed by FORCE RLS** — Flyway runs as the table owner with no tenant GUC, the

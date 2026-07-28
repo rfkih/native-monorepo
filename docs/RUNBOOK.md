@@ -39,6 +39,11 @@ Drive the loop: `POST /api/v1/sales` (headers `X-Company-Id: <uuid>`, `X-Actor: 
 body `{businessId,amountMinor,currency,idempotencyKey}`) → then `GET /api/v1/revenue?period=YYYY-MM` on
 finance (same `X-Company-Id`) shows the consolidated revenue move.
 
+Local port convention (dev recipe): org `8082`, employee `8084`, finance `8085`, restaurant `8086`,
+gateway `8090`. employee-service is gateway-routed via `EMPLOYEE_SERVICE_URI` (e.g.
+`http://localhost:8084`); the Vite dev proxy reaches it via `VITE_EMPLOYEE_URL` in the header-trust
+recipe. The console HR/payroll surfaces (org-unit hub → Employees/Payroll tabs) need it running.
+
 ## GOTCHAS (each cost real debugging — read before running locally)
 1. **Host `DB_*` env vars override the service defaults.** The yml uses `${DB_PASSWORD:default}`; if the
    shell has `DB_PASSWORD`/`DB_USERNAME`/`DB_URL` set (e.g. another project), Spring picks the host value
