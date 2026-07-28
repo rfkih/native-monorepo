@@ -24,10 +24,10 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
- * Web-slice test for {@code GET /api/v1/pnl/org-units/{id}}: 200 with the combined
- * totals+breakdown shape; 204 for an unknown/foreign/team unit; the {@code PnlController}-mirrored
- * empty-period semantics (204 without a currency hint, 200 zeros with one); RFC-7807 400 for a
- * malformed period. The {@link UnitPnlReader} is mocked — no DB.
+ * Web-slice test for {@code GET /api/v1/pnl/org-units/{id}}: 200 with the combined totals+breakdown
+ * shape; 204 for an unknown/foreign/team unit; the {@code PnlController}-mirrored empty-period
+ * semantics (204 without a currency hint, 200 zeros with one); RFC-7807 400 for a malformed period.
+ * The {@link UnitPnlReader} is mocked — no DB.
  */
 @WebMvcTest(UnitPnlController.class)
 @Import(ConstraintViolationAdvice.class)
@@ -52,7 +52,8 @@ class UnitPnlControllerTest {
             "IDR",
             false,
             List.of(
-                new UnitPnlResponse.OutletPnlRow(OUTLET, "Outlet B", true, 250_000L, 0L, 250_000L)));
+                new UnitPnlResponse.OutletPnlRow(
+                    OUTLET, "Outlet B", true, 250_000L, 0L, 250_000L)));
     when(unitPnlReader.unitPnlForPeriod(UNIT, "2026-07")).thenReturn(Optional.of(response));
 
     mockMvc

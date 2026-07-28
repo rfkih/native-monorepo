@@ -21,8 +21,10 @@ public interface UnitPnlRepository extends JpaRepository<OrgUnitRef, UUID> {
    * PRIMARY — same mechanism as the GL trial balance). Key properties:
    *
    * <ul>
-   *   <li>{@code ou.type = 'outlet'} is LOWERCASE — finance's {@code org_unit_ref} stores the
-   *       event-published values, unlike org-service's uppercase enum names.
+   *   <li>The type comparison is CASE-INSENSITIVE: {@code org_unit_ref.type} stores whatever the
+   *       events carry — {@code OrgUnitCreatedSchema} emits the enum NAME ({@code "OUTLET"},
+   *       uppercase), though older prose (V22 comments, one contract-test fixture) suggests
+   *       lowercase. {@code upper(ou.type)} makes the rollup immune to that history.
    *   <li>The tree is one level below a business unit (ADR 0012), so no recursive CTE.
    *   <li>The LEFT JOIN keeps a known unit with zero postings in the result — the existence check
    *       and the rollup are one query.
@@ -51,7 +53,7 @@ public interface UnitPnlRepository extends JpaRepository<OrgUnitRef, UUID> {
                    ON lp.business_id = ou.org_unit_id
                   AND lp.period = :period
            WHERE ou.org_unit_id = :orgUnitId
-              OR (ou.parent_id = :orgUnitId AND ou.type = 'outlet')
+              OR (ou.parent_id = :orgUnitId AND upper(ou.type) = 'OUTLET')
            GROUP BY ou.org_unit_id, ou.name, ou.type, ou.active
            ORDER BY revenue_minor DESC, ou.name
           """,

@@ -38,8 +38,8 @@ class UnitPnlTenancyIsolationTest extends PostgresRlsTestBase {
     String tenantB = UUID.randomUUID().toString();
     UUID bu = UUID.randomUUID();
     UUID outlet = UUID.randomUUID();
-    insertOrgUnitRef(bu, tenantA, "business_unit", null, "A HQ", true);
-    insertOrgUnitRef(outlet, tenantA, "outlet", bu, "A Outlet", true);
+    insertOrgUnitRef(bu, tenantA, "BUSINESS_UNIT", null, "A HQ", true);
+    insertOrgUnitRef(outlet, tenantA, "OUTLET", bu, "A Outlet", true);
     revenuePostingService.handle(
         new SaleRecordedEvent(
             UUID.randomUUID(), tenantA, outlet, Money.ofMinor(500_000L, "IDR"), OCCURRED));

@@ -9,9 +9,9 @@ import java.util.UUID;
  * rollup: unit totals (rule-8 Money pair: minor units + ISO-4217) plus a per-outlet breakdown
  * ({@code outlets} is empty when the unit is itself an outlet). {@code netMinor} is derived
  * (revenue − expense), never stored. {@code currency} may be {@code null} inside the service layer
- * for a known unit with zero postings; the controller either substitutes the caller's currency
- * hint or returns 204 (mirroring {@code PnlController}) — a {@code null} currency never reaches
- * the wire.
+ * for a known unit with zero postings; the controller either substitutes the caller's currency hint
+ * or returns 204 (mirroring {@code PnlController}) — a {@code null} currency never reaches the
+ * wire.
  *
  * @param orgUnitId the unit the rollup is for
  * @param period the accounting period {@code YYYY-MM}

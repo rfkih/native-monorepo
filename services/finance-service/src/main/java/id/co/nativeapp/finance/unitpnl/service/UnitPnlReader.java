@@ -48,11 +48,8 @@ public class UnitPnlReader {
     }
 
     UnitPnlRowView self =
-        rows.stream()
-            .filter(r -> r.getOrgUnitId().equals(orgUnitId))
-            .findFirst()
-            .orElse(null);
-    if (self == null || "team".equals(self.getType())) {
+        rows.stream().filter(r -> r.getOrgUnitId().equals(orgUnitId)).findFirst().orElse(null);
+    if (self == null || "TEAM".equalsIgnoreCase(self.getType())) {
       // parent_id matched but the unit itself is gone (should not happen — the query's OR
       // includes the self row), or the unit is a team: no P&L surface.
       return Optional.empty();

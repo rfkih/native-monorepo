@@ -45,9 +45,9 @@ class UnitPnlReaderTest extends PostgresRlsTestBase {
     UUID bu = UUID.randomUUID();
     UUID outletA = UUID.randomUUID();
     UUID outletB = UUID.randomUUID();
-    insertOrgUnitRef(bu, tenant, "business_unit", null, "HQ", true);
-    insertOrgUnitRef(outletA, tenant, "outlet", bu, "Outlet A", true);
-    insertOrgUnitRef(outletB, tenant, "outlet", bu, "Outlet B", true);
+    insertOrgUnitRef(bu, tenant, "BUSINESS_UNIT", null, "HQ", true);
+    insertOrgUnitRef(outletA, tenant, "OUTLET", bu, "Outlet A", true);
+    insertOrgUnitRef(outletB, tenant, "OUTLET", bu, "Outlet B", true);
 
     postSale(tenant, outletA, 100_000L);
     postSale(tenant, outletB, 250_000L);
@@ -75,8 +75,8 @@ class UnitPnlReaderTest extends PostgresRlsTestBase {
     String tenant = UUID.randomUUID().toString();
     UUID bu = UUID.randomUUID();
     UUID outlet = UUID.randomUUID();
-    insertOrgUnitRef(bu, tenant, "business_unit", null, "HQ", true);
-    insertOrgUnitRef(outlet, tenant, "outlet", bu, "Outlet", true);
+    insertOrgUnitRef(bu, tenant, "BUSINESS_UNIT", null, "HQ", true);
+    insertOrgUnitRef(outlet, tenant, "OUTLET", bu, "Outlet", true);
 
     postSale(tenant, outlet, 200_000L);
     // A REVERSAL contra row exactly as ReversalPostingWriter writes it (negative amount,
@@ -99,9 +99,9 @@ class UnitPnlReaderTest extends PostgresRlsTestBase {
     UUID bu = UUID.randomUUID();
     UUID outletA = UUID.randomUUID();
     UUID outletB = UUID.randomUUID();
-    insertOrgUnitRef(bu, tenant, "business_unit", null, "HQ", true);
-    insertOrgUnitRef(outletA, tenant, "outlet", bu, "Outlet A", true);
-    insertOrgUnitRef(outletB, tenant, "outlet", bu, "Outlet B", true);
+    insertOrgUnitRef(bu, tenant, "BUSINESS_UNIT", null, "HQ", true);
+    insertOrgUnitRef(outletA, tenant, "OUTLET", bu, "Outlet A", true);
+    insertOrgUnitRef(outletB, tenant, "OUTLET", bu, "Outlet B", true);
 
     postSale(tenant, outletA, 100_000L);
     postSale(tenant, outletB, 999_000L);
@@ -119,8 +119,8 @@ class UnitPnlReaderTest extends PostgresRlsTestBase {
     String tenant = UUID.randomUUID().toString();
     UUID bu = UUID.randomUUID();
     UUID outlet = UUID.randomUUID();
-    insertOrgUnitRef(bu, tenant, "business_unit", null, "HQ", true);
-    insertOrgUnitRef(outlet, tenant, "outlet", bu, "Outlet", true);
+    insertOrgUnitRef(bu, tenant, "BUSINESS_UNIT", null, "HQ", true);
+    insertOrgUnitRef(outlet, tenant, "OUTLET", bu, "Outlet", true);
 
     postSale(tenant, outlet, 100_000L);
     // Labor-suspense EXPENSE row on the all-zeros sentinel (no outlet) — company-level
@@ -148,7 +148,7 @@ class UnitPnlReaderTest extends PostgresRlsTestBase {
   void teamUnitResolvesEmpty() throws Exception {
     String tenant = UUID.randomUUID().toString();
     UUID team = UUID.randomUUID();
-    insertOrgUnitRef(team, tenant, "team", null, "Kitchen Team", true);
+    insertOrgUnitRef(team, tenant, "TEAM", null, "Kitchen Team", true);
 
     Optional<UnitPnlResponse> result =
         TenantContext.callAs(tenant, ACTOR, () -> unitPnlReader.unitPnlForPeriod(team, PERIOD));
@@ -161,8 +161,8 @@ class UnitPnlReaderTest extends PostgresRlsTestBase {
     String tenant = UUID.randomUUID().toString();
     UUID bu = UUID.randomUUID();
     UUID outlet = UUID.randomUUID();
-    insertOrgUnitRef(bu, tenant, "business_unit", null, "HQ", true);
-    insertOrgUnitRef(outlet, tenant, "outlet", bu, "Fresh Outlet", true);
+    insertOrgUnitRef(bu, tenant, "BUSINESS_UNIT", null, "HQ", true);
+    insertOrgUnitRef(outlet, tenant, "OUTLET", bu, "Fresh Outlet", true);
 
     Optional<UnitPnlResponse> result =
         TenantContext.callAs(tenant, ACTOR, () -> unitPnlReader.unitPnlForPeriod(bu, PERIOD));

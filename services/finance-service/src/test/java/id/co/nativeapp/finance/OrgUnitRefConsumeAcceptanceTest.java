@@ -143,14 +143,10 @@ class OrgUnitRefConsumeAcceptanceTest extends KafkaPostgresTestBase {
     OrgUnitRefEventFixtures.publishChanged(
         KAFKA.getBootstrapServers(), orgUnitId, changedEventId, changed);
 
-    // Drain the duplicate with a marker.
-    UUID markerId = UUID.randomUUID();
-    UUID markerEventId = UUID.randomUUID();
-    var marker =
-        OrgUnitRefEventFixtures.orgUnitCreated(markerId, companyId, "outlet", null, "Marker");
-    OrgUnitRefEventFixtures.publishCreated(
-        KAFKA.getBootstrapServers(), markerId, markerEventId, marker);
-
+    // Await the EXPECTED STATE directly (a cross-topic "drain marker" gives no ordering
+    // guarantee — the created and changed topics are consumed independently). The duplicate
+    // delivery can neither change the state again nor create a second row, so the
+    // idempotency assertions below hold regardless of when it lands.
     await()
         .atMost(Duration.ofSeconds(30))
         .pollInterval(Duration.ofMillis(200))
@@ -158,15 +154,17 @@ class OrgUnitRefConsumeAcceptanceTest extends KafkaPostgresTestBase {
             () ->
                 assertThat(
                         TenantContext.callAs(
-                            companyId.toString(), ACTOR, () -> orgUnitRefReader.findById(markerId)))
-                    .isPresent());
+                                companyId.toString(),
+                                ACTOR,
+                                () -> orgUnitRefReader.findById(orgUnitId))
+                            .map(OrgUnitRef::getName))
+                    .contains("New Name"));
 
-    // The name must be updated, and exactly one row exists (no duplicates from re-delivery).
+    // Exactly one row exists (no duplicates from re-delivery), still active.
     Optional<OrgUnitRef> ref =
         TenantContext.callAs(
             companyId.toString(), ACTOR, () -> orgUnitRefReader.findById(orgUnitId));
     assertThat(ref).isPresent();
-    assertThat(ref.get().getName()).isEqualTo("New Name");
     assertThat(ref.get().isActive()).isTrue();
     assertThat(orgUnitRefRowCountAsAdmin(orgUnitId)).isEqualTo(1L);
   }
@@ -206,14 +204,8 @@ class OrgUnitRefConsumeAcceptanceTest extends KafkaPostgresTestBase {
     OrgUnitRefEventFixtures.publishChanged(
         KAFKA.getBootstrapServers(), orgUnitId, deactivatedEventId, deactivated);
 
-    // Drain via marker.
-    UUID markerId = UUID.randomUUID();
-    UUID markerEventId = UUID.randomUUID();
-    var marker =
-        OrgUnitRefEventFixtures.orgUnitCreated(markerId, companyId, "outlet", null, "Marker2");
-    OrgUnitRefEventFixtures.publishCreated(
-        KAFKA.getBootstrapServers(), markerId, markerEventId, marker);
-
+    // Await the deactivated STATE directly (see the rename test — cross-topic markers give
+    // no ordering guarantee; the duplicate cannot flip the state back or add a row).
     await()
         .atMost(Duration.ofSeconds(30))
         .pollInterval(Duration.ofMillis(200))
@@ -221,14 +213,13 @@ class OrgUnitRefConsumeAcceptanceTest extends KafkaPostgresTestBase {
             () ->
                 assertThat(
                         TenantContext.callAs(
-                            companyId.toString(), ACTOR, () -> orgUnitRefReader.findById(markerId)))
-                    .isPresent());
+                                companyId.toString(),
+                                ACTOR,
+                                () -> orgUnitRefReader.findById(orgUnitId))
+                            .map(OrgUnitRef::isActive))
+                    .as("deactivation must set active = false")
+                    .contains(false));
 
-    Optional<OrgUnitRef> ref =
-        TenantContext.callAs(
-            companyId.toString(), ACTOR, () -> orgUnitRefReader.findById(orgUnitId));
-    assertThat(ref).isPresent();
-    assertThat(ref.get().isActive()).as("deactivation must set active = false").isFalse();
     assertThat(orgUnitRefRowCountAsAdmin(orgUnitId)).isEqualTo(1L);
   }
 

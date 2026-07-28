@@ -22,11 +22,11 @@ import org.springframework.web.bind.annotation.RestController;
  * outlet-type unit).
  *
  * <p>Mirrors {@link id.co.nativeapp.finance.pnl.controller.PnlController} semantics exactly: an
- * unknown / foreign / team unit is a {@code 204} (RLS makes foreign == unknown —
- * anti-enumeration); a known unit with zero postings returns a zero P&amp;L in the caller-supplied
- * {@code currency} hint (the console sends the company base currency), or {@code 204} without the
- * hint — finance never invents a currency. Tenant comes from the bound {@code TenantContext}; the
- * read is RLS-scoped (rule 5).
+ * unknown / foreign / team unit is a {@code 204} (RLS makes foreign == unknown — anti-enumeration);
+ * a known unit with zero postings returns a zero P&amp;L in the caller-supplied {@code currency}
+ * hint (the console sends the company base currency), or {@code 204} without the hint — finance
+ * never invents a currency. Tenant comes from the bound {@code TenantContext}; the read is
+ * RLS-scoped (rule 5).
  */
 @Tag(
     name = "P&L",

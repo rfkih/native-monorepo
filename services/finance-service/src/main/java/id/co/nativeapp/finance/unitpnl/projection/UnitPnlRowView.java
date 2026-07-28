@@ -14,7 +14,10 @@ public interface UnitPnlRowView {
 
   String getName();
 
-  /** The org-unit kind as stored in {@code org_unit_ref} — LOWERCASE, event-published values. */
+  /**
+   * The org-unit kind as stored in {@code org_unit_ref} — the event-published value ({@code
+   * OrgUnitCreatedSchema} emits the enum NAME, uppercase). Compare case-insensitively.
+   */
   String getType();
 
   boolean getActive();
