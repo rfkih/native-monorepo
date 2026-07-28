@@ -11,6 +11,8 @@ import java.util.UUID;
  * @param id the org-unit id
  * @param name the display name
  * @param type the org-unit type (e.g. {@code "OUTLET"})
+ * @param vertical the business vertical (lowercase {@code restaurant} | {@code carwash} | {@code
+ *     barbershop}) — non-null only for a {@code BUSINESS_UNIT}
  * @param parentId the parent org-unit id, or {@code null} for a top-level node
  * @param legalEmployerId the legal employer this node belongs to
  * @param companyId the owning tenant
@@ -22,6 +24,7 @@ public record OrgUnitResponse(
     UUID id,
     String name,
     String type,
+    String vertical,
     UUID parentId,
     UUID legalEmployerId,
     UUID companyId,
@@ -34,6 +37,7 @@ public record OrgUnitResponse(
         orgUnit.getId(),
         orgUnit.getName(),
         orgUnit.getType().name(),
+        orgUnit.getVertical() == null ? null : orgUnit.getVertical().key(),
         orgUnit.getParentId(),
         orgUnit.getLegalEmployerId(),
         UUID.fromString(orgUnit.getCompanyId()),

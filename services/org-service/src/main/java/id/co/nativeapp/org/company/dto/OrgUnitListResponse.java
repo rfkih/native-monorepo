@@ -14,8 +14,9 @@ import java.util.UUID;
  * @param id the org-unit id
  * @param name the display name
  * @param type the org-unit type string ({@code BUSINESS_UNIT}, {@code OUTLET}, {@code TEAM})
+ * @param vertical the business vertical (lowercase; non-null only for a {@code BUSINESS_UNIT})
  * @param parentId the parent org-unit id, or {@code null} for a top-level node
  * @param active whether the node is currently active
  */
 public record OrgUnitListResponse(
-    UUID id, String name, String type, UUID parentId, boolean active) {}
+    UUID id, String name, String type, String vertical, UUID parentId, boolean active) {}

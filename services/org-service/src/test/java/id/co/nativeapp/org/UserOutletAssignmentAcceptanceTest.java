@@ -58,7 +58,7 @@ class UserOutletAssignmentAcceptanceTest extends PostgresRlsTestBase {
   private TenantSetup bootstrap(String name) {
     var r =
         companyService.createCompany(
-            new CreateCompanyCommand(name, "IDR", "id", name + " HQ", ACTOR));
+            new CreateCompanyCommand(name, "IDR", "id", name + " HQ", "restaurant", ACTOR));
     return new TenantSetup(r.company().getId(), r.firstBusiness().getId());
   }
 

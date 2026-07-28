@@ -2,6 +2,7 @@ package id.co.nativeapp.org.company.dto;
 
 import id.co.nativeapp.security.ApiExceptionHandler;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import java.util.UUID;
 
 /**
@@ -17,5 +18,12 @@ import java.util.UUID;
  * @param name the org-unit name
  * @param type the org-unit type (e.g. {@code "outlet"}); validated by {@link OrgUnitType}
  * @param parentId the parent org unit, or {@code null} for a top-level node (a business_unit)
+ * @param vertical the business vertical, REQUIRED when {@code type} is {@code business_unit} and
+ *     forbidden otherwise (the conditional rule lives in the {@link OrgUnit} aggregate; the
+ *     {@code @Pattern} accepts {@code null} — only a present value is whitelist-checked)
  */
-public record CreateOrgUnitRequest(@NotBlank String name, @NotBlank String type, UUID parentId) {}
+public record CreateOrgUnitRequest(
+    @NotBlank String name,
+    @NotBlank String type,
+    UUID parentId,
+    @Pattern(regexp = "restaurant|carwash|barbershop", message = "unsupported vertical") String vertical) {}

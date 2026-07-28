@@ -2,6 +2,7 @@ package id.co.nativeapp.org.company.domain;
 
 import id.co.nativeapp.tenant.Auditable;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -56,6 +57,16 @@ public class OrgUnit extends Auditable {
   @Column(name = "parent_id")
   private UUID parentId;
 
+  /**
+   * The business vertical — REQUIRED for a {@link OrgUnitType#BUSINESS_UNIT}, {@code null} for
+   * outlet/team nodes (they inherit via their parent). IMMUTABLE after creation (like the company
+   * base currency). Persisted LOWERCASE via {@link VerticalConverter} — see {@link Vertical} for
+   * the casing decision.
+   */
+  @Convert(converter = VerticalConverter.class)
+  @Column(name = "vertical", length = 32, updatable = false)
+  private Vertical vertical;
+
   /** The legal employer this node belongs to (in the bootstrap, the company's single one). */
   @Column(name = "legal_employer_id", nullable = false, updatable = false)
   private UUID legalEmployerId;
@@ -82,16 +93,20 @@ public class OrgUnit extends Auditable {
    *
    * @param name the org-unit name; must be non-blank
    * @param type the org-unit kind; must be non-null
+   * @param vertical the business vertical — required for a {@code BUSINESS_UNIT}, must be {@code
+   *     null} for outlet/team nodes (they inherit via their parent)
    * @param parentId the parent org unit, or {@code null} for a top-level node
    * @param parentType the parent's type, or {@code null} when {@code parentId} is {@code null};
    *     used to validate the {@code business_unit > outlet > team} nesting
    * @param legalEmployerId the legal employer this node belongs to; must be non-null
    * @param effectiveFrom the date the node becomes effective; must be non-null
-   * @throws IllegalArgumentException if the type may not sit under the parent type (mapped to 400)
+   * @throws IllegalArgumentException if the type may not sit under the parent type, or the vertical
+   *     does not match the type rule (both mapped to 400)
    */
   public OrgUnit(
       String name,
       OrgUnitType type,
+      Vertical vertical,
       UUID parentId,
       OrgUnitType parentType,
       UUID legalEmployerId,
@@ -104,7 +119,25 @@ public class OrgUnit extends Auditable {
     this.effectiveTo = OPEN_ENDED;
     this.active = true;
     requireLegalPlacement(type, parentId, parentType);
+    requireVerticalMatchesType(type, vertical);
     this.parentId = parentId;
+    this.vertical = vertical;
+  }
+
+  /**
+   * A {@code BUSINESS_UNIT} must carry a vertical (what kind of business it runs); every other node
+   * type must NOT (outlets/teams inherit via their parent). Throws {@link IllegalArgumentException}
+   * (→ 400) otherwise.
+   */
+  private static void requireVerticalMatchesType(OrgUnitType type, Vertical vertical) {
+    if (type == OrgUnitType.BUSINESS_UNIT && vertical == null) {
+      throw new IllegalArgumentException(
+          "A BUSINESS_UNIT requires a vertical (restaurant | carwash | barbershop)");
+    }
+    if (type != OrgUnitType.BUSINESS_UNIT && vertical != null) {
+      throw new IllegalArgumentException(
+          "A " + type + " cannot carry a vertical — it inherits its business unit's");
+    }
   }
 
   /**
@@ -240,6 +273,11 @@ public class OrgUnit extends Auditable {
 
   public UUID getParentId() {
     return parentId;
+  }
+
+  /** The business vertical ({@code null} for outlet/team nodes — they inherit via the parent). */
+  public Vertical getVertical() {
+    return vertical;
   }
 
   public UUID getLegalEmployerId() {

@@ -77,6 +77,7 @@ public class CompanyController {
             request.baseCurrency(),
             request.defaultLanguage(),
             request.firstBusiness().name(),
+            request.firstBusiness().vertical(),
             actorOrSystem(actor));
 
     CreateCompanyResult result = companyService.createCompany(command);
@@ -131,7 +132,8 @@ public class CompanyController {
       throw new TenantAccessDeniedException();
     }
 
-    CreateBusinessCommand command = new CreateBusinessCommand(companyId, request.name());
+    CreateBusinessCommand command =
+        new CreateBusinessCommand(companyId, request.name(), request.vertical());
 
     OrgUnit created = companyService.addBusiness(command);
     OrgUnitResponse body = OrgUnitResponse.from(created);

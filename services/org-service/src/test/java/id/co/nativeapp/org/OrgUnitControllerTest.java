@@ -12,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import id.co.nativeapp.org.company.controller.OrgUnitController;
 import id.co.nativeapp.org.company.domain.OrgUnit;
 import id.co.nativeapp.org.company.domain.OrgUnitType;
+import id.co.nativeapp.org.company.domain.Vertical;
 import id.co.nativeapp.org.company.service.OrgUnitService;
 import id.co.nativeapp.security.ApiExceptionHandler;
 import java.time.LocalDate;
@@ -46,7 +47,13 @@ class OrgUnitControllerTest {
   private OrgUnit businessUnit() {
     OrgUnit unit =
         new OrgUnit(
-            "North Unit", OrgUnitType.BUSINESS_UNIT, null, null, COMPANY, LocalDate.of(2026, 1, 1));
+            "North Unit",
+            OrgUnitType.BUSINESS_UNIT,
+            Vertical.RESTAURANT,
+            null,
+            null,
+            COMPANY,
+            LocalDate.of(2026, 1, 1));
     unit.setCompanyId(COMPANY.toString());
     return unit;
   }

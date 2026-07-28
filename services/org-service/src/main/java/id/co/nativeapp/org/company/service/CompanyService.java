@@ -95,7 +95,8 @@ public class CompanyService {
                   command.name(),
                   command.baseCurrency(),
                   command.defaultLanguage(),
-                  command.businessName()));
+                  command.businessName(),
+                  command.vertical()));
     } catch (RuntimeException e) {
       throw e;
     } catch (Exception e) {

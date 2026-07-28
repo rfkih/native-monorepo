@@ -6,6 +6,7 @@ import id.co.nativeapp.org.company.domain.Company;
 import id.co.nativeapp.org.company.domain.LegalEmployer;
 import id.co.nativeapp.org.company.domain.OrgUnit;
 import id.co.nativeapp.org.company.domain.OrgUnitType;
+import id.co.nativeapp.org.company.domain.Vertical;
 import id.co.nativeapp.org.company.dto.CreateBusinessCommand;
 import id.co.nativeapp.org.company.dto.CreateCompanyResult;
 import id.co.nativeapp.org.company.messaging.CompanyCreatedSchema;
@@ -81,6 +82,7 @@ public class CompanyWriter {
    * @param baseCurrency the ISO-4217 base currency (validated + made immutable by {@link Company})
    * @param defaultLanguage the company default language
    * @param businessName the first business (org-unit) name
+   * @param vertical the first business's vertical (lowercase key; whitelist-parsed here)
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public CreateCompanyResult create(
@@ -88,7 +90,8 @@ public class CompanyWriter {
       String name,
       String baseCurrency,
       String defaultLanguage,
-      String businessName) {
+      String businessName,
+      String vertical) {
 
     // The tenant the auto-RLS aspect has bound to this transaction; it MUST equal the
     // new company id, so the company is its own tenant and the WITH CHECK passes.
@@ -113,7 +116,14 @@ public class CompanyWriter {
     // parent) — the top of the business_unit > outlet > team hierarchy (sub-types are
     // added under it via the org-unit endpoint; a default outlet is seeded below).
     OrgUnit firstBusiness =
-        new OrgUnit(businessName, OrgUnitType.BUSINESS_UNIT, null, null, legalEmployerId, today());
+        new OrgUnit(
+            businessName,
+            OrgUnitType.BUSINESS_UNIT,
+            Vertical.fromKey(vertical),
+            null,
+            null,
+            legalEmployerId,
+            today());
     firstBusiness.setCompanyId(tenant);
     OrgUnit savedBusiness = orgUnitRepository.save(firstBusiness);
 
@@ -168,6 +178,7 @@ public class CompanyWriter {
         new OrgUnit(
             command.name(),
             OrgUnitType.BUSINESS_UNIT,
+            Vertical.fromKey(command.vertical()),
             null,
             null,
             UUID.fromString(tenant),
@@ -189,10 +200,13 @@ public class CompanyWriter {
    * {@code OrgUnitCreated} outbox row commit atomically with the business unit (rule 3).
    */
   private void seedDefaultOutlet(OrgUnit businessUnit, String tenant, UUID companyId) {
+    // The outlet carries NO vertical of its own — it inherits the business unit's via the
+    // parent link (resolved by join where needed).
     OrgUnit outlet =
         new OrgUnit(
             businessUnit.getName(),
             OrgUnitType.OUTLET,
+            null,
             businessUnit.getId(),
             OrgUnitType.BUSINESS_UNIT,
             businessUnit.getLegalEmployerId(),

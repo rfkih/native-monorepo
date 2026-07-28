@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import id.co.nativeapp.org.company.domain.OrgUnit;
 import id.co.nativeapp.org.company.domain.OrgUnitType;
+import id.co.nativeapp.org.company.domain.Vertical;
 import java.time.LocalDate;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -20,7 +21,43 @@ class OrgUnitHierarchyTest {
   private static final LocalDate TODAY = LocalDate.of(2026, 6, 14);
 
   private static OrgUnit node(OrgUnitType type, UUID parentId, OrgUnitType parentType) {
-    return new OrgUnit("node", type, parentId, parentType, LE, TODAY);
+    // A BUSINESS_UNIT requires a vertical; every other type must carry none.
+    Vertical vertical = type == OrgUnitType.BUSINESS_UNIT ? Vertical.RESTAURANT : null;
+    return new OrgUnit("node", type, vertical, parentId, parentType, LE, TODAY);
+  }
+
+  @Test
+  void aBusinessUnitWithoutAVerticalIsRejected() {
+    assertThatThrownBy(
+            () -> new OrgUnit("HQ", OrgUnitType.BUSINESS_UNIT, null, null, null, LE, TODAY))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("vertical");
+  }
+
+  @Test
+  void aNonBusinessUnitWithAVerticalIsRejected() {
+    OrgUnit bu = node(OrgUnitType.BUSINESS_UNIT, null, null);
+    assertThatThrownBy(
+            () ->
+                new OrgUnit(
+                    "Outlet",
+                    OrgUnitType.OUTLET,
+                    Vertical.CARWASH,
+                    bu.getId(),
+                    OrgUnitType.BUSINESS_UNIT,
+                    LE,
+                    TODAY))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("vertical");
+  }
+
+  @Test
+  void verticalKeysAreLowercaseAndTheParserNormalizes() {
+    assertThat(Vertical.RESTAURANT.key()).isEqualTo("restaurant");
+    assertThat(Vertical.fromKey(" Carwash ")).isEqualTo(Vertical.CARWASH);
+    assertThatThrownBy(() -> Vertical.fromKey("laundromat"))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> Vertical.fromKey("  ")).isInstanceOf(IllegalArgumentException.class);
   }
 
   @Test

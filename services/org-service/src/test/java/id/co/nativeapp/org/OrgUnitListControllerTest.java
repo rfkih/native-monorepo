@@ -39,7 +39,7 @@ class OrgUnitListControllerTest {
   @Test
   void listOrgUnitsReturns200WithFlatList() throws Exception {
     OrgUnitListResponse stub =
-        new OrgUnitListResponse(UNIT_ID, "North Outlet", "OUTLET", PARENT_ID, true);
+        new OrgUnitListResponse(UNIT_ID, "North Outlet", "OUTLET", null, PARENT_ID, true);
 
     when(orgUnitService.findAllForCurrentTenant()).thenReturn(List.of(stub));
 

@@ -41,7 +41,8 @@ class DefaultOutletSeedingTest extends PostgresRlsTestBase {
   void companyBootstrapSeedsOneDefaultOutletUnderTheRootBusinessUnit() throws Exception {
     var result =
         companyService.createCompany(
-            new CreateCompanyCommand("SeedCo", "IDR", "id", "Warung Seed", "owner-s"));
+            new CreateCompanyCommand(
+                "SeedCo", "IDR", "id", "Warung Seed", "restaurant", "owner-s"));
     UUID companyId = result.company().getId();
     UUID rootId = result.firstBusiness().getId();
 
@@ -80,14 +81,16 @@ class DefaultOutletSeedingTest extends PostgresRlsTestBase {
   void addingABusinessSeedsItsOwnDefaultOutlet() throws Exception {
     var result =
         companyService.createCompany(
-            new CreateCompanyCommand("AddCo", "IDR", "id", "First Biz", "owner-a"));
+            new CreateCompanyCommand("AddCo", "IDR", "id", "First Biz", "restaurant", "owner-a"));
     UUID companyId = result.company().getId();
 
     OrgUnit secondBu =
         TenantContext.callAs(
             companyId.toString(),
             "owner-a",
-            () -> companyService.addBusiness(new CreateBusinessCommand(companyId, "Second Biz")));
+            () ->
+                companyService.addBusiness(
+                    new CreateBusinessCommand(companyId, "Second Biz", "restaurant")));
 
     // The new BU has its own seeded outlet, named after it.
     List<Map<String, Object>> outlets =
@@ -107,7 +110,8 @@ class DefaultOutletSeedingTest extends PostgresRlsTestBase {
   void aRootBusinessUnitCreatedViaTheOrgUnitEndpointSeedsItsOwnDefaultOutlet() throws Exception {
     var result =
         companyService.createCompany(
-            new CreateCompanyCommand("OrgUnitCo", "IDR", "id", "First Biz", "owner-o"));
+            new CreateCompanyCommand(
+                "OrgUnitCo", "IDR", "id", "First Biz", "restaurant", "owner-o"));
     UUID companyId = result.company().getId();
 
     // The org-tree page creates top-level business units via POST /api/v1/org-units — that
@@ -118,7 +122,8 @@ class DefaultOutletSeedingTest extends PostgresRlsTestBase {
             "owner-o",
             () ->
                 orgUnitService.create(
-                    new CreateOrgUnitCommand("Tree-Made Biz", "business_unit", null)));
+                    new CreateOrgUnitCommand(
+                        "Tree-Made Biz", "business_unit", null, "restaurant")));
 
     List<Map<String, Object>> outlets =
         adminQuery(

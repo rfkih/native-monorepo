@@ -55,6 +55,9 @@ public final class OrgUnitCreatedSchema {
         "parent_id", orgUnit.getParentId() == null ? null : orgUnit.getParentId().toString());
     record.put("legal_employer_id", orgUnit.getLegalEmployerId().toString());
     record.put("name", orgUnit.getName());
+    // LOWERCASE module-key value (Vertical.key()) — deliberately NOT the .name() casing 'type'
+    // uses; null for outlet/team nodes.
+    record.put("vertical", orgUnit.getVertical() == null ? null : orgUnit.getVertical().key());
     return record;
   }
 

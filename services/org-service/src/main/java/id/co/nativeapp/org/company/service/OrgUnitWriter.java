@@ -5,6 +5,7 @@ import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.org.company.domain.OrgUnit;
 import id.co.nativeapp.org.company.domain.OrgUnitChangeKind;
 import id.co.nativeapp.org.company.domain.OrgUnitType;
+import id.co.nativeapp.org.company.domain.Vertical;
 import id.co.nativeapp.org.company.dto.CreateOrgUnitCommand;
 import id.co.nativeapp.org.company.dto.PatchOrgUnitCommand;
 import id.co.nativeapp.org.company.messaging.OrgUnitChangedSchema;
@@ -107,9 +108,11 @@ public class OrgUnitWriter {
     // to the company's default legal_employer (id == company_id in the bootstrap).
     UUID legalEmployerId = parent == null ? companyId : parent.getLegalEmployerId();
 
-    // The aggregate enforces the parent->child type rule (and root => null parent).
+    // The aggregate enforces the parent->child type rule (and root => null parent) plus the
+    // vertical rule (required for a BUSINESS_UNIT, forbidden otherwise).
+    Vertical vertical = command.vertical() == null ? null : Vertical.fromKey(command.vertical());
     OrgUnit orgUnit =
-        new OrgUnit(command.name(), type, parentId, parentType, legalEmployerId, today());
+        new OrgUnit(command.name(), type, vertical, parentId, parentType, legalEmployerId, today());
     orgUnit.setCompanyId(tenant);
     OrgUnit saved = orgUnitRepository.save(orgUnit);
     orgUnitRepository.flush();
@@ -133,6 +136,7 @@ public class OrgUnitWriter {
           new OrgUnit(
               saved.getName(),
               OrgUnitType.OUTLET,
+              null,
               saved.getId(),
               OrgUnitType.BUSINESS_UNIT,
               saved.getLegalEmployerId(),

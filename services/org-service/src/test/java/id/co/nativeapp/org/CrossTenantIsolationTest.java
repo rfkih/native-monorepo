@@ -38,12 +38,14 @@ class CrossTenantIsolationTest extends PostgresRlsTestBase {
     // Bootstrap company A and company B, each creating its own tenant.
     UUID companyA =
         companyService
-            .createCompany(new CreateCompanyCommand("Alpha", "IDR", "id", "A Outlet", "owner-a"))
+            .createCompany(
+                new CreateCompanyCommand("Alpha", "IDR", "id", "A Outlet", "restaurant", "owner-a"))
             .company()
             .getId();
     UUID companyB =
         companyService
-            .createCompany(new CreateCompanyCommand("Beta", "USD", "en", "B Outlet", "owner-b"))
+            .createCompany(
+                new CreateCompanyCommand("Beta", "USD", "en", "B Outlet", "restaurant", "owner-b"))
             .company()
             .getId();
 

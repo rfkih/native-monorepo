@@ -4,6 +4,7 @@ import id.co.nativeapp.security.ApiExceptionHandler;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 
 /**
  * Create-company request body. The company's {@code baseCurrency} (ISO-4217) and {@code
@@ -38,6 +39,10 @@ public record CreateCompanyRequest(
    * in an old request body is ignored by deserialization, not rejected.
    *
    * @param name the business / org-unit name
+   * @param vertical the business vertical (lowercase {@code restaurant} | {@code carwash} | {@code
+   *     barbershop}); required — drives which POS the unit's outlets get
    */
-  public record BusinessRequest(@NotBlank String name) {}
+  public record BusinessRequest(
+      @NotBlank String name,
+      @NotBlank @Pattern(regexp = "restaurant|carwash|barbershop", message = "unsupported vertical") String vertical) {}
 }

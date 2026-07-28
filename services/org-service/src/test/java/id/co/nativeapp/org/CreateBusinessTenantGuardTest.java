@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import id.co.nativeapp.org.company.controller.CompanyController;
 import id.co.nativeapp.org.company.domain.OrgUnit;
 import id.co.nativeapp.org.company.domain.OrgUnitType;
+import id.co.nativeapp.org.company.domain.Vertical;
 import id.co.nativeapp.org.company.service.CompanyService;
 import id.co.nativeapp.org.config.TenantAccessDeniedAdvice;
 import id.co.nativeapp.tenant.TenantContext;
@@ -52,7 +53,7 @@ class CreateBusinessTenantGuardTest {
       throws Exception {
     String body =
         """
-        {"name":"Outlet 1","type":"outlet"}
+        {"name":"Outlet 1","vertical":"restaurant"}
         """;
 
     // Bound to BOUND_TENANT, but the path addresses OTHER_TENANT -> confused deputy -> 403.
@@ -78,6 +79,7 @@ class CreateBusinessTenantGuardTest {
         new OrgUnit(
             "Outlet 1",
             OrgUnitType.BUSINESS_UNIT,
+            Vertical.RESTAURANT,
             null,
             null,
             BOUND_TENANT,
@@ -87,7 +89,7 @@ class CreateBusinessTenantGuardTest {
 
     String body =
         """
-        {"name":"Outlet 1","type":"outlet"}
+        {"name":"Outlet 1","vertical":"restaurant"}
         """;
 
     // Bound to BOUND_TENANT and the path addresses the SAME tenant -> proceeds -> 201.

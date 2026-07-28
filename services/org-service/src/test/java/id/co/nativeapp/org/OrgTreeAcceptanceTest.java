@@ -49,7 +49,7 @@ class OrgTreeAcceptanceTest extends PostgresRlsTestBase {
   private Tenant bootstrapCompany(String name, String actor) {
     var result =
         companyService.createCompany(
-            new CreateCompanyCommand(name, "IDR", "id", name + " HQ", actor));
+            new CreateCompanyCommand(name, "IDR", "id", name + " HQ", "restaurant", actor));
     return new Tenant(result.company().getId(), result.firstBusiness().getId());
   }
 

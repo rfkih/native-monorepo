@@ -2,6 +2,7 @@ package id.co.nativeapp.org.company.dto;
 
 import id.co.nativeapp.security.ApiExceptionHandler;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 
 /**
  * Create-business request body: add a business under an existing company. The company id comes from
@@ -16,5 +17,9 @@ import jakarta.validation.constraints.NotBlank;
  * fast with a {@code 400} from {@link ApiExceptionHandler}.
  *
  * @param name the business (org-unit) name
+ * @param vertical the business vertical (lowercase {@code restaurant} | {@code carwash} | {@code
+ *     barbershop}); required — drives which POS the unit's outlets get
  */
-public record CreateBusinessRequest(@NotBlank String name) {}
+public record CreateBusinessRequest(
+    @NotBlank String name,
+    @NotBlank @Pattern(regexp = "restaurant|carwash|barbershop", message = "unsupported vertical") String vertical) {}

@@ -49,7 +49,7 @@ class OrgUnitUsersAcceptanceTest extends PostgresRlsTestBase {
   private Setup bootstrap(String name) throws Exception {
     var result =
         companyService.createCompany(
-            new CreateCompanyCommand(name, "IDR", "id", name + " HQ", ACTOR));
+            new CreateCompanyCommand(name, "IDR", "id", name + " HQ", "restaurant", ACTOR));
     UUID companyId = result.company().getId();
     UUID rootId = result.firstBusiness().getId();
     UUID seededOutletId =

@@ -58,6 +58,9 @@ public final class OrgUnitChangedSchema {
     record.put("change_kind", changeKind.name());
     record.put("name", orgUnit.getName());
     record.put("active", orgUnit.isActive());
+    // LOWERCASE module-key value (Vertical.key()) — deliberately NOT the .name() casing 'type'
+    // uses; immutable, carried on every change so consumers stay stateless.
+    record.put("vertical", orgUnit.getVertical() == null ? null : orgUnit.getVertical().key());
     return record;
   }
 

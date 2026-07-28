@@ -18,7 +18,14 @@ package id.co.nativeapp.org.company.dto;
  * @param baseCurrency the ISO-4217 base currency code (immutable once set)
  * @param defaultLanguage the company default language
  * @param businessName the first business (org-unit) name
+ * @param vertical the first business's vertical (lowercase {@code restaurant} | {@code carwash} |
+ *     {@code barbershop}); parsed + whitelist-enforced by the domain
  * @param actor the acting principal from the request edge (JWT {@code sub} / {@code X-Actor})
  */
 public record CreateCompanyCommand(
-    String name, String baseCurrency, String defaultLanguage, String businessName, String actor) {}
+    String name,
+    String baseCurrency,
+    String defaultLanguage,
+    String businessName,
+    String vertical,
+    String actor) {}

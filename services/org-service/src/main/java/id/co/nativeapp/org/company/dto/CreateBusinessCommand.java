@@ -13,5 +13,6 @@ import java.util.UUID;
  *
  * @param companyId the owning company (from the path)
  * @param name the org-unit name
+ * @param vertical the business vertical (lowercase; parsed + whitelist-enforced by the domain)
  */
-public record CreateBusinessCommand(UUID companyId, String name) {}
+public record CreateBusinessCommand(UUID companyId, String name, String vertical) {}

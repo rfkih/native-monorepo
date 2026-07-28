@@ -66,7 +66,12 @@ public class OrgUnitService {
         .map(
             v ->
                 new OrgUnitListResponse(
-                    v.getId(), v.getName(), v.getType(), v.getParentId(), v.isActive()))
+                    v.getId(),
+                    v.getName(),
+                    v.getType(),
+                    v.getVertical(),
+                    v.getParentId(),
+                    v.isActive()))
         .toList();
   }
 

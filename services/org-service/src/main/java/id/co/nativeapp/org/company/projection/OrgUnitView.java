@@ -29,6 +29,12 @@ public interface OrgUnitView {
   /** The org-unit type string (e.g. {@code "OUTLET"}), as stored in the {@code type} column. */
   String getType();
 
+  /**
+   * The business vertical (LOWERCASE module-key string, e.g. {@code "restaurant"}) — non-null only
+   * for {@code BUSINESS_UNIT} rows. Note the deliberate casing divergence from {@link #getType()}.
+   */
+  String getVertical();
+
   UUID getParentId();
 
   UUID getLegalEmployerId();

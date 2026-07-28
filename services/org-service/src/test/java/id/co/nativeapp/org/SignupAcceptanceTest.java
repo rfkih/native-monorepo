@@ -188,7 +188,7 @@ class SignupAcceptanceTest {
     String missingEmail =
         """
         {"companyName":"Acme","baseCurrency":"IDR","defaultLanguage":"id",
-         "firstBusinessName":"Main",
+         "firstBusinessName":"Main","vertical":"restaurant",
          "ownerEmail":"","ownerPassword":"secret","termsAccepted":true}
         """;
     assertBadRequest(missingEmail);
@@ -218,6 +218,20 @@ class SignupAcceptanceTest {
                 "\"firstBusinessName\": \"Main Outlet\",\n  \"firstBusinessType\": \"branch\",");
     String responseBody = callSignup(legacyBody);
     assertThat(responseBody).contains("companyId");
+  }
+
+  @Test
+  void aSignupWithoutAVerticalReturns400() {
+    assertBadRequest(signupBody(uniqueEmail()).replace("\"vertical\": \"restaurant\",", ""));
+  }
+
+  @Test
+  void anUnsupportedVerticalReturns400() {
+    // laundromat exists in entitlement's module catalog but is NOT a whitelisted BU vertical —
+    // the server-side whitelist is authoritative (a direct API call bypasses the client picker).
+    assertBadRequest(
+        signupBody(uniqueEmail())
+            .replace("\"vertical\": \"restaurant\"", "\"vertical\": \"laundromat\""));
   }
 
   @Test
@@ -273,6 +287,7 @@ class SignupAcceptanceTest {
           "baseCurrency": "IDR",
           "defaultLanguage": "id",
           "firstBusinessName": "Main Outlet",
+          "vertical": "restaurant",
           "ownerEmail": "%s",
           "ownerPassword": "secret-password-123",
           "termsAccepted": true

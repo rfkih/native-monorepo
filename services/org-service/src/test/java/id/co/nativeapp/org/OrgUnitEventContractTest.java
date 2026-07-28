@@ -167,8 +167,7 @@ class OrgUnitEventContractTest {
     written.put("name", "Wash HQ");
     written.put("vertical", "carwash");
 
-    GenericRecord decoded =
-        AvroSerde.deserialize(AvroSerde.serialize(written), writer, oldReader);
+    GenericRecord decoded = AvroSerde.deserialize(AvroSerde.serialize(written), writer, oldReader);
     assertThat(decoded.get("org_unit_id").toString()).isEqualTo(UNIT);
     assertThat(decoded.get("type").toString()).isEqualTo("BUSINESS_UNIT");
     assertThat(decoded.get("name").toString()).isEqualTo("Wash HQ");
