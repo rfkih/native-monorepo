@@ -15,6 +15,7 @@ import {
   OrgUnitTypeBadge,
   ReactivateDialog,
   RenameDialog,
+  VerticalBadge,
 } from './parts'
 
 /** Build a parent→children map from the flat list returned by the backend. */
@@ -175,8 +176,9 @@ function OrgNode({
           </Link>
         )}
 
-        {/* type badge */}
+        {/* type + vertical badges (vertical renders only on business units) */}
         <OrgUnitTypeBadge type={unit.type} />
+        <VerticalBadge vertical={unit.vertical} />
 
         {/* active/inactive indicator */}
         <span className="flex items-center gap-1.5 shrink-0">

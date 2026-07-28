@@ -37,6 +37,7 @@ import {
   OrgUnitTypeBadge,
   ReactivateDialog,
   RenameDialog,
+  VerticalBadge,
 } from './parts'
 
 /**
@@ -151,6 +152,7 @@ export function OrgUnitDetail() {
               {unit.name}
             </h1>
             <OrgUnitTypeBadge type={unit.type} />
+            <VerticalBadge vertical={unit.vertical} />
             <span className="flex items-center gap-1.5">
               <span
                 className={cn(
