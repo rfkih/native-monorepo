@@ -26,14 +26,18 @@ public class CompensationService {
   private final CompensationWriter writer;
   private final CompensationPackageRepository packageRepository;
   private final EmployeeRepository employeeRepository;
+  private final id.co.nativeapp.employee.payroll.repository.EarningRuleRepository
+      commissionRepository;
 
   public CompensationService(
       CompensationWriter writer,
       CompensationPackageRepository packageRepository,
-      EmployeeRepository employeeRepository) {
+      EmployeeRepository employeeRepository,
+      id.co.nativeapp.employee.payroll.repository.EarningRuleRepository commissionRepository) {
     this.writer = writer;
     this.packageRepository = packageRepository;
     this.employeeRepository = employeeRepository;
+    this.commissionRepository = commissionRepository;
   }
 
   /**
@@ -83,6 +87,51 @@ public class CompensationService {
   public CompensationResponse end(UUID employeeId, UUID packageId, LocalDate endOn) {
     TenantContext.require();
     return masked(writer.endPackage(employeeId, packageId, endOn));
+  }
+
+  // ---- commission (non-PII config; real basis points echoed) ----------------------------------
+
+  /** The commission rules on a package (a native projection — no salary ciphertext is read). */
+  @Transactional(readOnly = true)
+  public List<id.co.nativeapp.employee.payroll.dto.CommissionResponse> listCommissions(
+      UUID employeeId, UUID packageId) {
+    if (employeeRepository.findById(employeeId).isEmpty()) {
+      throw new id.co.nativeapp.employee.employee.domain.EmployeeNotFoundException(employeeId);
+    }
+    return commissionRepository.findCommissionViews(packageId).stream()
+        .map(
+            v ->
+                new id.co.nativeapp.employee.payroll.dto.CommissionResponse(
+                    v.getId(),
+                    v.getMetricKey(),
+                    v.getPercentBasisPoints() == null ? 0 : v.getPercentBasisPoints(),
+                    v.getEffectiveFrom(),
+                    v.getEffectiveTo()))
+        .toList();
+  }
+
+  /** Sets an own-sales commission (see {@link CompensationWriter#addCommission}). */
+  public id.co.nativeapp.employee.payroll.dto.CommissionResponse addCommission(
+      UUID employeeId, UUID packageId, int percentBasisPoints, String metricKey) {
+    TenantContext.require();
+    return toCommission(writer.addCommission(employeeId, packageId, percentBasisPoints, metricKey));
+  }
+
+  /** Ends an open commission (see {@link CompensationWriter#endCommission}). */
+  public id.co.nativeapp.employee.payroll.dto.CommissionResponse endCommission(
+      UUID employeeId, UUID packageId, UUID ruleId, LocalDate endOn) {
+    TenantContext.require();
+    return toCommission(writer.endCommission(employeeId, packageId, ruleId, endOn));
+  }
+
+  private static id.co.nativeapp.employee.payroll.dto.CommissionResponse toCommission(
+      id.co.nativeapp.employee.payroll.domain.EarningRule rule) {
+    return new id.co.nativeapp.employee.payroll.dto.CommissionResponse(
+        rule.getId(),
+        rule.getMetricKey(),
+        rule.getPercentBasisPoints() == null ? 0 : rule.getPercentBasisPoints(),
+        rule.getEffectiveFrom(),
+        rule.getEffectiveTo());
   }
 
   private static CompensationResponse masked(CompensationPackage pkg) {

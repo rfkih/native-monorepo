@@ -1,6 +1,8 @@
 package id.co.nativeapp.employee.payroll.controller;
 
+import id.co.nativeapp.employee.payroll.dto.CommissionResponse;
 import id.co.nativeapp.employee.payroll.dto.CompensationResponse;
+import id.co.nativeapp.employee.payroll.dto.CreateCommissionRequest;
 import id.co.nativeapp.employee.payroll.dto.CreateCompensationRequest;
 import id.co.nativeapp.employee.payroll.dto.EndCompensationRequest;
 import id.co.nativeapp.employee.payroll.service.CompensationService;
@@ -11,12 +13,14 @@ import java.net.URI;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -87,5 +91,59 @@ public class CompensationController {
       @PathVariable UUID packageId,
       @Valid @RequestBody EndCompensationRequest request) {
     return compensationService.end(employeeId, packageId, request.endOn());
+  }
+
+  @Operation(
+      summary = "List a package's commission rules",
+      description =
+          "The own-sales commission rules on the package (real basis-point rates — commission % is"
+              + " config, not an individual salary). No salary ciphertext is read on this path.")
+  @GetMapping("/{packageId}/commission")
+  public List<CommissionResponse> listCommission(
+      @PathVariable UUID employeeId, @PathVariable UUID packageId) {
+    return compensationService.listCommissions(employeeId, packageId);
+  }
+
+  @Operation(
+      summary = "Set an own-sales commission",
+      description =
+          "Adds a PERCENT_OF_METRIC commission (basis points of the employee's own summed sales"
+              + " metric) to the package. 400 when payroll setup is not seeded; 404 unknown"
+              + " package; 409 when an open commission on the same metric already exists.")
+  @PostMapping("/{packageId}/commission")
+  public ResponseEntity<CommissionResponse> addCommission(
+      @PathVariable UUID employeeId,
+      @PathVariable UUID packageId,
+      @Valid @RequestBody CreateCommissionRequest request) {
+    CommissionResponse body =
+        compensationService.addCommission(
+            employeeId, packageId, request.percentBasisPoints(), request.metricKey());
+    return ResponseEntity.created(
+            URI.create(
+                "/api/v1/employees/"
+                    + employeeId
+                    + "/compensation/"
+                    + packageId
+                    + "/commission/"
+                    + body.id()))
+        .body(body);
+  }
+
+  @Operation(
+      summary = "End an open commission",
+      description =
+          "Effective-dated close of a commission rule. 404 when the rule is not visible for that"
+              + " employee's package.")
+  @DeleteMapping("/{packageId}/commission/{ruleId}")
+  public CommissionResponse endCommission(
+      @PathVariable UUID employeeId,
+      @PathVariable UUID packageId,
+      @PathVariable UUID ruleId,
+      @RequestParam(required = false)
+          @org.springframework.format.annotation.DateTimeFormat(
+              iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE)
+          java.time.LocalDate endOn) {
+    return compensationService.endCommission(
+        employeeId, packageId, ruleId, endOn == null ? java.time.LocalDate.now() : endOn);
   }
 }

@@ -105,6 +105,20 @@ public class IllustrativeStatutorySeedWriter {
             null,
             10),
         tenant);
+    // Sales commission (taxable). The component is a plain taxable EARNING; the actual figure is
+    // driven per employee by a PERCENT_OF_METRIC earning rule over their own-sales metric — so the
+    // calc_type here is a filler (FIXED), like every other earning component.
+    save(
+        new PayComponent(
+            "COMMISSION",
+            PayComponentKind.EARNING,
+            CalcType.FIXED,
+            PayComponentBearer.EMPLOYEE,
+            "5120-COMMISSION",
+            true,
+            null,
+            15),
+        tenant);
     // Social insurance (BPJS-shaped) — employee leg (deduction, reduces tax base) + employer leg.
     save(
         new PayComponent(

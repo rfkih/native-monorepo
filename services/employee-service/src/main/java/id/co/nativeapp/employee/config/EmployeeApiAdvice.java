@@ -6,8 +6,10 @@ import id.co.nativeapp.employee.assignment.domain.ConflictingLegalEmployerExcept
 import id.co.nativeapp.employee.employee.domain.EmployeeNotFoundException;
 import id.co.nativeapp.employee.employee.domain.UserAlreadyLinkedException;
 import id.co.nativeapp.employee.me.domain.EmployeeNotLinkedException;
+import id.co.nativeapp.employee.payroll.domain.CommissionNotFoundException;
 import id.co.nativeapp.employee.payroll.domain.CompensationAlreadyEndedException;
 import id.co.nativeapp.employee.payroll.domain.CompensationNotFoundException;
+import id.co.nativeapp.employee.payroll.domain.DuplicateCommissionException;
 import id.co.nativeapp.employee.payroll.domain.IncompletePeriodException;
 import id.co.nativeapp.employee.payroll.domain.OverlappingCompensationException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -117,6 +119,26 @@ public class EmployeeApiAdvice {
     ProblemDetail problem = problem(HttpStatus.CONFLICT, "overlapping-compensation", request);
     problem.setTitle("Overlapping compensation package");
     // The message names only ids (UUIDs), never an amount (rule 6).
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /** An open commission on the same metric already exists → 409 Conflict. */
+  @ExceptionHandler(DuplicateCommissionException.class)
+  public ProblemDetail handleDuplicateCommission(
+      DuplicateCommissionException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.CONFLICT, "duplicate-commission", request);
+    problem.setTitle("Duplicate commission");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /** An operation referencing a commission rule not visible for that employee → 404. */
+  @ExceptionHandler(CommissionNotFoundException.class)
+  public ProblemDetail handleCommissionNotFound(
+      CommissionNotFoundException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.NOT_FOUND, "commission-not-found", request);
+    problem.setTitle("Commission not found");
     problem.setDetail(ex.getMessage());
     return problem;
   }

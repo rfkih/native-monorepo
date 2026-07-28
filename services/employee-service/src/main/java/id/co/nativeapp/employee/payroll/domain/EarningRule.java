@@ -161,10 +161,56 @@ public class EarningRule extends Auditable {
     return rule;
   }
 
+  /**
+   * A percent-of-metric earning rule: {@code percent_basis_points} applied to the summed value of a
+   * consumed metric (minor units) — the own-sales commission (metric value is already money;
+   * resolved at EMPLOYEE grain). Non-PII config.
+   */
+  public static EarningRule percentOfMetric(
+      UUID compensationPackageId,
+      UUID payComponentId,
+      String metricKey,
+      int percentBasisPoints,
+      LocalDate effectiveFrom,
+      LocalDate effectiveTo) {
+    EarningRule rule =
+        new EarningRule(
+            compensationPackageId,
+            payComponentId,
+            EarningParamKind.PERCENT_OF_METRIC,
+            effectiveFrom,
+            effectiveTo);
+    rule.metricKey = Objects.requireNonNull(metricKey, "metricKey");
+    rule.percentBasisPoints = percentBasisPoints;
+    return rule;
+  }
+
   /** Whether this rule's effective period covers the given as-of date (inclusive). */
   public boolean coversAsOf(LocalDate asOf) {
     Objects.requireNonNull(asOf, "asOf");
     return !asOf.isBefore(effectiveFrom) && !asOf.isAfter(effectiveTo);
+  }
+
+  /** Whether this rule is still open (its {@code effective_to} is the far-future sentinel). */
+  public boolean isOpen() {
+    return OPEN_ENDED.equals(effectiveTo);
+  }
+
+  /**
+   * Ends this rule on the given date (effective-dated close). Only an OPEN rule can be ended.
+   *
+   * @throws IllegalStateException if already ended; {@link IllegalArgumentException} if {@code
+   *     endOn} precedes {@code effectiveFrom}
+   */
+  public void end(LocalDate endOn) {
+    Objects.requireNonNull(endOn, "endOn");
+    if (!isOpen()) {
+      throw new IllegalStateException("Earning rule " + id + " is not open");
+    }
+    if (endOn.isBefore(effectiveFrom)) {
+      throw new IllegalArgumentException("endOn must not be before effectiveFrom");
+    }
+    this.effectiveTo = endOn;
   }
 
   public UUID getId() {

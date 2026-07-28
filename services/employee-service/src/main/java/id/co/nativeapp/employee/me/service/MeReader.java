@@ -11,13 +11,23 @@ import id.co.nativeapp.employee.me.dto.MeProfileResponse;
 import id.co.nativeapp.employee.me.dto.MyPayslipDetailResponse;
 import id.co.nativeapp.employee.me.dto.MyPayslipHeaderResponse;
 import id.co.nativeapp.employee.me.dto.MyPayslipLineResponse;
+import id.co.nativeapp.employee.me.dto.MySalesResponse;
+import id.co.nativeapp.employee.payroll.domain.CompensationPackage;
+import id.co.nativeapp.employee.payroll.domain.EarningParamKind;
+import id.co.nativeapp.employee.payroll.domain.EarningRule;
+import id.co.nativeapp.employee.payroll.domain.MetricInput;
 import id.co.nativeapp.employee.payroll.domain.PayComponentBearer;
 import id.co.nativeapp.employee.payroll.domain.PayComponentKind;
 import id.co.nativeapp.employee.payroll.domain.PayrollRun;
 import id.co.nativeapp.employee.payroll.domain.PayslipLine;
+import id.co.nativeapp.employee.payroll.repository.CompensationPackageRepository;
+import id.co.nativeapp.employee.payroll.repository.EarningRuleRepository;
+import id.co.nativeapp.employee.payroll.repository.MetricInputRepository;
 import id.co.nativeapp.employee.payroll.repository.PayrollRunRepository;
 import id.co.nativeapp.employee.payroll.repository.PayslipLineRepository;
+import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.TenantContext;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -38,23 +48,99 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class MeReader {
 
+  /**
+   * The sales metric a restaurant sale publishes at employee grain — the own-sales commission base.
+   */
+  private static final String SALES_METRIC = "sales_amount";
+
   private final EmployeeRepository employeeRepository;
   private final AssignmentRepository assignmentRepository;
   private final EmploymentContractRepository contractRepository;
   private final PayslipLineRepository payslipLineRepository;
   private final PayrollRunRepository payrollRunRepository;
+  private final MetricInputRepository metricInputRepository;
+  private final CompensationPackageRepository compPackageRepository;
+  private final EarningRuleRepository earningRuleRepository;
 
   public MeReader(
       EmployeeRepository employeeRepository,
       AssignmentRepository assignmentRepository,
       EmploymentContractRepository contractRepository,
       PayslipLineRepository payslipLineRepository,
-      PayrollRunRepository payrollRunRepository) {
+      PayrollRunRepository payrollRunRepository,
+      MetricInputRepository metricInputRepository,
+      CompensationPackageRepository compPackageRepository,
+      EarningRuleRepository earningRuleRepository) {
     this.employeeRepository = employeeRepository;
     this.assignmentRepository = assignmentRepository;
     this.contractRepository = contractRepository;
     this.payslipLineRepository = payslipLineRepository;
     this.payrollRunRepository = payrollRunRepository;
+    this.metricInputRepository = metricInputRepository;
+    this.compPackageRepository = compPackageRepository;
+    this.earningRuleRepository = earningRuleRepository;
+  }
+
+  /**
+   * The caller's own sales for the period + a commission preview. Sums the caller's employee-grain
+   * {@code sales_amount} metrics (subject = their login sub) and, if they have an active commission
+   * rule, previews {@code rate × sales}. The estimate is a PREVIEW — the posted payslip is
+   * authoritative. Currency comes from the caller's open compensation package (its amount is never
+   * read into the response — only its currency).
+   */
+  @Transactional(readOnly = true)
+  public MySalesResponse salesSummary(String period) {
+    Employee me = resolveMe();
+    LocalDate asOf = LocalDate.now();
+    String monthPrefix =
+        (period == null || period.isBlank()) ? asOf.toString().substring(0, 7) : period.strip();
+
+    // Currency from the open compensation package (never expose the amount).
+    String currency =
+        compPackageRepository.findByEmployeeId(me.getId()).stream()
+            .filter(p -> p.coversAsOf(asOf))
+            .findFirst()
+            .map(p -> p.getBasePay().currency().getCurrencyCode())
+            .orElse("IDR");
+
+    long sales = 0L;
+    Integer commissionBp = null;
+    if (me.getUserId() != null) {
+      try {
+        UUID subject = UUID.fromString(me.getUserId());
+        for (MetricInput row :
+            metricInputRepository.findByMetricKeyAndSubjectIdAndPeriodStartingWith(
+                SALES_METRIC, subject, monthPrefix)) {
+          sales += row.getValue();
+        }
+      } catch (IllegalArgumentException ignore) {
+        // A non-UUID sub keys no metric rows — sales stays 0.
+      }
+      commissionBp = activeCommissionBasisPoints(me.getId(), asOf);
+    }
+
+    Long estimate =
+        commissionBp == null
+            ? null
+            : Money.ofMinor(sales, currency).applyBasisPoints(commissionBp).amountMinor();
+    return new MySalesResponse(monthPrefix, sales, currency, commissionBp, estimate);
+  }
+
+  /** The caller's active PERCENT_OF_METRIC commission rate (bp) on their open package, or null. */
+  private Integer activeCommissionBasisPoints(UUID employeeId, LocalDate asOf) {
+    for (CompensationPackage pkg : compPackageRepository.findByEmployeeId(employeeId)) {
+      if (!pkg.coversAsOf(asOf)) {
+        continue;
+      }
+      for (EarningRule rule :
+          earningRuleRepository.findByCompensationPackageIdAndParamKind(
+              pkg.getId(), EarningParamKind.PERCENT_OF_METRIC)) {
+        if (rule.coversAsOf(asOf) && rule.getPercentBasisPoints() != null) {
+          return rule.getPercentBasisPoints();
+        }
+      }
+    }
+    return null;
   }
 
   /** The caller's profile (PII masked) with their assignments and contracts. */

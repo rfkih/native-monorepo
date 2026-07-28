@@ -56,7 +56,7 @@ class PayrollSetupEndpointTest extends PostgresRlsTestBase {
                 .content(json.writeValueAsString(Map.of("baseCurrency", "IDR"))))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.seeded").value(true))
-        .andExpect(jsonPath("$.componentCount").value(5))
+        .andExpect(jsonPath("$.componentCount").value(6))
         .andExpect(jsonPath("$.provenance").value("ILLUSTRATIVE_PLACEHOLDER"))
         .andExpect(jsonPath("$.illustrativeVersion").value("ILLUSTRATIVE-2026.1"));
 
@@ -68,7 +68,7 @@ class PayrollSetupEndpointTest extends PostgresRlsTestBase {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(Map.of("baseCurrency", "IDR"))))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.componentCount").value(5));
+        .andExpect(jsonPath("$.componentCount").value(6));
 
     // RLS: tenant B still sees nothing.
     mvc.perform(

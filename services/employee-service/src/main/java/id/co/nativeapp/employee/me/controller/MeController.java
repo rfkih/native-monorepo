@@ -3,6 +3,7 @@ package id.co.nativeapp.employee.me.controller;
 import id.co.nativeapp.employee.me.dto.MeProfileResponse;
 import id.co.nativeapp.employee.me.dto.MyPayslipDetailResponse;
 import id.co.nativeapp.employee.me.dto.MyPayslipHeaderResponse;
+import id.co.nativeapp.employee.me.dto.MySalesResponse;
 import id.co.nativeapp.employee.me.service.MeReader;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -71,5 +72,16 @@ public class MeController {
         .payslipDetail(runId)
         .map(ResponseEntity::ok)
         .orElseGet(() -> ResponseEntity.notFound().build());
+  }
+
+  @Operation(
+      summary = "My sales + commission preview",
+      description =
+          "The caller's own summed sales for the period and, if they have an active commission,"
+              + " an estimated commission (rate × sales). The estimate is a preview — the posted"
+              + " payslip is authoritative.")
+  @GetMapping("/sales")
+  public MySalesResponse sales(@RequestParam(required = false) String period) {
+    return meReader.salesSummary(period);
   }
 }

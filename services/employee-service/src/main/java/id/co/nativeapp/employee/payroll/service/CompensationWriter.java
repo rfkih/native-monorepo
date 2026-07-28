@@ -3,13 +3,17 @@ package id.co.nativeapp.employee.payroll.service;
 import id.co.nativeapp.employee.employee.domain.EmployeeNotFoundException;
 import id.co.nativeapp.employee.employee.repository.EmployeeRepository;
 import id.co.nativeapp.employee.employee.repository.EmploymentContractRepository;
+import id.co.nativeapp.employee.payroll.domain.CommissionNotFoundException;
 import id.co.nativeapp.employee.payroll.domain.CompensationNotFoundException;
 import id.co.nativeapp.employee.payroll.domain.CompensationPackage;
+import id.co.nativeapp.employee.payroll.domain.DuplicateCommissionException;
+import id.co.nativeapp.employee.payroll.domain.EarningParamKind;
 import id.co.nativeapp.employee.payroll.domain.EarningRule;
 import id.co.nativeapp.employee.payroll.domain.OverlappingCompensationException;
 import id.co.nativeapp.employee.payroll.domain.PayFrequency;
 import id.co.nativeapp.employee.payroll.repository.CompensationPackageRepository;
 import id.co.nativeapp.employee.payroll.repository.EarningRuleRepository;
+import id.co.nativeapp.employee.payroll.repository.PayComponentRepository;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
@@ -33,16 +37,99 @@ public class CompensationWriter {
   private final EarningRuleRepository earningRuleRepository;
   private final EmployeeRepository employeeRepository;
   private final EmploymentContractRepository contractRepository;
+  private final PayComponentRepository payComponentRepository;
 
   public CompensationWriter(
       CompensationPackageRepository compPackageRepository,
       EarningRuleRepository earningRuleRepository,
       EmployeeRepository employeeRepository,
-      EmploymentContractRepository contractRepository) {
+      EmploymentContractRepository contractRepository,
+      PayComponentRepository payComponentRepository) {
     this.compPackageRepository = compPackageRepository;
     this.earningRuleRepository = earningRuleRepository;
     this.employeeRepository = employeeRepository;
     this.contractRepository = contractRepository;
+    this.payComponentRepository = payComponentRepository;
+  }
+
+  /**
+   * Sets an own-sales commission on a package: a {@code PERCENT_OF_METRIC} earning rule bound to
+   * the seeded {@code COMMISSION} component. Validates the package belongs to the employee (404),
+   * that payroll setup is seeded (the COMMISSION component exists — else 400), and that no OPEN
+   * commission on the same metric already exists (409). The basis-point rate is non-PII config.
+   *
+   * @throws id.co.nativeapp.employee.payroll.domain.CompensationNotFoundException unknown package
+   *     for that employee (→ 404)
+   * @throws id.co.nativeapp.employee.payroll.domain.DuplicateCommissionException an open commission
+   *     on the same metric already exists (→ 409)
+   * @throws IllegalArgumentException payroll setup is not seeded (no COMMISSION component) (→ 400)
+   */
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public EarningRule addCommission(
+      UUID employeeId, UUID packageId, int percentBasisPoints, String metricKey) {
+    TenantContext.require();
+    CompensationPackage pkg = requireOwnPackage(employeeId, packageId);
+
+    UUID componentId =
+        payComponentRepository
+            .findByComponentKey("COMMISSION")
+            .orElseThrow(
+                () ->
+                    new IllegalArgumentException(
+                        "No COMMISSION pay component — seed payroll setup first"))
+            .getId();
+
+    boolean openDuplicate =
+        earningRuleRepository
+            .findByCompensationPackageIdAndParamKind(packageId, EarningParamKind.PERCENT_OF_METRIC)
+            .stream()
+            .anyMatch(r -> r.isOpen() && metricKey.equals(r.getMetricKey()));
+    if (openDuplicate) {
+      throw new DuplicateCommissionException(employeeId, metricKey);
+    }
+
+    EarningRule rule =
+        EarningRule.percentOfMetric(
+            pkg.getId(),
+            componentId,
+            metricKey,
+            percentBasisPoints,
+            pkg.getEffectiveFrom(),
+            EarningRule.OPEN_ENDED);
+    rule.setCompanyId(TenantContext.require().companyId());
+    EarningRule saved = earningRuleRepository.save(rule);
+    earningRuleRepository.flush();
+    return saved;
+  }
+
+  /**
+   * Ends an OPEN commission rule (effective-dated close). The rule must belong to a package of the
+   * given employee.
+   *
+   * @throws id.co.nativeapp.employee.payroll.domain.CommissionNotFoundException unknown rule for
+   *     that employee (→ 404)
+   */
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public EarningRule endCommission(UUID employeeId, UUID packageId, UUID ruleId, LocalDate endOn) {
+    TenantContext.require();
+    requireOwnPackage(employeeId, packageId);
+    EarningRule rule =
+        earningRuleRepository
+            .findById(ruleId)
+            .filter(r -> r.getCompensationPackageId().equals(packageId))
+            .orElseThrow(() -> new CommissionNotFoundException(ruleId));
+    rule.end(endOn);
+    EarningRule saved = earningRuleRepository.save(rule);
+    earningRuleRepository.flush();
+    return saved;
+  }
+
+  /** Resolves a package that must belong to the given employee (RLS-scoped; 404 otherwise). */
+  private CompensationPackage requireOwnPackage(UUID employeeId, UUID packageId) {
+    return compPackageRepository
+        .findById(packageId)
+        .filter(p -> p.getEmployeeId().equals(employeeId))
+        .orElseThrow(() -> new CompensationNotFoundException(packageId));
   }
 
   /**

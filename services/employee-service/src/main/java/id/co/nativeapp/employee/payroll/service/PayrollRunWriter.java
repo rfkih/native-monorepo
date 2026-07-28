@@ -497,6 +497,8 @@ public class PayrollRunWriter {
           case FIXED_AMOUNT -> earningRule.getFixedAmount();
           case PERCENT_OF_BASE -> pkgBase.applyBasisPoints(earningRule.getPercentBasisPoints());
           case PER_METRIC_UNIT -> resolveMetricEarning(employee, earningRule, asOf);
+          case PERCENT_OF_METRIC ->
+              resolvePercentOfMetricEarning(employee, earningRule, baseCurrency, asOf);
         };
     amount.requireSameCurrencyAs(Money.ofMinor(0L, baseCurrency));
     if (component.getKind() == PayComponentKind.EARNING) {
@@ -553,6 +555,53 @@ public class PayrollRunWriter {
       }
     }
     return rate.multiply(totalUnits);
+  }
+
+  /**
+   * Own-sales commission: {@code basis_points × summed metric AMOUNT} for the employee's linked
+   * login (EMPLOYEE grain — subject = the Keycloak sub the sales were rung under). The metric value
+   * is already money in minor units (e.g. {@code sales_amount}), so we sum it and apply the rate.
+   * An employee with NO linked login has no own-sales metrics → 0 (never an error — an unlinked HR
+   * record simply earns no commission). Reuses the single-period-grain guard.
+   */
+  private Money resolvePercentOfMetricEarning(
+      Employee employee, EarningRule earningRule, String baseCurrency, LocalDate asOf) {
+    if (employee.getUserId() == null) {
+      return Money.ofMinor(0L, baseCurrency);
+    }
+    UUID subject;
+    try {
+      subject = UUID.fromString(employee.getUserId());
+    } catch (IllegalArgumentException e) {
+      // A non-UUID sub cannot key a metric row (subject_id is a UUID). No metrics → no commission.
+      return Money.ofMinor(0L, baseCurrency);
+    }
+
+    String monthPrefix = YearMonth.from(asOf).toString();
+    long totalMetric = 0L;
+    PeriodGrain resolvedGrain = null;
+    List<MetricInput> rows =
+        metricInputRepository.findByMetricKeyAndSubjectIdAndPeriodStartingWith(
+            earningRule.getMetricKey(), subject, monthPrefix);
+    for (MetricInput row : rows) {
+      PeriodGrain rowGrain = periodGrainOf(row.getPeriod());
+      if (resolvedGrain == null) {
+        resolvedGrain = rowGrain;
+      } else if (resolvedGrain != rowGrain) {
+        throw new IllegalStateException(
+            "Metric '"
+                + earningRule.getMetricKey()
+                + "' for subject "
+                + subject
+                + " in "
+                + monthPrefix
+                + " has rows at MIXED period grains — summing both would double-count. Fix the"
+                + " upstream producer's grain");
+      }
+      totalMetric += row.getValue();
+    }
+    return Money.ofMinor(totalMetric, baseCurrency)
+        .applyBasisPoints(earningRule.getPercentBasisPoints());
   }
 
   /** The two period grains a metric row may carry; the period-string shape distinguishes them. */
