@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router-dom'
 import {
   ArrowUpRight,
+  Briefcase,
   Building2,
   ChevronRight,
   Plus,
@@ -18,6 +19,9 @@ import { Spinner } from '@/components/ui/Spinner'
 import { Segmented } from '@/components/ui/Segmented'
 import { EmptyState, KpiTile, PeriodNav } from '@/features/_shared/financeUi'
 import { useTeam } from '@/features/team/api'
+import { useEmployees } from '@/features/hr/api'
+import { EmployeesTab } from '@/features/hr/EmployeesTab'
+import { PayrollTab } from '@/features/hr/PayrollTab'
 import { useSession } from '@/lib/session'
 import { cn } from '@/lib/cn'
 import { formatMoney, formatPercent } from '@/lib/money'
@@ -48,7 +52,7 @@ import {
  * formatMoney minor units + Intl.
  */
 
-type TabKey = 'overview' | 'outlets' | 'people' | 'expenses' | 'payroll'
+type TabKey = 'overview' | 'outlets' | 'employees' | 'people' | 'expenses' | 'payroll'
 
 type DialogState =
   | { kind: 'addOutlet' }
@@ -97,6 +101,14 @@ export function OrgUnitDetail() {
     actor: company?.actor ?? '',
     enabled: !!company && isDetailType,
   })
+  // HR headcount for the smart tile — BU scope = the unit + its child outlets (client rollup).
+  const hrUnitIds = isBu ? [unitId ?? '', ...childOutlets.map((o) => o.id)] : [unitId ?? '']
+  const hrQuery = useEmployees({
+    companyId: company?.companyId ?? '',
+    actor: company?.actor ?? '',
+    orgUnitIds: hrUnitIds,
+    enabled: !!company && !!unitId && isDetailType,
+  })
 
   if (!company) {
     return <EmptyState title={t('org.noCompany')} hint={t('org.noCompanyHint')} />
@@ -124,10 +136,12 @@ export function OrgUnitDetail() {
   const currency = pnl?.currency ?? company.baseCurrency
   const netTone = (pnl?.netMinor ?? 0) < 0 ? 'text-loss' : 'text-profit'
   const distinctUsers = new Set((usersQuery.data ?? []).map((u) => u.userId))
+  const distinctEmployees = new Set((hrQuery.data ?? []).map((e) => e.employeeId))
 
   const tabs: { value: TabKey; label: string }[] = [
     { value: 'overview', label: t('orgHub.tabs.overview') },
     ...(isBu ? [{ value: 'outlets' as TabKey, label: t('orgHub.tabs.outlets') }] : []),
+    { value: 'employees', label: t('orgHub.tabs.employees') },
     { value: 'people', label: t('orgHub.tabs.people') },
     { value: 'expenses', label: t('orgHub.tabs.expenses') },
     { value: 'payroll', label: t('orgHub.tabs.payroll') },
@@ -194,7 +208,7 @@ export function OrgUnitDetail() {
       </div>
 
       {/* Smart buttons */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {isBu ? (
           <SmartButton
             icon={<Store className="size-5" aria-hidden="true" />}
@@ -210,6 +224,12 @@ export function OrgUnitDetail() {
             to={parent ? `/org/${parent.id}` : '/org'}
           />
         )}
+        <SmartButton
+          icon={<Briefcase className="size-5" aria-hidden="true" />}
+          label={t('orgHub.smart.employees')}
+          figure={hrQuery.isLoading ? '…' : String(distinctEmployees.size)}
+          onClick={() => setTab('employees')}
+        />
         <SmartButton
           icon={<Users className="size-5" aria-hidden="true" />}
           label={t('orgHub.smart.people')}
@@ -267,6 +287,17 @@ export function OrgUnitDetail() {
         />
       ) : null}
 
+      {tab === 'employees' ? (
+        <EmployeesTab
+          unit={unit}
+          childOutlets={childOutlets}
+          units={units}
+          companyId={company.companyId}
+          actor={company.actor}
+          baseCurrency={company.baseCurrency}
+        />
+      ) : null}
+
       {tab === 'people' ? (
         <PeopleTab usersQuery={usersQuery} teamQuery={teamQuery} />
       ) : null}
@@ -275,7 +306,15 @@ export function OrgUnitDetail() {
         <ComingSoon body={t('orgHub.comingSoon.expensesBody')} />
       ) : null}
       {tab === 'payroll' ? (
-        <ComingSoon body={t('orgHub.comingSoon.payrollBody')} />
+        <PayrollTab
+          unit={unit}
+          childOutlets={childOutlets}
+          units={units}
+          companyId={company.companyId}
+          actor={company.actor}
+          baseCurrency={company.baseCurrency}
+          locale={locale}
+        />
       ) : null}
 
       {/* Dialogs (lifted org parts; mutations invalidate ['orgUnits'] so the page re-renders) */}
