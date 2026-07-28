@@ -18,8 +18,16 @@ import org.springframework.stereotype.Service;
 @Service
 public class UserPageGrantService {
 
-  /** The grantable page keys (mirrors the console's grantable surface). */
-  static final Set<String> ALLOWED_PAGE_KEYS = Set.of("pos", "kitchen", "menu", "me");
+  /**
+   * The grantable page keys (mirrors the console's grantable surface). The POS surface ({@code
+   * pos}/{@code kitchen}/{@code menu}) plus the back-office/dashboard pages ({@code dashboard},
+   * {@code reports}, {@code org}, {@code groups}, {@code close}, {@code team}). {@code me} is the
+   * always-available floor. Grants stay UI-subtractive and narrow WITHIN a login's role — they
+   * never grant beyond it (roles remain the API authz boundary, ADR 0013).
+   */
+  static final Set<String> ALLOWED_PAGE_KEYS =
+      Set.of(
+          "pos", "kitchen", "menu", "me", "dashboard", "reports", "org", "groups", "close", "team");
 
   private final KeycloakAdminClient keycloak;
   private final UserPageGrantWriter writer;

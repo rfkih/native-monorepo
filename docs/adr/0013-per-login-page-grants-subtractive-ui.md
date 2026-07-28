@@ -40,7 +40,9 @@ remains the authoritative API authorization.
   restriction means unrestricted, exactly like outlet assignments). One or more rows = restricted to
   those page keys, still intersected with the role surface (a grant can only subtract).
   Owner/manager **bypass** grants entirely. `/me` is the always-available floor and is never removed
-  by the editor, so a login can never be locked out of everything.
+  by the editor, so a login can never be locked out of everything. (Extended 2026-07-28 — see the
+  Update below: the bypass is narrowed to **owner-only** so a manager login can be narrowed, and the
+  grantable set now spans the dashboard pages too.)
 - **Reads:** `GET /api/v1/users/me/pages` (every business role, gateway `@Order(HIGHEST_PRECEDENCE)`
   exact route before the general `/users/**`, mirroring `/me/outlets`); `GET|PUT
   /api/v1/users/{userId}/pages` (owner/manager). The console fetches `/me/pages` after login (short
@@ -60,3 +62,24 @@ remains the authoritative API authorization.
   role-based (ARCHITECTURE.md §gateway) — no page-aware routing, no token-lifespan coupling.
 - If a genuine per-page **security** requirement ever arises, it is a new role (or a route role-set
   change), not an extension of this table.
+
+## Update (2026-07-28) — grantable set extended to every console page; manager grants
+
+The owner asked to manage page access per person from the org-unit **People** tab, across all pages
+(not just the POS surface). This EXTENDS the decision above without changing its nature (grants stay
+subtractive, UI-only, role-intersected):
+
+- **Grantable set** now also includes the back-office pages: `dashboard`, `reports` (income
+  statement + balance sheet), `org`, `groups`, `close`, `team` — alongside the original `pos`,
+  `menu`, `kitchen` and the `me` floor (org-service `ALLOWED_PAGE_KEYS`).
+- **Bypass narrowed to owner-only.** Previously owner AND manager bypassed grants; now only the
+  **owner** bypasses (so the owner can never be locked out and is the recovery path for any
+  mis-grant). A **manager** login's grants now apply, so an owner can hide, say, Finance from one
+  manager. Still purely subtractive — a manager can never be *granted* a page their role lacks.
+- **Role-aware picker.** The editor shows only the pages the target login's role can actually reach
+  (a cashier sees POS/Menu/Kitchen; an owner/manager login sees the dashboard pages + POS surface; an
+  employee-only login has just `/me` and nothing to restrict), so a check never implies access the
+  gateway would deny.
+- The console guards each dashboard route with the grant (owner still bypasses) and filters the shell
+  nav; `home` resolves to the first *allowed* page to avoid a redirect loop when a login's landing
+  page is hidden. Roles remain the API authz boundary (the Consequences above are unchanged).
