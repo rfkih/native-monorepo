@@ -33,7 +33,12 @@ controller/service/repository/domain/dto/messaging layer sub-packages**, ArchUni
 expected-source registry (needs a rule); **POS indirect-tax + accounting** —
 the PB1-vs-PPN identity, rates, service-charge-revenue-vs-tip treatment, and GL account mappings ship
 `ILLUSTRATIVE_PLACEHOLDER` and need a tax/accounting SME (ADR 0006); **real QRIS/card PSP adapter +
-settlement webhook** (ADR 0007, needs a provider choice). (DONE: the P3d deferred operational items —
+settlement webhook** (ADR 0007, needs a provider choice); **own-sales commission is single-currency**
+— `MetricPublished` carries a bare minor-units `value` with no currency, so commission is denominated
+in the payroll base currency; correct only while sales are in the base currency. When multi-currency
+lands, add an optional `currency` to the metric schema and reject a metric whose currency ≠ the
+run/package currency (code-review W1; guarded today by the single-currency slice, commented at the
+emit + resolve sites). (DONE: the P3d deferred operational items —
 `member_group_index` backfill, the within-company concurrent-close lock, the within-close MVC tests;
 the finance-expansion posting-currency robustness guard; and the org-tree move/deactivate semantics —
 cascade-deactivate + reactivation.)

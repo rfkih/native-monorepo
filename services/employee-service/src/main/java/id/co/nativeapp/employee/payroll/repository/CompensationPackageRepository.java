@@ -19,6 +19,13 @@ public interface CompensationPackageRepository extends JpaRepository<Compensatio
   List<CompensationPackage> findByEmployeeId(UUID employeeId);
 
   /**
+   * Whether the package belongs to the employee (within the bound tenant) — a scalar ownership
+   * check that reads no columns, used to 404 a mismatched {@code (employeeId, packageId)} on the
+   * read path the same way {@code CompensationWriter.requireOwnPackage} guards the write path.
+   */
+  boolean existsByIdAndEmployeeId(UUID id, UUID employeeId);
+
+  /**
    * The console's masked package list — deliberately does NOT select {@code base_pay_enc}: the
    * salary ciphertext is never read (let alone decrypted) on this path (rule 6).
    */

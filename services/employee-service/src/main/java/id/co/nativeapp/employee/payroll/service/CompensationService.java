@@ -2,9 +2,13 @@ package id.co.nativeapp.employee.payroll.service;
 
 import id.co.nativeapp.employee.employee.domain.EmployeeNotFoundException;
 import id.co.nativeapp.employee.employee.repository.EmployeeRepository;
+import id.co.nativeapp.employee.payroll.domain.CompensationNotFoundException;
 import id.co.nativeapp.employee.payroll.domain.CompensationPackage;
+import id.co.nativeapp.employee.payroll.domain.EarningRule;
+import id.co.nativeapp.employee.payroll.dto.CommissionResponse;
 import id.co.nativeapp.employee.payroll.dto.CompensationResponse;
 import id.co.nativeapp.employee.payroll.repository.CompensationPackageRepository;
+import id.co.nativeapp.employee.payroll.repository.EarningRuleRepository;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.LocalDate;
@@ -26,14 +30,13 @@ public class CompensationService {
   private final CompensationWriter writer;
   private final CompensationPackageRepository packageRepository;
   private final EmployeeRepository employeeRepository;
-  private final id.co.nativeapp.employee.payroll.repository.EarningRuleRepository
-      commissionRepository;
+  private final EarningRuleRepository commissionRepository;
 
   public CompensationService(
       CompensationWriter writer,
       CompensationPackageRepository packageRepository,
       EmployeeRepository employeeRepository,
-      id.co.nativeapp.employee.payroll.repository.EarningRuleRepository commissionRepository) {
+      EarningRuleRepository commissionRepository) {
     this.writer = writer;
     this.packageRepository = packageRepository;
     this.employeeRepository = employeeRepository;
@@ -91,17 +94,23 @@ public class CompensationService {
 
   // ---- commission (non-PII config; real basis points echoed) ----------------------------------
 
-  /** The commission rules on a package (a native projection — no salary ciphertext is read). */
+  /**
+   * The commission rules on a package (a native projection — no salary ciphertext is read). The
+   * package must belong to the path's employee: a mismatched {@code (employeeId, packageId)} 404s
+   * rather than returning another employee's rules, mirroring {@code
+   * CompensationWriter.requireOwnPackage} on the write path.
+   *
+   * @throws CompensationNotFoundException if the package does not belong to the employee (→ 404)
+   */
   @Transactional(readOnly = true)
-  public List<id.co.nativeapp.employee.payroll.dto.CommissionResponse> listCommissions(
-      UUID employeeId, UUID packageId) {
-    if (employeeRepository.findById(employeeId).isEmpty()) {
-      throw new id.co.nativeapp.employee.employee.domain.EmployeeNotFoundException(employeeId);
+  public List<CommissionResponse> listCommissions(UUID employeeId, UUID packageId) {
+    if (!packageRepository.existsByIdAndEmployeeId(packageId, employeeId)) {
+      throw new CompensationNotFoundException(packageId);
     }
     return commissionRepository.findCommissionViews(packageId).stream()
         .map(
             v ->
-                new id.co.nativeapp.employee.payroll.dto.CommissionResponse(
+                new CommissionResponse(
                     v.getId(),
                     v.getMetricKey(),
                     v.getPercentBasisPoints() == null ? 0 : v.getPercentBasisPoints(),
@@ -111,22 +120,21 @@ public class CompensationService {
   }
 
   /** Sets an own-sales commission (see {@link CompensationWriter#addCommission}). */
-  public id.co.nativeapp.employee.payroll.dto.CommissionResponse addCommission(
+  public CommissionResponse addCommission(
       UUID employeeId, UUID packageId, int percentBasisPoints, String metricKey) {
     TenantContext.require();
     return toCommission(writer.addCommission(employeeId, packageId, percentBasisPoints, metricKey));
   }
 
   /** Ends an open commission (see {@link CompensationWriter#endCommission}). */
-  public id.co.nativeapp.employee.payroll.dto.CommissionResponse endCommission(
+  public CommissionResponse endCommission(
       UUID employeeId, UUID packageId, UUID ruleId, LocalDate endOn) {
     TenantContext.require();
     return toCommission(writer.endCommission(employeeId, packageId, ruleId, endOn));
   }
 
-  private static id.co.nativeapp.employee.payroll.dto.CommissionResponse toCommission(
-      id.co.nativeapp.employee.payroll.domain.EarningRule rule) {
-    return new id.co.nativeapp.employee.payroll.dto.CommissionResponse(
+  private static CommissionResponse toCommission(EarningRule rule) {
+    return new CommissionResponse(
         rule.getId(),
         rule.getMetricKey(),
         rule.getPercentBasisPoints() == null ? 0 : rule.getPercentBasisPoints(),

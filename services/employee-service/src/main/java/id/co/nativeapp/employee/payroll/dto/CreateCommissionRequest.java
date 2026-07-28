@@ -2,6 +2,7 @@ package id.co.nativeapp.employee.payroll.dto;
 
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 
@@ -15,5 +16,5 @@ import jakarta.validation.constraints.Positive;
  * @param metricKey the sales metric the commission applies to
  */
 public record CreateCommissionRequest(
-    @Positive @Max(10_000) Integer percentBasisPoints,
+    @NotNull @Positive @Max(10_000) Integer percentBasisPoints,
     @NotBlank @Pattern(regexp = "[a-z_]{1,64}") String metricKey) {}

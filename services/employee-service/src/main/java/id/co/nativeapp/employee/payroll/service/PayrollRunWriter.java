@@ -600,6 +600,14 @@ public class PayrollRunWriter {
       }
       totalMetric += row.getValue();
     }
+    // SINGLE-CURRENCY ASSUMPTION (tracked follow-up): the metric feed carries a bare minor-units
+    // `value` with NO currency, so the sum is denominated here in the company base currency. This
+    // is
+    // correct only while sales are in the base currency (multi-currency is flagged-simplified
+    // system-wide, and sales-currency-vs-base is a pre-existing un-enforced gate — see the TODO in
+    // restaurant SaleWriter). A cross-currency sale would be counted at face minor units. When
+    // multi-currency lands, add an optional `currency` to MetricPublished and reject a metric whose
+    // currency ≠ this base rather than blindly denominating.
     return Money.ofMinor(totalMetric, baseCurrency)
         .applyBasisPoints(earningRule.getPercentBasisPoints());
   }

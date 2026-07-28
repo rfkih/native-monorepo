@@ -147,6 +147,51 @@ class OwnSalesCommissionTest extends PostgresRlsTestBase {
     assertThat(json.readTree(run).get("grossTotalMinor").asLong()).isEqualTo(300_000_000L);
   }
 
+  @Test
+  void aCommissionWithNoRateIs400NotAnUnhandled500() throws Exception {
+    seedIllustrative();
+    UUID outlet = seedOutlet();
+    UUID employeeId = createEmployee("Dewi Null", "3207000000000003", "7777888899990003");
+    UUID contract = addContract(employeeId);
+    addAssignment(employeeId, outlet, "cashier");
+    UUID packageId = addCompensation(employeeId, contract, 300_000_000L);
+
+    // percentBasisPoints omitted (null) → @NotNull rejects at the edge (400), never a 500 NPE from
+    // unboxing null into the primitive-int service parameter.
+    mvc.perform(
+            post("/api/v1/employees/" + employeeId + "/compensation/" + packageId + "/commission")
+                .header("X-Company-Id", TENANT)
+                .header("X-Actor", HR)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(Map.of("metricKey", "sales_amount"))))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void listingCommissionsOnAPackageThatIsNotTheEmployeesIs404() throws Exception {
+    seedIllustrative();
+    UUID outlet = seedOutlet();
+
+    UUID employeeA = createEmployee("Ana A", "3207000000000004", "7777888899990004");
+    UUID contractA = addContract(employeeA);
+    addAssignment(employeeA, outlet, "cashier");
+    addCompensation(employeeA, contractA, 300_000_000L);
+
+    UUID employeeB = createEmployee("Beno B", "3207000000000005", "7777888899990005");
+    UUID contractB = addContract(employeeB);
+    addAssignment(employeeB, outlet, "cashier");
+    UUID packageB = addCompensation(employeeB, contractB, 300_000_000L);
+
+    // Employee A's path + Employee B's package → 404 (the package is not A's); it must NOT return
+    // B's commission rules just because A exists (the write path already guards via
+    // requireOwnPackage).
+    mvc.perform(
+            get("/api/v1/employees/" + employeeA + "/compensation/" + packageB + "/commission")
+                .header("X-Company-Id", TENANT)
+                .header("X-Actor", HR))
+        .andExpect(status().isNotFound());
+  }
+
   // ---- helpers --------------------------------------------------------------------------------
 
   private void projectSales(String sub, String period, long minor) {

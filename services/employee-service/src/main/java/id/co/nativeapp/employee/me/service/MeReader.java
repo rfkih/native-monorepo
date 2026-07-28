@@ -95,9 +95,16 @@ public class MeReader {
     String monthPrefix =
         (period == null || period.isBlank()) ? asOf.toString().substring(0, 7) : period.strip();
 
-    // Currency from the open compensation package (never expose the amount).
+    // The caller's packages, fetched ONCE (both currency and the commission rate read from them).
+    List<CompensationPackage> packages = compPackageRepository.findByEmployeeId(me.getId());
+
+    // Currency from the open compensation package (never expose the amount). The IDR fallback is
+    // the single-currency-slice default when the caller has sales but no covering package.
+    // Single-currency assumption: the commission math treats the sale currency AS this currency —
+    // the metric feed carries no currency of its own (same caveat as the authoritative path,
+    // PayrollRunWriter.resolvePercentOfMetricEarning).
     String currency =
-        compPackageRepository.findByEmployeeId(me.getId()).stream()
+        packages.stream()
             .filter(p -> p.coversAsOf(asOf))
             .findFirst()
             .map(p -> p.getBasePay().currency().getCurrencyCode())
@@ -108,15 +115,11 @@ public class MeReader {
     if (me.getUserId() != null) {
       try {
         UUID subject = UUID.fromString(me.getUserId());
-        for (MetricInput row :
-            metricInputRepository.findByMetricKeyAndSubjectIdAndPeriodStartingWith(
-                SALES_METRIC, subject, monthPrefix)) {
-          sales += row.getValue();
-        }
+        sales = sumSingleGrain(SALES_METRIC, subject, monthPrefix);
       } catch (IllegalArgumentException ignore) {
         // A non-UUID sub keys no metric rows — sales stays 0.
       }
-      commissionBp = activeCommissionBasisPoints(me.getId(), asOf);
+      commissionBp = activeCommissionBasisPoints(packages, SALES_METRIC, asOf);
     }
 
     Long estimate =
@@ -126,16 +129,48 @@ public class MeReader {
     return new MySalesResponse(monthPrefix, sales, currency, commissionBp, estimate);
   }
 
-  /** The caller's active PERCENT_OF_METRIC commission rate (bp) on their open package, or null. */
-  private Integer activeCommissionBasisPoints(UUID employeeId, LocalDate asOf) {
-    for (CompensationPackage pkg : compPackageRepository.findByEmployeeId(employeeId)) {
+  /**
+   * Sums the subject's metric rows for the month, resolving to a SINGLE period grain — the same
+   * no-double-count rule the authoritative payroll run enforces. In practice the restaurant
+   * producer emits {@code sales_amount} only at the daily grain, so this only ever sees one grain;
+   * the guard keeps the preview honest were a future producer to emit the same metric at the
+   * monthly grain.
+   */
+  private long sumSingleGrain(String metricKey, UUID subject, String monthPrefix) {
+    long total = 0L;
+    Integer grainLen = null;
+    for (MetricInput row :
+        metricInputRepository.findByMetricKeyAndSubjectIdAndPeriodStartingWith(
+            metricKey, subject, monthPrefix)) {
+      int rowLen = row.getPeriod().length();
+      if (grainLen == null) {
+        grainLen = rowLen;
+      } else if (grainLen != rowLen) {
+        // Mixed daily/monthly rows would double-count; the preview stays on the first grain seen.
+        continue;
+      }
+      total += row.getValue();
+    }
+    return total;
+  }
+
+  /**
+   * The caller's active {@code PERCENT_OF_METRIC} rate (bp) FOR THE GIVEN metric on an open
+   * package, or null. Matches on {@code metricKey} so a commission on some other metric never
+   * previews against {@code sales_amount} sales.
+   */
+  private Integer activeCommissionBasisPoints(
+      List<CompensationPackage> packages, String metricKey, LocalDate asOf) {
+    for (CompensationPackage pkg : packages) {
       if (!pkg.coversAsOf(asOf)) {
         continue;
       }
       for (EarningRule rule :
           earningRuleRepository.findByCompensationPackageIdAndParamKind(
               pkg.getId(), EarningParamKind.PERCENT_OF_METRIC)) {
-        if (rule.coversAsOf(asOf) && rule.getPercentBasisPoints() != null) {
+        if (rule.coversAsOf(asOf)
+            && metricKey.equals(rule.getMetricKey())
+            && rule.getPercentBasisPoints() != null) {
           return rule.getPercentBasisPoints();
         }
       }
