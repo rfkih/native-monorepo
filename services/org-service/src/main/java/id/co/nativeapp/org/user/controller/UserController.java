@@ -3,6 +3,7 @@ package id.co.nativeapp.org.user.controller;
 import id.co.nativeapp.org.user.dto.InviteUserRequest;
 import id.co.nativeapp.org.user.dto.InviteUserResponse;
 import id.co.nativeapp.org.user.dto.PatchUserRequest;
+import id.co.nativeapp.org.user.dto.ResetPasswordResponse;
 import id.co.nativeapp.org.user.dto.UserResponse;
 import id.co.nativeapp.org.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -145,5 +146,25 @@ public class UserController {
   public ResponseEntity<Void> deactivateUser(@PathVariable String id) {
     userService.deactivateUser(id);
     return ResponseEntity.noContent().build();
+  }
+
+  /**
+   * Resets a login's password to a fresh one-time temporary password (change-on-next-login).
+   *
+   * <p>The cross-tenant guard rejects targeting a user from a different company with 404. The
+   * one-time password is returned ONCE and is never stored/logged by org-service.
+   *
+   * @param id the target login's Keycloak UUID
+   * @return {@code 200} with the new one-time {@link ResetPasswordResponse#temporaryPassword()}
+   */
+  @Operation(
+      summary = "Reset a login's password",
+      description =
+          "Issues a fresh one-time temporary password for an existing login and re-arms Keycloak's"
+              + " forced change on next sign-in. The password is returned ONCE (never stored/logged"
+              + " server-side). Cross-tenant targets return 404. Requires owner or manager role.")
+  @PostMapping("/{id}/reset-password")
+  public ResetPasswordResponse resetPassword(@PathVariable String id) {
+    return userService.resetPassword(id);
   }
 }

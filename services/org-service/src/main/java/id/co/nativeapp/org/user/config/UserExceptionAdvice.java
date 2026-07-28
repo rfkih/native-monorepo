@@ -1,5 +1,6 @@
 package id.co.nativeapp.org.user.config;
 
+import id.co.nativeapp.org.user.service.InsufficientPrivilegeException;
 import id.co.nativeapp.org.user.service.InvalidOutletAssignmentException;
 import id.co.nativeapp.org.user.service.InvalidPageKeyException;
 import id.co.nativeapp.org.user.service.InvalidRoleException;
@@ -67,6 +68,22 @@ public class UserExceptionAdvice {
     problem.setType(URI.create(TYPE_BASE + "invalid-role"));
     problem.setTitle("Bad Request");
     problem.setDetail("The provided role is not valid. Allowed values: owner, manager, cashier.");
+    problem.setInstance(URI.create(request.getRequestURI()));
+    addTraceId(problem);
+    return problem;
+  }
+
+  /**
+   * A caller acting on a target that outranks them (e.g. a manager resetting an owner's password) →
+   * {@code 403 Forbidden}. The message names the rule but not the target's identity.
+   */
+  @ExceptionHandler(InsufficientPrivilegeException.class)
+  public ProblemDetail handleInsufficientPrivilege(
+      InsufficientPrivilegeException ex, HttpServletRequest request) {
+    ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
+    problem.setType(URI.create(TYPE_BASE + "insufficient-privilege"));
+    problem.setTitle("Forbidden");
+    problem.setDetail(ex.getMessage());
     problem.setInstance(URI.create(request.getRequestURI()));
     addTraceId(problem);
     return problem;

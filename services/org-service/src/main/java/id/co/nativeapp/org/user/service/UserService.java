@@ -2,6 +2,7 @@ package id.co.nativeapp.org.user.service;
 
 import id.co.nativeapp.org.user.dto.InviteUserResponse;
 import id.co.nativeapp.org.user.dto.PatchUserRequest;
+import id.co.nativeapp.org.user.dto.ResetPasswordResponse;
 import id.co.nativeapp.org.user.dto.UserResponse;
 import id.co.nativeapp.org.user.service.KeycloakAdminClient.InviteResult;
 import id.co.nativeapp.tenant.TenantContext;
@@ -164,6 +165,47 @@ public class UserService {
    */
   public UserResponse getUserById(String userId) {
     return toResponse(resolveInTenant(userId));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Reset password
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Resets an existing login's password to a fresh one-time temporary password, re-arming
+   * Keycloak's forced change-on-next-login. The target must belong to the caller's tenant, else
+   * {@link UserNotFoundException} (404 — anti-enumeration).
+   *
+   * <p><strong>Role-hierarchy guard.</strong> The gateway lets both owner and manager reach this
+   * endpoint, but a reset hands the caller a WORKING credential for the target. So a privileged
+   * target (an {@code owner} or {@code manager} login) may be reset ONLY by an {@code owner} —
+   * otherwise a manager could reset the owner's password and take over the account ({@link
+   * InsufficientPrivilegeException} → 403). A manager may still reset cashier/employee logins (the
+   * feature's purpose: hand an email-less employee a password).
+   *
+   * <p>The password is returned ONCE and is NEVER stored or logged by org-service (the caller holds
+   * it encrypted — ADR 0014).
+   *
+   * @param userId the target login's Keycloak UUID
+   * @return the new one-time temporary password (returned ONCE)
+   */
+  public ResetPasswordResponse resetPassword(String userId) {
+    // 404 if absent or cross-tenant (anti-enumeration).
+    KeycloakUser target = resolveInTenant(userId);
+    // Role-hierarchy guard: only an owner may reset a privileged (owner/manager) login.
+    boolean targetPrivileged =
+        target.roles().contains("owner") || target.roles().contains("manager");
+    if (targetPrivileged) {
+      KeycloakUser caller = resolveInTenant(TenantContext.require().actor());
+      if (!caller.roles().contains("owner")) {
+        throw new InsufficientPrivilegeException(
+            "Only an owner may reset an owner or manager login.");
+      }
+    }
+    String temp = keycloak.resetTemporaryPassword(userId);
+    log.info(
+        "Password reset for user {} in company {}", userId, TenantContext.require().companyId());
+    return new ResetPasswordResponse(userId, temp);
   }
 
   // ---------------------------------------------------------------------------

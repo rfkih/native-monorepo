@@ -534,6 +534,49 @@ public class KeycloakAdminClient {
   }
 
   /**
+   * Resets the user's password to a fresh server-generated TEMPORARY password: sets it with {@code
+   * temporary=true}, which makes Keycloak re-add the {@code UPDATE_PASSWORD} required action so the
+   * user must change it again on their next sign-in.
+   *
+   * <p><strong>The generated password is NEVER logged.</strong> It is returned once so the caller
+   * can hand it to the user; the caller stores it encrypted (ADR 0014), never in a log.
+   *
+   * @param userId the Keycloak user UUID
+   * @return the new one-time temporary password — NEVER log or store in plaintext
+   * @throws KeycloakAdminException if the Admin API is unreachable or returns an unexpected error
+   */
+  public String resetTemporaryPassword(String userId) {
+    String tempPassword = generateTemporaryPassword();
+    String token = acquireToken();
+    String url =
+        props.getBaseUrl()
+            + "/admin/realms/"
+            + props.getRealm()
+            + "/users/"
+            + userId
+            + "/reset-password";
+    try {
+      restClient
+          .put()
+          .uri(URI.create(url))
+          .header("Authorization", "Bearer " + token)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(Map.of("type", "password", "value", tempPassword, "temporary", true))
+          .retrieve()
+          .toBodilessEntity();
+      log.info("Reset temporary password for Keycloak user {}", userId);
+      return tempPassword;
+    } catch (RestClientResponseException e) {
+      throw new KeycloakAdminException(
+          "Keycloak reset-password for user " + userId + " failed with status " + e.getStatusCode(),
+          e);
+    } catch (RestClientException e) {
+      throw new KeycloakAdminException(
+          "Keycloak reset-password for user " + userId + " failed — connection error", e);
+    }
+  }
+
+  /**
    * Replaces the user's current business realm roles (owner/manager/cashier) with {@code newRole}.
    *
    * <p>The implementation: (1) fetches the current realm roles to find which business roles the
