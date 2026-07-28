@@ -5,9 +5,11 @@ import id.co.nativeapp.org.company.projection.OrgUnitView;
 import id.co.nativeapp.org.company.projection.OutletView;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 /**
  * Spring Data repository for {@link OrgUnit}.
@@ -83,4 +85,28 @@ public interface OrgUnitRepository extends JpaRepository<OrgUnit, UUID> {
           """,
       nativeQuery = true)
   List<OutletView> findActiveOutlets();
+
+  /**
+   * One org unit projected to {@link OrgUnitView} — the read-path existence/type guard (e.g. the
+   * users-per-unit endpoint validates its target without loading the entity). No {@code WHERE
+   * company_id} — RLS scopes the lookup, so a foreign unit resolves empty exactly like an unknown
+   * one (anti-enumeration, rule 5).
+   */
+  @Query(
+      value =
+          """
+          SELECT ou.id                AS id,
+                 ou.name              AS name,
+                 ou.type              AS type,
+                 ou.parent_id         AS parent_id,
+                 ou.legal_employer_id AS legal_employer_id,
+                 ou.company_id        AS company_id,
+                 ou.active            AS active,
+                 ou.effective_from    AS effective_from,
+                 ou.effective_to      AS effective_to
+            FROM org_unit ou
+           WHERE ou.id = :id
+          """,
+      nativeQuery = true)
+  Optional<OrgUnitView> findViewById(@Param("id") UUID id);
 }

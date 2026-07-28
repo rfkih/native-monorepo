@@ -2,6 +2,8 @@ package id.co.nativeapp.org.user.config;
 
 import id.co.nativeapp.org.user.service.InvalidOutletAssignmentException;
 import id.co.nativeapp.org.user.service.InvalidRoleException;
+import id.co.nativeapp.org.user.service.InvalidUnitUsersTargetException;
+import id.co.nativeapp.org.user.service.OrgUnitNotFoundException;
 import id.co.nativeapp.org.user.service.SelfLockoutException;
 import id.co.nativeapp.org.user.service.UserNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -92,6 +94,36 @@ public class UserExceptionAdvice {
       InvalidOutletAssignmentException ex, HttpServletRequest request) {
     ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
     problem.setType(URI.create(TYPE_BASE + "invalid-outlet-assignment"));
+    problem.setTitle("Bad Request");
+    problem.setDetail(ex.getMessage());
+    problem.setInstance(URI.create(request.getRequestURI()));
+    addTraceId(problem);
+    return problem;
+  }
+
+  /**
+   * An org unit that does not exist in the caller's company (genuinely absent OR cross-tenant) →
+   * {@code 404 Not Found}. Identical for both cases (anti-enumeration), mirroring {@code
+   * user-not-found}.
+   */
+  @ExceptionHandler(OrgUnitNotFoundException.class)
+  public ProblemDetail handleOrgUnitNotFound(
+      OrgUnitNotFoundException ex, HttpServletRequest request) {
+    ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.NOT_FOUND);
+    problem.setType(URI.create(TYPE_BASE + "org-unit-not-found"));
+    problem.setTitle("Not Found");
+    problem.setDetail("The requested org unit does not exist.");
+    problem.setInstance(URI.create(request.getRequestURI()));
+    addTraceId(problem);
+    return problem;
+  }
+
+  /** A users-per-unit read targeting a TEAM (teams carry no assignments) → {@code 400}. */
+  @ExceptionHandler(InvalidUnitUsersTargetException.class)
+  public ProblemDetail handleInvalidUnitUsersTarget(
+      InvalidUnitUsersTargetException ex, HttpServletRequest request) {
+    ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+    problem.setType(URI.create(TYPE_BASE + "invalid-unit-users-target"));
     problem.setTitle("Bad Request");
     problem.setDetail(ex.getMessage());
     problem.setInstance(URI.create(request.getRequestURI()));

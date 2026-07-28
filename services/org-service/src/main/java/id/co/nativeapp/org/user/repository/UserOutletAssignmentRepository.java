@@ -1,6 +1,7 @@
 package id.co.nativeapp.org.user.repository;
 
 import id.co.nativeapp.org.user.domain.UserOutletAssignment;
+import id.co.nativeapp.org.user.projection.OrgUnitUserView;
 import id.co.nativeapp.org.user.projection.UserOutletAssignmentView;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import java.util.List;
@@ -51,6 +52,30 @@ public interface UserOutletAssignmentRepository extends JpaRepository<UserOutlet
           """,
       nativeQuery = true)
   List<UserOutletAssignmentView> findActiveByUserId(String userId);
+
+  /**
+   * Active assignments under an org unit — the unit itself (an OUTLET) or, for a BUSINESS_UNIT, its
+   * child outlets via {@code ou.parent_id} (assignments only ever target outlets by aggregate
+   * invariant, so the parent disjunct is exactly "child outlets"; the tree is one level below a
+   * business unit — ADR 0012). Joined to {@code org_unit} for the outlet name. Served by {@code
+   * idx_user_outlet_assignment_outlet (company_id, org_unit_id)} — the index created for this admin
+   * view. No {@code WHERE company_id} — RLS scopes both tables (rule 5). Used by the org-unit hub's
+   * People tab ({@code GET /api/v1/org-units/{id}/users}).
+   */
+  @Query(
+      value =
+          """
+          SELECT ua.user_id     AS user_id,
+                 ua.org_unit_id AS org_unit_id,
+                 ou.name        AS outlet_name
+            FROM user_outlet_assignment ua
+            JOIN org_unit ou ON ou.id = ua.org_unit_id
+           WHERE ua.active = true
+             AND (ua.org_unit_id = :orgUnitId OR ou.parent_id = :orgUnitId)
+           ORDER BY ou.name, ua.user_id
+          """,
+      nativeQuery = true)
+  List<OrgUnitUserView> findActiveUnderUnit(UUID orgUnitId);
 
   /**
    * All (active + inactive) assignment rows for the given user. Used on the write path (PUT
