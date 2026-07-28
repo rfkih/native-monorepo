@@ -127,6 +127,51 @@ export function useUserOutlets(params: {
   })
 }
 
+/** GET /api/v1/users/{userId}/pages — a user's page-access mode (ALL vs RESTRICTED + keys). */
+export interface UserPages {
+  mode: 'ALL' | 'RESTRICTED'
+  pageKeys: string[]
+}
+
+export function useUserPages(params: {
+  userId: string
+  companyId: string
+  actor: string
+  enabled: boolean
+}) {
+  const { userId, companyId, actor, enabled } = params
+  return useQuery<UserPages>({
+    enabled: enabled && !!userId,
+    queryKey: ['userPages', companyId, userId],
+    queryFn: async () => {
+      const result = await apiFetch<UserPages>(`/api/v1/users/${userId}/pages`, {
+        tenant: { companyId, actor },
+      })
+      return result ?? { mode: 'ALL', pageKeys: [] }
+    },
+  })
+}
+
+/**
+ * PUT /api/v1/users/{userId}/pages — replace the page-grant set for a user.
+ * An empty array clears grants back to the full role surface.
+ */
+export function useSetUserPages(params: { companyId: string; actor: string }) {
+  const { companyId, actor } = params
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ userId, pageKeys }: { userId: string; pageKeys: string[] }) =>
+      apiFetch<UserPages>(`/api/v1/users/${userId}/pages`, {
+        method: 'PUT',
+        tenant: { companyId, actor },
+        body: { pageKeys },
+      }),
+    onSuccess: (_data, { userId }) => {
+      void queryClient.invalidateQueries({ queryKey: ['userPages', companyId, userId] })
+    },
+  })
+}
+
 /**
  * PUT /api/v1/users/{userId}/outlets — replace the outlet assignment set for a user.
  * Sending an empty array restores "unrestricted" (all outlets).

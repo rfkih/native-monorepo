@@ -986,6 +986,19 @@ export const en = {
       errorInvalid: 'One or more outlets are invalid. Reload and try again.',
       errorNotFound: 'This user could not be found. They may have been removed.',
     },
+    editPages: 'Pages',
+    pages: {
+      pos: 'Point of sale',
+      menu: 'Menu management',
+      kitchen: 'Kitchen display',
+    },
+    editPagesDialog: {
+      title: 'Page access',
+      body: 'Choose which pages {{email}} can open. This narrows the console only — it never grants more than their role already allows.',
+      hint: 'All pages checked = the full access their role allows. Their own profile (Me) is always available.',
+      save: 'Save',
+      saving: 'Saving…',
+    },
   },
   menu: {
     title: 'Menu management',

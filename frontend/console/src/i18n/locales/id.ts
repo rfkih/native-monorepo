@@ -982,6 +982,19 @@ export const id = {
       errorInvalid: 'Satu atau lebih gerai tidak valid. Muat ulang dan coba lagi.',
       errorNotFound: 'Pengguna ini tidak ditemukan. Mungkin sudah dihapus.',
     },
+    editPages: 'Halaman',
+    pages: {
+      pos: 'Point of sale',
+      menu: 'Manajemen menu',
+      kitchen: 'Tampilan dapur',
+    },
+    editPagesDialog: {
+      title: 'Akses halaman',
+      body: 'Pilih halaman yang dapat dibuka {{email}}. Ini hanya mempersempit konsol — tidak pernah memberi lebih dari yang sudah diizinkan perannya.',
+      hint: 'Semua halaman dicentang = akses penuh sesuai perannya. Profil sendiri (Saya) selalu tersedia.',
+      save: 'Simpan',
+      saving: 'Menyimpan…',
+    },
   },
   menu: {
     title: 'Manajemen menu',

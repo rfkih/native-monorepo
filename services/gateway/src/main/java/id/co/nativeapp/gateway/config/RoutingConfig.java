@@ -118,6 +118,28 @@ public class RoutingConfig {
         .build();
   }
 
+  /**
+   * {@code GET /api/v1/users/me/pages} — the caller's own page-access mode. Allowed for EVERY
+   * business role (a login reads its own grants) via {@code ME_ROLES}. Like {@link
+   * #userMeOutletsRoute}, this exact path must be ordered before the general {@code /users/**}
+   * (DASHBOARD_ROLES) route — {@code @Order(HIGHEST_PRECEDENCE)} makes the specific match win, so
+   * an {@code employee}/{@code cashier} login is not 403'd reading its own page grants.
+   */
+  @Bean
+  @Order(Ordered.HIGHEST_PRECEDENCE)
+  RouterFunction<ServerResponse> userMePagesRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("org-service-user-me-pages")
+        .route(path("/api/v1/users/me/pages"), http())
+        .before(uri(routes.orgService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(ME_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
   @Bean
   RouterFunction<ServerResponse> usersRoute(
       GatewayRouteProperties routes,

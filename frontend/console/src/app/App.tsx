@@ -3,6 +3,7 @@ import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import { Shell } from '@/app/Shell'
 import { Spinner } from '@/components/ui/Spinner'
 import { hasAnyRole, useAuth } from '@/lib/authContext'
+import { usePageAccess } from '@/lib/pageAccess'
 import { useSession } from '@/lib/session'
 
 // Route-level code splitting — keeps Recharts (dashboard) out of the POS path.
@@ -98,6 +99,9 @@ export function App() {
   const auth = useAuth()
   const { company, loading } = useSession()
   const { pathname } = useLocation()
+  // Per-login page grants (owner/manager bypass; others fetch /me/pages). Called unconditionally
+  // (hooks rule); its result is only consulted once we reach the authenticated routing below.
+  const pageAccess = usePageAccess()
 
   // Public routes render immediately — no auth redirect, no role check, no spinner.
   if (PUBLIC_PATHS.has(pathname)) {
@@ -130,8 +134,8 @@ export function App() {
     )
   }
 
-  // Authenticated → wait for the signed-in company to load, then route the role-gated app.
-  if (loading) {
+  // Authenticated → wait for the signed-in company AND the page grants to load, then route.
+  if (loading || !pageAccess.ready) {
     return <FullScreenSpinner />
   }
 
@@ -147,16 +151,23 @@ export function App() {
     )
   }
 
-  // Landing per role: back office → POS → the employee self-service surface.
-  const home = canDashboard ? '/' : canPos ? '/pos' : '/me'
+  // POS surfaces additionally honour the per-login page grants (a cashier may keep the POS but
+  // lose the kitchen display, etc.). /me is the always-available floor — never page-gated, so a
+  // login can never be locked out of everything.
+  const posAllowed = canPos && pageAccess.isAllowed('pos')
+  const menuAllowed = canPos && pageAccess.isAllowed('menu')
+  const kitchenAllowed = canPos && pageAccess.isAllowed('kitchen')
+
+  // Landing per role: back office → POS (if still granted) → the employee self-service surface.
+  const home = canDashboard ? '/' : posAllowed ? '/pos' : '/me'
 
   return (
     <Suspense fallback={<CenteredSpinner />}>
       <Routes>
         {/* The POS is a full-screen "front office" — it renders OUTSIDE the sidebar/topbar shell. */}
-        {canPos && <Route path="/pos" element={<Pos />} />}
-        {canPos && <Route path="/menu" element={<MenuManagement />} />}
-        {canPos && <Route path="/kitchen" element={<Kitchen />} />}
+        {posAllowed && <Route path="/pos" element={<Pos />} />}
+        {menuAllowed && <Route path="/menu" element={<MenuManagement />} />}
+        {kitchenAllowed && <Route path="/kitchen" element={<Kitchen />} />}
 
         {/* The employee self-service surface — full-screen, any business role may open it. */}
         <Route path="/me" element={<Me />} />

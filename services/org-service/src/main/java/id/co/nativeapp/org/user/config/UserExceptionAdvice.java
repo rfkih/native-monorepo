@@ -1,6 +1,7 @@
 package id.co.nativeapp.org.user.config;
 
 import id.co.nativeapp.org.user.service.InvalidOutletAssignmentException;
+import id.co.nativeapp.org.user.service.InvalidPageKeyException;
 import id.co.nativeapp.org.user.service.InvalidRoleException;
 import id.co.nativeapp.org.user.service.InvalidUnitUsersTargetException;
 import id.co.nativeapp.org.user.service.OrgUnitNotFoundException;
@@ -94,6 +95,19 @@ public class UserExceptionAdvice {
       InvalidOutletAssignmentException ex, HttpServletRequest request) {
     ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
     problem.setType(URI.create(TYPE_BASE + "invalid-outlet-assignment"));
+    problem.setTitle("Bad Request");
+    problem.setDetail(ex.getMessage());
+    problem.setInstance(URI.create(request.getRequestURI()));
+    addTraceId(problem);
+    return problem;
+  }
+
+  /** A page grant referencing a key outside the whitelist → {@code 400 Bad Request}. */
+  @ExceptionHandler(InvalidPageKeyException.class)
+  public ProblemDetail handleInvalidPageKey(
+      InvalidPageKeyException ex, HttpServletRequest request) {
+    ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+    problem.setType(URI.create(TYPE_BASE + "invalid-page-key"));
     problem.setTitle("Bad Request");
     problem.setDetail(ex.getMessage());
     problem.setInstance(URI.create(request.getRequestURI()));
