@@ -3,10 +3,12 @@ package id.co.nativeapp.employee.employee.service;
 import id.co.nativeapp.employee.assignment.dto.AssignmentResponse;
 import id.co.nativeapp.employee.assignment.repository.AssignmentRepository;
 import id.co.nativeapp.employee.employee.domain.Employee;
+import id.co.nativeapp.employee.employee.dto.ContractResponse;
 import id.co.nativeapp.employee.employee.dto.EmployeeListRowResponse;
 import id.co.nativeapp.employee.employee.dto.EmployeeResponse;
 import id.co.nativeapp.employee.employee.dto.EmployeeWithAssignmentsResponse;
 import id.co.nativeapp.employee.employee.repository.EmployeeRepository;
+import id.co.nativeapp.employee.employee.repository.EmploymentContractRepository;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
@@ -38,14 +40,17 @@ public class EmployeeReader {
 
   private final EmployeeRepository employeeRepository;
   private final AssignmentRepository assignmentRepository;
+  private final EmploymentContractRepository contractRepository;
   private final Clock clock;
 
   public EmployeeReader(
       EmployeeRepository employeeRepository,
       AssignmentRepository assignmentRepository,
+      EmploymentContractRepository contractRepository,
       Clock clock) {
     this.employeeRepository = employeeRepository;
     this.assignmentRepository = assignmentRepository;
+    this.contractRepository = contractRepository;
     this.clock = clock;
   }
 
@@ -107,8 +112,9 @@ public class EmployeeReader {
   }
 
   /**
-   * The employee (PII masked) plus its assignments, within the bound tenant. Empty if no such
-   * employee is visible (unknown id, or another tenant's — invisible under RLS).
+   * The employee (PII masked) plus its assignments and contracts, within the bound tenant. Empty if
+   * no such employee is visible (unknown id, or another tenant's — invisible under RLS). The
+   * contracts are what a compensation package references — the console needs their ids.
    */
   @Transactional(readOnly = true)
   public Optional<EmployeeWithAssignmentsResponse> findWithAssignments(UUID employeeId) {
@@ -120,8 +126,12 @@ public class EmployeeReader {
                   assignmentRepository.findByEmployeeId(employeeId).stream()
                       .map(AssignmentResponse::from)
                       .toList();
+              List<ContractResponse> contracts =
+                  contractRepository.findByEmployeeId(employeeId).stream()
+                      .map(ContractResponse::from)
+                      .toList();
               return new EmployeeWithAssignmentsResponse(
-                  EmployeeResponse.from(employee), assignments);
+                  EmployeeResponse.from(employee), assignments, contracts);
             });
   }
 }
