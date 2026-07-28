@@ -70,7 +70,15 @@ cascade-deactivate + reactivation.)
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
 - **Business-unit verticals — restaurant | carwash | barbershop (2026-07-28)** — `org_unit.vertical`
-  (org V6: nullable VARCHAR(32); backfill existing BUs → `restaurant`): REQUIRED on every
+  (org V6: nullable VARCHAR(32); backfill existing BUs → `restaurant`. **The V6 backfill was
+  silently swallowed by FORCE RLS** — Flyway runs as the table owner with no tenant GUC, the
+  policy filtered the UPDATE to zero rows, and Flyway reported success; caught on the live dev DB,
+  invisible to acceptance tests (they only create rows post-migration). V7 redoes it inside the
+  `NO FORCE ROW LEVEL SECURITY` escape hatch — restaurant-service V6 is the fleet precedent —
+  pinned by `VerticalBackfillMigrationTest`, which migrates→V5, plants a pre-existing BU over the
+  BYPASSRLS admin connection, migrates→latest as the owner role, and asserts the backfill landed.
+  **Lesson: any migration UPDATE on an RLS-forced table needs the NO FORCE hatch or a
+  self-checking follow-up like V2's `SET NOT NULL`.**): REQUIRED on every
   BUSINESS_UNIT creation path (signup, create-company, add-business, org-units), rejected for
   outlet/team, IMMUTABLE after create (like base currency: `updatable = false`, no PATCH path).
   **Casing decision:** stored/emitted/requested as LOWERCASE module-key strings via a JPA

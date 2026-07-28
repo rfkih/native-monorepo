@@ -46,7 +46,7 @@ deploy/             Kustomize base + per-service overlays (#24, author-only-unve
 | service | what it owns | produces (event) | consumes | DB migrations |
 |---|---|---|---|---|
 | **gateway** | the only external edge: JWKS-validates the JWT, injects `X-Company-Id/X-Actor/X-Roles`, Redis rate-limit. Reactive Spring Cloud Gateway, **no DB**. Packages: `security/filter/ratelimit/config` (not JPA layers). | — | — | — |
-| **org-service** | company (immutable base_currency + default_language), org tree (unit/outlet/team/legal_employer, ADR 0012; business units carry an immutable LOWERCASE `vertical`: restaurant \| carwash \| barbershop), user-outlet assignments, consolidation_group + membership | CompanyCreated, OrgUnitCreated/Changed, UserOutletAssignmentChanged, GroupDefined, GroupMembershipChanged | — | V1–V6 |
+| **org-service** | company (immutable base_currency + default_language), org tree (unit/outlet/team/legal_employer, ADR 0012; business units carry an immutable LOWERCASE `vertical`: restaurant \| carwash \| barbershop), user-outlet assignments, consolidation_group + membership | CompanyCreated, OrgUnitCreated/Changed, UserOutletAssignmentChanged, GroupDefined, GroupMembershipChanged | — | V1–V7 |
 | **restaurant-service** | 1st vertical: `sale` aggregate | SaleRecorded | — | V1 |
 | **carwash-service** | 2nd vertical: `wash`, entitlement-gated; metrics | SaleRecorded, MetricPublished | EntitlementGranted/Revoked, EmployeeChanged, AssignmentChanged | V1 |
 | **employee-service** | HR: employee/assignment (PII-encrypted) + **payroll engine** (gross-to-net, flagged-illustrative statutory) | EmployeeChanged, AssignmentChanged, PayrollPosted, LaborCostAllocated | OrgUnitCreated/Changed, MetricPublished, PeriodSealed | V1–V3 |
