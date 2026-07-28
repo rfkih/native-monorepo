@@ -71,7 +71,46 @@ class UnitPnlReaderTest extends PostgresRlsTestBase {
   }
 
   @Test
-  void reversalRowsNetAgainstPrimaryInTheRollup() throws Exception {
+  void revenueIsTheNetAccumulatorNotTheLedgerGrandTotal() throws Exception {
+    // C1 regression pin: a Phase-2 sale carries subtotal/discount/serviceCharge/tax; the
+    // ledger posting stores the GRAND TOTAL (customer-pays) while every P&L surface reports
+    // NET revenue (subtotal − discount). The rollup must report NET — the same figure
+    // GET /api/v1/pnl and /pnl/outlets serve — never the ledger sum.
+    String tenant = UUID.randomUUID().toString();
+    UUID bu = UUID.randomUUID();
+    UUID outlet = UUID.randomUUID();
+    insertOrgUnitRef(bu, tenant, "BUSINESS_UNIT", null, "HQ", true);
+    insertOrgUnitRef(outlet, tenant, "OUTLET", bu, "Outlet", true);
+
+    // subtotal 100k − discount 10k + serviceCharge 5k + tax 11k = grand total 106k; net 90k.
+    revenuePostingService.handle(
+        new SaleRecordedEvent(
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            tenant,
+            outlet,
+            Money.ofMinor(106_000L, "IDR"),
+            OCCURRED,
+            "CASH",
+            100_000L,
+            10_000L,
+            5_000L,
+            11_000L,
+            "tax-v1",
+            false));
+
+    Optional<UnitPnlResponse> result =
+        TenantContext.callAs(tenant, ACTOR, () -> unitPnlReader.unitPnlForPeriod(bu, PERIOD));
+
+    assertThat(result).isPresent();
+    assertThat(result.get().revenueMinor())
+        .as("unit rollup revenue must be NET (subtotal − discount), not the grand total")
+        .isEqualTo(90_000L);
+    assertThat(result.get().outlets().get(0).revenueMinor()).isEqualTo(90_000L);
+  }
+
+  @Test
+  void expenseReversalRowsNetAgainstPrimaryInTheRollup() throws Exception {
     String tenant = UUID.randomUUID().toString();
     UUID bu = UUID.randomUUID();
     UUID outlet = UUID.randomUUID();
@@ -79,18 +118,18 @@ class UnitPnlReaderTest extends PostgresRlsTestBase {
     insertOrgUnitRef(outlet, tenant, "OUTLET", bu, "Outlet", true);
 
     postSale(tenant, outlet, 200_000L);
-    // A REVERSAL contra row exactly as ReversalPostingWriter writes it (negative amount,
-    // posting_role = REVERSAL, same business/period/type). The reversal writer's own behavior
-    // is proven by OutletRevenueReversalTest; here we prove the rollup's signed SUM nets it.
-    insertLedgerPosting(tenant, outlet, "REVENUE", -80_000L, "REVERSAL", false);
+    // Labor-style EXPENSE rows: a PRIMARY and its supersession REVERSAL (negative) — the
+    // signed SUM on the expense leg must net them. (Revenue-side void/refund netting lives
+    // in the outlet_revenue accumulator, proven by OutletRevenueReversalTest.)
+    insertLedgerPosting(tenant, outlet, "EXPENSE", 50_000L, "PRIMARY", false);
+    insertLedgerPosting(tenant, outlet, "EXPENSE", -20_000L, "REVERSAL", false);
 
     Optional<UnitPnlResponse> result =
         TenantContext.callAs(tenant, ACTOR, () -> unitPnlReader.unitPnlForPeriod(bu, PERIOD));
 
     assertThat(result).isPresent();
-    assertThat(result.get().revenueMinor()).isEqualTo(120_000L);
-    assertThat(result.get().netMinor()).isEqualTo(120_000L);
-    assertThat(result.get().outlets().get(0).revenueMinor()).isEqualTo(120_000L);
+    assertThat(result.get().expenseMinor()).isEqualTo(30_000L);
+    assertThat(result.get().netMinor()).isEqualTo(170_000L);
   }
 
   @Test

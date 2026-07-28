@@ -127,6 +127,26 @@ class OrgUnitUsersAcceptanceTest extends PostgresRlsTestBase {
   }
 
   @Test
+  void aClosedAssignmentIsExcluded() throws Exception {
+    Setup s = bootstrap("HubClosed");
+    TenantContext.runAs(
+        s.companyId().toString(),
+        ACTOR,
+        () -> assignmentWriter.replaceAssignments(USER_A, List.of(s.seededOutletId())));
+    // Replace-set with an empty list closes the assignment (active = false, kept for audit).
+    TenantContext.runAs(
+        s.companyId().toString(),
+        ACTOR,
+        () -> assignmentWriter.replaceAssignments(USER_A, List.of()));
+
+    List<OrgUnitUserResponse> users =
+        TenantContext.callAs(
+            s.companyId().toString(), ACTOR, () -> orgUnitUsersReader.usersForUnit(s.rootId()));
+
+    assertThat(users).as("closed (inactive) assignments must not appear").isEmpty();
+  }
+
+  @Test
   void aTeamTargetIsRejected() throws Exception {
     Setup s = bootstrap("HubTeam");
     UUID teamId =

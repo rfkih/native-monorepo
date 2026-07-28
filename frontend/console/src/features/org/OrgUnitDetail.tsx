@@ -218,9 +218,13 @@ export function OrgUnitDetail() {
           icon={<Wallet className="size-5" aria-hidden="true" />}
           label={t('orgHub.smart.net')}
           figure={
-            pnlQuery.isLoading ? '…' : formatMoney(pnl?.netMinor ?? 0, currency, locale)
+            pnlQuery.isLoading
+              ? '…'
+              : pnlQuery.isError
+                ? '—'
+                : formatMoney(pnl?.netMinor ?? 0, currency, locale)
           }
-          tone={netTone}
+          tone={pnlQuery.isError ? undefined : netTone}
           onClick={() => setTab('overview')}
         />
       </div>

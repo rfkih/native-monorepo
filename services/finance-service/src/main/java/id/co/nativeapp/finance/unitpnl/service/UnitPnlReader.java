@@ -62,7 +62,7 @@ public class UnitPnlReader {
     List<UnitPnlResponse.OutletPnlRow> outlets = new ArrayList<>();
 
     for (UnitPnlRowView row : rows) {
-      if (row.getCurrencyCount() > 1) {
+      if (row.getRevenueCurrencyCount() > 1 || row.getExpenseCurrencyCount() > 1) {
         throw new IllegalStateException(
             "Mixed posting currencies under org unit "
                 + orgUnitId
@@ -73,16 +73,8 @@ public class UnitPnlReader {
       revenue = Math.addExact(revenue, row.getRevenueMinor());
       expense = Math.addExact(expense, row.getExpenseMinor());
       illustrative = illustrative || Boolean.TRUE.equals(row.getUsesIllustrativeRules());
-      if (row.getCurrency() != null) {
-        if (currency != null && !currency.strip().equals(row.getCurrency().strip())) {
-          throw new IllegalStateException(
-              "Mixed posting currencies across org units under "
-                  + orgUnitId
-                  + " for period "
-                  + period);
-        }
-        currency = row.getCurrency().strip();
-      }
+      currency = mergeCurrency(currency, row.getRevenueCurrency(), orgUnitId, period);
+      currency = mergeCurrency(currency, row.getExpenseCurrency(), orgUnitId, period);
       if (!row.getOrgUnitId().equals(orgUnitId)) {
         outlets.add(
             new UnitPnlResponse.OutletPnlRow(
@@ -105,5 +97,19 @@ public class UnitPnlReader {
             currency,
             illustrative,
             List.copyOf(outlets)));
+  }
+
+  /** Folds one leg's currency into the running one; a disagreement fails loud (M1.5). */
+  private static String mergeCurrency(
+      String current, String candidate, UUID orgUnitId, String period) {
+    if (candidate == null) {
+      return current;
+    }
+    String stripped = candidate.strip();
+    if (current != null && !current.equals(stripped)) {
+      throw new IllegalStateException(
+          "Mixed posting currencies across org units under " + orgUnitId + " for period " + period);
+    }
+    return stripped;
   }
 }

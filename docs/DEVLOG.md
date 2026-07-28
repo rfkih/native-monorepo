@@ -69,6 +69,35 @@ cascade-deactivate + reactivation.)
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **Org-unit hub — Odoo-style record detail (2026-07-28)** — clicking a BUSINESS_UNIT or OUTLET
+  in `/org` now opens `/org/:unitId` (the app's first param route): breadcrumb, sheet header
+  (type badge + status + rename/(de|re)activate via dialogs lifted into `features/org/parts.tsx`),
+  Odoo-style smart buttons (Outlets / People / This-period Net; an outlet shows a parent-unit
+  related-record link), and Segmented notebook tabs. **Overview** = per-unit P&L from the new
+  finance `unitpnl` feature (`GET /api/v1/pnl/org-units/{id}` — ONE native query rolls up the unit
+  + child outlets via `org_unit_ref.parent_id` [captured in V22, queried for the first time] LEFT
+  JOINed to `ledger_posting` with signed FILTER sums; V23 adds the two access-path indexes; 204 /
+  zeros-with-currency-hint mirror PnlController; the labor UNALLOCATED sentinel is excluded
+  structurally). **People** = new org `GET /api/v1/org-units/{id}/users` (assignments under the
+  unit's outlet set in-SQL, identity joined client-side from the cached team list; 404
+  unknown/foreign anti-enumeration, 400 TEAM). **Outlets** tab manages children inline (Add preset
+  to the BU). **Expenses/Payroll** ship as coming-soon panels — no expense producer exists and
+  employee-service is not gateway-routed. Zero gateway work (both endpoints under already-routed
+  prefixes). Live-E2E-caught fix: `org_unit_ref.type` stores the EVENT value — the enum NAME,
+  UPPERCASE (`OrgUnitCreatedSchema` emits `.name()`), while V22 comments + one contract fixture
+  misleadingly suggested lowercase; the rollup predicate is now case-insensitive. Also deflaked
+  `OrgUnitRefConsumeAcceptanceTest` (its cross-topic drain marker guaranteed no ordering; the
+  tests now await the expected state). Review (fresh context) FAILED once on a REAL money bug the
+  E2E's untaxed sale could not show: the rollup summed `ledger_posting.amount_minor` — the GRAND
+  TOTAL (incl. service charge + tax) — while every other surface reports NET revenue; fixed by
+  sourcing the revenue leg from the `outlet_revenue` NET accumulator (the same source
+  `/pnl/outlets` serves; reversal netting lives in the accumulator) with expenses still signed-
+  summed from the ledger, pinned by a regression test posting a fully-taxed Phase-2 sale
+  (106k gross / 90k net). Re-review deltas also added the closed-assignment exclusion test and a
+  smart-button error state. Follow-ups: expense-entry slice (producer + UI) and the HR/payroll
+  console (needs gateway routing + list endpoints + tax-SME statutory figures) unlock the two
+  disabled tabs; W2 (positively re-prove duplicate-delivery consumption in the deflaked consume
+  test, e.g. via processed_event) noted as nice-to-have.
 - **Org-tree flattening — outlet IS the branch (ADR 0012, 2026-07-28)** — nine atomic commits
   remove the BRANCH level (`business_unit > outlet > team`; `OrgUnitType` is the single encoding),
   seed **one default OUTLET under every new business unit** (company bootstrap AND add-business,
