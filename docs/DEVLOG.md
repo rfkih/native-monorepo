@@ -74,6 +74,44 @@ cascade-deactivate + reactivation.)
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **Accounts Receivable — Phase 1 of the Odoo accounting-parity program (2026-07-28, ADR 0014)** —
+  the first transactional AR layer + the first customer/party dimension in Native, all in
+  **finance-service** (`ar/` feature). Customers, invoices (draft → issue → (partially) paid | void),
+  payments/receipts, and an AR aging report. Invoices post to the existing double-entry GL **in the
+  same transaction** as the sub-ledger write (no cross-service sync) via a new generic
+  `JournalPostingService.buildEntryFromBreakdown` (an `amount_basis → Money` map reusing the
+  `GROSS`/`GROSS_REVENUE`/`TAX` vocabulary — the SALE path untouched): **issue** Dr AR (1200) / Cr
+  revenue (4000, net) / Cr output VAT (2200, tax, zero-omitted when non-taxable); **payment** Dr
+  cash-clearing / Cr AR; **void** the contra. New `AccountRole.AR`/`VAT_OUTPUT` (already anticipated
+  in the enum javadoc) + `EventKind.INVOICE_ISSUED`/`PAYMENT_RECEIVED`/`INVOICE_VOID`; illustrative
+  COA/roles/templates seeded in **V25** (V24 = the four Auditable + FORCE-RLS AR tables). AR flows
+  into the GL-derived **income statement + balance sheet** automatically (1200 AR = ASSET); it does
+  NOT feed the dimensional POS `/pnl` dashboard (deliberate — the GL statements are authoritative).
+  Reads are native-query projections (RLS-scoped, no `WHERE company_id`); aging buckets outstanding
+  invoices by days-overdue in the reader. Gateway routes `/api/v1/customers|invoices|ar/**`
+  (DASHBOARD_ROLES). Decisions (ADR 0014): AR is finance-local; customer is finance-local; sub-ledger
+  drives aging (the GL journal has no counterparty dimension); **single-currency** (base ccy);
+  **output tax flagged-illustrative** (PPN 11% placeholder, `uses_illustrative_rules` badged
+  "Estimated", SME-gated like POS); **events deferred to Phase 1b** (no mail transport yet, so no new
+  event added to the catalog). Invoice number = per-tenant `INV-NNNNN` via a `pg_advisory_xact_lock` +
+  RLS-scoped COUNT (UNIQUE backstop). **Verified: the whole finance suite (367 tests) green**,
+  including `ArTenancyIsolationTest` — an end-to-end Testcontainers test that drives create → issue
+  (11% VAT: 1,000,000 → 1,110,000) → part-pay (300,000, outstanding 810,000) → aging against real
+  PostgreSQL as the unprivileged `app_user` and proves cross-tenant RLS invisibility. ArchUnit
+  layering + web-slice contract tests (201/400/404/409 RFC-7807) + gateway build green. **Deliberate
+  Phase-1 exclusions** (later sub-steps): multi-currency invoices, credit notes, recurring invoices,
+  PDF/email delivery, dunning, fractional line quantities. **Console AR feature built** (Customers /
+  Invoices list+detail / New-invoice / Aging; additive to the console over the page-grants WIP, npm
+  build green). **Two adversarial code-review rounds** (backend + frontend) landed fixes: payment
+  idempotency (`Idempotency-Key` required + scoped per-invoice, V26 unique index; console sends a
+  fresh key per submit); the single-base-currency guard on issue/void/payment (M1/W-1) → 422; aging
+  mixed-currency guard; overpay client-validation + aging-cache invalidation. **Residual follow-ups
+  (tracked):** the sale/expense currency guard reads `consolidated_pnl` while AR reads `journal_entry`
+  — a unified single-currency-GL guard across ALL producers is deferred (defense-in-depth; unreachable
+  in a correct single-currency tenant, base ccy immutable); AR list/aging pagination envelope (interim
+  `LIMIT 500` on the two lists; aging still aggregates in-memory). Program roadmap → ~100% Odoo
+  accounting: **(1) AR ✓**, (2) AP, (3) Bank & reconciliation, (4) Tax/e-invoicing, (5) Cash-flow &
+  budgets, (6) Fixed assets & deferrals.
 - **Employee logins + self-service /me + page grants + own-sales commission (2026-07-28)** — HR
   employees became loggable-in users with a dashboard of their own and a commission on the sales they
   ring. Six phases (A–F). **A/B — logins:** reused the org-service invite flow to create a Keycloak
