@@ -3,6 +3,8 @@ package id.co.nativeapp.employee.assignment.service;
 import id.co.nativeapp.employee.assignment.domain.Assignment;
 import id.co.nativeapp.employee.assignment.dto.AddAssignmentCommand;
 import id.co.nativeapp.tenant.TenantContext;
+import java.time.LocalDate;
+import java.util.UUID;
 import org.springframework.stereotype.Service;
 
 /**
@@ -34,5 +36,18 @@ public class AssignmentService {
   public Assignment add(AddAssignmentCommand command) {
     TenantContext.require();
     return writer.create(command);
+  }
+
+  /**
+   * Ends an open assignment (effective-dated close) and emits {@code AssignmentChanged}.
+   *
+   * @throws id.co.nativeapp.employee.assignment.domain.AssignmentNotFoundException if the
+   *     assignment is not visible for that employee in the bound tenant (→ 404)
+   * @throws id.co.nativeapp.employee.assignment.domain.AssignmentAlreadyEndedException if it is not
+   *     open (→ 409)
+   */
+  public Assignment end(UUID employeeId, UUID assignmentId, LocalDate endOn) {
+    TenantContext.require();
+    return writer.end(employeeId, assignmentId, endOn);
   }
 }

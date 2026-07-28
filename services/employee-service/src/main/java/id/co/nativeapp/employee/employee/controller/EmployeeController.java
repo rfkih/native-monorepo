@@ -7,6 +7,7 @@ import id.co.nativeapp.employee.employee.dto.AddContractRequest;
 import id.co.nativeapp.employee.employee.dto.ContractResponse;
 import id.co.nativeapp.employee.employee.dto.CreateEmployeeCommand;
 import id.co.nativeapp.employee.employee.dto.CreateEmployeeRequest;
+import id.co.nativeapp.employee.employee.dto.EmployeeListRowResponse;
 import id.co.nativeapp.employee.employee.dto.EmployeeResponse;
 import id.co.nativeapp.employee.employee.dto.EmployeeWithAssignmentsResponse;
 import id.co.nativeapp.employee.employee.dto.UpdateEmployeeCommand;
@@ -17,7 +18,10 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
+import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -25,6 +29,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -122,6 +127,24 @@ public class EmployeeController {
     return ResponseEntity.created(
             URI.create("/api/v1/employees/" + employeeId + "/contracts/" + body.id()))
         .body(body);
+  }
+
+  @Operation(
+      summary = "List employees (console HR list)",
+      description =
+          "One row per (employee x current assignment in scope). orgUnitIds restricts to"
+              + " employees currently assigned in ANY of the given org units (the console passes a"
+              + " business unit plus its child outlets); without it the whole tenant lists,"
+              + " including employees with no current assignment (null assignment fields). No PII"
+              + " on this path; hasCompensation only says whether a covering package exists.")
+  @GetMapping
+  public List<EmployeeListRowResponse> listEmployees(
+      @RequestParam(required = false) List<UUID> orgUnitIds,
+      @RequestParam(required = false) String status,
+      @RequestParam(required = false) String q,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate asOf) {
+    return employeeReader.list(orgUnitIds, status, q, asOf);
   }
 
   @Operation(

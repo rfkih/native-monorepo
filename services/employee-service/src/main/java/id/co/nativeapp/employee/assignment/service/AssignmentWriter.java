@@ -1,6 +1,7 @@
 package id.co.nativeapp.employee.assignment.service;
 
 import id.co.nativeapp.employee.assignment.domain.Assignment;
+import id.co.nativeapp.employee.assignment.domain.AssignmentNotFoundException;
 import id.co.nativeapp.employee.assignment.domain.ConflictingLegalEmployerException;
 import id.co.nativeapp.employee.assignment.dto.AddAssignmentCommand;
 import id.co.nativeapp.employee.assignment.messaging.AssignmentChangedSchema;
@@ -14,6 +15,7 @@ import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import org.apache.avro.generic.GenericRecord;
@@ -114,6 +116,47 @@ public class AssignmentWriter {
     enforceSameLegalEmployer(assignment, targetLegalEmployerId);
 
     assignment.setCompanyId(tenant);
+    Assignment saved = assignmentRepository.save(assignment);
+    assignmentRepository.flush();
+
+    GenericRecord event = AssignmentChangedSchema.toRecord(saved);
+    outboxWriter.write(
+        AssignmentChangedSchema.AGGREGATE_TYPE,
+        saved.getId().toString(),
+        AssignmentChangedSchema.EVENT_TYPE,
+        AvroSerde.serialize(event),
+        null,
+        companyId,
+        clock.instant());
+    return saved;
+  }
+
+  /**
+   * Ends an open assignment on the given date (effective-dated close) and emits a second {@code
+   * AssignmentChanged} for the SAME aggregate — consumers upsert by {@code assignment_id}, so the
+   * updated {@code effective_to} supersedes the create event's. Atomic with the update (rule 3).
+   *
+   * <p>The assignment must be visible under RLS AND belong to the path's employee — an unknown id,
+   * another employee's assignment, and another tenant's all collapse to the same 404
+   * (anti-enumeration).
+   *
+   * @throws AssignmentNotFoundException if no such assignment is visible for that employee (→ 404)
+   * @throws id.co.nativeapp.employee.assignment.domain.AssignmentAlreadyEndedException if the
+   *     assignment is not open (→ 409)
+   * @throws IllegalArgumentException if {@code endOn} is before {@code effectiveFrom} (→ 400)
+   */
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public Assignment end(UUID employeeId, UUID assignmentId, LocalDate endOn) {
+    String tenant = TenantContext.require().companyId();
+    UUID companyId = UUID.fromString(tenant);
+
+    Assignment assignment =
+        assignmentRepository
+            .findById(assignmentId)
+            .filter(a -> a.getEmployeeId().equals(employeeId))
+            .orElseThrow(() -> new AssignmentNotFoundException(assignmentId));
+
+    assignment.end(endOn);
     Assignment saved = assignmentRepository.save(assignment);
     assignmentRepository.flush();
 

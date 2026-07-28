@@ -1,5 +1,7 @@
 package id.co.nativeapp.employee.config;
 
+import id.co.nativeapp.employee.assignment.domain.AssignmentAlreadyEndedException;
+import id.co.nativeapp.employee.assignment.domain.AssignmentNotFoundException;
 import id.co.nativeapp.employee.assignment.domain.ConflictingLegalEmployerException;
 import id.co.nativeapp.employee.employee.domain.EmployeeNotFoundException;
 import id.co.nativeapp.employee.payroll.domain.IncompletePeriodException;
@@ -66,6 +68,28 @@ public class EmployeeApiAdvice {
     ProblemDetail problem = problem(HttpStatus.CONFLICT, "incomplete-period", request);
     problem.setTitle("Period not complete");
     // The message names only business-unit ids (UUIDs), never PII (rule 6).
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /** Ending an assignment that is no longer open → 409 Conflict. */
+  @ExceptionHandler(AssignmentAlreadyEndedException.class)
+  public ProblemDetail handleAssignmentAlreadyEnded(
+      AssignmentAlreadyEndedException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.CONFLICT, "assignment-already-ended", request);
+    problem.setTitle("Assignment already ended");
+    // The message names only the assignment id (a UUID), never PII (rule 6).
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /** An operation referencing an assignment not visible for that employee → 404 Not Found. */
+  @ExceptionHandler(AssignmentNotFoundException.class)
+  public ProblemDetail handleAssignmentNotFound(
+      AssignmentNotFoundException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.NOT_FOUND, "assignment-not-found", request);
+    problem.setTitle("Assignment not found");
+    // The message names only the assignment id (a UUID), never PII (rule 6).
     problem.setDetail(ex.getMessage());
     return problem;
   }

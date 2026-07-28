@@ -90,6 +90,26 @@ public class Assignment extends Auditable {
   }
 
   /**
+   * Ends this assignment on the given date (effective-dated close — never a delete). Only an OPEN
+   * assignment (one still at the {@link #OPEN_ENDED} sentinel) can be ended: an already-ended
+   * assignment is a state conflict, not a re-editable value.
+   *
+   * @param endOn the last effective day; must be on or after {@code effectiveFrom}
+   * @throws AssignmentAlreadyEndedException if the assignment is not open (→ 409)
+   * @throws IllegalArgumentException if {@code endOn} is before {@code effectiveFrom} (→ 400)
+   */
+  public void end(LocalDate endOn) {
+    Objects.requireNonNull(endOn, "endOn");
+    if (!OPEN_ENDED.equals(this.effectiveTo)) {
+      throw new AssignmentAlreadyEndedException(this.id);
+    }
+    if (endOn.isBefore(this.effectiveFrom)) {
+      throw new IllegalArgumentException("endOn must not be before effectiveFrom");
+    }
+    this.effectiveTo = endOn;
+  }
+
+  /**
    * Whether this assignment's effective period overlaps the given period — i.e. the two are
    * <em>concurrent</em>. Ranges are treated as inclusive on both ends (an assignment ending on the
    * same day another begins is considered to overlap, the conservative choice for the
