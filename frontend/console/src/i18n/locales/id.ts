@@ -488,6 +488,30 @@ export const id = {
       actionEdit: 'Ubah',
       actionEndAssignment: 'Akhiri penugasan',
       actionTerminate: 'Berhentikan',
+      actionCreateLogin: 'Buat login',
+      hasLogin: 'Punya login',
+    },
+    createLogin: {
+      title: 'Buat login — {{name}}',
+      email: 'Alamat email',
+      emailHint: 'Menjadi nama pengguna. Karyawan masuk dengannya plus kata sandi sekali pakai.',
+      posCheckbox: 'Bisa menjalankan POS',
+      posCheckboxHint:
+        'Juga memberi peran kasir, sehingga login ini bisa membuka POS dan mencatat penjualan — sumber komisi penjualan pribadinya.',
+      submit: 'Buat login',
+      creating: 'Membuat…',
+      emailTaken: 'Login dengan email itu sudah ada.',
+      doneTitle: 'Login dibuat untuk {{name}}',
+      doneBody:
+        'Bagikan kata sandi sekali pakai di bawah. Karyawan wajib menggantinya saat pertama masuk.',
+      tempPassword: 'Kata sandi sekali pakai',
+      tempPasswordNote:
+        'Hanya tampil sekali — salin sekarang. Tidak disimpan dan tidak bisa dipulihkan, hanya bisa direset.',
+      close: 'Selesai',
+      linkFailedTitle: 'Login dibuat, tetapi belum tertaut',
+      linkFailedBody:
+        'Login sudah ada, tetapi penautan ke karyawan gagal. Ulangi penautan — login aman dipakai ulang.',
+      retryLink: 'Ulangi penautan',
     },
     roles: {
       chef: 'Koki',
@@ -880,6 +904,7 @@ export const id = {
       owner: 'Pemilik',
       manager: 'Manajer',
       cashier: 'Kasir',
+      employee: 'Karyawan',
     },
     inviteDialog: {
       title: 'Undang anggota tim',

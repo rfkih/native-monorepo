@@ -359,13 +359,13 @@ public class KeycloakAdminClient {
    *
    * @param email the new user's email (also used as username)
    * @param companyId the tenant company id to set as the {@code company_id} user attribute
-   * @param role the initial realm role to assign (must be one of owner/manager/cashier)
+   * @param roles the realm roles to assign (validated by the caller; assigned sequentially)
    * @return the {@link InviteResult} containing the new Keycloak user id and the one-time temporary
    *     password — NEVER log or store the password
    * @throws EmailAlreadyExistsException if a Keycloak account already exists for this email
    * @throws KeycloakAdminException if the Admin API is unreachable or returns an unexpected error
    */
-  public InviteResult createInvitedUser(String email, String companyId, String role) {
+  public InviteResult createInvitedUser(String email, String companyId, List<String> roles) {
     // Generate a secure temporary password. It is never assigned to any variable that touches a
     // log statement — the char[] is converted to String and stored only in the returned record.
     String tempPassword = generateTemporaryPassword();
@@ -407,7 +407,10 @@ public class KeycloakAdminClient {
       String path = location.getPath();
       String userId = path.substring(path.lastIndexOf('/') + 1);
 
-      assignRealmRole(userId, role);
+      // Sequential role-mapping POSTs — Keycloak treats each as an independent grant.
+      for (String role : roles) {
+        assignRealmRole(userId, role);
+      }
       log.info("Invited user created in Keycloak: userId={}", userId);
       return new InviteResult(userId, tempPassword);
     } catch (RestClientResponseException e) {

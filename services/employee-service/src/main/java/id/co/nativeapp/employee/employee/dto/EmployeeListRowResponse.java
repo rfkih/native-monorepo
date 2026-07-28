@@ -16,6 +16,7 @@ import java.util.UUID;
  * @param fullName the employee's display name
  * @param status ACTIVE | INACTIVE
  * @param ptkpStatus the PTKP status code (not PII)
+ * @param userId the linked console login's Keycloak subject id (non-PII), or null when unlinked
  * @param assignmentId the current assignment's id, or null
  * @param orgUnitId the org unit of that assignment, or null
  * @param role the free-text job role of that assignment, or null
@@ -29,6 +30,7 @@ public record EmployeeListRowResponse(
     String fullName,
     String status,
     String ptkpStatus,
+    String userId,
     UUID assignmentId,
     UUID orgUnitId,
     String role,

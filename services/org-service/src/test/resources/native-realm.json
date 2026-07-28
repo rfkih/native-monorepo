@@ -20,7 +20,8 @@
     "realm": [
       { "name": "owner", "description": "Company owner — full console access" },
       { "name": "manager", "description": "Scope-limited manager" },
-      { "name": "cashier", "description": "Operational POS user" }
+      { "name": "cashier", "description": "Operational POS user" },
+      { "name": "employee", "description": "Self-service employee — /me surface only" }
     ]
   },
   "clients": [

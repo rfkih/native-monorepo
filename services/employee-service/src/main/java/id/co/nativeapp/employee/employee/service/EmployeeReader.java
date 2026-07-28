@@ -94,6 +94,7 @@ public class EmployeeReader {
                     v.getFullName(),
                     v.getStatus(),
                     v.getPtkpStatus(),
+                    v.getUserId(),
                     v.getAssignmentId(),
                     v.getOrgUnitId(),
                     v.getRole(),

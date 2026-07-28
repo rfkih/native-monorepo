@@ -23,6 +23,7 @@ export interface InviteResponse {
   id: string
   email: string
   role: string
+  roles: string[]
   temporaryPassword: string
 }
 
@@ -30,6 +31,8 @@ export interface InviteResponse {
 export interface InviteMemberBody {
   email: string
   role: string
+  /** Extra roles for the same login (e.g. an employee who can also run the POS adds cashier). */
+  additionalRoles?: string[]
 }
 
 /** PATCH /api/v1/users/{id} body. */

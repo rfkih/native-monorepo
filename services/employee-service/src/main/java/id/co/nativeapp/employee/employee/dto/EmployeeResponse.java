@@ -15,6 +15,7 @@ import java.util.UUID;
  * @param status the employment status ({@code ACTIVE}/{@code INACTIVE})
  * @param maskedNik the NIK, fully redacted ({@code "***REDACTED***"})
  * @param maskedBankAccount the bank account, masked to its last 4 digits ({@code "****6789"})
+ * @param userId the linked console login's Keycloak subject id (non-PII), or null when unlinked
  */
 public record EmployeeResponse(
     UUID id,
@@ -22,7 +23,8 @@ public record EmployeeResponse(
     String ptkpStatus,
     String status,
     String maskedNik,
-    String maskedBankAccount) {
+    String maskedBankAccount,
+    String userId) {
 
   /** Builds a masked response from an employee aggregate (never the raw PII — rule 6). */
   public static EmployeeResponse from(Employee employee) {
@@ -32,6 +34,7 @@ public record EmployeeResponse(
         employee.getPtkpStatus().name(),
         employee.getStatus().name(),
         employee.maskedNik(),
-        employee.maskedBankAccount());
+        employee.maskedBankAccount(),
+        employee.getUserId());
   }
 }

@@ -17,6 +17,7 @@ import { EmptyState } from '@/features/_shared/financeUi'
 import type { OrgUnit } from '@/features/org/api'
 import { cn } from '@/lib/cn'
 import { useEmployees, type EmployeeListRow } from './api'
+import { CreateLoginDialog } from './CreateLoginDialog'
 import {
   AssignDialog,
   CompensationDialog,
@@ -32,6 +33,7 @@ type DialogState =
   | { kind: 'endAssignment'; employee: EmployeeListRow }
   | { kind: 'compensation'; employee: EmployeeListRow }
   | { kind: 'terminate'; employee: EmployeeListRow }
+  | { kind: 'createLogin'; employee: EmployeeListRow }
 
 /** One employee, grouped from their (possibly several) current-assignment rows. */
 interface GroupedEmployee {
@@ -39,6 +41,7 @@ interface GroupedEmployee {
   fullName: string
   status: EmployeeListRow['status']
   hasCompensation: boolean
+  userId: string | null
   rows: EmployeeListRow[]
 }
 
@@ -83,6 +86,7 @@ export function EmployeesTab({
           fullName: row.fullName,
           status: row.status,
           hasCompensation: row.hasCompensation,
+          userId: row.userId,
           rows: [row],
         })
       }
@@ -127,6 +131,9 @@ export function EmployeesTab({
                 setDialog({ kind: 'endAssignment', employee: employee.rows[0] })
               }
               onTerminate={() => setDialog({ kind: 'terminate', employee: employee.rows[0] })}
+              onCreateLogin={() =>
+                setDialog({ kind: 'createLogin', employee: employee.rows[0] })
+              }
             />
           ))}
         </Card>
@@ -177,6 +184,14 @@ export function EmployeesTab({
           onClose={() => setDialog(null)}
         />
       ) : null}
+      {dialog?.kind === 'createLogin' ? (
+        <CreateLoginDialog
+          employee={dialog.employee}
+          companyId={companyId}
+          actor={actor}
+          onClose={() => setDialog(null)}
+        />
+      ) : null}
     </div>
   )
 }
@@ -189,6 +204,7 @@ function EmployeeRow({
   onEdit,
   onEndAssignment,
   onTerminate,
+  onCreateLogin,
 }: {
   employee: GroupedEmployee
   unitName: (id: string | null) => string
@@ -197,6 +213,7 @@ function EmployeeRow({
   onEdit: () => void
   onEndAssignment: () => void
   onTerminate: () => void
+  onCreateLogin: () => void
 }) {
   const { t } = useTranslation()
   const active = employee.status === 'ACTIVE'
@@ -225,6 +242,7 @@ function EmployeeRow({
           ) : (
             <Badge tone="neutral">{t('hr.list.compNone')}</Badge>
           )}
+          {employee.userId ? <Badge tone="info">{t('hr.list.hasLogin')}</Badge> : null}
         </div>
         <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
           {employee.rows.filter((r) => r.assignmentId).length === 0 ? (
@@ -246,6 +264,9 @@ function EmployeeRow({
 
       {/* Hover-revealed row actions (Team.tsx pattern). */}
       <div className="flex items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+        {!employee.userId && active ? (
+          <RowAction label={t('hr.list.actionCreateLogin')} onClick={onCreateLogin} />
+        ) : null}
         <RowAction label={t('hr.list.actionAssign')} onClick={onAssign} />
         <RowAction label={t('hr.list.actionCompensation')} onClick={onCompensation} />
         <RowAction label={t('hr.list.actionEdit')} onClick={onEdit} />

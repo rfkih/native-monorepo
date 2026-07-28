@@ -61,6 +61,14 @@ public class Employee extends Auditable {
   @Column(name = "status", nullable = false, length = 16)
   private EmployeeStatus status;
 
+  /**
+   * The linked console login — the Keycloak subject id ({@code sub}), or null when the employee has
+   * no login. NOT PII (a stable opaque id, the same value org-service stores on outlet
+   * assignments); it is the join key for the /me self-service surface and own-sales commission.
+   */
+  @Column(name = "user_id", length = 64)
+  private String userId;
+
   protected Employee() {
     // for JPA
   }
@@ -128,6 +136,27 @@ public class Employee extends Auditable {
     return changed;
   }
 
+  /**
+   * Links this employee to a console login (the Keycloak subject id). Idempotent for the same user;
+   * relinking to a DIFFERENT user requires an explicit unlink first — a silent overwrite would
+   * quietly re-route the /me surface and own-sales commission to another person.
+   *
+   * @throws IllegalStateException if already linked to a different user (→ 409)
+   */
+  public void linkUser(String newUserId) {
+    String trimmed = requireNonBlank(newUserId, "userId");
+    if (this.userId != null && !this.userId.equals(trimmed)) {
+      throw new IllegalStateException(
+          "Employee " + id + " is already linked to a different login; unlink first");
+    }
+    this.userId = trimmed;
+  }
+
+  /** Removes the console-login link (the login itself lives in Keycloak, untouched). */
+  public void unlinkUser() {
+    this.userId = null;
+  }
+
   private static String requireNonBlank(String value, String field) {
     Objects.requireNonNull(value, field);
     String trimmed = value.strip();
@@ -151,6 +180,11 @@ public class Employee extends Auditable {
 
   public EmployeeStatus getStatus() {
     return status;
+  }
+
+  /** The linked login's Keycloak subject id, or null when the employee has no login. */
+  public String getUserId() {
+    return userId;
   }
 
   /**

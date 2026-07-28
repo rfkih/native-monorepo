@@ -35,7 +35,7 @@ public record KeycloakUser(
     List<String> roles) {
 
   /** The known business roles used to identify which roles to replace on a role change. */
-  static final List<String> BUSINESS_ROLES = List.of("owner", "manager", "cashier");
+  static final List<String> BUSINESS_ROLES = List.of("owner", "manager", "cashier", "employee");
 
   public KeycloakUser {
     roles = roles == null ? List.of() : List.copyOf(roles);

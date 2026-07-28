@@ -354,6 +354,32 @@ class UserManagementAcceptanceTest {
   // ===========================================================================
 
   @Test
+  void inviteWithTheEmployeeRoleSucceeds() throws Exception {
+    // The employee self-service surface hinges on this role being invitable; it must pass the
+    // ALLOWED_ROLES whitelist and be assignable as a realm role end-to-end.
+    String email = uniqueEmail();
+    String tokenA = tokenForOwnerA();
+
+    String body =
+        appClient()
+            .post()
+            .uri("/api/v1/users")
+            .header(HttpHeaders.AUTHORIZATION, bearer(tokenA))
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(
+                """
+                {"email": "%s", "role": "employee"}
+                """
+                    .formatted(email))
+            .retrieve()
+            .body(String.class);
+
+    JsonNode invited = JSON.readValue(body, JsonNode.class);
+    assertThat(invited.get("role").asString()).isEqualTo("employee");
+    assertThat(invited.get("temporaryPassword").asString()).isNotBlank();
+  }
+
+  @Test
   void inviteWithInvalidRoleReturns400() {
     String tokenA = tokenForOwnerA();
 

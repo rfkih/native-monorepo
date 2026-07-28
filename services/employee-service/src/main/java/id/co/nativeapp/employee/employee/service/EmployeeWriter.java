@@ -1,10 +1,12 @@
 package id.co.nativeapp.employee.employee.service;
 
 import id.co.nativeapp.employee.employee.domain.Employee;
+import id.co.nativeapp.employee.employee.domain.EmployeeNotFoundException;
 import id.co.nativeapp.employee.employee.domain.EmployeeStatus;
 import id.co.nativeapp.employee.employee.domain.EmploymentContract;
 import id.co.nativeapp.employee.employee.domain.EmploymentType;
 import id.co.nativeapp.employee.employee.domain.PtkpStatus;
+import id.co.nativeapp.employee.employee.domain.UserAlreadyLinkedException;
 import id.co.nativeapp.employee.employee.dto.AddContractCommand;
 import id.co.nativeapp.employee.employee.dto.CreateEmployeeCommand;
 import id.co.nativeapp.employee.employee.dto.UpdateEmployeeCommand;
@@ -133,6 +135,49 @@ public class EmployeeWriter {
     EmploymentContract saved = contractRepository.save(contract);
     contractRepository.flush();
     return saved;
+  }
+
+  /**
+   * Links an employee to a console login (the Keycloak subject id). Service-local — no event: the
+   * link never leaves this service (consumers resolve users via the sub directly). One login maps
+   * to at most one employee per company: pre-checked here for a clean 409, with the V7 partial
+   * unique index as the concurrency backstop.
+   *
+   * @throws EmployeeNotFoundException unknown/foreign employee (→ 404)
+   * @throws UserAlreadyLinkedException the login already belongs to another employee (→ 409)
+   */
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public Employee linkUser(UUID employeeId, String userId) {
+    TenantContext.require();
+    Employee employee =
+        employeeRepository
+            .findById(employeeId)
+            .orElseThrow(() -> new EmployeeNotFoundException(employeeId));
+
+    employeeRepository
+        .findByUserId(userId)
+        .filter(other -> !other.getId().equals(employeeId))
+        .ifPresent(
+            other -> {
+              throw new UserAlreadyLinkedException(userId, other.getId());
+            });
+
+    employee.linkUser(userId);
+    employeeRepository.flush();
+    return employee;
+  }
+
+  /** Removes an employee's console-login link (the Keycloak login itself is untouched). */
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public Employee unlinkUser(UUID employeeId) {
+    TenantContext.require();
+    Employee employee =
+        employeeRepository
+            .findById(employeeId)
+            .orElseThrow(() -> new EmployeeNotFoundException(employeeId));
+    employee.unlinkUser();
+    employeeRepository.flush();
+    return employee;
   }
 
   private void emitEmployeeChanged(Employee employee, UUID companyId) {

@@ -10,6 +10,7 @@ import id.co.nativeapp.employee.employee.dto.CreateEmployeeRequest;
 import id.co.nativeapp.employee.employee.dto.EmployeeListRowResponse;
 import id.co.nativeapp.employee.employee.dto.EmployeeResponse;
 import id.co.nativeapp.employee.employee.dto.EmployeeWithAssignmentsResponse;
+import id.co.nativeapp.employee.employee.dto.LoginLinkRequest;
 import id.co.nativeapp.employee.employee.dto.UpdateEmployeeCommand;
 import id.co.nativeapp.employee.employee.dto.UpdateEmployeeRequest;
 import id.co.nativeapp.employee.employee.service.EmployeeReader;
@@ -23,6 +24,7 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -145,6 +147,29 @@ public class EmployeeController {
       @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
           LocalDate asOf) {
     return employeeReader.list(orgUnitIds, status, q, asOf);
+  }
+
+  @Operation(
+      summary = "Link an employee to a console login",
+      description =
+          "Attaches the Keycloak login (its subject id, as returned by the org-service invite) to"
+              + " the employee — the join the /me self-service surface and own-sales commission"
+              + " run on. 404 for an unknown employee; 409 when the login is already linked to"
+              + " another employee (one login = at most one employee).")
+  @PostMapping("/{employeeId}/login-link")
+  public EmployeeResponse linkLogin(
+      @PathVariable UUID employeeId, @Valid @RequestBody LoginLinkRequest request) {
+    return EmployeeResponse.from(employeeService.linkUser(employeeId, request.userId()));
+  }
+
+  @Operation(
+      summary = "Unlink an employee's console login",
+      description =
+          "Removes the login link (the Keycloak login itself is untouched — disable it from the"
+              + " Team page if needed). 404 for an unknown employee.")
+  @DeleteMapping("/{employeeId}/login-link")
+  public EmployeeResponse unlinkLogin(@PathVariable UUID employeeId) {
+    return EmployeeResponse.from(employeeService.unlinkUser(employeeId));
   }
 
   @Operation(

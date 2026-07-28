@@ -492,6 +492,30 @@ export const en = {
       actionEdit: 'Edit',
       actionEndAssignment: 'End assignment',
       actionTerminate: 'Terminate',
+      actionCreateLogin: 'Create login',
+      hasLogin: 'Has login',
+    },
+    createLogin: {
+      title: 'Create login — {{name}}',
+      email: 'Email address',
+      emailHint: 'Becomes the username. The employee signs in with it and a one-time password.',
+      posCheckbox: 'Can run the POS',
+      posCheckboxHint:
+        'Also grants the cashier role, so this login can open the POS and ring sales — which is what feeds their own-sales commission.',
+      submit: 'Create login',
+      creating: 'Creating…',
+      emailTaken: 'A login with that email already exists.',
+      doneTitle: 'Login created for {{name}}',
+      doneBody:
+        'Share the one-time password below. The employee must change it at first sign-in.',
+      tempPassword: 'One-time password',
+      tempPasswordNote:
+        'Shown once — copy it now. It is never stored and cannot be recovered, only reset.',
+      close: 'Done',
+      linkFailedTitle: 'Login created, but not yet linked',
+      linkFailedBody:
+        'The login exists, but attaching it to the employee failed. Retry the link — the login is safe to reuse.',
+      retryLink: 'Retry link',
     },
     roles: {
       chef: 'Chef',
@@ -884,6 +908,7 @@ export const en = {
       owner: 'Owner',
       manager: 'Manager',
       cashier: 'Cashier',
+      employee: 'Employee',
     },
     inviteDialog: {
       title: 'Invite teammate',

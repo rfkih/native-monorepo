@@ -19,6 +19,9 @@ import org.springframework.data.repository.query.Param;
  */
 public interface EmployeeRepository extends JpaRepository<Employee, UUID> {
 
+  /** The employee linked to a console login (within the bound tenant), if any. */
+  java.util.Optional<Employee> findByUserId(String userId);
+
   /**
    * The console HR list: one row per (employee × CURRENT assignment in scope). {@code LEFT JOIN}
    * so, when unscoped ({@code hasUnits = false}), employees without a current assignment still
@@ -35,6 +38,7 @@ public interface EmployeeRepository extends JpaRepository<Employee, UUID> {
                  e.full_name      AS full_name,
                  e.status         AS status,
                  e.ptkp_status    AS ptkp_status,
+                 e.user_id        AS user_id,
                  a.id             AS assignment_id,
                  a.org_unit_id    AS org_unit_id,
                  a.role           AS role,

@@ -23,6 +23,8 @@ public interface EmployeeListView {
 
   String getPtkpStatus();
 
+  String getUserId();
+
   UUID getAssignmentId();
 
   UUID getOrgUnitId();

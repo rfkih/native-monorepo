@@ -5,6 +5,7 @@ import id.co.nativeapp.org.user.dto.PatchUserRequest;
 import id.co.nativeapp.org.user.dto.UserResponse;
 import id.co.nativeapp.org.user.service.KeycloakAdminClient.InviteResult;
 import id.co.nativeapp.tenant.TenantContext;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -41,7 +42,8 @@ public class UserService {
   private static final Logger log = LoggerFactory.getLogger(UserService.class);
 
   /** The allowed business roles for validation. */
-  private static final Set<String> ALLOWED_ROLES = Set.of("owner", "manager", "cashier");
+  private static final Set<String> ALLOWED_ROLES =
+      Set.of("owner", "manager", "cashier", "employee");
 
   private final KeycloakAdminClient keycloak;
   private final UserOutletAssignmentService outletAssignments;
@@ -100,11 +102,23 @@ public class UserService {
    * rejected with {@link InvalidRoleException} (400).
    *
    * @param email the invitee's email — NEVER logged here
-   * @param role the initial role ({@code owner}/{@code manager}/{@code cashier})
+   * @param role the primary role
+   * @param additionalRoles further roles for the same login (e.g. an employee who can also run the
+   *     POS gets {@code employee} + {@code cashier}); null/empty for just the primary
    * @return the invite response containing the temporary password (returned ONCE — not stored)
    */
-  public InviteUserResponse inviteUser(String email, String role) {
-    validateRole(role);
+  public InviteUserResponse inviteUser(String email, String role, List<String> additionalRoles) {
+    // Primary first, then de-duplicated extras — every role passes the same whitelist.
+    List<String> roles = new ArrayList<>();
+    roles.add(role);
+    if (additionalRoles != null) {
+      for (String extra : additionalRoles) {
+        if (!roles.contains(extra)) {
+          roles.add(extra);
+        }
+      }
+    }
+    roles.forEach(UserService::validateRole);
 
     String companyId = TenantContext.require().companyId();
 
@@ -115,11 +129,14 @@ public class UserService {
 
     // createInvitedUser returns the Keycloak userId AND the generated temporary password.
     // The password is NEVER logged — the InviteResult carries it only to pass it to the response.
-    InviteResult result = keycloak.createInvitedUser(email, companyId, role);
+    InviteResult result = keycloak.createInvitedUser(email, companyId, roles);
 
     log.info(
-        "Invited user created: userId={}, companyId={}, role={}", result.userId(), companyId, role);
-    return new InviteUserResponse(result.userId(), email, role, result.temporaryPassword());
+        "Invited user created: userId={}, companyId={}, roles={}",
+        result.userId(),
+        companyId,
+        roles);
+    return new InviteUserResponse(result.userId(), email, role, roles, result.temporaryPassword());
   }
 
   // ---------------------------------------------------------------------------

@@ -96,7 +96,8 @@ public class UserController {
   @PostMapping
   public ResponseEntity<InviteUserResponse> inviteUser(
       @Valid @RequestBody InviteUserRequest request) {
-    InviteUserResponse body = userService.inviteUser(request.email(), request.role());
+    InviteUserResponse body =
+        userService.inviteUser(request.email(), request.role(), request.additionalRoles());
     return ResponseEntity.created(URI.create("/api/v1/users/" + body.id())).body(body);
   }
 

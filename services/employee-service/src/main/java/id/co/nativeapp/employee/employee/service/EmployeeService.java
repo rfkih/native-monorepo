@@ -45,4 +45,23 @@ public class EmployeeService {
     TenantContext.require();
     return writer.addContract(command);
   }
+
+  /**
+   * Links an employee to a console login (Keycloak subject id).
+   *
+   * @throws id.co.nativeapp.employee.employee.domain.EmployeeNotFoundException unknown/foreign
+   *     employee (→ 404)
+   * @throws id.co.nativeapp.employee.employee.domain.UserAlreadyLinkedException the login already
+   *     belongs to another employee (→ 409)
+   */
+  public Employee linkUser(java.util.UUID employeeId, String userId) {
+    TenantContext.require();
+    return writer.linkUser(employeeId, userId);
+  }
+
+  /** Removes an employee's console-login link (the Keycloak login itself is untouched). */
+  public Employee unlinkUser(java.util.UUID employeeId) {
+    TenantContext.require();
+    return writer.unlinkUser(employeeId);
+  }
 }

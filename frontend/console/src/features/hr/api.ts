@@ -19,6 +19,8 @@ export interface EmployeeListRow {
   fullName: string
   status: 'ACTIVE' | 'INACTIVE'
   ptkpStatus: string
+  /** The linked console login's Keycloak subject id, or null when the employee has no login. */
+  userId: string | null
   assignmentId: string | null
   orgUnitId: string | null
   role: string | null
@@ -37,6 +39,7 @@ export interface EmployeeDetail {
     status: string
     maskedNik: string
     maskedBankAccount: string
+    userId: string | null
   }
   assignments: AssignmentRow[]
   contracts: ContractRow[]
@@ -292,6 +295,21 @@ export function useAddAssignment(params: TenantParams) {
         method: 'POST',
         tenant: { companyId, actor },
         body,
+      }),
+    onSuccess: (_d, { employeeId }) => invalidate(employeeId),
+  })
+}
+
+/** POST /api/v1/employees/{id}/login-link — attach a console login (Keycloak sub) to an employee. */
+export function useLinkLogin(params: TenantParams) {
+  const { companyId, actor } = params
+  const invalidate = useHrInvalidate(companyId)
+  return useMutation({
+    mutationFn: ({ employeeId, userId }: { employeeId: string; userId: string }) =>
+      apiFetch<EmployeeDetail['employee']>(`/api/v1/employees/${employeeId}/login-link`, {
+        method: 'POST',
+        tenant: { companyId, actor },
+        body: { userId },
       }),
     onSuccess: (_d, { employeeId }) => invalidate(employeeId),
   })

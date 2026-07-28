@@ -1,5 +1,7 @@
 package id.co.nativeapp.org.user.dto;
 
+import java.util.List;
+
 /**
  * Response body for a successful {@code POST /api/v1/users} ({@code 201 Created}).
  *
@@ -10,7 +12,9 @@ package id.co.nativeapp.org.user.dto;
  *
  * @param id the Keycloak user UUID of the newly created user
  * @param email the invitee's email address
- * @param role the assigned business role
+ * @param role the primary assigned business role
+ * @param roles every assigned business role (primary first)
  * @param temporaryPassword the one-time temporary password — NEVER log or cache this
  */
-public record InviteUserResponse(String id, String email, String role, String temporaryPassword) {}
+public record InviteUserResponse(
+    String id, String email, String role, List<String> roles, String temporaryPassword) {}

@@ -4,6 +4,7 @@ import id.co.nativeapp.employee.assignment.domain.AssignmentAlreadyEndedExceptio
 import id.co.nativeapp.employee.assignment.domain.AssignmentNotFoundException;
 import id.co.nativeapp.employee.assignment.domain.ConflictingLegalEmployerException;
 import id.co.nativeapp.employee.employee.domain.EmployeeNotFoundException;
+import id.co.nativeapp.employee.employee.domain.UserAlreadyLinkedException;
 import id.co.nativeapp.employee.payroll.domain.CompensationAlreadyEndedException;
 import id.co.nativeapp.employee.payroll.domain.CompensationNotFoundException;
 import id.co.nativeapp.employee.payroll.domain.IncompletePeriodException;
@@ -126,6 +127,17 @@ public class EmployeeApiAdvice {
     ProblemDetail problem = problem(HttpStatus.NOT_FOUND, "compensation-not-found", request);
     problem.setTitle("Compensation package not found");
     // The message names only the package id (a UUID), never an amount (rule 6).
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /** Linking a login that already belongs to another employee → 409 Conflict. */
+  @ExceptionHandler(UserAlreadyLinkedException.class)
+  public ProblemDetail handleUserAlreadyLinked(
+      UserAlreadyLinkedException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.CONFLICT, "user-already-linked", request);
+    problem.setTitle("Login already linked");
+    // The message names only ids (a subject id + an employee UUID), never PII (rule 6).
     problem.setDetail(ex.getMessage());
     return problem;
   }
