@@ -16,7 +16,37 @@ import { apiFetch } from '@/lib/api'
 import { hasAnyRole, useAuth } from '@/lib/authContext'
 
 /** The grantable console page keys (mirrors the org-service whitelist). */
-export type PageKey = 'pos' | 'kitchen' | 'menu' | 'me'
+export type PageKey =
+  | 'pos'
+  | 'kitchen'
+  | 'menu'
+  | 'me'
+  | 'dashboard'
+  | 'reports'
+  | 'org'
+  | 'groups'
+  | 'close'
+  | 'team'
+
+/** Pages on the back-office (owner/manager) surface. */
+export const DASHBOARD_PAGES: PageKey[] = ['dashboard', 'reports', 'org', 'groups', 'close', 'team']
+/** Pages on the POS (cashier) surface. */
+export const POS_PAGES: PageKey[] = ['pos', 'menu', 'kitchen']
+
+/**
+ * The pages a login's ROLES can actually reach — the grantable set for a role-aware page picker.
+ * Grants only NARROW within this (they never grant beyond the role), so a cashier only ever sees the
+ * POS pages, an owner/manager login sees the dashboard pages + POS surface, and an employee-only
+ * login has just {@code /me} (nothing to restrict).
+ */
+export function grantablePagesForRoles(roles: string[]): PageKey[] {
+  const out: PageKey[] = []
+  if (roles.includes('owner') || roles.includes('manager')) out.push(...DASHBOARD_PAGES)
+  if (roles.includes('owner') || roles.includes('manager') || roles.includes('cashier')) {
+    out.push(...POS_PAGES)
+  }
+  return out
+}
 
 interface MyPages {
   mode: 'ALL' | 'RESTRICTED'
@@ -24,16 +54,18 @@ interface MyPages {
 }
 
 /**
- * The signed-in login's page access. Owner/manager bypass (mode ALL, no fetch needed). Everyone
- * else fetches GET /api/v1/users/me/pages; a load failure fails OPEN to ALL (never lock a user out
- * of their own surface because a read hiccuped — the gateway still enforces the real boundary).
+ * The signed-in login's page access. The OWNER bypasses grants entirely (mode ALL, no fetch — the
+ * owner can never be locked out and is the recovery path for any mis-grant). A manager's grants
+ * apply. Everyone else fetches GET /api/v1/users/me/pages; a load failure fails OPEN to ALL (never
+ * lock a user out of their own surface because a read hiccuped — the gateway still enforces the real
+ * boundary).
  */
 export function usePageAccess(): {
   ready: boolean
   isAllowed: (page: PageKey) => boolean
 } {
   const auth = useAuth()
-  const bypass = hasAnyRole(auth.roles, 'owner', 'manager')
+  const bypass = hasAnyRole(auth.roles, 'owner')
 
   const query = useQuery<MyPages>({
     enabled: auth.authenticated && !bypass,

@@ -157,9 +157,34 @@ export function App() {
   const posAllowed = canPos && pageAccess.isAllowed('pos')
   const menuAllowed = canPos && pageAccess.isAllowed('menu')
   const kitchenAllowed = canPos && pageAccess.isAllowed('kitchen')
+  const dashboardAllowed = canDashboard && pageAccess.isAllowed('dashboard')
+  const reportsAllowed = canDashboard && pageAccess.isAllowed('reports')
+  const orgAllowed = canDashboard && pageAccess.isAllowed('org')
+  const groupsAllowed = canDashboard && pageAccess.isAllowed('groups')
+  const closeAllowed = canDashboard && pageAccess.isAllowed('close')
+  const teamAllowed = canDashboard && pageAccess.isAllowed('team')
 
-  // Landing per role: back office → POS (if still granted) → the employee self-service surface.
-  const home = canDashboard ? '/' : posAllowed ? '/pos' : '/me'
+  // Land on the FIRST page the login can actually open — avoids a redirect loop when a grant hides
+  // the login's natural landing page. /me is the always-available floor.
+  const home = dashboardAllowed
+    ? '/'
+    : reportsAllowed
+      ? '/statements/income'
+      : orgAllowed
+        ? '/org'
+        : groupsAllowed
+          ? '/groups'
+          : closeAllowed
+            ? '/close'
+            : teamAllowed
+              ? '/team'
+              : posAllowed
+                ? '/pos'
+                : menuAllowed
+                  ? '/menu'
+                  : kitchenAllowed
+                    ? '/kitchen'
+                    : '/me'
 
   return (
     <Suspense fallback={<CenteredSpinner />}>
@@ -181,49 +206,49 @@ export function App() {
           }
         >
           {canDashboard && <Route path="/onboarding" element={<OnboardingWizard />} />}
-          {canDashboard && (
+          {dashboardAllowed && (
             <Route
               path="/"
               element={company ? <Dashboard /> : <Navigate to="/onboarding" replace />}
             />
           )}
-          {canDashboard && (
+          {reportsAllowed && (
             <Route
               path="/statements/income"
               element={company ? <IncomeStatement /> : <Navigate to="/onboarding" replace />}
             />
           )}
-          {canDashboard && (
+          {reportsAllowed && (
             <Route
               path="/statements/balance-sheet"
               element={company ? <BalanceSheet /> : <Navigate to="/onboarding" replace />}
             />
           )}
-          {canDashboard && (
+          {orgAllowed && (
             <Route
               path="/org"
               element={company ? <OrgTree /> : <Navigate to="/onboarding" replace />}
             />
           )}
-          {canDashboard && (
+          {orgAllowed && (
             <Route
               path="/org/:unitId"
               element={company ? <OrgUnitDetail /> : <Navigate to="/onboarding" replace />}
             />
           )}
-          {canDashboard && (
+          {groupsAllowed && (
             <Route
               path="/groups"
               element={company ? <GroupConsolidation /> : <Navigate to="/onboarding" replace />}
             />
           )}
-          {canDashboard && (
+          {closeAllowed && (
             <Route
               path="/close"
               element={company ? <PeriodClose /> : <Navigate to="/onboarding" replace />}
             />
           )}
-          {canDashboard && (
+          {teamAllowed && (
             <Route
               path="/team"
               element={company ? <Team /> : <Navigate to="/onboarding" replace />}

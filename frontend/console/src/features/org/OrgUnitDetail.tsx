@@ -18,7 +18,8 @@ import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
 import { Segmented } from '@/components/ui/Segmented'
 import { EmptyState, KpiTile, PeriodNav } from '@/features/_shared/financeUi'
-import { useTeam } from '@/features/team/api'
+import { useTeam, type TeamMember } from '@/features/team/api'
+import { EditPagesDialog } from '@/features/team/EditPagesDialog'
 import { useEmployees } from '@/features/hr/api'
 import { EmployeesTab } from '@/features/hr/EmployeesTab'
 import { PayrollTab } from '@/features/hr/PayrollTab'
@@ -685,6 +686,8 @@ function PeopleTab({
   teamQuery: ReturnType<typeof useTeam>
 }) {
   const { t } = useTranslation()
+  const { company } = useSession()
+  const [editingPages, setEditingPages] = useState<TeamMember | null>(null)
 
   if (usersQuery.isError) {
     return (
@@ -745,6 +748,15 @@ function PeopleTab({
               {member?.roles?.length ? (
                 <Badge tone="info">{member.roles[0]}</Badge>
               ) : null}
+              {member ? (
+                <button
+                  type="button"
+                  onClick={() => setEditingPages(member)}
+                  className="rounded-md px-2 py-1 text-xs text-ink-3 hover:bg-paper hover:text-ink focus-visible:outline-2 focus-visible:outline-brand-500"
+                >
+                  {t('orgHub.people.editAccess')}
+                </button>
+              ) : null}
               <span className="flex flex-wrap items-center gap-1.5">
                 {entry.outlets.map((name) => (
                   <span
@@ -759,6 +771,14 @@ function PeopleTab({
           )
         })}
       </div>
+      {editingPages ? (
+        <EditPagesDialog
+          member={editingPages}
+          companyId={company?.companyId ?? ''}
+          actor={company?.actor ?? ''}
+          onClose={() => setEditingPages(null)}
+        />
+      ) : null}
     </Card>
   )
 }

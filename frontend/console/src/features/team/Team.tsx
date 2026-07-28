@@ -26,11 +26,10 @@ import {
   useDeactivateMember,
   useUserOutlets,
   useSetUserOutlets,
-  useUserPages,
-  useSetUserPages,
   type TeamMember,
   type InviteResponse,
 } from './api'
+import { EditPagesDialog } from './EditPagesDialog'
 
 /** The roles the invite/change-role UI offers. */
 const ROLES = ['owner', 'manager', 'cashier', 'employee'] as const
@@ -861,118 +860,3 @@ export function Team() {
   )
 }
 
-// ── Edit pages dialog ───────────────────────────────────────────────────────────
-
-/** The console pages a login may open (subtractive; empty = the full role surface). */
-const GRANTABLE_PAGES = ['pos', 'menu', 'kitchen'] as const
-
-function EditPagesDialog({
-  member,
-  companyId,
-  actor,
-  onClose,
-}: {
-  member: TeamMember
-  companyId: string
-  actor: string
-  onClose: () => void
-}) {
-  const { t } = useTranslation()
-  const pagesQuery = useUserPages({ userId: member.id, companyId, actor, enabled: true })
-  const mutation = useSetUserPages({ companyId, actor })
-
-  // Local selection — seeded once the current grants load. mode ALL = every grantable page on.
-  const [selected, setSelected] = useState<Set<string> | null>(null)
-  if (selected === null && !pagesQuery.isLoading && pagesQuery.data) {
-    setSelected(
-      pagesQuery.data.mode === 'ALL'
-        ? new Set(GRANTABLE_PAGES)
-        : new Set(pagesQuery.data.pageKeys.filter((k) => GRANTABLE_PAGES.includes(k as never))),
-    )
-  }
-
-  function toggle(page: string) {
-    setSelected((prev) => {
-      const next = new Set(prev ?? [])
-      if (next.has(page)) next.delete(page)
-      else next.add(page)
-      return next
-    })
-  }
-
-  function handleSave() {
-    const chosen = selected ?? new Set(GRANTABLE_PAGES)
-    // All grantable pages selected → clear grants (mode ALL — the full role surface). Otherwise
-    // send the chosen set PLUS 'me' (the always-available floor is never removed console-side).
-    const allSelected = GRANTABLE_PAGES.every((p) => chosen.has(p))
-    const pageKeys = allSelected ? [] : [...chosen, 'me']
-    mutation.mutate({ userId: member.id, pageKeys }, { onSuccess: onClose })
-  }
-
-  return (
-    <DialogOverlay onClose={onClose}>
-      <div className="space-y-4">
-        <h2 className="font-display text-lg font-semibold text-ink">{t('team.editPagesDialog.title')}</h2>
-        <p className="text-sm text-ink-2">
-          {t('team.editPagesDialog.body', { email: member.email })}
-        </p>
-
-        {pagesQuery.isLoading || selected === null ? (
-          <div className="flex justify-center py-6">
-            <Spinner className="text-emerald" />
-          </div>
-        ) : (
-          <div
-            role="group"
-            aria-label={t('team.editPagesDialog.title')}
-            className="overflow-hidden rounded-xl border border-line"
-          >
-            {GRANTABLE_PAGES.map((page, idx) => {
-              const checkboxId = `page-grant-${page}`
-              return (
-                <label
-                  key={page}
-                  htmlFor={checkboxId}
-                  className={cn(
-                    'flex h-11 cursor-pointer items-center gap-3 px-4 transition-colors hover:bg-hover',
-                    idx !== GRANTABLE_PAGES.length - 1 && 'border-b border-ink-50',
-                  )}
-                >
-                  <input
-                    id={checkboxId}
-                    type="checkbox"
-                    checked={selected.has(page)}
-                    onChange={() => toggle(page)}
-                    className="size-4 shrink-0 cursor-pointer accent-emerald"
-                  />
-                  <span className="text-sm text-ink">{t(`team.pages.${page}` as const)}</span>
-                </label>
-              )
-            })}
-          </div>
-        )}
-
-        <p className="text-xs text-ink-3">{t('team.editPagesDialog.hint')}</p>
-
-        {mutation.isError ? (
-          <p className="rounded-xl border border-loss/30 bg-tint-loss px-3 py-2 text-sm text-loss">
-            {t('team.errorGeneric')}
-          </p>
-        ) : null}
-
-        <div className="flex justify-end gap-3">
-          <Button type="button" variant="outline" onClick={onClose}>
-            {t('common.cancel')}
-          </Button>
-          <Button
-            type="button"
-            onClick={handleSave}
-            disabled={mutation.isPending || selected === null}
-          >
-            {mutation.isPending ? t('team.editPagesDialog.saving') : t('team.editPagesDialog.save')}
-          </Button>
-        </div>
-      </div>
-    </DialogOverlay>
-  )
-}

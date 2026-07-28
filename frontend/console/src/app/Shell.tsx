@@ -22,13 +22,14 @@ import {
 import { Wordmark } from '@/components/Wordmark'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { hasAnyRole, useAuth } from '@/lib/authContext'
+import { usePageAccess, type PageKey } from '@/lib/pageAccess'
 import { AUTH_MODE } from '@/lib/config'
 import { useSession } from '@/lib/session'
 import { useTheme } from '@/lib/theme'
 import { cn } from '@/lib/cn'
 
 type Icon = ComponentType<LucideProps>
-type NavItem = { to: string; label: string; icon: Icon; end?: boolean }
+type NavItem = { to: string; label: string; icon: Icon; end?: boolean; page?: PageKey }
 type NavGroup = { heading: string; items: NavItem[] }
 
 export function Shell({ children }: { children: ReactNode }) {
@@ -41,30 +42,40 @@ export function Shell({ children }: { children: ReactNode }) {
 
   const canDashboard = hasAnyRole(auth.roles, 'owner', 'manager')
   const canPos = hasAnyRole(auth.roles, 'owner', 'manager', 'cashier')
+  const pageAccess = usePageAccess()
 
-  // Grouped nav — the whole sidebar is dashboard-only; a cashier never mounts the Shell.
-  const groups: NavGroup[] = canDashboard
+  // Grouped nav — the whole sidebar is dashboard-only; a cashier never mounts the Shell. Each item
+  // that maps to a grantable page is hidden when the login's grants exclude it (owner bypasses).
+  const rawGroups: NavGroup[] = canDashboard
     ? [
         {
           heading: t('nav.groupFinance'),
           items: [
-            { to: '/', label: t('nav.dashboard'), icon: LayoutDashboard, end: true },
-            { to: '/statements/income', label: t('nav.income'), icon: LineChart },
-            { to: '/statements/balance-sheet', label: t('nav.balanceSheet'), icon: Scale },
+            { to: '/', label: t('nav.dashboard'), icon: LayoutDashboard, end: true, page: 'dashboard' },
+            { to: '/statements/income', label: t('nav.income'), icon: LineChart, page: 'reports' },
+            { to: '/statements/balance-sheet', label: t('nav.balanceSheet'), icon: Scale, page: 'reports' },
           ],
         },
         {
           heading: t('nav.groupStructure'),
           items: [
-            { to: '/org', label: t('nav.org'), icon: Network },
-            { to: '/groups', label: t('nav.groups'), icon: Layers },
-            { to: '/close', label: t('nav.close'), icon: CalendarCheck },
-            { to: '/team', label: t('nav.team'), icon: UsersRound },
+            { to: '/org', label: t('nav.org'), icon: Network, page: 'org' },
+            { to: '/groups', label: t('nav.groups'), icon: Layers, page: 'groups' },
+            { to: '/close', label: t('nav.close'), icon: CalendarCheck, page: 'close' },
+            { to: '/team', label: t('nav.team'), icon: UsersRound, page: 'team' },
             { to: '/onboarding', label: t('nav.onboarding'), icon: Building2 },
           ],
         },
       ]
     : []
+
+  // Drop items whose page is not granted, then drop any group left empty.
+  const groups: NavGroup[] = rawGroups
+    .map((g) => ({
+      ...g,
+      items: g.items.filter((it) => !it.page || pageAccess.isAllowed(it.page)),
+    }))
+    .filter((g) => g.items.length > 0)
 
   const isActive = (item: NavItem) =>
     item.end ? pathname === item.to : pathname.startsWith(item.to)
