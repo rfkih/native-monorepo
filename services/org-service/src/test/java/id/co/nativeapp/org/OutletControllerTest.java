@@ -43,8 +43,8 @@ class OutletControllerTest {
     when(orgUnitService.listActiveOutlets())
         .thenReturn(
             List.of(
-                new OutletResponse(OUTLET_A_ID, "Alpha Outlet"),
-                new OutletResponse(OUTLET_B_ID, "Beta Outlet")));
+                new OutletResponse(OUTLET_A_ID, "Alpha Outlet", "restaurant"),
+                new OutletResponse(OUTLET_B_ID, "Beta Outlet", "carwash")));
 
     mockMvc
         .perform(get("/api/v1/outlets"))
@@ -52,8 +52,10 @@ class OutletControllerTest {
         .andExpect(jsonPath("$.length()").value(2))
         .andExpect(jsonPath("$[0].id").value(OUTLET_A_ID.toString()))
         .andExpect(jsonPath("$[0].name").value("Alpha Outlet"))
+        .andExpect(jsonPath("$[0].vertical").value("restaurant"))
         .andExpect(jsonPath("$[1].id").value(OUTLET_B_ID.toString()))
-        .andExpect(jsonPath("$[1].name").value("Beta Outlet"));
+        .andExpect(jsonPath("$[1].name").value("Beta Outlet"))
+        .andExpect(jsonPath("$[1].vertical").value("carwash"));
   }
 
   @Test
@@ -68,9 +70,9 @@ class OutletControllerTest {
 
   @Test
   void listActiveOutletsDoesNotIncludeTypeOrParentIdFields() throws Exception {
-    // The contract is {id, name} only — no type, parentId, or active in the response.
+    // The contract is {id, name, vertical} only — no type, parentId, or active in the response.
     when(orgUnitService.listActiveOutlets())
-        .thenReturn(List.of(new OutletResponse(OUTLET_A_ID, "Alpha Outlet")));
+        .thenReturn(List.of(new OutletResponse(OUTLET_A_ID, "Alpha Outlet", "restaurant")));
 
     mockMvc
         .perform(get("/api/v1/outlets"))
@@ -78,5 +80,18 @@ class OutletControllerTest {
         .andExpect(jsonPath("$[0].type").doesNotExist())
         .andExpect(jsonPath("$[0].parentId").doesNotExist())
         .andExpect(jsonPath("$[0].active").doesNotExist());
+  }
+
+  @Test
+  void listActiveOutletsSerializesNullVerticalAsNull() throws Exception {
+    // A pre-V6 anomaly (parent BU without a vertical) must not break the picker — the field
+    // serializes as JSON null and the console fails open to restaurant.
+    when(orgUnitService.listActiveOutlets())
+        .thenReturn(List.of(new OutletResponse(OUTLET_A_ID, "Alpha Outlet", null)));
+
+    mockMvc
+        .perform(get("/api/v1/outlets"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].vertical").value((Object) null));
   }
 }

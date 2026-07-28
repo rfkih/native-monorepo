@@ -160,6 +160,24 @@ class VerticalAcceptanceTest extends PostgresRlsTestBase {
     assertThat(event.get("name").toString()).isEqualTo("Wash Central");
   }
 
+  @Test
+  void theOutletPickerInheritsTheParentBusinessUnitsVertical() throws Exception {
+    var result =
+        companyService.createCompany(
+            new CreateCompanyCommand("PickerCo", "IDR", "id", "Wash Picker", "carwash", ACTOR));
+    UUID companyId = result.company().getId();
+    UUID buId = result.firstBusiness().getId();
+    UUID outletId = seededOutletId(companyId, buId);
+
+    // The outlet row stores NULL, but GET /api/v1/outlets exposes the parent BU's vertical so
+    // the POS can gate without calling the dashboard-only org-units endpoint.
+    List<id.co.nativeapp.org.company.dto.OutletResponse> visible =
+        TenantContext.callAs(companyId.toString(), ACTOR, () -> orgUnitService.listActiveOutlets());
+    assertThat(visible).hasSize(1);
+    assertThat(visible.get(0).id()).isEqualTo(outletId);
+    assertThat(visible.get(0).vertical()).isEqualTo("carwash");
+  }
+
   // ---- helpers --------------------------------------------------------------------------------
 
   private String verticalOf(UUID orgUnitId) throws Exception {

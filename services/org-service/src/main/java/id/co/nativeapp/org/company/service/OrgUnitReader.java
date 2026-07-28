@@ -50,8 +50,8 @@ public class OrgUnitReader {
    * RLS constrains the result set to the bound company (rule 5). Used by the POS outlet picker
    * ({@code GET /api/v1/outlets}).
    *
-   * <p>Uses the {@link OutletView} projection — only {@code id} and {@code name} are selected
-   * (CLAUDE.md §3.3).
+   * <p>Uses the {@link OutletView} projection — only {@code id}, {@code name}, and the parent
+   * business unit's {@code vertical} are selected (CLAUDE.md §3.3).
    *
    * @return active outlets for the current tenant, ordered by name
    */

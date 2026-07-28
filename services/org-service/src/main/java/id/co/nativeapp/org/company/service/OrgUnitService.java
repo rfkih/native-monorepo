@@ -85,7 +85,7 @@ public class OrgUnitService {
   public List<OutletResponse> listActiveOutlets() {
     TenantContext.require();
     return reader.findActiveOutletsForCurrentTenant().stream()
-        .map(v -> new OutletResponse(v.getId(), v.getName()))
+        .map(v -> new OutletResponse(v.getId(), v.getName(), v.getVertical()))
         .toList();
   }
 }
