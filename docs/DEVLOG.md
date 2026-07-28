@@ -69,6 +69,25 @@ cascade-deactivate + reactivation.)
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **Business-unit verticals — restaurant | carwash | barbershop (2026-07-28)** — `org_unit.vertical`
+  (org V6: nullable VARCHAR(32); backfill existing BUs → `restaurant`): REQUIRED on every
+  BUSINESS_UNIT creation path (signup, create-company, add-business, org-units), rejected for
+  outlet/team, IMMUTABLE after create (like base currency: `updatable = false`, no PATCH path).
+  **Casing decision:** stored/emitted/requested as LOWERCASE module-key strings via a JPA
+  `AttributeConverter` (never `@Enumerated`, which would silently store the UPPERCASE enum name —
+  the exact casing-trap class the hub increment hit with `org_unit.type`), deliberately aligned with
+  entitlement-service's `module_catalog.module_key` vocabulary — though entitlements remain a
+  SEPARATE company-level concept, untouched this increment. `OrgUnitCreated/Changed` gained an
+  optional `vertical` (`["null","string"] default null`, appended LAST — positional-decode safety,
+  pinned by an old-reader contract test); consumers stay opaque. The POS learns the vertical via
+  `GET /api/v1/outlets` (`{id, name, vertical}` — parent-BU LEFT JOIN; cashiers can't read the
+  dashboard-only org-units endpoint). Console: vertical ChoiceCards on signup/onboarding, a
+  BU-only select in the org-tree add dialog, tree/hub badges, and a `requiredVertical` gate on
+  POS/Kitchen/Menu that renders a branded coming-soon panel (embedded outlet picker — never traps
+  a multi-vertical user) for carwash/barbershop outlets. **Client fails OPEN to restaurant on a
+  null vertical** (backfill guarantees it server-side; never brick a POS terminal on cache
+  staleness — do not "fix" this). No new ADR: the whitelist + ADR-0012-style semantics are
+  recorded here; a real carwash/barbershop POS is a later increment.
 - **Org-unit hub — Odoo-style record detail (2026-07-28)** — clicking a BUSINESS_UNIT or OUTLET
   in `/org` now opens `/org/:unitId` (the app's first param route): breadcrumb, sheet header
   (type badge + status + rename/(de|re)activate via dialogs lifted into `features/org/parts.tsx`),
