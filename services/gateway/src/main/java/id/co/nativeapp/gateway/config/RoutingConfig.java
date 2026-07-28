@@ -306,6 +306,60 @@ public class RoutingConfig {
   }
 
   // ---------------------------------------------------------------------------
+  // employee-service (owner dashboard — HR + payroll)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * HR records + assignments + compensation ({@code /api/v1/employees/**}) — strictly the
+   * owner/manager dashboard surface: employee rows carry PII and salary state, so the POS roles
+   * never reach them. Also covers the local org-read-model lookup ({@code
+   * /api/v1/employees/org-units}).
+   */
+  @Bean
+  RouterFunction<ServerResponse> employeesRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("employee-service-employees")
+        .route(path("/api/v1/employees/**"), http())
+        .before(uri(routes.employeeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /** Payroll runs (execute + read summaries/payslips/allocations) — owner/manager only. */
+  @Bean
+  RouterFunction<ServerResponse> payrollRunsRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("employee-service-payroll-runs")
+        .route(path("/api/v1/payroll-runs/**"), http())
+        .before(uri(routes.employeeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /** Payroll setup (catalog/statutory status + illustrative seed) — owner/manager only. */
+  @Bean
+  RouterFunction<ServerResponse> payrollSetupRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("employee-service-payroll-setup")
+        .route(path("/api/v1/payroll-setup/**"), http())
+        .before(uri(routes.employeeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  // ---------------------------------------------------------------------------
   // finance-service (owner dashboard)
   // ---------------------------------------------------------------------------
   @Bean

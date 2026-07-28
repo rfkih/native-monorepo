@@ -590,6 +590,128 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
   }
 
   // ---------------------------------------------------------------------------
+  // employee-service HR/payroll routes — owner/manager dashboard surface only
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void aCashierIsDeniedTheEmployeesRouteWith403() throws Exception {
+    // HR records carry PII and salary state — strictly a dashboard surface, never POS.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/employees")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void anOwnerCanReachTheEmployeesRouteWithInjectedTenantHeaders() throws Exception {
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/employees/some-id/assignments")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    RecordedRequest forwarded = theForwardedRequest();
+    assertThat(forwarded.getPath()).isEqualTo("/api/v1/employees/some-id/assignments");
+    assertThat(forwarded.getHeader("X-Company-Id")).isEqualTo(EXPECTED_COMPANY_ID);
+    assertThat(forwarded.getHeader("X-Actor")).isNotBlank();
+  }
+
+  @Test
+  void aCashierIsDeniedThePayrollRunsRouteWith403() throws Exception {
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/payroll-runs?period=2026-07")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void anOwnerCanReachThePayrollRunsRoute() throws Exception {
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/payroll-runs?period=2026-07")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/payroll-runs?period=2026-07");
+  }
+
+  @Test
+  void aCashierIsDeniedThePayrollSetupRouteWith403() throws Exception {
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/payroll-setup")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void anOwnerCanReachThePayrollSetupRoute() throws Exception {
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/payroll-setup")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/payroll-setup");
+  }
+
+  // ---------------------------------------------------------------------------
   // Public sign-up route — no Authorization header required
   // ---------------------------------------------------------------------------
 
