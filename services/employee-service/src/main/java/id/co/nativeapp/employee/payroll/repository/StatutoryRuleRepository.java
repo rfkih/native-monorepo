@@ -22,4 +22,18 @@ public interface StatutoryRuleRepository extends JpaRepository<StatutoryRule, UU
   Optional<StatutoryRule>
       findByRuleKeyAndActiveTrueAndEffectiveFromLessThanEqualAndEffectiveToGreaterThanEqual(
           String ruleKey, LocalDate from, LocalDate to);
+
+  /** The distinct provenances present (scalar strings — the setup-status read). */
+  @org.springframework.data.jpa.repository.Query(
+      value = "SELECT DISTINCT sr.provenance FROM statutory_rule sr",
+      nativeQuery = true)
+  List<String> findDistinctProvenances();
+
+  /** The newest illustrative rule-version label, or null when none exists (scalar). */
+  @org.springframework.data.jpa.repository.Query(
+      value =
+          "SELECT MAX(sr.rule_version) FROM statutory_rule sr"
+              + " WHERE sr.provenance = 'ILLUSTRATIVE_PLACEHOLDER'",
+      nativeQuery = true)
+  String findLatestIllustrativeVersion();
 }

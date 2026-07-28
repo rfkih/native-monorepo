@@ -4,7 +4,10 @@ import id.co.nativeapp.employee.assignment.domain.AssignmentAlreadyEndedExceptio
 import id.co.nativeapp.employee.assignment.domain.AssignmentNotFoundException;
 import id.co.nativeapp.employee.assignment.domain.ConflictingLegalEmployerException;
 import id.co.nativeapp.employee.employee.domain.EmployeeNotFoundException;
+import id.co.nativeapp.employee.payroll.domain.CompensationAlreadyEndedException;
+import id.co.nativeapp.employee.payroll.domain.CompensationNotFoundException;
 import id.co.nativeapp.employee.payroll.domain.IncompletePeriodException;
+import id.co.nativeapp.employee.payroll.domain.OverlappingCompensationException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
@@ -90,6 +93,39 @@ public class EmployeeApiAdvice {
     ProblemDetail problem = problem(HttpStatus.NOT_FOUND, "assignment-not-found", request);
     problem.setTitle("Assignment not found");
     // The message names only the assignment id (a UUID), never PII (rule 6).
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /** Ending a compensation package that is no longer open → 409 Conflict. */
+  @ExceptionHandler(CompensationAlreadyEndedException.class)
+  public ProblemDetail handleCompensationAlreadyEnded(
+      CompensationAlreadyEndedException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.CONFLICT, "compensation-already-ended", request);
+    problem.setTitle("Compensation package already ended");
+    // The message names only the package id (a UUID), never an amount (rule 6).
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /** A compensation package overlapping an existing one → 409 Conflict (double-pay guard). */
+  @ExceptionHandler(OverlappingCompensationException.class)
+  public ProblemDetail handleOverlappingCompensation(
+      OverlappingCompensationException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.CONFLICT, "overlapping-compensation", request);
+    problem.setTitle("Overlapping compensation package");
+    // The message names only ids (UUIDs), never an amount (rule 6).
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /** An operation referencing a compensation package not visible for that employee → 404. */
+  @ExceptionHandler(CompensationNotFoundException.class)
+  public ProblemDetail handleCompensationNotFound(
+      CompensationNotFoundException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.NOT_FOUND, "compensation-not-found", request);
+    problem.setTitle("Compensation package not found");
+    // The message names only the package id (a UUID), never an amount (rule 6).
     problem.setDetail(ex.getMessage());
     return problem;
   }

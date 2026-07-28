@@ -95,6 +95,36 @@ public class CompensationPackage extends Auditable {
     return !asOf.isBefore(effectiveFrom) && !asOf.isAfter(effectiveTo);
   }
 
+  /**
+   * Whether this package's effective period overlaps the given period (inclusive both ends) — the
+   * double-pay guard: the payroll run SUMS every covering package, so two overlapping packages
+   * would both contribute.
+   */
+  public boolean overlaps(LocalDate otherFrom, LocalDate otherTo) {
+    Objects.requireNonNull(otherFrom, "otherFrom");
+    Objects.requireNonNull(otherTo, "otherTo");
+    return !this.effectiveFrom.isAfter(otherTo) && !otherFrom.isAfter(this.effectiveTo);
+  }
+
+  /**
+   * Ends this package on the given date (effective-dated close — never a delete). Only an OPEN
+   * package (still at the {@link #OPEN_ENDED} sentinel) can be ended.
+   *
+   * @param endOn the last effective day; must be on or after {@code effectiveFrom}
+   * @throws CompensationAlreadyEndedException if the package is not open (→ 409)
+   * @throws IllegalArgumentException if {@code endOn} is before {@code effectiveFrom} (→ 400)
+   */
+  public void end(LocalDate endOn) {
+    Objects.requireNonNull(endOn, "endOn");
+    if (!OPEN_ENDED.equals(this.effectiveTo)) {
+      throw new CompensationAlreadyEndedException(this.id);
+    }
+    if (endOn.isBefore(this.effectiveFrom)) {
+      throw new IllegalArgumentException("endOn must not be before effectiveFrom");
+    }
+    this.effectiveTo = endOn;
+  }
+
   public UUID getId() {
     return id;
   }

@@ -1,7 +1,9 @@
 package id.co.nativeapp.employee.payroll.controller;
 
 import id.co.nativeapp.employee.payroll.domain.PayrollRun;
+import id.co.nativeapp.employee.payroll.dto.AllocationSummaryResponse;
 import id.co.nativeapp.employee.payroll.dto.PayrollRunResponse;
+import id.co.nativeapp.employee.payroll.dto.PayslipIndexRowResponse;
 import id.co.nativeapp.employee.payroll.dto.PayslipLineResponse;
 import id.co.nativeapp.employee.payroll.dto.RunPayrollCommand;
 import id.co.nativeapp.employee.payroll.dto.RunPayrollRequest;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -77,6 +80,43 @@ public class PayrollRunController {
     PayrollRun run = payrollRunService.calculateAndPost(command, request.baseCurrency());
     PayrollRunResponse body = PayrollRunResponse.from(run);
     return ResponseEntity.created(URI.create("/api/v1/payroll-runs/" + body.id())).body(body);
+  }
+
+  @Operation(
+      summary = "List a period's payroll runs",
+      description =
+          "Every run for the YYYY-MM period, newest run_seq first — company totals only. A"
+              + " re-run appears as an additional posting (there is no reversal).")
+  @GetMapping
+  public List<PayrollRunResponse> listRuns(@RequestParam(required = false) String period) {
+    return payrollRunReader.listByPeriod(period);
+  }
+
+  @Operation(
+      summary = "Get a run's labor cost by outlet",
+      description =
+          "The run's labor-cost buckets SUMmed per (outlet, GL account) across employees — the"
+              + " aggregation is the privacy guard: per-employee rows would leak individual"
+              + " salary (rule 6). The all-zeros outlet is the UNALLOCATED suspense bucket.")
+  @GetMapping("/{runId}/allocations")
+  public ResponseEntity<List<AllocationSummaryResponse>> getAllocations(@PathVariable UUID runId) {
+    return payrollRunReader
+        .allocationSummaries(runId)
+        .map(ResponseEntity::ok)
+        .orElseGet(() -> ResponseEntity.notFound().build());
+  }
+
+  @Operation(
+      summary = "Get a run's payslip index",
+      description =
+          "One row per employee with a payslip in the run (display name + line count) — no"
+              + " amounts; fetch the masked line detail per employee separately.")
+  @GetMapping("/{runId}/payslips")
+  public ResponseEntity<List<PayslipIndexRowResponse>> getPayslipIndex(@PathVariable UUID runId) {
+    return payrollRunReader
+        .payslipIndex(runId)
+        .map(ResponseEntity::ok)
+        .orElseGet(() -> ResponseEntity.notFound().build());
   }
 
   @Operation(

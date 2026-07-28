@@ -1,0 +1,97 @@
+package id.co.nativeapp.employee.payroll.service;
+
+import id.co.nativeapp.employee.employee.domain.EmployeeNotFoundException;
+import id.co.nativeapp.employee.employee.repository.EmployeeRepository;
+import id.co.nativeapp.employee.payroll.domain.CompensationPackage;
+import id.co.nativeapp.employee.payroll.dto.CompensationResponse;
+import id.co.nativeapp.employee.payroll.repository.CompensationPackageRepository;
+import id.co.nativeapp.money.Money;
+import id.co.nativeapp.tenant.TenantContext;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.UUID;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * Orchestrates the console compensation surface: masked reads here, writes via {@link
+ * CompensationWriter} (the {@code *Writer} pattern owns the tx + RLS GUC + validations). Base pay
+ * is salary PII (rule 6): every response this service produces is MASKED — the read path never
+ * selects the ciphertext, and the write path maps the persisted entity to a masked DTO without
+ * touching the amount.
+ */
+@Service
+public class CompensationService {
+
+  private final CompensationWriter writer;
+  private final CompensationPackageRepository packageRepository;
+  private final EmployeeRepository employeeRepository;
+
+  public CompensationService(
+      CompensationWriter writer,
+      CompensationPackageRepository packageRepository,
+      EmployeeRepository employeeRepository) {
+    this.writer = writer;
+    this.packageRepository = packageRepository;
+    this.employeeRepository = employeeRepository;
+  }
+
+  /**
+   * The employee's packages, masked — the projection never selects {@code base_pay_enc}.
+   *
+   * @throws EmployeeNotFoundException if the employee is not visible in the bound tenant (→ 404)
+   */
+  @Transactional(readOnly = true)
+  public List<CompensationResponse> listMasked(UUID employeeId) {
+    if (employeeRepository.findById(employeeId).isEmpty()) {
+      throw new EmployeeNotFoundException(employeeId);
+    }
+    // Projection-to-DTO mapping happens here in the service layer (CODE-STRUCTURE §3.3).
+    return packageRepository.findViewsByEmployeeId(employeeId).stream()
+        .map(
+            v ->
+                new CompensationResponse(
+                    v.getId(),
+                    v.getEmploymentContractId(),
+                    v.getPayFrequency(),
+                    v.getEffectiveFrom(),
+                    v.getEffectiveTo(),
+                    CompensationResponse.MASK))
+        .toList();
+  }
+
+  /** Creates a validated package (see {@link CompensationWriter#createValidated}) — masked echo. */
+  public CompensationResponse create(
+      UUID employeeId,
+      UUID employmentContractId,
+      long basePayMinor,
+      String currency,
+      LocalDate effectiveFrom,
+      LocalDate effectiveTo) {
+    TenantContext.require();
+    CompensationPackage saved =
+        writer.createValidated(
+            employeeId,
+            employmentContractId,
+            Money.ofMinor(basePayMinor, currency),
+            effectiveFrom,
+            effectiveTo);
+    return masked(saved);
+  }
+
+  /** Ends an OPEN package (see {@link CompensationWriter#endPackage}) — masked echo. */
+  public CompensationResponse end(UUID employeeId, UUID packageId, LocalDate endOn) {
+    TenantContext.require();
+    return masked(writer.endPackage(employeeId, packageId, endOn));
+  }
+
+  private static CompensationResponse masked(CompensationPackage pkg) {
+    return new CompensationResponse(
+        pkg.getId(),
+        pkg.getEmploymentContractId(),
+        pkg.getPayFrequency().name(),
+        pkg.getEffectiveFrom(),
+        pkg.getEffectiveTo(),
+        CompensationResponse.MASK);
+  }
+}
