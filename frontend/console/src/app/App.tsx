@@ -22,6 +22,9 @@ const Pos = lazy(() => import('@/features/pos/Pos').then((m) => ({ default: m.Po
 const OrgTree = lazy(() =>
   import('@/features/org/OrgTree').then((m) => ({ default: m.OrgTree })),
 )
+const OrgUnitDetail = lazy(() =>
+  import('@/features/org/OrgUnitDetail').then((m) => ({ default: m.OrgUnitDetail })),
+)
 const GroupConsolidation = lazy(() =>
   import('@/features/groups/GroupConsolidation').then((m) => ({ default: m.GroupConsolidation })),
 )
@@ -183,6 +186,12 @@ export function App() {
             <Route
               path="/org"
               element={company ? <OrgTree /> : <Navigate to="/onboarding" replace />}
+            />
+          )}
+          {canDashboard && (
+            <Route
+              path="/org/:unitId"
+              element={company ? <OrgUnitDetail /> : <Navigate to="/onboarding" replace />}
             />
           )}
           {canDashboard && (

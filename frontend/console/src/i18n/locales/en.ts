@@ -415,6 +415,60 @@ export const en = {
     signedInAs: 'Signed in as',
     signOut: 'Sign out',
   },
+  orgHub: {
+    subtitle: 'Everything this unit runs: performance, outlets, and people.',
+    breadcrumbLabel: 'Breadcrumb',
+    tabsLabel: 'Unit sections',
+    tabs: {
+      overview: 'Overview',
+      outlets: 'Outlets',
+      people: 'People',
+      expenses: 'Expenses',
+      payroll: 'Payroll',
+    },
+    smart: {
+      outlets: 'Active outlets',
+      people: 'People assigned',
+      net: 'Net this period',
+      parentUnit: 'Business unit',
+    },
+    overview: {
+      revenue: 'Revenue',
+      expense: 'Expenses',
+      net: 'Net',
+      contribution: 'Outlet contribution',
+      shareOfRevenue: '{{percent}} of revenue',
+      noPostings: 'No postings for this period yet. Sales appear here as they are recorded.',
+      error: 'Could not load the P&L for this unit.',
+      illustrative: 'Includes illustrative figures',
+      prevMonth: 'Previous month',
+      nextMonth: 'Next month',
+    },
+    outletsTab: {
+      add: 'Add outlet',
+      empty: 'No outlets yet',
+      emptyHint: 'Add the first outlet to start selling under this business unit.',
+    },
+    people: {
+      empty: 'No one is assigned under this unit yet',
+      emptyHint: 'Assign teammates to its outlets from the Team page.',
+      error: 'Could not load the people for this unit.',
+      unknownUser: 'Unknown user',
+    },
+    comingSoon: {
+      badge: 'Coming soon',
+      title: 'This module is on the roadmap',
+      expensesBody:
+        'Recording expenses against this unit is coming soon — expense entries will post straight into its P&L.',
+      payrollBody:
+        'Payroll for the people of this unit is coming soon — runs, payslips, and per-outlet labor cost.',
+    },
+    notFound: {
+      title: 'Unit not found',
+      hint: 'It may have been removed, or the link is stale.',
+      back: 'Back to the org tree',
+    },
+  },
   outletGate: {
     title: 'No outlet to ring on',
     body: 'This company has no active outlet yet, or none is assigned to you. Sales, menus, and kitchen tickets always belong to an outlet.',

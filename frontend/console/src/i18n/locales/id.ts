@@ -410,6 +410,61 @@ export const id = {
     signedInAs: 'Masuk sebagai',
     signOut: 'Keluar',
   },
+  orgHub: {
+    subtitle: 'Semua yang dijalankan unit ini: kinerja, gerai, dan tim.',
+    breadcrumbLabel: 'Jejak navigasi',
+    tabsLabel: 'Bagian unit',
+    tabs: {
+      overview: 'Ringkasan',
+      outlets: 'Gerai',
+      people: 'Tim',
+      expenses: 'Pengeluaran',
+      payroll: 'Penggajian',
+    },
+    smart: {
+      outlets: 'Gerai aktif',
+      people: 'Anggota ditugaskan',
+      net: 'Neto periode ini',
+      parentUnit: 'Unit bisnis',
+    },
+    overview: {
+      revenue: 'Pendapatan',
+      expense: 'Pengeluaran',
+      net: 'Neto',
+      contribution: 'Kontribusi gerai',
+      shareOfRevenue: '{{percent}} dari pendapatan',
+      noPostings:
+        'Belum ada pembukuan untuk periode ini. Penjualan akan muncul di sini saat tercatat.',
+      error: 'Gagal memuat laba rugi unit ini.',
+      illustrative: 'Termasuk angka ilustratif',
+      prevMonth: 'Bulan sebelumnya',
+      nextMonth: 'Bulan berikutnya',
+    },
+    outletsTab: {
+      add: 'Tambah gerai',
+      empty: 'Belum ada gerai',
+      emptyHint: 'Tambahkan gerai pertama untuk mulai berjualan di bawah unit bisnis ini.',
+    },
+    people: {
+      empty: 'Belum ada yang ditugaskan di unit ini',
+      emptyHint: 'Tugaskan anggota tim ke gerainya melalui halaman Tim.',
+      error: 'Gagal memuat anggota unit ini.',
+      unknownUser: 'Pengguna tidak dikenal',
+    },
+    comingSoon: {
+      badge: 'Segera hadir',
+      title: 'Modul ini ada di peta jalan',
+      expensesBody:
+        'Pencatatan pengeluaran untuk unit ini segera hadir — entri pengeluaran akan langsung masuk ke laba ruginya.',
+      payrollBody:
+        'Penggajian untuk tim unit ini segera hadir — proses gaji, slip gaji, dan biaya tenaga kerja per gerai.',
+    },
+    notFound: {
+      title: 'Unit tidak ditemukan',
+      hint: 'Mungkin sudah dihapus, atau tautannya kedaluwarsa.',
+      back: 'Kembali ke struktur organisasi',
+    },
+  },
   outletGate: {
     title: 'Belum ada gerai untuk transaksi',
     body: 'Perusahaan ini belum memiliki gerai aktif, atau belum ada gerai yang ditugaskan kepada Anda. Penjualan, menu, dan tiket dapur selalu terikat pada sebuah gerai.',

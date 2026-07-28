@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 import { ChevronDown, ChevronRight, Plus, TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -151,15 +152,28 @@ function OrgNode({
           )}
         </button>
 
-        {/* node name */}
-        <span
-          className={cn(
-            'flex-1 text-[14.5px] font-semibold',
-            unit.active ? 'text-ink' : 'text-ink-3',
-          )}
-        >
-          {unit.name}
-        </span>
+        {/* node name — BU/outlet click through to the unit hub (teams have no detail page) */}
+        {unit.type === 'TEAM' ? (
+          <span
+            className={cn(
+              'flex-1 text-[14.5px] font-semibold',
+              unit.active ? 'text-ink' : 'text-ink-3',
+            )}
+          >
+            {unit.name}
+          </span>
+        ) : (
+          <Link
+            to={`/org/${unit.id}`}
+            className={cn(
+              'min-w-0 flex-1 truncate text-[14.5px] font-semibold transition-colors',
+              'hover:text-brand-700 hover:underline',
+              unit.active ? 'text-ink' : 'text-ink-3',
+            )}
+          >
+            {unit.name}
+          </Link>
+        )}
 
         {/* type badge */}
         <OrgUnitTypeBadge type={unit.type} />

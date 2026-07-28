@@ -120,3 +120,88 @@ export function usePatchOrgUnit(params: { companyId: string; actor: string }) {
     },
   })
 }
+
+// ---------------------------------------------------------------------------
+// Org-unit hub (detail page) data
+// ---------------------------------------------------------------------------
+
+/** One child outlet's slice of a unit P&L rollup (mirror of finance OutletPnlRow). */
+export interface UnitPnlOutletRow {
+  orgUnitId: string
+  /** Display name from finance's cached org tree — may lag hydration. */
+  name: string | null
+  active: boolean
+  revenueMinor: number
+  expenseMinor: number
+  netMinor: number
+}
+
+/** Mirror of finance UnitPnlResponse (GET /api/v1/pnl/org-units/{id}). */
+export interface UnitPnlResponse {
+  orgUnitId: string
+  period: string
+  revenueMinor: number
+  expenseMinor: number
+  netMinor: number
+  currency: string
+  usesIllustrativeRules: boolean
+  /** Per-child-outlet breakdown, revenue-descending; empty for an outlet-type unit. */
+  outlets: UnitPnlOutletRow[]
+}
+
+/**
+ * GET /api/v1/pnl/org-units/{unitId}?period=&currency= — the per-unit P&L rollup. Sends the
+ * company base currency as the hint so an empty period renders as zeros (200) instead of 204;
+ * null only when finance does not know the unit yet (org_unit_ref hydration lag — render zeros,
+ * never an error).
+ */
+export function useUnitPnl(params: {
+  companyId: string
+  actor: string
+  unitId: string
+  period: string
+  baseCurrency: string
+  enabled: boolean
+}) {
+  const { companyId, actor, unitId, period, baseCurrency, enabled } = params
+  return useQuery({
+    enabled,
+    placeholderData: keepPreviousData,
+    queryKey: ['unitPnl', companyId, unitId, period],
+    queryFn: () =>
+      apiFetch<UnitPnlResponse>(
+        `/api/v1/pnl/org-units/${unitId}?period=${period}&currency=${encodeURIComponent(baseCurrency)}`,
+        { tenant: { companyId, actor } },
+      ),
+  })
+}
+
+/** Mirror of org-service OrgUnitUserResponse (GET /api/v1/org-units/{id}/users). */
+export interface OrgUnitUser {
+  userId: string
+  orgUnitId: string
+  outletName: string
+}
+
+/**
+ * GET /api/v1/org-units/{unitId}/users — active user↔outlet assignments under a unit (the
+ * People tab). Identity fields are joined client-side from the cached team list.
+ */
+export function useUnitUsers(params: {
+  companyId: string
+  actor: string
+  unitId: string
+  enabled: boolean
+}) {
+  const { companyId, actor, unitId, enabled } = params
+  return useQuery({
+    enabled,
+    queryKey: ['unitUsers', companyId, unitId],
+    queryFn: async () => {
+      const result = await apiFetch<OrgUnitUser[]>(`/api/v1/org-units/${unitId}/users`, {
+        tenant: { companyId, actor },
+      })
+      return result ?? []
+    },
+  })
+}
