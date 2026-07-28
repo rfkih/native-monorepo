@@ -3,6 +3,8 @@ package id.co.nativeapp.restaurant.sale.service;
 import id.co.nativeapp.events.AvroSerde;
 import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.money.Money;
+import id.co.nativeapp.restaurant.metric.domain.RestaurantMetricContract;
+import id.co.nativeapp.restaurant.metric.messaging.MetricPublishedSchema;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
 import id.co.nativeapp.restaurant.sale.domain.Sale;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
@@ -13,10 +15,13 @@ import id.co.nativeapp.restaurant.sale.projection.SaleView;
 import id.co.nativeapp.restaurant.sale.repository.SaleRepository;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.apache.avro.generic.GenericRecord;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +38,8 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Component
 public class SaleWriter {
+
+  private static final Logger log = LoggerFactory.getLogger(SaleWriter.class);
 
   private final SaleRepository repository;
   private final OutboxWriter outboxWriter;
@@ -121,6 +128,10 @@ public class SaleWriter {
         UUID.fromString(companyId),
         saved.getOccurredAt());
 
+    // Own-sales commission feed: emit a MetricPublished (sales_amount @ employee) in the SAME
+    // transaction, attributed to the cashier who rang it (rule 3).
+    emitSalesMetric(saved, companyId);
+
     // Test seam: a no-op in production; a test can install a hook that throws here to
     // prove the sale AND the outbox row roll back together (atomicity, rule 3).
     postOutboxHook.afterOutboxWrite(saved);
@@ -168,9 +179,47 @@ public class SaleWriter {
         UUID.fromString(companyId),
         saved.getOccurredAt());
 
+    emitSalesMetric(saved, companyId);
+
     postOutboxHook.afterOutboxWrite(saved);
 
     return new RecordSaleResult(SaleResponse.from(saved), true);
+  }
+
+  /**
+   * Emits one {@code MetricPublished} ({@code sales_amount} @ employee grain) for a sale,
+   * attributed to the cashier who rang it (the bound actor = the JWT sub, also on {@code
+   * sale.created_by}), in the caller's transaction (rule 3). Skipped when the actor is NOT a UUID:
+   * {@code metric_input.subject_id} is a UUID column, so a non-UUID actor (the header-trust dev
+   * recipe's fixed actor) cannot key a metric row — emitting one would fail the consumer decode.
+   * This is a documented dev-mode caveat; real logins always carry a UUID sub.
+   */
+  private void emitSalesMetric(Sale saved, String companyId) {
+    String actor = TenantContext.require().actor();
+    UUID subject;
+    try {
+      subject = UUID.fromString(actor);
+    } catch (IllegalArgumentException e) {
+      log.debug("Skipping sales_amount metric — actor '{}' is not a UUID sub (dev recipe)", actor);
+      return;
+    }
+    String period = saved.getOccurredAt().atZone(ZoneOffset.UTC).toLocalDate().toString();
+    GenericRecord metric =
+        MetricPublishedSchema.toRecord(
+            RestaurantMetricContract.SALES_AMOUNT,
+            period,
+            RestaurantMetricContract.EMPLOYEE_GRAIN,
+            subject.toString(),
+            saved.getAmount().amountMinor(),
+            saved.getBusinessId().toString());
+    outboxWriter.write(
+        MetricPublishedSchema.AGGREGATE_TYPE,
+        saved.getId().toString(),
+        MetricPublishedSchema.EVENT_TYPE,
+        AvroSerde.serialize(metric),
+        null,
+        UUID.fromString(companyId),
+        saved.getOccurredAt());
   }
 
   /**
