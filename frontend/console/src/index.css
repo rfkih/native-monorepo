@@ -221,6 +221,9 @@
     .floaty,
     .shimmer {
       animation: none;
+    }
+    /* Only the skeleton keeps a static fill — a bare background here would box every .reveal. */
+    .shimmer {
       background: var(--color-ink-100);
     }
   }

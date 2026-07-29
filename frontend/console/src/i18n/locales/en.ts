@@ -108,6 +108,7 @@ export const en = {
     r2Point1: 'Menu, orders, tables and payments in one screen',
     r2Point2: 'Every sale posts straight to the dimensional ledger',
     r2Point3: 'Idempotent and fault-tolerant by design',
+    r2PhotoAlt: 'A barista at work behind the espresso machine of a busy coffee bar',
     // feature grid
     gridKicker: 'Why Native',
     gridTitle: 'One platform, every layer of the business',

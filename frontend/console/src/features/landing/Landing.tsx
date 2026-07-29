@@ -4,10 +4,11 @@
  * Rendered for UNAUTHENTICATED visitors (the OidcAuthProvider no longer force-redirects to Keycloak;
  * login is explicit). "Get started" → /signup; "Sign in" → auth.login() (Keycloak PKCE redirect).
  *
- * World-class, self-contained: atmospheric layered backdrop, a realistic in-product "screenshot"
- * hero with floating accent cards, alternating feature rows with custom SVG mockups, scroll-reveal
- * motion, light/dark theme toggle. Fully localized (react-i18next) and locale-aware `Intl` for money.
- * All artwork is inline SVG/DOM (see ./art) — no raster assets, no external image calls.
+ * World-class, self-contained: real photography (bundled Unsplash assets, see ./photos and
+ * src/assets/landing/SOURCES.md) under theme-aware brand scrims, with the in-product "screenshot"
+ * mocks floating over it, alternating feature rows, scroll-reveal motion, light/dark theme toggle.
+ * Fully localized (react-i18next) and locale-aware `Intl` for money. Product mockups stay inline
+ * SVG/DOM (see ./art); photos are hashed local assets — still no external calls at runtime.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
@@ -28,6 +29,7 @@ import {
   SaleToast,
   VerticalStrip,
 } from './art'
+import { ctaPhoto, heroPhoto, Photo, portraitPhoto, posPhoto } from './photos'
 
 // ── Scroll-reveal (flash-free, reduced-motion-safe) ──────────────────────────────────────────────
 
@@ -158,7 +160,29 @@ function Header({ onSignIn, onGetStarted }: { onSignIn: () => void; onGetStarted
 function Hero({ onSignIn, onGetStarted }: { onSignIn: () => void; onGetStarted: () => void }) {
   const { t } = useTranslation()
   return (
-    <section className="relative">
+    <section className="relative isolate overflow-hidden">
+      {/* Full-bleed photo layer: warung scene → brand tint → theme-aware paper scrim. The scrim is
+          effectively solid over the copy column and lifts toward the right, so the photo emerges
+          under the dashboard mock; `--color-paper` flips with the theme, so dark mode is free. */}
+      <div aria-hidden className="absolute inset-0 -z-10">
+        <Photo
+          photo={heroPhoto}
+          alt=""
+          priority
+          sizes="100vw"
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+        <div className="absolute inset-0 bg-brand-900/35 mix-blend-multiply" />
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              'linear-gradient(90deg, var(--color-paper) 0%, var(--color-paper) 34%, color-mix(in srgb, var(--color-paper) 72%, transparent) 58%, color-mix(in srgb, var(--color-paper) 22%, transparent) 100%)',
+          }}
+        />
+        <div className="absolute inset-0 bg-paper/85 lg:hidden" />
+        <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-b from-transparent to-paper" />
+      </div>
       <div className="mx-auto grid w-full max-w-6xl grid-cols-1 items-center gap-14 px-5 pb-24 pt-14 lg:grid-cols-[1.05fr_0.95fr] lg:pt-20">
         {/* Left — copy + CTAs, staggered entrance */}
         <div>
@@ -373,12 +397,6 @@ function Steps() {
 function Testimonial() {
   const { t } = useTranslation()
   const author = t('landing.quoteAuthor')
-  const initials = author
-    .split(' ')
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase()
   return (
     <section className="border-t border-line px-5 py-24">
       <Reveal className="mx-auto max-w-3xl text-center">
@@ -387,9 +405,11 @@ function Testimonial() {
           {t('landing.quoteText')}
         </blockquote>
         <div className="mt-7 flex items-center justify-center gap-3">
-          <span className="grid size-11 place-items-center rounded-full bg-gradient-to-br from-brand-600 to-brand-800 text-[14px] font-bold text-white">
-            {initials}
-          </span>
+          <Photo
+            photo={portraitPhoto}
+            alt={author}
+            className="size-11 rounded-full object-cover ring-2 ring-brand-100 dark:ring-brand-300/30"
+          />
           <div className="text-left">
             <div className="text-sm font-bold text-ink">{author}</div>
             <div className="text-[12.5px] text-ink-3">{t('landing.quoteRole')}</div>
@@ -407,6 +427,14 @@ function CtaBand({ onSignIn, onGetStarted }: { onSignIn: () => void; onGetStarte
   return (
     <section className="px-5 py-20">
       <Reveal className="relative mx-auto w-full max-w-5xl overflow-hidden rounded-[32px] bg-gradient-to-br from-brand-600 to-brand-800 px-6 py-16 text-center shadow-lg">
+        {/* photo texture as a low-opacity luminosity layer — the gradient supplies hue (true brand
+            duotone), the carwash supplies light and shadow; white copy keeps AA regardless of image */}
+        <Photo
+          photo={ctaPhoto}
+          alt=""
+          sizes="(min-width: 1100px) 1024px, 96vw"
+          className="absolute inset-0 h-full w-full object-cover opacity-30 mix-blend-luminosity"
+        />
         {/* decorative grid inside the band */}
         <svg className="pointer-events-none absolute inset-0 h-full w-full text-white/10" aria-hidden>
           <defs>
@@ -508,7 +536,22 @@ export function Landing() {
           title={t('landing.r2Title')}
           body={t('landing.r2Body')}
           points={[t('landing.r2Point1'), t('landing.r2Point2'), t('landing.r2Point3')]}
-          media={<PosReceiptMock />}
+          media={
+            // Collage: real counter scene with the product receipt floating over it. The wrapper's
+            // bottom padding reserves the receipt's overhang so it never bleeds into the next section.
+            <div className="relative mx-auto w-full max-w-[500px] pb-14">
+              <div className="relative overflow-hidden rounded-card shadow-lg">
+                <Photo
+                  photo={posPhoto}
+                  alt={t('landing.r2PhotoAlt')}
+                  sizes="(min-width: 1024px) 500px, 92vw"
+                  className="aspect-[4/3] w-full object-cover"
+                />
+                <div aria-hidden className="absolute inset-0 bg-brand-900/25 mix-blend-multiply" />
+              </div>
+              <PosReceiptMock className="absolute bottom-0 right-0 w-[264px] sm:-right-4" />
+            </div>
+          }
         />
         <FeatureGrid />
         <Steps />

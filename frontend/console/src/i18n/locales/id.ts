@@ -104,6 +104,7 @@ export const id = {
     r2Point1: 'Menu, pesanan, meja, dan pembayaran dalam satu layar',
     r2Point2: 'Setiap penjualan langsung tercatat ke buku besar dimensional',
     r2Point3: 'Idempoten dan tahan gangguan secara desain',
+    r2PhotoAlt: 'Seorang barista bekerja di balik mesin espresso kedai kopi yang ramai',
     gridKicker: 'Kenapa Native',
     gridTitle: 'Satu platform, setiap lapisan bisnis',
     gridSubtitle:

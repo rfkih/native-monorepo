@@ -1,6 +1,7 @@
 /**
- * Landing-page artwork & product mockups — all self-contained inline SVG / DOM (no raster assets,
- * no external calls), theme-aware via the design-system tokens, and crisp at any size.
+ * Landing-page artwork & product mockups — self-contained inline SVG / DOM, theme-aware via the
+ * design-system tokens, and crisp at any size. (Raster photography lives in ./photos; the mocks
+ * here deliberately stay vector so they recolor with the theme and float over the photos.)
  *
  * The "screenshots" (DashboardMock, PosReceiptMock) are the real product's aesthetic rebuilt as
  * static markup — the same trick Linear/Stripe use so the hero art stays pixel-perfect and themable.
@@ -251,7 +252,7 @@ export function FxChip({ className }: { className?: string }) {
 
 // ── POS receipt mock (feature row) ───────────────────────────────────────────────────────────────
 
-export function PosReceiptMock() {
+export function PosReceiptMock({ className }: { className?: string }) {
   const { t, i18n } = useTranslation()
   const locale = localeOf(i18n.language)
   const items: [string, number, number][] = [
@@ -261,7 +262,12 @@ export function PosReceiptMock() {
   ]
   const subtotal = items.reduce((s, [, q, p]) => s + q * p, 0)
   return (
-    <div className="mx-auto w-full max-w-[320px] rounded-[20px] border border-line bg-surface p-5 shadow-lg">
+    <div
+      className={cn(
+        'mx-auto w-full max-w-[320px] rounded-[20px] border border-line bg-surface p-5 shadow-lg',
+        className,
+      )}
+    >
       <div className="flex items-center justify-between border-b border-dashed border-line pb-3">
         <div>
           <div className="font-display text-[14px] font-bold text-ink">{t('landing.posOrder')}</div>
