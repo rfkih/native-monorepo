@@ -82,6 +82,22 @@ public enum AccountRole {
    * placeholder computed in {@code BillWriter}). Maps to account 1300 (ILLUSTRATIVE).
    */
   VAT_INPUT,
+  /**
+   * Phase 3 bank: the single Bank control account (1000) that ALL bank accounts post to
+   * (per-account balances live in the bank sub-ledger). Debited on a reconciled deposit, credited
+   * on a reconciled withdrawal. Maps to account 1000 (ILLUSTRATIVE — SME-gated).
+   */
+  BANK,
+  /**
+   * Phase 3 bank: interest income (4100) — the contra credit for a deposit reconciled as INTEREST.
+   * ILLUSTRATIVE — SME-gated.
+   */
+  INTEREST_INCOME,
+  /**
+   * Phase 3 bank: bank charges (5400) — the contra debit for a withdrawal reconciled as BANK_FEE.
+   * ILLUSTRATIVE — SME-gated.
+   */
+  BANK_CHARGES,
   EXPENSE,
   LABOR_EXPENSE,
   LABOR_CLEARING,
