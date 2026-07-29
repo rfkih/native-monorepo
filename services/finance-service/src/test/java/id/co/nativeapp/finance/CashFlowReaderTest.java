@@ -44,6 +44,7 @@ class CashFlowReaderTest {
     when(resolver.resolve(eq(AccountRole.CASH_CLEARING), any())).thenReturn("1900");
     when(resolver.resolve(eq(AccountRole.QRIS_CLEARING), any())).thenReturn("1901");
     when(resolver.resolve(eq(AccountRole.CARD_CLEARING), any())).thenReturn("1902");
+    when(resolver.resolve(eq(AccountRole.FIXED_ASSET_COST), any())).thenReturn("1500");
     reader = new CashFlowReader(tb, resolver, Clock.fixed(NOW, ZoneOffset.UTC));
   }
 
@@ -106,6 +107,35 @@ class CashFlowReaderTest {
     });
     assertThat(cf.cashFromOperatingMinor()).isZero();
     assertThat(cf.netChangeInCashMinor()).isZero();
+    assertThat(cf.reconciled()).isTrue();
+  }
+
+  @Test
+  void capexClassifiesAsInvestingAndDepreciationAddsBackInOperating() {
+    // Capex: Dr 1500 Fixed-asset cost 12,000,000 / Cr 1900 cash 12,000,000.
+    // Depreciation: Dr 5500 expense 1,000,000 / Cr 1590 accumulated 1,000,000.
+    feed(
+        line("1500", "ASSET", 12_000_000L, 0L), // investing (role-resolved)
+        line("1900", "ASSET", 0L, 12_000_000L), // cash
+        line("5500", "EXPENSE", 1_000_000L, 0L),
+        line("1590", "ASSET", 0L, 1_000_000L)); // the add-back stays operating
+
+    CashFlowResponse cf = reader.read(PERIOD).orElseThrow();
+    assertThat(cf.netIncomeMinor()).isEqualTo(-1_000_000L); // the depreciation expense
+    // Accumulated depreciation adds back +1,000,000 in OPERATING → operating cash effect zero.
+    assertThat(cf.operatingLines()).singleElement().satisfies(l -> {
+      assertThat(l.accountCode()).isEqualTo("1590");
+      assertThat(l.amountMinor()).isEqualTo(1_000_000L);
+    });
+    assertThat(cf.cashFromOperatingMinor()).isZero();
+    // The fixed-asset cost movement is the capex outflow under INVESTING.
+    assertThat(cf.investingLines()).singleElement().satisfies(l -> {
+      assertThat(l.accountCode()).isEqualTo("1500");
+      assertThat(l.amountMinor()).isEqualTo(-12_000_000L);
+    });
+    assertThat(cf.cashFromInvestingMinor()).isEqualTo(-12_000_000L);
+    assertThat(cf.netChangeInCashMinor()).isEqualTo(-12_000_000L);
+    assertThat(cf.cashMovementMinor()).isEqualTo(-12_000_000L);
     assertThat(cf.reconciled()).isTrue();
   }
 

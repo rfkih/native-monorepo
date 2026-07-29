@@ -60,6 +60,15 @@ public class CashFlowReader {
     AccountRole.CARD_CLEARING
   };
 
+  /**
+   * The roles whose accounts classify as INVESTING (Phase 6, ADR 0020): the non-current fixed-asset
+   * COST account — its movement is capex. Deliberately NOT {@code ACCUMULATED_DEPRECIATION} (also
+   * ASSET-typed): that stays in OPERATING as the classic non-cash depreciation add-back that offsets
+   * the expense's hit to net income. Role-resolved like {@link #CASH_ROLES} (SME-pluggable), because
+   * both 1500 and 1590 are ASSET-typed — the split cannot come from {@code AccountType}.
+   */
+  private static final AccountRole[] INVESTING_ROLES = {AccountRole.FIXED_ASSET_COST};
+
   /** The cash-flow activity a non-cash balance-sheet account's movement belongs to. */
   private enum Activity {
     OPERATING,
@@ -101,6 +110,7 @@ public class CashFlowReader {
 
     String currency = lines.getFirst().getCurrency().strip();
     Set<String> cashCodes = resolveCashCodes();
+    Set<String> investingCodes = resolveInvestingCodes();
 
     long totalRevenue = 0L;
     long totalExpense = 0L;
@@ -146,7 +156,7 @@ public class CashFlowReader {
           long adjustment = Math.negateExact(movement);
           CashFlowLineItem item =
               new CashFlowLineItem(line.getAccountCode(), accountType.name(), adjustment);
-          switch (classify(accountType)) {
+          switch (classify(line.getAccountCode(), accountType, investingCodes)) {
             case OPERATING -> {
               operatingLines.add(item);
               operatingAdj = Math.addExact(operatingAdj, adjustment);
@@ -201,20 +211,33 @@ public class CashFlowReader {
 
   /**
    * Classifies a non-cash balance-sheet account's movement into a cash-flow activity. ILLUSTRATIVE
-   * (ADR 0019): everything current is operating; EQUITY is financing. The current-vs-non-current
-   * split (non-current assets → investing, long-term debt → financing) is SME-gated and reserved for
-   * Phase 6 fixed assets — today the COA has only current assets/liabilities + synthetic retained
-   * earnings, so operating captures all working capital.
+   * (ADR 0019/0020): the role-resolved investing set wins (fixed-asset cost → capex); then EQUITY →
+   * financing; everything else (current working capital + the accumulated-depreciation add-back +
+   * prepaid/deferred-revenue) is operating. The finer current-vs-non-current / long-term-debt split
+   * is SME-gated.
    */
-  private static Activity classify(AccountType accountType) {
+  private static Activity classify(
+      String accountCode, AccountType accountType, Set<String> investingCodes) {
+    if (investingCodes.contains(accountCode)) {
+      return Activity.INVESTING;
+    }
     return accountType == AccountType.EQUITY ? Activity.FINANCING : Activity.OPERATING;
   }
 
   /** Resolves the cash &amp; cash-equivalent account codes from the cash roles (skips any unmapped). */
   private Set<String> resolveCashCodes() {
+    return resolveCodes(CASH_ROLES);
+  }
+
+  /** Resolves the investing account codes (fixed-asset cost) from the investing roles. */
+  private Set<String> resolveInvestingCodes() {
+    return resolveCodes(INVESTING_ROLES);
+  }
+
+  private Set<String> resolveCodes(AccountRole[] roles) {
     Instant asOf = clock.instant();
     Set<String> codes = new HashSet<>();
-    for (AccountRole role : CASH_ROLES) {
+    for (AccountRole role : roles) {
       String code = roleAccountResolver.resolve(role, asOf);
       if (code != null) {
         codes.add(code);

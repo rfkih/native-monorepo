@@ -113,6 +113,35 @@ public enum AccountRole {
    * refund). Maps to account 1310 (ILLUSTRATIVE — regime + refund-vs-carryforward policy SME-gated).
    */
   VAT_CREDIT_CARRYFORWARD,
+  /**
+   * Phase 6 assets: the fixed-asset cost control account — debited when an asset is acquired
+   * (capitalized), the capex the cash-flow statement classifies as INVESTING. Maps to account 1500
+   * (ILLUSTRATIVE — SME-gated).
+   */
+  FIXED_ASSET_COST,
+  /**
+   * Phase 6 assets: accumulated depreciation (a contra-asset) — credited by each monthly
+   * depreciation run. Stays in the cash-flow OPERATING section (the non-cash add-back that offsets
+   * the depreciation expense). Maps to account 1590 (ILLUSTRATIVE — SME-gated).
+   */
+  ACCUMULATED_DEPRECIATION,
+  /**
+   * Phase 6 assets: depreciation expense — debited by each monthly depreciation run. Maps to account
+   * 5500 (ILLUSTRATIVE — SME-gated).
+   */
+  DEPRECIATION_EXPENSE,
+  /**
+   * Phase 6 deferrals: prepaid expense (an asset) — debited when an expense is paid up front,
+   * credited as each month's share is amortized to EXPENSE. Maps to account 1400 (ILLUSTRATIVE —
+   * SME-gated).
+   */
+  PREPAID_EXPENSE,
+  /**
+   * Phase 6 deferrals: deferred revenue (a liability) — credited when revenue is received up front,
+   * debited as each month's share is recognized to REVENUE. Maps to account 2400 (ILLUSTRATIVE —
+   * SME-gated).
+   */
+  DEFERRED_REVENUE,
   EXPENSE,
   LABOR_EXPENSE,
   LABOR_CLEARING,
