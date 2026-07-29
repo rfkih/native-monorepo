@@ -1,0 +1,470 @@
+import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { Link, useParams } from 'react-router-dom'
+import { ChevronRight, TriangleAlert } from 'lucide-react'
+import { Card } from '@/components/ui/Card'
+import { Button } from '@/components/ui/Button'
+import { Badge } from '@/components/ui/Badge'
+import { Spinner } from '@/components/ui/Spinner'
+import { Field, TextInput } from '@/components/ui/Field'
+import { EmptyState, KpiTile } from '@/features/_shared/financeUi'
+import { useSession } from '@/lib/session'
+import { localeOf } from '@/i18n'
+import { formatMoney, isoMinorExponent } from '@/lib/money'
+import {
+  useBill,
+  usePostBill,
+  useRecordPayment,
+  useVoidBill,
+  type BillDetail as BillDetailDto,
+} from './api'
+import { formatDate, billErrorKey } from './format'
+import { DialogOverlay, BillStatusBadge } from './parts'
+
+/**
+ * Bill detail (/bills/:id) — header (number, vendor, status, dates), KPI tiles (total/
+ * paid/outstanding), an amber "estimated tax" badge when the bill used illustrative tax rules,
+ * a line-items table, a payments table, and status-gated actions: Post (DRAFT), Record payment
+ * (POSTED/PARTIALLY_PAID), Void (DRAFT/POSTED and unpaid). 409 invalid-state responses map to a
+ * friendly i18n message via {@link billErrorKey}.
+ */
+export function BillDetail() {
+  const { t, i18n } = useTranslation()
+  const { company } = useSession()
+  const { id } = useParams<{ id: string }>()
+  const locale = localeOf(i18n.language)
+  const [dialog, setDialog] = useState<'post' | 'payment' | 'void' | null>(null)
+
+  const query = useBill({
+    companyId: company?.companyId ?? '',
+    actor: company?.actor ?? '',
+    id: id ?? '',
+    enabled: !!company && !!id,
+  })
+
+  if (!company) {
+    return <EmptyState title={t('ap.bills.noCompany')} hint={t('ap.bills.noCompanyHint')} />
+  }
+  if (query.isLoading) {
+    return (
+      <Card className="p-10 text-center">
+        <Spinner className="mx-auto text-brand-500" />
+      </Card>
+    )
+  }
+  if (query.isError) {
+    return (
+      <Card className="p-8 text-center text-sm text-loss">
+        <TriangleAlert className="mx-auto mb-2 size-5" />
+        {t('ap.detail.error')}
+      </Card>
+    )
+  }
+  const bill = query.data
+  if (!bill) {
+    return (
+      <div className="mx-auto max-w-md space-y-4 text-center">
+        <EmptyState title={t('ap.detail.notFoundTitle')} hint={t('ap.detail.notFoundHint')} />
+        <Link to="/bills" className="text-sm font-semibold text-brand-700 hover:underline">
+          {t('ap.detail.backToBills')}
+        </Link>
+      </div>
+    )
+  }
+
+  const canPost = bill.status === 'DRAFT'
+  const canRecordPayment = bill.status === 'POSTED' || bill.status === 'PARTIALLY_PAID'
+  const canVoid = (bill.status === 'DRAFT' || bill.status === 'POSTED') && bill.paidMinor === 0
+
+  return (
+    <div className="flex flex-col gap-[18px]">
+      {/* Breadcrumb trail */}
+      <nav aria-label={t('ap.detail.breadcrumbLabel')} className="flex items-center gap-1.5 text-sm">
+        <Link to="/bills" className="font-medium text-ink-3 transition-colors hover:text-brand-700">
+          {t('ap.bills.title')}
+        </Link>
+        <ChevronRight className="size-3.5 text-ink-3" aria-hidden="true" />
+        <span className="font-semibold text-ink">{bill.billNumber}</span>
+      </nav>
+
+      {/* Header */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">
+              {bill.billNumber}
+            </h1>
+            <BillStatusBadge status={bill.status} />
+            {bill.usesIllustrativeRules ? (
+              <Badge tone="amber">{t('ap.detail.estimatedTax')}</Badge>
+            ) : null}
+          </div>
+          <p className="mt-1.5 text-sm text-ink-3">
+            {t('ap.detail.vendor')}: {bill.vendorName} · {t('ap.detail.billDate')}:{' '}
+            {formatDate(bill.billDate, locale)} · {t('ap.detail.dueDate')}:{' '}
+            {formatDate(bill.dueDate, locale)}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {canPost ? (
+            <Button type="button" onClick={() => setDialog('post')}>
+              {t('ap.detail.actions.post')}
+            </Button>
+          ) : null}
+          {canRecordPayment ? (
+            <Button type="button" onClick={() => setDialog('payment')}>
+              {t('ap.detail.actions.recordPayment')}
+            </Button>
+          ) : null}
+          {canVoid ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="text-loss hover:bg-tint-loss"
+              onClick={() => setDialog('void')}
+            >
+              {t('ap.detail.actions.void')}
+            </Button>
+          ) : null}
+        </div>
+      </div>
+
+      {/* KPI tiles */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <KpiTile
+          label={t('ap.detail.total')}
+          minor={bill.totalMinor}
+          currency={bill.currency}
+          locale={locale}
+          loading={false}
+        />
+        <KpiTile
+          label={t('ap.detail.paid')}
+          minor={bill.paidMinor}
+          currency={bill.currency}
+          locale={locale}
+          loading={false}
+          tone="text-profit-ink"
+        />
+        <KpiTile
+          label={t('ap.detail.outstanding')}
+          minor={bill.outstandingMinor}
+          currency={bill.currency}
+          locale={locale}
+          loading={false}
+          tone={bill.outstandingMinor > 0 ? 'text-loss' : 'text-profit-ink'}
+          emphatic
+        />
+      </div>
+
+      {/* Line items */}
+      <Card className="p-6">
+        <h2 className="mb-3 text-[13px] font-bold uppercase tracking-[0.08em] text-ink-3">
+          {t('ap.detail.lines')}
+        </h2>
+        {bill.lines.length === 0 ? (
+          <p className="py-2 text-sm text-ink-3">{t('ap.detail.noLines')}</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-line text-left text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+                <th className="py-2">{t('ap.detail.colDescription')}</th>
+                <th className="py-2 text-right">{t('ap.detail.colQuantity')}</th>
+                <th className="py-2 text-right">{t('ap.detail.colUnitPrice')}</th>
+                <th className="py-2 text-right">{t('ap.detail.colLineTotal')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {bill.lines.map((line) => (
+                <tr key={line.lineNo} className="border-b border-ink-50 last:border-0">
+                  <td className="py-2.5 text-ink-2">{line.description}</td>
+                  <td className="tnum py-2.5 text-right font-mono text-ink-2">{line.quantity}</td>
+                  <td className="tnum py-2.5 text-right font-mono text-ink-2">
+                    {formatMoney(line.unitPriceMinor, bill.currency, locale)}
+                  </td>
+                  <td className="tnum py-2.5 text-right font-mono text-ink">
+                    {formatMoney(line.lineTotalMinor, bill.currency, locale)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-[1.5px] border-line-strong">
+                <td colSpan={3} className="pt-3 text-sm font-semibold text-ink">
+                  {t('ap.detail.total')}
+                </td>
+                <td className="tnum pt-3 text-right font-mono text-sm font-semibold text-ink">
+                  {formatMoney(bill.totalMinor, bill.currency, locale)}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        )}
+      </Card>
+
+      {/* Payments */}
+      <Card className="p-6">
+        <h2 className="mb-3 text-[13px] font-bold uppercase tracking-[0.08em] text-ink-3">
+          {t('ap.detail.payments')}
+        </h2>
+        {bill.payments.length === 0 ? (
+          <p className="py-2 text-sm text-ink-3">{t('ap.detail.noPayments')}</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-line text-left text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+                <th className="py-2">{t('ap.detail.colPaymentDate')}</th>
+                <th className="py-2">{t('ap.detail.colPaymentMethod')}</th>
+                <th className="py-2 text-right">{t('ap.detail.colPaymentAmount')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {bill.payments.map((p) => (
+                <tr key={p.id} className="border-b border-ink-50 last:border-0">
+                  <td className="py-2.5 text-ink-2">{formatDate(p.paidAt, locale)}</td>
+                  <td className="py-2.5 text-ink-2">{p.method ?? t('ap.detail.unknownMethod')}</td>
+                  <td className="tnum py-2.5 text-right font-mono text-ink">
+                    {formatMoney(p.amountMinor, p.currency, locale)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Card>
+
+      {dialog === 'post' ? (
+        <PostDialog
+          bill={bill}
+          companyId={company.companyId}
+          actor={company.actor}
+          onClose={() => setDialog(null)}
+        />
+      ) : null}
+      {dialog === 'payment' ? (
+        <PaymentDialog
+          bill={bill}
+          companyId={company.companyId}
+          actor={company.actor}
+          onClose={() => setDialog(null)}
+        />
+      ) : null}
+      {dialog === 'void' ? (
+        <VoidDialog
+          bill={bill}
+          companyId={company.companyId}
+          actor={company.actor}
+          onClose={() => setDialog(null)}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+function PostDialog({
+  bill,
+  companyId,
+  actor,
+  onClose,
+}: {
+  bill: BillDetailDto
+  companyId: string
+  actor: string
+  onClose: () => void
+}) {
+  const { t } = useTranslation()
+  const [termDays, setTermDays] = useState('')
+  const mutation = usePostBill({ companyId, actor, id: bill.id })
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    const parsed = termDays.trim() === '' ? undefined : Number(termDays)
+    mutation.mutate(
+      { termDays: Number.isFinite(parsed) ? parsed : undefined },
+      { onSuccess: () => onClose() },
+    )
+  }
+
+  return (
+    <DialogOverlay onClose={onClose}>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <h2 className="font-display text-lg font-semibold text-ink">
+          {t('ap.detail.postDialog.title')}
+        </h2>
+        <p className="text-sm text-ink-2">
+          {t('ap.detail.postDialog.body', { number: bill.billNumber })}
+        </p>
+        <Field
+          label={t('ap.detail.postDialog.termDaysLabel')}
+          htmlFor="post-term-days"
+          hint={t('ap.detail.postDialog.termDaysHint')}
+        >
+          <TextInput
+            id="post-term-days"
+            type="number"
+            min="1"
+            step="1"
+            value={termDays}
+            onChange={(e) => setTermDays(e.target.value)}
+          />
+        </Field>
+        {mutation.isError ? (
+          <p className="text-sm text-loss">{t(billErrorKey(mutation.error))}</p>
+        ) : null}
+        <div className="flex justify-end gap-3">
+          <Button type="button" variant="outline" onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button type="submit" disabled={mutation.isPending}>
+            {mutation.isPending
+              ? t('ap.detail.postDialog.submitting')
+              : t('ap.detail.postDialog.confirm')}
+          </Button>
+        </div>
+      </form>
+    </DialogOverlay>
+  )
+}
+
+function PaymentDialog({
+  bill,
+  companyId,
+  actor,
+  onClose,
+}: {
+  bill: BillDetailDto
+  companyId: string
+  actor: string
+  onClose: () => void
+}) {
+  const { t, i18n } = useTranslation()
+  const locale = localeOf(i18n.language)
+  const [amountMajor, setAmountMajor] = useState('')
+  const [method, setMethod] = useState('')
+  const mutation = useRecordPayment({ companyId, actor, id: bill.id })
+
+  const exponent = isoMinorExponent(bill.currency)
+  // Zero-decimal currencies (e.g. IDR) only accept whole units; others step by their minor unit.
+  const step = exponent === 0 ? '1' : (1 / 10 ** exponent).toString()
+  const parsedMajor = Number(amountMajor)
+  const amountMinor =
+    Number.isFinite(parsedMajor) && parsedMajor > 0 ? Math.round(parsedMajor * 10 ** exponent) : null
+  const amountInvalid = amountMajor !== '' && amountMinor === null
+  const amountOverpay = amountMinor !== null && amountMinor > bill.outstandingMinor
+  const canSubmit = !!amountMinor && !amountOverpay && !mutation.isPending
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!amountMinor || amountOverpay) return
+    // One key per submit attempt: minted here (not inside the mutation fn), so TanStack Query's
+    // automatic retries of THIS call reuse it, while the next submit gets a fresh one.
+    mutation.mutate(
+      { amountMinor, method: method.trim() || undefined, idempotencyKey: crypto.randomUUID() },
+      { onSuccess: () => onClose() },
+    )
+  }
+
+  return (
+    <DialogOverlay onClose={onClose}>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <h2 className="font-display text-lg font-semibold text-ink">
+          {t('ap.detail.paymentDialog.title')}
+        </h2>
+        <Field
+          label={t('ap.detail.paymentDialog.amountLabel', { currency: bill.currency })}
+          htmlFor="pay-amount"
+          hint={t('ap.detail.paymentDialog.outstandingHint', {
+            amount: formatMoney(bill.outstandingMinor, bill.currency, locale),
+          })}
+        >
+          <TextInput
+            id="pay-amount"
+            type="number"
+            min="0"
+            step={step}
+            value={amountMajor}
+            onChange={(e) => setAmountMajor(e.target.value)}
+            required
+            autoFocus
+          />
+        </Field>
+        <Field label={t('ap.detail.paymentDialog.methodLabel')} htmlFor="pay-method">
+          <TextInput
+            id="pay-method"
+            value={method}
+            onChange={(e) => setMethod(e.target.value)}
+            placeholder={t('ap.detail.paymentDialog.methodPlaceholder')}
+          />
+        </Field>
+        {amountInvalid ? (
+          <p className="text-sm text-loss">{t('ap.detail.paymentDialog.amountInvalid')}</p>
+        ) : amountOverpay ? (
+          <p className="text-sm text-loss">{t('ap.detail.paymentDialog.amountExceedsOutstanding')}</p>
+        ) : null}
+        {mutation.isError ? (
+          <p className="text-sm text-loss">{t(billErrorKey(mutation.error))}</p>
+        ) : null}
+        <div className="flex justify-end gap-3">
+          <Button type="button" variant="outline" onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button type="submit" disabled={!canSubmit}>
+            {mutation.isPending
+              ? t('ap.detail.paymentDialog.submitting')
+              : t('ap.detail.paymentDialog.confirm')}
+          </Button>
+        </div>
+      </form>
+    </DialogOverlay>
+  )
+}
+
+function VoidDialog({
+  bill,
+  companyId,
+  actor,
+  onClose,
+}: {
+  bill: BillDetailDto
+  companyId: string
+  actor: string
+  onClose: () => void
+}) {
+  const { t } = useTranslation()
+  const mutation = useVoidBill({ companyId, actor, id: bill.id })
+
+  function handleConfirm() {
+    mutation.mutate(undefined, { onSuccess: () => onClose() })
+  }
+
+  return (
+    <DialogOverlay onClose={onClose}>
+      <div className="space-y-4">
+        <h2 className="font-display text-lg font-semibold text-ink">
+          {t('ap.detail.voidDialog.title')}
+        </h2>
+        <p className="text-sm text-ink-2">
+          {t('ap.detail.voidDialog.body', { number: bill.billNumber })}
+        </p>
+        {mutation.isError ? (
+          <p className="text-sm text-loss">{t(billErrorKey(mutation.error))}</p>
+        ) : null}
+        <div className="flex justify-end gap-3">
+          <Button type="button" variant="outline" onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            type="button"
+            className="bg-loss text-white hover:opacity-90"
+            onClick={handleConfirm}
+            disabled={mutation.isPending}
+          >
+            {mutation.isPending
+              ? t('ap.detail.voidDialog.submitting')
+              : t('ap.detail.voidDialog.confirm')}
+          </Button>
+        </div>
+      </div>
+    </DialogOverlay>
+  )
+}

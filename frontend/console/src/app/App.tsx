@@ -64,6 +64,17 @@ const NewInvoice = lazy(() =>
   import('@/features/ar/NewInvoice').then((m) => ({ default: m.NewInvoice })),
 )
 const ArAging = lazy(() => import('@/features/ar/ArAging').then((m) => ({ default: m.ArAging })))
+const Vendors = lazy(() =>
+  import('@/features/ap/Vendors').then((m) => ({ default: m.Vendors })),
+)
+const BillsList = lazy(() =>
+  import('@/features/ap/BillsList').then((m) => ({ default: m.BillsList })),
+)
+const BillDetail = lazy(() =>
+  import('@/features/ap/BillDetail').then((m) => ({ default: m.BillDetail })),
+)
+const NewBill = lazy(() => import('@/features/ap/NewBill').then((m) => ({ default: m.NewBill })))
+const ApAging = lazy(() => import('@/features/ap/ApAging').then((m) => ({ default: m.ApAging })))
 
 function CenteredSpinner() {
   return (
@@ -265,6 +276,36 @@ export function App() {
             <Route
               path="/ar/aging"
               element={company ? <ArAging /> : <Navigate to="/onboarding" replace />}
+            />
+          )}
+          {canDashboard && (
+            <Route
+              path="/bills"
+              element={company ? <BillsList /> : <Navigate to="/onboarding" replace />}
+            />
+          )}
+          {canDashboard && (
+            <Route
+              path="/bills/new"
+              element={company ? <NewBill /> : <Navigate to="/onboarding" replace />}
+            />
+          )}
+          {canDashboard && (
+            <Route
+              path="/bills/:id"
+              element={company ? <BillDetail /> : <Navigate to="/onboarding" replace />}
+            />
+          )}
+          {canDashboard && (
+            <Route
+              path="/vendors"
+              element={company ? <Vendors /> : <Navigate to="/onboarding" replace />}
+            />
+          )}
+          {canDashboard && (
+            <Route
+              path="/ap/aging"
+              element={company ? <ApAging /> : <Navigate to="/onboarding" replace />}
             />
           )}
           {orgAllowed && (
