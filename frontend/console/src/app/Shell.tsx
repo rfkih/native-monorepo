@@ -8,6 +8,7 @@ import {
   Clock,
   FileText,
   History,
+  Landmark,
   Layers,
   LayoutDashboard,
   LineChart,
@@ -66,6 +67,7 @@ export function Shell({ children }: { children: ReactNode }) {
             { to: '/bills', label: t('nav.bills'), icon: FileText },
             { to: '/vendors', label: t('nav.vendors'), icon: Truck },
             { to: '/ap/aging', label: t('nav.apAging'), icon: History },
+            { to: '/bank', label: t('nav.bank'), icon: Landmark },
           ],
         },
         {

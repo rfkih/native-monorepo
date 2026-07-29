@@ -75,6 +75,12 @@ const BillDetail = lazy(() =>
 )
 const NewBill = lazy(() => import('@/features/ap/NewBill').then((m) => ({ default: m.NewBill })))
 const ApAging = lazy(() => import('@/features/ap/ApAging').then((m) => ({ default: m.ApAging })))
+const BankAccounts = lazy(() =>
+  import('@/features/bank/BankAccounts').then((m) => ({ default: m.BankAccounts })),
+)
+const BankReconcile = lazy(() =>
+  import('@/features/bank/BankReconcile').then((m) => ({ default: m.BankReconcile })),
+)
 
 function CenteredSpinner() {
   return (
@@ -306,6 +312,18 @@ export function App() {
             <Route
               path="/ap/aging"
               element={company ? <ApAging /> : <Navigate to="/onboarding" replace />}
+            />
+          )}
+          {canDashboard && (
+            <Route
+              path="/bank"
+              element={company ? <BankAccounts /> : <Navigate to="/onboarding" replace />}
+            />
+          )}
+          {canDashboard && (
+            <Route
+              path="/bank/:id"
+              element={company ? <BankReconcile /> : <Navigate to="/onboarding" replace />}
             />
           )}
           {orgAllowed && (
