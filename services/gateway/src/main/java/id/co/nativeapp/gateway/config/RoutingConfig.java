@@ -605,4 +605,24 @@ public class RoutingConfig {
         .filter(tenantFilter)
         .build();
   }
+
+  /**
+   * Tax / PPN (finance-service) — owner/manager only. {@code /api/v1/tax/**} covers the VAT report
+   * ({@code GET /api/v1/tax/vat/return}), filing + history + detail ({@code /api/v1/tax/vat/returns}),
+   * settlement ({@code POST /api/v1/tax/vat/returns/{id}/settle}), and the e-Faktur CSV export
+   * ({@code GET /api/v1/tax/vat/efaktur}) (Phase 4 Tax / PPN, ADR 0017). Fresh prefix — no collision.
+   */
+  @Bean
+  RouterFunction<ServerResponse> taxRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("finance-service-tax")
+        .route(path("/api/v1/tax/**"), http())
+        .before(uri(routes.financeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
 }
