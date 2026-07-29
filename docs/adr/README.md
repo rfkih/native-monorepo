@@ -34,3 +34,4 @@ boundary, a security posture. Routine, local choices do not need one — use a c
 | [0014](0014-accounts-receivable-subledger.md) | Accounts Receivable sub-ledger + the customer/party dimension in finance-service | Accepted |
 | [0015](0015-accounts-payable-subledger.md) | Accounts Payable sub-ledger — the vendor-facing mirror of AR | Accepted |
 | [0016](0016-bank-reconciliation.md) | Bank accounts & reconciliation — settling the clearing account | Accepted |
+| [0017](0017-tax-ppn-vat-return.md) | Tax / PPN — the VAT return, filing & settlement | Accepted |

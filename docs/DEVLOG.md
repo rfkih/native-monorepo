@@ -74,6 +74,41 @@ cascade-deactivate + reactivation.)
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **Tax / PPN — Phase 4 of the Odoo accounting-parity program (2026-07-29, ADR 0017)** — AR accrues
+  output VAT to `2200` and AP input VAT to `1300` (illustrative 11%), but nothing turned those into a
+  **tax return**. This adds the PPN (Indonesian VAT) pillar: a GL-derived **VAT report** (output =
+  credit-net of `2200`, input = debit-net of `1300`, **net = output − input** → PAYABLE/CREDITABLE),
+  an idempotent **File return** that posts the period-end netting entry and seals the period, and a
+  **Settle** posting when the net is paid. New `finance/tax/` feature: V31 (`tax_filing` seal,
+  UNIQUE(company,period,tax_type), FORCE RLS) + V32 (COA `2300 VAT Payable` + `1310 VAT Credit
+  Carryforward` + role maps; no posting_template). `VatReturnReader` wraps `GlTrialBalanceReader`
+  (inheriting its balance + single-currency asserts) and resolves VAT_OUTPUT/VAT_INPUT via
+  `RoleAccountResolver`. Filing posts an **ad-hoc balanced netting entry into the RETURN period**
+  (built directly in `TaxFilingWriter`, no posting_template/EventKind — the Bank approach, because the
+  net leg flips side): `Dr 2200 (output) / Cr 1300 (input) / Cr 2300 (net payable)` or `Dr 1310 (net
+  creditable)`, zero legs omitted; once filed the report reads the sealed `tax_filing` snapshot (the
+  netting cleared the period's 2200/1300). Idempotent via an advisory lock + `findByPeriodAndTaxType`
+  probe + UNIQUE `source_event_id`=filing id (re-file → no-op). **Settle** posts `Dr 2300 / Cr
+  CASH_CLEARING (1900)` (routes the payment through the same clearing every cash movement uses), a
+  one-shot FILED→SETTLED transition (status guard + UNIQUE source_event_id, no Idempotency-Key —
+  bank rationale); CREDITABLE/zero-net is terminal at FILED. Single-base-currency guard on every post
+  (→422). **e-Faktur** = a JSON endpoint of the period's output tax invoices → the console renders a
+  CSV download (real DJP API deferred). New `AccountRole.VAT_PAYABLE`/`VAT_CREDIT_CARRYFORWARD`.
+  Endpoints `/api/v1/tax/**` (DASHBOARD_ROLES). Console `features/tax/` (VAT report KPIs + File/Settle
+  + e-Faktur export + filing history, en/id). Balance sheet gains `2300`/`1310`; the period's
+  `2200`/`1300` draw to zero on filing. **Verified: 442 finance + 64 gateway tests green** (incl.
+  TaxFilingPostingTest — the netting legs for payable/creditable/nil + settlement + the state machine;
+  TaxControllerTest 200/201/400/404/409/422; TaxFilingTenancyIsolationTest E2E: file → 2200/1300
+  cleared + 2300=660,000, settle → 2300=0 + 1900 credited, re-file idempotent 200, RLS-isolated;
+  **TaxFilingConcurrencyTest** — two-thread races prove file()/settle() are each exactly-once under
+  contention). **Code-review PASS** (money/tenancy, fresh context); two warnings fixed — idempotent
+  re-file returns 200 not 201 (ENGINEERING-STANDARDS §1.1 + the close sibling), and the mandated §3.2
+  concurrency proof added. Built in the no-space worktree `C:\native-ar-build`. **Most SME-gated
+  phase** — rate, carryforward policy, PKP
+  status, e-Faktur schema, filing deadlines all flagged illustrative (ADR 0017). Program → **~80% Odoo
+  accounting: (1) AR ✓ (2) AP ✓ (3) Bank ✓ (4) Tax ✓**, (5) Cash-flow & budgets, (6) Fixed assets &
+  deferrals. Deferred: amended returns / late postings to a sealed period; net-void periods; PPh +
+  other tax types; the real DJP e-Faktur integration.
 - **Bank & Reconciliation — Phase 3 of the Odoo accounting-parity program (2026-07-29, ADR 0016)** —
   AR receipts, AP payments, AND POS sales all post to CASH_CLEARING (`1900`) = cash in transit; this
   adds real **bank accounts** and a **reconciliation** flow that settles that clearing balance against
