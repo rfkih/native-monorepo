@@ -32,3 +32,4 @@ boundary, a security posture. Routine, local choices do not need one — use a c
 | [0011](0011-keycloak-admin-via-spring-restclient.md) | Use Spring RestClient for Keycloak Admin API calls (no keycloak-admin-client library) | Accepted |
 | [0012](0012-flatten-org-tree-remove-branch.md) | Flatten the org tree: remove BRANCH and seed a default outlet per business unit | Accepted |
 | [0014](0014-accounts-receivable-subledger.md) | Accounts Receivable sub-ledger + the customer/party dimension in finance-service | Accepted |
+| [0015](0015-accounts-payable-subledger.md) | Accounts Payable sub-ledger — the vendor-facing mirror of AR | Accepted |

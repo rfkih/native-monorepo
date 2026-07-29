@@ -74,6 +74,34 @@ cascade-deactivate + reactivation.)
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **Accounts Payable — Phase 2 of the Odoo accounting-parity program (2026-07-29, ADR 0015)** — the
+  vendor-facing MIRROR of AR: vendors, bills (draft → **posted** → (partially) paid | void),
+  bill-payments, and an AP aging report, in **finance-service** (`ap/` feature), posting to the
+  double-entry GL in-transaction via the existing `buildEntryFromBreakdown` (no new posting code; V28
+  adds a `NET` amount_basis). **The GL sides are the CONTRA of AR** (a bill is a liability + expense,
+  not an asset + revenue): **post** Dr `EXPENSE`(net=5000) / Dr `VAT_INPUT`(tax=1300, a recoverable
+  ASSET) / Cr `AP`(total=2000); **payment** Dr AP / Cr cash-clearing; **void** the contra. New COA
+  `2000 AP`(LIABILITY) + `1300 VAT Input`(ASSET); new `AccountRole.AP`/`VAT_INPUT` +
+  `EventKind.BILL_POSTED`/`BILL_PAYMENT_MADE`/`BILL_VOID`. Single base currency; input PPN 11% is
+  ILLUSTRATIVE (SME-gated); bill net posts to a single expense account (per-line cost centres
+  deferred). Migrations **V27** (AP tables) + **V28** (GL config). **Every Phase-1 review fix baked in
+  from line 1** (AR needed two rounds; AP got them in one): payment `Idempotency-Key` **required** +
+  UNIQUE scoped to `(company, bill, key)` in V27; single-base-currency guard on **post + payment +
+  void** (→422); aging mixed-ccy guard; DTO-only controllers, `Location` on 201s, status `@Pattern`,
+  `LIMIT 500` on lists. AP flows into the balance sheet (2000 AP liability + 1300 VAT-input asset) +
+  income statement (5000 expense) automatically. **Path collision resolved:** `/api/v1/bills` was
+  already the restaurant "open bills" POS route, so AP bills are namespaced **`/api/v1/ap/bills`**
+  (gateway `/api/v1/ap/**`; vendors at `/api/v1/vendors`); the AP `AgingController` was renamed
+  `ApAgingController` to avoid a Spring bean-name clash with AR's. Console `features/ap/`
+  (Vendors/BillsList/BillDetail/NewBill/ApAging) mirrors `features/ar/` (idempotency-key sent
+  per-submit, overpay validation, aging invalidation carried forward). **Verified: 396 finance +
+  62 gateway tests green** (incl. `ApTenancyIsolationTest` end-to-end RLS + `ApWriterIntegrationTest`
+  idempotency+currency, mirroring the AR suite) + console `npm run build` green. Built in the no-space
+  worktree `C:\native-ar-build` (space in `C:\Project 2` breaks Gradle), synced back. Program →
+  ~100% Odoo accounting: **(1) AR ✓ (2) AP ✓**, (3) Bank & reconciliation, (4) Tax/e-invoicing,
+  (5) Cash-flow & budgets, (6) Fixed assets & deferrals. Residual (both AR+AP): the sale/expense
+  currency guard reads `consolidated_pnl` while AR/AP read `journal_entry` — a unified guard across
+  all producers stays a tracked follow-up (unreachable while base ccy immutable+single).
 - **Accounts Receivable — Phase 1 of the Odoo accounting-parity program (2026-07-28, ADR 0014)** —
   the first transactional AR layer + the first customer/party dimension in Native, all in
   **finance-service** (`ar/` feature). Customers, invoices (draft → issue → (partially) paid | void),
