@@ -1,7 +1,9 @@
 import { Suspense, lazy, useEffect, useRef } from 'react'
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Shell } from '@/app/Shell'
 import { Spinner } from '@/components/ui/Spinner'
+import { BrandMark } from '@/components/Wordmark'
 import { hasAnyRole, useAuth } from '@/lib/authContext'
 import { usePageAccess } from '@/lib/pageAccess'
 import { useSession } from '@/lib/session'
@@ -110,6 +112,7 @@ function FullScreenSpinner() {
 
 /** The /login route — immediately starts the Keycloak login redirect (a bookmarkable entry point). */
 function LoginLauncher() {
+  const { t } = useTranslation()
   const auth = useAuth()
   const fired = useRef(false)
   useEffect(() => {
@@ -117,7 +120,23 @@ function LoginLauncher() {
     fired.current = true
     auth.login()
   }, [auth])
-  return <FullScreenSpinner />
+  // Branded splash for the second or two before the IdP redirect lands.
+  return (
+    <div className="grid min-h-screen place-items-center bg-paper">
+      <div className="flex flex-col items-center gap-4">
+        <span className="grid size-14 place-items-center rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 shadow-md">
+          <BrandMark size={28} stroke="white" strokeWidth={2.4} />
+        </span>
+        <span className="font-display text-lg font-extrabold tracking-[-0.02em] text-ink">
+          {t('app.name')}
+        </span>
+        <span className="flex items-center gap-2 text-sm text-ink-3">
+          <Spinner />
+          {t('common.loading')}
+        </span>
+      </div>
+    </div>
+  )
 }
 
 /** True for routes that must be reachable without authentication. */
