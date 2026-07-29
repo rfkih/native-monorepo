@@ -74,6 +74,36 @@ cascade-deactivate + reactivation.)
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **Cash-flow statement + Budgets — Phase 5 of the Odoo accounting-parity program (2026-07-29, ADR
+  0019)** — the two remaining reporting/planning pieces. **Neither posts to the GL** (cash flow is
+  GL-derived; budgets compare against GL actuals), so no money-critical journal posting. **(A) Cash Flow
+  Statement** (indirect, in `statements/`, NO migration / NO new gateway route — extends the
+  already-routed `/api/v1/statements/**`): `glTrialBalance(period)` IS the per-account net movement, so
+  `m = debit − credit`; cash & equivalents resolved from the `BANK`/`CASH_CLEARING`/`QRIS_CLEARING`/
+  `CARD_CLEARING` roles; net income + working-capital adjustments (`credit − debit` per non-cash BS
+  account — asset ↑ uses cash, liability ↑ provides it) classified operating/investing/financing;
+  `netChangeInCash` **reconciles exactly** to the cash-account movement by double-entry (the reader
+  asserts it, like BalanceSheetReader's balance check). `CashFlowReader` + `CashFlowResponse` +
+  `/api/v1/statements/cash-flow`. **(B) Budgets** (`finance/budget/`, V33 `budget`+`budget_line`
+  parent/child, FORCE RLS, per-month): a named monthly set of `account_code → planned amount_minor`
+  (FK to chart_of_account, `amount ≥ 0`); the **budget-vs-actual** report joins each line's plan against
+  the account's type-normal GL actual for the period → variance = actual − planned (no new "actual"
+  store). `BudgetWriter` (create/delete, validates the account exists → 400), `BudgetReader`,
+  `BudgetActualReader`, `AccountCatalogReader` (the COA picker), `/api/v1/budgets/**` (new gateway
+  `budgetsRoute`, DASHBOARD_ROLES). Console: `statements/CashFlow.tsx` (reports grant) + `features/budget/`
+  (list + create dialog with account picker + the variance report, plain canDashboard), en/id.
+  **Verified: 462 finance + 66 gateway tests green** (CashFlowReaderTest — net income + working-capital
+  adjustments + the exact reconciliation + an unbalanced set rejected; StatementsControllerTest cash-flow
+  200/204/400; BudgetControllerTest 201/200/404/400/409/422; BudgetTenancyIsolationTest E2E — variance vs
+  seeded AR/AP actuals, RLS-isolated, unknown-account 400, delete) + console `npm run build`. Built in
+  the no-space worktree `C:\native-ar-build`. **Code-review PASS** (tenancy/RLS, fresh context) — budget
+  RLS clean, cash-flow reconciliation a provable identity; one warning fixed (budget-vs-actual now
+  guards the budget currency against the GL currency → 422, no cross-currency variance) + the account
+  picker restricted to P&L accounts. **SME gate:** the cash-flow activity classification
+  (current-vs-non-current, operating-vs-financing) is illustrative — everything is operating today (no
+  fixed assets / financing). Program → **~85% Odoo accounting: (1) AR ✓ (2) AP ✓ (3) Bank ✓ (4) Tax ✓
+  (5) Cash-flow & budgets ✓**; remaining (6) Fixed assets & deferrals. Deferred: multi-month/annual
+  budgets; budget line editing (create+delete only); direct-method cash flow; comparative columns.
 - **Tax / PPN — Phase 4 of the Odoo accounting-parity program (2026-07-29, ADR 0017)** — AR accrues
   output VAT to `2200` and AP input VAT to `1300` (illustrative 11%), but nothing turned those into a
   **tax return**. This adds the PPN (Indonesian VAT) pillar: a GL-derived **VAT report** (output =
