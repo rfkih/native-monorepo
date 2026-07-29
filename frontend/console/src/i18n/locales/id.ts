@@ -525,6 +525,7 @@ export const id = {
     list: {
       subtitle: 'Data HR untuk {{unit}} dan gerainya — terpisah dari login konsol.',
       add: 'Tambah karyawan',
+      assignExisting: 'Tugaskan karyawan',
       empty: 'Belum ada karyawan',
       emptyHint: 'Tambahkan karyawan pertama untuk unit ini — koki, pelayan, kasir, siapa pun.',
       error: 'Gagal memuat karyawan unit ini.',
@@ -637,6 +638,14 @@ export const id = {
       error: 'Tidak berhasil. Coba lagi.',
       legalEmployerConflict:
         'Karyawan ini sudah punya penugasan bersamaan di badan pemberi kerja yang berbeda.',
+    },
+    assignExisting: {
+      title: 'Tugaskan ke {{unit}}',
+      subtitle: 'Pilih karyawan yang sudah ada di bisnis ini. Karyawan baru ditambahkan di unit bisnis.',
+      employee: 'Karyawan',
+      pick: 'Pilih karyawan…',
+      empty: 'Tidak ada karyawan untuk ditugaskan. Tambahkan dulu di unit bisnis.',
+      submit: 'Tugaskan',
     },
     endAssignment: {
       title: 'Akhiri penugasan',

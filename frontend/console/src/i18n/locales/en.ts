@@ -529,6 +529,7 @@ export const en = {
     list: {
       subtitle: 'HR records for {{unit}} and its outlets — separate from console logins.',
       add: 'Add employee',
+      assignExisting: 'Assign employee',
       empty: 'No employees yet',
       emptyHint: 'Add the first employee to staff this unit — chefs, waiters, cashiers, anyone.',
       error: 'Could not load the employees for this unit.',
@@ -640,6 +641,14 @@ export const en = {
       error: 'That did not go through. Try again.',
       legalEmployerConflict:
         'This employee already has a concurrent assignment under a different legal employer.',
+    },
+    assignExisting: {
+      title: 'Assign to {{unit}}',
+      subtitle: 'Pick an existing employee of this business. New employees are added at the business unit.',
+      employee: 'Employee',
+      pick: 'Select an employee…',
+      empty: 'No employees available to assign. Add them at the business unit first.',
+      submit: 'Assign',
     },
     endAssignment: {
       title: 'End assignment',

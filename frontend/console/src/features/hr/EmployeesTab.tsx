@@ -21,6 +21,7 @@ import { CreateLoginDialog } from './CreateLoginDialog'
 import { EmployeeDetailDrawer } from './EmployeeDetailDrawer'
 import {
   AssignDialog,
+  AssignExistingDialog,
   CompensationDialog,
   EmployeeFormDialog,
   EndAssignmentDialog,
@@ -36,6 +37,7 @@ type DialogState =
   | { kind: 'terminate'; employee: EmployeeListRow }
   | { kind: 'createLogin'; employee: EmployeeListRow }
   | { kind: 'detail'; employee: EmployeeListRow }
+  | { kind: 'assignExisting' }
 
 /** One employee, grouped from their (possibly several) current-assignment rows. */
 interface GroupedEmployee {
@@ -100,10 +102,18 @@ export function EmployeesTab({
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-4">
         <p className="text-sm text-ink-3">{t('hr.list.subtitle', { unit: unit.name })}</p>
-        <Button type="button" onClick={() => setDialog({ kind: 'create' })}>
-          <Plus className="size-4" />
-          {t('hr.list.add')}
-        </Button>
+        {/* Create only at the business-unit level; an outlet assigns an EXISTING employee. */}
+        {unit.type === 'BUSINESS_UNIT' ? (
+          <Button type="button" onClick={() => setDialog({ kind: 'create' })}>
+            <Plus className="size-4" />
+            {t('hr.list.add')}
+          </Button>
+        ) : (
+          <Button type="button" onClick={() => setDialog({ kind: 'assignExisting' })}>
+            <Plus className="size-4" />
+            {t('hr.list.assignExisting')}
+          </Button>
+        )}
       </div>
 
       {query.isError ? (
@@ -202,6 +212,15 @@ export function EmployeesTab({
           actor={actor}
           onClose={() => setDialog(null)}
           onCreateLogin={() => setDialog({ kind: 'createLogin', employee: dialog.employee })}
+        />
+      ) : null}
+      {dialog?.kind === 'assignExisting' ? (
+        <AssignExistingDialog
+          outlet={unit}
+          units={units}
+          companyId={companyId}
+          actor={actor}
+          onClose={() => setDialog(null)}
         />
       ) : null}
     </div>

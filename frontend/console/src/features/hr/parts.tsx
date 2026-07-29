@@ -23,6 +23,7 @@ import {
   useCreateCompensation,
   useCreateEmployee,
   useEmployee,
+  useEmployees,
   useEndAssignment,
   useEndCompensation,
   useEndCommission,
@@ -439,6 +440,130 @@ export function AssignDialog({
           </Button>
           <Button type="submit" disabled={mutation.isPending || !role.trim()}>
             {mutation.isPending ? t('hr.form.saving') : t('hr.assign.submit')}
+          </Button>
+        </div>
+      </form>
+    </DialogOverlay>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Assign an EXISTING employee to an outlet (outlets never create employees —
+// employees are created at the business-unit level and positioned from there).
+// ---------------------------------------------------------------------------
+
+export function AssignExistingDialog({
+  outlet,
+  units,
+  companyId,
+  actor,
+  onClose,
+}: {
+  outlet: OrgUnit
+  units: OrgUnit[]
+  companyId: string
+  actor: string
+  onClose: () => void
+}) {
+  const { t } = useTranslation()
+
+  // The pool is the parent business unit's employees (the BU + all its outlets) — the "employees of
+  // this business". Outlets assign from that pool; they never create.
+  const parentBu = units.find((u) => u.id === outlet.parentId)
+  const buScope = parentBu
+    ? [parentBu.id, ...units.filter((u) => u.parentId === parentBu.id).map((u) => u.id)]
+    : [outlet.id]
+  const employeesQuery = useEmployees({ companyId, actor, orgUnitIds: buScope, enabled: true })
+
+  // Distinct ACTIVE employees, excluding any already positioned at THIS outlet.
+  const pool = useMemo(() => {
+    const seen = new Map<string, EmployeeListRow>()
+    const atOutlet = new Set<string>()
+    for (const r of employeesQuery.data ?? []) {
+      if (r.orgUnitId === outlet.id && r.assignmentId) atOutlet.add(r.employeeId)
+      if (r.status === 'ACTIVE' && !seen.has(r.employeeId)) seen.set(r.employeeId, r)
+    }
+    return [...seen.values()].filter((e) => !atOutlet.has(e.employeeId))
+  }, [employeesQuery.data, outlet.id])
+
+  const [employeeId, setEmployeeId] = useState('')
+  const [role, setRole] = useState('')
+  const [startDate, setStartDate] = useState(todayIso())
+  const mutation = useAddAssignment({ companyId, actor })
+  const conflict =
+    mutation.isError && (mutation.error as { status?: number } | null)?.status === 409
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!employeeId) return
+    mutation.mutate(
+      { employeeId, body: { orgUnitId: outlet.id, role: role.trim(), effectiveFrom: startDate } },
+      { onSuccess: onClose },
+    )
+  }
+
+  return (
+    <DialogOverlay onClose={onClose}>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <h2 className="font-display text-lg font-semibold text-ink">
+          {t('hr.assignExisting.title', { unit: outlet.name })}
+        </h2>
+        <p className="text-sm text-ink-3">{t('hr.assignExisting.subtitle')}</p>
+
+        {employeesQuery.isLoading ? (
+          <p className="text-sm text-ink-3">{t('common.loading')}</p>
+        ) : pool.length === 0 ? (
+          <p className="text-sm text-ink-3">{t('hr.assignExisting.empty')}</p>
+        ) : (
+          <>
+            <Field label={t('hr.assignExisting.employee')} htmlFor="assign-existing-emp">
+              <select
+                id="assign-existing-emp"
+                value={employeeId}
+                onChange={(e) => setEmployeeId(e.target.value)}
+                className={SELECT_CLASSES}
+                required
+              >
+                <option value="" disabled>
+                  {t('hr.assignExisting.pick')}
+                </option>
+                {pool.map((e) => (
+                  <option key={e.employeeId} value={e.employeeId}>
+                    {e.fullName}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label={t('hr.assign.role')} htmlFor="assign-existing-role">
+              <RolePresetInput id="assign-existing-role" value={role} onChange={setRole} />
+            </Field>
+            <Field label={t('hr.assign.startDate')} htmlFor="assign-existing-start">
+              <TextInput
+                id="assign-existing-start"
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                required
+              />
+            </Field>
+          </>
+        )}
+
+        {mutation.isError ? (
+          <p className="text-sm text-loss">
+            {conflict ? t('hr.assign.legalEmployerConflict') : t('hr.assign.error')}
+          </p>
+        ) : null}
+
+        <div className="flex justify-end gap-3">
+          <Button type="button" variant="outline" onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            type="submit"
+            disabled={mutation.isPending || !employeeId || !role.trim() || pool.length === 0}
+          >
+            {mutation.isPending ? t('hr.form.saving') : t('hr.assignExisting.submit')}
           </Button>
         </div>
       </form>
