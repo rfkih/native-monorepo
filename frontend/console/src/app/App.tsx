@@ -93,6 +93,12 @@ const BankReconcile = lazy(() =>
 const TaxReport = lazy(() =>
   import('@/features/tax/TaxReport').then((m) => ({ default: m.TaxReport })),
 )
+const FixedAssets = lazy(() =>
+  import('@/features/assets/FixedAssets').then((m) => ({ default: m.FixedAssets })),
+)
+const Deferrals = lazy(() =>
+  import('@/features/assets/Deferrals').then((m) => ({ default: m.Deferrals })),
+)
 
 function CenteredSpinner() {
   return (
@@ -299,6 +305,18 @@ export function App() {
             <Route
               path="/budgets/:id"
               element={company ? <BudgetDetail /> : <Navigate to="/onboarding" replace />}
+            />
+          )}
+          {canDashboard && (
+            <Route
+              path="/assets"
+              element={company ? <FixedAssets /> : <Navigate to="/onboarding" replace />}
+            />
+          )}
+          {canDashboard && (
+            <Route
+              path="/deferrals"
+              element={company ? <Deferrals /> : <Navigate to="/onboarding" replace />}
             />
           )}
           {canDashboard && (
