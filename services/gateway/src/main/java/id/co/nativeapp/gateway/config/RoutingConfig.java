@@ -566,4 +566,43 @@ public class RoutingConfig {
         .filter(tenantFilter)
         .build();
   }
+
+  /**
+   * Bank accounts + their statement lines (finance-service) — owner/manager only. {@code
+   * /api/v1/bank-accounts/**} covers CRUD plus the nested {@code
+   * /api/v1/bank-accounts/{id}/statement-lines} import/list (Phase 3 bank reconciliation, ADR
+   * 0016). No collision with any existing route.
+   */
+  @Bean
+  RouterFunction<ServerResponse> bankAccountsRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("finance-service-bank-accounts")
+        .route(path("/api/v1/bank-accounts/**"), http())
+        .before(uri(routes.financeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
+   * Bank reconciliation (finance-service) — owner/manager only. {@code /api/v1/bank/**} covers
+   * {@code POST /api/v1/bank/reconcile/{lineId}} and {@code GET /api/v1/bank/reconciliation} (Phase
+   * 3 bank reconciliation, ADR 0016). No collision with any existing route.
+   */
+  @Bean
+  RouterFunction<ServerResponse> bankRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("finance-service-bank")
+        .route(path("/api/v1/bank/**"), http())
+        .before(uri(routes.financeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
 }
