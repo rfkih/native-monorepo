@@ -529,4 +529,41 @@ public class RoutingConfig {
         .filter(tenantFilter)
         .build();
   }
+
+  /** AP vendors (finance-service) — owner/manager only. */
+  @Bean
+  RouterFunction<ServerResponse> vendorsRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("finance-service-vendors")
+        .route(path("/api/v1/vendors/**"), http())
+        .before(uri(routes.financeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
+   * All AP reads/writes under {@code /api/v1/ap/**} (finance-service) — owner/manager only. AP
+   * bills are namespaced {@code /api/v1/ap/bills} (NOT {@code /api/v1/bills}) to avoid colliding
+   * with restaurant-service's already-shipped guest-tab "open bills" route ({@link #billsRoute},
+   * POS surface); the AP aging report is {@code /api/v1/ap/aging}. Vendors are the separate {@link
+   * #vendorsRoute} ({@code /api/v1/vendors/**} — no collision). One {@code /api/v1/ap/**} route
+   * therefore covers both AP bills and AP aging.
+   */
+  @Bean
+  RouterFunction<ServerResponse> apRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("finance-service-ap")
+        .route(path("/api/v1/ap/**"), http())
+        .before(uri(routes.financeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
 }
