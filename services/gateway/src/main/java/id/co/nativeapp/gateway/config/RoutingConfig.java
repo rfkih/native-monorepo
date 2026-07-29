@@ -625,4 +625,24 @@ public class RoutingConfig {
         .filter(tenantFilter)
         .build();
   }
+
+  /**
+   * Budgets (finance-service) — owner/manager only. {@code /api/v1/budgets/**} covers budget CRUD,
+   * the budget-vs-actual variance ({@code GET /api/v1/budgets/{id}/actuals}), and the chart-of-account
+   * picker ({@code GET /api/v1/budgets/accounts}) (Phase 5 Cash-flow &amp; Budgets, ADR 0019). Fresh
+   * prefix — no collision.
+   */
+  @Bean
+  RouterFunction<ServerResponse> budgetsRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("finance-service-budgets")
+        .route(path("/api/v1/budgets/**"), http())
+        .before(uri(routes.financeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
 }
