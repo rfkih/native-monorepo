@@ -68,6 +68,7 @@ abstract class PostgresRlsTestBase {
               + " intercompany_match, group_membership_pending, processed_event,"
               + " outbox, within_company_close, member_group_index,"
               + " invoice_payment, invoice_line, invoice, customer,"
+              + " bill_payment, bill_line, bill, vendor,"
               + " journal_line, journal_entry CASCADE");
     } catch (SQLException ignored) {
       // Tables not created yet (pre-Flyway) — nothing to reset.

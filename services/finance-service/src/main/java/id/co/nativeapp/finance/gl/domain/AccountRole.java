@@ -70,6 +70,18 @@ public enum AccountRole {
    * Maps to account 2200 (ILLUSTRATIVE).
    */
   VAT_OUTPUT,
+  /**
+   * Phase 2 AP: the Accounts Payable control account. Credited when a vendor bill is posted (the
+   * amount owed to the vendor), debited when the bill is paid. Maps to account 2000 (ILLUSTRATIVE —
+   * SME-gated).
+   */
+  AP,
+  /**
+   * Phase 2 AP: recoverable input VAT — the debit for the tax leg of a posted vendor bill (an
+   * asset, VAT receivable from the tax authority). PPN regime + rate are SME-gated (ILLUSTRATIVE
+   * placeholder computed in {@code BillWriter}). Maps to account 1300 (ILLUSTRATIVE).
+   */
+  VAT_INPUT,
   EXPENSE,
   LABOR_EXPENSE,
   LABOR_CLEARING,

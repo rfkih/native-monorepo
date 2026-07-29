@@ -23,5 +23,13 @@ public enum EventKind {
   /** Phase 1 AR: a payment was received against a customer invoice — Dr cash-clearing / Cr AR. */
   PAYMENT_RECEIVED,
   /** Phase 1 AR: a customer invoice was voided — the contra of {@link #INVOICE_ISSUED}. */
-  INVOICE_VOID
+  INVOICE_VOID,
+  /**
+   * Phase 2 AP: a vendor bill was posted — Dr expense (net) / Dr input VAT (tax) / Cr AP (total).
+   */
+  BILL_POSTED,
+  /** Phase 2 AP: a payment was made against a vendor bill — Dr AP / Cr cash-clearing. */
+  BILL_PAYMENT_MADE,
+  /** Phase 2 AP: a vendor bill was voided — the contra of {@link #BILL_POSTED}. */
+  BILL_VOID
 }

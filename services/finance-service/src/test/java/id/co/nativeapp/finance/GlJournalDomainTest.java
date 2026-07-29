@@ -156,6 +156,9 @@ class GlJournalDomainTest {
             EventKind.SALE_REFUND,
             EventKind.INVOICE_ISSUED,
             EventKind.PAYMENT_RECEIVED,
-            EventKind.INVOICE_VOID);
+            EventKind.INVOICE_VOID,
+            EventKind.BILL_POSTED,
+            EventKind.BILL_PAYMENT_MADE,
+            EventKind.BILL_VOID);
   }
 }
