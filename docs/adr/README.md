@@ -37,3 +37,4 @@ boundary, a security posture. Routine, local choices do not need one — use a c
 | [0017](0017-tax-ppn-vat-return.md) | Tax / PPN — the VAT return, filing & settlement | Accepted |
 | [0018](0018-org-unit-hard-delete-empty-only.md) | Hard-delete an empty org unit; accept the owner-rung-sales orphan risk | Accepted |
 | [0019](0019-cash-flow-statement-and-budgets.md) | Cash Flow Statement (indirect, GL-derived) + per-month Budgets | Accepted |
+| [0020](0020-fixed-assets-and-deferrals.md) | Fixed assets & deferrals — the monthly amortization run | Accepted |

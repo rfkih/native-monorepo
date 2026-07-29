@@ -74,6 +74,46 @@ cascade-deactivate + reactivation.)
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **Fixed assets & deferrals — Phase 6, the FINAL pillar of the Odoo accounting-parity program
+  (2026-07-30, ADR 0020)** — the system's first TIME-BASED SCHEDULED postings. New `finance/assets/`:
+  `fixed_asset` + `deferral` + `amortization_run`(+`_line`) (V34, FORCE RLS) and GL config V35 (COA
+  1400 Prepaid/1500 FA-Cost/1590 Accum-Dep/2400 Deferred-Rev/5500 Dep-Expense + 5 new AccountRoles;
+  no posting_template — the ad-hoc Bank/Tax path). **Acquire** posts Dr 1500 / Cr 1900 (capex through
+  clearing; source=asset id); **deferrals** post their opening pair (prepaid Dr 1400/Cr 1900; deferred
+  revenue Dr 1900/Cr 2400). **The amortization run** (POST /api/v1/assets/runs {period}) posts EVERY
+  due item's month-k share in ONE transaction — asset: Dr 5500/Cr 1590; prepaid: Dr 5000/Cr 1400;
+  deferred revenue: Dr 2400/Cr 4000 — sealed once per (company, period) by the tax-filing pattern
+  (advisory lock → findByPeriod no-op → uq_amortization_run; per-line UNIQUE source_event_id backstop;
+  re-run → 200 no-op). **Straight-line exact-sum by cumulative rounding**: month k posts
+  round(B·k/N)−round(B·(k−1)/N) (HALF_EVEN via Money.mulDiv) → Σ = cost−salvage EXACTLY (remainder
+  spread evenly; a zero month records its line with no entry; periods independent → missed months
+  catch up by just running them). Start convention: assets begin the month AFTER acquisition
+  (ILLUSTRATIVE/SME-gated); deferrals at their chosen month. Book values = run-line sub-ledger SUMs
+  (no per-item GL query). **CashFlowReader gains the INVESTING section**: an investing account set
+  role-resolved from FIXED_ASSET_COST (mirrors the cash-role pattern) — capex → INVESTING while 1590
+  deliberately stays OPERATING (the non-cash add-back); the exact reconciliation invariant holds.
+  Endpoints `/api/v1/assets/**` + `/api/v1/deferrals/**` (DASHBOARD_ROLES, 2 new gateway routes).
+  Console `features/assets/` (register + acquire dialog + Run-depreciation control + run history;
+  Deferrals list + create dialog), en/id. **Code-review FAIL→fixed** (money/tenancy, fresh context):
+  C-1 — acquire/create-deferral posted money with no idempotency guard (a retry double-posted capex)
+  → both now REQUIRE an `Idempotency-Key` (keyless → 400) with a per-(company, key) replay probe +
+  `UNIQUE(company_id, idempotency_key)` backstop (V34), replay → 200 with the original, nothing
+  re-posted (the AR/AP payment pattern); W-1 — a backdated start into an already-run (sealed) month
+  would silently under-amortize forever → writers now reject a `start_period ≤ MAX(run period)`
+  (400); W-2 — unbounded `acquisitionDate` → `@PastOrPresent` + a year ≥ 1900 bound (clear 400, not
+  a misleading 409/500); + S-1: `RunReader.detail` now a direct projection lookup. The schedule
+  math, tenancy/RLS, cash-flow classifier and route ordering were all confirmed sound.
+  **Verified: 495 finance + 69 gateway tests green** —
+  DepreciationScheduleTest (exact-sum for awkward bases incl. 1-minor-unit/12 + index edges),
+  AmortizationPostingTest (all 6 entry shapes balanced), AssetControllerTest (201/200/400/404/409/422
+  + idempotent re-run 200), AssetTenancyIsolationTest E2E (acquire+2 deferrals → run month 1 →
+  re-run no-op → run month 2 adds the asset's first depreciation → registers/book values correct →
+  cash-flow shows capex under INVESTING + reconciles → RLS-isolated), AmortizationRunConcurrencyTest
+  (two-thread race → exactly one run + share posted once). + console `npm run build`. Built in
+  `C:\native-ar-build`. **THE ACCOUNTING PROGRAM IS COMPLETE: (1) AR ✓ (2) AP ✓ (3) Bank ✓ (4) Tax ✓
+  (5) Cash-flow & budgets ✓ (6) Fixed assets & deferrals ✓ → ~90% of Odoo accounting**, SME-gated
+  where real law/COA is required. Deferred: disposal/gain-loss; capitalize-from-AP-bill;
+  declining-balance; partial-month proration; auto-scheduler.
 - **Cash-flow statement + Budgets — Phase 5 of the Odoo accounting-parity program (2026-07-29, ADR
   0019)** — the two remaining reporting/planning pieces. **Neither posts to the GL** (cash flow is
   GL-derived; budgets compare against GL actuals), so no money-critical journal posting. **(A) Cash Flow
