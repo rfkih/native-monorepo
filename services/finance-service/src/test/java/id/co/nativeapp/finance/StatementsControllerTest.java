@@ -11,9 +11,12 @@ import id.co.nativeapp.finance.gl.domain.GlMultiCurrencyException;
 import id.co.nativeapp.finance.statements.controller.StatementsController;
 import id.co.nativeapp.finance.statements.dto.BalanceSheetLineItem;
 import id.co.nativeapp.finance.statements.dto.BalanceSheetResponse;
+import id.co.nativeapp.finance.statements.dto.CashFlowLineItem;
+import id.co.nativeapp.finance.statements.dto.CashFlowResponse;
 import id.co.nativeapp.finance.statements.dto.IncomeLineItem;
 import id.co.nativeapp.finance.statements.dto.IncomeStatementResponse;
 import id.co.nativeapp.finance.statements.service.BalanceSheetReader;
+import id.co.nativeapp.finance.statements.service.CashFlowReader;
 import id.co.nativeapp.finance.statements.service.IncomeStatementReader;
 import java.util.List;
 import java.util.Optional;
@@ -41,6 +44,7 @@ class StatementsControllerTest {
 
   @MockitoBean private IncomeStatementReader incomeStatementReader;
   @MockitoBean private BalanceSheetReader balanceSheetReader;
+  @MockitoBean private CashFlowReader cashFlowReader;
 
   // --- Income statement -----------------------------------------------------
 
@@ -159,5 +163,55 @@ class StatementsControllerTest {
         .andExpect(status().isUnprocessableEntity())
         .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
         .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/multi-currency-ledger"));
+  }
+
+  // --- Cash flow ------------------------------------------------------------
+
+  @Test
+  void cashFlowReturns200WithTheReconciledStatement() throws Exception {
+    CashFlowResponse cf =
+        new CashFlowResponse(
+            PERIOD,
+            "IDR",
+            3_000_000L,
+            List.of(new CashFlowLineItem("1200", "ASSET", -1_000_000L)),
+            2_000_000L,
+            List.of(),
+            0L,
+            List.of(),
+            0L,
+            2_000_000L,
+            2_000_000L,
+            true,
+            true);
+    when(cashFlowReader.read(PERIOD)).thenReturn(Optional.of(cf));
+
+    mockMvc
+        .perform(get("/api/v1/statements/cash-flow").param("period", PERIOD))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.period").value(PERIOD))
+        .andExpect(jsonPath("$.netIncomeMinor").value(3_000_000L))
+        .andExpect(jsonPath("$.cashFromOperatingMinor").value(2_000_000L))
+        .andExpect(jsonPath("$.netChangeInCashMinor").value(2_000_000L))
+        .andExpect(jsonPath("$.cashMovementMinor").value(2_000_000L))
+        .andExpect(jsonPath("$.reconciled").value(true));
+  }
+
+  @Test
+  void cashFlowReturns204WhenNoGlEntries() throws Exception {
+    when(cashFlowReader.read("2026-07")).thenReturn(Optional.empty());
+
+    mockMvc
+        .perform(get("/api/v1/statements/cash-flow").param("period", "2026-07"))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void cashFlowRejectsMalformedPeriodWithProblemDetail400() throws Exception {
+    mockMvc
+        .perform(get("/api/v1/statements/cash-flow").param("period", "2026-00"))
+        .andExpect(status().isBadRequest())
+        .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+        .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/validation-failed"));
   }
 }

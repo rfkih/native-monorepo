@@ -1,8 +1,10 @@
 package id.co.nativeapp.finance.statements.controller;
 
 import id.co.nativeapp.finance.statements.dto.BalanceSheetResponse;
+import id.co.nativeapp.finance.statements.dto.CashFlowResponse;
 import id.co.nativeapp.finance.statements.dto.IncomeStatementResponse;
 import id.co.nativeapp.finance.statements.service.BalanceSheetReader;
+import id.co.nativeapp.finance.statements.service.CashFlowReader;
 import id.co.nativeapp.finance.statements.service.IncomeStatementReader;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -50,11 +52,15 @@ public class StatementsController {
 
   private final IncomeStatementReader incomeStatementReader;
   private final BalanceSheetReader balanceSheetReader;
+  private final CashFlowReader cashFlowReader;
 
   public StatementsController(
-      IncomeStatementReader incomeStatementReader, BalanceSheetReader balanceSheetReader) {
+      IncomeStatementReader incomeStatementReader,
+      BalanceSheetReader balanceSheetReader,
+      CashFlowReader cashFlowReader) {
     this.incomeStatementReader = incomeStatementReader;
     this.balanceSheetReader = balanceSheetReader;
+    this.cashFlowReader = cashFlowReader;
   }
 
   /**
@@ -114,6 +120,33 @@ public class StatementsController {
           String asOf) {
 
     Optional<BalanceSheetResponse> result = balanceSheetReader.read(asOf);
+    return result.map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.noContent().build());
+  }
+
+  /**
+   * Cash Flow Statement (Arus Kas) for the requested accounting period — the indirect method, derived
+   * from the GL trial balance (Phase 5, ADR 0019). Net income + working-capital changes = net cash
+   * from operating; investing/financing are structured for later. PERIOD-scoped. Returns {@code 204
+   * No Content} when the period has no GL entries. The derived net change in cash reconciles exactly
+   * to the cash-account movement (asserted).
+   *
+   * @param period the accounting period {@code YYYY-MM} (validated; an impossible month is a 400)
+   */
+  @Operation(
+      summary = "Cash Flow Statement for a period (indirect method)",
+      description =
+          "Returns the Cash Flow Statement (Arus Kas) for the given YYYY-MM period, indirect method:"
+              + " net income + working-capital changes = net cash from operating; investing/financing"
+              + " structured for later. PERIOD-scoped; 204 when no GL entries exist in the period.")
+  @GetMapping("/cash-flow")
+  public ResponseEntity<CashFlowResponse> cashFlow(
+      @RequestParam
+          @Pattern(
+              regexp = "\\d{4}-(0[1-9]|1[0-2])",
+              message = "period must be a valid YYYY-MM month")
+          String period) {
+
+    Optional<CashFlowResponse> result = cashFlowReader.read(period);
     return result.map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.noContent().build());
   }
 }
