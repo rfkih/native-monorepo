@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { ChevronDown, ChevronRight, Plus, TriangleAlert } from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, Trash2, TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
@@ -12,6 +12,7 @@ import { useOrgUnits, type OrgUnit } from './api'
 import {
   AddUnitDialog,
   DeactivateDialog,
+  DeletePermanentlyDialog,
   OrgUnitTypeBadge,
   ReactivateDialog,
   RenameDialog,
@@ -36,6 +37,7 @@ type DialogState =
   | { kind: 'rename'; unit: OrgUnit }
   | { kind: 'deactivate'; unit: OrgUnit }
   | { kind: 'reactivate'; unit: OrgUnit }
+  | { kind: 'delete'; unit: OrgUnit }
 
 /** Action buttons that appear on hover over a node row. */
 function NodeActions({
@@ -44,12 +46,14 @@ function NodeActions({
   onRename,
   onDeactivate,
   onReactivate,
+  onDelete,
 }: {
   unit: OrgUnit
   onAddChild: (parentId: string) => void
   onRename: (unit: OrgUnit) => void
   onDeactivate: (unit: OrgUnit) => void
   onReactivate: (unit: OrgUnit) => void
+  onDelete: (unit: OrgUnit) => void
 }) {
   const { t } = useTranslation()
   return (
@@ -95,6 +99,15 @@ function NodeActions({
           {t('org.reactivate')}
         </button>
       )}
+      <button
+        type="button"
+        aria-label={t('org.delete')}
+        title={t('org.delete')}
+        className="grid size-7 place-items-center rounded-md text-ink-3 hover:bg-tint-loss hover:text-loss focus-visible:outline-2 focus-visible:outline-loss"
+        onClick={() => onDelete(unit)}
+      >
+        <Trash2 className="size-3.5" />
+      </button>
     </div>
   )
 }
@@ -108,6 +121,7 @@ function OrgNode({
   onRename,
   onDeactivate,
   onReactivate,
+  onDelete,
 }: {
   unit: OrgUnit
   treeMap: Map<string | null, OrgUnit[]>
@@ -116,6 +130,7 @@ function OrgNode({
   onRename: (unit: OrgUnit) => void
   onDeactivate: (unit: OrgUnit) => void
   onReactivate: (unit: OrgUnit) => void
+  onDelete: (unit: OrgUnit) => void
 }) {
   const { t } = useTranslation()
   const [expanded, setExpanded] = useState(true)
@@ -200,6 +215,7 @@ function OrgNode({
           onRename={onRename}
           onDeactivate={onDeactivate}
           onReactivate={onReactivate}
+          onDelete={onDelete}
         />
       </div>
 
@@ -215,6 +231,7 @@ function OrgNode({
               onRename={onRename}
               onDeactivate={onDeactivate}
               onReactivate={onReactivate}
+              onDelete={onDelete}
             />
           ))}
         </div>
@@ -261,6 +278,9 @@ export function OrgTree() {
   function openReactivate(unit: OrgUnit) {
     setDialog({ kind: 'reactivate', unit })
   }
+  function openDelete(unit: OrgUnit) {
+    setDialog({ kind: 'delete', unit })
+  }
   function closeDialog() {
     setDialog(null)
   }
@@ -305,6 +325,7 @@ export function OrgTree() {
               onRename={openRename}
               onDeactivate={openDeactivate}
               onReactivate={openReactivate}
+              onDelete={openDelete}
             />
           ))}
         </Card>
@@ -339,6 +360,15 @@ export function OrgTree() {
       {dialog?.kind === 'reactivate' ? (
         <ReactivateDialog
           unit={dialog.unit}
+          companyId={company.companyId}
+          actor={company.actor}
+          onClose={closeDialog}
+        />
+      ) : null}
+      {dialog?.kind === 'delete' ? (
+        <DeletePermanentlyDialog
+          unit={dialog.unit}
+          allUnits={units}
           companyId={company.companyId}
           actor={company.actor}
           onClose={closeDialog}

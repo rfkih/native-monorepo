@@ -15,6 +15,7 @@ import java.net.URI;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -122,5 +123,23 @@ public class OrgUnitController {
             request.reactivate());
     OrgUnit patched = orgUnitService.patch(command);
     return ResponseEntity.ok(OrgUnitResponse.from(patched));
+  }
+
+  /**
+   * Permanently deletes an EMPTY org unit (and, for a business unit, its empty child outlets). A
+   * unit that still has an assigned login is rejected with {@code 409} (deactivate instead — that
+   * preserves history). Returns {@code 204 No Content}.
+   */
+  @Operation(
+      summary = "Permanently delete an empty org unit",
+      description =
+          "Hard-deletes an org unit that has NO assigned logins (a business unit also removes its"
+              + " empty child outlets). A non-empty unit returns 409 — deactivate it instead. This"
+              + " is for removing units created by mistake; a unit with real data must be"
+              + " deactivated. Requires owner or manager role.")
+  @DeleteMapping("/{orgUnitId}")
+  public ResponseEntity<Void> deleteOrgUnit(@PathVariable UUID orgUnitId) {
+    orgUnitService.delete(orgUnitId);
+    return ResponseEntity.noContent().build();
   }
 }

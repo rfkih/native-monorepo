@@ -7,6 +7,7 @@ import id.co.nativeapp.org.company.dto.OutletResponse;
 import id.co.nativeapp.org.company.dto.PatchOrgUnitCommand;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
+import java.util.UUID;
 import org.springframework.stereotype.Service;
 
 /**
@@ -51,6 +52,19 @@ public class OrgUnitService {
   public OrgUnit patch(PatchOrgUnitCommand command) {
     TenantContext.require();
     return writer.patch(command);
+  }
+
+  /**
+   * Permanently deletes an org unit and its subtree — the "remove a mistake" path. A unit that has
+   * (or ever had) an assigned login is rejected ({@link OrgUnitHasDataException} → 409) —
+   * deactivate it instead, which preserves history; an unknown/cross-tenant id is a 404 (see {@link
+   * OrgUnitWriter#delete}).
+   *
+   * @param orgUnitId the org unit to delete
+   */
+  public void delete(UUID orgUnitId) {
+    TenantContext.require();
+    writer.delete(orgUnitId);
   }
 
   /**

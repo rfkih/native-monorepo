@@ -1,7 +1,9 @@
 package id.co.nativeapp.org;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -9,11 +11,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import id.co.nativeapp.org.company.config.OrgUnitExceptionAdvice;
 import id.co.nativeapp.org.company.controller.OrgUnitController;
 import id.co.nativeapp.org.company.domain.OrgUnit;
 import id.co.nativeapp.org.company.domain.OrgUnitType;
 import id.co.nativeapp.org.company.domain.Vertical;
+import id.co.nativeapp.org.company.service.OrgUnitHasDataException;
 import id.co.nativeapp.org.company.service.OrgUnitService;
+import id.co.nativeapp.org.user.config.UserExceptionAdvice;
+import id.co.nativeapp.org.user.service.OrgUnitNotFoundException;
 import id.co.nativeapp.security.ApiExceptionHandler;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -33,7 +39,7 @@ import org.springframework.test.web.servlet.MockMvc;
  * ApiExceptionHandler}.
  */
 @WebMvcTest(OrgUnitController.class)
-@Import(ApiExceptionHandler.class)
+@Import({ApiExceptionHandler.class, OrgUnitExceptionAdvice.class, UserExceptionAdvice.class})
 class OrgUnitControllerTest {
 
   private static final String PROBLEM_JSON = "application/problem+json";
@@ -131,5 +137,32 @@ class OrgUnitControllerTest {
         .andExpect(status().isBadRequest())
         .andExpect(content().contentTypeCompatibleWith(PROBLEM_JSON))
         .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/invalid-argument"));
+  }
+
+  @Test
+  void deletingAnOrgUnitReturns204() throws Exception {
+    // service.delete is a void no-op mock by default.
+    mockMvc.perform(delete("/api/v1/org-units/" + UNIT)).andExpect(status().isNoContent());
+  }
+
+  @Test
+  void deletingANonEmptyUnitIsMappedToA409ProblemDetail() throws Exception {
+    doThrow(new OrgUnitHasDataException(UNIT)).when(orgUnitService).delete(any());
+    mockMvc
+        .perform(delete("/api/v1/org-units/" + UNIT))
+        .andExpect(status().isConflict())
+        .andExpect(content().contentTypeCompatibleWith(PROBLEM_JSON))
+        .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/org-unit-has-data"))
+        .andExpect(jsonPath("$.title").value("Conflict"));
+  }
+
+  @Test
+  void deletingAnUnknownOrCrossTenantUnitIsMappedToA404ProblemDetail() throws Exception {
+    doThrow(new OrgUnitNotFoundException(UNIT)).when(orgUnitService).delete(any());
+    mockMvc
+        .perform(delete("/api/v1/org-units/" + UNIT))
+        .andExpect(status().isNotFound())
+        .andExpect(content().contentTypeCompatibleWith(PROBLEM_JSON))
+        .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/org-unit-not-found"));
   }
 }

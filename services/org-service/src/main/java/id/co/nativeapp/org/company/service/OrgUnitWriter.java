@@ -11,6 +11,8 @@ import id.co.nativeapp.org.company.dto.PatchOrgUnitCommand;
 import id.co.nativeapp.org.company.messaging.OrgUnitChangedSchema;
 import id.co.nativeapp.org.company.messaging.OrgUnitCreatedSchema;
 import id.co.nativeapp.org.company.repository.OrgUnitRepository;
+import id.co.nativeapp.org.user.repository.UserOutletAssignmentRepository;
+import id.co.nativeapp.org.user.service.OrgUnitNotFoundException;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Clock;
@@ -75,14 +77,87 @@ import org.springframework.transaction.annotation.Transactional;
 public class OrgUnitWriter {
 
   private final OrgUnitRepository orgUnitRepository;
+  private final UserOutletAssignmentRepository userOutletAssignmentRepository;
   private final OutboxWriter outboxWriter;
   private final Clock clock;
 
   public OrgUnitWriter(
-      OrgUnitRepository orgUnitRepository, OutboxWriter outboxWriter, Clock clock) {
+      OrgUnitRepository orgUnitRepository,
+      UserOutletAssignmentRepository userOutletAssignmentRepository,
+      OutboxWriter outboxWriter,
+      Clock clock) {
     this.orgUnitRepository = orgUnitRepository;
+    this.userOutletAssignmentRepository = userOutletAssignmentRepository;
     this.outboxWriter = outboxWriter;
     this.clock = clock;
+  }
+
+  /**
+   * PERMANENTLY deletes an org unit and its entire subtree (a business unit and its outlets, or an
+   * outlet and its teams) — the "remove a mistake" path. The safe, history-preserving alternative
+   * is {@link #patch} with {@code deactivate=true}; deletion is only for a unit created in error.
+   *
+   * <p><strong>The guard is best-effort, not a guarantee.</strong> It rejects any unit (or
+   * descendant) that has — or ever had — an assigned login ({@link OrgUnitHasDataException} → 409),
+   * because {@code user_outlet_assignment} is the only sales-linked signal org-service owns
+   * locally: assignments only ever target outlets, so an assigned outlet is one a cashier could
+   * have rung sales at. The guard matches closed rows too (an unassigned login keeps its row), so
+   * an outlet that was ever staffed stays undeletable. It does NOT catch owner/manager-rung sales
+   * on a never-assigned outlet — those leave no assignment row and no synchronous cross-service
+   * check is permitted (rule 2), so that residual orphan risk is accepted and documented in ADR
+   * 0018 (the console additionally blocks on employees before offering delete; the fully-safe path
+   * is always deactivate). No event is emitted, so finance/HR/restaurant read-model rows for the
+   * deleted subtree persist as inert refs (documented follow-up: an {@code OrgUnitDeleted} event to
+   * purge them — ADR 0018).
+   *
+   * <p>The whole subtree is removed in one transaction so no descendant is left pointing at a
+   * deleted parent (org-service has no intra-schema FKs — the invariant is enforced here, not by
+   * the DB). A BU always seeds a default outlet (ADR 0012), so deleting an empty BU cascades its
+   * empty outlets.
+   *
+   * @throws OrgUnitNotFoundException unknown or cross-tenant unit (→ 404, anti-enumeration)
+   * @throws OrgUnitHasDataException the unit or any descendant has (or had) an assigned login (→
+   *     409)
+   */
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public void delete(UUID orgUnitId) {
+    TenantContext.require();
+    List<OrgUnit> all = orgUnitRepository.findAll(); // RLS-scoped to the bound tenant
+    OrgUnit target =
+        all.stream()
+            .filter(u -> u.getId().equals(orgUnitId))
+            .findFirst()
+            .orElseThrow(() -> new OrgUnitNotFoundException(orgUnitId));
+
+    // Collect the target and its full subtree (all transitive descendants), so an outlet's teams
+    // — or a BU's outlets and their teams — go with it and nothing is orphaned. The tree is at
+    // most business_unit > outlet > team (ADR 0012); the visited set is defence-in-depth against
+    // corrupt cyclic data (mirrors cascadeDeactivate) so the walk always terminates.
+    List<OrgUnit> toDelete = new ArrayList<>();
+    Set<UUID> visited = new HashSet<>();
+    Deque<OrgUnit> pending = new ArrayDeque<>();
+    pending.push(target);
+    while (!pending.isEmpty()) {
+      OrgUnit node = pending.pop();
+      if (!visited.add(node.getId())) {
+        continue;
+      }
+      toDelete.add(node);
+      for (OrgUnit u : all) {
+        if (node.getId().equals(u.getParentId())) {
+          pending.push(u);
+        }
+      }
+    }
+
+    for (OrgUnit u : toDelete) {
+      if (userOutletAssignmentRepository.existsByOrgUnitId(u.getId())) {
+        throw new OrgUnitHasDataException(u.getId());
+      }
+    }
+
+    orgUnitRepository.deleteAll(toDelete);
+    orgUnitRepository.flush();
   }
 
   /**

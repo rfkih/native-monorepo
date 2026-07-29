@@ -10,10 +10,15 @@ import { useTranslation } from 'react-i18next'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Field, TextInput } from '@/components/ui/Field'
+import { Spinner } from '@/components/ui/Spinner'
+import { isOrgUnitHasData } from '@/lib/api'
 import { cn } from '@/lib/cn'
+import { useEmployees } from '@/features/hr/api'
 import {
   useCreateOrgUnit,
+  useDeleteOrgUnit,
   usePatchOrgUnit,
+  useUnitUsers,
   type OrgUnit,
   type OrgUnitType,
 } from './api'
@@ -365,6 +370,169 @@ export function ReactivateDialog({
               : t('org.reactivateDialog.confirm')}
           </Button>
         </div>
+      </div>
+    </DialogOverlay>
+  )
+}
+
+/**
+ * Ids of `rootId` and all its transitive descendants, from the flat org-unit list — the same
+ * subtree the server cascade-deletes. A breadth-first walk over `parentId`; the tree is at most
+ * three levels (business_unit > outlet > team, ADR 0012), so it terminates quickly.
+ */
+function collectSubtreeIds(rootId: string, allUnits: OrgUnit[]): string[] {
+  const ids = [rootId]
+  const queue = [rootId]
+  while (queue.length > 0) {
+    const current = queue.shift()!
+    for (const u of allUnits) {
+      if (u.parentId === current && !ids.includes(u.id)) {
+        ids.push(u.id)
+        queue.push(u.id)
+      }
+    }
+  }
+  return ids
+}
+
+/**
+ * Permanent-delete confirmation dialog. Hard-deletes an EMPTY unit and its subtree (a business
+ * unit with its outlets, or an outlet with its teams — every BU seeds one outlet, ADR 0012). It first checks the unit is empty and, if
+ * not, refuses and points the user to deactivate instead (which preserves history):
+ *
+ * <ul>
+ *   <li><em>assigned logins</em> — read from {@code useUnitUsers} (for a BU this already spans its
+ *       child outlets). The backend independently enforces this guard with a 409, so a race after
+ *       the check is caught and surfaced.
+ *   <li><em>employees</em> — read from {@code useEmployees} scoped to the unit and (for a BU) its
+ *       child outlets. Employees live in another service, so this guard is console-only (no sync
+ *       cross-service call, rule 2); deleting would orphan their HR assignment rows.
+ * </ul>
+ *
+ * This is the "remove a mistake" path — a unit with real data is deactivated, never deleted.
+ */
+export function DeletePermanentlyDialog({
+  unit,
+  allUnits,
+  companyId,
+  actor,
+  onClose,
+}: {
+  unit: OrgUnit
+  allUnits: OrgUnit[]
+  companyId: string
+  actor: string
+  onClose: () => void
+}) {
+  const { t } = useTranslation()
+  const mutation = useDeleteOrgUnit({ companyId, actor })
+
+  // Deleting a unit cascades its entire subtree on the server, so the emptiness check spans the
+  // unit AND every descendant (a BU always has ≥1 child outlet — ADR 0012 — so "has children" is
+  // never a block on its own; only descendants that carry data are). Collect the subtree ids from
+  // the already-loaded flat tree, matching the server's cascade scope.
+  const scopeIds = collectSubtreeIds(unit.id, allUnits)
+
+  const employeesQuery = useEmployees({ companyId, actor, orgUnitIds: scopeIds, enabled: true })
+  // The login list endpoint rejects a TEAM target (400) — teams never carry logins — so only query
+  // it for a BU/outlet; a team's login count is definitionally zero.
+  const usersEnabled = unit.type !== 'TEAM'
+  const usersQuery = useUnitUsers({ companyId, actor, unitId: unit.id, enabled: usersEnabled })
+
+  const checking =
+    employeesQuery.isLoading ||
+    employeesQuery.isPending ||
+    (usersEnabled && (usersQuery.isLoading || usersQuery.isPending))
+  // Fail CLOSED: the backend does not enforce the employee guard (employees live in another
+  // service, rule 2), so if either check errors we cannot prove the unit is empty — block the
+  // delete rather than risk orphaning employee/assignment rows.
+  const cannotVerify = employeesQuery.isError || (usersEnabled && usersQuery.isError)
+  const employeeCount = employeesQuery.data?.length ?? 0
+  const loginCount = usersQuery.data?.length ?? 0
+  const hasData = employeeCount > 0 || loginCount > 0
+
+  // A race lost to a concurrent (or historical) login assignment surfaces as the backend's 409
+  // org-unit-has-data — matched by its stable type URI, not a bare status code.
+  const conflict = isOrgUnitHasData(mutation.error)
+
+  function handleConfirm() {
+    mutation.mutate(unit.id, { onSuccess: () => { onClose() } })
+  }
+
+  return (
+    <DialogOverlay onClose={onClose}>
+      <div className="space-y-4">
+        <h2 className="font-display text-lg font-semibold text-ink">
+          {t('org.deleteDialog.title')}
+        </h2>
+
+        {checking ? (
+          <div className="flex items-center gap-3 py-2 text-sm text-ink-3">
+            <Spinner className="text-brand-500" />
+            {t('org.deleteDialog.checking')}
+          </div>
+        ) : cannotVerify ? (
+          <>
+            <p className="text-sm text-ink-2">{t('org.deleteDialog.verifyError')}</p>
+            <div className="flex justify-end">
+              <Button type="button" variant="outline" onClick={onClose}>
+                {t('org.deleteDialog.close')}
+              </Button>
+            </div>
+          </>
+        ) : hasData || conflict ? (
+          <>
+            <p className="text-sm text-ink-2">
+              {t('org.deleteDialog.blockedIntro', { name: unit.name })}
+            </p>
+            <ul className="space-y-1.5 rounded-xl bg-tint-loss/50 px-4 py-3 text-sm text-ink-2">
+              {conflict ? <li>{t('org.deleteDialog.conflict')}</li> : null}
+              {loginCount > 0 ? (
+                <li>{t('org.deleteDialog.blockedLogins', { count: loginCount })}</li>
+              ) : null}
+              {employeeCount > 0 ? (
+                <li>{t('org.deleteDialog.blockedEmployees', { count: employeeCount })}</li>
+              ) : null}
+            </ul>
+            <p className="text-xs text-ink-3">{t('org.deleteDialog.blockedHint')}</p>
+            <div className="flex justify-end">
+              <Button type="button" variant="outline" onClick={onClose}>
+                {t('org.deleteDialog.close')}
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-ink-2">
+              {t(
+                unit.type === 'BUSINESS_UNIT'
+                  ? 'org.deleteDialog.bodyBu'
+                  : 'org.deleteDialog.body',
+                { name: unit.name },
+              )}
+            </p>
+
+            {mutation.isError ? (
+              <p className="text-sm text-loss">{t('org.deleteDialog.errorTitle')}</p>
+            ) : null}
+
+            <div className="flex justify-end gap-3">
+              <Button type="button" variant="outline" onClick={onClose}>
+                {t('common.cancel')}
+              </Button>
+              <Button
+                type="button"
+                className="bg-loss text-white hover:opacity-90"
+                onClick={handleConfirm}
+                disabled={mutation.isPending}
+              >
+                {mutation.isPending
+                  ? t('org.deleteDialog.submitting')
+                  : t('org.deleteDialog.confirm')}
+              </Button>
+            </div>
+          </>
+        )}
       </div>
     </DialogOverlay>
   )

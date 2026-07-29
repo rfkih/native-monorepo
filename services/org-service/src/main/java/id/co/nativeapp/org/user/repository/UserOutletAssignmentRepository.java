@@ -31,6 +31,14 @@ import org.springframework.data.jpa.repository.Query;
 public interface UserOutletAssignmentRepository extends JpaRepository<UserOutletAssignment, UUID> {
 
   /**
+   * Whether ANY login is assigned to the given outlet (RLS-scoped — rule 5). Used as a delete
+   * guard: an outlet with an assigned cashier login could have rung sales, so it is never
+   * hard-deletable (it must be deactivated instead). A derived existence check — no {@code WHERE
+   * company_id}, RLS constrains it to the bound tenant.
+   */
+  boolean existsByOrgUnitId(UUID orgUnitId);
+
+  /**
    * Active assignments for the given user, joined to {@code org_unit} for the name, ordered by
    * outlet name. No {@code WHERE company_id} — RLS constrains the result to the bound company (rule
    * 5). Projection columns: {@code org_unit_id} alias → {@code getOrgUnitId()}, {@code name} alias

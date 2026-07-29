@@ -52,6 +52,21 @@ export function isOutletNotAssigned(err: unknown): boolean {
   )
 }
 
+/**
+ * Detects the org-service 409 `org-unit-has-data` problem+json (stable type URI
+ * `https://errors.nativeapp.id/org-unit-has-data`) thrown when a permanent org-unit delete is
+ * refused because the unit (or a descendant) has, or ever had, an assigned login. Surfaces on the
+ * org-tree delete action; the caller maps it to the `org.deleteDialog.conflict` i18n key.
+ */
+export function isOrgUnitHasData(err: unknown): boolean {
+  return (
+    err instanceof ApiError &&
+    err.status === 409 &&
+    typeof err.problem?.type === 'string' &&
+    err.problem.type.includes('org-unit-has-data')
+  )
+}
+
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   body?: unknown

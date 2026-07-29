@@ -11,7 +11,10 @@ import id.co.nativeapp.org.company.dto.PatchOrgUnitCommand;
 import id.co.nativeapp.org.company.messaging.OrgUnitChangedSchema;
 import id.co.nativeapp.org.company.messaging.OrgUnitCreatedSchema;
 import id.co.nativeapp.org.company.service.CompanyService;
+import id.co.nativeapp.org.company.service.OrgUnitHasDataException;
 import id.co.nativeapp.org.company.service.OrgUnitService;
+import id.co.nativeapp.org.user.service.OrgUnitNotFoundException;
+import id.co.nativeapp.org.user.service.UserOutletAssignmentWriter;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
 import java.util.Map;
@@ -41,6 +44,7 @@ class OrgTreeAcceptanceTest extends PostgresRlsTestBase {
 
   @Autowired private CompanyService companyService;
   @Autowired private OrgUnitService orgUnitService;
+  @Autowired private UserOutletAssignmentWriter assignmentWriter;
   @Autowired private JdbcTemplate jdbcTemplate;
 
   /** Bootstraps a company and returns {tenantId, rootBusinessUnitId}. */
@@ -457,6 +461,134 @@ class OrgTreeAcceptanceTest extends PostgresRlsTestBase {
     assertThat(isActive(bIds[1])).isTrue();
   }
 
+  @Test
+  void deletingABusinessUnitCascadesItsWholeSubtree() throws Exception {
+    Tenant t = bootstrapCompany("Nu-Delete", "owner-nd");
+
+    UUID[] ids =
+        TenantContext.callAs(
+            t.companyId().toString(),
+            "owner-nd",
+            () -> {
+              OrgUnit outlet =
+                  orgUnitService.create(
+                      new CreateOrgUnitCommand("Outlet", "outlet", t.rootBusinessUnitId()));
+              OrgUnit team =
+                  orgUnitService.create(new CreateOrgUnitCommand("Team", "team", outlet.getId()));
+              return new UUID[] {outlet.getId(), team.getId()};
+            });
+
+    // Delete the root business unit — its whole subtree goes with it.
+    TenantContext.callAs(
+        t.companyId().toString(),
+        "owner-nd",
+        () -> {
+          orgUnitService.delete(t.rootBusinessUnitId());
+          return null;
+        });
+
+    assertThat(exists(t.rootBusinessUnitId())).isFalse();
+    assertThat(exists(ids[0])).isFalse(); // outlet
+    assertThat(exists(ids[1])).isFalse(); // team
+    // And the seeded default outlet (ADR 0012) went too — the tenant tree is now empty.
+    List<UUID> remaining =
+        TenantContext.callAs(
+            t.companyId().toString(),
+            "owner-nd",
+            () ->
+                companyService.findOrgUnitsForCurrentTenant().stream()
+                    .map(id.co.nativeapp.org.company.projection.OrgUnitView::getId)
+                    .toList());
+    assertThat(remaining).isEmpty();
+  }
+
+  @Test
+  void deletingAnOutletWithAnAssignedLoginIsRejectedAndDeletesNothing() throws Exception {
+    Tenant t = bootstrapCompany("Xi-Delete", "owner-xd");
+
+    UUID outletId =
+        TenantContext.callAs(
+            t.companyId().toString(),
+            "owner-xd",
+            () -> {
+              OrgUnit outlet =
+                  orgUnitService.create(
+                      new CreateOrgUnitCommand("Outlet", "outlet", t.rootBusinessUnitId()));
+              // Assign a login to the outlet — now it could have rung sales.
+              assignmentWriter.replaceAssignments("cashier-sub-1", List.of(outlet.getId()));
+              return outlet.getId();
+            });
+
+    TenantContext.callAs(
+        t.companyId().toString(),
+        "owner-xd",
+        () -> {
+          assertThatThrownBy(() -> orgUnitService.delete(outletId))
+              .isInstanceOf(OrgUnitHasDataException.class);
+          return null;
+        });
+
+    assertThat(exists(outletId)).isTrue();
+  }
+
+  @Test
+  void deletingAnOutletWhoseLoginWasUnassignedIsStillRejected() throws Exception {
+    Tenant t = bootstrapCompany("Omicron-Delete", "owner-od");
+
+    UUID outletId =
+        TenantContext.callAs(
+            t.companyId().toString(),
+            "owner-od",
+            () -> {
+              OrgUnit outlet =
+                  orgUnitService.create(
+                      new CreateOrgUnitCommand("Outlet", "outlet", t.rootBusinessUnitId()));
+              // Assign then UNASSIGN — the replace-set closes the row (active=false) but keeps it.
+              assignmentWriter.replaceAssignments("cashier-sub-2", List.of(outlet.getId()));
+              assignmentWriter.replaceAssignments("cashier-sub-2", List.of());
+              return outlet.getId();
+            });
+
+    // The closed assignment row still means the outlet was once staffed → undeletable.
+    TenantContext.callAs(
+        t.companyId().toString(),
+        "owner-od",
+        () -> {
+          assertThatThrownBy(() -> orgUnitService.delete(outletId))
+              .isInstanceOf(OrgUnitHasDataException.class);
+          return null;
+        });
+
+    assertThat(exists(outletId)).isTrue();
+  }
+
+  @Test
+  void deletingAnotherTenantsUnitIsNotFoundAndLeavesItIntact() throws Exception {
+    Tenant a = bootstrapCompany("Pi-Delete-A", "owner-pa");
+    Tenant b = bootstrapCompany("Rho-Delete-B", "owner-rb");
+
+    UUID aOutletId =
+        TenantContext.callAs(
+            a.companyId().toString(),
+            "owner-pa",
+            () ->
+                orgUnitService
+                    .create(new CreateOrgUnitCommand("A Outlet", "outlet", a.rootBusinessUnitId()))
+                    .getId());
+
+    // B tries to delete A's outlet — invisible under RLS, so it is a 404, and nothing is removed.
+    TenantContext.callAs(
+        b.companyId().toString(),
+        "owner-rb",
+        () -> {
+          assertThatThrownBy(() -> orgUnitService.delete(aOutletId))
+              .isInstanceOf(OrgUnitNotFoundException.class);
+          return null;
+        });
+
+    assertThat(exists(aOutletId)).isTrue();
+  }
+
   // ---- helpers (read over the admin BYPASSRLS connection / the non-RLS outbox) ----------------
 
   private UUID parentOf(UUID id) throws Exception {
@@ -494,6 +626,19 @@ class OrgTreeAcceptanceTest extends PostgresRlsTestBase {
       try (var rs = ps.executeQuery()) {
         rs.next();
         return rs.getBoolean("active");
+      }
+    }
+  }
+
+  /** Whether the org_unit row still exists (read over the admin BYPASSRLS connection). */
+  private boolean exists(UUID id) throws Exception {
+    try (var admin =
+            java.sql.DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        var ps = admin.prepareStatement("SELECT 1 FROM org_unit WHERE id = ?")) {
+      ps.setObject(1, id);
+      try (var rs = ps.executeQuery()) {
+        return rs.next();
       }
     }
   }

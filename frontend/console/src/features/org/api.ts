@@ -117,6 +117,27 @@ export function useCreateOrgUnit(params: { companyId: string; actor: string }) {
   })
 }
 
+/**
+ * DELETE /api/v1/org-units/{id} — permanently remove an EMPTY unit (and, for a business unit, its
+ * empty child outlets). The server rejects a unit that still has an assigned login with 409
+ * (`org-unit-has-data`) — deactivate it instead. This is the "remove a mistake" path; a unit with
+ * real data must be deactivated (preserving history).
+ */
+export function useDeleteOrgUnit(params: { companyId: string; actor: string }) {
+  const { companyId, actor } = params
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<null>(`/api/v1/org-units/${id}`, {
+        method: 'DELETE',
+        tenant: { companyId, actor },
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['orgUnits', companyId] })
+    },
+  })
+}
+
 /** PATCH /api/v1/org-units/{id} — rename, move, deactivate, or reactivate. */
 export function usePatchOrgUnit(params: { companyId: string; actor: string }) {
   const { companyId, actor } = params

@@ -35,3 +35,4 @@ boundary, a security posture. Routine, local choices do not need one — use a c
 | [0015](0015-accounts-payable-subledger.md) | Accounts Payable sub-ledger — the vendor-facing mirror of AR | Accepted |
 | [0016](0016-bank-reconciliation.md) | Bank accounts & reconciliation — settling the clearing account | Accepted |
 | [0017](0017-tax-ppn-vat-return.md) | Tax / PPN — the VAT return, filing & settlement | Accepted |
+| [0018](0018-org-unit-hard-delete-empty-only.md) | Hard-delete an empty org unit; accept the owner-rung-sales orphan risk | Accepted |
