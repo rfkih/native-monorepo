@@ -19,6 +19,13 @@ const IncomeStatement = lazy(() =>
 const BalanceSheet = lazy(() =>
   import('@/features/statements/BalanceSheet').then((m) => ({ default: m.BalanceSheet })),
 )
+const CashFlow = lazy(() =>
+  import('@/features/statements/CashFlow').then((m) => ({ default: m.CashFlow })),
+)
+const Budgets = lazy(() => import('@/features/budget/Budgets').then((m) => ({ default: m.Budgets })))
+const BudgetDetail = lazy(() =>
+  import('@/features/budget/BudgetDetail').then((m) => ({ default: m.BudgetDetail })),
+)
 const Pos = lazy(() => import('@/features/pos/Pos').then((m) => ({ default: m.Pos })))
 const OrgTree = lazy(() =>
   import('@/features/org/OrgTree').then((m) => ({ default: m.OrgTree })),
@@ -255,6 +262,24 @@ export function App() {
             <Route
               path="/statements/balance-sheet"
               element={company ? <BalanceSheet /> : <Navigate to="/onboarding" replace />}
+            />
+          )}
+          {reportsAllowed && (
+            <Route
+              path="/statements/cash-flow"
+              element={company ? <CashFlow /> : <Navigate to="/onboarding" replace />}
+            />
+          )}
+          {canDashboard && (
+            <Route
+              path="/budgets"
+              element={company ? <Budgets /> : <Navigate to="/onboarding" replace />}
+            />
+          )}
+          {canDashboard && (
+            <Route
+              path="/budgets/:id"
+              element={company ? <BudgetDetail /> : <Navigate to="/onboarding" replace />}
             />
           )}
           {canDashboard && (

@@ -71,6 +71,50 @@ export function useIncomeStatement(params: {
   })
 }
 
+/** One Cash Flow line — mirror of finance-service CashFlowLineItem (adjustment as minor units). */
+export interface CashFlowLine {
+  accountCode: string
+  accountType: string
+  amountMinor: number
+}
+
+/** Mirror of finance-service CashFlowResponse (indirect method; all amounts integer minor units). */
+export interface CashFlowResponse {
+  period: string
+  currency: string
+  netIncomeMinor: number
+  operatingLines: CashFlowLine[]
+  cashFromOperatingMinor: number
+  investingLines: CashFlowLine[]
+  cashFromInvestingMinor: number
+  financingLines: CashFlowLine[]
+  cashFromFinancingMinor: number
+  netChangeInCashMinor: number
+  cashMovementMinor: number
+  reconciled: boolean
+  usesIllustrativeRules: boolean
+}
+
+/** GET /api/v1/statements/cash-flow?period=YYYY-MM. 204 → null (no GL entries yet). */
+export function useCashFlow(params: {
+  companyId: string
+  actor: string
+  period: string
+  enabled: boolean
+}) {
+  const { companyId, actor, period, enabled } = params
+  return useQuery({
+    enabled,
+    placeholderData: keepPreviousData,
+    queryKey: ['cashFlow', companyId, period],
+    queryFn: () =>
+      apiFetch<CashFlowResponse>('/api/v1/statements/cash-flow', {
+        tenant: { companyId, actor },
+        query: { period },
+      }),
+  })
+}
+
 /** GET /api/v1/statements/balance-sheet?asOf=YYYY-MM. 204 → null (no GL entries yet). */
 export function useBalanceSheet(params: {
   companyId: string

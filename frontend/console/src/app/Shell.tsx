@@ -2,6 +2,7 @@ import { useState, type ComponentType, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
+  ArrowLeftRight,
   ArrowRight,
   Building2,
   CalendarCheck,
@@ -22,6 +23,7 @@ import {
   Scale,
   Store,
   Sun,
+  Target,
   Truck,
   Users,
   UsersRound,
@@ -62,6 +64,7 @@ export function Shell({ children }: { children: ReactNode }) {
             { to: '/', label: t('nav.dashboard'), icon: LayoutDashboard, end: true, page: 'dashboard' },
             { to: '/statements/income', label: t('nav.income'), icon: LineChart, page: 'reports' },
             { to: '/statements/balance-sheet', label: t('nav.balanceSheet'), icon: Scale, page: 'reports' },
+            { to: '/statements/cash-flow', label: t('nav.cashFlow'), icon: ArrowLeftRight, page: 'reports' },
             { to: '/invoices', label: t('nav.invoices'), icon: Receipt },
             { to: '/customers', label: t('nav.customers'), icon: Users },
             { to: '/ar/aging', label: t('nav.arAging'), icon: Clock },
@@ -70,6 +73,7 @@ export function Shell({ children }: { children: ReactNode }) {
             { to: '/ap/aging', label: t('nav.apAging'), icon: History },
             { to: '/bank', label: t('nav.bank'), icon: Landmark },
             { to: '/tax', label: t('nav.tax'), icon: Percent },
+            { to: '/budgets', label: t('nav.budget'), icon: Target },
           ],
         },
         {
