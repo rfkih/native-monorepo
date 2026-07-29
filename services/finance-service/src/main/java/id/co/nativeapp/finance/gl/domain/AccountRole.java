@@ -98,6 +98,21 @@ public enum AccountRole {
    * ILLUSTRATIVE — SME-gated.
    */
   BANK_CHARGES,
+  /**
+   * Phase 4 tax (PPN): net VAT payable to the tax authority — the credit recognised when a PPN return
+   * is filed for a period whose output VAT exceeds its input VAT (Dr VAT_OUTPUT / Cr VAT_INPUT / Cr
+   * VAT_PAYABLE for the net), and debited again when the return is settled (Dr VAT_PAYABLE / Cr
+   * CASH_CLEARING). Maps to account 2200-family settlement account 2300 (ILLUSTRATIVE — regime +
+   * account SME-gated).
+   */
+  VAT_PAYABLE,
+  /**
+   * Phase 4 tax (PPN): excess recoverable input VAT carried forward — the debit recognised when a PPN
+   * return is filed for a period whose input VAT exceeds its output VAT (the Indonesian default is
+   * <em>dikompensasikan</em>: carry the credit to the next period rather than claim an immediate
+   * refund). Maps to account 1310 (ILLUSTRATIVE — regime + refund-vs-carryforward policy SME-gated).
+   */
+  VAT_CREDIT_CARRYFORWARD,
   EXPENSE,
   LABOR_EXPENSE,
   LABOR_CLEARING,
