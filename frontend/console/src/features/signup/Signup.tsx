@@ -25,6 +25,8 @@ import { cn } from '@/lib/cn'
 import { AUTH_MODE } from '@/lib/config'
 import { useAuth } from '@/lib/authContext'
 import { useSignup, type SignupRequest, type SignupResponse } from './api'
+// Barbershop scene for the brand panel (licensed — see src/assets/landing/SOURCES.md).
+import brandPanelPhoto from '@/assets/landing/signup-w1024.webp'
 
 // Mirrors onboarding — the same supported currencies and languages. The server enforces the
 // same whitelists authoritatively (SignupRequest @Pattern) — these lists are the UI copy of them.
@@ -115,14 +117,27 @@ function BrandPanel() {
   const proofs = [t('signup.proof1'), t('signup.proof2'), t('signup.proof3')]
   return (
     <aside className="relative hidden w-[512px] shrink-0 flex-col overflow-hidden bg-brand-700 p-12 lg:flex">
+      {/* Photography: barbershop scene as a CSS background (a background inside a display:none
+          ancestor is never fetched, so mobile pays zero bytes), pulled on-brand by a cyan multiply
+          layer plus a bottom-weighted gradient that keeps the copy zone ≥ AA on white text. */}
+      <div
+        aria-hidden
+        className="absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: `url(${brandPanelPhoto})` }}
+      />
+      <div aria-hidden className="absolute inset-0 bg-brand-800/70 mix-blend-multiply" />
+      <div
+        aria-hidden
+        className="absolute inset-0 bg-gradient-to-t from-brand-900/85 via-brand-800/40 to-brand-700/25"
+      />
       {/* Soft background shapes */}
       <div
         aria-hidden
-        className="absolute -top-40 -right-56 size-[560px] rounded-full bg-white/[0.055]"
+        className="absolute -top-40 -right-56 size-[560px] rounded-full bg-white/[0.04]"
       />
       <div
         aria-hidden
-        className="absolute -bottom-32 -left-36 size-[360px] rounded-full bg-white/[0.04]"
+        className="absolute -bottom-32 -left-36 size-[360px] rounded-full bg-white/[0.03]"
       />
 
       {/* Mark — on dark the bright end takes over and the glyph goes dark */}
