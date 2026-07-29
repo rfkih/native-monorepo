@@ -81,6 +81,9 @@ const BankAccounts = lazy(() =>
 const BankReconcile = lazy(() =>
   import('@/features/bank/BankReconcile').then((m) => ({ default: m.BankReconcile })),
 )
+const TaxReport = lazy(() =>
+  import('@/features/tax/TaxReport').then((m) => ({ default: m.TaxReport })),
+)
 
 function CenteredSpinner() {
   return (
@@ -324,6 +327,12 @@ export function App() {
             <Route
               path="/bank/:id"
               element={company ? <BankReconcile /> : <Navigate to="/onboarding" replace />}
+            />
+          )}
+          {canDashboard && (
+            <Route
+              path="/tax"
+              element={company ? <TaxReport /> : <Navigate to="/onboarding" replace />}
             />
           )}
           {orgAllowed && (

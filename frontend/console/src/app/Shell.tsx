@@ -17,6 +17,7 @@ import {
   Menu,
   Moon,
   Network,
+  Percent,
   Receipt,
   Scale,
   Store,
@@ -68,6 +69,7 @@ export function Shell({ children }: { children: ReactNode }) {
             { to: '/vendors', label: t('nav.vendors'), icon: Truck },
             { to: '/ap/aging', label: t('nav.apAging'), icon: History },
             { to: '/bank', label: t('nav.bank'), icon: Landmark },
+            { to: '/tax', label: t('nav.tax'), icon: Percent },
           ],
         },
         {
