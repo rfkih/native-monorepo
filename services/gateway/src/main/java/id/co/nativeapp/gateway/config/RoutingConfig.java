@@ -645,4 +645,41 @@ public class RoutingConfig {
         .filter(tenantFilter)
         .build();
   }
+
+  /**
+   * Fixed assets (finance-service) — owner/manager only. {@code /api/v1/assets/**} covers the asset
+   * register, acquire, and the monthly amortization run ({@code POST /api/v1/assets/runs}) (Phase 6
+   * fixed assets &amp; deferrals, ADR 0020). Fresh prefix — no collision.
+   */
+  @Bean
+  RouterFunction<ServerResponse> assetsRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("finance-service-assets")
+        .route(path("/api/v1/assets/**"), http())
+        .before(uri(routes.financeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
+   * Deferrals (finance-service) — owner/manager only. {@code /api/v1/deferrals/**} covers prepaid
+   * expenses + deferred revenue (Phase 6, ADR 0020). Fresh prefix — no collision.
+   */
+  @Bean
+  RouterFunction<ServerResponse> deferralsRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("finance-service-deferrals")
+        .route(path("/api/v1/deferrals/**"), http())
+        .before(uri(routes.financeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
 }
