@@ -74,6 +74,32 @@ cascade-deactivate + reactivation.)
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **Bank & Reconciliation — Phase 3 of the Odoo accounting-parity program (2026-07-29, ADR 0016)** —
+  AR receipts, AP payments, AND POS sales all post to CASH_CLEARING (`1900`) = cash in transit; this
+  adds real **bank accounts** and a **reconciliation** flow that settles that clearing balance against
+  bank statement lines (non-invasive — AR/AP/POS untouched). New `finance/bank/` feature: `bank_account`
+  + `bank_statement_line` (signed `amount_minor`), V29 (tables) + V30 (COA `1000 Bank`/`4100 Interest
+  Income`/`5400 Bank Charges` + role maps). **Reconcile-by-category** (the auto/line-item matching
+  engine is deferred): reconciling a line posts an **ad-hoc balanced 2-line JournalEntry** built
+  directly in `ReconciliationWriter` via `RoleAccountResolver` (no posting_template, no new EventKind):
+  deposit/CLEARING → Dr BANK(1000) / Cr CASH_CLEARING(1900) [the sweep]; withdrawal/CLEARING → the
+  reverse; withdrawal/BANK_FEE → Dr 5400 / Cr 1000; deposit/INTEREST → Dr 1000 / Cr 4100. Category is
+  gated by direction (INTEREST only on a deposit, BANK_FEE only on a withdrawal → 400). One shared
+  `BANK` control account (1000) — per-account balances in the sub-ledger, mirroring AR 1200 / AP 2000.
+  Idempotent via the UNRECONCILED→RECONCILED status guard + UNIQUE `source_event_id`=lineId (re-reconcile
+  → 409; no Idempotency-Key needed — it's a state transition, not a payment). Single-base-currency guard
+  on the post (→422); DTO-only controllers; Location/​@Pattern/​LIMIT; all tables FORCE RLS. The
+  reconciliation report = per-account bank balance (Σ reconciled lines) + the CASH_CLEARING GL balance
+  (`SUM(debit−credit)` on 1900 = cash-in-transit awaiting sweep) + unreconciled lines. Endpoints
+  `/api/v1/bank-accounts/**` + `/api/v1/bank/**` (DASHBOARD_ROLES). Balance sheet gains `1000 Bank`;
+  `1900 CASH_CLEARING` DRAWS DOWN as lines reconcile (residual = true cash-in-transit); income statement
+  gains 4100/5400. Console `features/bank/` (BankAccounts + a reconcile workspace with import + per-line
+  reconcile + the report KPIs). **Verified: 417 finance + 62 gateway tests green** (incl. ReconcilePostingTest
+  the 4 direction×category legs + BankTenancyIsolationTest E2E: +5,000,000 deposit swept + −25,000 fee →
+  bank 4,975,000, clearing −5,000,000, RLS-isolated). Built in the no-space worktree `C:\native-ar-build`.
+  Program → ~70% Odoo accounting: **(1) AR ✓ (2) AP ✓ (3) Bank & reconciliation ✓**, (4) Tax/e-invoicing,
+  (5) Cash-flow & budgets, (6) Fixed assets & deferrals. Deferred: the line-item matching engine; CSV/
+  bank-feed import; per-account GL accounts; multi-ccy bank accounts.
 - **Accounts Payable — Phase 2 of the Odoo accounting-parity program (2026-07-29, ADR 0015)** — the
   vendor-facing MIRROR of AR: vendors, bills (draft → **posted** → (partially) paid | void),
   bill-payments, and an AP aging report, in **finance-service** (`ap/` feature), posting to the
