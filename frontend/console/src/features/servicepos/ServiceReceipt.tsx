@@ -14,7 +14,7 @@ import { formatMoney } from '@/lib/money'
 import { ThermalReceipt } from '@/features/pos/ThermalReceipt'
 import type { ThermalRow, ThermalLineItem } from '@/features/pos/ThermalReceipt'
 import type { VerticalPosConfig } from './config'
-import { ticketLocationOf, type TicketResponse } from './api'
+import { ticketLocationOf, type AppliedPromotionResponse, type TicketResponse } from './api'
 
 interface Props {
   config: VerticalPosConfig
@@ -22,6 +22,12 @@ interface Props {
   locale: string
   /** Outlet/company name shown on the receipt. */
   businessName: string
+  /**
+   * Phase 3 (ADR 0026): the per-rule deduction detail from the LAST live quote before payment — the
+   * checkout response itself carries only the aggregate discount, so this is a display-only
+   * best-effort snapshot, rendered as extra deduction rows under the discount total.
+   */
+  appliedPromotions?: AppliedPromotionResponse[]
   onNew: () => void
 }
 
@@ -57,7 +63,7 @@ function tenderKey(tenderType: string): string {
   }
 }
 
-export function ServiceReceipt({ config, ticket, locale, businessName, onNew }: Props) {
+export function ServiceReceipt({ config, ticket, locale, businessName, appliedPromotions, onNew }: Props) {
   const { t } = useTranslation()
   const payment = ticket.payment
   const isPending = payment?.status === 'PENDING'
@@ -103,6 +109,15 @@ export function ServiceReceipt({ config, ticket, locale, businessName, onNew }: 
       valueLabel: `- ${formatMoney(breakdown.discountMinor, currency, locale)}`,
       isDeduction: true,
     })
+    // Phase 3 (ADR 0026): the per-rule detail behind the aggregate discount above, from the LAST
+    // live quote before payment (display-only — see the `appliedPromotions` prop doc).
+    for (const promo of appliedPromotions ?? []) {
+      totalRows.push({
+        label: `  ${promo.name}`,
+        valueLabel: `- ${formatMoney(promo.amountMinor, currency, locale)}`,
+        isDeduction: true,
+      })
+    }
   }
   totalRows.push({
     label: illustrative ? `${t('pos.serviceCharge')} · ${t('pos.estimated')}` : t('pos.serviceCharge'),

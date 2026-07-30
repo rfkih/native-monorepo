@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
 import { Segmented } from '@/components/ui/Segmented'
+import { AppliedPromotionChips } from '@/components/AppliedPromotionChips'
 import { formatMoney } from '@/lib/money'
 import type { CompanySession } from '@/lib/session'
 import { ApiError, isOutletNotAssigned } from '@/lib/api'
@@ -34,6 +35,20 @@ import type {
 import { useCheckout, useCapturePayment, usePayParked } from './api'
 
 type TenderTab = 'CASH' | 'QRIS' | 'CARD'
+
+/**
+ * Detects the checkout-time coupon rejections (ADR 0026: unlike the quote, checkout/pay-parked
+ * REJECT a bad/exhausted coupon rather than reporting couponStatus) — 422 coupon-invalid or 409
+ * coupon-exhausted (PromotionAdvice.java). Returns the matching i18n key, reusing the same copy the
+ * CouponField's inline error uses, or null for any other error shape.
+ */
+function couponCheckoutErrorKey(err: unknown): 'pos.coupon.invalid' | 'pos.coupon.exhausted' | null {
+  if (!(err instanceof ApiError)) return null
+  const type = err.problem?.type ?? ''
+  if (err.status === 422 && type.includes('coupon-invalid')) return 'pos.coupon.invalid'
+  if (err.status === 409 && type.includes('coupon-exhausted')) return 'pos.coupon.exhausted'
+  return null
+}
 
 /**
  * Detects a 422 insufficient-stock problem+json and returns a structured object
@@ -62,6 +77,8 @@ interface Props {
   grandTotalMinor: number
   /** Optional order-level discount in minor units; passed to checkout. */
   discountMinor: number
+  /** Phase 3 (ADR 0026): the committed coupon code (or null); forwarded to checkout/pay-parked. */
+  couponCode?: string | null
   /** Live price breakdown from useQuote — rendered in the modal header. */
   breakdown: PriceBreakdownResponse | null
   currency: string
@@ -100,6 +117,7 @@ export function PaymentModal({
   lines,
   grandTotalMinor,
   discountMinor,
+  couponCode,
   breakdown,
   currency,
   locale,
@@ -160,6 +178,7 @@ export function PaymentModal({
             lines={lines}
             grandTotalMinor={grandTotalMinor}
             discountMinor={discountMinor}
+            couponCode={couponCode}
             currency={currency}
             locale={locale}
             onSuccess={onSuccess}
@@ -174,6 +193,7 @@ export function PaymentModal({
             lines={lines}
             grandTotalMinor={grandTotalMinor}
             discountMinor={discountMinor}
+            couponCode={couponCode}
             currency={currency}
             locale={locale}
             tenderType={tender}
@@ -263,6 +283,13 @@ function ModalBreakdown({
           {formatMoney(breakdown.grandTotalMinor, currency, locale)}
         </span>
       </div>
+
+      <AppliedPromotionChips
+        promotions={breakdown.appliedPromotions}
+        currency={currency}
+        locale={locale}
+        className="pt-1"
+      />
     </div>
   )
 }
@@ -287,6 +314,7 @@ interface CashPanelProps {
   lines: OrderLineInput[]
   grandTotalMinor: number
   discountMinor: number
+  couponCode?: string | null
   currency: string
   locale: string
   onSuccess: (order: OrderResponse, payment: PaymentResponse) => void
@@ -301,6 +329,7 @@ function CashPanel({
   lines,
   grandTotalMinor,
   discountMinor,
+  couponCode,
   currency,
   locale,
   onSuccess,
@@ -344,7 +373,7 @@ function CashPanel({
     if (parkedOrderId) {
       // Resume path: finalise a PARKED order
       payParked.mutate(
-        { orderId: parkedOrderId, payment: { tenderType: 'CASH', tenderedMinor } },
+        { orderId: parkedOrderId, payment: { tenderType: 'CASH', tenderedMinor }, couponCode },
         {
           onSuccess: (res) => {
             if (res?.payment) {
@@ -364,6 +393,7 @@ function CashPanel({
           discountMinor,
           orderType,
           tableId,
+          couponCode,
         },
         {
           onSuccess: (res) => {
@@ -442,6 +472,10 @@ function CashPanel({
                 available: stockErr.available,
               })
             }
+            const couponKey = couponCheckoutErrorKey(err)
+            if (couponKey) {
+              return t(couponKey)
+            }
             return (err as Error).message
           })()}
         </p>
@@ -479,6 +513,7 @@ interface DigitalPanelProps {
   lines: OrderLineInput[]
   grandTotalMinor: number
   discountMinor: number
+  couponCode?: string | null
   currency: string
   locale: string
   tenderType: 'QRIS' | 'CARD'
@@ -494,6 +529,7 @@ function DigitalPanel({
   lines,
   grandTotalMinor,
   discountMinor,
+  couponCode,
   currency,
   locale,
   tenderType,
@@ -516,7 +552,7 @@ function DigitalPanel({
     if (parkedOrderId) {
       // Resume path: finalise a PARKED order with a digital tender → AWAITING_PAYMENT
       payParked.mutate(
-        { orderId: parkedOrderId, payment: { tenderType } },
+        { orderId: parkedOrderId, payment: { tenderType }, couponCode },
         {
           onSuccess: (res) => {
             if (res?.payment) {
@@ -528,7 +564,7 @@ function DigitalPanel({
       )
     } else {
       checkout.mutate(
-        { lines, payment: { tenderType }, discountMinor, orderType, tableId },
+        { lines, payment: { tenderType }, discountMinor, orderType, tableId, couponCode },
         {
           onSuccess: (res) => {
             if (res?.payment) {
@@ -578,6 +614,10 @@ function DigitalPanel({
                   itemName: stockErr.itemName,
                   available: stockErr.available,
                 })
+              }
+              const couponKey = couponCheckoutErrorKey(err)
+              if (couponKey) {
+                return t(couponKey)
               }
               return (err as Error).message
             })()}

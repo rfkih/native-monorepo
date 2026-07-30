@@ -14,7 +14,7 @@
  */
 import { useTranslation } from 'react-i18next'
 import { formatMoney } from '@/lib/money'
-import type { OrderResponse, PaymentResponse } from './api'
+import type { AppliedPromotionResponse, OrderResponse, PaymentResponse } from './api'
 import { ThermalReceipt } from './ThermalReceipt'
 import type { ThermalRow, ThermalLineItem } from './ThermalReceipt'
 
@@ -29,6 +29,13 @@ interface Props {
    * Null for takeaway/delivery or when tableId is absent.
    */
   tableLabel?: string | null
+  /**
+   * Phase 3 (ADR 0026): the per-rule deduction detail from the LAST live quote before payment —
+   * the checkout/pay-parked response itself carries only the aggregate `discountMinor` (the
+   * per-rule detail is durably persisted server-side, not echoed there), so this is a display-only
+   * best-effort snapshot, rendered as extra deduction rows under the discount total.
+   */
+  appliedPromotions?: AppliedPromotionResponse[]
   onNew: () => void
 }
 
@@ -77,7 +84,15 @@ function orderTypeI18nKey(orderType: string | null): string | null {
   }
 }
 
-export function ReceiptView({ order, payment, locale, businessName, tableLabel, onNew }: Props) {
+export function ReceiptView({
+  order,
+  payment,
+  locale,
+  businessName,
+  tableLabel,
+  appliedPromotions,
+  onNew,
+}: Props) {
   const { t } = useTranslation()
   const isPending = payment.status === 'PENDING'
   const isCash = payment.tenderType === 'CASH'
@@ -127,6 +142,15 @@ export function ReceiptView({ order, payment, locale, businessName, tableLabel, 
         valueLabel: `- ${formatMoney(breakdown.discountMinor, currency, locale)}`,
         isDeduction: true,
       })
+      // Phase 3 (ADR 0026): the per-rule detail behind the aggregate discount above, from the LAST
+      // live quote before payment (display-only — see the `appliedPromotions` prop doc).
+      for (const promo of appliedPromotions ?? []) {
+        totalRows.push({
+          label: `  ${promo.name}`,
+          valueLabel: `- ${formatMoney(promo.amountMinor, currency, locale)}`,
+          isDeduction: true,
+        })
+      }
     }
     totalRows.push({ label: t('pos.serviceCharge'), valueLabel: formatMoney(breakdown.serviceChargeMinor, currency, locale) })
     totalRows.push({ label: t('pos.tax'), valueLabel: formatMoney(breakdown.taxMinor, currency, locale) })

@@ -42,13 +42,15 @@ import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { isOutletNotAssigned } from '@/lib/api'
 import { useSession, type CompanySession } from '@/lib/session'
-import { useAuth } from '@/lib/authContext'
+import { useAuth, hasAnyRole } from '@/lib/authContext'
 import { useTheme } from '@/lib/theme'
 import { localeOf } from '@/i18n'
 import { cn } from '@/lib/cn'
 import { formatMoney, isoMinorExponent } from '@/lib/money'
 import { OutletPicker } from '@/components/OutletPicker'
 import { OutletGate } from '@/components/OutletGate'
+import { CouponField } from '@/components/CouponField'
+import { AppliedPromotionChips } from '@/components/AppliedPromotionChips'
 import {
   useMenu,
   useCategories,
@@ -65,7 +67,7 @@ import { ParkedTray } from './ParkedTray'
 import { TableFloor } from './TableFloor'
 import { BillDetail } from './BillDetail'
 import { useBills, useOpenBill, useAppendLines, type BillSummaryResponse } from './billsApi'
-import type { OrderResponse, PaymentResponse } from './api'
+import type { AppliedPromotionResponse, OrderResponse, PaymentResponse } from './api'
 import { useQuote, useGetOrder } from './api'
 
 // ---------------------------------------------------------------------------
@@ -121,12 +123,21 @@ function PosInner({ session }: { session: CompanySession }) {
   const [cart, setCart] = useState<CartLine[]>([])
   const orderType: OrderType = 'DINE_IN'
   const [discountInput, setDiscountInput] = useState<string>('')
+  // Phase 3 (ADR 0026): the committed coupon code fed into the live quote + checkout/pay-parked.
+  // Bills (guest tabs) are out of scope for coupons per the ADR — only the walk-in cart uses this.
+  const [couponCode, setCouponCode] = useState<string | null>(null)
+  // The manual discount is owner/manager-only (ADR 0026 §5; the server 403s anyway — this hides the
+  // input for a cashier so it never sees an affordance it cannot use).
+  const canManualDiscount = hasAnyRole(auth.roles, 'owner', 'manager')
 
   // Modal / overlay state
   const [modal, setModal] = useState<'payment' | 'receipt' | null>(null)
   const [modifierItem, setModifierItem] = useState<MenuItem | null>(null)
   const [placedOrder, setPlacedOrder] = useState<OrderResponse | null>(null)
   const [placedPayment, setPlacedPayment] = useState<PaymentResponse | null>(null)
+  // The applied-promotion detail from the LAST live quote before payment — the checkout/pay-parked
+  // response itself carries only the aggregate discount (ADR 0026), so the receipt uses this snapshot.
+  const [lastAppliedPromotions, setLastAppliedPromotions] = useState<AppliedPromotionResponse[]>([])
   const [showParkedTray, setShowParkedTray] = useState(false)
   const [showTableFloor, setShowTableFloor] = useState(false)
 
@@ -224,7 +235,7 @@ function PosInner({ session }: { session: CompanySession }) {
 
   const lineCount = cart.reduce((sum, l) => sum + l.qty, 0)
   const discountMinor = parseDiscountInput(discountInput, currency)
-  const quoteQuery = useQuote(session, cartLines, discountMinor)
+  const quoteQuery = useQuote(session, cartLines, discountMinor, couponCode)
   const breakdown = quoteQuery.data ?? resumedOrder?.breakdown ?? null
   const clientSubtotalMinor = cart.reduce(
     (sum, l) => sum + l.effectiveUnitPriceMinor * l.qty,
@@ -319,6 +330,7 @@ function PosInner({ session }: { session: CompanySession }) {
     setResumingOrderId(null)
     setResumedOrder(null)
     setResumeLoaded(false)
+    setCouponCode(null)
   }
 
   function handleResume(orderId: string) {
@@ -330,6 +342,7 @@ function PosInner({ session }: { session: CompanySession }) {
   function handlePaymentSuccess(order: OrderResponse, payment: PaymentResponse) {
     setPlacedOrder(order)
     setPlacedPayment(payment)
+    setLastAppliedPromotions(breakdown?.appliedPromotions ?? [])
     clearCart()
     setModal('receipt')
   }
@@ -606,6 +619,12 @@ function PosInner({ session }: { session: CompanySession }) {
           discountInput={discountInput}
           discountInvalid={discountInvalid}
           onDiscountChange={setDiscountInput}
+          showDiscountInput={canManualDiscount}
+          couponCode={couponCode}
+          couponStatus={breakdown?.couponStatus ?? null}
+          onCouponApply={setCouponCode}
+          onCouponClear={() => setCouponCode(null)}
+          appliedPromotions={breakdown?.appliedPromotions ?? []}
           onExpand={() => setBillSheetOpen(true)}
           onSend={() => {
             // In bill mode "Send" is handled by BillDetail; here we just open it
@@ -639,6 +658,7 @@ function PosInner({ session }: { session: CompanySession }) {
           breakdown={breakdown}
           grandTotalMinor={grandTotalMinor}
           discountMinor={discountMinor}
+          couponCode={couponCode}
           currency={currency}
           locale={locale}
           onSuccess={handlePaymentSuccess}
@@ -656,6 +676,7 @@ function PosInner({ session }: { session: CompanySession }) {
           locale={locale}
           businessName={session.name}
           tableLabel={null}
+          appliedPromotions={lastAppliedPromotions}
           onNew={handleNewOrder}
         />
       ) : null}
@@ -1098,6 +1119,12 @@ function SummaryBar({
   discountInput,
   discountInvalid,
   onDiscountChange,
+  showDiscountInput,
+  couponCode,
+  couponStatus,
+  onCouponApply,
+  onCouponClear,
+  appliedPromotions,
   onExpand,
   onSend,
   onPay,
@@ -1110,6 +1137,13 @@ function SummaryBar({
   discountInput: string
   discountInvalid: boolean
   onDiscountChange: (v: string) => void
+  /** Manual discount is owner/manager-only (ADR 0026 §5) — hidden for a cashier session. */
+  showDiscountInput: boolean
+  couponCode: string | null
+  couponStatus: 'APPLIED' | 'INVALID' | 'EXHAUSTED' | null
+  onCouponApply: (code: string) => void
+  onCouponClear: () => void
+  appliedPromotions: AppliedPromotionResponse[]
   onExpand: () => void
   onSend: () => void
   onPay: () => void
@@ -1132,37 +1166,48 @@ function SummaryBar({
       {/* Drag handle */}
       <span className="absolute left-1/2 top-2.5 h-1 w-10 -translate-x-1/2 rounded-full bg-line" aria-hidden="true" />
 
-      {/* Discount input — walk-in cart mode only (not bill mode) */}
+      {/* Coupon + manual discount — walk-in cart mode only (not bill mode). Coupons on bills are a
+          follow-up (ADR 0026 §"Consequences"); the manual discount input is owner/manager-only. */}
       {!activeBill && lineCount > 0 ? (
-        <div className="px-5 pt-5 pb-1">
-          <div className="flex items-center gap-2">
-            <label
-              htmlFor="pos-discount"
-              className="shrink-0 text-sm font-medium text-ink-2"
-            >
-              {t('pos.addDiscount')}
-            </label>
-            <input
-              id="pos-discount"
-              type="number"
-              min="0"
-              step="any"
-              value={discountInput}
-              onChange={(e) => onDiscountChange(e.target.value)}
-              placeholder="0"
-              aria-describedby={discountInvalid ? 'pos-discount-error' : undefined}
-              className={cn(
-                'h-11 w-40 rounded-xl border bg-surface px-3 text-sm text-ink placeholder:text-ink-3/50 transition-colors',
-                'focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15',
-                discountInvalid ? 'border-loss' : 'border-line',
-              )}
-            />
-            {discountInvalid ? (
-              <p id="pos-discount-error" className="text-xs text-loss" role="alert">
-                {t('pos.discountInvalid')}
-              </p>
-            ) : null}
-          </div>
+        <div className="flex flex-col gap-2.5 px-5 pt-5 pb-1">
+          <CouponField
+            code={couponCode}
+            status={couponStatus}
+            onApply={onCouponApply}
+            onClear={onCouponClear}
+            className="max-w-sm"
+          />
+          <AppliedPromotionChips promotions={appliedPromotions} currency={currency} locale={locale} />
+          {showDiscountInput ? (
+            <div className="flex items-center gap-2">
+              <label
+                htmlFor="pos-discount"
+                className="shrink-0 text-sm font-medium text-ink-2"
+              >
+                {t('pos.addDiscount')}
+              </label>
+              <input
+                id="pos-discount"
+                type="number"
+                min="0"
+                step="any"
+                value={discountInput}
+                onChange={(e) => onDiscountChange(e.target.value)}
+                placeholder="0"
+                aria-describedby={discountInvalid ? 'pos-discount-error' : undefined}
+                className={cn(
+                  'h-11 w-40 rounded-xl border bg-surface px-3 text-sm text-ink placeholder:text-ink-3/50 transition-colors',
+                  'focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15',
+                  discountInvalid ? 'border-loss' : 'border-line',
+                )}
+              />
+              {discountInvalid ? (
+                <p id="pos-discount-error" className="text-xs text-loss" role="alert">
+                  {t('pos.discountInvalid')}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
 

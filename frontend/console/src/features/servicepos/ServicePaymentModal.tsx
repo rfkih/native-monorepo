@@ -23,9 +23,10 @@ import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
 import { Segmented } from '@/components/ui/Segmented'
+import { AppliedPromotionChips } from '@/components/AppliedPromotionChips'
 import { formatMoney } from '@/lib/money'
 import type { CompanySession } from '@/lib/session'
-import { isOutletNotAssigned } from '@/lib/api'
+import { ApiError, isOutletNotAssigned } from '@/lib/api'
 import type { VerticalPosConfig, TenderType } from './config'
 import {
   isModuleNotEntitled,
@@ -43,6 +44,8 @@ interface Props {
   /** Server-authoritative grand total from the quote breakdown; drives the charge amount. */
   grandTotalMinor: number
   discountMinor: number
+  /** Phase 3 (ADR 0026): the committed coupon code (or null); forwarded to checkout. */
+  couponCode?: string | null
   /** Live price breakdown from useTicketQuote — rendered in the modal header. */
   breakdown: PriceBreakdownResponse | null
   currency: string
@@ -70,10 +73,19 @@ function quickChips(totalMinor: number, currency: string): number[] {
   return chips
 }
 
-/** Maps a checkout/capture error to a precise i18n message, or null for a generic fallback. */
+/**
+ * Maps a checkout/capture error to a precise i18n message, or null for a generic fallback. The
+ * coupon checks (ADR 0026: checkout REJECTS a bad/exhausted code, unlike the quote) reuse the same
+ * copy CouponField's own inline error uses.
+ */
 function errorMessageKey(err: unknown): string | null {
   if (isOutletNotAssigned(err)) return 'pos.payment.outletNotAssigned'
   if (isModuleNotEntitled(err)) return 'servicePos.errors.moduleNotEntitled'
+  if (err instanceof ApiError) {
+    const type = err.problem?.type ?? ''
+    if (err.status === 422 && type.includes('coupon-invalid')) return 'pos.coupon.invalid'
+    if (err.status === 409 && type.includes('coupon-exhausted')) return 'pos.coupon.exhausted'
+  }
   return null
 }
 
@@ -83,6 +95,7 @@ export function ServicePaymentModal({
   lines,
   grandTotalMinor,
   discountMinor,
+  couponCode,
   breakdown,
   currency,
   locale,
@@ -139,6 +152,7 @@ export function ServicePaymentModal({
             lines={lines}
             grandTotalMinor={grandTotalMinor}
             discountMinor={discountMinor}
+            couponCode={couponCode}
             currency={currency}
             locale={locale}
             bay={bay}
@@ -153,6 +167,7 @@ export function ServicePaymentModal({
             lines={lines}
             grandTotalMinor={grandTotalMinor}
             discountMinor={discountMinor}
+            couponCode={couponCode}
             currency={currency}
             locale={locale}
             bay={bay}
@@ -237,6 +252,13 @@ function ModalBreakdown({
           {formatMoney(breakdown.grandTotalMinor, currency, locale)}
         </span>
       </div>
+
+      <AppliedPromotionChips
+        promotions={breakdown.appliedPromotions}
+        currency={currency}
+        locale={locale}
+        className="pt-1"
+      />
     </div>
   )
 }
@@ -262,6 +284,7 @@ interface CashPanelProps {
   lines: TicketLineInput[]
   grandTotalMinor: number
   discountMinor: number
+  couponCode?: string | null
   currency: string
   locale: string
   bay: string
@@ -276,6 +299,7 @@ function CashPanel({
   lines,
   grandTotalMinor,
   discountMinor,
+  couponCode,
   currency,
   locale,
   bay,
@@ -322,6 +346,7 @@ function CashPanel({
         discountMinor,
         lines,
         payment: { tenderType: 'CASH', tenderedMinor },
+        couponCode,
       },
       {
         onSuccess: (res) => {
@@ -423,6 +448,7 @@ interface DigitalPanelProps {
   lines: TicketLineInput[]
   grandTotalMinor: number
   discountMinor: number
+  couponCode?: string | null
   currency: string
   locale: string
   bay: string
@@ -439,6 +465,7 @@ function DigitalPanel({
   lines,
   grandTotalMinor,
   discountMinor,
+  couponCode,
   currency,
   locale,
   bay,
@@ -468,6 +495,7 @@ function DigitalPanel({
         discountMinor,
         lines,
         payment: { tenderType },
+        couponCode,
       },
       {
         onSuccess: (res) => {

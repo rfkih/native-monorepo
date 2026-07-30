@@ -104,6 +104,9 @@ const FixedAssets = lazy(() =>
 const Deferrals = lazy(() =>
   import('@/features/assets/Deferrals').then((m) => ({ default: m.Deferrals })),
 )
+const Promotions = lazy(() =>
+  import('@/features/promotions/Promotions').then((m) => ({ default: m.Promotions })),
+)
 
 function CenteredSpinner() {
   return (
@@ -325,6 +328,12 @@ export function App() {
             <Route
               path="/deferrals"
               element={company ? <Deferrals /> : <Navigate to="/onboarding" replace />}
+            />
+          )}
+          {canDashboard && (
+            <Route
+              path="/promotions"
+              element={company ? <Promotions /> : <Navigate to="/onboarding" replace />}
             />
           )}
           {canDashboard && (

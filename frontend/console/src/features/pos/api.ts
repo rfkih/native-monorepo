@@ -106,9 +106,26 @@ export interface OrderLineInput {
 }
 
 /**
+ * Mirrors backend order.dto.AppliedPromotionResponse (Phase 3, ADR 0026) — one deduction the
+ * promotions engine applied, echoed ONLY on the quote response. `lineRef` is always null on a quote
+ * (a quote persists nothing — see the Java javadoc).
+ */
+export interface AppliedPromotionResponse {
+  name: string
+  type: string | null
+  amountMinor: number
+  lineRef: string | null
+}
+
+/**
  * Mirrors backend PriceBreakdownResponse. All amounts are integer minor units.
  * When usesIllustrativeRules is true the tax / service-charge lines are placeholder
  * amounts and the UI must badge them as estimated.
+ *
+ * Phase 3 (ADR 0026): appliedPromotions/couponStatus are populated ONLY on the quote response — the
+ * checkout/pay-parked responses keep the pre-Phase-3 shape (discountMinor already carries the
+ * collapsed total; the per-rule detail is durably persisted server-side as applied_promotion rows,
+ * not echoed here).
  */
 export interface PriceBreakdownResponse {
   subtotalMinor: number
@@ -118,6 +135,10 @@ export interface PriceBreakdownResponse {
   grandTotalMinor: number
   currency: string
   usesIllustrativeRules: boolean
+  /** Empty on checkout/pay-parked responses — see class doc. */
+  appliedPromotions: AppliedPromotionResponse[]
+  /** 'APPLIED' | 'INVALID' | 'EXHAUSTED' | null — null when no coupon code was supplied. */
+  couponStatus: 'APPLIED' | 'INVALID' | 'EXHAUSTED' | null
 }
 
 /** Matches backend PaymentResponse record (ADR 0006). All money is integer minor units. */
@@ -196,33 +217,46 @@ function tenantOf(session: CompanySession) {
  *
  * Phase 3: lines now carry selectedOptionIds — forwarded verbatim to the quote endpoint so the
  * server prices modifier deltas and returns the correct subtotal/tax/total breakdown.
+ *
+ * Phase 3 (ADR 0026): couponCode (optional) is forwarded verbatim — the quote endpoint never throws
+ * for a bad/expired/exhausted code, it reports `couponStatus` on the breakdown instead.
  */
 export function useQuote(
   session: CompanySession,
   lines: OrderLineInput[],
   discountMinor: number,
+  couponCode: string | null = null,
 ) {
   // State-based debounce: both the query key and the request body read from `debounced`,
   // so they are always identical and the server always receives the full current cart.
-  const [debounced, setDebounced] = useState<{ lines: OrderLineInput[]; discountMinor: number }>(
-    () => ({ lines, discountMinor }),
-  )
+  const [debounced, setDebounced] = useState<{
+    lines: OrderLineInput[]
+    discountMinor: number
+    couponCode: string | null
+  }>(() => ({ lines, discountMinor, couponCode }))
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => {
-      setDebounced({ lines, discountMinor })
+      setDebounced({ lines, discountMinor, couponCode })
     }, 400)
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
     }
-  }, [lines, discountMinor])
+  }, [lines, discountMinor, couponCode])
 
   const enabled = debounced.lines.length > 0
 
   return useQuery({
-    queryKey: ['quote', session.companyId, session.businessId, debounced.lines, debounced.discountMinor],
+    queryKey: [
+      'quote',
+      session.companyId,
+      session.businessId,
+      debounced.lines,
+      debounced.discountMinor,
+      debounced.couponCode,
+    ],
     enabled,
     placeholderData: keepPreviousData,
     staleTime: 0,
@@ -234,6 +268,7 @@ export function useQuote(
           businessId: session.businessId,
           lines: debounced.lines,
           discountMinor: debounced.discountMinor > 0 ? debounced.discountMinor : null,
+          couponCode: debounced.couponCode || null,
         },
       }),
   })
@@ -270,12 +305,14 @@ export interface CheckoutInput {
   orderType?: string
   /** Phase 4: table UUID (DINE_IN only) */
   tableId?: string | null
+  /** Phase 3 (ADR 0026): optional coupon code. Unlike the quote, checkout REJECTS a bad/exhausted code. */
+  couponCode?: string | null
 }
 
 export function useCheckout(session: CompanySession) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ lines, payment, discountMinor, orderType, tableId }: CheckoutInput) =>
+    mutationFn: ({ lines, payment, discountMinor, orderType, tableId, couponCode }: CheckoutInput) =>
       apiFetch<OrderResponse>('/api/v1/orders', {
         method: 'POST',
         tenant: tenantOf(session),
@@ -287,6 +324,7 @@ export function useCheckout(session: CompanySession) {
           discountMinor: discountMinor && discountMinor > 0 ? discountMinor : null,
           orderType: orderType ?? null,
           tableId: tableId ?? null,
+          couponCode: couponCode || null,
         },
       }),
     onSuccess: (res) => {
@@ -372,16 +410,19 @@ export function useGetOrder(session: CompanySession, orderId: string | null) {
 export interface PayParkedInput {
   orderId: string
   payment?: CheckoutPaymentInput
+  /** Phase 3 (ADR 0026): optional coupon code, re-evaluated at pay time (a parked order does not
+   * lock in promotions at park time). Rejected the same way checkout rejects a bad/exhausted code. */
+  couponCode?: string | null
 }
 
 export function usePayParked(session: CompanySession) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ orderId, payment }: PayParkedInput) =>
+    mutationFn: ({ orderId, payment, couponCode }: PayParkedInput) =>
       apiFetch<OrderResponse>(`/api/v1/orders/${orderId}/pay`, {
         method: 'POST',
         tenant: tenantOf(session),
-        body: { payment: payment ?? null },
+        body: { payment: payment ?? null, couponCode: couponCode || null },
       }),
     onSuccess: (res) => {
       if (res?.payment?.status === 'CAPTURED') {

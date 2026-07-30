@@ -41,12 +41,15 @@ import { cn } from '@/lib/cn'
 import { formatMoney, isoMinorExponent } from '@/lib/money'
 import { OutletPicker } from '@/components/OutletPicker'
 import { OutletGate } from '@/components/OutletGate'
+import { CouponField } from '@/components/CouponField'
+import { AppliedPromotionChips } from '@/components/AppliedPromotionChips'
 import type { VerticalPosConfig } from './config'
 import {
   useCatalogPackages,
   useCatalogAddons,
   useStaffProfiles,
   useTicketQuote,
+  type AppliedPromotionResponse,
   type CatalogItemResponse,
   type PriceBreakdownResponse,
   type StaffProfileResponse,
@@ -88,6 +91,10 @@ interface AddonLine {
 function ServicePosInner({ config, session }: { config: VerticalPosConfig; session: CompanySession }) {
   const { t, i18n } = useTranslation()
   const locale = localeOf(i18n.language)
+  const auth = useAuth()
+  // The manual discount is owner/manager-only (ADR 0026 §5; the server 403s anyway — this hides the
+  // input for a cashier so it never sees an affordance it cannot use).
+  const canManualDiscount = hasAnyRole(auth.roles, 'owner', 'manager')
 
   const packagesQuery = useCatalogPackages(config, session)
   const addonsQuery = useCatalogAddons(config, session)
@@ -104,10 +111,15 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
   const [vehiclePlate, setVehiclePlate] = useState('')
   const [staffProfileId, setStaffProfileId] = useState<string | null>(null)
   const [discountInput, setDiscountInput] = useState('')
+  // Phase 3 (ADR 0026): the committed coupon code fed into the live quote + checkout.
+  const [couponCode, setCouponCode] = useState<string | null>(null)
 
   // Overlay state
   const [modal, setModal] = useState<'payment' | 'receipt' | null>(null)
   const [ticket, setTicket] = useState<TicketResponse | null>(null)
+  // The applied-promotion detail from the LAST live quote before payment — the checkout response
+  // itself carries only the aggregate discount (ADR 0026), so the receipt uses this snapshot.
+  const [lastAppliedPromotions, setLastAppliedPromotions] = useState<AppliedPromotionResponse[]>([])
 
   const currency = packages[0]?.currency ?? addons[0]?.currency ?? session.baseCurrency
 
@@ -123,7 +135,7 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
   }, [config.primaryItemType, selectedPackage, addonLines])
 
   const discountMinor = parseDiscountInput(discountInput, currency)
-  const quoteQuery = useTicketQuote(config, session, lines, discountMinor)
+  const quoteQuery = useTicketQuote(config, session, lines, discountMinor, couponCode)
   const breakdown = quoteQuery.data ?? null
 
   const clientSubtotalMinor =
@@ -171,10 +183,12 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
     setVehiclePlate('')
     setStaffProfileId(null)
     setDiscountInput('')
+    setCouponCode(null)
   }
 
   function handlePaymentSuccess(paidTicket: TicketResponse) {
     setTicket(paidTicket)
+    setLastAppliedPromotions(breakdown?.appliedPromotions ?? [])
     resetTicketState()
     setModal('receipt')
   }
@@ -263,6 +277,12 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
             discountInput={discountInput}
             discountInvalid={discountInvalid}
             onDiscountChange={setDiscountInput}
+            showDiscountInput={canManualDiscount}
+            couponCode={couponCode}
+            couponStatus={breakdown?.couponStatus ?? null}
+            onCouponApply={setCouponCode}
+            onCouponClear={() => setCouponCode(null)}
+            appliedPromotions={breakdown?.appliedPromotions ?? []}
             breakdown={breakdown}
             grandTotalMinor={grandTotalMinor}
             canCharge={canCharge}
@@ -278,6 +298,7 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
           lines={lines}
           grandTotalMinor={grandTotalMinor}
           discountMinor={discountMinor}
+          couponCode={couponCode}
           breakdown={breakdown}
           currency={currency}
           locale={locale}
@@ -295,6 +316,7 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
           ticket={ticket}
           locale={locale}
           businessName={session.name}
+          appliedPromotions={lastAppliedPromotions}
           onNew={handleNewTicket}
         />
       ) : null}
@@ -486,6 +508,13 @@ interface SummaryPanelProps {
   discountInput: string
   discountInvalid: boolean
   onDiscountChange: (v: string) => void
+  /** Manual discount is owner/manager-only (ADR 0026 §5) — hidden for a cashier session. */
+  showDiscountInput: boolean
+  couponCode: string | null
+  couponStatus: 'APPLIED' | 'INVALID' | 'EXHAUSTED' | null
+  onCouponApply: (code: string) => void
+  onCouponClear: () => void
+  appliedPromotions: AppliedPromotionResponse[]
   breakdown: PriceBreakdownResponse | null
   grandTotalMinor: number
   canCharge: boolean
@@ -510,6 +539,12 @@ function SummaryPanel({
   discountInput,
   discountInvalid,
   onDiscountChange,
+  showDiscountInput,
+  couponCode,
+  couponStatus,
+  onCouponApply,
+  onCouponClear,
+  appliedPromotions,
   breakdown,
   grandTotalMinor,
   canCharge,
@@ -646,31 +681,42 @@ function SummaryPanel({
 
       <BreakdownPanel breakdown={breakdown} grandTotalMinor={grandTotalMinor} currency={currency} locale={locale} />
 
-      <div>
-        <label htmlFor="svc-discount" className="mb-1.5 block text-sm font-medium text-ink-2">
-          {t('pos.addDiscount')}
-        </label>
-        <input
-          id="svc-discount"
-          type="number"
-          min="0"
-          step="any"
-          value={discountInput}
-          onChange={(e) => onDiscountChange(e.target.value)}
-          placeholder="0"
-          aria-describedby={discountInvalid ? 'svc-discount-error' : undefined}
-          className={cn(
-            'h-11 w-full rounded-xl border bg-surface px-3 text-sm text-ink placeholder:text-ink-3/50 transition-colors',
-            'focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15',
-            discountInvalid ? 'border-loss' : 'border-line',
-          )}
-        />
-        {discountInvalid ? (
-          <p id="svc-discount-error" className="mt-1 text-xs text-loss" role="alert">
-            {t('pos.discountInvalid')}
-          </p>
-        ) : null}
-      </div>
+      <AppliedPromotionChips promotions={appliedPromotions} currency={currency} locale={locale} />
+
+      <CouponField
+        code={couponCode}
+        status={couponStatus}
+        onApply={onCouponApply}
+        onClear={onCouponClear}
+      />
+
+      {showDiscountInput ? (
+        <div>
+          <label htmlFor="svc-discount" className="mb-1.5 block text-sm font-medium text-ink-2">
+            {t('pos.addDiscount')}
+          </label>
+          <input
+            id="svc-discount"
+            type="number"
+            min="0"
+            step="any"
+            value={discountInput}
+            onChange={(e) => onDiscountChange(e.target.value)}
+            placeholder="0"
+            aria-describedby={discountInvalid ? 'svc-discount-error' : undefined}
+            className={cn(
+              'h-11 w-full rounded-xl border bg-surface px-3 text-sm text-ink placeholder:text-ink-3/50 transition-colors',
+              'focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15',
+              discountInvalid ? 'border-loss' : 'border-line',
+            )}
+          />
+          {discountInvalid ? (
+            <p id="svc-discount-error" className="mt-1 text-xs text-loss" role="alert">
+              {t('pos.discountInvalid')}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       <Button size="xl" className="tnum w-full font-mono" disabled={!canCharge} onClick={onCharge}>
         {t('servicePos.chargeButton', { amount: formatMoney(grandTotalMinor, currency, locale) })}

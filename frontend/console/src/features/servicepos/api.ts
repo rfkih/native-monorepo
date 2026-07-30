@@ -40,10 +40,21 @@ export interface StaffProfileResponse {
   active: boolean
 }
 
+/** Mirrors backend order.dto.AppliedPromotionResponse — see features/pos/api.ts's twin for detail. */
+export interface AppliedPromotionResponse {
+  name: string
+  type: string | null
+  amountMinor: number
+  lineRef: string | null
+}
+
 /**
  * Mirrors the backend PriceBreakdownResponse — identical shape to the restaurant POS's breakdown
  * (features/pos/api.ts). When usesIllustrativeRules is true the service-charge / tax lines are
  * placeholder amounts and the UI must badge them as estimated.
+ *
+ * Phase 3 (ADR 0026): appliedPromotions/couponStatus are populated ONLY on the quote response —
+ * same contract as the restaurant POS (features/pos/api.ts's PriceBreakdownResponse doc).
  */
 export interface PriceBreakdownResponse {
   subtotalMinor: number
@@ -53,6 +64,8 @@ export interface PriceBreakdownResponse {
   grandTotalMinor: number
   currency: string
   usesIllustrativeRules: boolean
+  appliedPromotions: AppliedPromotionResponse[]
+  couponStatus: 'APPLIED' | 'INVALID' | 'EXHAUSTED' | null
 }
 
 /** One quote/checkout line — a package (qty always 1) or an add-on (qty >= 1). */
@@ -238,21 +251,24 @@ export function useTicketQuote(
   session: CompanySession,
   lines: TicketLineInput[],
   discountMinor: number,
+  couponCode: string | null = null,
 ) {
-  const [debounced, setDebounced] = useState<{ lines: TicketLineInput[]; discountMinor: number }>(
-    () => ({ lines, discountMinor }),
-  )
+  const [debounced, setDebounced] = useState<{
+    lines: TicketLineInput[]
+    discountMinor: number
+    couponCode: string | null
+  }>(() => ({ lines, discountMinor, couponCode }))
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => {
-      setDebounced({ lines, discountMinor })
+      setDebounced({ lines, discountMinor, couponCode })
     }, 400)
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
     }
-  }, [lines, discountMinor])
+  }, [lines, discountMinor, couponCode])
 
   const enabled = debounced.lines.length > 0
 
@@ -265,6 +281,7 @@ export function useTicketQuote(
       session.businessId,
       debounced.lines,
       debounced.discountMinor,
+      debounced.couponCode,
     ],
     enabled,
     placeholderData: keepPreviousData,
@@ -277,6 +294,7 @@ export function useTicketQuote(
           businessId: session.businessId,
           lines: debounced.lines,
           discountMinor: debounced.discountMinor > 0 ? debounced.discountMinor : null,
+          couponCode: debounced.couponCode || null,
         },
       }),
   })
@@ -301,6 +319,8 @@ export interface TicketCheckoutInput {
   discountMinor?: number
   lines: TicketLineInput[]
   payment: { tenderType: TenderType; tenderedMinor?: number }
+  /** Phase 3 (ADR 0026): optional coupon code. Checkout REJECTS a bad/exhausted code (unlike the quote). */
+  couponCode?: string | null
 }
 
 export function useTicketCheckout(config: VerticalPosConfig, session: CompanySession) {
@@ -314,6 +334,7 @@ export function useTicketCheckout(config: VerticalPosConfig, session: CompanySes
       discountMinor,
       lines,
       payment,
+      couponCode,
     }: TicketCheckoutInput) =>
       apiFetch<TicketResponse>(`${config.apiBase}/tickets/checkout`, {
         method: 'POST',
@@ -330,6 +351,7 @@ export function useTicketCheckout(config: VerticalPosConfig, session: CompanySes
           discountMinor: discountMinor && discountMinor > 0 ? discountMinor : null,
           lines,
           payment,
+          couponCode: couponCode || null,
         },
       }),
     onSuccess: (res) => {
