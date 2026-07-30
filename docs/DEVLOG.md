@@ -74,6 +74,43 @@ cascade-deactivate + reactivation.)
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **Multi-company ownership — one login, 1..N businesses (2026-07-30, ADR 0021)** — each business is
+  its own legal entity = its own company with isolated books; a login can now hold MANY. The
+  `company_id` KC claim became **multivalued** (the allowed set, first = default; mapper change in
+  all 4 realm-JSON copies; readers accept `string|string[]` so old tokens work; RUNBOOK: a LIVE KC
+  needs the mapper updated via admin API). The client picks the ACTIVE company per request via
+  `X-Company-Id`, **validated against the token's set at the gateway AND at every service edge**
+  (`TenantBindingFilter`) — in-set → bind, absent → first, outside → 403 `invalid-company-selection`
+  (a spoofed header is now rejected outright, strictly stronger than the old silent overwrite; two
+  spoof tests updated to the new contract). Exactly one tenant binds per request; RLS/books
+  untouched; no re-auth per switch; no new sync edges. `RateLimitFilter` keys on the first company.
+  **org-service**: `KeycloakUser.companyIds` (list) + `belongsTo` guards (team/page-grant/outlet —
+  a multi-company login is manageable from EACH company's team page; KC `q=company_id:` search
+  matches multi-valued attributes, proven); `addCompanyToUser`/`removeCompanyFromUser`
+  (GET-merge-PUT preserving other attributes, idempotent); **`POST /companies` now BINDS its
+  creator** (membership-first + compensating removal, mirroring signup — this FIXES the oidc
+  onboarding loop where a created company was unreachable); new **`GET /api/v1/companies/mine`**
+  (tenant-optional; callAs per verified-claim id; dangling memberships skipped); the gateway
+  companies route uses a tenant-OPTIONAL tenant-filter variant so a 0-company token reaches the
+  bootstrap endpoints. **Console**: `auth.companyIds` + `auth.refresh()` (silent renew);
+  session = company LIST + per-login persisted active pointer; every call sends the active company
+  as the validated `X-Company-Id`; the header pill is a **switcher dropdown** + "Add business" →
+  the onboarding wizard (oidc: create → silent token renew → activate; dev: localStorage list).
+  QueryKeys already carry companyId → switching re-fetches everything. **Review (auth/tenancy
+  critical): the tenant-binding chain PASSED; one blocking regression found & fixed** — the session
+  bootstrap moved to `/companies/mine`, which fell through to the dashboard-only `/companies/**`
+  route and locked CASHIERS out of the POS → dedicated highest-precedence `ME_ROLES` route + a
+  cashier-bootstrap pinning test; the KC GET-merge-PUT two-tab race + the renew-failure 403 window
+  are documented ADR residuals (wizard already guards in-flight submits; renew now retried once).
+  **Verified: 75 gateway + 13 libs/security + 186 org tests green** (incl.
+  GatewayCompanySelectionTest — default-first / in-set honoured / out-of-set 403 / scalar
+  back-compat / cashier `/mine` bootstrap; the libs defense-in-depth proof now
+  includes the multi-company token defaulting to A and a validated selection re-binding RLS to B,
+  end to end vs real KC + RLS Postgres; MultiCompanyMembershipAcceptanceTest — create-binds-creator
+  → fresh-token claim → /mine → per-request selection → foreign-selection 403 → multi-valued team
+  search) + console build. **Limitation (documented):** realm roles are global per login (owner
+  everywhere) — per-company roles deferred; invitees stay single-company; "add existing login to my
+  company" deferred (the primitive exists).
 - **Fixed assets & deferrals — Phase 6, the FINAL pillar of the Odoo accounting-parity program
   (2026-07-30, ADR 0020)** — the system's first TIME-BASED SCHEDULED postings. New `finance/assets/`:
   `fixed_asset` + `deferral` + `amortization_run`(+`_line`) (V34, FORCE RLS) and GL config V35 (COA
