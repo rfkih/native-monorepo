@@ -4,10 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import id.co.nativeapp.carwash.pricing.domain.PriceBreakdown;
 import id.co.nativeapp.carwash.ticket.messaging.TicketSaleRecordedSchema;
+import id.co.nativeapp.carwash.wash.domain.Wash;
 import id.co.nativeapp.carwash.wash.messaging.SaleRecordedSchema;
 import id.co.nativeapp.events.AvroSerde;
 import id.co.nativeapp.money.Money;
 import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
@@ -24,6 +26,10 @@ import org.junit.jupiter.api.Test;
  * serializes on), stays mutually backward-compatible with the producer (restaurant) schema — so
  * finance reads carwash washes through the very same consumer path — and that the back-compat gate
  * accepts an added-optional field while rejecting a new required field with no default.
+ *
+ * <p>ADR 0027 (Phase 4, loyalty + gift cards): asserts the five trailing optional fields round-trip
+ * (defaulting to null for the legacy wash producer, which never sets them) and that the current
+ * schema stays backward-compatible with the pre-Phase-4 shape (old-writer / new-reader).
  */
 class SaleRecordedContractTest {
 
@@ -206,5 +212,83 @@ class SaleRecordedContractTest {
   void legacyNullAndTicketFullProducersShareTheIdenticalSchema() {
     assertThat(SaleRecordedSchema.schema().toString())
         .isEqualTo(TicketSaleRecordedSchema.schema().toString());
+  }
+
+  /**
+   * The PRE-Phase-4 producer/consumer shape (13 fields, through {@code uses_illustrative_rules}) —
+   * the schema every service ran before ADR 0027 (loyalty + gift cards) added the five trailing
+   * optional fields.
+   */
+  private static final String PRE_PHASE4_SCHEMA_JSON =
+      """
+      {
+        "type": "record",
+        "name": "SaleRecorded",
+        "namespace": "id.co.nativeapp.events.restaurant",
+        "fields": [
+          {"name": "sale_id", "type": "string"},
+          {"name": "company_id", "type": "string"},
+          {"name": "business_id", "type": "string"},
+          {"name": "amount_minor", "type": "long"},
+          {"name": "currency", "type": "string"},
+          {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+          {"name": "tender_type", "type": ["null", "string"], "default": null},
+          {"name": "subtotal_minor", "type": ["null", "long"], "default": null},
+          {"name": "discount_minor", "type": ["null", "long"], "default": null},
+          {"name": "service_charge_minor", "type": ["null", "long"], "default": null},
+          {"name": "tax_minor", "type": ["null", "long"], "default": null},
+          {"name": "tax_rule_version", "type": ["null", "string"], "default": null},
+          {"name": "uses_illustrative_rules", "type": ["null", "boolean"], "default": null}
+        ]
+      }
+      """;
+
+  @Test
+  void schemaCarriesTheFivePhase4LoyaltyAndGiftCardFields() {
+    // ADR 0027 (Phase 4): loyalty_member_id, loyalty_redeemed_points, loyalty_redeemed_minor,
+    // gift_card_id, gift_card_redeemed_minor — all ["null", <type>] with default null.
+    Schema schema = SaleRecordedSchema.schema();
+    assertThat(schema.getField("loyalty_member_id").hasDefaultValue()).isTrue();
+    assertThat(schema.getField("loyalty_redeemed_points").hasDefaultValue()).isTrue();
+    assertThat(schema.getField("loyalty_redeemed_minor").hasDefaultValue()).isTrue();
+    assertThat(schema.getField("gift_card_id").hasDefaultValue()).isTrue();
+    assertThat(schema.getField("gift_card_redeemed_minor").hasDefaultValue()).isTrue();
+  }
+
+  @Test
+  void newReaderIsBackwardCompatibleWithThePrePhase4Schema() {
+    // OLD-WRITER / NEW-READER: a reader on the current (Phase 4) schema must be able to read bytes
+    // written by carwash's own already-deployed pre-Phase-4 wash/ticket producers.
+    Schema oldWriter = new Schema.Parser().parse(PRE_PHASE4_SCHEMA_JSON);
+    Schema newReader = SaleRecordedSchema.schema();
+    assertThat(AvroSerde.isBackwardCompatible(oldWriter, newReader)).isTrue();
+  }
+
+  @Test
+  void legacyWashProducerBytesDecodeUnderTheCurrentSchemaWithNullPhase4Fields() {
+    // The legacy wash producer (SaleRecordedSchema.toRecord) never sets the five Phase 4 fields —
+    // proving the extended schema still round-trips its bytes with the new fields defaulting to
+    // null.
+    Wash wash = wash();
+    GenericRecord record = SaleRecordedSchema.toRecord(wash, "11111111-1111-1111-1111-111111111111");
+
+    byte[] bytes = AvroSerde.serialize(record);
+    GenericRecord decoded = AvroSerde.deserialize(bytes, SaleRecordedSchema.schema());
+
+    assertThat(decoded.get("loyalty_member_id")).isNull();
+    assertThat(decoded.get("loyalty_redeemed_points")).isNull();
+    assertThat(decoded.get("loyalty_redeemed_minor")).isNull();
+    assertThat(decoded.get("gift_card_id")).isNull();
+    assertThat(decoded.get("gift_card_redeemed_minor")).isNull();
+  }
+
+  private static Wash wash() {
+    return new Wash(
+        UUID.fromString("22222222-2222-2222-2222-222222222222"),
+        "bay-1",
+        Optional.empty(),
+        Money.ofMinor(50_000_00L, "IDR"),
+        Instant.parse("2026-06-14T08:30:00Z"),
+        "idem-" + UUID.randomUUID());
   }
 }

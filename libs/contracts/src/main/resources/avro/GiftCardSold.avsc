@@ -1,0 +1,16 @@
+{
+  "type": "record",
+  "name": "GiftCardSold",
+  "namespace": "id.co.nativeapp.events.restaurant",
+  "doc": "Emitted by a vertical (restaurant-service, carwash-service, barbershop-service) when a gift card is sold or topped up at checkout (ADR 0027, Phase 4 of the POS-parity program). NOT a sale -- a LIABILITY event: the company now owes the bearer stored value. Never merged into SaleRecorded (a gift-card sale is not revenue at the point of sale; revenue is recognised later, at redemption, via SaleRecorded.gift_card_redeemed_minor). Consumed by finance-service (post the GIFT_CARD_LIABILITY credit) and loyalty-service (append to the card's balance ledger and publish GiftCardStateChanged). Money is an integer minor-units amount plus an ISO-4217 currency code, never a float (CLAUDE.md rule 8). Namespace follows the SaleRecorded/SaleVoided/SaleRefunded/ExpenseRecorded house-style precedent: a multi-vertical-producer event keeps ONE stable namespace (restaurant, the historic producer-of-record) regardless of which vertical emits it, so all producers share one full name on the wire.",
+  "fields": [
+    {"name": "gift_card_sale_id", "type": "string", "doc": "This gift-card-sale event's unique id (UUID as string) -- the idempotency/dedupe key consumers use via ProcessedEventStore (not the Kafka offset)."},
+    {"name": "gift_card_id", "type": "string", "doc": "The gift card aggregate id (UUID as string) being sold or topped up; also the Kafka partition key so every event for one card (sale, redemption, state change) orders on the same partition."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string)."},
+    {"name": "business_id", "type": "string", "doc": "The originating business unit / outlet the card was sold at (UUID as string)."},
+    {"name": "amount_minor", "type": "long", "doc": "The stored-value amount sold or loaded onto the card, in the currency's minor units. Never a float."},
+    {"name": "currency", "type": "string", "doc": "ISO-4217 currency code, e.g. IDR or USD."},
+    {"name": "tender_type", "type": ["null", "string"], "default": null, "doc": "The payment tender type used to purchase/top up the card: CASH | QRIS | CARD, or null for legacy/unspecified. Finance routes the offsetting clearing-account debit by tender, the same convention as SaleRecorded.tender_type."},
+    {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the gift-card sale/top-up occurred, epoch millis (UTC)."}
+  ]
+}

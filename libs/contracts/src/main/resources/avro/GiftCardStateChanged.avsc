@@ -1,0 +1,15 @@
+{
+  "type": "record",
+  "name": "GiftCardStateChanged",
+  "namespace": "id.co.nativeapp.events.loyalty",
+  "doc": "Emitted by loyalty-service (ADR 0027, Phase 4 of the POS-parity program) whenever a gift card's state or stored-value balance changes: activation, a redemption, a top-up, expiry, or a void. Carries the ABSOLUTE resulting balance_minor (a set-to-value, NOT a delta) plus a monotonic balance_seq so a consumer applies only the newest value and drops a stale or out-of-order redelivery. Consumed by the verticals to maintain a local gift_card_ref read model (set only when balance_seq is newer), which a checkout reads to validate a redemption WITHOUT a synchronous call to loyalty-service (rule 2). Money is an integer minor-units amount plus an ISO-4217 currency code, never a float (CLAUDE.md rule 8).",
+  "fields": [
+    {"name": "gift_card_id", "type": "string", "doc": "The gift card aggregate id (UUID as string); also the Kafka partition key."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string)."},
+    {"name": "state", "type": "string", "doc": "The card's resulting state: ACTIVE | DEPLETED | EXPIRED | VOID. A string (not an Avro enum), so adding a state is a backward-compatible change."},
+    {"name": "balance_minor", "type": "long", "doc": "The card's resulting stored-value balance -- an ABSOLUTE set-to-value, not a delta -- in the currency's minor units. Never a float."},
+    {"name": "currency", "type": "string", "doc": "ISO-4217 currency code, e.g. IDR or USD."},
+    {"name": "balance_seq", "type": "long", "doc": "A monotonically increasing per-card sequence number. A consumer applies an incoming event only when balance_seq is strictly greater than its locally cached value (set-if-newer); a lower or equal balance_seq (redelivery or out-of-order delivery) is dropped."},
+    {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the state/balance change occurred, epoch millis (UTC)."}
+  ]
+}

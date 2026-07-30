@@ -29,6 +29,10 @@ import org.junit.jupiter.api.Test;
  * backward-compatible with the producer (restaurant) schema — so finance reads barbershop tickets
  * through the very same consumer path — and that the back-compat gate accepts an added-optional
  * field while rejecting a new required field with no default.
+ *
+ * <p>ADR 0027 (Phase 4, loyalty + gift cards): asserts the five trailing optional fields round-trip
+ * when populated on a ticket record, and that the current schema stays backward-compatible with the
+ * pre-Phase-4 shape (old-writer / new-reader).
  */
 class SaleRecordedContractTest {
 
@@ -193,5 +197,101 @@ class SaleRecordedContractTest {
     // contract.
     assertThat(AvroSerde.isBackwardCompatible(PRODUCER_SCHEMA, schema)).isTrue();
     assertThat(AvroSerde.isBackwardCompatible(schema, PRODUCER_SCHEMA)).isTrue();
+  }
+
+  /**
+   * The PRE-Phase-4 producer/consumer shape (13 fields, through {@code uses_illustrative_rules}) —
+   * the schema every service ran before ADR 0027 (loyalty + gift cards) added the five trailing
+   * optional fields.
+   */
+  private static final String PRE_PHASE4_SCHEMA_JSON =
+      """
+      {
+        "type": "record",
+        "name": "SaleRecorded",
+        "namespace": "id.co.nativeapp.events.restaurant",
+        "fields": [
+          {"name": "sale_id", "type": "string"},
+          {"name": "company_id", "type": "string"},
+          {"name": "business_id", "type": "string"},
+          {"name": "amount_minor", "type": "long"},
+          {"name": "currency", "type": "string"},
+          {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+          {"name": "tender_type", "type": ["null", "string"], "default": null},
+          {"name": "subtotal_minor", "type": ["null", "long"], "default": null},
+          {"name": "discount_minor", "type": ["null", "long"], "default": null},
+          {"name": "service_charge_minor", "type": ["null", "long"], "default": null},
+          {"name": "tax_minor", "type": ["null", "long"], "default": null},
+          {"name": "tax_rule_version", "type": ["null", "string"], "default": null},
+          {"name": "uses_illustrative_rules", "type": ["null", "boolean"], "default": null}
+        ]
+      }
+      """;
+
+  @Test
+  void schemaCarriesTheFivePhase4LoyaltyAndGiftCardFields() {
+    // ADR 0027 (Phase 4): loyalty_member_id, loyalty_redeemed_points, loyalty_redeemed_minor,
+    // gift_card_id, gift_card_redeemed_minor — all ["null", <type>] with default null.
+    Schema schema = TicketSaleRecordedSchema.schema();
+    assertThat(schema.getField("loyalty_member_id").hasDefaultValue()).isTrue();
+    assertThat(schema.getField("loyalty_redeemed_points").hasDefaultValue()).isTrue();
+    assertThat(schema.getField("loyalty_redeemed_minor").hasDefaultValue()).isTrue();
+    assertThat(schema.getField("gift_card_id").hasDefaultValue()).isTrue();
+    assertThat(schema.getField("gift_card_redeemed_minor").hasDefaultValue()).isTrue();
+  }
+
+  @Test
+  void newReaderIsBackwardCompatibleWithThePrePhase4Schema() {
+    // OLD-WRITER / NEW-READER: a reader on the current (Phase 4) schema must be able to read bytes
+    // written by barbershop's own already-deployed pre-Phase-4 ticket producer.
+    Schema oldWriter = new Schema.Parser().parse(PRE_PHASE4_SCHEMA_JSON);
+    Schema newReader = TicketSaleRecordedSchema.schema();
+    assertThat(AvroSerde.isBackwardCompatible(oldWriter, newReader)).isTrue();
+  }
+
+  @Test
+  void ticketProducerPhase4FieldsRoundTripWhenPopulated() {
+    // Unlike the wash producer (carwash's legacy path), a ticket producer CAN populate the Phase 4
+    // fields directly on a GenericRecord built from the shared schema (the loyalty/gift-card write
+    // paths land in a later wave; this proves the WIRE shape is ready for them now).
+    Schema schema = TicketSaleRecordedSchema.schema();
+    PriceBreakdown breakdown =
+        new PriceBreakdown(
+            Money.ofMinor(70_000_00L, "IDR"),
+            Money.ofMinor(0L, "IDR"),
+            Money.ofMinor(70_000_00L, "IDR"),
+            Money.ofMinor(0L, "IDR"),
+            Money.ofMinor(7_700_00L, "IDR"),
+            Money.ofMinor(77_700_00L, "IDR"),
+            "ILLUSTRATIVE-2026.1",
+            true);
+    UUID saleId = UUID.randomUUID();
+    UUID businessId = UUID.fromString("22222222-2222-2222-2222-222222222222");
+
+    GenericRecord record =
+        TicketSaleRecordedSchema.toRecord(
+            saleId,
+            "11111111-1111-1111-1111-111111111111",
+            businessId,
+            breakdown.grandTotal(),
+            Instant.parse("2026-06-14T08:30:00Z"),
+            "CASH",
+            breakdown);
+    record.put("loyalty_member_id", "44444444-4444-4444-4444-444444444444");
+    record.put("loyalty_redeemed_points", 500L);
+    record.put("loyalty_redeemed_minor", 5_000_00L);
+    record.put("gift_card_id", "55555555-5555-5555-5555-555555555555");
+    record.put("gift_card_redeemed_minor", 10_000_00L);
+
+    byte[] bytes = AvroSerde.serialize(record);
+    GenericRecord decoded = AvroSerde.deserialize(bytes, schema);
+
+    assertThat(decoded.get("loyalty_member_id").toString())
+        .isEqualTo("44444444-4444-4444-4444-444444444444");
+    assertThat(decoded.get("loyalty_redeemed_points")).isEqualTo(500L);
+    assertThat(decoded.get("loyalty_redeemed_minor")).isEqualTo(5_000_00L);
+    assertThat(decoded.get("gift_card_id").toString())
+        .isEqualTo("55555555-5555-5555-5555-555555555555");
+    assertThat(decoded.get("gift_card_redeemed_minor")).isEqualTo(10_000_00L);
   }
 }

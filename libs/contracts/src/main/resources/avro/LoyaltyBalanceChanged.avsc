@@ -1,0 +1,14 @@
+{
+  "type": "record",
+  "name": "LoyaltyBalanceChanged",
+  "namespace": "id.co.nativeapp.events.loyalty",
+  "doc": "Emitted by loyalty-service (ADR 0027, Phase 4 of the POS-parity program) whenever a member's points balance changes: enrollment, an earn, a redemption, a manual adjustment, or a reversal. Carries the ABSOLUTE resulting points_balance (a set-to-value, NOT a delta) plus a monotonic balance_seq so a consumer applies only the newest value and drops a stale or out-of-order redelivery. Consumed by the verticals to maintain a local member_balance_ref read model, set only when the incoming balance_seq is newer than the cached one -- the snapshot/bootstrap hydration path for that read model. NO PII (CLAUDE.md rule 6): member_id is an opaque UUID; the member's name and phone stay column-encrypted in loyalty-service and never cross this event.",
+  "fields": [
+    {"name": "member_id", "type": "string", "doc": "The loyalty member aggregate id (UUID as string); also the Kafka partition key so one member's balance events order."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string)."},
+    {"name": "points_balance", "type": "long", "doc": "The member's resulting points balance -- an ABSOLUTE set-to-value, not a delta. A long ledger unit (not money -- points are never a currency amount)."},
+    {"name": "balance_seq", "type": "long", "doc": "A monotonically increasing per-member sequence number. A consumer applies an incoming event only when balance_seq is strictly greater than its locally cached value (set-if-newer); a lower or equal balance_seq (redelivery or out-of-order delivery) is dropped, making the consumer idempotent under reordering as well as re-delivery."},
+    {"name": "reason", "type": "string", "doc": "Why the balance changed: ENROLLED | EARNED | REDEEMED | ADJUSTED | REVERSED. A string (not an Avro enum), so adding a reason is a backward-compatible change."},
+    {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the balance change occurred, epoch millis (UTC)."}
+  ]
+}

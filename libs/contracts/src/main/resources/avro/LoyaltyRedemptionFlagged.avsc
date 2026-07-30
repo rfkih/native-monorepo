@@ -1,0 +1,17 @@
+{
+  "type": "record",
+  "name": "LoyaltyRedemptionFlagged",
+  "namespace": "id.co.nativeapp.events.loyalty",
+  "doc": "Emitted by loyalty-service (ADR 0027, Phase 4 of the POS-parity program) when an eventual-consistency overdraft is detected: a vertical accepted a points or gift-card redemption against its LOCAL cached read model (member_balance_ref / gift_card_ref), but loyalty-service's authoritative ledger shows the account went negative once the redemption was applied there. This is the eventual-consistency overdraft flag, not a reversal -- the sale already completed and is not undone; it requires a manual follow-up (e.g. contacting the customer, adjusting the member's balance). Consumed by notification-service to alert an operator. NO PII (CLAUDE.md rule 6): member_id is an opaque UUID.",
+  "fields": [
+    {"name": "flag_id", "type": "string", "doc": "This flag's unique id (UUID as string); also the Kafka partition key and the idempotency/dedupe key."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string)."},
+    {"name": "business_id", "type": "string", "doc": "The business unit / outlet the redemption was accepted at (UUID as string)."},
+    {"name": "sale_id", "type": "string", "doc": "The SaleRecorded sale_id the overdrawing redemption was applied against (UUID as string)."},
+    {"name": "member_id", "type": ["null", "string"], "default": null, "doc": "The loyalty member whose points redemption overdrew the balance, or null when this flag is for a gift-card overdraft."},
+    {"name": "gift_card_id", "type": ["null", "string"], "default": null, "doc": "The gift card whose redemption overdrew the balance, or null when this flag is for a points overdraft."},
+    {"name": "shortfall_minor", "type": ["null", "long"], "default": null, "doc": "The currency-value shortfall -- how far negative the gift-card balance went, in minor units -- or null when this flag is not a gift-card shortfall. Never a float."},
+    {"name": "shortfall_points", "type": ["null", "long"], "default": null, "doc": "The points shortfall -- how far negative the points balance went -- or null when this flag is not a points shortfall."},
+    {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the overdraft was detected, epoch millis (UTC)."}
+  ]
+}

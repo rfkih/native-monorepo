@@ -27,6 +27,13 @@ import org.junit.jupiter.api.Test;
  *
  * <p>ADR 0006 slice 2: asserts the optional {@code tender_type} field round-trips and that old
  * records (tender_type absent) decode with {@code null} as the default.
+ *
+ * <p>ADR 0027 (Phase 4, loyalty + gift cards): asserts the five trailing optional fields ({@code
+ * loyalty_member_id}, {@code loyalty_redeemed_points}, {@code loyalty_redeemed_minor}, {@code
+ * gift_card_id}, {@code gift_card_redeemed_minor}) round-trip, and proves the evolution pair in
+ * both directions — a Phase 4 finance reader decodes pre-Phase-4 producer bytes (old-writer /
+ * new-reader), and a pre-Phase-4 finance reader (not yet upgraded) still decodes Phase 4 producer
+ * bytes, dropping the fields it doesn't know (new-writer / old-reader).
  */
 class SaleRecordedContractTest {
 
@@ -139,6 +146,120 @@ class SaleRecordedContractTest {
     assertThat(decoded.get("currency").toString()).isEqualTo("IDR");
     // tender_type defaults to null when absent from the old producer bytes.
     assertThat(decoded.get("tender_type")).isNull();
+  }
+
+  /**
+   * The PRE-Phase-4 producer/consumer shape (13 fields, through {@code uses_illustrative_rules}) —
+   * the schema every service ran before ADR 0027 (loyalty + gift cards) added the five trailing
+   * optional fields ({@code loyalty_member_id}, {@code loyalty_redeemed_points}, {@code
+   * loyalty_redeemed_minor}, {@code gift_card_id}, {@code gift_card_redeemed_minor}).
+   */
+  private static final String PRE_PHASE4_SCHEMA_JSON =
+      """
+      {
+        "type": "record",
+        "name": "SaleRecorded",
+        "namespace": "id.co.nativeapp.events.restaurant",
+        "fields": [
+          {"name": "sale_id", "type": "string"},
+          {"name": "company_id", "type": "string"},
+          {"name": "business_id", "type": "string"},
+          {"name": "amount_minor", "type": "long"},
+          {"name": "currency", "type": "string"},
+          {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+          {"name": "tender_type", "type": ["null", "string"], "default": null},
+          {"name": "subtotal_minor", "type": ["null", "long"], "default": null},
+          {"name": "discount_minor", "type": ["null", "long"], "default": null},
+          {"name": "service_charge_minor", "type": ["null", "long"], "default": null},
+          {"name": "tax_minor", "type": ["null", "long"], "default": null},
+          {"name": "tax_rule_version", "type": ["null", "string"], "default": null},
+          {"name": "uses_illustrative_rules", "type": ["null", "boolean"], "default": null}
+        ]
+      }
+      """;
+
+  @Test
+  void schemaCarriesTheFivePhase4LoyaltyAndGiftCardFields() {
+    Schema schema = SaleRecordedSchema.schema();
+    assertThat(schema.getField("loyalty_member_id").hasDefaultValue()).isTrue();
+    assertThat(schema.getField("loyalty_redeemed_points").hasDefaultValue()).isTrue();
+    assertThat(schema.getField("loyalty_redeemed_minor").hasDefaultValue()).isTrue();
+    assertThat(schema.getField("gift_card_id").hasDefaultValue()).isTrue();
+    assertThat(schema.getField("gift_card_redeemed_minor").hasDefaultValue()).isTrue();
+  }
+
+  @Test
+  void consumerCopyIsBackwardCompatibleWithThePrePhase4ProducerSchema() {
+    // OLD-WRITER / NEW-READER: finance on the current (Phase 4) schema must be able to read bytes
+    // written by an already-deployed pre-Phase-4 vertical producer (the rolling-deploy window
+    // before every vertical picks up ADR 0027).
+    Schema producer = new Schema.Parser().parse(PRE_PHASE4_SCHEMA_JSON);
+    Schema consumer = SaleRecordedSchema.schema();
+    assertThat(AvroSerde.isBackwardCompatible(producer, consumer)).isTrue();
+  }
+
+  @Test
+  void bytesWrittenWithPrePhase4ProducerSchemaDecodeUnderCurrentConsumerWithNullPhase4Fields() {
+    Schema producer = new Schema.Parser().parse(PRE_PHASE4_SCHEMA_JSON);
+    Schema consumer = SaleRecordedSchema.schema();
+
+    GenericRecord produced = new GenericData.Record(producer);
+    produced.put("sale_id", "33333333-3333-3333-3333-333333333333");
+    produced.put("company_id", "11111111-1111-1111-1111-111111111111");
+    produced.put("business_id", "22222222-2222-2222-2222-222222222222");
+    produced.put("amount_minor", 2_000_000L);
+    produced.put("currency", "IDR");
+    produced.put("occurred_at", 1_750_000_000_000L);
+    produced.put("tender_type", "CASH");
+
+    byte[] wireBytes = AvroSerde.serialize(produced);
+    GenericRecord decoded = AvroSerde.deserialize(wireBytes, producer, consumer);
+
+    assertThat(decoded.get("amount_minor")).isEqualTo(2_000_000L);
+    // The five Phase 4 fields default to null when absent from pre-Phase-4 producer bytes.
+    assertThat(decoded.get("loyalty_member_id")).isNull();
+    assertThat(decoded.get("loyalty_redeemed_points")).isNull();
+    assertThat(decoded.get("loyalty_redeemed_minor")).isNull();
+    assertThat(decoded.get("gift_card_id")).isNull();
+    assertThat(decoded.get("gift_card_redeemed_minor")).isNull();
+  }
+
+  @Test
+  void newProducerBytesWithPhase4FieldsDecodeUnderAnOldPrePhase4ReaderSchema() {
+    // NEW-WRITER / OLD-READER: an already-deployed pre-Phase-4 finance consumer (not yet upgraded)
+    // must still be able to project bytes written by an upgraded (Phase 4) vertical producer — the
+    // five new fields are simply dropped by Avro schema resolution, not an error.
+    Schema newProducer = SaleRecordedSchema.schema();
+    Schema oldConsumer = new Schema.Parser().parse(PRE_PHASE4_SCHEMA_JSON);
+
+    GenericRecord produced = new GenericData.Record(newProducer);
+    produced.put("sale_id", "33333333-3333-3333-3333-333333333333");
+    produced.put("company_id", "11111111-1111-1111-1111-111111111111");
+    produced.put("business_id", "22222222-2222-2222-2222-222222222222");
+    produced.put("amount_minor", 77_700_00L);
+    produced.put("currency", "IDR");
+    produced.put("occurred_at", 1_750_000_000_000L);
+    produced.put("tender_type", "CASH");
+    produced.put("subtotal_minor", 70_000_00L);
+    produced.put("discount_minor", 0L);
+    produced.put("service_charge_minor", 0L);
+    produced.put("tax_minor", 7_700_00L);
+    produced.put("tax_rule_version", "ILLUSTRATIVE-2026.1");
+    produced.put("uses_illustrative_rules", true);
+    produced.put("loyalty_member_id", "44444444-4444-4444-4444-444444444444");
+    produced.put("loyalty_redeemed_points", 500L);
+    produced.put("loyalty_redeemed_minor", 5_000_00L);
+    produced.put("gift_card_id", "55555555-5555-5555-5555-555555555555");
+    produced.put("gift_card_redeemed_minor", 10_000_00L);
+
+    byte[] wireBytes = AvroSerde.serialize(produced);
+    GenericRecord decoded = AvroSerde.deserialize(wireBytes, newProducer, oldConsumer);
+
+    assertThat(decoded.get("amount_minor")).isEqualTo(77_700_00L);
+    assertThat(decoded.get("tax_minor")).isEqualTo(7_700_00L);
+    // The old reader schema simply has no such fields.
+    assertThat(decoded.getSchema().getField("loyalty_member_id")).isNull();
+    assertThat(decoded.getSchema().getField("gift_card_id")).isNull();
   }
 
   @Test

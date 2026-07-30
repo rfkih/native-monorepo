@@ -52,9 +52,13 @@ schema. Until then a row here is documentation of intent, not a shippable contra
 | **`AssignmentChanged`** | **employee-service** | **verticals, finance** | **employee_id, org_unit_id, reporting_to, effective_from/to** | **LIVE (#19)** |
 | **`MetricPublished`** | **carwash-service, restaurant-service** (verticals) | **employee** | **metric_key, period, grain, subject_id, value, source_business_id** | **LIVE (#20; restaurant own-sales commission)** |
 | **`PeriodSealed`** | **verticals** | **employee, finance** | **company_id, business_id, period** | **LIVE (employee consumer #23)** |
-| **`SaleRecorded`** | **restaurant-service + carwash-service** (verticals) | **finance** | **sale_id, company_id, business_id, amount_minor, currency, occurred_at; Phase 2: subtotal_minor, discount_minor, service_charge_minor, tax_minor, tax_rule_version, uses_illustrative_rules (all nullable)** | **LIVE (M1.4 / #20 / Phase 2 breakdown)** |
+| **`SaleRecorded`** | **restaurant-service + carwash-service + barbershop-service** (verticals) | **finance** | **sale_id, company_id, business_id, amount_minor, currency, occurred_at; Phase 2: subtotal_minor, discount_minor, service_charge_minor, tax_minor, tax_rule_version, uses_illustrative_rules (all nullable); Phase 4 (ADR 0027): loyalty_member_id, loyalty_redeemed_points, loyalty_redeemed_minor, gift_card_id, gift_card_redeemed_minor (all nullable)** | **LIVE (M1.4 / #20 / Phase 2 breakdown / Phase 4 loyalty+gift-card schema)** |
 | **`SaleVoided`** | **restaurant-service** | **finance** | **void_id, sale_id, payment_id, company_id, business_id, amount_minor, currency, occurred_at, tender_type** | **LIVE (ADR 0006, slice 4)** |
 | **`SaleRefunded`** | **restaurant-service** | **finance** | **refund_id, sale_id, payment_id, company_id, business_id, refund_amount_minor, currency, total_refunded_minor, occurred_at, tender_type** | **LIVE (ADR 0006, slice 4)** |
+| **`GiftCardSold`** | **restaurant-service + carwash-service + barbershop-service** (verticals) | **finance-service, loyalty-service** | **gift_card_sale_id, gift_card_id, company_id, business_id, amount_minor, currency, tender_type, occurred_at** | **SCHEMA REGISTERED (ADR 0027, Phase 4) — producer/consumer machinery not yet built** |
+| **`LoyaltyBalanceChanged`** | **loyalty-service** | **the verticals** | **member_id, company_id, points_balance (absolute), balance_seq (monotonic), reason, occurred_at** | **SCHEMA REGISTERED (ADR 0027, Phase 4) — loyalty-service not yet scaffolded** |
+| **`GiftCardStateChanged`** | **loyalty-service** | **the verticals** | **gift_card_id, company_id, state, balance_minor (absolute), currency, balance_seq (monotonic), occurred_at** | **SCHEMA REGISTERED (ADR 0027, Phase 4) — loyalty-service not yet scaffolded** |
+| **`LoyaltyRedemptionFlagged`** | **loyalty-service** | **notification-service** | **flag_id, company_id, business_id, sale_id, member_id, gift_card_id, shortfall_minor, shortfall_points, occurred_at** | **SCHEMA REGISTERED (ADR 0027, Phase 4) — loyalty-service not yet scaffolded** |
 | **`ExpenseRecorded`** | **verticals** | **finance** | **expense_id, company_id, business_id, amount_minor, currency, gl_hint, occurred_at** | **LIVE (finance consumer #21)** |
 | **`PayrollPosted`** | **employee-service** | **finance** | **payroll_run_id, run_seq, company_id, period, base_currency, totals, rule_versions, uses_illustrative_rules, posted_at** | **LIVE (#23); finance consumer #23** |
 | **`LaborCostAllocated`** | **employee-service** | **finance** | **payroll_run_id, run_seq, company_id, period, outlet_id, gl_account, amount_minor, currency, uses_illustrative_rules, unallocated** | **LIVE (#23); finance consumer #23** |
@@ -256,18 +260,18 @@ uniformly).
 The first live event (M1.4 — the validation slice). Emitted by a vertical when a sale
 is recorded; consumed by finance-service to post to the ledger.
 
-- **Producer:** `restaurant-service` **and `carwash-service`** (#20 — the 2nd vertical; a recorded
-  wash emits `SaleRecorded` with `business_id` = the carwash outlet, so finance consolidates carwash
-  revenue alongside restaurant), and the other verticals as they ship. Since the carwash POS
-  (ADR 0023), carwash has TWO producing paths: the ticket checkout/capture path sends the **full
-  Phase-2 breakdown + `tender_type`** exactly like restaurant, while the legacy `POST /api/v1/washes`
-  path still sends all-null breakdown (finance's null fall-back path, unchanged).
+- **Producer:** `restaurant-service`, `carwash-service` (#20 — the 2nd vertical; a recorded wash
+  emits `SaleRecorded` with `business_id` = the carwash outlet, so finance consolidates carwash
+  revenue alongside restaurant), and `barbershop-service` (ADR 0024 — the 3rd vertical; ticket
+  checkout, the only revenue path). Since the carwash POS (ADR 0023), carwash has TWO producing
+  paths: the ticket checkout/capture path sends the **full Phase-2 breakdown + `tender_type`**
+  exactly like restaurant, while the legacy `POST /api/v1/washes` path still sends all-null
+  breakdown (finance's null fall-back path, unchanged). barbershop (ADR 0024) has no legacy path —
+  its ticket checkout is the only producer and always sends the full breakdown.
 - **Consumers:** `finance-service` (ledger posting + consolidated-revenue read model) — **LIVE (M1.5)**
 - **Aggregate type / partition key:** `sale` / `sale_id`
 - **Outbox `event_type`:** `SaleRecorded`
-- **Schema (producer, source of truth):** `services/restaurant-service/src/main/resources/avro/SaleRecorded.avsc`
-- **Schema (carwash producer copy):** `services/carwash-service/src/main/resources/avro/SaleRecorded.avsc` — byte-identical to the restaurant producer schema (same full name); carwash's `SaleRecordedContractTest` asserts the copy stays backward-compatible with the producer schema (rule 7), so finance reads carwash washes through the very same consumer path.
-- **Schema (finance consumer copy):** `services/finance-service/src/main/resources/avro/SaleRecorded.avsc` — finance owns its own consumer view of the contract; the finance `SaleRecordedContractTest` asserts the copy stays backward-compatible with the producer schema (rule 7). The finance consumer reads the outbox payload as **raw Avro bytes** via `libs/events AvroSerde` (no Schema Registry serde), deduping by the event UUID (`ProcessedEventStore`) so a re-delivery never double-posts.
+- **Schema (single source of truth, ADR 0003):** `libs/contracts/src/main/resources/avro/SaleRecorded.avsc` — every producer (restaurant, carwash, barbershop) and finance's consumer resolve the SAME classpath resource (`avro/SaleRecorded.avsc`), so a producer and its consumer can no longer structurally drift; there is exactly **one physical copy of this file in the repo**. (Historical note: before ADR 0003 each service kept its own copy under `services/<service>/src/main/resources/avro/`; those per-service copies were deleted when the schema consolidated into `libs/contracts` — a reference to a `services/.../avro/SaleRecorded.avsc` path elsewhere in this document or in prior session notes describes that pre-ADR-0003 state and no longer exists on disk.) Each service's own `SaleRecordedContractTest` (restaurant, carwash, barbershop, finance) still asserts its runtime view of the schema stays backward-compatible with the historical producer shape (rule 7) — the tests are per-service because each service builds/decodes records differently, even though the `.avsc` they load is identical. The finance consumer reads the outbox payload as **raw Avro bytes** via `libs/events AvroSerde` (no Schema Registry serde), deduping by the event UUID (`ProcessedEventStore`) so a re-delivery never double-posts.
 - **Full name:** `id.co.nativeapp.events.restaurant.SaleRecorded`
 
 **Money is an integer minor-units amount + an ISO-4217 currency code, never a float**
@@ -292,10 +296,24 @@ whole rupiah for IDR); `currency` is the ISO-4217 code. `occurred_at` is epoch m
 | `tax_minor` | `["null","long"]` (default `null`) | Tax amount in minor units, or `null` (treated as 0 by finance). Phase 2 addition |
 | `tax_rule_version` | `["null","string"]` (default `null`) | The `rule_version` label of the resolved tax rule (e.g. `PB1_RESTAURANT-v1`), or `null` for legacy producers. Informational — finance stores it for audit |
 | `uses_illustrative_rules` | `["null","boolean"]` (default `null`) | `true` when any resolved tax/service-charge rule was `ILLUSTRATIVE_PLACEHOLDER`; `null` treated as `false` by finance. Sticky in the finance GL: an entry is flagged illustrative when this is `true` OR when the posting template is illustrative |
+| `loyalty_member_id` | `["null","string"]` (default `null`) | Phase 4 (ADR 0027): the loyalty member (UUID as string) this sale is attributed to for points EARN, or `null` when no member was attached. **NOT PII** — an opaque member id; the member's name/phone stay column-encrypted in loyalty-service and never cross this event (rule 6) |
+| `loyalty_redeemed_points` | `["null","long"]` (default `null`) | Phase 4: the number of loyalty points spent on this sale, in loyalty-service's ledger units. Finance **ignores** this field (not money) — carried for traceability only |
+| `loyalty_redeemed_minor` | `["null","long"]` (default `null`) | Phase 4: the currency value of redeemed loyalty points, in minor units. A **contra-revenue deduction**, exactly like `discount_minor` — it EXTENDS the reconciliation identity (below). `null` (treated as 0) when no points were redeemed |
+| `gift_card_id` | `["null","string"]` (default `null`) | Phase 4: the gift card (UUID as string) redeemed against this sale as a **tender**, or `null` when no gift card was used. Distinct from `loyalty_member_id` — a gift-card redemption is a liability settlement, not a discount |
+| `gift_card_redeemed_minor` | `["null","long"]` (default `null`) | Phase 4: the amount of stored value redeemed from the gift card, in minor units — a **tender-settlement** amount (like `tender_type`), NOT a deduction from revenue. Must be `<= amount_minor`. Finance splits the clearing debit: Dr `GIFT_CARD_LIABILITY` for this amount, Dr the tender-clearing account (resolved from `tender_type`) for the residual (`amount_minor - gift_card_redeemed_minor`). `null` (treated as 0) when no gift card was used |
 
 **Reconciliation identity (Phase 2).** When all four breakdown fields are non-null, finance asserts:
 `subtotal_minor - discount_minor + service_charge_minor + tax_minor == amount_minor`. A violated
 identity is a poison event (misconfigured producer); finance routes the record to the DLT.
+
+**Reconciliation identity — EXTENDED (Phase 4, ADR 0027).** `loyalty_redeemed_minor` joins
+`discount_minor` as a deduction (points redemption is a contra-revenue discount, not a tender);
+`gift_card_redeemed_minor` does **not** appear in the identity at all — a gift-card redemption is a
+**tender settlement** (it changes HOW `amount_minor` is paid, not what `amount_minor` IS), exactly
+like `tender_type` never appearing in the Phase 2 identity. The full identity, nulls treated as 0:
+`subtotal_minor - discount_minor - loyalty_redeemed_minor + service_charge_minor + tax_minor ==
+amount_minor`. This SUPERSEDES the Phase 2 identity above (Phase 2 is the special case
+`loyalty_redeemed_minor == 0`); a violated identity is a poison event routed to the DLT, unchanged.
 
 **Avro schema** (single source of truth in `libs/contracts/src/main/resources/avro/SaleRecorded.avsc`)
 
@@ -304,21 +322,26 @@ identity is a poison event (misconfigured producer); finance routes the record t
   "type": "record",
   "name": "SaleRecorded",
   "namespace": "id.co.nativeapp.events.restaurant",
-  "doc": "Emitted by a vertical (restaurant-service) when a sale is recorded; consumed by finance-service to post to the ledger. Money is an integer minor-units amount plus an ISO-4217 currency code, never a float (CLAUDE.md rule 8). amount_minor is the GRAND TOTAL (customer-pays). Phase 2 adds optional breakdown fields (all null for legacy producers): subtotal_minor, discount_minor, service_charge_minor, tax_minor, tax_rule_version, uses_illustrative_rules.",
+  "doc": "Emitted by a vertical (restaurant-service, carwash-service, barbershop-service) when a sale is recorded; consumed by finance-service to post to the ledger. Money is an integer minor-units amount plus an ISO-4217 currency code, never a float (CLAUDE.md rule 8). amount_minor is the GRAND TOTAL (the amount the customer pays). Phase 2 adds an optional price breakdown (subtotal, discount, service charge, tax) for the finance GL to build a multi-line journal entry. A legacy producer (carwash) sends all-null breakdown fields; finance falls back to subtotal==grand total, no tax/discount. Phase 4 (ADR 0027, loyalty + gift cards) adds five optional fields (loyalty_member_id, loyalty_redeemed_points, loyalty_redeemed_minor, gift_card_id, gift_card_redeemed_minor) that EXTEND the reconciliation identity to: subtotal - discount - loyalty_redeemed + service_charge + tax == amount (nulls treated as 0). loyalty_redeemed_minor is a contra-revenue deduction (like discount_minor); gift_card_redeemed_minor is a TENDER settlement, not a deduction from revenue -- finance splits the clearing debit across the gift-card liability account and the residual tender-clearing account. All five are null for producers that predate Phase 4.",
   "fields": [
     {"name": "sale_id", "type": "string", "doc": "The sale aggregate id (UUID as string); also the Kafka partition key."},
     {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string)."},
     {"name": "business_id", "type": "string", "doc": "The originating business unit (UUID as string)."},
-    {"name": "amount_minor", "type": "long", "doc": "GRAND TOTAL in the currency's minor units (e.g. cents for USD, whole rupiah for IDR). Never a float. The customer-pays amount: subtotal - discount + service_charge + tax."},
+    {"name": "amount_minor", "type": "long", "doc": "Grand total amount in the currency's minor units — the amount the customer pays. Never a float."},
     {"name": "currency", "type": "string", "doc": "ISO-4217 currency code, e.g. IDR or USD."},
     {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the sale occurred, epoch millis (UTC)."},
-    {"name": "tender_type", "type": ["null", "string"], "default": null, "doc": "Payment tender type: CASH | QRIS | CARD, or null for legacy/no-payment sales. Finance routes the GL debit clearing account by tender (null/CASH -> CASH_CLEARING, QRIS -> QRIS_CLEARING, CARD -> CARD_CLEARING). Backward-compatible -- ADR 0006 slice 2."},
-    {"name": "subtotal_minor", "type": ["null", "long"], "default": null, "doc": "Sum of order-line totals before discount/tax/service-charge, in minor units. null for legacy producers; finance falls back to subtotal == amount. Phase 2 addition."},
-    {"name": "discount_minor", "type": ["null", "long"], "default": null, "doc": "Order-level discount in minor units, or null (treated as 0 by finance). Phase 2 addition."},
-    {"name": "service_charge_minor", "type": ["null", "long"], "default": null, "doc": "Service charge in minor units, or null (treated as 0 by finance). Phase 2 addition."},
-    {"name": "tax_minor", "type": ["null", "long"], "default": null, "doc": "Tax amount in minor units, or null (treated as 0 by finance). Phase 2 addition."},
-    {"name": "tax_rule_version", "type": ["null", "string"], "default": null, "doc": "The rule_version label of the resolved tax rule (e.g. PB1_RESTAURANT-v1), or null for legacy producers. Informational."},
-    {"name": "uses_illustrative_rules", "type": ["null", "boolean"], "default": null, "doc": "true when any resolved tax/service-charge rule was ILLUSTRATIVE_PLACEHOLDER; null treated as false by finance. The GL entry is flagged illustrative when this is true OR when the posting template is illustrative."}
+    {"name": "tender_type", "type": ["null", "string"], "default": null, "doc": "The payment tender type: CASH | QRIS | CARD, or null for legacy/no-payment sales. Finance routes the GL debit clearing account by tender (null/CASH -> CASH_CLEARING, QRIS -> QRIS_CLEARING, CARD -> CARD_CLEARING). Backward-compatible: old producers leave it null; old readers ignore it."},
+    {"name": "subtotal_minor", "type": ["null", "long"], "default": null, "doc": "Phase 2 price breakdown: sum of line totals before discount and tax, in the currency's minor units. Null for legacy producers (carwash). When null, finance treats subtotal == amount_minor."},
+    {"name": "discount_minor", "type": ["null", "long"], "default": null, "doc": "Phase 2 price breakdown: order-level discount amount in minor units (clamped to <= subtotal). Null for legacy producers. When null or 0, no SALES_DISCOUNT GL leg is posted."},
+    {"name": "service_charge_minor", "type": ["null", "long"], "default": null, "doc": "Phase 2 price breakdown: service charge amount in minor units. Null for legacy producers. When null or 0, no SERVICE_CHARGE_REVENUE GL leg is posted."},
+    {"name": "tax_minor", "type": ["null", "long"], "default": null, "doc": "Phase 2 price breakdown: tax amount in minor units (PB1 / PPN — regime is SME-gated; ILLUSTRATIVE). Null for legacy producers. When null or 0, no TAX_PAYABLE GL leg is posted."},
+    {"name": "tax_rule_version", "type": ["null", "string"], "default": null, "doc": "Phase 2: the rule_version label of the resolved tax rule (e.g. ILLUSTRATIVE-2026.1), for traceability. Null for legacy producers or when no tax rule is seeded."},
+    {"name": "uses_illustrative_rules", "type": ["null", "boolean"], "default": null, "doc": "Phase 2: true when any resolved tax/service-charge rule was provenance=ILLUSTRATIVE_PLACEHOLDER. Propagated to finance GL entries as uses_illustrative_rules. Null for legacy producers (treated as false by finance)."},
+    {"name": "loyalty_member_id", "type": ["null", "string"], "default": null, "doc": "Phase 4 (ADR 0027): the loyalty member (UUID as string) this sale is attributed to for points EARN, or null when no member was attached to the sale. NOT PII -- an opaque member id; the member's name/phone stay encrypted in loyalty-service and never cross this event."},
+    {"name": "loyalty_redeemed_points", "type": ["null", "long"], "default": null, "doc": "Phase 4 (ADR 0027): the number of loyalty points spent on this sale, in loyalty-service's ledger units. Finance IGNORES this field (it is not money); carried for traceability only. Null when no points were redeemed."},
+    {"name": "loyalty_redeemed_minor", "type": ["null", "long"], "default": null, "doc": "Phase 4 (ADR 0027): the currency value of redeemed loyalty points, in the sale currency's minor units. A CONTRA-REVENUE deduction, exactly like discount_minor -- it EXTENDS the reconciliation identity to: subtotal - discount - loyalty_redeemed + service_charge + tax == amount. Null (treated as 0 by finance) when no points were redeemed."},
+    {"name": "gift_card_id", "type": ["null", "string"], "default": null, "doc": "Phase 4 (ADR 0027): the gift card (UUID as string) redeemed against this sale as a TENDER, or null when no gift card was used. Distinct from loyalty_member_id -- a gift card redemption is a liability settlement, not a discount."},
+    {"name": "gift_card_redeemed_minor", "type": ["null", "long"], "default": null, "doc": "Phase 4 (ADR 0027): the amount of stored value redeemed from the gift card, in the sale currency's minor units. A TENDER-SETTLEMENT amount (like tender_type), NOT a deduction from revenue -- it must be <= amount_minor. Finance splits the clearing debit: Dr GIFT_CARD_LIABILITY for this amount, Dr the tender-clearing account (resolved from tender_type) for the residual (amount_minor - gift_card_redeemed_minor). Null (treated as 0) when no gift card was used."}
   ]
 }
 ```
@@ -332,6 +355,22 @@ backward-compatible with itself and with an added-optional-field variant, and re
 a new required field without a default. The Phase 2 breakdown fields are all
 `["null","type"]` with `default: null`, so existing consumers (carwash producer copy,
 finance consumer copy) that do not yet read them continue to function unchanged.
+
+**Phase 4 (ADR 0027, loyalty + gift cards).** The five trailing fields
+(`loyalty_member_id`, `loyalty_redeemed_points`, `loyalty_redeemed_minor`, `gift_card_id`,
+`gift_card_redeemed_minor`) are all `["null", <type>]` with `default: null`, appended at the END of
+the field list (positional decode safety, the same discipline `vertical` follows on
+`OrgUnitCreated`/`OrgUnitChanged`) — a purely additive, backward-compatible change. Every
+`SaleRecordedContractTest` (restaurant, carwash, barbershop, finance) asserts BOTH evolution
+directions: an **old-writer / new-reader** pair (a reader on the current schema decodes bytes from
+an already-deployed pre-Phase-4 producer, the five fields defaulting to null) and a **new-writer /
+old-reader** pair (an already-deployed pre-Phase-4 reader still decodes bytes from an upgraded
+Phase-4 producer, silently dropping the fields it doesn't know) — covering the rolling-deploy
+window where verticals and finance pick up ADR 0027 at different times. `loyalty-service` (the new
+producer of `LoyaltyBalanceChanged`/`GiftCardStateChanged`, and a consumer of this event for points
+EARN attribution) is not yet scaffolded, so this wave ships the schema + catalog + evolution tests
+only — no vertical write path populates these fields yet, and finance does not yet post against
+them.
 
 ### `ExpenseRecorded`
 
@@ -1570,3 +1609,305 @@ consumer uses the `refund_id` as the dedup key via `ProcessedEventStore`.
   ]
 }
 ```
+
+---
+
+## Phase 4 (ADR 0027) — loyalty + gift cards: schema foundation
+
+The four events below are the **event-contract foundation** of Phase 4 of the POS-parity program
+(ADR 0027 — loyalty points + gift cards). A NEW `loyalty-service` will own members (PII — phone,
+name — encrypted THERE, never on an event) and append-only points / gift-card ledgers. The
+verticals emit facts (`SaleRecorded`'s Phase 4 fields above, and `GiftCardSold` below);
+loyalty-service consumes those and publishes **absolute-value** balance events
+(`LoyaltyBalanceChanged`, `GiftCardStateChanged`) the verticals cache as local read models
+(`member_balance_ref` / `gift_card_ref`, set-if-newer on `balance_seq`) so a checkout can validate a
+redemption without a synchronous call to loyalty-service (rule 2). Gift-card redemption is a
+**tender settlement** (`SaleRecorded.gift_card_redeemed_minor`); points redemption is a
+**contra-revenue discount** (`SaleRecorded.loyalty_redeemed_minor`); an **earn is memo-only** — no
+GL posting at earn time. `LoyaltyRedemptionFlagged` is the eventual-consistency overdraft signal
+when a vertical's local cache let a redemption through that the authoritative ledger then found
+insufficient.
+
+**Status of this wave.** All four schemas are registered in `libs/contracts` (the single source of
+truth, ADR 0003) and covered by schema-parse + round-trip tests (see each section's Compatibility
+note for where those tests live — `loyalty-service` does not exist yet, so its own contract-test
+suite is a follow-up once it is scaffolded). **No producer or consumer machinery is wired yet** —
+this is deliberately schema-and-catalog-only; the finance posting logic, the verticals' gift-card
+write paths, and `loyalty-service` itself are later waves.
+
+### `GiftCardSold`
+
+Emitted by a vertical when a gift card is sold or topped up at checkout. **NOT a sale — a
+LIABILITY event:** the company now owes the bearer stored value. **Never merged into
+`SaleRecorded`** — a gift-card sale is not revenue at the point of sale; revenue is recognised
+later, at redemption, via `SaleRecorded.gift_card_redeemed_minor`.
+
+- **Producer:** the verticals (`restaurant-service`, `carwash-service`, `barbershop-service`), once
+  each ships a gift-card sale/top-up write path (a later wave — not built in this schema-only wave).
+- **Consumers:** `finance-service` (post the `GIFT_CARD_LIABILITY` credit — a later wave) and
+  `loyalty-service` (append to the card's balance ledger and publish `GiftCardStateChanged` — a
+  later wave, once loyalty-service is scaffolded).
+- **Aggregate type / partition key:** `gift_card` / `gift_card_id` — **not** `gift_card_sale_id` —
+  so every event for one card (a sale, a later redemption via `SaleRecorded`, a state change)
+  orders on the same partition, which `loyalty-service`'s balance ledger needs.
+- **Outbox `event_type`:** `GiftCardSold`
+- **Schema (single source of truth, ADR 0003):** `libs/contracts/src/main/resources/avro/GiftCardSold.avsc`
+- **Full name:** `id.co.nativeapp.events.restaurant.GiftCardSold`
+
+**Namespace decision.** `GiftCardSold` has THREE potential vertical producers, like
+`SaleRecorded`/`SaleVoided`/`SaleRefunded`/`ExpenseRecorded` before it. This catalog follows the
+SAME house-style precedent those events set: a multi-vertical-producer event keeps **one stable
+namespace** (`id.co.nativeapp.events.restaurant`, the historic producer-of-record) regardless of
+which vertical actually emits it, so every producer shares one full name on the wire and finance
+reads them all through the identical consumer path. (Contrast `MetricPublished`/`PeriodSealed`,
+which use the `carwash` namespace because carwash was the FIRST vertical to declare those
+contracts — the convention is "whichever vertical the schema is conceptually anchored to," not a
+fixed rule; for `GiftCardSold`, anchoring it to the `SaleRecorded` family made the most sense since
+it is a sibling revenue/liability fact about the same POS checkout.)
+
+**Key fields**
+
+| Field | Avro type | Meaning |
+|---|---|---|
+| `gift_card_sale_id` | `string` | This gift-card-sale event's unique id (UUID as string) — the idempotency/dedupe key (via `ProcessedEventStore`), not the Kafka offset |
+| `gift_card_id` | `string` | The gift card aggregate id (UUID as string) being sold/topped up; the partition key |
+| `company_id` | `string` | The owning tenant (UUID as string) |
+| `business_id` | `string` | The originating business unit / outlet the card was sold at (UUID as string) |
+| `amount_minor` | `long` | The stored-value amount sold/loaded onto the card, in the currency's minor units. Never a float |
+| `currency` | `string` | ISO-4217 currency code (e.g. `IDR`, `USD`) |
+| `tender_type` | `["null","string"]` (default `null`) | The payment tender used to purchase/top up the card: `CASH` \| `QRIS` \| `CARD`, or `null`. Same routing convention as `SaleRecorded.tender_type` |
+| `occurred_at` | `long` (`timestamp-millis`) | When the sale/top-up occurred, epoch millis UTC |
+
+**Avro schema**
+
+```json
+{
+  "type": "record",
+  "name": "GiftCardSold",
+  "namespace": "id.co.nativeapp.events.restaurant",
+  "doc": "Emitted by a vertical (restaurant-service, carwash-service, barbershop-service) when a gift card is sold or topped up at checkout (ADR 0027, Phase 4 of the POS-parity program). NOT a sale -- a LIABILITY event: the company now owes the bearer stored value. Never merged into SaleRecorded (a gift-card sale is not revenue at the point of sale; revenue is recognised later, at redemption, via SaleRecorded.gift_card_redeemed_minor). Consumed by finance-service (post the GIFT_CARD_LIABILITY credit) and loyalty-service (append to the card's balance ledger and publish GiftCardStateChanged). Money is an integer minor-units amount plus an ISO-4217 currency code, never a float (CLAUDE.md rule 8). Namespace follows the SaleRecorded/SaleVoided/SaleRefunded/ExpenseRecorded house-style precedent: a multi-vertical-producer event keeps ONE stable namespace (restaurant, the historic producer-of-record) regardless of which vertical emits it, so all producers share one full name on the wire.",
+  "fields": [
+    {"name": "gift_card_sale_id", "type": "string", "doc": "This gift-card-sale event's unique id (UUID as string) -- the idempotency/dedupe key consumers use via ProcessedEventStore (not the Kafka offset)."},
+    {"name": "gift_card_id", "type": "string", "doc": "The gift card aggregate id (UUID as string) being sold or topped up; also the Kafka partition key so every event for one card (sale, redemption, state change) orders on the same partition."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string)."},
+    {"name": "business_id", "type": "string", "doc": "The originating business unit / outlet the card was sold at (UUID as string)."},
+    {"name": "amount_minor", "type": "long", "doc": "The stored-value amount sold or loaded onto the card, in the currency's minor units. Never a float."},
+    {"name": "currency", "type": "string", "doc": "ISO-4217 currency code, e.g. IDR or USD."},
+    {"name": "tender_type", "type": ["null", "string"], "default": null, "doc": "The payment tender type used to purchase/top up the card: CASH | QRIS | CARD, or null for legacy/unspecified. Finance routes the offsetting clearing-account debit by tender, the same convention as SaleRecorded.tender_type."},
+    {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the gift-card sale/top-up occurred, epoch millis (UTC)."}
+  ]
+}
+```
+
+**Compatibility.** Only backward-compatible evolution is allowed: add fields with a default. Never
+add a required field without a default, never remove or rename a field, never change a field's
+type. **Tests this wave:** the schema parses (`Schema.Parser().parse`) and a `GenericRecord` built
+from it round-trips through `libs/events AvroSerde` — verified ad hoc for this catalog entry (no
+`libs/contracts` test module exists — it is resources-only, ADR 0003 — and no producer/consumer
+Java class exists yet to host a `*ContractTest`). **Where the real contract tests land:** a
+`GiftCardSoldContractTest` in EACH vertical once that vertical builds its `GiftCardSold` producer
+(mirroring `SaleRecordedContractTest`'s per-service pattern), and in `loyalty-service` once it is
+scaffolded (consumer side + the finance consumer copy's own test). This is a signed-off gap for
+this wave — DO NOT build producer/consumer machinery yet (out of scope; schema + catalog + evolution
+tests only).
+
+### `LoyaltyBalanceChanged`
+
+Emitted by `loyalty-service` whenever a member's points balance changes: enrollment, an earn, a
+redemption, a manual adjustment, or a reversal. Carries the **ABSOLUTE** resulting `points_balance`
+(a set-to-value, **not** a delta) plus a monotonic `balance_seq` so a consumer applies only the
+newest value and drops a stale/out-of-order redelivery — the log-compacted-topic / snapshot
+hydration discipline (ARCHITECTURE.md §3) for the verticals' `member_balance_ref` read model.
+
+- **Producer:** `loyalty-service` (not yet scaffolded — a later wave).
+- **Consumers:** the verticals (`restaurant-service`, `carwash-service`, `barbershop-service`) — a
+  local `member_balance_ref` read model, set only when the incoming `balance_seq` is newer than the
+  cached one (rule 2 — never a synchronous call to loyalty-service).
+- **Aggregate type / partition key:** `loyalty_member` / `member_id`
+- **Outbox `event_type`:** `LoyaltyBalanceChanged`
+- **Schema (single source of truth, ADR 0003):** `libs/contracts/src/main/resources/avro/LoyaltyBalanceChanged.avsc`
+- **Full name:** `id.co.nativeapp.events.loyalty.LoyaltyBalanceChanged`
+
+**No PII (rule 6).** `member_id` is an opaque UUID; the member's name and phone stay column-encrypted
+in `loyalty-service` and never cross this event. A consumer that needs more (e.g. displaying a
+member's name at checkout) reads its own slice or calls loyalty-service's future snapshot/bootstrap
+API — never this event.
+
+**Set-if-newer semantics.** Unlike `MetricPublished` (which ACCUMULATES a delta per event), this
+event is a **snapshot replacement**: a consumer applying event N with `balance_seq = s` must reject
+any later-processed event with `balance_seq <= s` for the same `member_id` (redelivery or
+out-of-order Kafka delivery within a partition should not happen, but a consumer restart replaying
+from an earlier offset, or a future multi-partition topic, could reorder across partitions — the
+`balance_seq` guard makes the read model correct regardless).
+
+**Key fields**
+
+| Field | Avro type | Meaning |
+|---|---|---|
+| `member_id` | `string` | The loyalty member aggregate id (UUID as string); the partition key |
+| `company_id` | `string` | The owning tenant (UUID as string) |
+| `points_balance` | `long` | The member's resulting points balance — an ABSOLUTE set-to-value, not a delta. A ledger unit, not money |
+| `balance_seq` | `long` | Monotonically increasing per-member sequence number; a consumer applies an event only if `balance_seq` is strictly greater than its cached value (set-if-newer) |
+| `reason` | `string` | Why the balance changed: `ENROLLED` \| `EARNED` \| `REDEEMED` \| `ADJUSTED` \| `REVERSED` |
+| `occurred_at` | `long` (`timestamp-millis`) | When the balance change occurred, epoch millis UTC |
+
+**Avro schema**
+
+```json
+{
+  "type": "record",
+  "name": "LoyaltyBalanceChanged",
+  "namespace": "id.co.nativeapp.events.loyalty",
+  "doc": "Emitted by loyalty-service (ADR 0027, Phase 4 of the POS-parity program) whenever a member's points balance changes: enrollment, an earn, a redemption, a manual adjustment, or a reversal. Carries the ABSOLUTE resulting points_balance (a set-to-value, NOT a delta) plus a monotonic balance_seq so a consumer applies only the newest value and drops a stale or out-of-order redelivery. Consumed by the verticals to maintain a local member_balance_ref read model, set only when the incoming balance_seq is newer than the cached one -- the snapshot/bootstrap hydration path for that read model. NO PII (CLAUDE.md rule 6): member_id is an opaque UUID; the member's name and phone stay column-encrypted in loyalty-service and never cross this event.",
+  "fields": [
+    {"name": "member_id", "type": "string", "doc": "The loyalty member aggregate id (UUID as string); also the Kafka partition key so one member's balance events order."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string)."},
+    {"name": "points_balance", "type": "long", "doc": "The member's resulting points balance -- an ABSOLUTE set-to-value, not a delta. A long ledger unit (not money -- points are never a currency amount)."},
+    {"name": "balance_seq", "type": "long", "doc": "A monotonically increasing per-member sequence number. A consumer applies an incoming event only when balance_seq is strictly greater than its locally cached value (set-if-newer); a lower or equal balance_seq (redelivery or out-of-order delivery) is dropped, making the consumer idempotent under reordering as well as re-delivery."},
+    {"name": "reason", "type": "string", "doc": "Why the balance changed: ENROLLED | EARNED | REDEEMED | ADJUSTED | REVERSED. A string (not an Avro enum), so adding a reason is a backward-compatible change."},
+    {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the balance change occurred, epoch millis (UTC)."}
+  ]
+}
+```
+
+**Compatibility.** Only backward-compatible evolution is allowed: add fields with a default. Never
+add a required field without a default, never remove or rename a field, never change a field's
+type. **Tests this wave:** the schema parses and round-trips through `libs/events AvroSerde` —
+verified ad hoc for this catalog entry (no `libs/contracts` test module — resources-only, ADR 0003
+— and no producer/consumer Java class exists yet). **Where the real contract tests land:**
+`loyalty-service`'s own `LoyaltyBalanceChangedContractTest` (producer side) once it is scaffolded,
+and each vertical's consumer-copy contract test once it builds the `member_balance_ref` projection.
+Signed-off gap for this wave — schema + catalog + evolution tests only.
+
+### `GiftCardStateChanged`
+
+Emitted by `loyalty-service` whenever a gift card's state or stored-value balance changes:
+activation, a redemption, a top-up, expiry, or a void. Carries the **ABSOLUTE** resulting
+`balance_minor` (a set-to-value, **not** a delta) plus a monotonic `balance_seq`, the same
+set-if-newer discipline as `LoyaltyBalanceChanged`.
+
+- **Producer:** `loyalty-service` (not yet scaffolded — a later wave).
+- **Consumers:** the verticals — a local `gift_card_ref` read model (set only when `balance_seq` is
+  newer), read at checkout to validate a redemption WITHOUT a synchronous call to loyalty-service
+  (rule 2).
+- **Aggregate type / partition key:** `gift_card` / `gift_card_id`
+- **Outbox `event_type`:** `GiftCardStateChanged`
+- **Schema (single source of truth, ADR 0003):** `libs/contracts/src/main/resources/avro/GiftCardStateChanged.avsc`
+- **Full name:** `id.co.nativeapp.events.loyalty.GiftCardStateChanged`
+
+**Money is an integer minor-units amount + an ISO-4217 currency code, never a float** (rule 8).
+`balance_minor` is the card's resulting stored-value balance, exactly as `points_balance` is the
+member's resulting points balance on `LoyaltyBalanceChanged` — both are absolute set-to-values, not
+deltas.
+
+**Key fields**
+
+| Field | Avro type | Meaning |
+|---|---|---|
+| `gift_card_id` | `string` | The gift card aggregate id (UUID as string); the partition key |
+| `company_id` | `string` | The owning tenant (UUID as string) |
+| `state` | `string` | The card's resulting state: `ACTIVE` \| `DEPLETED` \| `EXPIRED` \| `VOID` |
+| `balance_minor` | `long` | The card's resulting stored-value balance — an ABSOLUTE set-to-value, in minor units. Never a float |
+| `currency` | `string` | ISO-4217 currency code (e.g. `IDR`, `USD`) |
+| `balance_seq` | `long` | Monotonically increasing per-card sequence number; set-if-newer, same discipline as `LoyaltyBalanceChanged.balance_seq` |
+| `occurred_at` | `long` (`timestamp-millis`) | When the state/balance change occurred, epoch millis UTC |
+
+**Avro schema**
+
+```json
+{
+  "type": "record",
+  "name": "GiftCardStateChanged",
+  "namespace": "id.co.nativeapp.events.loyalty",
+  "doc": "Emitted by loyalty-service (ADR 0027, Phase 4 of the POS-parity program) whenever a gift card's state or stored-value balance changes: activation, a redemption, a top-up, expiry, or a void. Carries the ABSOLUTE resulting balance_minor (a set-to-value, NOT a delta) plus a monotonic balance_seq so a consumer applies only the newest value and drops a stale or out-of-order redelivery. Consumed by the verticals to maintain a local gift_card_ref read model (set only when balance_seq is newer), which a checkout reads to validate a redemption WITHOUT a synchronous call to loyalty-service (rule 2). Money is an integer minor-units amount plus an ISO-4217 currency code, never a float (CLAUDE.md rule 8).",
+  "fields": [
+    {"name": "gift_card_id", "type": "string", "doc": "The gift card aggregate id (UUID as string); also the Kafka partition key."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string)."},
+    {"name": "state", "type": "string", "doc": "The card's resulting state: ACTIVE | DEPLETED | EXPIRED | VOID. A string (not an Avro enum), so adding a state is a backward-compatible change."},
+    {"name": "balance_minor", "type": "long", "doc": "The card's resulting stored-value balance -- an ABSOLUTE set-to-value, not a delta -- in the currency's minor units. Never a float."},
+    {"name": "currency", "type": "string", "doc": "ISO-4217 currency code, e.g. IDR or USD."},
+    {"name": "balance_seq", "type": "long", "doc": "A monotonically increasing per-card sequence number. A consumer applies an incoming event only when balance_seq is strictly greater than its locally cached value (set-if-newer); a lower or equal balance_seq (redelivery or out-of-order delivery) is dropped."},
+    {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the state/balance change occurred, epoch millis (UTC)."}
+  ]
+}
+```
+
+**Compatibility.** Only backward-compatible evolution is allowed: add fields with a default. Never
+add a required field without a default, never remove or rename a field, never change a field's
+type. **Tests this wave:** schema-parse + round-trip verified ad hoc for this catalog entry (no
+`libs/contracts` test module; no producer/consumer Java class yet). **Where the real contract tests
+land:** `loyalty-service`'s own `GiftCardStateChangedContractTest` (producer side) once scaffolded,
+and each vertical's consumer-copy test once it builds the `gift_card_ref` projection. Signed-off gap
+for this wave.
+
+### `LoyaltyRedemptionFlagged`
+
+Emitted by `loyalty-service` when an **eventual-consistency overdraft** is detected: a vertical
+accepted a points or gift-card redemption against its LOCAL cached read model
+(`member_balance_ref` / `gift_card_ref`), but loyalty-service's authoritative ledger shows the
+account went negative once the redemption was applied there. This is a **manual-follow-up flag, not
+a reversal** — the sale already completed and is not undone.
+
+- **Producer:** `loyalty-service` (not yet scaffolded — a later wave).
+- **Consumers:** `notification-service` (alert an operator) — not yet wired; published for when it
+  arrives, the same posture `DeliveryReceipt` shipped with.
+- **Aggregate type / partition key:** `loyalty_redemption_flag` / `flag_id`
+- **Outbox `event_type`:** `LoyaltyRedemptionFlagged`
+- **Schema (single source of truth, ADR 0003):** `libs/contracts/src/main/resources/avro/LoyaltyRedemptionFlagged.avsc`
+- **Full name:** `id.co.nativeapp.events.loyalty.LoyaltyRedemptionFlagged`
+
+**No PII (rule 6).** `member_id` is an opaque UUID. **Why this can happen at all:** the verticals'
+read models (`member_balance_ref` / `gift_card_ref`) are caches, updated asynchronously by
+`LoyaltyBalanceChanged` / `GiftCardStateChanged` — under normal operation a checkout's local balance
+check is accurate, but a burst of near-simultaneous redemptions across outlets (each reading a
+not-yet-updated local cache) can accept more than the authoritative ledger allows. loyalty-service
+detects this when it applies the redemption to its own ledger and finds it went negative, and raises
+this flag rather than silently allowing (or synchronously blocking, which rule 2 forbids) the
+overdraft.
+
+**Key fields**
+
+| Field | Avro type | Meaning |
+|---|---|---|
+| `flag_id` | `string` | This flag's unique id (UUID as string); the partition key and idempotency/dedupe key |
+| `company_id` | `string` | The owning tenant (UUID as string) |
+| `business_id` | `string` | The business unit / outlet the redemption was accepted at (UUID as string) |
+| `sale_id` | `string` | The `SaleRecorded.sale_id` the overdrawing redemption was applied against (UUID as string) |
+| `member_id` | `["null","string"]` (default `null`) | The member whose points redemption overdrew, or `null` for a gift-card-only flag |
+| `gift_card_id` | `["null","string"]` (default `null`) | The gift card whose redemption overdrew, or `null` for a points-only flag |
+| `shortfall_minor` | `["null","long"]` (default `null`) | The currency-value shortfall (how far negative the gift-card balance went), in minor units, or `null` when not a gift-card shortfall. Never a float |
+| `shortfall_points` | `["null","long"]` (default `null`) | The points shortfall, or `null` when not a points shortfall |
+| `occurred_at` | `long` (`timestamp-millis`) | When the overdraft was detected, epoch millis UTC |
+
+**Avro schema**
+
+```json
+{
+  "type": "record",
+  "name": "LoyaltyRedemptionFlagged",
+  "namespace": "id.co.nativeapp.events.loyalty",
+  "doc": "Emitted by loyalty-service (ADR 0027, Phase 4 of the POS-parity program) when an eventual-consistency overdraft is detected: a vertical accepted a points or gift-card redemption against its LOCAL cached read model (member_balance_ref / gift_card_ref), but loyalty-service's authoritative ledger shows the account went negative once the redemption was applied there. This is the eventual-consistency overdraft flag, not a reversal -- the sale already completed and is not undone; it requires a manual follow-up (e.g. contacting the customer, adjusting the member's balance). Consumed by notification-service to alert an operator. NO PII (CLAUDE.md rule 6): member_id is an opaque UUID.",
+  "fields": [
+    {"name": "flag_id", "type": "string", "doc": "This flag's unique id (UUID as string); also the Kafka partition key and the idempotency/dedupe key."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string)."},
+    {"name": "business_id", "type": "string", "doc": "The business unit / outlet the redemption was accepted at (UUID as string)."},
+    {"name": "sale_id", "type": "string", "doc": "The SaleRecorded sale_id the overdrawing redemption was applied against (UUID as string)."},
+    {"name": "member_id", "type": ["null", "string"], "default": null, "doc": "The loyalty member whose points redemption overdrew the balance, or null when this flag is for a gift-card overdraft."},
+    {"name": "gift_card_id", "type": ["null", "string"], "default": null, "doc": "The gift card whose redemption overdrew the balance, or null when this flag is for a points overdraft."},
+    {"name": "shortfall_minor", "type": ["null", "long"], "default": null, "doc": "The currency-value shortfall -- how far negative the gift-card balance went, in minor units -- or null when this flag is not a gift-card shortfall. Never a float."},
+    {"name": "shortfall_points", "type": ["null", "long"], "default": null, "doc": "The points shortfall -- how far negative the points balance went -- or null when this flag is not a points shortfall."},
+    {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the overdraft was detected, epoch millis (UTC)."}
+  ]
+}
+```
+
+**Compatibility.** Only backward-compatible evolution is allowed: add fields with a default. Never
+add a required field without a default, never remove or rename a field, never change a field's
+type. `member_id`/`gift_card_id`/`shortfall_minor`/`shortfall_points` are already nullable unions
+(a flag is either a points OR a gift-card overdraft, never both) so a consumer that only cares about
+one kind can ignore the other pair. **Tests this wave:** schema-parse + round-trip verified ad hoc
+for this catalog entry (no `libs/contracts` test module; no producer/consumer Java class yet).
+**Where the real contract tests land:** `loyalty-service`'s own
+`LoyaltyRedemptionFlaggedContractTest` (producer side) once scaffolded, and
+`notification-service`'s consumer-copy test once it builds the alert-handling path. Signed-off gap
+for this wave.
