@@ -1,16 +1,25 @@
 /*
  * Native login theme — re-skins the stock Keycloak keycloak.v2 (PatternFly v5) login page to match
  * the console's "Native Console" design system: Plus Jakarta Sans, the DEEP-CYAN brand ramp
- * (hue 193°), cool neutral inks, soft paper surfaces and rounded cards.
+ * (hue 193°), cool neutral inks, soft paper surfaces and rounded fields.
  *
- * It echoes the sign-up page's split canvas (design 5a): on wide screens a cyan brand rail carries
- * the mark on the left while the login form sits quiet on the right; below that breakpoint it folds
- * back to a centred card. Pure CSS on top of the inherited templates — it overrides PatternFly's
- * design tokens (buttons/links/focus recolour for free) plus a few structural selectors, with no
- * template or FreeMarker changes, so login behaviour and i18n are untouched.
+ * It mirrors the sign-up page's split canvas (design 5a): on wide screens the photo brand rail
+ * (cyan duotone, wordmark pinned top-left) carries all the brand weight while the form sits as a
+ * QUIET FULL-HEIGHT WHITE COLUMN on the right — no floating card, exactly like the console's
+ * signup form column. Below 62rem it folds back to a centred card on paper, which stays robust on
+ * mobile. Pure CSS on top of the inherited templates (plus message-bundle copy overrides in
+ * ../../messages) — no template or FreeMarker changes, so login behaviour and i18n are untouched.
  *
- * Brand rule (from the design foundations): green is RETIRED as the brand — it now means profit/done
- * only. The brand is cyan: 600 (#0B7F99) fills, 700 (#095F73) speaks (text/links).
+ * Markup facts this file relies on (KC 26 / keycloak.v2):
+ *  - inputs are wrapped: <span class="pf-v5-c-form-control"><input/></span> (the SPAN draws the
+ *    border; PF paints its own underline via ::after — disabled below);
+ *  - the password field is a .pf-v5-c-input-group with a .pf-m-control eye button — restyled as
+ *    ONE field (shared border, borderless inner input, ghost icon button);
+ *  - the realm's displayNameHtml is sanitized by Keycloak (inline <svg> stripped), so the
+ *    .native-wordmark .mark tile draws its glyph from a CSS data-URI, never from the realm HTML.
+ *
+ * Brand rule (from the design foundations): green is RETIRED as the brand — it now means
+ * profit/done only. The brand is cyan: 600 (#0B7F99) fills, 700 (#095F73) speaks (text/links).
  */
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
@@ -33,8 +42,12 @@
   --nt-paper: #f6f9fa;
   --nt-surface: #ffffff;
 
-  /* Width of the cyan brand rail on wide screens (and the matching form offset). */
+  /* Width of the photo brand rail on wide screens (and the matching form offset). */
   --nt-rail: min(46vw, 600px);
+  /* Shared field metrics — inputs and the primary button read as one family. */
+  --nt-field-radius: 12px;
+  --nt-field-height: 46px;
+  --nt-focus-ring: 0 0 0 4px rgba(11, 127, 153, 0.14);
 
   /* Recolour PatternFly's global design tokens → brand cyan (primary buttons, links, active). */
   --pf-v5-global--primary-color--100: var(--nt-brand-600);
@@ -59,7 +72,7 @@ textarea,
   font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif !important;
 }
 
-/* Page background — the console's cool paper + a faint cyan glow (mirrors the app canvas). */
+/* Page background — mobile/narrow: the console's cool paper + a faint cyan glow. */
 body#keycloak-bg {
   background: radial-gradient(80% 80% at 50% -10%, var(--nt-brand-50) 0%, var(--nt-paper) 60%) fixed !important;
   color: var(--nt-ink);
@@ -71,14 +84,20 @@ body#keycloak-bg {
   position: relative;
   z-index: 1;
 }
+.pf-v5-c-login__container {
+  width: 100%;
+  max-width: 30.5rem;
+}
 
-/* ── Split canvas (design 5a) — a cyan brand rail on the left, form on the right ──────────────
+/* ── Split canvas (design 5a) — photo brand rail left, quiet white form column right ──────────
    Wide screens only. The rail is a fixed pseudo-element (so it never intercepts form clicks) and
-   the page is padded to sit the login card in the remaining space. Below 62rem it all folds away
-   and the card centres normally, so narrow/mobile keeps the plain, robust layout. */
+   the page is padded to sit the form in the remaining space. Below 62rem it all folds away and
+   the card centres normally, so narrow/mobile keeps the plain, robust layout. */
 @media (min-width: 62rem) {
   body#keycloak-bg {
     padding-left: var(--nt-rail) !important;
+    /* The form side is a clean white column (the signup page's right half), not a card on paper. */
+    background: var(--nt-surface) !important;
   }
   body#keycloak-bg::before {
     content: '';
@@ -86,104 +105,232 @@ body#keycloak-bg {
     inset: 0 auto 0 0;
     width: var(--nt-rail);
     z-index: 0;
-    /* Layers, top → bottom: mark, soft glows, cyan gradient MULTIPLIED onto the (pre-desaturated)
-       photo — a true duotone: the joglo-restaurant texture shows through, everything stays brand
-       cyan. Image is theme-local (../img, license: frontend/console/src/assets/landing/SOURCES.md). */
+    /* Layers, top → bottom: soft glows, bottom vignette (anchors the rail), cyan gradient
+       MULTIPLIED onto the (pre-desaturated) photo — a true duotone: the joglo-restaurant texture
+       shows through, everything stays brand cyan. Image is theme-local
+       (../img, license: frontend/console/src/assets/landing/SOURCES.md). */
     background:
-      url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='132'%20height='132'%20viewBox='0%200%20132%20132'%3E%3Crect%20width='132'%20height='132'%20rx='36'%20fill='rgba(255,255,255,0.12)'/%3E%3Cpath%20d='M30,96L56,58L78,80L104,34'%20fill='none'%20stroke='white'%20stroke-width='9'%20stroke-linecap='round'%20stroke-linejoin='round'/%3E%3C/svg%3E")
-        no-repeat center 42% / 132px 132px,
       radial-gradient(58% 46% at 88% 10%, rgba(255, 255, 255, 0.1), transparent 70%),
-      radial-gradient(52% 42% at 6% 94%, rgba(255, 255, 255, 0.08), transparent 70%),
+      linear-gradient(to top, rgba(4, 48, 58, 0.5), transparent 42%),
       linear-gradient(157deg, var(--nt-brand-600) 0%, #073c49 100%),
       url('../img/login-rail.webp') center / cover no-repeat var(--nt-brand-700);
-    background-blend-mode: normal, normal, normal, multiply, normal;
+    background-blend-mode: normal, normal, multiply, normal;
     box-shadow: inset -1px 0 0 rgba(4, 48, 58, 0.35);
   }
-  /* The rail carries the mark on wide screens, so drop the in-card wordmark there (matches 5a). */
-  #kc-header,
+
+  /* The wordmark leaves the form column and pins to the rail's top-left (signup panel layout).
+     body#keycloak-bg prefixes outgun the base .native-wordmark rules further down the file. */
+  #kc-header {
+    position: fixed;
+    top: 44px;
+    left: 48px;
+    z-index: 1;
+    padding: 0;
+  }
   #kc-header-wrapper {
-    display: none !important;
+    padding: 0;
+  }
+  body#keycloak-bg .native-wordmark {
+    color: #fff;
+  }
+  /* On the rail the tile goes light and the glyph dark — the signup panel's BrandMark treatment. */
+  body#keycloak-bg .native-wordmark .mark {
+    background: var(--nt-brand-300);
+    box-shadow: none;
+  }
+  body#keycloak-bg .native-wordmark .mark::before {
+    background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%2304303a'%20stroke-width='2.6'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M4%2018%20L10%2010%20L14%2014%20L20%205'/%3E%3C/svg%3E");
+  }
+
+  /* Flatten the card into the column: the page itself is the surface. */
+  .pf-v5-c-login__main {
+    border: none !important;
+    border-radius: 0;
+    box-shadow: none !important;
+    background: transparent !important;
+  }
+  .pf-v5-c-login__main-header,
+  .pf-v5-c-login__main-body,
+  .pf-v5-c-login__main-footer {
+    padding-left: 0;
+    padding-right: 0;
   }
 }
 
-/* Login card */
+/* ── Card (narrow/mobile only — flattened away on wide screens above) ───────────────────────── */
 .pf-v5-c-login__main {
   border: 1px solid var(--nt-line);
-  border-radius: 24px;
+  border-radius: 20px;
   box-shadow:
     0 14px 38px rgba(15, 23, 42, 0.1),
     0 3px 10px rgba(15, 23, 42, 0.05);
   background: var(--nt-surface);
   overflow: hidden;
 }
-
 .pf-v5-c-login__main-header,
 .pf-v5-c-login__main-body,
 .pf-v5-c-login__main-footer {
-  padding-left: 2.25rem;
-  padding-right: 2.25rem;
+  padding-left: 2rem;
+  padding-right: 2rem;
 }
 .pf-v5-c-login__main-header {
-  padding-top: 2.25rem;
+  padding-top: 2rem;
 }
 .pf-v5-c-login__main-footer {
-  padding-bottom: 2rem;
+  padding-bottom: 1.75rem;
 }
 
-/* Title */
+/* ── Title ──────────────────────────────────────────────────────────────────────────────────── */
 #kc-page-title,
 .pf-v5-c-title {
   color: var(--nt-ink) !important;
+  font-size: clamp(26px, 3.2vw, 30px) !important;
   font-weight: 800 !important;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+.pf-v5-c-login__main-header {
+  margin-bottom: 0.5rem;
+}
+
+/* ── Form rhythm ────────────────────────────────────────────────────────────────────────────── */
+.pf-v5-c-form {
+  --pf-v5-c-form--GridGap: 1.15rem;
+}
+/* keycloak.v2 leaves an empty group where forgot-password/remember-me would render — collapse it
+   so the grid gap doesn't double up. */
+.pf-v5-c-form__group:empty {
+  display: none;
 }
 
 /* Field labels */
 .pf-v5-c-form__label-text {
   color: var(--nt-ink-2) !important;
+  font-size: 13.5px !important;
   font-weight: 600 !important;
 }
+.pf-v5-c-form__label {
+  padding-bottom: 2px;
+}
 
-/* Inputs */
-.pf-v5-c-form-control,
-input.pf-v5-c-form-control,
-.pf-v5-c-form-control > input {
-  border-radius: 12px !important;
+/* ── Inputs — the border lives on the wrapper span; PF's ::after underline is disabled ───────── */
+span.pf-v5-c-form-control {
+  /* Flex row: input fills, PF's status-icon utilities (error !) sit inline on the right. */
+  display: flex;
+  align-items: center;
+  padding: 0 !important;
   border: 1px solid var(--nt-line) !important;
+  border-radius: var(--nt-field-radius) !important;
   background: var(--nt-surface) !important;
-  color: var(--nt-ink) !important;
-  --pf-v5-c-form-control--BorderTopColor: var(--nt-line);
-  --pf-v5-c-form-control--BorderRightColor: var(--nt-line);
-  --pf-v5-c-form-control--BorderBottomColor: var(--nt-line);
-  --pf-v5-c-form-control--BorderLeftColor: var(--nt-line);
-  --pf-v5-c-form-control--focus--BorderBottomColor: var(--nt-brand-600);
+  box-shadow: none !important;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
-.pf-v5-c-form-control:focus,
-.pf-v5-c-form-control:focus-within,
-input.pf-v5-c-form-control:focus {
+span.pf-v5-c-form-control::after,
+span.pf-v5-c-form-control::before {
+  display: none !important;
+}
+span.pf-v5-c-form-control > input {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  height: var(--nt-field-height);
+  padding: 0 14px;
+  border: 0 !important;
+  border-radius: var(--nt-field-radius);
+  background: transparent !important;
   outline: none !important;
+  box-shadow: none !important;
+  font-size: 15px;
+  color: var(--nt-ink) !important;
+}
+/* PF's inline status icon (shown on validation errors) — keep it inside the field, on the right. */
+span.pf-v5-c-form-control .pf-v5-c-form-control__utilities {
+  display: flex;
+  align-items: center;
+  padding-right: 12px;
+  color: #dc2626;
+}
+span.pf-v5-c-form-control:focus-within {
   border-color: var(--nt-brand-600) !important;
-  box-shadow: 0 0 0 4px rgba(11, 127, 153, 0.16) !important;
+  box-shadow: var(--nt-focus-ring) !important;
+}
+span.pf-v5-c-form-control.pf-m-error,
+span.pf-v5-c-form-control[aria-invalid='true'],
+span.pf-v5-c-form-control:has(input[aria-invalid='true']) {
+  border-color: #dc2626 !important;
+}
+.pf-v5-c-input-group:has(input[aria-invalid='true']) {
+  border-color: #dc2626;
 }
 
-/* Primary button (Sign in) */
-.pf-v5-c-button.pf-m-primary {
-  background: var(--nt-brand-600) !important;
-  border-radius: 12px !important;
-  font-weight: 700 !important;
-  border: none !important;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
-  transition: background-color 0.15s ease;
+/* ── Password group — one field: shared border, borderless input, ghost eye button ──────────── */
+.pf-v5-c-input-group {
+  border: 1px solid var(--nt-line);
+  border-radius: var(--nt-field-radius);
+  background: var(--nt-surface);
+  overflow: hidden;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
-.pf-v5-c-button.pf-m-primary:hover,
-.pf-v5-c-button.pf-m-primary:focus {
+.pf-v5-c-input-group:focus-within {
+  border-color: var(--nt-brand-600);
+  box-shadow: var(--nt-focus-ring);
+}
+.pf-v5-c-input-group span.pf-v5-c-form-control,
+.pf-v5-c-input-group span.pf-v5-c-form-control:focus-within {
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+.pf-v5-c-input-group .pf-v5-c-button.pf-m-control {
+  width: var(--nt-field-height);
+  height: var(--nt-field-height);
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--nt-ink-3) !important;
+  box-shadow: none !important;
+}
+.pf-v5-c-input-group .pf-v5-c-button.pf-m-control:hover {
+  color: var(--nt-brand-700) !important;
+}
+.pf-v5-c-input-group .pf-v5-c-button.pf-m-control:focus-visible {
+  outline: 2px solid var(--nt-brand-600);
+  outline-offset: -4px;
+  border-radius: 10px;
+}
+.pf-v5-c-input-group .pf-v5-c-button.pf-m-control::after {
+  display: none !important;
+}
+
+/* ── Primary button (Sign in) — sized to the field family ───────────────────────────────────── */
+.pf-v5-c-button.pf-m-primary {
+  height: 48px;
+  margin-top: 0.35rem;
+  background: var(--nt-brand-600) !important;
+  border: none !important;
+  border-radius: var(--nt-field-radius) !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.pf-v5-c-button.pf-m-primary:hover {
   background: var(--nt-brand-700) !important;
+}
+.pf-v5-c-button.pf-m-primary:focus-visible {
+  background: var(--nt-brand-700) !important;
+  box-shadow: 0 0 0 4px rgba(11, 127, 153, 0.28) !important;
+  outline: none;
 }
 
 /* Secondary / link buttons */
-.pf-v5-c-button.pf-m-control,
 .pf-v5-c-button.pf-m-secondary {
-  border-radius: 12px !important;
+  border-radius: var(--nt-field-radius) !important;
 }
 
 /* Links */
@@ -194,13 +341,14 @@ a:hover {
   color: var(--nt-brand-800);
 }
 
-/* Checkbox accent (remember me) */
+/* Checkbox accent (remember me, if the realm enables it) */
 .pf-v5-c-check__input {
   accent-color: var(--nt-brand-600);
 }
 
-/* Header brand wordmark — injected via the realm's displayNameHtml as .native-wordmark.
-   Shown on narrow/mobile (the rail is hidden there); the rail carries it on wide screens. */
+/* ── Header brand wordmark — injected via the realm's displayNameHtml as .native-wordmark.
+   Keycloak SANITIZES that HTML (the inline <svg> is stripped), so the glyph is drawn here from a
+   data-URI. Shown above the card on narrow/mobile; pinned onto the rail on wide screens. ─────── */
 #kc-header,
 #kc-header-wrapper {
   color: var(--nt-ink);
@@ -214,6 +362,8 @@ a:hover {
   font-size: 22px;
   letter-spacing: -0.02em;
   color: var(--nt-ink);
+  /* keycloak.v2 uppercases the brand header — the wordmark is "Native", not "NATIVE". */
+  text-transform: none;
 }
 .native-wordmark .mark {
   display: inline-grid;
@@ -224,8 +374,32 @@ a:hover {
   background: linear-gradient(135deg, var(--nt-brand-500), var(--nt-brand-800));
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
 }
+.native-wordmark .mark::before {
+  content: '';
+  width: 20px;
+  height: 20px;
+  background: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%23ffffff'%20stroke-width='2.6'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M4%2018%20L10%2010%20L14%2014%20L20%205'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+}
 
-/* Alerts (errors) — soften to the console's tint style. */
+/* ── Alerts (bad credentials etc.) — the console's tint style, not PF's heavy gold/red bars ──── */
+.pf-v5-c-alert {
+  border-radius: var(--nt-field-radius);
+  border: 1px solid var(--nt-line);
+  box-shadow: none;
+}
 .pf-v5-c-alert.pf-m-danger {
-  border-radius: 12px;
+  border-color: rgba(220, 38, 38, 0.25);
+  background: #fef2f2;
+}
+.pf-v5-c-alert__title {
+  font-weight: 600;
+  color: var(--nt-ink);
+}
+/* Inline field errors */
+.pf-v5-c-helper-text__item-text,
+#input-error,
+.kc-feedback-text {
+  color: #b91c1c;
+  font-size: 13px;
 }
