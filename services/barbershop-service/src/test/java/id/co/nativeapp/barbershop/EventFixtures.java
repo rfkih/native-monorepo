@@ -20,8 +20,8 @@ import org.apache.kafka.common.serialization.StringSerializer;
 
 /**
  * Test fixtures for publishing the events barbershop-service consumes the way the producer +
- * Debezium would: raw Avro bytes (built via {@code libs/events AvroSerde}) as the message value, the
- * partition key, and the durable event id stamped into the {@code id} header (the Debezium
+ * Debezium would: raw Avro bytes (built via {@code libs/events AvroSerde}) as the message value,
+ * the partition key, and the durable event id stamped into the {@code id} header (the Debezium
  * outbox-router event-id header the listeners dedupe on). NOT a Schema Registry serde — exactly the
  * transport barbershop-service consumes in production.
  */

@@ -29,11 +29,11 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * that does neither has no such bean.
  *
  * <p><strong>Tenant id is a UUID.</strong> In production the {@code company_id} is the JWT {@code
- * company_id} claim, which is a UUID. {@code Auditable} stores it as text and the {@code
- * outbox} {@code company_id} column is {@code UUID}; a non-UUID tenant id would persist a ticket
- * and then blow up on the outbox write — a {@code 500} after a partial effect. So this filter
- * validates the tenant id is a UUID at the EDGE: a missing, blank, or non-UUID {@code X-Company-Id}
- * (or a missing/blank actor) is rejected with {@code 400} and NO scope is bound. Probe endpoints are
+ * company_id} claim, which is a UUID. {@code Auditable} stores it as text and the {@code outbox}
+ * {@code company_id} column is {@code UUID}; a non-UUID tenant id would persist a ticket and then
+ * blow up on the outbox write — a {@code 500} after a partial effect. So this filter validates the
+ * tenant id is a UUID at the EDGE: a missing, blank, or non-UUID {@code X-Company-Id} (or a
+ * missing/blank actor) is rejected with {@code 400} and NO scope is bound. Probe endpoints are
  * exempt (see below).
  *
  * <p><strong>Probe exemption.</strong> {@code /healthz} and {@code /actuator/**} must never depend

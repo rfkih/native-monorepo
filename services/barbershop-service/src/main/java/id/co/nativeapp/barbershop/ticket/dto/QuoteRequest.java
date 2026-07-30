@@ -8,8 +8,8 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * {@code POST /api/v1/barbershop/tickets/quote} request body — a stateless price preview: given
- * the requested lines, what would the breakdown be. No ticket is persisted; no side effect.
+ * {@code POST /api/v1/barbershop/tickets/quote} request body — a stateless price preview: given the
+ * requested lines, what would the breakdown be. No ticket is persisted; no side effect.
  *
  * @param businessId the barbershop outlet the quote is for
  * @param lines the requested lines; must be non-empty

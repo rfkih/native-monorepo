@@ -23,8 +23,8 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Owns the {@code @Transactional} write unit of work for {@code POST
  * /api/v1/barbershop/tickets/{id}/capture} — the moment a digital (QRIS/CARD) tender's revenue is
- * recognised (mirrors carwash-service's {@code PaymentCaptureWriter} / {@code
- * TicketCaptureWriter}, ADR 0023 decision 2).
+ * recognised (mirrors carwash-service's {@code PaymentCaptureWriter} / {@code TicketCaptureWriter},
+ * ADR 0023 decision 2).
  *
  * <p><strong>Idempotency.</strong> If the ticket's payment is already {@code CAPTURED}
  * (re-delivery), this returns the current state with NO side effects — no second sale, no second

@@ -10,10 +10,10 @@ package id.co.nativeapp.barbershop.entitlement.domain;
  * BEFORE the transactional unit of work.
  *
  * <p><strong>Placement note (deliberate difference from carwash-service).</strong> carwash-service
- * anchors this exception in its legacy {@code wash.domain} package even though it is thrown by
- * both catalog and ticket writes. barbershop-service has no {@code wash}-analog legacy feature, so
- * this type lives in {@code entitlement.domain} instead — the bounded concept it actually belongs
- * to — and both {@code catalog} and {@code ticket} depend on it, exactly as they already depend on
+ * anchors this exception in its legacy {@code wash.domain} package even though it is thrown by both
+ * catalog and ticket writes. barbershop-service has no {@code wash}-analog legacy feature, so this
+ * type lives in {@code entitlement.domain} instead — the bounded concept it actually belongs to —
+ * and both {@code catalog} and {@code ticket} depend on it, exactly as they already depend on
  * {@code entitlement.service.EntitlementChecker} for the gate check itself.
  */
 public class NotEntitledException extends RuntimeException {

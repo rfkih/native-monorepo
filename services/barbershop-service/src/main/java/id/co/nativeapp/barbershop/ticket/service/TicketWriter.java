@@ -220,8 +220,8 @@ public class TicketWriter {
 
   /**
    * Resolves the MANDATORY barber {@link StaffProfile}, validating it exists, is active, and
-   * belongs to {@code businessId}, and returns its snapshotted employee link (may be {@code null}
-   * — the LINK stays optional even though the PROFILE selection is mandatory).
+   * belongs to {@code businessId}, and returns its snapshotted employee link (may be {@code null} —
+   * the LINK stays optional even though the PROFILE selection is mandatory).
    *
    * @throws IllegalArgumentException if the profile is unknown, cross-business, or inactive (→ 400)
    */

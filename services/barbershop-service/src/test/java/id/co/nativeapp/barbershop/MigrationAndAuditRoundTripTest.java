@@ -34,8 +34,8 @@ import org.springframework.boot.test.context.SpringBootTest;
  * the ONLY revenue path — a checked-out ticket — instead.
  *
  * <p>A checked-out ticket round-trips with its {@code company_id} and {@code created_by} populated
- * from the {@link TenantContext} scope (rule 4), read over the admin connection (the table is
- * FORCE RLS).
+ * from the {@link TenantContext} scope (rule 4), read over the admin connection (the table is FORCE
+ * RLS).
  */
 @SpringBootTest
 class MigrationAndAuditRoundTripTest extends KafkaPostgresRedisTestBase {

@@ -10,10 +10,10 @@ import org.springframework.stereotype.Service;
  * <p><strong>The inbound tenant comes from the event, not a request.</strong> There is no JWT on
  * the consumer path, so this service binds the tenant scope from the event's {@code company_id} via
  * {@link TenantContext#callAs} with a fixed {@code "barbershop-staff-consumer"} actor (which lands
- * in the Auditable {@code created_by}), then delegates to the proxied {@link
- * StaffProjectionWriter} so the {@code @Transactional} advice and the auto-RLS aspect engage under
- * that tenant. The transactional unit of work — dedupe + projection upsert — lives in the writer (a
- * separate bean so the Spring proxy is not bypassed by self-invocation).
+ * in the Auditable {@code created_by}), then delegates to the proxied {@link StaffProjectionWriter}
+ * so the {@code @Transactional} advice and the auto-RLS aspect engage under that tenant. The
+ * transactional unit of work — dedupe + projection upsert — lives in the writer (a separate bean so
+ * the Spring proxy is not bypassed by self-invocation).
  */
 @Service
 public class StaffProjectionService {

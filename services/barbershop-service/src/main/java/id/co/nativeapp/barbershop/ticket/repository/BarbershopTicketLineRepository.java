@@ -14,8 +14,7 @@ import org.springframework.data.repository.query.Param;
  * company_id}: every method runs inside a {@code @Transactional}, so {@link RlsAutoApplyAspect}
  * sets {@code app.current_tenant} automatically (rule 5).
  */
-public interface BarbershopTicketLineRepository
-    extends JpaRepository<BarbershopTicketLine, UUID> {
+public interface BarbershopTicketLineRepository extends JpaRepository<BarbershopTicketLine, UUID> {
 
   /** The lines of one ticket, in insertion order — used for receipt/response assembly. */
   @Query(

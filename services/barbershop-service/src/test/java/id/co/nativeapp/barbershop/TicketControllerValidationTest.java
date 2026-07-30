@@ -24,17 +24,18 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.mock.web.MockHttpServletRequestBuilder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /**
  * Web-slice tests for {@code /api/v1/barbershop/tickets} — the controller + the shared RFC-7807
  * {@link ApiExceptionHandler} advice plus the ticket-local {@link TicketAdvice}, no DB. {@link
- * TicketService} is mocked so the slice is pure web; the business-rule rejections (unknown/inactive/
- * cross-business item, cash short-tender) are simulated by stubbing the service to throw the same
- * exception the real {@code TicketItemReader}/{@code CashProvider} raise, proving the HTTP mapping.
- * Ported from carwash-service's {@code TicketControllerValidationTest} (ADR 0024).
+ * TicketService} is mocked so the slice is pure web; the business-rule rejections
+ * (unknown/inactive/ cross-business item, cash short-tender) are simulated by stubbing the service
+ * to throw the same exception the real {@code TicketItemReader}/{@code CashProvider} raise, proving
+ * the HTTP mapping. Ported from carwash-service's {@code TicketControllerValidationTest} (ADR
+ * 0024).
  *
  * <p><strong>Domain differences exercised here:</strong> {@code chair} is OPTIONAL (unlike
  * carwash's mandatory {@code bay}) — a request without it must NOT 400; {@code staffProfileId} is
@@ -227,7 +228,9 @@ class TicketControllerValidationTest {
         }
         """
             .formatted(OUTLET, STAFF_PROFILE, ITEM);
-    return post("/api/v1/barbershop/tickets/checkout").contentType("application/json").content(body);
+    return post("/api/v1/barbershop/tickets/checkout")
+        .contentType("application/json")
+        .content(body);
   }
 
   private static CheckoutResult validCheckoutResult() {
@@ -240,8 +243,7 @@ class TicketControllerValidationTest {
             UUID.fromString(STAFF_PROFILE),
             "Budi",
             ticketId,
-            new PriceBreakdownResponse(
-                100_000_00L, 0L, 0L, 11_000_00L, 111_000_00L, "IDR", true),
+            new PriceBreakdownResponse(100_000_00L, 0L, 0L, 11_000_00L, 111_000_00L, "IDR", true),
             Instant.now(),
             List.of(),
             new TicketPaymentResponse(

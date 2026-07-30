@@ -24,8 +24,9 @@ import org.hibernate.type.SqlTypes;
  * {@code catalog}, {@code payment}, and {@code ticket} all reach across to reuse it. barbershop-
  * service has no such legacy feature (ADR 0024: the ticket flow is the only revenue path), so this
  * type is anchored here instead — {@code catalog} is the first feature that needs a priced Money
- * column — and {@code payment}/{@code ticket} depend on it, the same cross-feature domain-type reuse
- * carwash already establishes as the house pattern (one {@code @Embeddable} per service is enough).
+ * column — and {@code payment}/{@code ticket} depend on it, the same cross-feature domain-type
+ * reuse carwash already establishes as the house pattern (one {@code @Embeddable} per service is
+ * enough).
  */
 @Embeddable
 public class MoneyEmbeddable {

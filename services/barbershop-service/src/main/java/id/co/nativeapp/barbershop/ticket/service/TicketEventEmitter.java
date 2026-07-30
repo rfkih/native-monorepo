@@ -30,13 +30,13 @@ import org.springframework.stereotype.Component;
  * <p><strong>Metrics emitted (ADR 0024).</strong> Outlet-grain {@code service_count} (1) —
  * unconditional; and employee-grain {@code sales_amount} (the ticket's grand total) — CONDITIONAL
  * on a non-null barber link, subject = the barber's employee id (not the cashier, deliberately
- * unlike restaurant). Unlike carwash, there is NO {@code upsell_amount} metric — barbershop declares
- * only one unconditional outlet-grain metric (see {@link BarbershopMetricContract}).
+ * unlike restaurant). Unlike carwash, there is NO {@code upsell_amount} metric — barbershop
+ * declares only one unconditional outlet-grain metric (see {@link BarbershopMetricContract}).
  *
  * <p><strong>Outbox aggregate id.</strong> The outlet-grain metric keys the outbox row's {@code
  * aggregate_id} to the OUTLET; the employee-grain metric and the {@code SaleRecorded} row key it to
- * the TICKET id (mirroring restaurant's {@code SaleWriter}, which keys {@code sales_amount@employee}
- * to the sale id).
+ * the TICKET id (mirroring restaurant's {@code SaleWriter}, which keys {@code
+ * sales_amount@employee} to the sale id).
  */
 @Component
 public class TicketEventEmitter {

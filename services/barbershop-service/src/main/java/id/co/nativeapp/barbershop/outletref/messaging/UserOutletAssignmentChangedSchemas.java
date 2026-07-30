@@ -16,8 +16,8 @@ import org.apache.avro.generic.GenericRecord;
  *
  * <p>Ported verbatim from carwash-service's {@code outletref} feature: NO local {@code .avsc} copy
  * is added under this service's own {@code src/main/resources/avro/} — this service resolves the
- * schema from the shared {@code libs/contracts} classpath resource instead, since barbershop-service
- * already depends on {@code libs/contracts} (see {@code build.gradle.kts}).
+ * schema from the shared {@code libs/contracts} classpath resource instead, since
+ * barbershop-service already depends on {@code libs/contracts} (see {@code build.gradle.kts}).
  *
  * <p>No Avro code-generation plugin and no Confluent / Schema Registry serde — consistent with how
  * the outbox stores events (raw Avro bytes, base64-transported by Debezium) and with all other

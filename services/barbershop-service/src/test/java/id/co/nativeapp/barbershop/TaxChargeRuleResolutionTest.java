@@ -24,9 +24,9 @@ import org.springframework.transaction.annotation.Transactional;
  * Integration tests for {@link TaxChargeService#resolve} against a real {@code tax_charge_rule}
  * table (Testcontainers PostgreSQL), covering the resolution behaviour: effective-dating, the
  * illustrative-flag propagation + version tie-break, the no-{@code SERVICE_CHARGE}-row fall-through
- * to zero, and that the resolver is keyed on {@link TaxChargeRule#KEY_VAT} ({@code
- * VAT_BARBERSHOP}) — NOT carwash-service's {@code VAT_CARWASH} key. Ported from carwash-service's
- * {@code TaxChargeRuleResolutionTest} (ADR 0024).
+ * to zero, and that the resolver is keyed on {@link TaxChargeRule#KEY_VAT} ({@code VAT_BARBERSHOP})
+ * — NOT carwash-service's {@code VAT_CARWASH} key. Ported from carwash-service's {@code
+ * TaxChargeRuleResolutionTest} (ADR 0024).
  *
  * <p><strong>Seeding strategy.</strong> There is no application-level writer for {@code
  * tax_charge_rule} (rows arrive only via Flyway seed data or a future admin endpoint), so each

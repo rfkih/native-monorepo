@@ -8,8 +8,8 @@ import jakarta.validation.constraints.PositiveOrZero;
 import java.util.UUID;
 
 /**
- * Request body to create a {@code service_item} or {@code service_addon} row. {@code company_id}
- * is intentionally absent — it comes from the bound tenant scope, never the client (rule 5).
+ * Request body to create a {@code service_item} or {@code service_addon} row. {@code company_id} is
+ * intentionally absent — it comes from the bound tenant scope, never the client (rule 5).
  *
  * <p>{@code priceMinor} is {@link PositiveOrZero} — a catalog item may legitimately be priced at
  * zero (a free add-on / promotional line), so {@code Positive} would be wrong here (unlike a

@@ -18,11 +18,11 @@ import org.springframework.stereotype.Component;
  * outlet-scoping enforcement on the ticket write paths (ported from carwash-service's {@code
  * outletref} feature).
  *
- * <p><strong>Shared decode/missing-id exceptions.</strong> This listener reuses barbershop-service's
- * ALREADY-SHARED {@link EventDecodeException} / {@link MissingEventIdException} — the same types
- * {@code EntitlementEventListener} and {@code StaffEventListener} throw. barbershop's single {@code
- * KafkaConfig.kafkaErrorHandler} already registers both as non-retryable, so this listener needs NO
- * change to that wiring.
+ * <p><strong>Shared decode/missing-id exceptions.</strong> This listener reuses
+ * barbershop-service's ALREADY-SHARED {@link EventDecodeException} / {@link
+ * MissingEventIdException} — the same types {@code EntitlementEventListener} and {@code
+ * StaffEventListener} throw. barbershop's single {@code KafkaConfig.kafkaErrorHandler} already
+ * registers both as non-retryable, so this listener needs NO change to that wiring.
  *
  * <p><strong>Raw Avro bytes.</strong> The message value is the org-service outbox payload — raw
  * Avro bytes shipped by Debezium (base64-transported and decoded by the container's {@code

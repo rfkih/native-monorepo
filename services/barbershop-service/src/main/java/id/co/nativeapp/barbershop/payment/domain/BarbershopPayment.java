@@ -18,13 +18,13 @@ import java.util.UUID;
  * carwash-service's {@code payment.domain.CarwashPayment}, ADR 0006, but coupled to a {@code
  * ticket_id} rather than an order; column shape matches the V1 migration exactly).
  *
- * <p><strong>Status is narrower than the column's CHECK constraint on purpose.</strong> The
- * {@code barbershop_payment.status} CHECK allows all seven of restaurant's {@code Payment.Status}
- * values (mirrored column-for-column from carwash-service by the migration author), but THIS PHASE
- * ports only the capture-inside-checkout foundation — no void/refund flow — so {@link Status}
- * declares only the two values this phase's code ever writes: {@code PENDING} and {@code CAPTURED}.
- * Both are within the DB CHECK's allowed set, so this is a valid (if narrower) subset; a later
- * phase can widen the enum to VOIDED/REFUNDED/etc. without a migration change.
+ * <p><strong>Status is narrower than the column's CHECK constraint on purpose.</strong> The {@code
+ * barbershop_payment.status} CHECK allows all seven of restaurant's {@code Payment.Status} values
+ * (mirrored column-for-column from carwash-service by the migration author), but THIS PHASE ports
+ * only the capture-inside-checkout foundation — no void/refund flow — so {@link Status} declares
+ * only the two values this phase's code ever writes: {@code PENDING} and {@code CAPTURED}. Both are
+ * within the DB CHECK's allowed set, so this is a valid (if narrower) subset; a later phase can
+ * widen the enum to VOIDED/REFUNDED/etc. without a migration change.
  *
  * <p>The revenue-recognised-at-capture invariant lives here: a {@link TenderType#CASH} payment is
  * constructed already {@link Status#CAPTURED}, while a digital ({@link TenderType#QRIS}/{@link
@@ -38,8 +38,9 @@ import java.util.UUID;
  * <p>Extends {@link Auditable} (rule 4) and is covered by the {@code barbershop_payment} RLS policy
  * (rule 5). Reuses {@code catalog.domain.MoneyEmbeddable} rather than declaring a second copy —
  * barbershop-service has no {@code wash}-analog legacy feature (unlike carwash, which anchors its
- * shared {@code MoneyEmbeddable} in the legacy {@code wash.domain} package), so this service anchors
- * it in {@code catalog.domain} instead, the first feature that needed a priced Money column.
+ * shared {@code MoneyEmbeddable} in the legacy {@code wash.domain} package), so this service
+ * anchors it in {@code catalog.domain} instead, the first feature that needed a priced Money
+ * column.
  */
 @Entity
 @Table(name = "barbershop_payment")
@@ -62,8 +63,8 @@ public class BarbershopPayment extends Auditable {
 
   /**
    * The barbershop outlet (org_unit) this payment was taken at. Denormalized for reporting/audit;
-   * the outlet-assignment guard runs ONCE at checkout ({@code TicketWriter}), not again at capture —
-   * deliberately matching carwash (review S2 precedent — capture completes a checkout that was
+   * the outlet-assignment guard runs ONCE at checkout ({@code TicketWriter}), not again at capture
+   * — deliberately matching carwash (review S2 precedent — capture completes a checkout that was
    * already outlet-authorized).
    */
   @Column(name = "business_id", nullable = false, updatable = false)

@@ -113,8 +113,8 @@ class MetricPublishedContractTest {
   }
 
   /**
-   * The barbershop POS ticket's employee-grain barber-commission feed (ADR 0024, mirroring ADR
-   * 0023 decision 4): {@code sales_amount} at the {@code employee} grain, {@code subject_id} = the
+   * The barbershop POS ticket's employee-grain barber-commission feed (ADR 0024, mirroring ADR 0023
+   * decision 4): {@code sales_amount} at the {@code employee} grain, {@code subject_id} = the
    * barber's employee id (NOT the outlet, and NOT the cashier — deliberately unlike restaurant's
    * cashier-attributed metric). {@link BarbershopMetricContract#SALES_AMOUNT} rides the SAME
    * generic schema (no new field) — a new metric key is a data change, not a schema change.

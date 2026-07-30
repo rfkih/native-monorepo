@@ -41,8 +41,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *       uses_illustrative_rules=true}, and {@code service_count} + (linked barber) {@code
  *       sales_amount} metrics are emitted — all atomically. barberEmployeeId is MANDATORY at
  *       checkout (ADR 0024) — every ticket here selects a staff profile.
- *   <li>An unlinked barber profile produces NO {@code sales_amount} metric (the LINK stays
- *       optional even though the profile SELECTION is mandatory).
+ *   <li>An unlinked barber profile produces NO {@code sales_amount} metric (the LINK stays optional
+ *       even though the profile SELECTION is mandatory).
  *   <li>Digital (QRIS) checkout persists a PENDING payment with {@code sale_id} NULL and ZERO
  *       outbox rows; {@code capture} then records the sale + metrics; a capture retry is idempotent
  *       (200, no second event).

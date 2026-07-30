@@ -16,8 +16,8 @@ import org.springframework.stereotype.Service;
 /**
  * Resolves the effective tax and service-charge rules at the ticket's {@code occurredAt} date and
  * applies the pricing formula to produce a {@link PriceBreakdown} — ported from carwash-service's
- * {@code pricing} feature (Phase 2 pricing pattern), keyed on {@link TaxChargeRule#KEY_VAT}
- * ({@code VAT_BARBERSHOP}).
+ * {@code pricing} feature (Phase 2 pricing pattern), keyed on {@link TaxChargeRule#KEY_VAT} ({@code
+ * VAT_BARBERSHOP}).
  *
  * <p><strong>Pricing formula (round ONCE per component via {@link
  * Money#applyBasisPoints}):</strong>

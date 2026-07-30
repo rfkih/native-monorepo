@@ -72,8 +72,7 @@ class CatalogAcceptanceTest extends KafkaPostgresRedisTestBase {
             () ->
                 catalogService.patchService(
                     created.id(),
-                    new CatalogItemPatchRequest(
-                        "Deluxe Haircut", null, 35_000_00L, false, 1, 45)));
+                    new CatalogItemPatchRequest("Deluxe Haircut", null, 35_000_00L, false, 1, 45)));
     assertThat(patched.name()).isEqualTo("Deluxe Haircut");
     assertThat(patched.priceMinor()).isEqualTo(35_000_00L);
     assertThat(patched.active()).isFalse();
@@ -113,7 +112,8 @@ class CatalogAcceptanceTest extends KafkaPostgresRedisTestBase {
             () ->
                 catalogService.patchAddon(
                     created.id(),
-                    new CatalogItemPatchRequest(null, "warm towel service", null, null, null, null)));
+                    new CatalogItemPatchRequest(
+                        null, "warm towel service", null, null, null, null)));
     assertThat(patched.description()).isEqualTo("warm towel service");
     assertThat(patched.priceMinor()).isEqualTo(15_000_00L); // unset field stays unchanged
     assertThat(patched.durationMinutes()).isNull();
@@ -267,8 +267,7 @@ class CatalogAcceptanceTest extends KafkaPostgresRedisTestBase {
                     () ->
                         catalogService.patchService(
                             serviceA.id(),
-                            new CatalogItemPatchRequest(
-                                "hijacked", null, null, null, null, null))))
+                            new CatalogItemPatchRequest("hijacked", null, null, null, null, null))))
         .isInstanceOf(CatalogItemNotFoundException.class);
   }
 

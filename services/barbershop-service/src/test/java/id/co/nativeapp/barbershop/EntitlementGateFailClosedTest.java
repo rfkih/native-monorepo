@@ -113,7 +113,9 @@ class EntitlementGateFailClosedTest extends PostgresRlsTestBase {
 
     UUID createdTicketId =
         TenantContext.callAs(
-                TENANT_A, ACTOR_A, () -> ticketService.checkout(checkoutRequest(service, barber, "ok-1")))
+                TENANT_A,
+                ACTOR_A,
+                () -> ticketService.checkout(checkoutRequest(service, barber, "ok-1")))
             .ticket()
             .ticketId();
     assertThat(createdTicketId).isNotNull();

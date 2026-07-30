@@ -5,9 +5,9 @@ import java.util.UUID;
 /**
  * A decoded staff event ({@code EmployeeChanged} or {@code AssignmentChanged}) reduced to exactly
  * what the local staff read model needs — the application command the listener hands to {@link
- * id.co.nativeapp.barbershop.staff.service.StaffProjectionService}. An immutable record carrying the
- * event id (for idempotency), the owning tenant the consumer binds the write to, the employee id
- * (the projection key), the event kind, and the projected fields.
+ * id.co.nativeapp.barbershop.staff.service.StaffProjectionService}. An immutable record carrying
+ * the event id (for idempotency), the owning tenant the consumer binds the write to, the employee
+ * id (the projection key), the event kind, and the projected fields.
  *
  * <p>For an {@link Kind#EMPLOYEE EMPLOYEE} event the {@code active} flag is meaningful and {@code
  * orgUnitId} is {@code null}; for an {@link Kind#ASSIGNMENT ASSIGNMENT} event {@code orgUnitId} is
