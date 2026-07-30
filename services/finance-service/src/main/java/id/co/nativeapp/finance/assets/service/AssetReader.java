@@ -2,6 +2,7 @@ package id.co.nativeapp.finance.assets.service;
 
 import id.co.nativeapp.finance.assets.domain.AmortizationRunLine;
 import id.co.nativeapp.finance.assets.domain.AssetNotFoundException;
+import id.co.nativeapp.finance.assets.domain.FixedAsset;
 import id.co.nativeapp.finance.assets.dto.AssetDetailResponse;
 import id.co.nativeapp.finance.assets.dto.AssetDetailResponse.ScheduleLine;
 import id.co.nativeapp.finance.assets.dto.AssetResponse;
@@ -43,19 +44,25 @@ public class AssetReader {
     AssetView view =
         assetRepository.findRegisterRow(id).orElseThrow(() -> new AssetNotFoundException(id));
     List<ScheduleLine> schedule =
-        runLineRepository
-            .findScheduleLines(AmortizationRunLine.ItemType.ASSET.name(), id)
-            .stream()
+        runLineRepository.findScheduleLines(AmortizationRunLine.ItemType.ASSET.name(), id).stream()
             .map(
                 l ->
                     new ScheduleLine(
-                        l.getPeriod(), l.getMonthIndex(), l.getAmountMinor(), l.getCurrency().strip()))
+                        l.getPeriod(),
+                        l.getMonthIndex(),
+                        l.getAmountMinor(),
+                        l.getCurrency().strip()))
             .toList();
     return new AssetDetailResponse(toResponse(view), schedule);
   }
 
   private static AssetResponse toResponse(AssetView v) {
-    long bookValue = Math.subtractExact(v.getCostMinor(), v.getAccumulatedMinor());
+    // A DISPOSED asset is off the books: its register book value is zero (the pre-disposal value
+    // is derivable from cost − accumulated; proceeds/date columns tell the disposal story).
+    long bookValue =
+        FixedAsset.Status.DISPOSED.name().equals(v.getStatus())
+            ? 0L
+            : Math.subtractExact(v.getCostMinor(), v.getAccumulatedMinor());
     return new AssetResponse(
         v.getId(),
         v.getName(),
@@ -66,6 +73,8 @@ public class AssetReader {
         v.getUsefulLifeMonths(),
         v.getCurrency().strip(),
         v.getStatus(),
+        v.getDisposalDate(),
+        v.getProceedsMinor(),
         v.getAccumulatedMinor(),
         bookValue);
   }

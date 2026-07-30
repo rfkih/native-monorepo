@@ -3,11 +3,14 @@ package id.co.nativeapp.finance.assets.controller;
 import id.co.nativeapp.finance.assets.dto.AcquireAssetRequest;
 import id.co.nativeapp.finance.assets.dto.AssetDetailResponse;
 import id.co.nativeapp.finance.assets.dto.AssetResponse;
+import id.co.nativeapp.finance.assets.dto.DisposeAssetRequest;
 import id.co.nativeapp.finance.assets.dto.RunAmortizationRequest;
 import id.co.nativeapp.finance.assets.dto.RunResponse;
 import id.co.nativeapp.finance.assets.service.AcquireAssetResult;
 import id.co.nativeapp.finance.assets.service.AmortizationRunWriter;
+import id.co.nativeapp.finance.assets.service.AssetDisposalWriter;
 import id.co.nativeapp.finance.assets.service.AssetReader;
+import id.co.nativeapp.finance.assets.service.DisposeAssetResult;
 import id.co.nativeapp.finance.assets.service.FixedAssetWriter;
 import id.co.nativeapp.finance.assets.service.RunAmortizationResult;
 import id.co.nativeapp.finance.assets.service.RunReader;
@@ -44,22 +47,26 @@ import org.springframework.web.bind.annotation.RestController;
 public class AssetController {
 
   private final FixedAssetWriter fixedAssetWriter;
+  private final AssetDisposalWriter assetDisposalWriter;
   private final AmortizationRunWriter amortizationRunWriter;
   private final AssetReader assetReader;
   private final RunReader runReader;
 
   public AssetController(
       FixedAssetWriter fixedAssetWriter,
+      AssetDisposalWriter assetDisposalWriter,
       AmortizationRunWriter amortizationRunWriter,
       AssetReader assetReader,
       RunReader runReader) {
     this.fixedAssetWriter = fixedAssetWriter;
+    this.assetDisposalWriter = assetDisposalWriter;
     this.amortizationRunWriter = amortizationRunWriter;
     this.assetReader = assetReader;
     this.runReader = runReader;
   }
 
-  @Operation(summary = "Acquire (capitalize) a fixed asset — posts Dr asset cost / Cr cash-clearing")
+  @Operation(
+      summary = "Acquire (capitalize) a fixed asset — posts Dr asset cost / Cr cash-clearing")
   @PostMapping
   public ResponseEntity<AssetDetailResponse> acquire(
       @Valid @RequestBody AcquireAssetRequest request,
@@ -81,6 +88,37 @@ public class AssetController {
             idempotencyKey);
     AssetDetailResponse detail = assetReader.detail(result.assetId());
     // Idempotent-POST contract: a fresh acquire → 201 + Location; a replay → 200 with the original.
+    if (!result.created()) {
+      return ResponseEntity.ok(detail);
+    }
+    return ResponseEntity.created(URI.create("/api/v1/assets/" + result.assetId())).body(detail);
+  }
+
+  @Operation(
+      summary =
+          "Dispose (sell/scrap) a fixed asset — derecognizes cost + accumulated depreciation and"
+              + " posts the gain/loss on disposal")
+  @PostMapping("/{id}/dispose")
+  public ResponseEntity<AssetDetailResponse> dispose(
+      @PathVariable UUID id,
+      @Valid @RequestBody DisposeAssetRequest request,
+      @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+    // The key is REQUIRED (the acquire rationale): disposing posts money, so a keyless request —
+    // which could double-post the derecognition on a retry — is rejected with 400.
+    if (idempotencyKey == null || idempotencyKey.isBlank()) {
+      throw new IllegalArgumentException(
+          "the Idempotency-Key header is required to dispose an asset");
+    }
+    DisposeAssetResult result =
+        assetDisposalWriter.dispose(
+            id,
+            request.disposalDate(),
+            request.proceedsMinor(),
+            request.currency(),
+            idempotencyKey);
+    AssetDetailResponse detail = assetReader.detail(result.assetId());
+    // Idempotent-POST contract: a fresh disposal → 201 + Location; a replay → 200 with the
+    // original.
     if (!result.created()) {
       return ResponseEntity.ok(detail);
     }

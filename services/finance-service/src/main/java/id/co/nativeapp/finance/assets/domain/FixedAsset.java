@@ -26,17 +26,21 @@ import org.hibernate.type.SqlTypes;
  * AFTER acquisition (the full-month convention): {@code start_period = acquisition month + 1},
  * computed here at acquire time and immutable.
  *
- * <p>Status is {@code ACTIVE} only in this slice — disposal (gain/loss postings) is a deferred flow
- * the column reserves. Extends {@link Auditable}; covered by the {@code fixed_asset} RLS policy
- * (V34), scoped to {@code app.current_tenant} (rules 4 + 5).
+ * <p>Disposal (ADR 0022): {@link #markDisposed} freezes the disposal facts onto the row — date,
+ * posting period, proceeds, and the derecognized accumulated depreciation — after the writer posts
+ * the disposal entry. A DISPOSED asset is excluded from every future amortization run ({@code
+ * findByStatus(ACTIVE)}), so the frozen amounts never drift; the cash-flow reader reclassifies from
+ * these columns, never by re-summing run lines. Extends {@link Auditable}; covered by the {@code
+ * fixed_asset} RLS policy (V34), scoped to {@code app.current_tenant} (rules 4 + 5).
  */
 @Entity
 @Table(name = "fixed_asset")
 public class FixedAsset extends Auditable {
 
-  /** The lifecycle states — ACTIVE only in this slice (disposal deferred, ADR 0020). */
+  /** The lifecycle states (V36 widened the CHECK to allow DISPOSED — ADR 0022). */
   public enum Status {
-    ACTIVE
+    ACTIVE,
+    DISPOSED
   }
 
   @Id
@@ -80,6 +84,29 @@ public class FixedAsset extends Auditable {
    */
   @Column(name = "idempotency_key", nullable = false, updatable = false, length = 128)
   private String idempotencyKey;
+
+  /** The user-entered disposal date — metadata only, never a posting period (ADR 0022). */
+  @Column(name = "disposal_date")
+  private LocalDate disposalDate;
+
+  /** The POSTING period ({@code YYYY-MM}) of the disposal entry — keys the cash-flow reclass. */
+  @Column(name = "disposal_period", length = 7)
+  private String disposalPeriod;
+
+  @Column(name = "proceeds_minor")
+  private Long proceedsMinor;
+
+  /** Accumulated depreciation derecognized by the disposal entry, frozen at disposal time. */
+  @Column(name = "accumulated_disposed_minor")
+  private Long accumulatedDisposedMinor;
+
+  /** The disposal GL entry. */
+  @Column(name = "disposal_entry_id")
+  private UUID disposalEntryId;
+
+  /** The dispose request's Idempotency-Key (partial {@code UNIQUE(company_id, key)}). */
+  @Column(name = "disposal_idempotency_key", length = 128)
+  private String disposalIdempotencyKey;
 
   protected FixedAsset() {
     // for JPA
@@ -195,5 +222,74 @@ public class FixedAsset extends Auditable {
 
   public String getIdempotencyKey() {
     return idempotencyKey;
+  }
+
+  /**
+   * Marks the asset disposed, freezing every disposal fact in one state change. The caller (the
+   * disposal writer) has already posted the balanced disposal entry keyed on {@code
+   * disposalEntryId} in the same transaction; the V36 all-or-nothing CHECK enforces the row shape.
+   *
+   * @param accumulatedDisposed the accumulated depreciation the entry derecognized (Dr 1590)
+   * @throws IllegalStateException if the asset is not ACTIVE (a double dispose)
+   * @throws IllegalArgumentException if a bound is violated
+   */
+  @SuppressWarnings("checkstyle:ParameterNumber")
+  public void markDisposed(
+      LocalDate disposalDate,
+      String disposalPeriod,
+      Money proceeds,
+      Money accumulatedDisposed,
+      UUID disposalEntryId,
+      String disposalIdempotencyKey) {
+    if (status != Status.ACTIVE) {
+      throw new IllegalStateException("asset is already disposed: " + id);
+    }
+    Objects.requireNonNull(disposalDate, "disposalDate");
+    Objects.requireNonNull(proceeds, "proceeds");
+    Objects.requireNonNull(accumulatedDisposed, "accumulatedDisposed");
+    proceeds.requireSameCurrencyAs(accumulatedDisposed);
+    if (proceeds.isNegative()) {
+      throw new IllegalArgumentException("proceeds must be non-negative: " + proceeds);
+    }
+    if (accumulatedDisposed.isNegative()) {
+      throw new IllegalArgumentException(
+          "accumulated depreciation must be non-negative: " + accumulatedDisposed);
+    }
+    if (disposalDate.isBefore(acquisitionDate)) {
+      throw new IllegalArgumentException(
+          "disposal date must not precede acquisition: " + disposalDate + " < " + acquisitionDate);
+    }
+    this.status = Status.DISPOSED;
+    this.disposalDate = disposalDate;
+    this.disposalPeriod = Objects.requireNonNull(disposalPeriod, "disposalPeriod");
+    this.proceedsMinor = proceeds.amountMinor();
+    this.accumulatedDisposedMinor = accumulatedDisposed.amountMinor();
+    this.disposalEntryId = Objects.requireNonNull(disposalEntryId, "disposalEntryId");
+    this.disposalIdempotencyKey =
+        Objects.requireNonNull(disposalIdempotencyKey, "disposalIdempotencyKey");
+  }
+
+  public LocalDate getDisposalDate() {
+    return disposalDate;
+  }
+
+  public String getDisposalPeriod() {
+    return disposalPeriod;
+  }
+
+  public Long getProceedsMinor() {
+    return proceedsMinor;
+  }
+
+  public Long getAccumulatedDisposedMinor() {
+    return accumulatedDisposedMinor;
+  }
+
+  public UUID getDisposalEntryId() {
+    return disposalEntryId;
+  }
+
+  public String getDisposalIdempotencyKey() {
+    return disposalIdempotencyKey;
   }
 }

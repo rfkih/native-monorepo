@@ -27,6 +27,12 @@ public interface FixedAssetRepository extends JpaRepository<FixedAsset, UUID> {
   Optional<FixedAsset> findByIdempotencyKey(String idempotencyKey);
 
   /**
+   * The asset disposed by a prior attempt with this Idempotency-Key (RLS-scoped) — the dispose
+   * replay probe (ADR 0022): a retried dispose returns it instead of double-posting.
+   */
+  Optional<FixedAsset> findByDisposalIdempotencyKey(String disposalIdempotencyKey);
+
+  /**
    * The asset register: each asset with its accumulated depreciation (Σ run-line amounts from the
    * sub-ledger) — book value = cost − accumulated, computed by the reader. RLS constrains both
    * tables. Bounded {@code LIMIT} (mirrors the other list readers).
@@ -43,12 +49,15 @@ public interface FixedAssetRepository extends JpaRepository<FixedAsset, UUID> {
                  fa.useful_life_months              AS useful_life_months,
                  fa.currency                        AS currency,
                  fa.status                          AS status,
+                 fa.disposal_date                   AS disposal_date,
+                 fa.proceeds_minor                  AS proceeds_minor,
                  COALESCE(SUM(arl.amount_minor), 0) AS accumulated_minor
             FROM fixed_asset fa
             LEFT JOIN amortization_run_line arl
                    ON arl.item_type = 'ASSET' AND arl.item_id = fa.id
            GROUP BY fa.id, fa.name, fa.acquisition_date, fa.start_period, fa.cost_minor,
-                    fa.salvage_minor, fa.useful_life_months, fa.currency, fa.status
+                    fa.salvage_minor, fa.useful_life_months, fa.currency, fa.status,
+                    fa.disposal_date, fa.proceeds_minor
            ORDER BY fa.acquisition_date DESC, fa.name
            LIMIT 500
           """,
@@ -68,13 +77,16 @@ public interface FixedAssetRepository extends JpaRepository<FixedAsset, UUID> {
                  fa.useful_life_months              AS useful_life_months,
                  fa.currency                        AS currency,
                  fa.status                          AS status,
+                 fa.disposal_date                   AS disposal_date,
+                 fa.proceeds_minor                  AS proceeds_minor,
                  COALESCE(SUM(arl.amount_minor), 0) AS accumulated_minor
             FROM fixed_asset fa
             LEFT JOIN amortization_run_line arl
                    ON arl.item_type = 'ASSET' AND arl.item_id = fa.id
            WHERE fa.id = :id
            GROUP BY fa.id, fa.name, fa.acquisition_date, fa.start_period, fa.cost_minor,
-                    fa.salvage_minor, fa.useful_life_months, fa.currency, fa.status
+                    fa.salvage_minor, fa.useful_life_months, fa.currency, fa.status,
+                    fa.disposal_date, fa.proceeds_minor
           """,
       nativeQuery = true)
   Optional<AssetView> findRegisterRow(@Param("id") UUID id);

@@ -103,6 +103,12 @@ public class AmortizationRunWriter {
     Objects.requireNonNull(period, "period");
     String companyId = TenantContext.require().companyId();
 
+    // Serialize against a concurrent DISPOSAL (ADR 0022): a dispose committing while this run posts
+    // the same asset's depreciation would freeze a stale accumulated amount and desync the
+    // cash-flow reclassification from the posted legs. Shared key, taken FIRST in both writers
+    // (same order everywhere → no deadlock).
+    runRepository.lockPeriod(companyId + ":ASSET_POSTING");
+
     // Serialize concurrent runs of THIS (company, period), BEFORE the idempotency probe.
     runRepository.lockPeriod(companyId + ":" + period + ":AMORT");
 
@@ -136,7 +142,8 @@ public class AmortizationRunWriter {
         int k = DepreciationSchedule.monthIndex(deferral.getStartPeriod(), period);
         Money amount =
             DepreciationSchedule.amountForMonth(deferral.total(), k, deferral.getMonths());
-        planned.add(new Planned(AmortizationRunLine.ItemType.DEFERRAL, deferral.getId(), k, amount));
+        planned.add(
+            new Planned(AmortizationRunLine.ItemType.DEFERRAL, deferral.getId(), k, amount));
       }
     }
 
@@ -213,13 +220,18 @@ public class AmortizationRunWriter {
   }
 
   /**
-   * Builds (but does not persist) the balanced monthly amortization entry for one deferral:
-   * prepaid → {@code Dr EXPENSE / Cr PREPAID_EXPENSE}; deferred revenue → {@code Dr
-   * DEFERRED_REVENUE / Cr REVENUE}. Public + pure for the posting unit tests.
+   * Builds (but does not persist) the balanced monthly amortization entry for one deferral: prepaid
+   * → {@code Dr EXPENSE / Cr PREPAID_EXPENSE}; deferred revenue → {@code Dr DEFERRED_REVENUE / Cr
+   * REVENUE}. Public + pure for the posting unit tests.
    */
   @SuppressWarnings("checkstyle:ParameterNumber")
   public JournalEntry buildDeferralEntry(
-      DeferralKind kind, String period, Instant now, UUID entryId, UUID sourceEventId, Money amount) {
+      DeferralKind kind,
+      String period,
+      Instant now,
+      UUID entryId,
+      UUID sourceEventId,
+      Money amount) {
     List<JournalLine> lines;
     String description;
     if (kind == DeferralKind.PREPAID_EXPENSE) {

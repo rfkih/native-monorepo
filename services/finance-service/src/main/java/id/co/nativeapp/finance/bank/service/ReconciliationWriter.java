@@ -192,7 +192,8 @@ public class ReconciliationWriter {
               "INTEREST can only reconcile a deposit (a positive statement line amount)");
         }
       }
-      case BANK_FEE -> {
+      // BANK_FEE — the only remaining ReconciliationCategory value.
+      default -> {
         if (isDeposit) {
           throw new IllegalArgumentException(
               "BANK_FEE can only reconcile a withdrawal (a negative statement line amount)");

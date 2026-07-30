@@ -12,6 +12,7 @@ import id.co.nativeapp.finance.assets.repository.AmortizationRunRepository;
 import id.co.nativeapp.finance.assets.repository.DeferralRepository;
 import id.co.nativeapp.finance.assets.repository.FixedAssetRepository;
 import id.co.nativeapp.finance.assets.service.AmortizationRunWriter;
+import id.co.nativeapp.finance.assets.service.AssetDisposalWriter;
 import id.co.nativeapp.finance.assets.service.DeferralWriter;
 import id.co.nativeapp.finance.assets.service.FixedAssetWriter;
 import id.co.nativeapp.finance.gl.domain.AccountRole;
@@ -32,8 +33,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
  * Unit tests for the ad-hoc balanced legs the Phase 6 writers assemble (mocked {@link
- * RoleAccountResolver}, no Spring/DB — the {@code ReconcilePostingTest} shape): the capex entry, the
- * two deferral opening entries, the monthly depreciation entry, and the two amortization entries.
+ * RoleAccountResolver}, no Spring/DB — the {@code ReconcilePostingTest} shape): the capex entry,
+ * the two deferral opening entries, the monthly depreciation entry, and the two amortization
+ * entries.
  */
 class AmortizationPostingTest {
 
@@ -44,6 +46,7 @@ class AmortizationPostingTest {
   private FixedAssetWriter assetWriter;
   private DeferralWriter deferralWriter;
   private AmortizationRunWriter runWriter;
+  private AssetDisposalWriter disposalWriter;
 
   @BeforeEach
   void setUp() {
@@ -56,6 +59,8 @@ class AmortizationPostingTest {
     when(resolver.resolve(eq(AccountRole.CASH_CLEARING), any())).thenReturn("1900");
     when(resolver.resolve(eq(AccountRole.EXPENSE), any())).thenReturn("5000");
     when(resolver.resolve(eq(AccountRole.REVENUE), any())).thenReturn("4000");
+    when(resolver.resolve(eq(AccountRole.GAIN_ON_DISPOSAL), any())).thenReturn("4200");
+    when(resolver.resolve(eq(AccountRole.LOSS_ON_DISPOSAL), any())).thenReturn("5600");
 
     Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
     assetWriter =
@@ -85,6 +90,15 @@ class AmortizationPostingTest {
             resolver,
             mock(JdbcTemplate.class),
             clock);
+    disposalWriter =
+        new AssetDisposalWriter(
+            mock(FixedAssetRepository.class),
+            mock(AmortizationRunRepository.class),
+            mock(JournalEntryRepository.class),
+            mock(JournalLineRepository.class),
+            resolver,
+            mock(JdbcTemplate.class),
+            clock);
   }
 
   @Test
@@ -104,7 +118,12 @@ class AmortizationPostingTest {
   void prepaidCreationDebitsPrepaidCreditsClearing() {
     JournalEntry entry =
         deferralWriter.buildCreationEntry(
-            DeferralKind.PREPAID_EXPENSE, PERIOD, NOW, UUID.randomUUID(), UUID.randomUUID(), AMOUNT);
+            DeferralKind.PREPAID_EXPENSE,
+            PERIOD,
+            NOW,
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            AMOUNT);
 
     List<JournalLine> lines = entry.getLines();
     assertThat(totalDebit(lines)).isEqualTo(totalCredit(lines)).isEqualTo(1_000_000L);
@@ -116,12 +135,19 @@ class AmortizationPostingTest {
   void deferredRevenueCreationDebitsClearingCreditsDeferred() {
     JournalEntry entry =
         deferralWriter.buildCreationEntry(
-            DeferralKind.DEFERRED_REVENUE, PERIOD, NOW, UUID.randomUUID(), UUID.randomUUID(), AMOUNT);
+            DeferralKind.DEFERRED_REVENUE,
+            PERIOD,
+            NOW,
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            AMOUNT);
 
     List<JournalLine> lines = entry.getLines();
     assertThat(totalDebit(lines)).isEqualTo(totalCredit(lines)).isEqualTo(1_000_000L);
-    assertThat(lineFor(lines, "1900").getDebitMinor()).isEqualTo(1_000_000L); // Dr clearing (cash in)
-    assertThat(lineFor(lines, "2400").getCreditMinor()).isEqualTo(1_000_000L); // Cr deferred revenue
+    assertThat(lineFor(lines, "1900").getDebitMinor())
+        .isEqualTo(1_000_000L); // Dr clearing (cash in)
+    assertThat(lineFor(lines, "2400").getCreditMinor())
+        .isEqualTo(1_000_000L); // Cr deferred revenue
   }
 
   @Test
@@ -139,7 +165,12 @@ class AmortizationPostingTest {
   void prepaidAmortizationDebitsExpenseCreditsPrepaid() {
     JournalEntry entry =
         runWriter.buildDeferralEntry(
-            DeferralKind.PREPAID_EXPENSE, PERIOD, NOW, UUID.randomUUID(), UUID.randomUUID(), AMOUNT);
+            DeferralKind.PREPAID_EXPENSE,
+            PERIOD,
+            NOW,
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            AMOUNT);
 
     List<JournalLine> lines = entry.getLines();
     assertThat(totalDebit(lines)).isEqualTo(totalCredit(lines)).isEqualTo(1_000_000L);
@@ -151,12 +182,145 @@ class AmortizationPostingTest {
   void deferredRevenueRecognitionDebitsDeferredCreditsRevenue() {
     JournalEntry entry =
         runWriter.buildDeferralEntry(
-            DeferralKind.DEFERRED_REVENUE, PERIOD, NOW, UUID.randomUUID(), UUID.randomUUID(), AMOUNT);
+            DeferralKind.DEFERRED_REVENUE,
+            PERIOD,
+            NOW,
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            AMOUNT);
 
     List<JournalLine> lines = entry.getLines();
     assertThat(totalDebit(lines)).isEqualTo(totalCredit(lines)).isEqualTo(1_000_000L);
     assertThat(lineFor(lines, "2400").getDebitMinor()).isEqualTo(1_000_000L); // Dr deferred revenue
     assertThat(lineFor(lines, "4000").getCreditMinor()).isEqualTo(1_000_000L); // Cr revenue
+  }
+
+  @Test
+  void disposalAboveBookValueCreditsGain() {
+    // Cost 12M, accumulated 1M (book 11M), sold for 12M → gain 1M. 4 legs, balanced at 13M.
+    JournalEntry entry =
+        disposalWriter.buildDisposalEntry(
+            PERIOD,
+            NOW,
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            Money.ofMinor(12_000_000L, "IDR"),
+            Money.ofMinor(1_000_000L, "IDR"),
+            Money.ofMinor(12_000_000L, "IDR"));
+
+    List<JournalLine> lines = entry.getLines();
+    assertThat(lines).hasSize(4);
+    assertThat(totalDebit(lines)).isEqualTo(totalCredit(lines)).isEqualTo(13_000_000L);
+    assertThat(lineFor(lines, "1900").getDebitMinor()).isEqualTo(12_000_000L); // Dr proceeds
+    assertThat(lineFor(lines, "1590").getDebitMinor()).isEqualTo(1_000_000L); // Dr accum removed
+    assertThat(lineFor(lines, "1500").getCreditMinor()).isEqualTo(12_000_000L); // Cr cost removed
+    assertThat(lineFor(lines, "4200").getCreditMinor()).isEqualTo(1_000_000L); // Cr gain
+  }
+
+  @Test
+  void disposalBelowBookValueDebitsLoss() {
+    // Cost 12M, accumulated 1M (book 11M), sold for 8M → loss 3M.
+    JournalEntry entry =
+        disposalWriter.buildDisposalEntry(
+            PERIOD,
+            NOW,
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            Money.ofMinor(12_000_000L, "IDR"),
+            Money.ofMinor(1_000_000L, "IDR"),
+            Money.ofMinor(8_000_000L, "IDR"));
+
+    List<JournalLine> lines = entry.getLines();
+    assertThat(lines).hasSize(4);
+    assertThat(totalDebit(lines)).isEqualTo(totalCredit(lines)).isEqualTo(12_000_000L);
+    assertThat(lineFor(lines, "1900").getDebitMinor()).isEqualTo(8_000_000L);
+    assertThat(lineFor(lines, "1590").getDebitMinor()).isEqualTo(1_000_000L);
+    assertThat(lineFor(lines, "5600").getDebitMinor()).isEqualTo(3_000_000L); // Dr loss
+    assertThat(lineFor(lines, "1500").getCreditMinor()).isEqualTo(12_000_000L);
+  }
+
+  @Test
+  void disposalAtExactlyBookValueHasNoPlugLeg() {
+    // Cost 12M, accumulated 1M, sold for exactly book 11M → no gain, no loss: 3 legs.
+    JournalEntry entry =
+        disposalWriter.buildDisposalEntry(
+            PERIOD,
+            NOW,
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            Money.ofMinor(12_000_000L, "IDR"),
+            Money.ofMinor(1_000_000L, "IDR"),
+            Money.ofMinor(11_000_000L, "IDR"));
+
+    List<JournalLine> lines = entry.getLines();
+    assertThat(lines).hasSize(3);
+    assertThat(totalDebit(lines)).isEqualTo(totalCredit(lines)).isEqualTo(12_000_000L);
+    assertThat(lines).noneMatch(l -> l.getAccountCode().equals("4200"));
+    assertThat(lines).noneMatch(l -> l.getAccountCode().equals("5600"));
+  }
+
+  @Test
+  void fullyDepreciatedScrapForZeroIsTheTwoLegRemoval() {
+    // Salvage-0 asset depreciated to the full cost, scrapped for nothing: no cash, no gain, no
+    // loss — just the removal pair Dr 1590 / Cr 1500.
+    JournalEntry entry =
+        disposalWriter.buildDisposalEntry(
+            PERIOD,
+            NOW,
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            Money.ofMinor(12_000_000L, "IDR"),
+            Money.ofMinor(12_000_000L, "IDR"),
+            Money.ofMinor(0L, "IDR"));
+
+    List<JournalLine> lines = entry.getLines();
+    assertThat(lines).hasSize(2);
+    assertThat(totalDebit(lines)).isEqualTo(totalCredit(lines)).isEqualTo(12_000_000L);
+    assertThat(lineFor(lines, "1590").getDebitMinor()).isEqualTo(12_000_000L);
+    assertThat(lineFor(lines, "1500").getCreditMinor()).isEqualTo(12_000_000L);
+  }
+
+  @Test
+  void aSalvageFlooredAssetSoldAboveSalvageGainsTheDifference() {
+    // Cost 12M, salvage 2M → accumulated tops out at the 10M depreciable base; book value ends at
+    // the 2M salvage. Sold for 3M → gain = proceeds − salvage = 1M.
+    JournalEntry entry =
+        disposalWriter.buildDisposalEntry(
+            PERIOD,
+            NOW,
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            Money.ofMinor(12_000_000L, "IDR"),
+            Money.ofMinor(10_000_000L, "IDR"),
+            Money.ofMinor(3_000_000L, "IDR"));
+
+    List<JournalLine> lines = entry.getLines();
+    assertThat(lines).hasSize(4);
+    assertThat(totalDebit(lines)).isEqualTo(totalCredit(lines)).isEqualTo(13_000_000L);
+    assertThat(lineFor(lines, "1900").getDebitMinor()).isEqualTo(3_000_000L);
+    assertThat(lineFor(lines, "1590").getDebitMinor()).isEqualTo(10_000_000L);
+    assertThat(lineFor(lines, "1500").getCreditMinor()).isEqualTo(12_000_000L);
+    assertThat(lineFor(lines, "4200").getCreditMinor()).isEqualTo(1_000_000L);
+  }
+
+  @Test
+  void zeroProceedsWriteOffWithNoDepreciationIsPureLoss() {
+    // Scrap an undepreciated asset: cost 12M, accumulated 0, proceeds 0 → 2 legs: Dr loss/Cr cost.
+    JournalEntry entry =
+        disposalWriter.buildDisposalEntry(
+            PERIOD,
+            NOW,
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            Money.ofMinor(12_000_000L, "IDR"),
+            Money.ofMinor(0L, "IDR"),
+            Money.ofMinor(0L, "IDR"));
+
+    List<JournalLine> lines = entry.getLines();
+    assertThat(lines).hasSize(2);
+    assertThat(totalDebit(lines)).isEqualTo(totalCredit(lines)).isEqualTo(12_000_000L);
+    assertThat(lineFor(lines, "5600").getDebitMinor()).isEqualTo(12_000_000L);
+    assertThat(lineFor(lines, "1500").getCreditMinor()).isEqualTo(12_000_000L);
   }
 
   private static long totalDebit(List<JournalLine> lines) {

@@ -1,6 +1,9 @@
 package id.co.nativeapp.finance.assets.controller;
 
+import id.co.nativeapp.finance.assets.domain.AssetAlreadyDisposedException;
+import id.co.nativeapp.finance.assets.domain.AssetDepreciationBehindException;
 import id.co.nativeapp.finance.assets.domain.AssetNotFoundException;
+import id.co.nativeapp.finance.assets.domain.IdempotencyKeyConflictException;
 import id.co.nativeapp.finance.pnl.domain.MismatchedPostingCurrencyException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
@@ -42,12 +45,47 @@ public class AssetAdvice {
     return decorate(problem, request);
   }
 
-  /** Bad input not caught by bean validation (salvage ≥ cost, bad ISO currency, blank name) → 400. */
+  /**
+   * Bad input not caught by bean validation (salvage ≥ cost, bad ISO currency, blank name) → 400.
+   */
   @ExceptionHandler(IllegalArgumentException.class)
   public ProblemDetail handleBadRequest(IllegalArgumentException ex, HttpServletRequest request) {
     ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
     problem.setType(URI.create(TYPE_BASE + "asset-invalid-request"));
     problem.setTitle("Bad Request");
+    problem.setDetail(ex.getMessage());
+    return decorate(problem, request);
+  }
+
+  /** A second disposal attempt under a different Idempotency-Key → 409 (ADR 0022). */
+  @ExceptionHandler(AssetAlreadyDisposedException.class)
+  public ProblemDetail handleAlreadyDisposed(
+      AssetAlreadyDisposedException ex, HttpServletRequest request) {
+    ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+    problem.setType(URI.create(TYPE_BASE + "asset-already-disposed"));
+    problem.setTitle("Conflict");
+    problem.setDetail(ex.getMessage());
+    return decorate(problem, request);
+  }
+
+  /** Depreciation out of step with the disposal's posting period → 409 (ADR 0022). */
+  @ExceptionHandler(AssetDepreciationBehindException.class)
+  public ProblemDetail handleDepreciationBehind(
+      AssetDepreciationBehindException ex, HttpServletRequest request) {
+    ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+    problem.setType(URI.create(TYPE_BASE + "asset-depreciation-behind"));
+    problem.setTitle("Conflict");
+    problem.setDetail(ex.getMessage());
+    return decorate(problem, request);
+  }
+
+  /** An Idempotency-Key reused against a DIFFERENT asset → 409 (path id is authoritative). */
+  @ExceptionHandler(IdempotencyKeyConflictException.class)
+  public ProblemDetail handleKeyConflict(
+      IdempotencyKeyConflictException ex, HttpServletRequest request) {
+    ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+    problem.setType(URI.create(TYPE_BASE + "asset-idempotency-key-conflict"));
+    problem.setTitle("Conflict");
     problem.setDetail(ex.getMessage());
     return decorate(problem, request);
   }
@@ -70,7 +108,8 @@ public class AssetAdvice {
     ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.UNPROCESSABLE_ENTITY);
     problem.setType(URI.create(TYPE_BASE + "asset-currency-mismatch"));
     problem.setTitle("Unprocessable Entity");
-    problem.setDetail("The posting currency must match the company's base currency for the period.");
+    problem.setDetail(
+        "The posting currency must match the company's base currency for the period.");
     return decorate(problem, request);
   }
 

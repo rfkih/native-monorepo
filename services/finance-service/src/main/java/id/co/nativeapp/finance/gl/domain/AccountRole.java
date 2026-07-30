@@ -99,18 +99,19 @@ public enum AccountRole {
    */
   BANK_CHARGES,
   /**
-   * Phase 4 tax (PPN): net VAT payable to the tax authority — the credit recognised when a PPN return
-   * is filed for a period whose output VAT exceeds its input VAT (Dr VAT_OUTPUT / Cr VAT_INPUT / Cr
-   * VAT_PAYABLE for the net), and debited again when the return is settled (Dr VAT_PAYABLE / Cr
-   * CASH_CLEARING). Maps to account 2200-family settlement account 2300 (ILLUSTRATIVE — regime +
-   * account SME-gated).
+   * Phase 4 tax (PPN): net VAT payable to the tax authority — the credit recognised when a PPN
+   * return is filed for a period whose output VAT exceeds its input VAT (Dr VAT_OUTPUT / Cr
+   * VAT_INPUT / Cr VAT_PAYABLE for the net), and debited again when the return is settled (Dr
+   * VAT_PAYABLE / Cr CASH_CLEARING). Maps to account 2200-family settlement account 2300
+   * (ILLUSTRATIVE — regime + account SME-gated).
    */
   VAT_PAYABLE,
   /**
-   * Phase 4 tax (PPN): excess recoverable input VAT carried forward — the debit recognised when a PPN
-   * return is filed for a period whose input VAT exceeds its output VAT (the Indonesian default is
-   * <em>dikompensasikan</em>: carry the credit to the next period rather than claim an immediate
-   * refund). Maps to account 1310 (ILLUSTRATIVE — regime + refund-vs-carryforward policy SME-gated).
+   * Phase 4 tax (PPN): excess recoverable input VAT carried forward — the debit recognised when a
+   * PPN return is filed for a period whose input VAT exceeds its output VAT (the Indonesian default
+   * is <em>dikompensasikan</em>: carry the credit to the next period rather than claim an immediate
+   * refund). Maps to account 1310 (ILLUSTRATIVE — regime + refund-vs-carryforward policy
+   * SME-gated).
    */
   VAT_CREDIT_CARRYFORWARD,
   /**
@@ -126,10 +127,21 @@ public enum AccountRole {
    */
   ACCUMULATED_DEPRECIATION,
   /**
-   * Phase 6 assets: depreciation expense — debited by each monthly depreciation run. Maps to account
-   * 5500 (ILLUSTRATIVE — SME-gated).
+   * Phase 6 assets: depreciation expense — debited by each monthly depreciation run. Maps to
+   * account 5500 (ILLUSTRATIVE — SME-gated).
    */
   DEPRECIATION_EXPENSE,
+  /**
+   * Asset disposal (ADR 0022): gain on selling a fixed asset above book value — the "other income"
+   * plug credited by the disposal entry ({@code proceeds − (cost − accumulated) > 0}). Never
+   * operating revenue. Maps to account 4200 (ILLUSTRATIVE — SME-gated).
+   */
+  GAIN_ON_DISPOSAL,
+  /**
+   * Asset disposal (ADR 0022): loss on selling/scrapping a fixed asset below book value — the plug
+   * debited by the disposal entry. Maps to account 5600 (ILLUSTRATIVE — SME-gated).
+   */
+  LOSS_ON_DISPOSAL,
   /**
    * Phase 6 deferrals: prepaid expense (an asset) — debited when an expense is paid up front,
    * credited as each month's share is amortized to EXPENSE. Maps to account 1400 (ILLUSTRATIVE —

@@ -29,5 +29,11 @@ public interface AssetView {
 
   String getStatus();
 
+  /** Null until disposed (ADR 0022). */
+  LocalDate getDisposalDate();
+
+  /** Null until disposed (ADR 0022). */
+  Long getProceedsMinor();
+
   long getAccumulatedMinor();
 }

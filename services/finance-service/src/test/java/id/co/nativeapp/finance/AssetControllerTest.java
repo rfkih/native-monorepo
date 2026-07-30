@@ -3,7 +3,6 @@ package id.co.nativeapp.finance;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -12,13 +11,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import id.co.nativeapp.finance.assets.controller.AssetAdvice;
 import id.co.nativeapp.finance.assets.controller.AssetController;
+import id.co.nativeapp.finance.assets.domain.AssetAlreadyDisposedException;
+import id.co.nativeapp.finance.assets.domain.AssetDepreciationBehindException;
 import id.co.nativeapp.finance.assets.domain.AssetNotFoundException;
+import id.co.nativeapp.finance.assets.domain.IdempotencyKeyConflictException;
 import id.co.nativeapp.finance.assets.dto.AssetDetailResponse;
 import id.co.nativeapp.finance.assets.dto.AssetResponse;
 import id.co.nativeapp.finance.assets.dto.RunResponse;
 import id.co.nativeapp.finance.assets.service.AcquireAssetResult;
 import id.co.nativeapp.finance.assets.service.AmortizationRunWriter;
+import id.co.nativeapp.finance.assets.service.AssetDisposalWriter;
 import id.co.nativeapp.finance.assets.service.AssetReader;
+import id.co.nativeapp.finance.assets.service.DisposeAssetResult;
 import id.co.nativeapp.finance.assets.service.FixedAssetWriter;
 import id.co.nativeapp.finance.assets.service.RunAmortizationResult;
 import id.co.nativeapp.finance.assets.service.RunReader;
@@ -38,8 +42,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
- * Web-slice test for {@link AssetController}: acquire (201), the register (200), the run (201 fresh /
- * 200 idempotent re-run), and the fault mappings from {@link AssetAdvice} — 400 (bad bounds), 404
+ * Web-slice test for {@link AssetController}: acquire (201), the register (200), the run (201 fresh
+ * / 200 idempotent re-run), and the fault mappings from {@link AssetAdvice} — 400 (bad bounds), 404
  * (unknown asset), 422 (currency). Services mocked. Mirrors {@code TaxControllerTest}.
  */
 @WebMvcTest(AssetController.class)
@@ -52,6 +56,7 @@ class AssetControllerTest {
   @Autowired private MockMvc mockMvc;
 
   @MockitoBean private FixedAssetWriter fixedAssetWriter;
+  @MockitoBean private AssetDisposalWriter assetDisposalWriter;
   @MockitoBean private AmortizationRunWriter amortizationRunWriter;
   @MockitoBean private AssetReader assetReader;
   @MockitoBean private RunReader runReader;
@@ -59,6 +64,9 @@ class AssetControllerTest {
   private static final String ACQUIRE_BODY =
       "{\"name\":\"Espresso machine\",\"acquisitionDate\":\"2026-07-15\",\"costMinor\":12000000,"
           + "\"salvageMinor\":0,\"usefulLifeMonths\":12,\"currency\":\"IDR\"}";
+
+  private static final String DISPOSE_BODY =
+      "{\"disposalDate\":\"2026-07-20\",\"proceedsMinor\":12000000,\"currency\":\"IDR\"}";
 
   private static AssetDetailResponse sampleDetail() {
     return new AssetDetailResponse(
@@ -72,6 +80,8 @@ class AssetControllerTest {
             12,
             "IDR",
             "ACTIVE",
+            null,
+            null,
             1_000_000L,
             11_000_000L),
         List.of(new AssetDetailResponse.ScheduleLine("2026-08", 1, 1_000_000L, "IDR")));
@@ -119,9 +129,130 @@ class AssetControllerTest {
   @Test
   void acquireWithoutAnIdempotencyKeyIsA400() throws Exception {
     mockMvc
-        .perform(post("/api/v1/assets").contentType(MediaType.APPLICATION_JSON).content(ACQUIRE_BODY))
+        .perform(
+            post("/api/v1/assets").contentType(MediaType.APPLICATION_JSON).content(ACQUIRE_BODY))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/asset-invalid-request"));
+  }
+
+  @Test
+  void disposeReturns201WithDetail() throws Exception {
+    when(assetDisposalWriter.dispose(any(), any(), anyLong(), any(), any()))
+        .thenReturn(new DisposeAssetResult(ASSET, true));
+    when(assetReader.detail(ASSET)).thenReturn(sampleDetail());
+
+    mockMvc
+        .perform(
+            post("/api/v1/assets/" + ASSET + "/dispose")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Idempotency-Key", "dispose-1")
+                .content(DISPOSE_BODY))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.asset.id").value(ASSET.toString()));
+  }
+
+  @Test
+  void disposeReplayReturns200WithTheOriginal() throws Exception {
+    // A retried dispose with the same key replays the original disposal (created == false) → 200.
+    when(assetDisposalWriter.dispose(any(), any(), anyLong(), any(), any()))
+        .thenReturn(new DisposeAssetResult(ASSET, false));
+    when(assetReader.detail(ASSET)).thenReturn(sampleDetail());
+
+    mockMvc
+        .perform(
+            post("/api/v1/assets/" + ASSET + "/dispose")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Idempotency-Key", "dispose-1")
+                .content(DISPOSE_BODY))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.asset.id").value(ASSET.toString()));
+  }
+
+  @Test
+  void disposeWithoutAnIdempotencyKeyIsA400() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/v1/assets/" + ASSET + "/dispose")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(DISPOSE_BODY))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/asset-invalid-request"));
+  }
+
+  @Test
+  void disposeOfAnUnknownAssetIsA404() throws Exception {
+    when(assetDisposalWriter.dispose(any(), any(), anyLong(), any(), any()))
+        .thenThrow(new AssetNotFoundException(ASSET));
+
+    mockMvc
+        .perform(
+            post("/api/v1/assets/" + ASSET + "/dispose")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Idempotency-Key", "dispose-404")
+                .content(DISPOSE_BODY))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/asset-not-found"));
+  }
+
+  @Test
+  void disposeOfAnAlreadyDisposedAssetIsA409() throws Exception {
+    when(assetDisposalWriter.dispose(any(), any(), anyLong(), any(), any()))
+        .thenThrow(new AssetAlreadyDisposedException(ASSET));
+
+    mockMvc
+        .perform(
+            post("/api/v1/assets/" + ASSET + "/dispose")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Idempotency-Key", "dispose-2")
+                .content(DISPOSE_BODY))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/asset-already-disposed"));
+  }
+
+  @Test
+  void disposeWithDepreciationOutOfStepIsA409() throws Exception {
+    when(assetDisposalWriter.dispose(any(), any(), anyLong(), any(), any()))
+        .thenThrow(new AssetDepreciationBehindException("2 of 3 due months posted"));
+
+    mockMvc
+        .perform(
+            post("/api/v1/assets/" + ASSET + "/dispose")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Idempotency-Key", "dispose-3")
+                .content(DISPOSE_BODY))
+        .andExpect(status().isConflict())
+        .andExpect(
+            jsonPath("$.type").value("https://errors.nativeapp.id/asset-depreciation-behind"));
+  }
+
+  @Test
+  void disposeReusingAnotherAssetsKeyIsA409() throws Exception {
+    // The path id is authoritative (code-review W1): a key that disposed a DIFFERENT asset must
+    // not silently replay it as this asset's disposal.
+    when(assetDisposalWriter.dispose(any(), any(), anyLong(), any(), any()))
+        .thenThrow(new IdempotencyKeyConflictException(ASSET, RUN));
+
+    mockMvc
+        .perform(
+            post("/api/v1/assets/" + ASSET + "/dispose")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Idempotency-Key", "dispose-reused")
+                .content(DISPOSE_BODY))
+        .andExpect(status().isConflict())
+        .andExpect(
+            jsonPath("$.type").value("https://errors.nativeapp.id/asset-idempotency-key-conflict"));
+  }
+
+  @Test
+  void disposeWithNegativeProceedsIsA400() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/v1/assets/" + ASSET + "/dispose")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Idempotency-Key", "dispose-4")
+                .content(
+                    "{\"disposalDate\":\"2026-07-20\",\"proceedsMinor\":-1,\"currency\":\"IDR\"}"))
+        .andExpect(status().isBadRequest());
   }
 
   @Test
