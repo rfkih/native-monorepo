@@ -24,6 +24,10 @@ CREATE DATABASE carwash_service OWNER carwash_service;
 CREATE ROLE barbershop_service LOGIN PASSWORD 'barbershop_service' REPLICATION;
 CREATE DATABASE barbershop_service OWNER barbershop_service;
 
+-- ---- loyalty-service (Phase 4 POS-parity: loyalty + gift cards, ADR 0027) ----
+CREATE ROLE loyalty_service LOGIN PASSWORD 'loyalty_service' REPLICATION;
+CREATE DATABASE loyalty_service OWNER loyalty_service;
+
 -- ---- finance-service ----
 CREATE ROLE finance_service LOGIN PASSWORD 'finance_service' REPLICATION;
 CREATE DATABASE finance_service OWNER finance_service;
@@ -53,6 +57,9 @@ GRANT ALL ON SCHEMA public TO carwash_service;
 
 \connect barbershop_service
 GRANT ALL ON SCHEMA public TO barbershop_service;
+
+\connect loyalty_service
+GRANT ALL ON SCHEMA public TO loyalty_service;
 
 \connect finance_service
 GRANT ALL ON SCHEMA public TO finance_service;

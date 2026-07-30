@@ -1,0 +1,60 @@
+# loyalty-service overlay — a DB-owning service (Postgres role loyalty_service) and a Kafka
+# PRODUCER (LoyaltyBalanceChanged/GiftCardStateChanged/LoyaltyRedemptionFlagged) + CONSUMER
+# (SaleRecorded/GiftCardSold/SaleVoided/SaleRefunded). Not entitlement-gated this phase (no Redis
+# dependency — libs/entitlement-check is deliberately not used). Readiness gates on db + kafka.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: native
+
+resources:
+  - ../../base
+
+labels:
+  - includeSelectors: true
+    pairs:
+      app.kubernetes.io/name: loyalty-service
+
+patches:
+  - target:
+      kind: Deployment
+      name: service
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: loyalty-service
+  - target:
+      kind: Service
+      name: service
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: loyalty-service
+
+images:
+  - name: native-service
+    newName: REGISTRY/native/loyalty-service
+    newTag: latest
+
+configMapGenerator:
+  - name: service-config
+    literals:
+      - DB_URL=jdbc:postgresql://postgres.native.svc.cluster.local:5432/loyalty_service
+      - KAFKA_BOOTSTRAP_SERVERS=kafka.native.svc.cluster.local:9092
+      - KEYCLOAK_ISSUER_URI=https://keycloak.example.co.id/realms/native
+      - KEYCLOAK_JWK_SET_URI=https://keycloak.example.co.id/realms/native/protocol/openid-connect/certs
+
+# Secret PLACEHOLDERS only — real creds (incl. the PII AES key + HMAC key) come from Vault / a
+# sealed-secret (see README). NEVER a literal secret in committed config.
+secretGenerator:
+  - name: service-secret
+    literals:
+      - DB_USERNAME=loyalty_service
+      - DB_PASSWORD=CHANGE_ME_VAULT
+      - NATIVE_PII_KEY=CHANGE_ME_VAULT_BASE64_32_BYTES
+      - NATIVE_PII_HMAC_KEY=CHANGE_ME_VAULT_BASE64_32_BYTES
+
+generatorOptions:
+  # Hash-suffix the ConfigMap/Secret names so a config change rolls the pods: kustomize
+  # rewrites the Deployment's envFrom refs to the new hash, forcing a new ReplicaSet.
+  disableNameSuffixHash: false
