@@ -389,6 +389,28 @@ public class RoutingConfig {
   }
 
   /**
+   * Promotion rules + coupons administration under {@code /api/v1/promotions/**}
+   * (restaurant-service, ADR 0026) — an owner/manager back-office surface: rules and coupon codes
+   * change what customers pay, so the cashier POS role has no business here. The cashier-facing
+   * half of promotions (a coupon applied at quote/checkout) rides the already-routed POS order
+   * paths; the vertical services' promo admin rides their {@code /api/v1/<vertical>/**} routes with
+   * the same owner/manager guard enforced service-side.
+   */
+  @Bean
+  RouterFunction<ServerResponse> promotionsRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("restaurant-service-promotions")
+        .route(path("/api/v1/promotions/**"), http())
+        .before(uri(routes.restaurantService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
    * All barbershop POS traffic under {@code /api/v1/barbershop/**} (barbershop-service) — POS
    * surface, vertical-prefixed exactly like {@link #carwashRoute} (ADR 0023/0024).
    */

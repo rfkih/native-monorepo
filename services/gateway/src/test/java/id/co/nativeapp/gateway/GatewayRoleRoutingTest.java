@@ -907,6 +907,50 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
   }
 
   // ---------------------------------------------------------------------------
+  // /api/v1/promotions/** — promo rules + coupons admin (owner/manager only, ADR 0026)
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void aCashierIsDeniedThePromotionsAdminRouteWith403() throws Exception {
+    // Rules and coupon codes change what customers pay — a back-office surface, never POS. The
+    // cashier-facing coupon APPLY rides the POS order routes, not this one.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/promotions")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void anOwnerCanReachThePromotionsAdminRoute() throws Exception {
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/promotions/coupons")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/promotions/coupons");
+  }
+
+  // ---------------------------------------------------------------------------
   // /api/v1/entitlements/** — module self-serve (owner/manager dashboard surface only)
   // ---------------------------------------------------------------------------
 
