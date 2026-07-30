@@ -20,10 +20,10 @@ import java.util.List;
  *
  * <p><strong>Why the write path re-reads via projections instead of mapping the in-memory
  * entities.</strong> A ticket response is assembled from three tables (the ticket header, its
- * lines, its payment) plus a LEFT JOIN for the washer's display label — exactly the shape the native
- * projection queries already produce. Re-reading (after an explicit flush makes the writes visible
- * on the same connection/transaction) avoids a second, parallel "from-entities" mapping that could
- * drift from the read path.
+ * lines, its payment) plus a LEFT JOIN for the washer's display label — exactly the shape the
+ * native projection queries already produce. Re-reading (after an explicit flush makes the writes
+ * visible on the same connection/transaction) avoids a second, parallel "from-entities" mapping
+ * that could drift from the read path.
  *
  * <p>Not a Spring bean — a stateless mapping utility, package-visible to the {@code ticket.service}
  * layer only.
@@ -41,7 +41,8 @@ final class TicketResponseFactory {
    */
   static TicketResponse toResponse(
       TicketView view, List<TicketLineView> lines, CarwashPaymentView payment) {
-    List<TicketLineResponse> lineResponses = lines.stream().map(TicketResponseFactory::toLine).toList();
+    List<TicketLineResponse> lineResponses =
+        lines.stream().map(TicketResponseFactory::toLine).toList();
     PriceBreakdownResponse breakdown =
         new PriceBreakdownResponse(
             view.getSubtotalMinor(),

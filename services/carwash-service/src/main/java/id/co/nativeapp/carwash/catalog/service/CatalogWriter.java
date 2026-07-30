@@ -23,16 +23,16 @@ import org.springframework.transaction.annotation.Transactional;
  * Owns the {@code @Transactional} catalog write units of work: create/patch for {@code
  * wash_package}, {@code wash_addon}, and {@code staff_profile}. A distinct bean from {@link
  * CatalogService} so it is invoked through the Spring proxy — the {@code @Transactional} advice and
- * {@link id.co.nativeapp.tenant.RlsAutoApplyAspect} that binds the tenant GUC only apply through the
- * proxy.
+ * {@link id.co.nativeapp.tenant.RlsAutoApplyAspect} that binds the tenant GUC only apply through
+ * the proxy.
  *
  * <p>The write path loads the FULL entity (inherited {@code findById}/{@code save}) — it
- * legitimately needs the whole aggregate to mutate and persist it, and the freshly-saved entity maps
- * directly to the response (never a projection — that pattern is reserved for reads, mirroring
+ * legitimately needs the whole aggregate to mutate and persist it, and the freshly-saved entity
+ * maps directly to the response (never a projection — that pattern is reserved for reads, mirroring
  * {@code WashResponse.from(Wash)}). A cross-tenant / unknown id is indistinguishable (RLS makes it
  * invisible) and surfaces as {@link CatalogItemNotFoundException} → {@code 404}. A duplicate {@code
- * staff_profile} display label surfaces as a {@code DataIntegrityViolationException} from the unique
- * constraint → {@code 409} (mapped by {@code config.CatalogAdvice}), uncaught here.
+ * staff_profile} display label surfaces as a {@code DataIntegrityViolationException} from the
+ * unique constraint → {@code 409} (mapped by {@code config.CatalogAdvice}), uncaught here.
  */
 @Component
 public class CatalogWriter {
@@ -135,9 +135,7 @@ public class CatalogWriter {
   @Transactional
   public StaffProfileResponse patchStaffProfile(UUID id, StaffProfilePatchRequest request) {
     StaffProfile profile =
-        staffProfileRepository
-            .findById(id)
-            .orElseThrow(() -> new CatalogItemNotFoundException(id));
+        staffProfileRepository.findById(id).orElseThrow(() -> new CatalogItemNotFoundException(id));
     if (request.displayLabel() != null) {
       profile.rename(request.displayLabel());
     }

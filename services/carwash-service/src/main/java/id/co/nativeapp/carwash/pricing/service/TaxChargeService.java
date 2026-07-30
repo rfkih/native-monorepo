@@ -15,9 +15,9 @@ import org.springframework.stereotype.Service;
 
 /**
  * Resolves the effective tax and service-charge rules at the ticket's {@code occurredAt} date and
- * applies the pricing formula to produce a {@link PriceBreakdown} — ported from restaurant-service's
- * {@code pricing} feature (Phase 2 pricing pattern), keyed on {@link TaxChargeRule#KEY_VAT} instead
- * of restaurant's {@code PB1_RESTAURANT} key.
+ * applies the pricing formula to produce a {@link PriceBreakdown} — ported from
+ * restaurant-service's {@code pricing} feature (Phase 2 pricing pattern), keyed on {@link
+ * TaxChargeRule#KEY_VAT} instead of restaurant's {@code PB1_RESTAURANT} key.
  *
  * <p><strong>Pricing formula (round ONCE per component via {@link
  * Money#applyBasisPoints}):</strong>

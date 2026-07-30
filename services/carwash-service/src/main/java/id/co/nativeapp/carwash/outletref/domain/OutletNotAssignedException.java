@@ -3,9 +3,9 @@ package id.co.nativeapp.carwash.outletref.domain;
 import java.util.UUID;
 
 /**
- * Thrown when an attendant attempts to ring a ticket at an outlet they are not assigned to (Phase
- * 5 enforcement policy ported from restaurant-service's {@code outletref} feature). The HTTP
- * response is a {@code 403} RFC-7807 {@code ProblemDetail} with the stable type URI {@code
+ * Thrown when an attendant attempts to ring a ticket at an outlet they are not assigned to (Phase 5
+ * enforcement policy ported from restaurant-service's {@code outletref} feature). The HTTP response
+ * is a {@code 403} RFC-7807 {@code ProblemDetail} with the stable type URI {@code
  * https://errors.nativeapp.id/outlet-not-assigned}.
  *
  * <p>Owner and manager roles bypass this check entirely — only cashiers/attendants are subject to

@@ -30,14 +30,15 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * <ul>
  *   <li>{@link OutboxWriter} — the transactional outbox writer (rule 3): its single {@code INSERT}
  *       runs on the caller's transactional {@link JdbcTemplate} connection, so a {@code
- *       SaleRecorded}/{@code MetricPublished} row commits atomically with the wash. Stamped with the
- *       W3C traceparent from the active span (ADR 0010 #13).
+ *       SaleRecorded}/{@code MetricPublished} row commits atomically with the wash. Stamped with
+ *       the W3C traceparent from the active span (ADR 0010 #13).
  *   <li>{@link ProcessedEventStore} — the idempotent-consumer dedupe store: its {@code processOnce}
  *       claim runs in the same transaction as the projection upsert, so a re-delivered entitlement
  *       / staff event never double-applies.
  *   <li>{@link EntitlementCache} + {@link CachedEntitlementChecker} — the shared Redis-cached
  *       entitled? gate.
- *   <li>{@link OutboxLagMetrics} — Micrometer gauge {@code native.outbox.unpublished} (ADR 0010 #13).
+ *   <li>{@link OutboxLagMetrics} — Micrometer gauge {@code native.outbox.unpublished} (ADR 0010
+ *       #13).
  * </ul>
  */
 @Configuration

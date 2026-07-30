@@ -34,15 +34,15 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * Acceptance tests for the carwash POS ticket checkout (ADR 0023) — the money path.
  *
  * <ol>
- *   <li>CASH checkout: breakdown math reconciles against the V5 seed (11% VAT on subtotal − discount,
- *       zero service charge), the ticket + lines + payment persist, {@code sale_id} is set, exactly
- *       ONE {@code SaleRecorded} with the FULL breakdown + tender CASH + {@code
+ *   <li>CASH checkout: breakdown math reconciles against the V5 seed (11% VAT on subtotal −
+ *       discount, zero service charge), the ticket + lines + payment persist, {@code sale_id} is
+ *       set, exactly ONE {@code SaleRecorded} with the FULL breakdown + tender CASH + {@code
  *       uses_illustrative_rules=true}, and {@code wash_count} + {@code upsell_amount} + (linked
  *       washer) {@code sales_amount} metrics are emitted — all atomically.
  *   <li>An unlinked washer profile produces NO {@code sales_amount} metric.
- *   <li>Digital (QRIS) checkout persists a PENDING payment with {@code sale_id} NULL and ZERO outbox
- *       rows; {@code capture} then records the sale + metrics; a capture retry is idempotent (200, no
- *       second event).
+ *   <li>Digital (QRIS) checkout persists a PENDING payment with {@code sale_id} NULL and ZERO
+ *       outbox rows; {@code capture} then records the sale + metrics; a capture retry is idempotent
+ *       (200, no second event).
  *   <li>A checkout retry with the same {@code idempotencyKey} is idempotent ({@code created=false},
  *       no second event, no second row).
  * </ol>
@@ -82,11 +82,13 @@ class TicketCheckoutAcceptanceTest extends KafkaPostgresRedisTestBase {
                 new TicketLineInput(ItemType.ADDON, addon.id(), 1)),
             new PaymentRequest(TenderType.CASH, 100_000_00L));
 
-    CheckoutResult first = TenantContext.callAs(TENANT_A, ACTOR_A, () -> ticketService.checkout(request));
+    CheckoutResult first =
+        TenantContext.callAs(TENANT_A, ACTOR_A, () -> ticketService.checkout(request));
     assertThat(first.created()).isTrue();
     TicketResponse ticket = first.ticket();
 
-    // subtotal = 50_000_00 + 20_000_00 = 70_000_00; VAT 11% (V5 seed) -> 7_700_00; total = 77_700_00.
+    // subtotal = 50_000_00 + 20_000_00 = 70_000_00; VAT 11% (V5 seed) -> 7_700_00; total =
+    // 77_700_00.
     assertThat(ticket.breakdown().subtotalMinor()).isEqualTo(70_000_00L);
     assertThat(ticket.breakdown().discountMinor()).isEqualTo(0L);
     assertThat(ticket.breakdown().serviceChargeMinor()).isEqualTo(0L);
@@ -118,7 +120,8 @@ class TicketCheckoutAcceptanceTest extends KafkaPostgresRedisTestBase {
     assertThat(sale.get("tax_minor")).isEqualTo(7_700_00L);
     assertThat(sale.get("uses_illustrative_rules")).isEqualTo(true);
 
-    // wash_count(1)@outlet + upsell_amount(addon total)@outlet + sales_amount(grand total)@employee.
+    // wash_count(1)@outlet + upsell_amount(addon total)@outlet + sales_amount(grand
+    // total)@employee.
     List<Map<String, Object>> metricRows = outboxRows("MetricPublished");
     assertThat(metricRows).hasSize(3);
     Map<String, Long> byKey = decodeMetricValuesByKey(metricRows);
@@ -128,7 +131,8 @@ class TicketCheckoutAcceptanceTest extends KafkaPostgresRedisTestBase {
         .containsEntry("sales_amount", 77_700_00L);
 
     // Idempotent retry: same ticket, no second write/event.
-    CheckoutResult retry = TenantContext.callAs(TENANT_A, ACTOR_A, () -> ticketService.checkout(request));
+    CheckoutResult retry =
+        TenantContext.callAs(TENANT_A, ACTOR_A, () -> ticketService.checkout(request));
     assertThat(retry.created()).isFalse();
     assertThat(retry.ticket().ticketId()).isEqualTo(ticket.ticketId());
     assertThat(outboxRows("SaleRecorded")).hasSize(1);
@@ -177,7 +181,8 @@ class TicketCheckoutAcceptanceTest extends KafkaPostgresRedisTestBase {
             List.of(new TicketLineInput(ItemType.PACKAGE, pkg.id(), 1)),
             new PaymentRequest(TenderType.QRIS, null));
 
-    CheckoutResult result = TenantContext.callAs(TENANT_A, ACTOR_A, () -> ticketService.checkout(request));
+    CheckoutResult result =
+        TenantContext.callAs(TENANT_A, ACTOR_A, () -> ticketService.checkout(request));
     assertThat(result.created()).isTrue();
     TicketResponse ticket = result.ticket();
     assertThat(ticket.saleId()).isNull();
@@ -248,8 +253,7 @@ class TicketCheckoutAcceptanceTest extends KafkaPostgresRedisTestBase {
                 AvroSerde.deserialize(
                     (byte[]) row.get("payload"),
                     id.co.nativeapp.carwash.metric.messaging.MetricPublishedSchema.schema()))
-        .collect(
-            Collectors.toMap(r -> r.get("metric_key").toString(), r -> (Long) r.get("value")));
+        .collect(Collectors.toMap(r -> r.get("metric_key").toString(), r -> (Long) r.get("value")));
   }
 
   private long ticketRowCountAsAdmin() throws Exception {

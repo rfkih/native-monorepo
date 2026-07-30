@@ -17,8 +17,8 @@ import org.springframework.data.repository.query.Param;
  * <p>The write path (capture) uses the inherited {@code findById}/{@code save} — a ticket has AT
  * MOST one payment in this phase (no split tenders), so the capture writer first resolves the
  * payment's own id via {@link #findViewByTicketId} (a read-path projection), then loads the full
- * aggregate by that id to mutate it (CLAUDE.md convention: the full entity is loaded only via {@code
- * findById}/{@code save}).
+ * aggregate by that id to mutate it (CLAUDE.md convention: the full entity is loaded only via
+ * {@code findById}/{@code save}).
  */
 public interface CarwashPaymentRepository extends JpaRepository<CarwashPayment, UUID> {
 

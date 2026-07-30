@@ -58,7 +58,8 @@ class TicketOutletAccessTest extends KafkaPostgresRedisTestBase {
 
   @BeforeEach
   void bindMockRequest() {
-    RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(new MockHttpServletRequest()));
+    RequestContextHolder.setRequestAttributes(
+        new ServletRequestAttributes(new MockHttpServletRequest()));
   }
 
   /**
@@ -87,7 +88,9 @@ class TicketOutletAccessTest extends KafkaPostgresRedisTestBase {
     setRoles("cashier");
     CheckoutRequest request = checkoutRequest(pkg.id(), "outlet-403-1");
 
-    assertThatThrownBy(() -> TenantContext.callAs(TENANT, CASHIER_ACTOR, () -> ticketService.checkout(request)))
+    assertThatThrownBy(
+            () ->
+                TenantContext.callAs(TENANT, CASHIER_ACTOR, () -> ticketService.checkout(request)))
         .isInstanceOf(OutletNotAssignedException.class);
   }
 
@@ -100,7 +103,8 @@ class TicketOutletAccessTest extends KafkaPostgresRedisTestBase {
     setRoles("cashier");
     CheckoutRequest request = checkoutRequest(pkg.id(), "outlet-grandfather-1");
 
-    CheckoutResult result = TenantContext.callAs(TENANT, CASHIER_ACTOR, () -> ticketService.checkout(request));
+    CheckoutResult result =
+        TenantContext.callAs(TENANT, CASHIER_ACTOR, () -> ticketService.checkout(request));
     assertThat(result.created()).isTrue();
   }
 
@@ -113,7 +117,8 @@ class TicketOutletAccessTest extends KafkaPostgresRedisTestBase {
     setRoles("owner");
     CheckoutRequest request = checkoutRequest(pkg.id(), "outlet-owner-1");
 
-    CheckoutResult result = TenantContext.callAs(TENANT, OWNER_ACTOR, () -> ticketService.checkout(request));
+    CheckoutResult result =
+        TenantContext.callAs(TENANT, OWNER_ACTOR, () -> ticketService.checkout(request));
     assertThat(result.created()).isTrue();
   }
 

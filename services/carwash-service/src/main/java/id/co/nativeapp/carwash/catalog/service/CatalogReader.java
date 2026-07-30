@@ -15,8 +15,8 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Owns the {@code @Transactional(readOnly = true)} catalog list reads. A distinct bean from {@link
  * CatalogWriter} and {@link CatalogService} so it is invoked through the Spring proxy — the
- * {@code @Transactional} advice and {@link id.co.nativeapp.tenant.RlsAutoApplyAspect} that binds the
- * tenant GUC only apply through the proxy.
+ * {@code @Transactional} advice and {@link id.co.nativeapp.tenant.RlsAutoApplyAspect} that binds
+ * the tenant GUC only apply through the proxy.
  *
  * <p>Deliberately UNGATED by the carwash entitlement (unlike writes): browsing the catalog carries
  * no revenue/side-effect risk, and the checkout screen needs to render the (possibly-not-yet-
@@ -75,7 +75,10 @@ public class CatalogReader {
   /** Maps a read-path {@link StaffProfileView} projection to the response shape. */
   static StaffProfileResponse toResponse(StaffProfileView view) {
     return new StaffProfileResponse(
-        view.getId(), view.getBusinessId(), view.getDisplayLabel(), view.getEmployeeId(),
+        view.getId(),
+        view.getBusinessId(),
+        view.getDisplayLabel(),
+        view.getEmployeeId(),
         view.isActive());
   }
 }

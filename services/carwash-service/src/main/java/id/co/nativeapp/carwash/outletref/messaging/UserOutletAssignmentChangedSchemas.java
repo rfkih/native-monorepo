@@ -9,14 +9,14 @@ import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericRecord;
 
 /**
- * Loads carwash-service's consumer view of the org-service {@code UserOutletAssignmentChanged}
- * Avro schema from the classpath ({@code avro/UserOutletAssignmentChanged.avsc}, provided by {@code
+ * Loads carwash-service's consumer view of the org-service {@code UserOutletAssignmentChanged} Avro
+ * schema from the classpath ({@code avro/UserOutletAssignmentChanged.avsc}, provided by {@code
  * libs/contracts} — the shared single source of truth, ADR 0003) and decodes raw Avro bytes into
  * {@link UserOutletAssignmentEvent}s the consumer applies to {@code user_outlet_assignment_ref}.
  *
  * <p>Ported verbatim from restaurant-service's {@code outletref} feature: NO local {@code .avsc}
- * copy is added under this service's own {@code src/main/resources/avro/} — restaurant-service
- * does not keep one for this particular event either (unlike {@code EmployeeChanged}/{@code
+ * copy is added under this service's own {@code src/main/resources/avro/} — restaurant-service does
+ * not keep one for this particular event either (unlike {@code EmployeeChanged}/{@code
  * AssignmentChanged} and {@code EntitlementGranted}/{@code EntitlementRevoked}, which ARE local
  * per-service consumer copies elsewhere in this codebase); both services resolve the schema from
  * the shared {@code libs/contracts} classpath resource instead, since carwash-service already

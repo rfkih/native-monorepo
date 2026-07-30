@@ -10,17 +10,17 @@ import java.util.UUID;
 
 /**
  * The {@code staff_profile} aggregate — the tenant's washer directory (V4). {@code displayLabel} is
- * a tenant-entered, PII-free label (e.g. "Budi", "Bay 2 crew") — events this service publishes carry
- * no PII (rule 6). {@code employeeId} OPTIONALLY links to the local {@code staff} read model
+ * a tenant-entered, PII-free label (e.g. "Budi", "Bay 2 crew") — events this service publishes
+ * carry no PII (rule 6). {@code employeeId} OPTIONALLY links to the local {@code staff} read model
  * (kept current by the {@code EmployeeChanged}/{@code AssignmentChanged} consumer) so a ticket
  * checked out against this profile can attribute the {@code sales_amount@employee} commission
  * metric to the washer who did the work, without this service ever holding or displaying employee
  * PII itself (ADR 0023).
  *
- * <p>Extends {@link Auditable} (rule 4) and is covered by the {@code staff_profile} RLS policy (rule
- * 5). {@code (company_id, business_id, display_label)} carries a UNIQUE constraint; violating it on
- * create/rename surfaces as a {@code DataIntegrityViolationException} → {@code 409} (see {@code
- * config.CatalogAdvice}).
+ * <p>Extends {@link Auditable} (rule 4) and is covered by the {@code staff_profile} RLS policy
+ * (rule 5). {@code (company_id, business_id, display_label)} carries a UNIQUE constraint; violating
+ * it on create/rename surfaces as a {@code DataIntegrityViolationException} → {@code 409} (see
+ * {@code config.CatalogAdvice}).
  */
 @Entity
 @Table(name = "staff_profile")

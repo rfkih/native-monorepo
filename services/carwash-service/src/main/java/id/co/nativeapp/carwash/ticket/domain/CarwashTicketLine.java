@@ -3,6 +3,7 @@ package id.co.nativeapp.carwash.ticket.domain;
 import id.co.nativeapp.carwash.wash.domain.MoneyEmbeddable;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.Auditable;
+import jakarta.persistence.AttributeOverride;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
@@ -18,9 +19,9 @@ import java.util.UUID;
  * checkout time (V6), so a receipt stays reproducible even if the catalog row changes later.
  *
  * <p>{@code price} is the UNIT price (reused {@link MoneyEmbeddable} — one amount/currency pair per
- * row, exactly the table's {@code price_minor}/{@code currency} columns); {@link #getLineTotalMinor}
- * multiplies by {@code qty}. Extends {@link Auditable} (rule 4) and is covered by the {@code
- * carwash_ticket_line} RLS policy (rule 5).
+ * row, exactly the table's {@code price_minor}/{@code currency} columns); {@link
+ * #getLineTotalMinor} multiplies by {@code qty}. Extends {@link Auditable} (rule 4) and is covered
+ * by the {@code carwash_ticket_line} RLS policy (rule 5).
  */
 @Entity
 @Table(name = "carwash_ticket_line")
@@ -46,7 +47,10 @@ public class CarwashTicketLine extends Auditable {
   @Column(name = "name", nullable = false, updatable = false)
   private String name;
 
-  @Embedded private MoneyEmbeddable price;
+  // MoneyEmbeddable defaults to amount_minor; this table's unit-price column is price_minor.
+  @Embedded
+  @AttributeOverride(name = "amountMinor", column = @Column(name = "price_minor", nullable = false))
+  private MoneyEmbeddable price;
 
   @Column(name = "qty", nullable = false, updatable = false)
   private int qty;
@@ -55,9 +59,16 @@ public class CarwashTicketLine extends Auditable {
     // for JPA
   }
 
-  /** Creates a new ticket line with a freshly generated id. {@code qty} must be strictly positive. */
+  /**
+   * Creates a new ticket line with a freshly generated id. {@code qty} must be strictly positive.
+   */
   public CarwashTicketLine(
-      UUID ticketId, UUID businessId, ItemType itemType, UUID itemId, String name, Money unitPrice,
+      UUID ticketId,
+      UUID businessId,
+      ItemType itemType,
+      UUID itemId,
+      String name,
+      Money unitPrice,
       int qty) {
     this.id = UUID.randomUUID();
     this.ticketId = Objects.requireNonNull(ticketId, "ticketId");

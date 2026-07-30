@@ -28,15 +28,16 @@ import org.springframework.stereotype.Component;
  * REQUIRES_NEW} transaction (which already has the tenant GUC set by the RLS auto-apply aspect on
  * the enclosing transactional bean), exactly like {@code pricing.service.TaxChargeService}.
  *
- * <p><strong>Metrics emitted (ADR 0023 decision 4).</strong> Outlet-grain {@code wash_count} (1) and
- * {@code upsell_amount} (Σ ADDON line totals) — unconditional, mirroring {@code WashWriter}; and
- * employee-grain {@code sales_amount} (the ticket's grand total) — CONDITIONAL on a non-null washer
- * link, subject = the washer's employee id (not the cashier, deliberately unlike restaurant).
+ * <p><strong>Metrics emitted (ADR 0023 decision 4).</strong> Outlet-grain {@code wash_count} (1)
+ * and {@code upsell_amount} (Σ ADDON line totals) — unconditional, mirroring {@code WashWriter};
+ * and employee-grain {@code sales_amount} (the ticket's grand total) — CONDITIONAL on a non-null
+ * washer link, subject = the washer's employee id (not the cashier, deliberately unlike
+ * restaurant).
  *
  * <p><strong>Outbox aggregate id.</strong> The outlet-grain metrics key the outbox row's {@code
  * aggregate_id} to the OUTLET (matching {@code WashWriter}); the employee-grain metric and the
- * {@code SaleRecorded} row key it to the TICKET id (mirroring restaurant's {@code SaleWriter}, which
- * keys {@code sales_amount@employee} to the sale id).
+ * {@code SaleRecorded} row key it to the TICKET id (mirroring restaurant's {@code SaleWriter},
+ * which keys {@code sales_amount@employee} to the sale id).
  */
 @Component
 public class TicketEventEmitter {
@@ -50,9 +51,9 @@ public class TicketEventEmitter {
   }
 
   /**
-   * Writes ONE {@code SaleRecorded} (full breakdown) plus the declared outlet-grain metric set, plus
-   * (when {@code washerEmployeeId} is non-null) the {@code sales_amount@employee} metric — all in the
-   * caller's active transaction (rule 3).
+   * Writes ONE {@code SaleRecorded} (full breakdown) plus the declared outlet-grain metric set,
+   * plus (when {@code washerEmployeeId} is non-null) the {@code sales_amount@employee} metric — all
+   * in the caller's active transaction (rule 3).
    *
    * @param ticket the ticket revenue is being recognised for
    * @param breakdown the resolved price breakdown
@@ -60,7 +61,8 @@ public class TicketEventEmitter {
    * @param addonTotal the sum of this ticket's ADDON line totals (the {@code upsell_amount} value)
    * @param companyId the owning tenant
    * @param tenderTypeName the tender enum name ({@code "CASH"}, {@code "QRIS"}, {@code "CARD"})
-   * @param occurredAt when revenue was recognised (checkout time for CASH, capture time for digital)
+   * @param occurredAt when revenue was recognised (checkout time for CASH, capture time for
+   *     digital)
    */
   @SuppressWarnings("checkstyle:ParameterNumber")
   public void recognizeRevenue(
@@ -121,7 +123,11 @@ public class TicketEventEmitter {
           };
       GenericRecord event =
           MetricPublishedSchema.toRecord(
-              declaration.metricKey(), period, declaration.grain().wireValue(), outletId, value,
+              declaration.metricKey(),
+              period,
+              declaration.grain().wireValue(),
+              outletId,
+              value,
               outletId);
       outboxWriter.write(
           MetricPublishedSchema.AGGREGATE_TYPE,

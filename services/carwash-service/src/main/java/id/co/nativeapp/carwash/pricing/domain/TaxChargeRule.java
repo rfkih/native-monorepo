@@ -71,8 +71,8 @@ public class TaxChargeRule extends Auditable {
   private UUID id;
 
   /**
-   * The rule family key: {@code VAT_CARWASH} or {@code SERVICE_CHARGE}. New rule types may be
-   * added in future migrations without breaking existing rows.
+   * The rule family key: {@code VAT_CARWASH} or {@code SERVICE_CHARGE}. New rule types may be added
+   * in future migrations without breaking existing rows.
    */
   @Column(name = "rule_key", nullable = false, length = 64)
   private String ruleKey;

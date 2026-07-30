@@ -82,7 +82,8 @@ class TicketCheckoutAtomicityTest extends KafkaPostgresRedisTestBase {
             List.of(new TicketLineInput(ItemType.PACKAGE, pkg.id(), 1)),
             new PaymentRequest(TenderType.CASH, 50_000_00L));
 
-    assertThatThrownBy(() -> TenantContext.callAs(TENANT_A, ACTOR_A, () -> ticketService.checkout(request)))
+    assertThatThrownBy(
+            () -> TenantContext.callAs(TENANT_A, ACTOR_A, () -> ticketService.checkout(request)))
         .isInstanceOf(IllegalStateException.class)
         .hasMessageContaining("forced failure");
 

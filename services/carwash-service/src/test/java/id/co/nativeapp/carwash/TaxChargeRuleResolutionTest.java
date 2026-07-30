@@ -143,7 +143,8 @@ class TaxChargeRuleResolutionTest extends PostgresRlsTestBase {
     assertThat(illustrative.tax().amountMinor()).isEqualTo(11_000L);
 
     // An accountant seeds a higher-version OFFICIAL row over the same window — the resolver's
-    // "ORDER BY rule_version DESC" must prefer it (OFFICIAL-2027.1 sorts after ILLUSTRATIVE-2026.1).
+    // "ORDER BY rule_version DESC" must prefer it (OFFICIAL-2027.1 sorts after
+    // ILLUSTRATIVE-2026.1).
     seedRule(
         tenant,
         TaxChargeRule.KEY_VAT,
@@ -180,8 +181,7 @@ class TaxChargeRuleResolutionTest extends PostgresRlsTestBase {
         TaxChargeRule.OPEN_ENDED);
 
     Money subtotal = Money.ofMinor(50_000L, CURRENCY);
-    PriceBreakdown breakdown =
-        resolveAs(tenant, subtotal, Instant.parse("2026-06-01T00:00:00Z"));
+    PriceBreakdown breakdown = resolveAs(tenant, subtotal, Instant.parse("2026-06-01T00:00:00Z"));
 
     assertThat(breakdown.serviceCharge().isZero()).isTrue();
     // taxBase = taxableBase + SC(0) = 50,000; tax = 10% of 50,000 = 5,000.
@@ -214,8 +214,7 @@ class TaxChargeRuleResolutionTest extends PostgresRlsTestBase {
         TaxChargeRule.OPEN_ENDED);
 
     Money subtotal = Money.ofMinor(10_000L, CURRENCY);
-    PriceBreakdown breakdown =
-        resolveAs(tenant, subtotal, Instant.parse("2026-06-01T00:00:00Z"));
+    PriceBreakdown breakdown = resolveAs(tenant, subtotal, Instant.parse("2026-06-01T00:00:00Z"));
 
     assertThat(breakdown.tax().isZero()).isTrue();
     assertThat(breakdown.taxRuleVersion()).isNull();
@@ -231,8 +230,7 @@ class TaxChargeRuleResolutionTest extends PostgresRlsTestBase {
     String tenant = "77777777-7777-7777-7777-770000000005";
     Money subtotal = Money.ofMinor(20_000L, CURRENCY);
 
-    PriceBreakdown breakdown =
-        resolveAs(tenant, subtotal, Instant.parse("2026-06-01T00:00:00Z"));
+    PriceBreakdown breakdown = resolveAs(tenant, subtotal, Instant.parse("2026-06-01T00:00:00Z"));
 
     assertThat(breakdown.tax().isZero()).isTrue();
     assertThat(breakdown.serviceCharge().isZero()).isTrue();

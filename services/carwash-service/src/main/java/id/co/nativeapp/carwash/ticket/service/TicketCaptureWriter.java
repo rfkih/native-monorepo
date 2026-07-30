@@ -28,10 +28,10 @@ import org.springframework.transaction.annotation.Transactional;
  * /api/v1/carwash/tickets/{id}/capture} — the moment a digital (QRIS/CARD) tender's revenue is
  * recognised (ADR 0023 decision 2). Mirrors restaurant-service's {@code PaymentCaptureWriter}.
  *
- * <p><strong>Idempotency.</strong> If the ticket's payment is already {@code CAPTURED} (re-delivery),
- * this returns the current state with NO side effects — no second sale, no second {@code
- * SaleRecorded}, no second metrics. If the payment is not {@code PENDING} (and not already {@code
- * CAPTURED}), it throws {@link PaymentNotPendingException} → {@code 409}.
+ * <p><strong>Idempotency.</strong> If the ticket's payment is already {@code CAPTURED}
+ * (re-delivery), this returns the current state with NO side effects — no second sale, no second
+ * {@code SaleRecorded}, no second metrics. If the payment is not {@code PENDING} (and not already
+ * {@code CAPTURED}), it throws {@link PaymentNotPendingException} → {@code 409}.
  *
  * <p>No stock concept in carwash — unlike restaurant's payment capture, there is nothing else to
  * deduct.
@@ -69,7 +69,9 @@ public class TicketCaptureWriter {
     String companyId = TenantContext.require().companyId();
 
     CarwashTicket ticket =
-        ticketRepository.findById(ticketId).orElseThrow(() -> new TicketNotFoundException(ticketId));
+        ticketRepository
+            .findById(ticketId)
+            .orElseThrow(() -> new TicketNotFoundException(ticketId));
 
     CarwashPaymentView paymentView =
         paymentRepository
@@ -108,8 +110,13 @@ public class TicketCaptureWriter {
     Money addonTotal = sumAddonTotal(lines, breakdown.grandTotal().currency().getCurrencyCode());
 
     eventEmitter.recognizeRevenue(
-        ticket, breakdown, ticket.getWasherEmployeeId(), addonTotal, companyId,
-        payment.getTenderType().name(), capturedAt);
+        ticket,
+        breakdown,
+        ticket.getWasherEmployeeId(),
+        addonTotal,
+        companyId,
+        payment.getTenderType().name(),
+        capturedAt);
 
     return assembleResponse(ticketId);
   }
@@ -126,7 +133,9 @@ public class TicketCaptureWriter {
 
   private TicketResponse assembleResponse(UUID ticketId) {
     TicketView view =
-        ticketRepository.findViewById(ticketId).orElseThrow(() -> new TicketNotFoundException(ticketId));
+        ticketRepository
+            .findViewById(ticketId)
+            .orElseThrow(() -> new TicketNotFoundException(ticketId));
     List<TicketLineView> lines = lineRepository.findViewsByTicketId(ticketId);
     CarwashPaymentView payment = paymentRepository.findViewByTicketId(ticketId).orElse(null);
     return TicketResponseFactory.toResponse(view, lines, payment);

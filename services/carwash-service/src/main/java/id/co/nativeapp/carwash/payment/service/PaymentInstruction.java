@@ -18,4 +18,8 @@ import java.util.UUID;
  * this instruction.
  */
 public record PaymentInstruction(
-    UUID ticketId, TenderType tenderType, Money amount, Long tenderedMinor, String idempotencyKey) {}
+    UUID ticketId,
+    TenderType tenderType,
+    Money amount,
+    Long tenderedMinor,
+    String idempotencyKey) {}

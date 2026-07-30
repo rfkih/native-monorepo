@@ -4,9 +4,9 @@ import jakarta.validation.constraints.PositiveOrZero;
 
 /**
  * Partial-update request body for a {@code wash_package} or {@code wash_addon} row. Every field is
- * OPTIONAL — a {@code null} field leaves that attribute unchanged (the {@code UpdateCustomerRequest}
- * convention already used by finance-service). {@code currency} cannot be changed via PATCH (a
- * catalog item does not switch currency after creation; re-create it instead).
+ * OPTIONAL — a {@code null} field leaves that attribute unchanged (the {@code
+ * UpdateCustomerRequest} convention already used by finance-service). {@code currency} cannot be
+ * changed via PATCH (a catalog item does not switch currency after creation; re-create it instead).
  *
  * @param name the new name, or {@code null} to leave unchanged
  * @param description the new description, or {@code null} to leave unchanged

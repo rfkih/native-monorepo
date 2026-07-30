@@ -3,6 +3,7 @@ package id.co.nativeapp.carwash.catalog.domain;
 import id.co.nativeapp.carwash.wash.domain.MoneyEmbeddable;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.Auditable;
+import jakarta.persistence.AttributeOverride;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
@@ -38,7 +39,10 @@ public class WashAddon extends Auditable {
   @Column(name = "description")
   private String description;
 
-  @Embedded private MoneyEmbeddable price;
+  // MoneyEmbeddable defaults to amount_minor; the catalog tables' price column is price_minor.
+  @Embedded
+  @AttributeOverride(name = "amountMinor", column = @Column(name = "price_minor", nullable = false))
+  private MoneyEmbeddable price;
 
   @Column(name = "active", nullable = false)
   private boolean active;

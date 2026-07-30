@@ -194,7 +194,13 @@ public class CarwashTicket extends Auditable {
     Money grandTotal = Money.ofMinor(totalMinor, ccy);
     Money taxableBase = subtotal.minus(discount);
     return new PriceBreakdown(
-        subtotal, discount, taxableBase, serviceCharge, tax, grandTotal, taxRuleVersion,
+        subtotal,
+        discount,
+        taxableBase,
+        serviceCharge,
+        tax,
+        grandTotal,
+        taxRuleVersion,
         usesIllustrativeRules);
   }
 

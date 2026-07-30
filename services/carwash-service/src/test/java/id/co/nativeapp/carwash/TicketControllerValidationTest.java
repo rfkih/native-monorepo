@@ -25,9 +25,10 @@ import org.springframework.test.web.servlet.MockMvc;
 /**
  * Web-slice tests for {@code /api/v1/carwash/tickets} — the controller + the shared RFC-7807 {@link
  * ApiExceptionHandler} advice plus the ticket-local {@link TicketAdvice}, no DB. {@link
- * TicketService} is mocked so the slice is pure web; the business-rule rejections (unknown/inactive/
- * cross-business item, cash short-tender) are simulated by stubbing the service to throw the same
- * exception the real {@code TicketItemReader}/{@code CashProvider} raise, proving the HTTP mapping.
+ * TicketService} is mocked so the slice is pure web; the business-rule rejections
+ * (unknown/inactive/ cross-business item, cash short-tender) are simulated by stubbing the service
+ * to throw the same exception the real {@code TicketItemReader}/{@code CashProvider} raise, proving
+ * the HTTP mapping.
  */
 @WebMvcTest(TicketController.class)
 @Import({ApiExceptionHandler.class, TicketAdvice.class})
@@ -53,7 +54,8 @@ class TicketControllerValidationTest {
         """
             .formatted(OUTLET, ITEM);
     mockMvc
-        .perform(post("/api/v1/carwash/tickets/checkout").contentType("application/json").content(body))
+        .perform(
+            post("/api/v1/carwash/tickets/checkout").contentType("application/json").content(body))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/validation-failed"));
   }
@@ -72,7 +74,8 @@ class TicketControllerValidationTest {
         """
             .formatted(OUTLET);
     mockMvc
-        .perform(post("/api/v1/carwash/tickets/checkout").contentType("application/json").content(body))
+        .perform(
+            post("/api/v1/carwash/tickets/checkout").contentType("application/json").content(body))
         .andExpect(status().isBadRequest());
   }
 
@@ -89,7 +92,8 @@ class TicketControllerValidationTest {
         """
             .formatted(OUTLET, ITEM);
     mockMvc
-        .perform(post("/api/v1/carwash/tickets/checkout").contentType("application/json").content(body))
+        .perform(
+            post("/api/v1/carwash/tickets/checkout").contentType("application/json").content(body))
         .andExpect(status().isBadRequest());
   }
 
@@ -107,7 +111,8 @@ class TicketControllerValidationTest {
         """
             .formatted(OUTLET, ITEM);
     mockMvc
-        .perform(post("/api/v1/carwash/tickets/checkout").contentType("application/json").content(body))
+        .perform(
+            post("/api/v1/carwash/tickets/checkout").contentType("application/json").content(body))
         .andExpect(status().isBadRequest());
   }
 

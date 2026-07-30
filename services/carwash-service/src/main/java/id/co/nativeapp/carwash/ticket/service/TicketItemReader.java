@@ -21,11 +21,11 @@ import org.springframework.stereotype.Component;
  * Shared catalog item resolution + pricing helper used by BOTH {@link TicketWriter} (checkout /
  * capture) and {@link TicketReader} (quote) so they cannot diverge — the same pattern
  * restaurant-service's {@code ModifierValidationReader} follows for order lines. Named {@code
- * *Reader} (rather than e.g. {@code *Resolver}) specifically so it satisfies the
- * {@code LayeredArchitectureTest.repositoriesAreAccessedOnlyByTheServiceLayer} naming convention —
- * every class that depends on a repository must be a {@code *Service}/{@code *Writer}/{@code
- * *Reader} (or another repository); {@code ModifierValidationReader} follows the identical
- * convention for the same reason.
+ * *Reader} (rather than e.g. {@code *Resolver}) specifically so it satisfies the {@code
+ * LayeredArchitectureTest.repositoriesAreAccessedOnlyByTheServiceLayer} naming convention — every
+ * class that depends on a repository must be a {@code *Service}/{@code *Writer}/{@code *Reader} (or
+ * another repository); {@code ModifierValidationReader} follows the identical convention for the
+ * same reason.
  *
  * <p>For a requested cart, this component:
  *
@@ -57,8 +57,8 @@ public class TicketItemReader {
 
   /**
    * Resolves + validates a requested cart against {@code businessId}, returning the priced lines,
-   * the shared currency code, the subtotal (Σ line totals), and the addon-only total (for the {@code
-   * upsell_amount} metric).
+   * the shared currency code, the subtotal (Σ line totals), and the addon-only total (for the
+   * {@code upsell_amount} metric).
    *
    * @throws IllegalArgumentException if any item is unknown, inactive, or belongs to another
    *     business (→ 400)
@@ -78,14 +78,14 @@ public class TicketItemReader {
             .distinct()
             .toList();
 
-    Map<UUID, CatalogItemView> packageMap = loadChunked(packageIds, packageRepository::findViewsByIds);
+    Map<UUID, CatalogItemView> packageMap =
+        loadChunked(packageIds, packageRepository::findViewsByIds);
     Map<UUID, CatalogItemView> addonMap = loadChunked(addonIds, addonRepository::findViewsByIds);
 
     List<ResolvedLine> resolved = new ArrayList<>(lines.size());
     Set<String> currencies = new LinkedHashSet<>();
     for (TicketLineInput line : lines) {
-      Map<UUID, CatalogItemView> map =
-          line.itemType() == ItemType.PACKAGE ? packageMap : addonMap;
+      Map<UUID, CatalogItemView> map = line.itemType() == ItemType.PACKAGE ? packageMap : addonMap;
       CatalogItemView view = map.get(line.itemId());
       if (view == null) {
         throw new IllegalArgumentException(
@@ -108,7 +108,11 @@ public class TicketItemReader {
       currencies.add(currencyCode);
       resolved.add(
           new ResolvedLine(
-              line.itemType(), line.itemId(), view.getName(), view.getPriceMinor(), currencyCode,
+              line.itemType(),
+              line.itemId(),
+              view.getName(),
+              view.getPriceMinor(),
+              currencyCode,
               line.qty()));
     }
 

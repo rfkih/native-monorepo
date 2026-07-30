@@ -25,9 +25,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 /**
  * Acceptance — the tenancy isolation proof for the ticket feature, relying on AUTO-applied RLS
- * (mirrors {@code WashTenancyIsolationTest}). A ticket (and its catalog rows) recorded under tenant A
- * is invisible to tenant B: {@code GET /tickets/{id}} 404s (via {@link TicketNotFoundException}) and
- * tenant B's catalog listing never includes tenant A's package.
+ * (mirrors {@code WashTenancyIsolationTest}). A ticket (and its catalog rows) recorded under tenant
+ * A is invisible to tenant B: {@code GET /tickets/{id}} 404s (via {@link TicketNotFoundException})
+ * and tenant B's catalog listing never includes tenant A's package.
  */
 @SpringBootTest
 class TicketTenancyIsolationTest extends KafkaPostgresRedisTestBase {
@@ -53,7 +53,8 @@ class TicketTenancyIsolationTest extends KafkaPostgresRedisTestBase {
             ACTOR_A,
             () ->
                 catalogService.createPackage(
-                    new CatalogItemCreateRequest(OUTLET, "Tenant A Wash", null, 30_000_00L, "IDR")));
+                    new CatalogItemCreateRequest(
+                        OUTLET, "Tenant A Wash", null, 30_000_00L, "IDR")));
 
     TicketResponse ticketA =
         TenantContext.callAs(
@@ -79,7 +80,8 @@ class TicketTenancyIsolationTest extends KafkaPostgresRedisTestBase {
             ACTOR_B,
             () ->
                 catalogService.createPackage(
-                    new CatalogItemCreateRequest(OUTLET, "Tenant B Wash", null, 20_000_00L, "IDR")));
+                    new CatalogItemCreateRequest(
+                        OUTLET, "Tenant B Wash", null, 20_000_00L, "IDR")));
 
     TicketResponse ticketB =
         TenantContext.callAs(
@@ -100,10 +102,14 @@ class TicketTenancyIsolationTest extends KafkaPostgresRedisTestBase {
 
     // GET: tenant A's ticket is invisible from tenant B's scope (404), and vice versa.
     assertThatThrownBy(
-            () -> TenantContext.callAs(TENANT_B, ACTOR_B, () -> ticketService.getById(ticketA.ticketId())))
+            () ->
+                TenantContext.callAs(
+                    TENANT_B, ACTOR_B, () -> ticketService.getById(ticketA.ticketId())))
         .isInstanceOf(TicketNotFoundException.class);
     assertThatThrownBy(
-            () -> TenantContext.callAs(TENANT_A, ACTOR_A, () -> ticketService.getById(ticketB.ticketId())))
+            () ->
+                TenantContext.callAs(
+                    TENANT_A, ACTOR_A, () -> ticketService.getById(ticketB.ticketId())))
         .isInstanceOf(TicketNotFoundException.class);
 
     // GET: each tenant sees its own ticket fine.

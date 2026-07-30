@@ -48,8 +48,8 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <ol>
  *   <li>Idempotency fast path: returns the existing ticket if the key is already present — BEFORE
- *       the outlet guard (an idempotent replay of an already-recorded ticket still returns; only NEW
- *       work is rejected — the restaurant {@code OutletGate} ordering).
+ *       the outlet guard (an idempotent replay of an already-recorded ticket still returns; only
+ *       NEW work is rejected — the restaurant {@code OutletGate} ordering).
  *   <li>{@link OutletAccessGuard#enforce}: the attendant must be assigned to the outlet.
  *   <li>Resolves + validates the requested lines via {@link TicketItemReader} (server-side pricing
  *       — never trusts a client amount).
@@ -122,7 +122,8 @@ public class TicketWriter {
 
     outletAccessGuard.enforce(request.businessId());
 
-    TicketItemReader.ResolvedCart cart = itemResolver.resolve(request.businessId(), request.lines());
+    TicketItemReader.ResolvedCart cart =
+        itemResolver.resolve(request.businessId(), request.lines());
 
     UUID washerEmployeeId = resolveWasher(request.businessId(), request.staffProfileId());
 
@@ -155,19 +156,26 @@ public class TicketWriter {
             breakdown.grandTotal(),
             request.payment().tenderedMinor(),
             request.idempotencyKey());
-    TenderAuthorization auth = paymentProviderRegistry.providerFor(tenderType).authorize(instruction);
+    TenderAuthorization auth =
+        paymentProviderRegistry.providerFor(tenderType).authorize(instruction);
 
     CarwashPayment payment;
     if (!tenderType.isDigital()) {
       Money tendered = Money.ofMinor(request.payment().tenderedMinor(), cart.currencyCode());
       payment =
           CarwashPayment.capturedCash(
-              savedTicket.getId(), request.businessId(), breakdown.grandTotal(), tendered,
+              savedTicket.getId(),
+              request.businessId(),
+              breakdown.grandTotal(),
+              tendered,
               auth.change());
     } else {
       payment =
           CarwashPayment.pendingDigital(
-              savedTicket.getId(), request.businessId(), tenderType, breakdown.grandTotal(),
+              savedTicket.getId(),
+              request.businessId(),
+              tenderType,
+              breakdown.grandTotal(),
               auth.providerRef());
     }
     payment.setCompanyId(companyId);
@@ -179,7 +187,12 @@ public class TicketWriter {
       savedTicket.linkSale(savedTicket.getId());
       ticketRepository.saveAndFlush(savedTicket);
       eventEmitter.recognizeRevenue(
-          savedTicket, breakdown, washerEmployeeId, cart.addonTotal(), companyId, tenderType.name(),
+          savedTicket,
+          breakdown,
+          washerEmployeeId,
+          cart.addonTotal(),
+          companyId,
+          tenderType.name(),
           now);
       // Test seam: a no-op in production; a test can install a hook that throws here to prove the
       // ticket, its lines, its payment, AND the outbox rows roll back together (atomicity, rule 3).
@@ -232,8 +245,13 @@ public class TicketWriter {
       Money unitPrice = Money.ofMinor(rl.priceMinor(), rl.currency());
       CarwashTicketLine line =
           new CarwashTicketLine(
-              ticket.getId(), ticket.getBusinessId(), rl.itemType(), rl.itemId(), rl.name(),
-              unitPrice, rl.qty());
+              ticket.getId(),
+              ticket.getBusinessId(),
+              rl.itemType(),
+              rl.itemId(),
+              rl.name(),
+              unitPrice,
+              rl.qty());
       line.setCompanyId(companyId);
       lineRepository.save(line);
     }
@@ -243,10 +261,14 @@ public class TicketWriter {
     lineRepository.flush();
   }
 
-  /** Assembles the full response by re-reading the ticket + lines + payment (native projections). */
+  /**
+   * Assembles the full response by re-reading the ticket + lines + payment (native projections).
+   */
   private TicketResponse assembleResponse(UUID ticketId) {
     TicketView view =
-        ticketRepository.findViewById(ticketId).orElseThrow(() -> new TicketNotFoundException(ticketId));
+        ticketRepository
+            .findViewById(ticketId)
+            .orElseThrow(() -> new TicketNotFoundException(ticketId));
     List<TicketLineView> lines = lineRepository.findViewsByTicketId(ticketId);
     CarwashPaymentView payment = paymentRepository.findViewByTicketId(ticketId).orElse(null);
     return TicketResponseFactory.toResponse(view, lines, payment);

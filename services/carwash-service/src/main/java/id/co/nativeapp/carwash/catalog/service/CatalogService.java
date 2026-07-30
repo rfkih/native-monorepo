@@ -21,10 +21,10 @@ import org.springframework.stereotype.Service;
  *
  * <p><strong>Writes are entitlement-gated; reads are not.</strong> Every create/patch consults the
  * shared {@link EntitlementChecker} for the bound tenant and the configured {@code carwash} module
- * BEFORE any side effect; a company not entitled gets {@link NotEntitledException} → {@code 403} and
- * no row is written. Reads ({@link #listPackages}/{@link #listAddons}/{@link #listStaffProfiles})
- * are RLS-scoped only — browsing (or rendering the entitlement gate itself) never requires the
- * module grant.
+ * BEFORE any side effect; a company not entitled gets {@link NotEntitledException} → {@code 403}
+ * and no row is written. Reads ({@link #listPackages}/{@link #listAddons}/{@link
+ * #listStaffProfiles}) are RLS-scoped only — browsing (or rendering the entitlement gate itself)
+ * never requires the module grant.
  *
  * <p>Not itself {@code @Transactional}: writes delegate to {@link CatalogWriter}, reads delegate to
  * {@link CatalogReader} — each invoked through the Spring proxy so the tx advice and the RLS
@@ -92,9 +92,9 @@ public class CatalogService {
   }
 
   /**
-   * The entitlement gate (Phase-2 pattern): rejects a write with {@code 403} if the bound company is
-   * not entitled to the {@code carwash} module. Checked BEFORE the write so no row is produced on a
-   * denied request.
+   * The entitlement gate (Phase-2 pattern): rejects a write with {@code 403} if the bound company
+   * is not entitled to the {@code carwash} module. Checked BEFORE the write so no row is produced
+   * on a denied request.
    */
   private void requireEntitled() {
     String companyId = TenantContext.require().companyId();

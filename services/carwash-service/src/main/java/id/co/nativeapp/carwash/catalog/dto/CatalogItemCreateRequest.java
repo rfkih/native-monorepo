@@ -25,5 +25,4 @@ public record CatalogItemCreateRequest(
     @NotBlank String name,
     String description,
     @NotNull @PositiveOrZero Long priceMinor,
-    @NotBlank @Pattern(regexp = "^[A-Z]{3}$", message = "must be an uppercase ISO-4217 code")
-        String currency) {}
+    @NotBlank @Pattern(regexp = "^[A-Z]{3}$", message = "must be an uppercase ISO-4217 code") String currency) {}

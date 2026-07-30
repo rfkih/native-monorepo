@@ -15,23 +15,26 @@ import org.apache.avro.generic.GenericRecord;
  * Loads carwash-service's PRODUCER copy of the {@code SaleRecorded} Avro schema from the classpath
  * ({@code avro/SaleRecorded.avsc}, shipped by {@code libs/contracts}) and builds the FULL-BREAKDOWN
  * {@link GenericRecord}s the carwash POS ticket produces — the second carwash producer alongside
- * {@link id.co.nativeapp.carwash.wash.messaging.SaleRecordedSchema wash.messaging.SaleRecordedSchema}
- * (which stays a null-breakdown legacy producer, untouched — ADR 0023 decision 6).
+ * {@link id.co.nativeapp.carwash.wash.messaging.SaleRecordedSchema
+ * wash.messaging.SaleRecordedSchema} (which stays a null-breakdown legacy producer, untouched — ADR
+ * 0023 decision 6).
  *
  * <p>Field-by-field mapping mirrors restaurant-service's {@code sale.messaging.SaleRecordedSchema}
  * (the schema's Phase 2 producer): {@code amount_minor} is the GRAND TOTAL, the {@code
  * subtotal_minor}/{@code discount_minor}/{@code service_charge_minor}/{@code tax_minor}/{@code
  * tax_rule_version}/{@code uses_illustrative_rules} legs are populated from the resolved {@link
- * PriceBreakdown}, and {@code tender_type} carries the checkout/capture tender's name. Unlike {@code
- * wash.messaging.SaleRecordedSchema} (which builds a record from a persisted {@code Wash} entity),
- * this schema is entity-agnostic: it takes the already-decided {@code saleId} (the ticket's own id,
- * per ADR 0023 decision 2 — {@code ticket.sale_id = ticket.id}), so it serves BOTH the cash-checkout
- * path and the later digital-capture path from the same helper.
+ * PriceBreakdown}, and {@code tender_type} carries the checkout/capture tender's name. Unlike
+ * {@code wash.messaging.SaleRecordedSchema} (which builds a record from a persisted {@code Wash}
+ * entity), this schema is entity-agnostic: it takes the already-decided {@code saleId} (the
+ * ticket's own id, per ADR 0023 decision 2 — {@code ticket.sale_id = ticket.id}), so it serves BOTH
+ * the cash-checkout path and the later digital-capture path from the same helper.
  */
 public final class TicketSaleRecordedSchema {
 
-  /** Classpath location of the {@code .avsc} — the same resource {@code wash.messaging.
-   * SaleRecordedSchema} loads (shipped once by {@code libs/contracts}). */
+  /**
+   * Classpath location of the {@code .avsc} — the same resource {@code wash.messaging.
+   * SaleRecordedSchema} loads (shipped once by {@code libs/contracts}).
+   */
   public static final String RESOURCE = "avro/SaleRecorded.avsc";
 
   /** The event name as it appears in the outbox {@code event_type} column. */

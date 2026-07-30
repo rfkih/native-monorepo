@@ -3,6 +3,7 @@ package id.co.nativeapp.carwash.catalog.domain;
 import id.co.nativeapp.carwash.wash.domain.MoneyEmbeddable;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.Auditable;
+import jakarta.persistence.AttributeOverride;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
@@ -16,10 +17,10 @@ import java.util.UUID;
  * a carwash ticket can be built from (V4). Extends {@link Auditable} (rule 4) and is covered by the
  * {@code wash_package} RLS policy (rule 5).
  *
- * <p>The price is a {@code libs/money} {@link Money} (rule 8 — integer minor units + ISO-4217, never
- * a float), persisted via the reused {@link MoneyEmbeddable} (the same {@code price_minor}/{@code
- * currency} column shape as the {@code wash}/{@code carwash_payment} tables). {@code businessId} is
- * the carwash outlet (org_unit) this package is offered at.
+ * <p>The price is a {@code libs/money} {@link Money} (rule 8 — integer minor units + ISO-4217,
+ * never a float), persisted via the reused {@link MoneyEmbeddable} (the same {@code
+ * price_minor}/{@code currency} column shape as the {@code wash}/{@code carwash_payment} tables).
+ * {@code businessId} is the carwash outlet (org_unit) this package is offered at.
  *
  * <p>Writes go through {@link id.co.nativeapp.carwash.catalog.service.CatalogWriter CatalogWriter}
  * (write path: the full entity, via inherited {@code findById}/{@code save}); reads go through the
@@ -43,7 +44,10 @@ public class WashPackage extends Auditable {
   @Column(name = "description")
   private String description;
 
-  @Embedded private MoneyEmbeddable price;
+  // MoneyEmbeddable defaults to amount_minor; the catalog tables' price column is price_minor.
+  @Embedded
+  @AttributeOverride(name = "amountMinor", column = @Column(name = "price_minor", nullable = false))
+  private MoneyEmbeddable price;
 
   @Column(name = "active", nullable = false)
   private boolean active;

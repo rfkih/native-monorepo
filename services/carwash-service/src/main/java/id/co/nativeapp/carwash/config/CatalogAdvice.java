@@ -17,8 +17,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  *
  * <ul>
  *   <li>{@link CatalogItemNotFoundException} — an unknown or cross-tenant {@code wash_package} /
- *       {@code wash_addon} / {@code staff_profile} id (RLS makes a cross-tenant id indistinguishable
- *       from unknown — no existence disclosure) → {@code 404}.
+ *       {@code wash_addon} / {@code staff_profile} id (RLS makes a cross-tenant id
+ *       indistinguishable from unknown — no existence disclosure) → {@code 404}.
  *   <li>{@link DataIntegrityViolationException} — most notably a duplicate {@code staff_profile}
  *       {@code (company_id, business_id, display_label)} → {@code 409}, rather than leaking a raw
  *       {@code 500}.

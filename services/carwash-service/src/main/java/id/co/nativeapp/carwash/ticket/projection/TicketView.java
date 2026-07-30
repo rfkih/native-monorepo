@@ -23,8 +23,10 @@ public interface TicketView {
 
   UUID getStaffProfileId();
 
-  /** The washer's {@code display_label}, LEFT JOINed from {@code staff_profile}; {@code null} if no
-   * staff profile was selected, or the linked row no longer exists. */
+  /**
+   * The washer's {@code display_label}, LEFT JOINed from {@code staff_profile}; {@code null} if no
+   * staff profile was selected, or the linked row no longer exists.
+   */
   String getStaffLabel();
 
   UUID getSaleId();

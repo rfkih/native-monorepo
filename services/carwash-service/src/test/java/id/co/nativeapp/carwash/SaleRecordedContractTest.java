@@ -152,7 +152,8 @@ class SaleRecordedContractTest {
   @Test
   void ticketFullBreakdownProducerBuildsAValidRecordAgainstTheSharedSchema() {
     Schema schema = TicketSaleRecordedSchema.schema();
-    // Both carwash producers (legacy null-breakdown wash, full-breakdown ticket) share the IDENTICAL
+    // Both carwash producers (legacy null-breakdown wash, full-breakdown ticket) share the
+    // IDENTICAL
     // classpath resource, so their schema shape (full name included) is byte-identical.
     assertThat(schema.getFullName()).isEqualTo(SaleRecordedSchema.schema().getFullName());
 
@@ -191,7 +192,8 @@ class SaleRecordedContractTest {
     assertThat(decoded.get("tax_rule_version").toString()).isEqualTo("ILLUSTRATIVE-2026.1");
     assertThat(decoded.get("uses_illustrative_rules")).isEqualTo(true);
 
-    // Still mutually backward-compatible with the restaurant producer schema — same shared contract.
+    // Still mutually backward-compatible with the restaurant producer schema — same shared
+    // contract.
     assertThat(AvroSerde.isBackwardCompatible(PRODUCER_SCHEMA, schema)).isTrue();
     assertThat(AvroSerde.isBackwardCompatible(schema, PRODUCER_SCHEMA)).isTrue();
   }

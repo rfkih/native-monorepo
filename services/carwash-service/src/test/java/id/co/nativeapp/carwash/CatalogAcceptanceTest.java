@@ -50,7 +50,8 @@ class CatalogAcceptanceTest extends KafkaPostgresRedisTestBase {
             ACTOR_A,
             () ->
                 catalogService.createPackage(
-                    new CatalogItemCreateRequest(OUTLET, "Basic Wash", "soap + rinse", 30_000_00L, "IDR")));
+                    new CatalogItemCreateRequest(
+                        OUTLET, "Basic Wash", "soap + rinse", 30_000_00L, "IDR")));
     assertThat(created.name()).isEqualTo("Basic Wash");
     assertThat(created.priceMinor()).isEqualTo(30_000_00L);
     assertThat(created.currency()).isEqualTo("IDR");
@@ -87,7 +88,9 @@ class CatalogAcceptanceTest extends KafkaPostgresRedisTestBase {
         TenantContext.callAs(
             TENANT_A,
             ACTOR_A,
-            () -> catalogService.createAddon(new CatalogItemCreateRequest(OUTLET, "Wax", null, 15_000_00L, "IDR")));
+            () ->
+                catalogService.createAddon(
+                    new CatalogItemCreateRequest(OUTLET, "Wax", null, 15_000_00L, "IDR")));
     assertThat(created.name()).isEqualTo("Wax");
 
     CatalogItemResponse patched =
@@ -96,7 +99,8 @@ class CatalogAcceptanceTest extends KafkaPostgresRedisTestBase {
             ACTOR_A,
             () ->
                 catalogService.patchAddon(
-                    created.id(), new CatalogItemPatchRequest(null, "carnauba wax", null, null, null)));
+                    created.id(),
+                    new CatalogItemPatchRequest(null, "carnauba wax", null, null, null)));
     assertThat(patched.description()).isEqualTo("carnauba wax");
     assertThat(patched.priceMinor()).isEqualTo(15_000_00L); // unset field stays unchanged
 
@@ -114,7 +118,9 @@ class CatalogAcceptanceTest extends KafkaPostgresRedisTestBase {
         TenantContext.callAs(
             TENANT_A,
             ACTOR_A,
-            () -> catalogService.createStaffProfile(new StaffProfileCreateRequest(OUTLET, "Budi", null, null)));
+            () ->
+                catalogService.createStaffProfile(
+                    new StaffProfileCreateRequest(OUTLET, "Budi", null, null)));
     assertThat(created.displayLabel()).isEqualTo("Budi");
     assertThat(created.employeeId()).isNull();
     assertThat(created.active()).isTrue(); // null "active" on create defaults to true
@@ -131,7 +137,8 @@ class CatalogAcceptanceTest extends KafkaPostgresRedisTestBase {
     assertThat(patched.active()).isFalse();
 
     List<StaffProfileResponse> all =
-        TenantContext.callAs(TENANT_A, ACTOR_A, () -> catalogService.listStaffProfiles(OUTLET, false));
+        TenantContext.callAs(
+            TENANT_A, ACTOR_A, () -> catalogService.listStaffProfiles(OUTLET, false));
     assertThat(all).extracting(StaffProfileResponse::id).contains(created.id());
   }
 
@@ -143,14 +150,18 @@ class CatalogAcceptanceTest extends KafkaPostgresRedisTestBase {
         TenantContext.callAs(
             TENANT_A,
             ACTOR_A,
-            () -> catalogService.createPackage(new CatalogItemCreateRequest(OUTLET, "Outlet 1 Wash", null, 10_000_00L, "IDR")));
+            () ->
+                catalogService.createPackage(
+                    new CatalogItemCreateRequest(
+                        OUTLET, "Outlet 1 Wash", null, 10_000_00L, "IDR")));
     CatalogItemResponse atOutlet2 =
         TenantContext.callAs(
             TENANT_A,
             ACTOR_A,
             () ->
                 catalogService.createPackage(
-                    new CatalogItemCreateRequest(OUTLET_2, "Outlet 2 Wash", null, 10_000_00L, "IDR")));
+                    new CatalogItemCreateRequest(
+                        OUTLET_2, "Outlet 2 Wash", null, 10_000_00L, "IDR")));
 
     List<CatalogItemResponse> outlet1Only =
         TenantContext.callAs(TENANT_A, ACTOR_A, () -> catalogService.listPackages(OUTLET, false));
@@ -166,7 +177,9 @@ class CatalogAcceptanceTest extends KafkaPostgresRedisTestBase {
     TenantContext.callAs(
         TENANT_A,
         ACTOR_A,
-        () -> catalogService.createStaffProfile(new StaffProfileCreateRequest(OUTLET, "Budi", null, true)));
+        () ->
+            catalogService.createStaffProfile(
+                new StaffProfileCreateRequest(OUTLET, "Budi", null, true)));
 
     assertThatThrownBy(
             () ->
@@ -227,7 +240,9 @@ class CatalogAcceptanceTest extends KafkaPostgresRedisTestBase {
         TenantContext.callAs(
             TENANT_A,
             ACTOR_A,
-            () -> catalogService.createPackage(new CatalogItemCreateRequest(OUTLET, "A Wash", null, 10_000_00L, "IDR")));
+            () ->
+                catalogService.createPackage(
+                    new CatalogItemCreateRequest(OUTLET, "A Wash", null, 10_000_00L, "IDR")));
 
     assertThatThrownBy(
             () ->
@@ -236,7 +251,8 @@ class CatalogAcceptanceTest extends KafkaPostgresRedisTestBase {
                     ACTOR_B,
                     () ->
                         catalogService.patchPackage(
-                            packageA.id(), new CatalogItemPatchRequest("hijacked", null, null, null, null))))
+                            packageA.id(),
+                            new CatalogItemPatchRequest("hijacked", null, null, null, null))))
         .isInstanceOf(CatalogItemNotFoundException.class);
   }
 

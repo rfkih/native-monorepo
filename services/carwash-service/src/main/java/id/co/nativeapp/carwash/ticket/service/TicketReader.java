@@ -58,12 +58,14 @@ public class TicketReader {
    */
   @Transactional(readOnly = true)
   public PriceBreakdownResponse quote(QuoteRequest request) {
-    TicketItemReader.ResolvedCart cart = itemResolver.resolve(request.businessId(), request.lines());
+    TicketItemReader.ResolvedCart cart =
+        itemResolver.resolve(request.businessId(), request.lines());
     Money discount =
         request.discountMinor() != null
             ? Money.ofMinor(request.discountMinor(), cart.currencyCode())
             : null;
-    PriceBreakdown breakdown = taxChargeService.resolve(cart.subtotal(), 0L, discount, Instant.now());
+    PriceBreakdown breakdown =
+        taxChargeService.resolve(cart.subtotal(), 0L, discount, Instant.now());
     return new PriceBreakdownResponse(
         breakdown.subtotal().amountMinor(),
         breakdown.discount().amountMinor(),
@@ -82,7 +84,9 @@ public class TicketReader {
   @Transactional(readOnly = true)
   public TicketResponse getById(UUID ticketId) {
     TicketView view =
-        ticketRepository.findViewById(ticketId).orElseThrow(() -> new TicketNotFoundException(ticketId));
+        ticketRepository
+            .findViewById(ticketId)
+            .orElseThrow(() -> new TicketNotFoundException(ticketId));
     List<TicketLineView> lines = lineRepository.findViewsByTicketId(ticketId);
     CarwashPaymentView payment = paymentRepository.findViewByTicketId(ticketId).orElse(null);
     return TicketResponseFactory.toResponse(view, lines, payment);

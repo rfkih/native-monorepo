@@ -37,8 +37,8 @@ public final class CarwashMetricContract {
   /**
    * The {@code sales_amount} metric key: a ticket's grand total (minor units), emitted at the
    * {@link MetricGrain#EMPLOYEE employee} grain — the carwash POS's washer-commission feed (ADR
-   * 0023 decision 4). Deliberately NOT in {@link #DECLARATIONS}: {@code DECLARATIONS} lists only the
-   * unconditional {@link MetricGrain#OUTLET outlet}-grain wash metrics; {@code sales_amount} is
+   * 0023 decision 4). Deliberately NOT in {@link #DECLARATIONS}: {@code DECLARATIONS} lists only
+   * the unconditional {@link MetricGrain#OUTLET outlet}-grain wash metrics; {@code sales_amount} is
    * CONDITIONAL — emitted by {@code ticket.service.TicketWriter}/{@code TicketCaptureWriter} only
    * when the ticket's washer link ({@code staff_profile.employee_id}, snapshotted onto {@code
    * carwash_ticket.washer_employee_id} at checkout) is non-null, with {@code subject_id} = that

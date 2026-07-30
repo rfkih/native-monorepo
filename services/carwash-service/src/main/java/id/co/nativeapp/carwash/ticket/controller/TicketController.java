@@ -29,7 +29,9 @@ import org.springframework.web.bind.annotation.RestController;
  * company is not entitled. {@code checkout} also enforces outlet-assignment scoping ({@code
  * config.OutletAccessAdvice}).
  */
-@Tag(name = "Carwash Tickets", description = "Quote, checkout, capture, and retrieve carwash tickets")
+@Tag(
+    name = "Carwash Tickets",
+    description = "Quote, checkout, capture, and retrieve carwash tickets")
 @RestController
 @RequestMapping("/api/v1/carwash/tickets")
 public class TicketController {
@@ -66,7 +68,8 @@ public class TicketController {
     CheckoutResult result = ticketService.checkout(request);
     TicketResponse body = result.ticket();
     return result.created()
-        ? ResponseEntity.created(URI.create("/api/v1/carwash/tickets/" + body.ticketId())).body(body)
+        ? ResponseEntity.created(URI.create("/api/v1/carwash/tickets/" + body.ticketId()))
+            .body(body)
         : ResponseEntity.ok(body);
   }
 
@@ -85,8 +88,9 @@ public class TicketController {
 
   @Operation(
       summary = "Get a ticket",
-      description = "Fetches a single ticket by id (receipt shape: header, lines, payment). 404 if"
-          + " unknown or belonging to another tenant.")
+      description =
+          "Fetches a single ticket by id (receipt shape: header, lines, payment). 404 if"
+              + " unknown or belonging to another tenant.")
   @GetMapping("/{id}")
   public TicketResponse get(@PathVariable UUID id) {
     return ticketService.getById(id);

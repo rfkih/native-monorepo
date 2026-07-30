@@ -62,8 +62,9 @@ public class CatalogController {
 
   @Operation(
       summary = "Create a wash package",
-      description = "Creates a wash package. Rejected with 403 when the company is not entitled to"
-          + " the carwash module.")
+      description =
+          "Creates a wash package. Rejected with 403 when the company is not entitled to"
+              + " the carwash module.")
   @PostMapping("/packages")
   public ResponseEntity<CatalogItemResponse> createPackage(
       @Valid @RequestBody CatalogItemCreateRequest request) {
@@ -74,8 +75,9 @@ public class CatalogController {
 
   @Operation(
       summary = "Update a wash package",
-      description = "Partially updates a wash package; unset fields are left unchanged. 404 if"
-          + " unknown or belonging to another tenant.")
+      description =
+          "Partially updates a wash package; unset fields are left unchanged. 404 if"
+              + " unknown or belonging to another tenant.")
   @PatchMapping("/packages/{id}")
   public CatalogItemResponse patchPackage(
       @PathVariable UUID id, @Valid @RequestBody CatalogItemPatchRequest request) {
@@ -100,8 +102,9 @@ public class CatalogController {
 
   @Operation(
       summary = "Create a wash addon",
-      description = "Creates a wash addon. Rejected with 403 when the company is not entitled to"
-          + " the carwash module.")
+      description =
+          "Creates a wash addon. Rejected with 403 when the company is not entitled to"
+              + " the carwash module.")
   @PostMapping("/addons")
   public ResponseEntity<CatalogItemResponse> createAddon(
       @Valid @RequestBody CatalogItemCreateRequest request) {
@@ -112,8 +115,9 @@ public class CatalogController {
 
   @Operation(
       summary = "Update a wash addon",
-      description = "Partially updates a wash addon; unset fields are left unchanged. 404 if unknown"
-          + " or belonging to another tenant.")
+      description =
+          "Partially updates a wash addon; unset fields are left unchanged. 404 if unknown"
+              + " or belonging to another tenant.")
   @PatchMapping("/addons/{id}")
   public CatalogItemResponse patchAddon(
       @PathVariable UUID id, @Valid @RequestBody CatalogItemPatchRequest request) {
@@ -152,8 +156,9 @@ public class CatalogController {
 
   @Operation(
       summary = "Update a staff profile",
-      description = "Partially updates a staff profile; unset fields are left unchanged. 404 if"
-          + " unknown or belonging to another tenant.")
+      description =
+          "Partially updates a staff profile; unset fields are left unchanged. 404 if"
+              + " unknown or belonging to another tenant.")
   @PatchMapping("/staff-profiles/{id}")
   public StaffProfileResponse patchStaffProfile(
       @PathVariable UUID id, @Valid @RequestBody StaffProfilePatchRequest request) {
