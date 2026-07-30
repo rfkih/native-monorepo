@@ -134,4 +134,8 @@ tasks.named<Test>("test") {
     // a reproducible round-trip without touching Vault. Real environments source these from Vault.
     systemProperty("NATIVE_PII_KEY", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
     systemProperty("NATIVE_PII_HMAC_KEY", "ZmVkY2JhOTg3NjU0MzIxMGZlZGNiYTk4NzY1NDMyMTA=")
+    // Security review W-4: the gift-card code-derivation HMAC key. MUST be the IDENTICAL value in
+    // every other service's test task (restaurant/carwash/barbershop-service) — see
+    // GiftCardCodeGenerator's class javadoc for why a fleet-wide key match matters.
+    systemProperty("NATIVE_GIFTCARD_CODE_KEY", "Z2lmdC1jYXJkLWNvZGUtaG1hYy1rZXktMDEyMzQ1Njc=")
 }

@@ -20,4 +20,12 @@ public interface LoyaltyLedgerEntryRepository extends JpaRepository<LoyaltyLedge
    */
   List<LoyaltyLedgerEntry> findBySaleIdAndEntryTypeIn(
       UUID saleId, List<LoyaltyLedgerEntryType> types);
+
+  /**
+   * Whether a sale has already been reversed — the self-enforcing guard against TWO DISTINCT
+   * reversal events for one sale (e.g. a {@code SaleVoided} followed by a {@code SaleRefunded})
+   * each re-reversing the originals and double-crediting (review S2). A scalar exists, not a
+   * projection (CLAUDE.md read-path convention).
+   */
+  boolean existsBySaleIdAndEntryType(UUID saleId, LoyaltyLedgerEntryType entryType);
 }

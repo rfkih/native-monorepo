@@ -1,6 +1,7 @@
 package id.co.nativeapp.loyalty.member.controller;
 
 import id.co.nativeapp.loyalty.member.dto.EnrollMemberRequest;
+import id.co.nativeapp.loyalty.member.dto.LookupMemberRequest;
 import id.co.nativeapp.loyalty.member.dto.MemberResponse;
 import id.co.nativeapp.loyalty.member.service.MemberService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -14,7 +15,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -23,6 +23,15 @@ import org.springframework.web.bind.annotation.RestController;
  * id.co.nativeapp.tenant.TenantContext TenantContext}, never the request body (rule 5). This is a
  * DIRECT client call from the console/POS through the gateway — not a service-to-service call (see
  * ADR 0027: "console → gateway → loyalty-service is a client call, not a service-to-service call").
+ *
+ * <p><strong>Security review W-2 — the phone lookup is {@code POST}, not {@code GET}.</strong> This
+ * class used to expose {@code GET /api/v1/loyalty/members?phone=...}: a full phone number in a URL
+ * lands in proxy/gateway access logs and OTel span tags (PII, rule 6) even though the response body
+ * itself only ever returns the masked tail. The GET endpoint has been REMOVED (not deprecated —
+ * pre-GA, no consumers besides the console, which is updated in the same wave) and replaced by
+ * {@link #lookupByPhone(LookupMemberRequest)}, which carries the phone in a bean-validated request
+ * body instead. The gateway's existing {@code /api/v1/loyalty/**} route already covers the new path
+ * with no route change.
  */
 @Tag(name = "Loyalty Members", description = "Enroll and look up loyalty members by phone")
 @RestController
@@ -50,12 +59,13 @@ public class MemberController {
   @Operation(
       summary = "Look up a member by phone",
       description =
-          "Exact-match lookup by phone (the POS 'attach an existing member' flow). Returns the"
-              + " display name plain + the phone's last 4 digits for cashier confirmation, never"
-              + " the full phone. 404 if unknown.")
-  @GetMapping
-  public MemberResponse lookupByPhone(@RequestParam String phone) {
-    return memberService.lookupByPhone(phone);
+          "Exact-match lookup by phone (the POS 'attach an existing member' flow), by REQUEST BODY"
+              + " — never a query parameter (security review W-2: a query-string phone would land"
+              + " in proxy access logs / trace spans). Returns the display name plain + the phone's"
+              + " last 4 digits for cashier confirmation, never the full phone. 404 if unknown.")
+  @PostMapping("/lookup")
+  public MemberResponse lookupByPhone(@Valid @RequestBody LookupMemberRequest request) {
+    return memberService.lookupByPhone(request.phone());
   }
 
   @Operation(

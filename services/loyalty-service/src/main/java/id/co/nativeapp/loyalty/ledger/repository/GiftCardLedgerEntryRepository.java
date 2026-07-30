@@ -15,4 +15,7 @@ public interface GiftCardLedgerEntryRepository extends JpaRepository<GiftCardLed
   /** The REDEEM entries recorded against one sale — summed by the reversal writer. */
   List<GiftCardLedgerEntry> findBySaleIdAndEntryTypeIn(
       UUID saleId, List<GiftCardLedgerEntryType> types);
+
+  /** Whether a sale's gift-card activity was already reversed — see the loyalty twin (review S2). */
+  boolean existsBySaleIdAndEntryType(UUID saleId, GiftCardLedgerEntryType entryType);
 }

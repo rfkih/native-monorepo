@@ -453,7 +453,7 @@ public class JournalPostingService {
     if (event == null) {
       return resolveAmount(amountBasis, gross);
     }
-    return switch (amountBasis.toUpperCase()) {
+    return switch (amountBasis.toUpperCase(java.util.Locale.ROOT)) {
       case "GROSS" -> gross;
       case "GROSS_REVENUE" -> event.effectiveSubtotal();
       case "DISCOUNT" -> event.effectiveDiscount();

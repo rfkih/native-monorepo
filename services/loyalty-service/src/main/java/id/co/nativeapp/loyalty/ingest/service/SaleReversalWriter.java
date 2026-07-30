@@ -86,6 +86,12 @@ public class SaleReversalWriter {
   }
 
   private void reverseLoyaltyLedger(SaleReversalFact fact) {
+    // Self-enforcing full-reversal-only invariant (review S2): two DISTINCT reversal events for
+    // one sale (a SaleVoided followed by a SaleRefunded) must not each re-reverse the originals
+    // and double-credit — processOnce dedupes only a REDELIVERY of the same event.
+    if (ledgerRepository.existsBySaleIdAndEntryType(fact.saleId(), LoyaltyLedgerEntryType.REVERSE)) {
+      return;
+    }
     List<LoyaltyLedgerEntry> entries =
         ledgerRepository.findBySaleIdAndEntryTypeIn(fact.saleId(), REVERSIBLE_LOYALTY_TYPES);
     if (entries.isEmpty()) {
@@ -127,6 +133,11 @@ public class SaleReversalWriter {
   }
 
   private void reverseGiftCardLedger(SaleReversalFact fact) {
+    // Same self-enforcing already-reversed guard as the loyalty twin (review S2).
+    if (giftCardLedgerRepository.existsBySaleIdAndEntryType(
+        fact.saleId(), GiftCardLedgerEntryType.REVERSE)) {
+      return;
+    }
     List<GiftCardLedgerEntry> entries =
         giftCardLedgerRepository.findBySaleIdAndEntryTypeIn(
             fact.saleId(), REVERSIBLE_GIFT_CARD_TYPES);

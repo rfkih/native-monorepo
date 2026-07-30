@@ -77,6 +77,18 @@ native:
     # The entitlement-check Redis cache TTL safety net (invalidation by event is the primary
     # mechanism; this is only the backstop). Data, not code.
     cache-ttl: ${BARBERSHOP_CACHE_TTL:PT30M}
+  giftcard:
+    # Security review W-4: the HMAC-SHA256 key GiftCardCodeGenerator keys the card-code derivation
+    # with, base64-encoded 32-byte value, NATIVE_GIFTCARD_CODE_KEY env var, Vault-injected in prod.
+    # MUST be the IDENTICAL value in loyalty-service/restaurant-service/carwash-service (their own
+    # native.giftcard.code-key) — a mismatch would make the same card resolve to a different code
+    # depending on which service derives it. The committed default below is a DEV/TEST-ONLY
+    # placeholder shared verbatim across all four services' application.yml, never a real secret.
+    code-key: ${NATIVE_GIFTCARD_CODE_KEY:Z2lmdC1jYXJkLWNvZGUtaG1hYy1rZXktMDEyMzQ1Njc=}
+    # Security review W-3: the ceiling on a single gift-card SELL's amountMinor. IDR's minor unit is
+    # one whole rupiah, so 5,000,000 = Rp5,000,000. A request above this is rejected 422
+    # (gift-card-mint-limit). NATIVE_GIFTCARD_MAX_MINT_MINOR env var.
+    max-mint-minor: ${NATIVE_GIFTCARD_MAX_MINT_MINOR:5000000}
 
 management:
   endpoints:

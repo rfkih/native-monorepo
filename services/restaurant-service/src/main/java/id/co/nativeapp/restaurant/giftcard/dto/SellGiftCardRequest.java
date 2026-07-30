@@ -18,12 +18,14 @@ import java.util.UUID;
  * @param amountMinor the stored-value amount to load onto the new card, in minor units; must be
  *     positive (rule 8 — never a float)
  * @param currency ISO-4217 currency code
- * @param tenderType the tender used to purchase the card: {@code CASH}/{@code QRIS}/{@code CARD},
- *     or {@code null} for an unspecified tender
+ * @param tenderType the tender used to purchase the card: {@code CASH}/{@code QRIS}/{@code CARD}.
+ *     {@code @NotNull} (security review W-3) — an unspecified tender used to route to CASH
+ *     clearing by default, which silently mis-books a digital-tender sale as cash; the till must
+ *     now name the tender explicitly.
  */
 public record SellGiftCardRequest(
     @NotNull UUID businessId,
     @NotBlank String idempotencyKey,
     @NotNull @Positive Long amountMinor,
     @NotBlank String currency,
-    String tenderType) {}
+    @NotNull String tenderType) {}

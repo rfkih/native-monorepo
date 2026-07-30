@@ -36,6 +36,7 @@ class TenancyIsolationTest extends KafkaPostgresTestBase {
 
   @Autowired private MemberService memberService;
   @Autowired private GiftCardReader giftCardReader;
+  @Autowired private GiftCardCodeGenerator giftCardCodeGenerator;
 
   @Test
   void aMemberEnrolledUnderOneTenantIsInvisibleToAnotherTenantsLookupByTheSamePhone()
@@ -78,7 +79,7 @@ class TenancyIsolationTest extends KafkaPostgresTestBase {
         EventFixtures.giftCardSold(giftCardId, TENANT_A, BUSINESS, 20_000L, "IDR");
     EventFixtures.publishGiftCardSold(KAFKA.getBootstrapServers(), UUID.randomUUID(), event);
 
-    String code = GiftCardCodeGenerator.deriveCode(giftCardId);
+    String code = giftCardCodeGenerator.deriveCode(giftCardId);
 
     // ignoreException: Awaitility's untilAsserted only auto-retries on AssertionError; the card
     // does not exist yet on the first few polls (async Kafka consumption).

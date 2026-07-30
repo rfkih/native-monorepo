@@ -6,6 +6,7 @@ import id.co.nativeapp.loyalty.member.domain.MemberNotFoundException;
 import id.co.nativeapp.loyalty.member.domain.PhoneNormalizer;
 import id.co.nativeapp.loyalty.member.dto.MemberResponse;
 import id.co.nativeapp.loyalty.member.repository.LoyaltyMemberRepository;
+import id.co.nativeapp.tenant.TenantContext;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,8 +40,9 @@ public class MemberReader {
    */
   @Transactional(readOnly = true)
   public MemberResponse lookupByPhone(String rawPhone) {
+    String companyId = TenantContext.require().companyId();
     String normalized = PhoneNormalizer.normalize(rawPhone);
-    String hash = phoneHasher.hash(normalized);
+    String hash = phoneHasher.hash(companyId, normalized);
     LoyaltyMember member =
         repository.findByPhoneHash(hash).orElseThrow(MemberNotFoundException::new);
     return MemberResponse.from(member);

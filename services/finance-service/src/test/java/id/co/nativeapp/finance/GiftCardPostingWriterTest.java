@@ -1,6 +1,7 @@
 package id.co.nativeapp.finance;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import id.co.nativeapp.finance.giftcard.messaging.GiftCardSoldEvent;
 import id.co.nativeapp.finance.giftcard.service.GiftCardPostingService;
@@ -156,6 +157,49 @@ class GiftCardPostingWriterTest extends PostgresRlsTestBase {
     assertThat(countAsAdmin("consolidated_pnl")).isZero();
     assertThat(countAsAdmin("ledger_posting"))
         .as("no dimensional ledger_posting row either — only the GL journal entry is written")
+        .isZero();
+  }
+
+  // ------------------------------------------------------------------ S-note: defense-in-depth
+  // amount guard — a non-positive event amount is poisoned BEFORE any write.
+
+  @Test
+  void zeroAmountIsPoisonedAndPostsNothing() {
+    UUID giftCardSaleId = UUID.randomUUID();
+    GiftCardSoldEvent event =
+        new GiftCardSoldEvent(
+            giftCardSaleId,
+            UUID.randomUUID(),
+            TENANT,
+            BUSINESS,
+            Money.ofMinor(0L, "IDR"),
+            OCCURRED,
+            "CASH");
+
+    assertThatThrownBy(() -> giftCardPostingService.handle(event))
+        .isInstanceOf(IllegalStateException.class);
+  }
+
+  @Test
+  void negativeAmountIsPoisonedAndPostsNothing() throws Exception {
+    UUID giftCardSaleId = UUID.randomUUID();
+    GiftCardSoldEvent event =
+        new GiftCardSoldEvent(
+            giftCardSaleId,
+            UUID.randomUUID(),
+            TENANT,
+            BUSINESS,
+            Money.ofMinor(-AMOUNT_IDR, "IDR"),
+            OCCURRED,
+            "CASH");
+
+    assertThatThrownBy(() -> giftCardPostingService.handle(event))
+        .isInstanceOf(IllegalStateException.class);
+
+    // The transaction rolled back before writing anything (S-note — mirrors the identity-violation
+    // rollback contract in RevenuePostingWriter).
+    assertThat(journalEntryCountFor(giftCardSaleId))
+        .as("a poisoned event must not leave a partial journal_entry row")
         .isZero();
   }
 

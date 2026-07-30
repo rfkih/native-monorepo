@@ -61,7 +61,7 @@ public class MemberEnrollWriter {
   public MemberResponse enroll(EnrollMemberRequest request) {
     String companyId = TenantContext.require().companyId();
     String normalizedPhone = PhoneNormalizer.normalize(request.phone());
-    String phoneHash = phoneHasher.hash(normalizedPhone);
+    String phoneHash = phoneHasher.hash(companyId, normalizedPhone);
 
     if (repository.existsByPhoneHash(phoneHash)) {
       throw new DuplicateMemberException();

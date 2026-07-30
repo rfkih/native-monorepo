@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import id.co.nativeapp.events.AvroSerde;
 import id.co.nativeapp.restaurant.PostgresRlsTestBase;
+import id.co.nativeapp.restaurant.giftcard.domain.GiftCardMintLimitExceededException;
 import id.co.nativeapp.restaurant.giftcard.dto.GiftCardSaleResponse;
 import id.co.nativeapp.restaurant.giftcard.dto.SellGiftCardRequest;
 import id.co.nativeapp.restaurant.giftcard.messaging.GiftCardSoldSchema;
@@ -14,13 +15,21 @@ import id.co.nativeapp.restaurant.outletref.domain.OutletNotAssignedException;
 import id.co.nativeapp.restaurant.outletref.messaging.UserOutletAssignmentEvent;
 import id.co.nativeapp.restaurant.outletref.service.UserOutletAssignmentRefService;
 import id.co.nativeapp.tenant.TenantContext;
-import java.nio.ByteBuffer;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validation;
+import jakarta.validation.Validator;
+import jakarta.validation.ValidatorFactory;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.time.LocalDate;
+import java.util.Base64;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import org.apache.avro.generic.GenericRecord;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,10 +43,12 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *
  * <p>Covers: the sold row + the decoded {@code GiftCardSold} outbox event (card id, amount, tender,
  * company); the derived display code matching an INDEPENDENT recomputation of loyalty-service's
- * derivation scheme (Base32 of the first 10 UUID bytes, no padding — ADR 0027 decision 5); an
- * idempotent replay (one row, one event); and {@link
+ * KEYED derivation scheme (HMAC-SHA256, Base32 of the first 10 digest bytes, no padding — ADR 0027
+ * decision 5, security review W-4); an idempotent replay (one row, one event); {@link
  * id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard} enforcement — a cashier with no
- * outlet assignment at a company that HAS adopted scoping is rejected 403.
+ * outlet assignment at a company that HAS adopted scoping is rejected 403; the security review W-3
+ * mint controls (a {@code @NotNull} tenderType, and a request above {@code
+ * native.giftcard.max-mint-minor} rejected 422).
  */
 @SpringBootTest
 class GiftCardSaleIntegrationTest extends PostgresRlsTestBase {
@@ -130,18 +141,70 @@ class GiftCardSaleIntegrationTest extends PostgresRlsTestBase {
   }
 
   // -----------------------------------------------------------------------
+  // Security review W-3: mint controls — @NotNull tenderType + a max-mint-minor ceiling.
+  // -----------------------------------------------------------------------
+
+  @Test
+  void nullTenderTypeFailsBeanValidation() {
+    ValidatorFactory factory = Validation.buildDefaultValidatorFactory();
+    Validator validator = factory.getValidator();
+
+    SellGiftCardRequest request =
+        new SellGiftCardRequest(BUSINESS_ID, "sell-" + UUID.randomUUID(), 10_000L, "IDR", null);
+    Set<ConstraintViolation<SellGiftCardRequest>> violations = validator.validate(request);
+
+    assertThat(violations)
+        .isNotEmpty()
+        .anyMatch(v -> v.getPropertyPath().toString().equals("tenderType"));
+  }
+
+  @Test
+  void aMintAboveTheConfiguredCeilingIsRejectedWith422() throws Exception {
+    // The dev/test default native.giftcard.max-mint-minor is 5,000,000 (application.yml) — one
+    // minor unit above it must be rejected BEFORE any write.
+    SellGiftCardRequest request =
+        new SellGiftCardRequest(
+            BUSINESS_ID, "sell-over-limit-" + UUID.randomUUID(), 5_000_001L, "IDR", "CASH");
+
+    assertThatThrownBy(
+            () ->
+                TenantContext.callAs(
+                    TENANT, OWNER_ACTOR, () -> giftCardSaleService.sell(request)))
+        .isInstanceOf(GiftCardMintLimitExceededException.class);
+  }
+
+  @Test
+  void aMintExactlyAtTheConfiguredCeilingIsAccepted() throws Exception {
+    SellGiftCardRequest request =
+        new SellGiftCardRequest(
+            BUSINESS_ID, "sell-at-limit-" + UUID.randomUUID(), 5_000_000L, "IDR", "CASH");
+
+    GiftCardSaleResult result =
+        TenantContext.callAs(TENANT, OWNER_ACTOR, () -> giftCardSaleService.sell(request));
+
+    assertThat(result.created()).isTrue();
+    assertThat(result.sale().amountMinor()).isEqualTo(5_000_000L);
+  }
+
+  // -----------------------------------------------------------------------
   // Independent code-derivation recomputation (does NOT call production
   // GiftCardCodeGenerator — a true cross-check against a copy-paste bug).
+  // Security review W-4: the KEYED HMAC-SHA256 scheme, using the SAME dev/test key every service's
+  // application.yml / build.gradle.kts commits (NATIVE_GIFTCARD_CODE_KEY) — see
+  // GiftCardCodeGenerator's class javadoc for the exact message format.
   // -----------------------------------------------------------------------
 
   private static final char[] BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567".toCharArray();
 
-  private static String recomputeDerivedCode(UUID giftCardId) {
-    ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES * 2);
-    buffer.putLong(giftCardId.getMostSignificantBits());
-    buffer.putLong(giftCardId.getLeastSignificantBits());
+  private static final String TEST_CODE_KEY_BASE64 = "Z2lmdC1jYXJkLWNvZGUtaG1hYy1rZXktMDEyMzQ1Njc=";
+
+  private static String recomputeDerivedCode(UUID giftCardId) throws Exception {
+    byte[] keyBytes = Base64.getDecoder().decode(TEST_CODE_KEY_BASE64);
+    Mac mac = Mac.getInstance("HmacSHA256");
+    mac.init(new SecretKeySpec(keyBytes, "HmacSHA256"));
+    byte[] digest = mac.doFinal(giftCardId.toString().getBytes(StandardCharsets.UTF_8));
     byte[] truncated = new byte[10];
-    System.arraycopy(buffer.array(), 0, truncated, 0, 10);
+    System.arraycopy(digest, 0, truncated, 0, 10);
     StringBuilder out = new StringBuilder();
     int bitBuffer = 0;
     int bitsLeft = 0;

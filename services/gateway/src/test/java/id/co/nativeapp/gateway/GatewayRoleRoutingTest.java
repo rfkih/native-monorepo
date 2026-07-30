@@ -915,19 +915,25 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
   void aCashierCanReachTheLoyaltyMembersRoute() throws Exception {
     // The cashier attaches members and gift cards at the till — a POS surface. PII stays inside
     // loyalty-service; the route only fronts masked lookups.
+    //
+    // POST, not GET (security review W-2): the phone lookup moved from a query parameter to a
+    // request body so the phone never lands in a proxy access log / trace span. The route itself
+    // is unchanged (still /api/v1/loyalty/**), only the sub-path + verb changed.
     String token =
         obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
 
     String response =
         gatewayClient()
-            .get()
-            .uri("/api/v1/loyalty/members?phone=0812")
+            .post()
+            .uri("/api/v1/loyalty/members/lookup")
+            .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
             .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .body("{\"phone\":\"0812\"}")
             .retrieve()
             .body(String.class);
 
     assertThat(response).isEqualTo("ok");
-    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/loyalty/members?phone=0812");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/loyalty/members/lookup");
   }
 
   @Test

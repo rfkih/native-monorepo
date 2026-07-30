@@ -39,6 +39,16 @@ import org.springframework.transaction.annotation.Transactional;
  * v3 template's {@code NET_TENDER}/{@code GIFT_CARD_TENDER} split ({@code RevenuePostingWriter}).
  * This writer posts ONLY the double-entry GL journal entry (Dr &lt;tender clearing&gt; / Cr {@link
  * AccountRole#GIFT_CARD_LIABILITY}, the {@code GIFT_CARD_SALE} v1 template, V37).
+ *
+ * <p><strong>Defense-in-depth amount guard (S-note).</strong> {@link #postGiftCardSale} asserts
+ * {@code event.amount()} is strictly positive BEFORE any write — mirroring how {@code
+ * SaleRecordedEvent#assertReconciliationIdentity} guards {@code RevenuePostingWriter}: a
+ * non-positive amount can only reach this consumer via a forged/misconfigured producer (the
+ * vertical write path already validates {@code @Positive amountMinor} at the request boundary), so
+ * it is treated the SAME as a Phase 2 identity violation — an {@link IllegalStateException},
+ * deliberately NOT added to {@code KafkaConfig}'s non-retryable set, so it takes the identical
+ * bounded-retry-then-DLT path (a deterministic poison event fails every retry identically and lands
+ * on {@code GiftCardSold.DLT}, never silently posting a negative/zero liability).
  */
 @Component
 public class GiftCardPostingWriter {
@@ -74,6 +84,21 @@ public class GiftCardPostingWriter {
   }
 
   private void postGiftCardSale(GiftCardSoldEvent event) {
+    // S-note: assert the event amount is positive BEFORE any write — defense-in-depth against a
+    // forged/misconfigured producer (see class javadoc). Mirrors how SaleRecordedEvent's
+    // reconciliation identity is asserted FIRST in RevenuePostingWriter, rolling the transaction
+    // back before anything is written.
+    if (!event.amount().isPositive()) {
+      throw new IllegalStateException(
+          "GiftCardSold amount is non-positive ("
+              + event.amount().amountMinor()
+              + " "
+              + event.amount().currency().getCurrencyCode()
+              + ") for giftCardSaleId="
+              + event.giftCardSaleId()
+              + " — poison event, routing to DLT");
+    }
+
     String period = LedgerPosting.periodOf(event.occurredAt());
     TenantContext.Tenant tenant = TenantContext.require();
     String companyId = tenant.companyId();

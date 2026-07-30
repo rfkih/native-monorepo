@@ -2,6 +2,7 @@ package id.co.nativeapp.loyalty.ingest.service;
 
 import id.co.nativeapp.events.ProcessedEventStore;
 import id.co.nativeapp.loyalty.giftcard.domain.GiftCard;
+import id.co.nativeapp.loyalty.giftcard.domain.GiftCardCodeGenerator;
 import id.co.nativeapp.loyalty.giftcard.repository.GiftCardRepository;
 import id.co.nativeapp.loyalty.ingest.dto.GiftCardSoldFact;
 import id.co.nativeapp.loyalty.ledger.domain.GiftCardLedgerEntry;
@@ -32,16 +33,19 @@ public class GiftCardSoldWriter {
   private final GiftCardLedgerEntryRepository ledgerRepository;
   private final LoyaltyEventEmitter eventEmitter;
   private final ProcessedEventStore processedEvents;
+  private final GiftCardCodeGenerator giftCardCodeGenerator;
 
   public GiftCardSoldWriter(
       GiftCardRepository giftCardRepository,
       GiftCardLedgerEntryRepository ledgerRepository,
       LoyaltyEventEmitter eventEmitter,
-      ProcessedEventStore processedEvents) {
+      ProcessedEventStore processedEvents,
+      GiftCardCodeGenerator giftCardCodeGenerator) {
     this.giftCardRepository = giftCardRepository;
     this.ledgerRepository = ledgerRepository;
     this.eventEmitter = eventEmitter;
     this.processedEvents = processedEvents;
+    this.giftCardCodeGenerator = giftCardCodeGenerator;
   }
 
   /**
@@ -60,9 +64,11 @@ public class GiftCardSoldWriter {
   private void ingest(GiftCardSoldFact fact) {
     GiftCard card = giftCardRepository.findById(fact.giftCardId()).orElse(null);
     if (card == null) {
+      String code = giftCardCodeGenerator.deriveCode(fact.giftCardId());
       card =
           new GiftCard(
               fact.giftCardId(),
+              code,
               fact.currency(),
               fact.amountMinor(),
               fact.occurredAt(),

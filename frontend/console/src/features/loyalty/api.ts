@@ -45,16 +45,19 @@ function tenantOf(session: CompanySession) {
 }
 
 /**
- * On-demand exact-match lookup by phone — GET /api/v1/loyalty/members?phone=...  404 when unknown
- * (see {@link isMemberNotFound}). Modelled as a mutation (not a query) since it fires on a cashier
- * action (Enter / "Look up"), not automatically off a debounced input.
+ * On-demand exact-match lookup by phone — POST /api/v1/loyalty/members/lookup with the phone in
+ * the REQUEST BODY (never a query parameter: a URL-borne phone lands in proxy access logs and
+ * OTel spans — rule 6; security review W-2). 404 when unknown (see {@link isMemberNotFound}).
+ * Modelled as a mutation (not a query) since it fires on a cashier action (Enter / "Look up"),
+ * not automatically off a debounced input.
  */
 export function useLookupMember(session: CompanySession) {
   return useMutation({
     mutationFn: (phone: string) =>
-      apiFetch<MemberResponse>('/api/v1/loyalty/members', {
+      apiFetch<MemberResponse>('/api/v1/loyalty/members/lookup', {
+        method: 'POST',
         tenant: tenantOf(session),
-        query: { phone },
+        body: { phone },
       }),
   })
 }

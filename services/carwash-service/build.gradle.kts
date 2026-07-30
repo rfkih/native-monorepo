@@ -133,4 +133,8 @@ dependencies {
 // restaurant-service / entitlement-service / employee-service do it after the consolidation.
 tasks.named<Test>("test") {
     systemProperty("spring.profiles.active", "dev")
+    // Security review W-4: the gift-card code-derivation HMAC key. MUST be the IDENTICAL value in
+    // every other service's test task (loyalty/restaurant/barbershop-service) — see
+    // GiftCardCodeGenerator's class javadoc for why a fleet-wide key match matters.
+    systemProperty("NATIVE_GIFTCARD_CODE_KEY", "Z2lmdC1jYXJkLWNvZGUtaG1hYy1rZXktMDEyMzQ1Njc=")
 }

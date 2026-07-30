@@ -56,9 +56,9 @@ schema. Until then a row here is documentation of intent, not a shippable contra
 | **`SaleVoided`** | **restaurant-service** | **finance** | **void_id, sale_id, payment_id, company_id, business_id, amount_minor, currency, occurred_at, tender_type** | **LIVE (ADR 0006, slice 4)** |
 | **`SaleRefunded`** | **restaurant-service** | **finance** | **refund_id, sale_id, payment_id, company_id, business_id, refund_amount_minor, currency, total_refunded_minor, occurred_at, tender_type** | **LIVE (ADR 0006, slice 4)** |
 | **`GiftCardSold`** | **restaurant-service + carwash-service + barbershop-service** (verticals) | **finance-service, loyalty-service** | **gift_card_sale_id, gift_card_id, company_id, business_id, amount_minor, currency, tender_type, occurred_at** | **LIVE (ADR 0027, Phase 4): vertical producers (gift-card sell endpoints) + finance liability-posting consumer + loyalty-service card-materialising consumer all built** |
-| **`LoyaltyBalanceChanged`** | **loyalty-service** | **the verticals** | **member_id, company_id, points_balance (absolute), balance_seq (monotonic), reason, occurred_at** | **SCHEMA REGISTERED (ADR 0027, Phase 4) — loyalty-service not yet scaffolded** |
-| **`GiftCardStateChanged`** | **loyalty-service** | **the verticals** | **gift_card_id, company_id, state, balance_minor (absolute), currency, balance_seq (monotonic), occurred_at** | **SCHEMA REGISTERED (ADR 0027, Phase 4) — loyalty-service not yet scaffolded** |
-| **`LoyaltyRedemptionFlagged`** | **loyalty-service** | **notification-service** | **flag_id, company_id, business_id, sale_id, member_id, gift_card_id, shortfall_minor, shortfall_points, occurred_at** | **SCHEMA REGISTERED (ADR 0027, Phase 4) — loyalty-service not yet scaffolded** |
+| **`LoyaltyBalanceChanged`** | **loyalty-service** | **the verticals** | **member_id, company_id, points_balance (absolute), balance_seq (monotonic), reason, occurred_at** | **LIVE (ADR 0027, Phase 4): loyalty-service producer + vertical consumers built** |
+| **`GiftCardStateChanged`** | **loyalty-service** | **the verticals** | **gift_card_id, company_id, state, balance_minor (absolute), currency, balance_seq (monotonic), occurred_at** | **LIVE (ADR 0027, Phase 4): loyalty-service producer + vertical consumers built** |
+| **`LoyaltyRedemptionFlagged`** | **loyalty-service** | **notification-service** | **flag_id, company_id, business_id, sale_id, member_id, gift_card_id, shortfall_minor, shortfall_points, occurred_at** | **LIVE (ADR 0027, Phase 4): loyalty-service producer + vertical consumers built** |
 | **`ExpenseRecorded`** | **verticals** | **finance** | **expense_id, company_id, business_id, amount_minor, currency, gl_hint, occurred_at** | **LIVE (finance consumer #21)** |
 | **`PayrollPosted`** | **employee-service** | **finance** | **payroll_run_id, run_seq, company_id, period, base_currency, totals, rule_versions, uses_illustrative_rules, posted_at** | **LIVE (#23); finance consumer #23** |
 | **`LaborCostAllocated`** | **employee-service** | **finance** | **payroll_run_id, run_seq, company_id, period, outlet_id, gl_account, amount_minor, currency, uses_illustrative_rules, unallocated** | **LIVE (#23); finance consumer #23** |
@@ -368,9 +368,10 @@ old-reader** pair (an already-deployed pre-Phase-4 reader still decodes bytes fr
 Phase-4 producer, silently dropping the fields it doesn't know) — covering the rolling-deploy
 window where verticals and finance pick up ADR 0027 at different times. `loyalty-service` (the new
 producer of `LoyaltyBalanceChanged`/`GiftCardStateChanged`, and a consumer of this event for points
-EARN attribution) is not yet scaffolded, so this wave ships the schema + catalog + evolution tests
-only — no vertical write path populates these fields yet, and finance does not yet post against
-them.
+EARN attribution) shipped in the later Phase-4 waves: every vertical write path now populates
+these fields, finance posts against them (SALE v3 template), and loyalty-service applies
+earn/redeem off this event — the schema-first wave landed the contracts and evolution tests
+before any machinery, by design.
 
 ### `ExpenseRecorded`
 
@@ -1631,7 +1632,7 @@ insufficient.
 **Status of this wave.** All four schemas are registered in `libs/contracts` (the single source of
 truth, ADR 0003) and covered by schema-parse + round-trip tests (see each section's Compatibility
 note for where those tests live — `loyalty-service` does not exist yet, so its own contract-test
-suite is a follow-up once it is scaffolded). **No producer or consumer machinery is wired yet** —
+suite now EXISTS in loyalty-service). **Producer/consumer machinery is now BUILT (later Phase-4 waves)** —
 this is deliberately schema-and-catalog-only; the finance posting logic, the verticals' gift-card
 write paths, and `loyalty-service` itself are later waves.
 
@@ -1708,7 +1709,7 @@ Java class exists yet to host a `*ContractTest`). **Where the real contract test
 `GiftCardSoldContractTest` in EACH vertical once that vertical builds its `GiftCardSold` producer
 (mirroring `SaleRecordedContractTest`'s per-service pattern), and in `loyalty-service` once it is
 scaffolded (consumer side + the finance consumer copy's own test). This is a signed-off gap for
-this wave — DO NOT build producer/consumer machinery yet (out of scope; schema + catalog + evolution
+this wave (schema-first; the producer/consumer machinery was built in the later Phase-4 waves; schema + catalog + evolution
 tests only).
 
 ### `LoyaltyBalanceChanged`
@@ -1719,7 +1720,7 @@ redemption, a manual adjustment, or a reversal. Carries the **ABSOLUTE** resulti
 newest value and drops a stale/out-of-order redelivery — the log-compacted-topic / snapshot
 hydration discipline (ARCHITECTURE.md §3) for the verticals' `member_balance_ref` read model.
 
-- **Producer:** `loyalty-service` (not yet scaffolded — a later wave).
+- **Producer:** `loyalty-service` (BUILT — Phase 4; outbox-emitted in the same tx as every balance-affecting write).
 - **Consumers:** the verticals (`restaurant-service`, `carwash-service`, `barbershop-service`) — a
   local `member_balance_ref` read model, set only when the incoming `balance_seq` is newer than the
   cached one (rule 2 — never a synchronous call to loyalty-service).
@@ -1786,7 +1787,7 @@ activation, a redemption, a top-up, expiry, or a void. Carries the **ABSOLUTE** 
 `balance_minor` (a set-to-value, **not** a delta) plus a monotonic `balance_seq`, the same
 set-if-newer discipline as `LoyaltyBalanceChanged`.
 
-- **Producer:** `loyalty-service` (not yet scaffolded — a later wave).
+- **Producer:** `loyalty-service` (BUILT — Phase 4; outbox-emitted in the same tx as every balance-affecting write).
 - **Consumers:** the verticals — a local `gift_card_ref` read model (set only when `balance_seq` is
   newer), read at checkout to validate a redemption WITHOUT a synchronous call to loyalty-service
   (rule 2).
@@ -1848,7 +1849,7 @@ accepted a points or gift-card redemption against its LOCAL cached read model
 account went negative once the redemption was applied there. This is a **manual-follow-up flag, not
 a reversal** — the sale already completed and is not undone.
 
-- **Producer:** `loyalty-service` (not yet scaffolded — a later wave).
+- **Producer:** `loyalty-service` (BUILT — Phase 4; outbox-emitted in the same tx as every balance-affecting write).
 - **Consumers:** `notification-service` (alert an operator) — not yet wired; published for when it
   arrives, the same posture `DeliveryReceipt` shipped with.
 - **Aggregate type / partition key:** `loyalty_redemption_flag` / `flag_id`

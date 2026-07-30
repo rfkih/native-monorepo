@@ -67,10 +67,24 @@ public class GiftCard extends Auditable {
     // for JPA
   }
 
-  /** Creates a newly-sold card at its initial ACTIVE state with {@code amountMinor} balance. */
-  public GiftCard(UUID id, String currency, long amountMinor, Instant soldAt, UUID soldBusinessId) {
+  /**
+   * Creates a newly-sold card at its initial ACTIVE state with {@code amountMinor} balance.
+   *
+   * <p>{@code code} is derived by the CALLER ({@code ingest.service.GiftCardSoldWriter}, via the
+   * injected {@link GiftCardCodeGenerator} bean) and passed in rather than computed here — the
+   * generator is keyed (security review W-4) and therefore needs the externalized {@code
+   * NATIVE_GIFTCARD_CODE_KEY}, which a framework-light domain entity has no business reaching into
+   * Spring config for (CODE-STRUCTURE.md §3.4).
+   */
+  public GiftCard(
+      UUID id,
+      String code,
+      String currency,
+      long amountMinor,
+      Instant soldAt,
+      UUID soldBusinessId) {
     this.id = Objects.requireNonNull(id, "id");
-    this.code = GiftCardCodeGenerator.deriveCode(id);
+    this.code = Objects.requireNonNull(code, "code");
     this.state = GiftCardState.ACTIVE;
     this.balanceMinor = amountMinor;
     this.currency = Objects.requireNonNull(currency, "currency");

@@ -19,6 +19,18 @@ import javax.crypto.spec.SecretKeySpec;
  * offline from a leaked database dump the way an unkeyed {@code SHA-256(phone)} could — an attacker
  * without the key cannot enumerate candidate phone numbers and match hashes.
  *
+ * <p><strong>Tenant-mixed message (security review W-1).</strong> The HMAC message is {@code
+ * companyId + ":" + normalizedPhone} — NOT the phone alone. Hashing the phone alone would make the
+ * digest a pure function of the phone number, so the SAME phone would hash IDENTICALLY across
+ * every tenant; a leaked database dump could then link the same person across unrelated companies
+ * purely from the {@code phone_hash} column, even without decrypting a single {@code
+ * phone_encrypted} value. Mixing the tenant into the message makes the digest tenant-scoped: the
+ * same phone under two different {@code company_id}s produces two UNRELATED hashes, so
+ * cross-tenant linkage is impossible from the hash column alone. This changes neither the {@code
+ * UNIQUE(company_id, phone_hash)} constraint nor the exact-match lookup query — both were already
+ * scoped by {@code company_id} (RLS); this closes the cross-tenant CORRELATION leak on a raw DB
+ * dump, not a query-scoping gap.
+ *
  * <p>Sourced from a SEPARATE key than {@link PiiCipher} (see {@link PiiEncryptionConfig} class
  * javadoc for why the two keys are never conflated), mirroring the same fail-fast startup
  * validation employee-service's {@link PiiCipher} established: a malformed/missing key aborts boot
@@ -66,18 +78,24 @@ public final class PhoneHasher {
 
   /**
    * Computes the deterministic HMAC-SHA256 hex digest of an ALREADY-NORMALIZED phone number (see
-   * {@code member.domain.PhoneNormalizer}) — the caller must normalize first so that two spellings
-   * of the same number (e.g. with/without dashes) hash identically.
+   * {@code member.domain.PhoneNormalizer}), tenant-mixed (security review W-1 — see class javadoc).
    *
+   * @param companyId the tenant the phone is being hashed for; must be non-blank. Mixed into the
+   *     HMAC message so the SAME phone under two different tenants never hashes to the same digest.
    * @param normalizedPhone the normalized phone number; must be non-blank
-   * @return a 64-character lowercase hex digest
+   * @return a 64-character lowercase hex digest, unique to this {@code (companyId, phone)} pair
    */
-  public String hash(String normalizedPhone) {
+  public String hash(String companyId, String normalizedPhone) {
+    Objects.requireNonNull(companyId, "companyId");
     Objects.requireNonNull(normalizedPhone, "normalizedPhone");
     try {
       Mac mac = Mac.getInstance(ALGORITHM);
       mac.init(key);
-      byte[] digest = mac.doFinal(normalizedPhone.getBytes(StandardCharsets.UTF_8));
+      // The message format is FIXED and documented (class javadoc): companyId + ":" + phone. A
+      // colon separator + companyId being a UUID (no colons) makes the pair unambiguous — no two
+      // distinct (companyId, phone) inputs can ever concatenate to the same message.
+      String message = companyId + ":" + normalizedPhone;
+      byte[] digest = mac.doFinal(message.getBytes(StandardCharsets.UTF_8));
       return HexFormat.of().formatHex(digest);
     } catch (Exception e) {
       // The message carries no PII/key (rule 6) — only the operation that failed.

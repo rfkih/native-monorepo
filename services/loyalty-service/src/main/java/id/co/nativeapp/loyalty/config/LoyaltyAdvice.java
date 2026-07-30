@@ -2,6 +2,7 @@ package id.co.nativeapp.loyalty.config;
 
 import id.co.nativeapp.loyalty.earnrule.domain.EarnRuleValidationException;
 import id.co.nativeapp.loyalty.earnrule.domain.EarnRuleWriteForbiddenException;
+import id.co.nativeapp.loyalty.giftcard.domain.GiftCardListForbiddenException;
 import id.co.nativeapp.loyalty.giftcard.domain.GiftCardNotFoundException;
 import id.co.nativeapp.loyalty.member.domain.DuplicateMemberException;
 import id.co.nativeapp.loyalty.member.domain.MemberNotFoundException;
@@ -27,6 +28,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  *       {@code 422}.
  *   <li>{@link EarnRuleWriteForbiddenException} — a non-owner/manager earn-rule write → {@code
  *       403}.
+ *   <li>{@link GiftCardListForbiddenException} — a non-owner/manager gift-card admin listing
+ *       (security review W-4) → {@code 403}.
  * </ul>
  */
 @RestControllerAdvice
@@ -79,6 +82,16 @@ public class LoyaltyAdvice {
       EarnRuleWriteForbiddenException ex, HttpServletRequest request) {
     ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
     problem.setType(URI.create(TYPE_BASE + "earn-rule-write-forbidden"));
+    problem.setTitle("Forbidden");
+    problem.setDetail(ex.getMessage());
+    return decorate(problem, request);
+  }
+
+  @ExceptionHandler(GiftCardListForbiddenException.class)
+  public ProblemDetail handleGiftCardListForbidden(
+      GiftCardListForbiddenException ex, HttpServletRequest request) {
+    ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
+    problem.setType(URI.create(TYPE_BASE + "gift-card-list-forbidden"));
     problem.setTitle("Forbidden");
     problem.setDetail(ex.getMessage());
     return decorate(problem, request);

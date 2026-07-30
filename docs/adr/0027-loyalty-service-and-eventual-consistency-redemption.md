@@ -77,3 +77,14 @@ Odoo solves this inside one database; Native cannot.
   without touching the event stream.
 - The gateway gains `/api/v1/loyalty/**` (POS roles) with the earn-rules admin carved out to the
   dashboard; the dev stack needs the loyalty postgres role/DB and Debezium connector.
+- Security review (2026-07-31, PASS): fixed before close — the phone hash is tenant-salted
+  (cross-tenant linkage on a DB dump), the lookup moved off the URL into a POST body, the
+  gift-card code became a KEYED derivation (`NATIVE_GIFTCARD_CODE_KEY`, fleet-matched — the code
+  is a bearer secret and must not be a public function of a broadcast id), card enumeration is
+  owner/manager-only, and minting requires a tender type under a configurable ceiling
+  (`NATIVE_GIFTCARD_MAX_MINT_MINOR`). Accepted with note: the exact-match member phone lookup is
+  a within-tenant staff capability by design; gateway-header trust off-gateway is the
+  pre-existing fleet posture (mTLS at split time). **Follow-up:** digital-tender gift-card sales
+  should route through the pending→capture flow so a card becomes redeemable only once tender is
+  captured; a compensating un-redeem on void; the fleet-wide literal hash-chain for the journal
+  remains a platform gap predating this phase.

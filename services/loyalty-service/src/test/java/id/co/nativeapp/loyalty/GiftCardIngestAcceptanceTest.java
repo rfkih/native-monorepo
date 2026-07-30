@@ -30,6 +30,7 @@ class GiftCardIngestAcceptanceTest extends KafkaPostgresTestBase {
   private static final UUID BUSINESS = UUID.fromString("33333333-3333-3333-3333-333333333333");
 
   @Autowired private GiftCardReader giftCardReader;
+  @Autowired private GiftCardCodeGenerator giftCardCodeGenerator;
 
   @Test
   void giftCardSoldCreatesTheCardWithADerivedCodeAndALoadEntry() throws Exception {
@@ -38,7 +39,7 @@ class GiftCardIngestAcceptanceTest extends KafkaPostgresTestBase {
     GenericRecord event = EventFixtures.giftCardSold(giftCardId, TENANT, BUSINESS, 100_000L, "IDR");
     EventFixtures.publishGiftCardSold(KAFKA.getBootstrapServers(), eventId, event);
 
-    String expectedCode = GiftCardCodeGenerator.deriveCode(giftCardId);
+    String expectedCode = giftCardCodeGenerator.deriveCode(giftCardId);
 
     // Awaitility's untilAsserted only auto-retries on AssertionError; the card does not exist yet
     // on the first few polls (async Kafka consumption), so the lookup throws
@@ -68,7 +69,7 @@ class GiftCardIngestAcceptanceTest extends KafkaPostgresTestBase {
         UUID.randomUUID(),
         EventFixtures.giftCardSold(giftCardId, TENANT, BUSINESS, 50_000L, "IDR"));
 
-    String code = GiftCardCodeGenerator.deriveCode(giftCardId);
+    String code = giftCardCodeGenerator.deriveCode(giftCardId);
     await()
         .atMost(Duration.ofSeconds(30))
         .ignoreException(GiftCardNotFoundException.class)
@@ -116,7 +117,7 @@ class GiftCardIngestAcceptanceTest extends KafkaPostgresTestBase {
         UUID.randomUUID(),
         EventFixtures.giftCardSold(giftCardId, TENANT, BUSINESS, 10_000L, "IDR"));
 
-    String code = GiftCardCodeGenerator.deriveCode(giftCardId);
+    String code = giftCardCodeGenerator.deriveCode(giftCardId);
     await()
         .atMost(Duration.ofSeconds(30))
         .ignoreException(GiftCardNotFoundException.class)
