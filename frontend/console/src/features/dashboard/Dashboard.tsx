@@ -75,6 +75,9 @@ export function Dashboard() {
   const margin = figures.revenue > 0 ? figures.net / figures.revenue : 0
   const expenseRatio = figures.revenue > 0 ? figures.expense / figures.revenue : 0
   const marginLabel = figures.revenue > 0 ? formatPercent(margin, locale) : '—'
+  // Whether THIS period has any postings at all — qualitative labels (positive/healthy/…) and
+  // deltas render as '—' on an empty period rather than asserting facts no posting backs.
+  const hasPostings = figures.revenue !== 0 || figures.expense !== 0 || figures.net !== 0
 
   // Trailing-window series (each point converted on its own merits, matching the active lens).
   const points = trend.map((p) => {
@@ -194,7 +197,7 @@ export function Dashboard() {
                 </div>
               )}
 
-              {prev ? (
+              {prev && prev.fig.revenue > 0 ? (
                 <div className="flex flex-wrap items-center gap-3">
                   <DeltaPill value={revDelta} locale={locale} />
                   <span className="text-[13px] text-ink-3">
@@ -282,25 +285,33 @@ export function Dashboard() {
                   <Glance
                     label={t('dashboard.margin')}
                     value={marginLabel}
-                    sub={profit ? t('dashboard.healthy') : t('dashboard.negative')}
+                    sub={
+                      figures.revenue > 0
+                        ? profit
+                          ? t('dashboard.healthy')
+                          : t('dashboard.negative')
+                        : '—'
+                    }
                     valueClass="text-profit-ink"
                   />
                   <Glance
                     label={t('dashboard.netTrend')}
-                    value={prev ? signedPercent(netTrend, locale) : '—'}
+                    value={prev && prev.fig.net !== 0 ? signedPercent(netTrend, locale) : '—'}
                     sub={t('dashboard.months', { count: TREND_MONTHS })}
                     valueClass={netTrend >= 0 ? 'text-profit-ink' : 'text-loss'}
                   />
                   <Glance
                     label={t('dashboard.bestMonth')}
-                    value={best ? monthShort(best.period, locale) : '—'}
+                    value={best && best.net !== 0 ? monthShort(best.period, locale) : '—'}
                     sub={t('dashboard.peak')}
                   />
                   <Glance
                     label={t('dashboard.netProfit')}
-                    value={profit ? t('dashboard.positive') : t('dashboard.negative')}
+                    value={
+                      hasPostings ? (profit ? t('dashboard.positive') : t('dashboard.negative')) : '—'
+                    }
                     sub={formatPeriod(period, locale)}
-                    valueClass={profit ? 'text-profit-ink' : 'text-loss'}
+                    valueClass={hasPostings ? (profit ? 'text-profit-ink' : 'text-loss') : undefined}
                   />
                 </div>
               </Card>
@@ -334,21 +345,31 @@ export function Dashboard() {
             <Kpi
               label={t('dashboard.revenue')}
               value={formatMoney(figures.revenue, displayCurrency, locale)}
-              note={prev ? `${signedPercent(revDelta, locale)} ${t('dashboard.vsPrev', { month: prevMonthLabel })}` : undefined}
+              note={
+                prev && prev.fig.revenue > 0
+                  ? `${signedPercent(revDelta, locale)} ${t('dashboard.vsPrev', { month: prevMonthLabel })}`
+                  : undefined
+              }
               noteClass={revDelta >= 0 ? 'text-profit-ink' : 'text-loss'}
               loading={query.isLoading}
             />
             <Kpi
               label={t('dashboard.expense')}
               value={formatMoney(figures.expense, displayCurrency, locale)}
-              note={t('dashboard.ofRevenue', { pct: formatPercent(expenseRatio, locale) })}
+              note={
+                figures.revenue > 0
+                  ? t('dashboard.ofRevenue', { pct: formatPercent(expenseRatio, locale) })
+                  : undefined
+              }
               loading={query.isLoading}
             />
             <Kpi
               label={t('dashboard.netProfit')}
               value={formatMoney(figures.net, displayCurrency, locale)}
               valueClass={profit ? 'text-profit-ink' : 'text-loss'}
-              note={profit ? t('dashboard.positive') : t('dashboard.negative')}
+              note={
+                hasPostings ? (profit ? t('dashboard.positive') : t('dashboard.negative')) : undefined
+              }
               noteClass={profit ? 'text-profit-ink' : 'text-loss'}
               emphatic
               loading={query.isLoading}
@@ -357,7 +378,13 @@ export function Dashboard() {
               label={t('dashboard.margin')}
               value={marginLabel}
               valueClass="text-profit-ink"
-              note={profit ? t('dashboard.healthy') : t('dashboard.negative')}
+              note={
+                figures.revenue > 0
+                  ? profit
+                    ? t('dashboard.healthy')
+                    : t('dashboard.negative')
+                  : undefined
+              }
               loading={query.isLoading}
             />
           </div>

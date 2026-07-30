@@ -52,7 +52,6 @@ import { OutletGate } from '@/components/OutletGate'
 import {
   useMenu,
   useCategories,
-  useSeedMenu,
   useTables,
   useParkedOrders,
   type MenuItem,
@@ -116,7 +115,6 @@ function PosInner({ session }: { session: CompanySession }) {
   const tablesQuery = useTables(session)
   const parkedQuery = useParkedOrders(session)
   const billsQuery = useBills(session)
-  const seed = useSeedMenu(session)
   const appendLines = useAppendLines(session)
 
   // Cart state
@@ -563,7 +561,7 @@ function PosInner({ session }: { session: CompanySession }) {
           {menuQuery.isLoading ? (
             <MenuSkeleton />
           ) : items.length === 0 ? (
-            <EmptyMenu onLoad={() => seed.mutate()} isLoading={seed.isPending} />
+            <EmptyMenu />
           ) : (
             <div>
               {/* Section label */}
@@ -1247,7 +1245,7 @@ function MenuSkeleton() {
 // EmptyMenu
 // ---------------------------------------------------------------------------
 
-function EmptyMenu({ onLoad, isLoading }: { onLoad: () => void; isLoading: boolean }) {
+function EmptyMenu() {
   const { t } = useTranslation()
   return (
     <div className="flex flex-col items-center justify-center px-6 py-20 text-center">
@@ -1256,10 +1254,6 @@ function EmptyMenu({ onLoad, isLoading }: { onLoad: () => void; isLoading: boole
       </div>
       <h2 className="font-display text-xl font-bold text-ink">{t('pos.emptyMenu')}</h2>
       <p className="mx-auto mt-2 max-w-xs text-sm text-ink-3">{t('pos.emptyMenuHint')}</p>
-      <Button className="mt-6 shadow-sm" onClick={onLoad} disabled={isLoading}>
-        {isLoading ? <Spinner /> : null}
-        {t('pos.loadSample')}
-      </Button>
     </div>
   )
 }
