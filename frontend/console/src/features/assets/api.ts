@@ -20,6 +20,10 @@ export interface Asset {
   usefulLifeMonths: number
   currency: string
   status: string
+  /** Null until the asset is DISPOSED (ADR 0022). */
+  disposalDate: string | null
+  /** Null until the asset is DISPOSED (ADR 0022). */
+  proceedsMinor: number | null
   accumulatedMinor: number
   bookValueMinor: number
 }
@@ -145,6 +149,15 @@ export interface CreateDeferralVariables extends CreateDeferralBody {
   idempotencyKey: string
 }
 
+/** See {@link AcquireAssetVariables}. */
+export interface DisposeAssetVariables {
+  assetId: string
+  disposalDate: string
+  proceedsMinor: number
+  currency: string
+  idempotencyKey: string
+}
+
 /** POST /api/v1/assets — acquire (capitalize) an asset (requires an Idempotency-Key). */
 export function useAcquireAsset(params: { companyId: string; actor: string }) {
   const { companyId, actor } = params
@@ -168,6 +181,26 @@ export function useCreateDeferral(params: { companyId: string; actor: string }) 
   return useMutation({
     mutationFn: ({ idempotencyKey, ...body }: CreateDeferralVariables) =>
       apiFetch<Deferral[]>('/api/v1/deferrals', {
+        method: 'POST',
+        tenant: { companyId, actor },
+        headers: { 'Idempotency-Key': idempotencyKey },
+        body,
+      }),
+    onSuccess: () => invalidateAll(queryClient, companyId),
+  })
+}
+
+/**
+ * POST /api/v1/assets/{id}/dispose — sell/scrap an asset (requires an Idempotency-Key; ADR 0022).
+ * Derecognizes cost + accumulated depreciation and posts the gain/loss on disposal; proceeds of 0
+ * = write-off. One-shot: an already-disposed asset returns 409.
+ */
+export function useDisposeAsset(params: { companyId: string; actor: string }) {
+  const { companyId, actor } = params
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ assetId, idempotencyKey, ...body }: DisposeAssetVariables) =>
+      apiFetch<AssetDetail>(`/api/v1/assets/${assetId}/dispose`, {
         method: 'POST',
         tenant: { companyId, actor },
         headers: { 'Idempotency-Key': idempotencyKey },

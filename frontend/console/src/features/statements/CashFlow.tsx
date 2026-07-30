@@ -60,7 +60,12 @@ export function CashFlow() {
       [t('statements.cashFlow.fromOperating'), data.cashFromOperatingMinor],
       [],
       [t('statements.cashFlow.investing')],
-      ...data.investingLines.map((l) => [l.accountCode, l.amountMinor]),
+      ...data.investingLines.map((l) => [
+        l.accountCode === 'DISPOSAL_PROCEEDS'
+          ? t('statements.cashFlow.disposalProceeds')
+          : l.accountCode,
+        l.amountMinor,
+      ]),
       [t('statements.cashFlow.fromInvesting'), data.cashFromInvestingMinor],
       [],
       [t('statements.cashFlow.financing')],
@@ -163,6 +168,12 @@ export function CashFlow() {
                   heading={t('statements.cashFlow.investing')}
                   lines={data.investingLines.map((l) => ({
                     accountCode: l.accountCode,
+                    // The disposal-proceeds line is a synthetic marker, not a chart account —
+                    // render it with its localized label (ADR 0022).
+                    label:
+                      l.accountCode === 'DISPOSAL_PROCEEDS'
+                        ? t('statements.cashFlow.disposalProceeds')
+                        : undefined,
                     amountMinor: l.amountMinor,
                   }))}
                   totalLabel={t('statements.cashFlow.fromInvesting')}

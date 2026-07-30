@@ -11,7 +11,7 @@ import { useSession } from '@/lib/session'
 import { localeOf } from '@/i18n'
 import { formatMoney, isoMinorExponent } from '@/lib/money'
 import { formatPeriod } from '@/lib/period'
-import { useAcquireAsset, useAssets, useRunAmortization, useRuns } from './api'
+import { useAcquireAsset, useAssets, useDisposeAsset, useRunAmortization, useRuns, type Asset } from './api'
 import { assetErrorKey } from './format'
 
 function currentMonth(): string {
@@ -43,6 +43,7 @@ export function FixedAssets() {
   const assetsQuery = useAssets({ companyId, actor, enabled })
   const runsQuery = useRuns({ companyId, actor, enabled })
   const acquireAsset = useAcquireAsset({ companyId, actor })
+  const disposeAsset = useDisposeAsset({ companyId, actor })
   const runAmortization = useRunAmortization({ companyId, actor })
 
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -54,6 +55,11 @@ export function FixedAssets() {
   const [runPeriod, setRunPeriod] = useState(currentMonth())
   const [error, setError] = useState<string | null>(null)
   const [runError, setRunError] = useState<string | null>(null)
+  // Dispose dialog (ADR 0022): the asset being sold/scrapped, or null when closed.
+  const [disposeTarget, setDisposeTarget] = useState<Asset | null>(null)
+  const [disposeDate, setDisposeDate] = useState(todayIso())
+  const [proceeds, setProceeds] = useState('0')
+  const [disposeError, setDisposeError] = useState<string | null>(null)
 
   if (!company) {
     return <EmptyState title={t('assets.noCompany')} hint={t('assets.noCompanyHint')} />
@@ -102,6 +108,35 @@ export function FixedAssets() {
       await runAmortization.mutateAsync(runPeriod)
     } catch (e) {
       setRunError(t(assetErrorKey(e)))
+    }
+  }
+
+  function openDispose(asset: Asset) {
+    setDisposeDate(todayIso())
+    setProceeds('0')
+    setDisposeError(null)
+    setDisposeTarget(asset)
+  }
+
+  async function submitDispose() {
+    if (!disposeTarget) return
+    setDisposeError(null)
+    if (Number(proceeds) < 0) {
+      setDisposeError(t('assets.errors.invalid'))
+      return
+    }
+    try {
+      await disposeAsset.mutateAsync({
+        assetId: disposeTarget.id,
+        disposalDate: disposeDate,
+        proceedsMinor: toMinor(Number(proceeds || '0'), disposeTarget.currency),
+        currency: disposeTarget.currency,
+        // Generated once per submit (stable across TanStack retries; fresh on the next submit).
+        idempotencyKey: crypto.randomUUID(),
+      })
+      setDisposeTarget(null)
+    } catch (e) {
+      setDisposeError(t(assetErrorKey(e)))
     }
   }
 
@@ -172,6 +207,10 @@ export function FixedAssets() {
                 <th className="px-4 py-3 text-right">{t('assets.colCost')}</th>
                 <th className="px-4 py-3 text-right">{t('assets.colAccumulated')}</th>
                 <th className="px-4 py-3 text-right">{t('assets.colBookValue')}</th>
+                <th className="px-4 py-3">{t('assets.colStatus')}</th>
+                <th className="px-4 py-3">
+                  <span className="sr-only">{t('assets.dispose')}</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -194,6 +233,20 @@ export function FixedAssets() {
                   </td>
                   <td className="tnum px-4 py-3 text-right font-mono font-semibold text-ink">
                     {formatMoney(a.bookValueMinor, a.currency, locale)}
+                  </td>
+                  <td className="px-4 py-3">
+                    {a.status === 'DISPOSED' ? (
+                      <Badge tone="amber">{t('assets.statusDisposed')}</Badge>
+                    ) : (
+                      <Badge tone="neutral">{t('assets.statusActive')}</Badge>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    {a.status === 'ACTIVE' ? (
+                      <Button type="button" variant="outline" onClick={() => openDispose(a)}>
+                        {t('assets.dispose')}
+                      </Button>
+                    ) : null}
                   </td>
                 </tr>
               ))}
@@ -325,6 +378,80 @@ export function FixedAssets() {
                 </Button>
                 <Button type="button" onClick={submitAcquire} disabled={acquireAsset.isPending}>
                   {t('assets.acquireConfirm')}
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      ) : null}
+
+      {disposeTarget ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setDisposeTarget(null)
+          }}
+        >
+          <Card className="w-full max-w-md p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="font-display text-xl font-semibold text-ink">
+                {t('assets.disposeTitle', { name: disposeTarget.name })}
+              </h2>
+              <button
+                type="button"
+                aria-label={t('common.close')}
+                onClick={() => setDisposeTarget(null)}
+                className="text-ink-3 hover:text-ink"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+
+            <p className="mb-4 text-sm leading-relaxed text-ink-3">
+              {t('assets.disposeHint', {
+                bookValue: formatMoney(
+                  disposeTarget.bookValueMinor,
+                  disposeTarget.currency,
+                  locale,
+                ),
+              })}
+            </p>
+
+            <div className="flex flex-col gap-3.5">
+              <Field label={t('assets.disposeDateLabel')} htmlFor="dispose-date">
+                <TextInput
+                  id="dispose-date"
+                  type="date"
+                  value={disposeDate}
+                  onChange={(e) => setDisposeDate(e.target.value)}
+                />
+              </Field>
+              <Field label={t('assets.proceedsLabel')} htmlFor="dispose-proceeds">
+                <TextInput
+                  id="dispose-proceeds"
+                  type="number"
+                  min="0"
+                  value={proceeds}
+                  onChange={(e) => setProceeds(e.target.value)}
+                />
+              </Field>
+
+              {disposeError ? (
+                <div className="flex items-center gap-2 text-sm text-loss">
+                  <TriangleAlert className="size-4 shrink-0" aria-hidden />
+                  {disposeError}
+                </div>
+              ) : null}
+
+              <div className="mt-1 flex justify-end gap-2.5">
+                <Button type="button" variant="outline" onClick={() => setDisposeTarget(null)}>
+                  {t('common.cancel')}
+                </Button>
+                <Button type="button" onClick={submitDispose} disabled={disposeAsset.isPending}>
+                  {disposeAsset.isPending ? <Spinner /> : null}
+                  {t('assets.disposeConfirm')}
                 </Button>
               </div>
             </div>

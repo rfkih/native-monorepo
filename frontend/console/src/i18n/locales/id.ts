@@ -326,6 +326,7 @@ export const id = {
     noLines: 'Tidak ada akun',
     cashFlow: {
       title: 'Laporan arus kas',
+      disposalProceeds: 'Hasil pelepasan aset',
       subtitle: 'Bagaimana kas bergerak pada periode ini — metode tidak langsung.',
       operating: 'Aktivitas operasi',
       investing: 'Aktivitas investasi',
@@ -1943,11 +1944,24 @@ export const id = {
     colPeriod: 'Bulan',
     colItems: 'Item',
     colPosted: 'Dibukukan',
+    colStatus: 'Status',
+    statusActive: 'Aktif',
+    statusDisposed: 'Dilepas',
+    dispose: 'Lepas',
+    disposeTitle: 'Lepas {{name}}',
+    disposeConfirm: 'Lepas aset',
+    disposeDateLabel: 'Tanggal pelepasan',
+    proceedsLabel: 'Harga jual (0 = hapus buku)',
+    disposeHint:
+      'Menghapus aset dan penyusutannya dari pembukuan, lalu membukukan selisih terhadap nilai buku {{bookValue}} sebagai laba atau rugi pelepasan — pendapatan lain-lain, bukan pendapatan penjualan. Tidak dapat dibatalkan.',
     illustrativeNote:
       'Ilustratif: hanya garis lurus, penyusutan mulai bulan setelah perolehan, dan kode akun masih sementara menunggu ahli akuntansi.',
     errors: {
       invalid: 'Periksa jumlahnya — harga perolehan harus positif dan nilai sisa di bawahnya.',
       currencyMismatch: 'Mata uang harus sama dengan mata uang dasar perusahaan untuk periode ini.',
+      alreadyDisposed: 'Aset ini sudah dilepas.',
+      depreciationBehind:
+        'Penyusutan belum lengkap — jalankan bulan yang tertinggal sebelum melepas aset.',
       generic: 'Terjadi kesalahan. Silakan coba lagi.',
     },
   },

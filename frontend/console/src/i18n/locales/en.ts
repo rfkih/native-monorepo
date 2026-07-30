@@ -332,6 +332,7 @@ export const en = {
     cashFlow: {
       title: 'Cash flow statement',
       subtitle: 'How cash moved this period — the indirect method.',
+      disposalProceeds: 'Proceeds from asset disposal',
       operating: 'Operating activities',
       investing: 'Investing activities',
       financing: 'Financing activities',
@@ -1947,11 +1948,24 @@ export const en = {
     colPeriod: 'Month',
     colItems: 'Items',
     colPosted: 'Posted',
+    colStatus: 'Status',
+    statusActive: 'Active',
+    statusDisposed: 'Disposed',
+    dispose: 'Dispose',
+    disposeTitle: 'Dispose {{name}}',
+    disposeConfirm: 'Dispose asset',
+    disposeDateLabel: 'Disposal date',
+    proceedsLabel: 'Sale price (0 = write-off)',
+    disposeHint:
+      'Removes the asset and its depreciation from the books and posts the difference against the {{bookValue}} book value as a gain or loss on disposal — other income, never sales revenue. This cannot be undone.',
     illustrativeNote:
       'Illustrative: straight-line only, depreciation starts the month after acquisition, and account codes are placeholders pending an accounting specialist.',
     errors: {
       invalid: 'Check the amounts — cost must be positive and salvage below cost.',
       currencyMismatch: 'The currency must match the company base currency for the period.',
+      alreadyDisposed: 'This asset has already been disposed.',
+      depreciationBehind:
+        'Depreciation is not caught up — run the missing months before disposing.',
       generic: 'Something went wrong. Please try again.',
     },
   },
