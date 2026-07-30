@@ -931,6 +931,24 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
   }
 
   @Test
+  void aCashierCanReachTheGiftCardSalesRoute() throws Exception {
+    // Selling a gift card is a till operation (ADR 0027) — POS surface, restaurant-unprefixed.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/gift-card-sales/x")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/gift-card-sales/x");
+  }
+
+  @Test
   void aCashierIsDeniedTheLoyaltyEarnRulesRouteWith403() throws Exception {
     // Earn rules decide how much every sale is worth in points — owner/manager config, ordered
     // BEFORE the general loyalty route (first match wins).

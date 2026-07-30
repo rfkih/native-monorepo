@@ -432,6 +432,28 @@ public class RoutingConfig {
   }
 
   /**
+   * Restaurant gift-card sales ({@code /api/v1/gift-card-sales}) — a POS till operation (ADR 0027):
+   * selling a card mints it and emits {@code GiftCardSold}. Unprefixed because restaurant's surface
+   * is grandfathered unprefixed; deliberately NOT under {@code /api/v1/loyalty/**}, which routes to
+   * loyalty-service (the card is SOLD at the vertical till, the authoritative card aggregate
+   * materialises in loyalty-service via the event). The carwash/barbershop equivalents ride their
+   * existing vertical-prefixed routes.
+   */
+  @Bean
+  RouterFunction<ServerResponse> giftCardSalesRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("restaurant-service-gift-card-sales")
+        .route(path("/api/v1/gift-card-sales/**"), http())
+        .before(uri(routes.restaurantService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(POS_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
    * Loyalty POS surface ({@code /api/v1/loyalty/**} — member lookup/enroll, gift-card lookup) —
    * POS_ROLES: the cashier attaches members and gift cards at the till (ADR 0027). This is a CLIENT
    * call through the gateway, not a service-to-service call; the verticals themselves never call
