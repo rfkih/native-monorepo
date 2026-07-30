@@ -369,9 +369,9 @@ public class RoutingConfig {
   /**
    * All carwash POS traffic under {@code /api/v1/carwash/**} (carwash-service) — POS surface.
    * Vertical services after restaurant are namespaced by vertical (the {@code /api/v1/ap/**}
-   * precedent applied at vertical scope): restaurant's unprefixed paths ({@code /orders},
-   * {@code /menu}, …) are grandfathered, but carwash and every later vertical prefix so they can
-   * never collide with each other. Covers catalog (packages/addons/staff-profiles) and tickets
+   * precedent applied at vertical scope): restaurant's unprefixed paths ({@code /orders}, {@code
+   * /menu}, …) are grandfathered, but carwash and every later vertical prefix so they can never
+   * collide with each other. Covers catalog (packages/addons/staff-profiles) and tickets
    * (quote/checkout/read).
    */
   @Bean
@@ -701,9 +701,10 @@ public class RoutingConfig {
 
   /**
    * Tax / PPN (finance-service) — owner/manager only. {@code /api/v1/tax/**} covers the VAT report
-   * ({@code GET /api/v1/tax/vat/return}), filing + history + detail ({@code /api/v1/tax/vat/returns}),
-   * settlement ({@code POST /api/v1/tax/vat/returns/{id}/settle}), and the e-Faktur CSV export
-   * ({@code GET /api/v1/tax/vat/efaktur}) (Phase 4 Tax / PPN, ADR 0017). Fresh prefix — no collision.
+   * ({@code GET /api/v1/tax/vat/return}), filing + history + detail ({@code
+   * /api/v1/tax/vat/returns}), settlement ({@code POST /api/v1/tax/vat/returns/{id}/settle}), and
+   * the e-Faktur CSV export ({@code GET /api/v1/tax/vat/efaktur}) (Phase 4 Tax / PPN, ADR 0017).
+   * Fresh prefix — no collision.
    */
   @Bean
   RouterFunction<ServerResponse> taxRoute(
@@ -721,9 +722,9 @@ public class RoutingConfig {
 
   /**
    * Budgets (finance-service) — owner/manager only. {@code /api/v1/budgets/**} covers budget CRUD,
-   * the budget-vs-actual variance ({@code GET /api/v1/budgets/{id}/actuals}), and the chart-of-account
-   * picker ({@code GET /api/v1/budgets/accounts}) (Phase 5 Cash-flow &amp; Budgets, ADR 0019). Fresh
-   * prefix — no collision.
+   * the budget-vs-actual variance ({@code GET /api/v1/budgets/{id}/actuals}), and the
+   * chart-of-account picker ({@code GET /api/v1/budgets/accounts}) (Phase 5 Cash-flow &amp;
+   * Budgets, ADR 0019). Fresh prefix — no collision.
    */
   @Bean
   RouterFunction<ServerResponse> budgetsRoute(

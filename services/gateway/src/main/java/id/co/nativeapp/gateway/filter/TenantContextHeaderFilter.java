@@ -48,7 +48,10 @@ import org.springframework.web.servlet.function.ServerResponse;
 public final class TenantContextHeaderFilter
     implements HandlerFilterFunction<ServerResponse, ServerResponse> {
 
-  /** Tenant id header: inbound = the client's active-company selection; outbound = the resolved tenant. */
+  /**
+   * Tenant id header: inbound = the client's active-company selection; outbound = the resolved
+   * tenant.
+   */
   public static final String COMPANY_HEADER = "X-Company-Id";
 
   /** Acting principal header (the JWT {@code sub}). */

@@ -36,7 +36,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *       never double-grants.
  *   <li>{@link EntitlementCache} + {@link CachedEntitlementChecker} — the shared Redis-cached
  *       entitled? gate.
- *   <li>{@link OutboxLagMetrics} — Micrometer gauge {@code native.outbox.unpublished} (ADR 0010 #13).
+ *   <li>{@link OutboxLagMetrics} — Micrometer gauge {@code native.outbox.unpublished} (ADR 0010
+ *       #13).
  * </ul>
  */
 @Configuration
