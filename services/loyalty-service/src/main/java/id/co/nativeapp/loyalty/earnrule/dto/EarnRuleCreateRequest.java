@@ -7,7 +7,8 @@ import java.time.LocalDate;
 
 /**
  * {@code POST /api/v1/loyalty/earn-rules} request body. {@code effectiveFrom} defaults to today
- * when omitted; {@code effectiveTo} defaults to the open-ended sentinel ({@code EarnRule.OPEN_ENDED}).
+ * when omitted; {@code effectiveTo} defaults to the open-ended sentinel ({@code
+ * EarnRule.OPEN_ENDED}).
  */
 public record EarnRuleCreateRequest(
     @NotNull @PositiveOrZero Long pointsPerMinorBp,

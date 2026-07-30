@@ -29,7 +29,9 @@ public final class SaleReversalConsumerSchema {
     // static holder
   }
 
-  /** Lazy holder: each {@code .avsc} is parsed on FIRST use (a parse failure is a repeatable error). */
+  /**
+   * Lazy holder: each {@code .avsc} is parsed on FIRST use (a parse failure is a repeatable error).
+   */
   private static final class Holder {
     private static final Schema VOIDED_SCHEMA = parse(VOIDED_RESOURCE);
     private static final Schema REFUNDED_SCHEMA = parse(REFUNDED_RESOURCE);

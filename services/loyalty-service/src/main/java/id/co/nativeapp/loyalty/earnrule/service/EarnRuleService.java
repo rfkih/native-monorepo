@@ -8,8 +8,8 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 
 /**
- * Orchestrates earn-rule admin CRUD for {@code EarnRuleController}. Ported from barbershop-service's
- * {@code PromotionAdminService} write-role-guard pattern.
+ * Orchestrates earn-rule admin CRUD for {@code EarnRuleController}. Ported from
+ * barbershop-service's {@code PromotionAdminService} write-role-guard pattern.
  *
  * <p><strong>Writes require {@code owner}/{@code manager}; reads are ungated.</strong> An earn rule
  * is company-wide, money-routing configuration (it decides how many points every future sale
@@ -27,7 +27,8 @@ public class EarnRuleService {
   private final EarnRuleReader reader;
   private final ActorRolesProvider actorRoles;
 
-  public EarnRuleService(EarnRuleWriter writer, EarnRuleReader reader, ActorRolesProvider actorRoles) {
+  public EarnRuleService(
+      EarnRuleWriter writer, EarnRuleReader reader, ActorRolesProvider actorRoles) {
     this.writer = writer;
     this.reader = reader;
     this.actorRoles = actorRoles;

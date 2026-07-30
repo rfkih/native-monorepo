@@ -45,7 +45,10 @@ public class LoyaltyMember extends Auditable {
   @Column(name = "id", nullable = false, updatable = false)
   private UUID id;
 
-  /** The member's phone number — PII. Column-encrypted at rest via {@link PiiBytesAttributeConverter}. */
+  /**
+   * The member's phone number — PII. Column-encrypted at rest via {@link
+   * PiiBytesAttributeConverter}.
+   */
   @Convert(converter = PiiBytesAttributeConverter.class)
   @Column(name = "phone_encrypted", nullable = false)
   private String phone;

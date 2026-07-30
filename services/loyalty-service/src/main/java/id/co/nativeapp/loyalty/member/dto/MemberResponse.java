@@ -29,6 +29,9 @@ public record MemberResponse(UUID id, String displayName, String phoneTail, long
 
   public static MemberResponse from(LoyaltyMember member) {
     return new MemberResponse(
-        member.getId(), member.getDisplayName(), member.maskedPhoneTail(), member.getPointsBalance());
+        member.getId(),
+        member.getDisplayName(),
+        member.maskedPhoneTail(),
+        member.getPointsBalance());
   }
 }

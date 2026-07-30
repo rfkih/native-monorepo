@@ -47,8 +47,8 @@ abstract class PostgresRlsTestBase {
    * exist on the very first invocation before Flyway has run, so the truncate is best-effort.
    *
    * <p>Unlike barbershop's {@code tax_charge_rule} (which carries a preserved V1 seed row),
-   * loyalty-service's {@code earn_rule} has NO seed row (by design — zero-earn until configured), so
-   * it is safely included in the full truncate list here.
+   * loyalty-service's {@code earn_rule} has NO seed row (by design — zero-earn until configured),
+   * so it is safely included in the full truncate list here.
    */
   @BeforeEach
   void resetTables() {

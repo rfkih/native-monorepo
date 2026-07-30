@@ -22,9 +22,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 /**
  * Two-tenant RLS isolation (rule 5): a member enrolled under tenant A's phone hash is invisible to
  * tenant B's lookup by the SAME phone (a different member, or none at all, per tenant), and a gift
- * card sold under tenant A's code is invisible to tenant B — proving the {@code
- * UNIQUE(company_id, phone_hash)} / {@code UNIQUE(company_id, code)} constraints are genuinely
- * tenant-scoped, not global.
+ * card sold under tenant A's code is invisible to tenant B — proving the {@code UNIQUE(company_id,
+ * phone_hash)} / {@code UNIQUE(company_id, code)} constraints are genuinely tenant-scoped, not
+ * global.
  */
 @SpringBootTest
 class TenancyIsolationTest extends KafkaPostgresTestBase {
@@ -43,7 +43,9 @@ class TenancyIsolationTest extends KafkaPostgresTestBase {
     String phone = "0833-9999-0001";
     MemberResponse enrolledInA =
         TenantContext.callAs(
-            TENANT_A, ACTOR, () -> memberService.enroll(new EnrollMemberRequest(phone, "Tenant A")));
+            TENANT_A,
+            ACTOR,
+            () -> memberService.enroll(new EnrollMemberRequest(phone, "Tenant A")));
 
     // The SAME phone under tenant B: not found (tenant B has never enrolled it) — proving the
     // UNIQUE(company_id, phone_hash) constraint scopes uniqueness PER TENANT, and the lookup query
@@ -56,12 +58,16 @@ class TenancyIsolationTest extends KafkaPostgresTestBase {
     // uniqueness constraint is per-tenant, not global.
     MemberResponse enrolledInB =
         TenantContext.callAs(
-            TENANT_B, ACTOR, () -> memberService.enroll(new EnrollMemberRequest(phone, "Tenant B")));
+            TENANT_B,
+            ACTOR,
+            () -> memberService.enroll(new EnrollMemberRequest(phone, "Tenant B")));
     assertThat(enrolledInB.id()).isNotEqualTo(enrolledInA.id());
 
     // Tenant A cannot read tenant B's member by id either (RLS on findById).
     assertThatThrownBy(
-            () -> TenantContext.callAs(TENANT_A, ACTOR, () -> memberService.getById(enrolledInB.id())))
+            () ->
+                TenantContext.callAs(
+                    TENANT_A, ACTOR, () -> memberService.getById(enrolledInB.id())))
         .isInstanceOf(MemberNotFoundException.class);
   }
 
@@ -82,7 +88,8 @@ class TenancyIsolationTest extends KafkaPostgresTestBase {
         .untilAsserted(
             () ->
                 assertThat(
-                        TenantContext.callAs(TENANT_A, ACTOR, () -> giftCardReader.lookupByCode(code))
+                        TenantContext.callAs(
+                                TENANT_A, ACTOR, () -> giftCardReader.lookupByCode(code))
                             .balanceMinor())
                     .isEqualTo(20_000L));
 

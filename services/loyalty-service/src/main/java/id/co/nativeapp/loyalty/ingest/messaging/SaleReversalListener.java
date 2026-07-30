@@ -24,8 +24,8 @@ import org.springframework.stereotype.Component;
  * trigger the IDENTICAL behaviour (full-reversal of the sale's loyalty facts by {@code sale_id};
  * loyalty stored only sale-level facts, so even a partial refund reverses the FULL loyalty impact,
  * mirroring finance's posture). Rather than duplicate that behaviour across two near-identical
- * classes, this mirrors {@code StaffEventListener}'s house precedent (one class, two {@code
- * @KafkaListener} methods, one shared decode+apply path) — see {@link SaleReversalService} /
+ * classes, this mirrors {@code StaffEventListener}'s house precedent (one class, two
+ * {@code @KafkaListener} methods, one shared decode+apply path) — see {@link SaleReversalService} /
  * {@link id.co.nativeapp.loyalty.ingest.service.SaleReversalWriter SaleReversalWriter} for the
  * shared reversal logic.
  *
@@ -62,8 +62,7 @@ public class SaleReversalListener {
   }
 
   private void handle(
-      ConsumerRecord<String, byte[]> record,
-      BiFunction<UUID, byte[], SaleReversalFact> decoder) {
+      ConsumerRecord<String, byte[]> record, BiFunction<UUID, byte[], SaleReversalFact> decoder) {
     UUID eventId = eventIdOf(record);
     SaleReversalFact fact = decode(eventId, record, decoder);
     boolean applied = saleReversalService.apply(fact);

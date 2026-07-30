@@ -19,8 +19,8 @@ import org.springframework.boot.test.context.SpringBootTest;
  * VARCHAR}, or the {@code BYTEA} PII columns vs the entity's converter target type).
  *
  * <p>An enrolled member round-trips with its {@code company_id} and {@code created_by} populated
- * from the {@link TenantContext} scope (rule 4), read over the admin connection (the table is
- * FORCE RLS) — and its PII columns are proven to be ciphertext, not plaintext (rule 6).
+ * from the {@link TenantContext} scope (rule 4), read over the admin connection (the table is FORCE
+ * RLS) — and its PII columns are proven to be ciphertext, not plaintext (rule 6).
  */
 @SpringBootTest
 class MigrationAndAuditRoundTripTest extends KafkaPostgresTestBase {

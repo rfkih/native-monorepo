@@ -14,15 +14,16 @@ import org.junit.jupiter.api.Test;
  * The {@code LoyaltyBalanceChanged} PRODUCER-copy contract test (ADR 0027, no Spring context
  * needed; HR-7 triad): the schema parses with the expected shape, a {@link GenericRecord}
  * round-trips through {@code libs/events AvroSerde}, and the back-compat gate accepts an
- * added-optional-field while rejecting a new required field with no default. Also pins NO PII
- * (rule 6): {@code member_id} is an opaque UUID string field only.
+ * added-optional-field while rejecting a new required field with no default. Also pins NO PII (rule
+ * 6): {@code member_id} is an opaque UUID string field only.
  */
 class LoyaltyBalanceChangedContractTest {
 
   @Test
   void avscParsesWithTheExpectedShape() {
     Schema schema = LoyaltyBalanceChangedSchema.schema();
-    assertThat(schema.getFullName()).isEqualTo("id.co.nativeapp.events.loyalty.LoyaltyBalanceChanged");
+    assertThat(schema.getFullName())
+        .isEqualTo("id.co.nativeapp.events.loyalty.LoyaltyBalanceChanged");
     assertThat(schema.getField("member_id")).isNotNull();
     assertThat(schema.getField("company_id")).isNotNull();
     assertThat(schema.getField("points_balance").schema().getType()).isEqualTo(Schema.Type.LONG);

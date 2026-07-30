@@ -19,7 +19,8 @@ class GiftCardStateChangedContractTest {
   @Test
   void avscParsesWithTheExpectedShape() {
     Schema schema = GiftCardStateChangedSchema.schema();
-    assertThat(schema.getFullName()).isEqualTo("id.co.nativeapp.events.loyalty.GiftCardStateChanged");
+    assertThat(schema.getFullName())
+        .isEqualTo("id.co.nativeapp.events.loyalty.GiftCardStateChanged");
     assertThat(schema.getField("gift_card_id")).isNotNull();
     assertThat(schema.getField("state")).isNotNull();
     assertThat(schema.getField("balance_minor").schema().getType()).isEqualTo(Schema.Type.LONG);
@@ -32,7 +33,13 @@ class GiftCardStateChangedContractTest {
     UUID cardId = UUID.randomUUID();
     GenericRecord record =
         GiftCardStateChangedSchema.toRecord(
-            cardId, "11111111-1111-1111-1111-111111111111", "DEPLETED", 0L, "IDR", 2L, Instant.now());
+            cardId,
+            "11111111-1111-1111-1111-111111111111",
+            "DEPLETED",
+            0L,
+            "IDR",
+            2L,
+            Instant.now());
 
     byte[] bytes = AvroSerde.serialize(record);
     GenericRecord decoded = AvroSerde.deserialize(bytes, GiftCardStateChangedSchema.schema());

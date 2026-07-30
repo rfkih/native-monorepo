@@ -15,12 +15,15 @@ import org.apache.avro.generic.GenericRecord;
  * the {@link GenericRecord}s emitted whenever a member's points balance changes (ADR 0027).
  *
  * <p>Carries the ABSOLUTE resulting {@code points_balance} (never a delta) plus the monotonic
- * {@code balance_seq} — see {@link id.co.nativeapp.loyalty.member.domain.LoyaltyMember#applyPointsDelta}.
- * NO PII (rule 6): {@code member_id} is an opaque UUID.
+ * {@code balance_seq} — see {@link
+ * id.co.nativeapp.loyalty.member.domain.LoyaltyMember#applyPointsDelta}. NO PII (rule 6): {@code
+ * member_id} is an opaque UUID.
  */
 public final class LoyaltyBalanceChangedSchema {
 
-  /** Classpath location of the {@code .avsc}, shared with every consumer via {@code libs/contracts}. */
+  /**
+   * Classpath location of the {@code .avsc}, shared with every consumer via {@code libs/contracts}.
+   */
   public static final String RESOURCE = "avro/LoyaltyBalanceChanged.avsc";
 
   /** The event name as it appears in the outbox {@code event_type} column. */

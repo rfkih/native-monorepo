@@ -44,7 +44,8 @@ public final class LoyaltyRedemptionFlaggedSchema {
       UUID memberId,
       long shortfallPoints,
       Instant occurredAt) {
-    return build(flagId, companyId, businessId, saleId, memberId, null, null, shortfallPoints, occurredAt);
+    return build(
+        flagId, companyId, businessId, saleId, memberId, null, null, shortfallPoints, occurredAt);
   }
 
   /** Builds a gift-card-overdraft flag ({@code giftCardId} non-null, {@code memberId} null). */

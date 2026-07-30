@@ -3,8 +3,8 @@ package id.co.nativeapp.loyalty;
 import id.co.nativeapp.events.AvroSerde;
 import id.co.nativeapp.events.Base64ByteArraySerializer;
 import id.co.nativeapp.loyalty.ingest.messaging.GiftCardSoldConsumerSchema;
-import id.co.nativeapp.loyalty.ingest.messaging.SaleReversalConsumerSchema;
 import id.co.nativeapp.loyalty.ingest.messaging.SaleRecordedConsumerSchema;
+import id.co.nativeapp.loyalty.ingest.messaging.SaleReversalConsumerSchema;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Map;
@@ -105,7 +105,8 @@ final class EventFixtures {
 
   // ---- SaleVoided / SaleRefunded ----
 
-  static GenericRecord saleVoided(UUID saleId, String companyId, UUID businessId, long amountMinor, String currency) {
+  static GenericRecord saleVoided(
+      UUID saleId, String companyId, UUID businessId, long amountMinor, String currency) {
     Schema schema = SaleReversalConsumerSchema.voidedSchema();
     GenericRecord record = new GenericData.Record(schema);
     record.put("void_id", UUID.randomUUID().toString());

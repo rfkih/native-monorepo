@@ -12,8 +12,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Owns the {@code @Transactional} unit of work that applies one {@code GiftCardSold} event
- * (ADR 0027): creates the card (id FROM the event — never generated here) with a deterministically
+ * Owns the {@code @Transactional} unit of work that applies one {@code GiftCardSold} event (ADR
+ * 0027): creates the card (id FROM the event — never generated here) with a deterministically
  * derived {@code code}, or — if the card already exists (a top-up) — adds to its balance, then
  * appends a {@code LOAD} ledger entry and emits {@code GiftCardStateChanged}. A distinct bean from
  * {@link GiftCardSoldService} so the {@code @Transactional} advice and the RLS auto-apply aspect
@@ -62,7 +62,11 @@ public class GiftCardSoldWriter {
     if (card == null) {
       card =
           new GiftCard(
-              fact.giftCardId(), fact.currency(), fact.amountMinor(), fact.occurredAt(), fact.businessId());
+              fact.giftCardId(),
+              fact.currency(),
+              fact.amountMinor(),
+              fact.occurredAt(),
+              fact.businessId());
       card.setCompanyId(fact.companyId());
     } else {
       card.load(fact.amountMinor());

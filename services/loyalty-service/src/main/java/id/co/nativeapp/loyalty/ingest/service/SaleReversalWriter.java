@@ -18,12 +18,12 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Owns the {@code @Transactional} unit of work that REVERSES a sale's earn/redeem entries by
- * {@code sale_id} (ADR 0027) — full-reversal only, mirroring finance's posture (loyalty stores only
- * SALE-LEVEL facts, not a per-line/per-refund breakdown, so a {@code SaleVoided} or a PARTIAL {@code
- * SaleRefunded} both reverse the FULL loyalty impact of the original sale). A distinct bean from
- * {@link SaleReversalService} so the {@code @Transactional} advice and the RLS auto-apply aspect
- * engage through the Spring proxy.
+ * Owns the {@code @Transactional} unit of work that REVERSES a sale's earn/redeem entries by {@code
+ * sale_id} (ADR 0027) — full-reversal only, mirroring finance's posture (loyalty stores only
+ * SALE-LEVEL facts, not a per-line/per-refund breakdown, so a {@code SaleVoided} or a PARTIAL
+ * {@code SaleRefunded} both reverse the FULL loyalty impact of the original sale). A distinct bean
+ * from {@link SaleReversalService} so the {@code @Transactional} advice and the RLS auto-apply
+ * aspect engage through the Spring proxy.
  *
  * <p><strong>Net-reversal design (documented — how this satisfies the ledger's idempotency
  * backstop).</strong> {@code UNIQUE(company_id, source_event_id, entry_type)} allows at most ONE
@@ -128,7 +128,8 @@ public class SaleReversalWriter {
 
   private void reverseGiftCardLedger(SaleReversalFact fact) {
     List<GiftCardLedgerEntry> entries =
-        giftCardLedgerRepository.findBySaleIdAndEntryTypeIn(fact.saleId(), REVERSIBLE_GIFT_CARD_TYPES);
+        giftCardLedgerRepository.findBySaleIdAndEntryTypeIn(
+            fact.saleId(), REVERSIBLE_GIFT_CARD_TYPES);
     if (entries.isEmpty()) {
       return;
     }

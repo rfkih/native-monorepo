@@ -18,5 +18,6 @@ public interface LoyaltyLedgerEntryRepository extends JpaRepository<LoyaltyLedge
    * the net reversal (see {@code ingest.service.SaleReversalWriter}). Excludes any prior {@code
    * REVERSE}/{@code ADJUST} row for the same sale so a reversal is never itself reversed.
    */
-  List<LoyaltyLedgerEntry> findBySaleIdAndEntryTypeIn(UUID saleId, List<LoyaltyLedgerEntryType> types);
+  List<LoyaltyLedgerEntry> findBySaleIdAndEntryTypeIn(
+      UUID saleId, List<LoyaltyLedgerEntryType> types);
 }

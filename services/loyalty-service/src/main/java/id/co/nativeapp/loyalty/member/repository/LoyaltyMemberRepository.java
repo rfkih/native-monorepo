@@ -18,10 +18,10 @@ import org.springframework.data.jpa.repository.JpaRepository;
  * can only alias raw SQL columns, never run application logic over them. So the encrypted-PII read
  * path legitimately loads the whole aggregate (exactly as the WRITE path always does) and decrypts
  * via the JPA {@code AttributeConverter} on access. This mirrors employee-service's identical
- * constraint on {@code Employee.nik}/{@code bankAccount}. Only the {@link
- * #findByPhoneHash(String)} derived-query method exists — no PII-bearing native {@code @Query} was
- * written, so the {@code repositoryQueriesAreNative} ArchUnit rule (which only inspects {@code
- * @Query}-annotated methods) is unaffected.
+ * constraint on {@code Employee.nik}/{@code bankAccount}. Only the {@link #findByPhoneHash(String)}
+ * derived-query method exists — no PII-bearing native {@code @Query} was written, so the {@code
+ * repositoryQueriesAreNative} ArchUnit rule (which only inspects {@code @Query}-annotated methods)
+ * is unaffected.
  */
 public interface LoyaltyMemberRepository extends JpaRepository<LoyaltyMember, UUID> {
 

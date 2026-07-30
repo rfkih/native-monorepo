@@ -33,9 +33,9 @@ public class MemberReader {
   /**
    * Exact-match lookup by phone (the POS "attach an existing member" flow).
    *
-   * @throws MemberNotFoundException if no member matches (→ 404) — deliberately the SAME
-   *     not-found signal whether the phone was never enrolled or belongs to another tenant (RLS
-   *     makes the two indistinguishable; no existence disclosure)
+   * @throws MemberNotFoundException if no member matches (→ 404) — deliberately the SAME not-found
+   *     signal whether the phone was never enrolled or belongs to another tenant (RLS makes the two
+   *     indistinguishable; no existence disclosure)
    */
   @Transactional(readOnly = true)
   public MemberResponse lookupByPhone(String rawPhone) {

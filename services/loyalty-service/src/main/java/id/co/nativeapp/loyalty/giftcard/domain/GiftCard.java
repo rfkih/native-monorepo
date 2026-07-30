@@ -68,8 +68,7 @@ public class GiftCard extends Auditable {
   }
 
   /** Creates a newly-sold card at its initial ACTIVE state with {@code amountMinor} balance. */
-  public GiftCard(
-      UUID id, String currency, long amountMinor, Instant soldAt, UUID soldBusinessId) {
+  public GiftCard(UUID id, String currency, long amountMinor, Instant soldAt, UUID soldBusinessId) {
     this.id = Objects.requireNonNull(id, "id");
     this.code = GiftCardCodeGenerator.deriveCode(id);
     this.state = GiftCardState.ACTIVE;
@@ -80,7 +79,9 @@ public class GiftCard extends Auditable {
     this.soldBusinessId = Objects.requireNonNull(soldBusinessId, "soldBusinessId");
   }
 
-  /** Adds stored value (a LOAD/top-up). The card stays/returns to ACTIVE. Bumps {@link #balanceSeq}. */
+  /**
+   * Adds stored value (a LOAD/top-up). The card stays/returns to ACTIVE. Bumps {@link #balanceSeq}.
+   */
   public long load(long amountMinor) {
     this.balanceMinor = Math.addExact(this.balanceMinor, amountMinor);
     if (this.state == GiftCardState.DEPLETED) {

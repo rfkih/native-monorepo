@@ -12,8 +12,8 @@ import javax.crypto.spec.SecretKeySpec;
  * (rule 6 — never store or search plaintext PII). Unlike {@link PiiCipher} (randomized-IV AES-GCM,
  * so encrypting the same value twice yields different ciphertext), this hasher MUST be
  * deterministic — the same normalized phone number always produces the same 64-character lowercase
- * hex digest — so {@code UNIQUE(company_id, phone_hash)} and an exact-match {@code WHERE
- * phone_hash = ?} query both work without ever touching the encrypted column.
+ * hex digest — so {@code UNIQUE(company_id, phone_hash)} and an exact-match {@code WHERE phone_hash
+ * = ?} query both work without ever touching the encrypted column.
  *
  * <p>Keyed (HMAC, not a bare hash) specifically so the digest cannot be brute-forced/rainbow-tabled
  * offline from a leaked database dump the way an unkeyed {@code SHA-256(phone)} could — an attacker

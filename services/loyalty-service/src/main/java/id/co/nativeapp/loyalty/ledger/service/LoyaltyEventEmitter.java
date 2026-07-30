@@ -18,10 +18,10 @@ import org.springframework.stereotype.Component;
  * REDEEMED}/{@code REVERSED} and the overdraft flag) so the emission logic cannot diverge across
  * call sites — mirrors barbershop-service's {@code TicketEventEmitter}.
  *
- * <p>Not itself {@code @Transactional} — always invoked from inside the caller's own {@code
- * @Transactional} unit of work (which already has the tenant GUC set by the RLS auto-apply aspect
- * on the enclosing transactional bean), so the balance/state-changed row commits atomically with
- * the ledger mutation (rule 3).
+ * <p>Not itself {@code @Transactional} — always invoked from inside the caller's own
+ * {@code @Transactional} unit of work (which already has the tenant GUC set by the RLS auto-apply
+ * aspect on the enclosing transactional bean), so the balance/state-changed row commits atomically
+ * with the ledger mutation (rule 3).
  */
 @Component
 public class LoyaltyEventEmitter {
@@ -32,7 +32,9 @@ public class LoyaltyEventEmitter {
     this.outboxWriter = outboxWriter;
   }
 
-  /** Emits {@code LoyaltyBalanceChanged} with the member's resulting ABSOLUTE balance + sequence. */
+  /**
+   * Emits {@code LoyaltyBalanceChanged} with the member's resulting ABSOLUTE balance + sequence.
+   */
   public void emitBalanceChanged(
       UUID memberId,
       String companyId,
@@ -53,7 +55,9 @@ public class LoyaltyEventEmitter {
         occurredAt);
   }
 
-  /** Emits {@code GiftCardStateChanged} with the card's resulting ABSOLUTE state/balance + sequence. */
+  /**
+   * Emits {@code GiftCardStateChanged} with the card's resulting ABSOLUTE state/balance + sequence.
+   */
   @SuppressWarnings("checkstyle:ParameterNumber")
   public void emitGiftCardStateChanged(
       UUID giftCardId,
@@ -78,7 +82,12 @@ public class LoyaltyEventEmitter {
 
   /** Emits a points-overdraft {@code LoyaltyRedemptionFlagged}. */
   public void emitPointsOverdraftFlagged(
-      String companyId, UUID businessId, UUID saleId, UUID memberId, long shortfallPoints, Instant occurredAt) {
+      String companyId,
+      UUID businessId,
+      UUID saleId,
+      UUID memberId,
+      long shortfallPoints,
+      Instant occurredAt) {
     UUID flagId = UUID.randomUUID();
     GenericRecord event =
         LoyaltyRedemptionFlaggedSchema.forPoints(

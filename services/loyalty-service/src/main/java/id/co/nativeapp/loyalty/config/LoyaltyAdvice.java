@@ -15,9 +15,9 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /**
  * The loyalty-service-SPECIFIC RFC 7807 {@link ProblemDetail} advice (ADR 0027) — the fault shapes
- * the shared {@code libs/security ApiExceptionHandler} (validation / {@code IllegalArgumentException}
- * / the non-leaking catch-all) does not own. Mirrors barbershop-service's {@code CatalogAdvice}/
- * {@code PromotionAdvice} style.
+ * the shared {@code libs/security ApiExceptionHandler} (validation / {@code
+ * IllegalArgumentException} / the non-leaking catch-all) does not own. Mirrors barbershop-service's
+ * {@code CatalogAdvice}/ {@code PromotionAdvice} style.
  *
  * <ul>
  *   <li>{@link DuplicateMemberException} — enrollment for an already-enrolled phone → {@code 409}.
@@ -45,7 +45,8 @@ public class LoyaltyAdvice {
   }
 
   @ExceptionHandler(MemberNotFoundException.class)
-  public ProblemDetail handleMemberNotFound(MemberNotFoundException ex, HttpServletRequest request) {
+  public ProblemDetail handleMemberNotFound(
+      MemberNotFoundException ex, HttpServletRequest request) {
     ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.NOT_FOUND);
     problem.setType(URI.create(TYPE_BASE + "member-not-found"));
     problem.setTitle("Not Found");

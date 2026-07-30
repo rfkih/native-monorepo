@@ -4,10 +4,10 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 /**
- * Entry point for loyalty-service — Phase 4 of the POS-parity program (ADR 0027): the sole owner
- * of the loyalty points / gift-card ledger of record, and the ONLY home of member PII (phone,
- * display name — column-level encrypted). Enrolls/looks up members, resolves the company-wide
- * earn rule, serves gift-card lookups, and idempotently ingests {@code SaleRecorded}/{@code
+ * Entry point for loyalty-service — Phase 4 of the POS-parity program (ADR 0027): the sole owner of
+ * the loyalty points / gift-card ledger of record, and the ONLY home of member PII (phone, display
+ * name — column-level encrypted). Enrolls/looks up members, resolves the company-wide earn rule,
+ * serves gift-card lookups, and idempotently ingests {@code SaleRecorded}/{@code
  * GiftCardSold}/{@code SaleVoided}/{@code SaleRefunded} to apply earn/redeem/reversal and emit
  * {@code LoyaltyBalanceChanged}/{@code GiftCardStateChanged}/{@code LoyaltyRedemptionFlagged} via
  * the outbox.

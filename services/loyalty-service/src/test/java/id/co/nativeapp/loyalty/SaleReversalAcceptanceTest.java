@@ -39,7 +39,8 @@ class SaleReversalAcceptanceTest extends KafkaPostgresTestBase {
     UUID saleId = UUID.randomUUID();
     GenericRecord sale =
         EventFixtures.saleRecorded(
-            saleId, TENANT, BUSINESS, 10_000L, "IDR", 10_000L, 0L, memberId, null, null, null, null);
+            saleId, TENANT, BUSINESS, 10_000L, "IDR", 10_000L, 0L, memberId, null, null, null,
+            null);
     grantEarnRule();
     EventFixtures.publishSaleRecorded(KAFKA.getBootstrapServers(), UUID.randomUUID(), sale);
 
@@ -67,7 +68,8 @@ class SaleReversalAcceptanceTest extends KafkaPostgresTestBase {
     UUID saleId = UUID.randomUUID();
     GenericRecord sale =
         EventFixtures.saleRecorded(
-            saleId, TENANT, BUSINESS, 5_000L, "IDR", 5_000L, 0L, memberId, 200L, 2_000L, null, null);
+            saleId, TENANT, BUSINESS, 5_000L, "IDR", 5_000L, 0L, memberId, 200L, 2_000L, null,
+            null);
     EventFixtures.publishSaleRecorded(KAFKA.getBootstrapServers(), UUID.randomUUID(), sale);
 
     await()
@@ -88,7 +90,9 @@ class SaleReversalAcceptanceTest extends KafkaPostgresTestBase {
   private UUID enroll(String phone) throws Exception {
     MemberResponse response =
         TenantContext.callAs(
-            TENANT, ACTOR, () -> memberService.enroll(new EnrollMemberRequest(phone, "Test Member")));
+            TENANT,
+            ACTOR,
+            () -> memberService.enroll(new EnrollMemberRequest(phone, "Test Member")));
     return response.id();
   }
 

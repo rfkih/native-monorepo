@@ -24,7 +24,8 @@ import org.testcontainers.utility.DockerImageName;
  * {@code Thread.sleep}).
  *
  * <p>Kafka is the modern KRaft {@code apache/kafka} image (no ZooKeeper) — a singleton started once
- * and reaped by Ryuk at JVM exit, its endpoint wired into Spring via {@code @DynamicPropertySource}.
+ * and reaped by Ryuk at JVM exit, its endpoint wired into Spring via
+ * {@code @DynamicPropertySource}.
  */
 abstract class KafkaPostgresTestBase extends PostgresRlsTestBase {
 

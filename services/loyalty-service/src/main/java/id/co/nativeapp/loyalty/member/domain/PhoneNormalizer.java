@@ -12,13 +12,12 @@ import java.util.Objects;
  * character that is not a digit or a LEADING {@code '+'} (spaces, hyphens, parentheses, dots — any
  * punctuation a cashier might type). A {@code '+'} is preserved ONLY as the very first character
  * (an international prefix); any {@code '+'} elsewhere in the input is dropped along with the other
- * punctuation. This is deliberately a SIMPLE, deterministic scheme — it does NOT attempt full
- * E.164 normalization (no country-code inference for a bare local number, e.g. {@code
- * "0812-3456-7890"} normalizes to {@code "081234567890"}, NOT {@code "+6281234567890"}): the same
- * tenant's cashiers are expected to enter numbers consistently, and a locale-aware libphonenumber
- * dependency is out of scope for this phase. A future phase MAY replace this with true E.164
- * normalization as a data migration, not a code-only change (existing {@code phone_hash} values
- * would need re-hashing).
+ * punctuation. This is deliberately a SIMPLE, deterministic scheme — it does NOT attempt full E.164
+ * normalization (no country-code inference for a bare local number, e.g. {@code "0812-3456-7890"}
+ * normalizes to {@code "081234567890"}, NOT {@code "+6281234567890"}): the same tenant's cashiers
+ * are expected to enter numbers consistently, and a locale-aware libphonenumber dependency is out
+ * of scope for this phase. A future phase MAY replace this with true E.164 normalization as a data
+ * migration, not a code-only change (existing {@code phone_hash} values would need re-hashing).
  *
  * <p>The result is never PII-logged; only the normalized digits are handed to the hasher/cipher.
  */

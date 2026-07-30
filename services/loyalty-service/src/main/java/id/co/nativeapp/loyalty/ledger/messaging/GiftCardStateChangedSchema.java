@@ -14,9 +14,8 @@ import org.apache.avro.generic.GenericRecord;
  * classpath ({@code avro/GiftCardStateChanged.avsc}, shipped by {@code libs/contracts}) and builds
  * the {@link GenericRecord}s emitted whenever a gift card's state or balance changes (ADR 0027).
  *
- * <p>Carries the ABSOLUTE resulting {@code balance_minor} (never a delta) plus the monotonic
- * {@code balance_seq}. Money is an integer minor-units amount + ISO-4217 currency, never a float
- * (rule 8).
+ * <p>Carries the ABSOLUTE resulting {@code balance_minor} (never a delta) plus the monotonic {@code
+ * balance_seq}. Money is an integer minor-units amount + ISO-4217 currency, never a float (rule 8).
  */
 public final class GiftCardStateChangedSchema {
 

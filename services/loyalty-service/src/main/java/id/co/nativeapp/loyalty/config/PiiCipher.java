@@ -13,9 +13,8 @@ import javax.crypto.spec.SecretKeySpec;
  * AES-256-GCM authenticated encryption for PII columns (rule 6). Ported VERBATIM from
  * employee-service's {@code config.PiiCipher} (the mechanism this service mirrors exactly per the
  * Phase-4 task): one instance holds the 256-bit key sourced from {@link PiiEncryptionProperties};
- * {@link PiiBytesAttributeConverter} delegates to it so the member {@code phone_encrypted} /
- * {@code display_name_encrypted} columns are ciphertext at rest and decrypt back transparently on
- * read.
+ * {@link PiiBytesAttributeConverter} delegates to it so the member {@code phone_encrypted} / {@code
+ * display_name_encrypted} columns are ciphertext at rest and decrypt back transparently on read.
  *
  * <p><strong>Random IV per value.</strong> GCM is only secure if the (key, IV) pair is never
  * reused; a fixed IV with a reused key is catastrophic. So {@link #encryptToString(String)} draws a
@@ -23,8 +22,8 @@ import javax.crypto.spec.SecretKeySpec;
  * ciphertext. The stored form is {@code base64( IV(12) || ciphertext+GCMtag(16) )}; {@link
  * #decryptFromString(String)} splits the IV back off. Two encryptions of the same plaintext
  * therefore produce different ciphertext, so the column never leaks equality of underlying values
- * (that is exactly why {@code phone_hash}, a SEPARATE deterministic HMAC — see {@link
- * PhoneHasher} — exists for exact-match lookup: the encrypted column itself can never be searched).
+ * (that is exactly why {@code phone_hash}, a SEPARATE deterministic HMAC — see {@link PhoneHasher}
+ * — exists for exact-match lookup: the encrypted column itself can never be searched).
  *
  * <p>GCM's 128-bit authentication tag means a tampered or truncated ciphertext fails to decrypt
  * (rather than returning garbage), so a corrupted column is detected rather than silently mis-read.

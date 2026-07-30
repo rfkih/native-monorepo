@@ -49,7 +49,8 @@ class SaleRecordedIngestAcceptanceTest extends KafkaPostgresTestBase {
     UUID eventId = UUID.randomUUID();
     GenericRecord sale =
         EventFixtures.saleRecorded(
-            saleId, TENANT, BUSINESS, 10_007L, "IDR", 10_007L, 0L, memberId, null, null, null, null);
+            saleId, TENANT, BUSINESS, 10_007L, "IDR", 10_007L, 0L, memberId, null, null, null,
+            null);
     EventFixtures.publishSaleRecorded(KAFKA.getBootstrapServers(), eventId, sale);
 
     await()
@@ -73,7 +74,8 @@ class SaleRecordedIngestAcceptanceTest extends KafkaPostgresTestBase {
     UUID eventId = UUID.randomUUID();
     GenericRecord sale =
         EventFixtures.saleRecorded(
-            saleId, TENANT, BUSINESS, 5_000L, "IDR", 5_000L, 0L, memberId, 200L, 2_000L, null, null);
+            saleId, TENANT, BUSINESS, 5_000L, "IDR", 5_000L, 0L, memberId, 200L, 2_000L, null,
+            null);
     EventFixtures.publishSaleRecorded(KAFKA.getBootstrapServers(), eventId, sale);
 
     await()
@@ -95,7 +97,8 @@ class SaleRecordedIngestAcceptanceTest extends KafkaPostgresTestBase {
     UUID eventId = UUID.randomUUID();
     GenericRecord sale =
         EventFixtures.saleRecorded(
-            saleId, TENANT, BUSINESS, 10_000L, "IDR", 10_000L, 0L, memberId, 400L, 4_000L, null, null);
+            saleId, TENANT, BUSINESS, 10_000L, "IDR", 10_000L, 0L, memberId, 400L, 4_000L, null,
+            null);
     EventFixtures.publishSaleRecorded(KAFKA.getBootstrapServers(), eventId, sale);
 
     // 1000 - 400 (redeem) + 60 (earn) = 660.
@@ -115,7 +118,8 @@ class SaleRecordedIngestAcceptanceTest extends KafkaPostgresTestBase {
     UUID eventId = UUID.randomUUID();
     GenericRecord sale =
         EventFixtures.saleRecorded(
-            saleId, TENANT, BUSINESS, 5_000L, "IDR", 5_000L, 0L, memberId, 150L, 1_500L, null, null);
+            saleId, TENANT, BUSINESS, 5_000L, "IDR", 5_000L, 0L, memberId, 150L, 1_500L, null,
+            null);
     EventFixtures.publishSaleRecorded(KAFKA.getBootstrapServers(), eventId, sale);
 
     await()
@@ -137,7 +141,8 @@ class SaleRecordedIngestAcceptanceTest extends KafkaPostgresTestBase {
     UUID eventId = UUID.randomUUID();
     GenericRecord sale =
         EventFixtures.saleRecorded(
-            saleId, TENANT, BUSINESS, 5_000L, "IDR", 5_000L, 0L, memberId, 100L, 1_000L, null, null);
+            saleId, TENANT, BUSINESS, 5_000L, "IDR", 5_000L, 0L, memberId, 100L, 1_000L, null,
+            null);
 
     EventFixtures.publishSaleRecorded(KAFKA.getBootstrapServers(), eventId, sale);
     await()
@@ -165,7 +170,9 @@ class SaleRecordedIngestAcceptanceTest extends KafkaPostgresTestBase {
   private UUID enroll(String phone) throws Exception {
     MemberResponse response =
         TenantContext.callAs(
-            TENANT, ACTOR, () -> memberService.enroll(new EnrollMemberRequest(phone, "Test Member")));
+            TENANT,
+            ACTOR,
+            () -> memberService.enroll(new EnrollMemberRequest(phone, "Test Member")));
     return response.id();
   }
 
@@ -176,7 +183,12 @@ class SaleRecordedIngestAcceptanceTest extends KafkaPostgresTestBase {
         () ->
             earnRuleService.create(
                 new id.co.nativeapp.loyalty.earnrule.dto.EarnRuleCreateRequest(
-                    pointsPerMinorBp, minSaleMinor, "ILLUSTRATIVE_PLACEHOLDER", "test", null, null)));
+                    pointsPerMinorBp,
+                    minSaleMinor,
+                    "ILLUSTRATIVE_PLACEHOLDER",
+                    "test",
+                    null,
+                    null)));
   }
 
   /** Directly grants a starting balance via a raw admin UPDATE (test setup shortcut). */
@@ -218,7 +230,10 @@ class SaleRecordedIngestAcceptanceTest extends KafkaPostgresTestBase {
     }
   }
 
-  /** Reads the MOST RECENT {@code LoyaltyBalanceChanged} outbox row for the given member (aggregate_id). */
+  /**
+   * Reads the MOST RECENT {@code LoyaltyBalanceChanged} outbox row for the given member
+   * (aggregate_id).
+   */
   private GenericRecord latestOutboxEventFor(String eventType, UUID memberId) throws Exception {
     return latestOutboxRow(eventType, memberId.toString(), LoyaltyBalanceChangedSchema.schema());
   }

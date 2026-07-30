@@ -17,9 +17,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Owns the {@code @Transactional} write unit of work for member enrollment — the barbershop {@code
- * TicketWriter}/{@code CatalogWriter} pattern applied to enrollment (a distinct bean so the {@code
- * @Transactional} advice and the {@link id.co.nativeapp.tenant.RlsAutoApplyAspect} that sets the
- * tenant GUC engage through the Spring proxy).
+ * TicketWriter}/{@code CatalogWriter} pattern applied to enrollment (a distinct bean so the
+ * {@code @Transactional} advice and the {@link id.co.nativeapp.tenant.RlsAutoApplyAspect} that sets
+ * the tenant GUC engage through the Spring proxy).
  *
  * <p><strong>Phone normalization + hashing happen here</strong> (see {@link PhoneNormalizer} /
  * {@link PhoneHasher}), immediately before the entity is built, so both the fast-path {@code
@@ -41,7 +41,9 @@ public class MemberEnrollWriter {
   private final LoyaltyEventEmitter eventEmitter;
 
   public MemberEnrollWriter(
-      LoyaltyMemberRepository repository, PhoneHasher phoneHasher, LoyaltyEventEmitter eventEmitter) {
+      LoyaltyMemberRepository repository,
+      PhoneHasher phoneHasher,
+      LoyaltyEventEmitter eventEmitter) {
     this.repository = repository;
     this.phoneHasher = phoneHasher;
     this.eventEmitter = eventEmitter;

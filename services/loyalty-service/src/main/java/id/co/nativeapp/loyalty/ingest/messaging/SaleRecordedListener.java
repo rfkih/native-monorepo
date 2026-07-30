@@ -17,9 +17,9 @@ import org.springframework.stereotype.Component;
  * Consumes {@code SaleRecorded} off Kafka (EVERY vertical's producer — restaurant/carwash/
  * barbershop, ADR 0003 single shared schema) and applies its loyalty/gift-card facts idempotently
  * (ADR 0027): points EARN (when {@code loyalty_member_id} is present and an effective earn rule
- * exists) and/or points REDEEM and/or gift-card REDEEM (when the corresponding fields are
- * present). A sale with none of the five Phase-4 fields populated is a clean, cheap no-op (still
- * marked processed, so a re-delivery is equally cheap).
+ * exists) and/or points REDEEM and/or gift-card REDEEM (when the corresponding fields are present).
+ * A sale with none of the five Phase-4 fields populated is a clean, cheap no-op (still marked
+ * processed, so a re-delivery is equally cheap).
  *
  * <p><strong>Raw Avro bytes.</strong> The message value is a vertical's outbox payload — raw Avro
  * bytes shipped by Debezium — so the container delivers a {@code byte[]} value; this listener

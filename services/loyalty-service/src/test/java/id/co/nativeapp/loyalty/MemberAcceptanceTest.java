@@ -38,7 +38,9 @@ class MemberAcceptanceTest extends KafkaPostgresTestBase {
       throws Exception {
     MemberResponse enrolled =
         TenantContext.callAs(
-            TENANT_A, ACTOR_A, () -> memberService.enroll(new EnrollMemberRequest(RAW_PHONE, "Budi")));
+            TENANT_A,
+            ACTOR_A,
+            () -> memberService.enroll(new EnrollMemberRequest(RAW_PHONE, "Budi")));
 
     assertThat(enrolled.pointsBalance()).isZero();
     assertThat(enrolled.phoneTail()).isEqualTo("****7890");
@@ -95,7 +97,9 @@ class MemberAcceptanceTest extends KafkaPostgresTestBase {
 
     try {
       TenantContext.callAs(
-          TENANT_A, ACTOR_A, () -> memberService.enroll(new EnrollMemberRequest(RAW_PHONE, "Budi")));
+          TENANT_A,
+          ACTOR_A,
+          () -> memberService.enroll(new EnrollMemberRequest(RAW_PHONE, "Budi")));
       TenantContext.callAs(TENANT_A, ACTOR_A, () -> memberService.lookupByPhone(RAW_PHONE));
     } finally {
       rootLoyaltyLogger.detachAppender(appender);

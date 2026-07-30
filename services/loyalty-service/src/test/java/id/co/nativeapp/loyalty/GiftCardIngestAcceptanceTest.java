@@ -75,14 +75,26 @@ class GiftCardIngestAcceptanceTest extends KafkaPostgresTestBase {
         .untilAsserted(
             () ->
                 assertThat(
-                        TenantContext.callAs(TENANT, "actor", () -> giftCardReader.lookupByCode(code))
+                        TenantContext.callAs(
+                                TENANT, "actor", () -> giftCardReader.lookupByCode(code))
                             .balanceMinor())
                     .isEqualTo(50_000L));
 
     UUID saleId = UUID.randomUUID();
     GenericRecord sale =
         EventFixtures.saleRecorded(
-            saleId, TENANT, BUSINESS, 50_000L, "IDR", 50_000L, 0L, null, null, null, giftCardId, 50_000L);
+            saleId,
+            TENANT,
+            BUSINESS,
+            50_000L,
+            "IDR",
+            50_000L,
+            0L,
+            null,
+            null,
+            null,
+            giftCardId,
+            50_000L);
     EventFixtures.publishSaleRecorded(KAFKA.getBootstrapServers(), UUID.randomUUID(), sale);
 
     await()
@@ -111,14 +123,26 @@ class GiftCardIngestAcceptanceTest extends KafkaPostgresTestBase {
         .untilAsserted(
             () ->
                 assertThat(
-                        TenantContext.callAs(TENANT, "actor", () -> giftCardReader.lookupByCode(code))
+                        TenantContext.callAs(
+                                TENANT, "actor", () -> giftCardReader.lookupByCode(code))
                             .balanceMinor())
                     .isEqualTo(10_000L));
 
     UUID saleId = UUID.randomUUID();
     GenericRecord sale =
         EventFixtures.saleRecorded(
-            saleId, TENANT, BUSINESS, 15_000L, "IDR", 15_000L, 0L, null, null, null, giftCardId, 15_000L);
+            saleId,
+            TENANT,
+            BUSINESS,
+            15_000L,
+            "IDR",
+            15_000L,
+            0L,
+            null,
+            null,
+            null,
+            giftCardId,
+            15_000L);
     EventFixtures.publishSaleRecorded(KAFKA.getBootstrapServers(), UUID.randomUUID(), sale);
 
     await()
