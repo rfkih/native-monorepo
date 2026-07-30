@@ -117,11 +117,16 @@ public class CarwashTicket extends Auditable {
   @Column(name = "loyalty_redeemed_minor")
   private Long loyaltyRedeemedMinor;
 
-  /** Phase 4 (ADR 0027): the gift card redeemed as a TENDER against this ticket, or {@code null}. */
+  /**
+   * Phase 4 (ADR 0027): the gift card redeemed as a TENDER against this ticket, or {@code null}.
+   */
   @Column(name = "gift_card_id")
   private UUID giftCardId;
 
-  /** Phase 4 (ADR 0027): the ACTUAL amount redeemed from the gift card, minor units, or {@code null}. */
+  /**
+   * Phase 4 (ADR 0027): the ACTUAL amount redeemed from the gift card, minor units, or {@code
+   * null}.
+   */
   @Column(name = "gift_card_redeemed_minor")
   private Long giftCardRedeemedMinor;
 
@@ -356,7 +361,9 @@ public class CarwashTicket extends Auditable {
     return loyaltyRedeemedPoints;
   }
 
-  /** Phase 4 (ADR 0027): the currency value of the redeemed points, minor units, or {@code null}. */
+  /**
+   * Phase 4 (ADR 0027): the currency value of the redeemed points, minor units, or {@code null}.
+   */
   public Long getLoyaltyRedeemedMinor() {
     return loyaltyRedeemedMinor;
   }
@@ -366,7 +373,10 @@ public class CarwashTicket extends Auditable {
     return giftCardId;
   }
 
-  /** Phase 4 (ADR 0027): the ACTUAL amount redeemed from the gift card, minor units, or {@code null}. */
+  /**
+   * Phase 4 (ADR 0027): the ACTUAL amount redeemed from the gift card, minor units, or {@code
+   * null}.
+   */
   public Long getGiftCardRedeemedMinor() {
     return giftCardRedeemedMinor;
   }

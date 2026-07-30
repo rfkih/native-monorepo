@@ -44,7 +44,8 @@ class GiftCardStateChangedContractTest {
   void schemaParsesFromClasspathWithExpectedShape() {
     Schema schema = GiftCardStateChangedConsumerSchema.schema();
 
-    assertThat(schema.getFullName()).isEqualTo("id.co.nativeapp.events.loyalty.GiftCardStateChanged");
+    assertThat(schema.getFullName())
+        .isEqualTo("id.co.nativeapp.events.loyalty.GiftCardStateChanged");
     assertThat(schema.getField("gift_card_id")).isNotNull();
     assertThat(schema.getField("company_id")).isNotNull();
     assertThat(schema.getField("state")).isNotNull();

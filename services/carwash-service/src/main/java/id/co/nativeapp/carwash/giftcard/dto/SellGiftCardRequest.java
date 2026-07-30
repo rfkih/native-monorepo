@@ -6,10 +6,10 @@ import jakarta.validation.constraints.Positive;
 import java.util.UUID;
 
 /**
- * Request body for {@code POST /api/v1/gift-card-sales} — sells (mints) a new gift card at the
- * till (ADR 0027, Phase 4). {@code company_id} and the actor are intentionally absent — they come
- * from the bound {@link id.co.nativeapp.tenant.TenantContext TenantContext}, never the client
- * (rule 5). A till operation: {@link id.co.nativeapp.carwash.outletref.service.OutletAccessGuard
+ * Request body for {@code POST /api/v1/gift-card-sales} — sells (mints) a new gift card at the till
+ * (ADR 0027, Phase 4). {@code company_id} and the actor are intentionally absent — they come from
+ * the bound {@link id.co.nativeapp.tenant.TenantContext TenantContext}, never the client (rule 5).
+ * A till operation: {@link id.co.nativeapp.carwash.outletref.service.OutletAccessGuard
  * OutletAccessGuard} is enforced, but no owner/manager role is required (selling a card is not a
  * discount/discretionary action).
  *

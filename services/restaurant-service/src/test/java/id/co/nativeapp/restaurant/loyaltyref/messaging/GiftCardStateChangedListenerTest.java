@@ -87,7 +87,8 @@ class GiftCardStateChangedListenerTest {
     verify(service).apply(captor.capture());
     GiftCardStateChangedEvent event = captor.getValue();
     assertThat(event.eventId()).isEqualTo(eventId);
-    assertThat(event.giftCardId()).isEqualTo(UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"));
+    assertThat(event.giftCardId())
+        .isEqualTo(UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"));
     assertThat(event.companyId()).isEqualTo("11111111-1111-1111-1111-111111111111");
     assertThat(event.state()).isEqualTo("ACTIVE");
     assertThat(event.balanceMinor()).isEqualTo(25_000L);

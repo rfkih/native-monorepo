@@ -55,12 +55,17 @@ public interface TicketView {
   /** Phase 4 (ADR 0027): the ACTUAL points redeemed, or {@code null}. */
   Long getLoyaltyRedeemedPoints();
 
-  /** Phase 4 (ADR 0027): the currency value of the redeemed points, minor units, or {@code null}. */
+  /**
+   * Phase 4 (ADR 0027): the currency value of the redeemed points, minor units, or {@code null}.
+   */
   Long getLoyaltyRedeemedMinor();
 
   /** Phase 4 (ADR 0027): the redeemed gift card, or {@code null}. */
   UUID getGiftCardId();
 
-  /** Phase 4 (ADR 0027): the ACTUAL amount redeemed from the gift card, minor units, or {@code null}. */
+  /**
+   * Phase 4 (ADR 0027): the ACTUAL amount redeemed from the gift card, minor units, or {@code
+   * null}.
+   */
   Long getGiftCardRedeemedMinor();
 }

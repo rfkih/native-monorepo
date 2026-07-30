@@ -37,8 +37,8 @@ import java.util.UUID;
  *     legacy/carwash paths (all-null breakdown fields on the wire). Phase 4 (ADR 0027): when a
  *     loyalty redemption applies, this breakdown's {@code discount()} is the COMBINED deduction
  *     (promo + loyalty) — {@link
- *     id.co.nativeapp.restaurant.sale.messaging.SaleRecordedSchema#toRecord} decomposes it back into
- *     the wire's promo-only {@code discount_minor} using {@code loyaltyRedeemedMinor}
+ *     id.co.nativeapp.restaurant.sale.messaging.SaleRecordedSchema#toRecord} decomposes it back
+ *     into the wire's promo-only {@code discount_minor} using {@code loyaltyRedeemedMinor}
  * @param loyaltyMemberId Phase 4 (ADR 0027): the loyalty member attached to this sale, or {@code
  *     null}
  * @param loyaltyRedeemedPoints Phase 4 (ADR 0027): the ACTUAL points redeemed, or {@code null}
@@ -75,8 +75,18 @@ public record RecordSaleCommand(
       Instant occurredAt,
       String idempotencyKey) {
     this(
-        businessId, amountMinor, currency, occurredAt, idempotencyKey, null, null, null, null,
-        null, null, null);
+        businessId,
+        amountMinor,
+        currency,
+        occurredAt,
+        idempotencyKey,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
   }
 
   /**
@@ -91,8 +101,18 @@ public record RecordSaleCommand(
       String idempotencyKey,
       String tenderType) {
     this(
-        businessId, amountMinor, currency, occurredAt, idempotencyKey, tenderType, null, null,
-        null, null, null, null);
+        businessId,
+        amountMinor,
+        currency,
+        occurredAt,
+        idempotencyKey,
+        tenderType,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
   }
 
   /**
@@ -108,7 +128,17 @@ public record RecordSaleCommand(
       String tenderType,
       PriceBreakdown breakdown) {
     this(
-        businessId, amountMinor, currency, occurredAt, idempotencyKey, tenderType, breakdown, null,
-        null, null, null, null);
+        businessId,
+        amountMinor,
+        currency,
+        occurredAt,
+        idempotencyKey,
+        tenderType,
+        breakdown,
+        null,
+        null,
+        null,
+        null,
+        null);
   }
 }

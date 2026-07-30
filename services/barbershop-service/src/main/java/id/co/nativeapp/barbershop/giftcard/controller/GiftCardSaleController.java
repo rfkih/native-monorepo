@@ -15,8 +15,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * {@code POST /api/v1/barbershop/gift-cards/sell} — sells (mints) a gift card at the till (ADR 0027,
- * Phase 4).
+ * {@code POST /api/v1/barbershop/gift-cards/sell} — sells (mints) a gift card at the till (ADR
+ * 0027, Phase 4).
  *
  * <p><strong>Path note.</strong> Sits under barbershop-service's already-gateway-routed {@code
  * /api/v1/barbershop/**} prefix (see {@code RoutingConfig#barbershopPosRoute}), so — unlike

@@ -8,8 +8,8 @@ import java.util.UUID;
  * ported VERBATIM from {@code loyalty-service}'s {@code
  * id.co.nativeapp.loyalty.giftcard.domain.GiftCardCodeGenerator} (the exact derivation, so the till
  * that mints the card and loyalty-service's own read of the same id agree on the printed code
- * without any cross-service call). See that class's javadoc for the full scheme rationale
- * (Base32, first 10 of 16 UUID bytes, no padding).
+ * without any cross-service call). See that class's javadoc for the full scheme rationale (Base32,
+ * first 10 of 16 UUID bytes, no padding).
  *
  * <p>This vertical mints the gift card's UUID {@code id} at the till (ADR 0027 decision 5) — never
  * loyalty-service — so deriving the code HERE (not waiting for {@code GiftCardStateChanged} to

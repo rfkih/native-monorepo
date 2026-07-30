@@ -1,8 +1,5 @@
 package id.co.nativeapp.barbershop.giftcard.service;
 
-import id.co.nativeapp.events.AvroSerde;
-import id.co.nativeapp.events.OutboxWriter;
-import id.co.nativeapp.money.Money;
 import id.co.nativeapp.barbershop.giftcard.domain.GiftCardCodeGenerator;
 import id.co.nativeapp.barbershop.giftcard.domain.GiftCardSale;
 import id.co.nativeapp.barbershop.giftcard.dto.GiftCardSaleResponse;
@@ -11,6 +8,9 @@ import id.co.nativeapp.barbershop.giftcard.messaging.GiftCardSoldSchema;
 import id.co.nativeapp.barbershop.giftcard.projection.GiftCardSaleView;
 import id.co.nativeapp.barbershop.giftcard.repository.GiftCardSaleRepository;
 import id.co.nativeapp.barbershop.outletref.service.OutletAccessGuard;
+import id.co.nativeapp.events.AvroSerde;
+import id.co.nativeapp.events.OutboxWriter;
+import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Instant;
@@ -27,13 +27,13 @@ import org.springframework.transaction.annotation.Transactional;
  * liability event instead of a revenue one.
  *
  * <p>A distinct bean (not private methods on {@link GiftCardSaleService}) so each transactional
- * method is invoked through the Spring proxy — a self-invocation would bypass the {@code
- * @Transactional} advice and the {@link RlsAutoApplyAspect} that sets the tenant GUC.
+ * method is invoked through the Spring proxy — a self-invocation would bypass the
+ * {@code @Transactional} advice and the {@link RlsAutoApplyAspect} that sets the tenant GUC.
  *
  * <p><strong>One atomic unit of work.</strong> {@link #sell} runs in {@code REQUIRES_NEW} and: (1)
  * the idempotency fast path returns the existing sale for a re-delivered {@code idempotencyKey}
- * WITHOUT minting a second card or emitting a second event; (2) {@link OutletAccessGuard#enforce}
- * — a till operation, so no owner/manager role is required (unlike a manual discount); (3) mints a
+ * WITHOUT minting a second card or emitting a second event; (2) {@link OutletAccessGuard#enforce} —
+ * a till operation, so no owner/manager role is required (unlike a manual discount); (3) mints a
  * fresh card UUID, derives its display code, persists the {@code gift_card_sale} row; (4) writes
  * {@code GiftCardSold} to the outbox in the SAME transaction (rule 3).
  */

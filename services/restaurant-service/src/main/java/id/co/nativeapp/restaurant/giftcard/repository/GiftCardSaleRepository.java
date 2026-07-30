@@ -37,5 +37,6 @@ public interface GiftCardSaleRepository extends JpaRepository<GiftCardSale, UUID
            WHERE s.idempotency_key = :idempotencyKey
           """,
       nativeQuery = true)
-  Optional<GiftCardSaleView> findViewByIdempotencyKey(@Param("idempotencyKey") String idempotencyKey);
+  Optional<GiftCardSaleView> findViewByIdempotencyKey(
+      @Param("idempotencyKey") String idempotencyKey);
 }

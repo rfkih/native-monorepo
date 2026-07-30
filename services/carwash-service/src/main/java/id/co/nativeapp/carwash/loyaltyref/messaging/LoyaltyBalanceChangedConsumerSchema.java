@@ -10,9 +10,9 @@ import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericRecord;
 
 /**
- * Loads carwash-service's CONSUMER copy of the {@code LoyaltyBalanceChanged} Avro schema from
- * the classpath ({@code avro/LoyaltyBalanceChanged.avsc}, the single {@code libs/contracts} source
- * of truth, ADR 0003) and decodes raw Avro bytes into a {@link LoyaltyBalanceChangedEvent}.
+ * Loads carwash-service's CONSUMER copy of the {@code LoyaltyBalanceChanged} Avro schema from the
+ * classpath ({@code avro/LoyaltyBalanceChanged.avsc}, the single {@code libs/contracts} source of
+ * truth, ADR 0003) and decodes raw Avro bytes into a {@link LoyaltyBalanceChangedEvent}.
  *
  * <p>No Avro code-generation plugin, no Schema Registry serde — consistent with every other
  * consumer in this fleet (mirrors {@code outletref.messaging.UserOutletAssignmentChangedSchemas}).

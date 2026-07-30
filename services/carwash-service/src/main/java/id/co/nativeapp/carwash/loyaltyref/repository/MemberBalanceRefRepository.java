@@ -47,16 +47,16 @@ public class MemberBalanceRefRepository {
   }
 
   /**
-   * Atomically decrements {@code points} from the cached balance IF the cached balance still
-   * covers it (ADR 0027 decision 3 — the within-service double-spend guard): {@code UPDATE
+   * Atomically decrements {@code points} from the cached balance IF the cached balance still covers
+   * it (ADR 0027 decision 3 — the within-service double-spend guard): {@code UPDATE
    * member_balance_ref SET points_balance = points_balance - :points WHERE member_id = :memberId
    * AND points_balance >= :points}.
    *
    * @param actor stamped into {@code updated_by} — the checkout caller's bound actor (the cashier),
    *     since this decrement happens synchronously inside an authenticated checkout request
-   * @return the number of rows updated: {@code 1} on success, {@code 0} if the member is unknown
-   *     or a concurrent redemption already consumed the balance this decrement needed (the caller
-   *     maps zero rows to {@code 409 loyalty-balance-insufficient})
+   * @return the number of rows updated: {@code 1} on success, {@code 0} if the member is unknown or
+   *     a concurrent redemption already consumed the balance this decrement needed (the caller maps
+   *     zero rows to {@code 409 loyalty-balance-insufficient})
    */
   public int decrementIfSufficient(UUID memberId, long points, String actor) {
     Timestamp now = Timestamp.from(Instant.now());

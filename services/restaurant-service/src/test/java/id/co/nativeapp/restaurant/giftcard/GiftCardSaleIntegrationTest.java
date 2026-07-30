@@ -28,9 +28,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * Phase 4 (ADR 0027) — the gift-card SALE (mint) write path: {@code POST
- * /api/v1/gift-card-sales} (exercised here at the {@link GiftCardSaleService} layer, mirroring
- * every other feature's {@code *IntegrationTest} idiom).
+ * Phase 4 (ADR 0027) — the gift-card SALE (mint) write path: {@code POST /api/v1/gift-card-sales}
+ * (exercised here at the {@link GiftCardSaleService} layer, mirroring every other feature's {@code
+ * *IntegrationTest} idiom).
  *
  * <p>Covers: the sold row + the decoded {@code GiftCardSold} outbox event (card id, amount, tender,
  * company); the derived display code matching an INDEPENDENT recomputation of loyalty-service's
@@ -73,7 +73,8 @@ class GiftCardSaleIntegrationTest extends PostgresRlsTestBase {
 
     // GiftCardSold outbox decode.
     GenericRecord decoded = readGiftCardSoldAdmin(sale.giftCardId());
-    assertThat(decoded.get("gift_card_sale_id").toString()).isEqualTo(sale.giftCardSaleId().toString());
+    assertThat(decoded.get("gift_card_sale_id").toString())
+        .isEqualTo(sale.giftCardSaleId().toString());
     assertThat(decoded.get("gift_card_id").toString()).isEqualTo(sale.giftCardId().toString());
     assertThat(decoded.get("company_id").toString()).isEqualTo(TENANT);
     assertThat(decoded.get("business_id").toString()).isEqualTo(BUSINESS_ID.toString());
@@ -118,7 +119,8 @@ class GiftCardSaleIntegrationTest extends PostgresRlsTestBase {
     assignmentService.apply(seed);
 
     SellGiftCardRequest request =
-        new SellGiftCardRequest(BUSINESS_ID, "sell-403-" + UUID.randomUUID(), 25_000L, "IDR", "CASH");
+        new SellGiftCardRequest(
+            BUSINESS_ID, "sell-403-" + UUID.randomUUID(), 25_000L, "IDR", "CASH");
 
     assertThatThrownBy(
             () ->

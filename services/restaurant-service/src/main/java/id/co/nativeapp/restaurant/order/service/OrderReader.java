@@ -235,7 +235,8 @@ public class OrderReader {
                           0L,
                           Math.min(
                               request.giftCardRedeemMinor(),
-                              Math.min(Math.max(cachedBalance, 0L), Math.max(grandTotalMinor, 0L)))))
+                              Math.min(
+                                  Math.max(cachedBalance, 0L), Math.max(grandTotalMinor, 0L)))))
               .orElse(0L);
     }
 

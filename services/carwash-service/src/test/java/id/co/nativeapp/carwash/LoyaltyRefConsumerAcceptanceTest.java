@@ -65,7 +65,9 @@ class LoyaltyRefConsumerAcceptanceTest extends PostgresRlsTestBase {
 
     assertThat(applied).isTrue(); // this delivery was processed...
     // ...but the set-if-newer guard inside the upsert rejected the stale content.
-    assertThat(memberBalanceAdmin(memberId)).as("stale balanceSeq must not regress the cache").isEqualTo(1_200L);
+    assertThat(memberBalanceAdmin(memberId))
+        .as("stale balanceSeq must not regress the cache")
+        .isEqualTo(1_200L);
   }
 
   @Test
@@ -125,7 +127,9 @@ class LoyaltyRefConsumerAcceptanceTest extends PostgresRlsTestBase {
                 UUID.randomUUID(), cardId, COMPANY_A, "DEPLETED", 0L, "IDR", 2L, Instant.now()));
 
     assertThat(applied).isTrue();
-    assertThat(giftCardBalanceAdmin(cardId)).as("stale balanceSeq must not regress the cache").isEqualTo(40_000L);
+    assertThat(giftCardBalanceAdmin(cardId))
+        .as("stale balanceSeq must not regress the cache")
+        .isEqualTo(40_000L);
     assertThat(giftCardStateAdmin(cardId)).isEqualTo("ACTIVE");
   }
 
@@ -140,7 +144,8 @@ class LoyaltyRefConsumerAcceptanceTest extends PostgresRlsTestBase {
     assertThat(giftCardStateChangedService.apply(event)).isTrue();
 
     GiftCardStateChangedEvent duplicate =
-        new GiftCardStateChangedEvent(eventId, cardId, COMPANY_A, "VOID", 0L, "IDR", 99L, Instant.now());
+        new GiftCardStateChangedEvent(
+            eventId, cardId, COMPANY_A, "VOID", 0L, "IDR", 99L, Instant.now());
     assertThat(giftCardStateChangedService.apply(duplicate)).as("idempotency: skipped").isFalse();
 
     assertThat(giftCardBalanceAdmin(cardId)).isEqualTo(10_000L);
@@ -165,7 +170,8 @@ class LoyaltyRefConsumerAcceptanceTest extends PostgresRlsTestBase {
   private long memberBalanceAdmin(UUID memberId) throws Exception {
     try (Connection admin = adminConnection();
         PreparedStatement ps =
-            admin.prepareStatement("SELECT points_balance FROM member_balance_ref WHERE member_id = ?")) {
+            admin.prepareStatement(
+                "SELECT points_balance FROM member_balance_ref WHERE member_id = ?")) {
       ps.setObject(1, memberId);
       try (ResultSet rs = ps.executeQuery()) {
         rs.next();
@@ -177,7 +183,8 @@ class LoyaltyRefConsumerAcceptanceTest extends PostgresRlsTestBase {
   private long countMemberBalanceRowsAdmin(String companyId) throws Exception {
     try (Connection admin = adminConnection();
         PreparedStatement ps =
-            admin.prepareStatement("SELECT COUNT(*) FROM member_balance_ref WHERE company_id = ?")) {
+            admin.prepareStatement(
+                "SELECT COUNT(*) FROM member_balance_ref WHERE company_id = ?")) {
       ps.setString(1, companyId);
       try (ResultSet rs = ps.executeQuery()) {
         rs.next();
@@ -189,7 +196,8 @@ class LoyaltyRefConsumerAcceptanceTest extends PostgresRlsTestBase {
   private long giftCardBalanceAdmin(UUID cardId) throws Exception {
     try (Connection admin = adminConnection();
         PreparedStatement ps =
-            admin.prepareStatement("SELECT balance_minor FROM gift_card_ref WHERE gift_card_id = ?")) {
+            admin.prepareStatement(
+                "SELECT balance_minor FROM gift_card_ref WHERE gift_card_id = ?")) {
       ps.setObject(1, cardId);
       try (ResultSet rs = ps.executeQuery()) {
         rs.next();

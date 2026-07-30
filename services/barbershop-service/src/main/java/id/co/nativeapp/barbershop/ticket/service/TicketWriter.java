@@ -297,7 +297,8 @@ public class TicketWriter {
     if (giftCardFullyCovers) {
       Money zero = Money.zero(breakdown.grandTotal().currency());
       payment =
-          BarbershopPayment.capturedCash(savedTicket.getId(), request.businessId(), zero, zero, zero);
+          BarbershopPayment.capturedCash(
+              savedTicket.getId(), request.businessId(), zero, zero, zero);
     } else {
       PaymentInstruction instruction =
           new PaymentInstruction(

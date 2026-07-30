@@ -76,8 +76,18 @@ public final class TicketSaleRecordedSchema {
       String tenderType,
       PriceBreakdown breakdown) {
     return toRecord(
-        saleId, companyId, businessId, grandTotal, occurredAt, tenderType, breakdown, null, null,
-        null, null, null);
+        saleId,
+        companyId,
+        businessId,
+        grandTotal,
+        occurredAt,
+        tenderType,
+        breakdown,
+        null,
+        null,
+        null,
+        null,
+        null);
   }
 
   /**

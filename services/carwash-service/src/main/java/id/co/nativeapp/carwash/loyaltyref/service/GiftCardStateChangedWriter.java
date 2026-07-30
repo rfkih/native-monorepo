@@ -1,8 +1,8 @@
 package id.co.nativeapp.carwash.loyaltyref.service;
 
-import id.co.nativeapp.events.ProcessedEventStore;
 import id.co.nativeapp.carwash.loyaltyref.messaging.GiftCardStateChangedEvent;
 import id.co.nativeapp.carwash.loyaltyref.repository.GiftCardRefRepository;
+import id.co.nativeapp.events.ProcessedEventStore;
 import id.co.nativeapp.tenant.TenantContext;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;

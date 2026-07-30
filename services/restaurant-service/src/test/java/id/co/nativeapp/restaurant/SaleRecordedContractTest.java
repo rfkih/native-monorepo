@@ -24,8 +24,8 @@ import org.junit.jupiter.api.Test;
  *
  * <p>ADR 0027 (Phase 4, loyalty + gift cards) additions: asserts the five trailing optional fields
  * ({@code loyalty_member_id}, {@code loyalty_redeemed_points}, {@code loyalty_redeemed_minor},
- * {@code gift_card_id}, {@code gift_card_redeemed_minor}) round-trip, and proves the evolution
- * pair — a new (Phase 4) reader can decode an old (pre-Phase-4) producer's bytes, AND an old
+ * {@code gift_card_id}, {@code gift_card_redeemed_minor}) round-trip, and proves the evolution pair
+ * — a new (Phase 4) reader can decode an old (pre-Phase-4) producer's bytes, AND an old
  * (pre-Phase-4) reader can decode a new (Phase 4) producer's bytes, dropping unknown fields.
  */
 class SaleRecordedContractTest {

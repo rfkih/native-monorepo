@@ -47,7 +47,8 @@ class LoyaltyBalanceChangedContractTest {
   void schemaParsesFromClasspathWithExpectedShape() {
     Schema schema = LoyaltyBalanceChangedConsumerSchema.schema();
 
-    assertThat(schema.getFullName()).isEqualTo("id.co.nativeapp.events.loyalty.LoyaltyBalanceChanged");
+    assertThat(schema.getFullName())
+        .isEqualTo("id.co.nativeapp.events.loyalty.LoyaltyBalanceChanged");
     assertThat(schema.getField("member_id")).isNotNull();
     assertThat(schema.getField("company_id")).isNotNull();
     assertThat(schema.getField("points_balance")).isNotNull();

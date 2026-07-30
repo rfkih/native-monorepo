@@ -4,12 +4,12 @@ import java.util.UUID;
 
 /**
  * Thrown at checkout when a requested points redemption cannot be atomically decremented from the
- * LOCAL {@code member_balance_ref} cache (ADR 0027, Phase 4) — either because the member is
- * UNKNOWN to this vertical's cache (not yet replicated by {@code LoyaltyBalanceChanged}, or an
- * invalid id), or because a concurrent redemption raced ours between the clamp read and the atomic
- * decrement. Both cases are the same wire problem from the caller's point of view (a redemption
- * that cannot be honoured right now), so they share one exception/response shape — documented
- * per the task's pinned semantics, not a bug.
+ * LOCAL {@code member_balance_ref} cache (ADR 0027, Phase 4) — either because the member is UNKNOWN
+ * to this vertical's cache (not yet replicated by {@code LoyaltyBalanceChanged}, or an invalid id),
+ * or because a concurrent redemption raced ours between the clamp read and the atomic decrement.
+ * Both cases are the same wire problem from the caller's point of view (a redemption that cannot be
+ * honoured right now), so they share one exception/response shape — documented per the task's
+ * pinned semantics, not a bug.
  *
  * <p>Maps to {@code 409 Conflict} RFC-7807 ({@code loyalty-balance-insufficient}) via {@link
  * id.co.nativeapp.carwash.config.LoyaltyRefAdvice}. {@code memberId} is an opaque UUID — not PII

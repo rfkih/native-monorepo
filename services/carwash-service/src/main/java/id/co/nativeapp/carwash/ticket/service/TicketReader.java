@@ -6,7 +6,6 @@ import id.co.nativeapp.carwash.loyaltyref.repository.MemberBalanceRefRepository;
 import id.co.nativeapp.carwash.payment.projection.CarwashPaymentView;
 import id.co.nativeapp.carwash.payment.repository.CarwashPaymentRepository;
 import id.co.nativeapp.carwash.pricing.domain.PriceBreakdown;
-import id.co.nativeapp.money.Money;
 import id.co.nativeapp.carwash.pricing.service.TaxChargeService;
 import id.co.nativeapp.carwash.promotion.dto.EvalInput;
 import id.co.nativeapp.carwash.promotion.dto.EvalLine;
@@ -21,6 +20,7 @@ import id.co.nativeapp.carwash.ticket.projection.TicketLineView;
 import id.co.nativeapp.carwash.ticket.projection.TicketView;
 import id.co.nativeapp.carwash.ticket.repository.CarwashTicketLineRepository;
 import id.co.nativeapp.carwash.ticket.repository.CarwashTicketRepository;
+import id.co.nativeapp.money.Money;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -127,8 +127,7 @@ public class TicketReader {
             ? promoDiscount.plus(Money.ofMinor(loyaltyRedeemedMinor, cart.currencyCode()))
             : promoDiscount;
 
-    PriceBreakdown breakdown =
-        taxChargeService.resolve(cart.subtotal(), 0L, combinedDiscount, now);
+    PriceBreakdown breakdown = taxChargeService.resolve(cart.subtotal(), 0L, combinedDiscount, now);
 
     long giftCardRedeemedMinor = 0L;
     if (request.giftCardId() != null
@@ -146,7 +145,8 @@ public class TicketReader {
                           0L,
                           Math.min(
                               request.giftCardRedeemMinor(),
-                              Math.min(Math.max(cachedBalance, 0L), Math.max(grandTotalMinor, 0L)))))
+                              Math.min(
+                                  Math.max(cachedBalance, 0L), Math.max(grandTotalMinor, 0L)))))
               .orElse(0L);
     }
 

@@ -66,7 +66,8 @@ class GiftCardSaleIntegrationTest extends PostgresRlsTestBase {
     assertThat(sale.code()).isEqualTo(recomputeDerivedCode(sale.giftCardId()));
 
     GenericRecord decoded = readGiftCardSoldAdmin(sale.giftCardId());
-    assertThat(decoded.get("gift_card_sale_id").toString()).isEqualTo(sale.giftCardSaleId().toString());
+    assertThat(decoded.get("gift_card_sale_id").toString())
+        .isEqualTo(sale.giftCardSaleId().toString());
     assertThat(decoded.get("gift_card_id").toString()).isEqualTo(sale.giftCardId().toString());
     assertThat(decoded.get("company_id").toString()).isEqualTo(TENANT);
     assertThat(decoded.get("business_id").toString()).isEqualTo(OUTLET.toString());
@@ -113,7 +114,8 @@ class GiftCardSaleIntegrationTest extends PostgresRlsTestBase {
 
     assertThatThrownBy(
             () ->
-                TenantContext.callAs(TENANT, CASHIER_ACTOR, () -> giftCardSaleService.sell(request)))
+                TenantContext.callAs(
+                    TENANT, CASHIER_ACTOR, () -> giftCardSaleService.sell(request)))
         .isInstanceOf(OutletNotAssignedException.class);
   }
 

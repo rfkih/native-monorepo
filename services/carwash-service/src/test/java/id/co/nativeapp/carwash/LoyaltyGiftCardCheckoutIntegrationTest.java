@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import id.co.nativeapp.carwash.catalog.dto.CatalogItemCreateRequest;
-import id.co.nativeapp.carwash.catalog.dto.CatalogItemResponse;
 import id.co.nativeapp.carwash.catalog.service.CatalogService;
 import id.co.nativeapp.carwash.entitlement.dto.EntitlementProjectedEvent;
 import id.co.nativeapp.carwash.entitlement.service.EntitlementProjectionService;
@@ -99,7 +98,8 @@ class LoyaltyGiftCardCheckoutIntegrationTest extends KafkaPostgresRedisTestBase 
             null,
             null);
 
-    CheckoutResult result = TenantContext.callAs(TENANT, ACTOR, () -> ticketService.checkout(request));
+    CheckoutResult result =
+        TenantContext.callAs(TENANT, ACTOR, () -> ticketService.checkout(request));
 
     assertThat(result.created()).isTrue();
     TicketResponse ticket = result.ticket();
@@ -162,7 +162,8 @@ class LoyaltyGiftCardCheckoutIntegrationTest extends KafkaPostgresRedisTestBase 
             cardId,
             20_000L);
 
-    CheckoutResult result = TenantContext.callAs(TENANT, ACTOR, () -> ticketService.checkout(request));
+    CheckoutResult result =
+        TenantContext.callAs(TENANT, ACTOR, () -> ticketService.checkout(request));
 
     assertThat(result.created()).isTrue();
     TicketResponse ticket = result.ticket();
@@ -204,7 +205,8 @@ class LoyaltyGiftCardCheckoutIntegrationTest extends KafkaPostgresRedisTestBase 
             cardId,
             50_000L);
 
-    CheckoutResult result = TenantContext.callAs(TENANT, ACTOR, () -> ticketService.checkout(request));
+    CheckoutResult result =
+        TenantContext.callAs(TENANT, ACTOR, () -> ticketService.checkout(request));
 
     assertThat(result.created()).isTrue();
     TicketResponse ticket = result.ticket();
@@ -248,7 +250,8 @@ class LoyaltyGiftCardCheckoutIntegrationTest extends KafkaPostgresRedisTestBase 
             null,
             null);
 
-    assertThatThrownBy(() -> TenantContext.callAs(TENANT, ACTOR, () -> ticketService.checkout(request)))
+    assertThatThrownBy(
+            () -> TenantContext.callAs(TENANT, ACTOR, () -> ticketService.checkout(request)))
         .isInstanceOf(LoyaltyBalanceInsufficientException.class);
 
     assertThat(countTicketsAdmin(idemKey)).isZero();
@@ -278,7 +281,8 @@ class LoyaltyGiftCardCheckoutIntegrationTest extends KafkaPostgresRedisTestBase 
             unknownCard,
             5_000L);
 
-    assertThatThrownBy(() -> TenantContext.callAs(TENANT, ACTOR, () -> ticketService.checkout(request)))
+    assertThatThrownBy(
+            () -> TenantContext.callAs(TENANT, ACTOR, () -> ticketService.checkout(request)))
         .isInstanceOf(GiftCardUnusableException.class);
 
     assertThat(countTicketsAdmin(idemKey)).isZero();
@@ -309,7 +313,8 @@ class LoyaltyGiftCardCheckoutIntegrationTest extends KafkaPostgresRedisTestBase 
             cardId,
             5_000L);
 
-    assertThatThrownBy(() -> TenantContext.callAs(TENANT, ACTOR, () -> ticketService.checkout(request)))
+    assertThatThrownBy(
+            () -> TenantContext.callAs(TENANT, ACTOR, () -> ticketService.checkout(request)))
         .isInstanceOf(GiftCardUnusableException.class);
 
     assertThat(countTicketsAdmin(idemKey)).isZero();
@@ -346,7 +351,8 @@ class LoyaltyGiftCardCheckoutIntegrationTest extends KafkaPostgresRedisTestBase 
             cardId,
             5_000L);
 
-    CheckoutResult first = TenantContext.callAs(TENANT, ACTOR, () -> ticketService.checkout(request));
+    CheckoutResult first =
+        TenantContext.callAs(TENANT, ACTOR, () -> ticketService.checkout(request));
     assertThat(first.created()).isTrue();
     UUID ticketId = first.ticket().ticketId();
 
@@ -354,7 +360,8 @@ class LoyaltyGiftCardCheckoutIntegrationTest extends KafkaPostgresRedisTestBase 
     assertThat(readGiftCardBalanceAdmin(cardId)).isEqualTo(25_000L);
     assertThat(countSaleRecordedEventsAdmin()).isEqualTo(1);
 
-    CheckoutResult replay = TenantContext.callAs(TENANT, ACTOR, () -> ticketService.checkout(request));
+    CheckoutResult replay =
+        TenantContext.callAs(TENANT, ACTOR, () -> ticketService.checkout(request));
 
     assertThat(replay.created()).isFalse();
     assertThat(replay.ticket().ticketId()).isEqualTo(ticketId);
@@ -393,7 +400,8 @@ class LoyaltyGiftCardCheckoutIntegrationTest extends KafkaPostgresRedisTestBase 
             cardId,
             20_000L);
 
-    CheckoutResult result = TenantContext.callAs(TENANT, ACTOR, () -> ticketService.checkout(request));
+    CheckoutResult result =
+        TenantContext.callAs(TENANT, ACTOR, () -> ticketService.checkout(request));
     assertThat(result.created()).isTrue();
     TicketResponse ticket = result.ticket();
     // grandTotal = 100,000 - 1,000 (loyalty) = 99,000; residual = 99,000 - 20,000 (gift card) =
@@ -416,7 +424,9 @@ class LoyaltyGiftCardCheckoutIntegrationTest extends KafkaPostgresRedisTestBase 
     GenericRecord decoded = readSaleRecordedAdmin(captured.ticketId());
     // Under test: amount_minor MUST be the ticket's GRAND TOTAL (99,000), never the 79,000
     // residual.
-    assertThat(decoded.get("amount_minor")).as("ticket grand total, NOT the residual").isEqualTo(99_000L);
+    assertThat(decoded.get("amount_minor"))
+        .as("ticket grand total, NOT the residual")
+        .isEqualTo(99_000L);
     assertThat(decoded.get("loyalty_member_id").toString()).isEqualTo(memberId.toString());
     assertThat(decoded.get("loyalty_redeemed_points")).isEqualTo(1_000L);
     assertThat(decoded.get("loyalty_redeemed_minor")).isEqualTo(1_000L);
@@ -451,10 +461,12 @@ class LoyaltyGiftCardCheckoutIntegrationTest extends KafkaPostgresRedisTestBase 
 
   private void seedMemberBalance(UUID memberId, long points, long seq) {
     loyaltyBalanceChangedService.apply(
-        new LoyaltyBalanceChangedEvent(UUID.randomUUID(), memberId, TENANT, points, seq, Instant.now()));
+        new LoyaltyBalanceChangedEvent(
+            UUID.randomUUID(), memberId, TENANT, points, seq, Instant.now()));
   }
 
-  private void seedGiftCard(UUID cardId, String state, long balanceMinor, String currency, long seq) {
+  private void seedGiftCard(
+      UUID cardId, String state, long balanceMinor, String currency, long seq) {
     giftCardStateChangedService.apply(
         new GiftCardStateChangedEvent(
             UUID.randomUUID(), cardId, TENANT, state, balanceMinor, currency, seq, Instant.now()));
@@ -463,7 +475,8 @@ class LoyaltyGiftCardCheckoutIntegrationTest extends KafkaPostgresRedisTestBase 
   private long readMemberBalanceAdmin(UUID memberId) throws Exception {
     try (Connection admin = adminConnection();
         PreparedStatement ps =
-            admin.prepareStatement("SELECT points_balance FROM member_balance_ref WHERE member_id = ?")) {
+            admin.prepareStatement(
+                "SELECT points_balance FROM member_balance_ref WHERE member_id = ?")) {
       ps.setObject(1, memberId);
       try (ResultSet rs = ps.executeQuery()) {
         rs.next();
@@ -475,7 +488,8 @@ class LoyaltyGiftCardCheckoutIntegrationTest extends KafkaPostgresRedisTestBase 
   private long readGiftCardBalanceAdmin(UUID cardId) throws Exception {
     try (Connection admin = adminConnection();
         PreparedStatement ps =
-            admin.prepareStatement("SELECT balance_minor FROM gift_card_ref WHERE gift_card_id = ?")) {
+            admin.prepareStatement(
+                "SELECT balance_minor FROM gift_card_ref WHERE gift_card_id = ?")) {
       ps.setObject(1, cardId);
       try (ResultSet rs = ps.executeQuery()) {
         rs.next();
@@ -507,7 +521,8 @@ class LoyaltyGiftCardCheckoutIntegrationTest extends KafkaPostgresRedisTestBase 
   private int countTicketsAdmin(String idempotencyKey) throws Exception {
     try (Connection admin = adminConnection();
         PreparedStatement ps =
-            admin.prepareStatement("SELECT COUNT(*) FROM carwash_ticket WHERE idempotency_key = ?")) {
+            admin.prepareStatement(
+                "SELECT COUNT(*) FROM carwash_ticket WHERE idempotency_key = ?")) {
       ps.setString(1, idempotencyKey);
       try (ResultSet rs = ps.executeQuery()) {
         rs.next();
@@ -519,7 +534,8 @@ class LoyaltyGiftCardCheckoutIntegrationTest extends KafkaPostgresRedisTestBase 
   private int countSaleRecordedEventsAdmin() throws Exception {
     try (Connection admin = adminConnection();
         PreparedStatement ps =
-            admin.prepareStatement("SELECT COUNT(*) FROM outbox WHERE event_type = 'SaleRecorded'")) {
+            admin.prepareStatement(
+                "SELECT COUNT(*) FROM outbox WHERE event_type = 'SaleRecorded'")) {
       try (ResultSet rs = ps.executeQuery()) {
         rs.next();
         return rs.getInt(1);

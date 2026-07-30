@@ -16,4 +16,9 @@ import java.util.UUID;
  * @param occurredAt when the balance change occurred
  */
 public record LoyaltyBalanceChangedEvent(
-    UUID eventId, UUID memberId, String companyId, long pointsBalance, long balanceSeq, Instant occurredAt) {}
+    UUID eventId,
+    UUID memberId,
+    String companyId,
+    long pointsBalance,
+    long balanceSeq,
+    Instant occurredAt) {}

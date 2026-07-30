@@ -10,9 +10,9 @@ import java.util.UUID;
 import org.springframework.stereotype.Component;
 
 /**
- * Checkout-time loyalty-points and gift-card redemption: clamps a requested redemption to the
- * LOCAL cache and atomically decrements it in the SAME database transaction as the checkout (ADR
- * 0027 decisions 2 and 3) — never a synchronous call to loyalty-service (rule 2).
+ * Checkout-time loyalty-points and gift-card redemption: clamps a requested redemption to the LOCAL
+ * cache and atomically decrements it in the SAME database transaction as the checkout (ADR 0027
+ * decisions 2 and 3) — never a synchronous call to loyalty-service (rule 2).
  *
  * <p>Not itself {@code @Transactional} — like {@code outletref.service.OutletAccessGuard}, this
  * bean's methods must be called from inside the caller's own {@code @Transactional} boundary
@@ -21,17 +21,18 @@ import org.springframework.stereotype.Component;
  * checkout that fails downstream (e.g. insufficient stock) rolls back the decrement together with
  * everything else.
  *
- * <p><strong>Clamp order (pinned, ADR 0027):</strong> a redemption is clamped to {@code min(requested,
- * cached balance, remaining deductible base)} — never negative, never exceeding what remains. The
- * clamp is computed from an upper-bound READ of the cache; the actual double-spend guard is the
- * atomic decrement's {@code WHERE} clause. Zero rows updated (the member/card is unknown to this
- * cache, or a concurrent redemption already consumed the balance since the read) maps to {@code
- * 409} — {@link LoyaltyBalanceInsufficientException} / {@link GiftCardUnusableException}.
+ * <p><strong>Clamp order (pinned, ADR 0027):</strong> a redemption is clamped to {@code
+ * min(requested, cached balance, remaining deductible base)} — never negative, never exceeding what
+ * remains. The clamp is computed from an upper-bound READ of the cache; the actual double-spend
+ * guard is the atomic decrement's {@code WHERE} clause. Zero rows updated (the member/card is
+ * unknown to this cache, or a concurrent redemption already consumed the balance since the read)
+ * maps to {@code 409} — {@link LoyaltyBalanceInsufficientException} / {@link
+ * GiftCardUnusableException}.
  *
  * <p><strong>Idempotent replay.</strong> Callers MUST invoke this guard only on a genuinely NEW
  * checkout — every writer's idempotency fast path returns BEFORE calling this guard, so a
- * re-delivered request never double-decrements (verified per-writer, per the task's pinned
- * ordering requirement).
+ * re-delivered request never double-decrements (verified per-writer, per the task's pinned ordering
+ * requirement).
  */
 @Component
 public class LoyaltyRedemptionGuard {
@@ -88,7 +89,8 @@ public class LoyaltyRedemptionGuard {
 
   /**
    * Redeems stored value from {@code giftCardId} as a TENDER settlement (never a discount, ADR 0027
-   * decision 4), clamped to {@code min(requestedMinor, cached ACTIVE card balance, grandTotalMinor)}.
+   * decision 4), clamped to {@code min(requestedMinor, cached ACTIVE card balance,
+   * grandTotalMinor)}.
    *
    * @param giftCardId the gift card being redeemed, or {@code null} if none (returns 0)
    * @param requestedMinor the amount the till asked to redeem; {@code <= 0} returns 0 (no-op)

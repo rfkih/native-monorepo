@@ -1,7 +1,7 @@
 package id.co.nativeapp.barbershop.giftcard.messaging;
 
-import id.co.nativeapp.money.Money;
 import id.co.nativeapp.barbershop.giftcard.domain.GiftCardSale;
+import id.co.nativeapp.money.Money;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;

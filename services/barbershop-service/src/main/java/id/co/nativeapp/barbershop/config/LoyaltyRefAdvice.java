@@ -14,8 +14,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /**
  * Maps the two ADR 0027 (Phase 4, loyalty + gift cards) checkout-time redemption faults to {@code
- * 409 Conflict} RFC-7807 {@link ProblemDetail} responses. Mirrors {@code PromotionAdvice}'s
- * narrow, feature-scoped style.
+ * 409 Conflict} RFC-7807 {@link ProblemDetail} responses. Mirrors {@code PromotionAdvice}'s narrow,
+ * feature-scoped style.
  *
  * <ul>
  *   <li>{@link LoyaltyBalanceInsufficientException} — the requested points redemption could not be

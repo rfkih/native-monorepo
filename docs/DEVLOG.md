@@ -74,6 +74,37 @@ cascade-deactivate + reactivation.)
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **Loyalty + gift cards — Phase 4 of the POS-parity program (2026-07-31, ADR 0027)** — the
+  program's hardest design, shipped: a NEW **loyalty-service** (the sole ledger of record: members
+  with AES-256-GCM-encrypted phone/name + a separate-key HMAC lookup hash — the ONLY PII home;
+  append-only points + gift-card ledgers with UNIQUE(company, source_event_id, type) idempotency
+  backstops; company-configured `earn_rule`, zero-earn until configured, **UTC-date effective
+  dating** — the gate caught a live system-zone bug creating a daily 00:00–07:00 WIB zero-earn
+  window). **The rule-2 answer:** console→gateway→loyalty is a CLIENT call (lookup/enroll fresh
+  and authoritative at the till); the VERTICALS never call loyalty — they clamp + atomically
+  decrement LOCAL `member_balance_ref`/`gift_card_ref` caches (absolute-value events +
+  `balance_seq` set-if-newer = self-healing), and cross-outlet races within replication lag are
+  applied anyway by the authoritative ledger, going NEGATIVE + emitting `LoyaltyRedemptionFlagged`
+  — never silent, never blocking (the reservation saga is the documented escalation). **Events:**
+  `SaleRecorded` +5 nullable fields (identity extends to subtotal − discount − loyalty_redeemed +
+  sc + tax == amount; gift-card settlement excluded — a TENDER); four new schemas
+  (GiftCardSold/LoyaltyBalanceChanged/GiftCardStateChanged/LoyaltyRedemptionFlagged), evolution
+  proven both directions in all four consumers. **Money:** points redeem at 1 pt = Rp1 (documented
+  v1; schema carries points+minor separately so a rate needs no schema change); gift-card
+  redemption splits the clearing debit (Dr GIFT_CARD_LIABILITY + residual tender; fully-covered →
+  zero-amount CAPTURED payment, wire tender NULL); earn is memo-only; finance V37 + its Java
+  companion shipped as ONE build (the migration carries a deployment-order hazard banner — SALE v3
+  basis tokens NET_TENDER/GIFT_CARD_TENDER/LOYALTY_REDEEMED), legacy sales byte-identical under v3
+  (named regression x2); reversal replay contras the new legs with zero code change. Two capture
+  bugs found en route: restaurant capture would have used the gift-card RESIDUAL as amount_minor
+  (under-recording revenue) — fixed to the order total. **Ticket identity CHECKs extended**
+  (carwash V10/barbershop V5); `discount_minor` stays promo-only everywhere. **Console:**
+  MemberField/GiftCardField/GiftCardSellModal on both POS surfaces (keypad math targets
+  residualDueMinor), /loyalty dashboard (earn rules create-only by design + back-office lookups),
+  receipts render the card as a PAYMENT row (a tender, never a discount). Gateway:
+  /api/v1/loyalty/** (POS) with /earn-rules carved to DASHBOARD; /api/v1/gift-card-sales
+  (restaurant, POS). 27 new vertical suites + 19 loyalty suites; ALL gates green (loyalty,
+  finance, gateway, three verticals, console).
 - **Promotions engine — Phase 3 of the POS-parity program (2026-07-31, ADR 0026)** — automatic
   rules, coupons, and happy hour across ALL THREE vertical POSes, with **zero Avro and zero finance
   changes**: every deduction (line-scope rules → priority/exclusive automatics → at most ONE coupon

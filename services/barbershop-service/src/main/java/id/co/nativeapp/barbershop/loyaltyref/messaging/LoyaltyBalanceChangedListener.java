@@ -20,12 +20,13 @@ import org.springframework.stereotype.Component;
  * redemption clamp WITHOUT a synchronous call to loyalty-service (rule 2).
  *
  * <p><strong>Shared decode/missing-id exceptions.</strong> Unlike restaurant-service (which
- * declares feature-local decode/missing-id exception types), this listener reuses barbershop-service's
- * ALREADY-SHARED {@link EventDecodeException} / {@link MissingEventIdException} — the same types
- * {@code UserOutletAssignmentListener}/{@code EntitlementEventListener}/{@code StaffEventListener}
- * throw. barbershop's single {@code KafkaConfig.kafkaErrorHandler} already registers both as
- * non-retryable, so this listener needs NO change to that wiring (mirrors barbershop's own established
- * convention over a verbatim restaurant-service port).
+ * declares feature-local decode/missing-id exception types), this listener reuses
+ * barbershop-service's ALREADY-SHARED {@link EventDecodeException} / {@link
+ * MissingEventIdException} — the same types {@code UserOutletAssignmentListener}/{@code
+ * EntitlementEventListener}/{@code StaffEventListener} throw. barbershop's single {@code
+ * KafkaConfig.kafkaErrorHandler} already registers both as non-retryable, so this listener needs NO
+ * change to that wiring (mirrors barbershop's own established convention over a verbatim
+ * restaurant-service port).
  */
 @Component
 public class LoyaltyBalanceChangedListener {

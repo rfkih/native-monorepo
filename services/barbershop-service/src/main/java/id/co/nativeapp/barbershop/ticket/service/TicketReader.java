@@ -7,7 +7,6 @@ import id.co.nativeapp.barbershop.payment.projection.BarbershopPaymentView;
 import id.co.nativeapp.barbershop.payment.repository.BarbershopPaymentRepository;
 import id.co.nativeapp.barbershop.pricing.domain.PriceBreakdown;
 import id.co.nativeapp.barbershop.pricing.service.TaxChargeService;
-import id.co.nativeapp.money.Money;
 import id.co.nativeapp.barbershop.promotion.dto.EvalInput;
 import id.co.nativeapp.barbershop.promotion.dto.EvalLine;
 import id.co.nativeapp.barbershop.promotion.dto.EvalResult;
@@ -21,6 +20,7 @@ import id.co.nativeapp.barbershop.ticket.projection.TicketLineView;
 import id.co.nativeapp.barbershop.ticket.projection.TicketView;
 import id.co.nativeapp.barbershop.ticket.repository.BarbershopTicketLineRepository;
 import id.co.nativeapp.barbershop.ticket.repository.BarbershopTicketRepository;
+import id.co.nativeapp.money.Money;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -145,7 +145,8 @@ public class TicketReader {
                           0L,
                           Math.min(
                               request.giftCardRedeemMinor(),
-                              Math.min(Math.max(cachedBalance, 0L), Math.max(grandTotalMinor, 0L)))))
+                              Math.min(
+                                  Math.max(cachedBalance, 0L), Math.max(grandTotalMinor, 0L)))))
               .orElse(0L);
     }
 

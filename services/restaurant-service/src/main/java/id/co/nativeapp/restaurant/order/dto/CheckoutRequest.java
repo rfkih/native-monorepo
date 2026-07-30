@@ -71,8 +71,7 @@ public record CheckoutRequest(
       List<OrderLineRequest> lines,
       PaymentRequest payment) {
     this(
-        businessId, idempotencyKey, lines, payment, null, null, null, null, null, null, null,
-        null);
+        businessId, idempotencyKey, lines, payment, null, null, null, null, null, null, null, null);
   }
 
   /**
@@ -86,8 +85,18 @@ public record CheckoutRequest(
       PaymentRequest payment,
       Long discountMinor) {
     this(
-        businessId, idempotencyKey, lines, payment, discountMinor, null, null, null, null, null,
-        null, null);
+        businessId,
+        idempotencyKey,
+        lines,
+        payment,
+        discountMinor,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
   }
 
   /** Convenience for a checkout with Phase 4 fields but no coupon (pre-Phase-3 seven-arg shape). */
@@ -100,8 +109,18 @@ public record CheckoutRequest(
       String orderType,
       UUID tableId) {
     this(
-        businessId, idempotencyKey, lines, payment, discountMinor, orderType, tableId, null, null,
-        null, null, null);
+        businessId,
+        idempotencyKey,
+        lines,
+        payment,
+        discountMinor,
+        orderType,
+        tableId,
+        null,
+        null,
+        null,
+        null,
+        null);
   }
 
   /**
@@ -118,7 +137,17 @@ public record CheckoutRequest(
       UUID tableId,
       String couponCode) {
     this(
-        businessId, idempotencyKey, lines, payment, discountMinor, orderType, tableId, couponCode,
-        null, null, null, null);
+        businessId,
+        idempotencyKey,
+        lines,
+        payment,
+        discountMinor,
+        orderType,
+        tableId,
+        couponCode,
+        null,
+        null,
+        null,
+        null);
   }
 }

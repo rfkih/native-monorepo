@@ -11,8 +11,8 @@ import java.util.UUID;
  * exception/response shape — documented per the task's pinned semantics, not a bug.
  *
  * <p>Maps to {@code 409 Conflict} RFC-7807 ({@code gift-card-unusable}) via {@link
- * id.co.nativeapp.carwash.config.LoyaltyRefAdvice}. {@code giftCardId} is an opaque UUID — not
- * PII (rule 6) — safe to log/echo.
+ * id.co.nativeapp.carwash.config.LoyaltyRefAdvice}. {@code giftCardId} is an opaque UUID — not PII
+ * (rule 6) — safe to log/echo.
  */
 public class GiftCardUnusableException extends RuntimeException {
 

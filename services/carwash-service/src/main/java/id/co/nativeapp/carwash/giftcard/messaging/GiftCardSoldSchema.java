@@ -1,7 +1,7 @@
 package id.co.nativeapp.carwash.giftcard.messaging;
 
-import id.co.nativeapp.money.Money;
 import id.co.nativeapp.carwash.giftcard.domain.GiftCardSale;
+import id.co.nativeapp.money.Money;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
@@ -10,9 +10,9 @@ import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericRecord;
 
 /**
- * Loads carwash-service's PRODUCER copy of the {@code GiftCardSold} Avro schema from the
- * classpath ({@code avro/GiftCardSold.avsc}, the single {@code libs/contracts} source of truth, ADR
- * 0003) and builds {@link GenericRecord}s from a persisted {@link GiftCardSale}.
+ * Loads carwash-service's PRODUCER copy of the {@code GiftCardSold} Avro schema from the classpath
+ * ({@code avro/GiftCardSold.avsc}, the single {@code libs/contracts} source of truth, ADR 0003) and
+ * builds {@link GenericRecord}s from a persisted {@link GiftCardSale}.
  *
  * <p>NOT a sale — a LIABILITY event (V17 migration comment): {@code amount_minor} is the
  * stored-value amount loaded onto the card, never revenue. Never merged into {@code SaleRecorded}.

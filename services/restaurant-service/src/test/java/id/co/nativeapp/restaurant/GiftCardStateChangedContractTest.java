@@ -13,8 +13,9 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Consumer-driven contract test for the {@code GiftCardStateChanged} event (ADR 0027, Phase 4) —
- * mirrors {@link LoyaltyBalanceChangedContractTest} / {@code UserOutletAssignmentChangedContractTest}.
- * loyalty-service is the producer, restaurant-service the consumer.
+ * mirrors {@link LoyaltyBalanceChangedContractTest} / {@code
+ * UserOutletAssignmentChangedContractTest}. loyalty-service is the producer, restaurant-service the
+ * consumer.
  */
 class GiftCardStateChangedContractTest {
 
@@ -45,7 +46,8 @@ class GiftCardStateChangedContractTest {
   void schemaParsesFromClasspathWithExpectedShape() {
     Schema schema = GiftCardStateChangedConsumerSchema.schema();
 
-    assertThat(schema.getFullName()).isEqualTo("id.co.nativeapp.events.loyalty.GiftCardStateChanged");
+    assertThat(schema.getFullName())
+        .isEqualTo("id.co.nativeapp.events.loyalty.GiftCardStateChanged");
     assertThat(schema.getField("gift_card_id")).isNotNull();
     assertThat(schema.getField("company_id")).isNotNull();
     assertThat(schema.getField("state")).isNotNull();

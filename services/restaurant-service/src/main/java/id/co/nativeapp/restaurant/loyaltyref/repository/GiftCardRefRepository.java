@@ -10,8 +10,8 @@ import org.springframework.stereotype.Repository;
 /**
  * Repository for the {@code gift_card_ref} read model — the LOCAL cache of loyalty-service's
  * gift-card state (ADR 0027, Phase 4), fed by {@code GiftCardStateChanged} and read at checkout to
- * clamp + atomically decrement a gift-card redemption WITHOUT a synchronous call to
- * loyalty-service (rule 2). Mirrors {@link MemberBalanceRefRepository}.
+ * clamp + atomically decrement a gift-card redemption WITHOUT a synchronous call to loyalty-service
+ * (rule 2). Mirrors {@link MemberBalanceRefRepository}.
  */
 @Repository
 public class GiftCardRefRepository {

@@ -351,10 +351,10 @@ public class Order extends Auditable {
 
   /**
    * Phase 4 (ADR 0027): stamps this order's loyalty/gift-card redemption selections. Called ONCE,
-   * before the order is first persisted (checkout) or when a parked order is finalised
-   * (pay-parked) — never re-applied on an idempotent replay. All five arguments are independent:
-   * {@code loyaltyMemberId} may be attached with zero points redeemed (EARN-only attribution), and
-   * a gift-card redemption never touches the loyalty fields (ADR 0027 decision 4 — the two are
+   * before the order is first persisted (checkout) or when a parked order is finalised (pay-parked)
+   * — never re-applied on an idempotent replay. All five arguments are independent: {@code
+   * loyaltyMemberId} may be attached with zero points redeemed (EARN-only attribution), and a
+   * gift-card redemption never touches the loyalty fields (ADR 0027 decision 4 — the two are
    * orthogonal: a discount vs. a tender settlement).
    *
    * @param loyaltyMemberId the attached member, or {@code null}
@@ -388,7 +388,9 @@ public class Order extends Auditable {
     return loyaltyRedeemedPoints;
   }
 
-  /** Phase 4 (ADR 0027): the currency value of the redeemed points, minor units, or {@code null}. */
+  /**
+   * Phase 4 (ADR 0027): the currency value of the redeemed points, minor units, or {@code null}.
+   */
   public Long getLoyaltyRedeemedMinor() {
     return loyaltyRedeemedMinor;
   }
@@ -398,7 +400,10 @@ public class Order extends Auditable {
     return giftCardId;
   }
 
-  /** Phase 4 (ADR 0027): the ACTUAL amount redeemed from the gift card, minor units, or {@code null}. */
+  /**
+   * Phase 4 (ADR 0027): the ACTUAL amount redeemed from the gift card, minor units, or {@code
+   * null}.
+   */
   public Long getGiftCardRedeemedMinor() {
     return giftCardRedeemedMinor;
   }

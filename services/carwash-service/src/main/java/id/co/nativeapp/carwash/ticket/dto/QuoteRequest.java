@@ -24,9 +24,9 @@ import java.util.UUID;
  *     ONE input to the promotions engine (the manual-discount layer, applied last)
  * @param couponCode Phase 3 (ADR 0026): optional coupon code; case-insensitive. {@code null}/blank
  *     means no coupon.
- * @param loyaltyMemberId Phase 4 (ADR 0027): optional loyalty member to preview a points
- *     redemption against. A quote NEVER throws for an unknown member or an insufficient balance —
- *     it silently previews {@code 0} redeemed (a quote commits nothing).
+ * @param loyaltyMemberId Phase 4 (ADR 0027): optional loyalty member to preview a points redemption
+ *     against. A quote NEVER throws for an unknown member or an insufficient balance — it silently
+ *     previews {@code 0} redeemed (a quote commits nothing).
  * @param loyaltyRedeemPoints Phase 4 (ADR 0027): optional points to preview redeeming.
  * @param giftCardId Phase 4 (ADR 0027): optional gift card to preview a redemption against; same
  *     never-throws posture as {@code loyaltyMemberId}.

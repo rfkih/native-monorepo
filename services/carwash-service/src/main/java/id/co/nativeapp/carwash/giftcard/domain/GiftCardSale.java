@@ -18,8 +18,8 @@ import java.util.UUID;
  * The {@code gift_card_sale} aggregate — this vertical's own record of selling (or later, topping
  * up) a gift card at the till (ADR 0027, Phase 4). NOT a sale of goods/services and NEVER folded
  * into {@code CarwashTicket}/{@code SaleRecorded} — a gift-card sale is a LIABILITY event, not
- * revenue (V9 migration comment). Emits {@code GiftCardSold} via the outbox in the SAME
- * transaction (rule 3).
+ * revenue (V9 migration comment). Emits {@code GiftCardSold} via the outbox in the SAME transaction
+ * (rule 3).
  *
  * <p>{@code giftCardId} carries the UUID minted AT THE TILL at the moment of sale (ADR 0027
  * decision 5) — the human-facing {@link GiftCardCodeGenerator#deriveCode(UUID)} code is a pure

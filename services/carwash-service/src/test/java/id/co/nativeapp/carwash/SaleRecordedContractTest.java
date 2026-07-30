@@ -270,7 +270,8 @@ class SaleRecordedContractTest {
     // proving the extended schema still round-trips its bytes with the new fields defaulting to
     // null.
     Wash wash = wash();
-    GenericRecord record = SaleRecordedSchema.toRecord(wash, "11111111-1111-1111-1111-111111111111");
+    GenericRecord record =
+        SaleRecordedSchema.toRecord(wash, "11111111-1111-1111-1111-111111111111");
 
     byte[] bytes = AvroSerde.serialize(record);
     GenericRecord decoded = AvroSerde.deserialize(bytes, SaleRecordedSchema.schema());

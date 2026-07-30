@@ -19,6 +19,7 @@ import id.co.nativeapp.restaurant.order.dto.OrderLineRequest;
 import id.co.nativeapp.restaurant.order.dto.OrderResponse;
 import id.co.nativeapp.restaurant.order.dto.ParkOrderRequest;
 import id.co.nativeapp.restaurant.order.dto.PayParkedRequest;
+import id.co.nativeapp.restaurant.order.service.OrderService;
 import id.co.nativeapp.restaurant.payment.domain.TenderType;
 import id.co.nativeapp.restaurant.payment.dto.PaymentRequest;
 import id.co.nativeapp.restaurant.payment.dto.PaymentResponse;
@@ -42,9 +43,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * Phase 4 (ADR 0027) — loyalty-points and gift-card redemption over the real restaurant order
  * checkout/park/pay-parked/capture flow, end to end.
  *
- * <p>A fresh tenant (no seeded tax/service-charge rule — see {@code PromotionCheckoutIntegrationTest}
- * precedent) so the extended reconciliation identity ({@code subtotal - discount - loyaltyRedeemed +
- * serviceCharge + tax == amount}, EVENT-CATALOG.md) is exact with zero tax/SC legs.
+ * <p>A fresh tenant (no seeded tax/service-charge rule — see {@code
+ * PromotionCheckoutIntegrationTest} precedent) so the extended reconciliation identity ({@code
+ * subtotal - discount - loyaltyRedeemed + serviceCharge + tax == amount}, EVENT-CATALOG.md) is
+ * exact with zero tax/SC legs.
  *
  * <p>Covers: (1) points redemption — identity, the five persisted {@code restaurant_order} columns,
  * the decoded {@code SaleRecorded} wire shape (PROMO-ONLY {@code discount_minor}), and the {@code
@@ -102,7 +104,8 @@ class LoyaltyGiftCardCheckoutIntegrationTest extends PostgresRlsTestBase {
             null,
             null);
 
-    CheckoutResult result = TenantContext.callAs(TENANT, ACTOR, () -> orderService.checkout(request));
+    CheckoutResult result =
+        TenantContext.callAs(TENANT, ACTOR, () -> orderService.checkout(request));
 
     assertThat(result.created()).isTrue();
     OrderResponse order = result.order();
@@ -169,7 +172,8 @@ class LoyaltyGiftCardCheckoutIntegrationTest extends PostgresRlsTestBase {
             cardId,
             20_000L);
 
-    CheckoutResult result = TenantContext.callAs(TENANT, ACTOR, () -> orderService.checkout(request));
+    CheckoutResult result =
+        TenantContext.callAs(TENANT, ACTOR, () -> orderService.checkout(request));
 
     assertThat(result.created()).isTrue();
     OrderResponse order = result.order();
@@ -211,7 +215,8 @@ class LoyaltyGiftCardCheckoutIntegrationTest extends PostgresRlsTestBase {
             cardId,
             50_000L);
 
-    CheckoutResult result = TenantContext.callAs(TENANT, ACTOR, () -> orderService.checkout(request));
+    CheckoutResult result =
+        TenantContext.callAs(TENANT, ACTOR, () -> orderService.checkout(request));
 
     assertThat(result.created()).isTrue();
     OrderResponse order = result.order();
@@ -253,7 +258,8 @@ class LoyaltyGiftCardCheckoutIntegrationTest extends PostgresRlsTestBase {
             null,
             null);
 
-    assertThatThrownBy(() -> TenantContext.callAs(TENANT, ACTOR, () -> orderService.checkout(request)))
+    assertThatThrownBy(
+            () -> TenantContext.callAs(TENANT, ACTOR, () -> orderService.checkout(request)))
         .isInstanceOf(LoyaltyBalanceInsufficientException.class);
 
     assertThat(countOrdersAdmin(idemKey)).isZero();
@@ -281,7 +287,8 @@ class LoyaltyGiftCardCheckoutIntegrationTest extends PostgresRlsTestBase {
             unknownCard,
             5_000L);
 
-    assertThatThrownBy(() -> TenantContext.callAs(TENANT, ACTOR, () -> orderService.checkout(request)))
+    assertThatThrownBy(
+            () -> TenantContext.callAs(TENANT, ACTOR, () -> orderService.checkout(request)))
         .isInstanceOf(GiftCardUnusableException.class);
 
     assertThat(countOrdersAdmin(idemKey)).isZero();
@@ -310,7 +317,8 @@ class LoyaltyGiftCardCheckoutIntegrationTest extends PostgresRlsTestBase {
             cardId,
             5_000L);
 
-    assertThatThrownBy(() -> TenantContext.callAs(TENANT, ACTOR, () -> orderService.checkout(request)))
+    assertThatThrownBy(
+            () -> TenantContext.callAs(TENANT, ACTOR, () -> orderService.checkout(request)))
         .isInstanceOf(GiftCardUnusableException.class);
 
     assertThat(countOrdersAdmin(idemKey)).isZero();
@@ -345,7 +353,8 @@ class LoyaltyGiftCardCheckoutIntegrationTest extends PostgresRlsTestBase {
             cardId,
             5_000L);
 
-    CheckoutResult first = TenantContext.callAs(TENANT, ACTOR, () -> orderService.checkout(request));
+    CheckoutResult first =
+        TenantContext.callAs(TENANT, ACTOR, () -> orderService.checkout(request));
     assertThat(first.created()).isTrue();
     UUID orderId = first.order().orderId();
 
@@ -353,7 +362,8 @@ class LoyaltyGiftCardCheckoutIntegrationTest extends PostgresRlsTestBase {
     assertThat(readGiftCardBalanceAdmin(cardId)).isEqualTo(25_000L);
     assertThat(countSaleRecordedEventsAdmin()).isEqualTo(1);
 
-    CheckoutResult replay = TenantContext.callAs(TENANT, ACTOR, () -> orderService.checkout(request));
+    CheckoutResult replay =
+        TenantContext.callAs(TENANT, ACTOR, () -> orderService.checkout(request));
 
     assertThat(replay.created()).isFalse();
     assertThat(replay.order().orderId()).isEqualTo(orderId);
@@ -392,7 +402,8 @@ class LoyaltyGiftCardCheckoutIntegrationTest extends PostgresRlsTestBase {
             cardId,
             20_000L);
 
-    CheckoutResult result = TenantContext.callAs(TENANT, ACTOR, () -> orderService.checkout(request));
+    CheckoutResult result =
+        TenantContext.callAs(TENANT, ACTOR, () -> orderService.checkout(request));
     assertThat(result.created()).isTrue();
     OrderResponse order = result.order();
     // grandTotal = 100,000 - 1,000 (loyalty) = 99,000; residual = 99,000 - 20,000 (gift card) =
@@ -408,14 +419,17 @@ class LoyaltyGiftCardCheckoutIntegrationTest extends PostgresRlsTestBase {
     assertThat(readGiftCardBalanceAdmin(cardId)).isEqualTo(10_000L);
 
     PaymentResponse captured =
-        TenantContext.callAs(TENANT, ACTOR, () -> paymentCaptureService.capture(pending.paymentId()));
+        TenantContext.callAs(
+            TENANT, ACTOR, () -> paymentCaptureService.capture(pending.paymentId()));
     assertThat(captured.status()).isEqualTo("CAPTURED");
     assertThat(captured.saleId()).isNotNull();
 
     GenericRecord decoded = readSaleRecordedAdmin(captured.saleId());
     // The under-recording fix under test: amount_minor MUST be the order's GRAND TOTAL (99,000),
     // never payment.amountMinor() (the 79,000 tender RESIDUAL after the gift-card settlement).
-    assertThat(decoded.get("amount_minor")).as("order grand total, NOT the residual").isEqualTo(99_000L);
+    assertThat(decoded.get("amount_minor"))
+        .as("order grand total, NOT the residual")
+        .isEqualTo(99_000L);
     assertThat(decoded.get("loyalty_member_id").toString()).isEqualTo(memberId.toString());
     assertThat(decoded.get("loyalty_redeemed_points")).isEqualTo(1_000L);
     assertThat(decoded.get("loyalty_redeemed_minor")).isEqualTo(1_000L);
@@ -440,8 +454,11 @@ class LoyaltyGiftCardCheckoutIntegrationTest extends PostgresRlsTestBase {
 
     ParkOrderRequest parkRequest =
         new ParkOrderRequest(
-            BUSINESS_ID, "park-loyalty-" + UUID.randomUUID(), List.of(new OrderLineRequest(itemId, 1)));
-    CheckoutResult parked = TenantContext.callAs(TENANT, ACTOR, () -> orderService.park(parkRequest));
+            BUSINESS_ID,
+            "park-loyalty-" + UUID.randomUUID(),
+            List.of(new OrderLineRequest(itemId, 1)));
+    CheckoutResult parked =
+        TenantContext.callAs(TENANT, ACTOR, () -> orderService.park(parkRequest));
     assertThat(parked.created()).isTrue();
     UUID orderId = parked.order().orderId();
 
@@ -477,18 +494,23 @@ class LoyaltyGiftCardCheckoutIntegrationTest extends PostgresRlsTestBase {
         () ->
             menuService
                 .createItem(
-                    new CreateMenuItemRequest(BUSINESS_ID, "Item " + UUID.randomUUID(), "BEVERAGE", priceMinor, "IDR"))
+                    new CreateMenuItemRequest(
+                        BUSINESS_ID, "Item " + UUID.randomUUID(), "BEVERAGE", priceMinor, "IDR"))
                 .id());
   }
 
-  /** Seeds {@code member_balance_ref} via the consumer path — the same as a real replicated event. */
+  /**
+   * Seeds {@code member_balance_ref} via the consumer path — the same as a real replicated event.
+   */
   private void seedMemberBalance(UUID memberId, long points, long seq) {
     loyaltyBalanceChangedService.apply(
-        new LoyaltyBalanceChangedEvent(UUID.randomUUID(), memberId, TENANT, points, seq, Instant.now()));
+        new LoyaltyBalanceChangedEvent(
+            UUID.randomUUID(), memberId, TENANT, points, seq, Instant.now()));
   }
 
   /** Seeds {@code gift_card_ref} via the consumer path — the same as a real replicated event. */
-  private void seedGiftCard(UUID cardId, String state, long balanceMinor, String currency, long seq) {
+  private void seedGiftCard(
+      UUID cardId, String state, long balanceMinor, String currency, long seq) {
     giftCardStateChangedService.apply(
         new GiftCardStateChangedEvent(
             UUID.randomUUID(), cardId, TENANT, state, balanceMinor, currency, seq, Instant.now()));
@@ -497,7 +519,8 @@ class LoyaltyGiftCardCheckoutIntegrationTest extends PostgresRlsTestBase {
   private long readMemberBalanceAdmin(UUID memberId) throws Exception {
     try (Connection admin = adminConnection();
         PreparedStatement ps =
-            admin.prepareStatement("SELECT points_balance FROM member_balance_ref WHERE member_id = ?")) {
+            admin.prepareStatement(
+                "SELECT points_balance FROM member_balance_ref WHERE member_id = ?")) {
       ps.setObject(1, memberId);
       try (ResultSet rs = ps.executeQuery()) {
         rs.next();
@@ -509,7 +532,8 @@ class LoyaltyGiftCardCheckoutIntegrationTest extends PostgresRlsTestBase {
   private long readGiftCardBalanceAdmin(UUID cardId) throws Exception {
     try (Connection admin = adminConnection();
         PreparedStatement ps =
-            admin.prepareStatement("SELECT balance_minor FROM gift_card_ref WHERE gift_card_id = ?")) {
+            admin.prepareStatement(
+                "SELECT balance_minor FROM gift_card_ref WHERE gift_card_id = ?")) {
       ps.setObject(1, cardId);
       try (ResultSet rs = ps.executeQuery()) {
         rs.next();
@@ -554,7 +578,8 @@ class LoyaltyGiftCardCheckoutIntegrationTest extends PostgresRlsTestBase {
   private int countSaleRecordedEventsAdmin() throws Exception {
     try (Connection admin = adminConnection();
         PreparedStatement ps =
-            admin.prepareStatement("SELECT COUNT(*) FROM outbox WHERE event_type = 'SaleRecorded'")) {
+            admin.prepareStatement(
+                "SELECT COUNT(*) FROM outbox WHERE event_type = 'SaleRecorded'")) {
       try (ResultSet rs = ps.executeQuery()) {
         rs.next();
         return rs.getInt(1);

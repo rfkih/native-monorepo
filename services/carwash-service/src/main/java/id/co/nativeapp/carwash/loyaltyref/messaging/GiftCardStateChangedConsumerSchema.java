@@ -52,9 +52,7 @@ public final class GiftCardStateChangedConsumerSchema {
 
   private static Schema parse() {
     try (InputStream in =
-        GiftCardStateChangedConsumerSchema.class
-            .getClassLoader()
-            .getResourceAsStream(RESOURCE)) {
+        GiftCardStateChangedConsumerSchema.class.getClassLoader().getResourceAsStream(RESOURCE)) {
       if (in == null) {
         throw new IllegalStateException("Avro schema not found on classpath: " + RESOURCE);
       }

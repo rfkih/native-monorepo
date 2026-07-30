@@ -248,9 +248,9 @@ public class PaymentCaptureWriter {
    *
    * <p><strong>Phase 4 (ADR 0027).</strong> The reconstructed {@code fixedDiscount} fed into {@link
    * TaxChargeService#resolve} is the COMBINED deduction — the promo-only sum ({@code
-   * ruleDiscountMinor + manualDiscountMinor}, unchanged from the Phase-3 reconstruction) PLUS {@link
-   * Order#getLoyaltyRedeemedMinor()} (persisted at checkout) — so a capture reproduces the EXACT
-   * checkout-time grand total even when a points redemption applied. The gift-card TENDER
+   * ruleDiscountMinor + manualDiscountMinor}, unchanged from the Phase-3 reconstruction) PLUS
+   * {@link Order#getLoyaltyRedeemedMinor()} (persisted at checkout) — so a capture reproduces the
+   * EXACT checkout-time grand total even when a points redemption applied. The gift-card TENDER
    * settlement never enters this discount math (ADR 0027 decision 4 — it is not a deduction).
    *
    * @param order the order being captured (its lines, {@code occurredAt}, {@code discountMinor},

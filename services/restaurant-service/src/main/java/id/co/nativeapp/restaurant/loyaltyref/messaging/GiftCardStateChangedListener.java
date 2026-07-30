@@ -13,8 +13,9 @@ import org.springframework.stereotype.Component;
 /**
  * Consumes {@code GiftCardStateChanged} off Kafka (produced by loyalty-service, ADR 0027) and
  * applies it to restaurant-service's local {@code gift_card_ref} read model, set-if-newer by {@code
- * balance_seq}. Backs {@link id.co.nativeapp.restaurant.loyaltyref.service.LoyaltyRedemptionGuard}'s
- * checkout-time gift-card-redemption clamp WITHOUT a synchronous call to loyalty-service (rule 2).
+ * balance_seq}. Backs {@link
+ * id.co.nativeapp.restaurant.loyaltyref.service.LoyaltyRedemptionGuard}'s checkout-time
+ * gift-card-redemption clamp WITHOUT a synchronous call to loyalty-service (rule 2).
  *
  * <p>Mirrors {@link LoyaltyBalanceChangedListener} in every particular.
  */

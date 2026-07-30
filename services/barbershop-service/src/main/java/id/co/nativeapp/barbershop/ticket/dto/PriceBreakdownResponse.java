@@ -46,9 +46,7 @@ public record PriceBreakdownResponse(
     long giftCardAppliedMinor,
     long residualDueMinor) {
 
-  /**
-   * Convenience for the pre-Phase-3 seven-arg shape (no promotions detail, no Phase 4 fields).
-   */
+  /** Convenience for the pre-Phase-3 seven-arg shape (no promotions detail, no Phase 4 fields). */
   public PriceBreakdownResponse(
       long subtotalMinor,
       long discountMinor,
@@ -73,8 +71,8 @@ public record PriceBreakdownResponse(
   }
 
   /**
-   * Convenience for the checkout/capture/get responses (no promotions detail) PLUS the Phase 4
-   * (ADR 0027) redemption amounts.
+   * Convenience for the checkout/capture/get responses (no promotions detail) PLUS the Phase 4 (ADR
+   * 0027) redemption amounts.
    */
   public PriceBreakdownResponse(
       long subtotalMinor,

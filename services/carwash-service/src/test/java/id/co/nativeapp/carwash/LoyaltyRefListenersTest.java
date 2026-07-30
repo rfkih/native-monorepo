@@ -41,7 +41,8 @@ class LoyaltyRefListenersTest {
   class LoyaltyBalanceChangedListenerFailClosedPaths {
 
     private final LoyaltyBalanceChangedService service = mock(LoyaltyBalanceChangedService.class);
-    private final LoyaltyBalanceChangedListener listener = new LoyaltyBalanceChangedListener(service);
+    private final LoyaltyBalanceChangedListener listener =
+        new LoyaltyBalanceChangedListener(service);
 
     private static ConsumerRecord<String, byte[]> record(byte[] value) {
       return new ConsumerRecord<>("LoyaltyBalanceChanged", 0, 7L, "key", value);
@@ -101,7 +102,8 @@ class LoyaltyRefListenersTest {
       verify(service).apply(captor.capture());
       LoyaltyBalanceChangedEvent event = captor.getValue();
       assertThat(event.eventId()).isEqualTo(eventId);
-      assertThat(event.memberId()).isEqualTo(UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"));
+      assertThat(event.memberId())
+          .isEqualTo(UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"));
       assertThat(event.pointsBalance()).isEqualTo(1_500L);
       assertThat(event.balanceSeq()).isEqualTo(3L);
     }
@@ -184,7 +186,8 @@ class LoyaltyRefListenersTest {
       verify(service).apply(captor.capture());
       GiftCardStateChangedEvent event = captor.getValue();
       assertThat(event.eventId()).isEqualTo(eventId);
-      assertThat(event.giftCardId()).isEqualTo(UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"));
+      assertThat(event.giftCardId())
+          .isEqualTo(UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"));
       assertThat(event.state()).isEqualTo("ACTIVE");
       assertThat(event.balanceMinor()).isEqualTo(25_000L);
       assertThat(event.balanceSeq()).isEqualTo(2L);

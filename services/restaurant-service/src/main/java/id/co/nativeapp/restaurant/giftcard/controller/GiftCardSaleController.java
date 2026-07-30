@@ -15,8 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * {@code POST /api/v1/gift-card-sales} — sells (mints) a gift card at the till (ADR 0027, Phase
- * 4).
+ * {@code POST /api/v1/gift-card-sales} — sells (mints) a gift card at the till (ADR 0027, Phase 4).
  *
  * <p><strong>Path note (deliberate).</strong> restaurant-service's routes are NOT prefixed by
  * service name at the gateway (unlike carwash/barbershop's {@code /api/v1/{vertical}/**}); this
@@ -52,8 +51,7 @@ public class GiftCardSaleController {
     GiftCardSaleResult result = giftCardSaleService.sell(request);
     GiftCardSaleResponse body = result.sale();
     return result.created()
-        ? ResponseEntity.created(
-                URI.create("/api/v1/gift-card-sales/" + body.giftCardSaleId()))
+        ? ResponseEntity.created(URI.create("/api/v1/gift-card-sales/" + body.giftCardSaleId()))
             .body(body)
         : ResponseEntity.ok(body);
   }

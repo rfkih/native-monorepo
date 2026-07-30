@@ -14,6 +14,7 @@ import id.co.nativeapp.restaurant.menu.service.MenuService;
 import id.co.nativeapp.restaurant.order.dto.CheckoutRequest;
 import id.co.nativeapp.restaurant.order.dto.CheckoutResult;
 import id.co.nativeapp.restaurant.order.dto.OrderLineRequest;
+import id.co.nativeapp.restaurant.order.service.OrderService;
 import id.co.nativeapp.restaurant.payment.domain.TenderType;
 import id.co.nativeapp.restaurant.payment.dto.PaymentRequest;
 import id.co.nativeapp.tenant.TenantContext;
@@ -66,8 +67,10 @@ class LoyaltyGiftCardRedemptionConcurrencyTest extends PostgresRlsTestBase {
     seedMemberBalance(memberId, 1_500L, 1L);
     UUID itemId = createMenuItem(10_000L);
 
-    CheckoutRequest reqA = pointsCheckoutRequest(itemId, memberId, 1_000L, "loyalty-race-a-" + UUID.randomUUID());
-    CheckoutRequest reqB = pointsCheckoutRequest(itemId, memberId, 1_000L, "loyalty-race-b-" + UUID.randomUUID());
+    CheckoutRequest reqA =
+        pointsCheckoutRequest(itemId, memberId, 1_000L, "loyalty-race-a-" + UUID.randomUUID());
+    CheckoutRequest reqB =
+        pointsCheckoutRequest(itemId, memberId, 1_000L, "loyalty-race-b-" + UUID.randomUUID());
 
     RaceOutcome outcome = race(reqA, reqB, LoyaltyBalanceInsufficientException.class);
 
@@ -91,7 +94,9 @@ class LoyaltyGiftCardRedemptionConcurrencyTest extends PostgresRlsTestBase {
 
     RaceOutcome outcome = race(reqA, reqB, GiftCardUnusableException.class);
 
-    assertThat(outcome.successCount()).as("exactly one checkout redeemed the gift card").isEqualTo(1);
+    assertThat(outcome.successCount())
+        .as("exactly one checkout redeemed the gift card")
+        .isEqualTo(1);
     assertThat(outcome.rejectedCount()).as("the loser sees 409").isEqualTo(1);
     assertThat(readGiftCardBalanceAdmin(cardId)).isEqualTo(5_000L);
   }
@@ -103,7 +108,9 @@ class LoyaltyGiftCardRedemptionConcurrencyTest extends PostgresRlsTestBase {
   private record RaceOutcome(int successCount, int rejectedCount) {}
 
   private RaceOutcome race(
-      CheckoutRequest reqA, CheckoutRequest reqB, Class<? extends RuntimeException> expectedRejection)
+      CheckoutRequest reqA,
+      CheckoutRequest reqB,
+      Class<? extends RuntimeException> expectedRejection)
       throws InterruptedException {
     CyclicBarrier barrier = new CyclicBarrier(2);
     Callable<CheckoutResult> attemptA =
@@ -200,10 +207,12 @@ class LoyaltyGiftCardRedemptionConcurrencyTest extends PostgresRlsTestBase {
 
   private void seedMemberBalance(UUID memberId, long points, long seq) {
     loyaltyBalanceChangedService.apply(
-        new LoyaltyBalanceChangedEvent(UUID.randomUUID(), memberId, TENANT, points, seq, Instant.now()));
+        new LoyaltyBalanceChangedEvent(
+            UUID.randomUUID(), memberId, TENANT, points, seq, Instant.now()));
   }
 
-  private void seedGiftCard(UUID cardId, String state, long balanceMinor, String currency, long seq) {
+  private void seedGiftCard(
+      UUID cardId, String state, long balanceMinor, String currency, long seq) {
     giftCardStateChangedService.apply(
         new GiftCardStateChangedEvent(
             UUID.randomUUID(), cardId, TENANT, state, balanceMinor, currency, seq, Instant.now()));
@@ -212,7 +221,8 @@ class LoyaltyGiftCardRedemptionConcurrencyTest extends PostgresRlsTestBase {
   private long readMemberBalanceAdmin(UUID memberId) throws Exception {
     try (Connection admin = adminConnection();
         PreparedStatement ps =
-            admin.prepareStatement("SELECT points_balance FROM member_balance_ref WHERE member_id = ?")) {
+            admin.prepareStatement(
+                "SELECT points_balance FROM member_balance_ref WHERE member_id = ?")) {
       ps.setObject(1, memberId);
       try (ResultSet rs = ps.executeQuery()) {
         rs.next();
@@ -224,7 +234,8 @@ class LoyaltyGiftCardRedemptionConcurrencyTest extends PostgresRlsTestBase {
   private long readGiftCardBalanceAdmin(UUID cardId) throws Exception {
     try (Connection admin = adminConnection();
         PreparedStatement ps =
-            admin.prepareStatement("SELECT balance_minor FROM gift_card_ref WHERE gift_card_id = ?")) {
+            admin.prepareStatement(
+                "SELECT balance_minor FROM gift_card_ref WHERE gift_card_id = ?")) {
       ps.setObject(1, cardId);
       try (ResultSet rs = ps.executeQuery()) {
         rs.next();

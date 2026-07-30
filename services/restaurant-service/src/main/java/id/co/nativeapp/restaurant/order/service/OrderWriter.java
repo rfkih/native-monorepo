@@ -767,7 +767,8 @@ public class OrderWriter {
     // promo discount, then feed the COMBINED figure into TaxChargeService.resolve so
     // serviceCharge/tax/grandTotal all reflect it. Skipped for park (applyPromotions == false) —
     // redemption evaluates at PAY time, mirroring promotions (ADR 0026 posture).
-    validateLoyaltyRedemptionPairing(loyaltyMemberId, loyaltyRedeemPoints, giftCardId, giftCardRedeemMinor);
+    validateLoyaltyRedemptionPairing(
+        loyaltyMemberId, loyaltyRedeemPoints, giftCardId, giftCardRedeemMinor);
     long loyaltyRedeemedMinor = 0L;
     Money combinedDiscount = fixedDiscount;
     if (applyPromotions && loyaltyMemberId != null) {
@@ -864,7 +865,8 @@ public class OrderWriter {
 
     // Phase 4 (ADR 0027): same clamp+decrement discipline as buildCart's step 6b/6c — evaluated
     // HERE (pay time), never at park time.
-    validateLoyaltyRedemptionPairing(loyaltyMemberId, loyaltyRedeemPoints, giftCardId, giftCardRedeemMinor);
+    validateLoyaltyRedemptionPairing(
+        loyaltyMemberId, loyaltyRedeemPoints, giftCardId, giftCardRedeemMinor);
     long loyaltyRedeemedMinor = 0L;
     Money combinedDiscount = fixedDiscount;
     if (loyaltyMemberId != null) {
@@ -883,10 +885,7 @@ public class OrderWriter {
     if (giftCardId != null) {
       giftCardRedeemedMinor =
           loyaltyRedemptionGuard.redeemGiftCard(
-              giftCardId,
-              giftCardRedeemMinor,
-              breakdown.grandTotal().amountMinor(),
-              currencyCode);
+              giftCardId, giftCardRedeemMinor, breakdown.grandTotal().amountMinor(), currencyCode);
     }
 
     return new EngineRecompute(breakdown, evalResult, loyaltyRedeemedMinor, giftCardRedeemedMinor);

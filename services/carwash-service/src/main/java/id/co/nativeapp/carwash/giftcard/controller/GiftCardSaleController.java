@@ -49,8 +49,7 @@ public class GiftCardSaleController {
     GiftCardSaleResult result = giftCardSaleService.sell(request);
     GiftCardSaleResponse body = result.sale();
     return result.created()
-        ? ResponseEntity.created(
-                URI.create("/api/v1/carwash/gift-cards/" + body.giftCardSaleId()))
+        ? ResponseEntity.created(URI.create("/api/v1/carwash/gift-cards/" + body.giftCardSaleId()))
             .body(body)
         : ResponseEntity.ok(body);
   }

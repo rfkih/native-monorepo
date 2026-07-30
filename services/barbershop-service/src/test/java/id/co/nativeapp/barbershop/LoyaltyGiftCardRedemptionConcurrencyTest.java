@@ -69,9 +69,11 @@ class LoyaltyGiftCardRedemptionConcurrencyTest extends KafkaPostgresRedisTestBas
     UUID barberId = createStaffProfile();
 
     CheckoutRequest reqA =
-        pointsCheckoutRequest(serviceId, barberId, memberId, 1_000L, "loyalty-race-a-" + UUID.randomUUID());
+        pointsCheckoutRequest(
+            serviceId, barberId, memberId, 1_000L, "loyalty-race-a-" + UUID.randomUUID());
     CheckoutRequest reqB =
-        pointsCheckoutRequest(serviceId, barberId, memberId, 1_000L, "loyalty-race-b-" + UUID.randomUUID());
+        pointsCheckoutRequest(
+            serviceId, barberId, memberId, 1_000L, "loyalty-race-b-" + UUID.randomUUID());
 
     RaceOutcome outcome = race(reqA, reqB, LoyaltyBalanceInsufficientException.class);
 
@@ -89,13 +91,17 @@ class LoyaltyGiftCardRedemptionConcurrencyTest extends KafkaPostgresRedisTestBas
     UUID barberId = createStaffProfile();
 
     CheckoutRequest reqA =
-        giftCardCheckoutRequest(serviceId, barberId, cardId, 10_000L, "giftcard-race-a-" + UUID.randomUUID());
+        giftCardCheckoutRequest(
+            serviceId, barberId, cardId, 10_000L, "giftcard-race-a-" + UUID.randomUUID());
     CheckoutRequest reqB =
-        giftCardCheckoutRequest(serviceId, barberId, cardId, 10_000L, "giftcard-race-b-" + UUID.randomUUID());
+        giftCardCheckoutRequest(
+            serviceId, barberId, cardId, 10_000L, "giftcard-race-b-" + UUID.randomUUID());
 
     RaceOutcome outcome = race(reqA, reqB, GiftCardUnusableException.class);
 
-    assertThat(outcome.successCount()).as("exactly one checkout redeemed the gift card").isEqualTo(1);
+    assertThat(outcome.successCount())
+        .as("exactly one checkout redeemed the gift card")
+        .isEqualTo(1);
     assertThat(outcome.rejectedCount()).as("the loser sees 409").isEqualTo(1);
     assertThat(readGiftCardBalanceAdmin(cardId)).isEqualTo(5_000L);
   }
@@ -107,7 +113,9 @@ class LoyaltyGiftCardRedemptionConcurrencyTest extends KafkaPostgresRedisTestBas
   private record RaceOutcome(int successCount, int rejectedCount) {}
 
   private RaceOutcome race(
-      CheckoutRequest reqA, CheckoutRequest reqB, Class<? extends RuntimeException> expectedRejection)
+      CheckoutRequest reqA,
+      CheckoutRequest reqB,
+      Class<? extends RuntimeException> expectedRejection)
       throws InterruptedException {
     CyclicBarrier barrier = new CyclicBarrier(2);
     Callable<CheckoutResult> attemptA =
@@ -214,16 +222,19 @@ class LoyaltyGiftCardRedemptionConcurrencyTest extends KafkaPostgresRedisTestBas
             OWNER_ACTOR,
             () ->
                 catalogService.createStaffProfile(
-                    new StaffProfileCreateRequest(OUTLET, "Budi " + UUID.randomUUID(), null, true)));
+                    new StaffProfileCreateRequest(
+                        OUTLET, "Budi " + UUID.randomUUID(), null, true)));
     return response.id();
   }
 
   private void seedMemberBalance(UUID memberId, long points, long seq) {
     loyaltyBalanceChangedService.apply(
-        new LoyaltyBalanceChangedEvent(UUID.randomUUID(), memberId, TENANT, points, seq, Instant.now()));
+        new LoyaltyBalanceChangedEvent(
+            UUID.randomUUID(), memberId, TENANT, points, seq, Instant.now()));
   }
 
-  private void seedGiftCard(UUID cardId, String state, long balanceMinor, String currency, long seq) {
+  private void seedGiftCard(
+      UUID cardId, String state, long balanceMinor, String currency, long seq) {
     giftCardStateChangedService.apply(
         new GiftCardStateChangedEvent(
             UUID.randomUUID(), cardId, TENANT, state, balanceMinor, currency, seq, Instant.now()));
@@ -232,7 +243,8 @@ class LoyaltyGiftCardRedemptionConcurrencyTest extends KafkaPostgresRedisTestBas
   private long readMemberBalanceAdmin(UUID memberId) throws Exception {
     try (Connection admin = adminConnection();
         PreparedStatement ps =
-            admin.prepareStatement("SELECT points_balance FROM member_balance_ref WHERE member_id = ?")) {
+            admin.prepareStatement(
+                "SELECT points_balance FROM member_balance_ref WHERE member_id = ?")) {
       ps.setObject(1, memberId);
       try (ResultSet rs = ps.executeQuery()) {
         rs.next();
@@ -244,7 +256,8 @@ class LoyaltyGiftCardRedemptionConcurrencyTest extends KafkaPostgresRedisTestBas
   private long readGiftCardBalanceAdmin(UUID cardId) throws Exception {
     try (Connection admin = adminConnection();
         PreparedStatement ps =
-            admin.prepareStatement("SELECT balance_minor FROM gift_card_ref WHERE gift_card_id = ?")) {
+            admin.prepareStatement(
+                "SELECT balance_minor FROM gift_card_ref WHERE gift_card_id = ?")) {
       ps.setObject(1, cardId);
       try (ResultSet rs = ps.executeQuery()) {
         rs.next();

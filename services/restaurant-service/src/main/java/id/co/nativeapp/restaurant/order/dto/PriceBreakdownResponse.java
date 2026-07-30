@@ -28,11 +28,11 @@ import java.util.List;
  *
  * <p><strong>Phase 4 (ADR 0027, additive).</strong> {@code discountMinor} is now PROMO-ONLY — a
  * loyalty-points redemption is reported separately as {@code loyaltyRedeemedMinor} (a
- * contra-revenue deduction; matches the {@code SaleRecorded} wire's {@code discount_minor} /
- * {@code loyalty_redeemed_minor} split, EVENT-CATALOG.md). {@code giftCardAppliedMinor} is the
- * amount TENDERED from a gift card (never a discount) and {@code residualDueMinor = grandTotalMinor
- * - giftCardAppliedMinor} is what remains for the requested payment method to actually authorize —
- * so the POS can render the true amount due honestly. All three default to {@code 0} on every
+ * contra-revenue deduction; matches the {@code SaleRecorded} wire's {@code discount_minor} / {@code
+ * loyalty_redeemed_minor} split, EVENT-CATALOG.md). {@code giftCardAppliedMinor} is the amount
+ * TENDERED from a gift card (never a discount) and {@code residualDueMinor = grandTotalMinor -
+ * giftCardAppliedMinor} is what remains for the requested payment method to actually authorize — so
+ * the POS can render the true amount due honestly. All three default to {@code 0} on every
  * pre-Phase-4 call site (fully backward compatible).
  *
  * @param subtotalMinor sum of line totals before any discount (minor units)
@@ -101,8 +101,8 @@ public record PriceBreakdownResponse(
   }
 
   /**
-   * Factory: maps a domain {@link PriceBreakdown} to the wire shape (no promotions detail, no
-   * Phase 4 redemption).
+   * Factory: maps a domain {@link PriceBreakdown} to the wire shape (no promotions detail, no Phase
+   * 4 redemption).
    */
   public static PriceBreakdownResponse from(PriceBreakdown bd) {
     return from(bd, null, 0L, 0L);
@@ -141,7 +141,10 @@ public record PriceBreakdownResponse(
    * @param giftCardRedeemedMinor the ACTUAL gift-card tender amount, or {@code 0}
    */
   public static PriceBreakdownResponse from(
-      PriceBreakdown bd, EvalResult evalResult, long loyaltyRedeemedMinor, long giftCardRedeemedMinor) {
+      PriceBreakdown bd,
+      EvalResult evalResult,
+      long loyaltyRedeemedMinor,
+      long giftCardRedeemedMinor) {
     List<AppliedPromotionResponse> applied =
         evalResult == null
             ? List.of()
