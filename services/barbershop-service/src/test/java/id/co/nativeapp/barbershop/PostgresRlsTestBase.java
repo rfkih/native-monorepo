@@ -54,7 +54,8 @@ abstract class PostgresRlsTestBase {
       // tax_charge_rule is deliberately NOT truncated: the V1 Flyway seed (VAT_BARBERSHOP) must
       // survive between tests, exactly as carwash's test base preserves its V5 seed.
       st.execute(
-          "TRUNCATE TABLE entitlement_projection, staff, outbox, processed_event,"
+          "TRUNCATE TABLE applied_promotion, coupon, promo_rule,"
+              + " entitlement_projection, staff, outbox, processed_event,"
               + " service_item, service_addon, staff_profile,"
               + " barbershop_payment, barbershop_ticket_line, barbershop_ticket,"
               + " user_outlet_assignment_ref CASCADE");
