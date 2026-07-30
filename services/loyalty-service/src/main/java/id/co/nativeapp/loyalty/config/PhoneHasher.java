@@ -21,15 +21,15 @@ import javax.crypto.spec.SecretKeySpec;
  *
  * <p><strong>Tenant-mixed message (security review W-1).</strong> The HMAC message is {@code
  * companyId + ":" + normalizedPhone} — NOT the phone alone. Hashing the phone alone would make the
- * digest a pure function of the phone number, so the SAME phone would hash IDENTICALLY across
- * every tenant; a leaked database dump could then link the same person across unrelated companies
- * purely from the {@code phone_hash} column, even without decrypting a single {@code
- * phone_encrypted} value. Mixing the tenant into the message makes the digest tenant-scoped: the
- * same phone under two different {@code company_id}s produces two UNRELATED hashes, so
- * cross-tenant linkage is impossible from the hash column alone. This changes neither the {@code
- * UNIQUE(company_id, phone_hash)} constraint nor the exact-match lookup query — both were already
- * scoped by {@code company_id} (RLS); this closes the cross-tenant CORRELATION leak on a raw DB
- * dump, not a query-scoping gap.
+ * digest a pure function of the phone number, so the SAME phone would hash IDENTICALLY across every
+ * tenant; a leaked database dump could then link the same person across unrelated companies purely
+ * from the {@code phone_hash} column, even without decrypting a single {@code phone_encrypted}
+ * value. Mixing the tenant into the message makes the digest tenant-scoped: the same phone under
+ * two different {@code company_id}s produces two UNRELATED hashes, so cross-tenant linkage is
+ * impossible from the hash column alone. This changes neither the {@code UNIQUE(company_id,
+ * phone_hash)} constraint nor the exact-match lookup query — both were already scoped by {@code
+ * company_id} (RLS); this closes the cross-tenant CORRELATION leak on a raw DB dump, not a
+ * query-scoping gap.
  *
  * <p>Sourced from a SEPARATE key than {@link PiiCipher} (see {@link PiiEncryptionConfig} class
  * javadoc for why the two keys are never conflated), mirroring the same fail-fast startup

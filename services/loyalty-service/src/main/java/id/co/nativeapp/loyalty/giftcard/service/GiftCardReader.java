@@ -19,8 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
  * <p><strong>{@link #list()} requires {@code owner}/{@code manager} (security review W-4); {@link
  * #lookupByCode} stays ungated for POS.</strong> The admin listing returns EVERY card for the
  * tenant, including its bearer-credential {@code code} — unrestricted access would let any POS
- * token enumerate every valid redemption code in the company, not just the one on the card in
- * hand. A per-code lookup carries no such risk (the caller already has to know/scan the code).
+ * token enumerate every valid redemption code in the company, not just the one on the card in hand.
+ * A per-code lookup carries no such risk (the caller already has to know/scan the code).
  * Empty-roles-pass semantics mirror {@code EarnRuleService.requireWriteRole} — the same guard
  * pattern.
  */

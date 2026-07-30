@@ -38,12 +38,12 @@ import javax.crypto.spec.SecretKeySpec;
  * restaurant-service} / {@code carwash-service} / {@code barbershop-service}) — a card's code must
  * be reproducible identically wherever it is derived, without a synchronous cross-service call
  * (rule 2). All four services therefore bind the SAME env var name, {@code
- * NATIVE_GIFTCARD_CODE_KEY}, to the SAME
- * base64-encoded 32-byte value (Vault-provisioned in prod, mirroring how {@code NATIVE_PII_*} is
- * provisioned — see {@code GiftCardProperties}/{@code GiftCardCodeConfig} in each service's {@code
- * config} package). A key mismatch between services would silently make the SAME card resolve to
- * DIFFERENT codes depending on who minted vs. who reads it — there is no automated cross-service
- * check for this; it is an operational invariant documented here and at each provisioning site.
+ * NATIVE_GIFTCARD_CODE_KEY}, to the SAME base64-encoded 32-byte value (Vault-provisioned in prod,
+ * mirroring how {@code NATIVE_PII_*} is provisioned — see {@code GiftCardProperties}/{@code
+ * GiftCardCodeConfig} in each service's {@code config} package). A key mismatch between services
+ * would silently make the SAME card resolve to DIFFERENT codes depending on who minted vs. who
+ * reads it — there is no automated cross-service check for this; it is an operational invariant
+ * documented here and at each provisioning site.
  */
 public final class GiftCardCodeGenerator {
 

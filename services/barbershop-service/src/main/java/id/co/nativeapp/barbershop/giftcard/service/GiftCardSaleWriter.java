@@ -41,8 +41,8 @@ import org.springframework.transaction.annotation.Transactional;
  * GiftCardCodeGenerator} (security review W-4), persists the {@code gift_card_sale} row; (5) writes
  * {@code GiftCardSold} to the outbox in the SAME transaction (rule 3).
  *
- * <p><strong>Mint controls (security review W-3).</strong> {@code tenderType} is now {@code
- * @NotNull} on {@link SellGiftCardRequest} and {@code amountMinor} is capped by {@link
+ * <p><strong>Mint controls (security review W-3).</strong> {@code tenderType} is now
+ * {@code @NotNull} on {@link SellGiftCardRequest} and {@code amountMinor} is capped by {@link
  * GiftCardProperties#maxMintMinor}. <strong>Deliberately NOT built here:</strong> routing a digital
  * tender (QRIS/CARD) through a pending/capture flow so the card only activates once the payment is
  * confirmed — that is the documented ADR 0027 follow-up, not this wave; this writer still activates

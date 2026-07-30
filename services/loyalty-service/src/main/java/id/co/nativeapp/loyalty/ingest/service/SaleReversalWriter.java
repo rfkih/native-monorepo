@@ -89,7 +89,8 @@ public class SaleReversalWriter {
     // Self-enforcing full-reversal-only invariant (review S2): two DISTINCT reversal events for
     // one sale (a SaleVoided followed by a SaleRefunded) must not each re-reverse the originals
     // and double-credit — processOnce dedupes only a REDELIVERY of the same event.
-    if (ledgerRepository.existsBySaleIdAndEntryType(fact.saleId(), LoyaltyLedgerEntryType.REVERSE)) {
+    if (ledgerRepository.existsBySaleIdAndEntryType(
+        fact.saleId(), LoyaltyLedgerEntryType.REVERSE)) {
       return;
     }
     List<LoyaltyLedgerEntry> entries =

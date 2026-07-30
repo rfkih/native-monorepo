@@ -6,8 +6,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Wires the keyed gift-card code derivation (security review W-4): binds {@link
- * GiftCardProperties} (the externalized, fleet-wide {@code NATIVE_GIFTCARD_CODE_KEY} + the {@code
+ * Wires the keyed gift-card code derivation (security review W-4): binds {@link GiftCardProperties}
+ * (the externalized, fleet-wide {@code NATIVE_GIFTCARD_CODE_KEY} + the {@code
  * NATIVE_GIFTCARD_MAX_MINT_MINOR} mint ceiling, security review W-3) and builds the singleton
  * {@link GiftCardCodeGenerator} bean {@code giftcard.service.GiftCardSaleWriter} delegates to.
  */

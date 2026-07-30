@@ -12,9 +12,9 @@ import org.springframework.validation.annotation.Validated;
  * @param codeKey the base64-encoded 32-byte HMAC-SHA256 key {@code
  *     giftcard.domain.GiftCardCodeGenerator} keys the card-code derivation with (security review
  *     W-4). Supplied as {@code NATIVE_GIFTCARD_CODE_KEY}. <strong>Must be the IDENTICAL value in
- *     every other service that derives a gift-card code</strong> (loyalty-service +
- *     carwash-service + barbershop-service) — a mismatch would make the same card resolve to a
- *     different code depending on which service derives it.
+ *     every other service that derives a gift-card code</strong> (loyalty-service + carwash-service
+ *     + barbershop-service) — a mismatch would make the same card resolve to a different code
+ *     depending on which service derives it.
  * @param maxMintMinor the ceiling on a single gift-card SELL's {@code amountMinor} (security review
  *     W-3) — an unbounded mint would let a compromised/misbehaving POS client create arbitrarily
  *     large redeemable liability with no independent check. Supplied as {@code

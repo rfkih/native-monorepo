@@ -16,6 +16,8 @@ public interface GiftCardLedgerEntryRepository extends JpaRepository<GiftCardLed
   List<GiftCardLedgerEntry> findBySaleIdAndEntryTypeIn(
       UUID saleId, List<GiftCardLedgerEntryType> types);
 
-  /** Whether a sale's gift-card activity was already reversed — see the loyalty twin (review S2). */
+  /**
+   * Whether a sale's gift-card activity was already reversed — see the loyalty twin (review S2).
+   */
   boolean existsBySaleIdAndEntryType(UUID saleId, GiftCardLedgerEntryType entryType);
 }

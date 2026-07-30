@@ -6,10 +6,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Wires the keyed gift-card code derivation (security review W-4): binds {@link
- * GiftCardProperties} (the externalized, fleet-wide {@code NATIVE_GIFTCARD_CODE_KEY}) and builds
- * the singleton {@link GiftCardCodeGenerator} bean the gift-card ingest writer and reads delegate
- * to. Mirrors {@link PiiEncryptionConfig}'s wiring style.
+ * Wires the keyed gift-card code derivation (security review W-4): binds {@link GiftCardProperties}
+ * (the externalized, fleet-wide {@code NATIVE_GIFTCARD_CODE_KEY}) and builds the singleton {@link
+ * GiftCardCodeGenerator} bean the gift-card ingest writer and reads delegate to. Mirrors {@link
+ * PiiEncryptionConfig}'s wiring style.
  */
 @Configuration
 @EnableConfigurationProperties(GiftCardProperties.class)

@@ -156,8 +156,7 @@ class GiftCardSaleIntegrationTest extends PostgresRlsTestBase {
 
     assertThatThrownBy(
             () ->
-                TenantContext.callAs(
-                    TENANT, OWNER_ACTOR, () -> giftCardSaleService.sell(request)))
+                TenantContext.callAs(TENANT, OWNER_ACTOR, () -> giftCardSaleService.sell(request)))
         .isInstanceOf(GiftCardMintLimitExceededException.class);
   }
 
