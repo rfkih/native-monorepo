@@ -2,6 +2,8 @@ package id.co.nativeapp.carwash;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import id.co.nativeapp.carwash.metric.domain.CarwashMetricContract;
+import id.co.nativeapp.carwash.metric.domain.MetricGrain;
 import id.co.nativeapp.carwash.metric.messaging.MetricPublishedSchema;
 import id.co.nativeapp.events.AvroSerde;
 import org.apache.avro.Schema;
@@ -100,5 +102,33 @@ class MetricPublishedContractTest {
                 }
                 """);
     assertThat(AvroSerde.isBackwardCompatible(v1, incompatible)).isFalse();
+  }
+
+  /**
+   * The carwash POS ticket's employee-grain washer-commission feed (ADR 0023 decision 4): {@code
+   * sales_amount} at the {@code employee} grain, {@code subject_id} = the washer's employee id (NOT
+   * the outlet, and NOT the cashier — deliberately unlike restaurant's cashier-attributed metric).
+   * {@link CarwashMetricContract#SALES_AMOUNT} rides the SAME generic schema (no new field) — a new
+   * metric key is a data change, not a schema change.
+   */
+  @Test
+  void salesAmountAtTheEmployeeGrainRoundTripsThroughAvroSerde() {
+    String washerEmployeeId = "44444444-4444-4444-4444-444444444444";
+    String outletId = "22222222-2222-2222-2222-222222222222";
+    GenericRecord record =
+        MetricPublishedSchema.toRecord(
+            CarwashMetricContract.SALES_AMOUNT,
+            "2026-07-30",
+            MetricGrain.EMPLOYEE.wireValue(),
+            washerEmployeeId,
+            77_700_00L,
+            outletId);
+    byte[] bytes = AvroSerde.serialize(record);
+    GenericRecord decoded = AvroSerde.deserialize(bytes, MetricPublishedSchema.schema());
+    assertThat(decoded.get("metric_key").toString()).isEqualTo("sales_amount");
+    assertThat(decoded.get("grain").toString()).isEqualTo("employee");
+    assertThat(decoded.get("subject_id").toString()).isEqualTo(washerEmployeeId);
+    assertThat(decoded.get("value")).isEqualTo(77_700_00L);
+    assertThat(decoded.get("source_business_id").toString()).isEqualTo(outletId);
   }
 }

@@ -1,6 +1,7 @@
 package id.co.nativeapp.carwash.config;
 
 import id.co.nativeapp.carwash.entitlement.service.ProjectionEntitlementLoader;
+import id.co.nativeapp.carwash.ticket.service.TicketPostOutboxHook;
 import id.co.nativeapp.carwash.wash.service.PostOutboxHook;
 import id.co.nativeapp.entitlementcheck.CachedEntitlementChecker;
 import id.co.nativeapp.entitlementcheck.EntitlementCache;
@@ -92,5 +93,17 @@ public class EventsConfig {
   @ConditionalOnMissingBean
   public PostOutboxHook postOutboxHook() {
     return new PostOutboxHook.Noop();
+  }
+
+  /**
+   * The production no-op post-outbox hook for the ticket feature ({@link
+   * id.co.nativeapp.carwash.ticket.service.TicketWriter TicketWriter} test seam). Declared {@link
+   * ConditionalOnMissingBean} so the ticket atomicity test can supply a throwing hook in its own
+   * context without a bean-definition clash, independent of the wash feature's hook.
+   */
+  @Bean
+  @ConditionalOnMissingBean
+  public TicketPostOutboxHook ticketPostOutboxHook() {
+    return new TicketPostOutboxHook.Noop();
   }
 }

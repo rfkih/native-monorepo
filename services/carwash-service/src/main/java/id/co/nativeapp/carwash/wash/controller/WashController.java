@@ -56,7 +56,14 @@ public class WashController {
           "Records a car-wash operation (bay + optional upsell) for the bound tenant. Returns 201"
               + " Created with a Location header on the first write; returns 200 OK on a retry"
               + " carrying the same idempotency_key (no second event). Rejected with 403 when the"
-              + " company is not entitled to the carwash module.")
+              + " company is not entitled to the carwash module."
+              + " DEPRECATED (ADR 0023): superseded by the POS-parity ticket checkout at"
+              + " POST /api/v1/carwash/tickets/checkout (catalog pricing, tax/service-charge,"
+              + " tenders, outlet enforcement, washer attribution). This endpoint is left un-routed"
+              + " at the gateway and untouched behaviorally — its tests double as the"
+              + " backward-compatibility proof — but new integrations should use the ticket"
+              + " checkout instead.",
+      deprecated = true)
   @PostMapping
   public ResponseEntity<WashResponse> recordWash(@Valid @RequestBody WashRequest request) {
     RecordWashCommand command =

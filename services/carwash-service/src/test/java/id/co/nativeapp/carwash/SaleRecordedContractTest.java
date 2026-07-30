@@ -2,8 +2,13 @@ package id.co.nativeapp.carwash;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import id.co.nativeapp.carwash.pricing.domain.PriceBreakdown;
+import id.co.nativeapp.carwash.ticket.messaging.TicketSaleRecordedSchema;
 import id.co.nativeapp.carwash.wash.messaging.SaleRecordedSchema;
 import id.co.nativeapp.events.AvroSerde;
+import id.co.nativeapp.money.Money;
+import java.time.Instant;
+import java.util.UUID;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericRecord;
@@ -133,5 +138,71 @@ class SaleRecordedContractTest {
                 }
                 """);
     assertThat(AvroSerde.isBackwardCompatible(v1, incompatible)).isFalse();
+  }
+
+  /**
+   * carwash's SECOND {@code SaleRecorded} producer (ADR 0023): the ticket checkout populates the
+   * FULL price breakdown + {@code tender_type}, unlike {@code wash.messaging.SaleRecordedSchema}
+   * (the legacy null-breakdown producer). Both producers load the SAME classpath resource ({@code
+   * avro/SaleRecorded.avsc}, byte-identical to restaurant's producer schema), so this proves the
+   * full-breakdown path parses, round-trips, and stays mutually backward-compatible with the
+   * restaurant producer schema — finance consolidates BOTH carwash producers through the identical
+   * consumer path.
+   */
+  @Test
+  void ticketFullBreakdownProducerBuildsAValidRecordAgainstTheSharedSchema() {
+    Schema schema = TicketSaleRecordedSchema.schema();
+    // Both carwash producers (legacy null-breakdown wash, full-breakdown ticket) share the IDENTICAL
+    // classpath resource, so their schema shape (full name included) is byte-identical.
+    assertThat(schema.getFullName()).isEqualTo(SaleRecordedSchema.schema().getFullName());
+
+    PriceBreakdown breakdown =
+        new PriceBreakdown(
+            Money.ofMinor(70_000_00L, "IDR"),
+            Money.ofMinor(0L, "IDR"),
+            Money.ofMinor(70_000_00L, "IDR"),
+            Money.ofMinor(0L, "IDR"),
+            Money.ofMinor(7_700_00L, "IDR"),
+            Money.ofMinor(77_700_00L, "IDR"),
+            "ILLUSTRATIVE-2026.1",
+            true);
+    UUID saleId = UUID.randomUUID();
+    UUID businessId = UUID.fromString("22222222-2222-2222-2222-222222222222");
+
+    GenericRecord record =
+        TicketSaleRecordedSchema.toRecord(
+            saleId,
+            "11111111-1111-1111-1111-111111111111",
+            businessId,
+            breakdown.grandTotal(),
+            Instant.parse("2026-06-14T08:30:00Z"),
+            "CASH",
+            breakdown);
+
+    byte[] bytes = AvroSerde.serialize(record);
+    GenericRecord decoded = AvroSerde.deserialize(bytes, schema);
+    assertThat(decoded.get("sale_id").toString()).isEqualTo(saleId.toString());
+    assertThat(decoded.get("business_id").toString()).isEqualTo(businessId.toString());
+    assertThat(decoded.get("amount_minor")).isEqualTo(77_700_00L);
+    assertThat(decoded.get("currency").toString()).isEqualTo("IDR");
+    assertThat(decoded.get("tender_type").toString()).isEqualTo("CASH");
+    assertThat(decoded.get("subtotal_minor")).isEqualTo(70_000_00L);
+    assertThat(decoded.get("tax_minor")).isEqualTo(7_700_00L);
+    assertThat(decoded.get("tax_rule_version").toString()).isEqualTo("ILLUSTRATIVE-2026.1");
+    assertThat(decoded.get("uses_illustrative_rules")).isEqualTo(true);
+
+    // Still mutually backward-compatible with the restaurant producer schema — same shared contract.
+    assertThat(AvroSerde.isBackwardCompatible(PRODUCER_SCHEMA, schema)).isTrue();
+    assertThat(AvroSerde.isBackwardCompatible(schema, PRODUCER_SCHEMA)).isTrue();
+  }
+
+  /**
+   * The legacy-null (wash) and full-breakdown (ticket) producers are two call sites over the SAME
+   * Avro contract, not two different schemas — proving neither can silently drift from the other.
+   */
+  @Test
+  void legacyNullAndTicketFullProducersShareTheIdenticalSchema() {
+    assertThat(SaleRecordedSchema.schema().toString())
+        .isEqualTo(TicketSaleRecordedSchema.schema().toString());
   }
 }
