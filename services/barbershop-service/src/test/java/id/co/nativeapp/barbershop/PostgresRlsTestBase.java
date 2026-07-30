@@ -58,6 +58,7 @@ abstract class PostgresRlsTestBase {
               + " entitlement_projection, staff, outbox, processed_event,"
               + " service_item, service_addon, staff_profile,"
               + " barbershop_payment, barbershop_ticket_line, barbershop_ticket,"
+              + " gift_card_sale, gift_card_ref, member_balance_ref,"
               + " user_outlet_assignment_ref CASCADE");
     } catch (SQLException ignored) {
       // Tables not created yet (pre-Flyway) — nothing to reset.
