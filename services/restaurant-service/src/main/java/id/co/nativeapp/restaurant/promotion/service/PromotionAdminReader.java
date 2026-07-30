@@ -12,9 +12,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Owns the {@code @Transactional(readOnly = true)} promotion admin list reads. A distinct bean from
- * {@link PromotionAdminWriter} and {@link PromotionAdminService} so it is invoked through the Spring
- * proxy — the {@code @Transactional} advice and the {@code RlsAutoApplyAspect} that binds the tenant
- * GUC only apply through the proxy (the {@code CatalogReader} pattern).
+ * {@link PromotionAdminWriter} and {@link PromotionAdminService} so it is invoked through the
+ * Spring proxy — the {@code @Transactional} advice and the {@code RlsAutoApplyAspect} that binds
+ * the tenant GUC only apply through the proxy (the {@code CatalogReader} pattern).
  */
 @Component
 public class PromotionAdminReader {
@@ -22,19 +22,24 @@ public class PromotionAdminReader {
   private final PromoRuleRepository promoRuleRepository;
   private final CouponRepository couponRepository;
 
-  public PromotionAdminReader(PromoRuleRepository promoRuleRepository, CouponRepository couponRepository) {
+  public PromotionAdminReader(
+      PromoRuleRepository promoRuleRepository, CouponRepository couponRepository) {
     this.promoRuleRepository = promoRuleRepository;
     this.couponRepository = couponRepository;
   }
 
   @Transactional(readOnly = true)
   public List<PromoRuleResponse> listRules(boolean activeOnly) {
-    return promoRuleRepository.findViews(activeOnly).stream().map(PromotionAdminReader::toResponse).toList();
+    return promoRuleRepository.findViews(activeOnly).stream()
+        .map(PromotionAdminReader::toResponse)
+        .toList();
   }
 
   @Transactional(readOnly = true)
   public List<CouponResponse> listCoupons(boolean activeOnly) {
-    return couponRepository.findViews(activeOnly).stream().map(PromotionAdminReader::toResponse).toList();
+    return couponRepository.findViews(activeOnly).stream()
+        .map(PromotionAdminReader::toResponse)
+        .toList();
   }
 
   private static PromoRuleResponse toResponse(PromoRuleView v) {
@@ -62,6 +67,12 @@ public class PromotionAdminReader {
 
   private static CouponResponse toResponse(CouponView v) {
     return new CouponResponse(
-        v.getId(), v.getCode(), v.getRuleId(), v.getMaxRedemptions(), v.getRedeemedCount(), v.getExpiresAt(), v.isActive());
+        v.getId(),
+        v.getCode(),
+        v.getRuleId(),
+        v.getMaxRedemptions(),
+        v.getRedeemedCount(),
+        v.getExpiresAt(),
+        v.isActive());
   }
 }

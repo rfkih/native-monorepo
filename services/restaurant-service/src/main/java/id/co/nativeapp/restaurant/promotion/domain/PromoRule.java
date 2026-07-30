@@ -16,20 +16,22 @@ import org.hibernate.type.SqlTypes;
 
 /**
  * A configured promotion rule (ADR 0026) — the catalog row {@link
- * id.co.nativeapp.restaurant.promotion.service.PromotionEngineService PromotionEngineService} resolves at
- * checkout/pay time. Maps to the {@code promo_rule} table (V16__promotions.sql).
+ * id.co.nativeapp.restaurant.promotion.service.PromotionEngineService PromotionEngineService}
+ * resolves at checkout/pay time. Maps to the {@code promo_rule} table (V16__promotions.sql).
  *
- * <p>Extends {@link Auditable} (rule 4) and is covered by the {@code promo_rule_tenant_isolation} RLS
- * policy (rule 5). {@code rate_bp}/{@code amount_minor}/{@code currency} are plain nullable columns
- * rather than a {@link id.co.nativeapp.money.Money Money}/{@code MoneyEmbeddable} pairing — exactly
- * the same reasoning as {@code Order.discountMinor}: a percent-type rule legitimately carries no
- * amount and vice versa, so the "amount, always present" invariant a {@code MoneyEmbeddable} implies
- * does not hold here (rule 8 — never a float; still true, just not wrapped in {@code Money}).
+ * <p>Extends {@link Auditable} (rule 4) and is covered by the {@code promo_rule_tenant_isolation}
+ * RLS policy (rule 5). {@code rate_bp}/{@code amount_minor}/{@code currency} are plain nullable
+ * columns rather than a {@link id.co.nativeapp.money.Money Money}/{@code MoneyEmbeddable} pairing —
+ * exactly the same reasoning as {@code Order.discountMinor}: a percent-type rule legitimately
+ * carries no amount and vice versa, so the "amount, always present" invariant a {@code
+ * MoneyEmbeddable} implies does not hold here (rule 8 — never a float; still true, just not wrapped
+ * in {@code Money}).
  *
- * <p><strong>{@code buy_qty}/{@code get_qty}/{@code get_scope_ref_id} are intentionally UNMAPPED.</strong>
- * They are schema-reserved columns for the not-yet-shipped {@code BUY_X_GET_Y} rule type ({@link
- * PromoRuleType}); {@code ddl-auto=validate} only checks that mapped entity attributes agree with the
- * migrated schema, so leaving them out of this entity is safe and avoids carrying dead fields.
+ * <p><strong>{@code buy_qty}/{@code get_qty}/{@code get_scope_ref_id} are intentionally
+ * UNMAPPED.</strong> They are schema-reserved columns for the not-yet-shipped {@code BUY_X_GET_Y}
+ * rule type ({@link PromoRuleType}); {@code ddl-auto=validate} only checks that mapped entity
+ * attributes agree with the migrated schema, so leaving them out of this entity is safe and avoids
+ * carrying dead fields.
  *
  * <p>A {@code protected} no-arg constructor exists only for JPA.
  */

@@ -35,25 +35,26 @@ import org.springframework.stereotype.Component;
  * <p><strong>Pure evaluation — no writes.</strong> This component only READS ({@link
  * PromoRuleRepository}/{@link CouponRepository}); it never redeems a coupon (the atomic {@code
  * redeemIfAvailable} UPDATE is the caller's job, inside its own write transaction, AFTER inspecting
- * {@link EvalResult#couponOutcome()}) and never persists an {@code applied_promotion} row. It has no
- * {@code @Transactional} of its own — it always runs inside the caller's already-open transaction
- * (the {@code OrderWriter}/{@code BillWriter} REQUIRES_NEW method, or {@code OrderReader}'s read-only
- * quote transaction), exactly like {@code TaxChargeService}.
+ * {@link EvalResult#couponOutcome()}) and never persists an {@code applied_promotion} row. It has
+ * no {@code @Transactional} of its own — it always runs inside the caller's already-open
+ * transaction (the {@code OrderWriter}/{@code BillWriter} REQUIRES_NEW method, or {@code
+ * OrderReader}'s read-only quote transaction), exactly like {@code TaxChargeService}.
  *
  * <p><strong>Composition order (deterministic, ADR 0026 / V16 migration comment):</strong>
  *
  * <ol>
  *   <li><strong>Line-scope</strong> {@code PERCENT_OFF_LINE} rules, per matching line (scope {@code
  *       ITEM}: {@code menuItemId == scope_ref_id}; scope {@code CATEGORY}: {@code categoryId ==
- *       scope_ref_id}), each deduction computed against — and clamped to — that line's OWN total. The
- *       cart subtotal stays GROSS; line discounts are components of the eventual ORDER discount, not
- *       a subtotal reduction (finance semantics unchanged).
+ *       scope_ref_id}), each deduction computed against — and clamped to — that line's OWN total.
+ *       The cart subtotal stays GROSS; line discounts are components of the eventual ORDER
+ *       discount, not a subtotal reduction (finance semantics unchanged).
  *   <li><strong>Automatic order-scope</strong> rules ({@code PERCENT_OFF_ORDER}/{@code
  *       AMOUNT_OFF_ORDER}, {@code requires_coupon = FALSE}), in {@code priority ASC} order (ties by
  *       id); each computed against the GROSS subtotal independently (not compounding). A rule with
  *       {@code exclusive = TRUE} stops further automatics from being evaluated AFTER it is added to
  *       the pending list (so higher-priority exclusive rules still run; nothing after them does).
- *       {@code min_subtotal_minor} gates a rule: subtotal must be &ge; the minimum to qualify at all.
+ *       {@code min_subtotal_minor} gates a rule: subtotal must be &ge; the minimum to qualify at
+ *       all.
  *   <li><strong>At most ONE coupon</strong>: resolved by its normalized code; validated active, not
  *       expired, {@code redeemed_count < max_redemptions} (an ADVISORY read — the atomic UPDATE at
  *       the caller's commit is the real race-safe guard), and its linked rule active + effective +
@@ -61,17 +62,17 @@ import org.springframework.stereotype.Component;
  *       requires_coupon = TRUE} one (that flag exists precisely to gate a rule behind a coupon).
  *   <li><strong>Manual discount LAST</strong> — the pre-existing staff-entered discount. Carries no
  *       {@code ruleId}, so it never becomes an {@code applied_promotion} row.
- *   <li><strong>Clamp</strong>: the deductions above are accumulated in composition order and clamped
- *       so their sum never exceeds the subtotal — the deduction that would push the running total past
- *       the subtotal is truncated to exactly what remains, and everything after it becomes zero and is
- *       dropped.
+ *   <li><strong>Clamp</strong>: the deductions above are accumulated in composition order and
+ *       clamped so their sum never exceeds the subtotal — the deduction that would push the running
+ *       total past the subtotal is truncated to exactly what remains, and everything after it
+ *       becomes zero and is dropped.
  * </ol>
  *
  * <p><strong>Happy-hour windows.</strong> A rule's {@code dow_mask}/{@code window_start}/{@code
  * window_end} are evaluated in the rule's OWN {@code tz} (never the server's zone). {@code bit 0 =
  * Monday .. bit 6 = Sunday}. The window is a half-open {@code [window_start, window_end)}; when
- * {@code window_start > window_end} the window WRAPS past midnight (e.g. {@code 22:00–02:00} matches
- * both {@code 23:00} and {@code 01:00}).
+ * {@code window_start > window_end} the window WRAPS past midnight (e.g. {@code 22:00–02:00}
+ * matches both {@code 23:00} and {@code 01:00}).
  */
 @Component
 public class PromotionEngineService {
@@ -81,16 +82,17 @@ public class PromotionEngineService {
   private final PromoRuleRepository promoRuleRepository;
   private final CouponRepository couponRepository;
 
-  public PromotionEngineService(PromoRuleRepository promoRuleRepository, CouponRepository couponRepository) {
+  public PromotionEngineService(
+      PromoRuleRepository promoRuleRepository, CouponRepository couponRepository) {
     this.promoRuleRepository = promoRuleRepository;
     this.couponRepository = couponRepository;
   }
 
   /**
    * Evaluates every configured promotion against one cart and returns the single collapsed discount
-   * plus its per-rule breakdown. Never throws for an invalid/exhausted coupon — that is reported via
-   * {@link EvalResult#couponOutcome()} for the caller to act on (a quote reports it; checkout/pay
-   * reject it).
+   * plus its per-rule breakdown. Never throws for an invalid/exhausted coupon — that is reported
+   * via {@link EvalResult#couponOutcome()} for the caller to act on (a quote reports it;
+   * checkout/pay reject it).
    */
   public EvalResult evaluate(EvalInput input) {
     Currency currency = Currency.getInstance(input.currency());
@@ -114,9 +116,11 @@ public class PromotionEngineService {
       pending.addAll(lineDeductionsFor(rule, input.lines(), currency, null));
     }
 
-    // 2. Automatic order-scope rules (skip requires_coupon), priority ASC; exclusive stops the loop.
+    // 2. Automatic order-scope rules (skip requires_coupon), priority ASC; exclusive stops the
+    // loop.
     for (RuleSnapshot rule : activeRules) {
-      if (rule.type() != PromoRuleType.PERCENT_OFF_ORDER && rule.type() != PromoRuleType.AMOUNT_OFF_ORDER) {
+      if (rule.type() != PromoRuleType.PERCENT_OFF_ORDER
+          && rule.type() != PromoRuleType.AMOUNT_OFF_ORDER) {
         continue;
       }
       if (rule.requiresCoupon()) {
@@ -128,7 +132,8 @@ public class PromotionEngineService {
       Money amount = naturalOrderAmount(rule, subtotal, currency);
       if (amount.isPositive()) {
         pending.add(
-            new AppliedDeduction(rule.id(), null, rule.name(), rule.type(), rule.rateBp(), null, amount));
+            new AppliedDeduction(
+                rule.id(), null, rule.name(), rule.type(), rule.rateBp(), null, amount));
       }
       if (rule.exclusive()) {
         break;
@@ -138,22 +143,38 @@ public class PromotionEngineService {
     // 3. At most one coupon.
     CouponOutcome couponOutcome = null;
     if (input.couponCode() != null && !input.couponCode().isBlank()) {
-      couponOutcome = applyCoupon(input.couponCode(), subtotal, occurredAt, currency, input.lines(), pending);
+      couponOutcome =
+          applyCoupon(input.couponCode(), subtotal, occurredAt, currency, input.lines(), pending);
     }
 
     // 4. Manual discount last (no ruleId — never persisted as an applied_promotion row).
     if (input.manualDiscountMinor() > 0) {
       Money manual = Money.ofMinor(input.manualDiscountMinor(), currency);
-      pending.add(new AppliedDeduction(null, null, MANUAL_DISCOUNT_LABEL, null, null, null, manual));
+      pending.add(
+          new AppliedDeduction(null, null, MANUAL_DISCOUNT_LABEL, null, null, null, manual));
     }
 
     // 5. Sequential clamp: Σ <= subtotal; the overflowing deduction is truncated, everything after
     //    it becomes zero and is dropped.
     List<AppliedDeduction> clamped = sequentialClamp(pending, subtotal, currency);
-    Money totalDiscount = clamped.stream().map(AppliedDeduction::amount).reduce(Money.zero(currency), Money::plus);
-    List<AppliedDeduction> ruleDeductions = clamped.stream().filter(d -> d.ruleId() != null).toList();
+    Money totalDiscount =
+        clamped.stream().map(AppliedDeduction::amount).reduce(Money.zero(currency), Money::plus);
+    List<AppliedDeduction> ruleDeductions =
+        clamped.stream().filter(d -> d.ruleId() != null).toList();
 
-    return new EvalResult(totalDiscount, ruleDeductions, couponOutcome);
+    // If the clamp zeroed the coupon's own deduction out entirely (subtotal exhausted by earlier
+    // deductions), the coupon granted nothing after all — downgrade so no redemption is burned.
+    CouponOutcome finalOutcome = couponOutcome;
+    if (finalOutcome != null && finalOutcome.redeemable()) {
+      UUID appliedCouponId = finalOutcome.couponId();
+      boolean survivedClamp =
+          ruleDeductions.stream().anyMatch(d -> appliedCouponId.equals(d.couponId()));
+      if (!survivedClamp) {
+        finalOutcome = finalOutcome.withoutRedemption();
+      }
+    }
+
+    return new EvalResult(totalDiscount, ruleDeductions, finalOutcome);
   }
 
   // -------------------------------------------------------------------------
@@ -189,6 +210,14 @@ public class PromotionEngineService {
       return CouponOutcome.invalid(code, v.getCouponId(), v.getRuleId());
     }
 
+    // A coupon linking a rule that ALREADY fired (automatically or as a line-scope rule) grants
+    // nothing new: applying it again would double the deduction. The customer still sees APPLIED —
+    // they have the deal — but no second deduction is added and no redemption is burned.
+    boolean ruleAlreadyApplied = pending.stream().anyMatch(d -> rule.id().equals(d.ruleId()));
+    if (ruleAlreadyApplied) {
+      return CouponOutcome.appliedNoNewBenefit(code, v.getCouponId(), v.getRuleId());
+    }
+
     List<AppliedDeduction> added;
     if (rule.type() == PromoRuleType.PERCENT_OFF_LINE) {
       added = lineDeductionsFor(rule, lines, currency, v.getCouponId());
@@ -198,8 +227,18 @@ public class PromotionEngineService {
           amount.isPositive()
               ? List.of(
                   new AppliedDeduction(
-                      rule.id(), v.getCouponId(), rule.name(), rule.type(), rule.rateBp(), null, amount))
+                      rule.id(),
+                      v.getCouponId(),
+                      rule.name(),
+                      rule.type(),
+                      rule.rateBp(),
+                      null,
+                      amount))
               : List.of();
+    }
+    if (added.isEmpty()) {
+      // Resolved fine but its natural amount is zero — nothing granted, nothing to burn.
+      return CouponOutcome.appliedNoNewBenefit(code, v.getCouponId(), v.getRuleId());
     }
     pending.addAll(added);
     return CouponOutcome.applied(code, v.getCouponId(), v.getRuleId());
@@ -226,7 +265,13 @@ public class PromotionEngineService {
       if (amount.isPositive()) {
         result.add(
             new AppliedDeduction(
-                rule.id(), couponId, rule.name(), rule.type(), rule.rateBp(), line.lineId(), amount));
+                rule.id(),
+                couponId,
+                rule.name(),
+                rule.type(),
+                rule.rateBp(),
+                line.lineId(),
+                amount));
       }
     }
     return result;
@@ -244,7 +289,8 @@ public class PromotionEngineService {
 
   private static Money naturalOrderAmount(RuleSnapshot rule, Money subtotal, Currency currency) {
     return switch (rule.type()) {
-      case PERCENT_OFF_ORDER -> subtotal.applyBasisPoints(rule.rateBp() == null ? 0L : rule.rateBp());
+      case PERCENT_OFF_ORDER ->
+          subtotal.applyBasisPoints(rule.rateBp() == null ? 0L : rule.rateBp());
       case AMOUNT_OFF_ORDER -> {
         if (rule.amountMinor() == null) {
           yield Money.zero(currency);

@@ -7,10 +7,10 @@ import java.util.UUID;
 import org.springframework.lang.Nullable;
 
 /**
- * Native-query read projection joining a {@code coupon} row with its linked {@code promo_rule} row —
- * exactly what {@link id.co.nativeapp.restaurant.promotion.service.PromotionEngineService PromotionEngineService}
- * needs to validate a code and (if valid) apply its rule's deduction, in one round trip. Never {@code
- * SELECT *} of either entity (CODE-STRUCTURE.md §3.3).
+ * Native-query read projection joining a {@code coupon} row with its linked {@code promo_rule} row
+ * — exactly what {@link id.co.nativeapp.restaurant.promotion.service.PromotionEngineService
+ * PromotionEngineService} needs to validate a code and (if valid) apply its rule's deduction, in
+ * one round trip. Never {@code SELECT *} of either entity (CODE-STRUCTURE.md §3.3).
  */
 public interface CouponRuleView {
 

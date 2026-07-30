@@ -46,7 +46,8 @@ class PromotionEngineServiceTest {
 
   private final PromoRuleRepository promoRuleRepository = mock(PromoRuleRepository.class);
   private final CouponRepository couponRepository = mock(CouponRepository.class);
-  private final PromotionEngineService engine = new PromotionEngineService(promoRuleRepository, couponRepository);
+  private final PromotionEngineService engine =
+      new PromotionEngineService(promoRuleRepository, couponRepository);
 
   private static Money idr(long minor) {
     return Money.ofMinor(minor, "IDR");
@@ -82,12 +83,12 @@ class PromotionEngineServiceTest {
     seedNoCoupon();
 
     EvalInput input =
-        new EvalInput(
-            List.of(line(ITEM_A, null, 10_000L, 1)), "IDR", idr(10_000L), NOON, null, 0L);
+        new EvalInput(List.of(line(ITEM_A, null, 10_000L, 1)), "IDR", idr(10_000L), NOON, null, 0L);
     EvalResult result = engine.evaluate(input);
 
     // First rule (10% of 10,000 = 1,000) consumes the whole subtotal after the second's 2,000 is
-    // clamped down by the FIRST-applied 1,000 leaving 9,000 remaining -> second gets min(2000,9000).
+    // clamped down by the FIRST-applied 1,000 leaving 9,000 remaining -> second gets
+    // min(2000,9000).
     assertThat(result.deductions()).hasSize(2);
     assertThat(result.deductions().get(0).nameSnapshot()).isEqualTo("10% first");
     assertThat(result.deductions().get(0).amount()).isEqualTo(idr(1_000L));
@@ -98,7 +99,8 @@ class PromotionEngineServiceTest {
 
   @Test
   void exclusiveRuleStopsFurtherAutomaticsButNotTheCouponOrManualLayer() {
-    FakeRule exclusiveFirst = FakeRule.percentOffOrder("Exclusive 10%", 1_000L).priority(10).exclusive(true);
+    FakeRule exclusiveFirst =
+        FakeRule.percentOffOrder("Exclusive 10%", 1_000L).priority(10).exclusive(true);
     FakeRule neverReached = FakeRule.percentOffOrder("Never reached 5%", 500L).priority(20);
     seedRules(exclusiveFirst, neverReached);
     seedNoCoupon();
@@ -127,12 +129,14 @@ class PromotionEngineServiceTest {
 
     EvalResult belowThreshold =
         engine.evaluate(
-            new EvalInput(List.of(line(ITEM_A, null, 40_000L, 1)), "IDR", idr(40_000L), NOON, null, 0L));
+            new EvalInput(
+                List.of(line(ITEM_A, null, 40_000L, 1)), "IDR", idr(40_000L), NOON, null, 0L));
     assertThat(belowThreshold.deductions()).isEmpty();
 
     EvalResult atThreshold =
         engine.evaluate(
-            new EvalInput(List.of(line(ITEM_A, null, 50_000L, 1)), "IDR", idr(50_000L), NOON, null, 0L));
+            new EvalInput(
+                List.of(line(ITEM_A, null, 50_000L, 1)), "IDR", idr(50_000L), NOON, null, 0L));
     assertThat(atThreshold.deductions()).hasSize(1);
     assertThat(atThreshold.totalDiscount()).isEqualTo(idr(5_000L));
   }
@@ -149,7 +153,8 @@ class PromotionEngineServiceTest {
 
     EvalResult result =
         engine.evaluate(
-            new EvalInput(List.of(line(ITEM_A, null, 10_000L, 1)), "IDR", idr(10_000L), NOON, null, 0L));
+            new EvalInput(
+                List.of(line(ITEM_A, null, 10_000L, 1)), "IDR", idr(10_000L), NOON, null, 0L));
 
     assertThat(result.deductions()).isEmpty();
     assertThat(result.totalDiscount()).isEqualTo(idr(0L));
@@ -161,15 +166,15 @@ class PromotionEngineServiceTest {
 
   @Test
   void lineScopeItemRuleOnlyDiscountsTheMatchingLineAndClampsToItsOwnTotal() {
-    FakeRule itemRule = FakeRule.percentOffLine("50% off item A", 5_000L, PromoScopeKind.ITEM, ITEM_A);
+    FakeRule itemRule =
+        FakeRule.percentOffLine("50% off item A", 5_000L, PromoScopeKind.ITEM, ITEM_A);
     seedRules(itemRule);
     seedNoCoupon();
 
     EvalLine lineA = line(ITEM_A, null, 10_000L, 1); // 50% of 10,000 = 5,000
     EvalLine lineB = line(ITEM_B, null, 20_000L, 1); // untouched — different item
     EvalResult result =
-        engine.evaluate(
-            new EvalInput(List.of(lineA, lineB), "IDR", idr(30_000L), NOON, null, 0L));
+        engine.evaluate(new EvalInput(List.of(lineA, lineB), "IDR", idr(30_000L), NOON, null, 0L));
 
     assertThat(result.deductions()).hasSize(1);
     AppliedDeduction d = result.deductions().get(0);
@@ -187,8 +192,7 @@ class PromotionEngineServiceTest {
     EvalLine lineA = line(ITEM_A, CATEGORY_X, 10_000L, 1);
     EvalLine lineB = line(ITEM_B, CATEGORY_X, 20_000L, 1);
     EvalResult result =
-        engine.evaluate(
-            new EvalInput(List.of(lineA, lineB), "IDR", idr(30_000L), NOON, null, 0L));
+        engine.evaluate(new EvalInput(List.of(lineA, lineB), "IDR", idr(30_000L), NOON, null, 0L));
 
     assertThat(result.deductions()).hasSize(2);
     assertThat(result.totalDiscount()).isEqualTo(idr(3_000L)); // 1,000 + 2,000
@@ -198,7 +202,8 @@ class PromotionEngineServiceTest {
   void lineScopeDeductionNeverExceedsTheLinesOwnTotal() {
     // A 100% rate on a very cheap line must clamp to the line's own total, never subsidised by
     // another line's headroom.
-    FakeRule fullOff = FakeRule.percentOffLine("100% off item A", 10_000L, PromoScopeKind.ITEM, ITEM_A);
+    FakeRule fullOff =
+        FakeRule.percentOffLine("100% off item A", 10_000L, PromoScopeKind.ITEM, ITEM_A);
     seedRules(fullOff);
     seedNoCoupon();
 
@@ -281,7 +286,8 @@ class PromotionEngineServiceTest {
     UUID ruleId = UUID.randomUUID();
     seedRules();
     FakeCoupon future =
-        FakeCoupon.percentOffOrder(UUID.randomUUID(), "TOOSOON", ruleId, "Not yet effective", 1_000L)
+        FakeCoupon.percentOffOrder(
+                UUID.randomUUID(), "TOOSOON", ruleId, "Not yet effective", 1_000L)
             .effectiveFrom(LocalDate.of(2030, 1, 1));
     when(couponRepository.findViewByCode("TOOSOON")).thenReturn(Optional.of(future));
 
@@ -299,7 +305,8 @@ class PromotionEngineServiceTest {
     seedRules(); // the gated rule itself is not in the "active effective automatics" set consulted
     // by the coupon lookup — it is resolved directly via the coupon join.
     FakeCoupon gated =
-        FakeCoupon.percentOffOrder(UUID.randomUUID(), "MEMBERS", ruleId, "Members-only 20%", 2_000L);
+        FakeCoupon.percentOffOrder(
+            UUID.randomUUID(), "MEMBERS", ruleId, "Members-only 20%", 2_000L);
     when(couponRepository.findViewByCode("MEMBERS")).thenReturn(Optional.of(gated));
 
     EvalResult result =
@@ -345,7 +352,8 @@ class PromotionEngineServiceTest {
     seedNoCoupon();
 
     Instant elevenPm = Instant.parse("2026-06-15T16:00:00Z"); // 23:00 WIB
-    Instant oneAm = Instant.parse("2026-06-15T18:00:00Z"); // 01:00 WIB (next civil day in UTC terms)
+    Instant oneAm =
+        Instant.parse("2026-06-15T18:00:00Z"); // 01:00 WIB (next civil day in UTC terms)
     Instant noonNotInWindow = NOON;
 
     assertThat(deductionCount(lateNight, elevenPm)).isEqualTo(1);
@@ -374,7 +382,12 @@ class PromotionEngineServiceTest {
     EvalResult r =
         engine.evaluate(
             new EvalInput(
-                List.of(line(ITEM_A, null, 10_000L, 1)), "IDR", idr(10_000L), occurredAt, null, 0L));
+                List.of(line(ITEM_A, null, 10_000L, 1)),
+                "IDR",
+                idr(10_000L),
+                occurredAt,
+                null,
+                0L));
     return r.deductions().size();
   }
 
@@ -430,7 +443,8 @@ class PromotionEngineServiceTest {
       seedRules(rules);
       seedNoCoupon();
 
-      long manualDiscountMinor = random.nextBoolean() ? random.nextInt((int) subtotalMinor + 1) : 0L;
+      long manualDiscountMinor =
+          random.nextBoolean() ? random.nextInt((int) subtotalMinor + 1) : 0L;
       EvalLine soleLine = line(ITEM_A, null, subtotalMinor, 1);
       EvalResult evalResult =
           engine.evaluate(
@@ -449,7 +463,8 @@ class PromotionEngineServiceTest {
       assertThat(breakdown.tax().isZero()).as("no tax rule seeded -> zero tax").isTrue();
       assertThat(breakdown.serviceCharge().isZero()).as("no SC rule seeded -> zero SC").isTrue();
       assertThat(breakdown.grandTotal().amountMinor()).isGreaterThanOrEqualTo(0L);
-      assertThat(breakdown.subtotal().minus(breakdown.discount())).isEqualTo(breakdown.grandTotal());
+      assertThat(breakdown.subtotal().minus(breakdown.discount()))
+          .isEqualTo(breakdown.grandTotal());
     }
   }
 
@@ -496,7 +511,8 @@ class PromotionEngineServiceTest {
       return r;
     }
 
-    static FakeRule percentOffLine(String name, long rateBp, PromoScopeKind scopeKind, UUID scopeRefId) {
+    static FakeRule percentOffLine(
+        String name, long rateBp, PromoScopeKind scopeKind, UUID scopeRefId) {
       FakeRule r = new FakeRule();
       r.name = name;
       r.type = PromoRuleType.PERCENT_OFF_LINE;
@@ -634,7 +650,10 @@ class PromotionEngineServiceTest {
     }
   }
 
-  /** A mutable, fluent {@link CouponRuleView} test fixture (a coupon linked to a PERCENT_OFF_ORDER rule). */
+  /**
+   * A mutable, fluent {@link CouponRuleView} test fixture (a coupon linked to a PERCENT_OFF_ORDER
+   * rule).
+   */
   private static final class FakeCoupon implements CouponRuleView {
     private UUID couponId;
     private String code;

@@ -15,21 +15,22 @@ import java.util.UUID;
 
 /**
  * The per-sale AUDIT TRAIL row for one rule's deduction (ADR 0026) — a permanent SNAPSHOT that must
- * keep meaning exactly what it meant at application time even if the {@link PromoRule}/{@link Coupon}
- * row is later edited or retired. Maps to the {@code applied_promotion} table (V16__promotions.sql).
+ * keep meaning exactly what it meant at application time even if the {@link PromoRule}/{@link
+ * Coupon} row is later edited or retired. Maps to the {@code applied_promotion} table
+ * (V16__promotions.sql).
  *
- * <p>Extends {@link Auditable} (rule 4); covered by the {@code applied_promotion_tenant_isolation} RLS
- * policy (rule 5). {@code amount_minor}/{@code currency} use {@link MoneyEmbeddable} (rule 8) since —
- * unlike {@link PromoRule}'s conditional amount — an applied-promotion row always carries the actual
- * minor-unit amount it discounted.
+ * <p>Extends {@link Auditable} (rule 4); covered by the {@code applied_promotion_tenant_isolation}
+ * RLS policy (rule 5). {@code amount_minor}/{@code currency} use {@link MoneyEmbeddable} (rule 8)
+ * since — unlike {@link PromoRule}'s conditional amount — an applied-promotion row always carries
+ * the actual minor-unit amount it discounted.
  *
  * <p><strong>{@code orderId} naming.</strong> The migration's {@code order_id} column is a
  * per-vertical generic "source aggregate id" link (the identical DDL ships in carwash/barbershop as
  * {@code ticket_id}). Restaurant-service has TWO revenue-recording aggregates — {@code
  * restaurant_order} and {@code bill} — and reuses this one column for both: for an order-originated
- * deduction it holds the order id, and for a bill/guest-tab check it holds the {@code bill.id}. There
- * is no {@code REFERENCES} clause (this is an independent audit trail, not a CASCADE-owned child), so
- * either usage is schema-legal.
+ * deduction it holds the order id, and for a bill/guest-tab check it holds the {@code bill.id}.
+ * There is no {@code REFERENCES} clause (this is an independent audit trail, not a CASCADE-owned
+ * child), so either usage is schema-legal.
  *
  * <p>A {@code protected} no-arg constructor exists only for JPA.
  */
@@ -83,12 +84,12 @@ public class AppliedPromotion extends Auditable {
   /**
    * Creates an applied-promotion audit row with a freshly generated id.
    *
-   * @param orderId the source aggregate id (a {@code restaurant_order.id} or a {@code bill.id} — see
-   *     class javadoc)
+   * @param orderId the source aggregate id (a {@code restaurant_order.id} or a {@code bill.id} —
+   *     see class javadoc)
    * @param saleId the sale this deduction ultimately rode on; {@code null} until the order/check
    *     captures a sale (digital-tender revenue-at-capture, ADR 0006)
-   * @param ruleId the {@link PromoRule} that produced this deduction (never null — a manual discount
-   *     is not a rule and never produces a row here)
+   * @param ruleId the {@link PromoRule} that produced this deduction (never null — a manual
+   *     discount is not a rule and never produces a row here)
    * @param couponId the {@link Coupon} that gated this deduction, or {@code null} for an automatic
    *     rule
    * @param ruleNameSnapshot the rule's name at application time

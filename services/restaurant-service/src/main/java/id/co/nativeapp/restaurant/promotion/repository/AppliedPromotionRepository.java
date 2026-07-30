@@ -43,10 +43,11 @@ public interface AppliedPromotionRepository extends JpaRepository<AppliedPromoti
   List<AppliedPromotionView> findViewsBySaleId(@Param("saleId") UUID saleId);
 
   /**
-   * Stamps {@code sale_id} onto every still-{@code NULL} row for {@code orderId} — the digital-tender
-   * capture path (ADR 0006 revenue-at-capture), where the order/check's deductions were written at
-   * checkout/pay time with {@code sale_id = NULL} because no sale existed yet. Called from {@code
-   * PaymentCaptureWriter.capture} once the sale is recorded, in the same transaction.
+   * Stamps {@code sale_id} onto every still-{@code NULL} row for {@code orderId} — the
+   * digital-tender capture path (ADR 0006 revenue-at-capture), where the order/check's deductions
+   * were written at checkout/pay time with {@code sale_id = NULL} because no sale existed yet.
+   * Called from {@code PaymentCaptureWriter.capture} once the sale is recorded, in the same
+   * transaction.
    */
   @Modifying
   @Query(

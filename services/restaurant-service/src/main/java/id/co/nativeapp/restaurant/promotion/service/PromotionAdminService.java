@@ -17,10 +17,10 @@ import org.springframework.stereotype.Service;
  *
  * <p><strong>Writes require {@code owner}/{@code manager}; reads are ungated.</strong> A promo rule
  * or coupon is money-routing configuration (it decides what a checkout discounts and by how much),
- * so — unlike restaurant-menu prices, which stay cashier-editable at POS parity — every create/patch
- * is held to the same owner/manager bar as {@code ManualDiscountGuard} and carwash's {@code
- * requireStaffWriteRole} (empty-roles-pass semantics: a headerless call is the gateway-less dev
- * recipe / a direct service-layer test, not a real cashier token).
+ * so — unlike restaurant-menu prices, which stay cashier-editable at POS parity — every
+ * create/patch is held to the same owner/manager bar as {@code ManualDiscountGuard} and carwash's
+ * {@code requireStaffWriteRole} (empty-roles-pass semantics: a headerless call is the gateway-less
+ * dev recipe / a direct service-layer test, not a real cashier token).
  *
  * <p>Not itself {@code @Transactional} — transactional units live in {@link PromotionAdminWriter}
  * (writes) and {@link PromotionAdminReader} (reads) so the proxy and the RLS aspect engage.

@@ -24,14 +24,16 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * {@code /api/v1/promotions[/coupons]} — admin CRUD for the Phase-3 promotions engine (ADR 0026). The
- * tenant ({@code company_id}) and actor come from the bound {@link
+ * {@code /api/v1/promotions[/coupons]} — admin CRUD for the Phase-3 promotions engine (ADR 0026).
+ * The tenant ({@code company_id}) and actor come from the bound {@link
  * id.co.nativeapp.tenant.TenantContext TenantContext}, never the request body (rule 5).
  *
  * <p>Writes are gated to {@code owner}/{@code manager} by {@link PromotionAdminService}; reads are
  * not (browsing the configured rules/coupons carries no side-effect risk).
  */
-@Tag(name = "Promotions", description = "Promo rules + coupons: the Phase-3 promotions engine admin CRUD")
+@Tag(
+    name = "Promotions",
+    description = "Promo rules + coupons: the Phase-3 promotions engine admin CRUD")
 @RestController
 @RequestMapping("/api/v1/promotions")
 public class PromotionAdminController {
@@ -52,7 +54,8 @@ public class PromotionAdminController {
           "Lists promo rules for the bound tenant, restricted to active-only (default true), ordered"
               + " by priority then name.")
   @GetMapping
-  public List<PromoRuleResponse> listRules(@RequestParam(defaultValue = "true") boolean activeOnly) {
+  public List<PromoRuleResponse> listRules(
+      @RequestParam(defaultValue = "true") boolean activeOnly) {
     return promotionAdminService.listRules(activeOnly);
   }
 
@@ -62,7 +65,8 @@ public class PromotionAdminController {
           "Creates a promo rule. Rejected with 422 on a type/parameter mismatch and 403 when the"
               + " caller is not owner/manager.")
   @PostMapping
-  public ResponseEntity<PromoRuleResponse> createRule(@Valid @RequestBody PromoRuleCreateRequest request) {
+  public ResponseEntity<PromoRuleResponse> createRule(
+      @Valid @RequestBody PromoRuleCreateRequest request) {
     PromoRuleResponse created = promotionAdminService.createRule(request);
     return ResponseEntity.created(URI.create("/api/v1/promotions/" + created.id())).body(created);
   }
@@ -100,9 +104,11 @@ public class PromotionAdminController {
               + " 422 if the rule is unknown, 409 on a duplicate code, 403 when the caller is not"
               + " owner/manager.")
   @PostMapping("/coupons")
-  public ResponseEntity<CouponResponse> createCoupon(@Valid @RequestBody CouponCreateRequest request) {
+  public ResponseEntity<CouponResponse> createCoupon(
+      @Valid @RequestBody CouponCreateRequest request) {
     CouponResponse created = promotionAdminService.createCoupon(request);
-    return ResponseEntity.created(URI.create("/api/v1/promotions/coupons/" + created.id())).body(created);
+    return ResponseEntity.created(URI.create("/api/v1/promotions/coupons/" + created.id()))
+        .body(created);
   }
 
   @Operation(

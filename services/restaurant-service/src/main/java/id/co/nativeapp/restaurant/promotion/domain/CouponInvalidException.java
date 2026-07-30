@@ -23,7 +23,9 @@ public class CouponInvalidException extends RuntimeException {
   private final String code;
 
   public CouponInvalidException(String code) {
-    super("Coupon code is invalid, unknown, expired, or its rule is not currently effective: " + code);
+    super(
+        "Coupon code is invalid, unknown, expired, or its rule is not currently effective: "
+            + code);
     this.code = code;
   }
 

@@ -164,7 +164,9 @@ public class OrderReader {
       long effectiveUnit = Math.addExact(unitPrice.amountMinor(), modifierDelta);
       long lineTotal = Math.multiplyExact(effectiveUnit, (long) lineReq.qty());
       runningTotal = runningTotal.plus(Money.ofMinor(lineTotal, currencyCode));
-      evalLines.add(new EvalLine(null, lineReq.menuItemId(), view.getCategoryId(), effectiveUnit, lineReq.qty()));
+      evalLines.add(
+          new EvalLine(
+              null, lineReq.menuItemId(), view.getCategoryId(), effectiveUnit, lineReq.qty()));
     }
 
     // ------------------------------------------------------------------
@@ -175,10 +177,12 @@ public class OrderReader {
     Instant now = Instant.now();
     long manualDiscountMinor = (request.discountMinor() != null) ? request.discountMinor() : 0L;
     EvalInput evalInput =
-        new EvalInput(evalLines, currencyCode, runningTotal, now, request.couponCode(), manualDiscountMinor);
+        new EvalInput(
+            evalLines, currencyCode, runningTotal, now, request.couponCode(), manualDiscountMinor);
     EvalResult evalResult = promotionEngine.evaluate(evalInput);
 
-    PriceBreakdown breakdown = taxChargeService.resolve(runningTotal, 0L, evalResult.totalDiscount(), now);
+    PriceBreakdown breakdown =
+        taxChargeService.resolve(runningTotal, 0L, evalResult.totalDiscount(), now);
 
     return PriceBreakdownResponse.from(breakdown, evalResult);
   }

@@ -18,12 +18,13 @@ import java.util.List;
  * misled into believing the amounts are regulatory-verified.
  *
  * <p><strong>Phase 3 (ADR 0026):</strong> {@code appliedPromotions}/{@code couponStatus} are
- * populated ONLY on the {@code POST /api/v1/orders/quote} response (via {@link #from(PriceBreakdown,
- * EvalResult)}) — the promotions engine's per-rule audit detail for a pricing preview. The
- * checkout/pay-parked/pay-bill responses keep using the plain {@link #from(PriceBreakdown)} factory:
- * {@code discountMinor} already carries the correct COLLAPSED total (the engine's output feeds {@code
- * TaxChargeService} directly), and the per-rule detail is durably persisted as {@code
- * applied_promotion} audit rows rather than echoed on those particular responses.
+ * populated ONLY on the {@code POST /api/v1/orders/quote} response (via {@link
+ * #from(PriceBreakdown, EvalResult)}) — the promotions engine's per-rule audit detail for a pricing
+ * preview. The checkout/pay-parked/pay-bill responses keep using the plain {@link
+ * #from(PriceBreakdown)} factory: {@code discountMinor} already carries the correct COLLAPSED total
+ * (the engine's output feeds {@code TaxChargeService} directly), and the per-rule detail is durably
+ * persisted as {@code applied_promotion} audit rows rather than echoed on those particular
+ * responses.
  *
  * @param subtotalMinor sum of line totals before any discount (minor units)
  * @param discountMinor order-level discount applied (clamped to &le; subtotal; minor units) — the
@@ -36,9 +37,9 @@ import java.util.List;
  *     ILLUSTRATIVE_PLACEHOLDER; the UI should badge tax / SC as estimated
  * @param appliedPromotions the per-rule deduction detail (Phase 3); empty when not computed via the
  *     promotions engine (see class javadoc)
- * @param couponStatus {@code "APPLIED"} / {@code "INVALID"} / {@code "EXHAUSTED"} when a coupon code
- *     was supplied, {@code null} when none was supplied or this breakdown was not computed via the
- *     promotions engine
+ * @param couponStatus {@code "APPLIED"} / {@code "INVALID"} / {@code "EXHAUSTED"} when a coupon
+ *     code was supplied, {@code null} when none was supplied or this breakdown was not computed via
+ *     the promotions engine
  */
 public record PriceBreakdownResponse(
     long subtotalMinor,
@@ -52,8 +53,8 @@ public record PriceBreakdownResponse(
     String couponStatus) {
 
   /**
-   * Convenience for the pre-Phase-3 seven-arg shape (no promotions detail) — preserves existing call
-   * sites that construct this record directly rather than via {@link #from(PriceBreakdown)}.
+   * Convenience for the pre-Phase-3 seven-arg shape (no promotions detail) — preserves existing
+   * call sites that construct this record directly rather than via {@link #from(PriceBreakdown)}.
    */
   public PriceBreakdownResponse(
       long subtotalMinor,
@@ -81,8 +82,8 @@ public record PriceBreakdownResponse(
   }
 
   /**
-   * Factory: maps a domain {@link PriceBreakdown} PLUS the promotions engine's {@link EvalResult} to
-   * the wire shape — used by the quote endpoint.
+   * Factory: maps a domain {@link PriceBreakdown} PLUS the promotions engine's {@link EvalResult}
+   * to the wire shape — used by the quote endpoint.
    */
   public static PriceBreakdownResponse from(PriceBreakdown bd, EvalResult evalResult) {
     List<AppliedPromotionResponse> applied =

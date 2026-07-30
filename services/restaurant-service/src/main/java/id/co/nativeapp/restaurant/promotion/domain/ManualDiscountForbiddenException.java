@@ -4,8 +4,8 @@ package id.co.nativeapp.restaurant.promotion.domain;
  * Thrown when a caller whose role set does not include {@code owner} or {@code manager} attempts an
  * action reserved to those roles: a checkout/pay-parked/pay-bill request carrying a positive manual
  * {@code discountMinor} ({@code ManualDiscountGuard}), or a promotion admin CRUD write ({@code
- * PromotionAdminService}, the same money-routing bar as {@code ManualDiscountGuard} — a promo rule or
- * coupon decides what a checkout discounts and by how much).
+ * PromotionAdminService}, the same money-routing bar as {@code ManualDiscountGuard} — a promo rule
+ * or coupon decides what a checkout discounts and by how much).
  *
  * <p>Maps to {@code 403 Forbidden} via {@code config.PromotionAdvice} (one {@code
  * manual-discount-forbidden} type URI for both call sites — the reader-facing distinction is the

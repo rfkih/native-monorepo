@@ -6,13 +6,13 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * One deduction {@link id.co.nativeapp.restaurant.promotion.service.PromotionEngineService PromotionEngineService}
- * decided to apply — either a rule-backed deduction (persisted as an {@code applied_promotion} audit
- * row) or the manual discount ({@code ruleId == null}, never persisted there — a manual discount is
- * not a rule).
+ * One deduction {@link id.co.nativeapp.restaurant.promotion.service.PromotionEngineService
+ * PromotionEngineService} decided to apply — either a rule-backed deduction (persisted as an {@code
+ * applied_promotion} audit row) or the manual discount ({@code ruleId == null}, never persisted
+ * there — a manual discount is not a rule).
  *
- * @param ruleId the {@link id.co.nativeapp.restaurant.promotion.domain.PromoRule} id, or {@code null}
- *     for the manual discount
+ * @param ruleId the {@link id.co.nativeapp.restaurant.promotion.domain.PromoRule} id, or {@code
+ *     null} for the manual discount
  * @param couponId the {@link id.co.nativeapp.restaurant.promotion.domain.Coupon} that gated this
  *     deduction, or {@code null} for an automatic rule / the manual discount
  * @param nameSnapshot a human-readable label (the rule's name, or {@code "Manual discount"})
@@ -22,8 +22,8 @@ import java.util.UUID;
  * @param lineRef the {@code order_line}/{@code bill_line} id this deduction landed on (line-scope
  *     rules only), or {@code null} for an order-level rule / the manual discount
  * @param amount the deduction amount — the CLAMPED, final amount after {@link
- *     id.co.nativeapp.restaurant.promotion.service.PromotionEngineService PromotionEngineService}'s sequential
- *     clamp (composition rule 5)
+ *     id.co.nativeapp.restaurant.promotion.service.PromotionEngineService PromotionEngineService}'s
+ *     sequential clamp (composition rule 5)
  */
 public record AppliedDeduction(
     UUID ruleId,
@@ -41,6 +41,7 @@ public record AppliedDeduction(
 
   /** Returns a copy of this deduction with a different (typically clamped) amount. */
   public AppliedDeduction withAmount(Money newAmount) {
-    return new AppliedDeduction(ruleId, couponId, nameSnapshot, typeSnapshot, rateBpSnapshot, lineRef, newAmount);
+    return new AppliedDeduction(
+        ruleId, couponId, nameSnapshot, typeSnapshot, rateBpSnapshot, lineRef, newAmount);
   }
 }

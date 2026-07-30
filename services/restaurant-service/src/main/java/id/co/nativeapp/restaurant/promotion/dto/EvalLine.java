@@ -14,12 +14,13 @@ import java.util.UUID;
  * @param menuItemId the menu item this line is for (ITEM-scope matching)
  * @param categoryId the menu item's category at evaluation time, or {@code null} if uncategorized
  *     (CATEGORY-scope matching)
- * @param unitPriceMinor the EFFECTIVE per-unit price in minor units (base price + modifier deltas) —
- *     {@code unitPriceMinor * qty == lineTotalMinor()}, exactly mirroring how {@code OrderLine}/{@code
- *     BillLine} compute their own {@code line_total_minor}
+ * @param unitPriceMinor the EFFECTIVE per-unit price in minor units (base price + modifier deltas)
+ *     — {@code unitPriceMinor * qty == lineTotalMinor()}, exactly mirroring how {@code
+ *     OrderLine}/{@code BillLine} compute their own {@code line_total_minor}
  * @param qty the line quantity; must be &ge; 1
  */
-public record EvalLine(UUID lineId, UUID menuItemId, UUID categoryId, long unitPriceMinor, int qty) {
+public record EvalLine(
+    UUID lineId, UUID menuItemId, UUID categoryId, long unitPriceMinor, int qty) {
 
   public EvalLine {
     Objects.requireNonNull(menuItemId, "menuItemId");
@@ -28,7 +29,9 @@ public record EvalLine(UUID lineId, UUID menuItemId, UUID categoryId, long unitP
     }
   }
 
-  /** The pre-computed line total in minor units — {@code unitPriceMinor * qty}, exact integer math. */
+  /**
+   * The pre-computed line total in minor units — {@code unitPriceMinor * qty}, exact integer math.
+   */
   public long lineTotalMinor() {
     return Math.multiplyExact(unitPriceMinor, (long) qty);
   }

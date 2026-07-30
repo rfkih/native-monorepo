@@ -86,7 +86,10 @@ class CouponRedemptionConcurrencyTest extends PostgresRlsTestBase {
                             null,
                             null,
                             null,
-                            null,
+                            // requiresCoupon: the race under test is over the COUPON's redemption —
+                            // the rule must fire only via the code (an automatic rule would make
+                            // the coupon non-redeemable under the no-new-benefit semantics).
+                            true,
                             LocalDate.of(2026, 1, 1),
                             null))
                     .id());
@@ -94,16 +97,31 @@ class CouponRedemptionConcurrencyTest extends PostgresRlsTestBase {
     TenantContext.callAs(
         TENANT,
         ACTOR,
-        () -> promotionAdminService.createCoupon(new CouponCreateRequest("RACE10", ruleId, 1, null)));
+        () ->
+            promotionAdminService.createCoupon(new CouponCreateRequest("RACE10", ruleId, 1, null)));
 
     String keyA = "coupon-race-" + UUID.randomUUID() + "-a";
     String keyB = "coupon-race-" + UUID.randomUUID() + "-b";
     CheckoutRequest reqA =
         new CheckoutRequest(
-            BUSINESS_ID, keyA, List.of(new OrderLineRequest(menuItemId, 1)), null, null, null, null, "RACE10");
+            BUSINESS_ID,
+            keyA,
+            List.of(new OrderLineRequest(menuItemId, 1)),
+            null,
+            null,
+            null,
+            null,
+            "RACE10");
     CheckoutRequest reqB =
         new CheckoutRequest(
-            BUSINESS_ID, keyB, List.of(new OrderLineRequest(menuItemId, 1)), null, null, null, null, "RACE10");
+            BUSINESS_ID,
+            keyB,
+            List.of(new OrderLineRequest(menuItemId, 1)),
+            null,
+            null,
+            null,
+            null,
+            "RACE10");
 
     CyclicBarrier barrier = new CyclicBarrier(2);
     Callable<CheckoutResult> attemptA =
@@ -148,7 +166,9 @@ class CouponRedemptionConcurrencyTest extends PostgresRlsTestBase {
 
     assertThat(successCount).as("exactly one checkout redeemed the coupon").isEqualTo(1);
     assertThat(exhaustedCount).as("the loser sees CouponExhaustedException").isEqualTo(1);
-    assertThat(redeemedCountAsAdmin("RACE10")).as("redeemed_count settles at exactly 1").isEqualTo(1);
+    assertThat(redeemedCountAsAdmin("RACE10"))
+        .as("redeemed_count settles at exactly 1")
+        .isEqualTo(1);
   }
 
   /** Reads {@code coupon.redeemed_count} over an admin/BYPASSRLS connection. */
@@ -156,7 +176,8 @@ class CouponRedemptionConcurrencyTest extends PostgresRlsTestBase {
     try (Connection admin =
             java.sql.DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
-        PreparedStatement ps = admin.prepareStatement("SELECT redeemed_count FROM coupon WHERE code = ?")) {
+        PreparedStatement ps =
+            admin.prepareStatement("SELECT redeemed_count FROM coupon WHERE code = ?")) {
       ps.setString(1, code);
       try (ResultSet rs = ps.executeQuery()) {
         rs.next();

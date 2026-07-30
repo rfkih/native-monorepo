@@ -92,7 +92,10 @@ class PromotionCheckoutIntegrationTest extends PostgresRlsTestBase {
                             null,
                             null,
                             null,
-                            null,
+                            // requiresCoupon — the realistic coupon setup: the rule fires ONLY via
+                            // the code. (A coupon linking an everyone-gets-it automatic rule grants
+                            // no new benefit and deliberately burns no redemption.)
+                            true,
                             LocalDate.of(2026, 1, 1),
                             null)))
             .id();
@@ -113,7 +116,9 @@ class PromotionCheckoutIntegrationTest extends PostgresRlsTestBase {
     // -----------------------------------------------------------------------
     PriceBreakdownResponse quote =
         TenantContext.callAs(
-            TENANT, ACTOR, () -> orderService.quote(new QuoteRequest(BUSINESS_ID, lines, null, "save10")));
+            TENANT,
+            ACTOR,
+            () -> orderService.quote(new QuoteRequest(BUSINESS_ID, lines, null, "save10")));
 
     assertThat(quote.couponStatus()).isEqualTo("APPLIED");
     assertThat(quote.appliedPromotions()).hasSize(1);

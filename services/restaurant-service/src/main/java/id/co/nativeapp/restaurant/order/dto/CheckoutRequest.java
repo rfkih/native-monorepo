@@ -19,8 +19,8 @@ import java.util.UUID;
  * @param lines the order lines; must be non-empty with qty &ge; 1 per line
  * @param payment optional payment for an order paid in the same call (cash captures synchronously;
  *     ADR 0006). Omit it to create the order without recording a payment.
- * @param discountMinor optional order-level fixed discount in minor currency units (&ge; 0). This is
- *     ONE INPUT to the Phase-3 promotions engine (ADR 0026) — the manual-discount layer, applied
+ * @param discountMinor optional order-level fixed discount in minor currency units (&ge; 0). This
+ *     is ONE INPUT to the Phase-3 promotions engine (ADR 0026) — the manual-discount layer, applied
  *     LAST after every automatic rule and any redeemed coupon, then jointly clamped so the total
  *     discount can never exceed the order subtotal. A {@code null} value means no manual discount
  *     (same as passing 0). A positive value requires the {@code owner}/{@code manager} role ({@code
@@ -71,9 +71,7 @@ public record CheckoutRequest(
     this(businessId, idempotencyKey, lines, payment, discountMinor, null, null, null);
   }
 
-  /**
-   * Convenience for a checkout with Phase 4 fields but no coupon (pre-Phase-3 seven-arg shape).
-   */
+  /** Convenience for a checkout with Phase 4 fields but no coupon (pre-Phase-3 seven-arg shape). */
   public CheckoutRequest(
       UUID businessId,
       String idempotencyKey,

@@ -19,9 +19,10 @@ import org.springframework.data.repository.query.Param;
 public interface CouponRepository extends JpaRepository<Coupon, UUID> {
 
   /**
-   * Resolves a normalized (uppercase, trimmed) coupon code together with its linked rule's fields in
-   * one round trip — what {@link id.co.nativeapp.restaurant.promotion.service.PromotionEngineService
-   * PromotionEngineService} needs to validate and apply a coupon's deduction.
+   * Resolves a normalized (uppercase, trimmed) coupon code together with its linked rule's fields
+   * in one round trip — what {@link
+   * id.co.nativeapp.restaurant.promotion.service.PromotionEngineService PromotionEngineService}
+   * needs to validate and apply a coupon's deduction.
    */
   @Query(
       value =
@@ -77,12 +78,13 @@ public interface CouponRepository extends JpaRepository<Coupon, UUID> {
    * THE single-use / max-redemption enforcement idiom (V16 migration comment) — one atomic UPDATE
    * that is simultaneously the guard and the increment. Zero rows updated means the coupon was
    * already exhausted or inactive (possibly a concurrent checkout that got there first); the caller
-   * maps that to {@link id.co.nativeapp.restaurant.promotion.domain.CouponExhaustedException} (409).
+   * maps that to {@link id.co.nativeapp.restaurant.promotion.domain.CouponExhaustedException}
+   * (409).
    *
-   * <p>Must be called inside the caller's already-open {@code @Transactional} write (the surrounding
-   * {@code OrderWriter}/{@code BillWriter} REQUIRES_NEW method) so a rollback (e.g. a later stock
-   * shortfall) also reverts this increment — exactly the {@code MenuItemRepository#deductStock}
-   * pattern.
+   * <p>Must be called inside the caller's already-open {@code @Transactional} write (the
+   * surrounding {@code OrderWriter}/{@code BillWriter} REQUIRES_NEW method) so a rollback (e.g. a
+   * later stock shortfall) also reverts this increment — exactly the {@code
+   * MenuItemRepository#deductStock} pattern.
    *
    * @return the number of rows updated: 1 on success, 0 if the coupon is exhausted or inactive
    */

@@ -6,11 +6,11 @@ import java.time.LocalTime;
 import java.util.UUID;
 
 /**
- * Partial-update request body for a {@code promo_rule} row. Every field is OPTIONAL — a {@code null}
- * field leaves that attribute unchanged (the {@code CatalogItemPatchRequest} convention already used
- * by carwash). {@code ruleType} cannot be changed via PATCH (re-create instead); the type/parameter
- * cross-checks in {@link PromoRuleCreateRequest}'s javadoc are re-validated against the resulting
- * combination when a parameter that participates in them is supplied.
+ * Partial-update request body for a {@code promo_rule} row. Every field is OPTIONAL — a {@code
+ * null} field leaves that attribute unchanged (the {@code CatalogItemPatchRequest} convention
+ * already used by carwash). {@code ruleType} cannot be changed via PATCH (re-create instead); the
+ * type/parameter cross-checks in {@link PromoRuleCreateRequest}'s javadoc are re-validated against
+ * the resulting combination when a parameter that participates in them is supplied.
  *
  * @param name new name, or {@code null} to leave unchanged
  * @param scopeKind new scope kind, or {@code null} to leave unchanged

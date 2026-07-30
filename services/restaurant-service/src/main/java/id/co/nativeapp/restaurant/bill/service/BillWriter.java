@@ -439,10 +439,12 @@ public class BillWriter {
     Money subtotal = sumLineTotals(targetLineViews, currency);
     List<EvalLine> evalLines = toEvalLines(targetLineViews, currency);
     long manualDiscountMinor = (request.discountMinor() != null) ? request.discountMinor() : 0L;
-    EvalInput evalInput = new EvalInput(evalLines, currency, subtotal, now, null, manualDiscountMinor);
+    EvalInput evalInput =
+        new EvalInput(evalLines, currency, subtotal, now, null, manualDiscountMinor);
     EvalResult evalResult = promotionEngine.evaluate(evalInput);
 
-    PriceBreakdown breakdown = taxChargeService.resolve(subtotal, 0L, evalResult.totalDiscount(), now);
+    PriceBreakdown breakdown =
+        taxChargeService.resolve(subtotal, 0L, evalResult.totalDiscount(), now);
     Money grandTotal = breakdown.grandTotal();
 
     if (!grandTotal.isPositive()) {
@@ -478,8 +480,10 @@ public class BillWriter {
 
     // Same tx as the sale — the applied_promotion audit rows for THIS check (empty when only the
     // manual layer discounted, since the manual discount carries no ruleId). The "order_id" column
-    // holds this BILL's id — see AppliedPromotion's class javadoc for the per-vertical column reuse.
-    persistAppliedPromotions(bill.getId(), checkSaleId, evalResult, TenantContext.require().companyId());
+    // holds this BILL's id — see AppliedPromotion's class javadoc for the per-vertical column
+    // reuse.
+    persistAppliedPromotions(
+        bill.getId(), checkSaleId, evalResult, TenantContext.require().companyId());
 
     // -----------------------------------------------------------------------
     // Mark the target lines as paid (bulk UPDATE via repository).
@@ -705,7 +709,9 @@ public class BillWriter {
       MenuItemView view = itemMap.get(lv.getMenuItemId());
       UUID categoryId = (view != null) ? view.getCategoryId() : null;
       long effectiveUnitPrice = lv.getUnitPriceMinor() + lv.getModifierDeltaMinor();
-      result.add(new EvalLine(lv.getId(), lv.getMenuItemId(), categoryId, effectiveUnitPrice, lv.getQty()));
+      result.add(
+          new EvalLine(
+              lv.getId(), lv.getMenuItemId(), categoryId, effectiveUnitPrice, lv.getQty()));
     }
     return result;
   }
@@ -717,7 +723,8 @@ public class BillWriter {
    * ruleId}). {@code orderId} here holds the {@code bill.id} (see {@code AppliedPromotion}'s class
    * javadoc for the per-vertical column reuse).
    */
-  private void persistAppliedPromotions(UUID orderId, UUID saleId, EvalResult evalResult, String companyId) {
+  private void persistAppliedPromotions(
+      UUID orderId, UUID saleId, EvalResult evalResult, String companyId) {
     if (evalResult.deductions().isEmpty()) {
       return;
     }

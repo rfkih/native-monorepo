@@ -29,8 +29,8 @@ import org.springframework.transaction.annotation.Transactional;
  * OrderWriter}/{@code CatalogWriter} pattern).
  *
  * <p>The write path loads/produces the FULL entity — it legitimately needs the whole aggregate to
- * mutate and persist, and the freshly-saved entity maps directly to the response, never a projection
- * (that pattern is reserved for reads).
+ * mutate and persist, and the freshly-saved entity maps directly to the response, never a
+ * projection (that pattern is reserved for reads).
  */
 @Component
 public class PromotionAdminWriter {
@@ -38,7 +38,8 @@ public class PromotionAdminWriter {
   private final PromoRuleRepository promoRuleRepository;
   private final CouponRepository couponRepository;
 
-  public PromotionAdminWriter(PromoRuleRepository promoRuleRepository, CouponRepository couponRepository) {
+  public PromotionAdminWriter(
+      PromoRuleRepository promoRuleRepository, CouponRepository couponRepository) {
     this.promoRuleRepository = promoRuleRepository;
     this.couponRepository = couponRepository;
   }
@@ -52,7 +53,12 @@ public class PromotionAdminWriter {
     PromoRuleType ruleType = parseRuleType(request.ruleType());
     PromoScopeKind scopeKind = parseScopeKind(request.scopeKind());
     validateConsistency(
-        ruleType, scopeKind, request.scopeRefId(), request.rateBp(), request.amountMinor(), request.currency());
+        ruleType,
+        scopeKind,
+        request.scopeRefId(),
+        request.rateBp(),
+        request.amountMinor(),
+        request.currency());
 
     PromoRule rule =
         new PromoRule(
@@ -94,7 +100,8 @@ public class PromotionAdminWriter {
       rule.rescope(newScopeKind, newScopeRefId);
     }
     Long newRateBp = request.rateBp() != null ? request.rateBp() : rule.getRateBp();
-    Long newAmountMinor = request.amountMinor() != null ? request.amountMinor() : rule.getAmountMinor();
+    Long newAmountMinor =
+        request.amountMinor() != null ? request.amountMinor() : rule.getAmountMinor();
     String newCurrency = request.currency() != null ? request.currency() : rule.getCurrency();
     if (request.rateBp() != null || request.amountMinor() != null || request.currency() != null) {
       rule.reprice(newRateBp, newAmountMinor, newCurrency);
@@ -127,7 +134,12 @@ public class PromotionAdminWriter {
     }
 
     validateConsistency(
-        rule.getRuleType(), rule.getScopeKind(), rule.getScopeRefId(), rule.getRateBp(), rule.getAmountMinor(), rule.getCurrency());
+        rule.getRuleType(),
+        rule.getScopeKind(),
+        rule.getScopeRefId(),
+        rule.getRateBp(),
+        rule.getAmountMinor(),
+        rule.getCurrency());
 
     return toResponse(promoRuleRepository.saveAndFlush(rule));
   }
@@ -198,7 +210,8 @@ public class PromotionAdminWriter {
     try {
       return PromoScopeKind.valueOf(raw);
     } catch (IllegalArgumentException ex) {
-      throw new PromoRuleValidationException("Unknown scope_kind: " + raw + " — supported: ITEM, CATEGORY");
+      throw new PromoRuleValidationException(
+          "Unknown scope_kind: " + raw + " — supported: ITEM, CATEGORY");
     }
   }
 
@@ -215,7 +228,8 @@ public class PromotionAdminWriter {
           throw new PromoRuleValidationException(ruleType + " requires rateBp");
         }
         if (rateBp < 0 || rateBp > 10_000) {
-          throw new PromoRuleValidationException("rateBp must be between 0 and 10000, got: " + rateBp);
+          throw new PromoRuleValidationException(
+              "rateBp must be between 0 and 10000, got: " + rateBp);
         }
         if (amountMinor != null || currency != null) {
           throw new PromoRuleValidationException(ruleType + " must not carry amountMinor/currency");
@@ -240,10 +254,12 @@ public class PromotionAdminWriter {
 
     if (ruleType == PromoRuleType.PERCENT_OFF_LINE) {
       if (scopeKind == null || scopeRefId == null) {
-        throw new PromoRuleValidationException("PERCENT_OFF_LINE requires scopeKind and scopeRefId");
+        throw new PromoRuleValidationException(
+            "PERCENT_OFF_LINE requires scopeKind and scopeRefId");
       }
     } else if (scopeKind != null || scopeRefId != null) {
-      throw new PromoRuleValidationException(ruleType + " must not carry scopeKind/scopeRefId (order-scope)");
+      throw new PromoRuleValidationException(
+          ruleType + " must not carry scopeKind/scopeRefId (order-scope)");
     }
   }
 

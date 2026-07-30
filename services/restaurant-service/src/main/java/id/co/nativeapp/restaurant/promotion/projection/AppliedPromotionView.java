@@ -4,8 +4,9 @@ import java.util.UUID;
 import org.springframework.lang.Nullable;
 
 /**
- * Native-query read projection over an {@code applied_promotion} row — reserved for future reporting
- * (receipt rendering, promo-performance dashboards); not yet wired to a controller in this phase.
+ * Native-query read projection over an {@code applied_promotion} row — reserved for future
+ * reporting (receipt rendering, promo-performance dashboards); not yet wired to a controller in
+ * this phase.
  */
 public interface AppliedPromotionView {
 

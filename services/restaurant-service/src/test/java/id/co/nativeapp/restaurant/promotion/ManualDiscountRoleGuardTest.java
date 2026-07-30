@@ -67,7 +67,8 @@ class ManualDiscountRoleGuardTest extends PostgresRlsTestBase {
   }
 
   private void clearRoles() {
-    RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(new MockHttpServletRequest()));
+    RequestContextHolder.setRequestAttributes(
+        new ServletRequestAttributes(new MockHttpServletRequest()));
   }
 
   @AfterEach
@@ -143,7 +144,8 @@ class ManualDiscountRoleGuardTest extends PostgresRlsTestBase {
   }
 
   @Test
-  void headerlessCallerWithAPositiveManualDiscountSucceedsAtCheckoutDevRecipeTrust() throws Exception {
+  void headerlessCallerWithAPositiveManualDiscountSucceedsAtCheckoutDevRecipeTrust()
+      throws Exception {
     UUID menuItemId = createMenuItem();
     clearRoles(); // no X-Roles header at all — empty-roles-pass
 
@@ -166,7 +168,9 @@ class ManualDiscountRoleGuardTest extends PostgresRlsTestBase {
 
     CheckoutRequest req =
         new CheckoutRequest(
-            BUSINESS_ID, UUID.randomUUID().toString(), List.of(new OrderLineRequest(menuItemId, 1)));
+            BUSINESS_ID,
+            UUID.randomUUID().toString(),
+            List.of(new OrderLineRequest(menuItemId, 1)));
 
     CheckoutResult result = TenantContext.callAs(TENANT, ACTOR, () -> orderService.checkout(req));
     assertThat(result.created()).isTrue();
@@ -241,7 +245,9 @@ class ManualDiscountRoleGuardTest extends PostgresRlsTestBase {
     setRoles("owner");
     BillResponse opened =
         TenantContext.callAs(
-            TENANT, ACTOR, () -> billService.open(new OpenBillRequest(BUSINESS_ID, null, "Table 6")));
+            TENANT,
+            ACTOR,
+            () -> billService.open(new OpenBillRequest(BUSINESS_ID, null, "Table 6")));
     TenantContext.callAs(
         TENANT,
         ACTOR,

@@ -15,10 +15,10 @@ import java.util.UUID;
  * normalized by the service before insert/lookup.
  *
  * <p>Extends {@link Auditable} (rule 4); covered by the {@code coupon_tenant_isolation} RLS policy
- * (rule 5). Redemption is enforced by the ATOMIC {@code
- * CouponRepository#redeemIfAvailable} UPDATE, not by a read-modify-write on this entity — {@link
- * #redeemedCount} here is read-only from the application's point of view outside that UPDATE (a
- * fresh read always reflects the committed count).
+ * (rule 5). Redemption is enforced by the ATOMIC {@code CouponRepository#redeemIfAvailable} UPDATE,
+ * not by a read-modify-write on this entity — {@link #redeemedCount} here is read-only from the
+ * application's point of view outside that UPDATE (a fresh read always reflects the committed
+ * count).
  *
  * <p>A {@code protected} no-arg constructor exists only for JPA.
  */
@@ -55,7 +55,8 @@ public class Coupon extends Auditable {
   /**
    * Creates a coupon with a freshly generated id, active by default and zero redemptions.
    *
-   * @param code the ALREADY uppercase-normalized code (the service, not this constructor, normalizes)
+   * @param code the ALREADY uppercase-normalized code (the service, not this constructor,
+   *     normalizes)
    * @param ruleId the linked {@link PromoRule} id (must already exist — validated by the service)
    * @param maxRedemptions must be &gt; 0
    * @param expiresAt optional expiry instant; {@code null} means never expires

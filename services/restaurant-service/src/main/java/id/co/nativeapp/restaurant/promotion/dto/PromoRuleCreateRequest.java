@@ -10,14 +10,14 @@ import java.util.UUID;
  * Request body to create a {@code promo_rule} row. {@code company_id} and actor are intentionally
  * absent — they come from the bound tenant scope, never the client (rule 5).
  *
- * <p>Type/parameter validation ({@code PromoRuleAdminService}, {@code PromoRuleValidationException} →
- * 422):
+ * <p>Type/parameter validation ({@code PromoRuleAdminService}, {@code PromoRuleValidationException}
+ * → 422):
  *
  * <ul>
  *   <li>{@code PERCENT_OFF_ORDER}/{@code PERCENT_OFF_LINE} require {@code rateBp} (0-10000) and
  *       forbid {@code amountMinor}/{@code currency};
- *   <li>{@code AMOUNT_OFF_ORDER} requires {@code amountMinor} (&ge; 0) + {@code currency} and forbids
- *       {@code rateBp};
+ *   <li>{@code AMOUNT_OFF_ORDER} requires {@code amountMinor} (&ge; 0) + {@code currency} and
+ *       forbids {@code rateBp};
  *   <li>{@code PERCENT_OFF_LINE} requires {@code scopeKind} + {@code scopeRefId}; every other type
  *       forbids them (order-scope rules have no line to scope to);
  *   <li>{@code BUY_X_GET_Y} is rejected — schema-reserved, not shipped this phase (see {@link
@@ -31,9 +31,10 @@ import java.util.UUID;
  * @param rateBp basis-point rate (0-10000); required for the two percent types
  * @param amountMinor fixed discount in minor units (&ge; 0); required for {@code AMOUNT_OFF_ORDER}
  * @param currency ISO-4217 code; required for {@code AMOUNT_OFF_ORDER}
- * @param minSubtotalMinor optional minimum order subtotal (minor units) this rule requires to qualify
- * @param dowMask optional day-of-week bitmask (bit 0 = Monday .. bit 6 = Sunday); {@code null} = every
- *     day
+ * @param minSubtotalMinor optional minimum order subtotal (minor units) this rule requires to
+ *     qualify
+ * @param dowMask optional day-of-week bitmask (bit 0 = Monday .. bit 6 = Sunday); {@code null} =
+ *     every day
  * @param windowStart optional happy-hour start time (in {@code tz})
  * @param windowEnd optional happy-hour end time (in {@code tz}); an overnight window has {@code
  *     windowStart > windowEnd}
