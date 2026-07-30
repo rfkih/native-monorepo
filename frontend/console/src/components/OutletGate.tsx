@@ -8,8 +8,9 @@
  * when the company has none (unreachable for companies created after the default-outlet
  * seeding; still possible on partial hydration or for pre-ADR dev tenants), a per-vertical
  * coming-soon panel when `requiredVertical` is set and the effective outlet belongs to a
- * different vertical (carwash/barbershop have no POS yet), and otherwise hands its children
- * a session whose businessId IS the effective outlet id.
+ * DIFFERENT vertical (e.g. this gate requires 'restaurant' but the effective outlet is a
+ * carwash/barbershop one — each of those has its own POS, just not behind THIS gate), and
+ * otherwise hands its children a session whose businessId IS the effective outlet id.
  */
 
 import type { ReactNode } from 'react'

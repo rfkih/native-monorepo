@@ -112,12 +112,14 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
 
   const lines: TicketLineInput[] = useMemo(() => {
     const out: TicketLineInput[] = []
-    if (selectedPackage) out.push({ itemType: 'PACKAGE', itemId: selectedPackage.id, qty: 1 })
+    if (selectedPackage) {
+      out.push({ itemType: config.primaryItemType, itemId: selectedPackage.id, qty: 1 })
+    }
     for (const { item, qty } of addonLines.values()) {
       out.push({ itemType: 'ADDON', itemId: item.id, qty })
     }
     return out
-  }, [selectedPackage, addonLines])
+  }, [config.primaryItemType, selectedPackage, addonLines])
 
   const discountMinor = parseDiscountInput(discountInput, currency)
   const quoteQuery = useTicketQuote(config, session, lines, discountMinor)
@@ -131,7 +133,11 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
   const discountInvalid =
     discountInput !== '' && (isNaN(Number(discountInput)) || Number(discountInput) < 0)
   const locationFilled = !config.location.required || bay.trim().length > 0
-  const canCharge = selectedPackage != null && locationFilled && !discountInvalid
+  // A required attribution (barbershop's barber) blocks Charge until a staff profile is picked —
+  // carwash's washer stays optional (attribution.required is false there).
+  const attributionFilled = !config.attribution.required || staffProfileId != null
+  const canCharge =
+    selectedPackage != null && locationFilled && attributionFilled && !discountInvalid
 
   function selectPackage(item: CatalogItemResponse) {
     setSelectedPackage((prev) => (prev?.id === item.id ? null : item))
@@ -186,12 +192,12 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">
           <section>
             <h2 className="mb-3 text-[11px] font-bold uppercase tracking-[.08em] text-ink-3">
-              {t('carwashPos.packages')}
+              {t(config.primaryItemLabels.titleKey)}
             </h2>
             {packagesQuery.isLoading ? (
               <CatalogSkeleton />
             ) : packages.length === 0 ? (
-              <EmptyCatalog message={t('carwashPos.emptyPackages')} />
+              <EmptyCatalog message={t(config.primaryItemLabels.emptyKey)} />
             ) : (
               <div
                 className="grid gap-3"
@@ -201,6 +207,7 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
                   <PackageCard
                     key={pkg.id}
                     item={pkg}
+                    config={config}
                     locale={locale}
                     selected={selectedPackage?.id === pkg.id}
                     onSelect={() => selectPackage(pkg)}
@@ -212,18 +219,19 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
 
           <section className="mt-8">
             <h2 className="mb-3 text-[11px] font-bold uppercase tracking-[.08em] text-ink-3">
-              {t('carwashPos.addons')}
+              {t(`${config.i18nNs}.addons`)}
             </h2>
             {addonsQuery.isLoading ? (
               <ChipsSkeleton />
             ) : addons.length === 0 ? (
-              <EmptyCatalog message={t('carwashPos.emptyAddons')} />
+              <EmptyCatalog message={t(`${config.i18nNs}.emptyAddons`)} />
             ) : (
               <div className="flex flex-wrap gap-2">
                 {addons.map((addon) => (
                   <AddonChip
                     key={addon.id}
                     item={addon}
+                    config={config}
                     locale={locale}
                     selected={addonLines.has(addon.id)}
                     onToggle={() => toggleAddon(addon)}
@@ -335,8 +343,8 @@ function HeaderBar({ config, session }: { config: VerticalPosConfig; session: Co
         {canDashboard ? (
           <Link
             to="/catalog"
-            aria-label={t('carwashPos.manageCatalog')}
-            title={t('carwashPos.manageCatalog')}
+            aria-label={t(`${config.i18nNs}.manageCatalog`)}
+            title={t(`${config.i18nNs}.manageCatalog`)}
             className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
           >
             <Settings className="size-4" />
@@ -372,11 +380,13 @@ function HeaderBar({ config, session }: { config: VerticalPosConfig; session: Co
 
 function PackageCard({
   item,
+  config,
   locale,
   selected,
   onSelect,
 }: {
   item: CatalogItemResponse
+  config: VerticalPosConfig
   locale: string
   selected: boolean
   onSelect: () => void
@@ -389,8 +399,8 @@ function PackageCard({
       aria-pressed={selected}
       aria-label={
         selected
-          ? t('carwashPos.packageSelectedLabel', { name: item.name })
-          : t('carwashPos.selectPackageLabel', { name: item.name })
+          ? t(config.primaryItemLabels.selectedLabelKey, { name: item.name })
+          : t(config.primaryItemLabels.selectLabelKey, { name: item.name })
       }
       className={cn(
         'flex flex-col rounded-xl border bg-surface p-4 text-left transition-all duration-200',
@@ -416,11 +426,13 @@ function PackageCard({
 
 function AddonChip({
   item,
+  config,
   locale,
   selected,
   onToggle,
 }: {
   item: CatalogItemResponse
+  config: VerticalPosConfig
   locale: string
   selected: boolean
   onToggle: () => void
@@ -433,8 +445,8 @@ function AddonChip({
       aria-pressed={selected}
       aria-label={
         selected
-          ? t('carwashPos.addonSelectedLabel', { name: item.name })
-          : t('carwashPos.selectAddonLabel', { name: item.name })
+          ? t(`${config.i18nNs}.addonSelectedLabel`, { name: item.name })
+          : t(`${config.i18nNs}.selectAddonLabel`, { name: item.name })
       }
       className={cn(
         'flex h-10 shrink-0 items-center gap-2 rounded-full border-[1.5px] px-4 text-[13px] font-semibold transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
@@ -577,7 +589,7 @@ function SummaryPanel({
             id="svc-location"
             value={bay}
             onChange={(e) => onBayChange(e.target.value)}
-            placeholder={t('carwashPos.bayPlaceholder')}
+            placeholder={t(config.location.placeholderKey)}
             required={config.location.required}
           />
         </Field>
@@ -594,13 +606,31 @@ function SummaryPanel({
         ) : null}
 
         {config.attribution.enabled ? (
-          <Field label={t(config.attribution.labelKey)} htmlFor="svc-staff">
+          <Field
+            label={
+              <span className="inline-flex items-center gap-1.5">
+                {t(config.attribution.labelKey)}
+                {config.attribution.required ? (
+                  <Badge tone="amber" className="px-1.5 py-0 text-[10px]">
+                    {t('common.required')}
+                  </Badge>
+                ) : null}
+              </span>
+            }
+            htmlFor="svc-staff"
+            hint={
+              config.attribution.required && config.attribution.requiredHintKey
+                ? t(config.attribution.requiredHintKey)
+                : undefined
+            }
+          >
             <select
               id="svc-staff"
               className={SELECT_CLASS}
               value={staffProfileId ?? ''}
               onChange={(e) => onStaffChange(e.target.value || null)}
               required={config.attribution.required}
+              aria-required={config.attribution.required}
             >
               <option value="">{t('servicePos.noneOption')}</option>
               {staffProfiles.map((s) => (

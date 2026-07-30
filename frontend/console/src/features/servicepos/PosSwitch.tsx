@@ -1,16 +1,16 @@
 /**
  * PosSwitch — picks WHICH POS surface to render for the current outlet's vertical. Thin by design:
- * Pos (restaurant) and ServicePos (carwash) each mount their OWN OutletGate internally (identical
- * to how MenuManagement/Kitchen already work), so re-resolving the outlet list here and letting the
- * chosen surface re-resolve it again is intentional and idempotent — this component never renders
- * ticket/order UI itself.
+ * Pos (restaurant) and ServicePos (carwash / barbershop, each with their own VerticalPosConfig)
+ * mount their OWN OutletGate internally (identical to how MenuManagement/Kitchen already work), so
+ * re-resolving the outlet list here and letting the chosen surface re-resolve it again is
+ * intentional and idempotent — this component never renders ticket/order UI itself.
  *
  * Vertical resolution fails OPEN to 'restaurant' on a missing/null vertical — identical semantics to
  * components/OutletGate.tsx's own fail-open (never brick a POS terminal on cache staleness).
  *
  * CatalogSwitch is the /catalog counterpart: restaurant outlets already have a catalog manager
- * (MenuManagement, mounted at /menu) so it redirects there; carwash renders CatalogManagement;
- * every other vertical is still "coming soon".
+ * (MenuManagement, mounted at /menu) so it redirects there; carwash and barbershop each render
+ * CatalogManagement over their own config; every other vertical is still "coming soon".
  */
 import { lazy, Suspense } from 'react'
 import { Navigate } from 'react-router-dom'
@@ -21,6 +21,7 @@ import { useResolvedOutlets } from '@/features/org/useResolvedOutlets'
 import { ServicePos } from './ServicePos'
 import { CatalogManagement } from './CatalogManagement'
 import { carwashConfig } from './carwashConfig'
+import { barbershopConfig } from './barbershopConfig'
 
 const Pos = lazy(() => import('@/features/pos/Pos').then((m) => ({ default: m.Pos })))
 
@@ -56,6 +57,9 @@ export function PosSwitch() {
   if (vertical === 'carwash') {
     return <ServicePos config={carwashConfig} />
   }
+  if (vertical === 'barbershop') {
+    return <ServicePos config={barbershopConfig} />
+  }
   if (vertical === 'restaurant') {
     return (
       <Suspense fallback={<CenteredSpinner />}>
@@ -70,8 +74,11 @@ export function CatalogSwitch() {
   const { company } = useSession()
   const { outlets, effectiveOutletId, status } = useResolvedOutlets()
 
+  // No company yet — render CatalogManagement anyway so it owns its own NoCompany screen (mirrors
+  // PosSwitch's own `!company` branch above). The config passed here is never actually consulted:
+  // CatalogManagement bails out to <NoCompany /> before reading anything off it.
   if (!company) {
-    return <CatalogManagement />
+    return <CatalogManagement config={carwashConfig} />
   }
 
   if (status === 'loading') {
@@ -85,7 +92,10 @@ export function CatalogSwitch() {
     return <Navigate to="/menu" replace />
   }
   if (vertical === 'carwash') {
-    return <CatalogManagement />
+    return <CatalogManagement config={carwashConfig} />
+  }
+  if (vertical === 'barbershop') {
+    return <CatalogManagement config={barbershopConfig} />
   }
   return <VerticalComingSoon vertical={vertical} />
 }

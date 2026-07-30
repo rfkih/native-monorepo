@@ -1,10 +1,14 @@
 /**
- * CatalogManagement — owner/manager back-office page for the carwash service catalog: packages,
- * add-ons, and washers (staff profiles). Standalone full-screen page at /catalog, outside the
- * Shell, mirroring features/menu/MenuManagement.tsx's page skeleton (its restaurant counterpart).
+ * CatalogManagement — owner/manager back-office page for a service vertical's catalog: primary
+ * items (packages for carwash, services for barbershop), add-ons, and staff profiles (washers for
+ * carwash, barbers for barbershop). Standalone full-screen page at /catalog, outside the Shell,
+ * mirroring features/menu/MenuManagement.tsx's page skeleton (its restaurant counterpart).
  *
- * Hardcoded to the carwash vertical (imports carwashConfig directly) — CatalogSwitch in
- * PosSwitch.tsx is what decides a company's outlet resolves here at all.
+ * Parameterized by a VerticalPosConfig prop (PosSwitch's CatalogSwitch decides which one, and
+ * whether a company's outlet resolves here at all) — NOT hardcoded to one vertical. Structural
+ * field labels (name/description/price/active/etc.) stay shared serviceCatalog.* copy; only the
+ * nouns that must differ (the primary item's name, the staff role's name) are config-driven, via
+ * VerticalPosConfig.primaryItemLabels / .staffTitleKey / .i18nNs.
  *
  * Rules enforced:
  *   - No hardcoded user-facing strings (rule 9): every label is a react-i18next key.
@@ -27,7 +31,7 @@ import { formatMoney, isoMinorExponent } from '@/lib/money'
 import { OutletPicker } from '@/components/OutletPicker'
 import { OutletGate } from '@/components/OutletGate'
 import { useEmployees } from '@/features/hr/api'
-import { carwashConfig } from './carwashConfig'
+import type { VerticalPosConfig } from './config'
 import {
   useCatalogAddons,
   useCatalogPackages,
@@ -46,12 +50,12 @@ import {
 // Entry guard
 // ---------------------------------------------------------------------------
 
-export function CatalogManagement() {
+export function CatalogManagement({ config }: { config: VerticalPosConfig }) {
   const { company } = useSession()
   if (!company) return <NoCompany />
   return (
-    <OutletGate company={company} requiredVertical={carwashConfig.vertical}>
-      {(session) => <CatalogManagementInner key={session.businessId} session={session} />}
+    <OutletGate company={company} requiredVertical={config.vertical}>
+      {(session) => <CatalogManagementInner key={session.businessId} config={config} session={session} />}
     </OutletGate>
   )
 }
@@ -78,9 +82,20 @@ function NoCompany() {
 // Inner
 // ---------------------------------------------------------------------------
 
-function CatalogManagementInner({ session }: { session: CompanySession }) {
+function CatalogManagementInner({
+  config,
+  session,
+}: {
+  config: VerticalPosConfig
+  session: CompanySession
+}) {
   const { t, i18n } = useTranslation()
   const locale = localeOf(i18n.language)
+  // The page subtitle names the primary item and the staff role inline — lowercased so it reads as
+  // a natural mid-sentence noun ("packages"/"washers" for carwash, "services"/"barbers" for
+  // barbershop) while the sentence itself stays ONE shared serviceCatalog.subtitle key.
+  const primaryNoun = t(config.primaryItemLabels.titleKey).toLowerCase()
+  const staffNoun = t(config.staffTitleKey).toLowerCase()
 
   return (
     <div className="min-h-screen bg-paper">
@@ -99,10 +114,12 @@ function CatalogManagementInner({ session }: { session: CompanySession }) {
       </div>
 
       <div className="mx-auto max-w-3xl space-y-6 px-4 py-6 sm:px-6">
-        <p className="text-sm text-ink-3">{t('serviceCatalog.subtitle')}</p>
-        <PackagesSection session={session} locale={locale} />
-        <AddonsSection session={session} locale={locale} />
-        <WashersSection session={session} />
+        <p className="text-sm text-ink-3">
+          {t('serviceCatalog.subtitle', { primary: primaryNoun, staff: staffNoun })}
+        </p>
+        <PackagesSection session={session} config={config} locale={locale} />
+        <AddonsSection session={session} config={config} locale={locale} />
+        <WashersSection session={session} config={config} />
       </div>
     </div>
   )
@@ -134,10 +151,18 @@ function DialogOverlay({ children, onClose }: { children: React.ReactNode; onClo
 // Packages section
 // ---------------------------------------------------------------------------
 
-function PackagesSection({ session, locale }: { session: CompanySession; locale: string }) {
+function PackagesSection({
+  session,
+  config,
+  locale,
+}: {
+  session: CompanySession
+  config: VerticalPosConfig
+  locale: string
+}) {
   const { t } = useTranslation()
-  const query = useCatalogPackages(carwashConfig, session, { includeInactive: true })
-  const updateMutation = useUpdatePackage(carwashConfig, session)
+  const query = useCatalogPackages(config, session, { includeInactive: true })
+  const updateMutation = useUpdatePackage(config, session)
   const [dialog, setDialog] = useState<'create' | CatalogItemResponse | null>(null)
 
   const items = query.data ?? []
@@ -145,10 +170,12 @@ function PackagesSection({ session, locale }: { session: CompanySession; locale:
   return (
     <Card className="p-5">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="font-display text-base font-semibold text-ink">{t('serviceCatalog.packagesTitle')}</h2>
+        <h2 className="font-display text-base font-semibold text-ink">
+          {t(config.primaryItemLabels.titleKey)}
+        </h2>
         <Button size="sm" onClick={() => setDialog('create')}>
           <Plus className="size-4" aria-hidden="true" />
-          {t('serviceCatalog.addPackage')}
+          {t(config.primaryItemLabels.addLabelKey)}
         </Button>
       </div>
 
@@ -156,7 +183,7 @@ function PackagesSection({ session, locale }: { session: CompanySession; locale:
         <Spinner className="size-5 text-ink-3" />
       ) : items.length === 0 ? (
         <p className="rounded-xl border border-dashed border-line bg-paper px-4 py-6 text-center text-sm text-ink-3">
-          {t('carwashPos.emptyPackages')}
+          {t(config.primaryItemLabels.emptyKey)}
         </p>
       ) : (
         <ul className="space-y-1.5">
@@ -176,17 +203,19 @@ function PackagesSection({ session, locale }: { session: CompanySession; locale:
       {dialog === 'create' ? (
         <CreateCatalogItemDialog
           session={session}
+          config={config}
           kind="package"
-          titleKey="serviceCatalog.addPackage"
+          titleKey={config.primaryItemLabels.addLabelKey}
           onClose={() => setDialog(null)}
         />
       ) : null}
       {dialog && dialog !== 'create' ? (
         <EditCatalogItemDialog
           session={session}
+          config={config}
           kind="package"
           item={dialog}
-          titleKey="serviceCatalog.editPackage"
+          titleKey={config.primaryItemLabels.editLabelKey}
           onClose={() => setDialog(null)}
         />
       ) : null}
@@ -198,10 +227,18 @@ function PackagesSection({ session, locale }: { session: CompanySession; locale:
 // Add-ons section
 // ---------------------------------------------------------------------------
 
-function AddonsSection({ session, locale }: { session: CompanySession; locale: string }) {
+function AddonsSection({
+  session,
+  config,
+  locale,
+}: {
+  session: CompanySession
+  config: VerticalPosConfig
+  locale: string
+}) {
   const { t } = useTranslation()
-  const query = useCatalogAddons(carwashConfig, session, { includeInactive: true })
-  const updateMutation = useUpdateAddon(carwashConfig, session)
+  const query = useCatalogAddons(config, session, { includeInactive: true })
+  const updateMutation = useUpdateAddon(config, session)
   const [dialog, setDialog] = useState<'create' | CatalogItemResponse | null>(null)
 
   const items = query.data ?? []
@@ -220,7 +257,7 @@ function AddonsSection({ session, locale }: { session: CompanySession; locale: s
         <Spinner className="size-5 text-ink-3" />
       ) : items.length === 0 ? (
         <p className="rounded-xl border border-dashed border-line bg-paper px-4 py-6 text-center text-sm text-ink-3">
-          {t('carwashPos.emptyAddons')}
+          {t(`${config.i18nNs}.emptyAddons`)}
         </p>
       ) : (
         <ul className="space-y-1.5">
@@ -240,6 +277,7 @@ function AddonsSection({ session, locale }: { session: CompanySession; locale: s
       {dialog === 'create' ? (
         <CreateCatalogItemDialog
           session={session}
+          config={config}
           kind="addon"
           titleKey="serviceCatalog.addAddon"
           onClose={() => setDialog(null)}
@@ -248,6 +286,7 @@ function AddonsSection({ session, locale }: { session: CompanySession; locale: s
       {dialog && dialog !== 'create' ? (
         <EditCatalogItemDialog
           session={session}
+          config={config}
           kind="addon"
           item={dialog}
           titleKey="serviceCatalog.editAddon"
@@ -321,18 +360,20 @@ type CatalogItemKindLabel = 'package' | 'addon'
 
 function CreateCatalogItemDialog({
   session,
+  config,
   kind,
   titleKey,
   onClose,
 }: {
   session: CompanySession
+  config: VerticalPosConfig
   kind: CatalogItemKindLabel
   titleKey: string
   onClose: () => void
 }) {
   const { t } = useTranslation()
-  const createPackage = useCreatePackage(carwashConfig, session)
-  const createAddon = useCreateAddon(carwashConfig, session)
+  const createPackage = useCreatePackage(config, session)
+  const createAddon = useCreateAddon(config, session)
   const mutation = kind === 'package' ? createPackage : createAddon
   const exp = isoMinorExponent(session.baseCurrency)
 
@@ -431,20 +472,22 @@ function CreateCatalogItemDialog({
 
 function EditCatalogItemDialog({
   session,
+  config,
   kind,
   item,
   titleKey,
   onClose,
 }: {
   session: CompanySession
+  config: VerticalPosConfig
   kind: CatalogItemKindLabel
   item: CatalogItemResponse
   titleKey: string
   onClose: () => void
 }) {
   const { t } = useTranslation()
-  const updatePackage = useUpdatePackage(carwashConfig, session)
-  const updateAddon = useUpdateAddon(carwashConfig, session)
+  const updatePackage = useUpdatePackage(config, session)
+  const updateAddon = useUpdateAddon(config, session)
   const mutation = kind === 'package' ? updatePackage : updateAddon
   const exp = isoMinorExponent(item.currency)
 
@@ -544,10 +587,16 @@ function EditCatalogItemDialog({
 // Washers section (staff profiles)
 // ---------------------------------------------------------------------------
 
-function WashersSection({ session }: { session: CompanySession }) {
+function WashersSection({
+  session,
+  config,
+}: {
+  session: CompanySession
+  config: VerticalPosConfig
+}) {
   const { t } = useTranslation()
-  const query = useStaffProfiles(carwashConfig, session, { includeInactive: true })
-  const updateMutation = useUpdateStaffProfile(carwashConfig, session)
+  const query = useStaffProfiles(config, session, { includeInactive: true })
+  const updateMutation = useUpdateStaffProfile(config, session)
   const [dialog, setDialog] = useState<'create' | StaffProfileResponse | null>(null)
 
   const items = query.data ?? []
@@ -555,7 +604,7 @@ function WashersSection({ session }: { session: CompanySession }) {
   return (
     <Card className="p-5">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="font-display text-base font-semibold text-ink">{t('serviceCatalog.washersTitle')}</h2>
+        <h2 className="font-display text-base font-semibold text-ink">{t(config.staffTitleKey)}</h2>
         <Button size="sm" onClick={() => setDialog('create')}>
           <Plus className="size-4" aria-hidden="true" />
           {t('serviceCatalog.addWasher')}
@@ -615,11 +664,17 @@ function WashersSection({ session }: { session: CompanySession }) {
       )}
 
       {dialog === 'create' ? (
-        <WasherDialog session={session} titleKey="serviceCatalog.addWasher" onClose={() => setDialog(null)} />
+        <WasherDialog
+          session={session}
+          config={config}
+          titleKey="serviceCatalog.addWasher"
+          onClose={() => setDialog(null)}
+        />
       ) : null}
       {dialog && dialog !== 'create' ? (
         <WasherDialog
           session={session}
+          config={config}
           titleKey="serviceCatalog.editWasher"
           profile={dialog}
           onClose={() => setDialog(null)}
@@ -636,18 +691,20 @@ function WashersSection({ session }: { session: CompanySession }) {
  */
 function WasherDialog({
   session,
+  config,
   titleKey,
   profile,
   onClose,
 }: {
   session: CompanySession
+  config: VerticalPosConfig
   titleKey: string
   profile?: StaffProfileResponse
   onClose: () => void
 }) {
   const { t } = useTranslation()
-  const createMutation = useCreateStaffProfile(carwashConfig, session)
-  const updateMutation = useUpdateStaffProfile(carwashConfig, session)
+  const createMutation = useCreateStaffProfile(config, session)
+  const updateMutation = useUpdateStaffProfile(config, session)
   const mutation = profile ? updateMutation : createMutation
   const employeesQuery = useEmployees({
     companyId: session.companyId,

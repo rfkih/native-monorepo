@@ -18,6 +18,7 @@ import {
   RenameDialog,
   VerticalBadge,
 } from './parts'
+import { ModulesPanel } from './ModulesPanel'
 
 /** Build a parent→children map from the flat list returned by the backend. */
 function buildTree(units: OrgUnit[]): Map<string | null, OrgUnit[]> {
@@ -330,6 +331,10 @@ export function OrgTree() {
           ))}
         </Card>
       )}
+
+      {/* Module entitlements — owner/manager toggles which verticals/platform modules this
+          company can use (entitlement-service, company-scoped). */}
+      <ModulesPanel session={company} />
 
       {/* Dialogs */}
       {dialog?.kind === 'add' ? (

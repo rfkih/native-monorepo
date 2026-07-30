@@ -8,7 +8,9 @@ export function Field({
   htmlFor,
   children,
 }: {
-  label: string
+  /** Usually plain text; a ReactNode is allowed for a label that carries an inline marker (e.g. a
+   * "Required" badge next to the text). */
+  label: ReactNode
   hint?: string
   error?: string
   htmlFor?: string

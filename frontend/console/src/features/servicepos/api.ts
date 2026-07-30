@@ -156,12 +156,15 @@ export function useCatalogPackages(
       activeOnly,
     ],
     queryFn: async () => {
-      const result = await apiFetch<CatalogItemResponse[]>(`${config.apiBase}/packages`, {
-        tenant: tenantOf(session),
-        // The catalog is OUTLET-scoped (business_id on every row): filter server-side to the
-        // effective outlet so a multi-outlet company's terminals only see their own offerings.
-        query: { activeOnly, businessId: session.businessId },
-      })
+      const result = await apiFetch<CatalogItemResponse[]>(
+        `${config.apiBase}/${config.packagesPath}`,
+        {
+          tenant: tenantOf(session),
+          // The catalog is OUTLET-scoped (business_id on every row): filter server-side to the
+          // effective outlet so a multi-outlet company's terminals only see their own offerings.
+          query: { activeOnly, businessId: session.businessId },
+        },
+      )
       return result ?? []
     },
   })
@@ -386,7 +389,7 @@ export function useCreatePackage(config: VerticalPosConfig, session: CompanySess
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (body: CreateCatalogItemInput) =>
-      apiFetch<CatalogItemResponse>(`${config.apiBase}/packages`, {
+      apiFetch<CatalogItemResponse>(`${config.apiBase}/${config.packagesPath}`, {
         method: 'POST',
         tenant: tenantOf(session),
         body,
@@ -399,7 +402,7 @@ export function useUpdatePackage(config: VerticalPosConfig, session: CompanySess
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, ...body }: UpdateCatalogItemInput) =>
-      apiFetch<CatalogItemResponse>(`${config.apiBase}/packages/${id}`, {
+      apiFetch<CatalogItemResponse>(`${config.apiBase}/${config.packagesPath}/${id}`, {
         method: 'PATCH',
         tenant: tenantOf(session),
         body,

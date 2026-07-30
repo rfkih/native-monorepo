@@ -6,7 +6,22 @@ export const carwashConfig: VerticalPosConfig = {
   vertical: 'carwash',
   apiBase: '/api/v1/carwash',
   i18nNs: 'carwashPos',
-  location: { labelKey: 'carwashPos.bay', required: true },
+  location: {
+    labelKey: 'carwashPos.bay',
+    placeholderKey: 'carwashPos.bayPlaceholder',
+    required: true,
+  },
   vehicleField: true,
   attribution: { enabled: true, required: false, labelKey: 'carwashPos.washer' },
+  packagesPath: 'packages',
+  primaryItemType: 'PACKAGE',
+  primaryItemLabels: {
+    titleKey: 'carwashPos.packages',
+    emptyKey: 'carwashPos.emptyPackages',
+    selectLabelKey: 'carwashPos.selectPackageLabel',
+    selectedLabelKey: 'carwashPos.packageSelectedLabel',
+    addLabelKey: 'serviceCatalog.addPackage',
+    editLabelKey: 'serviceCatalog.editPackage',
+  },
+  staffTitleKey: 'serviceCatalog.washersTitle',
 }
