@@ -51,7 +51,13 @@ abstract class PostgresRlsTestBase {
             java.sql.DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
         Statement st = admin.createStatement()) {
-      st.execute("TRUNCATE TABLE wash, entitlement_projection, staff, outbox, processed_event");
+      // tax_charge_rule is deliberately NOT truncated: the V5 Flyway seed (VAT_CARWASH) must
+      // survive between tests, exactly as restaurant's test base preserves its V5 seed.
+      st.execute(
+          "TRUNCATE TABLE wash, entitlement_projection, staff, outbox, processed_event,"
+              + " wash_package, wash_addon, staff_profile,"
+              + " carwash_payment, carwash_ticket_line, carwash_ticket,"
+              + " user_outlet_assignment_ref CASCADE");
     } catch (SQLException ignored) {
       // Tables not created yet (pre-Flyway) — nothing to reset.
     }
