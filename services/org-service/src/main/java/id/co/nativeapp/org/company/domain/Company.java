@@ -64,6 +64,28 @@ public class Company extends Auditable {
   @Column(name = "legal_employer_id", nullable = false, updatable = false)
   private UUID legalEmployerId;
 
+  /**
+   * The company's country: an ISO 3166-1 alpha-2 code (e.g. {@code "ID"}). Write-once like {@code
+   * base_currency} — the base currency is DERIVED from it at creation (ADR 0025), so a mutable
+   * country would break the derivation story. Same {@code CHAR}/bpchar mapping trick as {@code
+   * base_currency} so {@code ddl-auto=validate} agrees with the migrated column.
+   */
+  @JdbcTypeCode(SqlTypes.CHAR)
+  @Column(name = "country", nullable = false, updatable = false, length = 2)
+  private String country;
+
+  /** Optional contact phone captured at signup — format-checked at the request edge only. */
+  @Column(name = "phone", length = 32)
+  private String phone;
+
+  /** Optional signup funnel field: employee-count band (whitelist lives at the request edge). */
+  @Column(name = "company_size", length = 16)
+  private String companySize;
+
+  /** Optional signup funnel field: why the owner signed up (whitelist at the request edge). */
+  @Column(name = "primary_interest", length = 32)
+  private String primaryInterest;
+
   protected Company() {
     // for JPA
   }
@@ -71,21 +93,53 @@ public class Company extends Auditable {
   /**
    * Creates a company with the given id (which is also its tenant {@code company_id}). Validates
    * its invariants: non-blank name, a real ISO-4217 {@code baseCurrency}, non-blank {@code
-   * defaultLanguage}, non-null {@code legalEmployerId}.
+   * defaultLanguage}, non-null {@code legalEmployerId}, a real ISO 3166-1 {@code country}.
    *
    * @param id the company id — also its own tenant id (a company is its own tenant)
    * @param name the company name; must be non-blank
    * @param baseCurrency the ISO-4217 base currency code; validated via {@link Currency}; IMMUTABLE
    * @param defaultLanguage the company default language (e.g. {@code "en"}/{@code "id"}); non-blank
    * @param legalEmployerId the legal employer this company is
+   * @param country the ISO 3166-1 alpha-2 country code; validated via {@link CountryDefaults};
+   *     IMMUTABLE (the base currency is derived from it at creation — ADR 0025)
+   * @param phone optional contact phone (nullable)
+   * @param companySize optional employee-count band (nullable — funnel data)
+   * @param primaryInterest optional signup interest (nullable — funnel data)
    */
   public Company(
-      UUID id, String name, String baseCurrency, String defaultLanguage, UUID legalEmployerId) {
+      UUID id,
+      String name,
+      String baseCurrency,
+      String defaultLanguage,
+      UUID legalEmployerId,
+      String country,
+      String phone,
+      String companySize,
+      String primaryInterest) {
     this.id = Objects.requireNonNull(id, "id");
     this.name = requireNonBlank(name, "name");
     this.baseCurrency = requireValidCurrency(baseCurrency);
     this.defaultLanguage = requireNonBlank(defaultLanguage, "defaultLanguage");
     this.legalEmployerId = Objects.requireNonNull(legalEmployerId, "legalEmployerId");
+    this.country = CountryDefaults.requireValidCountry(country);
+    this.phone = phone;
+    this.companySize = companySize;
+    this.primaryInterest = primaryInterest;
+  }
+
+  /**
+   * Convenience constructor for the pre-country call sites (tests, fixtures): defaults the country
+   * to {@code "ID"} (every pre-ADR-0025 tenant is Indonesian) with no funnel data.
+   *
+   * @param id the company id — also its own tenant id
+   * @param name the company name
+   * @param baseCurrency the ISO-4217 base currency code
+   * @param defaultLanguage the company default language
+   * @param legalEmployerId the legal employer this company is
+   */
+  public Company(
+      UUID id, String name, String baseCurrency, String defaultLanguage, UUID legalEmployerId) {
+    this(id, name, baseCurrency, defaultLanguage, legalEmployerId, "ID", null, null, null);
   }
 
   /**
@@ -130,6 +184,26 @@ public class Company extends Auditable {
 
   public UUID getLegalEmployerId() {
     return legalEmployerId;
+  }
+
+  /** The immutable ISO 3166-1 alpha-2 country code (stripped of any {@code CHAR} padding). */
+  public String getCountry() {
+    return country.strip();
+  }
+
+  /** Optional contact phone; {@code null} when never captured. */
+  public String getPhone() {
+    return phone;
+  }
+
+  /** Optional employee-count band from signup; {@code null} on the in-app create path. */
+  public String getCompanySize() {
+    return companySize;
+  }
+
+  /** Optional signup interest; {@code null} on the in-app create path. */
+  public String getPrimaryInterest() {
+    return primaryInterest;
   }
 
   // NOTE: there is deliberately NO setBaseCurrency(...) and NO setId(...)/setLegalEmployerId(...).

@@ -81,11 +81,18 @@ public class CompanyController {
       @RequestHeader(value = DevTenantFilter.ACTOR_HEADER, required = false) String actor,
       @Valid @RequestBody CreateCompanyRequest request) {
 
+    // country is optional on this in-app path (ADR 0025): null → "ID" (every in-app-created
+    // company predates or follows the Indonesian default); baseCurrency stays EXPLICIT here —
+    // derivation from country applies only to the public signup.
     CreateCompanyCommand command =
         new CreateCompanyCommand(
             request.name(),
             request.baseCurrency(),
             request.defaultLanguage(),
+            request.country() != null ? request.country() : "ID",
+            null,
+            null,
+            null,
             request.firstBusiness().name(),
             request.firstBusiness().vertical(),
             actorOrSystem(actor));

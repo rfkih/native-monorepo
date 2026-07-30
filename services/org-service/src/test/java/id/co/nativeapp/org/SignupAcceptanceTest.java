@@ -142,8 +142,15 @@ class SignupAcceptanceTest {
     assertThat(rowCountAsAdmin("company")).isEqualTo(1L);
     assertThat(rowCountAsAdmin("org_unit")).isEqualTo(2L);
 
-    // Keycloak user has the correct company_id attribute and the owner role.
+    // Country-derived defaults + funnel fields landed on the company row (ADR 0025).
     String companyId = node.get("companyId").asString();
+    assertThat(companyColumnAsAdmin(companyId, "country")).isEqualTo("ID");
+    assertThat(companyColumnAsAdmin(companyId, "base_currency")).isEqualTo("IDR");
+    assertThat(companyColumnAsAdmin(companyId, "phone")).isEqualTo("+62 812 3456 7890");
+    assertThat(companyColumnAsAdmin(companyId, "company_size")).isEqualTo("1-5");
+    assertThat(companyColumnAsAdmin(companyId, "primary_interest")).isEqualTo("own-company");
+
+    // Keycloak user has the correct company_id attribute, the owner role, and the owner's name.
     verifyKeycloakUser(email, companyId);
   }
 
@@ -187,18 +194,104 @@ class SignupAcceptanceTest {
     // ownerEmail is blank — bean validation must reject this before any service logic.
     String missingEmail =
         """
-        {"companyName":"Acme","baseCurrency":"IDR","defaultLanguage":"id",
+        {"companyName":"Acme","country":"ID","defaultLanguage":"id",
          "firstBusinessName":"Main","vertical":"restaurant",
+         "ownerFirstName":"Budi","companySize":"1-5","primaryInterest":"own-company",
          "ownerEmail":"","ownerPassword":"secret","termsAccepted":true}
         """;
     assertBadRequest(missingEmail);
   }
 
   @Test
-  void anUnsupportedCurrencyReturns400() {
-    // EUR is a real ISO-4217 code but NOT platform-supported — the server-side whitelist must
-    // reject it; a direct API call bypasses the client's option list.
-    assertBadRequest(signupBody(uniqueEmail()).replace("\"IDR\"", "\"EUR\""));
+  void aClientSuppliedBaseCurrencyIsIgnoredAndDerivationWins() throws Exception {
+    // ADR 0025: baseCurrency left the wire contract — the server derives it from country. An OLD
+    // client still sending one (here even an unsupported EUR) is ignored by deserialization, not
+    // rejected, and the country-derived currency wins.
+    String email = uniqueEmail();
+    String legacyBody =
+        signupBody(email)
+            .replace("\"country\": \"ID\",", "\"country\": \"ID\",\n  \"baseCurrency\": \"EUR\",");
+    String responseBody = callSignup(legacyBody);
+    JsonNode node = JSON.readValue(responseBody, JsonNode.class);
+    assertThat(companyColumnAsAdmin(node.get("companyId").asString(), "base_currency"))
+        .isEqualTo("IDR");
+  }
+
+  @Test
+  void countryIdDerivesIdrBooks() throws Exception {
+    String responseBody = callSignup(signupBody(uniqueEmail()));
+    String companyId = JSON.readValue(responseBody, JsonNode.class).get("companyId").asString();
+    assertThat(companyColumnAsAdmin(companyId, "country")).isEqualTo("ID");
+    assertThat(companyColumnAsAdmin(companyId, "base_currency")).isEqualTo("IDR");
+  }
+
+  @Test
+  void countryUsDerivesUsdBooks() throws Exception {
+    String body = signupBody(uniqueEmail()).replace("\"country\": \"ID\"", "\"country\": \"US\"");
+    String responseBody = callSignup(body);
+    String companyId = JSON.readValue(responseBody, JsonNode.class).get("companyId").asString();
+    assertThat(companyColumnAsAdmin(companyId, "country")).isEqualTo("US");
+    assertThat(companyColumnAsAdmin(companyId, "base_currency")).isEqualTo("USD");
+  }
+
+  @Test
+  void anUnknownCountryReturns400WithNoResidue() throws Exception {
+    // "XX" passes the [A-Z]{2} pattern but is not a real ISO 3166-1 country — the domain check
+    // must 400 it BEFORE the Keycloak user is created (derivation runs first), so a validation
+    // failure never spends a compensation: no company row AND no Keycloak user may exist.
+    String email = uniqueEmail();
+    assertBadRequest(signupBody(email).replace("\"country\": \"ID\"", "\"country\": \"XX\""));
+    try {
+      assertThat(rowCountAsAdmin("company")).isZero();
+    } catch (SQLException ignored) {
+      // Tables not created yet — equally proves nothing was persisted.
+    }
+    assertThat(keycloakUsersFor(email).size()).isZero();
+  }
+
+  @Test
+  void aLowercaseCountryReturns400() {
+    // The wire contract is strict alpha-2 upper-case; normalization is a domain courtesy for the
+    // service layer, not a request-format leniency.
+    assertBadRequest(
+        signupBody(uniqueEmail()).replace("\"country\": \"ID\"", "\"country\": \"id\""));
+  }
+
+  @Test
+  void aBlankCompanySizeReturns400() {
+    assertBadRequest(
+        signupBody(uniqueEmail()).replace("\"companySize\": \"1-5\",", "\"companySize\": \"\","));
+  }
+
+  @Test
+  void anUnknownPrimaryInterestReturns400() {
+    assertBadRequest(signupBody(uniqueEmail()).replace("\"own-company\"", "\"world-domination\""));
+  }
+
+  @Test
+  void anInvalidPhoneReturns400() {
+    assertBadRequest(
+        signupBody(uniqueEmail())
+            .replace("\"phone\": \"+62 812 3456 7890\"", "\"phone\": \"not-a-phone\""));
+  }
+
+  @Test
+  void aMononymOwnerWithoutPhoneSignsUpSuccessfully() throws Exception {
+    // Indonesian mononyms: ownerLastName is optional, as is phone. The Keycloak user gets a
+    // firstName and NO lastName.
+    String email = uniqueEmail();
+    String body =
+        signupBody(email)
+            .replace("\"ownerLastName\": \"Santoso\",\n  ", "")
+            .replace("\"phone\": \"+62 812 3456 7890\",\n  ", "");
+    String responseBody = callSignup(body);
+    assertThat(responseBody).contains("companyId");
+
+    JsonNode user = keycloakUsersFor(email).get(0);
+    assertThat(user.path("firstName").asString()).isEqualTo("Budi");
+    // lastName was never sent — the representation must not carry one (absent or empty; it must
+    // certainly not contain a value).
+    assertThat(user.toString()).doesNotContain("Santoso");
   }
 
   @Test
@@ -281,13 +374,21 @@ class SignupAcceptanceTest {
   }
 
   private static String signupBody(String email) {
+    // NOTE: several tests surgically .replace(...) exact literals from this body (including the
+    // ",\n  \"termsAccepted\": true" tail) — keep the formatting stable when editing. There is
+    // deliberately NO baseCurrency: it is derived server-side from country (ADR 0025).
     return """
         {
           "companyName": "Acme Corp",
-          "baseCurrency": "IDR",
+          "country": "ID",
           "defaultLanguage": "id",
           "firstBusinessName": "Main Outlet",
           "vertical": "restaurant",
+          "ownerFirstName": "Budi",
+          "ownerLastName": "Santoso",
+          "phone": "+62 812 3456 7890",
+          "companySize": "1-5",
+          "primaryInterest": "own-company",
           "ownerEmail": "%s",
           "ownerPassword": "secret-password-123",
           "termsAccepted": true
@@ -296,8 +397,30 @@ class SignupAcceptanceTest {
         .formatted(email);
   }
 
-  /** Verifies the Keycloak user for {@code email} has the correct {@code company_id} attribute. */
+  /** Verifies the Keycloak user for {@code email} has the correct attributes, role and name. */
   private void verifyKeycloakUser(String email, String expectedCompanyId) throws IOException {
+    JsonNode users = keycloakUsersFor(email);
+    assertThat(users.size()).isGreaterThanOrEqualTo(1);
+
+    JsonNode user = users.get(0);
+    JsonNode companyIds = user.path("attributes").path("company_id");
+    assertThat(companyIds.isArray()).isTrue();
+    assertThat(companyIds.get(0).asString()).isEqualTo(expectedCompanyId);
+
+    // The owner's name is stored on Keycloak's NATIVE firstName/lastName fields (ADR 0025).
+    assertThat(user.path("firstName").asString()).isEqualTo("Budi");
+    assertThat(user.path("lastName").asString()).isEqualTo("Santoso");
+
+    // Signed-up owners start unverified (verification is enforced when the realm requires it),
+    // and the ToS consent instant is recorded as a user attribute.
+    assertThat(user.path("emailVerified").asBoolean()).isFalse();
+    JsonNode termsAcceptedAt = user.path("attributes").path("terms_accepted_at");
+    assertThat(termsAcceptedAt.isArray()).isTrue();
+    assertThat(termsAcceptedAt.get(0).asString()).isNotBlank();
+  }
+
+  /** Fetches the Keycloak user representations for {@code email} (exact match; may be empty). */
+  private JsonNode keycloakUsersFor(String email) throws IOException {
     String adminToken = obtainAdminToken();
     String usersUrl =
         KEYCLOAK.getAuthServerUrl()
@@ -318,19 +441,7 @@ class SignupAcceptanceTest {
       assertThat(response.code()).isEqualTo(200);
       JsonNode users = JSON.readValue(response.body().string(), JsonNode.class);
       assertThat(users.isArray()).isTrue();
-      assertThat(users.size()).isGreaterThanOrEqualTo(1);
-
-      JsonNode user = users.get(0);
-      JsonNode companyIds = user.path("attributes").path("company_id");
-      assertThat(companyIds.isArray()).isTrue();
-      assertThat(companyIds.get(0).asString()).isEqualTo(expectedCompanyId);
-
-      // Signed-up owners start unverified (verification is enforced when the realm requires it),
-      // and the ToS consent instant is recorded as a user attribute.
-      assertThat(user.path("emailVerified").asBoolean()).isFalse();
-      JsonNode termsAcceptedAt = user.path("attributes").path("terms_accepted_at");
-      assertThat(termsAcceptedAt.isArray()).isTrue();
-      assertThat(termsAcceptedAt.get(0).asString()).isNotBlank();
+      return users;
     }
   }
 
@@ -365,6 +476,18 @@ class SignupAcceptanceTest {
         var rs = st.executeQuery("SELECT count(*) FROM " + table)) {
       rs.next();
       return rs.getLong(1);
+    }
+  }
+
+  /** Reads one column of the given company row via the admin/BYPASSRLS connection. */
+  private String companyColumnAsAdmin(String companyId, String column) throws SQLException {
+    try (Connection admin = adminConnection();
+        var ps = admin.prepareStatement("SELECT " + column + " FROM company WHERE id = ?::uuid")) {
+      ps.setString(1, companyId);
+      try (var rs = ps.executeQuery()) {
+        assertThat(rs.next()).as("company row %s exists", companyId).isTrue();
+        return rs.getString(1);
+      }
     }
   }
 

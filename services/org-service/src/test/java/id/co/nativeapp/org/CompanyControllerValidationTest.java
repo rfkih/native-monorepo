@@ -74,6 +74,23 @@ class CompanyControllerValidationTest {
   }
 
   @Test
+  void malformedCountryIsRejectedWithAProblemDetail() throws Exception {
+    // country is OPTIONAL on this in-app path (ADR 0025) — but when present it must be a bare
+    // ISO 3166-1 alpha-2 code, not a country name.
+    String body =
+        """
+            {"name":"Acme","baseCurrency":"IDR","defaultLanguage":"id","country":"Indonesia",
+             "firstBusiness":{"name":"Outlet 1","vertical":"restaurant"}}
+            """;
+    mockMvc
+        .perform(post("/api/v1/companies").contentType(MediaType.APPLICATION_JSON).content(body))
+        .andExpect(status().isBadRequest())
+        .andExpect(content().contentTypeCompatibleWith(PROBLEM_JSON))
+        .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/validation-failed"))
+        .andExpect(jsonPath("$.errors[0].field").value("country"));
+  }
+
+  @Test
   void unknownBaseCurrencyCodeIsMappedToAProblemDetail() throws Exception {
     // Passes bean validation (non-blank), but the Company aggregate rejects "ZZZ"
     // with an IllegalArgumentException that the advice maps to a 400 ProblemDetail.

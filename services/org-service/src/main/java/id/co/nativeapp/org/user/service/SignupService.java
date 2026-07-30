@@ -1,5 +1,6 @@
 package id.co.nativeapp.org.user.service;
 
+import id.co.nativeapp.org.company.domain.CountryDefaults;
 import id.co.nativeapp.org.company.dto.CreateCompanyCommand;
 import id.co.nativeapp.org.company.service.CompanyService;
 import id.co.nativeapp.org.user.dto.SignupRequest;
@@ -64,6 +65,12 @@ public class SignupService {
    *     {@code 502}); when this happens before company creation nothing is persisted
    */
   public SignupResponse signup(SignupRequest request) {
+    // Step 0: validate the country and derive the base currency (ADR 0025) BEFORE any Keycloak
+    // call — an invalid country must fail with a clean 400 while NOTHING exists yet, never after
+    // a user was created (which would spend a compensation on a validation error).
+    String country = CountryDefaults.requireValidCountry(request.country());
+    String baseCurrency = CountryDefaults.baseCurrencyFor(country);
+
     // Step 1: pre-check the email in Keycloak so the common duplicate case is rejected cleanly.
     // A race that slips past this is still caught: createUser maps Keycloak's 409 to
     // EmailAlreadyExistsException, and at that point NOTHING has been persisted.
@@ -77,21 +84,32 @@ public class SignupService {
 
     // Step 3: create the Keycloak user + owner role FIRST. If any of this fails, nothing has been
     // persisted on our side; a role-assignment failure compensates by deleting the just-created
-    // user so the email is not left blocked.
+    // user so the email is not left blocked. First/last name are Keycloak-native fields; the
+    // last name is optional (mononyms).
     String keycloakUserId =
         keycloak.createUser(
-            request.ownerEmail(), request.ownerPassword(), companyId.toString(), Instant.now());
+            request.ownerEmail(),
+            request.ownerPassword(),
+            request.ownerFirstName().strip(),
+            blankToNull(request.ownerLastName()),
+            companyId.toString(),
+            Instant.now());
     try {
       keycloak.assignRealmRole(keycloakUserId, "owner");
 
       // Step 4: create the company + first business (new tenant) under the pre-generated id. This
       // calls into CompanyService, which opens a TenantContext scope over that id and delegates to
-      // a @Transactional CompanyWriter, exactly as the tenant bootstrap always does.
+      // a @Transactional CompanyWriter, exactly as the tenant bootstrap always does. The base
+      // currency is the DERIVED one — never anything the client sent.
       companyService.createCompany(
           new CreateCompanyCommand(
               request.companyName(),
-              request.baseCurrency(),
+              baseCurrency,
               request.defaultLanguage(),
+              country,
+              blankToNull(request.phone()),
+              request.companySize(),
+              request.primaryInterest(),
               request.firstBusinessName(),
               request.vertical(),
               request.ownerEmail() // actor = the signing-up owner's email
@@ -113,6 +131,15 @@ public class SignupService {
    * the accepted double-failure residual: an orphaned Keycloak user that blocks the email, logged
    * at ERROR (user id only — never the email or password) for manual cleanup.
    */
+  /** Optional-field normalization: {@code null}/blank → {@code null}, else stripped. */
+  private static String blankToNull(String value) {
+    if (value == null) {
+      return null;
+    }
+    String stripped = value.strip();
+    return stripped.isEmpty() ? null : stripped;
+  }
+
   private void compensateUserCreation(String keycloakUserId) {
     try {
       keycloak.deleteUser(keycloakUserId);

@@ -168,6 +168,10 @@ public class KeycloakAdminClient {
    *
    * @param email the user's email (also used as username)
    * @param password the initial password — NEVER logged
+   * @param firstName the owner's first (or only) name — Keycloak's NATIVE {@code firstName} field
+   *     (top-level, so the attribute-merge in {@link #addCompanyToUser}/{@link
+   *     #removeCompanyFromUser} never touches it)
+   * @param lastName the owner's last name; nullable/blank for mononyms — only sent when present
    * @param companyId the new tenant's company id, set as the {@code company_id} user attribute so
    *     Keycloak maps it into the JWT claim
    * @param termsAcceptedAt the instant the owner accepted the Terms of Service (consent record)
@@ -175,30 +179,38 @@ public class KeycloakAdminClient {
    * @throws KeycloakAdminException if the Admin API is unreachable or user creation fails
    */
   public String createUser(
-      String email, String password, String companyId, Instant termsAcceptedAt) {
+      String email,
+      String password,
+      String firstName,
+      String lastName,
+      String companyId,
+      Instant termsAcceptedAt) {
     String token = acquireToken();
     String url = props.getBaseUrl() + "/admin/realms/" + props.getRealm() + "/users";
 
-    Map<String, Object> body =
+    // HashMap, not Map.of: lastName is conditional (Map.of rejects nulls and Keycloak
+    // treats an explicit empty string as a value, not an absence).
+    Map<String, Object> body = new HashMap<>();
+    body.put("username", email);
+    body.put("email", email);
+    body.put("enabled", true);
+    body.put("emailVerified", false);
+    body.put(
+        "requiredActions",
+        props.isRequireEmailVerification() ? List.of("VERIFY_EMAIL") : List.of());
+    body.put("firstName", firstName);
+    if (lastName != null && !lastName.isBlank()) {
+      body.put("lastName", lastName);
+    }
+    body.put(
+        "attributes",
         Map.of(
-            "username",
-            email,
-            "email",
-            email,
-            "enabled",
-            true,
-            "emailVerified",
-            false,
-            "requiredActions",
-            props.isRequireEmailVerification() ? List.of("VERIFY_EMAIL") : List.of(),
-            "attributes",
-            Map.of(
-                "company_id",
-                List.of(companyId),
-                "terms_accepted_at",
-                List.of(termsAcceptedAt.toString())),
-            "credentials",
-            List.of(Map.of("type", "password", "value", password, "temporary", false)));
+            "company_id",
+            List.of(companyId),
+            "terms_accepted_at",
+            List.of(termsAcceptedAt.toString())));
+    body.put(
+        "credentials", List.of(Map.of("type", "password", "value", password, "temporary", false)));
 
     try {
       ResponseEntity<Void> response =
@@ -602,7 +614,9 @@ public class KeycloakAdminClient {
           .body(Map.of("attributes", attributes))
           .retrieve()
           .toBodilessEntity();
-      log.info("Added company membership to Keycloak user {} (now {} memberships)", userId,
+      log.info(
+          "Added company membership to Keycloak user {} (now {} memberships)",
+          userId,
           companyIds.size());
     } catch (RestClientResponseException e) {
       throw new KeycloakAdminException(
@@ -646,7 +660,8 @@ public class KeycloakAdminClient {
           "Keycloak user fetch for membership remove failed — connection error", e);
     }
     if (raw == null) {
-      throw new KeycloakAdminException("Keycloak user fetch for membership remove returned no body");
+      throw new KeycloakAdminException(
+          "Keycloak user fetch for membership remove returned no body");
     }
 
     Map<String, Object> attributes = new java.util.LinkedHashMap<>();

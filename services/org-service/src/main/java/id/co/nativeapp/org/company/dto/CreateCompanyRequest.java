@@ -24,13 +24,31 @@ import jakarta.validation.constraints.Pattern;
  * @param name the company name
  * @param baseCurrency the ISO-4217 base currency code (immutable once set)
  * @param defaultLanguage the company default language (e.g. {@code "en"}/{@code "id"})
+ * @param country optional ISO 3166-1 alpha-2 country code (ADR 0025); {@code null} defaults to
+ *     {@code "ID"} at the controller — this in-app path keeps its EXPLICIT {@code baseCurrency} (no
+ *     derivation), unlike the public signup
  * @param firstBusiness the first business (a top-level org unit) to create with the company
  */
 public record CreateCompanyRequest(
     @NotBlank String name,
     @NotBlank String baseCurrency,
     @NotBlank String defaultLanguage,
+    @Pattern(regexp = "[A-Z]{2}", message = "must be an ISO 3166-1 alpha-2 code") String country,
     @NotNull @Valid BusinessRequest firstBusiness) {
+
+  /**
+   * Convenience constructor in the pre-country shape (kept so existing Java call sites don't
+   * churn); {@code country} defaults to {@code null} → {@code "ID"} at the controller.
+   *
+   * @param name the company name
+   * @param baseCurrency the ISO-4217 base currency code
+   * @param defaultLanguage the company default language
+   * @param firstBusiness the first business to create with the company
+   */
+  public CreateCompanyRequest(
+      String name, String baseCurrency, String defaultLanguage, BusinessRequest firstBusiness) {
+    this(name, baseCurrency, defaultLanguage, null, firstBusiness);
+  }
 
   /**
    * The first-business payload nested in a create-company request (and the body of

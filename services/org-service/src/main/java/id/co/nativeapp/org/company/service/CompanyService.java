@@ -87,16 +87,7 @@ public class CompanyService {
       // CHECK passes. callAs declares checked Exception; the writer only throws
       // unchecked, so the catch below just rethrows.
       return TenantContext.callAs(
-          newCompanyId.toString(),
-          command.actor(),
-          () ->
-              writer.create(
-                  newCompanyId,
-                  command.name(),
-                  command.baseCurrency(),
-                  command.defaultLanguage(),
-                  command.businessName(),
-                  command.vertical()));
+          newCompanyId.toString(), command.actor(), () -> writer.create(newCompanyId, command));
     } catch (RuntimeException e) {
       throw e;
     } catch (Exception e) {

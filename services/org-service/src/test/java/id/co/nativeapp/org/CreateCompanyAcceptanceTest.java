@@ -55,6 +55,12 @@ class CreateCompanyAcceptanceTest extends PostgresRlsTestBase {
     assertThat(result.company().getDefaultLanguage()).isEqualTo("id");
     assertThat(result.company().getLegalEmployerId()).isEqualTo(companyId);
 
+    // The pre-country command shape defaults the country to "ID" with no funnel data (ADR 0025).
+    assertThat(result.company().getCountry()).isEqualTo("ID");
+    assertThat(result.company().getPhone()).isNull();
+    assertThat(result.company().getCompanySize()).isNull();
+    assertThat(result.company().getPrimaryInterest()).isNull();
+
     // The first business persisted as an org unit under the new tenant.
     assertThat(result.firstBusiness().getId()).isNotNull();
     assertThat(result.firstBusiness().getName()).isEqualTo("Main Outlet");

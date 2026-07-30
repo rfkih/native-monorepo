@@ -8,6 +8,7 @@ import id.co.nativeapp.org.company.domain.OrgUnit;
 import id.co.nativeapp.org.company.domain.OrgUnitType;
 import id.co.nativeapp.org.company.domain.Vertical;
 import id.co.nativeapp.org.company.dto.CreateBusinessCommand;
+import id.co.nativeapp.org.company.dto.CreateCompanyCommand;
 import id.co.nativeapp.org.company.dto.CreateCompanyResult;
 import id.co.nativeapp.org.company.messaging.CompanyCreatedSchema;
 import id.co.nativeapp.org.company.messaging.OrgUnitCreatedSchema;
@@ -78,20 +79,12 @@ public class CompanyWriter {
    * CompanyService#createCompany} is not transactional.
    *
    * @param newCompanyId the freshly generated company id == new tenant id (bound in the scope)
-   * @param name the company name
-   * @param baseCurrency the ISO-4217 base currency (validated + made immutable by {@link Company})
-   * @param defaultLanguage the company default language
-   * @param businessName the first business (org-unit) name
-   * @param vertical the first business's vertical (lowercase key; whitelist-parsed here)
+   * @param command the create-company command (name, currency, language, country + optional funnel
+   *     fields, first business) — mirrors {@link #addBusiness(CreateBusinessCommand)}'s shape
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
-  public CreateCompanyResult create(
-      UUID newCompanyId,
-      String name,
-      String baseCurrency,
-      String defaultLanguage,
-      String businessName,
-      String vertical) {
+  public CreateCompanyResult create(UUID newCompanyId, CreateCompanyCommand command) {
+    String name = command.name();
 
     // The tenant the auto-RLS aspect has bound to this transaction; it MUST equal the
     // new company id, so the company is its own tenant and the WITH CHECK passes.
@@ -105,10 +98,19 @@ public class CompanyWriter {
     legalEmployer.setCompanyId(tenant);
     legalEmployerRepository.save(legalEmployer);
 
-    // The Company aggregate validates the base currency (ISO-4217) and makes it
-    // immutable; an unknown code throws IllegalArgumentException -> 400.
+    // The Company aggregate validates the base currency (ISO-4217) and country (ISO 3166-1)
+    // and makes both immutable; an unknown code throws IllegalArgumentException -> 400.
     Company company =
-        new Company(newCompanyId, name, baseCurrency, defaultLanguage, legalEmployerId);
+        new Company(
+            newCompanyId,
+            name,
+            command.baseCurrency(),
+            command.defaultLanguage(),
+            legalEmployerId,
+            command.country(),
+            command.phone(),
+            command.companySize(),
+            command.primaryInterest());
     company.setCompanyId(tenant);
     Company savedCompany = companyRepository.save(company);
 
@@ -117,9 +119,9 @@ public class CompanyWriter {
     // added under it via the org-unit endpoint; a default outlet is seeded below).
     OrgUnit firstBusiness =
         new OrgUnit(
-            businessName,
+            command.businessName(),
             OrgUnitType.BUSINESS_UNIT,
-            Vertical.fromKey(vertical),
+            Vertical.fromKey(command.vertical()),
             null,
             null,
             legalEmployerId,
