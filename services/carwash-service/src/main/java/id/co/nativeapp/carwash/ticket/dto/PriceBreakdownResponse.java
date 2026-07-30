@@ -15,9 +15,9 @@ import java.util.List;
  *
  * @param appliedPromotions the per-rule deduction detail (Phase 3); empty when not computed via the
  *     promotions engine (see class javadoc)
- * @param couponStatus {@code "APPLIED"} / {@code "INVALID"} / {@code "EXHAUSTED"} when a coupon code
- *     was supplied, {@code null} when none was supplied or this breakdown was not computed via the
- *     promotions engine
+ * @param couponStatus {@code "APPLIED"} / {@code "INVALID"} / {@code "EXHAUSTED"} when a coupon
+ *     code was supplied, {@code null} when none was supplied or this breakdown was not computed via
+ *     the promotions engine
  */
 public record PriceBreakdownResponse(
     long subtotalMinor,

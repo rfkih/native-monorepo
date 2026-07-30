@@ -30,8 +30,8 @@ public class ManualDiscountGuard {
    * Enforces the guard for a given {@code discountMinor} request value. A {@code null} or
    * non-positive value is always allowed (no manual discount requested).
    *
-   * @throws ManualDiscountForbiddenException if {@code discountMinor > 0} and the actor's role set is
-   *     non-empty and does not include {@code owner}/{@code manager}
+   * @throws ManualDiscountForbiddenException if {@code discountMinor > 0} and the actor's role set
+   *     is non-empty and does not include {@code owner}/{@code manager}
    */
   public void enforce(Long discountMinor) {
     if (discountMinor == null || discountMinor <= 0) {

@@ -56,7 +56,8 @@ public class Coupon extends Auditable {
   /**
    * Creates a coupon with a freshly generated id, active by default and zero redemptions.
    *
-   * @param code the ALREADY uppercase-normalized code (the service, not this constructor, normalizes)
+   * @param code the ALREADY uppercase-normalized code (the service, not this constructor,
+   *     normalizes)
    * @param ruleId the linked {@link PromoRule} id (must already exist — validated by the service)
    * @param maxRedemptions must be &gt; 0
    * @param expiresAt optional expiry instant; {@code null} means never expires

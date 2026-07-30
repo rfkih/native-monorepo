@@ -7,8 +7,8 @@ package id.co.nativeapp.carwash.promotion.domain;
  * CouponRepository#redeemIfAvailable} UPDATE returned zero rows because a concurrent checkout won
  * the last redemption first. Ported verbatim from restaurant-service (ADR 0026).
  *
- * <p>Maps to {@code 409 Conflict} via {@code config.PromotionAdvice}. The whole checkout transaction
- * rolls back — no ticket, no payment, no other promotion's applied row.
+ * <p>Maps to {@code 409 Conflict} via {@code config.PromotionAdvice}. The whole checkout
+ * transaction rolls back — no ticket, no payment, no other promotion's applied row.
  */
 public class CouponExhaustedException extends RuntimeException {
 

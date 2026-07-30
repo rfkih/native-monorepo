@@ -87,8 +87,9 @@ class PromotionTicketIntegrationTest extends KafkaPostgresRedisTestBase {
   }
 
   @Test
-  void quoteReportsCouponAndCashCheckoutCollapsesItIntoTheDiscountWithAnAuditTrailAndNoDoubleRedeem()
-      throws Exception {
+  void
+      quoteReportsCouponAndCashCheckoutCollapsesItIntoTheDiscountWithAnAuditTrailAndNoDoubleRedeem()
+          throws Exception {
     grantBarbershop();
     UUID serviceId =
         TenantContext.callAs(
@@ -96,7 +97,8 @@ class PromotionTicketIntegrationTest extends KafkaPostgresRedisTestBase {
                 ACTOR,
                 () ->
                     catalogService.createService(
-                        new CatalogItemCreateRequest(OUTLET, "Haircut", null, 10_000L, "IDR", null)))
+                        new CatalogItemCreateRequest(
+                            OUTLET, "Haircut", null, 10_000L, "IDR", null)))
             .id();
     UUID barberId = createBarber();
 
@@ -143,7 +145,9 @@ class PromotionTicketIntegrationTest extends KafkaPostgresRedisTestBase {
     // -----------------------------------------------------------------------
     PriceBreakdownResponse quote =
         TenantContext.callAs(
-            TENANT, ACTOR, () -> ticketService.quote(new QuoteRequest(OUTLET, lines, null, "save10")));
+            TENANT,
+            ACTOR,
+            () -> ticketService.quote(new QuoteRequest(OUTLET, lines, null, "save10")));
 
     assertThat(quote.couponStatus()).isEqualTo("APPLIED");
     assertThat(quote.appliedPromotions()).hasSize(1);
@@ -167,7 +171,8 @@ class PromotionTicketIntegrationTest extends KafkaPostgresRedisTestBase {
             new PaymentRequest(TenderType.CASH, 10_000L),
             "SAVE10");
 
-    CheckoutResult first = TenantContext.callAs(TENANT, ACTOR, () -> ticketService.checkout(checkoutReq));
+    CheckoutResult first =
+        TenantContext.callAs(TENANT, ACTOR, () -> ticketService.checkout(checkoutReq));
 
     assertThat(first.created()).isTrue();
     TicketResponse ticket = first.ticket();
@@ -207,7 +212,8 @@ class PromotionTicketIntegrationTest extends KafkaPostgresRedisTestBase {
     // -----------------------------------------------------------------------
     // 3. Idempotent replay — same idempotencyKey — must NOT re-run the engine or re-redeem.
     // -----------------------------------------------------------------------
-    CheckoutResult retry = TenantContext.callAs(TENANT, ACTOR, () -> ticketService.checkout(checkoutReq));
+    CheckoutResult retry =
+        TenantContext.callAs(TENANT, ACTOR, () -> ticketService.checkout(checkoutReq));
 
     assertThat(retry.created()).isFalse();
     assertThat(retry.ticket().ticketId()).isEqualTo(ticketId);
@@ -224,36 +230,37 @@ class PromotionTicketIntegrationTest extends KafkaPostgresRedisTestBase {
                 ACTOR,
                 () ->
                     catalogService.createService(
-                        new CatalogItemCreateRequest(OUTLET, "Haircut", null, 40_000L, "IDR", null)))
+                        new CatalogItemCreateRequest(
+                            OUTLET, "Haircut", null, 40_000L, "IDR", null)))
             .id();
     UUID barberId = createBarber();
 
     UUID ruleId =
         TenantContext.callAs(
-                TENANT,
-                ACTOR,
-                () ->
-                    promotionAdminService
-                        .createRule(
-                            new PromoRuleCreateRequest(
-                                "10% off",
-                                "PERCENT_OFF_ORDER",
-                                null,
-                                null,
-                                1_000L,
-                                null,
-                                null,
-                                null,
-                                null,
-                                null,
-                                null,
-                                null,
-                                null,
-                                null,
-                                false,
-                                LocalDate.of(2026, 1, 1),
-                                null))
-                        .id());
+            TENANT,
+            ACTOR,
+            () ->
+                promotionAdminService
+                    .createRule(
+                        new PromoRuleCreateRequest(
+                            "10% off",
+                            "PERCENT_OFF_ORDER",
+                            null,
+                            null,
+                            1_000L,
+                            null,
+                            null,
+                            null,
+                            null,
+                            null,
+                            null,
+                            null,
+                            null,
+                            null,
+                            false,
+                            LocalDate.of(2026, 1, 1),
+                            null))
+                    .id());
 
     List<TicketLineInput> lines = List.of(new TicketLineInput(ItemType.SERVICE, serviceId, 1));
     String idemKey = "promo-digital-" + UUID.randomUUID();
@@ -268,7 +275,8 @@ class PromotionTicketIntegrationTest extends KafkaPostgresRedisTestBase {
             new PaymentRequest(TenderType.QRIS, null),
             null);
 
-    CheckoutResult result = TenantContext.callAs(TENANT, ACTOR, () -> ticketService.checkout(checkoutReq));
+    CheckoutResult result =
+        TenantContext.callAs(TENANT, ACTOR, () -> ticketService.checkout(checkoutReq));
     UUID ticketId = result.ticket().ticketId();
     assertThat(result.ticket().saleId()).isNull();
 

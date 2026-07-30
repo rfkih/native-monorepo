@@ -145,11 +145,11 @@ public class BarbershopTicket extends Auditable {
 
   /**
    * Creates a new ticket with a CALLER-SUPPLIED id (Phase 3, ADR 0026). {@link
-   * id.co.nativeapp.barbershop.ticket.service.TicketWriter TicketWriter} pre-generates the ticket id
-   * so the ticket's {@code barbershop_ticket_line} rows — which carry a plain {@code ticket_id} FK
-   * column rather than a JPA bidirectional association — can be built (and their own ids captured
-   * for the promotions engine's {@code EvalLine.lineId}/{@code AppliedDeduction.lineRef}) BEFORE
-   * this entity exists, since the engine must run before the {@link PriceBreakdown} this
+   * id.co.nativeapp.barbershop.ticket.service.TicketWriter TicketWriter} pre-generates the ticket
+   * id so the ticket's {@code barbershop_ticket_line} rows — which carry a plain {@code ticket_id}
+   * FK column rather than a JPA bidirectional association — can be built (and their own ids
+   * captured for the promotions engine's {@code EvalLine.lineId}/{@code AppliedDeduction.lineRef})
+   * BEFORE this entity exists, since the engine must run before the {@link PriceBreakdown} this
    * constructor requires. The 7-arg overload above delegates here with a freshly generated id,
    * preserving every pre-Phase-3 call site.
    *
@@ -188,7 +188,9 @@ public class BarbershopTicket extends Auditable {
     this.saleId = Objects.requireNonNull(saleId, "saleId");
   }
 
-  /** Phase 3 (ADR 0026): stamps the redeemed coupon id. Called once, at the moment of redemption. */
+  /**
+   * Phase 3 (ADR 0026): stamps the redeemed coupon id. Called once, at the moment of redemption.
+   */
   public void attachCoupon(UUID couponId) {
     this.couponId = Objects.requireNonNull(couponId, "couponId");
   }

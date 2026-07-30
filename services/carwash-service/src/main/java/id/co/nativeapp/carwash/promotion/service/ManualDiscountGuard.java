@@ -14,8 +14,8 @@ import org.springframework.stereotype.Component;
  * CatalogService.requireStaffWriteRole}): an EMPTY role set is let through. The {@code X-Roles}
  * header only exists behind the gateway, which always stamps it on an authenticated route — so a
  * real cashier/attendant token IS denied. A headerless request means the gateway-less dev recipe or
- * a direct service-layer test, where {@code OutletAccessGuard}'s grandfather clause applies the same
- * trust.
+ * a direct service-layer test, where {@code OutletAccessGuard}'s grandfather clause applies the
+ * same trust.
  */
 @Component
 public class ManualDiscountGuard {
@@ -30,8 +30,8 @@ public class ManualDiscountGuard {
    * Enforces the guard for a given {@code discountMinor} request value. A {@code null} or
    * non-positive value is always allowed (no manual discount requested).
    *
-   * @throws ManualDiscountForbiddenException if {@code discountMinor > 0} and the actor's role set is
-   *     non-empty and does not include {@code owner}/{@code manager}
+   * @throws ManualDiscountForbiddenException if {@code discountMinor > 0} and the actor's role set
+   *     is non-empty and does not include {@code owner}/{@code manager}
    */
   public void enforce(Long discountMinor) {
     if (discountMinor == null || discountMinor <= 0) {

@@ -29,10 +29,10 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 
 /**
  * Pure-unit tests (no Spring context, no database) for {@code PromotionAdminService}/{@code
- * PromotionAdminWriter}: type/parameter mismatches on {@code promo_rule}/{@code coupon} CRUD ({@code
- * PromoRuleValidationException} → 422 via {@code config.PromotionAdvice}) and the owner/manager write
- * guard ({@code ManualDiscountForbiddenException} → 403). Ported from restaurant-service's
- * equivalent suite (verbatim logic; package/import renames only).
+ * PromotionAdminWriter}: type/parameter mismatches on {@code promo_rule}/{@code coupon} CRUD
+ * ({@code PromoRuleValidationException} → 422 via {@code config.PromotionAdvice}) and the
+ * owner/manager write guard ({@code ManualDiscountForbiddenException} → 403). Ported from
+ * restaurant-service's equivalent suite (verbatim logic; package/import renames only).
  *
  * <p>{@link PromoRuleRepository}/{@link CouponRepository} are Mockito mocks; {@link
  * ActorRolesProvider} is real (no dependencies) with its {@code X-Roles} header simulated via a
@@ -67,10 +67,31 @@ class PromotionAdminValidationTest {
 
   @SuppressWarnings("checkstyle:ParameterNumber")
   private static PromoRuleCreateRequest ruleRequest(
-      String name, String ruleType, String scopeKind, UUID scopeRefId, Long rateBp, Long amountMinor, String currency) {
+      String name,
+      String ruleType,
+      String scopeKind,
+      UUID scopeRefId,
+      Long rateBp,
+      Long amountMinor,
+      String currency) {
     return new PromoRuleCreateRequest(
-        name, ruleType, scopeKind, scopeRefId, rateBp, amountMinor, currency, null, null, null,
-        null, null, null, null, null, LocalDate.of(2026, 1, 1), null);
+        name,
+        ruleType,
+        scopeKind,
+        scopeRefId,
+        rateBp,
+        amountMinor,
+        currency,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        LocalDate.of(2026, 1, 1),
+        null);
   }
 
   // -------------------------------------------------------------------------
@@ -79,7 +100,8 @@ class PromotionAdminValidationTest {
 
   @Test
   void percentOffOrderWithoutRateBpIsRejected() {
-    PromoRuleCreateRequest req = ruleRequest("10% off", "PERCENT_OFF_ORDER", null, null, null, null, null);
+    PromoRuleCreateRequest req =
+        ruleRequest("10% off", "PERCENT_OFF_ORDER", null, null, null, null, null);
     assertThatThrownBy(() -> writer.createRule(req))
         .isInstanceOf(PromoRuleValidationException.class)
         .hasMessageContaining("rateBp");
@@ -141,7 +163,8 @@ class PromotionAdminValidationTest {
   @Test
   void unknownRuleTypeIsRejected() {
     PromoRuleCreateRequest req = ruleRequest("???", "NOT_A_TYPE", null, null, null, null, null);
-    assertThatThrownBy(() -> writer.createRule(req)).isInstanceOf(PromoRuleValidationException.class);
+    assertThatThrownBy(() -> writer.createRule(req))
+        .isInstanceOf(PromoRuleValidationException.class);
   }
 
   @Test
@@ -173,8 +196,7 @@ class PromotionAdminValidationTest {
     PromoRuleCreateRequest req =
         ruleRequest("10% off", "PERCENT_OFF_ORDER", null, null, 1_000L, null, null);
 
-    PromoRuleResponse response =
-        TenantContext.callAs(TENANT, ACTOR, () -> service.createRule(req));
+    PromoRuleResponse response = TenantContext.callAs(TENANT, ACTOR, () -> service.createRule(req));
 
     assertThat(response.name()).isEqualTo("10% off");
     assertThat(response.ruleType()).isEqualTo("PERCENT_OFF_ORDER");
@@ -189,8 +211,7 @@ class PromotionAdminValidationTest {
     PromoRuleCreateRequest req =
         ruleRequest("10% off", "PERCENT_OFF_ORDER", null, null, 1_000L, null, null);
 
-    PromoRuleResponse response =
-        TenantContext.callAs(TENANT, ACTOR, () -> service.createRule(req));
+    PromoRuleResponse response = TenantContext.callAs(TENANT, ACTOR, () -> service.createRule(req));
 
     assertThat(response.name()).isEqualTo("10% off");
   }

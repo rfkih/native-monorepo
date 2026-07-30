@@ -20,9 +20,10 @@ import org.springframework.data.repository.query.Param;
 public interface CouponRepository extends JpaRepository<Coupon, UUID> {
 
   /**
-   * Resolves a normalized (uppercase, trimmed) coupon code together with its linked rule's fields in
-   * one round trip — what {@link id.co.nativeapp.carwash.promotion.service.PromotionEngineService
-   * PromotionEngineService} needs to validate and apply a coupon's deduction.
+   * Resolves a normalized (uppercase, trimmed) coupon code together with its linked rule's fields
+   * in one round trip — what {@link
+   * id.co.nativeapp.carwash.promotion.service.PromotionEngineService PromotionEngineService} needs
+   * to validate and apply a coupon's deduction.
    */
   @Query(
       value =
@@ -80,9 +81,9 @@ public interface CouponRepository extends JpaRepository<Coupon, UUID> {
    * already exhausted or inactive (possibly a concurrent checkout that got there first); the caller
    * maps that to {@link id.co.nativeapp.carwash.promotion.domain.CouponExhaustedException} (409).
    *
-   * <p>Must be called inside the caller's already-open {@code @Transactional} write (the surrounding
-   * {@code TicketWriter} REQUIRES_NEW method) so a rollback (e.g. a later pricing failure) also
-   * reverts this increment.
+   * <p>Must be called inside the caller's already-open {@code @Transactional} write (the
+   * surrounding {@code TicketWriter} REQUIRES_NEW method) so a rollback (e.g. a later pricing
+   * failure) also reverts this increment.
    *
    * @return the number of rows updated: 1 on success, 0 if the coupon is exhausted or inactive
    */

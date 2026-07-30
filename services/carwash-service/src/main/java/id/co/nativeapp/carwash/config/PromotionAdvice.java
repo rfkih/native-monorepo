@@ -13,19 +13,20 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /**
- * The promotion-feature-specific RFC 7807 {@link ProblemDetail} advice (ADR 0026) — the fault shapes
- * the shared {@code libs/security ApiExceptionHandler} does not own, mirroring {@link CatalogAdvice}
- * / {@link TicketAdvice}'s style in this same package (ported from restaurant-service's {@code
- * PromotionAdvice}).
+ * The promotion-feature-specific RFC 7807 {@link ProblemDetail} advice (ADR 0026) — the fault
+ * shapes the shared {@code libs/security ApiExceptionHandler} does not own, mirroring {@link
+ * CatalogAdvice} / {@link TicketAdvice}'s style in this same package (ported from
+ * restaurant-service's {@code PromotionAdvice}).
  *
  * <ul>
  *   <li>{@link PromoRuleValidationException} — a type/parameter mismatch on rule/coupon CRUD, or an
  *       unknown rule/coupon id → {@code 422 Unprocessable Entity} ({@code promo-rule-invalid}).
- *   <li>{@link CouponInvalidException} — an unknown/expired/inactive coupon code, or one whose linked
- *       rule is not currently effective, supplied at checkout time → {@code 422} ({@code
+ *   <li>{@link CouponInvalidException} — an unknown/expired/inactive coupon code, or one whose
+ *       linked rule is not currently effective, supplied at checkout time → {@code 422} ({@code
  *       coupon-invalid}).
- *   <li>{@link CouponExhaustedException} — a coupon whose redemption count is exhausted (advisory or
- *       the definitive atomic-UPDATE race loss) → {@code 409 Conflict} ({@code coupon-exhausted}).
+ *   <li>{@link CouponExhaustedException} — a coupon whose redemption count is exhausted (advisory
+ *       or the definitive atomic-UPDATE race loss) → {@code 409 Conflict} ({@code
+ *       coupon-exhausted}).
  *   <li>{@link ManualDiscountForbiddenException} — a non-owner/manager caller attempted a manual
  *       discount or a promotion admin CRUD write → {@code 403 Forbidden} ({@code
  *       manual-discount-forbidden}).
@@ -39,12 +40,12 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * detail); declaring a SECOND handler for the identical exception type here — with neither advice
  * bean carrying an {@code @Order} — would make Spring's cross-advice {@code @ExceptionHandler}
  * resolution ambiguous/bean-order-dependent for EVERY {@code DataIntegrityViolationException} in
- * this service, not just a duplicate coupon. Left unhandled here on purpose: a duplicate coupon code
- * still surfaces as {@code 409 Conflict} via {@link CatalogAdvice}'s existing catch-all (a slightly
- * generic {@code catalog-item-conflict} detail message rather than a promotion-specific one) — no
- * ambiguity, no raw {@code 500}. Flagged for the tech lead/integration-engineer as a follow-up
- * (either give {@code CatalogAdvice} a coupon-aware detail branch, or promote both handlers behind a
- * single ordered advice).
+ * this service, not just a duplicate coupon. Left unhandled here on purpose: a duplicate coupon
+ * code still surfaces as {@code 409 Conflict} via {@link CatalogAdvice}'s existing catch-all (a
+ * slightly generic {@code catalog-item-conflict} detail message rather than a promotion-specific
+ * one) — no ambiguity, no raw {@code 500}. Flagged for the tech lead/integration-engineer as a
+ * follow-up (either give {@code CatalogAdvice} a coupon-aware detail branch, or promote both
+ * handlers behind a single ordered advice).
  */
 @RestControllerAdvice
 public class PromotionAdvice {
@@ -52,7 +53,8 @@ public class PromotionAdvice {
   private static final String TYPE_BASE = "https://errors.nativeapp.id/";
 
   @ExceptionHandler(PromoRuleValidationException.class)
-  public ProblemDetail handlePromoRuleInvalid(PromoRuleValidationException ex, HttpServletRequest request) {
+  public ProblemDetail handlePromoRuleInvalid(
+      PromoRuleValidationException ex, HttpServletRequest request) {
     ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.UNPROCESSABLE_ENTITY);
     problem.setType(URI.create(TYPE_BASE + "promo-rule-invalid"));
     problem.setTitle("Invalid promotion rule/coupon request");
@@ -65,13 +67,15 @@ public class PromotionAdvice {
     ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.UNPROCESSABLE_ENTITY);
     problem.setType(URI.create(TYPE_BASE + "coupon-invalid"));
     problem.setTitle("Invalid coupon");
-    problem.setDetail("The supplied coupon code is unknown, expired, inactive, or not currently effective.");
+    problem.setDetail(
+        "The supplied coupon code is unknown, expired, inactive, or not currently effective.");
     problem.setProperty("code", ex.getCode());
     return decorate(problem, request);
   }
 
   @ExceptionHandler(CouponExhaustedException.class)
-  public ProblemDetail handleCouponExhausted(CouponExhaustedException ex, HttpServletRequest request) {
+  public ProblemDetail handleCouponExhausted(
+      CouponExhaustedException ex, HttpServletRequest request) {
     ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
     problem.setType(URI.create(TYPE_BASE + "coupon-exhausted"));
     problem.setTitle("Coupon exhausted");

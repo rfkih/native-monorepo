@@ -22,12 +22,12 @@ import java.util.UUID;
  * @param idempotencyKey the client's request id (producer-idempotency dedupe key)
  * @param chair the optional chair it ran on; {@code null} for not recorded
  * @param staffProfileId the MANDATORY barber staff profile selected at checkout
- * @param discountMinor an optional fixed discount in minor units; {@code null} for no discount. This
- *     is ONE INPUT to the Phase-3 promotions engine (ADR 0026) — the manual-discount layer, applied
- *     LAST after every automatic rule and any redeemed coupon, then jointly clamped so the total
- *     discount can never exceed the ticket subtotal. A positive value requires the {@code owner}/
- *     {@code manager} role ({@code ManualDiscountGuard}) — a cashier/barber token is rejected with
- *     {@code 403}.
+ * @param discountMinor an optional fixed discount in minor units; {@code null} for no discount.
+ *     This is ONE INPUT to the Phase-3 promotions engine (ADR 0026) — the manual-discount layer,
+ *     applied LAST after every automatic rule and any redeemed coupon, then jointly clamped so the
+ *     total discount can never exceed the ticket subtotal. A positive value requires the {@code
+ *     owner}/ {@code manager} role ({@code ManualDiscountGuard}) — a cashier/barber token is
+ *     rejected with {@code 403}.
  * @param lines the requested lines; must be non-empty
  * @param payment the tender
  * @param couponCode Phase 3 (ADR 0026): optional coupon code; case-insensitive. An invalid or

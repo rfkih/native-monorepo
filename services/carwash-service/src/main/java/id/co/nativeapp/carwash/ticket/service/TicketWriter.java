@@ -62,8 +62,9 @@ import org.springframework.transaction.annotation.Transactional;
  * <ol>
  *   <li>Idempotency fast path: returns the existing ticket if the key is already present — BEFORE
  *       the outlet guard AND before the promotions engine runs, so a replay never re-evaluates
- *       promotions and never re-redeems a coupon (an idempotent replay of an already-recorded ticket
- *       still returns; only NEW work is rejected — the restaurant {@code OutletGate} ordering).
+ *       promotions and never re-redeems a coupon (an idempotent replay of an already-recorded
+ *       ticket still returns; only NEW work is rejected — the restaurant {@code OutletGate}
+ *       ordering).
  *   <li>{@link OutletAccessGuard#enforce}: the attendant must be assigned to the outlet.
  *   <li>Phase 3 (ADR 0026): a positive manual discount requires owner/manager ({@link
  *       ManualDiscountGuard}).
@@ -72,8 +73,8 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>Resolves the optional washer {@link StaffProfile} and snapshots its employee link.
  *   <li>Phase 3 (ADR 0026): pre-generates the ticket id and builds the {@link CarwashTicketLine}
  *       entities (their ids are known immediately, independent of the parent ticket's persisted
- *       state — a plain-UUID FK column, unlike restaurant's JPA-associated {@code OrderLine}) so the
- *       {@link PromotionEngineService} can be evaluated (line-scope matching + {@code
+ *       state — a plain-UUID FK column, unlike restaurant's JPA-associated {@code OrderLine}) so
+ *       the {@link PromotionEngineService} can be evaluated (line-scope matching + {@code
  *       AppliedDeduction.lineRef}) BEFORE the ticket itself is constructed, since the ticket's
  *       constructor needs the already-resolved {@link PriceBreakdown} the engine feeds into.
  *   <li>Resolves the price breakdown via {@link TaxChargeService}, using the promotions engine's
@@ -186,15 +187,27 @@ public class TicketWriter {
     List<EvalLine> evalLines = new ArrayList<>(ticketLines.size());
     for (CarwashTicketLine line : ticketLines) {
       evalLines.add(
-          new EvalLine(line.getId(), line.getItemId(), null, line.getUnitPrice().amountMinor(), line.getQty()));
+          new EvalLine(
+              line.getId(),
+              line.getItemId(),
+              null,
+              line.getUnitPrice().amountMinor(),
+              line.getQty()));
     }
 
     long manualDiscountMinor = (request.discountMinor() != null) ? request.discountMinor() : 0L;
     EvalInput evalInput =
-        new EvalInput(evalLines, cart.currencyCode(), cart.subtotal(), now, request.couponCode(), manualDiscountMinor);
+        new EvalInput(
+            evalLines,
+            cart.currencyCode(),
+            cart.subtotal(),
+            now,
+            request.couponCode(),
+            manualDiscountMinor);
     EvalResult evalResult = promotionEngine.evaluate(evalInput);
 
-    PriceBreakdown breakdown = taxChargeService.resolve(cart.subtotal(), 0L, evalResult.totalDiscount(), now);
+    PriceBreakdown breakdown =
+        taxChargeService.resolve(cart.subtotal(), 0L, evalResult.totalDiscount(), now);
 
     // A zero (or negative) grand total must never record revenue: a fully-discounted or
     // zero-priced cart would otherwise emit a zero-amount SaleRecorded, which the finance journal
@@ -323,8 +336,8 @@ public class TicketWriter {
 
   /**
    * Builds the (not-yet-persisted) {@link CarwashTicketLine} entities for a resolved cart against a
-   * pre-generated {@code ticketId} — each line's id is final at construction (Phase 3, ADR 0026: the
-   * promotions engine needs it before the ticket itself exists; see class javadoc).
+   * pre-generated {@code ticketId} — each line's id is final at construction (Phase 3, ADR 0026:
+   * the promotions engine needs it before the ticket itself exists; see class javadoc).
    */
   private List<CarwashTicketLine> buildLines(
       UUID ticketId, UUID businessId, List<TicketItemReader.ResolvedLine> lines) {
@@ -332,7 +345,8 @@ public class TicketWriter {
     for (TicketItemReader.ResolvedLine rl : lines) {
       Money unitPrice = Money.ofMinor(rl.priceMinor(), rl.currency());
       result.add(
-          new CarwashTicketLine(ticketId, businessId, rl.itemType(), rl.itemId(), rl.name(), unitPrice, rl.qty()));
+          new CarwashTicketLine(
+              ticketId, businessId, rl.itemType(), rl.itemId(), rl.name(), unitPrice, rl.qty()));
     }
     return result;
   }
@@ -383,11 +397,12 @@ public class TicketWriter {
   /**
    * Persists the {@code applied_promotion} audit rows for a checkout, same transaction as the
    * ticket/sale (ADR 0026). A {@code null} {@code saleId} is legal (the digital-tender path defers
-   * revenue to capture — {@code TicketCaptureWriter} stamps it in later). Does nothing when there is
-   * nothing to persist (no rule-backed deduction — a ticket discounted ONLY by the manual layer
+   * revenue to capture — {@code TicketCaptureWriter} stamps it in later). Does nothing when there
+   * is nothing to persist (no rule-backed deduction — a ticket discounted ONLY by the manual layer
    * produces zero rows here, since the manual discount has no {@code ruleId}).
    */
-  private void persistAppliedPromotions(UUID ticketId, UUID saleId, EvalResult evalResult, String companyId) {
+  private void persistAppliedPromotions(
+      UUID ticketId, UUID saleId, EvalResult evalResult, String companyId) {
     if (evalResult.deductions().isEmpty()) {
       return;
     }

@@ -19,8 +19,8 @@ import java.util.UUID;
  *
  * @param businessId the carwash outlet the quote is for
  * @param lines the requested lines; must be non-empty
- * @param discountMinor an optional fixed discount in minor units; {@code null} for no discount — ONE
- *     input to the promotions engine (the manual-discount layer, applied last)
+ * @param discountMinor an optional fixed discount in minor units; {@code null} for no discount —
+ *     ONE input to the promotions engine (the manual-discount layer, applied last)
  * @param couponCode Phase 3 (ADR 0026): optional coupon code; case-insensitive. {@code null}/blank
  *     means no coupon.
  */

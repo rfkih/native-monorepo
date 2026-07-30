@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import id.co.nativeapp.barbershop.catalog.dto.CatalogItemCreateRequest;
 import id.co.nativeapp.barbershop.catalog.dto.StaffProfileCreateRequest;
-import id.co.nativeapp.barbershop.catalog.dto.StaffProfileResponse;
 import id.co.nativeapp.barbershop.catalog.service.CatalogService;
 import id.co.nativeapp.barbershop.entitlement.dto.EntitlementProjectedEvent;
 import id.co.nativeapp.barbershop.entitlement.service.EntitlementProjectionService;
@@ -158,7 +157,8 @@ class ManualDiscountRoleGuardTest extends KafkaPostgresRedisTestBase {
   }
 
   @Test
-  void headerlessCallerWithAPositiveManualDiscountSucceedsAtCheckoutDevRecipeTrust() throws Exception {
+  void headerlessCallerWithAPositiveManualDiscountSucceedsAtCheckoutDevRecipeTrust()
+      throws Exception {
     grantBarbershop();
     UUID serviceId = createService();
     UUID barberId = createBarber();

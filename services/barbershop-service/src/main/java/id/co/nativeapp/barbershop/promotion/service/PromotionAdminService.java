@@ -24,10 +24,11 @@ import org.springframework.stereotype.Service;
  *
  * <p><strong>Vertical-prefixed routing (difference from restaurant).</strong> Restaurant's admin
  * endpoints ride the DASHBOARD gateway route (owner/manager enforced at the gateway too).
- * Barbershop's {@code /api/v1/barbershop/promotions[/coupons]} endpoints ride the existing POS-roles
- * gateway route instead (see {@code PromotionAdminController} class javadoc) — this service-side
- * write guard is therefore the ONLY guard for a write; reads stay open to any authenticated POS
- * caller (a barber/cashier sees the rule/coupon catalog, acceptable — they already see prices).
+ * Barbershop's {@code /api/v1/barbershop/promotions[/coupons]} endpoints ride the existing
+ * POS-roles gateway route instead (see {@code PromotionAdminController} class javadoc) — this
+ * service-side write guard is therefore the ONLY guard for a write; reads stay open to any
+ * authenticated POS caller (a barber/cashier sees the rule/coupon catalog, acceptable — they
+ * already see prices).
  *
  * <p>Not itself {@code @Transactional} — transactional units live in {@link PromotionAdminWriter}
  * (writes) and {@link PromotionAdminReader} (reads) so the proxy and the RLS aspect engage.

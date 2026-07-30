@@ -42,8 +42,8 @@ import org.springframework.transaction.annotation.Transactional;
  * revenue is deferred to capture). Once the sale records here, every such row for this ticket is
  * stamped with the new sale id — {@code ticket.getId()}, since {@code sale_id == ticket_id} for
  * carwash (ADR 0023 decision 2) — in the SAME transaction ({@link
- * AppliedPromotionRepository#stampSaleId}). The idempotent re-delivery early return above means this
- * never double-stamps.
+ * AppliedPromotionRepository#stampSaleId}). The idempotent re-delivery early return above means
+ * this never double-stamps.
  */
 @Component
 public class TicketCaptureWriter {

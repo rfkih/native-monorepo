@@ -7,9 +7,10 @@ import org.springframework.lang.Nullable;
 
 /**
  * Native-query read projection over a {@code promo_rule} row — serves both {@link
- * id.co.nativeapp.barbershop.promotion.service.PromotionEngineService PromotionEngineService} resolution
- * (the effective-rule set at checkout time) and the admin listing endpoint, never {@code SELECT *} of
- * the entity (CODE-STRUCTURE.md §3.3). Ported verbatim from restaurant-service via carwash-service.
+ * id.co.nativeapp.barbershop.promotion.service.PromotionEngineService PromotionEngineService}
+ * resolution (the effective-rule set at checkout time) and the admin listing endpoint, never {@code
+ * SELECT *} of the entity (CODE-STRUCTURE.md §3.3). Ported verbatim from restaurant-service via
+ * carwash-service.
  */
 public interface PromoRuleView {
 

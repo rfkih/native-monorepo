@@ -15,8 +15,9 @@ import java.util.UUID;
 
 /**
  * The per-sale AUDIT TRAIL row for one rule's deduction (ADR 0026) — a permanent SNAPSHOT that must
- * keep meaning exactly what it meant at application time even if the {@link PromoRule}/{@link Coupon}
- * row is later edited or retired. Maps to the {@code applied_promotion} table (V8__promotions.sql).
+ * keep meaning exactly what it meant at application time even if the {@link PromoRule}/{@link
+ * Coupon} row is later edited or retired. Maps to the {@code applied_promotion} table
+ * (V8__promotions.sql).
  *
  * <p>Extends {@link Auditable} (rule 4); covered by the {@code applied_promotion_tenant_isolation}
  * RLS policy (rule 5). {@code amount_minor}/{@code currency} use {@link MoneyEmbeddable} (rule 8)
@@ -82,19 +83,19 @@ public class AppliedPromotion extends Auditable {
    * Creates an applied-promotion audit row with a freshly generated id.
    *
    * @param ticketId the source {@code carwash_ticket.id}
-   * @param saleId the sale this deduction ultimately rode on; {@code null} until the ticket captures
-   *     a sale (digital-tender revenue-at-capture, ADR 0006/0023); {@code sale_id == ticket_id} for
-   *     carwash once known (ADR 0023 decision 2)
-   * @param ruleId the {@link PromoRule} that produced this deduction (never null — a manual discount
-   *     is not a rule and never produces a row here)
+   * @param saleId the sale this deduction ultimately rode on; {@code null} until the ticket
+   *     captures a sale (digital-tender revenue-at-capture, ADR 0006/0023); {@code sale_id ==
+   *     ticket_id} for carwash once known (ADR 0023 decision 2)
+   * @param ruleId the {@link PromoRule} that produced this deduction (never null — a manual
+   *     discount is not a rule and never produces a row here)
    * @param couponId the {@link Coupon} that gated this deduction, or {@code null} for an automatic
    *     rule
    * @param ruleNameSnapshot the rule's name at application time
    * @param ruleTypeSnapshot the rule's type at application time
    * @param rateBpSnapshot the rule's basis-point rate at application time, or {@code null} for a
    *     fixed-amount rule
-   * @param lineRef the {@code carwash_ticket_line} id this deduction landed on, or {@code null} for a
-   *     ticket-level rule
+   * @param lineRef the {@code carwash_ticket_line} id this deduction landed on, or {@code null} for
+   *     a ticket-level rule
    * @param amount the actual amount discounted (already clamped per the composition rule)
    */
   @SuppressWarnings("checkstyle:ParameterNumber")

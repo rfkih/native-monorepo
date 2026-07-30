@@ -187,7 +187,9 @@ public class CarwashTicket extends Auditable {
     this.saleId = Objects.requireNonNull(saleId, "saleId");
   }
 
-  /** Phase 3 (ADR 0026): stamps the redeemed coupon id. Called once, at the moment of redemption. */
+  /**
+   * Phase 3 (ADR 0026): stamps the redeemed coupon id. Called once, at the moment of redemption.
+   */
   public void attachCoupon(UUID couponId) {
     this.couponId = Objects.requireNonNull(couponId, "couponId");
   }

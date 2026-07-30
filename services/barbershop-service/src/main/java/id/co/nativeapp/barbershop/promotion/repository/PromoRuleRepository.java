@@ -11,8 +11,8 @@ import org.springframework.data.repository.query.Param;
 
 /**
  * Spring Data repository for {@link PromoRule}. All queries are native (rule 10 / CODE-STRUCTURE.md
- * §3.3). The RLS policy on {@code promo_rule} scopes every query to the bound tenant automatically —
- * no manual {@code WHERE company_id} is required. Ported verbatim from restaurant-service via
+ * §3.3). The RLS policy on {@code promo_rule} scopes every query to the bound tenant automatically
+ * — no manual {@code WHERE company_id} is required. Ported verbatim from restaurant-service via
  * carwash-service.
  */
 public interface PromoRuleRepository extends JpaRepository<PromoRule, UUID> {
@@ -20,8 +20,9 @@ public interface PromoRuleRepository extends JpaRepository<PromoRule, UUID> {
   /**
    * The active, currently-effective rule set at {@code asOf}, ordered {@code priority ASC, id ASC}
    * for deterministic composition ({@link
-   * id.co.nativeapp.barbershop.promotion.service.PromotionEngineService PromotionEngineService} relies on this
-   * ordering — lower priority number evaluated first among automatics; ties break on id).
+   * id.co.nativeapp.barbershop.promotion.service.PromotionEngineService PromotionEngineService}
+   * relies on this ordering — lower priority number evaluated first among automatics; ties break on
+   * id).
    *
    * @param asOf the date the ticket occurred on (UTC date of {@code occurredAt})
    */

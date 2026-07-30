@@ -21,6 +21,8 @@ public enum PromoRuleType {
   /** A fixed {@code Money} amount off the whole ticket subtotal. */
   AMOUNT_OFF_ORDER,
 
-  /** A basis-point percent off a single matching line (scoped to one item — CATEGORY never matches). */
+  /**
+   * A basis-point percent off a single matching line (scoped to one item — CATEGORY never matches).
+   */
   PERCENT_OFF_LINE
 }

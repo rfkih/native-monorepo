@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import id.co.nativeapp.carwash.catalog.dto.CatalogItemCreateRequest;
-import id.co.nativeapp.carwash.catalog.dto.CatalogItemResponse;
 import id.co.nativeapp.carwash.catalog.service.CatalogService;
 import id.co.nativeapp.carwash.entitlement.dto.EntitlementProjectedEvent;
 import id.co.nativeapp.carwash.entitlement.service.EntitlementProjectionService;
@@ -90,7 +89,8 @@ class ManualDiscountRoleGuardTest extends KafkaPostgresRedisTestBase {
         .id();
   }
 
-  private static CheckoutRequest checkoutRequest(UUID packageId, String idempotencyKey, Long discountMinor) {
+  private static CheckoutRequest checkoutRequest(
+      UUID packageId, String idempotencyKey, Long discountMinor) {
     return new CheckoutRequest(
         OUTLET,
         idempotencyKey,
@@ -142,7 +142,8 @@ class ManualDiscountRoleGuardTest extends KafkaPostgresRedisTestBase {
   }
 
   @Test
-  void headerlessCallerWithAPositiveManualDiscountSucceedsAtCheckoutDevRecipeTrust() throws Exception {
+  void headerlessCallerWithAPositiveManualDiscountSucceedsAtCheckoutDevRecipeTrust()
+      throws Exception {
     grantCarwash();
     UUID packageId = createPackage();
     clearRoles(); // no X-Roles header at all — empty-roles-pass

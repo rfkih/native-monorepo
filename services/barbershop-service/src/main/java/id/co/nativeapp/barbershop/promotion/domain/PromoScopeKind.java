@@ -18,6 +18,8 @@ public enum PromoScopeKind {
   /** {@code scope_ref_id} is a {@code service_item.id} or {@code service_addon.id}. */
   ITEM,
 
-  /** Schema-legal, never matches for barbershop (no category dimension exists) — see class javadoc. */
+  /**
+   * Schema-legal, never matches for barbershop (no category dimension exists) — see class javadoc.
+   */
   CATEGORY
 }

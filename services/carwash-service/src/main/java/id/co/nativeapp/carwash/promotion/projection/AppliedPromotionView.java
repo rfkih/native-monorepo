@@ -4,9 +4,10 @@ import java.util.UUID;
 import org.springframework.lang.Nullable;
 
 /**
- * Native-query read projection over an {@code applied_promotion} row — reserved for future reporting
- * (receipt rendering, promo-performance dashboards); not yet wired to a controller in this phase.
- * Ported from restaurant-service, adapted to {@code ticket_id} in place of {@code order_id}.
+ * Native-query read projection over an {@code applied_promotion} row — reserved for future
+ * reporting (receipt rendering, promo-performance dashboards); not yet wired to a controller in
+ * this phase. Ported from restaurant-service, adapted to {@code ticket_id} in place of {@code
+ * order_id}.
  */
 public interface AppliedPromotionView {
 

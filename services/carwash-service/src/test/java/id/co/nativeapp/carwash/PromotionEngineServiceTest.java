@@ -32,11 +32,11 @@ import org.junit.jupiter.api.Test;
  * PromoRuleRepository}/{@link CouponRepository} are Mockito mocks stubbed with {@link FakeRule}/
  * {@link FakeCoupon} fixtures.
  *
- * <p>A THINNER PORT of restaurant-service's {@code PromotionEngineServiceTest} (the engine itself is
- * byte-identical — see {@code PromotionEngineService}'s class javadoc): the deep composition matrix
- * is already proven there. This suite keeps the core cases (composition order, exclusive, min
- * subtotal, requires_coupon, line-scope ITEM matching + clamp, coupon resolution, happy-hour incl.
- * overnight wrap, day-of-week mask, the final clamp) plus ONE carwash-specific case — a
+ * <p>A THINNER PORT of restaurant-service's {@code PromotionEngineServiceTest} (the engine itself
+ * is byte-identical — see {@code PromotionEngineService}'s class javadoc): the deep composition
+ * matrix is already proven there. This suite keeps the core cases (composition order, exclusive,
+ * min subtotal, requires_coupon, line-scope ITEM matching + clamp, coupon resolution, happy-hour
+ * incl. overnight wrap, day-of-week mask, the final clamp) plus ONE carwash-specific case — a
  * CATEGORY-scoped rule never matches (no category dimension in the wash catalog). The 200-iteration
  * randomized property test is intentionally SKIPPED (already proven against the identical engine in
  * restaurant-service).
@@ -51,7 +51,8 @@ class PromotionEngineServiceTest {
 
   private final PromoRuleRepository promoRuleRepository = mock(PromoRuleRepository.class);
   private final CouponRepository couponRepository = mock(CouponRepository.class);
-  private final PromotionEngineService engine = new PromotionEngineService(promoRuleRepository, couponRepository);
+  private final PromotionEngineService engine =
+      new PromotionEngineService(promoRuleRepository, couponRepository);
 
   private static Money idr(long minor) {
     return Money.ofMinor(minor, "IDR");
@@ -98,13 +99,15 @@ class PromotionEngineServiceTest {
 
   @Test
   void exclusiveRuleStopsFurtherAutomaticsButNotTheCouponOrManualLayer() {
-    FakeRule exclusiveFirst = FakeRule.percentOffOrder("Exclusive 10%", 1_000L).priority(10).exclusive(true);
+    FakeRule exclusiveFirst =
+        FakeRule.percentOffOrder("Exclusive 10%", 1_000L).priority(10).exclusive(true);
     FakeRule neverReached = FakeRule.percentOffOrder("Never reached 5%", 500L).priority(20);
     seedRules(exclusiveFirst, neverReached);
     seedNoCoupon();
 
     EvalInput input =
-        new EvalInput(List.of(line(ITEM_A, null, 100_000L, 1)), "IDR", idr(100_000L), NOON, null, 1_000L);
+        new EvalInput(
+            List.of(line(ITEM_A, null, 100_000L, 1)), "IDR", idr(100_000L), NOON, null, 1_000L);
     EvalResult result = engine.evaluate(input);
 
     assertThat(result.deductions()).hasSize(1);
@@ -124,12 +127,14 @@ class PromotionEngineServiceTest {
 
     EvalResult belowThreshold =
         engine.evaluate(
-            new EvalInput(List.of(line(ITEM_A, null, 40_000L, 1)), "IDR", idr(40_000L), NOON, null, 0L));
+            new EvalInput(
+                List.of(line(ITEM_A, null, 40_000L, 1)), "IDR", idr(40_000L), NOON, null, 0L));
     assertThat(belowThreshold.deductions()).isEmpty();
 
     EvalResult atThreshold =
         engine.evaluate(
-            new EvalInput(List.of(line(ITEM_A, null, 50_000L, 1)), "IDR", idr(50_000L), NOON, null, 0L));
+            new EvalInput(
+                List.of(line(ITEM_A, null, 50_000L, 1)), "IDR", idr(50_000L), NOON, null, 0L));
     assertThat(atThreshold.deductions()).hasSize(1);
     assertThat(atThreshold.totalDiscount()).isEqualTo(idr(5_000L));
   }
@@ -146,7 +151,8 @@ class PromotionEngineServiceTest {
 
     EvalResult result =
         engine.evaluate(
-            new EvalInput(List.of(line(ITEM_A, null, 10_000L, 1)), "IDR", idr(10_000L), NOON, null, 0L));
+            new EvalInput(
+                List.of(line(ITEM_A, null, 10_000L, 1)), "IDR", idr(10_000L), NOON, null, 0L));
 
     assertThat(result.deductions()).isEmpty();
     assertThat(result.totalDiscount()).isEqualTo(idr(0L));
@@ -158,7 +164,8 @@ class PromotionEngineServiceTest {
 
   @Test
   void lineScopeItemRuleOnlyDiscountsTheMatchingLineAndClampsToItsOwnTotal() {
-    FakeRule itemRule = FakeRule.percentOffLine("50% off item A", 5_000L, PromoScopeKind.ITEM, ITEM_A);
+    FakeRule itemRule =
+        FakeRule.percentOffLine("50% off item A", 5_000L, PromoScopeKind.ITEM, ITEM_A);
     seedRules(itemRule);
     seedNoCoupon();
 
@@ -184,7 +191,8 @@ class PromotionEngineServiceTest {
     seedNoCoupon();
 
     EvalLine lineA = line(ITEM_A, null, 10_000L, 1); // categoryId always null for carwash
-    EvalResult result = engine.evaluate(new EvalInput(List.of(lineA), "IDR", idr(10_000L), NOON, null, 0L));
+    EvalResult result =
+        engine.evaluate(new EvalInput(List.of(lineA), "IDR", idr(10_000L), NOON, null, 0L));
 
     assertThat(result.deductions()).isEmpty();
     assertThat(result.totalDiscount()).isEqualTo(idr(0L));
@@ -192,12 +200,14 @@ class PromotionEngineServiceTest {
 
   @Test
   void lineScopeDeductionNeverExceedsTheLinesOwnTotal() {
-    FakeRule fullOff = FakeRule.percentOffLine("100% off item A", 10_000L, PromoScopeKind.ITEM, ITEM_A);
+    FakeRule fullOff =
+        FakeRule.percentOffLine("100% off item A", 10_000L, PromoScopeKind.ITEM, ITEM_A);
     seedRules(fullOff);
     seedNoCoupon();
 
     EvalLine lineA = line(ITEM_A, null, 1_000L, 1);
-    EvalResult result = engine.evaluate(new EvalInput(List.of(lineA), "IDR", idr(1_000L), NOON, null, 0L));
+    EvalResult result =
+        engine.evaluate(new EvalInput(List.of(lineA), "IDR", idr(1_000L), NOON, null, 0L));
 
     assertThat(result.totalDiscount()).isEqualTo(idr(1_000L));
   }
@@ -241,7 +251,8 @@ class PromotionEngineServiceTest {
 
     EvalResult result =
         engine.evaluate(
-            new EvalInput(List.of(line(ITEM_A, null, 10_000L, 1)), "IDR", idr(10_000L), NOON, "unknown", 0L));
+            new EvalInput(
+                List.of(line(ITEM_A, null, 10_000L, 1)), "IDR", idr(10_000L), NOON, "unknown", 0L));
 
     assertThat(result.couponOutcome().status()).isEqualTo(CouponStatus.INVALID);
     assertThat(result.deductions()).isEmpty();
@@ -259,7 +270,8 @@ class PromotionEngineServiceTest {
 
     EvalResult result =
         engine.evaluate(
-            new EvalInput(List.of(line(ITEM_A, null, 10_000L, 1)), "IDR", idr(10_000L), NOON, "MAXED", 0L));
+            new EvalInput(
+                List.of(line(ITEM_A, null, 10_000L, 1)), "IDR", idr(10_000L), NOON, "MAXED", 0L));
 
     assertThat(result.couponOutcome().status()).isEqualTo(CouponStatus.EXHAUSTED);
     assertThat(result.deductions()).isEmpty();
@@ -270,12 +282,14 @@ class PromotionEngineServiceTest {
     UUID ruleId = UUID.randomUUID();
     seedRules(); // the gated rule is resolved directly via the coupon join, not the automatics set
     FakeCoupon gated =
-        FakeCoupon.percentOffOrder(UUID.randomUUID(), "MEMBERS", ruleId, "Members-only 20%", 2_000L);
+        FakeCoupon.percentOffOrder(
+            UUID.randomUUID(), "MEMBERS", ruleId, "Members-only 20%", 2_000L);
     when(couponRepository.findViewByCode("MEMBERS")).thenReturn(Optional.of(gated));
 
     EvalResult result =
         engine.evaluate(
-            new EvalInput(List.of(line(ITEM_A, null, 10_000L, 1)), "IDR", idr(10_000L), NOON, "MEMBERS", 0L));
+            new EvalInput(
+                List.of(line(ITEM_A, null, 10_000L, 1)), "IDR", idr(10_000L), NOON, "MEMBERS", 0L));
 
     assertThat(result.couponOutcome().status()).isEqualTo(CouponStatus.APPLIED);
     assertThat(result.totalDiscount()).isEqualTo(idr(2_000L));
@@ -341,7 +355,13 @@ class PromotionEngineServiceTest {
     seedRules(rule);
     EvalResult r =
         engine.evaluate(
-            new EvalInput(List.of(line(ITEM_A, null, 10_000L, 1)), "IDR", idr(10_000L), occurredAt, null, 0L));
+            new EvalInput(
+                List.of(line(ITEM_A, null, 10_000L, 1)),
+                "IDR",
+                idr(10_000L),
+                occurredAt,
+                null,
+                0L));
     return r.deductions().size();
   }
 
@@ -358,11 +378,13 @@ class PromotionEngineServiceTest {
 
     EvalResult result =
         engine.evaluate(
-            new EvalInput(List.of(line(ITEM_A, null, 10_000L, 1)), "IDR", idr(10_000L), NOON, null, 5_000L));
+            new EvalInput(
+                List.of(line(ITEM_A, null, 10_000L, 1)), "IDR", idr(10_000L), NOON, null, 5_000L));
 
     // 6,000 (first) + 4,000 (second, clamped) + 0 (manual, dropped) = 10,000 == subtotal.
     assertThat(result.totalDiscount()).isEqualTo(idr(10_000L));
-    assertThat(result.totalDiscount().amountMinor()).isLessThanOrEqualTo(idr(10_000L).amountMinor());
+    assertThat(result.totalDiscount().amountMinor())
+        .isLessThanOrEqualTo(idr(10_000L).amountMinor());
     assertThat(result.deductions()).hasSize(2);
   }
 
@@ -409,7 +431,8 @@ class PromotionEngineServiceTest {
       return r;
     }
 
-    static FakeRule percentOffLine(String name, long rateBp, PromoScopeKind scopeKind, UUID scopeRefId) {
+    static FakeRule percentOffLine(
+        String name, long rateBp, PromoScopeKind scopeKind, UUID scopeRefId) {
       FakeRule r = new FakeRule();
       r.name = name;
       r.type = PromoRuleType.PERCENT_OFF_LINE;
@@ -547,7 +570,10 @@ class PromotionEngineServiceTest {
     }
   }
 
-  /** A mutable, fluent {@link CouponRuleView} test fixture (a coupon linked to a PERCENT_OFF_ORDER rule). */
+  /**
+   * A mutable, fluent {@link CouponRuleView} test fixture (a coupon linked to a PERCENT_OFF_ORDER
+   * rule).
+   */
   private static final class FakeCoupon implements CouponRuleView {
     private UUID couponId;
     private String code;

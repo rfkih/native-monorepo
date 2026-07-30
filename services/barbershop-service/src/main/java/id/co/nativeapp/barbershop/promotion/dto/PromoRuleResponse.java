@@ -6,9 +6,9 @@ import java.util.UUID;
 
 /**
  * Wire shape for a {@code promo_rule} row (admin list/create/patch responses). Mapped from the
- * write-path entity ({@code PromotionAdminWriter}) or the read-path {@code PromoRuleView} projection
- * ({@code PromotionAdminReader}) — never here, since a {@code dto} may not depend on the {@code
- * projection} layer (CODE-STRUCTURE.md §6). Ported verbatim from restaurant-service via
+ * write-path entity ({@code PromotionAdminWriter}) or the read-path {@code PromoRuleView}
+ * projection ({@code PromotionAdminReader}) — never here, since a {@code dto} may not depend on the
+ * {@code projection} layer (CODE-STRUCTURE.md §6). Ported verbatim from restaurant-service via
  * carwash-service.
  */
 @SuppressWarnings("checkstyle:ParameterNumber")

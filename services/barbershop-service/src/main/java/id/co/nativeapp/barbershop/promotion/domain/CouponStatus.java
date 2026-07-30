@@ -4,7 +4,8 @@ package id.co.nativeapp.barbershop.promotion.domain;
  * The outcome of resolving a coupon code during {@link
  * id.co.nativeapp.barbershop.promotion.service.PromotionEngineService#evaluate} — carried on {@link
  * id.co.nativeapp.barbershop.promotion.dto.CouponOutcome} and surfaced on the wire as {@code
- * PriceBreakdownResponse.couponStatus}. Ported verbatim from restaurant-service via carwash-service.
+ * PriceBreakdownResponse.couponStatus}. Ported verbatim from restaurant-service via
+ * carwash-service.
  */
 public enum CouponStatus {
   /** The coupon resolved, its rule is currently effective, and its deduction was applied. */
@@ -12,8 +13,8 @@ public enum CouponStatus {
 
   /**
    * The code does not resolve to a coupon this tenant owns, the coupon (or its linked rule) is
-   * inactive/expired, or the linked rule is not currently effective (outside its effective window or
-   * happy-hour window).
+   * inactive/expired, or the linked rule is not currently effective (outside its effective window
+   * or happy-hour window).
    */
   INVALID,
 

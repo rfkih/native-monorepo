@@ -7,9 +7,9 @@ import java.util.Objects;
 
 /**
  * The input to {@link id.co.nativeapp.barbershop.promotion.service.PromotionEngineService#evaluate
- * PromotionEngineService.evaluate} — everything the engine needs to compute the collapsed discount for one
- * checkout/quote, and nothing it can mutate (pure evaluation, no writes). Ported verbatim from
- * restaurant-service via carwash-service.
+ * PromotionEngineService.evaluate} — everything the engine needs to compute the collapsed discount
+ * for one checkout/quote, and nothing it can mutate (pure evaluation, no writes). Ported verbatim
+ * from restaurant-service via carwash-service.
  *
  * @param lines the cart lines (line-scope rule matching)
  * @param currency the ISO-4217 currency of {@code subtotal} and every line (single-currency per

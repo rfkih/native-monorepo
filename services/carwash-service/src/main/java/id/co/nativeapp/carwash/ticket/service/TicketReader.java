@@ -84,7 +84,13 @@ public class TicketReader {
     Instant now = Instant.now();
     long manualDiscountMinor = (request.discountMinor() != null) ? request.discountMinor() : 0L;
     EvalInput evalInput =
-        new EvalInput(evalLines, cart.currencyCode(), cart.subtotal(), now, request.couponCode(), manualDiscountMinor);
+        new EvalInput(
+            evalLines,
+            cart.currencyCode(),
+            cart.subtotal(),
+            now,
+            request.couponCode(),
+            manualDiscountMinor);
     EvalResult evalResult = promotionEngine.evaluate(evalInput);
 
     PriceBreakdown breakdown =

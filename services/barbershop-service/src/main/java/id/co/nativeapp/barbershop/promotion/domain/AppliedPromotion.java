@@ -15,8 +15,9 @@ import java.util.UUID;
 
 /**
  * The per-sale AUDIT TRAIL row for one rule's deduction (ADR 0026) — a permanent SNAPSHOT that must
- * keep meaning exactly what it meant at application time even if the {@link PromoRule}/{@link Coupon}
- * row is later edited or retired. Maps to the {@code applied_promotion} table (V3__promotions.sql).
+ * keep meaning exactly what it meant at application time even if the {@link PromoRule}/{@link
+ * Coupon} row is later edited or retired. Maps to the {@code applied_promotion} table
+ * (V3__promotions.sql).
  *
  * <p>Extends {@link Auditable} (rule 4); covered by the {@code applied_promotion_tenant_isolation}
  * RLS policy (rule 5). {@code amount_minor}/{@code currency} use {@link MoneyEmbeddable} (rule 8)
@@ -82,11 +83,11 @@ public class AppliedPromotion extends Auditable {
    * Creates an applied-promotion audit row with a freshly generated id.
    *
    * @param ticketId the source {@code barbershop_ticket.id}
-   * @param saleId the sale this deduction ultimately rode on; {@code null} until the ticket captures
-   *     a sale (digital-tender revenue-at-capture, ADR 0006/0023/0024); {@code sale_id == ticket_id}
-   *     for barbershop once known (ADR 0023 decision 2, preserved by ADR 0024)
-   * @param ruleId the {@link PromoRule} that produced this deduction (never null — a manual discount
-   *     is not a rule and never produces a row here)
+   * @param saleId the sale this deduction ultimately rode on; {@code null} until the ticket
+   *     captures a sale (digital-tender revenue-at-capture, ADR 0006/0023/0024); {@code sale_id ==
+   *     ticket_id} for barbershop once known (ADR 0023 decision 2, preserved by ADR 0024)
+   * @param ruleId the {@link PromoRule} that produced this deduction (never null — a manual
+   *     discount is not a rule and never produces a row here)
    * @param couponId the {@link Coupon} that gated this deduction, or {@code null} for an automatic
    *     rule
    * @param ruleNameSnapshot the rule's name at application time

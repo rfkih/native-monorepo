@@ -71,7 +71,8 @@ class CouponRedemptionConcurrencyTest extends KafkaPostgresRedisTestBase {
                 ACTOR,
                 () ->
                     catalogService.createService(
-                        new CatalogItemCreateRequest(OUTLET, "Haircut", null, 10_000L, "IDR", null)))
+                        new CatalogItemCreateRequest(
+                            OUTLET, "Haircut", null, 10_000L, "IDR", null)))
             .id();
     UUID barberId =
         TenantContext.callAs(
@@ -113,7 +114,8 @@ class CouponRedemptionConcurrencyTest extends KafkaPostgresRedisTestBase {
     TenantContext.callAs(
         TENANT,
         ACTOR,
-        () -> promotionAdminService.createCoupon(new CouponCreateRequest("RACE10", ruleId, 1, null)));
+        () ->
+            promotionAdminService.createCoupon(new CouponCreateRequest("RACE10", ruleId, 1, null)));
 
     String keyA = "coupon-race-" + UUID.randomUUID() + "-a";
     String keyB = "coupon-race-" + UUID.randomUUID() + "-b";
@@ -181,7 +183,9 @@ class CouponRedemptionConcurrencyTest extends KafkaPostgresRedisTestBase {
 
     assertThat(successCount).as("exactly one checkout redeemed the coupon").isEqualTo(1);
     assertThat(exhaustedCount).as("the loser sees CouponExhaustedException").isEqualTo(1);
-    assertThat(redeemedCountAsAdmin("RACE10")).as("redeemed_count settles at exactly 1").isEqualTo(1);
+    assertThat(redeemedCountAsAdmin("RACE10"))
+        .as("redeemed_count settles at exactly 1")
+        .isEqualTo(1);
   }
 
   /** Reads {@code coupon.redeemed_count} over an admin/BYPASSRLS connection. */
@@ -189,7 +193,8 @@ class CouponRedemptionConcurrencyTest extends KafkaPostgresRedisTestBase {
     try (Connection admin =
             java.sql.DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
-        PreparedStatement ps = admin.prepareStatement("SELECT redeemed_count FROM coupon WHERE code = ?")) {
+        PreparedStatement ps =
+            admin.prepareStatement("SELECT redeemed_count FROM coupon WHERE code = ?")) {
       ps.setString(1, code);
       try (ResultSet rs = ps.executeQuery()) {
         rs.next();

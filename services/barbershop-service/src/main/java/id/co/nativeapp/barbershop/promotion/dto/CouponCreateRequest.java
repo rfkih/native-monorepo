@@ -19,9 +19,12 @@ import java.util.UUID;
  * @param code the redemption code (case-insensitive; normalized to uppercase)
  * @param ruleId the {@link id.co.nativeapp.barbershop.promotion.domain.PromoRule} this coupon
  *     redeems — may be of ANY rule type, including a {@code requires_coupon = TRUE} one
- * @param maxRedemptions maximum number of times this coupon may be redeemed; must be &gt; 0; defaults
- *     to 1 (single-use) when omitted
+ * @param maxRedemptions maximum number of times this coupon may be redeemed; must be &gt; 0;
+ *     defaults to 1 (single-use) when omitted
  * @param expiresAt optional expiry instant; {@code null} means the coupon never expires
  */
 public record CouponCreateRequest(
-    @NotBlank String code, @NotNull UUID ruleId, @Positive Integer maxRedemptions, Instant expiresAt) {}
+    @NotBlank String code,
+    @NotNull UUID ruleId,
+    @Positive Integer maxRedemptions,
+    Instant expiresAt) {}

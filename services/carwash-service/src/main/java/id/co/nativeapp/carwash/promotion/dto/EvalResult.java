@@ -13,13 +13,14 @@ import java.util.Objects;
  * @param totalDiscount the SUM of every applied deduction (line-scope + automatics + coupon +
  *     manual), already clamped so it never exceeds the input subtotal — this is what the caller
  *     passes to {@code TaxChargeService.resolve} in place of the raw manual discount
- * @param deductions the RULE-backed deductions only (line-scope + automatics + coupon) — excludes the
- *     manual discount, which has no {@code ruleId} and is therefore never persisted as an {@code
- *     applied_promotion} row. This is also what the quote endpoint echoes as {@code
+ * @param deductions the RULE-backed deductions only (line-scope + automatics + coupon) — excludes
+ *     the manual discount, which has no {@code ruleId} and is therefore never persisted as an
+ *     {@code applied_promotion} row. This is also what the quote endpoint echoes as {@code
  *     appliedPromotions}
  * @param couponOutcome the resolved coupon outcome, or {@code null} if no coupon code was supplied
  */
-public record EvalResult(Money totalDiscount, List<AppliedDeduction> deductions, CouponOutcome couponOutcome) {
+public record EvalResult(
+    Money totalDiscount, List<AppliedDeduction> deductions, CouponOutcome couponOutcome) {
 
   public EvalResult {
     Objects.requireNonNull(totalDiscount, "totalDiscount");

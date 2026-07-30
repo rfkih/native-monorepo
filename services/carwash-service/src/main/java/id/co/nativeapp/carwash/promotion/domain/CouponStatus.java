@@ -12,8 +12,8 @@ public enum CouponStatus {
 
   /**
    * The code does not resolve to a coupon this tenant owns, the coupon (or its linked rule) is
-   * inactive/expired, or the linked rule is not currently effective (outside its effective window or
-   * happy-hour window).
+   * inactive/expired, or the linked rule is not currently effective (outside its effective window
+   * or happy-hour window).
    */
   INVALID,
 
