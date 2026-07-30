@@ -74,6 +74,22 @@ cascade-deactivate + reactivation.)
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **Odoo-style signup — country-derived currency, owner identity, funnel fields (2026-07-30,
+  ADR 0025)** — the public signup now asks WHERE (country), not WHICH currency: `SignupRequest`
+  dropped `baseCurrency` and gained `country` (ISO 3166-1 alpha-2) + `ownerFirstName`/optional
+  `ownerLastName` (mononym-friendly, stored on Keycloak's NATIVE name fields) + optional `phone`
+  (format-checked, no SMS) + Odoo's funnel bands `companySize`/`primaryInterest`. org-service
+  derives the currency in `company.domain.CountryDefaults` (ID→IDR else USD) BEFORE any Keycloak
+  call (invalid country = 400 with zero residue), and `company` grew write-once `country` +
+  nullable funnel columns (V9, `NOT NULL DEFAULT 'ID'` — no RLS backfill trap). `CompanyCreated`
+  deliberately NOT widened (sole live consumer reads `company_id` only); the in-app
+  `POST /companies` keeps explicit currency + optional country (wizard alignment = follow-up).
+  Console signup rebuilt as 5 steps (Company → Region → About you → Security → Review): native
+  `<select>` country picker labeled via `Intl.DisplayNames` (no hardcoded country names), locked
+  derived-currency callout, review rows with the currency pencil jumping to Region. Full
+  org-service gate green (spotless/checkstyle/jacoco + Testcontainers acceptance incl. new
+  ID→IDR / US→USD derivation, no-residue, mononym and legacy-baseCurrency-ignored cases);
+  console build + all-5-steps screenshot walkthrough verified.
 - **Carwash POS — Phase 1 of the POS-parity program (2026-07-30, ADR 0023)** — the second vertical
   sells: carwash-service grew from a bare `POST /washes` to a full POS backend on branch
   `feat/pos-parity`. **Backend** (V4–V7): outlet-scoped catalog (`wash_package`/`wash_addon` +

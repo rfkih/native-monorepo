@@ -38,7 +38,7 @@
 9. **No hardcoded user-facing strings.** All UI copy goes through i18n keys (react-i18next). Format every number, date, and currency via locale-aware `Intl` — never manual concatenation.
 
 ## Settings live at creation, not in the dashboard
-- A company's **base (functional) currency** and **default language** are set during company creation (org-service) and stored on the company. **Base currency is immutable** once transactions exist. The dashboard reads them; it never offers to toggle them.
+- A company's **country**, **base (functional) currency**, and **default language** are set during company creation (org-service) and stored on the company. On the public signup the currency is **derived from the country** (ID→IDR, else USD — ADR 0025), never chosen. **Country and base currency are immutable** once set. The dashboard reads them; it never offers to toggle them.
 - **Per-user language** preference lives on the user profile (a teammate may override the company default).
 - A view-only **presentation currency** (seeing the books in another currency) is a separate, optional convenience via finance-service FX — not the base currency.
 
