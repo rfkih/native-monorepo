@@ -58,7 +58,7 @@ schema. Until then a row here is documentation of intent, not a shippable contra
 | **`ExpenseRecorded`** | **verticals** | **finance** | **expense_id, company_id, business_id, amount_minor, currency, gl_hint, occurred_at** | **LIVE (finance consumer #21)** |
 | **`PayrollPosted`** | **employee-service** | **finance** | **payroll_run_id, run_seq, company_id, period, base_currency, totals, rule_versions, uses_illustrative_rules, posted_at** | **LIVE (#23); finance consumer #23** |
 | **`LaborCostAllocated`** | **employee-service** | **finance** | **payroll_run_id, run_seq, company_id, period, outlet_id, gl_account, amount_minor, currency, uses_illustrative_rules, unallocated** | **LIVE (#23); finance consumer #23** |
-| **`UserOutletAssignmentChanged`** | **org-service** | **restaurant-service** (Phase 5 outlet-scoping) | **assignment_id, user_id, company_id, org_unit_id, change_kind, effective_from, effective_to** | **LIVE (Phase 5)** |
+| **`UserOutletAssignmentChanged`** | **org-service** | **restaurant-service** (Phase 5 outlet-scoping), **carwash-service** (outlet-scoping foundation) | **assignment_id, user_id, company_id, org_unit_id, change_kind, effective_from, effective_to** | **LIVE (Phase 5); carwash-service consumer added ahead of its ticket/checkout POS-parity work** |
 | **`GroupDefined`** | **org-service** | **finance** | **group_id, lead_company_id, reporting_currency, name** | **LIVE (P3d SEAM 1); finance consumer P3d SEAM 1** |
 | **`GroupMembershipChanged`** | **org-service** | **finance** | **group_id, member_company_id, change_kind, effective_from, effective_to** | **LIVE (P3d SEAM 1); finance consumer P3d SEAM 1** |
 | **`TrialBalancePublished`** | **finance** (member within-company close) | **finance** (group consolidation) | **company_id, group_id, period, base_currency, reconciled, uses_illustrative_rules, lines[]** | **LIVE (CONSUMER P3d SEAM 2 group_trial_balance ingest; PRODUCER P3d SEAM 4a within-company close)** |
@@ -258,7 +258,10 @@ is recorded; consumed by finance-service to post to the ledger.
 
 - **Producer:** `restaurant-service` **and `carwash-service`** (#20 — the 2nd vertical; a recorded
   wash emits `SaleRecorded` with `business_id` = the carwash outlet, so finance consolidates carwash
-  revenue alongside restaurant), and the other verticals as they ship.
+  revenue alongside restaurant), and the other verticals as they ship. Since the carwash POS
+  (ADR 0023), carwash has TWO producing paths: the ticket checkout/capture path sends the **full
+  Phase-2 breakdown + `tender_type`** exactly like restaurant, while the legacy `POST /api/v1/washes`
+  path still sends all-null breakdown (finance's null fall-back path, unchanged).
 - **Consumers:** `finance-service` (ledger posting + consolidated-revenue read model) — **LIVE (M1.5)**
 - **Aggregate type / partition key:** `sale` / `sale_id`
 - **Outbox `event_type`:** `SaleRecorded`
@@ -283,7 +286,7 @@ whole rupiah for IDR); `currency` is the ISO-4217 code. `occurred_at` is epoch m
 | `currency` | `string` | ISO-4217 currency code (e.g. `IDR`, `USD`) |
 | `occurred_at` | `long` (`timestamp-millis`) | When the sale occurred, epoch millis UTC |
 | `tender_type` | `["null","string"]` (default `null`) | Payment tender: `CASH` \| `QRIS` \| `CARD`, or `null` for legacy/no-payment sales. Finance routes the GL debit clearing account by tender: `null`/`CASH` → `CASH_CLEARING`, `QRIS` → `QRIS_CLEARING`, `CARD` → `CARD_CLEARING`. Backward-compatible addition — ADR 0006 slice 2 |
-| `subtotal_minor` | `["null","long"]` (default `null`) | Sum of order-line totals **before** discount/tax/service-charge, in minor units. `null` for legacy producers (carwash); finance falls back to `subtotal == amount` (Phase 1). Phase 2 addition |
+| `subtotal_minor` | `["null","long"]` (default `null`) | Sum of order-line totals **before** discount/tax/service-charge, in minor units. `null` for legacy producer paths (carwash `POST /washes`); finance falls back to `subtotal == amount` (Phase 1). Phase 2 addition; the carwash ticket path (ADR 0023) populates it |
 | `discount_minor` | `["null","long"]` (default `null`) | Order-level discount in minor units, or `null` (treated as 0 by finance). Phase 2 addition |
 | `service_charge_minor` | `["null","long"]` (default `null`) | Service charge in minor units, or `null` (treated as 0 by finance). Phase 2 addition |
 | `tax_minor` | `["null","long"]` (default `null`) | Tax amount in minor units, or `null` (treated as 0 by finance). Phase 2 addition |
@@ -412,7 +415,13 @@ EMITS against it.
   - `carwash-service` declares, at the `outlet` grain: `wash_count` (a count of washes) and
     `upsell_amount` (upsell revenue in the wash currency's minor units). On recording a wash it emits
     one `MetricPublished` per declared metric, via the transactional outbox in the same transaction as
-    the wash + `SaleRecorded`.
+    the wash + `SaleRecorded`. **Since the carwash POS (ADR 0023) it ALSO declares, at the `employee`
+    grain: `sales_amount`** (the ticket's grand total in minor units), `subject_id` = the ticket's
+    `washer_employee_id` — the staff_profile→employee link snapshotted at checkout, so commission
+    attributes to the WASHER who did the work (deliberately unlike restaurant, where the subject is
+    the cashier who rang it). **Skipped when the ticket's profile is unlinked** (no employee link →
+    no commission metric); the outlet-grain metrics are emitted for tickets exactly as for washes
+    (`wash_count` 1 per ticket; `upsell_amount` = Σ ADDON line totals).
   - `restaurant-service` declares, at the **`employee` grain**: `sales_amount` (the sale's grand total
     in the sale currency's minor units), `subject_id` = the cashier's Keycloak `sub` (also on
     `sale.created_by`). Emitted **per sale** in the same transaction as `SaleRecorded` (both
@@ -1168,6 +1177,33 @@ backward-compatible with the producer schema (rule 7).
   default-closed. Adoption is detected purely from local `user_outlet_assignment_ref` presence —
   restaurant-service has no org-unit read model, so it cannot (and does not need to) resolve
   "the first business" itself.
+
+**Topic consumed:** `UserOutletAssignmentChanged`.
+
+### `UserOutletAssignmentChanged` — carwash-service consumer view
+
+carwash-service **ports** the identical consumer shape restaurant-service uses (verbatim, package
+renamed to `id.co.nativeapp.carwash.outletref`): the same `user_outlet_assignment_ref` table shape
+(V7), the same `OutletAccessGuard` policy (owner/manager bypass → active-assignment check →
+zero-rows grandfather clause → `OutletNotAssignedException` 403), and the same schema-resolution
+approach — reads `avro/UserOutletAssignmentChanged.avsc` from the shared `libs/contracts` classpath
+resource (no local per-service copy, matching restaurant-service, which does not keep one for this
+event either), decodes raw Avro bytes via `libs/events AvroSerde`, and dedupes by event UUID
+(`ProcessedEventStore`).
+
+**One deliberate shape deviation from restaurant-service:** the carwash listener throws
+carwash-service's already-SHARED `config.EventDecodeException` / `config.MissingEventIdException`
+(the same types `EntitlementEventListener` and `StaffEventListener` already throw) instead of
+restaurant's feature-local `UserOutletAssignmentDecodeException` /
+`UserOutletAssignmentMissingEventIdException` pair — carwash's single `KafkaConfig.kafkaErrorHandler`
+already registers the shared pair as non-retryable, so no wiring change was needed to add this
+consumer.
+
+**Scope of this port.** This lands the guard + read model + consumer ONLY, as the foundation for
+carwash's POS-parity work — no ticket/checkout write path calls `OutletAccessGuard.enforce` yet (that
+lands with the ticket-checkout feature, a separate task); until then the guard and its read model are
+exercised only by tests (`OutletAccessGuardTest`, a test-only `@Transactional` invoker standing in for
+the future checkout writer).
 
 **Topic consumed:** `UserOutletAssignmentChanged`.
 
