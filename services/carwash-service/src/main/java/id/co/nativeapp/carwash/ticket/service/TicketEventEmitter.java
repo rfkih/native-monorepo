@@ -83,6 +83,11 @@ public class TicketEventEmitter {
       String companyId,
       String tenderTypeName,
       Instant occurredAt) {
+    // Phase 4 (ADR 0027): the ticket's already-persisted (or in-memory, checkout-time) loyalty/
+    // gift-card columns are the single source of truth for these fields at emission time — both
+    // TicketWriter (CASH, checkout) and TicketCaptureWriter (digital, capture) pass a ticket that
+    // already carries them (set at construction — CarwashTicket's redemption columns never change
+    // after checkout).
     GenericRecord event =
         TicketSaleRecordedSchema.toRecord(
             ticket.getId(),
@@ -91,7 +96,12 @@ public class TicketEventEmitter {
             breakdown.grandTotal(),
             occurredAt,
             tenderTypeName,
-            breakdown);
+            breakdown,
+            ticket.getLoyaltyMemberId(),
+            ticket.getLoyaltyRedeemedPoints(),
+            ticket.getLoyaltyRedeemedMinor(),
+            ticket.getGiftCardId(),
+            ticket.getGiftCardRedeemedMinor());
     outboxWriter.write(
         TicketSaleRecordedSchema.AGGREGATE_TYPE,
         ticket.getId().toString(),

@@ -8,6 +8,7 @@ import id.co.nativeapp.restaurant.payment.repository.PaymentRepository;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Instant;
+import java.util.Currency;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -121,6 +122,34 @@ public class PaymentWriter {
             auth.providerRef(),
             occurredAt,
             instruction.idempotencyKey());
+    payment.setCompanyId(companyId);
+    return PaymentResponse.from(repository.saveAndFlush(payment));
+  }
+
+  /**
+   * Phase 4 (ADR 0027): persists a ZERO-amount CAPTURED payment when a gift-card redemption fully
+   * covers the sale (residual == 0) — the "fully-gift-card-paid" contract. NO {@link
+   * PaymentProviderRegistry} call is made (there is nothing left to authorize); the row is built
+   * directly via {@link Payment#capturedCash} (cash-path semantics, per the task's pinned wording),
+   * regardless of what tender the till originally requested — {@code tendered = change = amount =
+   * 0}, which trivially satisfies {@code change >= 0}.
+   *
+   * <p>Joins the caller's transaction (propagation {@code MANDATORY}), exactly like {@link
+   * #captureCashInCurrentTx}.
+   */
+  @Transactional(propagation = Propagation.MANDATORY)
+  public PaymentResponse captureZeroResidualInCurrentTx(
+      UUID orderId,
+      UUID businessId,
+      String currencyCode,
+      UUID saleId,
+      Instant capturedAt,
+      String idempotencyKey) {
+    String companyId = TenantContext.require().companyId();
+    Money zero = Money.zero(Currency.getInstance(currencyCode));
+    Payment payment =
+        Payment.capturedCash(
+            orderId, businessId, zero, zero, zero, saleId, capturedAt, idempotencyKey);
     payment.setCompanyId(companyId);
     return PaymentResponse.from(repository.saveAndFlush(payment));
   }

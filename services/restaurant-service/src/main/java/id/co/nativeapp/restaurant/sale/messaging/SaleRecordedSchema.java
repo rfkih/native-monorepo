@@ -6,6 +6,7 @@ import id.co.nativeapp.restaurant.sale.domain.Sale;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.util.UUID;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericRecord;
@@ -67,9 +68,46 @@ public final class SaleRecordedSchema {
    * @param breakdown the Phase 2 price breakdown (subtotal, discount, service charge, tax); must
    *     not be null for Phase 2 producers; null for legacy/carwash callers
    */
-  @SuppressWarnings("checkstyle:ParameterNumber")
   public static GenericRecord toRecord(
       Sale sale, String companyId, String tenderType, PriceBreakdown breakdown) {
+    return toRecord(sale, companyId, tenderType, breakdown, null, null, null, null, null);
+  }
+
+  /**
+   * Builds a {@code SaleRecorded} {@link GenericRecord} with the full Phase 2 price breakdown PLUS
+   * the Phase 4 (ADR 0027) loyalty/gift-card fields.
+   *
+   * <p><strong>{@code discount_minor} decomposition.</strong> When a loyalty redemption applies,
+   * {@code breakdown.discount()} is the COMBINED deduction fed into {@code
+   * TaxChargeService.resolve} (promo total + {@code loyaltyRedeemedMinor}, ADR 0027 pinned
+   * semantics) — required so {@code serviceCharge}/{@code tax}/{@code grandTotal} land correctly.
+   * The WIRE {@code discount_minor} must stay PROMO-ONLY (the EVENT-CATALOG's extended
+   * reconciliation identity keeps {@code loyalty_redeemed_minor} as its own subtractive term), so
+   * this method emits {@code discount_minor = breakdown.discount() - loyaltyRedeemedMinor}. This is
+   * EXACT (never re-clamped) because the caller only ever redeems points up to the subtotal
+   * remaining AFTER the promo discount (see {@code
+   * id.co.nativeapp.restaurant.loyaltyref.service.LoyaltyRedemptionGuard}), so {@code
+   * breakdown.discount() == promoOnly + loyaltyRedeemedMinor} by construction.
+   *
+   * @param loyaltyMemberId the attached loyalty member, or {@code null}
+   * @param loyaltyRedeemedPoints the ACTUAL points redeemed, or {@code null}/0
+   * @param loyaltyRedeemedMinor the currency value of the redeemed points, minor units, or {@code
+   *     null}/0
+   * @param giftCardId the gift card redeemed as a tender, or {@code null}
+   * @param giftCardRedeemedMinor the ACTUAL amount redeemed from the gift card, minor units, or
+   *     {@code null}/0
+   */
+  @SuppressWarnings("checkstyle:ParameterNumber")
+  public static GenericRecord toRecord(
+      Sale sale,
+      String companyId,
+      String tenderType,
+      PriceBreakdown breakdown,
+      UUID loyaltyMemberId,
+      Long loyaltyRedeemedPoints,
+      Long loyaltyRedeemedMinor,
+      UUID giftCardId,
+      Long giftCardRedeemedMinor) {
     Money amount = sale.getAmount();
     GenericRecord record = new GenericData.Record(SCHEMA);
     record.put("sale_id", sale.getId().toString());
@@ -83,8 +121,10 @@ public final class SaleRecordedSchema {
     record.put("tender_type", tenderType);
     // Phase 2 breakdown fields — null when breakdown is null (legacy path).
     if (breakdown != null) {
+      long loyaltyMinor = loyaltyRedeemedMinor != null ? loyaltyRedeemedMinor : 0L;
       record.put("subtotal_minor", breakdown.subtotal().amountMinor());
-      record.put("discount_minor", breakdown.discount().amountMinor());
+      // Phase 4 (ADR 0027): decompose the COMBINED breakdown discount back to promo-only.
+      record.put("discount_minor", breakdown.discount().amountMinor() - loyaltyMinor);
       record.put("service_charge_minor", breakdown.serviceCharge().amountMinor());
       record.put("tax_minor", breakdown.tax().amountMinor());
       record.put("tax_rule_version", breakdown.taxRuleVersion());
@@ -97,12 +137,18 @@ public final class SaleRecordedSchema {
       record.put("tax_rule_version", null);
       record.put("uses_illustrative_rules", null);
     }
+    // Phase 4 (ADR 0027) fields — all nullable, appended last (positional decode safety).
+    record.put("loyalty_member_id", loyaltyMemberId == null ? null : loyaltyMemberId.toString());
+    record.put("loyalty_redeemed_points", loyaltyRedeemedPoints);
+    record.put("loyalty_redeemed_minor", loyaltyRedeemedMinor);
+    record.put("gift_card_id", giftCardId == null ? null : giftCardId.toString());
+    record.put("gift_card_redeemed_minor", giftCardRedeemedMinor);
     return record;
   }
 
   /**
    * Backward-compatible overload for callers that have no tender context or breakdown (e.g. legacy
-   * {@code POST /sales}). Sets {@code tender_type} and all Phase 2 fields to {@code null}.
+   * {@code POST /sales}). Sets {@code tender_type} and all Phase 2/4 fields to {@code null}.
    *
    * @param sale the persisted sale aggregate
    * @param companyId the owning tenant

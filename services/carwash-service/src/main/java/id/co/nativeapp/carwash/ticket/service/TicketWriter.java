@@ -2,6 +2,7 @@ package id.co.nativeapp.carwash.ticket.service;
 
 import id.co.nativeapp.carwash.catalog.domain.StaffProfile;
 import id.co.nativeapp.carwash.catalog.repository.StaffProfileRepository;
+import id.co.nativeapp.carwash.loyaltyref.service.LoyaltyRedemptionGuard;
 import id.co.nativeapp.carwash.outletref.service.OutletAccessGuard;
 import id.co.nativeapp.carwash.payment.domain.CarwashPayment;
 import id.co.nativeapp.carwash.payment.domain.TenderType;
@@ -107,6 +108,7 @@ public class TicketWriter {
   private final CouponRepository couponRepository;
   private final AppliedPromotionRepository appliedPromotionRepository;
   private final ManualDiscountGuard manualDiscountGuard;
+  private final LoyaltyRedemptionGuard loyaltyRedemptionGuard;
 
   @SuppressWarnings("checkstyle:ParameterNumber")
   public TicketWriter(
@@ -123,7 +125,8 @@ public class TicketWriter {
       PromotionEngineService promotionEngine,
       CouponRepository couponRepository,
       AppliedPromotionRepository appliedPromotionRepository,
-      ManualDiscountGuard manualDiscountGuard) {
+      ManualDiscountGuard manualDiscountGuard,
+      LoyaltyRedemptionGuard loyaltyRedemptionGuard) {
     this.ticketRepository = ticketRepository;
     this.lineRepository = lineRepository;
     this.paymentRepository = paymentRepository;
@@ -138,6 +141,7 @@ public class TicketWriter {
     this.couponRepository = couponRepository;
     this.appliedPromotionRepository = appliedPromotionRepository;
     this.manualDiscountGuard = manualDiscountGuard;
+    this.loyaltyRedemptionGuard = loyaltyRedemptionGuard;
   }
 
   /**
@@ -205,15 +209,48 @@ public class TicketWriter {
             request.couponCode(),
             manualDiscountMinor);
     EvalResult evalResult = promotionEngine.evaluate(evalInput);
+    Money promoDiscount = evalResult.totalDiscount();
 
-    PriceBreakdown breakdown =
-        taxChargeService.resolve(cart.subtotal(), 0L, evalResult.totalDiscount(), now);
+    // Phase 4 (ADR 0027): points redemption is a DEDUCTION that EXTENDS the promo discount —
+    // clamp+decrement (atomically, in THIS transaction) against the subtotal remaining AFTER the
+    // promo discount, then feed the COMBINED figure into TaxChargeService.resolve.
+    LoyaltyRedemptionGuard.validatePairing(
+        request.loyaltyMemberId(),
+        request.loyaltyRedeemPoints(),
+        request.giftCardId(),
+        request.giftCardRedeemMinor());
+    long loyaltyRedeemedMinor = 0L;
+    Money combinedDiscount = promoDiscount;
+    if (request.loyaltyMemberId() != null) {
+      long remainingDeductibleMinor = cart.subtotal().amountMinor() - promoDiscount.amountMinor();
+      loyaltyRedeemedMinor =
+          loyaltyRedemptionGuard.redeemPoints(
+              request.loyaltyMemberId(), request.loyaltyRedeemPoints(), remainingDeductibleMinor);
+      if (loyaltyRedeemedMinor > 0L) {
+        combinedDiscount =
+            promoDiscount.plus(Money.ofMinor(loyaltyRedeemedMinor, cart.currencyCode()));
+      }
+    }
+
+    PriceBreakdown breakdown = taxChargeService.resolve(cart.subtotal(), 0L, combinedDiscount, now);
 
     // A zero (or negative) grand total must never record revenue: a fully-discounted or
     // zero-priced cart would otherwise emit a zero-amount SaleRecorded, which the finance journal
     // rejects (a balanced entry needs a positive total). 400 — review S1.
     if (breakdown.grandTotal().amountMinor() <= 0L) {
       throw new IllegalArgumentException("ticket grand total must be positive");
+    }
+
+    // Phase 4 (ADR 0027): gift-card redemption is a TENDER settlement (never a discount), clamped
+    // + atomically decremented against the GRAND TOTAL now that tax/service-charge are known.
+    long giftCardRedeemedMinor = 0L;
+    if (request.giftCardId() != null) {
+      giftCardRedeemedMinor =
+          loyaltyRedemptionGuard.redeemGiftCard(
+              request.giftCardId(),
+              request.giftCardRedeemMinor(),
+              breakdown.grandTotal().amountMinor(),
+              cart.currencyCode());
     }
 
     // Phase 3 (ADR 0026): coupon redemption — the atomic guard; 0 rows -> 409, whole tx rolls back.
@@ -230,7 +267,12 @@ public class TicketWriter {
             washerEmployeeId,
             breakdown,
             now,
-            request.idempotencyKey());
+            request.idempotencyKey(),
+            request.loyaltyMemberId(),
+            loyaltyRedeemedMinor > 0L ? loyaltyRedeemedMinor : null,
+            loyaltyRedeemedMinor > 0L ? loyaltyRedeemedMinor : null,
+            giftCardRedeemedMinor > 0L ? request.giftCardId() : null,
+            giftCardRedeemedMinor > 0L ? giftCardRedeemedMinor : null);
     if (redeemedCouponId != null) {
       ticket.attachCoupon(redeemedCouponId);
     }
@@ -238,42 +280,56 @@ public class TicketWriter {
     CarwashTicket savedTicket = ticketRepository.saveAndFlush(ticket);
     persistLines(ticketLines, companyId);
 
+    // Phase 4 (ADR 0027): the gift-card TENDER settlement reduces WHAT REMAINS for the requested
+    // payment method to authorize — never the sale amount. residual == 0 skips the provider
+    // entirely (the fully-gift-card-paid contract).
     TenderType tenderType = request.payment().tenderType();
-    PaymentInstruction instruction =
-        new PaymentInstruction(
-            savedTicket.getId(),
-            tenderType,
-            breakdown.grandTotal(),
-            request.payment().tenderedMinor(),
-            request.idempotencyKey());
-    TenderAuthorization auth =
-        paymentProviderRegistry.providerFor(tenderType).authorize(instruction);
+    long grandTotalMinor = breakdown.grandTotal().amountMinor();
+    long residualMinor = grandTotalMinor - giftCardRedeemedMinor;
+    boolean giftCardFullyCovers = residualMinor == 0L;
 
     CarwashPayment payment;
-    if (!tenderType.isDigital()) {
-      Money tendered = Money.ofMinor(request.payment().tenderedMinor(), cart.currencyCode());
+    if (giftCardFullyCovers) {
+      Money zero = Money.zero(breakdown.grandTotal().currency());
       payment =
-          CarwashPayment.capturedCash(
-              savedTicket.getId(),
-              request.businessId(),
-              breakdown.grandTotal(),
-              tendered,
-              auth.change());
+          CarwashPayment.capturedCash(savedTicket.getId(), request.businessId(), zero, zero, zero);
     } else {
-      payment =
-          CarwashPayment.pendingDigital(
+      PaymentInstruction instruction =
+          new PaymentInstruction(
               savedTicket.getId(),
-              request.businessId(),
               tenderType,
-              breakdown.grandTotal(),
-              auth.providerRef());
+              Money.ofMinor(residualMinor, cart.currencyCode()),
+              request.payment().tenderedMinor(),
+              request.idempotencyKey());
+      TenderAuthorization auth =
+          paymentProviderRegistry.providerFor(tenderType).authorize(instruction);
+      if (!tenderType.isDigital()) {
+        Money tendered = Money.ofMinor(request.payment().tenderedMinor(), cart.currencyCode());
+        payment =
+            CarwashPayment.capturedCash(
+                savedTicket.getId(),
+                request.businessId(),
+                Money.ofMinor(residualMinor, cart.currencyCode()),
+                tendered,
+                auth.change());
+      } else {
+        payment =
+            CarwashPayment.pendingDigital(
+                savedTicket.getId(),
+                request.businessId(),
+                tenderType,
+                Money.ofMinor(residualMinor, cart.currencyCode()),
+                auth.providerRef());
+      }
     }
     payment.setCompanyId(companyId);
     paymentRepository.saveAndFlush(payment);
 
-    if (!tenderType.isDigital()) {
-      // CASH: revenue is recognised now (ADR 0006, preserved by ADR 0023) — the sale id IS the
-      // ticket id (decision 2).
+    boolean isDigitalPending = !giftCardFullyCovers && tenderType.isDigital();
+    if (!isDigitalPending) {
+      // CASH / gift-card-fully-covers: revenue is recognised now (ADR 0006, preserved by ADR
+      // 0023) — the sale id IS the ticket id (decision 2). tender_type on the wire is NULL when
+      // the gift card fully covered the sale (ADR 0027 pinned semantics).
       savedTicket.linkSale(savedTicket.getId());
       ticketRepository.saveAndFlush(savedTicket);
       persistAppliedPromotions(savedTicket.getId(), savedTicket.getId(), evalResult, companyId);
@@ -283,15 +339,15 @@ public class TicketWriter {
           washerEmployeeId,
           cart.addonTotal(),
           companyId,
-          tenderType.name(),
+          giftCardFullyCovers ? null : tenderType.name(),
           now);
       // Test seam: a no-op in production; a test can install a hook that throws here to prove the
       // ticket, its lines, its payment, AND the outbox rows roll back together (atomicity, rule 3).
       postOutboxHook.afterOutboxWrite(savedTicket);
     } else {
-      // Digital (PENDING): no sale id, no events — deferred to TicketCaptureWriter. The
-      // applied_promotion rows are written with sale_id = NULL now; TicketCaptureWriter stamps it
-      // once the sale records at capture time (ADR 0006 revenue-at-capture).
+      // Digital (PENDING, residual > 0): no sale id, no events — deferred to TicketCaptureWriter.
+      // The applied_promotion rows are written with sale_id = NULL now; TicketCaptureWriter stamps
+      // it once the sale records at capture time (ADR 0006 revenue-at-capture).
       persistAppliedPromotions(savedTicket.getId(), null, evalResult, companyId);
     }
 

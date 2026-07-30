@@ -29,20 +29,38 @@ import java.util.UUID;
  *     discount.
  * @param couponCode optional coupon code (Phase 3, ADR 0026); case-insensitive. {@code null}/blank
  *     means no coupon.
+ * @param loyaltyMemberId Phase 4 (ADR 0027): optional loyalty member to preview a points
+ *     redemption against; see {@link CheckoutRequest#loyaltyMemberId()}. A quote NEVER throws for
+ *     an unknown member or an insufficient balance — it silently previews {@code 0} redeemed
+ *     (documented deviation from checkout's fail-closed 409; a quote commits nothing).
+ * @param loyaltyRedeemPoints Phase 4 (ADR 0027): optional points to preview redeeming.
+ * @param giftCardId Phase 4 (ADR 0027): optional gift card to preview a redemption against; same
+ *     never-throws posture as {@code loyaltyMemberId}.
+ * @param giftCardRedeemMinor Phase 4 (ADR 0027): optional amount to preview redeeming.
  */
 public record QuoteRequest(
     @NotNull UUID businessId,
     @NotEmpty @Valid List<OrderLineRequest> lines,
     @Min(0) Long discountMinor,
-    String couponCode) {
+    String couponCode,
+    UUID loyaltyMemberId,
+    @Min(0) Long loyaltyRedeemPoints,
+    UUID giftCardId,
+    @Min(0) Long giftCardRedeemMinor) {
 
   /** Convenience for a quote with no discount and no coupon (the two-arg shape). */
   public QuoteRequest(UUID businessId, List<OrderLineRequest> lines) {
-    this(businessId, lines, null, null);
+    this(businessId, lines, null, null, null, null, null, null);
   }
 
   /** Convenience for a quote with a discount but no coupon (the pre-Phase-3 three-arg shape). */
   public QuoteRequest(UUID businessId, List<OrderLineRequest> lines, Long discountMinor) {
-    this(businessId, lines, discountMinor, null);
+    this(businessId, lines, discountMinor, null, null, null, null, null);
+  }
+
+  /** Convenience for a quote with a coupon but no Phase 4 fields (pre-Phase-4 four-arg shape). */
+  public QuoteRequest(
+      UUID businessId, List<OrderLineRequest> lines, Long discountMinor, String couponCode) {
+    this(businessId, lines, discountMinor, couponCode, null, null, null, null);
   }
 }

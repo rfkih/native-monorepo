@@ -43,6 +43,10 @@ final class TicketResponseFactory {
       TicketView view, List<TicketLineView> lines, CarwashPaymentView payment) {
     List<TicketLineResponse> lineResponses =
         lines.stream().map(TicketResponseFactory::toLine).toList();
+    long loyaltyRedeemedMinor =
+        view.getLoyaltyRedeemedMinor() != null ? view.getLoyaltyRedeemedMinor() : 0L;
+    long giftCardRedeemedMinor =
+        view.getGiftCardRedeemedMinor() != null ? view.getGiftCardRedeemedMinor() : 0L;
     PriceBreakdownResponse breakdown =
         new PriceBreakdownResponse(
             view.getSubtotalMinor(),
@@ -51,7 +55,9 @@ final class TicketResponseFactory {
             view.getTaxMinor(),
             view.getTotalMinor(),
             view.getCurrency().strip(),
-            view.isUsesIllustrativeRules());
+            view.isUsesIllustrativeRules(),
+            loyaltyRedeemedMinor,
+            giftCardRedeemedMinor);
     TicketPaymentResponse paymentResponse =
         payment == null ? null : toPayment(payment, view.getSaleId());
     return new TicketResponse(

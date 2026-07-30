@@ -1,6 +1,9 @@
 package id.co.nativeapp.restaurant.order.service;
 
 import id.co.nativeapp.money.Money;
+import id.co.nativeapp.restaurant.loyaltyref.repository.GiftCardBalance;
+import id.co.nativeapp.restaurant.loyaltyref.repository.GiftCardRefRepository;
+import id.co.nativeapp.restaurant.loyaltyref.repository.MemberBalanceRefRepository;
 import id.co.nativeapp.restaurant.menu.projection.MenuItemView;
 import id.co.nativeapp.restaurant.menu.projection.ModifierOptionView;
 import id.co.nativeapp.restaurant.menu.repository.MenuItemRepository;
@@ -56,16 +59,22 @@ public class OrderReader {
   private final ModifierValidationReader modifierValidator;
   private final TaxChargeService taxChargeService;
   private final PromotionEngineService promotionEngine;
+  private final MemberBalanceRefRepository memberBalanceRefRepository;
+  private final GiftCardRefRepository giftCardRefRepository;
 
   public OrderReader(
       MenuItemRepository menuItemRepository,
       ModifierValidationReader modifierValidator,
       TaxChargeService taxChargeService,
-      PromotionEngineService promotionEngine) {
+      PromotionEngineService promotionEngine,
+      MemberBalanceRefRepository memberBalanceRefRepository,
+      GiftCardRefRepository giftCardRefRepository) {
     this.menuItemRepository = menuItemRepository;
     this.modifierValidator = modifierValidator;
     this.taxChargeService = taxChargeService;
     this.promotionEngine = promotionEngine;
+    this.memberBalanceRefRepository = memberBalanceRefRepository;
+    this.giftCardRefRepository = giftCardRefRepository;
   }
 
   /**
@@ -180,10 +189,57 @@ public class OrderReader {
         new EvalInput(
             evalLines, currencyCode, runningTotal, now, request.couponCode(), manualDiscountMinor);
     EvalResult evalResult = promotionEngine.evaluate(evalInput);
+    Money promoDiscount = evalResult.totalDiscount();
 
-    PriceBreakdown breakdown =
-        taxChargeService.resolve(runningTotal, 0L, evalResult.totalDiscount(), now);
+    // ------------------------------------------------------------------
+    // 5. Phase 4 (ADR 0027): PREVIEW a loyalty/gift-card redemption — same clamp math as checkout,
+    //    but READ-ONLY (no atomic decrement, never throws on an unknown/insufficient member or
+    //    card). A quote commits nothing, so an unusable redemption silently previews as 0 rather
+    //    than failing the whole pricing preview (documented deviation from checkout's fail-closed
+    //    409 — see QuoteRequest javadoc).
+    // ------------------------------------------------------------------
+    long loyaltyRedeemedMinor = 0L;
+    if (request.loyaltyMemberId() != null
+        && request.loyaltyRedeemPoints() != null
+        && request.loyaltyRedeemPoints() > 0L) {
+      long remainingDeductibleMinor = runningTotal.amountMinor() - promoDiscount.amountMinor();
+      long cachedBalance =
+          memberBalanceRefRepository.findBalance(request.loyaltyMemberId()).orElse(0L);
+      loyaltyRedeemedMinor =
+          Math.max(
+              0L,
+              Math.min(
+                  request.loyaltyRedeemPoints(),
+                  Math.min(Math.max(cachedBalance, 0L), Math.max(remainingDeductibleMinor, 0L))));
+    }
+    Money combinedDiscount =
+        loyaltyRedeemedMinor > 0L
+            ? promoDiscount.plus(Money.ofMinor(loyaltyRedeemedMinor, currencyCode))
+            : promoDiscount;
 
-    return PriceBreakdownResponse.from(breakdown, evalResult);
+    PriceBreakdown breakdown = taxChargeService.resolve(runningTotal, 0L, combinedDiscount, now);
+
+    long giftCardRedeemedMinor = 0L;
+    if (request.giftCardId() != null
+        && request.giftCardRedeemMinor() != null
+        && request.giftCardRedeemMinor() > 0L) {
+      long grandTotalMinor = breakdown.grandTotal().amountMinor();
+      giftCardRedeemedMinor =
+          giftCardRefRepository
+              .findActiveBalance(request.giftCardId())
+              .filter(bal -> bal.currency().equalsIgnoreCase(currencyCode))
+              .map(GiftCardBalance::balanceMinor)
+              .map(
+                  cachedBalance ->
+                      Math.max(
+                          0L,
+                          Math.min(
+                              request.giftCardRedeemMinor(),
+                              Math.min(Math.max(cachedBalance, 0L), Math.max(grandTotalMinor, 0L)))))
+              .orElse(0L);
+    }
+
+    return PriceBreakdownResponse.from(
+        breakdown, evalResult, loyaltyRedeemedMinor, giftCardRedeemedMinor);
   }
 }

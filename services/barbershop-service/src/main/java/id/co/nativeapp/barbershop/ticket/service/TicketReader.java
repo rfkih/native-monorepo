@@ -1,9 +1,13 @@
 package id.co.nativeapp.barbershop.ticket.service;
 
+import id.co.nativeapp.barbershop.loyaltyref.repository.GiftCardBalance;
+import id.co.nativeapp.barbershop.loyaltyref.repository.GiftCardRefRepository;
+import id.co.nativeapp.barbershop.loyaltyref.repository.MemberBalanceRefRepository;
 import id.co.nativeapp.barbershop.payment.projection.BarbershopPaymentView;
 import id.co.nativeapp.barbershop.payment.repository.BarbershopPaymentRepository;
 import id.co.nativeapp.barbershop.pricing.domain.PriceBreakdown;
 import id.co.nativeapp.barbershop.pricing.service.TaxChargeService;
+import id.co.nativeapp.money.Money;
 import id.co.nativeapp.barbershop.promotion.dto.EvalInput;
 import id.co.nativeapp.barbershop.promotion.dto.EvalLine;
 import id.co.nativeapp.barbershop.promotion.dto.EvalResult;
@@ -50,20 +54,27 @@ public class TicketReader {
   private final TicketItemReader itemResolver;
   private final TaxChargeService taxChargeService;
   private final PromotionEngineService promotionEngine;
+  private final MemberBalanceRefRepository memberBalanceRefRepository;
+  private final GiftCardRefRepository giftCardRefRepository;
 
+  @SuppressWarnings("checkstyle:ParameterNumber")
   public TicketReader(
       BarbershopTicketRepository ticketRepository,
       BarbershopTicketLineRepository lineRepository,
       BarbershopPaymentRepository paymentRepository,
       TicketItemReader itemResolver,
       TaxChargeService taxChargeService,
-      PromotionEngineService promotionEngine) {
+      PromotionEngineService promotionEngine,
+      MemberBalanceRefRepository memberBalanceRefRepository,
+      GiftCardRefRepository giftCardRefRepository) {
     this.ticketRepository = ticketRepository;
     this.lineRepository = lineRepository;
     this.paymentRepository = paymentRepository;
     this.itemResolver = itemResolver;
     this.taxChargeService = taxChargeService;
     this.promotionEngine = promotionEngine;
+    this.memberBalanceRefRepository = memberBalanceRefRepository;
+    this.giftCardRefRepository = giftCardRefRepository;
   }
 
   /**
@@ -92,25 +103,72 @@ public class TicketReader {
             request.couponCode(),
             manualDiscountMinor);
     EvalResult evalResult = promotionEngine.evaluate(evalInput);
+    Money promoDiscount = evalResult.totalDiscount();
 
-    PriceBreakdown breakdown =
-        taxChargeService.resolve(cart.subtotal(), 0L, evalResult.totalDiscount(), now);
+    // Phase 4 (ADR 0027): PREVIEW a loyalty/gift-card redemption — same clamp math as checkout,
+    // but READ-ONLY (no atomic decrement, never throws on an unknown/insufficient member or
+    // card). See QuoteRequest javadoc for the documented deviation from checkout's fail-closed 409.
+    long loyaltyRedeemedMinor = 0L;
+    if (request.loyaltyMemberId() != null
+        && request.loyaltyRedeemPoints() != null
+        && request.loyaltyRedeemPoints() > 0L) {
+      long remainingDeductibleMinor = cart.subtotal().amountMinor() - promoDiscount.amountMinor();
+      long cachedBalance =
+          memberBalanceRefRepository.findBalance(request.loyaltyMemberId()).orElse(0L);
+      loyaltyRedeemedMinor =
+          Math.max(
+              0L,
+              Math.min(
+                  request.loyaltyRedeemPoints(),
+                  Math.min(Math.max(cachedBalance, 0L), Math.max(remainingDeductibleMinor, 0L))));
+    }
+    Money combinedDiscount =
+        loyaltyRedeemedMinor > 0L
+            ? promoDiscount.plus(Money.ofMinor(loyaltyRedeemedMinor, cart.currencyCode()))
+            : promoDiscount;
+
+    PriceBreakdown breakdown = taxChargeService.resolve(cart.subtotal(), 0L, combinedDiscount, now);
+
+    long giftCardRedeemedMinor = 0L;
+    if (request.giftCardId() != null
+        && request.giftCardRedeemMinor() != null
+        && request.giftCardRedeemMinor() > 0L) {
+      long grandTotalMinor = breakdown.grandTotal().amountMinor();
+      giftCardRedeemedMinor =
+          giftCardRefRepository
+              .findActiveBalance(request.giftCardId())
+              .filter(bal -> bal.currency().equalsIgnoreCase(cart.currencyCode()))
+              .map(GiftCardBalance::balanceMinor)
+              .map(
+                  cachedBalance ->
+                      Math.max(
+                          0L,
+                          Math.min(
+                              request.giftCardRedeemMinor(),
+                              Math.min(Math.max(cachedBalance, 0L), Math.max(grandTotalMinor, 0L)))))
+              .orElse(0L);
+    }
 
     List<AppliedPromotionResponse> applied =
         evalResult.deductions().stream().map(AppliedPromotionResponse::from).toList();
     String couponStatus =
         evalResult.couponOutcome() == null ? null : evalResult.couponOutcome().status().name();
+    long promoOnlyDiscountMinor = breakdown.discount().amountMinor() - loyaltyRedeemedMinor;
+    long grandTotalMinor = breakdown.grandTotal().amountMinor();
 
     return new PriceBreakdownResponse(
         breakdown.subtotal().amountMinor(),
-        breakdown.discount().amountMinor(),
+        promoOnlyDiscountMinor,
         breakdown.serviceCharge().amountMinor(),
         breakdown.tax().amountMinor(),
-        breakdown.grandTotal().amountMinor(),
+        grandTotalMinor,
         breakdown.grandTotal().currency().getCurrencyCode(),
         breakdown.usesIllustrativeRules(),
         applied,
-        couponStatus);
+        couponStatus,
+        loyaltyRedeemedMinor,
+        giftCardRedeemedMinor,
+        grandTotalMinor - giftCardRedeemedMinor);
   }
 
   /**

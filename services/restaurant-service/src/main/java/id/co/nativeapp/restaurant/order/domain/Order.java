@@ -100,6 +100,35 @@ public class Order extends Auditable {
   @Column(name = "coupon_id")
   private UUID couponId;
 
+  /** Phase 4 (ADR 0027): the loyalty member attached to this order, or {@code null} if none. */
+  @Column(name = "loyalty_member_id")
+  private UUID loyaltyMemberId;
+
+  /**
+   * Phase 4 (ADR 0027): the ACTUAL points redeemed (after the checkout-time clamp), or {@code null}
+   * if none. 1 point = 1 minor unit (points-valuation v1).
+   */
+  @Column(name = "loyalty_redeemed_points")
+  private Long loyaltyRedeemedPoints;
+
+  /**
+   * Phase 4 (ADR 0027): the currency value of the redeemed points, minor units — a CONTRA-REVENUE
+   * deduction, {@code == loyaltyRedeemedPoints} exactly (v1 valuation). {@code null} if none.
+   */
+  @Column(name = "loyalty_redeemed_minor")
+  private Long loyaltyRedeemedMinor;
+
+  /** Phase 4 (ADR 0027): the gift card redeemed as a TENDER against this order, or {@code null}. */
+  @Column(name = "gift_card_id")
+  private UUID giftCardId;
+
+  /**
+   * Phase 4 (ADR 0027): the ACTUAL amount redeemed from the gift card, minor units — a
+   * TENDER-SETTLEMENT amount, never a deduction from revenue. {@code null} if none.
+   */
+  @Column(name = "gift_card_redeemed_minor")
+  private Long giftCardRedeemedMinor;
+
   @OneToMany(
       mappedBy = "order",
       cascade = CascadeType.ALL,
@@ -318,5 +347,59 @@ public class Order extends Auditable {
   /** Phase 3 (ADR 0026): the redeemed coupon id, or {@code null} if none was used. */
   public UUID getCouponId() {
     return couponId;
+  }
+
+  /**
+   * Phase 4 (ADR 0027): stamps this order's loyalty/gift-card redemption selections. Called ONCE,
+   * before the order is first persisted (checkout) or when a parked order is finalised
+   * (pay-parked) — never re-applied on an idempotent replay. All five arguments are independent:
+   * {@code loyaltyMemberId} may be attached with zero points redeemed (EARN-only attribution), and
+   * a gift-card redemption never touches the loyalty fields (ADR 0027 decision 4 — the two are
+   * orthogonal: a discount vs. a tender settlement).
+   *
+   * @param loyaltyMemberId the attached member, or {@code null}
+   * @param loyaltyRedeemedPoints the ACTUAL points redeemed (post-clamp), or {@code null}/0
+   * @param loyaltyRedeemedMinor the currency value of the redeemed points ({@code ==
+   *     loyaltyRedeemedPoints}, v1 valuation), or {@code null}/0
+   * @param giftCardId the redeemed gift card, or {@code null}
+   * @param giftCardRedeemedMinor the ACTUAL amount redeemed from the gift card (post-clamp), or
+   *     {@code null}/0
+   */
+  public void applyLoyaltyRedemption(
+      UUID loyaltyMemberId,
+      Long loyaltyRedeemedPoints,
+      Long loyaltyRedeemedMinor,
+      UUID giftCardId,
+      Long giftCardRedeemedMinor) {
+    this.loyaltyMemberId = loyaltyMemberId;
+    this.loyaltyRedeemedPoints = loyaltyRedeemedPoints;
+    this.loyaltyRedeemedMinor = loyaltyRedeemedMinor;
+    this.giftCardId = giftCardId;
+    this.giftCardRedeemedMinor = giftCardRedeemedMinor;
+  }
+
+  /** Phase 4 (ADR 0027): the attached loyalty member, or {@code null}. */
+  public UUID getLoyaltyMemberId() {
+    return loyaltyMemberId;
+  }
+
+  /** Phase 4 (ADR 0027): the ACTUAL points redeemed, or {@code null}. */
+  public Long getLoyaltyRedeemedPoints() {
+    return loyaltyRedeemedPoints;
+  }
+
+  /** Phase 4 (ADR 0027): the currency value of the redeemed points, minor units, or {@code null}. */
+  public Long getLoyaltyRedeemedMinor() {
+    return loyaltyRedeemedMinor;
+  }
+
+  /** Phase 4 (ADR 0027): the redeemed gift card, or {@code null}. */
+  public UUID getGiftCardId() {
+    return giftCardId;
+  }
+
+  /** Phase 4 (ADR 0027): the ACTUAL amount redeemed from the gift card, minor units, or {@code null}. */
+  public Long getGiftCardRedeemedMinor() {
+    return giftCardRedeemedMinor;
   }
 }

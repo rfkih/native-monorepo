@@ -1,6 +1,7 @@
 package id.co.nativeapp.restaurant.order.service;
 
 import id.co.nativeapp.money.Money;
+import id.co.nativeapp.restaurant.loyaltyref.service.LoyaltyRedemptionGuard;
 import id.co.nativeapp.restaurant.menu.projection.MenuItemView;
 import id.co.nativeapp.restaurant.menu.projection.ModifierOptionView;
 import id.co.nativeapp.restaurant.menu.repository.MenuItemRepository;
@@ -125,6 +126,7 @@ public class OrderWriter {
   private final CouponRepository couponRepository;
   private final AppliedPromotionRepository appliedPromotionRepository;
   private final ManualDiscountGuard manualDiscountGuard;
+  private final LoyaltyRedemptionGuard loyaltyRedemptionGuard;
 
   @SuppressWarnings("checkstyle:ParameterNumber")
   public OrderWriter(
@@ -142,7 +144,8 @@ public class OrderWriter {
       PromotionEngineService promotionEngine,
       CouponRepository couponRepository,
       AppliedPromotionRepository appliedPromotionRepository,
-      ManualDiscountGuard manualDiscountGuard) {
+      ManualDiscountGuard manualDiscountGuard,
+      LoyaltyRedemptionGuard loyaltyRedemptionGuard) {
     this.orderRepository = orderRepository;
     this.lineRepository = lineRepository;
     this.modifierRepository = modifierRepository;
@@ -158,6 +161,7 @@ public class OrderWriter {
     this.couponRepository = couponRepository;
     this.appliedPromotionRepository = appliedPromotionRepository;
     this.manualDiscountGuard = manualDiscountGuard;
+    this.loyaltyRedemptionGuard = loyaltyRedemptionGuard;
   }
 
   /**
@@ -202,6 +206,8 @@ public class OrderWriter {
     // ------------------------------------------------------------------
     // 1. Load requested menu items, resolve modifiers, compute subtotal, evaluate promotions
     //    (ADR 0026), and price via TaxChargeService (RLS-scoped item loads; chunk IN by <=1000).
+    //    Phase 4 (ADR 0027): also clamps + atomically decrements a points/gift-card redemption
+    //    (skipped for park via applyPromotions=false — never called from here).
     // ------------------------------------------------------------------
     CartContext cart =
         buildCart(
@@ -210,7 +216,11 @@ public class OrderWriter {
             request.discountMinor(),
             request.couponCode(),
             true,
-            now);
+            now,
+            request.loyaltyMemberId(),
+            request.loyaltyRedeemPoints(),
+            request.giftCardId(),
+            request.giftCardRedeemMinor());
 
     // ------------------------------------------------------------------
     // 2. Validate order type + table id (Phase 4).
@@ -239,32 +249,45 @@ public class OrderWriter {
       order.attachCoupon(redeemedCouponId);
     }
     order.setCompanyId(companyId);
+    stampLoyaltyRedemption(order, request.loyaltyMemberId(), request.giftCardId(), cart);
     persistLines(order, cart.linesToAdd(), companyId);
     Order saved = orderRepository.saveAndFlush(order);
 
     // ------------------------------------------------------------------
-    // 5. Record the sale / payment based on tender type (ADR 0006).
+    // 5. Record the sale / payment based on tender type (ADR 0006) and the Phase 4 (ADR 0027)
+    //    gift-card TENDER settlement: the residual = grandTotal − giftCardRedeemed is what the
+    //    requested payment method actually authorizes; residual == 0 skips the provider entirely.
     // ------------------------------------------------------------------
     OrderResponse response;
+    long grandTotalMinor = cart.breakdown().grandTotal().amountMinor();
+    ResidualTender residual = resolveResidual(grandTotalMinor, cart.giftCardRedeemedMinor());
     boolean isDigitalPayment =
-        request.payment() != null && request.payment().tenderType().isDigital();
+        request.payment() != null
+            && !residual.giftCardFullyCovers()
+            && request.payment().tenderType().isDigital();
 
     if (!isDigitalPayment) {
-      // CASH or no-payment path: deduct stock (tracked items only) then record sale — all in this
-      // transaction. A stock shortfall throws InsufficientStockException → rolls back everything.
+      // CASH / gift-card-fully-covers / no-payment path: deduct stock (tracked items only) then
+      // record sale — all in this transaction. A stock shortfall throws InsufficientStockException
+      // → rolls back everything.
       stockDeductionWriter.deductForLines(cart.linesToAdd(), cart.itemViews());
 
       String tenderTypeName =
-          (request.payment() != null) ? request.payment().tenderType().name() : null;
+          (request.payment() != null && !residual.giftCardFullyCovers())
+              ? request.payment().tenderType().name()
+              : null;
       RecordSaleCommand saleCommand =
-          new RecordSaleCommand(
+          recordSaleCommand(
               request.businessId(),
-              cart.breakdown().grandTotal().amountMinor(),
+              grandTotalMinor,
               cart.currencyCode(),
               now,
               request.idempotencyKey(),
               tenderTypeName,
-              cart.breakdown());
+              cart.breakdown(),
+              request.loyaltyMemberId(),
+              request.giftCardId(),
+              cart);
       RecordSaleResult saleResult = saleWriter.recordInCurrentTx(saleCommand);
 
       // Link the sale id back to the order → status COMPLETED.
@@ -277,23 +300,32 @@ public class OrderWriter {
 
       response = OrderResponse.from(saved, cart.breakdown());
       if (request.payment() != null) {
-        PaymentInstruction instruction =
-            new PaymentInstruction(
-                saved.getId(),
-                request.businessId(),
-                request.payment().tenderType(),
-                cart.breakdown().grandTotal(),
-                request.payment().tenderedMinor(),
-                request.idempotencyKey() + ":pay");
         PaymentResponse paymentResponse =
-            paymentWriter.captureCashInCurrentTx(instruction, saleResult.sale().id(), now);
+            residual.giftCardFullyCovers()
+                ? paymentWriter.captureZeroResidualInCurrentTx(
+                    saved.getId(),
+                    request.businessId(),
+                    cart.currencyCode(),
+                    saleResult.sale().id(),
+                    now,
+                    request.idempotencyKey() + ":pay")
+                : paymentWriter.captureCashInCurrentTx(
+                    new PaymentInstruction(
+                        saved.getId(),
+                        request.businessId(),
+                        request.payment().tenderType(),
+                        Money.ofMinor(residual.residualMinor(), cart.currencyCode()),
+                        request.payment().tenderedMinor(),
+                        request.idempotencyKey() + ":pay"),
+                    saleResult.sale().id(),
+                    now);
         response = response.withPayment(paymentResponse);
       }
     } else {
-      // DIGITAL path: persist a PENDING payment; no sale, no SaleRecorded yet. The
-      // applied_promotion
-      // rows are written with sale_id = NULL now; PaymentCaptureWriter stamps it once the sale
-      // records at capture time (ADR 0006 revenue-at-capture).
+      // DIGITAL path (residual > 0): persist a PENDING payment for the RESIDUAL only; no sale, no
+      // SaleRecorded yet. The applied_promotion rows are written with sale_id = NULL now;
+      // PaymentCaptureWriter stamps it once the sale records at capture time (ADR 0006
+      // revenue-at-capture).
       saved.markAwaitingPayment();
       orderRepository.saveAndFlush(saved);
 
@@ -304,7 +336,7 @@ public class OrderWriter {
               saved.getId(),
               request.businessId(),
               request.payment().tenderType(),
-              cart.breakdown().grandTotal(),
+              Money.ofMinor(residual.residualMinor(), cart.currencyCode()),
               null,
               request.idempotencyKey() + ":pay");
       PaymentResponse paymentResponse =
@@ -345,6 +377,8 @@ public class OrderWriter {
     UUID tableId = request.tableId();
 
     // Validate items + pricing (same as checkout). No promotions engine — see class javadoc.
+    // Phase 4 (ADR 0027): no loyalty/gift-card redemption either — ParkOrderRequest carries none
+    // of those fields; redemption is evaluated at PAY time, mirroring promotions.
     CartContext cart =
         buildCart(
             request.businessId(),
@@ -352,7 +386,11 @@ public class OrderWriter {
             request.discountMinor(),
             null,
             false,
-            Instant.now());
+            Instant.now(),
+            null,
+            null,
+            null,
+            null);
 
     // Validate order type + table id.
     validateTableId(orderType, tableId, request.businessId());
@@ -436,9 +474,19 @@ public class OrderWriter {
 
     // Re-evaluate the promotions engine + recompute the price breakdown from the persisted lines
     // (H1 fix + ADR 0026). The subtotal is the sum of line totals; the manual-discount input is
-    // whatever was stored on the order at park time; the coupon (if any) is supplied NOW.
+    // whatever was stored on the order at park time; the coupon (if any) is supplied NOW. Phase 4
+    // (ADR 0027): loyalty/gift-card redemption is ALSO evaluated HERE — mirrors promotions.
     EngineRecompute er =
-        recomputeWithPromotions(order, parkedLineViews, currencyCode, request.couponCode(), now);
+        recomputeWithPromotions(
+            order,
+            parkedLineViews,
+            currencyCode,
+            request.couponCode(),
+            now,
+            request.loyaltyMemberId(),
+            request.loyaltyRedeemPoints(),
+            request.giftCardId(),
+            request.giftCardRedeemMinor());
     PriceBreakdown breakdown = er.breakdown();
 
     // The re-evaluated grand total is the TRUE final amount (ADR 0026) — every downstream use of
@@ -449,26 +497,36 @@ public class OrderWriter {
     if (redeemedCouponId != null) {
       order.attachCoupon(redeemedCouponId);
     }
+    stampLoyaltyRedemption(order, request.loyaltyMemberId(), request.giftCardId(), er);
 
+    long grandTotalMinor = breakdown.grandTotal().amountMinor();
+    ResidualTender residual = resolveResidual(grandTotalMinor, er.giftCardRedeemedMinor());
     boolean isDigitalPayment =
-        request.payment() != null && request.payment().tenderType().isDigital();
+        request.payment() != null
+            && !residual.giftCardFullyCovers()
+            && request.payment().tenderType().isDigital();
 
     if (!isDigitalPayment) {
       // Deduct stock for tracked items (same tx — roll back everything on shortfall).
       deductStockForParkedLines(parkedLineViews, currencyCode);
 
-      // CASH or no-payment: record the sale now — revenue recognised here.
+      // CASH / gift-card-fully-covers / no-payment: record the sale now — revenue recognised here.
       String tenderTypeName =
-          (request.payment() != null) ? request.payment().tenderType().name() : null;
+          (request.payment() != null && !residual.giftCardFullyCovers())
+              ? request.payment().tenderType().name()
+              : null;
       RecordSaleCommand saleCommand =
-          new RecordSaleCommand(
+          recordSaleCommand(
               order.getBusinessId(),
-              order.getTotal().amountMinor(),
+              grandTotalMinor,
               currencyCode,
               now,
               saleIdempotencyKey,
               tenderTypeName,
-              breakdown);
+              breakdown,
+              request.loyaltyMemberId(),
+              request.giftCardId(),
+              er);
       RecordSaleResult saleResult = saleWriter.recordInCurrentTx(saleCommand);
 
       order.linkSale(saleResult.sale().id()); // PARKED → COMPLETED
@@ -478,22 +536,32 @@ public class OrderWriter {
 
       OrderResponse response = OrderResponse.from(order, breakdown);
       if (request.payment() != null) {
-        PaymentInstruction instruction =
-            new PaymentInstruction(
-                order.getId(),
-                order.getBusinessId(),
-                request.payment().tenderType(),
-                order.getTotal(),
-                request.payment().tenderedMinor(),
-                saleIdempotencyKey + ":pay");
         PaymentResponse paymentResponse =
-            paymentWriter.captureCashInCurrentTx(instruction, saleResult.sale().id(), now);
+            residual.giftCardFullyCovers()
+                ? paymentWriter.captureZeroResidualInCurrentTx(
+                    order.getId(),
+                    order.getBusinessId(),
+                    currencyCode,
+                    saleResult.sale().id(),
+                    now,
+                    saleIdempotencyKey + ":pay")
+                : paymentWriter.captureCashInCurrentTx(
+                    new PaymentInstruction(
+                        order.getId(),
+                        order.getBusinessId(),
+                        request.payment().tenderType(),
+                        Money.ofMinor(residual.residualMinor(), currencyCode),
+                        request.payment().tenderedMinor(),
+                        saleIdempotencyKey + ":pay"),
+                    saleResult.sale().id(),
+                    now);
         response = response.withPayment(paymentResponse);
       }
       return response;
     } else {
-      // DIGITAL: persist a PENDING payment; defer revenue to capture. applied_promotion rows are
-      // written with sale_id = NULL; PaymentCaptureWriter stamps it at capture time.
+      // DIGITAL (residual > 0): persist a PENDING payment for the RESIDUAL only; defer revenue to
+      // capture. applied_promotion rows are written with sale_id = NULL; PaymentCaptureWriter
+      // stamps it at capture time.
       order.markAwaitingPayment(); // PARKED → AWAITING_PAYMENT
       orderRepository.saveAndFlush(order);
 
@@ -504,7 +572,7 @@ public class OrderWriter {
               order.getId(),
               order.getBusinessId(),
               request.payment().tenderType(),
-              order.getTotal(),
+              Money.ofMinor(residual.residualMinor(), currencyCode),
               null,
               saleIdempotencyKey + ":pay");
       PaymentResponse paymentResponse =
@@ -561,14 +629,26 @@ public class OrderWriter {
    * @param occurredAt the instant used for both the promotions engine's effective-window resolution
    *     and {@code TaxChargeService}'s effective-rule resolution — the SAME instant the caller uses
    *     for the order/sale timestamp
+   * @param loyaltyMemberId Phase 4 (ADR 0027): optional loyalty member; only consulted when {@code
+   *     applyPromotions} is {@code true} (redemption evaluates at checkout/pay time, not park time)
+   * @param loyaltyRedeemPoints Phase 4 (ADR 0027): optional requested points redemption
+   * @param giftCardId Phase 4 (ADR 0027): optional gift card; only consulted when {@code
+   *     applyPromotions} is {@code true}
+   * @param giftCardRedeemMinor Phase 4 (ADR 0027): optional requested gift-card redemption, minor
+   *     units
    */
+  @SuppressWarnings("checkstyle:ParameterNumber")
   private CartContext buildCart(
       UUID businessId,
       List<OrderLineRequest> lineRequests,
       Long discountMinor,
       String couponCode,
       boolean applyPromotions,
-      Instant occurredAt) {
+      Instant occurredAt,
+      UUID loyaltyMemberId,
+      Long loyaltyRedeemPoints,
+      UUID giftCardId,
+      Long giftCardRedeemMinor) {
 
     // 1. Load requested menu items (RLS-scoped; chunk IN by <=1000).
     List<UUID> requestedIds = lineRequests.stream().map(OrderLineRequest::menuItemId).toList();
@@ -681,8 +761,30 @@ public class OrderWriter {
     } else {
       fixedDiscount = (discountMinor != null) ? Money.ofMinor(discountMinor, currencyCode) : null;
     }
+
+    // 6b. Phase 4 (ADR 0027): points redemption is a DEDUCTION that EXTENDS the promo discount —
+    // clamp+decrement (atomically, in THIS transaction) against the subtotal remaining AFTER the
+    // promo discount, then feed the COMBINED figure into TaxChargeService.resolve so
+    // serviceCharge/tax/grandTotal all reflect it. Skipped for park (applyPromotions == false) —
+    // redemption evaluates at PAY time, mirroring promotions (ADR 0026 posture).
+    validateLoyaltyRedemptionPairing(loyaltyMemberId, loyaltyRedeemPoints, giftCardId, giftCardRedeemMinor);
+    long loyaltyRedeemedMinor = 0L;
+    Money combinedDiscount = fixedDiscount;
+    if (applyPromotions && loyaltyMemberId != null) {
+      long promoDiscountMinor = (fixedDiscount != null) ? fixedDiscount.amountMinor() : 0L;
+      long remainingDeductibleMinor = runningTotal.amountMinor() - promoDiscountMinor;
+      loyaltyRedeemedMinor =
+          loyaltyRedemptionGuard.redeemPoints(
+              loyaltyMemberId, loyaltyRedeemPoints, remainingDeductibleMinor);
+      if (loyaltyRedeemedMinor > 0L) {
+        Money loyaltyDeduction = Money.ofMinor(loyaltyRedeemedMinor, currencyCode);
+        combinedDiscount =
+            (fixedDiscount != null) ? fixedDiscount.plus(loyaltyDeduction) : loyaltyDeduction;
+      }
+    }
+
     PriceBreakdown breakdown =
-        taxChargeService.resolve(runningTotal, 0L, fixedDiscount, occurredAt);
+        taxChargeService.resolve(runningTotal, 0L, combinedDiscount, occurredAt);
     Money grandTotal = breakdown.grandTotal();
     if (!grandTotal.isPositive()) {
       throw new IllegalArgumentException(
@@ -693,7 +795,24 @@ public class OrderWriter {
               + " — a fully-comped order is not a sale");
     }
 
-    return new CartContext(currencyCode, linesToAdd, breakdown, itemViews, evalResult);
+    // 6c. Phase 4 (ADR 0027): gift-card redemption is a TENDER settlement (never a discount),
+    // clamped + atomically decremented against the GRAND TOTAL now that tax/service-charge are
+    // known.
+    long giftCardRedeemedMinor = 0L;
+    if (applyPromotions && giftCardId != null) {
+      giftCardRedeemedMinor =
+          loyaltyRedemptionGuard.redeemGiftCard(
+              giftCardId, giftCardRedeemMinor, grandTotal.amountMinor(), currencyCode);
+    }
+
+    return new CartContext(
+        currencyCode,
+        linesToAdd,
+        breakdown,
+        itemViews,
+        evalResult,
+        loyaltyRedeemedMinor,
+        giftCardRedeemedMinor);
   }
 
   /**
@@ -701,12 +820,17 @@ public class OrderWriter {
    * pre-loaded line views (ADR 0026). Loads fresh {@link MenuItemView}s for the parked lines (RLS-
    * scoped, chunked) so line-scope rule matching sees the item's CURRENT category assignment.
    */
+  @SuppressWarnings("checkstyle:ParameterNumber")
   private EngineRecompute recomputeWithPromotions(
       Order order,
       List<OrderLineView> lineViews,
       String currencyCode,
       String couponCode,
-      Instant occurredAt) {
+      Instant occurredAt,
+      UUID loyaltyMemberId,
+      Long loyaltyRedeemPoints,
+      UUID giftCardId,
+      Long giftCardRedeemMinor) {
     Currency currency = Currency.getInstance(currencyCode);
 
     List<UUID> menuItemIds = lineViews.stream().map(OrderLineView::getMenuItemId).toList();
@@ -736,10 +860,36 @@ public class OrderWriter {
         new EvalInput(
             evalLines, currencyCode, subtotal, occurredAt, couponCode, manualDiscountMinor);
     EvalResult evalResult = promotionEngine.evaluate(evalInput);
+    Money fixedDiscount = evalResult.totalDiscount();
 
-    PriceBreakdown breakdown =
-        taxChargeService.resolve(subtotal, 0L, evalResult.totalDiscount(), occurredAt);
-    return new EngineRecompute(breakdown, evalResult);
+    // Phase 4 (ADR 0027): same clamp+decrement discipline as buildCart's step 6b/6c — evaluated
+    // HERE (pay time), never at park time.
+    validateLoyaltyRedemptionPairing(loyaltyMemberId, loyaltyRedeemPoints, giftCardId, giftCardRedeemMinor);
+    long loyaltyRedeemedMinor = 0L;
+    Money combinedDiscount = fixedDiscount;
+    if (loyaltyMemberId != null) {
+      long remainingDeductibleMinor = subtotal.amountMinor() - fixedDiscount.amountMinor();
+      loyaltyRedeemedMinor =
+          loyaltyRedemptionGuard.redeemPoints(
+              loyaltyMemberId, loyaltyRedeemPoints, remainingDeductibleMinor);
+      if (loyaltyRedeemedMinor > 0L) {
+        combinedDiscount = fixedDiscount.plus(Money.ofMinor(loyaltyRedeemedMinor, currencyCode));
+      }
+    }
+
+    PriceBreakdown breakdown = taxChargeService.resolve(subtotal, 0L, combinedDiscount, occurredAt);
+
+    long giftCardRedeemedMinor = 0L;
+    if (giftCardId != null) {
+      giftCardRedeemedMinor =
+          loyaltyRedemptionGuard.redeemGiftCard(
+              giftCardId,
+              giftCardRedeemMinor,
+              breakdown.grandTotal().amountMinor(),
+              currencyCode);
+    }
+
+    return new EngineRecompute(breakdown, evalResult, loyaltyRedeemedMinor, giftCardRedeemedMinor);
   }
 
   /**
@@ -946,17 +1096,185 @@ public class OrderWriter {
 
   /**
    * Immutable value holding the validated cart: resolved lines, breakdown, currency, the item views
-   * used for stock-deduction tracking, and (checkout only) the promotions engine's result.
+   * used for stock-deduction tracking, (checkout only) the promotions engine's result, and (Phase
+   * 4, ADR 0027) the ACTUAL loyalty-points/gift-card amounts redeemed (post-clamp; {@code 0} when
+   * nothing was redeemed or {@code applyPromotions} was {@code false}).
    */
   private record CartContext(
       String currencyCode,
       List<OrderLine> linesToAdd,
       PriceBreakdown breakdown,
       List<MenuItemView> itemViews,
-      EvalResult evalResult) {}
+      EvalResult evalResult,
+      long loyaltyRedeemedMinor,
+      long giftCardRedeemedMinor) {}
 
   /**
-   * The promotions-aware breakdown + engine result produced by {@link #recomputeWithPromotions}.
+   * The promotions-aware breakdown + engine result produced by {@link #recomputeWithPromotions},
+   * plus (Phase 4, ADR 0027) the ACTUAL loyalty-points/gift-card amounts redeemed (post-clamp).
    */
-  private record EngineRecompute(PriceBreakdown breakdown, EvalResult evalResult) {}
+  private record EngineRecompute(
+      PriceBreakdown breakdown,
+      EvalResult evalResult,
+      long loyaltyRedeemedMinor,
+      long giftCardRedeemedMinor) {}
+
+  /**
+   * Phase 4 (ADR 0027): the payment residual after a gift-card redemption. A gift-card redemption
+   * is a TENDER settlement, never a discount — it reduces WHAT REMAINS to be tendered by another
+   * method, never the sale's {@code amount_minor}.
+   *
+   * @param residualMinor {@code grandTotalMinor - giftCardRedeemedMinor}; equals the grand total
+   *     unchanged when no gift card was redeemed (backward-compatible with every pre-Phase-4 path)
+   * @param giftCardFullyCovers {@code true} when {@code residualMinor == 0} — the requested payment
+   *     method authorizes NOTHING; no provider call is made, and the wire {@code tender_type} on
+   *     the emitted {@code SaleRecorded} is {@code null} (ADR 0027 pinned semantics)
+   */
+  private record ResidualTender(long residualMinor, boolean giftCardFullyCovers) {}
+
+  private static ResidualTender resolveResidual(long grandTotalMinor, long giftCardRedeemedMinor) {
+    long residual = grandTotalMinor - giftCardRedeemedMinor;
+    return new ResidualTender(residual, residual == 0L);
+  }
+
+  /**
+   * Phase 4 (ADR 0027): rejects a request that supplies one half of a redemption pair without the
+   * other — {@code loyaltyRedeemPoints > 0} requires {@code loyaltyMemberId}, and {@code
+   * giftCardId} requires a positive {@code giftCardRedeemMinor} (and vice versa). A {@code
+   * loyaltyMemberId} with no redemption is legal (EARN-only attribution); a bare {@code
+   * giftCardId}/{@code giftCardRedeemMinor} without its pair is not, since a gift card carries no
+   * earn concept.
+   */
+  private static void validateLoyaltyRedemptionPairing(
+      UUID loyaltyMemberId, Long loyaltyRedeemPoints, UUID giftCardId, Long giftCardRedeemMinor) {
+    if (loyaltyRedeemPoints != null && loyaltyRedeemPoints > 0L && loyaltyMemberId == null) {
+      throw new IllegalArgumentException(
+          "loyaltyMemberId is required when loyaltyRedeemPoints > 0");
+    }
+    boolean giftCardAmountRequested = giftCardRedeemMinor != null && giftCardRedeemMinor > 0L;
+    if (giftCardAmountRequested != (giftCardId != null)) {
+      throw new IllegalArgumentException(
+          "giftCardId and a positive giftCardRedeemMinor must be supplied together");
+    }
+  }
+
+  /**
+   * Stamps the Phase 4 (ADR 0027) redemption selections onto the order, applying the "0 → null"
+   * convention (the persisted columns are nullable; {@code 0} redeemed is stored as {@code null},
+   * matching every other optional Phase 4 wire field).
+   */
+  private static void stampLoyaltyRedemption(
+      Order order, UUID loyaltyMemberId, UUID giftCardId, CartContext cart) {
+    stampLoyaltyRedemption(
+        order,
+        loyaltyMemberId,
+        giftCardId,
+        cart.loyaltyRedeemedMinor(),
+        cart.giftCardRedeemedMinor());
+  }
+
+  private static void stampLoyaltyRedemption(
+      Order order, UUID loyaltyMemberId, UUID giftCardId, EngineRecompute er) {
+    stampLoyaltyRedemption(
+        order, loyaltyMemberId, giftCardId, er.loyaltyRedeemedMinor(), er.giftCardRedeemedMinor());
+  }
+
+  private static void stampLoyaltyRedemption(
+      Order order,
+      UUID loyaltyMemberId,
+      UUID giftCardId,
+      long loyaltyRedeemedMinor,
+      long giftCardRedeemedMinor) {
+    order.applyLoyaltyRedemption(
+        loyaltyMemberId,
+        loyaltyRedeemedMinor > 0L ? loyaltyRedeemedMinor : null,
+        loyaltyRedeemedMinor > 0L ? loyaltyRedeemedMinor : null,
+        giftCardRedeemedMinor > 0L ? giftCardId : null,
+        giftCardRedeemedMinor > 0L ? giftCardRedeemedMinor : null);
+  }
+
+  /**
+   * Builds the {@link RecordSaleCommand} carrying the Phase 4 (ADR 0027) loyalty/gift-card fields,
+   * shared by {@link #checkout} and {@link #payParked} so the two revenue-recognition call sites
+   * cannot diverge on the wire-field derivation.
+   */
+  @SuppressWarnings("checkstyle:ParameterNumber")
+  private static RecordSaleCommand recordSaleCommand(
+      UUID businessId,
+      long amountMinor,
+      String currencyCode,
+      Instant occurredAt,
+      String idempotencyKey,
+      String tenderType,
+      PriceBreakdown breakdown,
+      UUID loyaltyMemberId,
+      UUID giftCardId,
+      CartContext cart) {
+    return recordSaleCommand(
+        businessId,
+        amountMinor,
+        currencyCode,
+        occurredAt,
+        idempotencyKey,
+        tenderType,
+        breakdown,
+        loyaltyMemberId,
+        giftCardId,
+        cart.loyaltyRedeemedMinor(),
+        cart.giftCardRedeemedMinor());
+  }
+
+  @SuppressWarnings("checkstyle:ParameterNumber")
+  private static RecordSaleCommand recordSaleCommand(
+      UUID businessId,
+      long amountMinor,
+      String currencyCode,
+      Instant occurredAt,
+      String idempotencyKey,
+      String tenderType,
+      PriceBreakdown breakdown,
+      UUID loyaltyMemberId,
+      UUID giftCardId,
+      EngineRecompute er) {
+    return recordSaleCommand(
+        businessId,
+        amountMinor,
+        currencyCode,
+        occurredAt,
+        idempotencyKey,
+        tenderType,
+        breakdown,
+        loyaltyMemberId,
+        giftCardId,
+        er.loyaltyRedeemedMinor(),
+        er.giftCardRedeemedMinor());
+  }
+
+  @SuppressWarnings("checkstyle:ParameterNumber")
+  private static RecordSaleCommand recordSaleCommand(
+      UUID businessId,
+      long amountMinor,
+      String currencyCode,
+      Instant occurredAt,
+      String idempotencyKey,
+      String tenderType,
+      PriceBreakdown breakdown,
+      UUID loyaltyMemberId,
+      UUID giftCardId,
+      long loyaltyRedeemedMinor,
+      long giftCardRedeemedMinor) {
+    return new RecordSaleCommand(
+        businessId,
+        amountMinor,
+        currencyCode,
+        occurredAt,
+        idempotencyKey,
+        tenderType,
+        breakdown,
+        loyaltyMemberId,
+        loyaltyRedeemedMinor > 0L ? loyaltyRedeemedMinor : null,
+        loyaltyRedeemedMinor > 0L ? loyaltyRedeemedMinor : null,
+        giftCardRedeemedMinor > 0L ? giftCardId : null,
+        giftCardRedeemedMinor > 0L ? giftCardRedeemedMinor : null);
+  }
 }

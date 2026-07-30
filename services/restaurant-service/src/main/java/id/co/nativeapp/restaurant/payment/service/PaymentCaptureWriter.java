@@ -158,23 +158,40 @@ public class PaymentCaptureWriter {
     // priced with at checkout (see reconstructBreakdown javadoc) — null on a reconciliation
     // mismatch, in which case the pre-existing no-breakdown command below is used, exactly as
     // before this fix.
-    PriceBreakdown breakdown = reconstructBreakdown(order, payment.getAmount());
+    //
+    // Phase 4 review fix (ADR 0027): the sale's amount_minor MUST be the order's GRAND TOTAL —
+    // NOT payment.getAmount(), which since Phase 4 is the RESIDUAL after a gift-card redemption
+    // (a tender amount, always <= the grand total). Using payment.getAmount() here would silently
+    // under-record revenue whenever a gift card partially settled a digital-tender order.
+    // order.getTotal() is the checkout-time grand total, immutable since (never mutated on this
+    // digital-capture path).
+    Money grandTotal = order.getTotal();
+    PriceBreakdown breakdown = reconstructBreakdown(order);
+
+    // order.giftCardId is ALREADY null whenever giftCardRedeemedMinor is null (OrderWriter stamps
+    // the pair together, never one without the other) — no extra conditional needed here.
+    Long loyaltyRedeemedMinor = order.getLoyaltyRedeemedMinor();
 
     // Record the sale and emit SaleRecorded in THIS transaction (MANDATORY joins us).
     RecordSaleCommand saleCommand =
         (breakdown != null)
             ? new RecordSaleCommand(
                 payment.getBusinessId(),
-                payment.getAmount().amountMinor(),
-                payment.getAmount().currency().getCurrencyCode(),
+                grandTotal.amountMinor(),
+                grandTotal.currency().getCurrencyCode(),
                 capturedAt,
                 saleIdempotencyKey,
                 payment.getTenderType().name(), // tender_type for GL routing (ADR 0006 slice 2)
-                breakdown)
+                breakdown,
+                order.getLoyaltyMemberId(),
+                loyaltyRedeemedMinor,
+                loyaltyRedeemedMinor,
+                order.getGiftCardId(),
+                order.getGiftCardRedeemedMinor())
             : new RecordSaleCommand(
                 payment.getBusinessId(),
-                payment.getAmount().amountMinor(),
-                payment.getAmount().currency().getCurrencyCode(),
+                grandTotal.amountMinor(),
+                grandTotal.currency().getCurrencyCode(),
                 capturedAt,
                 saleIdempotencyKey,
                 payment.getTenderType().name());
@@ -222,22 +239,31 @@ public class PaymentCaptureWriter {
    * new rule version (a later {@code effective_from}) has since been added.
    *
    * <p><strong>Safety guard.</strong> If the reconstructed {@link PriceBreakdown#grandTotal()} does
-   * not exactly equal the amount about to be recorded as the sale, this NEVER distorts money on the
-   * wire: it logs a WARN (order id + expected/actual minor amounts only — no PII) and returns
-   * {@code null} so the caller falls back to the pre-existing no-breakdown {@link
-   * RecordSaleCommand} — identical to the behaviour before this fix.
+   * not exactly equal {@link Order#getTotal()} (the order's checkout-time GRAND TOTAL — never
+   * {@code payment.getAmount()}, which since Phase 4/ADR 0027 is only the tender RESIDUAL after a
+   * gift-card redemption), this NEVER distorts money on the wire: it logs a WARN (order id +
+   * expected/actual minor amounts only — no PII) and returns {@code null} so the caller falls back
+   * to the pre-existing no-breakdown {@link RecordSaleCommand} — identical to the behaviour before
+   * this fix.
    *
-   * @param order the order being captured (its lines, {@code occurredAt}, and {@code discountMinor}
-   *     are read; not mutated)
-   * @param amountBeingRecorded the sale amount about to be recorded (the captured payment's amount)
-   * @return the reconstructed breakdown, or {@code null} if it does not reconcile to {@code
-   *     amountBeingRecorded}
+   * <p><strong>Phase 4 (ADR 0027).</strong> The reconstructed {@code fixedDiscount} fed into {@link
+   * TaxChargeService#resolve} is the COMBINED deduction — the promo-only sum ({@code
+   * ruleDiscountMinor + manualDiscountMinor}, unchanged from the Phase-3 reconstruction) PLUS {@link
+   * Order#getLoyaltyRedeemedMinor()} (persisted at checkout) — so a capture reproduces the EXACT
+   * checkout-time grand total even when a points redemption applied. The gift-card TENDER
+   * settlement never enters this discount math (ADR 0027 decision 4 — it is not a deduction).
+   *
+   * @param order the order being captured (its lines, {@code occurredAt}, {@code discountMinor},
+   *     and Phase-4 redemption columns are read; not mutated)
+   * @return the reconstructed breakdown, or {@code null} if it does not reconcile to {@link
+   *     Order#getTotal()}
    */
-  private PriceBreakdown reconstructBreakdown(Order order, Money amountBeingRecorded) {
-    String currencyCode = amountBeingRecorded.currency().getCurrencyCode();
+  private PriceBreakdown reconstructBreakdown(Order order) {
+    Money orderTotal = order.getTotal();
+    String currencyCode = orderTotal.currency().getCurrencyCode();
 
     List<OrderLineView> lineViews = orderLineRepository.findViewsByOrderId(order.getId());
-    Money subtotal = Money.zero(amountBeingRecorded.currency());
+    Money subtotal = Money.zero(orderTotal.currency());
     for (OrderLineView lv : lineViews) {
       subtotal = subtotal.plus(Money.ofMinor(lv.getLineTotalMinor(), currencyCode));
     }
@@ -247,19 +273,22 @@ public class PaymentCaptureWriter {
       ruleDiscountMinor = Math.addExact(ruleDiscountMinor, row.getAmountMinor());
     }
     long manualDiscountMinor = (order.getDiscountMinor() != null) ? order.getDiscountMinor() : 0L;
-    Money fixedDiscount =
-        Money.ofMinor(Math.addExact(ruleDiscountMinor, manualDiscountMinor), currencyCode);
+    long loyaltyRedeemedMinor =
+        (order.getLoyaltyRedeemedMinor() != null) ? order.getLoyaltyRedeemedMinor() : 0L;
+    long combinedDiscountMinor =
+        Math.addExact(Math.addExact(ruleDiscountMinor, manualDiscountMinor), loyaltyRedeemedMinor);
+    Money fixedDiscount = Money.ofMinor(combinedDiscountMinor, currencyCode);
 
     PriceBreakdown breakdown =
         taxChargeService.resolve(subtotal, 0L, fixedDiscount, order.getOccurredAt());
 
-    if (!breakdown.grandTotal().equals(amountBeingRecorded)) {
+    if (!breakdown.grandTotal().equals(orderTotal)) {
       log.warn(
           "Digital capture breakdown reconstruction mismatch — falling back to the no-breakdown"
               + " SaleRecorded (money is NOT distorted). orderId={} expectedMinor={}"
               + " reconstructedMinor={}",
           order.getId(),
-          amountBeingRecorded.amountMinor(),
+          orderTotal.amountMinor(),
           breakdown.grandTotal().amountMinor());
       return null;
     }

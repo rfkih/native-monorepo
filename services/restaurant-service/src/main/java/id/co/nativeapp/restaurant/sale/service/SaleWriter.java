@@ -111,7 +111,16 @@ public class SaleWriter {
     // Phase 2 breakdown (null for legacy / carwash callers — all breakdown fields on the
     // wire are null, finance falls back to subtotal==amount_minor).
     GenericRecord event =
-        SaleRecordedSchema.toRecord(saved, companyId, command.tenderType(), command.breakdown());
+        SaleRecordedSchema.toRecord(
+            saved,
+            companyId,
+            command.tenderType(),
+            command.breakdown(),
+            command.loyaltyMemberId(),
+            command.loyaltyRedeemedPoints(),
+            command.loyaltyRedeemedMinor(),
+            command.giftCardId(),
+            command.giftCardRedeemedMinor());
     byte[] payload = AvroSerde.serialize(event);
 
     // The outbox INSERT runs on this transaction's connection (rule 3): it commits
@@ -168,7 +177,16 @@ public class SaleWriter {
     Sale saved = repository.saveAndFlush(sale);
 
     GenericRecord event =
-        SaleRecordedSchema.toRecord(saved, companyId, command.tenderType(), command.breakdown());
+        SaleRecordedSchema.toRecord(
+            saved,
+            companyId,
+            command.tenderType(),
+            command.breakdown(),
+            command.loyaltyMemberId(),
+            command.loyaltyRedeemedPoints(),
+            command.loyaltyRedeemedMinor(),
+            command.giftCardId(),
+            command.giftCardRedeemedMinor());
     byte[] payload = AvroSerde.serialize(event);
     outboxWriter.write(
         SaleRecordedSchema.AGGREGATE_TYPE,

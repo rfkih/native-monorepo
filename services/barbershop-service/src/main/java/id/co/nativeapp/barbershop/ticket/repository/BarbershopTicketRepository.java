@@ -42,7 +42,12 @@ public interface BarbershopTicketRepository extends JpaRepository<BarbershopTick
                  t.tax_rule_version            AS tax_rule_version,
                  t.uses_illustrative_rules     AS uses_illustrative_rules,
                  t.occurred_at                 AS occurred_at,
-                 t.idempotency_key             AS idempotency_key
+                 t.idempotency_key             AS idempotency_key,
+                 t.loyalty_member_id           AS loyalty_member_id,
+                 t.loyalty_redeemed_points     AS loyalty_redeemed_points,
+                 t.loyalty_redeemed_minor      AS loyalty_redeemed_minor,
+                 t.gift_card_id                AS gift_card_id,
+                 t.gift_card_redeemed_minor    AS gift_card_redeemed_minor
             FROM barbershop_ticket t
             LEFT JOIN staff_profile sp ON sp.id = t.staff_profile_id
            WHERE t.idempotency_key = :idempotencyKey
@@ -69,7 +74,12 @@ public interface BarbershopTicketRepository extends JpaRepository<BarbershopTick
                  t.tax_rule_version            AS tax_rule_version,
                  t.uses_illustrative_rules     AS uses_illustrative_rules,
                  t.occurred_at                 AS occurred_at,
-                 t.idempotency_key             AS idempotency_key
+                 t.idempotency_key             AS idempotency_key,
+                 t.loyalty_member_id           AS loyalty_member_id,
+                 t.loyalty_redeemed_points     AS loyalty_redeemed_points,
+                 t.loyalty_redeemed_minor      AS loyalty_redeemed_minor,
+                 t.gift_card_id                AS gift_card_id,
+                 t.gift_card_redeemed_minor    AS gift_card_redeemed_minor
             FROM barbershop_ticket t
             LEFT JOIN staff_profile sp ON sp.id = t.staff_profile_id
            WHERE t.id = :ticketId

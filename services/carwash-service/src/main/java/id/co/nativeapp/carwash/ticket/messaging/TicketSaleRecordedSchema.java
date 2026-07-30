@@ -55,14 +55,16 @@ public final class TicketSaleRecordedSchema {
   }
 
   /**
-   * Builds a {@code SaleRecorded} {@link GenericRecord} with the full price breakdown.
+   * Builds a {@code SaleRecorded} {@link GenericRecord} with the full price breakdown. Backward-
+   * compatible overload with every Phase 4 (ADR 0027) field {@code null}.
    *
    * @param saleId the sale id (the ticket's own id — ADR 0023 decision 2)
    * @param companyId the owning tenant (stamped on the ticket from the tenant scope)
    * @param businessId the carwash outlet
    * @param grandTotal the amount the customer pays (must equal {@code breakdown.grandTotal()})
    * @param occurredAt when the sale was recognised (checkout for CASH, capture for digital)
-   * @param tenderType the tender enum name ({@code "CASH"}, {@code "QRIS"}, {@code "CARD"})
+   * @param tenderType the tender enum name ({@code "CASH"}, {@code "QRIS"}, {@code "CARD"}), or
+   *     {@code null} when a gift card fully settled the sale (ADR 0027)
    * @param breakdown the resolved price breakdown
    */
   @SuppressWarnings("checkstyle:ParameterNumber")
@@ -74,6 +76,44 @@ public final class TicketSaleRecordedSchema {
       Instant occurredAt,
       String tenderType,
       PriceBreakdown breakdown) {
+    return toRecord(
+        saleId, companyId, businessId, grandTotal, occurredAt, tenderType, breakdown, null, null,
+        null, null, null);
+  }
+
+  /**
+   * Builds a {@code SaleRecorded} {@link GenericRecord} with the full price breakdown PLUS the
+   * Phase 4 (ADR 0027) loyalty/gift-card fields.
+   *
+   * <p><strong>{@code discount_minor} decomposition.</strong> {@code breakdown.discount()} is the
+   * COMBINED deduction (promo + loyalty, per {@link
+   * id.co.nativeapp.carwash.ticket.domain.CarwashTicket}'s persisted-column decomposition); this
+   * method emits the wire's {@code discount_minor} as PROMO-ONLY ({@code breakdown.discount() -
+   * loyaltyRedeemedMinor}) so the EVENT-CATALOG's extended reconciliation identity holds — mirrors
+   * restaurant-service's {@code SaleRecordedSchema}.
+   *
+   * @param loyaltyMemberId the attached loyalty member, or {@code null}
+   * @param loyaltyRedeemedPoints the ACTUAL points redeemed, or {@code null}/0
+   * @param loyaltyRedeemedMinor the currency value of the redeemed points, minor units, or {@code
+   *     null}/0
+   * @param giftCardId the gift card redeemed as a tender, or {@code null}
+   * @param giftCardRedeemedMinor the ACTUAL amount redeemed from the gift card, minor units, or
+   *     {@code null}/0
+   */
+  @SuppressWarnings("checkstyle:ParameterNumber")
+  public static GenericRecord toRecord(
+      UUID saleId,
+      String companyId,
+      UUID businessId,
+      Money grandTotal,
+      Instant occurredAt,
+      String tenderType,
+      PriceBreakdown breakdown,
+      UUID loyaltyMemberId,
+      Long loyaltyRedeemedPoints,
+      Long loyaltyRedeemedMinor,
+      UUID giftCardId,
+      Long giftCardRedeemedMinor) {
     GenericRecord record = new GenericData.Record(SCHEMA);
     record.put("sale_id", saleId.toString());
     record.put("company_id", companyId);
@@ -82,12 +122,18 @@ public final class TicketSaleRecordedSchema {
     record.put("currency", grandTotal.currency().getCurrencyCode());
     record.put("occurred_at", occurredAt.toEpochMilli());
     record.put("tender_type", tenderType);
+    long loyaltyMinor = loyaltyRedeemedMinor != null ? loyaltyRedeemedMinor : 0L;
     record.put("subtotal_minor", breakdown.subtotal().amountMinor());
-    record.put("discount_minor", breakdown.discount().amountMinor());
+    record.put("discount_minor", breakdown.discount().amountMinor() - loyaltyMinor);
     record.put("service_charge_minor", breakdown.serviceCharge().amountMinor());
     record.put("tax_minor", breakdown.tax().amountMinor());
     record.put("tax_rule_version", breakdown.taxRuleVersion());
     record.put("uses_illustrative_rules", breakdown.usesIllustrativeRules());
+    record.put("loyalty_member_id", loyaltyMemberId == null ? null : loyaltyMemberId.toString());
+    record.put("loyalty_redeemed_points", loyaltyRedeemedPoints);
+    record.put("loyalty_redeemed_minor", loyaltyRedeemedMinor);
+    record.put("gift_card_id", giftCardId == null ? null : giftCardId.toString());
+    record.put("gift_card_redeemed_minor", giftCardRedeemedMinor);
     return record;
   }
 

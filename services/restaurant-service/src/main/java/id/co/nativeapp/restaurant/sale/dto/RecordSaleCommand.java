@@ -29,10 +29,26 @@ import java.util.UUID;
  * @param idempotencyKey the client's request id, the producer-idempotency dedupe key
  * @param tenderType the payment tender type ({@code CASH}, {@code QRIS}, {@code CARD}), or {@code
  *     null} for legacy/no-payment sales; threaded to the {@code SaleRecorded} event wire field so
- *     finance can route the GL clearing account by tender (ADR 0006, slice 2)
+ *     finance can route the GL clearing account by tender (ADR 0006, slice 2). ALSO {@code null}
+ *     when a gift card fully settled the sale (residual == 0, ADR 0027 decision — finance's
+ *     null-tender fallback posts a ZERO clearing leg, which is omitted; see {@code
+ *     OrderWriter}/{@code PaymentCaptureWriter})
  * @param breakdown the Phase 2 price breakdown (subtotal, discount, service charge, tax); null for
- *     legacy/carwash paths (all-null breakdown fields on the wire)
+ *     legacy/carwash paths (all-null breakdown fields on the wire). Phase 4 (ADR 0027): when a
+ *     loyalty redemption applies, this breakdown's {@code discount()} is the COMBINED deduction
+ *     (promo + loyalty) — {@link
+ *     id.co.nativeapp.restaurant.sale.messaging.SaleRecordedSchema#toRecord} decomposes it back into
+ *     the wire's promo-only {@code discount_minor} using {@code loyaltyRedeemedMinor}
+ * @param loyaltyMemberId Phase 4 (ADR 0027): the loyalty member attached to this sale, or {@code
+ *     null}
+ * @param loyaltyRedeemedPoints Phase 4 (ADR 0027): the ACTUAL points redeemed, or {@code null}
+ * @param loyaltyRedeemedMinor Phase 4 (ADR 0027): the currency value of the redeemed points, minor
+ *     units, or {@code null}
+ * @param giftCardId Phase 4 (ADR 0027): the gift card redeemed as a tender, or {@code null}
+ * @param giftCardRedeemedMinor Phase 4 (ADR 0027): the ACTUAL amount redeemed from the gift card,
+ *     minor units, or {@code null}
  */
+@SuppressWarnings("checkstyle:ParameterNumber")
 public record RecordSaleCommand(
     @NotNull UUID businessId,
     @NotNull @Positive Long amountMinor,
@@ -40,11 +56,17 @@ public record RecordSaleCommand(
     Instant occurredAt,
     @NotBlank String idempotencyKey,
     String tenderType,
-    PriceBreakdown breakdown) {
+    PriceBreakdown breakdown,
+    UUID loyaltyMemberId,
+    Long loyaltyRedeemedPoints,
+    Long loyaltyRedeemedMinor,
+    UUID giftCardId,
+    Long giftCardRedeemedMinor) {
 
   /**
    * Convenience constructor preserving the original five-argument shape (no-tender / legacy
-   * callers). Sets {@code tenderType} and {@code breakdown} to {@code null}.
+   * callers). Sets {@code tenderType} and {@code breakdown} to {@code null}, and every Phase 4
+   * field to {@code null}.
    */
   public RecordSaleCommand(
       UUID businessId,
@@ -52,12 +74,14 @@ public record RecordSaleCommand(
       String currency,
       Instant occurredAt,
       String idempotencyKey) {
-    this(businessId, amountMinor, currency, occurredAt, idempotencyKey, null, null);
+    this(
+        businessId, amountMinor, currency, occurredAt, idempotencyKey, null, null, null, null,
+        null, null, null);
   }
 
   /**
    * Convenience constructor for callers with a tender type but no breakdown (Phase 1 / no-pricing
-   * path). Sets {@code breakdown} to {@code null}.
+   * path). Sets {@code breakdown} and every Phase 4 field to {@code null}.
    */
   public RecordSaleCommand(
       UUID businessId,
@@ -66,6 +90,25 @@ public record RecordSaleCommand(
       Instant occurredAt,
       String idempotencyKey,
       String tenderType) {
-    this(businessId, amountMinor, currency, occurredAt, idempotencyKey, tenderType, null);
+    this(
+        businessId, amountMinor, currency, occurredAt, idempotencyKey, tenderType, null, null,
+        null, null, null, null);
+  }
+
+  /**
+   * Convenience constructor for pre-Phase-4 callers with a tender type AND a breakdown. Sets every
+   * Phase 4 (ADR 0027) field to {@code null}.
+   */
+  public RecordSaleCommand(
+      UUID businessId,
+      Long amountMinor,
+      String currency,
+      Instant occurredAt,
+      String idempotencyKey,
+      String tenderType,
+      PriceBreakdown breakdown) {
+    this(
+        businessId, amountMinor, currency, occurredAt, idempotencyKey, tenderType, breakdown, null,
+        null, null, null, null);
   }
 }

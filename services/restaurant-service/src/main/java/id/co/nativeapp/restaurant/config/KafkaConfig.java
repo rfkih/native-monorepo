@@ -1,6 +1,8 @@
 package id.co.nativeapp.restaurant.config;
 
 import id.co.nativeapp.events.Base64ByteArraySerializer;
+import id.co.nativeapp.restaurant.loyaltyref.messaging.LoyaltyRefDecodeException;
+import id.co.nativeapp.restaurant.loyaltyref.messaging.LoyaltyRefMissingEventIdException;
 import id.co.nativeapp.restaurant.outletref.messaging.UserOutletAssignmentDecodeException;
 import id.co.nativeapp.restaurant.outletref.messaging.UserOutletAssignmentMissingEventIdException;
 import java.util.HashMap;
@@ -42,7 +44,11 @@ import org.springframework.util.backoff.FixedBackOff;
  * <ul>
  *   <li>{@link UserOutletAssignmentDecodeException} — the value is not a valid Avro payload;
  *   <li>{@link UserOutletAssignmentMissingEventIdException} — the record has no valid {@code id}
- *       header (a producer-side contract violation).
+ *       header (a producer-side contract violation);
+ *   <li>{@link LoyaltyRefDecodeException} — a {@code LoyaltyBalanceChanged}/{@code
+ *       GiftCardStateChanged} payload is not valid Avro (ADR 0027, Phase 4);
+ *   <li>{@link LoyaltyRefMissingEventIdException} — same as above, missing/invalid {@code id}
+ *       header.
  * </ul>
  */
 @Configuration
@@ -94,7 +100,9 @@ public class KafkaConfig {
     handler.addNotRetryableExceptions(
         java.io.UncheckedIOException.class,
         UserOutletAssignmentDecodeException.class,
-        UserOutletAssignmentMissingEventIdException.class);
+        UserOutletAssignmentMissingEventIdException.class,
+        LoyaltyRefDecodeException.class,
+        LoyaltyRefMissingEventIdException.class);
     return handler;
   }
 

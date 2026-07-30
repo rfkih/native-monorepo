@@ -58,11 +58,18 @@ public record OrderResponse(
 
   /**
    * Maps the write-path aggregate (with its in-memory lines) to the response shape, with the
-   * computed price breakdown. No payment.
+   * computed price breakdown. No payment. Phase 4 (ADR 0027): the embedded breakdown's {@code
+   * loyaltyRedeemedMinor}/{@code giftCardAppliedMinor}/{@code residualDueMinor} are read off the
+   * order's already-stamped redemption columns (the caller must call {@code
+   * Order#applyLoyaltyRedemption} before this).
    */
   public static OrderResponse from(Order order, PriceBreakdown bd) {
     List<OrderLineResponse> lineResponses =
         order.getLines().stream().map(OrderLineResponse::from).toList();
+    long loyaltyRedeemedMinor =
+        order.getLoyaltyRedeemedMinor() != null ? order.getLoyaltyRedeemedMinor() : 0L;
+    long giftCardRedeemedMinor =
+        order.getGiftCardRedeemedMinor() != null ? order.getGiftCardRedeemedMinor() : 0L;
     return new OrderResponse(
         order.getId(),
         order.getBusinessId(),
@@ -71,7 +78,7 @@ public record OrderResponse(
         order.getSaleId(),
         lineResponses,
         null,
-        PriceBreakdownResponse.from(bd),
+        PriceBreakdownResponse.from(bd, loyaltyRedeemedMinor, giftCardRedeemedMinor),
         order.getStatus(),
         order.getOrderType(),
         order.getTableId());

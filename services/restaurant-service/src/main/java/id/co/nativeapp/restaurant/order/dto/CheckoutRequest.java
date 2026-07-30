@@ -30,6 +30,17 @@ import java.util.UUID;
  * @param couponCode Phase 3 (ADR 0026): optional coupon code; case-insensitive. An invalid or
  *     exhausted code is rejected ({@code 422}/{@code 409}) — unlike the quote endpoint, checkout is
  *     money-moving and never silently drops a bad code.
+ * @param loyaltyMemberId Phase 4 (ADR 0027): optional loyalty member to attach to this order (earn
+ *     attribution, and/or the identity a points redemption is charged against). {@code null} means
+ *     no member.
+ * @param loyaltyRedeemPoints Phase 4 (ADR 0027): optional points to redeem, clamped server-side to
+ *     {@code min(requested, cached balance, remaining deductible base)} — never trusted as-is.
+ *     Requires {@code loyaltyMemberId}; {@code null}/0 means no redemption.
+ * @param giftCardId Phase 4 (ADR 0027): optional gift card to redeem as a TENDER (never a
+ *     discount). {@code null} means no gift card.
+ * @param giftCardRedeemMinor Phase 4 (ADR 0027): optional amount to redeem from the gift card,
+ *     minor units, clamped server-side to {@code min(requested, cached ACTIVE balance, grand
+ *     total)}. Requires {@code giftCardId}; {@code null}/0 means no redemption.
  */
 public record CheckoutRequest(
     @NotNull UUID businessId,
@@ -39,11 +50,15 @@ public record CheckoutRequest(
     @Min(0) Long discountMinor,
     String orderType,
     UUID tableId,
-    String couponCode) {
+    String couponCode,
+    UUID loyaltyMemberId,
+    @Min(0) Long loyaltyRedeemPoints,
+    UUID giftCardId,
+    @Min(0) Long giftCardRedeemMinor) {
 
   /** Convenience for a checkout with no payment and no discount (the original three-arg shape). */
   public CheckoutRequest(UUID businessId, String idempotencyKey, List<OrderLineRequest> lines) {
-    this(businessId, idempotencyKey, lines, null, null, null, null, null);
+    this(businessId, idempotencyKey, lines, null, null, null, null, null, null, null, null, null);
   }
 
   /**
@@ -55,7 +70,9 @@ public record CheckoutRequest(
       String idempotencyKey,
       List<OrderLineRequest> lines,
       PaymentRequest payment) {
-    this(businessId, idempotencyKey, lines, payment, null, null, null, null);
+    this(
+        businessId, idempotencyKey, lines, payment, null, null, null, null, null, null, null,
+        null);
   }
 
   /**
@@ -68,7 +85,9 @@ public record CheckoutRequest(
       List<OrderLineRequest> lines,
       PaymentRequest payment,
       Long discountMinor) {
-    this(businessId, idempotencyKey, lines, payment, discountMinor, null, null, null);
+    this(
+        businessId, idempotencyKey, lines, payment, discountMinor, null, null, null, null, null,
+        null, null);
   }
 
   /** Convenience for a checkout with Phase 4 fields but no coupon (pre-Phase-3 seven-arg shape). */
@@ -80,6 +99,26 @@ public record CheckoutRequest(
       Long discountMinor,
       String orderType,
       UUID tableId) {
-    this(businessId, idempotencyKey, lines, payment, discountMinor, orderType, tableId, null);
+    this(
+        businessId, idempotencyKey, lines, payment, discountMinor, orderType, tableId, null, null,
+        null, null, null);
+  }
+
+  /**
+   * Convenience for a checkout with a coupon but no Phase 4 (ADR 0027) loyalty/gift-card fields
+   * (pre-Phase-4 eight-arg shape).
+   */
+  public CheckoutRequest(
+      UUID businessId,
+      String idempotencyKey,
+      List<OrderLineRequest> lines,
+      PaymentRequest payment,
+      Long discountMinor,
+      String orderType,
+      UUID tableId,
+      String couponCode) {
+    this(
+        businessId, idempotencyKey, lines, payment, discountMinor, orderType, tableId, couponCode,
+        null, null, null, null);
   }
 }
