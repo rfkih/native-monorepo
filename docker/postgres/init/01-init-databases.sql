@@ -20,6 +20,10 @@ CREATE DATABASE restaurant_service OWNER restaurant_service;
 CREATE ROLE carwash_service LOGIN PASSWORD 'carwash_service' REPLICATION;
 CREATE DATABASE carwash_service OWNER carwash_service;
 
+-- ---- barbershop-service (3rd vertical) ----
+CREATE ROLE barbershop_service LOGIN PASSWORD 'barbershop_service' REPLICATION;
+CREATE DATABASE barbershop_service OWNER barbershop_service;
+
 -- ---- finance-service ----
 CREATE ROLE finance_service LOGIN PASSWORD 'finance_service' REPLICATION;
 CREATE DATABASE finance_service OWNER finance_service;
@@ -46,6 +50,9 @@ GRANT ALL ON SCHEMA public TO restaurant_service;
 
 \connect carwash_service
 GRANT ALL ON SCHEMA public TO carwash_service;
+
+\connect barbershop_service
+GRANT ALL ON SCHEMA public TO barbershop_service;
 
 \connect finance_service
 GRANT ALL ON SCHEMA public TO finance_service;

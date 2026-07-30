@@ -1,0 +1,131 @@
+package id.co.nativeapp.barbershop.catalog.service;
+
+import id.co.nativeapp.barbershop.catalog.domain.StaffProfileWriteForbiddenException;
+import id.co.nativeapp.barbershop.catalog.dto.CatalogItemCreateRequest;
+import id.co.nativeapp.barbershop.catalog.dto.CatalogItemPatchRequest;
+import id.co.nativeapp.barbershop.catalog.dto.CatalogItemResponse;
+import id.co.nativeapp.barbershop.catalog.dto.StaffProfileCreateRequest;
+import id.co.nativeapp.barbershop.catalog.dto.StaffProfilePatchRequest;
+import id.co.nativeapp.barbershop.catalog.dto.StaffProfileResponse;
+import id.co.nativeapp.barbershop.config.ActorRolesProvider;
+import id.co.nativeapp.barbershop.config.BarbershopProperties;
+import id.co.nativeapp.barbershop.entitlement.domain.NotEntitledException;
+import id.co.nativeapp.entitlementcheck.EntitlementChecker;
+import id.co.nativeapp.tenant.TenantContext;
+import java.util.List;
+import java.util.UUID;
+import org.springframework.stereotype.Service;
+
+/**
+ * Orchestrates the barbershop catalog (services, addons, staff profiles) — the {@link
+ * id.co.nativeapp.barbershop.ticket.service.TicketService TicketService} entitlement-gating pattern
+ * applied to catalog management (ported from carwash-service's {@code CatalogService}).
+ *
+ * <p><strong>Writes are entitlement-gated; reads are not.</strong> Every create/patch consults the
+ * shared {@link EntitlementChecker} for the bound tenant and the configured {@code barbershop}
+ * module BEFORE any side effect; a company not entitled gets {@link NotEntitledException} → {@code
+ * 403} and no row is written. Reads ({@link #listServices}/{@link #listAddons}/{@link
+ * #listStaffProfiles}) are RLS-scoped only — browsing (or rendering the entitlement gate itself)
+ * never requires the module grant.
+ *
+ * <p>Not itself {@code @Transactional}: writes delegate to {@link CatalogWriter}, reads delegate to
+ * {@link CatalogReader} — each invoked through the Spring proxy so the tx advice and the RLS
+ * auto-apply aspect engage.
+ */
+@Service
+public class CatalogService {
+
+  private final CatalogWriter writer;
+  private final CatalogReader reader;
+  private final EntitlementChecker entitlementChecker;
+  private final ActorRolesProvider actorRoles;
+  private final String moduleKey;
+
+  public CatalogService(
+      CatalogWriter writer,
+      CatalogReader reader,
+      EntitlementChecker entitlementChecker,
+      ActorRolesProvider actorRoles,
+      BarbershopProperties properties) {
+    this.writer = writer;
+    this.reader = reader;
+    this.entitlementChecker = entitlementChecker;
+    this.actorRoles = actorRoles;
+    this.moduleKey = properties.moduleKey();
+  }
+
+  public CatalogItemResponse createService(CatalogItemCreateRequest request) {
+    requireEntitled();
+    return writer.createService(request);
+  }
+
+  public CatalogItemResponse patchService(UUID id, CatalogItemPatchRequest request) {
+    requireEntitled();
+    return writer.patchService(id, request);
+  }
+
+  public List<CatalogItemResponse> listServices(UUID businessId, boolean activeOnly) {
+    return reader.listServices(businessId, activeOnly);
+  }
+
+  public CatalogItemResponse createAddon(CatalogItemCreateRequest request) {
+    requireEntitled();
+    return writer.createAddon(request);
+  }
+
+  public CatalogItemResponse patchAddon(UUID id, CatalogItemPatchRequest request) {
+    requireEntitled();
+    return writer.patchAddon(id, request);
+  }
+
+  public List<CatalogItemResponse> listAddons(UUID businessId, boolean activeOnly) {
+    return reader.listAddons(businessId, activeOnly);
+  }
+
+  public StaffProfileResponse createStaffProfile(StaffProfileCreateRequest request) {
+    requireEntitled();
+    requireStaffWriteRole();
+    return writer.createStaffProfile(request);
+  }
+
+  public StaffProfileResponse patchStaffProfile(UUID id, StaffProfilePatchRequest request) {
+    requireEntitled();
+    requireStaffWriteRole();
+    return writer.patchStaffProfile(id, request);
+  }
+
+  public List<StaffProfileResponse> listStaffProfiles(UUID businessId, boolean activeOnly) {
+    return reader.listStaffProfiles(businessId, activeOnly);
+  }
+
+  /**
+   * The entitlement gate (Phase-2 pattern): rejects a write with {@code 403} if the bound company
+   * is not entitled to the {@code barbershop} module. Checked BEFORE the write so no row is
+   * produced on a denied request.
+   */
+  private void requireEntitled() {
+    String companyId = TenantContext.require().companyId();
+    if (!entitlementChecker.isEntitled(companyId, moduleKey)) {
+      throw new NotEntitledException(moduleKey);
+    }
+  }
+
+  /**
+   * Staff-profile writes require {@code owner} or {@code manager} (mirroring carwash-service review
+   * W3): the {@code employee_id} link routes {@code sales_amount} commission, so a cashier token
+   * must not be able to create or relink profiles even though the gateway admits it to {@code
+   * /api/v1/barbershop/**} (POS surface). Service/addon writes deliberately stay at restaurant-menu
+   * parity (cashier-editable) — a checkout re-prices server-side, so they carry no money-routing
+   * power.
+   *
+   * <p>An EMPTY role set is allowed through: the {@code X-Roles} header exists only behind the
+   * gateway (which always stamps it on authenticated routes, so a real cashier IS denied); a
+   * headerless request means the gateway-less dev recipe or a direct service-layer test, where the
+   * outletref guard's grandfather clause applies the same trust.
+   */
+  private void requireStaffWriteRole() {
+    if (!actorRoles.currentRoles().isEmpty() && !actorRoles.isOwnerOrManager()) {
+      throw new StaffProfileWriteForbiddenException();
+    }
+  }
+}
