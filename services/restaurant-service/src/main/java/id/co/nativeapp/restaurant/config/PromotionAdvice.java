@@ -33,8 +33,13 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  *   <li>{@link ManualDiscountForbiddenException} — a non-owner/manager caller attempted a manual
  *       discount or a promotion admin CRUD write → {@code 403 Forbidden} ({@code
  *       manual-discount-forbidden}).
- *   <li>{@link DataIntegrityViolationException} — most notably a duplicate {@code coupon} {@code
- *       (company_id, code)} → {@code 409}, rather than leaking a raw {@code 500}.
+ *   <li>{@link DataIntegrityViolationException} — a generic {@code 409 Conflict}, rather than
+ *       leaking a raw {@code 500}. Note this handler is registered {@code
+ *       @Order(HIGHEST_PRECEDENCE)} and has no sibling handler for this exception type in
+ *       restaurant-service, so it is effectively SERVICE-WIDE, not promotion-specific — it catches
+ *       ANY unique-constraint violation that reaches it uncaught (most commonly a duplicate {@code
+ *       coupon} {@code (company_id, code)}, but not exclusively). The response copy is deliberately
+ *       generic so an unrelated conflict is never mislabeled as a promotion problem.
  * </ul>
  */
 @RestControllerAdvice
@@ -86,8 +91,10 @@ public class PromotionAdvice {
       DataIntegrityViolationException ex, HttpServletRequest request) {
     ProblemDetail problem = problem(HttpStatus.CONFLICT, "promotion-conflict", request);
     problem.setTitle("Conflict");
+    // Deliberately generic (this handler is service-wide, not promotion-specific — see class
+    // javadoc): names a duplicate coupon code only as an illustrative example, not the cause.
     problem.setDetail(
-        "The operation conflicted with an existing row (e.g. a duplicate coupon code).");
+        "The operation conflicted with an existing row, e.g. a duplicate coupon code.");
     return problem;
   }
 

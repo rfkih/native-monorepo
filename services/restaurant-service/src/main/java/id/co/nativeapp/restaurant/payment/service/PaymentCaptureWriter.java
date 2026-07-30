@@ -12,6 +12,9 @@ import id.co.nativeapp.restaurant.order.repository.OrderRepository;
 import id.co.nativeapp.restaurant.payment.domain.Payment;
 import id.co.nativeapp.restaurant.payment.dto.PaymentResponse;
 import id.co.nativeapp.restaurant.payment.repository.PaymentRepository;
+import id.co.nativeapp.restaurant.pricing.domain.PriceBreakdown;
+import id.co.nativeapp.restaurant.pricing.service.TaxChargeService;
+import id.co.nativeapp.restaurant.promotion.projection.AppliedPromotionView;
 import id.co.nativeapp.restaurant.promotion.repository.AppliedPromotionRepository;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
@@ -21,6 +24,8 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,9 +55,20 @@ import org.springframework.transaction.annotation.Transactional;
  * stamped with the new {@code sale_id} in the SAME transaction ({@link
  * id.co.nativeapp.restaurant.promotion.repository.AppliedPromotionRepository#stampSaleId}) — the
  * idempotent re-delivery early return means this never double-stamps.
+ *
+ * <p><strong>Phase 3 review fix (W1).</strong> A digital-tender checkout defers the sale (and thus
+ * the {@code SaleRecorded} event) to this capture — but it does NOT defer pricing: the order was
+ * already fully priced by {@code OrderWriter.checkout} (subtotal, discount, service charge, tax all
+ * resolved then). {@link #capture} reconstructs that same {@link PriceBreakdown} deterministically
+ * from the order's persisted lines + {@code applied_promotion} audit rows (see {@link
+ * #reconstructBreakdown}) so the emitted {@code SaleRecorded} carries the real subtotal/discount/
+ * tax/service-charge legs instead of leaving them {@code null} (which made finance fall back to
+ * {@code subtotal == amount_minor}, silently dropping the discount AND tax/SC legs).
  */
 @Component
 public class PaymentCaptureWriter {
+
+  private static final Logger log = LoggerFactory.getLogger(PaymentCaptureWriter.class);
 
   private final PaymentRepository paymentRepository;
   private final OrderRepository orderRepository;
@@ -61,7 +77,9 @@ public class PaymentCaptureWriter {
   private final StockDeductionWriter stockDeductionWriter;
   private final SaleWriter saleWriter;
   private final AppliedPromotionRepository appliedPromotionRepository;
+  private final TaxChargeService taxChargeService;
 
+  @SuppressWarnings("checkstyle:ParameterNumber")
   public PaymentCaptureWriter(
       PaymentRepository paymentRepository,
       OrderRepository orderRepository,
@@ -69,7 +87,8 @@ public class PaymentCaptureWriter {
       MenuItemRepository menuItemRepository,
       StockDeductionWriter stockDeductionWriter,
       SaleWriter saleWriter,
-      AppliedPromotionRepository appliedPromotionRepository) {
+      AppliedPromotionRepository appliedPromotionRepository,
+      TaxChargeService taxChargeService) {
     this.paymentRepository = paymentRepository;
     this.orderRepository = orderRepository;
     this.orderLineRepository = orderLineRepository;
@@ -77,6 +96,7 @@ public class PaymentCaptureWriter {
     this.stockDeductionWriter = stockDeductionWriter;
     this.saleWriter = saleWriter;
     this.appliedPromotionRepository = appliedPromotionRepository;
+    this.taxChargeService = taxChargeService;
   }
 
   /**
@@ -121,20 +141,43 @@ public class PaymentCaptureWriter {
     // resolves to the same sale key — no second SaleRecorded (M3 / ADR 0006).
     String saleIdempotencyKey = payment.getId() + ":capture-sale";
 
+    // Load the order once, up front — needed both to reconstruct the price breakdown (its lines,
+    // occurredAt, and discountMinor) and, later, to link the sale + move it to COMPLETED.
+    Order order =
+        orderRepository
+            .findById(payment.getOrderId())
+            .orElseThrow(
+                () -> new IllegalArgumentException("Order not found for payment: " + paymentId));
+
     // Deduct stock for tracked order lines — same transaction as sale + payment state change.
     // An insufficient-stock shortfall throws InsufficientStockException, rolling back everything
     // (no sale, no SaleRecorded, no stock change, no status transition).
     deductStockForOrder(payment.getOrderId(), payment.getAmount().currency().getCurrencyCode());
 
+    // Phase 3 review fix (W1): reconstruct the Phase-2 price breakdown this order was actually
+    // priced with at checkout (see reconstructBreakdown javadoc) — null on a reconciliation
+    // mismatch, in which case the pre-existing no-breakdown command below is used, exactly as
+    // before this fix.
+    PriceBreakdown breakdown = reconstructBreakdown(order, payment.getAmount());
+
     // Record the sale and emit SaleRecorded in THIS transaction (MANDATORY joins us).
     RecordSaleCommand saleCommand =
-        new RecordSaleCommand(
-            payment.getBusinessId(),
-            payment.getAmount().amountMinor(),
-            payment.getAmount().currency().getCurrencyCode(),
-            capturedAt,
-            saleIdempotencyKey,
-            payment.getTenderType().name()); // tender_type for GL routing (ADR 0006 slice 2)
+        (breakdown != null)
+            ? new RecordSaleCommand(
+                payment.getBusinessId(),
+                payment.getAmount().amountMinor(),
+                payment.getAmount().currency().getCurrencyCode(),
+                capturedAt,
+                saleIdempotencyKey,
+                payment.getTenderType().name(), // tender_type for GL routing (ADR 0006 slice 2)
+                breakdown)
+            : new RecordSaleCommand(
+                payment.getBusinessId(),
+                payment.getAmount().amountMinor(),
+                payment.getAmount().currency().getCurrencyCode(),
+                capturedAt,
+                saleIdempotencyKey,
+                payment.getTenderType().name());
     RecordSaleResult saleResult = saleWriter.recordInCurrentTx(saleCommand);
 
     // Capture the payment aggregate: PENDING → CAPTURED, sets sale_id + captured_at.
@@ -142,11 +185,6 @@ public class PaymentCaptureWriter {
     paymentRepository.saveAndFlush(payment);
 
     // Link the sale to the order and move it to COMPLETED.
-    Order order =
-        orderRepository
-            .findById(payment.getOrderId())
-            .orElseThrow(
-                () -> new IllegalArgumentException("Order not found for payment: " + paymentId));
     order.linkSale(saleResult.sale().id());
     orderRepository.saveAndFlush(order);
 
@@ -155,6 +193,77 @@ public class PaymentCaptureWriter {
     appliedPromotionRepository.stampSaleId(payment.getOrderId(), saleResult.sale().id());
 
     return PaymentResponse.from(payment);
+  }
+
+  /**
+   * Phase 3 review fix (W1): rebuilds the Phase-2 {@link PriceBreakdown} a digital-tender capture
+   * never had — {@code OrderWriter.checkout} already priced this order (subtotal, discount,
+   * service charge, tax) but a digital tender defers the {@code SaleRecorded} emission to capture,
+   * and until this fix that emission always carried a {@code null} breakdown (finance fell back to
+   * {@code subtotal == amount_minor}, silently losing the discount AND tax/service-charge legs).
+   *
+   * <p><strong>Deterministic reconstruction.</strong> An order's lines never change after checkout
+   * (line items are immutable once persisted), so their sum reproduces the EXACT subtotal checkout
+   * priced from. The discount is reconstructed as the sum of this order's {@code applied_promotion}
+   * audit rows (the rule/coupon-backed deductions — each row's {@code amount_minor} is already the
+   * CLAMPED amount that deduction actually contributed, V16 migration comment) PLUS the order's raw
+   * manual discount ({@link Order#getDiscountMinor()}). {@link TaxChargeService#resolve} re-clamps
+   * that sum to the subtotal with {@code Money#min} — which, because every deduction is
+   * non-negative, is mathematically IDENTICAL to the sequential per-deduction clamp {@code
+   * PromotionEngineService} applied at checkout (clamping a running sum to a cap always yields
+   * exactly {@code min(Σ terms, cap)}, regardless of the order the terms were added in). So this
+   * reproduces the checkout-time discount exactly, provided the effective-dated tax/service-charge
+   * rule for the order's date has not changed since.
+   *
+   * <p><strong>The SAME pricing instant checkout used.</strong> {@link TaxChargeService#resolve} is
+   * called with {@link Order#getOccurredAt()} — the exact instant {@code OrderWriter.checkout}
+   * persisted on the order, NOT {@code Instant.now()} at capture time — so the effective-dated
+   * tax/service-charge rule resolution reproduces identically to what checkout resolved, even if a
+   * new rule version (a later {@code effective_from}) has since been added.
+   *
+   * <p><strong>Safety guard.</strong> If the reconstructed {@link PriceBreakdown#grandTotal()} does
+   * not exactly equal the amount about to be recorded as the sale, this NEVER distorts money on
+   * the wire: it logs a WARN (order id + expected/actual minor amounts only — no PII) and returns
+   * {@code null} so the caller falls back to the pre-existing no-breakdown {@link
+   * RecordSaleCommand} — identical to the behaviour before this fix.
+   *
+   * @param order the order being captured (its lines, {@code occurredAt}, and {@code discountMinor}
+   *     are read; not mutated)
+   * @param amountBeingRecorded the sale amount about to be recorded (the captured payment's amount)
+   * @return the reconstructed breakdown, or {@code null} if it does not reconcile to {@code
+   *     amountBeingRecorded}
+   */
+  private PriceBreakdown reconstructBreakdown(Order order, Money amountBeingRecorded) {
+    String currencyCode = amountBeingRecorded.currency().getCurrencyCode();
+
+    List<OrderLineView> lineViews = orderLineRepository.findViewsByOrderId(order.getId());
+    Money subtotal = Money.zero(amountBeingRecorded.currency());
+    for (OrderLineView lv : lineViews) {
+      subtotal = subtotal.plus(Money.ofMinor(lv.getLineTotalMinor(), currencyCode));
+    }
+
+    long ruleDiscountMinor = 0L;
+    for (AppliedPromotionView row : appliedPromotionRepository.findViewsByOrderId(order.getId())) {
+      ruleDiscountMinor = Math.addExact(ruleDiscountMinor, row.getAmountMinor());
+    }
+    long manualDiscountMinor = (order.getDiscountMinor() != null) ? order.getDiscountMinor() : 0L;
+    Money fixedDiscount =
+        Money.ofMinor(Math.addExact(ruleDiscountMinor, manualDiscountMinor), currencyCode);
+
+    PriceBreakdown breakdown =
+        taxChargeService.resolve(subtotal, 0L, fixedDiscount, order.getOccurredAt());
+
+    if (!breakdown.grandTotal().equals(amountBeingRecorded)) {
+      log.warn(
+          "Digital capture breakdown reconstruction mismatch — falling back to the no-breakdown"
+              + " SaleRecorded (money is NOT distorted). orderId={} expectedMinor={}"
+              + " reconstructedMinor={}",
+          order.getId(),
+          amountBeingRecorded.amountMinor(),
+          breakdown.grandTotal().amountMinor());
+      return null;
+    }
+    return breakdown;
   }
 
   /**
