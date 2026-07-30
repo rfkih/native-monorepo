@@ -50,6 +50,9 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // FAIL if 5173 is taken instead of silently hopping to 5174/5175 — a second `npm run dev`
+    // means a server is ALREADY running: reuse it, don't stack instances.
+    strictPort: true,
     // Allow extra hostnames when the dev server is reached through a tunnel/reverse proxy
     // (e.g. a Tailscale Funnel host). Comma-separated in VITE_ALLOWED_HOSTS; default keeps
     // Vite's normal localhost-only host check.
