@@ -28,7 +28,12 @@ const Budgets = lazy(() => import('@/features/budget/Budgets').then((m) => ({ de
 const BudgetDetail = lazy(() =>
   import('@/features/budget/BudgetDetail').then((m) => ({ default: m.BudgetDetail })),
 )
-const Pos = lazy(() => import('@/features/pos/Pos').then((m) => ({ default: m.Pos })))
+const PosSwitch = lazy(() =>
+  import('@/features/servicepos/PosSwitch').then((m) => ({ default: m.PosSwitch })),
+)
+const CatalogSwitch = lazy(() =>
+  import('@/features/servicepos/PosSwitch').then((m) => ({ default: m.CatalogSwitch })),
+)
 const OrgTree = lazy(() =>
   import('@/features/org/OrgTree').then((m) => ({ default: m.OrgTree })),
 )
@@ -254,9 +259,12 @@ export function App() {
   return (
     <Suspense fallback={<CenteredSpinner />}>
       <Routes>
-        {/* The POS is a full-screen "front office" — it renders OUTSIDE the sidebar/topbar shell. */}
-        {posAllowed && <Route path="/pos" element={<Pos />} />}
+        {/* The POS is a full-screen "front office" — it renders OUTSIDE the sidebar/topbar shell.
+            PosSwitch picks the per-vertical surface (restaurant Pos vs carwash ServicePos). */}
+        {posAllowed && <Route path="/pos" element={<PosSwitch />} />}
         {menuAllowed && <Route path="/menu" element={<MenuManagement />} />}
+        {/* /catalog is the carwash counterpart of /menu — gated identically (menuAllowed). */}
+        {menuAllowed && <Route path="/catalog" element={<CatalogSwitch />} />}
         {kitchenAllowed && <Route path="/kitchen" element={<Kitchen />} />}
 
         {/* The employee self-service surface — full-screen, any business role may open it. */}

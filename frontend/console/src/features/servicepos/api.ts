@@ -1,0 +1,468 @@
+/**
+ * Service-POS data plumbing — carwash today, generalised for any future "package + add-ons"
+ * vertical via VerticalPosConfig. Mirrors the react-query patterns in features/pos/api.ts
+ * (tenant-scoped apiFetch, debounced live quote, mutation-driven cache invalidation) but is NOT a
+ * copy: the wire shapes (CatalogItemResponse / StaffProfileResponse / TicketResponse) are specific
+ * to the service-POS backend contract.
+ *
+ * Every query key is scoped by [config.vertical, ..., session.companyId, session.businessId] so
+ * two verticals (or two outlets) never share a cache entry.
+ */
+import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
+import { useEffect, useRef, useState } from 'react'
+import { apiFetch, ApiError } from '@/lib/api'
+import type { CompanySession } from '@/lib/session'
+import type { CatalogItemKind, TenderType, VerticalPosConfig } from './config'
+
+// ---------------------------------------------------------------------------
+// Wire types
+// ---------------------------------------------------------------------------
+
+/** A sellable package or add-on (GET .../packages, .../addons). */
+export interface CatalogItemResponse {
+  id: string
+  businessId: string
+  name: string
+  description: string | null
+  priceMinor: number
+  currency: string
+  active: boolean
+  displayOrder: number
+}
+
+/** A staff member who can be attributed to a ticket (GET .../staff-profiles). */
+export interface StaffProfileResponse {
+  id: string
+  businessId: string
+  displayLabel: string
+  /** Linked HR employee id (features/hr), or null when the profile has no employee link. */
+  employeeId: string | null
+  active: boolean
+}
+
+/**
+ * Mirrors the backend PriceBreakdownResponse — identical shape to the restaurant POS's breakdown
+ * (features/pos/api.ts). When usesIllustrativeRules is true the service-charge / tax lines are
+ * placeholder amounts and the UI must badge them as estimated.
+ */
+export interface PriceBreakdownResponse {
+  subtotalMinor: number
+  discountMinor: number
+  serviceChargeMinor: number
+  taxMinor: number
+  grandTotalMinor: number
+  currency: string
+  usesIllustrativeRules: boolean
+}
+
+/** One quote/checkout line — a package (qty always 1) or an add-on (qty >= 1). */
+export interface TicketLineInput {
+  itemType: CatalogItemKind
+  itemId: string
+  qty: number
+}
+
+/** A priced line as returned on a TicketResponse. */
+export interface TicketLineResponse {
+  itemType: CatalogItemKind
+  itemId: string
+  name: string
+  /** Unit price in minor units — multiply by qty for the line total (no separate total field). */
+  priceMinor: number
+  currency: string
+  qty: number
+}
+
+/** Mirrors the restaurant POS's PaymentResponse, nested under a ticket instead of an order. */
+export interface TicketPaymentResponse {
+  paymentId: string
+  ticketId: string
+  tenderType: TenderType
+  /** String name of Payment.Status enum: PENDING | CAPTURED | VOIDED | REFUNDED | ... */
+  status: string
+  amountMinor: number
+  currency: string
+  /** Cash only — null for digital tenders. */
+  tenderedMinor: number | null
+  /** Cash only — null for digital tenders. */
+  changeMinor: number | null
+  /** True for QRIS/CARD until a real provider adapter lands (ADR 0006). */
+  providerPending: boolean
+  /** null until the payment is CAPTURED. */
+  saleId: string | null
+}
+
+export interface TicketResponse {
+  ticketId: string
+  businessId: string
+  bay: string
+  vehiclePlate: string | null
+  staffProfileId: string | null
+  staffLabel: string | null
+  saleId: string | null
+  breakdown: PriceBreakdownResponse
+  occurredAt: string
+  lines: TicketLineResponse[]
+  payment: TicketPaymentResponse | null
+}
+
+function tenantOf(session: CompanySession) {
+  return { companyId: session.companyId, actor: session.actor }
+}
+
+// ---------------------------------------------------------------------------
+// Error helpers — the outlet-not-assigned check mirrors features/pos; module-not-entitled is new
+// to service-POS and lives here (local, per rule: never edit lib/api.ts for a feature-specific check).
+// ---------------------------------------------------------------------------
+
+/**
+ * Detects a 403 module-not-entitled problem+json (the company/outlet is not entitled to this
+ * vertical's module). Surfaces on checkout the same way outlet-not-assigned does.
+ */
+export function isModuleNotEntitled(err: unknown): boolean {
+  return (
+    err instanceof ApiError &&
+    err.status === 403 &&
+    typeof err.problem?.type === 'string' &&
+    err.problem.type.includes('module-not-entitled')
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Catalog reads — packages / add-ons / staff profiles
+// ---------------------------------------------------------------------------
+
+/**
+ * Read options: the POS terminal reads active-only (default); CatalogManagement reads EVERYTHING
+ * (includeInactive) so a deactivated item stays visible and can be reactivated.
+ */
+export interface CatalogReadOptions {
+  includeInactive?: boolean
+}
+
+export function useCatalogPackages(
+  config: VerticalPosConfig,
+  session: CompanySession,
+  opts: CatalogReadOptions = {},
+) {
+  const activeOnly = opts.includeInactive ? 'false' : 'true'
+  return useQuery({
+    queryKey: [
+      'servicepos',
+      config.vertical,
+      'packages',
+      session.companyId,
+      session.businessId,
+      activeOnly,
+    ],
+    queryFn: async () => {
+      const result = await apiFetch<CatalogItemResponse[]>(`${config.apiBase}/packages`, {
+        tenant: tenantOf(session),
+        // The catalog is OUTLET-scoped (business_id on every row): filter server-side to the
+        // effective outlet so a multi-outlet company's terminals only see their own offerings.
+        query: { activeOnly, businessId: session.businessId },
+      })
+      return result ?? []
+    },
+  })
+}
+
+export function useCatalogAddons(
+  config: VerticalPosConfig,
+  session: CompanySession,
+  opts: CatalogReadOptions = {},
+) {
+  const activeOnly = opts.includeInactive ? 'false' : 'true'
+  return useQuery({
+    queryKey: [
+      'servicepos',
+      config.vertical,
+      'addons',
+      session.companyId,
+      session.businessId,
+      activeOnly,
+    ],
+    queryFn: async () => {
+      const result = await apiFetch<CatalogItemResponse[]>(`${config.apiBase}/addons`, {
+        tenant: tenantOf(session),
+        query: { activeOnly, businessId: session.businessId },
+      })
+      return result ?? []
+    },
+  })
+}
+
+export function useStaffProfiles(
+  config: VerticalPosConfig,
+  session: CompanySession,
+  opts: CatalogReadOptions = {},
+) {
+  const activeOnly = opts.includeInactive ? 'false' : 'true'
+  return useQuery({
+    queryKey: [
+      'servicepos',
+      config.vertical,
+      'staff-profiles',
+      session.companyId,
+      session.businessId,
+      activeOnly,
+    ],
+    queryFn: async () => {
+      const result = await apiFetch<StaffProfileResponse[]>(`${config.apiBase}/staff-profiles`, {
+        tenant: tenantOf(session),
+        query: { activeOnly, businessId: session.businessId },
+      })
+      return result ?? []
+    },
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Live quote — debounced, no side-effects (mirrors features/pos useQuote exactly).
+// ---------------------------------------------------------------------------
+
+export function useTicketQuote(
+  config: VerticalPosConfig,
+  session: CompanySession,
+  lines: TicketLineInput[],
+  discountMinor: number,
+) {
+  const [debounced, setDebounced] = useState<{ lines: TicketLineInput[]; discountMinor: number }>(
+    () => ({ lines, discountMinor }),
+  )
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => {
+      setDebounced({ lines, discountMinor })
+    }, 400)
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+    }
+  }, [lines, discountMinor])
+
+  const enabled = debounced.lines.length > 0
+
+  return useQuery({
+    queryKey: [
+      'servicepos',
+      config.vertical,
+      'quote',
+      session.companyId,
+      session.businessId,
+      debounced.lines,
+      debounced.discountMinor,
+    ],
+    enabled,
+    placeholderData: keepPreviousData,
+    staleTime: 0,
+    queryFn: () =>
+      apiFetch<PriceBreakdownResponse>(`${config.apiBase}/tickets/quote`, {
+        method: 'POST',
+        tenant: tenantOf(session),
+        body: {
+          businessId: session.businessId,
+          lines: debounced.lines,
+          discountMinor: debounced.discountMinor > 0 ? debounced.discountMinor : null,
+        },
+      }),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Checkout / capture / read-one
+// ---------------------------------------------------------------------------
+
+export interface TicketCheckoutInput {
+  bay: string
+  vehiclePlate?: string | null
+  staffProfileId?: string | null
+  discountMinor?: number
+  lines: TicketLineInput[]
+  payment: { tenderType: TenderType; tenderedMinor?: number }
+}
+
+export function useTicketCheckout(config: VerticalPosConfig, session: CompanySession) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      bay,
+      vehiclePlate,
+      staffProfileId,
+      discountMinor,
+      lines,
+      payment,
+    }: TicketCheckoutInput) =>
+      apiFetch<TicketResponse>(`${config.apiBase}/tickets/checkout`, {
+        method: 'POST',
+        tenant: tenantOf(session),
+        body: {
+          businessId: session.businessId,
+          idempotencyKey: crypto.randomUUID(),
+          bay,
+          vehiclePlate: vehiclePlate || null,
+          staffProfileId: staffProfileId || null,
+          discountMinor: discountMinor && discountMinor > 0 ? discountMinor : null,
+          lines,
+          payment,
+        },
+      }),
+    onSuccess: (res) => {
+      // A CAPTURED payment recorded a Sale → consolidated dashboard revenue changes.
+      if (res?.payment?.status === 'CAPTURED') {
+        void qc.invalidateQueries({ queryKey: ['pnl'] })
+      }
+    },
+  })
+}
+
+/** The "Mark as paid" step for QRIS/CARD — captures a PENDING ticket payment. */
+export function useTicketCapture(config: VerticalPosConfig, session: CompanySession) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (ticketId: string) =>
+      apiFetch<TicketResponse>(`${config.apiBase}/tickets/${ticketId}/capture`, {
+        method: 'POST',
+        tenant: tenantOf(session),
+      }),
+    onSuccess: (res) => {
+      if (res?.payment?.status === 'CAPTURED') {
+        void qc.invalidateQueries({ queryKey: ['pnl'] })
+      }
+    },
+  })
+}
+
+export function useTicket(
+  config: VerticalPosConfig,
+  session: CompanySession,
+  ticketId: string | null,
+) {
+  return useQuery({
+    queryKey: ['servicepos', config.vertical, 'ticket', session.companyId, ticketId],
+    enabled: ticketId != null,
+    queryFn: () =>
+      apiFetch<TicketResponse>(`${config.apiBase}/tickets/${ticketId}`, {
+        tenant: tenantOf(session),
+      }),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Catalog management mutations (owner/manager back office — CatalogManagement.tsx)
+// ---------------------------------------------------------------------------
+
+function catalogKey(config: VerticalPosConfig, session: CompanySession, kind: string) {
+  return ['servicepos', config.vertical, kind, session.companyId, session.businessId]
+}
+
+export interface CreateCatalogItemInput {
+  businessId: string
+  name: string
+  description?: string | null
+  priceMinor: number
+  currency: string
+}
+
+export interface UpdateCatalogItemInput {
+  id: string
+  name?: string
+  description?: string | null
+  priceMinor?: number
+  active?: boolean
+  displayOrder?: number
+}
+
+export function useCreatePackage(config: VerticalPosConfig, session: CompanySession) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: CreateCatalogItemInput) =>
+      apiFetch<CatalogItemResponse>(`${config.apiBase}/packages`, {
+        method: 'POST',
+        tenant: tenantOf(session),
+        body,
+      }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: catalogKey(config, session, 'packages') }),
+  })
+}
+
+export function useUpdatePackage(config: VerticalPosConfig, session: CompanySession) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...body }: UpdateCatalogItemInput) =>
+      apiFetch<CatalogItemResponse>(`${config.apiBase}/packages/${id}`, {
+        method: 'PATCH',
+        tenant: tenantOf(session),
+        body,
+      }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: catalogKey(config, session, 'packages') }),
+  })
+}
+
+export function useCreateAddon(config: VerticalPosConfig, session: CompanySession) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: CreateCatalogItemInput) =>
+      apiFetch<CatalogItemResponse>(`${config.apiBase}/addons`, {
+        method: 'POST',
+        tenant: tenantOf(session),
+        body,
+      }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: catalogKey(config, session, 'addons') }),
+  })
+}
+
+export function useUpdateAddon(config: VerticalPosConfig, session: CompanySession) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...body }: UpdateCatalogItemInput) =>
+      apiFetch<CatalogItemResponse>(`${config.apiBase}/addons/${id}`, {
+        method: 'PATCH',
+        tenant: tenantOf(session),
+        body,
+      }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: catalogKey(config, session, 'addons') }),
+  })
+}
+
+export interface CreateStaffProfileInput {
+  businessId: string
+  displayLabel: string
+  employeeId?: string | null
+}
+
+export interface UpdateStaffProfileInput {
+  id: string
+  displayLabel?: string
+  employeeId?: string | null
+  active?: boolean
+}
+
+export function useCreateStaffProfile(config: VerticalPosConfig, session: CompanySession) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: CreateStaffProfileInput) =>
+      apiFetch<StaffProfileResponse>(`${config.apiBase}/staff-profiles`, {
+        method: 'POST',
+        tenant: tenantOf(session),
+        body,
+      }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: catalogKey(config, session, 'staff-profiles') }),
+  })
+}
+
+export function useUpdateStaffProfile(config: VerticalPosConfig, session: CompanySession) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...body }: UpdateStaffProfileInput) =>
+      apiFetch<StaffProfileResponse>(`${config.apiBase}/staff-profiles/${id}`, {
+        method: 'PATCH',
+        tenant: tenantOf(session),
+        body,
+      }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: catalogKey(config, session, 'staff-profiles') }),
+  })
+}
