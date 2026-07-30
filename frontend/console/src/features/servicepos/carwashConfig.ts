@@ -7,6 +7,7 @@ export const carwashConfig: VerticalPosConfig = {
   apiBase: '/api/v1/carwash',
   i18nNs: 'carwashPos',
   location: {
+    fieldName: 'bay',
     labelKey: 'carwashPos.bay',
     placeholderKey: 'carwashPos.bayPlaceholder',
     required: true,

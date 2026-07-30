@@ -95,8 +95,12 @@ export interface TicketPaymentResponse {
 export interface TicketResponse {
   ticketId: string
   businessId: string
-  bay: string
-  vehiclePlate: string | null
+  /** Carwash's location field — absent on barbershop responses (which carry `chair`). */
+  bay?: string | null
+  /** Barbershop's location field — absent on carwash responses (which carry `bay`). */
+  chair?: string | null
+  /** Carwash only — barbershop tickets carry no vehicle plate at all. */
+  vehiclePlate?: string | null
   staffProfileId: string | null
   staffLabel: string | null
   saleId: string | null
@@ -104,6 +108,11 @@ export interface TicketResponse {
   occurredAt: string
   lines: TicketLineResponse[]
   payment: TicketPaymentResponse | null
+}
+
+/** The ticket's location value under whichever wire field this vertical uses (bay/chair). */
+export function ticketLocationOf(config: VerticalPosConfig, ticket: TicketResponse): string | null {
+  return (config.location.fieldName === 'chair' ? ticket.chair : ticket.bay) ?? null
 }
 
 function tenantOf(session: CompanySession) {
@@ -285,6 +294,7 @@ export interface TicketCheckoutInput {
    * twice (the BillDetail freshIdempotencyKey pattern; review W1).
    */
   idempotencyKey: string
+  /** The location value; serialized under this vertical's wire field name (bay/chair). */
   bay: string
   vehiclePlate?: string | null
   staffProfileId?: string | null
@@ -311,8 +321,11 @@ export function useTicketCheckout(config: VerticalPosConfig, session: CompanySes
         body: {
           businessId: session.businessId,
           idempotencyKey,
-          bay,
-          vehiclePlate: vehiclePlate || null,
+          // The location rides this vertical's wire field name (carwash `bay` is @NotBlank;
+          // barbershop `chair` is optional → null when the input is blank). The vehicle plate is
+          // a carwash-only field — omitted entirely for verticals whose contract lacks it.
+          [config.location.fieldName]: bay.trim() ? bay : null,
+          ...(config.vehicleField ? { vehiclePlate: vehiclePlate || null } : {}),
           staffProfileId: staffProfileId || null,
           discountMinor: discountMinor && discountMinor > 0 ? discountMinor : null,
           lines,

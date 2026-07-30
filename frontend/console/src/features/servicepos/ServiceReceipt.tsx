@@ -14,7 +14,7 @@ import { formatMoney } from '@/lib/money'
 import { ThermalReceipt } from '@/features/pos/ThermalReceipt'
 import type { ThermalRow, ThermalLineItem } from '@/features/pos/ThermalReceipt'
 import type { VerticalPosConfig } from './config'
-import type { TicketResponse } from './api'
+import { ticketLocationOf, type TicketResponse } from './api'
 
 interface Props {
   config: VerticalPosConfig
@@ -72,10 +72,11 @@ export function ServiceReceipt({ config, ticket, locale, businessName, onNew }: 
     timeStyle: 'short',
   }).format(new Date(ticket.occurredAt))
 
-  // Meta rows — bay / vehicle / washer, skipping any that are null (task 4/6 spec).
+  // Meta rows — location (bay/chair) / vehicle / staff, skipping any that are null.
   const metaRows: ThermalRow[] = []
-  if (ticket.bay) {
-    metaRows.push({ label: t(config.location.labelKey), valueLabel: ticket.bay })
+  const location = ticketLocationOf(config, ticket)
+  if (location) {
+    metaRows.push({ label: t(config.location.labelKey), valueLabel: location })
   }
   if (config.vehicleField && ticket.vehiclePlate) {
     metaRows.push({ label: t('carwashPos.vehiclePlate'), valueLabel: ticket.vehiclePlate })

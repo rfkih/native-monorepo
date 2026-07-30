@@ -54,6 +54,12 @@ export interface VerticalPosConfig {
   i18nNs: string
   /** The "where" field on a ticket (bay for carwash, chair for barbershop). */
   location: {
+    /**
+     * The WIRE field name this vertical's backend uses for the location on
+     * CheckoutRequest/TicketResponse — 'bay' (carwash) or 'chair' (barbershop). The UI keeps one
+     * internal name; api.ts translates at the request/response boundary.
+     */
+    fieldName: 'bay' | 'chair'
     /** i18n key for the field label. */
     labelKey: string
     /** i18n key for the input placeholder. */

@@ -12,6 +12,7 @@ export const barbershopConfig: VerticalPosConfig = {
   apiBase: '/api/v1/barbershop',
   i18nNs: 'barbershopPos',
   location: {
+    fieldName: 'chair',
     labelKey: 'barbershopPos.chair',
     placeholderKey: 'barbershopPos.chairPlaceholder',
     required: false,
