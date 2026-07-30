@@ -1,5 +1,5 @@
-import { useState, type ComponentType, type ReactNode } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
   ArrowLeftRight,
@@ -7,6 +7,8 @@ import {
   Building2,
   CalendarCheck,
   CalendarClock,
+  Check,
+  ChevronDown,
   Clock,
   FileText,
   History,
@@ -21,6 +23,7 @@ import {
   Moon,
   Network,
   Percent,
+  Plus,
   Receipt,
   Scale,
   Store,
@@ -175,12 +178,7 @@ export function Shell({ children }: { children: ReactNode }) {
 
           <div className="flex-1" />
 
-          {company ? (
-            <div className="hidden h-9 items-center gap-2 rounded-full bg-ink-50 px-3.5 text-[13px] font-semibold text-ink sm:flex">
-              <span className="size-[7px] rounded-full bg-profit" />
-              {company.name}
-            </div>
-          ) : null}
+          {company ? <CompanySwitcher /> : null}
 
           <button
             type="button"
@@ -291,6 +289,97 @@ function Avatar() {
   return (
     <div className="grid size-10 place-items-center rounded-full bg-emerald-tint text-[13px] font-bold text-emerald-2">
       {initials || 'NA'}
+    </div>
+  )
+}
+
+/**
+ * The company switcher (multi-company ownership, ADR 0021): the header pill lists the login's
+ * companies; picking one switches the active tenant (every companyId-keyed query re-fetches, and
+ * each API call sends the token-validated selection). "+ Add business" opens the onboarding wizard
+ * for company N+1. A single-company login sees the plain pill (no menu affordance beyond it).
+ */
+function CompanySwitcher() {
+  const { t } = useTranslation()
+  const { company, companies, setActiveCompany } = useSession()
+  const navigate = useNavigate()
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement | null>(null)
+
+  // Close on outside click / Escape.
+  useEffect(() => {
+    if (!open) return
+    function onPointerDown(e: MouseEvent) {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [open])
+
+  if (!company) return null
+
+  return (
+    <div ref={rootRef} className="relative hidden sm:block">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={t('shell.switchCompany')}
+        className="flex h-9 items-center gap-2 rounded-full bg-ink-50 px-3.5 text-[13px] font-semibold text-ink transition-colors hover:bg-hover"
+      >
+        <span className="size-[7px] rounded-full bg-profit" />
+        {company.name}
+        <ChevronDown className={cn('size-3.5 text-ink-3 transition-transform', open && 'rotate-180')} />
+      </button>
+
+      {open ? (
+        <div
+          role="menu"
+          className="absolute right-0 top-11 z-50 min-w-[220px] rounded-2xl border border-line bg-surface p-1.5 shadow-lg"
+        >
+          <div className="px-3 pb-1 pt-2 text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+            {t('shell.yourBusinesses')}
+          </div>
+          {companies.map((c) => (
+            <button
+              key={c.companyId}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false)
+                if (c.companyId !== company.companyId) setActiveCompany(c.companyId)
+              }}
+              className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] font-semibold text-ink transition-colors hover:bg-hover"
+            >
+              <span className="truncate">{c.name}</span>
+              {c.companyId === company.companyId ? (
+                <Check className="size-4 shrink-0 text-profit" />
+              ) : null}
+            </button>
+          ))}
+          <div className="my-1 h-px bg-line" />
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false)
+              navigate('/onboarding')
+            }}
+            className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-[13px] font-semibold text-emerald-2 transition-colors hover:bg-hover"
+          >
+            <Plus className="size-4 shrink-0" />
+            {t('shell.addBusiness')}
+          </button>
+        </div>
+      ) : null}
     </div>
   )
 }

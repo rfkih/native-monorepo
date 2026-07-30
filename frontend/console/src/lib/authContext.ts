@@ -14,8 +14,16 @@ export interface AuthState {
   /** Initial auth resolution finished (a redirect/login may still be pending if false). */
   ready: boolean
   authenticated: boolean
-  /** The verified `company_id` claim, or null for a not-yet-provisioned principal / dev mode. */
+  /**
+   * The FIRST company of the verified `company_id` claim (the default active company), or null for
+   * a not-yet-provisioned principal / dev mode. Kept for the many single-company call sites.
+   */
   companyId: string | null
+  /**
+   * ALL companies of the verified `company_id` claim — the login's allowed set (multi-company
+   * ownership, ADR 0021; the claim is `string | string[]`). Empty in dev mode / pre-onboarding.
+   */
+  companyIds: string[]
   /** The acting principal (JWT `preferred_username`/`sub`, or the dev actor). */
   actor: string
   /**
@@ -31,6 +39,13 @@ export interface AuthState {
    */
   login: (loginHint?: string) => void
   logout: () => void
+  /**
+   * Silently renews the access token (oidc mode) so a just-changed `company_id` claim — e.g. after
+   * "Add another business" enlarged the membership set — reaches the session without a re-login.
+   * Resolves `true` when the renew succeeded (the fresh claims are applied), `false` when it failed
+   * (the old token stays until the next automatic renew). Always `true` in dev mode (no token).
+   */
+  refresh: () => Promise<boolean>
 }
 
 export const AuthContext = createContext<AuthState | null>(null)

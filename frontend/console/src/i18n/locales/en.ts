@@ -193,8 +193,14 @@ export const en = {
     toggleTheme: 'Toggle light / dark theme',
     backToDashboard: 'Back to dashboard',
   },
+  shell: {
+    switchCompany: 'Switch business',
+    yourBusinesses: 'Your businesses',
+    addBusiness: 'Add business',
+  },
   onboarding: {
     title: 'Create a company',
+    addTitle: 'Add another business',
     subtitle:
       'The base currency and language are set now — they are fixed at creation and cannot be changed later.',
     stepCompany: 'Company',

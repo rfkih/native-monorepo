@@ -96,9 +96,13 @@ export async function apiFetch<T>(path: string, opts: RequestOptions = {}): Prom
   const headers: Record<string, string> = { Accept: 'application/json' }
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json'
   if (AUTH_MODE === 'oidc') {
-    // The gateway derives tenant/actor/roles from the verified token; do NOT send X-Company-Id /
-    // X-Actor (the gateway strips client copies anyway).
+    // Actor/roles come from the verified token. X-Company-Id is the ACTIVE-COMPANY SELECTION
+    // (multi-company ownership, ADR 0021): the gateway and each service validate it against the
+    // token's allowed set before binding — a value outside the set is a 403, so this is a
+    // selection, never a trusted tenant. Omitted (bootstrap calls), the token's first company is
+    // the default.
     if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`
+    if (opts.tenant) headers['X-Company-Id'] = opts.tenant.companyId
   } else if (opts.tenant) {
     headers['X-Company-Id'] = opts.tenant.companyId
     headers['X-Actor'] = opts.tenant.actor

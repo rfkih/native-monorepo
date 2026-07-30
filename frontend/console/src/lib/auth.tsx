@@ -33,11 +33,13 @@ function DevAuthProvider({ children }: { children: ReactNode }) {
       ready: true,
       authenticated: true,
       companyId: null, // dev tenant comes from the onboarding session, not a token
+      companyIds: [],
       actor: DEV_ACTOR,
       sub: null,
       roles: [...BUSINESS_ROLES],
       login: () => {},
       logout: () => {},
+      refresh: async () => true,
     }),
     [],
   )
@@ -65,10 +67,11 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
       }),
   )
 
-  const [state, setState] = useState<Omit<AuthState, 'login' | 'logout'>>({
+  const [state, setState] = useState<Omit<AuthState, 'login' | 'logout' | 'refresh'>>({
     ready: false,
     authenticated: false,
     companyId: null,
+    companyIds: [],
     actor: '',
     sub: null,
     roles: [],
@@ -85,6 +88,7 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
           ready: true,
           authenticated: false,
           companyId: null,
+          companyIds: [],
           actor: '',
           sub: null,
           roles: [],
@@ -93,10 +97,14 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
       }
       setAccessToken(user.access_token)
       const claims = decodeJwt(user.access_token)
+      // The company_id claim is `string | string[]` (a multivalued mapper emits an array — the
+      // login's allowed companies, first = default active; pre-rollout tokens carry a scalar).
+      const companyIds = extractCompanyIds(claims.company_id)
       setState({
         ready: true,
         authenticated: true,
-        companyId: typeof claims.company_id === 'string' ? claims.company_id : null,
+        companyId: companyIds[0] ?? null,
+        companyIds,
         actor:
           (typeof claims.preferred_username === 'string' && claims.preferred_username) ||
           (typeof claims.sub === 'string' && claims.sub) ||
@@ -133,6 +141,7 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
         ready: true,
         authenticated: false,
         companyId: null,
+        companyIds: [],
         actor: '',
         sub: null,
         roles: [],
@@ -162,6 +171,18 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
         setAccessToken(null)
         void manager.signoutRedirect()
       },
+      // Silent renew: fetches a fresh token so a just-enlarged company_id claim (after "Add
+      // another business") reaches the session. The addUserLoaded event applies the new claims.
+      refresh: async () => {
+        try {
+          await manager.signinSilent()
+          return true
+        } catch {
+          // Renew failed (e.g. IdP session gone) — the current token stays; the new membership
+          // arrives on the next automatic renew or login.
+          return false
+        }
+      },
     }),
     [state, manager],
   )
@@ -172,6 +193,25 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
 // ---------------------------------------------------------------------------
 // helpers (module-private)
 // ---------------------------------------------------------------------------
+
+/**
+ * Normalizes the `string | string[]` company_id claim to a clean, deduplicated id list. Array
+ * entries coerce primitives (mirroring the two backend extractors, which accept any element via
+ * `toString()`), so all three implementations agree on the set for any claim shape.
+ */
+function extractCompanyIds(claim: unknown): string[] {
+  if (typeof claim === 'string') return claim ? [claim] : []
+  if (Array.isArray(claim)) {
+    const ids: string[] = []
+    for (const value of claim) {
+      const id =
+        typeof value === 'string' ? value : typeof value === 'number' ? String(value) : ''
+      if (id && !ids.includes(id)) ids.push(id)
+    }
+    return ids
+  }
+  return []
+}
 
 /** Decode a JWT payload (no verification — the gateway/services verify; we only read claims). */
 function decodeJwt(token: string): Record<string, unknown> {

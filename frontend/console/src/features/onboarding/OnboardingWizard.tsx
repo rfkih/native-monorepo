@@ -10,6 +10,8 @@ import { ChoiceCards } from '@/components/ui/ChoiceCards'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
 import { useSession } from '@/lib/session'
+import { useAuth } from '@/lib/authContext'
+import { AUTH_MODE } from '@/lib/config'
 import { DEV_ACTOR } from '@/lib/devIdentity'
 import { cn } from '@/lib/cn'
 import { createCompany, type CompanyResponse } from './api'
@@ -21,7 +23,10 @@ const VERTICALS = ['restaurant', 'carwash', 'barbershop'] as const
 export function OnboardingWizard() {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
-  const { setCompany } = useSession()
+  const { setCompany, companies } = useSession()
+  const auth = useAuth()
+  // With ≥1 existing company this wizard is the "Add another business" flow (ADR 0021).
+  const isAdditional = companies.length > 0
 
   const [step, setStep] = useState(0)
   const [name, setName] = useState('')
@@ -44,15 +49,26 @@ export function OnboardingWizard() {
         },
         DEV_ACTOR,
       ),
-    onSuccess: (res) => {
+    onSuccess: async (res) => {
       setCreated(res)
+      // In oidc mode the create BOUND this login to the new company (its Keycloak membership grew,
+      // ADR 0021) — silently renew the token so the enlarged company_id claim arrives and the
+      // /mine list includes it. Then activate the new company (setCompany holds it as the manual
+      // session until the list catches up; in dev it upserts into the persisted list). One retry
+      // on a failed renew; if both fail the activation still proceeds — tenant calls 403 with
+      // invalid-company-selection until the next automatic renew self-heals the claim (documented
+      // residual, ADR 0021).
+      if (AUTH_MODE === 'oidc') {
+        const renewed = await auth.refresh()
+        if (!renewed) await auth.refresh()
+      }
       setCompany({
         companyId: res.id,
         name: res.name,
         baseCurrency: res.baseCurrency,
         defaultLanguage: res.defaultLanguage,
         businessId: res.firstBusinessId,
-        actor: DEV_ACTOR,
+        actor: AUTH_MODE === 'oidc' ? auth.actor : DEV_ACTOR,
       })
     },
   })
@@ -75,7 +91,7 @@ export function OnboardingWizard() {
       {/* Centered header */}
       <header className="mb-8 text-center">
         <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">
-          {t('onboarding.title')}
+          {t(isAdditional ? 'onboarding.addTitle' : 'onboarding.title')}
         </h1>
         <p className="mx-auto mt-1.5 max-w-md text-sm leading-relaxed text-ink-3">
           {t('onboarding.subtitle')}

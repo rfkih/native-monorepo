@@ -186,8 +186,14 @@ export const id = {
     toggleTheme: 'Ganti tema terang / gelap',
     backToDashboard: 'Kembali ke dasbor',
   },
+  shell: {
+    switchCompany: 'Ganti bisnis',
+    yourBusinesses: 'Bisnis Anda',
+    addBusiness: 'Tambah bisnis',
+  },
   onboarding: {
     title: 'Buat perusahaan',
+    addTitle: 'Tambah bisnis baru',
     subtitle:
       'Mata uang dasar dan bahasa ditetapkan sekarang — keduanya dikunci saat pembuatan dan tidak dapat diubah lagi.',
     stepCompany: 'Perusahaan',
