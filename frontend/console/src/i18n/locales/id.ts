@@ -286,6 +286,7 @@ export const id = {
     noCompanyHint: 'Buat perusahaan untuk melihat posisi terkonsolidasinya.',
   },
   statements: {
+    scopeAllUnits: 'semua unit bisnis',
     incomeTitle: 'Laporan laba rugi',
     incomeSubtitle: 'Pendapatan, beban, dan laba bersih untuk periode ini.',
     balanceTitle: 'Neraca',

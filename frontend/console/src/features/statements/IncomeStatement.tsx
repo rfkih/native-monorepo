@@ -10,7 +10,7 @@ import { localeOf } from '@/i18n'
 import { formatMoney, formatAmount, formatPercent } from '@/lib/money'
 import { currentPeriod, shiftPeriod } from '@/lib/period'
 import { useIncomeStatement } from './api'
-import { downloadCsv, LineSection, PeriodNav, StatementEmptyState, SummaryCard } from './parts'
+import { downloadCsv, EntityScope, LineSection, PeriodNav, StatementEmptyState, SummaryCard } from './parts'
 
 /**
  * Income Statement (Laba Rugi) — design 2b: the parchment palette retired.
@@ -55,6 +55,7 @@ export function IncomeStatement() {
   const exportCsv = () => {
     if (!data) return
     downloadCsv(`income-statement-${period}.csv`, [
+      [company.name, t('statements.scopeAllUnits')],
       [t('statements.incomeTitle'), period, currency],
       [],
       [t('statements.revenue')],
@@ -74,6 +75,7 @@ export function IncomeStatement() {
       {/* Page header */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
+          <EntityScope name={company.name} scope={t('statements.scopeAllUnits')} />
           <h1 className="font-display text-[28px] font-extrabold tracking-[-0.02em] text-ink">
             {t('statements.incomeTitle')}
           </h1>

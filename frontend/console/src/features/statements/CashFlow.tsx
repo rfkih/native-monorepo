@@ -10,7 +10,7 @@ import { localeOf } from '@/i18n'
 import { formatMoney, formatAmount } from '@/lib/money'
 import { currentPeriod, shiftPeriod } from '@/lib/period'
 import { useCashFlow } from './api'
-import { downloadCsv, LineSection, PeriodNav, StatementEmptyState, SummaryCard } from './parts'
+import { downloadCsv, EntityScope, LineSection, PeriodNav, StatementEmptyState, SummaryCard } from './parts'
 
 /**
  * Cash Flow Statement (Arus Kas) — the indirect method, derived from the GL. Net income + the
@@ -51,6 +51,7 @@ export function CashFlow() {
   const exportCsv = () => {
     if (!data) return
     downloadCsv(`cash-flow-${period}.csv`, [
+      [company.name, t('statements.scopeAllUnits')],
       [t('statements.cashFlow.title'), period, currency],
       [],
       [t('statements.cashFlow.operating')],
@@ -74,6 +75,7 @@ export function CashFlow() {
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
+          <EntityScope name={company.name} scope={t('statements.scopeAllUnits')} />
           <h1 className="font-display text-[28px] font-extrabold tracking-[-0.02em] text-ink">
             {t('statements.cashFlow.title')}
           </h1>

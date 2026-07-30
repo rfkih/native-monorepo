@@ -5,6 +5,19 @@ export { KpiTile, PeriodNav, EmptyState as StatementEmptyState } from '@/feature
 
 import { Card } from '@/components/ui/Card'
 
+/**
+ * The reporting-entity line every formal statement leads with: WHICH business these figures belong
+ * to, and that they cover the whole company (the GL has no business-unit dimension — per-unit P&L
+ * lives on the org-unit pages). Rendered above the statement title; included when printing.
+ */
+export function EntityScope({ name, scope }: { name: string; scope: string }) {
+  return (
+    <div className="mb-1 text-[13px] font-semibold text-ink-2">
+      {name} <span className="font-normal text-ink-3">· {scope}</span>
+    </div>
+  )
+}
+
 /** The 2b/2c statement summary card: color chip + uppercase label + mono figure (+ optional note). */
 export function SummaryCard({
   chipClass,

@@ -10,7 +10,7 @@ import { localeOf } from '@/i18n'
 import { formatMoney, formatAmount, formatPercent } from '@/lib/money'
 import { currentPeriod, shiftPeriod } from '@/lib/period'
 import { useBalanceSheet, type BalanceLine } from './api'
-import { downloadCsv, LineSection, PeriodNav, StatementEmptyState, SummaryCard } from './parts'
+import { downloadCsv, EntityScope, LineSection, PeriodNav, StatementEmptyState, SummaryCard } from './parts'
 
 /** The synthetic retained-earnings account code finance-service appends to every balance sheet. */
 const RETAINED_EARNINGS_ACCOUNT = '3000-RETAINED-EARNINGS'
@@ -70,6 +70,7 @@ export function BalanceSheet() {
   const exportCsv = () => {
     if (!data) return
     downloadCsv(`balance-sheet-${asOf}.csv`, [
+      [company.name, t('statements.scopeAllUnits')],
       [t('statements.balanceTitle'), asOf, currency],
       [],
       [t('statements.assets')],
@@ -91,6 +92,7 @@ export function BalanceSheet() {
       {/* Page header */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
+          <EntityScope name={company.name} scope={t('statements.scopeAllUnits')} />
           <h1 className="font-display text-[28px] font-extrabold tracking-[-0.02em] text-ink">
             {t('statements.balanceTitle')}
           </h1>

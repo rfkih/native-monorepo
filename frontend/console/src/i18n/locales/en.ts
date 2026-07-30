@@ -291,6 +291,7 @@ export const en = {
     noCompanyHint: 'Create a company to see its consolidated position.',
   },
   statements: {
+    scopeAllUnits: 'all business units',
     incomeTitle: 'Income statement',
     incomeSubtitle: 'Revenue, expense and net for the period.',
     balanceTitle: 'Balance sheet',
