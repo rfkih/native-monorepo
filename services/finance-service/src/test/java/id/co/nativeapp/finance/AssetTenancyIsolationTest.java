@@ -28,12 +28,12 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 /**
  * End-to-end integration test (real PostgreSQL, unprivileged {@code app_user}) for the Phase 6
- * asset/deferral flow: acquire an asset (capex posts, start = next month) + create a prepaid expense
- * and a deferred revenue (opening entries post, start = this month) → run THIS month (prepaid +
- * deferred-revenue shares post; the asset is not yet due) → run NEXT month (the asset's first
- * depreciation joins) → registers show accumulated/book/remaining; a re-run is an idempotent no-op;
- * the cash-flow statement classifies the capex as INVESTING and still reconciles exactly; RLS
- * isolates everything from a second tenant.
+ * asset/deferral flow: acquire an asset (capex posts, start = next month) + create a prepaid
+ * expense and a deferred revenue (opening entries post, start = this month) → run THIS month
+ * (prepaid + deferred-revenue shares post; the asset is not yet due) → run NEXT month (the asset's
+ * first depreciation joins) → registers show accumulated/book/remaining; a re-run is an idempotent
+ * no-op; the cash-flow statement classifies the capex as INVESTING and still reconciles exactly;
+ * RLS isolates everything from a second tenant.
  */
 @SpringBootTest
 class AssetTenancyIsolationTest extends PostgresRlsTestBase {
@@ -197,8 +197,7 @@ class AssetTenancyIsolationTest extends PostgresRlsTestBase {
 
     // The cash-flow statement classifies the capex under INVESTING and still reconciles exactly.
     CashFlowResponse cashFlow =
-        TenantContext.callAs(
-            TENANT_A, ACTOR, () -> cashFlowReader.read(thisPeriod).orElseThrow());
+        TenantContext.callAs(TENANT_A, ACTOR, () -> cashFlowReader.read(thisPeriod).orElseThrow());
     assertThat(cashFlow.investingLines())
         .anySatisfy(
             l -> {

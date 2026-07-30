@@ -15,9 +15,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 /**
- * Integration tests for {@code GiftCardPostingWriter} (ADR 0027, Phase 4 of the POS-parity
- * program) against the real Flyway-migrated schema — proving V37's illustrative reference data
- * (the {@code GIFT_CARD_SALE} v1 template, role 2500) and this Java change integrate correctly.
+ * Integration tests for {@code GiftCardPostingWriter} (ADR 0027, Phase 4 of the POS-parity program)
+ * against the real Flyway-migrated schema — proving V37's illustrative reference data (the {@code
+ * GIFT_CARD_SALE} v1 template, role 2500) and this Java change integrate correctly.
  *
  * <p>Covers: the liability posting itself (Dr &lt;tender clearing&gt; / Cr GIFT_CARD_LIABILITY,
  * balanced), tender routing (mirrors {@code SaleRecordedTenderRoutingTest}), idempotency
@@ -185,7 +185,10 @@ class GiftCardPostingWriterTest extends PostgresRlsTestBase {
         Statement st = admin.createStatement();
         ResultSet rs = st.executeQuery(sql)) {
       assertThat(rs.next())
-          .as((debit ? "debit" : "credit") + " line must exist for giftCardSaleId=" + giftCardSaleId)
+          .as(
+              (debit ? "debit" : "credit")
+                  + " line must exist for giftCardSaleId="
+                  + giftCardSaleId)
           .isTrue();
       return rs.getString("account_code");
     }
@@ -213,7 +216,9 @@ class GiftCardPostingWriterTest extends PostgresRlsTestBase {
     }
     assertThat(lines).as("GIFT_CARD_SALE entry must have exactly 2 lines").isEqualTo(2);
     assertThat(totalDebit).as("Σdebit must equal Σcredit").isEqualTo(totalCredit);
-    assertThat(totalDebit).as("total must equal the gift-card sale amount").isEqualTo(expectedTotal);
+    assertThat(totalDebit)
+        .as("total must equal the gift-card sale amount")
+        .isEqualTo(expectedTotal);
   }
 
   private long journalEntryCountFor(UUID giftCardSaleId) throws Exception {

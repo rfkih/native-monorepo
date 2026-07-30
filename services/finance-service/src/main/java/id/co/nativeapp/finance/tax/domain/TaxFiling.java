@@ -14,21 +14,21 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 /**
- * The {@code tax_filing} aggregate (Phase 4 Tax / PPN, ADR 0017) — the record that a company FILED a
- * period's PPN (VAT) return. The tax analogue of {@link
+ * The {@code tax_filing} aggregate (Phase 4 Tax / PPN, ADR 0017) — the record that a company FILED
+ * a period's PPN (VAT) return. The tax analogue of {@link
  * id.co.nativeapp.finance.withinclose.domain.WithinCompanyClose}: a {@code UNIQUE (company_id,
  * period, tax_type)} guards it (idempotency — a re-file finds the row and no-ops).
  *
- * <p>The VAT amounts are DERIVED from the double-entry GL (output = credit-net of VAT_OUTPUT / 2200,
- * input = debit-net of VAT_INPUT / 1300, over the period), snapshotted here at file time; this table
- * is NOT the source of truth for the ledger. {@code netMinor} is the magnitude {@code |output −
- * input|} and {@code netDirection} carries its sign (PAYABLE when output ≥ input, CREDITABLE
- * otherwise) — so the settlement rule ("PAYABLE only") needs no re-derivation.
+ * <p>The VAT amounts are DERIVED from the double-entry GL (output = credit-net of VAT_OUTPUT /
+ * 2200, input = debit-net of VAT_INPUT / 1300, over the period), snapshotted here at file time;
+ * this table is NOT the source of truth for the ledger. {@code netMinor} is the magnitude {@code
+ * |output − input|} and {@code netDirection} carries its sign (PAYABLE when output ≥ input,
+ * CREDITABLE otherwise) — so the settlement rule ("PAYABLE only") needs no re-derivation.
  *
  * <p>{@code status}, {@code settlementEntryId} and {@code settledAt} are the only mutable columns
- * (updated by {@link #settle}); everything else is set once at file time. Extends {@link Auditable},
- * so it carries the six audit + tenancy columns and is covered by the {@code tax_filing} RLS policy
- * (V31), scoped to {@code app.current_tenant} (rules 4 + 5).
+ * (updated by {@link #settle}); everything else is set once at file time. Extends {@link
+ * Auditable}, so it carries the six audit + tenancy columns and is covered by the {@code
+ * tax_filing} RLS policy (V31), scoped to {@code app.current_tenant} (rules 4 + 5).
  */
 @Entity
 @Table(name = "tax_filing")
@@ -61,7 +61,9 @@ public class TaxFiling extends Auditable {
   @Column(name = "input_vat_minor", nullable = false, updatable = false)
   private long inputVatMinor;
 
-  /** The magnitude {@code |output − input|} in minor units; {@link #netDirection} carries the sign. */
+  /**
+   * The magnitude {@code |output − input|} in minor units; {@link #netDirection} carries the sign.
+   */
   @Column(name = "net_minor", nullable = false, updatable = false)
   private long netMinor;
 
@@ -73,7 +75,9 @@ public class TaxFiling extends Auditable {
   @Column(name = "filing_entry_id", nullable = false, updatable = false)
   private UUID filingEntryId;
 
-  /** The settlement {@code journal_entry} raised on settle (Dr 2300 / Cr 1900); NULL until settled. */
+  /**
+   * The settlement {@code journal_entry} raised on settle (Dr 2300 / Cr 1900); NULL until settled.
+   */
   @Column(name = "settlement_entry_id")
   private UUID settlementEntryId;
 
@@ -88,10 +92,10 @@ public class TaxFiling extends Auditable {
   }
 
   /**
-   * Creates a FILED PPN return for {@code (the bound company, period)}. {@code netMinor} is computed
-   * as {@code |output − input|} and {@code netDirection} from the sign (PAYABLE when {@code output ≥
-   * input}). The caller has already posted the netting {@code JournalEntry} keyed on {@code
-   * filingEntryId}.
+   * Creates a FILED PPN return for {@code (the bound company, period)}. {@code netMinor} is
+   * computed as {@code |output − input|} and {@code netDirection} from the sign (PAYABLE when
+   * {@code output ≥ input}). The caller has already posted the netting {@code JournalEntry} keyed
+   * on {@code filingEntryId}.
    *
    * @param id the aggregate id (pre-allocated by the writer, also the netting entry's {@code
    *     source_event_id})
@@ -137,7 +141,8 @@ public class TaxFiling extends Auditable {
    */
   public void settle(UUID settlementEntryId, Instant settledAt) {
     if (status != TaxFilingStatus.FILED) {
-      throw new TaxFilingStateException("tax filing is not in FILED state: " + id + " (" + status + ")");
+      throw new TaxFilingStateException(
+          "tax filing is not in FILED state: " + id + " (" + status + ")");
     }
     if (netDirection != NetDirection.PAYABLE || netMinor <= 0L) {
       throw new TaxFilingStateException(

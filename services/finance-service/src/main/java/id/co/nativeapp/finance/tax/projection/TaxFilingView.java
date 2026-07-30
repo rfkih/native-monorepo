@@ -8,8 +8,8 @@ import java.util.UUID;
  * readers need, never {@code SELECT *} of the full entity. Backs the native read queries on {@code
  * TaxFilingRepository} (detail, period-lookup, history). Snake_case native-query aliases map to
  * these accessors via Spring Data's projection-interface convention; lives in the feature's {@code
- * tax.projection} package so the ArchUnit {@code Projection} layer rule enforces it is accessed only
- * from service + repository.
+ * tax.projection} package so the ArchUnit {@code Projection} layer rule enforces it is accessed
+ * only from service + repository.
  */
 public interface TaxFilingView {
 

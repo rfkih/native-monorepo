@@ -5,7 +5,8 @@ package id.co.nativeapp.finance.tax.domain;
  *
  * <ul>
  *   <li>{@code FILED} — the return has been filed: the period-end netting entry (Dr VAT_OUTPUT / Cr
- *       VAT_INPUT / net → VAT_PAYABLE or VAT_CREDIT_CARRYFORWARD) is posted and the period is sealed.
+ *       VAT_INPUT / net → VAT_PAYABLE or VAT_CREDIT_CARRYFORWARD) is posted and the period is
+ *       sealed.
  *   <li>{@code SETTLED} — a net-PAYABLE return's balance has been paid to the tax authority (Dr
  *       VAT_PAYABLE / Cr CASH_CLEARING). Terminal.
  * </ul>

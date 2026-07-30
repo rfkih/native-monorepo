@@ -26,17 +26,19 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * {@code /api/v1/tax} — the PPN (VAT) return surface for the bound tenant: the GL-derived VAT report,
- * filing a return (posts the period-end netting entry + seals the period), the filing history +
- * detail, settling a net-payable return (posts the payment), and the e-Faktur CSV export. Writes go
- * through the RLS-bound service; every response is a DTO (never the entity). Typed faults map to
- * RFC-7807 via {@link TaxAdvice} (404 not-found, 409 invalid-state, 400 bad-input/no-activity, 422
- * currency-mismatch).
+ * {@code /api/v1/tax} — the PPN (VAT) return surface for the bound tenant: the GL-derived VAT
+ * report, filing a return (posts the period-end netting entry + seals the period), the filing
+ * history + detail, settling a net-payable return (posts the payment), and the e-Faktur CSV export.
+ * Writes go through the RLS-bound service; every response is a DTO (never the entity). Typed faults
+ * map to RFC-7807 via {@link TaxAdvice} (404 not-found, 409 invalid-state, 400
+ * bad-input/no-activity, 422 currency-mismatch).
  *
- * <p><strong>ILLUSTRATIVE / SME-gated:</strong> the 11% rate, the net-creditable carryforward policy,
- * PKP status, and the e-Faktur layout are placeholders — see ADR 0017 + V31/V32 headers.
+ * <p><strong>ILLUSTRATIVE / SME-gated:</strong> the 11% rate, the net-creditable carryforward
+ * policy, PKP status, and the e-Faktur layout are placeholders — see ADR 0017 + V31/V32 headers.
  */
-@Tag(name = "Tax / PPN", description = "PPN (VAT) return, filing, settlement + e-Faktur for the tenant.")
+@Tag(
+    name = "Tax / PPN",
+    description = "PPN (VAT) return, filing, settlement + e-Faktur for the tenant.")
 @RestController
 @RequestMapping("/api/v1/tax")
 @Validated
@@ -55,16 +57,20 @@ public class TaxController {
     this.taxFilingReader = taxFilingReader;
   }
 
-  @Operation(summary = "The PPN (VAT) return for a period (output − input = net payable/creditable)")
+  @Operation(
+      summary = "The PPN (VAT) return for a period (output − input = net payable/creditable)")
   @GetMapping("/vat/return")
   public VatReturnResponse vatReturn(
       @RequestParam
-          @Pattern(regexp = "\\d{4}-(0[1-9]|1[0-2])", message = "period must be a valid YYYY-MM month")
+          @Pattern(
+              regexp = "\\d{4}-(0[1-9]|1[0-2])",
+              message = "period must be a valid YYYY-MM month")
           String period) {
     return vatReturnReader.read(period);
   }
 
-  @Operation(summary = "File the PPN return for a period (posts the netting entry, seals the period)")
+  @Operation(
+      summary = "File the PPN return for a period (posts the netting entry, seals the period)")
   @PostMapping("/vat/returns")
   public ResponseEntity<TaxFilingResponse> file(@Valid @RequestBody FileReturnRequest request) {
     FileReturnResult result = taxFilingService.file(request.period());
@@ -75,7 +81,8 @@ public class TaxController {
     if (!result.created()) {
       return ResponseEntity.ok(detail);
     }
-    return ResponseEntity.created(URI.create("/api/v1/tax/vat/returns/" + detail.id())).body(detail);
+    return ResponseEntity.created(URI.create("/api/v1/tax/vat/returns/" + detail.id()))
+        .body(detail);
   }
 
   @Operation(summary = "The PPN filing history for the bound tenant (most-recent period first)")
@@ -90,17 +97,22 @@ public class TaxController {
     return taxFilingReader.detail(id);
   }
 
-  @Operation(summary = "Settle a filed net-payable return (posts Dr VAT payable / Cr cash-clearing)")
+  @Operation(
+      summary = "Settle a filed net-payable return (posts Dr VAT payable / Cr cash-clearing)")
   @PostMapping("/vat/returns/{id}/settle")
   public TaxFilingResponse settle(@PathVariable UUID id) {
     return taxFilingReader.detail(taxFilingService.settle(id));
   }
 
-  @Operation(summary = "e-Faktur export of the period's output tax invoices (illustrative; real DJP deferred)")
+  @Operation(
+      summary =
+          "e-Faktur export of the period's output tax invoices (illustrative; real DJP deferred)")
   @GetMapping("/vat/efaktur")
   public EfakturExportResponse efaktur(
       @RequestParam
-          @Pattern(regexp = "\\d{4}-(0[1-9]|1[0-2])", message = "period must be a valid YYYY-MM month")
+          @Pattern(
+              regexp = "\\d{4}-(0[1-9]|1[0-2])",
+              message = "period must be a valid YYYY-MM month")
           String period) {
     return taxFilingReader.efaktur(period);
   }

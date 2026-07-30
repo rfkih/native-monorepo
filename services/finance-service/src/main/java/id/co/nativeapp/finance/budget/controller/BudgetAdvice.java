@@ -14,18 +14,19 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /**
  * RFC 7807 {@link ProblemDetail} advice for the budget controllers (Phase 5) — the fault shapes the
- * shared {@code libs/security ApiExceptionHandler} does not own. Scoped to the {@code budget.controller}
- * package so its {@code IllegalArgumentException → 400} mapping does not affect other controllers
- * (mirrors {@code ApAdvice} / {@code TaxAdvice}).
+ * shared {@code libs/security ApiExceptionHandler} does not own. Scoped to the {@code
+ * budget.controller} package so its {@code IllegalArgumentException → 400} mapping does not affect
+ * other controllers (mirrors {@code ApAdvice} / {@code TaxAdvice}).
  *
  * <ul>
  *   <li>{@link BudgetNotFoundException} → {@code 404} (generic detail — reads are RLS-scoped; no
  *       existence disclosure).
  *   <li>{@link UnknownAccountException} → {@code 400} (a line targets a non-existent account).
- *   <li>{@link IllegalArgumentException} → {@code 400} (blank name, bad currency, duplicate account).
+ *   <li>{@link IllegalArgumentException} → {@code 400} (blank name, bad currency, duplicate
+ *       account).
  *   <li>{@link DataIntegrityViolationException} → {@code 409} (a duplicate budget name+period).
- *   <li>{@link GlMultiCurrencyException} → {@code 422} (the period's GL is multi-currency — from the
- *       variance report's trial-balance read).
+ *   <li>{@link GlMultiCurrencyException} → {@code 422} (the period's GL is multi-currency — from
+ *       the variance report's trial-balance read).
  * </ul>
  */
 @RestControllerAdvice(basePackages = "id.co.nativeapp.finance.budget.controller")
@@ -54,7 +55,9 @@ public class BudgetAdvice {
     return decorate(problem, request);
   }
 
-  /** Bad input not caught by bean validation (blank name, bad currency, duplicate account) → 400. */
+  /**
+   * Bad input not caught by bean validation (blank name, bad currency, duplicate account) → 400.
+   */
   @ExceptionHandler(IllegalArgumentException.class)
   public ProblemDetail handleBadRequest(IllegalArgumentException ex, HttpServletRequest request) {
     ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);

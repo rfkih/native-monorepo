@@ -14,8 +14,8 @@ import org.hibernate.type.SqlTypes;
 /**
  * The {@code budget} aggregate (Phase 5, ADR 0019) — a named set of planned amounts for one month.
  * PLANNING DATA: a budget never posts to the GL; the budget-vs-actual report compares its {@link
- * BudgetLine}s against the period's GL actuals. The parent of a parent+child pair, mirroring
- * {@code Bill}/{@code BillLine}.
+ * BudgetLine}s against the period's GL actuals. The parent of a parent+child pair, mirroring {@code
+ * Bill}/{@code BillLine}.
  *
  * <p>Extends {@link Auditable}, so it carries the six audit + tenancy columns and is covered by the
  * {@code budget} RLS policy (V33), scoped to {@code app.current_tenant} (rules 4 + 5).
@@ -48,7 +48,8 @@ public class Budget extends Auditable {
    * @param name a non-blank display name
    * @param period the accounting period {@code YYYY-MM} this budget plans for
    * @param currencyCode the ISO-4217 currency of the planned amounts
-   * @throws IllegalArgumentException if {@code name} is blank or {@code currencyCode} is not ISO-4217
+   * @throws IllegalArgumentException if {@code name} is blank or {@code currencyCode} is not
+   *     ISO-4217
    */
   public static Budget create(String name, String period, String currencyCode) {
     Objects.requireNonNull(period, "period");

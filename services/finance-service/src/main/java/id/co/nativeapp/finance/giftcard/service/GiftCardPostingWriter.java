@@ -1,13 +1,13 @@
 package id.co.nativeapp.finance.giftcard.service;
 
 import id.co.nativeapp.events.ProcessedEventStore;
+import id.co.nativeapp.finance.giftcard.messaging.GiftCardSoldEvent;
 import id.co.nativeapp.finance.gl.domain.AccountRole;
 import id.co.nativeapp.finance.gl.domain.EventKind;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
 import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
 import id.co.nativeapp.finance.gl.service.JournalPostingService;
-import id.co.nativeapp.finance.giftcard.messaging.GiftCardSoldEvent;
 import id.co.nativeapp.finance.revenue.domain.LedgerPosting;
 import id.co.nativeapp.tenant.TenantContext;
 import org.springframework.stereotype.Component;
@@ -17,8 +17,8 @@ import org.springframework.transaction.annotation.Transactional;
  * Owns the single {@code @Transactional} unit of work that posts a consumed {@code GiftCardSold} to
  * the GL as a LIABILITY entry — idempotently (ADR 0027, Phase 4 of the POS-parity program).
  *
- * <p>It is a distinct bean (not a private method on {@link GiftCardPostingService}) so the method is
- * invoked through the Spring proxy: a self-invocation would bypass the {@code @Transactional}
+ * <p>It is a distinct bean (not a private method on {@link GiftCardPostingService}) so the method
+ * is invoked through the Spring proxy: a self-invocation would bypass the {@code @Transactional}
  * advice and the {@link id.co.nativeapp.tenant.RlsAutoApplyAspect} that sets the tenant GUC, and
  * the tenant GUC is exactly what makes the RLS {@code WITH CHECK} pass on the inserts (rule 5). The
  * caller ({@link GiftCardPostingService}) binds the tenant from the event's {@code company_id}

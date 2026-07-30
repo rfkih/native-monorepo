@@ -41,9 +41,10 @@ public class BudgetWriter {
    * Creates a budget for {@code (name, period)} with its planned lines.
    *
    * @return the new budget id
-   * @throws IllegalArgumentException if there are no lines, the currency is invalid, or an account is
-   *     duplicated across lines
-   * @throws UnknownAccountException if a line targets an account not in the chart of accounts (→ 400)
+   * @throws IllegalArgumentException if there are no lines, the currency is invalid, or an account
+   *     is duplicated across lines
+   * @throws UnknownAccountException if a line targets an account not in the chart of accounts (→
+   *     400)
    */
   @Transactional
   public UUID create(
@@ -55,13 +56,16 @@ public class BudgetWriter {
     Currency currency = Currency.getInstance(currencyCode); // validates ISO-4217 (→ 400 if bad)
     String companyId = TenantContext.require().companyId();
 
-    // Validate every line up front (clearer 400s than the DB FK/UNIQUE): the account must exist, and
-    // no account may repeat within the budget (the uq_budget_line_account UNIQUE is the DB backstop).
+    // Validate every line up front (clearer 400s than the DB FK/UNIQUE): the account must exist,
+    // and
+    // no account may repeat within the budget (the uq_budget_line_account UNIQUE is the DB
+    // backstop).
     Set<String> seen = new HashSet<>();
     for (BudgetLineInput input : lineInputs) {
       String accountCode = input.accountCode();
       if (!seen.add(accountCode)) {
-        throw new IllegalArgumentException("account appears more than once in the budget: " + accountCode);
+        throw new IllegalArgumentException(
+            "account appears more than once in the budget: " + accountCode);
       }
       if (!budgetRepository.accountExists(accountCode)) {
         throw new UnknownAccountException(accountCode);
@@ -89,7 +93,9 @@ public class BudgetWriter {
   @Transactional
   public void delete(UUID budgetId) {
     Budget budget =
-        budgetRepository.findById(budgetId).orElseThrow(() -> new BudgetNotFoundException(budgetId));
+        budgetRepository
+            .findById(budgetId)
+            .orElseThrow(() -> new BudgetNotFoundException(budgetId));
     budgetLineRepository.deleteByBudgetId(budget.getId());
     budgetRepository.delete(budget);
   }

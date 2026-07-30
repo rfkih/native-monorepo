@@ -33,8 +33,8 @@ public enum EventKind {
   /** Phase 2 AP: a vendor bill was voided — the contra of {@link #BILL_POSTED}. */
   BILL_VOID,
   /**
-   * Phase 4 loyalty/gift cards (ADR 0027): a gift card was sold or topped up ({@code
-   * GiftCardSold}) — a LIABILITY event, never revenue: Dr &lt;tender clearing&gt; / Cr {@link
+   * Phase 4 loyalty/gift cards (ADR 0027): a gift card was sold or topped up ({@code GiftCardSold})
+   * — a LIABILITY event, never revenue: Dr &lt;tender clearing&gt; / Cr {@link
    * AccountRole#GIFT_CARD_LIABILITY} (both {@code GROSS}, V37 seed).
    */
   GIFT_CARD_SALE

@@ -179,7 +179,8 @@ class Phase4SaleGlEntryAssemblyTest {
   void fullyGiftCardPaidWithNullTenderOmitsClearingLegAndLiabilityCarriesFullDebit() {
     when(templateResolver.resolve(eq(EventKind.SALE), any())).thenReturn(saleV3Template());
 
-    // amount == gift_card_redeemed (fully paid by gift card); tender_type null (no residual tender).
+    // amount == gift_card_redeemed (fully paid by gift card); tender_type null (no residual
+    // tender).
     SaleRecordedEvent evt = event(20_000L, 0L, 0L, 0L, 20_000L, null, null, 20_000L);
 
     JournalEntry entry =
@@ -216,7 +217,9 @@ class Phase4SaleGlEntryAssemblyTest {
         .noneMatch(l -> GIFT_CARD_LIABILITY_CODE.equals(l.getAccountCode()));
 
     JournalLine clearing = lineFor(lines, CASH_CLEARING_CODE);
-    assertThat(clearing.getDebitMinor()).as("NET_TENDER = amount (no gift card)").isEqualTo(25_000L);
+    assertThat(clearing.getDebitMinor())
+        .as("NET_TENDER = amount (no gift card)")
+        .isEqualTo(25_000L);
 
     JournalLine loyalty = lineFor(lines, LOYALTY_DISCOUNT_CODE);
     assertThat(loyalty.getDebitMinor()).isEqualTo(5_000L);
@@ -242,7 +245,8 @@ class Phase4SaleGlEntryAssemblyTest {
   void legacySaleEventProducesByteIdenticalEntryUnderV3AsUnderV2() {
     // subtotal=30_000, discount=5_000, SC=1_250, tax=2_625, grand=28_875 — the Phase2
     // non-zero-discount worked example, no Phase 4 fields set (both null).
-    SaleRecordedEvent legacyEvent = event(30_000L, 5_000L, 1_250L, 2_625L, 28_875L, "CASH", null, null);
+    SaleRecordedEvent legacyEvent =
+        event(30_000L, 5_000L, 1_250L, 2_625L, 28_875L, "CASH", null, null);
 
     when(templateResolver.resolve(eq(EventKind.SALE), any())).thenReturn(saleV2Template());
     JournalEntry v2Entry =

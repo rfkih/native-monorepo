@@ -35,9 +35,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * Unit tests for the ad-hoc balanced legs the tax writers assemble — {@link
  * TaxFilingWriter#buildFilingEntry} (the period-end netting entry, for every payable/creditable/nil
  * case) and {@link TaxSettlementWriter#buildSettlementEntry} — with a mocked {@link
- * RoleAccountResolver} and no Spring/DB, plus the {@link TaxFiling} state machine. The tax mirror of
- * {@link ReconcilePostingTest}: filing posts a directly-built entry (no {@code posting_template}),
- * so this pins the exact Dr/Cr legs and the guards.
+ * RoleAccountResolver} and no Spring/DB, plus the {@link TaxFiling} state machine. The tax mirror
+ * of {@link ReconcilePostingTest}: filing posts a directly-built entry (no {@code
+ * posting_template}), so this pins the exact Dr/Cr legs and the guards.
  */
 class TaxFilingPostingTest {
 

@@ -16,8 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * The read-side service for budgets (Phase 5) — the list and the detail (header + lines). Native +
- * projection reads, RLS-scoped; maps projections to DTOs so the {@code budget.projection} types never
- * leak to the controller layer.
+ * projection reads, RLS-scoped; maps projections to DTOs so the {@code budget.projection} types
+ * never leak to the controller layer.
  */
 @Service
 public class BudgetReader {
@@ -57,9 +57,7 @@ public class BudgetReader {
     BudgetView header =
         budgetRepository.findViewById(id).orElseThrow(() -> new BudgetNotFoundException(id));
     List<BudgetLineDto> lines =
-        budgetLineRepository.findViewsByBudgetId(id).stream()
-            .map(BudgetReader::toLineDto)
-            .toList();
+        budgetLineRepository.findViewsByBudgetId(id).stream().map(BudgetReader::toLineDto).toList();
     return new BudgetResponse(
         header.getId(), header.getName(), header.getPeriod(), header.getCurrency().strip(), lines);
   }

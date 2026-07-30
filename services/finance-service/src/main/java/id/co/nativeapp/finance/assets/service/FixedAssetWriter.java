@@ -28,11 +28,11 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * The {@code @Transactional} unit of work for acquiring (capitalizing) a {@link FixedAsset} (Phase
  * 6, ADR 0020). Posts the capex entry — {@code Dr FIXED_ASSET_COST (1500) / Cr CASH_CLEARING
- * (1900)} for the cost, routed through the same clearing account every cash movement uses so a later
- * bank reconciliation sweeps it — in the same transaction as the asset row. Ad-hoc balanced entry
- * (no posting_template / EventKind — the Bank/Tax path); {@code source_event_id = the asset id}
- * (UNIQUE on {@code journal_entry}). A distinct proxy-invoked bean so {@code @Transactional} + the
- * RLS aspect engage (rule 5). Capitalizing from an AP bill is a deferred flow (ADR 0020).
+ * (1900)} for the cost, routed through the same clearing account every cash movement uses so a
+ * later bank reconciliation sweeps it — in the same transaction as the asset row. Ad-hoc balanced
+ * entry (no posting_template / EventKind — the Bank/Tax path); {@code source_event_id = the asset
+ * id} (UNIQUE on {@code journal_entry}). A distinct proxy-invoked bean so {@code @Transactional} +
+ * the RLS aspect engage (rule 5). Capitalizing from an AP bill is a deferred flow (ADR 0020).
  */
 @Component
 public class FixedAssetWriter {
@@ -64,9 +64,9 @@ public class FixedAssetWriter {
 
   /**
    * Acquires an asset: posts the capex entry and saves the asset (start period = the month after
-   * acquisition — the full-month convention, SME-gated). Acquiring posts money, so it is
-   * idempotent per {@code (company, Idempotency-Key)}: a retried request replays the original asset
-   * ({@code created == false}), posting nothing (code-review C-1 — the AR/AP payment rationale).
+   * acquisition — the full-month convention, SME-gated). Acquiring posts money, so it is idempotent
+   * per {@code (company, Idempotency-Key)}: a retried request replays the original asset ({@code
+   * created == false}), posting nothing (code-review C-1 — the AR/AP payment rationale).
    *
    * @return the asset id + whether this call freshly acquired it
    * @throws IllegalArgumentException on invalid bounds (cost/salvage/life/currency/date, or a start
@@ -122,7 +122,14 @@ public class FixedAssetWriter {
 
     FixedAsset asset =
         FixedAsset.acquire(
-            assetId, name, acquisitionDate, cost, salvage, usefulLifeMonths, entryId, idempotencyKey);
+            assetId,
+            name,
+            acquisitionDate,
+            cost,
+            salvage,
+            usefulLifeMonths,
+            entryId,
+            idempotencyKey);
     asset.setCompanyId(companyId);
     assetRepository.save(asset);
     return new AcquireAssetResult(assetId, true);
@@ -136,8 +143,7 @@ public class FixedAssetWriter {
   private void requireStartAfterLastRun(String startPeriod) {
     List<String> latest =
         jdbcTemplate.query(
-            "SELECT MAX(period) FROM amortization_run",
-            (rs, rowNum) -> rs.getString(1));
+            "SELECT MAX(period) FROM amortization_run", (rs, rowNum) -> rs.getString(1));
     String maxRun = latest.isEmpty() ? null : latest.getFirst();
     if (maxRun != null && startPeriod.compareTo(maxRun) <= 0) {
       throw new IllegalArgumentException(

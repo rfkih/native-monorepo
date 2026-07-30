@@ -8,8 +8,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * The read-side service for deferrals (Phase 6): the list with each deferral's amortized-to-date and
- * remaining balance (from the run-line sub-ledger). Native + projection, RLS-scoped.
+ * The read-side service for deferrals (Phase 6): the list with each deferral's amortized-to-date
+ * and remaining balance (from the run-line sub-ledger). Native + projection, RLS-scoped.
  */
 @Service
 public class DeferralReader {

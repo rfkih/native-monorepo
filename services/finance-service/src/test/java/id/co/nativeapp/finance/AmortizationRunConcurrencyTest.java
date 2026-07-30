@@ -23,12 +23,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 /**
- * CONCURRENCY proof for the amortization run (§3.2 — atomicity + idempotency under concurrency for a
- * money-touching command). Two threads, released together by a {@link CyclicBarrier}, race {@code
+ * CONCURRENCY proof for the amortization run (§3.2 — atomicity + idempotency under concurrency for
+ * a money-touching command). Two threads, released together by a {@link CyclicBarrier}, race {@code
  * run(period)} for the SAME {@code (company, period)}: the advisory lock + {@code
- * uq_amortization_run} UNIQUE serialize them — exactly one run row exists, both calls converge on the
- * same run id with exactly one {@code created == true}, and the month's share posts exactly once
- * (no double depreciation/amortization).
+ * uq_amortization_run} UNIQUE serialize them — exactly one run row exists, both calls converge on
+ * the same run id with exactly one {@code created == true}, and the month's share posts exactly
+ * once (no double depreciation/amortization).
  */
 @SpringBootTest
 class AmortizationRunConcurrencyTest extends PostgresRlsTestBase {

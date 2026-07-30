@@ -124,11 +124,11 @@ public class StatementsController {
   }
 
   /**
-   * Cash Flow Statement (Arus Kas) for the requested accounting period — the indirect method, derived
-   * from the GL trial balance (Phase 5, ADR 0019). Net income + working-capital changes = net cash
-   * from operating; investing/financing are structured for later. PERIOD-scoped. Returns {@code 204
-   * No Content} when the period has no GL entries. The derived net change in cash reconciles exactly
-   * to the cash-account movement (asserted).
+   * Cash Flow Statement (Arus Kas) for the requested accounting period — the indirect method,
+   * derived from the GL trial balance (Phase 5, ADR 0019). Net income + working-capital changes =
+   * net cash from operating; investing/financing are structured for later. PERIOD-scoped. Returns
+   * {@code 204 No Content} when the period has no GL entries. The derived net change in cash
+   * reconciles exactly to the cash-account movement (asserted).
    *
    * @param period the accounting period {@code YYYY-MM} (validated; an impossible month is a 400)
    */

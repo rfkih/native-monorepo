@@ -9,8 +9,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Exposes the chart of accounts (code + name + type) for the budget create-form account picker
- * (Phase 5). {@code chart_of_account} is GLOBAL reference data — the same accounts for every tenant —
- * so this returns the full catalog (no tenant scoping); it is served only to owner/manager at the
+ * (Phase 5). {@code chart_of_account} is GLOBAL reference data — the same accounts for every tenant
+ * — so this returns the full catalog (no tenant scoping); it is served only to owner/manager at the
  * gateway.
  */
 @Service

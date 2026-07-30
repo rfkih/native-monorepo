@@ -1,7 +1,6 @@
 package id.co.nativeapp.finance;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -39,9 +38,9 @@ import org.springframework.test.web.servlet.MockMvc;
 
 /**
  * Web-slice test for {@link TaxController}: the VAT report (200), filing (201 + Location), a filed
- * return / history / detail, settle (200), and the fault mappings from {@link TaxAdvice} + the shared
- * {@link ApiExceptionHandler} — 400 (no activity / bad period), 404 (unknown filing), 409 (re-settle),
- * 422 (currency mismatch). Services mocked. Mirrors {@link BankControllerTest}.
+ * return / history / detail, settle (200), and the fault mappings from {@link TaxAdvice} + the
+ * shared {@link ApiExceptionHandler} — 400 (no activity / bad period), 404 (unknown filing), 409
+ * (re-settle), 422 (currency mismatch). Services mocked. Mirrors {@link BankControllerTest}.
  */
 @WebMvcTest(TaxController.class)
 @Import({TaxAdvice.class, ApiExceptionHandler.class, ConstraintViolationAdvice.class})
@@ -114,7 +113,8 @@ class TaxControllerTest {
 
   @Test
   void refileReturns200WithTheExistingResource() throws Exception {
-    // Idempotent re-file: created == false → 200 OK (not 201), the existing (possibly SETTLED) filing.
+    // Idempotent re-file: created == false → 200 OK (not 201), the existing (possibly SETTLED)
+    // filing.
     when(taxFilingService.file("2026-07")).thenReturn(new FileReturnResult(FILING, false));
     when(taxFilingReader.detail(FILING)).thenReturn(sampleFiling("SETTLED"));
 

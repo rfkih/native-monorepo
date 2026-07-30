@@ -24,10 +24,10 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Builds the budget-vs-actual variance report (Phase 5, ADR 0019): each budgeted account's planned
  * amount paired with its GL actual for the budget's period, and the variance ({@code actual −
- * planned}). The <em>actual</em> is the account's net in its normal direction — a revenue / liability
- * / equity credit-net, an asset / expense debit-net — from {@code glTrialBalance(period)}; an account
- * with no activity in the period actuals to zero. No new tables: budgets are compared against the
- * same GL-derived numbers the statements use.
+ * planned}). The <em>actual</em> is the account's net in its normal direction — a revenue /
+ * liability / equity credit-net, an asset / expense debit-net — from {@code
+ * glTrialBalance(period)}; an account with no activity in the period actuals to zero. No new
+ * tables: budgets are compared against the same GL-derived numbers the statements use.
  */
 @Service
 public class BudgetActualReader {
@@ -57,7 +57,9 @@ public class BudgetActualReader {
   @Transactional(readOnly = true)
   public BudgetActualsResponse actuals(UUID budgetId) {
     BudgetView header =
-        budgetRepository.findViewById(budgetId).orElseThrow(() -> new BudgetNotFoundException(budgetId));
+        budgetRepository
+            .findViewById(budgetId)
+            .orElseThrow(() -> new BudgetNotFoundException(budgetId));
     List<BudgetLineView> lines = budgetLineRepository.findViewsByBudgetId(budgetId);
     String currency = header.getCurrency().strip();
 
@@ -126,8 +128,7 @@ public class BudgetActualReader {
   private static long normalizedNet(String accountTypeRaw, GlTrialBalanceLineView tb) {
     AccountType type = AccountType.valueOf(accountTypeRaw.toUpperCase(Locale.ROOT));
     return switch (type) {
-      case ASSET, EXPENSE ->
-          Math.subtractExact(tb.getTotalDebitMinor(), tb.getTotalCreditMinor());
+      case ASSET, EXPENSE -> Math.subtractExact(tb.getTotalDebitMinor(), tb.getTotalCreditMinor());
       case LIABILITY, EQUITY, REVENUE ->
           Math.subtractExact(tb.getTotalCreditMinor(), tb.getTotalDebitMinor());
     };

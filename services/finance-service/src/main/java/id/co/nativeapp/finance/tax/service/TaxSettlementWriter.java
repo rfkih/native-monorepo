@@ -117,10 +117,10 @@ public class TaxSettlementWriter {
   }
 
   /**
-   * Builds (but does not persist) the balanced ad-hoc settlement entry for {@code filing}: {@code Dr
-   * VAT_PAYABLE / Cr CASH_CLEARING} for its net, posted into {@code period}. Public + pure (mocked
-   * resolver, no DB) so {@code TaxFilingPostingTest} can assert the legs. {@code source_event_id =
-   * entryId} (its own id, UNIQUE).
+   * Builds (but does not persist) the balanced ad-hoc settlement entry for {@code filing}: {@code
+   * Dr VAT_PAYABLE / Cr CASH_CLEARING} for its net, posted into {@code period}. Public + pure
+   * (mocked resolver, no DB) so {@code TaxFilingPostingTest} can assert the legs. {@code
+   * source_event_id = entryId} (its own id, UNIQUE).
    */
   public JournalEntry buildSettlementEntry(
       TaxFiling filing, String period, Instant now, UUID entryId) {

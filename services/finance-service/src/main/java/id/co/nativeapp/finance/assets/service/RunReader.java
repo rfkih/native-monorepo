@@ -25,7 +25,10 @@ public class RunReader {
   @Transactional(readOnly = true)
   public List<RunResponse> history() {
     return runRepository.findAllViews().stream()
-        .map(v -> new RunResponse(v.getId(), v.getPeriod(), v.getLineCount(), v.getTotalMinor(), v.getRunAt()))
+        .map(
+            v ->
+                new RunResponse(
+                    v.getId(), v.getPeriod(), v.getLineCount(), v.getTotalMinor(), v.getRunAt()))
         .toList();
   }
 
@@ -34,7 +37,10 @@ public class RunReader {
   public RunResponse detail(UUID id) {
     return runRepository
         .findViewById(id)
-        .map(v -> new RunResponse(v.getId(), v.getPeriod(), v.getLineCount(), v.getTotalMinor(), v.getRunAt()))
+        .map(
+            v ->
+                new RunResponse(
+                    v.getId(), v.getPeriod(), v.getLineCount(), v.getTotalMinor(), v.getRunAt()))
         .orElseThrow(() -> new IllegalStateException("amortization run vanished: " + id));
   }
 }

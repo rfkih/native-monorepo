@@ -18,15 +18,16 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 /**
  * RFC 7807 {@link ProblemDetail} advice for the tax controllers (Phase 4 Tax / PPN) — the fault
  * shapes the shared {@code libs/security ApiExceptionHandler} does not own. Scoped to the {@code
- * tax.controller} package so its {@code IllegalArgumentException → 400} mapping does not affect other
- * controllers (mirrors {@code ApAdvice}).
+ * tax.controller} package so its {@code IllegalArgumentException → 400} mapping does not affect
+ * other controllers (mirrors {@code ApAdvice}).
  *
  * <ul>
- *   <li>{@link TaxFilingNotFoundException} → {@code 404} (generic detail — reads are RLS-scoped, so a
- *       foreign-tenant id is indistinguishable from a missing one; no existence disclosure).
- *   <li>{@link TaxFilingStateException} → {@code 409} (an illegal lifecycle transition: re-settle, or
- *       settling a creditable / zero-net return).
- *   <li>{@link NoVatActivityException} → {@code 400} (nothing to file — no VAT, or a net-void period).
+ *   <li>{@link TaxFilingNotFoundException} → {@code 404} (generic detail — reads are RLS-scoped, so
+ *       a foreign-tenant id is indistinguishable from a missing one; no existence disclosure).
+ *   <li>{@link TaxFilingStateException} → {@code 409} (an illegal lifecycle transition: re-settle,
+ *       or settling a creditable / zero-net return).
+ *   <li>{@link NoVatActivityException} → {@code 400} (nothing to file — no VAT, or a net-void
+ *       period).
  *   <li>{@link IllegalArgumentException} → {@code 400} (bad input not caught by bean validation).
  *   <li>{@link MismatchedPostingCurrencyException} / {@link GlMultiCurrencyException} → {@code 422}
  *       (the period's GL is multi-currency, or a filing/settlement currency diverges).
@@ -89,8 +90,8 @@ public class TaxAdvice {
 
   /**
    * A concurrent conflict (a raced double-file hitting the {@code uq_tax_filing} unique index, or a
-   * raced settle) → 409 rather than a leaked 500. No money is double-posted — the losing transaction
-   * rolls back; the client may retry.
+   * raced settle) → 409 rather than a leaked 500. No money is double-posted — the losing
+   * transaction rolls back; the client may retry.
    */
   @ExceptionHandler({
     DataIntegrityViolationException.class,

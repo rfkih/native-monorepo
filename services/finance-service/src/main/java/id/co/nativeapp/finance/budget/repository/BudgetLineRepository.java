@@ -10,9 +10,9 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 /**
- * Spring Data repository for {@link BudgetLine} (Phase 5). RLS scopes all access to the bound tenant
- * (rule 5). The detail/actuals read joins {@code chart_of_account} (global ref) for each line's
- * account name + type.
+ * Spring Data repository for {@link BudgetLine} (Phase 5). RLS scopes all access to the bound
+ * tenant (rule 5). The detail/actuals read joins {@code chart_of_account} (global ref) for each
+ * line's account name + type.
  */
 public interface BudgetLineRepository extends JpaRepository<BudgetLine, UUID> {
 

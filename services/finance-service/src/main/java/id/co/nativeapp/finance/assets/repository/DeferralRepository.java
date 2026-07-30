@@ -10,8 +10,8 @@ import org.springframework.data.jpa.repository.Query;
 
 /**
  * Spring Data repository for {@link Deferral} (Phase 6). RLS scopes all access (rule 5). The run
- * writer loads the aggregates (inherited {@code findAll}); the list READ path is native + projection
- * with the amortized-to-date roll-up.
+ * writer loads the aggregates (inherited {@code findAll}); the list READ path is native +
+ * projection with the amortized-to-date roll-up.
  */
 public interface DeferralRepository extends JpaRepository<Deferral, UUID> {
 

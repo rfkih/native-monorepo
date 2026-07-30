@@ -35,8 +35,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
- * Web-slice test for {@link BudgetController}: create (201), list (200), detail (200), actuals (200),
- * delete (204), and the fault mappings from {@link BudgetAdvice} + the shared {@link
+ * Web-slice test for {@link BudgetController}: create (201), list (200), detail (200), actuals
+ * (200), delete (204), and the fault mappings from {@link BudgetAdvice} + the shared {@link
  * ApiExceptionHandler} — 400 (blank name / unknown account), 404 (unknown budget), 409 (duplicate).
  * Services mocked. Mirrors {@code BillControllerTest} / {@code TaxControllerTest}.
  */
@@ -72,7 +72,8 @@ class BudgetControllerTest {
     when(budgetReader.detail(BUDGET)).thenReturn(sampleBudget());
 
     mockMvc
-        .perform(post("/api/v1/budgets").contentType(MediaType.APPLICATION_JSON).content(CREATE_BODY))
+        .perform(
+            post("/api/v1/budgets").contentType(MediaType.APPLICATION_JSON).content(CREATE_BODY))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.name").value("Q3 plan"))
         .andExpect(jsonPath("$.lines[0].accountCode").value("4000"))
@@ -95,7 +96,8 @@ class BudgetControllerTest {
         .thenThrow(new UnknownAccountException("9998"));
 
     mockMvc
-        .perform(post("/api/v1/budgets").contentType(MediaType.APPLICATION_JSON).content(CREATE_BODY))
+        .perform(
+            post("/api/v1/budgets").contentType(MediaType.APPLICATION_JSON).content(CREATE_BODY))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/budget-unknown-account"));
   }
@@ -106,7 +108,8 @@ class BudgetControllerTest {
         .thenThrow(new DataIntegrityViolationException("uq_budget_company_name_period"));
 
     mockMvc
-        .perform(post("/api/v1/budgets").contentType(MediaType.APPLICATION_JSON).content(CREATE_BODY))
+        .perform(
+            post("/api/v1/budgets").contentType(MediaType.APPLICATION_JSON).content(CREATE_BODY))
         .andExpect(status().isConflict())
         .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/budget-conflict"));
   }
@@ -169,7 +172,8 @@ class BudgetControllerTest {
     mockMvc
         .perform(get("/api/v1/budgets/{id}/actuals", BUDGET))
         .andExpect(status().isUnprocessableEntity())
-        .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/budget-currency-mismatch"));
+        .andExpect(
+            jsonPath("$.type").value("https://errors.nativeapp.id/budget-currency-mismatch"));
   }
 
   @Test

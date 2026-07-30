@@ -10,8 +10,8 @@ import java.util.UUID;
  * carrying exactly the fields finance needs from the contract, already parsed out of the raw Avro
  * {@link org.apache.avro.generic.GenericRecord}.
  *
- * <p><strong>NOT a sale — a LIABILITY event.</strong> A gift card sold/topped up is stored value the
- * company now owes the bearer; it is never merged into {@code SaleRecorded} and finance never
+ * <p><strong>NOT a sale — a LIABILITY event.</strong> A gift card sold/topped up is stored value
+ * the company now owes the bearer; it is never merged into {@code SaleRecorded} and finance never
  * accumulates it as revenue (no {@code consolidated_revenue}/{@code outlet_revenue}/{@code
  * consolidated_pnl} update — see {@code GiftCardPostingWriter}). Revenue is recognised later, at
  * redemption, via {@code SaleRecorded.gift_card_redeemed_minor}.

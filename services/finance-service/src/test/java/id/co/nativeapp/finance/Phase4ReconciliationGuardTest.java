@@ -27,9 +27,10 @@ import org.junit.jupiter.api.Test;
  * RevenuePostingWriter#postRevenue} already lets propagate out of the {@code @Transactional} unit
  * of work (rolling it back) and out of the {@code @KafkaListener} method, where the container's
  * bounded-retry-then-DLT error handler routes the poison record to {@code SaleRecorded.DLT} — the
- * exact mechanism {@code SaleRecordedDltTest}/{@code SaleRecordedMissingHeaderDltTest} already prove
- * generically. These tests prove the NEW guards trigger that same poison path; no Kafka container is
- * needed to prove the guard logic itself (mirrors {@code PostingCurrencyGuardTest}'s posture).
+ * exact mechanism {@code SaleRecordedDltTest}/{@code SaleRecordedMissingHeaderDltTest} already
+ * prove generically. These tests prove the NEW guards trigger that same poison path; no Kafka
+ * container is needed to prove the guard logic itself (mirrors {@code PostingCurrencyGuardTest}'s
+ * posture).
  */
 class Phase4ReconciliationGuardTest {
 
@@ -97,8 +98,7 @@ class Phase4ReconciliationGuardTest {
 
   @Test
   void giftCardRedeemedZeroThrows() {
-    SaleRecordedEvent event =
-        phase4Event(30_000L, 0L, 0L, 0L, 30_000L, null, null, null, null, 0L);
+    SaleRecordedEvent event = phase4Event(30_000L, 0L, 0L, 0L, 30_000L, null, null, null, null, 0L);
 
     assertThatThrownBy(event::assertReconciliationIdentity)
         .isInstanceOf(IllegalStateException.class)

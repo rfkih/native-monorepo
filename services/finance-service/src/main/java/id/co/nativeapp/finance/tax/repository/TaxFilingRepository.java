@@ -13,8 +13,8 @@ import org.springframework.data.repository.query.Param;
 /**
  * Spring Data repository for the {@link TaxFiling} aggregate (Phase 4 Tax / PPN, ADR 0017).
  *
- * <p>A thin data port: no manual {@code WHERE company_id} — RLS scopes every read/write to the bound
- * company (rule 5). The entity-returning {@link #findByPeriodAndTaxType} is the write-path
+ * <p>A thin data port: no manual {@code WHERE company_id} — RLS scopes every read/write to the
+ * bound company (rule 5). The entity-returning {@link #findByPeriodAndTaxType} is the write-path
  * idempotency probe (a re-file finds the row and no-ops); the read paths (detail, history, the VAT
  * report's filing-state lookup) use native + projection queries, never {@code SELECT *} of the
  * entity.
@@ -50,7 +50,9 @@ public interface TaxFilingRepository extends JpaRepository<TaxFiling, UUID> {
       nativeQuery = true)
   Optional<TaxFilingView> findViewById(@Param("id") UUID id);
 
-  /** One filing by {@code (period, tax_type)}, projected — the READ (VAT-report filing-state) path. */
+  /**
+   * One filing by {@code (period, tax_type)}, projected — the READ (VAT-report filing-state) path.
+   */
   @Query(
       value =
           """
@@ -135,12 +137,12 @@ public interface TaxFilingRepository extends JpaRepository<TaxFiling, UUID> {
    * exists regardless of whether a {@code tax_filing} row exists yet, taken at the TOP of the file
    * flow BEFORE the {@link #findByPeriodAndTaxType} idempotency probe. It serializes two concurrent
    * file attempts for the same key: without it both could pass the "no row yet" probe, both post a
-   * netting entry, and one would win the {@code uq_tax_filing} UNIQUE insert while the other died on
-   * a unique-violation 500. With the lock the second attempt blocks until the first commits, then
-   * finds the row and returns the clean idempotent no-op. The UNIQUE constraint is the durable
+   * netting entry, and one would win the {@code uq_tax_filing} UNIQUE insert while the other died
+   * on a unique-violation 500. With the lock the second attempt blocks until the first commits,
+   * then finds the row and returns the clean idempotent no-op. The UNIQUE constraint is the durable
    * backstop; the lock makes concurrency graceful (copied verbatim from {@code
-   * WithinCompanyCloseRepository#lockPeriod}). Returns {@code true} so Spring Data can bind the void
-   * {@code pg_advisory_xact_lock} as a scalar result.
+   * WithinCompanyCloseRepository#lockPeriod}). Returns {@code true} so Spring Data can bind the
+   * void {@code pg_advisory_xact_lock} as a scalar result.
    */
   @Query(value = "SELECT pg_advisory_xact_lock(hashtext(:key)::bigint) IS NULL", nativeQuery = true)
   boolean lockPeriod(@Param("key") String key);

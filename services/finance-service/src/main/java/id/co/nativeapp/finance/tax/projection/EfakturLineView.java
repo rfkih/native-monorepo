@@ -9,8 +9,8 @@ import java.time.LocalDate;
  * SQL table reference, not a Java dependency on the {@code ar} feature).
  *
  * <p>DPP (<em>Dasar Pengenaan Pajak</em>) is the tax base = the invoice subtotal; PPN is the output
- * VAT. NOTE: this is an ILLUSTRATIVE flat layout, NOT the certified DJP e-Faktur import schema
- * (no NSFP tax-invoice serial numbers, no certificate) — ADR 0017 SME gate.
+ * VAT. NOTE: this is an ILLUSTRATIVE flat layout, NOT the certified DJP e-Faktur import schema (no
+ * NSFP tax-invoice serial numbers, no certificate) — ADR 0017 SME gate.
  */
 public interface EfakturLineView {
 

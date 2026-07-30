@@ -27,13 +27,15 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * {@code /api/v1/budgets} — per-month budgets for the bound tenant (Phase 5, ADR 0019): create, list,
- * detail, the budget-vs-actual variance report, and delete, plus the chart-of-account picker. Budgets
- * are planning data — nothing here posts to the GL. Every response is a DTO; typed faults map to
- * RFC-7807 via {@link BudgetAdvice} (404 not-found, 400 bad-input/unknown-account, 409 duplicate, 422
- * multi-currency).
+ * {@code /api/v1/budgets} — per-month budgets for the bound tenant (Phase 5, ADR 0019): create,
+ * list, detail, the budget-vs-actual variance report, and delete, plus the chart-of-account picker.
+ * Budgets are planning data — nothing here posts to the GL. Every response is a DTO; typed faults
+ * map to RFC-7807 via {@link BudgetAdvice} (404 not-found, 400 bad-input/unknown-account, 409
+ * duplicate, 422 multi-currency).
  */
-@Tag(name = "Budgets", description = "Per-month budgets + budget-vs-actual variance for the tenant.")
+@Tag(
+    name = "Budgets",
+    description = "Per-month budgets + budget-vs-actual variance for the tenant.")
 @RestController
 @RequestMapping("/api/v1/budgets")
 @Validated
@@ -85,7 +87,8 @@ public class BudgetController {
     return budgetReader.detail(id);
   }
 
-  @Operation(summary = "Budget-vs-actual variance for a budget (planned vs the period's GL actuals)")
+  @Operation(
+      summary = "Budget-vs-actual variance for a budget (planned vs the period's GL actuals)")
   @GetMapping("/{id}/actuals")
   public BudgetActualsResponse actuals(@PathVariable UUID id) {
     return budgetActualReader.actuals(id);

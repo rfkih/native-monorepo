@@ -19,9 +19,9 @@ import org.junit.jupiter.api.Test;
  * consumer machinery ({@code GiftCardSoldListener} / {@code GiftCardPostingWriter}).
  *
  * <p>Asserts the schema parses from the classpath, has the expected shape, round-trips through
- * {@link AvroSerde}, decodes into a {@link GiftCardSoldEvent} via {@link GiftCardSoldSchema#decode},
- * and stays backward-compatible with a producer schema that predates the optional {@code
- * tender_type} field (defaults to {@code null} when absent).
+ * {@link AvroSerde}, decodes into a {@link GiftCardSoldEvent} via {@link
+ * GiftCardSoldSchema#decode}, and stays backward-compatible with a producer schema that predates
+ * the optional {@code tender_type} field (defaults to {@code null} when absent).
  */
 class GiftCardSoldContractTest {
 

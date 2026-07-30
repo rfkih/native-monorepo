@@ -72,8 +72,9 @@ class Phase4LoyaltyGiftCardIntegrationTest extends PostgresRlsTestBase {
         saleEvent(eventId, 40_000L, 0L, 0L, 0L, 40_000L, "CASH", null, null, 15_000L));
 
     assertThat(consolidatedRevenueMinor())
-        .as("gift-card redemption must NOT reduce net revenue (it is a tender split, not a"
-            + " discount)")
+        .as(
+            "gift-card redemption must NOT reduce net revenue (it is a tender split, not a"
+                + " discount)")
         .isEqualTo(40_000L);
   }
 
@@ -178,7 +179,8 @@ class Phase4LoyaltyGiftCardIntegrationTest extends PostgresRlsTestBase {
 
     // The read model must unwind by the EXTENDED net (45,000), netting to zero.
     assertThat(consolidatedRevenueMinor())
-        .as("void must unwind consolidated_revenue by the extended net (subtotal − loyaltyRedeemed)")
+        .as(
+            "void must unwind consolidated_revenue by the extended net (subtotal − loyaltyRedeemed)")
         .isZero();
   }
 

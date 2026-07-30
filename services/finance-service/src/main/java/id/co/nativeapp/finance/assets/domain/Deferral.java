@@ -15,9 +15,10 @@ import org.hibernate.type.SqlTypes;
 
 /**
  * The {@code deferral} aggregate (Phase 6, ADR 0020) — a prepaid expense or deferred revenue spread
- * straight-line over {@code months} starting at {@code start_period} (inclusive). Creating one posts
- * its opening entry in the same transaction ({@code Dr 1400 / Cr 1900} prepaid; {@code Dr 1900 / Cr
- * 2400} deferred revenue); the monthly amortization run then posts each month's share to the P&amp;L.
+ * straight-line over {@code months} starting at {@code start_period} (inclusive). Creating one
+ * posts its opening entry in the same transaction ({@code Dr 1400 / Cr 1900} prepaid; {@code Dr
+ * 1900 / Cr 2400} deferred revenue); the monthly amortization run then posts each month's share to
+ * the P&amp;L.
  *
  * <p>Extends {@link Auditable}; covered by the {@code deferral} RLS policy (V34), scoped to {@code
  * app.current_tenant} (rules 4 + 5).

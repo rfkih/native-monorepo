@@ -23,7 +23,9 @@ class DepreciationScheduleTest {
     long sum = 0L;
     for (int k = 1; k <= n; k++) {
       long amount = DepreciationSchedule.amountForMonth(base, k, n).amountMinor();
-      assertThat(amount).as("month %d of %d for base %d", k, n, baseMinor).isGreaterThanOrEqualTo(0L);
+      assertThat(amount)
+          .as("month %d of %d for base %d", k, n, baseMinor)
+          .isGreaterThanOrEqualTo(0L);
       sum = Math.addExact(sum, amount);
     }
     assertThat(sum).as("Σ schedule for base %d over %d", baseMinor, n).isEqualTo(baseMinor);

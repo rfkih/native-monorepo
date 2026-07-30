@@ -19,8 +19,8 @@ import java.util.Objects;
  * minor units spread evenly across the schedule instead of piling up anywhere. An individual month
  * can round to zero when {@code B < N}; the run records the step but posts no entry.
  *
- * <p><strong>Month index.</strong> {@code k = monthsBetween(startPeriod, period) + 1} (1-based);
- * an item is due in a period iff {@code 1 ≤ k ≤ N}. Periods are independent (the cumulative formula
+ * <p><strong>Month index.</strong> {@code k = monthsBetween(startPeriod, period) + 1} (1-based); an
+ * item is due in a period iff {@code 1 ≤ k ≤ N}. Periods are independent (the cumulative formula
  * needs only k), so a missed month is caught up by simply running that period — no ordering
  * constraint between runs.
  */
@@ -61,7 +61,10 @@ public final class DepreciationSchedule {
     return Math.toIntExact(Math.addExact(months, 1L));
   }
 
-  /** Whether a schedule of {@code n} months starting at {@code startPeriod} is due in {@code period}. */
+  /**
+   * Whether a schedule of {@code n} months starting at {@code startPeriod} is due in {@code
+   * period}.
+   */
   public static boolean isDue(String startPeriod, String period, int n) {
     int k = monthIndex(startPeriod, period);
     return k >= 1 && k <= n;

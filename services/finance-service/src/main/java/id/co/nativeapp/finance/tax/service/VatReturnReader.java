@@ -31,14 +31,15 @@ import org.springframework.transaction.annotation.Transactional;
  * </ul>
  *
  * <p>The account codes are resolved from the SME-pluggable {@code role_account_map} (VAT_OUTPUT /
- * VAT_INPUT), not hard-coded, so a remapped chart is followed automatically. The reader wraps {@link
- * GlTrialBalanceReader#read} so it inherits the Σdebit==Σcredit + single-currency assertions.
+ * VAT_INPUT), not hard-coded, so a remapped chart is followed automatically. The reader wraps
+ * {@link GlTrialBalanceReader#read} so it inherits the Σdebit==Σcredit + single-currency
+ * assertions.
  *
  * <p><strong>Once a period is filed</strong>, {@link #read} reports the FILED SNAPSHOT (from {@code
  * tax_filing}), not the live GL: filing posts a netting entry that clears the period's 2200/1300 to
- * zero, so the live recompute would (correctly) read zero — the snapshot is what the return actually
- * was. The writer path uses {@link #compute} (the raw live figures) before it posts that netting
- * entry.
+ * zero, so the live recompute would (correctly) read zero — the snapshot is what the return
+ * actually was. The writer path uses {@link #compute} (the raw live figures) before it posts that
+ * netting entry.
  */
 @Service
 public class VatReturnReader {
@@ -53,7 +54,8 @@ public class VatReturnReader {
       RoleAccountResolver roleAccountResolver,
       TaxFilingRepository taxFilingRepository,
       Clock clock) {
-    this.glTrialBalanceReader = Objects.requireNonNull(glTrialBalanceReader, "glTrialBalanceReader");
+    this.glTrialBalanceReader =
+        Objects.requireNonNull(glTrialBalanceReader, "glTrialBalanceReader");
     this.roleAccountResolver = Objects.requireNonNull(roleAccountResolver, "roleAccountResolver");
     this.taxFilingRepository = Objects.requireNonNull(taxFilingRepository, "taxFilingRepository");
     this.clock = Objects.requireNonNull(clock, "clock");
@@ -83,8 +85,7 @@ public class VatReturnReader {
     }
     VatReturn live = compute(period);
     long signedNet = Math.subtractExact(live.outputVatMinor(), live.inputVatMinor());
-    String direction =
-        (signedNet >= 0L ? NetDirection.PAYABLE : NetDirection.CREDITABLE).name();
+    String direction = (signedNet >= 0L ? NetDirection.PAYABLE : NetDirection.CREDITABLE).name();
     return new VatReturnResponse(
         period,
         live.currency(),

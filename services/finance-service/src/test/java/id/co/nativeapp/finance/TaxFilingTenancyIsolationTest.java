@@ -10,7 +10,6 @@ import id.co.nativeapp.finance.ar.dto.CustomerResponse;
 import id.co.nativeapp.finance.ar.service.CustomerWriter;
 import id.co.nativeapp.finance.ar.service.InvoiceLineInput;
 import id.co.nativeapp.finance.ar.service.InvoiceWriter;
-import id.co.nativeapp.finance.gl.projection.GlTrialBalanceLineView;
 import id.co.nativeapp.finance.gl.service.GlTrialBalanceReader;
 import id.co.nativeapp.finance.revenue.domain.LedgerPosting;
 import id.co.nativeapp.finance.tax.dto.TaxFilingHistoryResponse;
@@ -30,11 +29,11 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 /**
  * End-to-end integration test (real PostgreSQL, unprivileged {@code app_user}) for the Phase 4 PPN
- * flow: seed a taxable AR invoice (output VAT) + a taxable AP bill (input VAT), read the VAT return,
- * FILE it (the netting entry clears the period's 2200/1300 and books the net to 2300), verify the
- * report then reports the sealed snapshot and a re-file is an idempotent no-op, SETTLE it (clears
- * 2300, credits CASH_CLEARING), and confirm RLS isolates the filing from another tenant. The tax
- * mirror of {@link BankTenancyIsolationTest}.
+ * flow: seed a taxable AR invoice (output VAT) + a taxable AP bill (input VAT), read the VAT
+ * return, FILE it (the netting entry clears the period's 2200/1300 and books the net to 2300),
+ * verify the report then reports the sealed snapshot and a re-file is an idempotent no-op, SETTLE
+ * it (clears 2300, credits CASH_CLEARING), and confirm RLS isolates the filing from another tenant.
+ * The tax mirror of {@link BankTenancyIsolationTest}.
  */
 @SpringBootTest
 class TaxFilingTenancyIsolationTest extends PostgresRlsTestBase {
@@ -66,7 +65,10 @@ class TaxFilingTenancyIsolationTest extends PostgresRlsTestBase {
           CustomerResponse customer = customerWriter.create("Acme Sales", null, null);
           UUID invoice =
               invoiceWriter.createDraft(
-                  customer.id(), "IDR", true, List.of(new InvoiceLineInput("Sale", 1, 10_000_000L)));
+                  customer.id(),
+                  "IDR",
+                  true,
+                  List.of(new InvoiceLineInput("Sale", 1, 10_000_000L)));
           invoiceWriter.issue(invoice, 30);
           VendorResponse vendor = vendorWriter.create("Acme Supplies", null, null);
           UUID bill =

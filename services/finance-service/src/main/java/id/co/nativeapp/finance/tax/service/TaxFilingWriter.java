@@ -25,16 +25,16 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * The {@code @Transactional} unit of work for FILING a period's PPN (VAT) return — the money-critical
- * novel piece of Phase 4 (ADR 0017; V31/V32). Like the Bank reconciliation writer (and unlike AR/AP,
- * which use the {@code posting_template} framework), filing posts an AD-HOC balanced {@link
- * JournalEntry} built directly here via {@link JournalLine#debit}/{@link JournalLine#credit} — there
- * is no {@code posting_template} or new {@code EventKind} for it, because the net-VAT leg's
- * <em>side</em> flips with the sign (a credit to VAT_PAYABLE when payable, a debit to
- * VAT_CREDIT_CARRYFORWARD when creditable).
+ * The {@code @Transactional} unit of work for FILING a period's PPN (VAT) return — the
+ * money-critical novel piece of Phase 4 (ADR 0017; V31/V32). Like the Bank reconciliation writer
+ * (and unlike AR/AP, which use the {@code posting_template} framework), filing posts an AD-HOC
+ * balanced {@link JournalEntry} built directly here via {@link JournalLine#debit}/{@link
+ * JournalLine#credit} — there is no {@code posting_template} or new {@code EventKind} for it,
+ * because the net-VAT leg's <em>side</em> flips with the sign (a credit to VAT_PAYABLE when
+ * payable, a debit to VAT_CREDIT_CARRYFORWARD when creditable).
  *
- * <p><strong>The netting entry (posted into the RETURN period, so it offsets that period's
- * accruals in the period trial balance):</strong>
+ * <p><strong>The netting entry (posted into the RETURN period, so it offsets that period's accruals
+ * in the period trial balance):</strong>
  *
  * <ul>
  *   <li>{@code Dr VAT_OUTPUT (2200)} for the output VAT — clears the period's output-VAT liability.
@@ -46,12 +46,12 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * A leg whose amount is zero is omitted; a zero net posts just the two clearing legs.
  *
- * <p><strong>Idempotency.</strong> A per-{@code (company, period, PPN)} advisory lock is taken at the
- * top, BEFORE the {@code findByPeriodAndTaxType} probe; an already-filed period returns its id (a
- * clean no-op, posting nothing). The netting entry's {@code source_event_id} is the filing id
+ * <p><strong>Idempotency.</strong> A per-{@code (company, period, PPN)} advisory lock is taken at
+ * the top, BEFORE the {@code findByPeriodAndTaxType} probe; an already-filed period returns its id
+ * (a clean no-op, posting nothing). The netting entry's {@code source_event_id} is the filing id
  * (UNIQUE on {@code journal_entry}) — the database backstop behind the lock + the {@code
- * uq_tax_filing} UNIQUE(company, period, tax_type). A distinct proxy-invoked bean so the {@code
- * @Transactional} + RLS aspect engage (rule 5).
+ * uq_tax_filing} UNIQUE(company, period, tax_type). A distinct proxy-invoked bean so the
+ * {@code @Transactional} + RLS aspect engage (rule 5).
  */
 @Component
 public class TaxFilingWriter {
@@ -85,12 +85,13 @@ public class TaxFilingWriter {
   }
 
   /**
-   * Files the PPN return for {@code (the bound company, period)}: computes the net from the GL, posts
-   * the ad-hoc netting entry into the return period, and seals the {@code tax_filing} row.
+   * Files the PPN return for {@code (the bound company, period)}: computes the net from the GL,
+   * posts the ad-hoc netting entry into the return period, and seals the {@code tax_filing} row.
    *
-   * @return the filing id + whether it was freshly filed (an idempotent re-file returns the existing
-   *     id with {@code created == false}, posting nothing)
-   * @throws NoVatActivityException if the period has no VAT to file, or a net-void (negative) period
+   * @return the filing id + whether it was freshly filed (an idempotent re-file returns the
+   *     existing id with {@code created == false}, posting nothing)
+   * @throws NoVatActivityException if the period has no VAT to file, or a net-void (negative)
+   *     period
    * @throws MismatchedPostingCurrencyException if the period's currency diverges (→ 422)
    */
   @Transactional
@@ -125,12 +126,24 @@ public class TaxFilingWriter {
     // period trial balance), occurred at `now`. source_event_id = the filing id (UNIQUE backstop).
     JournalEntry entry =
         buildFilingEntry(
-            period, now, entryId, filingId, vat.currency(), vat.outputVatMinor(), vat.inputVatMinor());
+            period,
+            now,
+            entryId,
+            filingId,
+            vat.currency(),
+            vat.outputVatMinor(),
+            vat.inputVatMinor());
     persistEntry(entry, companyId);
 
     TaxFiling filing =
         TaxFiling.file(
-            filingId, period, vat.currency(), vat.outputVatMinor(), vat.inputVatMinor(), entryId, now);
+            filingId,
+            period,
+            vat.currency(),
+            vat.outputVatMinor(),
+            vat.inputVatMinor(),
+            entryId,
+            now);
     filing.setCompanyId(companyId);
     taxFilingRepository.save(filing);
     return new FileReturnResult(filingId, true);
@@ -138,12 +151,13 @@ public class TaxFilingWriter {
 
   /**
    * Builds (but does not persist) the balanced ad-hoc netting {@link JournalEntry} for filing the
-   * PPN return of {@code period} with the given output/input VAT (minor units, {@code currencyCode}).
-   * Public and pure (resolves account codes via {@link RoleAccountResolver}, no DB writes) so {@code
-   * TaxFilingPostingTest} can assert the exact legs for every case with a mocked resolver — mirroring
-   * how {@code ReconciliationWriter#buildEntry} is unit-tested.
+   * PPN return of {@code period} with the given output/input VAT (minor units, {@code
+   * currencyCode}). Public and pure (resolves account codes via {@link RoleAccountResolver}, no DB
+   * writes) so {@code TaxFilingPostingTest} can assert the exact legs for every case with a mocked
+   * resolver — mirroring how {@code ReconciliationWriter#buildEntry} is unit-tested.
    *
-   * @param sourceEventId the entry's {@code source_event_id} (the filing id — UNIQUE idempotency key)
+   * @param sourceEventId the entry's {@code source_event_id} (the filing id — UNIQUE idempotency
+   *     key)
    * @throws NoVatActivityException if there is no VAT to file (both zero), or a net-void (negative)
    *     period — which this slice does not support (ADR 0017 deferral)
    */
@@ -176,7 +190,8 @@ public class TaxFilingWriter {
     int lineNo = 1;
     if (outputVatMinor > 0L) {
       lines.add(
-          JournalLine.debit(entryId, lineNo++, outputCode, Money.ofMinor(outputVatMinor, currency)));
+          JournalLine.debit(
+              entryId, lineNo++, outputCode, Money.ofMinor(outputVatMinor, currency)));
     }
     if (inputVatMinor > 0L) {
       lines.add(
@@ -184,10 +199,12 @@ public class TaxFilingWriter {
     }
     if (signedNet > 0L) {
       String payableCode = requireMapped(AccountRole.VAT_PAYABLE, now);
-      lines.add(JournalLine.credit(entryId, lineNo++, payableCode, Money.ofMinor(signedNet, currency)));
+      lines.add(
+          JournalLine.credit(entryId, lineNo++, payableCode, Money.ofMinor(signedNet, currency)));
     } else if (signedNet < 0L) {
       String carryCode = requireMapped(AccountRole.VAT_CREDIT_CARRYFORWARD, now);
-      lines.add(JournalLine.debit(entryId, lineNo++, carryCode, Money.ofMinor(-signedNet, currency)));
+      lines.add(
+          JournalLine.debit(entryId, lineNo++, carryCode, Money.ofMinor(-signedNet, currency)));
     }
 
     return JournalEntry.balanced(
@@ -221,9 +238,9 @@ public class TaxFilingWriter {
   }
 
   /**
-   * Rejects a filing whose currency diverges from any journal entry already posted in the period for
-   * this tenant (mirroring AR/AP's {@code requireConsistentGlCurrency}). Runs under RLS on the {@code
-   * @Transactional} connection, so it only sees this tenant's GL.
+   * Rejects a filing whose currency diverges from any journal entry already posted in the period
+   * for this tenant (mirroring AR/AP's {@code requireConsistentGlCurrency}). Runs under RLS on the
+   * {@code @Transactional} connection, so it only sees this tenant's GL.
    */
   private void requireConsistentGlCurrency(String period, Money amount) {
     String incoming = amount.currency().getCurrencyCode();

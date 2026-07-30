@@ -29,10 +29,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 /**
  * End-to-end integration test (real PostgreSQL, unprivileged {@code app_user}) for Phase 5 budgets:
- * create a budget with lines, read its detail, and compute the budget-vs-actual variance against real
- * seeded GL activity (an AR invoice credits revenue 4000; an AP bill debits expense 5000), then
- * confirm RLS isolates the budget from another tenant and an unknown account is rejected. The budget
- * mirror of the AR/AP/tax tenancy tests.
+ * create a budget with lines, read its detail, and compute the budget-vs-actual variance against
+ * real seeded GL activity (an AR invoice credits revenue 4000; an AP bill debits expense 5000),
+ * then confirm RLS isolates the budget from another tenant and an unknown account is rejected. The
+ * budget mirror of the AR/AP/tax tenancy tests.
  */
 @SpringBootTest
 class BudgetTenancyIsolationTest extends PostgresRlsTestBase {
@@ -103,14 +103,18 @@ class BudgetTenancyIsolationTest extends PostgresRlsTestBase {
     assertThat(actuals.totalPlannedMinor()).isEqualTo(17_000_000L);
     assertThat(actuals.totalActualMinor()).isEqualTo(14_000_000L);
     assertThat(actuals.totalVarianceMinor()).isEqualTo(-3_000_000L);
-    assertThat(lineFor(actuals, "4000")).satisfies(l -> {
-      assertThat(l.actualMinor()).isEqualTo(10_000_000L);
-      assertThat(l.varianceMinor()).isEqualTo(-2_000_000L);
-    });
-    assertThat(lineFor(actuals, "5000")).satisfies(l -> {
-      assertThat(l.actualMinor()).isEqualTo(4_000_000L);
-      assertThat(l.varianceMinor()).isEqualTo(-1_000_000L);
-    });
+    assertThat(lineFor(actuals, "4000"))
+        .satisfies(
+            l -> {
+              assertThat(l.actualMinor()).isEqualTo(10_000_000L);
+              assertThat(l.varianceMinor()).isEqualTo(-2_000_000L);
+            });
+    assertThat(lineFor(actuals, "5000"))
+        .satisfies(
+            l -> {
+              assertThat(l.actualMinor()).isEqualTo(4_000_000L);
+              assertThat(l.varianceMinor()).isEqualTo(-1_000_000L);
+            });
 
     // RLS: tenant B sees no budgets and cannot read tenant A's budget (a 404, not a leak).
     List<?> bList = TenantContext.callAs(TENANT_B, ACTOR, () -> budgetReader.list());

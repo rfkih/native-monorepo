@@ -21,8 +21,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * {@code /api/v1/deferrals} — prepaid expenses + deferred revenue for the bound tenant (Phase 6, ADR
- * 0020): create (posts the opening entry) and the list with remaining balances. The monthly
+ * {@code /api/v1/deferrals} — prepaid expenses + deferred revenue for the bound tenant (Phase 6,
+ * ADR 0020): create (posts the opening entry) and the list with remaining balances. The monthly
  * amortization run ({@code POST /api/v1/assets/runs}) posts each month's share. DTOs only; faults
  * via {@link AssetAdvice} (the same advice package).
  */

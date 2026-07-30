@@ -125,8 +125,7 @@ public class DeferralWriter {
   private void requireStartAfterLastRun(String startPeriod) {
     List<String> latest =
         jdbcTemplate.query(
-            "SELECT MAX(period) FROM amortization_run",
-            (rs, rowNum) -> rs.getString(1));
+            "SELECT MAX(period) FROM amortization_run", (rs, rowNum) -> rs.getString(1));
     String maxRun = latest.isEmpty() ? null : latest.getFirst();
     if (maxRun != null && startPeriod.compareTo(maxRun) <= 0) {
       throw new IllegalArgumentException(
@@ -145,7 +144,12 @@ public class DeferralWriter {
    */
   @SuppressWarnings("checkstyle:ParameterNumber")
   public JournalEntry buildCreationEntry(
-      DeferralKind kind, String period, Instant now, UUID entryId, UUID sourceEventId, Money total) {
+      DeferralKind kind,
+      String period,
+      Instant now,
+      UUID entryId,
+      UUID sourceEventId,
+      Money total) {
     String clearingCode = requireMapped(AccountRole.CASH_CLEARING, now);
     List<JournalLine> lines;
     String description;

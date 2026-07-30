@@ -168,10 +168,10 @@ public enum AccountRole {
   GIFT_CARD_LIABILITY,
   /**
    * Phase 4 loyalty/gift cards (ADR 0027, ILLUSTRATIVE — SME-gated): points-redemption
-   * contra-revenue debit, extending the {@code SALE} v3 template exactly as {@link
-   * #SALES_DISCOUNT} does for the promo discount — points redemption is a discount, not a tender
-   * settlement (unlike a gift card). SME must confirm contra-revenue vs. a separate
-   * marketing/loyalty expense treatment. Maps to account 4030 (ILLUSTRATIVE — SME-gated, V37).
+   * contra-revenue debit, extending the {@code SALE} v3 template exactly as {@link #SALES_DISCOUNT}
+   * does for the promo discount — points redemption is a discount, not a tender settlement (unlike
+   * a gift card). SME must confirm contra-revenue vs. a separate marketing/loyalty expense
+   * treatment. Maps to account 4030 (ILLUSTRATIVE — SME-gated, V37).
    */
   LOYALTY_DISCOUNT,
   /**
@@ -182,10 +182,10 @@ public enum AccountRole {
    */
   LOYALTY_LIABILITY,
   /**
-   * Phase 4 loyalty/gift cards (ADR 0027): unredeemed/expired gift-card value recognised as
-   * income. DEFINED-BUT-UNUSED in every Phase 4 posting template — the {@link
-   * #SERVICE_CHARGE_PAYABLE} precedent (V17): recognising breakage needs an SME-confirmed policy
-   * (rate + timing) not yet decided. Maps to account 4900 (ILLUSTRATIVE, V37).
+   * Phase 4 loyalty/gift cards (ADR 0027): unredeemed/expired gift-card value recognised as income.
+   * DEFINED-BUT-UNUSED in every Phase 4 posting template — the {@link #SERVICE_CHARGE_PAYABLE}
+   * precedent (V17): recognising breakage needs an SME-confirmed policy (rate + timing) not yet
+   * decided. Maps to account 4900 (ILLUSTRATIVE, V37).
    */
   GIFT_CARD_BREAKAGE_INCOME
 }

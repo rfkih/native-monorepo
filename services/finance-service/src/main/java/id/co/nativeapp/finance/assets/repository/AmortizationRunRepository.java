@@ -11,15 +11,17 @@ import org.springframework.data.repository.query.Param;
 
 /**
  * Spring Data repository for the {@link AmortizationRun} seal (Phase 6, ADR 0020). RLS scopes all
- * access (rule 5). {@link #findByPeriod} is the write-path idempotency probe; {@link #lockPeriod} is
- * the deterministic advisory lock taken BEFORE it (copied verbatim from the tax-filing /
- * within-close repositories: serializes two concurrent runs of the same {@code (company, period)} so
- * the loser blocks, then finds the row and no-ops instead of dying on the {@code
+ * access (rule 5). {@link #findByPeriod} is the write-path idempotency probe; {@link #lockPeriod}
+ * is the deterministic advisory lock taken BEFORE it (copied verbatim from the tax-filing /
+ * within-close repositories: serializes two concurrent runs of the same {@code (company, period)}
+ * so the loser blocks, then finds the row and no-ops instead of dying on the {@code
  * uq_amortization_run} UNIQUE — which remains the durable backstop).
  */
 public interface AmortizationRunRepository extends JpaRepository<AmortizationRun, UUID> {
 
-  /** The run for a period within the bound company, if it has already run — the idempotency probe. */
+  /**
+   * The run for a period within the bound company, if it has already run — the idempotency probe.
+   */
   Optional<AmortizationRun> findByPeriod(String period);
 
   /** One run by id, projected — the post-run detail read (RLS-scoped). */
@@ -55,8 +57,8 @@ public interface AmortizationRunRepository extends JpaRepository<AmortizationRun
 
   /**
    * Transaction-scoped advisory lock keyed on {@code (company, period)} — held even before the seal
-   * row exists; auto-released at commit/rollback. See {@code TaxFilingRepository#lockPeriod} for the
-   * full rationale. Returns {@code true} so Spring Data can bind the void function as a scalar.
+   * row exists; auto-released at commit/rollback. See {@code TaxFilingRepository#lockPeriod} for
+   * the full rationale. Returns {@code true} so Spring Data can bind the void function as a scalar.
    */
   @Query(value = "SELECT pg_advisory_xact_lock(hashtext(:key)::bigint) IS NULL", nativeQuery = true)
   boolean lockPeriod(@Param("key") String key);

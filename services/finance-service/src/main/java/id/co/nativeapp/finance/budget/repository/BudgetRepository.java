@@ -67,7 +67,10 @@ public interface BudgetRepository extends JpaRepository<Budget, UUID> {
       nativeQuery = true)
   List<AccountView> findAllAccounts();
 
-  /** Whether {@code accountCode} exists in the chart of accounts (global ref) — write-path validation. */
+  /**
+   * Whether {@code accountCode} exists in the chart of accounts (global ref) — write-path
+   * validation.
+   */
   @Query(
       value = "SELECT count(*) > 0 FROM chart_of_account WHERE account_code = :code",
       nativeQuery = true)

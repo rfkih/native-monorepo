@@ -62,9 +62,9 @@ import java.util.UUID;
  *     (treated as 0) — a contra-revenue deduction, like {@code discountMinor}
  * @param giftCardId the gift card (UUID as string) redeemed as a tender, or null — finance never
  *     reads this field directly (it is a loyalty-service concern); carried for traceability
- * @param giftCardRedeemedMinor the stored-value amount redeemed from the gift card in minor
- *     units, or null (treated as 0) — a TENDER-SETTLEMENT amount, never a revenue deduction; must
- *     be {@code <= amount_minor} when present
+ * @param giftCardRedeemedMinor the stored-value amount redeemed from the gift card in minor units,
+ *     or null (treated as 0) — a TENDER-SETTLEMENT amount, never a revenue deduction; must be
+ *     {@code <= amount_minor} when present
  */
 public record SaleRecordedEvent(
     UUID eventId,
@@ -151,8 +151,8 @@ public record SaleRecordedEvent(
    * ADR 0027, added the five trailing loyalty/gift-card fields). Sets all five Phase 4 fields to
    * null — a Phase 2 caller (or a pre-Phase-4 producer's decoded record) is therefore
    * byte-identical in behaviour to before Phase 4: {@link #effectiveLoyaltyRedeemed()} and {@link
-   * #effectiveGiftCardRedeemed()} both resolve to zero, and {@link
-   * #assertReconciliationIdentity()} reduces to exactly the Phase 2 identity.
+   * #effectiveGiftCardRedeemed()} both resolve to zero, and {@link #assertReconciliationIdentity()}
+   * reduces to exactly the Phase 2 identity.
    */
   @SuppressWarnings("checkstyle:ParameterNumber")
   public SaleRecordedEvent(

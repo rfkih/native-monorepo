@@ -36,9 +36,9 @@ import org.springframework.boot.test.context.SpringBootTest;
  *       serialize the two: exactly one tax_filing row exists, exactly one call reports {@code
  *       created == true}, and {@code VAT_PAYABLE (2300)} is credited exactly once (the net, not
  *       double).
- *   <li><strong>settle()</strong> — the up-front status guard + the {@code @Version} optimistic lock
- *       let exactly one settlement post; the loser rolls back (its orphan journal entry with it), so
- *       {@code 2300} is debited exactly once and the filing ends SETTLED.
+ *   <li><strong>settle()</strong> — the up-front status guard + the {@code @Version} optimistic
+ *       lock let exactly one settlement post; the loser rolls back (its orphan journal entry with
+ *       it), so {@code 2300} is debited exactly once and the filing ends SETTLED.
  * </ul>
  */
 @SpringBootTest
@@ -100,9 +100,12 @@ class TaxFilingConcurrencyTest extends PostgresRlsTestBase {
     assertThat(r1.filingId()).isEqualTo(r2.filingId());
     assertThat(r1.created() ^ r2.created()).as("exactly one call created the filing").isTrue();
 
-    // Exactly ONE tax_filing row, and VAT_PAYABLE (2300) credited exactly once (the net, not double).
+    // Exactly ONE tax_filing row, and VAT_PAYABLE (2300) credited exactly once (the net, not
+    // double).
     assertThat(countAsAdmin("SELECT count(*) FROM tax_filing")).isEqualTo(1L);
-    assertThat(sumAsAdmin("SELECT COALESCE(SUM(credit_minor),0) FROM journal_line WHERE account_code='2300'"))
+    assertThat(
+            sumAsAdmin(
+                "SELECT COALESCE(SUM(credit_minor),0) FROM journal_line WHERE account_code='2300'"))
         .isEqualTo(660_000L);
   }
 
@@ -129,7 +132,9 @@ class TaxFilingConcurrencyTest extends PostgresRlsTestBase {
     // Exactly one settle succeeded; the loser rolled back (status guard or optimistic lock).
     assertThat(ok1 ^ ok2).as("exactly one settle succeeded").isTrue();
     // VAT_PAYABLE (2300) debited exactly once (the loser's orphan settlement entry rolled back).
-    assertThat(sumAsAdmin("SELECT COALESCE(SUM(debit_minor),0) FROM journal_line WHERE account_code='2300'"))
+    assertThat(
+            sumAsAdmin(
+                "SELECT COALESCE(SUM(debit_minor),0) FROM journal_line WHERE account_code='2300'"))
         .isEqualTo(660_000L);
   }
 
@@ -156,7 +161,8 @@ class TaxFilingConcurrencyTest extends PostgresRlsTestBase {
                 taxFilingService.settle(filingId);
                 return true;
               } catch (RuntimeException raced) {
-                // The loser: TaxFilingStateException (already settled) or an optimistic-lock failure.
+                // The loser: TaxFilingStateException (already settled) or an optimistic-lock
+                // failure.
                 return false;
               }
             });

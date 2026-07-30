@@ -14,12 +14,13 @@ import java.util.List;
  */
 public record CreateBudgetRequest(
     @NotBlank @Size(max = 255) String name,
-    @NotBlank @Pattern(regexp = "\\d{4}-(0[1-9]|1[0-2])", message = "period must be a valid YYYY-MM month")
+    @NotBlank @Pattern(
+            regexp = "\\d{4}-(0[1-9]|1[0-2])",
+            message = "period must be a valid YYYY-MM month")
         String period,
     @NotBlank @Size(min = 3, max = 3) String currency,
     @NotEmpty @Size(max = 500) @Valid List<LineInput> lines) {
 
   /** One planned line: an account and its non-negative planned amount (minor units). */
-  public record LineInput(
-      @NotBlank @Size(max = 32) String accountCode, @Min(0) long amountMinor) {}
+  public record LineInput(@NotBlank @Size(max = 32) String accountCode, @Min(0) long amountMinor) {}
 }
