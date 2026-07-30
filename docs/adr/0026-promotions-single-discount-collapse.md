@@ -63,5 +63,9 @@ the consumer. The design question is where promotion complexity lives.
 - Guest-tab bills get automatics + manual discount only; coupons on bills are a follow-up.
 - Coupon codes are only as strong as merchants make them; the guard is the per-tenant
   authenticated surface + rate limiting (noted for the security review).
+- A DIGITAL-tender checkout redeems the coupon at checkout time, before capture: an abandoned
+  digital checkout permanently consumes a redemption slot (conservative — it can only
+  over-count, never grant more than `max_redemptions`; security review S-2). A follow-up may
+  release the slot on void.
 - The engine is cloned per vertical like the POS itself — restaurant first, then the ticket
   verticals; divergence risk is handled the same way (clone + adversarial review).

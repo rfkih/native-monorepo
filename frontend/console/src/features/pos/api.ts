@@ -297,6 +297,14 @@ export function useCategories(session: CompanySession) {
 }
 
 export interface CheckoutInput {
+  /**
+   * Minted ONCE when the payment attempt begins (panel mount) and REUSED across retries of the
+   * same attempt — never per click. If the first attempt commits server-side but the response is
+   * lost, the retry replays the same key and resolves to the SAME order instead of charging (and,
+   * since ADR 0026, redeeming a coupon) twice. The BillDetail freshIdempotencyKey pattern;
+   * promotions review W2.
+   */
+  idempotencyKey: string
   lines: OrderLineInput[]
   payment?: CheckoutPaymentInput
   /** Optional order-level discount in minor units (>= 0). Server clamps to subtotal. */
@@ -312,13 +320,21 @@ export interface CheckoutInput {
 export function useCheckout(session: CompanySession) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ lines, payment, discountMinor, orderType, tableId, couponCode }: CheckoutInput) =>
+    mutationFn: ({
+      idempotencyKey,
+      lines,
+      payment,
+      discountMinor,
+      orderType,
+      tableId,
+      couponCode,
+    }: CheckoutInput) =>
       apiFetch<OrderResponse>('/api/v1/orders', {
         method: 'POST',
         tenant: tenantOf(session),
         body: {
           businessId: session.businessId,
-          idempotencyKey: crypto.randomUUID(),
+          idempotencyKey,
           lines,
           payment: payment ?? null,
           discountMinor: discountMinor && discountMinor > 0 ? discountMinor : null,

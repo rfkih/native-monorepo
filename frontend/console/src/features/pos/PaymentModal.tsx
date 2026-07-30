@@ -342,6 +342,11 @@ function CashPanel({
   const checkout = useCheckout(session)
   const payParked = usePayParked(session)
 
+  // One idempotency key per payment ATTEMPT (panel mount), reused across retries — a retry after
+  // an ambiguous failure replays the same key and resolves to the same order (never a second
+  // charge or coupon redemption). Promotions review W2; the BillDetail pattern.
+  const [idempotencyKey] = useState<string>(() => crypto.randomUUID())
+
   const isBusy = checkout.isPending || payParked.isPending
 
   // tenderedMinor is held as an integer; the keypad appends digits to a string, then parsed.
@@ -388,6 +393,7 @@ function CashPanel({
       // Normal checkout path
       checkout.mutate(
         {
+          idempotencyKey,
           lines,
           payment: { tenderType: 'CASH', tenderedMinor },
           discountMinor,
@@ -544,6 +550,9 @@ function DigitalPanel({
   const payParked = usePayParked(session)
   const capture = useCapturePayment(session)
 
+  // One idempotency key per payment ATTEMPT (panel mount), reused across retries (review W2).
+  const [idempotencyKey] = useState<string>(() => crypto.randomUUID())
+
   // After initiation we hold the PENDING order + payment to drive the "Mark as paid" step.
   const [pendingOrder, setPendingOrder] = useState<OrderResponse | null>(null)
   const [pendingPayment, setPendingPayment] = useState<PaymentResponse | null>(null)
@@ -564,7 +573,7 @@ function DigitalPanel({
       )
     } else {
       checkout.mutate(
-        { lines, payment: { tenderType }, discountMinor, orderType, tableId, couponCode },
+        { idempotencyKey, lines, payment: { tenderType }, discountMinor, orderType, tableId, couponCode },
         {
           onSuccess: (res) => {
             if (res?.payment) {

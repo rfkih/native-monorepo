@@ -143,13 +143,21 @@ export function ReceiptView({
         isDeduction: true,
       })
       // Phase 3 (ADR 0026): the per-rule detail behind the aggregate discount above, from the LAST
-      // live quote before payment (display-only — see the `appliedPromotions` prop doc).
-      for (const promo of appliedPromotions ?? []) {
-        totalRows.push({
-          label: `  ${promo.name}`,
-          valueLabel: `- ${formatMoney(promo.amountMinor, currency, locale)}`,
-          isDeduction: true,
-        })
+      // live quote before payment (display-only). The aggregate line is authoritative (checkout
+      // response); the itemization is a quote snapshot that can drift (happy hour ended, coupon
+      // raced) — suppress it when its sum EXCEEDS the aggregate, so a printed receipt never shows
+      // rows adding up to more than the discount actually charged. A sum below the aggregate is
+      // legitimate (the remainder is the manual discount, which has no rule row). Review W3.
+      const promoRows = appliedPromotions ?? []
+      const promoSum = promoRows.reduce((sum, p) => sum + p.amountMinor, 0)
+      if (promoSum <= breakdown.discountMinor) {
+        for (const promo of promoRows) {
+          totalRows.push({
+            label: `  ${promo.name}`,
+            valueLabel: `- ${formatMoney(promo.amountMinor, currency, locale)}`,
+            isDeduction: true,
+          })
+        }
       }
     }
     totalRows.push({ label: t('pos.serviceCharge'), valueLabel: formatMoney(breakdown.serviceChargeMinor, currency, locale) })
