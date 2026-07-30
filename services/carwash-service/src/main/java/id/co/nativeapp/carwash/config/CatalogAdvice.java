@@ -1,6 +1,7 @@
 package id.co.nativeapp.carwash.config;
 
 import id.co.nativeapp.carwash.catalog.domain.CatalogItemNotFoundException;
+import id.co.nativeapp.carwash.catalog.domain.StaffProfileWriteForbiddenException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
 import org.slf4j.MDC;
@@ -35,6 +36,16 @@ public class CatalogAdvice {
     problem.setType(URI.create(TYPE_BASE + "catalog-item-not-found"));
     problem.setTitle("Not Found");
     problem.setDetail("No such catalog item is accessible.");
+    return decorate(problem, request);
+  }
+
+  @ExceptionHandler(StaffProfileWriteForbiddenException.class)
+  public ProblemDetail handleStaffWriteForbidden(
+      StaffProfileWriteForbiddenException ex, HttpServletRequest request) {
+    ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.FORBIDDEN);
+    problem.setType(URI.create(TYPE_BASE + "staff-profile-write-forbidden"));
+    problem.setTitle("Forbidden");
+    problem.setDetail("Staff profile changes require the owner or manager role.");
     return decorate(problem, request);
   }
 

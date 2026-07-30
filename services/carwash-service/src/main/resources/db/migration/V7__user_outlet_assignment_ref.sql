@@ -1,4 +1,5 @@
--- restaurant-service V14 — local cache of org-service user→outlet assignments.
+-- carwash-service V7 — local cache of org-service user→outlet assignments
+-- (restaurant-service V14, copied verbatim; only this header names the local consumers).
 --
 -- `user_outlet_assignment_ref` is a read model fed by the `UserOutletAssignmentChanged`
 -- event that org-service publishes via its outbox.  The consumer upserts idempotently:
@@ -9,15 +10,16 @@
 -- Design notes:
 --   * Rule 1 (database-per-service): org_unit_id and user_id are opaque references;
 --     no FK to org-service, no cross-service joins, ever.
---   * Rule 2 (no sync calls): OrderWriter reads exclusively from this table — it never
---     calls org-service to validate a cashier's outlet assignment synchronously.
+--   * Rule 2 (no sync calls): OutletAccessGuard (invoked by TicketWriter) reads exclusively
+--     from this table — it never calls org-service to validate a cashier's outlet
+--     assignment synchronously.
 --   * Rule 4 (Auditable): the table carries all six Auditable columns; it is a derived
 --     read model so it is NOT hash-chain-audited — Debezium CDC covers history.
 --   * Rule 5 (RLS): ENABLE + FORCE ROW LEVEL SECURITY + tenant_isolation policy,
---     identical predicate to all other restaurant-service tables.
+--     identical predicate to all other carwash-service tables.
 --   * Rule 8 (money): this table holds no monetary values; not applicable.
 --   * Enforcement policy: cashier default-closed (must be in this table with active=true
---     for the requested org_unit_id); owner/manager bypass is applied in OrderWriter
+--     for the requested org_unit_id); owner/manager bypass is applied in OutletAccessGuard
 --     before the guard query, so this table is never queried for those roles.
 --   * Ids only — no PII stored here.
 

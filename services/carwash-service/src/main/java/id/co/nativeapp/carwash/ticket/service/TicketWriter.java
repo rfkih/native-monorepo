@@ -134,6 +134,13 @@ public class TicketWriter {
             : null;
     PriceBreakdown breakdown = taxChargeService.resolve(cart.subtotal(), 0L, discount, now);
 
+    // A zero (or negative) grand total must never record revenue: a fully-discounted or
+    // zero-priced cart would otherwise emit a zero-amount SaleRecorded, which the finance journal
+    // rejects (a balanced entry needs a positive total). 400 — review S1.
+    if (breakdown.grandTotal().amountMinor() <= 0L) {
+      throw new IllegalArgumentException("ticket grand total must be positive");
+    }
+
     CarwashTicket ticket =
         new CarwashTicket(
             request.businessId(),

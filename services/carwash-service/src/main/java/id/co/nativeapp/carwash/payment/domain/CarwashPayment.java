@@ -63,10 +63,10 @@ public class CarwashPayment extends Auditable {
   private UUID ticketId;
 
   /**
-   * The carwash outlet (org_unit) this payment was taken at — needed by the future ticket-checkout
-   * writer to run {@link id.co.nativeapp.carwash.outletref.service.OutletAccessGuard#enforce}
-   * before capture, exactly as restaurant's {@code PaymentCaptureWriter} does with {@code
-   * Payment.getBusinessId()}.
+   * The carwash outlet (org_unit) this payment was taken at. Denormalized for reporting/audit; the
+   * outlet-assignment guard runs ONCE at checkout ({@code TicketWriter}), not again at capture —
+   * deliberately matching restaurant, whose {@code PaymentCaptureWriter} also runs no outlet guard
+   * (capture completes a checkout that was already outlet-authorized; review S2).
    */
   @Column(name = "business_id", nullable = false, updatable = false)
   private UUID businessId;

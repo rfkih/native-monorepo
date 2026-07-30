@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import id.co.nativeapp.carwash.catalog.domain.CatalogItemNotFoundException;
+import id.co.nativeapp.carwash.catalog.domain.StaffProfileWriteForbiddenException;
 import id.co.nativeapp.carwash.catalog.dto.CatalogItemCreateRequest;
 import id.co.nativeapp.carwash.catalog.dto.CatalogItemPatchRequest;
 import id.co.nativeapp.carwash.catalog.dto.CatalogItemResponse;
@@ -11,6 +12,7 @@ import id.co.nativeapp.carwash.catalog.dto.StaffProfileCreateRequest;
 import id.co.nativeapp.carwash.catalog.dto.StaffProfilePatchRequest;
 import id.co.nativeapp.carwash.catalog.dto.StaffProfileResponse;
 import id.co.nativeapp.carwash.catalog.service.CatalogService;
+import id.co.nativeapp.carwash.config.ActorRolesProvider;
 import id.co.nativeapp.carwash.entitlement.dto.EntitlementProjectedEvent;
 import id.co.nativeapp.carwash.entitlement.service.EntitlementProjectionService;
 import id.co.nativeapp.carwash.wash.domain.NotEntitledException;
@@ -21,6 +23,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 /**
  * Acceptance tests for the carwash catalog feature (packages, addons, staff profiles): CRUD round
@@ -254,6 +259,92 @@ class CatalogAcceptanceTest extends KafkaPostgresRedisTestBase {
                             packageA.id(),
                             new CatalogItemPatchRequest("hijacked", null, null, null, null))))
         .isInstanceOf(CatalogItemNotFoundException.class);
+  }
+
+  @Test
+  void aCashierRoleIsForbiddenFromStaffProfileWritesButAnOwnerIsNot() throws Exception {
+    // Review W3: staff profiles route commission (the employee link), so their writes are held to
+    // owner/manager even though the gateway admits cashiers to /api/v1/carwash/**. Roles come from
+    // the X-Roles header the gateway stamps; install a mock request to simulate each caller.
+    grantCarwash(TENANT_A);
+
+    withRolesHeader(
+        "cashier",
+        () ->
+            assertThatThrownBy(
+                    () ->
+                        TenantContext.callAs(
+                            TENANT_A,
+                            ACTOR_A,
+                            () ->
+                                catalogService.createStaffProfile(
+                                    new StaffProfileCreateRequest(OUTLET, "Budi", null, null))))
+                .isInstanceOf(StaffProfileWriteForbiddenException.class));
+
+    StaffProfileResponse created =
+        withRolesHeader(
+            "owner",
+            () ->
+                TenantContext.callAs(
+                    TENANT_A,
+                    ACTOR_A,
+                    () ->
+                        catalogService.createStaffProfile(
+                            new StaffProfileCreateRequest(OUTLET, "Budi", null, null))));
+    assertThat(created.displayLabel()).isEqualTo("Budi");
+
+    // A cashier also cannot RELINK an existing profile (the commission-redirect vector).
+    withRolesHeader(
+        "cashier",
+        () ->
+            assertThatThrownBy(
+                    () ->
+                        TenantContext.callAs(
+                            TENANT_A,
+                            ACTOR_A,
+                            () ->
+                                catalogService.patchStaffProfile(
+                                    created.id(),
+                                    new StaffProfilePatchRequest(null, UUID.randomUUID(), null))))
+                .isInstanceOf(StaffProfileWriteForbiddenException.class));
+
+    // But package writes stay at restaurant-menu parity: a cashier CAN create a package.
+    CatalogItemResponse pkg =
+        withRolesHeader(
+            "cashier",
+            () ->
+                TenantContext.callAs(
+                    TENANT_A,
+                    ACTOR_A,
+                    () ->
+                        catalogService.createPackage(
+                            new CatalogItemCreateRequest(
+                                OUTLET, "Cashier Wash", null, 5_000_00L, "IDR"))));
+    assertThat(pkg.name()).isEqualTo("Cashier Wash");
+  }
+
+  /** Runs the body with a mock HTTP request carrying the given X-Roles header, then cleans up. */
+  private static <T> T withRolesHeader(String roles, java.util.concurrent.Callable<T> body)
+      throws Exception {
+    MockHttpServletRequest request = new MockHttpServletRequest();
+    request.addHeader(ActorRolesProvider.ROLES_HEADER, roles);
+    RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+    try {
+      return body.call();
+    } finally {
+      RequestContextHolder.resetRequestAttributes();
+    }
+  }
+
+  private static void withRolesHeader(String roles, Runnable body) {
+    MockHttpServletRequest request = new MockHttpServletRequest();
+    request.addHeader(ActorRolesProvider.ROLES_HEADER, roles);
+    RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+    try {
+      body.run();
+    } finally {
+      RequestContextHolder.resetRequestAttributes();
+    }
   }
 
   private void grantCarwash(String companyId) {

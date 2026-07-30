@@ -210,6 +210,35 @@ class TicketCheckoutAcceptanceTest extends KafkaPostgresRedisTestBase {
     assertThat(outboxRows("MetricPublished")).hasSize(2);
   }
 
+  @Test
+  void aZeroGrandTotalCheckoutIsRejectedAndRecordsNothing() throws Exception {
+    // Review S1: a fully-discounted / zero-priced cart must never emit a zero-amount SaleRecorded
+    // (the finance journal needs a positive total). 400 via IllegalArgumentException.
+    grantCarwash(TENANT_A);
+    CatalogItemResponse freePkg = createPackage("Promo Freebie", 0L);
+
+    org.assertj.core.api.Assertions.assertThatThrownBy(
+            () ->
+                TenantContext.callAs(
+                    TENANT_A,
+                    ACTOR_A,
+                    () ->
+                        ticketService.checkout(
+                            new CheckoutRequest(
+                                OUTLET,
+                                "zero-total-1",
+                                "bay-1",
+                                null,
+                                null,
+                                null,
+                                List.of(new TicketLineInput(ItemType.PACKAGE, freePkg.id(), 1)),
+                                new PaymentRequest(TenderType.CASH, 0L)))))
+        .isInstanceOf(IllegalArgumentException.class);
+
+    assertThat(ticketRowCountAsAdmin()).isZero();
+    assertThat(outboxRows("SaleRecorded")).isEmpty();
+  }
+
   // -------------------------------------------------------------------------
   // Fixtures
   // -------------------------------------------------------------------------

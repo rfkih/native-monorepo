@@ -286,6 +286,10 @@ function CashPanel({
   const { t } = useTranslation()
   const checkout = useTicketCheckout(config, session)
 
+  // One idempotency key per payment ATTEMPT (panel mount), reused across retries — a retry after
+  // an ambiguous failure replays the same key and resolves to the same ticket (review W1).
+  const [idempotencyKey] = useState<string>(() => crypto.randomUUID())
+
   const [keyStr, setKeyStr] = useState<string>('')
   const tenderedMinor = keyStr === '' ? 0 : parseInt(keyStr, 10)
   const changeMinor = tenderedMinor - grandTotalMinor
@@ -311,6 +315,7 @@ function CashPanel({
     if (!canPay) return
     checkout.mutate(
       {
+        idempotencyKey,
         bay,
         vehiclePlate: vehiclePlate || null,
         staffProfileId,
@@ -447,12 +452,16 @@ function DigitalPanel({
   const checkout = useTicketCheckout(config, session)
   const capture = useTicketCapture(config, session)
 
+  // One idempotency key per payment ATTEMPT (panel mount), reused across retries (review W1).
+  const [idempotencyKey] = useState<string>(() => crypto.randomUUID())
+
   // After initiation we hold the PENDING ticket to drive the "Mark as paid" step.
   const [pendingTicket, setPendingTicket] = useState<TicketResponse | null>(null)
 
   function initiatePayment() {
     checkout.mutate(
       {
+        idempotencyKey,
         bay,
         vehiclePlate: vehiclePlate || null,
         staffProfileId,

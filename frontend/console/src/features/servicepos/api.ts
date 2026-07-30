@@ -275,6 +275,13 @@ export function useTicketQuote(
 // ---------------------------------------------------------------------------
 
 export interface TicketCheckoutInput {
+  /**
+   * Minted ONCE when the payment attempt begins (modal mount) and REUSED across retries of the
+   * same attempt — never per click. If the first attempt commits server-side but the response is
+   * lost, the retry replays the same key and resolves to the SAME ticket instead of charging
+   * twice (the BillDetail freshIdempotencyKey pattern; review W1).
+   */
+  idempotencyKey: string
   bay: string
   vehiclePlate?: string | null
   staffProfileId?: string | null
@@ -287,6 +294,7 @@ export function useTicketCheckout(config: VerticalPosConfig, session: CompanySes
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({
+      idempotencyKey,
       bay,
       vehiclePlate,
       staffProfileId,
@@ -299,7 +307,7 @@ export function useTicketCheckout(config: VerticalPosConfig, session: CompanySes
         tenant: tenantOf(session),
         body: {
           businessId: session.businessId,
-          idempotencyKey: crypto.randomUUID(),
+          idempotencyKey,
           bay,
           vehiclePlate: vehiclePlate || null,
           staffProfileId: staffProfileId || null,

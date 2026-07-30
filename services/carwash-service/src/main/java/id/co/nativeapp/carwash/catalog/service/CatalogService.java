@@ -3,9 +3,11 @@ package id.co.nativeapp.carwash.catalog.service;
 import id.co.nativeapp.carwash.catalog.dto.CatalogItemCreateRequest;
 import id.co.nativeapp.carwash.catalog.dto.CatalogItemPatchRequest;
 import id.co.nativeapp.carwash.catalog.dto.CatalogItemResponse;
+import id.co.nativeapp.carwash.catalog.domain.StaffProfileWriteForbiddenException;
 import id.co.nativeapp.carwash.catalog.dto.StaffProfileCreateRequest;
 import id.co.nativeapp.carwash.catalog.dto.StaffProfilePatchRequest;
 import id.co.nativeapp.carwash.catalog.dto.StaffProfileResponse;
+import id.co.nativeapp.carwash.config.ActorRolesProvider;
 import id.co.nativeapp.carwash.config.CarwashProperties;
 import id.co.nativeapp.carwash.wash.domain.NotEntitledException;
 import id.co.nativeapp.entitlementcheck.EntitlementChecker;
@@ -36,16 +38,19 @@ public class CatalogService {
   private final CatalogWriter writer;
   private final CatalogReader reader;
   private final EntitlementChecker entitlementChecker;
+  private final ActorRolesProvider actorRoles;
   private final String moduleKey;
 
   public CatalogService(
       CatalogWriter writer,
       CatalogReader reader,
       EntitlementChecker entitlementChecker,
+      ActorRolesProvider actorRoles,
       CarwashProperties properties) {
     this.writer = writer;
     this.reader = reader;
     this.entitlementChecker = entitlementChecker;
+    this.actorRoles = actorRoles;
     this.moduleKey = properties.moduleKey();
   }
 
@@ -79,11 +84,13 @@ public class CatalogService {
 
   public StaffProfileResponse createStaffProfile(StaffProfileCreateRequest request) {
     requireEntitled();
+    requireStaffWriteRole();
     return writer.createStaffProfile(request);
   }
 
   public StaffProfileResponse patchStaffProfile(UUID id, StaffProfilePatchRequest request) {
     requireEntitled();
+    requireStaffWriteRole();
     return writer.patchStaffProfile(id, request);
   }
 
@@ -100,6 +107,24 @@ public class CatalogService {
     String companyId = TenantContext.require().companyId();
     if (!entitlementChecker.isEntitled(companyId, moduleKey)) {
       throw new NotEntitledException(moduleKey);
+    }
+  }
+
+  /**
+   * Staff-profile writes require {@code owner} or {@code manager} (review W3): the {@code
+   * employee_id} link routes {@code sales_amount} commission, so a cashier token must not be able
+   * to create or relink profiles even though the gateway admits it to {@code /api/v1/carwash/**}
+   * (POS surface). Package/addon writes deliberately stay at restaurant-menu parity
+   * (cashier-editable) — a checkout re-prices server-side, so they carry no money-routing power.
+   *
+   * <p>An EMPTY role set is allowed through: the {@code X-Roles} header exists only behind the
+   * gateway (which always stamps it on authenticated routes, so a real cashier IS denied); a
+   * headerless request means the gateway-less dev recipe or a direct service-layer test, where the
+   * outletref guard's grandfather clause applies the same trust.
+   */
+  private void requireStaffWriteRole() {
+    if (!actorRoles.currentRoles().isEmpty() && !actorRoles.isOwnerOrManager()) {
+      throw new StaffProfileWriteForbiddenException();
     }
   }
 }
