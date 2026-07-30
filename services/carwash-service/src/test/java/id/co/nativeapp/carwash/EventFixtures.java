@@ -2,6 +2,10 @@ package id.co.nativeapp.carwash;
 
 import id.co.nativeapp.carwash.entitlement.messaging.EntitlementEventListener;
 import id.co.nativeapp.carwash.entitlement.messaging.EntitlementEventSchemas;
+import id.co.nativeapp.carwash.loyaltyref.messaging.GiftCardStateChangedConsumerSchema;
+import id.co.nativeapp.carwash.loyaltyref.messaging.GiftCardStateChangedListener;
+import id.co.nativeapp.carwash.loyaltyref.messaging.LoyaltyBalanceChangedConsumerSchema;
+import id.co.nativeapp.carwash.loyaltyref.messaging.LoyaltyBalanceChangedListener;
 import id.co.nativeapp.carwash.staff.messaging.StaffEventListener;
 import id.co.nativeapp.carwash.staff.messaging.StaffEventSchemas;
 import id.co.nativeapp.events.AvroSerde;
@@ -113,6 +117,63 @@ final class EventFixtures {
         eventId,
         AvroSerde.serialize(event),
         StaffEventListener.EVENT_ID_HEADER);
+  }
+
+  // ---- LoyaltyBalanceChanged / GiftCardStateChanged (ADR 0027, against the consumer-copy
+  // schemas) — published by loyalty-service in production; these fixtures publish the identical
+  // wire shape (raw Avro bytes + the durable "id" header) so the real @KafkaListener consumes them
+  // exactly as it would in production. ----
+
+  static GenericRecord loyaltyBalanceChanged(
+      String memberId, String companyId, long pointsBalance, long balanceSeq, String reason) {
+    GenericRecord record = new GenericData.Record(LoyaltyBalanceChangedConsumerSchema.schema());
+    record.put("member_id", memberId);
+    record.put("company_id", companyId);
+    record.put("points_balance", pointsBalance);
+    record.put("balance_seq", balanceSeq);
+    record.put("reason", reason);
+    record.put("occurred_at", Instant.parse("2026-07-31T00:00:00Z").toEpochMilli());
+    return record;
+  }
+
+  static GenericRecord giftCardStateChanged(
+      String giftCardId,
+      String companyId,
+      String state,
+      long balanceMinor,
+      String currency,
+      long balanceSeq) {
+    GenericRecord record = new GenericData.Record(GiftCardStateChangedConsumerSchema.schema());
+    record.put("gift_card_id", giftCardId);
+    record.put("company_id", companyId);
+    record.put("state", state);
+    record.put("balance_minor", balanceMinor);
+    record.put("currency", currency);
+    record.put("balance_seq", balanceSeq);
+    record.put("occurred_at", Instant.parse("2026-07-31T00:00:00Z").toEpochMilli());
+    return record;
+  }
+
+  static void publishLoyaltyBalanceChanged(
+      String bootstrapServers, String memberId, UUID eventId, GenericRecord event) {
+    publish(
+        bootstrapServers,
+        LoyaltyBalanceChangedConsumerSchema.TOPIC,
+        memberId,
+        eventId,
+        AvroSerde.serialize(event),
+        LoyaltyBalanceChangedListener.EVENT_ID_HEADER);
+  }
+
+  static void publishGiftCardStateChanged(
+      String bootstrapServers, String giftCardId, UUID eventId, GenericRecord event) {
+    publish(
+        bootstrapServers,
+        GiftCardStateChangedConsumerSchema.TOPIC,
+        giftCardId,
+        eventId,
+        AvroSerde.serialize(event),
+        GiftCardStateChangedListener.EVENT_ID_HEADER);
   }
 
   private static void publish(
