@@ -12,6 +12,18 @@ import id.co.nativeapp.carwash.payment.service.PaymentProviderRegistry;
 import id.co.nativeapp.carwash.payment.service.TenderAuthorization;
 import id.co.nativeapp.carwash.pricing.domain.PriceBreakdown;
 import id.co.nativeapp.carwash.pricing.service.TaxChargeService;
+import id.co.nativeapp.carwash.promotion.domain.AppliedPromotion;
+import id.co.nativeapp.carwash.promotion.domain.CouponExhaustedException;
+import id.co.nativeapp.carwash.promotion.domain.CouponInvalidException;
+import id.co.nativeapp.carwash.promotion.dto.AppliedDeduction;
+import id.co.nativeapp.carwash.promotion.dto.CouponOutcome;
+import id.co.nativeapp.carwash.promotion.dto.EvalInput;
+import id.co.nativeapp.carwash.promotion.dto.EvalLine;
+import id.co.nativeapp.carwash.promotion.dto.EvalResult;
+import id.co.nativeapp.carwash.promotion.repository.AppliedPromotionRepository;
+import id.co.nativeapp.carwash.promotion.repository.CouponRepository;
+import id.co.nativeapp.carwash.promotion.service.ManualDiscountGuard;
+import id.co.nativeapp.carwash.promotion.service.PromotionEngineService;
 import id.co.nativeapp.carwash.ticket.domain.CarwashTicket;
 import id.co.nativeapp.carwash.ticket.domain.CarwashTicketLine;
 import id.co.nativeapp.carwash.ticket.domain.TicketNotFoundException;
@@ -26,6 +38,7 @@ import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -48,19 +61,32 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <ol>
  *   <li>Idempotency fast path: returns the existing ticket if the key is already present — BEFORE
- *       the outlet guard (an idempotent replay of an already-recorded ticket still returns; only
- *       NEW work is rejected — the restaurant {@code OutletGate} ordering).
+ *       the outlet guard AND before the promotions engine runs, so a replay never re-evaluates
+ *       promotions and never re-redeems a coupon (an idempotent replay of an already-recorded ticket
+ *       still returns; only NEW work is rejected — the restaurant {@code OutletGate} ordering).
  *   <li>{@link OutletAccessGuard#enforce}: the attendant must be assigned to the outlet.
+ *   <li>Phase 3 (ADR 0026): a positive manual discount requires owner/manager ({@link
+ *       ManualDiscountGuard}).
  *   <li>Resolves + validates the requested lines via {@link TicketItemReader} (server-side pricing
  *       — never trusts a client amount).
  *   <li>Resolves the optional washer {@link StaffProfile} and snapshots its employee link.
- *   <li>Resolves the price breakdown via {@link TaxChargeService}.
- *   <li>Persists the ticket + lines, then authorizes the tender via {@link PaymentProviderRegistry}
- *       and persists the {@link CarwashPayment}.
+ *   <li>Phase 3 (ADR 0026): pre-generates the ticket id and builds the {@link CarwashTicketLine}
+ *       entities (their ids are known immediately, independent of the parent ticket's persisted
+ *       state — a plain-UUID FK column, unlike restaurant's JPA-associated {@code OrderLine}) so the
+ *       {@link PromotionEngineService} can be evaluated (line-scope matching + {@code
+ *       AppliedDeduction.lineRef}) BEFORE the ticket itself is constructed, since the ticket's
+ *       constructor needs the already-resolved {@link PriceBreakdown} the engine feeds into.
+ *   <li>Resolves the price breakdown via {@link TaxChargeService}, using the promotions engine's
+ *       collapsed discount as the fixed discount.
+ *   <li>If a coupon was supplied: redeems it ATOMICALLY (409 on exhaustion — the whole transaction
+ *       rolls back) and stamps {@code carwash_ticket.coupon_id}.
+ *   <li>Persists the ticket + lines + the {@code applied_promotion} audit rows, then authorizes the
+ *       tender via {@link PaymentProviderRegistry} and persists the {@link CarwashPayment}.
  *   <li>CASH ({@code !tenderType.isDigital()}): links the sale (ticket id = sale id, ADR 0023
  *       decision 2), writes {@code SaleRecorded} + metrics via {@link TicketEventEmitter} — all in
  *       this same transaction (rule 3). Digital (PENDING): no sale id, no events — deferred to
- *       {@link TicketCaptureWriter}.
+ *       {@link TicketCaptureWriter}; the {@code applied_promotion} rows are written with {@code
+ *       sale_id = NULL} and stamped at capture time.
  * </ol>
  */
 @Component
@@ -76,6 +102,10 @@ public class TicketWriter {
   private final OutletAccessGuard outletAccessGuard;
   private final TicketEventEmitter eventEmitter;
   private final TicketPostOutboxHook postOutboxHook;
+  private final PromotionEngineService promotionEngine;
+  private final CouponRepository couponRepository;
+  private final AppliedPromotionRepository appliedPromotionRepository;
+  private final ManualDiscountGuard manualDiscountGuard;
 
   @SuppressWarnings("checkstyle:ParameterNumber")
   public TicketWriter(
@@ -88,7 +118,11 @@ public class TicketWriter {
       PaymentProviderRegistry paymentProviderRegistry,
       OutletAccessGuard outletAccessGuard,
       TicketEventEmitter eventEmitter,
-      TicketPostOutboxHook postOutboxHook) {
+      TicketPostOutboxHook postOutboxHook,
+      PromotionEngineService promotionEngine,
+      CouponRepository couponRepository,
+      AppliedPromotionRepository appliedPromotionRepository,
+      ManualDiscountGuard manualDiscountGuard) {
     this.ticketRepository = ticketRepository;
     this.lineRepository = lineRepository;
     this.paymentRepository = paymentRepository;
@@ -99,6 +133,10 @@ public class TicketWriter {
     this.outletAccessGuard = outletAccessGuard;
     this.eventEmitter = eventEmitter;
     this.postOutboxHook = postOutboxHook;
+    this.promotionEngine = promotionEngine;
+    this.couponRepository = couponRepository;
+    this.appliedPromotionRepository = appliedPromotionRepository;
+    this.manualDiscountGuard = manualDiscountGuard;
   }
 
   /**
@@ -107,13 +145,20 @@ public class TicketWriter {
    *
    * @throws org.springframework.dao.DataIntegrityViolationException if a concurrent racer already
    *     inserted the {@code (company_id, idempotency_key)} row
+   * @throws id.co.nativeapp.carwash.promotion.domain.ManualDiscountForbiddenException if {@code
+   *     discountMinor > 0} and the caller is not owner/manager
+   * @throws CouponInvalidException if {@code couponCode} is supplied and does not resolve to a
+   *     usable coupon
+   * @throws CouponExhaustedException if {@code couponCode} resolves to a coupon whose redemption
+   *     limit is reached
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public CheckoutResult create(CheckoutRequest request) {
     String companyId = TenantContext.require().companyId();
 
-    // Idempotency fast path — BEFORE the outlet guard (restaurant OutletGate ordering: an
-    // idempotent replay of an already-recorded ticket still returns; only NEW work is rejected).
+    // Idempotency fast path — BEFORE the outlet guard AND before the promotions engine (restaurant
+    // OutletGate ordering: an idempotent replay of an already-recorded ticket still returns; only
+    // NEW work is rejected — guard ordering is load-bearing so a replay never re-redeems a coupon).
     Optional<TicketView> existing =
         ticketRepository.findViewByIdempotencyKey(request.idempotencyKey());
     if (existing.isPresent()) {
@@ -122,17 +167,34 @@ public class TicketWriter {
 
     outletAccessGuard.enforce(request.businessId());
 
+    // Phase 3 (ADR 0026): a positive manual discount requires owner/manager.
+    manualDiscountGuard.enforce(request.discountMinor());
+
     TicketItemReader.ResolvedCart cart =
         itemResolver.resolve(request.businessId(), request.lines());
 
     UUID washerEmployeeId = resolveWasher(request.businessId(), request.staffProfileId());
 
     Instant now = Instant.now();
-    Money discount =
-        request.discountMinor() != null
-            ? Money.ofMinor(request.discountMinor(), cart.currencyCode())
-            : null;
-    PriceBreakdown breakdown = taxChargeService.resolve(cart.subtotal(), 0L, discount, now);
+
+    // Phase 3 (ADR 0026): pre-generate the ticket id and build the REAL CarwashTicketLine entities
+    // now (their ids are already final, independent of ticket persistence — a plain-UUID FK, unlike
+    // restaurant's JPA-associated OrderLine) so the promotions engine sees real lineRefs.
+    UUID ticketId = UUID.randomUUID();
+    List<CarwashTicketLine> ticketLines = buildLines(ticketId, request.businessId(), cart.lines());
+
+    List<EvalLine> evalLines = new ArrayList<>(ticketLines.size());
+    for (CarwashTicketLine line : ticketLines) {
+      evalLines.add(
+          new EvalLine(line.getId(), line.getItemId(), null, line.getUnitPrice().amountMinor(), line.getQty()));
+    }
+
+    long manualDiscountMinor = (request.discountMinor() != null) ? request.discountMinor() : 0L;
+    EvalInput evalInput =
+        new EvalInput(evalLines, cart.currencyCode(), cart.subtotal(), now, request.couponCode(), manualDiscountMinor);
+    EvalResult evalResult = promotionEngine.evaluate(evalInput);
+
+    PriceBreakdown breakdown = taxChargeService.resolve(cart.subtotal(), 0L, evalResult.totalDiscount(), now);
 
     // A zero (or negative) grand total must never record revenue: a fully-discounted or
     // zero-priced cart would otherwise emit a zero-amount SaleRecorded, which the finance journal
@@ -141,8 +203,13 @@ public class TicketWriter {
       throw new IllegalArgumentException("ticket grand total must be positive");
     }
 
+    // Phase 3 (ADR 0026): coupon redemption — the atomic guard; 0 rows -> 409, whole tx rolls back.
+    // Runs AFTER validation so a foreseeable rejection never wastes a redemption slot.
+    UUID redeemedCouponId = redeemCouponIfApplicable(evalResult);
+
     CarwashTicket ticket =
         new CarwashTicket(
+            ticketId,
             request.businessId(),
             request.bay(),
             request.vehiclePlate(),
@@ -151,9 +218,12 @@ public class TicketWriter {
             breakdown,
             now,
             request.idempotencyKey());
+    if (redeemedCouponId != null) {
+      ticket.attachCoupon(redeemedCouponId);
+    }
     ticket.setCompanyId(companyId);
     CarwashTicket savedTicket = ticketRepository.saveAndFlush(ticket);
-    persistLines(savedTicket, cart.lines(), companyId);
+    persistLines(ticketLines, companyId);
 
     TenderType tenderType = request.payment().tenderType();
     PaymentInstruction instruction =
@@ -193,6 +263,7 @@ public class TicketWriter {
       // ticket id (decision 2).
       savedTicket.linkSale(savedTicket.getId());
       ticketRepository.saveAndFlush(savedTicket);
+      persistAppliedPromotions(savedTicket.getId(), savedTicket.getId(), evalResult, companyId);
       eventEmitter.recognizeRevenue(
           savedTicket,
           breakdown,
@@ -204,8 +275,12 @@ public class TicketWriter {
       // Test seam: a no-op in production; a test can install a hook that throws here to prove the
       // ticket, its lines, its payment, AND the outbox rows roll back together (atomicity, rule 3).
       postOutboxHook.afterOutboxWrite(savedTicket);
+    } else {
+      // Digital (PENDING): no sale id, no events — deferred to TicketCaptureWriter. The
+      // applied_promotion rows are written with sale_id = NULL now; TicketCaptureWriter stamps it
+      // once the sale records at capture time (ADR 0006 revenue-at-capture).
+      persistAppliedPromotions(savedTicket.getId(), null, evalResult, companyId);
     }
-    // Digital (PENDING): no sale id, no events — deferred to TicketCaptureWriter.
 
     return new CheckoutResult(assembleResponse(savedTicket.getId()), true);
   }
@@ -246,19 +321,24 @@ public class TicketWriter {
     return profile.getEmployeeId();
   }
 
-  private void persistLines(
-      CarwashTicket ticket, List<TicketItemReader.ResolvedLine> lines, String companyId) {
+  /**
+   * Builds the (not-yet-persisted) {@link CarwashTicketLine} entities for a resolved cart against a
+   * pre-generated {@code ticketId} — each line's id is final at construction (Phase 3, ADR 0026: the
+   * promotions engine needs it before the ticket itself exists; see class javadoc).
+   */
+  private List<CarwashTicketLine> buildLines(
+      UUID ticketId, UUID businessId, List<TicketItemReader.ResolvedLine> lines) {
+    List<CarwashTicketLine> result = new ArrayList<>(lines.size());
     for (TicketItemReader.ResolvedLine rl : lines) {
       Money unitPrice = Money.ofMinor(rl.priceMinor(), rl.currency());
-      CarwashTicketLine line =
-          new CarwashTicketLine(
-              ticket.getId(),
-              ticket.getBusinessId(),
-              rl.itemType(),
-              rl.itemId(),
-              rl.name(),
-              unitPrice,
-              rl.qty());
+      result.add(
+          new CarwashTicketLine(ticketId, businessId, rl.itemType(), rl.itemId(), rl.name(), unitPrice, rl.qty()));
+    }
+    return result;
+  }
+
+  private void persistLines(List<CarwashTicketLine> lines, String companyId) {
+    for (CarwashTicketLine line : lines) {
       line.setCompanyId(companyId);
       lineRepository.save(line);
     }
@@ -266,6 +346,68 @@ public class TicketWriter {
     // which does not auto-synchronize with Hibernate's persistence context — the physical INSERTs
     // must already be on the connection for the native SELECT to see them (CLAUDE.md convention).
     lineRepository.flush();
+  }
+
+  /**
+   * Inspects a promotions-engine result's coupon outcome and either does nothing (no coupon
+   * supplied), redeems the coupon atomically and returns its id, or throws.
+   *
+   * @throws CouponInvalidException if the supplied coupon code did not resolve to a usable coupon
+   * @throws CouponExhaustedException if the coupon's redemption limit is reached (either the
+   *     engine's advisory check, or — the definitive, race-safe guard — the atomic UPDATE lost the
+   *     race to a concurrent checkout)
+   */
+  private UUID redeemCouponIfApplicable(EvalResult evalResult) {
+    if (evalResult.couponOutcome() == null) {
+      return null;
+    }
+    CouponOutcome outcome = evalResult.couponOutcome();
+    return switch (outcome.status()) {
+      case INVALID -> throw new CouponInvalidException(outcome.code());
+      case EXHAUSTED -> throw new CouponExhaustedException(outcome.code());
+      case APPLIED -> {
+        // APPLIED but non-redeemable = the coupon granted no NEW benefit (its rule already fired
+        // automatically, or its deduction zeroed out) — never burn a redemption for nothing.
+        if (!outcome.redeemable()) {
+          yield null;
+        }
+        int rows = couponRepository.redeemIfAvailable(outcome.couponId());
+        if (rows == 0) {
+          throw new CouponExhaustedException(outcome.code());
+        }
+        yield outcome.couponId();
+      }
+    };
+  }
+
+  /**
+   * Persists the {@code applied_promotion} audit rows for a checkout, same transaction as the
+   * ticket/sale (ADR 0026). A {@code null} {@code saleId} is legal (the digital-tender path defers
+   * revenue to capture — {@code TicketCaptureWriter} stamps it in later). Does nothing when there is
+   * nothing to persist (no rule-backed deduction — a ticket discounted ONLY by the manual layer
+   * produces zero rows here, since the manual discount has no {@code ruleId}).
+   */
+  private void persistAppliedPromotions(UUID ticketId, UUID saleId, EvalResult evalResult, String companyId) {
+    if (evalResult.deductions().isEmpty()) {
+      return;
+    }
+    List<AppliedPromotion> rows = new ArrayList<>(evalResult.deductions().size());
+    for (AppliedDeduction d : evalResult.deductions()) {
+      AppliedPromotion row =
+          new AppliedPromotion(
+              ticketId,
+              saleId,
+              d.ruleId(),
+              d.couponId(),
+              d.nameSnapshot(),
+              d.typeSnapshot().name(),
+              d.rateBpSnapshot(),
+              d.lineRef(),
+              d.amount());
+      row.setCompanyId(companyId);
+      rows.add(row);
+    }
+    appliedPromotionRepository.saveAll(rows);
   }
 
   /**

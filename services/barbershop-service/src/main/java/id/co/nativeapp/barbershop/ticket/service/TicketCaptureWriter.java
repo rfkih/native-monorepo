@@ -4,6 +4,7 @@ import id.co.nativeapp.barbershop.payment.domain.BarbershopPayment;
 import id.co.nativeapp.barbershop.payment.projection.BarbershopPaymentView;
 import id.co.nativeapp.barbershop.payment.repository.BarbershopPaymentRepository;
 import id.co.nativeapp.barbershop.pricing.domain.PriceBreakdown;
+import id.co.nativeapp.barbershop.promotion.repository.AppliedPromotionRepository;
 import id.co.nativeapp.barbershop.ticket.domain.BarbershopTicket;
 import id.co.nativeapp.barbershop.ticket.domain.PaymentNotPendingException;
 import id.co.nativeapp.barbershop.ticket.domain.TicketNotFoundException;
@@ -33,6 +34,14 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>No stock concept in barbershop — unlike restaurant's payment capture, there is nothing else to
  * deduct.
+ *
+ * <p><strong>Phase 3 (ADR 0026).</strong> A digital-tender checkout writes its {@code
+ * applied_promotion} audit rows at checkout time with {@code sale_id = NULL} (no sale exists yet —
+ * revenue is deferred to capture). Once the sale records here, every such row for this ticket is
+ * stamped with the new sale id — {@code ticket.getId()}, since {@code sale_id == ticket_id} for
+ * barbershop (ADR 0023 decision 2, preserved by ADR 0024) — in the SAME transaction ({@link
+ * AppliedPromotionRepository#stampSaleId}). The idempotent re-delivery early return above means this
+ * never double-stamps.
  */
 @Component
 public class TicketCaptureWriter {
@@ -41,16 +50,19 @@ public class TicketCaptureWriter {
   private final BarbershopTicketLineRepository lineRepository;
   private final BarbershopPaymentRepository paymentRepository;
   private final TicketEventEmitter eventEmitter;
+  private final AppliedPromotionRepository appliedPromotionRepository;
 
   public TicketCaptureWriter(
       BarbershopTicketRepository ticketRepository,
       BarbershopTicketLineRepository lineRepository,
       BarbershopPaymentRepository paymentRepository,
-      TicketEventEmitter eventEmitter) {
+      TicketEventEmitter eventEmitter,
+      AppliedPromotionRepository appliedPromotionRepository) {
     this.ticketRepository = ticketRepository;
     this.lineRepository = lineRepository;
     this.paymentRepository = paymentRepository;
     this.eventEmitter = eventEmitter;
+    this.appliedPromotionRepository = appliedPromotionRepository;
   }
 
   /**
@@ -101,6 +113,10 @@ public class TicketCaptureWriter {
 
     ticket.linkSale(ticket.getId());
     ticketRepository.saveAndFlush(ticket);
+
+    // Phase 3 (ADR 0026): stamp sale_id onto every applied_promotion row this ticket wrote at
+    // checkout time (sale_id was NULL then — no sale existed yet for a digital tender).
+    appliedPromotionRepository.stampSaleId(ticket.getId(), ticket.getId());
 
     Instant capturedAt = Instant.now();
     PriceBreakdown breakdown = ticket.toBreakdown();

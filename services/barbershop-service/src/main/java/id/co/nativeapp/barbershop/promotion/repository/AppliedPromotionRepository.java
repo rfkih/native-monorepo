@@ -1,0 +1,65 @@
+package id.co.nativeapp.barbershop.promotion.repository;
+
+import id.co.nativeapp.barbershop.promotion.domain.AppliedPromotion;
+import id.co.nativeapp.barbershop.promotion.projection.AppliedPromotionView;
+import java.util.List;
+import java.util.UUID;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+/**
+ * Spring Data repository for {@link AppliedPromotion}. Writes go through the inherited {@code
+ * save}/{@code saveAll} (the write path needs the whole aggregate); the native-query read below is
+ * reserved for future reporting (receipt rendering, promo-performance dashboards).
+ *
+ * <p>All queries are native (rule 10 / CODE-STRUCTURE.md §3.3). The RLS policy on {@code
+ * applied_promotion} scopes every query to the bound tenant automatically — no manual {@code WHERE
+ * company_id} is required. Ported from restaurant-service via carwash-service, adapted to {@code
+ * ticket_id} in place of {@code order_id}.
+ */
+public interface AppliedPromotionRepository extends JpaRepository<AppliedPromotion, UUID> {
+
+  /** The applied-promotion audit rows for a given sale (receipt / finance-adjacent audit query). */
+  @Query(
+      value =
+          """
+          SELECT id                  AS id,
+                 ticket_id           AS ticketId,
+                 sale_id             AS saleId,
+                 rule_id             AS ruleId,
+                 coupon_id           AS couponId,
+                 rule_name_snapshot  AS ruleNameSnapshot,
+                 rule_type_snapshot  AS ruleTypeSnapshot,
+                 rate_bp_snapshot    AS rateBpSnapshot,
+                 line_ref            AS lineRef,
+                 amount_minor        AS amountMinor,
+                 currency            AS currency
+            FROM applied_promotion
+           WHERE sale_id = :saleId
+           ORDER BY created_at
+          """,
+      nativeQuery = true)
+  List<AppliedPromotionView> findViewsBySaleId(@Param("saleId") UUID saleId);
+
+  /**
+   * Stamps {@code sale_id} onto every still-{@code NULL} row for {@code ticketId} — the
+   * digital-tender capture path (ADR 0006 revenue-at-capture), where the ticket's deductions were
+   * written at checkout time with {@code sale_id = NULL} because no sale existed yet. Called from
+   * {@code TicketCaptureWriter.capture} once the sale is recorded, in the same transaction.
+   */
+  @Modifying
+  @Query(
+      value =
+          """
+          UPDATE applied_promotion
+             SET sale_id    = :saleId,
+                 updated_at = NOW(),
+                 version    = version + 1
+           WHERE ticket_id  = :ticketId
+             AND sale_id IS NULL
+          """,
+      nativeQuery = true)
+  int stampSaleId(@Param("ticketId") UUID ticketId, @Param("saleId") UUID saleId);
+}

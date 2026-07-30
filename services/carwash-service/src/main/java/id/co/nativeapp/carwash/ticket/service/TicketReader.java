@@ -4,7 +4,12 @@ import id.co.nativeapp.carwash.payment.projection.CarwashPaymentView;
 import id.co.nativeapp.carwash.payment.repository.CarwashPaymentRepository;
 import id.co.nativeapp.carwash.pricing.domain.PriceBreakdown;
 import id.co.nativeapp.carwash.pricing.service.TaxChargeService;
+import id.co.nativeapp.carwash.promotion.dto.EvalInput;
+import id.co.nativeapp.carwash.promotion.dto.EvalLine;
+import id.co.nativeapp.carwash.promotion.dto.EvalResult;
+import id.co.nativeapp.carwash.promotion.service.PromotionEngineService;
 import id.co.nativeapp.carwash.ticket.domain.TicketNotFoundException;
+import id.co.nativeapp.carwash.ticket.dto.AppliedPromotionResponse;
 import id.co.nativeapp.carwash.ticket.dto.PriceBreakdownResponse;
 import id.co.nativeapp.carwash.ticket.dto.QuoteRequest;
 import id.co.nativeapp.carwash.ticket.dto.TicketResponse;
@@ -12,8 +17,8 @@ import id.co.nativeapp.carwash.ticket.projection.TicketLineView;
 import id.co.nativeapp.carwash.ticket.projection.TicketView;
 import id.co.nativeapp.carwash.ticket.repository.CarwashTicketLineRepository;
 import id.co.nativeapp.carwash.ticket.repository.CarwashTicketRepository;
-import id.co.nativeapp.money.Money;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -28,7 +33,13 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>{@link #quote} reuses {@link TicketItemReader} — the SAME item-resolution + pricing pipeline
  * {@link TicketWriter#create} uses — so a quote can never diverge from what checkout would actually
- * charge.
+ * charge. Phase 3 (ADR 0026): {@link #quote} ALSO evaluates {@link PromotionEngineService} — every
+ * currently-effective automatic rule plus the resolved outcome of an optional coupon code — and
+ * echoes the per-rule detail on the response. A quote persists nothing, so every {@link EvalLine}
+ * carries {@code lineId = null}; a line-scope deduction on the quote response therefore carries a
+ * {@code null} {@code lineRef}. NEVER throws for a bad/expired/exhausted coupon code — {@code
+ * couponStatus} reports it instead (a quote is only a pricing preview; the atomic redemption never
+ * runs in this read-only transaction).
  */
 @Service
 public class TicketReader {
@@ -38,34 +49,52 @@ public class TicketReader {
   private final CarwashPaymentRepository paymentRepository;
   private final TicketItemReader itemResolver;
   private final TaxChargeService taxChargeService;
+  private final PromotionEngineService promotionEngine;
 
   public TicketReader(
       CarwashTicketRepository ticketRepository,
       CarwashTicketLineRepository lineRepository,
       CarwashPaymentRepository paymentRepository,
       TicketItemReader itemResolver,
-      TaxChargeService taxChargeService) {
+      TaxChargeService taxChargeService,
+      PromotionEngineService promotionEngine) {
     this.ticketRepository = ticketRepository;
     this.lineRepository = lineRepository;
     this.paymentRepository = paymentRepository;
     this.itemResolver = itemResolver;
     this.taxChargeService = taxChargeService;
+    this.promotionEngine = promotionEngine;
   }
 
   /**
    * A stateless price preview for the requested lines — resolves + validates items exactly as
-   * checkout would, computes the breakdown, and returns it. No ticket is written; no event emitted.
+   * checkout would, evaluates the Phase-3 promotions engine (automatics + at most one coupon), and
+   * computes the breakdown. No ticket is written; no event emitted; no coupon is redeemed.
    */
   @Transactional(readOnly = true)
   public PriceBreakdownResponse quote(QuoteRequest request) {
     TicketItemReader.ResolvedCart cart =
         itemResolver.resolve(request.businessId(), request.lines());
-    Money discount =
-        request.discountMinor() != null
-            ? Money.ofMinor(request.discountMinor(), cart.currencyCode())
-            : null;
+
+    List<EvalLine> evalLines = new ArrayList<>(cart.lines().size());
+    for (TicketItemReader.ResolvedLine rl : cart.lines()) {
+      evalLines.add(new EvalLine(null, rl.itemId(), null, rl.priceMinor(), rl.qty()));
+    }
+
+    Instant now = Instant.now();
+    long manualDiscountMinor = (request.discountMinor() != null) ? request.discountMinor() : 0L;
+    EvalInput evalInput =
+        new EvalInput(evalLines, cart.currencyCode(), cart.subtotal(), now, request.couponCode(), manualDiscountMinor);
+    EvalResult evalResult = promotionEngine.evaluate(evalInput);
+
     PriceBreakdown breakdown =
-        taxChargeService.resolve(cart.subtotal(), 0L, discount, Instant.now());
+        taxChargeService.resolve(cart.subtotal(), 0L, evalResult.totalDiscount(), now);
+
+    List<AppliedPromotionResponse> applied =
+        evalResult.deductions().stream().map(AppliedPromotionResponse::from).toList();
+    String couponStatus =
+        evalResult.couponOutcome() == null ? null : evalResult.couponOutcome().status().name();
+
     return new PriceBreakdownResponse(
         breakdown.subtotal().amountMinor(),
         breakdown.discount().amountMinor(),
@@ -73,7 +102,9 @@ public class TicketReader {
         breakdown.tax().amountMinor(),
         breakdown.grandTotal().amountMinor(),
         breakdown.grandTotal().currency().getCurrencyCode(),
-        breakdown.usesIllustrativeRules());
+        breakdown.usesIllustrativeRules(),
+        applied,
+        couponStatus);
   }
 
   /**
