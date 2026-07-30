@@ -2,6 +2,7 @@ package id.co.nativeapp.gateway.ratelimit;
 
 import id.co.nativeapp.gateway.filter.TenantContextHeaderFilter;
 import id.co.nativeapp.gateway.security.TenantJwtAuthoritiesConverter;
+import java.util.List;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -44,13 +45,14 @@ public final class RateLimitFilter
       // request with 401 before any route filter runs.
       return ServerResponse.status(HttpStatus.UNAUTHORIZED).build();
     }
-    String companyId = jwt.getClaimAsString(TenantJwtAuthoritiesConverter.COMPANY_ID_CLAIM);
+    // Key the bucket on the login's FIRST allowed company (multi-company ownership, ADR 0021 — the
+    // claim is string|string[]; identical behavior for a single-company login). A 0-company token
+    // buckets on the sub alone ("none") — tenant AUTHORIZATION is the TenantContextHeaderFilter's
+    // decision (it knows per-route tenant-optionality); rate limiting only cares about abuse.
+    List<String> companyIds = TenantJwtAuthoritiesConverter.extractCompanyIds(jwt);
+    String companyKey = companyIds.isEmpty() ? "none" : companyIds.getFirst();
     String sub = jwt.getSubject();
-    if (companyId == null || companyId.isBlank()) {
-      // Authenticated but tenant-less: a tenant/authZ denial is 403, not 401 (§1.1).
-      return ServerResponse.status(HttpStatus.FORBIDDEN).build();
-    }
-    if (!limiter.tryAcquire(companyId, sub)) {
+    if (!limiter.tryAcquire(companyKey, sub)) {
       return ServerResponse.status(HttpStatus.TOO_MANY_REQUESTS)
           .header(HttpHeaders.RETRY_AFTER, Long.toString(limiter.retryAfterSeconds()))
           .build();

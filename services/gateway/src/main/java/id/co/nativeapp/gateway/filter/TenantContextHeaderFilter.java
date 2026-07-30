@@ -15,31 +15,40 @@ import org.springframework.web.servlet.function.ServerResponse;
  * and strips any client-supplied copies first so a caller can never spoof its tenant.
  *
  * <p>By the time this filter runs the request is authenticated (the security filter chain rejected
- * anything without a valid token with {@code 401}). It reads the {@code company_id} claim, {@code
+ * anything without a valid token with {@code 401}). It reads the {@code company_id} claim (the
+ * login's ALLOWED COMPANIES — {@code string | string[]}, multi-company ownership ADR 0021), {@code
  * sub}, and roles from the JWT in the {@link SecurityContextHolder} and writes them as:
  *
  * <ul>
- *   <li>{@code X-Company-Id} — the {@code company_id} claim (the tenant; what the services' {@code
- *       DevTenantFilter} reads),
+ *   <li>{@code X-Company-Id} — the resolved ACTIVE company (what the services' tenant binding
+ *       reads),
  *   <li>{@code X-Actor} — the {@code sub} (the acting principal),
  *   <li>{@code X-Roles} — the comma-joined role names.
  * </ul>
  *
- * <p><strong>Spoof defence.</strong> Any inbound {@code X-Company-Id} / {@code X-Actor} / {@code
- * X-Roles} from the client is removed before the JWT-derived values are set, so a client header can
- * never reach a downstream service. The headers leaving the gateway are derived solely from the
- * verified token.
+ * <p><strong>Active-company selection.</strong> A multi-company login picks its active company per
+ * request by sending {@code X-Company-Id}. The inbound value is honoured ONLY when it is in the
+ * token's allowed set — a value outside the set is rejected with {@code 403} (an authenticated
+ * caller asking for a tenant it does not belong to). Absent a selection, the first allowed company
+ * is the default, so a single-company login behaves exactly as before.
  *
- * <p>If the {@code company_id} claim is absent the request is rejected with {@code 403} rather than
- * forwarded tenant-less: the token is valid (so it is not a {@code 401} authentication failure) but
- * carries no tenant, so it is not authorized to reach a tenant-scoped service — a tenant/authZ
- * denial maps to {@code 403} (ENGINEERING-STANDARDS §1.1). A missing/invalid/expired token never
- * reaches this filter; the security chain already rejected it with {@code 401}.
+ * <p><strong>Spoof defence.</strong> Any inbound {@code X-Company-Id} / {@code X-Actor} / {@code
+ * X-Roles} from the client is removed before the JWT-derived values are set: {@code X-Company-Id}
+ * only survives as the VALIDATED selection, never verbatim; the headers leaving the gateway are
+ * derived solely from the verified token plus the token-validated selection.
+ *
+ * <p>If the token carries NO companies the request is rejected with {@code 403} (authenticated but
+ * not authorized for any tenant-scoped service — §1.1), UNLESS this instance was built {@link
+ * #tenantOptional()}: the bootstrap routes ({@code /api/v1/companies/**}) must admit a 0-company
+ * login so it can create its first company / list its (empty) memberships — the request is then
+ * forwarded WITHOUT {@code X-Company-Id} and the downstream service's own per-path tenant-optional
+ * enforcement decides (org-service permits exactly {@code POST /api/v1/companies} + {@code GET
+ * /api/v1/companies/mine} unbound; everything else still 403s at the service edge).
  */
 public final class TenantContextHeaderFilter
     implements HandlerFilterFunction<ServerResponse, ServerResponse> {
 
-  /** Tenant id header consumed by every service's {@code DevTenantFilter}. */
+  /** Tenant id header: inbound = the client's active-company selection; outbound = the resolved tenant. */
   public static final String COMPANY_HEADER = "X-Company-Id";
 
   /** Acting principal header (the JWT {@code sub}). */
@@ -47,6 +56,27 @@ public final class TenantContextHeaderFilter
 
   /** Comma-joined granted roles. */
   public static final String ROLES_HEADER = "X-Roles";
+
+  /** Whether a 0-company token may pass through (tenant-less) instead of being 403'd. */
+  private final boolean tenantOptional;
+
+  /** The default, tenant-REQUIRED filter (every business route). */
+  public TenantContextHeaderFilter() {
+    this(false);
+  }
+
+  private TenantContextHeaderFilter(boolean tenantOptional) {
+    this.tenantOptional = tenantOptional;
+  }
+
+  /**
+   * The tenant-OPTIONAL variant for the company-bootstrap routes: a 0-company login is forwarded
+   * tenant-less (actor + roles only) so org-service's own tenant-optional matcher can admit exactly
+   * the bootstrap endpoints. Tokens WITH companies behave identically to the required variant.
+   */
+  public static TenantContextHeaderFilter tenantOptional() {
+    return new TenantContextHeaderFilter(true);
+  }
 
   @Override
   public ServerResponse filter(ServerRequest request, HandlerFunction<ServerResponse> next)
@@ -58,14 +88,43 @@ public final class TenantContextHeaderFilter
       return ServerResponse.status(401).build();
     }
 
-    String companyId = jwt.getClaimAsString(TenantJwtAuthoritiesConverter.COMPANY_ID_CLAIM);
-    if (companyId == null || companyId.isBlank()) {
-      // A valid token with no tenant claim is authenticated but NOT authorized to reach a
-      // tenant-scoped service: a tenant/authZ denial is 403, not 401 (§1.1).
-      return ServerResponse.status(403).build();
-    }
+    List<String> allowed = TenantJwtAuthoritiesConverter.extractCompanyIds(jwt);
     String actor = jwt.getSubject();
     String roles = String.join(",", TenantJwtAuthoritiesConverter.extractRoles(jwt));
+
+    if (allowed.isEmpty()) {
+      if (!tenantOptional) {
+        // A valid token with no tenant claim is authenticated but NOT authorized to reach a
+        // tenant-scoped service: a tenant/authZ denial is 403, not 401 (§1.1).
+        return ServerResponse.status(403).build();
+      }
+      // Bootstrap: forward tenant-less (actor + roles only); the service edge enforces per path.
+      ServerRequest tenantless =
+          ServerRequest.from(request)
+              .headers(
+                  headers -> {
+                    headers.remove(COMPANY_HEADER);
+                    headers.remove(ACTOR_HEADER);
+                    headers.remove(ROLES_HEADER);
+                    headers.set(ACTOR_HEADER, actor);
+                    headers.set(ROLES_HEADER, roles);
+                  })
+              .build();
+      return next.handle(tenantless);
+    }
+
+    // Resolve the ACTIVE company: the client's selection if (and only if) the token allows it,
+    // else the token's first company. A selection outside the allowed set is an authenticated
+    // caller requesting a tenant it does not belong to — reject, never silently fall back.
+    String requested = request.headers().firstHeader(COMPANY_HEADER);
+    String active;
+    if (requested == null || requested.isBlank()) {
+      active = allowed.getFirst();
+    } else if (allowed.contains(requested)) {
+      active = requested;
+    } else {
+      return ServerResponse.status(403).build();
+    }
 
     ServerRequest trusted =
         ServerRequest.from(request)
@@ -75,7 +134,7 @@ public final class TenantContextHeaderFilter
                   headers.remove(COMPANY_HEADER);
                   headers.remove(ACTOR_HEADER);
                   headers.remove(ROLES_HEADER);
-                  headers.set(COMPANY_HEADER, companyId);
+                  headers.set(COMPANY_HEADER, active);
                   headers.set(ACTOR_HEADER, actor);
                   headers.set(ROLES_HEADER, roles);
                 })

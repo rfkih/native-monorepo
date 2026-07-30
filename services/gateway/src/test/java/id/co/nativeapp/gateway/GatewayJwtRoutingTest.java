@@ -54,9 +54,9 @@ class GatewayJwtRoutingTest extends GatewayIntegrationTestBase {
             .get()
             .uri("/api/v1/sales/123")
             .header(HttpHeaders.AUTHORIZATION, bearer(token))
-            // The client TRIES to spoof its tenant/actor/roles — the gateway must overwrite these.
-            .header(
-                TenantContextHeaderFilter.COMPANY_HEADER, "99999999-9999-9999-9999-999999999999")
+            // The client TRIES to spoof its actor/roles — the gateway must overwrite these. (A
+            // spoofed X-Company-Id naming a FOREIGN company is no longer overwritten — it is
+            // rejected 403 outright; see GatewayCompanySelectionTest. ADR 0021.)
             .header(TenantContextHeaderFilter.ACTOR_HEADER, "attacker")
             .header(TenantContextHeaderFilter.ROLES_HEADER, "superadmin")
             .retrieve()
@@ -69,11 +69,9 @@ class GatewayJwtRoutingTest extends GatewayIntegrationTestBase {
     // to restaurant-service, which now exposes that path. A route/path mismatch (the original
     // Critical) would land the stub on a different path and fail this assertion, not pass silently.
     assertThat(forwarded.getPath()).isEqualTo("/api/v1/sales/123");
-    // X-Company-Id equals the token's company_id claim — NOT the spoofed client value.
+    // X-Company-Id equals the token's company_id claim (the login's single allowed company).
     assertThat(forwarded.getHeader(TenantContextHeaderFilter.COMPANY_HEADER))
         .isEqualTo(EXPECTED_COMPANY_ID);
-    assertThat(forwarded.getHeader(TenantContextHeaderFilter.COMPANY_HEADER))
-        .isNotEqualTo("99999999-9999-9999-9999-999999999999");
     // X-Actor is the token subject, not the spoofed actor.
     assertThat(forwarded.getHeader(TenantContextHeaderFilter.ACTOR_HEADER))
         .isNotEqualTo("attacker")

@@ -183,17 +183,49 @@ public class RoutingConfig {
         .build();
   }
 
+  /**
+   * {@code GET /api/v1/companies/mine} — the caller's OWN company memberships (the switcher/session
+   * bootstrap, ADR 0021). Allowed for EVERY business role via {@code ME_ROLES}: the console session
+   * bootstraps the active company from this endpoint for all personas — a {@code cashier} needs it
+   * to open the POS (the exact regression the dashboard-only gate caused), and the response is
+   * derived strictly from the caller's own verified {@code company_id} claim, so there is no
+   * cross-user or cross-tenant exposure to widen. Tenant-OPTIONAL like {@link #companiesRoute}: a
+   * 0-company login gets {@code []} instead of a 403.
+   *
+   * <p>{@code @Order(HIGHEST_PRECEDENCE)} is load-bearing: the general {@code /companies/**} route
+   * below would otherwise swallow this exact path and 403 every non-dashboard role — the same
+   * first-match-wins pattern as {@link #currentCompanyRoute}.
+   */
+  @Bean
+  @Order(Ordered.HIGHEST_PRECEDENCE)
+  RouterFunction<ServerResponse> myCompaniesRoute(
+      GatewayRouteProperties routes, RedisTokenBucketRateLimiter limiter) {
+    return GatewayRouterFunctions.route("org-service-my-companies")
+        .route(path("/api/v1/companies/mine"), http())
+        .before(uri(routes.orgService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(ME_ROLES))
+        .filter(TenantContextHeaderFilter.tenantOptional())
+        .build();
+  }
+
+  /**
+   * Company creation/management — owner/manager. Uses the TENANT-OPTIONAL tenant filter (ADR 0021):
+   * a valid 0-company token (a fresh login pre-onboarding, or one adding its first business) must
+   * reach {@code POST /api/v1/companies} + {@code GET /api/v1/companies/mine}; it is forwarded
+   * tenant-less and org-service's own per-path tenant-optional matcher enforces exactly those two —
+   * every other companies path still 403s at the service edge. Tokens WITH companies behave as on
+   * every other route (validated active-company selection).
+   */
   @Bean
   RouterFunction<ServerResponse> companiesRoute(
-      GatewayRouteProperties routes,
-      RedisTokenBucketRateLimiter limiter,
-      TenantContextHeaderFilter tenantFilter) {
+      GatewayRouteProperties routes, RedisTokenBucketRateLimiter limiter) {
     return GatewayRouterFunctions.route("org-service")
         .route(path("/api/v1/companies/**"), http())
         .before(uri(routes.orgService()))
         .filter(new RateLimitFilter(limiter))
         .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
-        .filter(tenantFilter)
+        .filter(TenantContextHeaderFilter.tenantOptional())
         .build();
   }
 

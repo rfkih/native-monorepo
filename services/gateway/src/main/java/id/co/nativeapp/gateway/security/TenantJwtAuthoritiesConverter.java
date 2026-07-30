@@ -60,6 +60,35 @@ public final class TenantJwtAuthoritiesConverter
   }
 
   /**
+   * Recovers the login's allowed company ids from the {@code company_id} claim (multi-company
+   * ownership, ADR 0021). The claim is {@code string | string[]}: a multi-valued Keycloak mapper
+   * emits a JSON array (one entry per company the login belongs to, first = the default active
+   * company), while tokens minted before the mapper change carry a scalar — both shapes normalize
+   * to a list here so old cached tokens keep working through the rollout. Blank values dropped;
+   * deduplicated, order-preserving. Empty when the login has no company yet (pre-onboarding).
+   */
+  public static List<String> extractCompanyIds(Jwt jwt) {
+    Object claim = jwt.getClaim(COMPANY_ID_CLAIM);
+    List<String> ids = new ArrayList<>();
+    if (claim instanceof String s) {
+      if (!s.isBlank()) {
+        ids.add(s);
+      }
+    } else if (claim instanceof Collection<?> values) {
+      for (Object value : values) {
+        if (value == null) {
+          continue;
+        }
+        String id = value.toString();
+        if (!id.isBlank() && !ids.contains(id)) {
+          ids.add(id);
+        }
+      }
+    }
+    return ids;
+  }
+
+  /**
    * Recovers the curated business role names from the token. Candidates come from the flat {@code
    * roles} claim (the realm-role protocol mapper) and {@code realm_access.roles} (Keycloak's
    * default placement), but only roles in {@link #BUSINESS_ROLES} are kept — the {@code
