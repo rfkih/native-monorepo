@@ -166,16 +166,17 @@ export function CashFlow() {
               <Card className="p-6">
                 <LineSection
                   heading={t('statements.cashFlow.investing')}
-                  lines={data.investingLines.map((l) => ({
-                    accountCode: l.accountCode,
+                  lines={data.investingLines.map((l) =>
                     // The disposal-proceeds line is a synthetic marker, not a chart account —
-                    // render it with its localized label (ADR 0022).
-                    label:
-                      l.accountCode === 'DISPOSAL_PROCEEDS'
-                        ? t('statements.cashFlow.disposalProceeds')
-                        : undefined,
-                    amountMinor: l.amountMinor,
-                  }))}
+                    // render ONLY its localized label, no code chip (the net-income row pattern).
+                    l.accountCode === 'DISPOSAL_PROCEEDS'
+                      ? {
+                          accountCode: '',
+                          label: t('statements.cashFlow.disposalProceeds'),
+                          amountMinor: l.amountMinor,
+                        }
+                      : { accountCode: l.accountCode, amountMinor: l.amountMinor },
+                  )}
                   totalLabel={t('statements.cashFlow.fromInvesting')}
                   totalMinor={data.cashFromInvestingMinor}
                   currency={currency}
