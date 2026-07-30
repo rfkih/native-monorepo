@@ -72,13 +72,22 @@ docker compose -f docker/compose.dev.yml up -d
 # 2) Wait until Connect is healthy (it depends on Kafka + Postgres being up).
 curl -fsS http://localhost:8083/connectors
 
-# 3) Register the Debezium outbox connector for restaurant-service.
-curl -fsS -X POST http://localhost:8083/connectors \
-  -H 'Content-Type: application/json' \
-  -d @docker/debezium/outbox-connector.json
+# 3) Register the Debezium outbox connectors — one per producing service DB.
+#    restaurant = outbox-connector.json; org/employee/carwash/entitlement have their
+#    own copies. The entitlement connector is REQUIRED for any carwash POS work:
+#    without it EntitlementGranted never reaches carwash's projection and the gate
+#    403s not-entitled forever.
+for f in outbox-connector org-outbox-connector employee-outbox-connector \
+         carwash-outbox-connector entitlement-outbox-connector; do
+  curl -fsS -X POST http://localhost:8083/connectors \
+    -H 'Content-Type: application/json' \
+    -d @docker/debezium/$f.json
+done
 
-# 4) Confirm it is RUNNING.
+# 4) Confirm they are RUNNING.
 curl -fsS http://localhost:8083/connectors/restaurant-outbox-connector/status
+curl -fsS http://localhost:8083/connectors/carwash-outbox-connector/status
+curl -fsS http://localhost:8083/connectors/entitlement-outbox-connector/status
 ```
 
 A connector is registered **per service database** (DB-per-service). To add
