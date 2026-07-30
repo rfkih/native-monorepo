@@ -29,6 +29,14 @@ import id.co.nativeapp.restaurant.order.service.ModifierValidationReader;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
 import id.co.nativeapp.restaurant.pricing.domain.PriceBreakdown;
 import id.co.nativeapp.restaurant.pricing.service.TaxChargeService;
+import id.co.nativeapp.restaurant.promotion.domain.AppliedPromotion;
+import id.co.nativeapp.restaurant.promotion.dto.AppliedDeduction;
+import id.co.nativeapp.restaurant.promotion.dto.EvalInput;
+import id.co.nativeapp.restaurant.promotion.dto.EvalLine;
+import id.co.nativeapp.restaurant.promotion.dto.EvalResult;
+import id.co.nativeapp.restaurant.promotion.repository.AppliedPromotionRepository;
+import id.co.nativeapp.restaurant.promotion.service.ManualDiscountGuard;
+import id.co.nativeapp.restaurant.promotion.service.PromotionEngineService;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
 import id.co.nativeapp.restaurant.sale.service.SaleWriter;
@@ -87,7 +95,11 @@ public class BillWriter {
   private final StockDeductionWriter stockDeductionWriter;
   private final RestaurantTableRepository tableRepository;
   private final OutletAccessGuard outletAccessGuard;
+  private final PromotionEngineService promotionEngine;
+  private final AppliedPromotionRepository appliedPromotionRepository;
+  private final ManualDiscountGuard manualDiscountGuard;
 
+  @SuppressWarnings("checkstyle:ParameterNumber")
   public BillWriter(
       BillRepository billRepository,
       BillLineRepository lineRepository,
@@ -98,7 +110,10 @@ public class BillWriter {
       SaleWriter saleWriter,
       StockDeductionWriter stockDeductionWriter,
       RestaurantTableRepository tableRepository,
-      OutletAccessGuard outletAccessGuard) {
+      OutletAccessGuard outletAccessGuard,
+      PromotionEngineService promotionEngine,
+      AppliedPromotionRepository appliedPromotionRepository,
+      ManualDiscountGuard manualDiscountGuard) {
     this.billRepository = billRepository;
     this.lineRepository = lineRepository;
     this.modifierRepository = modifierRepository;
@@ -109,6 +124,9 @@ public class BillWriter {
     this.stockDeductionWriter = stockDeductionWriter;
     this.tableRepository = tableRepository;
     this.outletAccessGuard = outletAccessGuard;
+    this.promotionEngine = promotionEngine;
+    this.appliedPromotionRepository = appliedPromotionRepository;
+    this.manualDiscountGuard = manualDiscountGuard;
   }
 
   // -------------------------------------------------------------------------
@@ -407,11 +425,24 @@ public class BillWriter {
     }
 
     // -----------------------------------------------------------------------
-    // Apply optional discount to this check's subtotal.
+    // Phase 3 (ADR 0026): a positive manual discount requires owner/manager. Checked here — after
+    // every idempotent-replay short-circuit above — so a safe replay never re-triggers the guard.
     // -----------------------------------------------------------------------
-    Long checkDiscountMinor = request.discountMinor();
+    manualDiscountGuard.enforce(request.discountMinor());
 
-    PriceBreakdown breakdown = computeBreakdown(targetLineViews, currency, checkDiscountMinor);
+    // -----------------------------------------------------------------------
+    // Evaluate the promotions engine for THIS check's subtotal (ADR 0026 — automatics + the manual
+    // discount only; coupons are NOT supported on bills this phase — follow-up). The collapsed
+    // discount feeds TaxChargeService as the fixed discount, replacing the raw request discount.
+    // -----------------------------------------------------------------------
+    Instant now = Instant.now();
+    Money subtotal = sumLineTotals(targetLineViews, currency);
+    List<EvalLine> evalLines = toEvalLines(targetLineViews, currency);
+    long manualDiscountMinor = (request.discountMinor() != null) ? request.discountMinor() : 0L;
+    EvalInput evalInput = new EvalInput(evalLines, currency, subtotal, now, null, manualDiscountMinor);
+    EvalResult evalResult = promotionEngine.evaluate(evalInput);
+
+    PriceBreakdown breakdown = taxChargeService.resolve(subtotal, 0L, evalResult.totalDiscount(), now);
     Money grandTotal = breakdown.grandTotal();
 
     if (!grandTotal.isPositive()) {
@@ -421,8 +452,6 @@ public class BillWriter {
               + " "
               + currency);
     }
-
-    Instant now = Instant.now();
 
     // -----------------------------------------------------------------------
     // Deduct stock for tracked lines in this check — same tx, rolls back on
@@ -446,6 +475,11 @@ public class BillWriter {
             breakdown);
     RecordSaleResult saleResult = saleWriter.recordInCurrentTx(saleCommand);
     UUID checkSaleId = saleResult.sale().id();
+
+    // Same tx as the sale — the applied_promotion audit rows for THIS check (empty when only the
+    // manual layer discounted, since the manual discount carries no ruleId). The "order_id" column
+    // holds this BILL's id — see AppliedPromotion's class javadoc for the per-vertical column reuse.
+    persistAppliedPromotions(bill.getId(), checkSaleId, evalResult, TenantContext.require().companyId());
 
     // -----------------------------------------------------------------------
     // Mark the target lines as paid (bulk UPDATE via repository).
@@ -638,14 +672,72 @@ public class BillWriter {
    */
   private PriceBreakdown computeBreakdown(
       List<BillLineView> lineViews, String currencyCode, Long discountMinor) {
+    Money subtotal = sumLineTotals(lineViews, currencyCode);
+    Money fixedDiscount =
+        (discountMinor != null) ? Money.ofMinor(discountMinor, currencyCode) : null;
+    return taxChargeService.resolve(subtotal, 0L, fixedDiscount, Instant.now());
+  }
+
+  /** Sums a set of bill lines' persisted totals into one {@link Money} subtotal. */
+  private static Money sumLineTotals(List<BillLineView> lineViews, String currencyCode) {
     Currency currency = Currency.getInstance(currencyCode);
     Money subtotal = Money.zero(currency);
     for (BillLineView lv : lineViews) {
       subtotal = subtotal.plus(Money.ofMinor(lv.getLineTotalMinor(), currencyCode));
     }
-    Money fixedDiscount =
-        (discountMinor != null) ? Money.ofMinor(discountMinor, currencyCode) : null;
-    return taxChargeService.resolve(subtotal, 0L, fixedDiscount, Instant.now());
+    return subtotal;
+  }
+
+  /**
+   * Builds the promotions engine's {@link EvalLine}s for a set of bill lines (ADR 0026) — loads
+   * fresh {@link MenuItemView}s (RLS-scoped, chunked) so line-scope rule matching sees the item's
+   * CURRENT category assignment, mirroring {@code OrderWriter.recomputeWithPromotions}.
+   */
+  private List<EvalLine> toEvalLines(List<BillLineView> lineViews, String currencyCode) {
+    List<UUID> menuItemIds = lineViews.stream().map(BillLineView::getMenuItemId).toList();
+    Map<UUID, MenuItemView> itemMap = new HashMap<>();
+    for (int i = 0; i < menuItemIds.size(); i += 1000) {
+      List<UUID> chunk = menuItemIds.subList(i, Math.min(i + 1000, menuItemIds.size()));
+      menuItemRepository.findViewsByIds(chunk).forEach(v -> itemMap.put(v.getId(), v));
+    }
+    List<EvalLine> result = new ArrayList<>(lineViews.size());
+    for (BillLineView lv : lineViews) {
+      MenuItemView view = itemMap.get(lv.getMenuItemId());
+      UUID categoryId = (view != null) ? view.getCategoryId() : null;
+      long effectiveUnitPrice = lv.getUnitPriceMinor() + lv.getModifierDeltaMinor();
+      result.add(new EvalLine(lv.getId(), lv.getMenuItemId(), categoryId, effectiveUnitPrice, lv.getQty()));
+    }
+    return result;
+  }
+
+  /**
+   * Persists the {@code applied_promotion} audit rows for one check, same transaction as the sale
+   * (ADR 0026). Does nothing when there is nothing to persist (no rule-backed deduction — a check
+   * discounted ONLY by the manual layer produces zero rows, since the manual discount has no {@code
+   * ruleId}). {@code orderId} here holds the {@code bill.id} (see {@code AppliedPromotion}'s class
+   * javadoc for the per-vertical column reuse).
+   */
+  private void persistAppliedPromotions(UUID orderId, UUID saleId, EvalResult evalResult, String companyId) {
+    if (evalResult.deductions().isEmpty()) {
+      return;
+    }
+    List<AppliedPromotion> rows = new ArrayList<>(evalResult.deductions().size());
+    for (AppliedDeduction d : evalResult.deductions()) {
+      AppliedPromotion row =
+          new AppliedPromotion(
+              orderId,
+              saleId,
+              d.ruleId(),
+              d.couponId(),
+              d.nameSnapshot(),
+              d.typeSnapshot().name(),
+              d.rateBpSnapshot(),
+              d.lineRef(),
+              d.amount());
+      row.setCompanyId(companyId);
+      rows.add(row);
+    }
+    appliedPromotionRepository.saveAll(rows);
   }
 
   /**

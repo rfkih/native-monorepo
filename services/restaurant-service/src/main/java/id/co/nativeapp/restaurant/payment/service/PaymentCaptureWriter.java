@@ -12,6 +12,7 @@ import id.co.nativeapp.restaurant.order.repository.OrderRepository;
 import id.co.nativeapp.restaurant.payment.domain.Payment;
 import id.co.nativeapp.restaurant.payment.dto.PaymentResponse;
 import id.co.nativeapp.restaurant.payment.repository.PaymentRepository;
+import id.co.nativeapp.restaurant.promotion.repository.AppliedPromotionRepository;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
 import id.co.nativeapp.restaurant.sale.service.SaleWriter;
@@ -42,6 +43,13 @@ import org.springframework.transaction.annotation.Transactional;
  * Payment.Status#CAPTURED} (re-delivery), the method returns immediately with no side effects — no
  * second stock deduction, no second sale, no second {@code SaleRecorded}. The early return happens
  * before any stock deduction, so re-delivering the capture cannot double-deduct stock.
+ *
+ * <p><strong>Phase 3 (ADR 0026).</strong> A digital-tender checkout writes its {@code
+ * applied_promotion} audit rows at checkout time with {@code sale_id = NULL} (no sale exists yet —
+ * revenue is deferred to capture). Once the sale records here, every such row for this order is
+ * stamped with the new {@code sale_id} in the SAME transaction ({@link
+ * id.co.nativeapp.restaurant.promotion.repository.AppliedPromotionRepository#stampSaleId}) — the
+ * idempotent re-delivery early return means this never double-stamps.
  */
 @Component
 public class PaymentCaptureWriter {
@@ -52,6 +60,7 @@ public class PaymentCaptureWriter {
   private final MenuItemRepository menuItemRepository;
   private final StockDeductionWriter stockDeductionWriter;
   private final SaleWriter saleWriter;
+  private final AppliedPromotionRepository appliedPromotionRepository;
 
   public PaymentCaptureWriter(
       PaymentRepository paymentRepository,
@@ -59,13 +68,15 @@ public class PaymentCaptureWriter {
       OrderLineRepository orderLineRepository,
       MenuItemRepository menuItemRepository,
       StockDeductionWriter stockDeductionWriter,
-      SaleWriter saleWriter) {
+      SaleWriter saleWriter,
+      AppliedPromotionRepository appliedPromotionRepository) {
     this.paymentRepository = paymentRepository;
     this.orderRepository = orderRepository;
     this.orderLineRepository = orderLineRepository;
     this.menuItemRepository = menuItemRepository;
     this.stockDeductionWriter = stockDeductionWriter;
     this.saleWriter = saleWriter;
+    this.appliedPromotionRepository = appliedPromotionRepository;
   }
 
   /**
@@ -138,6 +149,10 @@ public class PaymentCaptureWriter {
                 () -> new IllegalArgumentException("Order not found for payment: " + paymentId));
     order.linkSale(saleResult.sale().id());
     orderRepository.saveAndFlush(order);
+
+    // Phase 3 (ADR 0026): stamp sale_id onto every applied_promotion row this order wrote at
+    // checkout time (sale_id was NULL then — no sale existed yet for a digital tender).
+    appliedPromotionRepository.stampSaleId(payment.getOrderId(), saleResult.sale().id());
 
     return PaymentResponse.from(payment);
   }

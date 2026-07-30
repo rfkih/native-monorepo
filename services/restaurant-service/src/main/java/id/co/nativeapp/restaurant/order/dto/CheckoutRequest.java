@@ -19,13 +19,17 @@ import java.util.UUID;
  * @param lines the order lines; must be non-empty with qty &ge; 1 per line
  * @param payment optional payment for an order paid in the same call (cash captures synchronously;
  *     ADR 0006). Omit it to create the order without recording a payment.
- * @param discountMinor optional order-level fixed discount in minor currency units (&ge; 0). When
- *     non-null, passed to the pricing formula as a fixed discount (overrides any percent discount).
- *     Clamped to &le; subtotal by {@link
- *     id.co.nativeapp.restaurant.pricing.service.TaxChargeService} so the discount can never exceed
- *     the order subtotal. A {@code null} value means no discount (same as passing 0).
+ * @param discountMinor optional order-level fixed discount in minor currency units (&ge; 0). This is
+ *     ONE INPUT to the Phase-3 promotions engine (ADR 0026) — the manual-discount layer, applied
+ *     LAST after every automatic rule and any redeemed coupon, then jointly clamped so the total
+ *     discount can never exceed the order subtotal. A {@code null} value means no manual discount
+ *     (same as passing 0). A positive value requires the {@code owner}/{@code manager} role ({@code
+ *     ManualDiscountGuard}) — a cashier token is rejected with {@code 403}.
  * @param orderType Phase 4: DINE_IN / TAKEAWAY / DELIVERY; defaults to DINE_IN when null
  * @param tableId Phase 4: nullable table reference; only valid for DINE_IN orders
+ * @param couponCode Phase 3 (ADR 0026): optional coupon code; case-insensitive. An invalid or
+ *     exhausted code is rejected ({@code 422}/{@code 409}) — unlike the quote endpoint, checkout is
+ *     money-moving and never silently drops a bad code.
  */
 public record CheckoutRequest(
     @NotNull UUID businessId,
@@ -34,11 +38,12 @@ public record CheckoutRequest(
     @Valid PaymentRequest payment,
     @Min(0) Long discountMinor,
     String orderType,
-    UUID tableId) {
+    UUID tableId,
+    String couponCode) {
 
   /** Convenience for a checkout with no payment and no discount (the original three-arg shape). */
   public CheckoutRequest(UUID businessId, String idempotencyKey, List<OrderLineRequest> lines) {
-    this(businessId, idempotencyKey, lines, null, null, null, null);
+    this(businessId, idempotencyKey, lines, null, null, null, null, null);
   }
 
   /**
@@ -50,11 +55,11 @@ public record CheckoutRequest(
       String idempotencyKey,
       List<OrderLineRequest> lines,
       PaymentRequest payment) {
-    this(businessId, idempotencyKey, lines, payment, null, null, null);
+    this(businessId, idempotencyKey, lines, payment, null, null, null, null);
   }
 
   /**
-   * Convenience for a checkout with a payment and a discount but no Phase 4 fields
+   * Convenience for a checkout with a payment and a discount but no Phase 4/Phase 3 fields
    * (backwards-compatible five-arg shape).
    */
   public CheckoutRequest(
@@ -63,6 +68,20 @@ public record CheckoutRequest(
       List<OrderLineRequest> lines,
       PaymentRequest payment,
       Long discountMinor) {
-    this(businessId, idempotencyKey, lines, payment, discountMinor, null, null);
+    this(businessId, idempotencyKey, lines, payment, discountMinor, null, null, null);
+  }
+
+  /**
+   * Convenience for a checkout with Phase 4 fields but no coupon (pre-Phase-3 seven-arg shape).
+   */
+  public CheckoutRequest(
+      UUID businessId,
+      String idempotencyKey,
+      List<OrderLineRequest> lines,
+      PaymentRequest payment,
+      Long discountMinor,
+      String orderType,
+      UUID tableId) {
+    this(businessId, idempotencyKey, lines, payment, discountMinor, orderType, tableId, null);
   }
 }

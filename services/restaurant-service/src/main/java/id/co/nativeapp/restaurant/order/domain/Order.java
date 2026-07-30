@@ -90,6 +90,15 @@ public class Order extends Auditable {
   @Column(name = "discount_minor")
   private Long discountMinor;
 
+  /**
+   * Phase 3 (ADR 0026): the redeemed {@code coupon} id, if any. Denormalized convenience only — NOT
+   * authoritative; the source of truth for what was actually applied (and for how much) is the {@code
+   * applied_promotion} audit rows, which is what this order's collapsed {@code discount_minor} was
+   * computed from (V16 migration comment). {@code null} means no coupon was redeemed.
+   */
+  @Column(name = "coupon_id")
+  private UUID couponId;
+
   @OneToMany(
       mappedBy = "order",
       cascade = CascadeType.ALL,
@@ -249,6 +258,20 @@ public class Order extends Auditable {
     return total.toMoney();
   }
 
+  /**
+   * Phase 3 (ADR 0026): re-prices this order's total to the freshly re-evaluated {@link
+   * id.co.nativeapp.restaurant.pricing.domain.PriceBreakdown} grand total at {@code payParked} time.
+   * A parked order's total is only a park-time SNAPSHOT — promotions (automatic rules, a coupon)
+   * evaluate at pay time, not park time, so the true charged amount can differ from what was stored
+   * when the cart was parked. Must be called BEFORE recording the sale/payment so every downstream
+   * consumer of {@link #getTotal()} (the sale amount, the payment instruction, the response) agrees
+   * on the one true final total. Currency never changes (same order, same cart).
+   */
+  public void updateTotal(Money newTotal) {
+    Objects.requireNonNull(newTotal, "newTotal");
+    this.total = MoneyEmbeddable.of(newTotal);
+  }
+
   public UUID getSaleId() {
     return saleId;
   }
@@ -282,5 +305,15 @@ public class Order extends Auditable {
    */
   public Long getDiscountMinor() {
     return discountMinor;
+  }
+
+  /** Phase 3 (ADR 0026): stamps the redeemed coupon id. Called once, at the moment of redemption. */
+  public void attachCoupon(UUID couponId) {
+    this.couponId = Objects.requireNonNull(couponId, "couponId");
+  }
+
+  /** Phase 3 (ADR 0026): the redeemed coupon id, or {@code null} if none was used. */
+  public UUID getCouponId() {
+    return couponId;
   }
 }

@@ -9,6 +9,10 @@ import id.co.nativeapp.restaurant.order.dto.PriceBreakdownResponse;
 import id.co.nativeapp.restaurant.order.dto.QuoteRequest;
 import id.co.nativeapp.restaurant.pricing.domain.PriceBreakdown;
 import id.co.nativeapp.restaurant.pricing.service.TaxChargeService;
+import id.co.nativeapp.restaurant.promotion.dto.EvalInput;
+import id.co.nativeapp.restaurant.promotion.dto.EvalLine;
+import id.co.nativeapp.restaurant.promotion.dto.EvalResult;
+import id.co.nativeapp.restaurant.promotion.service.PromotionEngineService;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -51,14 +55,17 @@ public class OrderReader {
   private final MenuItemRepository menuItemRepository;
   private final ModifierValidationReader modifierValidator;
   private final TaxChargeService taxChargeService;
+  private final PromotionEngineService promotionEngine;
 
   public OrderReader(
       MenuItemRepository menuItemRepository,
       ModifierValidationReader modifierValidator,
-      TaxChargeService taxChargeService) {
+      TaxChargeService taxChargeService,
+      PromotionEngineService promotionEngine) {
     this.menuItemRepository = menuItemRepository;
     this.modifierValidator = modifierValidator;
     this.taxChargeService = taxChargeService;
+    this.promotionEngine = promotionEngine;
   }
 
   /**
@@ -134,12 +141,16 @@ public class OrderReader {
         modifierValidator.loadContext(request.lines());
 
     // ------------------------------------------------------------------
-    // 3b. Compute line totals + subtotal (integer minor units, exact).
+    // 3b. Compute line totals + subtotal (integer minor units, exact); also build the promotions
+    //     engine's EvalLine per cart line (Phase 3, ADR 0026). A quote persists nothing, so each
+    //     EvalLine carries lineId = null — a line-scope deduction on a quote response therefore
+    //     carries a null lineRef (there is no real order_line/bill_line to reference yet).
     //     effectiveUnit = unitPriceMinor + Σ priceDeltaMinor (modifiers)
     //     lineTotal = effectiveUnit × qty
     //     The validator already confirmed effectiveUnit >= 0.
     // ------------------------------------------------------------------
     Money runningTotal = Money.zero(currency);
+    List<EvalLine> evalLines = new ArrayList<>(request.lines().size());
     for (OrderLineRequest lineReq : request.lines()) {
       MenuItemView view = itemMap.get(lineReq.menuItemId());
       Money unitPrice = Money.ofMinor(view.getPriceMinor(), view.getCurrency().strip());
@@ -153,20 +164,22 @@ public class OrderReader {
       long effectiveUnit = Math.addExact(unitPrice.amountMinor(), modifierDelta);
       long lineTotal = Math.multiplyExact(effectiveUnit, (long) lineReq.qty());
       runningTotal = runningTotal.plus(Money.ofMinor(lineTotal, currencyCode));
+      evalLines.add(new EvalLine(null, lineReq.menuItemId(), view.getCategoryId(), effectiveUnit, lineReq.qty()));
     }
 
     // ------------------------------------------------------------------
-    // 4. Apply Phase 2 pricing formula via TaxChargeService.
+    // 4. Evaluate the Phase-3 promotions engine (ADR 0026), then apply the Phase 2 pricing formula
+    //    via TaxChargeService with the engine's COLLAPSED discount as the fixed discount. Never
+    //    throws for a bad/exhausted coupon — couponStatus reports it instead (quote is a preview).
     // ------------------------------------------------------------------
     Instant now = Instant.now();
-    Money fixedDiscount =
-        (request.discountMinor() != null)
-            ? Money.ofMinor(request.discountMinor(), currencyCode)
-            : null;
-    long discountBp = 0L;
-    PriceBreakdown breakdown =
-        taxChargeService.resolve(runningTotal, discountBp, fixedDiscount, now);
+    long manualDiscountMinor = (request.discountMinor() != null) ? request.discountMinor() : 0L;
+    EvalInput evalInput =
+        new EvalInput(evalLines, currencyCode, runningTotal, now, request.couponCode(), manualDiscountMinor);
+    EvalResult evalResult = promotionEngine.evaluate(evalInput);
 
-    return PriceBreakdownResponse.from(breakdown);
+    PriceBreakdown breakdown = taxChargeService.resolve(runningTotal, 0L, evalResult.totalDiscount(), now);
+
+    return PriceBreakdownResponse.from(breakdown, evalResult);
   }
 }

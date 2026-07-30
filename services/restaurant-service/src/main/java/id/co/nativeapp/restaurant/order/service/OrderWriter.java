@@ -28,6 +28,18 @@ import id.co.nativeapp.restaurant.payment.service.PaymentInstruction;
 import id.co.nativeapp.restaurant.payment.service.PaymentWriter;
 import id.co.nativeapp.restaurant.pricing.domain.PriceBreakdown;
 import id.co.nativeapp.restaurant.pricing.service.TaxChargeService;
+import id.co.nativeapp.restaurant.promotion.domain.AppliedPromotion;
+import id.co.nativeapp.restaurant.promotion.domain.CouponExhaustedException;
+import id.co.nativeapp.restaurant.promotion.domain.CouponInvalidException;
+import id.co.nativeapp.restaurant.promotion.dto.AppliedDeduction;
+import id.co.nativeapp.restaurant.promotion.dto.CouponOutcome;
+import id.co.nativeapp.restaurant.promotion.dto.EvalInput;
+import id.co.nativeapp.restaurant.promotion.dto.EvalLine;
+import id.co.nativeapp.restaurant.promotion.dto.EvalResult;
+import id.co.nativeapp.restaurant.promotion.repository.AppliedPromotionRepository;
+import id.co.nativeapp.restaurant.promotion.repository.CouponRepository;
+import id.co.nativeapp.restaurant.promotion.service.ManualDiscountGuard;
+import id.co.nativeapp.restaurant.promotion.service.PromotionEngineService;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
 import id.co.nativeapp.restaurant.sale.service.SaleWriter;
@@ -60,24 +72,34 @@ import org.springframework.transaction.annotation.Transactional;
  * REQUIRES_NEW} transaction and:
  *
  * <ol>
- *   <li>Idempotency short-circuit: returns the existing order if the key is already present.
+ *   <li>Idempotency short-circuit: returns the existing order if the key is already present — this
+ *       fast path runs BEFORE the promotions engine, so a replay never re-evaluates promotions and
+ *       never re-redeems a coupon.
  *   <li>Loads the requested menu items (RLS-scoped) and validates all are active, share the same
  *       currency (single-currency only — no mixed-currency orders, rule 8), and belong to the same
  *       business as the request ({@code businessId} check — W4).
  *   <li>Validates {@code tableId}: only allowed for DINE_IN; must belong to the same business.
  *   <li>Snapshots name + unit price, computes line totals and subtotal as integer minor units
  *       ({@link Math#multiplyExact} / {@link Math#addExact} — never a float).
- *   <li>Resolves effective tax + service-charge rules (Phase 2 pricing) and computes a {@link
- *       PriceBreakdown} (subtotal → discount → taxableBase → serviceCharge → tax → grandTotal).
- *       Rejects a zero-or-negative grandTotal (a fully-comped order is not a sale → 400).
- *   <li>Persists the {@link Order} + {@link OrderLine}s.
+ *   <li><strong>Phase 3 (ADR 0026):</strong> evaluates the {@link PromotionEngineService} (automatics + at
+ *       most one coupon + the manual discount, all collapsed into ONE {@link Money} figure), then
+ *       resolves effective tax + service-charge rules (Phase 2 pricing) with that figure as the fixed
+ *       discount, producing a {@link PriceBreakdown} (subtotal → discount → taxableBase →
+ *       serviceCharge → tax → grandTotal). Rejects a zero-or-negative grandTotal (a fully-comped
+ *       order is not a sale → 400).
+ *   <li>If a coupon was supplied: redeems it ATOMICALLY (409 on exhaustion — the whole transaction
+ *       rolls back) and stamps {@code restaurant_order.coupon_id}.
+ *   <li>Persists the {@link Order} + {@link OrderLine}s + the {@code applied_promotion} audit rows.
  *   <li>Calls {@link SaleWriter#recordInCurrentTx} with propagation {@code MANDATORY} so the sale
  *       row and its {@code SaleRecorded} outbox row join this same transaction (rule 3, C1 fix).
  * </ol>
  *
- * <p><strong>Park = saved cart, no revenue.</strong> {@link #park} persists an order in {@code
- * PARKED} status — identical validation to checkout, but writes NO sale, NO payment, NO outbox row.
- * Revenue is recognised only when {@link #payParked} finalises the order.
+ * <p><strong>Park = saved cart, no revenue, no promotions yet.</strong> {@link #park} persists an
+ * order in {@code PARKED} status — identical item/table validation to checkout, but writes NO sale,
+ * NO payment, NO outbox row, and does NOT run the promotions engine (composition rule — ADR 0026:
+ * promotions evaluate at PAY time, not park time). The stored {@code discountMinor} is the raw manual
+ * discount only; {@link #payParked} re-evaluates the full engine (automatics + coupon + manual) at
+ * pay time against whatever rules/coupons are effective THEN.
  *
  * <p>The {@code (company_id, idempotency_key)} UNIQUE constraint on {@code restaurant_order} (a
  * concurrent collision) is handled by the orchestrating {@link OrderService} via a separate-
@@ -99,7 +121,12 @@ public class OrderWriter {
   private final RestaurantTableRepository tableRepository;
   private final StockDeductionWriter stockDeductionWriter;
   private final OutletAccessGuard outletAccessGuard;
+  private final PromotionEngineService promotionEngine;
+  private final CouponRepository couponRepository;
+  private final AppliedPromotionRepository appliedPromotionRepository;
+  private final ManualDiscountGuard manualDiscountGuard;
 
+  @SuppressWarnings("checkstyle:ParameterNumber")
   public OrderWriter(
       OrderRepository orderRepository,
       OrderLineRepository lineRepository,
@@ -111,7 +138,11 @@ public class OrderWriter {
       TaxChargeService taxChargeService,
       RestaurantTableRepository tableRepository,
       StockDeductionWriter stockDeductionWriter,
-      OutletAccessGuard outletAccessGuard) {
+      OutletAccessGuard outletAccessGuard,
+      PromotionEngineService promotionEngine,
+      CouponRepository couponRepository,
+      AppliedPromotionRepository appliedPromotionRepository,
+      ManualDiscountGuard manualDiscountGuard) {
     this.orderRepository = orderRepository;
     this.lineRepository = lineRepository;
     this.modifierRepository = modifierRepository;
@@ -123,6 +154,10 @@ public class OrderWriter {
     this.tableRepository = tableRepository;
     this.stockDeductionWriter = stockDeductionWriter;
     this.outletAccessGuard = outletAccessGuard;
+    this.promotionEngine = promotionEngine;
+    this.couponRepository = couponRepository;
+    this.appliedPromotionRepository = appliedPromotionRepository;
+    this.manualDiscountGuard = manualDiscountGuard;
   }
 
   /**
@@ -133,6 +168,12 @@ public class OrderWriter {
    * @throws IllegalArgumentException if any requested menu item is unknown/inactive, or if the
    *     items span more than one currency, or if tableId is supplied for a non-DINE_IN order, or if
    *     tableId does not belong to the request's business
+   * @throws id.co.nativeapp.restaurant.promotion.domain.ManualDiscountForbiddenException if {@code
+   *     discountMinor > 0} and the caller is not owner/manager
+   * @throws CouponInvalidException if {@code couponCode} is supplied and does not resolve to a
+   *     usable coupon
+   * @throws CouponExhaustedException if {@code couponCode} resolves to a coupon whose redemption
+   *     limit is reached
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public CheckoutResult checkout(CheckoutRequest request) {
@@ -142,20 +183,28 @@ public class OrderWriter {
     // manager bypass, cashier default-closed, zero-rows grandfather — lives in OutletAccessGuard).
     outletAccessGuard.enforce(request.businessId());
 
-    // Idempotency fast path: return the existing order without a second SaleRecorded.
+    // Idempotency fast path: return the existing order without a second SaleRecorded, WITHOUT
+    // evaluating promotions or redeeming a coupon a second time (guard ordering is load-bearing).
     Optional<OrderView> existing =
         orderRepository.findViewByIdempotencyKey(request.idempotencyKey());
     if (existing.isPresent()) {
       return toIdempotentResult(existing.get(), companyId);
     }
 
+    // Phase 3 (ADR 0026): a positive manual discount requires owner/manager.
+    manualDiscountGuard.enforce(request.discountMinor());
+
     String orderType = resolveOrderType(request.orderType());
     UUID tableId = request.tableId();
 
+    Instant now = Instant.now();
+
     // ------------------------------------------------------------------
-    // 1. Load requested menu items (RLS-scoped; chunk IN by <=1000).
+    // 1. Load requested menu items, resolve modifiers, compute subtotal, evaluate promotions
+    //    (ADR 0026), and price via TaxChargeService (RLS-scoped item loads; chunk IN by <=1000).
     // ------------------------------------------------------------------
-    CartContext cart = buildCart(request.businessId(), request.lines(), request.discountMinor());
+    CartContext cart =
+        buildCart(request.businessId(), request.lines(), request.discountMinor(), request.couponCode(), true, now);
 
     // ------------------------------------------------------------------
     // 2. Validate order type + table id (Phase 4).
@@ -163,9 +212,14 @@ public class OrderWriter {
     validateTableId(orderType, tableId, request.businessId());
 
     // ------------------------------------------------------------------
-    // 3. Persist order + lines + modifier snapshots (total = GRAND TOTAL).
+    // 3. Coupon redemption (Phase 3, ADR 0026) — the atomic guard; 0 rows -> 409, whole tx rolls
+    //    back. Runs AFTER validation so a foreseeable rejection never wastes a redemption slot.
     // ------------------------------------------------------------------
-    Instant now = Instant.now();
+    UUID redeemedCouponId = redeemCouponIfApplicable(cart.evalResult());
+
+    // ------------------------------------------------------------------
+    // 4. Persist order + lines + modifier snapshots (total = GRAND TOTAL).
+    // ------------------------------------------------------------------
     Order order =
         new Order(
             request.businessId(),
@@ -175,12 +229,15 @@ public class OrderWriter {
             orderType,
             tableId,
             request.discountMinor());
+    if (redeemedCouponId != null) {
+      order.attachCoupon(redeemedCouponId);
+    }
     order.setCompanyId(companyId);
     persistLines(order, cart.linesToAdd(), companyId);
     Order saved = orderRepository.saveAndFlush(order);
 
     // ------------------------------------------------------------------
-    // 4. Record the sale / payment based on tender type (ADR 0006).
+    // 5. Record the sale / payment based on tender type (ADR 0006).
     // ------------------------------------------------------------------
     OrderResponse response;
     boolean isDigitalPayment =
@@ -208,6 +265,9 @@ public class OrderWriter {
       saved.linkSale(saleResult.sale().id());
       orderRepository.saveAndFlush(saved);
 
+      // Immediate-cash path: the sale id is already known — stamp it on every applied_promotion row.
+      persistAppliedPromotions(saved.getId(), saleResult.sale().id(), cart.evalResult(), companyId);
+
       response = OrderResponse.from(saved, cart.breakdown());
       if (request.payment() != null) {
         PaymentInstruction instruction =
@@ -223,9 +283,13 @@ public class OrderWriter {
         response = response.withPayment(paymentResponse);
       }
     } else {
-      // DIGITAL path: persist a PENDING payment; no sale, no SaleRecorded yet.
+      // DIGITAL path: persist a PENDING payment; no sale, no SaleRecorded yet. The applied_promotion
+      // rows are written with sale_id = NULL now; PaymentCaptureWriter stamps it once the sale
+      // records at capture time (ADR 0006 revenue-at-capture).
       saved.markAwaitingPayment();
       orderRepository.saveAndFlush(saved);
+
+      persistAppliedPromotions(saved.getId(), null, cart.evalResult(), companyId);
 
       PaymentInstruction instruction =
           new PaymentInstruction(
@@ -244,8 +308,9 @@ public class OrderWriter {
   }
 
   /**
-   * Parks a cart as a PARKED order — no sale, no payment, no outbox row. Idempotent on {@code
-   * (company_id, idempotency_key)} like checkout.
+   * Parks a cart as a PARKED order — no sale, no payment, no outbox row, no promotions evaluation
+   * (ADR 0026 — promotions evaluate at pay time). Idempotent on {@code (company_id, idempotency_key)}
+   * like checkout.
    *
    * <p>Revenue is recognised ONLY when {@link #payParked} is called. This is the park invariant:
    * asserting that a PARKED order has no sale_id and no outbox row is the test oracle.
@@ -271,8 +336,9 @@ public class OrderWriter {
     String orderType = resolveOrderType(request.orderType());
     UUID tableId = request.tableId();
 
-    // Validate items + pricing (same as checkout).
-    CartContext cart = buildCart(request.businessId(), request.lines(), request.discountMinor());
+    // Validate items + pricing (same as checkout). No promotions engine — see class javadoc.
+    CartContext cart =
+        buildCart(request.businessId(), request.lines(), request.discountMinor(), null, false, Instant.now());
 
     // Validate order type + table id.
     validateTableId(orderType, tableId, request.businessId());
@@ -297,14 +363,22 @@ public class OrderWriter {
   }
 
   /**
-   * Finalises a PARKED order: records the Sale + optional payment, transitions PARKED → COMPLETED
-   * (cash / no-payment) or AWAITING_PAYMENT (digital). This is the moment revenue is recognised for
-   * a parked order.
+   * Finalises a PARKED order: re-evaluates the promotions engine (ADR 0026 — against whatever rules/
+   * coupon are effective RIGHT NOW, not at park time), records the Sale + optional payment,
+   * transitions PARKED → COMPLETED (cash / no-payment) or AWAITING_PAYMENT (digital). This is the
+   * moment revenue AND promotions are recognised for a parked order.
    *
-   * <p>Idempotent: re-paying a COMPLETED order returns the existing state without side effects;
-   * re-paying an AWAITING_PAYMENT order delegates idempotency to the payment layer.
+   * <p>Idempotent: re-paying a COMPLETED order returns the existing state without side effects (no
+   * re-evaluation, no re-redemption); re-paying an AWAITING_PAYMENT order delegates idempotency to
+   * the payment layer.
    *
    * @throws IllegalArgumentException if the order is not found, not PARKED, or already paid
+   * @throws id.co.nativeapp.restaurant.promotion.domain.ManualDiscountForbiddenException if the
+   *     order's stored {@code discountMinor > 0} and the caller is not owner/manager
+   * @throws CouponInvalidException if {@code couponCode} is supplied and does not resolve to a
+   *     usable coupon
+   * @throws CouponExhaustedException if {@code couponCode} resolves to a coupon whose redemption
+   *     limit is reached
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public OrderResponse payParked(UUID orderId, PayParkedRequest request) {
@@ -321,7 +395,8 @@ public class OrderWriter {
     outletAccessGuard.enforce(order.getBusinessId());
 
     if ("COMPLETED".equals(order.getStatus())) {
-      // Idempotent: already paid — return the current state without side effects.
+      // Idempotent: already paid — return the current state without side effects (no re-evaluation,
+      // no re-redemption).
       return OrderResponse.from(order);
     }
 
@@ -334,6 +409,10 @@ public class OrderWriter {
               + ". Only PARKED orders can be finalised via /pay.");
     }
 
+    // Phase 3 (ADR 0026): the manual discount was captured at park time; gate it HERE, at the
+    // moment it actually charges the customer.
+    manualDiscountGuard.enforce(order.getDiscountMinor());
+
     Instant now = Instant.now();
     String currencyCode = order.getTotal().currency().getCurrencyCode();
     String saleIdempotencyKey = orderId + ":park-sale";
@@ -341,10 +420,20 @@ public class OrderWriter {
     // Load persisted lines once — used for breakdown recomputation AND stock deduction.
     List<OrderLineView> parkedLineViews = lineRepository.findViewsByOrderId(order.getId());
 
-    // Recompute the price breakdown from the persisted lines (H1 fix).
-    // The subtotal is the sum of line totals; the discount is whatever was stored on the order at
-    // park time. This reproduces the same breakdown shape as the equivalent direct checkout.
-    PriceBreakdown breakdown = recomputeBreakdownFromViews(order, parkedLineViews, currencyCode);
+    // Re-evaluate the promotions engine + recompute the price breakdown from the persisted lines
+    // (H1 fix + ADR 0026). The subtotal is the sum of line totals; the manual-discount input is
+    // whatever was stored on the order at park time; the coupon (if any) is supplied NOW.
+    EngineRecompute er = recomputeWithPromotions(order, parkedLineViews, currencyCode, request.couponCode(), now);
+    PriceBreakdown breakdown = er.breakdown();
+
+    // The re-evaluated grand total is the TRUE final amount (ADR 0026) — every downstream use of
+    // order.getTotal() (the sale amount, the payment instruction, the response) must agree with it.
+    order.updateTotal(breakdown.grandTotal());
+
+    UUID redeemedCouponId = redeemCouponIfApplicable(er.evalResult());
+    if (redeemedCouponId != null) {
+      order.attachCoupon(redeemedCouponId);
+    }
 
     boolean isDigitalPayment =
         request.payment() != null && request.payment().tenderType().isDigital();
@@ -370,6 +459,8 @@ public class OrderWriter {
       order.linkSale(saleResult.sale().id()); // PARKED → COMPLETED
       orderRepository.saveAndFlush(order);
 
+      persistAppliedPromotions(order.getId(), saleResult.sale().id(), er.evalResult(), companyId);
+
       OrderResponse response = OrderResponse.from(order, breakdown);
       if (request.payment() != null) {
         PaymentInstruction instruction =
@@ -386,9 +477,12 @@ public class OrderWriter {
       }
       return response;
     } else {
-      // DIGITAL: persist a PENDING payment; defer revenue to capture.
+      // DIGITAL: persist a PENDING payment; defer revenue to capture. applied_promotion rows are
+      // written with sale_id = NULL; PaymentCaptureWriter stamps it at capture time.
       order.markAwaitingPayment(); // PARKED → AWAITING_PAYMENT
       orderRepository.saveAndFlush(order);
+
+      persistAppliedPromotions(order.getId(), null, er.evalResult(), companyId);
 
       PaymentInstruction instruction =
           new PaymentInstruction(
@@ -442,10 +536,24 @@ public class OrderWriter {
 
   /**
    * Validates + builds the cart context (item loading, currency check, modifier resolution,
-   * subtotal, pricing). Shared between checkout and park so they cannot diverge.
+   * subtotal, pricing). Shared between checkout and park so they cannot diverge on item/modifier
+   * validation.
+   *
+   * @param couponCode Phase 3 coupon code; only consulted when {@code applyPromotions} is {@code
+   *     true}
+   * @param applyPromotions {@code true} for checkout (evaluates {@link PromotionEngineService}); {@code
+   *     false} for park (ADR 0026 — promotions evaluate at pay time, not park time)
+   * @param occurredAt the instant used for both the promotions engine's effective-window resolution
+   *     and {@code TaxChargeService}'s effective-rule resolution — the SAME instant the caller uses
+   *     for the order/sale timestamp
    */
   private CartContext buildCart(
-      UUID businessId, List<OrderLineRequest> lineRequests, Long discountMinor) {
+      UUID businessId,
+      List<OrderLineRequest> lineRequests,
+      Long discountMinor,
+      String couponCode,
+      boolean applyPromotions,
+      Instant occurredAt) {
 
     // 1. Load requested menu items (RLS-scoped; chunk IN by <=1000).
     List<UUID> requestedIds = lineRequests.stream().map(OrderLineRequest::menuItemId).toList();
@@ -510,9 +618,10 @@ public class OrderWriter {
           modifierValidator.validateLine(lineReq, view.getPriceMinor(), modCtx));
     }
 
-    // 5. Compute line totals + subtotal.
+    // 5. Compute line totals + subtotal, and (Phase 3) each line's EvalLine.
     Money runningTotal = Money.zero(currency);
     List<OrderLine> linesToAdd = new ArrayList<>(lineRequests.size());
+    List<EvalLine> evalLines = new ArrayList<>(lineRequests.size());
     for (int i = 0; i < lineRequests.size(); i++) {
       OrderLineRequest lineReq = lineRequests.get(i);
       List<ModifierOptionView> lineModifiers = resolvedModifiersByLine.get(i);
@@ -533,13 +642,24 @@ public class OrderWriter {
       }
       runningTotal = runningTotal.plus(Money.ofMinor(line.getLineTotalMinor(), currencyCode));
       linesToAdd.add(line);
+
+      long effectiveUnitPrice = Math.addExact(unitPrice.amountMinor(), modifierDelta);
+      evalLines.add(new EvalLine(line.getId(), lineReq.menuItemId(), view.getCategoryId(), effectiveUnitPrice, lineReq.qty()));
     }
 
-    // 6. Phase 2 pricing.
-    Money fixedDiscount =
-        (discountMinor != null) ? Money.ofMinor(discountMinor, currencyCode) : null;
-    PriceBreakdown breakdown =
-        taxChargeService.resolve(runningTotal, 0L, fixedDiscount, Instant.now());
+    // 6. Phase 3 promotions engine (checkout only) + Phase 2 pricing.
+    EvalResult evalResult = null;
+    Money fixedDiscount;
+    if (applyPromotions) {
+      long manualDiscountMinor = (discountMinor != null) ? discountMinor : 0L;
+      EvalInput evalInput =
+          new EvalInput(evalLines, currencyCode, runningTotal, occurredAt, couponCode, manualDiscountMinor);
+      evalResult = promotionEngine.evaluate(evalInput);
+      fixedDiscount = evalResult.totalDiscount();
+    } else {
+      fixedDiscount = (discountMinor != null) ? Money.ofMinor(discountMinor, currencyCode) : null;
+    }
+    PriceBreakdown breakdown = taxChargeService.resolve(runningTotal, 0L, fixedDiscount, occurredAt);
     Money grandTotal = breakdown.grandTotal();
     if (!grandTotal.isPositive()) {
       throw new IllegalArgumentException(
@@ -550,7 +670,107 @@ public class OrderWriter {
               + " — a fully-comped order is not a sale");
     }
 
-    return new CartContext(currencyCode, linesToAdd, breakdown, itemViews);
+    return new CartContext(currencyCode, linesToAdd, breakdown, itemViews, evalResult);
+  }
+
+  /**
+   * Recomputes the promotions-aware {@link PriceBreakdown} for a parked order at pay time from
+   * pre-loaded line views (ADR 0026). Loads fresh {@link MenuItemView}s for the parked lines (RLS-
+   * scoped, chunked) so line-scope rule matching sees the item's CURRENT category assignment.
+   */
+  private EngineRecompute recomputeWithPromotions(
+      Order order,
+      List<OrderLineView> lineViews,
+      String currencyCode,
+      String couponCode,
+      Instant occurredAt) {
+    Currency currency = Currency.getInstance(currencyCode);
+
+    List<UUID> menuItemIds = lineViews.stream().map(OrderLineView::getMenuItemId).toList();
+    Map<UUID, MenuItemView> itemMap = new HashMap<>();
+    for (int i = 0; i < menuItemIds.size(); i += 1000) {
+      List<UUID> chunk = menuItemIds.subList(i, Math.min(i + 1000, menuItemIds.size()));
+      menuItemRepository.findViewsByIds(chunk).forEach(v -> itemMap.put(v.getId(), v));
+    }
+
+    Money subtotal = Money.zero(currency);
+    List<EvalLine> evalLines = new ArrayList<>(lineViews.size());
+    for (OrderLineView lv : lineViews) {
+      subtotal = subtotal.plus(Money.ofMinor(lv.getLineTotalMinor(), currencyCode));
+      MenuItemView view = itemMap.get(lv.getMenuItemId());
+      UUID categoryId = (view != null) ? view.getCategoryId() : null;
+      // OrderLineView carries the BASE unit price only (modifiers are snapshotted separately);
+      // recover the EFFECTIVE per-unit price from the persisted line total (exact by construction:
+      // lineTotalMinor == effectiveUnitPriceMinor * qty).
+      long effectiveUnitPrice = lv.getLineTotalMinor() / lv.getQty();
+      evalLines.add(new EvalLine(lv.getId(), lv.getMenuItemId(), categoryId, effectiveUnitPrice, lv.getQty()));
+    }
+
+    long manualDiscountMinor = (order.getDiscountMinor() != null) ? order.getDiscountMinor() : 0L;
+    EvalInput evalInput =
+        new EvalInput(evalLines, currencyCode, subtotal, occurredAt, couponCode, manualDiscountMinor);
+    EvalResult evalResult = promotionEngine.evaluate(evalInput);
+
+    PriceBreakdown breakdown = taxChargeService.resolve(subtotal, 0L, evalResult.totalDiscount(), occurredAt);
+    return new EngineRecompute(breakdown, evalResult);
+  }
+
+  /**
+   * Inspects a promotions-engine result's coupon outcome and either does nothing (no coupon
+   * supplied), redeems the coupon atomically and returns its id, or throws.
+   *
+   * @throws CouponInvalidException if the supplied coupon code did not resolve to a usable coupon
+   * @throws CouponExhaustedException if the coupon's redemption limit is reached (either the
+   *     engine's advisory check, or — the definitive, race-safe guard — the atomic UPDATE lost the
+   *     race to a concurrent checkout)
+   */
+  private UUID redeemCouponIfApplicable(EvalResult evalResult) {
+    if (evalResult == null || evalResult.couponOutcome() == null) {
+      return null;
+    }
+    CouponOutcome outcome = evalResult.couponOutcome();
+    return switch (outcome.status()) {
+      case INVALID -> throw new CouponInvalidException(outcome.code());
+      case EXHAUSTED -> throw new CouponExhaustedException(outcome.code());
+      case APPLIED -> {
+        int rows = couponRepository.redeemIfAvailable(outcome.couponId());
+        if (rows == 0) {
+          throw new CouponExhaustedException(outcome.code());
+        }
+        yield outcome.couponId();
+      }
+    };
+  }
+
+  /**
+   * Persists the {@code applied_promotion} audit rows for a checkout/pay-parked call, same
+   * transaction as the order/sale (ADR 0026). A {@code null} {@code saleId} is legal (the digital-
+   * tender path defers revenue to capture — {@code PaymentCaptureWriter} stamps it in later). Does
+   * nothing when there is nothing to persist (no engine result, or no rule-backed deduction — a
+   * cart discounted ONLY by the manual layer produces zero rows here, since the manual discount has
+   * no {@code ruleId}).
+   */
+  private void persistAppliedPromotions(UUID orderId, UUID saleId, EvalResult evalResult, String companyId) {
+    if (evalResult == null || evalResult.deductions().isEmpty()) {
+      return;
+    }
+    List<AppliedPromotion> rows = new ArrayList<>(evalResult.deductions().size());
+    for (AppliedDeduction d : evalResult.deductions()) {
+      AppliedPromotion row =
+          new AppliedPromotion(
+              orderId,
+              saleId,
+              d.ruleId(),
+              d.couponId(),
+              d.nameSnapshot(),
+              d.typeSnapshot().name(),
+              d.rateBpSnapshot(),
+              d.lineRef(),
+              d.amount());
+      row.setCompanyId(companyId);
+      rows.add(row);
+    }
+    appliedPromotionRepository.saveAll(rows);
   }
 
   /**
@@ -653,26 +873,6 @@ public class OrderWriter {
   }
 
   /**
-   * Recomputes the {@link PriceBreakdown} for a parked order at pay time from pre-loaded line
-   * views. The subtotal is the sum of the persisted line totals; the fixed discount is whatever was
-   * stored on the order at park time. This produces the same breakdown shape as an equivalent
-   * direct checkout of the same cart (H1 fix — parked-then-paid SaleRecorded carries identical
-   * breakdown legs).
-   */
-  private PriceBreakdown recomputeBreakdownFromViews(
-      Order order, List<OrderLineView> lineViews, String currencyCode) {
-    Money subtotal = Money.zero(Currency.getInstance(currencyCode));
-    for (OrderLineView lv : lineViews) {
-      subtotal = subtotal.plus(Money.ofMinor(lv.getLineTotalMinor(), currencyCode));
-    }
-    Money fixedDiscount =
-        (order.getDiscountMinor() != null)
-            ? Money.ofMinor(order.getDiscountMinor(), currencyCode)
-            : null;
-    return taxChargeService.resolve(subtotal, 0L, fixedDiscount, Instant.now());
-  }
-
-  /**
    * Deducts stock for tracked items when paying a parked order. Loads the current {@link
    * MenuItemView}s for the parked lines by their ids, then delegates to {@link
    * StockDeductionWriter#deductForLines} which runs in the caller's transaction ({@code
@@ -712,12 +912,16 @@ public class OrderWriter {
   }
 
   /**
-   * Immutable value holding the validated cart: resolved lines, breakdown, currency, and the item
-   * views used for stock-deduction tracking.
+   * Immutable value holding the validated cart: resolved lines, breakdown, currency, the item views
+   * used for stock-deduction tracking, and (checkout only) the promotions engine's result.
    */
   private record CartContext(
       String currencyCode,
       List<OrderLine> linesToAdd,
       PriceBreakdown breakdown,
-      List<MenuItemView> itemViews) {}
+      List<MenuItemView> itemViews,
+      EvalResult evalResult) {}
+
+  /** The promotions-aware breakdown + engine result produced by {@link #recomputeWithPromotions}. */
+  private record EngineRecompute(PriceBreakdown breakdown, EvalResult evalResult) {}
 }
