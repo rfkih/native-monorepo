@@ -411,6 +411,48 @@ public class RoutingConfig {
   }
 
   /**
+   * Loyalty earn-rule administration ({@code /api/v1/loyalty/earn-rules/**}) — owner/manager only:
+   * earn rules decide how much every sale is worth in points (money-adjacent config). Ordered
+   * before the general POS-roles loyalty route below ({@code @Order(HIGHEST_PRECEDENCE)} — first
+   * match wins, the {@code /users/me/**} precedent).
+   */
+  @Bean
+  @Order(Ordered.HIGHEST_PRECEDENCE)
+  RouterFunction<ServerResponse> loyaltyEarnRulesRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("loyalty-service-earn-rules")
+        .route(path("/api/v1/loyalty/earn-rules/**"), http())
+        .before(uri(routes.loyaltyService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
+   * Loyalty POS surface ({@code /api/v1/loyalty/**} — member lookup/enroll, gift-card lookup) —
+   * POS_ROLES: the cashier attaches members and gift cards at the till (ADR 0027). This is a CLIENT
+   * call through the gateway, not a service-to-service call; the verticals themselves never call
+   * loyalty-service synchronously (rule 2) — they validate against locally cached read models. PII
+   * stays inside loyalty-service; responses carry only the display name + a masked phone tail.
+   */
+  @Bean
+  RouterFunction<ServerResponse> loyaltyRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("loyalty-service")
+        .route(path("/api/v1/loyalty/**"), http())
+        .before(uri(routes.loyaltyService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(POS_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
    * All barbershop POS traffic under {@code /api/v1/barbershop/**} (barbershop-service) — POS
    * surface, vertical-prefixed exactly like {@link #carwashRoute} (ADR 0023/0024).
    */

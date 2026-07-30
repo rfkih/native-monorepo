@@ -52,6 +52,7 @@ native:
       carwash-service: ${CARWASH_SERVICE_URI:http://carwash-service:8080}
       barbershop-service: ${BARBERSHOP_SERVICE_URI:http://barbershop-service:8080}
       entitlement-service: ${ENTITLEMENT_SERVICE_URI:http://entitlement-service:8080}
+      loyalty-service: ${LOYALTY_SERVICE_URI:http://loyalty-service:8080}
     rate-limit:
       # Token bucket per (company_id, sub): capacity is the burst size; the bucket
       # refills refill-tokens every refill-period. Tuned low here so the limit is easy

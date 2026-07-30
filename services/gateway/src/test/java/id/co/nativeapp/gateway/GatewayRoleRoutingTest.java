@@ -907,6 +907,70 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
   }
 
   // ---------------------------------------------------------------------------
+  // /api/v1/loyalty/** — member/gift-card POS surface (POS_ROLES) with earn-rules
+  // carved out to the dashboard (ADR 0027)
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void aCashierCanReachTheLoyaltyMembersRoute() throws Exception {
+    // The cashier attaches members and gift cards at the till — a POS surface. PII stays inside
+    // loyalty-service; the route only fronts masked lookups.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/loyalty/members?phone=0812")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/loyalty/members?phone=0812");
+  }
+
+  @Test
+  void aCashierIsDeniedTheLoyaltyEarnRulesRouteWith403() throws Exception {
+    // Earn rules decide how much every sale is worth in points — owner/manager config, ordered
+    // BEFORE the general loyalty route (first match wins).
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/loyalty/earn-rules")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void anOwnerCanReachTheLoyaltyEarnRulesRoute() throws Exception {
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/loyalty/earn-rules")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/loyalty/earn-rules");
+  }
+
+  // ---------------------------------------------------------------------------
   // /api/v1/promotions/** — promo rules + coupons admin (owner/manager only, ADR 0026)
   // ---------------------------------------------------------------------------
 

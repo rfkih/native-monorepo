@@ -53,6 +53,7 @@ configMapGenerator:
       - CARWASH_SERVICE_URI=http://carwash-service.native.svc.cluster.local:80
       - BARBERSHOP_SERVICE_URI=http://barbershop-service.native.svc.cluster.local:80
       - ENTITLEMENT_SERVICE_URI=http://entitlement-service.native.svc.cluster.local:80
+      - LOYALTY_SERVICE_URI=http://loyalty-service.native.svc.cluster.local:80
 
 generatorOptions:
   # Hash-suffix the ConfigMap/Secret names so a config change rolls the pods: kustomize
