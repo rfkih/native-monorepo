@@ -74,6 +74,40 @@ cascade-deactivate + reactivation.)
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **Carwash POS — Phase 1 of the POS-parity program (2026-07-30, ADR 0023)** — the second vertical
+  sells: carwash-service grew from a bare `POST /washes` to a full POS backend on branch
+  `feat/pos-parity`. **Backend** (V4–V7): outlet-scoped catalog (`wash_package`/`wash_addon` +
+  `staff_profile` — a PII-free washer directory whose OPTIONAL `employee_id` link is snapshotted
+  onto each ticket for commission), `tax_charge_rule` mirroring restaurant V5 (⚠ `VAT_CARWASH`
+  1100 bp `ILLUSTRATIVE_PLACEHOLDER` — the carwash indirect-tax regime is SME-gated; NO
+  service-charge rule seeded → zero fall-through), and the `ticket` money path: stateless quote →
+  one-shot checkout (`/api/v1/carwash/tickets`) with the `WashService` idempotency contract
+  verbatim, server-side price re-resolution (client amounts never trusted), `OutletAccessGuard`
+  after the idempotency fast path, CASH capturing ticket+lines+payment+`SaleRecorded`(FULL
+  breakdown + tender)+metrics in ONE tx, QRIS/CARD flagged-pending (PENDING, `sale_id` NULL, zero
+  events) until `POST /{id}/capture` — revenue at capture (ADR 0006) preserved in one-shot form.
+  Metrics: `wash_count`/`upsell_amount`@outlet (as washes) + **`sales_amount`@employee, subject =
+  the WASHER** (unlike restaurant's cashier-subject), skipped when unlinked. **Zero Avro changes**
+  (the nullable breakdown fields existed; finance consumed the richer producer with zero changes);
+  legacy `POST /washes` untouched (OpenAPI-deprecated; its tests double as the back-compat proof).
+  **Gateway**: `/api/v1/carwash/**` → carwash-service, POS_ROLES — vertical path prefixing (the
+  `/api/v1/ap` precedent; restaurant's unprefixed routes are grandfathered). **Console**: reusable
+  `features/servicepos/` surface (config-driven per vertical: package grid, addon chips, bay +
+  vehicle + washer attribution, live quote with estimated badges, cash keypad / digital two-step
+  pending→capture modal, `ThermalReceipt` reuse) + `CatalogManagement` + `PosSwitch` at `/pos`
+  picking the surface by the effective outlet's vertical (fail-open-to-restaurant preserved); i18n
+  en/id. **Dev stack**: carwash + entitlement Debezium connectors added (the entitlement connector
+  is load-bearing — without it the module gate 403s live). **Review (money+tenancy): PASS; 3
+  warnings fixed** — W1 console minted a fresh idempotency key per click (ambiguous-failure retry
+  = double charge) → key now minted once per payment attempt and reused; W2 concurrent capture's
+  optimistic-lock loser 500'd → recovered to an idempotent 200 + a two-thread race test proving
+  exactly one `SaleRecorded`; W3 staff-profile writes were cashier-reachable (the employee link
+  routes commission) → owner/manager-only 403 (packages/addons stay at restaurant-menu parity).
+  Also: zero-grand-total checkout rejected (S1); found+fixed a Hibernate mismatch (`MoneyEmbeddable`
+  defaults `amount_minor` vs the tables' `price_minor` → `@AttributeOverride` on 3 entities).
+  Deviations kept for house-pattern parity: idempotency key in the body (not the header) with no
+  payload-mismatch 409, matching `WashService`/restaurant. Full gate green; next = Phase 2
+  (barbershop service + POS via /new-service, entitlement module rollout).
 - **Fixed-asset disposal — gain/loss on disposal (2026-07-30, ADR 0022)** — selling/scrapping an
   asset now books correctly: `POST /api/v1/assets/{id}/dispose` (Idempotency-Key required; 201/200
   replay; one-shot 409 `asset-already-disposed`) posts the derecognition ad-hoc — Dr 1900 proceeds

@@ -88,9 +88,9 @@ public class TicketService {
    *
    * <p><strong>Concurrent capture.</strong> Two racing captures of the same ticket are serialized
    * by the optimistic {@code @Version} on the payment/ticket rows: the loser's flush fails BEFORE
-   * its event is written, so exactly one {@code SaleRecorded} is ever emitted. The loser lands
-   * here as an {@link OptimisticLockingFailureException}; its capture transaction is aborted, so
-   * we re-read in a FRESH transaction and — the winner having captured — hand the loser the same
+   * its event is written, so exactly one {@code SaleRecorded} is ever emitted. The loser lands here
+   * as an {@link OptimisticLockingFailureException}; its capture transaction is aborted, so we
+   * re-read in a FRESH transaction and — the winner having captured — hand the loser the same
    * captured ticket (the idempotent-retry semantics a sequential re-capture already gets).
    *
    * @throws NotEntitledException if the bound company is not entitled to the carwash module (→ 403)

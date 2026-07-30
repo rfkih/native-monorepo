@@ -9,8 +9,8 @@ import id.co.nativeapp.carwash.entitlement.dto.EntitlementProjectedEvent;
 import id.co.nativeapp.carwash.entitlement.service.EntitlementProjectionService;
 import id.co.nativeapp.carwash.payment.domain.TenderType;
 import id.co.nativeapp.carwash.ticket.domain.ItemType;
-import id.co.nativeapp.carwash.ticket.dto.CheckoutResult;
 import id.co.nativeapp.carwash.ticket.dto.CheckoutRequest;
+import id.co.nativeapp.carwash.ticket.dto.CheckoutResult;
 import id.co.nativeapp.carwash.ticket.dto.PaymentRequest;
 import id.co.nativeapp.carwash.ticket.dto.TicketLineInput;
 import id.co.nativeapp.carwash.ticket.dto.TicketResponse;
@@ -37,8 +37,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * flush trips the optimistic {@code @Version} BEFORE any event write, and {@code
  * TicketService.capture} recovers it with a fresh-transaction re-read — so BOTH callers succeed
  * with the same CAPTURED ticket, and exactly ONE {@code SaleRecorded} exists. This is the
- * two-terminals-marking-the-same-QRIS-paid race on a money path: the invariant under test is
- * "never a second revenue event".
+ * two-terminals-marking-the-same-QRIS-paid race on a money path: the invariant under test is "never
+ * a second revenue event".
  */
 @SpringBootTest
 class TicketCaptureConcurrencyTest extends KafkaPostgresRedisTestBase {
