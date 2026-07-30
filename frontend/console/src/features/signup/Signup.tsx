@@ -18,6 +18,9 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Field, TextInput } from '@/components/ui/Field'
 import { ChoiceCards } from '@/components/ui/ChoiceCards'
+import { Segmented } from '@/components/ui/Segmented'
+import { Select } from '@/components/ui/Select'
+import { countryName, countryOptions, derivedCurrency } from '@/lib/countries'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
 import { BrandMark } from '@/components/Wordmark'
@@ -28,19 +31,39 @@ import { useSignup, type SignupRequest, type SignupResponse } from './api'
 // Barbershop scene for the brand panel (licensed — see src/assets/landing/SOURCES.md).
 import brandPanelPhoto from '@/assets/landing/signup-w1024.webp'
 
-// Mirrors onboarding — the same supported currencies and languages. The server enforces the
-// same whitelists authoritatively (SignupRequest @Pattern) — these lists are the UI copy of them.
-const CURRENCIES = ['IDR', 'USD'] as const
+// Mirrors onboarding — the same supported languages/verticals. The server enforces the same
+// whitelists authoritatively (SignupRequest @Pattern) — these lists are the UI copy of them.
+// There is NO currency list any more: the base currency is DERIVED from the country (ADR 0025).
 const LANGS = ['en', 'id'] as const
 const VERTICALS = ['restaurant', 'carwash', 'barbershop'] as const
+const COMPANY_SIZES = ['1-5', '6-20', '21-50', '51-250', '250+'] as const
+const INTERESTS = ['own-company', 'client-services', 'student', 'teacher'] as const
+
+// Wire token → i18n key maps (rule 9: option labels are localized copy, tokens are contract).
+const SIZE_KEYS: Record<(typeof COMPANY_SIZES)[number], string> = {
+  '1-5': 'signup.companySizeOpt1to5',
+  '6-20': 'signup.companySizeOpt6to20',
+  '21-50': 'signup.companySizeOpt21to50',
+  '51-250': 'signup.companySizeOpt51to250',
+  '250+': 'signup.companySizeOpt250plus',
+}
+const INTEREST_KEYS: Record<(typeof INTERESTS)[number], string> = {
+  'own-company': 'signup.interestOwnCompany',
+  'client-services': 'signup.interestClientServices',
+  student: 'signup.interestStudent',
+  teacher: 'signup.interestTeacher',
+}
 
 const PASSWORD_MIN_LENGTH = 8
+// UI copy of the server's lenient phone check (SignupRequest @Pattern) — advisory only.
+const PHONE_RE = /^\+?[0-9][0-9 ()\-]{5,31}$/
 
 // Step indexes — the Review rows link back to these.
 const STEP_COMPANY = 0
-const STEP_SETTINGS = 1
-const STEP_ACCOUNT = 2
-const STEP_REVIEW = 3
+const STEP_REGION = 1
+const STEP_YOU = 2
+const STEP_SECURITY = 3
+const STEP_REVIEW = 4
 
 // ── Validation helpers ────────────────────────────────────────────────────────
 
@@ -71,7 +94,9 @@ function passwordStrength(pw: string): 0 | 1 | 2 | 3 | 4 {
 interface FormErrors {
   companyName?: string
   firstBusinessName?: string
+  ownerFirstName?: string
   ownerEmail?: string
+  phone?: string
   ownerPassword?: string
   ownerPasswordConfirm?: string
   terms?: string
@@ -372,12 +397,17 @@ export function Signup() {
   // Form state
   const [step, setStep] = useState(STEP_COMPANY)
   const [companyName, setCompanyName] = useState('')
-  const [baseCurrency, setBaseCurrency] = useState<string>('IDR')
+  const [country, setCountry] = useState<string>('ID')
   const [defaultLanguage, setDefaultLanguage] = useState<string>(
     i18n.language === 'id' ? 'id' : 'en',
   )
   const [firstBusinessName, setFirstBusinessName] = useState('')
   const [vertical, setVertical] = useState<string>('restaurant')
+  const [ownerFirstName, setOwnerFirstName] = useState('')
+  const [ownerLastName, setOwnerLastName] = useState('')
+  const [phone, setPhone] = useState('')
+  const [companySize, setCompanySize] = useState<string>('1-5')
+  const [primaryInterest, setPrimaryInterest] = useState<string>('own-company')
   const [ownerEmail, setOwnerEmail] = useState('')
   const [ownerPassword, setOwnerPassword] = useState('')
   const [ownerPasswordConfirm, setOwnerPasswordConfirm] = useState('')
@@ -385,10 +415,15 @@ export function Signup() {
   const [errors, setErrors] = useState<FormErrors>({})
   const [success, setSuccess] = useState<SignupResponse | null>(null)
 
+  // Derived, never chosen (ADR 0025): the country decides the base currency; the server
+  // re-derives authoritatively (an API caller cannot pick a currency either).
+  const baseCurrency = derivedCurrency(country)
+
   const steps = [
     t('signup.stepCompany'),
-    t('signup.stepSettings'),
-    t('signup.stepAccount'),
+    t('signup.stepRegion'),
+    t('signup.stepYou'),
+    t('signup.stepSecurity'),
     t('signup.stepReview'),
   ]
 
@@ -400,12 +435,18 @@ export function Signup() {
       if (!companyName.trim()) errs.companyName = t('signup.fieldRequired')
       if (!firstBusinessName.trim()) errs.firstBusinessName = t('signup.fieldRequired')
     }
-    if (s === STEP_ACCOUNT) {
+    if (s === STEP_YOU) {
+      if (!ownerFirstName.trim()) errs.ownerFirstName = t('signup.fieldRequired')
       if (!ownerEmail.trim()) {
         errs.ownerEmail = t('signup.fieldRequired')
       } else if (!isValidEmail(ownerEmail)) {
         errs.ownerEmail = t('signup.emailInvalid')
       }
+      if (phone.trim() && !PHONE_RE.test(phone.trim())) {
+        errs.phone = t('signup.phoneInvalid')
+      }
+    }
+    if (s === STEP_SECURITY) {
       if (!ownerPassword) {
         errs.ownerPassword = t('signup.fieldRequired')
       } else if (ownerPassword.length < PASSWORD_MIN_LENGTH) {
@@ -436,10 +477,15 @@ export function Signup() {
   function submit() {
     const body: SignupRequest = {
       companyName: companyName.trim(),
-      baseCurrency,
+      country,
       defaultLanguage,
       firstBusinessName: firstBusinessName.trim(),
       vertical,
+      ownerFirstName: ownerFirstName.trim(),
+      ownerLastName: ownerLastName.trim() || undefined,
+      phone: phone.trim() || undefined,
+      companySize,
+      primaryInterest,
       ownerEmail: ownerEmail.trim(),
       ownerPassword,
       termsAccepted,
@@ -604,29 +650,32 @@ export function Signup() {
                 </div>
               )}
 
-              {/* Step 1 — Currency + language (permanent) */}
-              {step === STEP_SETTINGS && (
+              {/* Step 1 — Region: country decides the (locked) base currency; language */}
+              {step === STEP_REGION && (
                 <div className="space-y-6">
-                  <Field
-                    label={t('signup.baseCurrency')}
-                    hint={t('signup.baseCurrencyHint')}
-                  >
-                    <ChoiceCards
-                      name="currency"
-                      value={baseCurrency}
-                      onChange={setBaseCurrency}
-                      options={CURRENCIES.map((c) => ({
-                        value: c,
-                        title: c,
-                        subtitle: t(`currency.${c}`),
-                        aside: (
-                          <span className="font-mono text-xs text-ink-3">
-                            {symbolOf(c, i18n.language)}
-                          </span>
-                        ),
-                      }))}
-                    />
+                  <Field label={t('signup.country')} htmlFor="country" hint={t('signup.countryHint')}>
+                    <Select
+                      id="country"
+                      autoFocus
+                      value={country}
+                      onChange={(e) => setCountry(e.target.value)}
+                    >
+                      {countryOptions(i18n.language).map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </Select>
                   </Field>
+                  {/* The derived, immutable currency — shown, never chosen (ADR 0025) */}
+                  <div className="flex items-start gap-2.5 rounded-xl border border-line bg-paper px-3.5 py-3">
+                    <Lock className="mt-0.5 size-3.5 shrink-0 text-ink-3" aria-hidden />
+                    <p className="text-xs leading-relaxed text-ink-2">
+                      {t('signup.derivedCurrencyNote', {
+                        currency: `${baseCurrency} (${symbolOf(baseCurrency, i18n.language)})`,
+                      })}
+                    </p>
+                  </div>
                   <Field
                     label={t('signup.defaultLanguage')}
                     hint={t('signup.defaultLanguageHint')}
@@ -649,9 +698,42 @@ export function Signup() {
                 </div>
               )}
 
-              {/* Step 2 — Owner account credentials + consent */}
-              {step === STEP_ACCOUNT && (
+              {/* Step 2 — About you: name, contact and the Odoo-style funnel questions */}
+              {step === STEP_YOU && (
                 <div className="space-y-5">
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field
+                      label={t('signup.ownerFirstName')}
+                      htmlFor="ownerFirstName"
+                      error={errors.ownerFirstName}
+                    >
+                      <TextInput
+                        id="ownerFirstName"
+                        autoFocus
+                        autoComplete="given-name"
+                        value={ownerFirstName}
+                        onChange={(e) => {
+                          setOwnerFirstName(e.target.value)
+                          if (errors.ownerFirstName)
+                            setErrors((p) => ({ ...p, ownerFirstName: undefined }))
+                        }}
+                        placeholder={t('signup.ownerFirstNamePlaceholder')}
+                      />
+                    </Field>
+                    <Field
+                      label={t('signup.ownerLastName')}
+                      htmlFor="ownerLastName"
+                      hint={t('signup.ownerLastNameHint')}
+                    >
+                      <TextInput
+                        id="ownerLastName"
+                        autoComplete="family-name"
+                        value={ownerLastName}
+                        onChange={(e) => setOwnerLastName(e.target.value)}
+                        placeholder={t('signup.ownerLastNamePlaceholder')}
+                      />
+                    </Field>
+                  </div>
                   <Field
                     label={t('signup.ownerEmail')}
                     htmlFor="ownerEmail"
@@ -660,7 +742,6 @@ export function Signup() {
                     <TextInput
                       id="ownerEmail"
                       type="email"
-                      autoFocus
                       autoComplete="email"
                       value={ownerEmail}
                       onChange={(e) => {
@@ -670,6 +751,53 @@ export function Signup() {
                       placeholder={t('signup.ownerEmailPlaceholder')}
                     />
                   </Field>
+                  <Field
+                    label={t('signup.phone')}
+                    htmlFor="phone"
+                    hint={errors.phone ? undefined : t('signup.phoneHint')}
+                    error={errors.phone}
+                  >
+                    <TextInput
+                      id="phone"
+                      type="tel"
+                      autoComplete="tel"
+                      value={phone}
+                      onChange={(e) => {
+                        setPhone(e.target.value)
+                        if (errors.phone) setErrors((p) => ({ ...p, phone: undefined }))
+                      }}
+                      placeholder={t('signup.phonePlaceholder')}
+                    />
+                  </Field>
+                  <Field label={t('signup.companySize')}>
+                    <Segmented
+                      ariaLabel={t('signup.companySize')}
+                      value={companySize}
+                      onChange={setCompanySize}
+                      options={COMPANY_SIZES.map((s) => ({
+                        value: s as string,
+                        label: t(SIZE_KEYS[s] as Parameters<typeof t>[0]),
+                      }))}
+                    />
+                  </Field>
+                  <Field label={t('signup.primaryInterest')}>
+                    <ChoiceCards
+                      name="interest"
+                      columns={1}
+                      value={primaryInterest}
+                      onChange={setPrimaryInterest}
+                      options={INTERESTS.map((v) => ({
+                        value: v,
+                        title: t(INTEREST_KEYS[v] as Parameters<typeof t>[0]),
+                      }))}
+                    />
+                  </Field>
+                </div>
+              )}
+
+              {/* Step 3 — Security: credentials + consent */}
+              {step === STEP_SECURITY && (
+                <div className="space-y-5">
                   <Field
                     label={t('signup.ownerPassword')}
                     htmlFor="ownerPassword"
@@ -728,7 +856,7 @@ export function Signup() {
                 </div>
               )}
 
-              {/* Step 3 — Review */}
+              {/* Step 4 — Review */}
               {step === STEP_REVIEW && (
                 <ReviewPanel
                   fixedLabel={t('signup.fixedNote')}
@@ -751,22 +879,45 @@ export function Signup() {
                       step: STEP_COMPANY,
                     },
                     {
+                      label: t('signup.country'),
+                      value: countryName(country, i18n.language),
+                      step: STEP_REGION,
+                    },
+                    {
+                      // Derived from the country — the pencil jumps to Region, because changing
+                      // the country IS how the currency changes (ADR 0025).
                       label: t('signup.baseCurrency'),
                       value: `${baseCurrency} · ${t(`currency.${baseCurrency}`)}`,
-                      step: STEP_SETTINGS,
+                      step: STEP_REGION,
                       fixed: true,
                     },
                     {
                       label: t('signup.defaultLanguage'),
                       value: t(`lang.${defaultLanguage}`),
-                      step: STEP_SETTINGS,
+                      step: STEP_REGION,
                       fixed: true,
                     },
-                    { label: t('signup.ownerEmail'), value: ownerEmail, step: STEP_ACCOUNT },
+                    {
+                      label: t('signup.ownerName'),
+                      value: [ownerFirstName, ownerLastName].filter(Boolean).join(' '),
+                      step: STEP_YOU,
+                    },
+                    { label: t('signup.ownerEmail'), value: ownerEmail, step: STEP_YOU },
+                    { label: t('signup.phone'), value: phone, step: STEP_YOU },
+                    {
+                      label: t('signup.companySize'),
+                      value: t(SIZE_KEYS[companySize as (typeof COMPANY_SIZES)[number]] as Parameters<typeof t>[0]),
+                      step: STEP_YOU,
+                    },
+                    {
+                      label: t('signup.primaryInterest'),
+                      value: t(INTEREST_KEYS[primaryInterest as (typeof INTERESTS)[number]] as Parameters<typeof t>[0]),
+                      step: STEP_YOU,
+                    },
                     {
                       label: t('signup.ownerPassword'),
                       value: '',
-                      step: STEP_ACCOUNT,
+                      step: STEP_SECURITY,
                       secret: true,
                     },
                   ]}

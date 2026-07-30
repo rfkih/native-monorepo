@@ -3,11 +3,21 @@ import { apiFetch, type ApiError } from '@/lib/api'
 
 export interface SignupRequest {
   companyName: string
-  baseCurrency: string
+  /** ISO 3166-1 alpha-2 — the server DERIVES the base currency from it (ADR 0025). */
+  country: string
   defaultLanguage: string
   firstBusinessName: string
   /** Lowercase business vertical (restaurant | carwash | barbershop). */
   vertical: string
+  ownerFirstName: string
+  /** Optional — Indonesian mononyms are common. */
+  ownerLastName?: string
+  /** Optional; lenient format, no SMS verification. */
+  phone?: string
+  /** Employee-count band (1-5 | 6-20 | 21-50 | 51-250 | 250+). */
+  companySize: string
+  /** own-company | client-services | student | teacher. */
+  primaryInterest: string
   ownerEmail: string
   ownerPassword: string
   /** ToS consent — also enforced server-side (@AssertTrue). */
