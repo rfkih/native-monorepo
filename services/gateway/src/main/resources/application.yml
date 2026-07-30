@@ -49,6 +49,7 @@ native:
       restaurant-service: ${RESTAURANT_SERVICE_URI:http://restaurant-service:8080}
       finance-service: ${FINANCE_SERVICE_URI:http://finance-service:8080}
       employee-service: ${EMPLOYEE_SERVICE_URI:http://employee-service:8080}
+      carwash-service: ${CARWASH_SERVICE_URI:http://carwash-service:8080}
     rate-limit:
       # Token bucket per (company_id, sub): capacity is the burst size; the bucket
       # refills refill-tokens every refill-period. Tuned low here so the limit is easy

@@ -366,6 +366,28 @@ public class RoutingConfig {
         .build();
   }
 
+  /**
+   * All carwash POS traffic under {@code /api/v1/carwash/**} (carwash-service) — POS surface.
+   * Vertical services after restaurant are namespaced by vertical (the {@code /api/v1/ap/**}
+   * precedent applied at vertical scope): restaurant's unprefixed paths ({@code /orders},
+   * {@code /menu}, …) are grandfathered, but carwash and every later vertical prefix so they can
+   * never collide with each other. Covers catalog (packages/addons/staff-profiles) and tickets
+   * (quote/checkout/read).
+   */
+  @Bean
+  RouterFunction<ServerResponse> carwashRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("carwash-service")
+        .route(path("/api/v1/carwash/**"), http())
+        .before(uri(routes.carwashService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(POS_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
   // ---------------------------------------------------------------------------
   // employee-service (self-service /me — every business role)
   // ---------------------------------------------------------------------------

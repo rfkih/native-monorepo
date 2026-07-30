@@ -20,4 +20,5 @@ public record GatewayRouteProperties(
     @NotNull URI orgService,
     @NotNull URI restaurantService,
     @NotNull URI financeService,
-    @NotNull URI employeeService) {}
+    @NotNull URI employeeService,
+    @NotNull URI carwashService) {}

@@ -49,6 +49,8 @@ configMapGenerator:
       - ORG_SERVICE_URI=http://org-service.native.svc.cluster.local:80
       - RESTAURANT_SERVICE_URI=http://restaurant-service.native.svc.cluster.local:80
       - FINANCE_SERVICE_URI=http://finance-service.native.svc.cluster.local:80
+      - EMPLOYEE_SERVICE_URI=http://employee-service.native.svc.cluster.local:80
+      - CARWASH_SERVICE_URI=http://carwash-service.native.svc.cluster.local:80
 
 generatorOptions:
   # Hash-suffix the ConfigMap/Secret names so a config change rolls the pods: kustomize

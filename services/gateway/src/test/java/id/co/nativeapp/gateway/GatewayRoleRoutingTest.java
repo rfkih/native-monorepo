@@ -842,6 +842,50 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
   }
 
   // ---------------------------------------------------------------------------
+  // /api/v1/carwash/** — the carwash vertical POS surface (POS_ROLES, vertical-prefixed)
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void aCashierCanReachTheCarwashPackagesRoute() throws Exception {
+    // Carwash is the second vertical POS; its whole surface is vertical-prefixed
+    // (/api/v1/carwash/**) and POS_ROLES-gated like the restaurant POS routes.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/carwash/packages")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/carwash/packages");
+  }
+
+  @Test
+  void anOwnerCanReachTheCarwashRouteWithInjectedTenantHeaders() throws Exception {
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/carwash/tickets/some-id")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    RecordedRequest forwarded = theForwardedRequest();
+    assertThat(forwarded.getPath()).isEqualTo("/api/v1/carwash/tickets/some-id");
+    // The new route bean must apply the tenant filter like every other authenticated route.
+    assertThat(forwarded.getHeader("X-Company-Id")).isEqualTo(EXPECTED_COMPANY_ID);
+    assertThat(forwarded.getHeader("X-Actor")).isNotBlank();
+    assertThat(forwarded.getHeader("X-Roles")).isNotBlank();
+  }
+
+  // ---------------------------------------------------------------------------
   // /api/v1/me/** — employee self-service (every business role)
   // ---------------------------------------------------------------------------
 
