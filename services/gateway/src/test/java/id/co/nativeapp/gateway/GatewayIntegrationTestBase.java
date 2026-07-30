@@ -179,6 +179,8 @@ abstract class GatewayIntegrationTestBase {
     registry.add("native.gateway.routes.finance-service", stubUri);
     registry.add("native.gateway.routes.employee-service", stubUri);
     registry.add("native.gateway.routes.carwash-service", stubUri);
+    registry.add("native.gateway.routes.barbershop-service", stubUri);
+    registry.add("native.gateway.routes.entitlement-service", stubUri);
   }
 
   /**

@@ -388,6 +388,45 @@ public class RoutingConfig {
         .build();
   }
 
+  /**
+   * All barbershop POS traffic under {@code /api/v1/barbershop/**} (barbershop-service) — POS
+   * surface, vertical-prefixed exactly like {@link #carwashRoute} (ADR 0023/0024).
+   */
+  @Bean
+  RouterFunction<ServerResponse> barbershopRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("barbershop-service")
+        .route(path("/api/v1/barbershop/**"), http())
+        .before(uri(routes.barbershopService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(POS_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
+   * Module entitlements under {@code /api/v1/entitlements/**} (entitlement-service) — the
+   * owner/manager self-serve path for activating a module on an EXISTING company (ADR 0024: new
+   * modules are default-granted only at company creation; a Flyway backfill into the FORCE-RLS
+   * {@code tenant_entitlement} is impossible by design, so existing companies grant through this
+   * surface and the grant flows out via the outbox as {@code EntitlementGranted}).
+   */
+  @Bean
+  RouterFunction<ServerResponse> entitlementsRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("entitlement-service")
+        .route(path("/api/v1/entitlements/**"), http())
+        .before(uri(routes.entitlementService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
   // ---------------------------------------------------------------------------
   // employee-service (self-service /me — every business role)
   // ---------------------------------------------------------------------------

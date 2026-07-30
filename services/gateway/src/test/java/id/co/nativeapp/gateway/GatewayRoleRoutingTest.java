@@ -886,6 +886,72 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
   }
 
   // ---------------------------------------------------------------------------
+  // /api/v1/barbershop/** — the barbershop vertical POS surface (POS_ROLES, vertical-prefixed)
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void aCashierCanReachTheBarbershopServicesRoute() throws Exception {
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/barbershop/services")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/barbershop/services");
+  }
+
+  // ---------------------------------------------------------------------------
+  // /api/v1/entitlements/** — module self-serve (owner/manager dashboard surface only)
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void aCashierIsDeniedTheEntitlementsRouteWith403() throws Exception {
+    // Module grants change what a company pays for — strictly a dashboard surface, never POS.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/entitlements")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void anOwnerCanReachTheEntitlementsRouteWithInjectedTenantHeaders() throws Exception {
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/entitlements")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    RecordedRequest forwarded = theForwardedRequest();
+    assertThat(forwarded.getPath()).isEqualTo("/api/v1/entitlements");
+    assertThat(forwarded.getHeader("X-Company-Id")).isEqualTo(EXPECTED_COMPANY_ID);
+  }
+
+  // ---------------------------------------------------------------------------
   // /api/v1/me/** — employee self-service (every business role)
   // ---------------------------------------------------------------------------
 
