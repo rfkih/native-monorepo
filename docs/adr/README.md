@@ -39,3 +39,4 @@ boundary, a security posture. Routine, local choices do not need one — use a c
 | [0019](0019-cash-flow-statement-and-budgets.md) | Cash Flow Statement (indirect, GL-derived) + per-month Budgets | Accepted |
 | [0020](0020-fixed-assets-and-deferrals.md) | Fixed assets & deferrals — the monthly amortization run | Accepted |
 | [0021](0021-multi-company-ownership.md) | Multi-company ownership — one login, 1..N businesses (multivalued claim + validated selection) | Accepted |
+| [0022](0022-fixed-asset-disposal.md) | Fixed-asset disposal — gain/loss on disposal as other income | Accepted |

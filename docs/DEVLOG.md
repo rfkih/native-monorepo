@@ -74,6 +74,26 @@ cascade-deactivate + reactivation.)
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **Fixed-asset disposal — gain/loss on disposal (2026-07-30, ADR 0022)** — selling/scrapping an
+  asset now books correctly: `POST /api/v1/assets/{id}/dispose` (Idempotency-Key required; 201/200
+  replay; one-shot 409 `asset-already-disposed`) posts the derecognition ad-hoc — Dr 1900 proceeds
+  + Dr 1590 accumulated / Cr 1500 cost, plug Cr **4200 Gain** / Dr **5600 Loss** (new
+  GAIN/LOSS_ON_DISPOSAL roles, V36) — into the CURRENT period (disposalDate = metadata; backdating
+  would restate closed/filed periods). Guards: depreciation-in-step PER ASSET (posted-line COUNT ==
+  months due before the posting period + no line ≥ it — runs may skip months, so MAX(period) proves
+  nothing; disposal month gets no depreciation) → 409 `asset-depreciation-behind`. Disposal facts
+  FROZEN onto fixed_asset (V36 all-or-nothing CHECK); both asset writers take the shared
+  `company:ASSET_POSTING` advisory lock first, so a dispose can never interleave with a run posting
+  the same asset's depreciation. **CashFlowReader reclassifies disposal periods from the frozen
+  columns**: pure capex on 1500, ONE `DISPOSAL_PROCEEDS` investing inflow, pure depreciation
+  add-back on 1590, gain/loss backed out of operating GROSS — the identity nets to zero so the
+  exact-reconciliation assert still closes (and now cross-checks frozen vs posted). Register shows
+  DISPOSED + zero book value + proceeds; console: status column + Dispose dialog (date + sale
+  price, 0 = write-off) + localized proceeds line on the cash-flow statement. **512 finance tests
+  green** (17 new: posting-legs units incl. write-off, controller slice, 2 lifecycle E2Es with
+  cash-flow assertions + guard 409s vs real RLS Postgres, dispose×2 race + dispose-vs-run race
+  proving the shared lock). SME-gated: disposal-month convention, 4200/5600 codes, PPN 16D not
+  computed.
 - **Multi-company ownership — one login, 1..N businesses (2026-07-30, ADR 0021)** — each business is
   its own legal entity = its own company with isolated books; a login can now hold MANY. The
   `company_id` KC claim became **multivalued** (the allowed set, first = default; mapper change in
