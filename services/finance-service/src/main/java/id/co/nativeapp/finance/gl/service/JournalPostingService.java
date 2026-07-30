@@ -429,8 +429,25 @@ public class JournalPostingService {
    *   <li>{@code "TAX"} — the tax amount ({@link SaleRecordedEvent#effectiveTax()})
    * </ul>
    *
+   * and the Phase 4 (ADR 0027, V37 SALE v3) basis values:
+   *
+   * <ul>
+   *   <li>{@code "NET_TENDER"} — the residual clearing leg: {@code amount −
+   *       gift_card_redeemed_minor} ({@link SaleRecordedEvent#amount()} minus {@link
+   *       SaleRecordedEvent#effectiveGiftCardRedeemed()}). For an event with no gift-card
+   *       redemption this equals {@code amount} exactly, so it collapses to the pre-Phase-4 {@code
+   *       "GROSS"} clearing-debit value (the legacy-byte-identical guarantee).
+   *   <li>{@code "GIFT_CARD_TENDER"} — the gift-card-settled leg ({@link
+   *       SaleRecordedEvent#effectiveGiftCardRedeemed()}); zero (and therefore omitted by the
+   *       caller's zero-line-omission) when no gift card was used.
+   *   <li>{@code "LOYALTY_REDEEMED"} — the points-redemption contra-revenue leg ({@link
+   *       SaleRecordedEvent#effectiveLoyaltyRedeemed()}); zero (and therefore omitted) when no
+   *       points were redeemed.
+   * </ul>
+   *
    * <p>Amounts are NEVER recomputed in finance — each basis just SELECTS a field carried on the
-   * event. A null {@code event} falls back to the original GROSS-only behaviour.
+   * event (or, for {@code NET_TENDER}, a single subtraction of two such fields). A null {@code
+   * event} falls back to the original GROSS-only behaviour.
    */
   static Money resolveAmount(String amountBasis, Money gross, SaleRecordedEvent event) {
     if (event == null) {
@@ -442,11 +459,15 @@ public class JournalPostingService {
       case "DISCOUNT" -> event.effectiveDiscount();
       case "SERVICE_CHARGE" -> event.effectiveServiceCharge();
       case "TAX" -> event.effectiveTax();
+      case "NET_TENDER" -> event.amount().minus(event.effectiveGiftCardRedeemed());
+      case "GIFT_CARD_TENDER" -> event.effectiveGiftCardRedeemed();
+      case "LOYALTY_REDEEMED" -> event.effectiveLoyaltyRedeemed();
       default ->
           throw new IllegalStateException(
               "Unsupported amount_basis: '"
                   + amountBasis
-                  + "' — supported values: GROSS, GROSS_REVENUE, DISCOUNT, SERVICE_CHARGE, TAX");
+                  + "' — supported values: GROSS, GROSS_REVENUE, DISCOUNT, SERVICE_CHARGE, TAX,"
+                  + " NET_TENDER, GIFT_CARD_TENDER, LOYALTY_REDEEMED");
     };
   }
 

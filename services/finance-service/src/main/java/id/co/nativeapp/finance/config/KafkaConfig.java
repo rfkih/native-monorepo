@@ -144,6 +144,7 @@ public class KafkaConfig {
         id.co.nativeapp.finance.grouptb.messaging.TrialBalancePublishedDecodeException.class,
         id.co.nativeapp.finance.reversal.messaging.SaleVoidedDecodeException.class,
         id.co.nativeapp.finance.reversal.messaging.SaleRefundedDecodeException.class,
+        id.co.nativeapp.finance.giftcard.messaging.GiftCardSoldDecodeException.class,
         id.co.nativeapp.finance.orgref.messaging.OrgUnitRefDecodeException.class,
         id.co.nativeapp.finance.orgref.messaging.OrgUnitRefMissingEventIdException.class,
         id.co.nativeapp.finance.revenue.messaging.MissingEventIdException.class,

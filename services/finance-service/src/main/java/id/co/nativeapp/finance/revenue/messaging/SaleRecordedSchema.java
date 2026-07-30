@@ -58,6 +58,14 @@ public final class SaleRecordedSchema {
    * events / carwash; the enum name string for POS sales. The optional Phase 2 breakdown fields are
    * decoded — all {@code null} for legacy producers (carwash, direct-sale path).
    *
+   * <p><strong>Phase 4 (ADR 0027) loyalty/gift-card fields.</strong> The five trailing optional
+   * fields ({@code loyalty_member_id}, {@code loyalty_redeemed_points}, {@code
+   * loyalty_redeemed_minor}, {@code gift_card_id}, {@code gift_card_redeemed_minor}) are decoded
+   * the same way as the Phase 2 breakdown fields — {@code null} for a pre-Phase-4 producer (the
+   * Avro union defaults to {@code null} when the field is absent from the writer schema), so a
+   * pre-Phase-4 event decodes into a {@link SaleRecordedEvent} with all five fields {@code null},
+   * byte-identical to before Phase 4.
+   *
    * @param eventId the event's UUID (the outbox row / Debezium message id) — the idempotency key
    * @param payload the raw Avro bytes off the topic
    */
@@ -79,6 +87,15 @@ public final class SaleRecordedSchema {
     Object taxRuleVersionRaw = record.get("tax_rule_version");
     String taxRuleVersion = (taxRuleVersionRaw != null) ? taxRuleVersionRaw.toString() : null;
     Boolean usesIllustrative = (Boolean) record.get("uses_illustrative_rules");
+    // Phase 4 (ADR 0027) loyalty/gift-card fields — all ["null", ...] with default null; a
+    // pre-Phase-4 producer's bytes decode with every one of these as null (old-writer/new-reader).
+    Object loyaltyMemberIdRaw = record.get("loyalty_member_id");
+    String loyaltyMemberId = (loyaltyMemberIdRaw != null) ? loyaltyMemberIdRaw.toString() : null;
+    Long loyaltyRedeemedPoints = (Long) record.get("loyalty_redeemed_points");
+    Long loyaltyRedeemedMinor = (Long) record.get("loyalty_redeemed_minor");
+    Object giftCardIdRaw = record.get("gift_card_id");
+    String giftCardId = (giftCardIdRaw != null) ? giftCardIdRaw.toString() : null;
+    Long giftCardRedeemedMinor = (Long) record.get("gift_card_redeemed_minor");
     return new SaleRecordedEvent(
         eventId,
         saleId,
@@ -92,7 +109,12 @@ public final class SaleRecordedSchema {
         serviceChargeMinor,
         taxMinor,
         taxRuleVersion,
-        usesIllustrative);
+        usesIllustrative,
+        loyaltyMemberId,
+        loyaltyRedeemedPoints,
+        loyaltyRedeemedMinor,
+        giftCardId,
+        giftCardRedeemedMinor);
   }
 
   private static Schema parse() {

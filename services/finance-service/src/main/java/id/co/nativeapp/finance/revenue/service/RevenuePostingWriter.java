@@ -172,13 +172,21 @@ public class RevenuePostingWriter {
     //    double-count those components on the P&L. Legacy events (no breakdown) fall back to
     //    subtotal == amount, which preserves Phase 1 behaviour exactly.
     //
-    //    netRevenue = subtotal − discount (= taxableBase in the pricing formula).
+    //    Phase 4 (ADR 0027): loyalty-points redemption is ALSO a contra-revenue deduction — exactly
+    //    like discount — so it joins the net-revenue subtraction. A pre-Phase-4 event has
+    //    loyaltyRedeemedMinor == null, so effectiveLoyaltyRedeemed() == 0 and this reduces to
+    //    EXACTLY the Phase 2 formula (regression-safe). gift_card_redeemed_minor never appears here
+    //    — a gift-card redemption is a TENDER settlement, not a revenue deduction.
+    //
+    //    netRevenue = subtotal − discount − loyaltyRedeemed (= taxableBase in the pricing formula).
     Money subtotal = event.effectiveSubtotal();
     Money discount = event.effectiveDiscount();
-    Money netRevenue = subtotal.minus(discount);
+    Money loyaltyRedeemed = event.effectiveLoyaltyRedeemed();
+    Money netRevenue = subtotal.minus(discount).minus(loyaltyRedeemed);
     String currencyCode = amount.currency().getCurrencyCode();
 
-    // 3a) consolidated_revenue read model: accumulate the NET revenue (subtotal − discount).
+    // 3a) consolidated_revenue read model: accumulate the NET revenue (subtotal − discount −
+    //     loyaltyRedeemed).
     jdbcTemplate.update(
         UPSERT_REVENUE_SQL,
         UUID.randomUUID(),
@@ -210,10 +218,13 @@ public class RevenuePostingWriter {
     pnlReadModel.addRevenue(
         period, netRevenue, companyId, actor, event.effectiveUsesIllustrative());
 
-    // 4) Double-entry GL journal — SAME transaction, SAME processOnce claim. Use the Phase 2
-    //    breakdown-aware builder so the SALE v2 template's GROSS_REVENUE / DISCOUNT /
-    //    SERVICE_CHARGE / TAX basis values resolve correctly. Zero-amount lines are omitted.
-    //    The clearing account is routed by tender type (ADR 0006 slice 2).
+    // 4) Double-entry GL journal — SAME transaction, SAME processOnce claim. Use the Phase 2/4
+    //    breakdown-aware builder so the effective SALE template's GROSS_REVENUE / DISCOUNT /
+    //    SERVICE_CHARGE / TAX / NET_TENDER / GIFT_CARD_TENDER / LOYALTY_REDEEMED basis values
+    //    resolve correctly (V37 SALE v3 becomes the effective template once this Java change and
+    //    the migration are deployed together). Zero-amount lines are omitted. The clearing account
+    //    is routed by tender type (ADR 0006 slice 2); a gift-card-covered residual splits the
+    //    clearing debit onto GIFT_CARD_LIABILITY via the template, not this override.
     AccountRole clearingRole = resolveClearingRole(event.tenderType());
     JournalEntry glEntry =
         journalPostingService.buildEntryForSale(
@@ -230,9 +241,10 @@ public class RevenuePostingWriter {
     if (event.saleId() != null) {
       glEntry.setSaleAggregateId(event.saleId());
     }
-    // Phase 2 V19: store the precomputed net revenue (subtotal − discount) on the SALE entry so
-    // the reversal writer can unwind the read models by exactly the same amount that was
-    // accumulated — without account-code-dependent line inspection (which would be fragile).
+    // Phase 2 V19 (extended Phase 4, ADR 0027): store the precomputed net revenue (subtotal −
+    // discount − loyaltyRedeemed) on the SALE entry so the reversal writer can unwind the read
+    // models by exactly the same amount that was accumulated — without account-code-dependent line
+    // inspection (which would be fragile).
     glEntry.setNetRevenueMinor(netRevenue.amountMinor());
     // saveAndFlush flushes the journal_entry INSERT to Postgres immediately so the FK on
     // journal_line.entry_id is satisfied when the line INSERTs follow in the same transaction.

@@ -157,5 +157,35 @@ public enum AccountRole {
   EXPENSE,
   LABOR_EXPENSE,
   LABOR_CLEARING,
-  SUSPENSE
+  SUSPENSE,
+  /**
+   * Phase 4 loyalty/gift cards (ADR 0027, ILLUSTRATIVE — SME-gated): the gift-card liability
+   * control account. Credited when a card is sold/topped up ({@code GIFT_CARD_SALE} — a LIABILITY
+   * event, never revenue), debited as it is redeemed (the {@code GIFT_CARD_TENDER} leg of the
+   * {@code SALE} v3 template). Outstanding balance = stored value the company still owes bearers.
+   * Maps to account 2500 (ILLUSTRATIVE — SME-gated, V37).
+   */
+  GIFT_CARD_LIABILITY,
+  /**
+   * Phase 4 loyalty/gift cards (ADR 0027, ILLUSTRATIVE — SME-gated): points-redemption
+   * contra-revenue debit, extending the {@code SALE} v3 template exactly as {@link
+   * #SALES_DISCOUNT} does for the promo discount — points redemption is a discount, not a tender
+   * settlement (unlike a gift card). SME must confirm contra-revenue vs. a separate
+   * marketing/loyalty expense treatment. Maps to account 4030 (ILLUSTRATIVE — SME-gated, V37).
+   */
+  LOYALTY_DISCOUNT,
+  /**
+   * Phase 4 loyalty/gift cards (ADR 0027): accrued points liability. DEFINED-BUT-UNUSED in every
+   * Phase 4 posting template — the {@link #SERVICE_CHARGE_PAYABLE} precedent (V17): an earn is
+   * memo-only (no GL entry at earn time), so accruing this liability needs an SME-confirmed
+   * points-valuation + breakage model not yet decided. Maps to account 2510 (ILLUSTRATIVE, V37).
+   */
+  LOYALTY_LIABILITY,
+  /**
+   * Phase 4 loyalty/gift cards (ADR 0027): unredeemed/expired gift-card value recognised as
+   * income. DEFINED-BUT-UNUSED in every Phase 4 posting template — the {@link
+   * #SERVICE_CHARGE_PAYABLE} precedent (V17): recognising breakage needs an SME-confirmed policy
+   * (rate + timing) not yet decided. Maps to account 4900 (ILLUSTRATIVE, V37).
+   */
+  GIFT_CARD_BREAKAGE_INCOME
 }
