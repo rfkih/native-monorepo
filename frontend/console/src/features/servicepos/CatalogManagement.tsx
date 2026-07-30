@@ -607,7 +607,7 @@ function WashersSection({
         <h2 className="font-display text-base font-semibold text-ink">{t(config.staffTitleKey)}</h2>
         <Button size="sm" onClick={() => setDialog('create')}>
           <Plus className="size-4" aria-hidden="true" />
-          {t('serviceCatalog.addWasher')}
+          {t(config.staffLabels.addLabelKey)}
         </Button>
       </div>
 
@@ -615,7 +615,7 @@ function WashersSection({
         <Spinner className="size-5 text-ink-3" />
       ) : items.length === 0 ? (
         <p className="rounded-xl border border-dashed border-line bg-paper px-4 py-6 text-center text-sm text-ink-3">
-          {t('serviceCatalog.emptyWashers')}
+          {t(config.staffLabels.emptyKey)}
         </p>
       ) : (
         <ul className="space-y-1.5">
@@ -667,7 +667,7 @@ function WashersSection({
         <WasherDialog
           session={session}
           config={config}
-          titleKey="serviceCatalog.addWasher"
+          titleKey={config.staffLabels.addLabelKey}
           onClose={() => setDialog(null)}
         />
       ) : null}
@@ -675,7 +675,7 @@ function WashersSection({
         <WasherDialog
           session={session}
           config={config}
-          titleKey="serviceCatalog.editWasher"
+          titleKey={config.staffLabels.editLabelKey}
           profile={dialog}
           onClose={() => setDialog(null)}
         />

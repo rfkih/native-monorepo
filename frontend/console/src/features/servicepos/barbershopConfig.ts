@@ -33,6 +33,12 @@ export const barbershopConfig: VerticalPosConfig = {
     selectedLabelKey: 'barbershopPos.serviceSelectedLabel',
     addLabelKey: 'barbershopPos.addService',
     editLabelKey: 'barbershopPos.editService',
+    summaryEmptyKey: 'barbershopPos.summaryEmpty',
   },
   staffTitleKey: 'barbershopPos.staffTitle',
+  staffLabels: {
+    addLabelKey: 'barbershopPos.addBarber',
+    emptyKey: 'barbershopPos.emptyBarbers',
+    editLabelKey: 'barbershopPos.editBarber',
+  },
 }

@@ -74,6 +74,34 @@ cascade-deactivate + reactivation.)
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **Barbershop vertical + module rollout — Phase 2 of the POS-parity program (2026-07-30, ADR
+  0024)** — the THIRD vertical sells, proving the carwash shape is a clone-able template:
+  `services/barbershop-service` (145 files, 28 test suites) is a copy-with-rename of carwash with
+  ONLY the domain differences: catalog = `service_item` (+ `duration_minutes` NULL — RESERVED for a
+  future appointments app, persisted but inert) + `service_addon` + `staff_profile`; ticket carries
+  `chair` (optional) not `bay`, no vehicle plate, and **barber attribution MANDATORY**
+  (`staff_profile_id NOT NULL`, 400 without — every cut has a barber; the employee LINK stays
+  optional and `sales_amount`@employee is skipped unlinked); declared outlet metric =
+  `service_count` only; tax rule `VAT_BARBERSHOP` 1100 bp ILLUSTRATIVE (personal-care regime
+  SME-gated). One V1 baseline folds in every Phase-1 lesson (outbox traceparent, `price_minor`
+  `@AttributeOverride`, FORCE RLS everywhere). **Module rollout recipe** (the reusable part):
+  entitlement V4 inserts `barbershop` into `module_catalog` BEFORE the `default-modules` config
+  lands (`validateModulesExist` throws at the first `CompanyCreated` otherwise); NEW companies get
+  the default grant; EXISTING companies are deliberately NOT backfilled (a Flyway write into
+  FORCE-RLS `tenant_entitlement` is impossible by design and would bypass the outbox) — they
+  self-serve via the newly gateway-routed `POST /api/v1/entitlements` (DASHBOARD_ROLES) + a console
+  **ModulesPanel** on the org page (confirm-before-revoke). Gateway: `/api/v1/barbershop/**`
+  (POS_ROLES). Console: `servicepos` generalized by config with zero carwash copy changes —
+  `packagesPath` (packages|services), `primaryItemType`, per-vertical labels, `location.fieldName`
+  (**the wire seam: barbershop serializes `chair`, carwash `bay`; vehiclePlate omitted for
+  verticals without it**), required-attribution gate blocking Charge. **Review (money+tenancy):
+  PASS — "unusually faithful clone", zero money/tenancy findings; W1/W2 fixed** (carwash "washer"/
+  "package" copy leaking onto barbershop surfaces → staffLabels + summaryEmptyKey config groups).
+  The whole clone produced ONE functional defect (a wrong MockMvc import). Full gates green:
+  barbershop (28 suites), entitlement (6-module default grant), gateway (route matrix), console
+  build. Zero Avro changes — the third `SaleRecorded` producer. NOTE: parallel sessions share this
+  branch (signup/country work landed mid-phase as ADR 0025) — ADR numbers must be re-checked
+  against `docs/adr/` before each phase (promotions is now 0026).
 - **Odoo-style signup — country-derived currency, owner identity, funnel fields (2026-07-30,
   ADR 0025)** — the public signup now asks WHERE (country), not WHICH currency: `SignupRequest`
   dropped `baseCurrency` and gained `country` (ISO 3166-1 alpha-2) + `ownerFirstName`/optional

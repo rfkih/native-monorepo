@@ -1,12 +1,13 @@
 /**
- * ServicePos — the generic "package + add-ons" POS surface for service verticals (carwash today).
- * A full-screen front-office terminal, structurally the counterpart of features/pos/Pos.tsx but
- * driven entirely by a VerticalPosConfig instead of hardcoded restaurant concepts (menu items,
- * modifiers, tables, bills).
+ * ServicePos — the generic "primary item + add-ons" POS surface for service verticals (carwash
+ * and barbershop today). A full-screen front-office terminal, structurally the counterpart of
+ * features/pos/Pos.tsx but driven entirely by a VerticalPosConfig instead of hardcoded restaurant
+ * concepts (menu items, modifiers, tables, bills).
  *
- * Flow: pick ONE package (tap replaces the previous pick) + any number of add-ons (chips, each
- * with its own qty stepper) → fill the location field (bay) + optional vehicle plate + optional
- * staff attribution (washer) → a live price breakdown streams from useTicketQuote → Charge opens
+ * Flow: pick ONE primary item (package/service — tap replaces the previous pick) + any number of
+ * add-ons (chips, each with its own qty stepper) → fill the location field (bay/chair, required
+ * per config) + the vertical's extra fields (vehicle plate; staff attribution — REQUIRED for
+ * barbershop) → a live price breakdown streams from useTicketQuote → Charge opens
  * ServicePaymentModal → on success, ServiceReceipt takes over; "New ticket" resets the terminal.
  *
  * Strings rule (rule 9): every label is an i18n key. Money rule (rule 8): all amounts are integer
@@ -525,7 +526,7 @@ function SummaryPanel({
         </h2>
         {!hasSelection ? (
           <p className="rounded-xl border border-dashed border-line bg-paper px-4 py-6 text-center text-sm text-ink-3">
-            {t('servicePos.summary.empty')}
+            {t(config.primaryItemLabels.summaryEmptyKey)}
           </p>
         ) : (
           <ul className="space-y-2">

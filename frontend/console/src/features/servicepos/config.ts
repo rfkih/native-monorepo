@@ -40,6 +40,8 @@ export interface PrimaryItemLabels {
   addLabelKey: string
   /** "Edit package" / "Edit service" dialog title (back office). */
   editLabelKey: string
+  /** Terminal summary empty state — "Select a package/service to start a ticket" (review W2). */
+  summaryEmptyKey: string
 }
 
 export interface VerticalPosConfig {
@@ -92,4 +94,11 @@ export interface VerticalPosConfig {
   /** i18n key for the CatalogManagement staff-profile section title — "Washers" for carwash,
    * "Barbers" for barbershop (the rest of serviceCatalog.* stays shared/vertical-neutral copy). */
   staffTitleKey: string
+  /** Staff-section copy beyond the title (review W1 — "Add washer" must not render in a
+   * barbershop): the back-office add button, empty state, and dialog titles, vertical-worded. */
+  staffLabels: {
+    addLabelKey: string
+    emptyKey: string
+    editLabelKey: string
+  }
 }

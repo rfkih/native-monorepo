@@ -23,6 +23,12 @@ export const carwashConfig: VerticalPosConfig = {
     selectedLabelKey: 'carwashPos.packageSelectedLabel',
     addLabelKey: 'serviceCatalog.addPackage',
     editLabelKey: 'serviceCatalog.editPackage',
+    summaryEmptyKey: 'servicePos.summary.empty',
   },
   staffTitleKey: 'serviceCatalog.washersTitle',
+  staffLabels: {
+    addLabelKey: 'serviceCatalog.addWasher',
+    emptyKey: 'serviceCatalog.emptyWashers',
+    editLabelKey: 'serviceCatalog.editWasher',
+  },
 }
