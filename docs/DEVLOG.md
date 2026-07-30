@@ -74,6 +74,35 @@ cascade-deactivate + reactivation.)
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
+- **Promotions engine — Phase 3 of the POS-parity program (2026-07-31, ADR 0026)** — automatic
+  rules, coupons, and happy hour across ALL THREE vertical POSes, with **zero Avro and zero finance
+  changes**: every deduction (line-scope rules → priority/exclusive automatics → at most ONE coupon
+  → the manual discount, clamped ≤ subtotal) COLLAPSES into the existing
+  `SaleRecorded.discount_minor`; per-rule detail lives in the new vertical-local
+  `applied_promotion` audit rows (rule SNAPSHOTS, same tx as the sale). Schema x3 (restaurant V16 /
+  carwash V8 / barbershop V3, identical + FORCE RLS): `promo_rule` (typed; happy-hour
+  dow_mask/window/tz on ANY rule; `requires_coupon` = the coupon vehicle; BUY_X_GET_Y
+  schema-reserved, admin-rejected), `coupon` (UNIQUE(company, code); **atomic redemption UPDATE**
+  in the checkout tx — 0 rows → 409 rollback, race-proven x3), `applied_promotion`. Engine =
+  `PromotionEngineService`, byte-identical x3 (CATEGORY scope documented never-matches off
+  restaurant). **Promotions evaluate when money moves** — parked orders re-evaluate at pay (which
+  exposed and fixed a pre-existing payParked stale-total bug); quotes report a NON-throwing
+  `couponStatus` + itemized `appliedPromotions`. **Coupon no-new-benefit semantics** (found by the
+  gate, fixed on principle): a coupon whose linked rule already fired automatically / grants zero /
+  is clamped out stays APPLIED on the wire but burns NO redemption. Manual discount is now
+  owner/manager-only (403 cashier) on every path incl. bills. Admin: restaurant
+  `/api/v1/promotions` (gateway DASHBOARD_ROLES) + vertical-prefixed clones (POS-routed,
+  service-side owner/manager write guard — reads deliberately open). Console: `/promotions`
+  dashboard page (rules + coupons CRUD, happy-hour editor), CouponField + applied chips on BOTH POS
+  surfaces, receipt itemization (drift-suppressed), cashier-hidden discount input, per-attempt
+  idempotency keys on restaurant checkout (the W2 double-charge window closed). **Reviews: code
+  PASS + security PASS (zero C/W security findings)**; W1 fixed — restaurant digital-tender capture
+  now RECONSTRUCTS the breakdown (line sums + applied rows + manual → TaxChargeService at the
+  order's persisted occurredAt; mismatch → WARN + null-breakdown fallback, money never distorted),
+  reaching parity with the ticket verticals; two-tenant promotion isolation tests x3 (security
+  S-1). Residuals (documented ADR 0026): abandoned digital checkout burns a redemption slot
+  (over-counts only); per-vertical rule duplication for multi-vertical companies; coupon
+  brute-force bounded by per-tenant rate limiting. All gates green x3 services + console.
 - **Barbershop vertical + module rollout — Phase 2 of the POS-parity program (2026-07-30, ADR
   0024)** — the THIRD vertical sells, proving the carwash shape is a clone-able template:
   `services/barbershop-service` (145 files, 28 test suites) is a copy-with-rename of carwash with

@@ -197,9 +197,9 @@ public class PaymentCaptureWriter {
 
   /**
    * Phase 3 review fix (W1): rebuilds the Phase-2 {@link PriceBreakdown} a digital-tender capture
-   * never had — {@code OrderWriter.checkout} already priced this order (subtotal, discount,
-   * service charge, tax) but a digital tender defers the {@code SaleRecorded} emission to capture,
-   * and until this fix that emission always carried a {@code null} breakdown (finance fell back to
+   * never had — {@code OrderWriter.checkout} already priced this order (subtotal, discount, service
+   * charge, tax) but a digital tender defers the {@code SaleRecorded} emission to capture, and
+   * until this fix that emission always carried a {@code null} breakdown (finance fell back to
    * {@code subtotal == amount_minor}, silently losing the discount AND tax/service-charge legs).
    *
    * <p><strong>Deterministic reconstruction.</strong> An order's lines never change after checkout
@@ -222,8 +222,8 @@ public class PaymentCaptureWriter {
    * new rule version (a later {@code effective_from}) has since been added.
    *
    * <p><strong>Safety guard.</strong> If the reconstructed {@link PriceBreakdown#grandTotal()} does
-   * not exactly equal the amount about to be recorded as the sale, this NEVER distorts money on
-   * the wire: it logs a WARN (order id + expected/actual minor amounts only — no PII) and returns
+   * not exactly equal the amount about to be recorded as the sale, this NEVER distorts money on the
+   * wire: it logs a WARN (order id + expected/actual minor amounts only — no PII) and returns
    * {@code null} so the caller falls back to the pre-existing no-breakdown {@link
    * RecordSaleCommand} — identical to the behaviour before this fix.
    *

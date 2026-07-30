@@ -97,8 +97,7 @@ class PaymentCaptureBreakdownTest extends PostgresRlsTestBase {
         TENANT,
         ACTOR,
         () ->
-            promotionAdminService.createCoupon(
-                new CouponCreateRequest("SAVE10", ruleId, 1, null)));
+            promotionAdminService.createCoupon(new CouponCreateRequest("SAVE10", ruleId, 1, null)));
 
     List<OrderLineRequest> lines = List.of(new OrderLineRequest(menuItemId, 1));
     String idemKey = "digital-promo-" + UUID.randomUUID();

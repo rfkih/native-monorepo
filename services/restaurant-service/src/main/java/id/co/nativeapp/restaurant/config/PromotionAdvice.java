@@ -34,8 +34,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  *       discount or a promotion admin CRUD write → {@code 403 Forbidden} ({@code
  *       manual-discount-forbidden}).
  *   <li>{@link DataIntegrityViolationException} — a generic {@code 409 Conflict}, rather than
- *       leaking a raw {@code 500}. Note this handler is registered {@code
- *       @Order(HIGHEST_PRECEDENCE)} and has no sibling handler for this exception type in
+ *       leaking a raw {@code 500}. Note this handler is registered
+ *       {@code @Order(HIGHEST_PRECEDENCE)} and has no sibling handler for this exception type in
  *       restaurant-service, so it is effectively SERVICE-WIDE, not promotion-specific — it catches
  *       ANY unique-constraint violation that reaches it uncaught (most commonly a duplicate {@code
  *       coupon} {@code (company_id, code)}, but not exclusively). The response copy is deliberately
