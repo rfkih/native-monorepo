@@ -72,7 +72,7 @@ native:
     cache-ttl: ${ENTITLEMENT_CACHE_TTL:PT30M}
     # The DEFAULT modules a new company is granted when its CompanyCreated arrives. Data, not code
     # (ENGINEERING-STANDARDS §7) — the base verticals + the platform finance/hr modules.
-    default-modules: ${ENTITLEMENT_DEFAULT_MODULES:restaurant,carwash,laundromat,hr,finance}
+    default-modules: ${ENTITLEMENT_DEFAULT_MODULES:restaurant,carwash,laundromat,hr,finance,barbershop}
 
 management:
   endpoints:

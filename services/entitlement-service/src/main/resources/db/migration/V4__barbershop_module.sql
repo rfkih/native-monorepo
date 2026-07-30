@@ -1,0 +1,34 @@
+-- entitlement-service V4 — add the `barbershop` module to the catalog (ADR 0024, POS-parity
+-- program Phase 2: barbershop is the fourth operations vertical alongside restaurant / carwash /
+-- laundromat).
+--
+-- This migration ONLY inserts into module_catalog (global reference data — see V1 comment: NOT
+-- tenant-scoped, NOT Auditable, NOT under RLS). It deliberately does NOT backfill tenant_entitlement
+-- for existing companies:
+--   * tenant_entitlement is FORCE ROW LEVEL SECURITY (V1). A Flyway migration runs as the migration
+--     role outside any request's bound tenant (no app.current_tenant is set), so a data backfill
+--     INSERT would either be rejected by the WITH CHECK policy or (worse, if ever run as a
+--     BYPASSRLS/superuser role) silently write rows that never pass through the service's grant path
+--     — see the rls-migration-backfill lesson: a FORCE-RLS UPDATE/INSERT from a migration silently
+--     matches/affects rows outside the intended tenant semantics. This is by design, not an oversight.
+--   * Every entitlement grant MUST flow through EntitlementService/EntitlementWriter so it (a) is
+--     idempotent by aggregate state, (b) writes the tenant_entitlement row AND the EntitlementGranted
+--     outbox row in the SAME transaction, and (c) invalidates the entitlement-check cache on commit.
+--     A migration-time INSERT would create entitlement rows with no corresponding outbox event, so
+--     downstream consumers (billing, feature gates cached elsewhere) would never learn about the
+--     grant — a silent consistency break.
+--
+-- Rollout path instead:
+--   * Existing companies self-serve via POST /api/v1/entitlements (module_key=barbershop), gateway
+--     routing landing separately.
+--   * New companies get `barbershop` automatically via the existing CompanyCreated default-grant flow
+--     once native.entitlement.default-modules includes it (application.yml, this same change set).
+--
+-- SEQUENCING (read before deploying): EntitlementService#grantDefaultsFor calls
+-- validateModulesExist(defaultModules) before granting a new company's defaults, which throws
+-- UnknownModuleException if a configured default module key is not yet in module_catalog. This
+-- migration MUST land in the same release BEFORE OR WITH the application.yml default-modules change
+-- that adds `barbershop` — never after — or the first CompanyCreated consumed post-deploy (with the
+-- new config but the old catalog) will fail validation and throw instead of granting defaults.
+INSERT INTO module_catalog (module_key, name, description) VALUES
+    ('barbershop', 'Barbershop', 'Barbershop operations vertical (bookings, chairs, services).');
