@@ -65,6 +65,7 @@
             "user.attribute": "company_id",
             "claim.name": "company_id",
             "jsonType.label": "String",
+            "multivalued": "true",
             "id.token.claim": "true",
             "access.token.claim": "true",
             "userinfo.token.claim": "true"
@@ -113,6 +114,7 @@
             "user.attribute": "company_id",
             "claim.name": "company_id",
             "jsonType.label": "String",
+            "multivalued": "true",
             "id.token.claim": "true",
             "access.token.claim": "true",
             "userinfo.token.claim": "true"
@@ -173,6 +175,24 @@
         { "type": "password", "value": "cashier-password", "temporary": false }
       ],
       "realmRoles": ["cashier"]
+    },
+    {
+      "username": "owner-multi",
+      "enabled": true,
+      "email": "owner@multi.example.co.id",
+      "emailVerified": true,
+      "firstName": "Multi",
+      "lastName": "Owner",
+      "attributes": {
+        "company_id": [
+          "22222222-2222-2222-2222-222222222222",
+          "33333333-3333-3333-3333-333333333333"
+        ]
+      },
+      "credentials": [
+        { "type": "password", "value": "multi-password", "temporary": false }
+      ],
+      "realmRoles": ["owner", "manager"]
     }
   ]
 }

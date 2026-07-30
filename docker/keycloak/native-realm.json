@@ -54,6 +54,7 @@
             "user.attribute": "company_id",
             "claim.name": "company_id",
             "jsonType.label": "String",
+            "multivalued": "true",
             "id.token.claim": "true",
             "access.token.claim": "true",
             "userinfo.token.claim": "true"
@@ -116,6 +117,7 @@
             "user.attribute": "company_id",
             "claim.name": "company_id",
             "jsonType.label": "String",
+            "multivalued": "true",
             "id.token.claim": "true",
             "access.token.claim": "true",
             "userinfo.token.claim": "true"

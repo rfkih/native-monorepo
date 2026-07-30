@@ -57,6 +57,14 @@ curl -s -X POST http://localhost:18080/admin/realms/native/roles \
   -d '{"name":"employee","description":"Self-service employee — /me surface only"}'
 ```
 
+**Multi-company claim mapper on a RUNNING Keycloak** (multi-company ownership, ADR 0021): the
+`company_id` protocol mapper must be `multivalued: true` on BOTH the `native-gateway` and
+`native-console` clients (the realm JSON now ships it, but a live KC keeps its old mapper — same
+no-auto-apply rule as above). Update each client's mapper via the admin API (find the client id +
+mapper id, then PUT the mapper with `"multivalued": "true"` added to its config), or — if losing
+users is acceptable — drop the KC db and re-import. Symptom of a stale scalar mapper: a login with
+2+ companies gets a malformed `company_id` claim and the gateway 403s every request.
+
 ## GOTCHAS (each cost real debugging — read before running locally)
 1. **Host `DB_*` env vars override the service defaults.** The yml uses `${DB_PASSWORD:default}`; if the
    shell has `DB_PASSWORD`/`DB_USERNAME`/`DB_URL` set (e.g. another project), Spring picks the host value
