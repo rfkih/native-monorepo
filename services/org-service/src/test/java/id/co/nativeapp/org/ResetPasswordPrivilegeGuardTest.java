@@ -35,7 +35,7 @@ class ResetPasswordPrivilegeGuardTest {
   @Mock private UserOutletAssignmentService outletAssignments;
 
   private KeycloakUser user(String id, String role) {
-    return new KeycloakUser(id, id + "@example.co.id", null, true, COMPANY, List.of(role));
+    return new KeycloakUser(id, id + "@example.co.id", null, true, List.of(COMPANY), List.of(role));
   }
 
   @Test

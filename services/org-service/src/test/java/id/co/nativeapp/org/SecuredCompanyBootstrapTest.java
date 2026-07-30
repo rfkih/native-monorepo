@@ -124,6 +124,13 @@ class SecuredCompanyBootstrapTest {
     registry.add(
         "spring.security.oauth2.resourceserver.jwt.jwk-set-uri",
         () -> issuer + "/protocol/openid-connect/certs");
+
+    // The authenticated create now BINDS its creator (membership-first, ADR 0021) via the Keycloak
+    // Admin API — point the admin client at the same Testcontainers Keycloak.
+    registry.add("native.keycloak-admin.base-url", KEYCLOAK::getAuthServerUrl);
+    registry.add("native.keycloak-admin.realm", () -> REALM);
+    registry.add("native.keycloak-admin.client-id", () -> "native-admin");
+    registry.add("native.keycloak-admin.client-secret", () -> "native-admin-secret");
   }
 
   @Test

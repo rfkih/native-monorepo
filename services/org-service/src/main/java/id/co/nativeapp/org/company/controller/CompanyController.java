@@ -11,13 +11,20 @@ import id.co.nativeapp.org.company.dto.OrgUnitResponse;
 import id.co.nativeapp.org.company.service.CompanyService;
 import id.co.nativeapp.org.config.DevTenantFilter;
 import id.co.nativeapp.org.config.TenantAccessDeniedException;
+import id.co.nativeapp.org.user.service.CompanyMembershipService;
+import id.co.nativeapp.security.TenantBindingFilter;
 import id.co.nativeapp.tenant.TenantContext;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -51,9 +58,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class CompanyController {
 
   private final CompanyService companyService;
+  private final CompanyMembershipService membershipService;
 
-  public CompanyController(CompanyService companyService) {
+  public CompanyController(
+      CompanyService companyService, CompanyMembershipService membershipService) {
     this.companyService = companyService;
+    this.membershipService = membershipService;
   }
 
   /**
@@ -80,9 +90,56 @@ public class CompanyController {
             request.firstBusiness().vertical(),
             actorOrSystem(actor));
 
-    CreateCompanyResult result = companyService.createCompany(command);
+    // With a verified JWT principal (oidc), the creator is BOUND to the new company (their Keycloak
+    // membership gains it — membership-first with compensating removal, ADR 0021); this is both the
+    // "add another business" flow and the fix for the onboarding loop where a created company was
+    // unreachable by its creator. Without a JWT (dev header-trust mode), the plain bootstrap runs —
+    // dev has no Keycloak to bind against.
+    Jwt jwt = currentJwt();
+    CreateCompanyResult result =
+        jwt != null
+            ? membershipService.createCompanyForUser(command, jwt.getSubject())
+            : companyService.createCompany(command);
     CompanyResponse body = CompanyResponse.from(result.company(), result.firstBusiness());
     return ResponseEntity.created(URI.create("/api/v1/companies/" + body.id())).body(body);
+  }
+
+  /**
+   * The caller's companies — the company-switcher list (multi-company ownership, ADR 0021). The
+   * membership set comes exclusively from the VERIFIED token's {@code company_id} claim (never a
+   * client parameter); in dev header-trust mode it falls back to the bound tenant (a single
+   * company). A login with no company yet gets an empty list (the endpoint is tenant-optional so a
+   * fresh login can call it before onboarding). Token order is preserved — the first entry is the
+   * default active company.
+   */
+  @Operation(
+      summary = "List the caller's companies",
+      description =
+          "Returns the companies the authenticated login belongs to (the token's company_id claim"
+              + " set), token order, for the company switcher. Empty for a login with no company"
+              + " yet. 200 always.")
+  @GetMapping("/mine")
+  public List<CompanyResponse> myCompanies(
+      @RequestHeader(value = DevTenantFilter.ACTOR_HEADER, required = false) String actor) {
+    Jwt jwt = currentJwt();
+    if (jwt != null) {
+      return companyService.findMyCompanies(
+          TenantBindingFilter.extractCompanyIds(jwt), jwt.getSubject());
+    }
+    // Dev header-trust mode: no token — the bound tenant (if any) is the single membership.
+    if (TenantContext.current().isPresent()) {
+      TenantContext.Tenant tenant = TenantContext.require();
+      return companyService.findMyCompanies(List.of(tenant.companyId()), tenant.actor());
+    }
+    return List.of();
+  }
+
+  private static Jwt currentJwt() {
+    Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+    if (authentication instanceof JwtAuthenticationToken token) {
+      return token.getToken();
+    }
+    return null;
   }
 
   /**

@@ -74,6 +74,15 @@ public class DevTenantFilter extends OncePerRequestFilter implements Ordered {
     String actor = request.getHeader(ACTOR_HEADER);
 
     if (companyId == null || companyId.isBlank() || actor == null || actor.isBlank()) {
+      // The company-switcher list (ADR 0021) tolerates a header-less dev call — a login with no
+      // company yet asks "which companies do I have?" and the controller answers with an empty
+      // list. With headers present, the normal binding below runs and /mine returns the bound
+      // tenant's single company.
+      if ("GET".equalsIgnoreCase(request.getMethod())
+          && request.getRequestURI().equals("/api/v1/companies/mine")) {
+        chain.doFilter(request, response);
+        return;
+      }
       // The probe + bootstrap endpoints are exempt (shouldNotFilter); a non-exempt
       // request that needs a tenant must carry both headers, so reject the
       // missing/blank case at the edge rather than letting an unscoped data request

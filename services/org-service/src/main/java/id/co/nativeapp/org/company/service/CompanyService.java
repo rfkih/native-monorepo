@@ -153,4 +153,35 @@ public class CompanyService {
     TenantContext.require();
     return reader.findCurrentCompany();
   }
+
+  /**
+   * The companies a login belongs to — the {@code /mine} read for the company switcher
+   * (multi-company ownership, ADR 0021). {@code companyIds} is the caller's TOKEN-VERIFIED
+   * membership set (never client input): for each id a tenant scope is opened over that id (each
+   * company is the caller's own — the same trust base as the active-company binding) and the
+   * company profile read under RLS. An id whose company row does not exist (the dangling-membership
+   * double-failure residual) is skipped rather than failing the whole list. Order preserved (first
+   * = the token's default active company).
+   *
+   * @param companyIds the caller's verified membership set (from the JWT claim)
+   * @param actor the caller's principal (the JWT {@code sub})
+   * @return the caller's company profiles, token order, unknown ids skipped
+   */
+  public List<CompanyResponse> findMyCompanies(List<String> companyIds, String actor) {
+    List<CompanyResponse> companies = new java.util.ArrayList<>(companyIds.size());
+    for (String companyId : companyIds) {
+      try {
+        companies.add(TenantContext.callAs(companyId, actor, reader::findCurrentCompany));
+      } catch (NoSuchElementException dangling) {
+        // A membership pointing at a company that does not exist (a failed create whose
+        // compensation also failed) — skip it; the log line in the compensation path covers it.
+      } catch (RuntimeException e) {
+        throw e;
+      } catch (Exception e) {
+        // callAs declares checked Exception; the reader only throws unchecked — unreachable.
+        throw new IllegalStateException("my-companies read failed", e);
+      }
+    }
+    return companies;
+  }
 }

@@ -22,7 +22,8 @@ import java.util.List;
  * @param username the Keycloak username (same as email for Native users)
  * @param email the user's email address — do NOT log this (PII)
  * @param enabled whether the account is enabled in Keycloak
- * @param companyId the value of the {@code company_id} user attribute, or {@code null} if not set
+ * @param companyIds ALL values of the {@code company_id} user attribute — the companies this login
+ *     belongs to (multi-company ownership, ADR 0021); never null, empty if the attribute is unset
  * @param roles the business realm roles assigned to this user (owner/manager/cashier); never null,
  *     may be empty if the user has no business roles
  */
@@ -31,7 +32,7 @@ public record KeycloakUser(
     String username,
     String email,
     boolean enabled,
-    String companyId,
+    List<String> companyIds,
     List<String> roles) {
 
   /** The known business roles used to identify which roles to replace on a role change. */
@@ -39,5 +40,14 @@ public record KeycloakUser(
 
   public KeycloakUser {
     roles = roles == null ? List.of() : List.copyOf(roles);
+    companyIds = companyIds == null ? List.of() : List.copyOf(companyIds);
+  }
+
+  /**
+   * Whether this login belongs to {@code companyId} — the cross-tenant guard predicate (a
+   * multi-company user belongs to EACH of their companies).
+   */
+  public boolean belongsTo(String companyId) {
+    return companyId != null && companyIds.contains(companyId);
   }
 }

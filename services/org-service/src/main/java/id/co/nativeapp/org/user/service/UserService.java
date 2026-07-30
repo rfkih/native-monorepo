@@ -324,9 +324,10 @@ public class UserService {
     KeycloakUser user =
         keycloak.getUserById(userId).orElseThrow(() -> new UserNotFoundException(userId));
 
-    // Cross-tenant guard: reject if the user's company_id does not match the caller's tenant.
-    // Use 404 (not 403) so the caller cannot enumerate existence of other tenants' user ids.
-    if (!callerCompanyId.equals(user.companyId())) {
+    // Cross-tenant guard: reject unless the user BELONGS TO the caller's tenant (a multi-company
+    // login belongs to each of its companies — ADR 0021). Use 404 (not 403) so the caller cannot
+    // enumerate existence of other tenants' user ids.
+    if (!user.belongsTo(callerCompanyId)) {
       throw new UserNotFoundException(userId);
     }
 

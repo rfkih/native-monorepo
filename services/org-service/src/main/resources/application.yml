@@ -112,6 +112,10 @@ native:
     # sub-resources (e.g. /api/v1/companies/{id}/businesses) remain strictly tenant-scoped.
     tenant-optional:
       - "POST /api/v1/companies"
+      # The company-switcher list (ADR 0021): a fresh login with NO company yet must be able to ask
+      # "which companies do I have?" (answer: none) before onboarding. The membership set comes from
+      # the verified token claim inside the controller; a bound tenant is unnecessary.
+      - "GET /api/v1/companies/mine"
     # The public sign-up endpoint: fully unauthenticated (no token at all). The security chain
     # permitAlls it; TenantBindingFilter skips it via shouldNotFilter. Default is empty — only
     # org-service opts in.

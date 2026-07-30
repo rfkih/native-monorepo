@@ -141,7 +141,8 @@ public class UserOutletAssignmentService {
     String callerCompanyId = TenantContext.require().companyId();
     KeycloakUser user =
         keycloak.getUserById(userId).orElseThrow(() -> new UserNotFoundException(userId));
-    if (!callerCompanyId.equals(user.companyId())) {
+    // A multi-company login belongs to each of its companies (ADR 0021); 404 anti-enumeration.
+    if (!user.belongsTo(callerCompanyId)) {
       throw new UserNotFoundException(userId);
     }
   }

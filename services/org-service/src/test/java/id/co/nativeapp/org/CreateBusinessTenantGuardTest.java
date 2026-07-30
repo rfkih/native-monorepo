@@ -47,6 +47,8 @@ class CreateBusinessTenantGuardTest {
   @Autowired private MockMvc mockMvc;
 
   @MockitoBean private CompanyService companyService;
+  // The controller now also wires the membership orchestrator (ADR 0021) — mocked out here.
+  @MockitoBean private id.co.nativeapp.org.user.service.CompanyMembershipService membershipService;
 
   @Test
   void addBusinessWithAPathCompanyIdDifferentFromTheBoundTenantIsRejectedWith403()

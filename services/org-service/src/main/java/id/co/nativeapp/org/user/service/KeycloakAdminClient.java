@@ -534,6 +534,168 @@ public class KeycloakAdminClient {
   }
 
   /**
+   * Adds {@code companyId} to the user's {@code company_id} attribute list — the membership write
+   * of multi-company ownership (ADR 0021): the multivalued protocol mapper then emits the enlarged
+   * set into the user's next token. Idempotent (a value already present is a no-op).
+   *
+   * <p>Keycloak's user PUT REPLACES the whole {@code attributes} map, so the current map is fetched
+   * first and every other attribute (e.g. {@code terms_accepted_at}) is preserved verbatim — only
+   * the {@code company_id} list is merged.
+   *
+   * @param userId the Keycloak user UUID (the JWT {@code sub})
+   * @param companyId the company to add to the user's membership set
+   * @throws KeycloakAdminException if the Admin API is unreachable or returns an unexpected error
+   */
+  @SuppressWarnings("unchecked")
+  public void addCompanyToUser(String userId, String companyId) {
+    String token = acquireToken();
+    String url = props.getBaseUrl() + "/admin/realms/" + props.getRealm() + "/users/" + userId;
+
+    Map<String, Object> raw;
+    try {
+      raw =
+          restClient
+              .get()
+              .uri(URI.create(url))
+              .header("Authorization", "Bearer " + token)
+              .retrieve()
+              .body(Map.class);
+    } catch (RestClientResponseException e) {
+      throw new KeycloakAdminException(
+          "Keycloak user fetch for membership add failed with status " + e.getStatusCode(), e);
+    } catch (RestClientException e) {
+      throw new KeycloakAdminException(
+          "Keycloak user fetch for membership add failed — connection error", e);
+    }
+    if (raw == null) {
+      throw new KeycloakAdminException("Keycloak user fetch for membership add returned no body");
+    }
+
+    // Merge: preserve EVERY existing attribute; only the company_id list gains the new value.
+    Map<String, Object> attributes = new java.util.LinkedHashMap<>();
+    Object existingAttrs = raw.get("attributes");
+    if (existingAttrs instanceof Map<?, ?> attrMap) {
+      for (Map.Entry<?, ?> entry : attrMap.entrySet()) {
+        attributes.put(String.valueOf(entry.getKey()), entry.getValue());
+      }
+    }
+    List<String> companyIds = new ArrayList<>();
+    if (attributes.get("company_id") instanceof List<?> current) {
+      for (Object value : current) {
+        if (value instanceof String s && !s.isBlank() && !companyIds.contains(s)) {
+          companyIds.add(s);
+        }
+      }
+    }
+    if (companyIds.contains(companyId)) {
+      return; // idempotent — membership already present
+    }
+    companyIds.add(companyId);
+    attributes.put("company_id", companyIds);
+
+    try {
+      restClient
+          .put()
+          .uri(URI.create(url))
+          .header("Authorization", "Bearer " + token)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(Map.of("attributes", attributes))
+          .retrieve()
+          .toBodilessEntity();
+      log.info("Added company membership to Keycloak user {} (now {} memberships)", userId,
+          companyIds.size());
+    } catch (RestClientResponseException e) {
+      throw new KeycloakAdminException(
+          "Keycloak membership add for user " + userId + " failed with status " + e.getStatusCode(),
+          e);
+    } catch (RestClientException e) {
+      throw new KeycloakAdminException(
+          "Keycloak membership add for user " + userId + " failed — connection error", e);
+    }
+  }
+
+  /**
+   * Removes {@code companyId} from the user's {@code company_id} attribute list — the COMPENSATION
+   * for a failed create-company after the membership was already added (mirrors the signup flow's
+   * compensating user delete, ADR 0021). Idempotent (a value not present is a no-op). Preserves all
+   * other attributes, exactly like {@link #addCompanyToUser}.
+   *
+   * @param userId the Keycloak user UUID (the JWT {@code sub})
+   * @param companyId the company to remove from the user's membership set
+   * @throws KeycloakAdminException if the Admin API is unreachable or returns an unexpected error
+   */
+  @SuppressWarnings("unchecked")
+  public void removeCompanyFromUser(String userId, String companyId) {
+    String token = acquireToken();
+    String url = props.getBaseUrl() + "/admin/realms/" + props.getRealm() + "/users/" + userId;
+
+    Map<String, Object> raw;
+    try {
+      raw =
+          restClient
+              .get()
+              .uri(URI.create(url))
+              .header("Authorization", "Bearer " + token)
+              .retrieve()
+              .body(Map.class);
+    } catch (RestClientResponseException e) {
+      throw new KeycloakAdminException(
+          "Keycloak user fetch for membership remove failed with status " + e.getStatusCode(), e);
+    } catch (RestClientException e) {
+      throw new KeycloakAdminException(
+          "Keycloak user fetch for membership remove failed — connection error", e);
+    }
+    if (raw == null) {
+      throw new KeycloakAdminException("Keycloak user fetch for membership remove returned no body");
+    }
+
+    Map<String, Object> attributes = new java.util.LinkedHashMap<>();
+    Object existingAttrs = raw.get("attributes");
+    if (existingAttrs instanceof Map<?, ?> attrMap) {
+      for (Map.Entry<?, ?> entry : attrMap.entrySet()) {
+        attributes.put(String.valueOf(entry.getKey()), entry.getValue());
+      }
+    }
+    List<String> companyIds = new ArrayList<>();
+    if (attributes.get("company_id") instanceof List<?> current) {
+      for (Object value : current) {
+        if (value instanceof String s && !s.isBlank() && !companyIds.contains(s)) {
+          companyIds.add(s);
+        }
+      }
+    }
+    if (!companyIds.remove(companyId)) {
+      return; // idempotent — membership not present
+    }
+    attributes.put("company_id", companyIds);
+
+    try {
+      restClient
+          .put()
+          .uri(URI.create(url))
+          .header("Authorization", "Bearer " + token)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(Map.of("attributes", attributes))
+          .retrieve()
+          .toBodilessEntity();
+      log.info(
+          "Removed company membership from Keycloak user {} (now {} memberships)",
+          userId,
+          companyIds.size());
+    } catch (RestClientResponseException e) {
+      throw new KeycloakAdminException(
+          "Keycloak membership remove for user "
+              + userId
+              + " failed with status "
+              + e.getStatusCode(),
+          e);
+    } catch (RestClientException e) {
+      throw new KeycloakAdminException(
+          "Keycloak membership remove for user " + userId + " failed — connection error", e);
+    }
+  }
+
+  /**
    * Resets the user's password to a fresh server-generated TEMPORARY password: sets it with {@code
    * temporary=true}, which makes Keycloak re-add the {@code UPDATE_PASSWORD} required action so the
    * user must change it again on their next sign-in.
@@ -706,7 +868,8 @@ public class KeycloakAdminClient {
 
   /**
    * Maps a raw Keycloak user representation (a JSON-decoded Map) to a {@link KeycloakUser}.
-   * Extracts the {@code company_id} attribute from the nested {@code attributes} map.
+   * Extracts ALL values of the {@code company_id} attribute from the nested {@code attributes} map
+   * — the companies this login belongs to (multi-company ownership, ADR 0021).
    */
   @SuppressWarnings("unchecked")
   private static KeycloakUser mapToKeycloakUser(Map<?, ?> raw, List<String> roles) {
@@ -715,16 +878,20 @@ public class KeycloakAdminClient {
     String email = (String) raw.get("email");
     Boolean enabled = (Boolean) raw.get("enabled");
 
-    String companyId = null;
+    List<String> companyIds = new ArrayList<>();
     Object attrs = raw.get("attributes");
     if (attrs instanceof Map<?, ?> attrMap) {
       Object companyIdAttr = attrMap.get("company_id");
-      if (companyIdAttr instanceof List<?> companyIdList && !companyIdList.isEmpty()) {
-        companyId = (String) companyIdList.getFirst();
+      if (companyIdAttr instanceof List<?> companyIdList) {
+        for (Object value : companyIdList) {
+          if (value instanceof String s && !s.isBlank() && !companyIds.contains(s)) {
+            companyIds.add(s);
+          }
+        }
       }
     }
 
-    return new KeycloakUser(id, username, email, Boolean.TRUE.equals(enabled), companyId, roles);
+    return new KeycloakUser(id, username, email, Boolean.TRUE.equals(enabled), companyIds, roles);
   }
 
   /**
