@@ -107,6 +107,9 @@ const Deferrals = lazy(() =>
 const Promotions = lazy(() =>
   import('@/features/promotions/Promotions').then((m) => ({ default: m.Promotions })),
 )
+const EarnRulesPage = lazy(() =>
+  import('@/features/loyalty/EarnRulesPage').then((m) => ({ default: m.EarnRulesPage })),
+)
 
 function CenteredSpinner() {
   return (
@@ -334,6 +337,12 @@ export function App() {
             <Route
               path="/promotions"
               element={company ? <Promotions /> : <Navigate to="/onboarding" replace />}
+            />
+          )}
+          {canDashboard && (
+            <Route
+              path="/loyalty"
+              element={company ? <EarnRulesPage /> : <Navigate to="/onboarding" replace />}
             />
           )}
           {canDashboard && (

@@ -160,6 +160,15 @@ export function ReceiptView({
         }
       }
     }
+    // Phase 4 (ADR 0027): loyalty points redeemed — a separate deduction row under the discount
+    // block (never folded into the promo-only discount above, matching the wire's split).
+    if (breakdown.loyaltyRedeemedMinor > 0) {
+      totalRows.push({
+        label: t('pos.loyalty.redeemedLabel'),
+        valueLabel: `- ${formatMoney(breakdown.loyaltyRedeemedMinor, currency, locale)}`,
+        isDeduction: true,
+      })
+    }
     totalRows.push({ label: t('pos.serviceCharge'), valueLabel: formatMoney(breakdown.serviceChargeMinor, currency, locale) })
     totalRows.push({ label: t('pos.tax'), valueLabel: formatMoney(breakdown.taxMinor, currency, locale) })
   } else {
@@ -171,10 +180,20 @@ export function ReceiptView({
     ? formatMoney(breakdown.grandTotalMinor, currency, locale)
     : formatMoney(payment.amountMinor, currency, locale)
 
-  // Payment rows
-  const paymentRows: ThermalRow[] = [
-    { label: t('pos.receipt.tender'), valueLabel: t(tenderKey(payment.tenderType)) },
-  ]
+  // Payment rows. Phase 4 (ADR 0027): a gift-card tender is a PAYMENT row (never a discount) — it
+  // is listed here, before the tender-in-hand row, when the breakdown carries one. Points EARNED
+  // on this sale are deliberately NOT shown — MemberResponse/OrderResponse never echo an
+  // earned-points figure back on the checkout/pay-parked response, so there is nothing to render
+  // (a client-side estimate would risk drifting from the server's actual ledger entry).
+  const paymentRows: ThermalRow[] = []
+  if (breakdown && breakdown.giftCardAppliedMinor > 0) {
+    paymentRows.push({
+      label: t('pos.loyalty.giftCard.paymentRowLabel'),
+      valueLabel: `- ${formatMoney(breakdown.giftCardAppliedMinor, currency, locale)}`,
+      isDeduction: true,
+    })
+  }
+  paymentRows.push({ label: t('pos.receipt.tender'), valueLabel: t(tenderKey(payment.tenderType)) })
   if (isCash && payment.tenderedMinor != null) {
     paymentRows.push({ label: t('pos.receipt.tendered'), valueLabel: formatMoney(payment.tenderedMinor, currency, locale) })
   }

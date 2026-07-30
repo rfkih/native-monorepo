@@ -126,6 +126,12 @@ export interface AppliedPromotionResponse {
  * checkout/pay-parked responses keep the pre-Phase-3 shape (discountMinor already carries the
  * collapsed total; the per-rule detail is durably persisted server-side as applied_promotion rows,
  * not echoed here).
+ *
+ * Phase 4 (ADR 0027, additive): `discountMinor` is PROMO-ONLY — a loyalty-points redemption is
+ * reported separately as `loyaltyRedeemedMinor` (contra-revenue). `giftCardAppliedMinor` is the
+ * amount TENDERED from a gift card (never a discount) and `residualDueMinor = grandTotalMinor -
+ * giftCardAppliedMinor` is what remains for the requested payment method to actually authorize.
+ * All three default to 0 on every pre-Phase-4 response.
  */
 export interface PriceBreakdownResponse {
   subtotalMinor: number
@@ -139,6 +145,12 @@ export interface PriceBreakdownResponse {
   appliedPromotions: AppliedPromotionResponse[]
   /** 'APPLIED' | 'INVALID' | 'EXHAUSTED' | null — null when no coupon code was supplied. */
   couponStatus: 'APPLIED' | 'INVALID' | 'EXHAUSTED' | null
+  /** Phase 4 (ADR 0027): currency value of loyalty points redeemed, minor units; 0 when none. */
+  loyaltyRedeemedMinor: number
+  /** Phase 4 (ADR 0027): amount TENDERED from a gift card, minor units; 0 when none. */
+  giftCardAppliedMinor: number
+  /** Phase 4 (ADR 0027): grandTotalMinor - giftCardAppliedMinor — what remains to authorize. */
+  residualDueMinor: number
 }
 
 /** Matches backend PaymentResponse record (ADR 0006). All money is integer minor units. */
@@ -220,12 +232,21 @@ function tenantOf(session: CompanySession) {
  *
  * Phase 3 (ADR 0026): couponCode (optional) is forwarded verbatim — the quote endpoint never throws
  * for a bad/expired/exhausted code, it reports `couponStatus` on the breakdown instead.
+ *
+ * Phase 4 (ADR 0027): loyaltyMemberId/loyaltyRedeemPoints (optional) preview a points redemption —
+ * the quote NEVER throws for an unknown member or an insufficient balance (silently previews a
+ * clamped/zero redemption; only checkout is fail-closed). giftCardId/giftCardRedeemMinor are
+ * deliberately NOT threaded here — the payment modal computes `residualDueMinor` client-side from
+ * the identical `grandTotalMinor - giftCardRedeemMinor` arithmetic the server's own factory uses
+ * (see components/GiftCardField.tsx), so a gift card never needs a second quote round-trip.
  */
 export function useQuote(
   session: CompanySession,
   lines: OrderLineInput[],
   discountMinor: number,
   couponCode: string | null = null,
+  loyaltyMemberId: string | null = null,
+  loyaltyRedeemPoints: number = 0,
 ) {
   // State-based debounce: both the query key and the request body read from `debounced`,
   // so they are always identical and the server always receives the full current cart.
@@ -233,18 +254,20 @@ export function useQuote(
     lines: OrderLineInput[]
     discountMinor: number
     couponCode: string | null
-  }>(() => ({ lines, discountMinor, couponCode }))
+    loyaltyMemberId: string | null
+    loyaltyRedeemPoints: number
+  }>(() => ({ lines, discountMinor, couponCode, loyaltyMemberId, loyaltyRedeemPoints }))
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => {
-      setDebounced({ lines, discountMinor, couponCode })
+      setDebounced({ lines, discountMinor, couponCode, loyaltyMemberId, loyaltyRedeemPoints })
     }, 400)
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
     }
-  }, [lines, discountMinor, couponCode])
+  }, [lines, discountMinor, couponCode, loyaltyMemberId, loyaltyRedeemPoints])
 
   const enabled = debounced.lines.length > 0
 
@@ -256,6 +279,8 @@ export function useQuote(
       debounced.lines,
       debounced.discountMinor,
       debounced.couponCode,
+      debounced.loyaltyMemberId,
+      debounced.loyaltyRedeemPoints,
     ],
     enabled,
     placeholderData: keepPreviousData,
@@ -269,6 +294,8 @@ export function useQuote(
           lines: debounced.lines,
           discountMinor: debounced.discountMinor > 0 ? debounced.discountMinor : null,
           couponCode: debounced.couponCode || null,
+          loyaltyMemberId: debounced.loyaltyMemberId || null,
+          loyaltyRedeemPoints: debounced.loyaltyRedeemPoints > 0 ? debounced.loyaltyRedeemPoints : null,
         },
       }),
   })
@@ -315,6 +342,16 @@ export interface CheckoutInput {
   tableId?: string | null
   /** Phase 3 (ADR 0026): optional coupon code. Unlike the quote, checkout REJECTS a bad/exhausted code. */
   couponCode?: string | null
+  /** Phase 4 (ADR 0027): optional loyalty member to attach (earn attribution and/or the identity a
+   * points redemption is charged against). */
+  loyaltyMemberId?: string | null
+  /** Phase 4 (ADR 0027): optional points to redeem; requires loyaltyMemberId. Clamped server-side. */
+  loyaltyRedeemPoints?: number | null
+  /** Phase 4 (ADR 0027): optional gift card to redeem as a TENDER (never a discount). */
+  giftCardId?: string | null
+  /** Phase 4 (ADR 0027): optional amount to redeem from the gift card, minor units. Clamped
+   * server-side. Requires giftCardId. */
+  giftCardRedeemMinor?: number | null
 }
 
 export function useCheckout(session: CompanySession) {
@@ -328,6 +365,10 @@ export function useCheckout(session: CompanySession) {
       orderType,
       tableId,
       couponCode,
+      loyaltyMemberId,
+      loyaltyRedeemPoints,
+      giftCardId,
+      giftCardRedeemMinor,
     }: CheckoutInput) =>
       apiFetch<OrderResponse>('/api/v1/orders', {
         method: 'POST',
@@ -341,6 +382,10 @@ export function useCheckout(session: CompanySession) {
           orderType: orderType ?? null,
           tableId: tableId ?? null,
           couponCode: couponCode || null,
+          loyaltyMemberId: loyaltyMemberId || null,
+          loyaltyRedeemPoints: loyaltyRedeemPoints && loyaltyRedeemPoints > 0 ? loyaltyRedeemPoints : null,
+          giftCardId: giftCardId || null,
+          giftCardRedeemMinor: giftCardRedeemMinor && giftCardRedeemMinor > 0 ? giftCardRedeemMinor : null,
         },
       }),
     onSuccess: (res) => {
@@ -429,16 +474,37 @@ export interface PayParkedInput {
   /** Phase 3 (ADR 0026): optional coupon code, re-evaluated at pay time (a parked order does not
    * lock in promotions at park time). Rejected the same way checkout rejects a bad/exhausted code. */
   couponCode?: string | null
+  /** Phase 4 (ADR 0027): loyalty/gift-card redemption is likewise evaluated HERE, not at park time
+   * — see CheckoutInput's twin fields. */
+  loyaltyMemberId?: string | null
+  loyaltyRedeemPoints?: number | null
+  giftCardId?: string | null
+  giftCardRedeemMinor?: number | null
 }
 
 export function usePayParked(session: CompanySession) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ orderId, payment, couponCode }: PayParkedInput) =>
+    mutationFn: ({
+      orderId,
+      payment,
+      couponCode,
+      loyaltyMemberId,
+      loyaltyRedeemPoints,
+      giftCardId,
+      giftCardRedeemMinor,
+    }: PayParkedInput) =>
       apiFetch<OrderResponse>(`/api/v1/orders/${orderId}/pay`, {
         method: 'POST',
         tenant: tenantOf(session),
-        body: { payment: payment ?? null, couponCode: couponCode || null },
+        body: {
+          payment: payment ?? null,
+          couponCode: couponCode || null,
+          loyaltyMemberId: loyaltyMemberId || null,
+          loyaltyRedeemPoints: loyaltyRedeemPoints && loyaltyRedeemPoints > 0 ? loyaltyRedeemPoints : null,
+          giftCardId: giftCardId || null,
+          giftCardRedeemMinor: giftCardRedeemMinor && giftCardRedeemMinor > 0 ? giftCardRedeemMinor : null,
+        },
       }),
     onSuccess: (res) => {
       if (res?.payment?.status === 'CAPTURED') {

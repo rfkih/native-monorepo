@@ -1,5 +1,5 @@
 /**
- * PaymentModal — Step 2 of the POS checkout flow (ADR 0006, slice 5).
+ * PaymentModal — Step 2 of the POS checkout flow (ADR 0006, slice 5; extended Phase 4, ADR 0027).
  *
  * Three tenders via a Segmented picker:
  *   CASH  — numeric keypad + quick-cash chips; live change line; Pay fires checkout-with-payment
@@ -11,21 +11,39 @@
  * Phase 2: discountMinor is threaded into checkout; the authoritative grandTotalMinor from the
  * price breakdown drives the charge amount rather than a client-side subtotal.
  *
+ * Phase 4 (ADR 0027): a gift-card code may be applied here (GiftCardField) — the loyalty MEMBER
+ * attach + points redemption happens upstream on the main POS screen (components/MemberField.tsx)
+ * and is only forwarded here read-only via `loyaltyMember`/`loyaltyRedeemPoints`. The tender/keypad
+ * math targets `residualDueMinor = grandTotalMinor - giftCardRedeemMinor` — computed CLIENT-SIDE
+ * via the identical arithmetic the server's own PriceBreakdownResponse factory uses (no extra
+ * quote round-trip needed; see GiftCardField's class doc). When the gift card fully covers the
+ * total (residualDueMinor === 0), the tender picker is skipped entirely — see FullCoveragePanel's
+ * doc for the wire-shape decision (a zero-amount payment object is still sent, matching the
+ * backend's captureZeroResidualInCurrentTx path, which every vertical honours regardless of the
+ * chosen tenderType).
+ *
  * Money rule (rule 8): all amounts are integer minor units throughout. Displayed via formatMoney().
  * Strings rule (rule 9): every label is an i18n key — no hardcoded user-facing text.
  */
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { X } from 'lucide-react'
+import { Gift, X } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
 import { Segmented } from '@/components/ui/Segmented'
 import { AppliedPromotionChips } from '@/components/AppliedPromotionChips'
+import { GiftCardField } from '@/components/GiftCardField'
 import { formatMoney } from '@/lib/money'
 import type { CompanySession } from '@/lib/session'
 import { ApiError, isOutletNotAssigned } from '@/lib/api'
+import {
+  isGiftCardUnusable,
+  isLoyaltyBalanceInsufficient,
+  type GiftCardResponse,
+  type MemberResponse,
+} from '@/features/loyalty/api'
 import type {
   OrderLineInput,
   OrderResponse,
@@ -70,15 +88,35 @@ function parseInsufficientStock(
   return null
 }
 
+/**
+ * Simple (non-parameterised) checkout-time error keys shared by every tender panel — outlet
+ * assignment, coupon, and the Phase 4 (ADR 0027) loyalty/gift-card redemption faults. Stock is
+ * handled separately ({@link parseInsufficientStock}) since it needs interpolated params.
+ */
+function resolveSimpleErrorKey(err: unknown): string | null {
+  if (isOutletNotAssigned(err)) return 'pos.payment.outletNotAssigned'
+  const couponKey = couponCheckoutErrorKey(err)
+  if (couponKey) return couponKey
+  if (isLoyaltyBalanceInsufficient(err)) return 'pos.loyalty.member.insufficientBalance'
+  if (isGiftCardUnusable(err)) return 'pos.loyalty.giftCard.unusableAtCheckout'
+  return null
+}
+
 interface Props {
   session: CompanySession
   lines: OrderLineInput[]
-  /** Server-authoritative grand total from the quote breakdown; drives the charge amount. */
+  /** Server-authoritative grand total from the quote breakdown; drives the charge amount BEFORE
+   * any gift-card tender (a gift card is never a discount — see PriceBreakdownResponse javadoc). */
   grandTotalMinor: number
   /** Optional order-level discount in minor units; passed to checkout. */
   discountMinor: number
   /** Phase 3 (ADR 0026): the committed coupon code (or null); forwarded to checkout/pay-parked. */
   couponCode?: string | null
+  /** Phase 4 (ADR 0027): the loyalty member attached upstream on the main POS screen (read-only
+   * here — attach/detach lives in MemberField, not this modal). */
+  loyaltyMember?: MemberResponse | null
+  /** Phase 4 (ADR 0027): the points redemption committed upstream; forwarded verbatim. */
+  loyaltyRedeemPoints?: number
   /** Live price breakdown from useQuote — rendered in the modal header. */
   breakdown: PriceBreakdownResponse | null
   currency: string
@@ -118,6 +156,8 @@ export function PaymentModal({
   grandTotalMinor,
   discountMinor,
   couponCode,
+  loyaltyMember,
+  loyaltyRedeemPoints,
   breakdown,
   currency,
   locale,
@@ -130,11 +170,23 @@ export function PaymentModal({
   const { t } = useTranslation()
   const [tender, setTender] = useState<TenderTab>('CASH')
 
+  // Phase 4 (ADR 0027): gift-card redemption is entered HERE (unlike the loyalty member, which is
+  // attached upstream) — a cashier typically only learns the customer wants to pay by gift card at
+  // the till. `residualDueMinor` is the identity the server's PriceBreakdownResponse factory uses;
+  // see the class doc for why no second quote round-trip is needed.
+  const [giftCard, setGiftCard] = useState<GiftCardResponse | null>(null)
+  const [giftCardRedeemMinor, setGiftCardRedeemMinor] = useState(0)
+  const residualDueMinor = Math.max(0, grandTotalMinor - giftCardRedeemMinor)
+  const fullyCoveredByGiftCard = giftCard != null && residualDueMinor === 0
+
   const tenderOptions: { value: TenderTab; label: string }[] = [
     { value: 'CASH', label: t('pos.payment.tenderCash') },
     { value: 'QRIS', label: t('pos.payment.tenderQris') },
     { value: 'CARD', label: t('pos.payment.tenderCard') },
   ]
+
+  const loyaltyMemberId = loyaltyMember?.id ?? null
+  const effectiveLoyaltyRedeemPoints = loyaltyRedeemPoints ?? 0
 
   return (
     // Overlay — same backdrop pattern as ChargeSuccess in Pos.tsx
@@ -161,48 +213,101 @@ export function PaymentModal({
         {/* Inline breakdown */}
         <ModalBreakdown breakdown={breakdown} grandTotalMinor={grandTotalMinor} currency={currency} locale={locale} />
 
-        {/* Tender picker */}
-        <div className="flex justify-center px-5 py-4">
-          <Segmented
-            options={tenderOptions}
-            value={tender}
-            onChange={setTender}
-            ariaLabel={t('pos.payment.selectTender')}
+        {/* Gift-card redemption (Phase 4, ADR 0027) */}
+        <div className="border-b border-line px-5 py-3">
+          <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-ink-3">
+            <Gift className="size-3.5 shrink-0" aria-hidden />
+            {t('pos.loyalty.giftCard.applyTitle')}
+          </p>
+          <GiftCardField
+            session={session}
+            locale={locale}
+            card={giftCard}
+            onApply={(card, redeem) => {
+              setGiftCard(card)
+              setGiftCardRedeemMinor(redeem)
+            }}
+            onClear={() => {
+              setGiftCard(null)
+              setGiftCardRedeemMinor(0)
+            }}
+            redeemMinor={giftCardRedeemMinor}
+            onRedeemChange={setGiftCardRedeemMinor}
+            dueBeforeCardMinor={grandTotalMinor}
           />
         </div>
 
-        {/* Tender-specific panel */}
-        {tender === 'CASH' ? (
-          <CashPanel
+        {fullyCoveredByGiftCard ? (
+          <FullCoveragePanel
             session={session}
             lines={lines}
-            grandTotalMinor={grandTotalMinor}
             discountMinor={discountMinor}
             couponCode={couponCode}
+            loyaltyMemberId={loyaltyMemberId}
+            loyaltyRedeemPoints={effectiveLoyaltyRedeemPoints}
+            giftCardId={giftCard!.id}
+            giftCardRedeemMinor={giftCardRedeemMinor}
             currency={currency}
             locale={locale}
             onSuccess={onSuccess}
-            onClose={onClose}
             parkedOrderId={parkedOrderId}
             orderType={orderType}
             tableId={tableId}
           />
         ) : (
-          <DigitalPanel
-            session={session}
-            lines={lines}
-            grandTotalMinor={grandTotalMinor}
-            discountMinor={discountMinor}
-            couponCode={couponCode}
-            currency={currency}
-            locale={locale}
-            tenderType={tender}
-            onSuccess={onSuccess}
-            onClose={onClose}
-            parkedOrderId={parkedOrderId}
-            orderType={orderType}
-            tableId={tableId}
-          />
+          <>
+            {/* Tender picker */}
+            <div className="flex justify-center px-5 py-4">
+              <Segmented
+                options={tenderOptions}
+                value={tender}
+                onChange={setTender}
+                ariaLabel={t('pos.payment.selectTender')}
+              />
+            </div>
+
+            {/* Tender-specific panel */}
+            {tender === 'CASH' ? (
+              <CashPanel
+                session={session}
+                lines={lines}
+                chargeMinor={residualDueMinor}
+                discountMinor={discountMinor}
+                couponCode={couponCode}
+                loyaltyMemberId={loyaltyMemberId}
+                loyaltyRedeemPoints={effectiveLoyaltyRedeemPoints}
+                giftCardId={giftCard?.id ?? null}
+                giftCardRedeemMinor={giftCardRedeemMinor}
+                currency={currency}
+                locale={locale}
+                onSuccess={onSuccess}
+                onClose={onClose}
+                parkedOrderId={parkedOrderId}
+                orderType={orderType}
+                tableId={tableId}
+              />
+            ) : (
+              <DigitalPanel
+                session={session}
+                lines={lines}
+                chargeMinor={residualDueMinor}
+                discountMinor={discountMinor}
+                couponCode={couponCode}
+                loyaltyMemberId={loyaltyMemberId}
+                loyaltyRedeemPoints={effectiveLoyaltyRedeemPoints}
+                giftCardId={giftCard?.id ?? null}
+                giftCardRedeemMinor={giftCardRedeemMinor}
+                currency={currency}
+                locale={locale}
+                tenderType={tender}
+                onSuccess={onSuccess}
+                onClose={onClose}
+                parkedOrderId={parkedOrderId}
+                orderType={orderType}
+                tableId={tableId}
+              />
+            )}
+          </>
         )}
       </Card>
     </div>
@@ -258,6 +363,18 @@ function ModalBreakdown({
         </div>
       ) : null}
 
+      {/* Phase 4 (ADR 0027): loyalty points redeemed — a separate contra-revenue line, never
+          folded into the promo-only discount above (matches the wire's discountMinor/
+          loyaltyRedeemedMinor split). */}
+      {breakdown.loyaltyRedeemedMinor > 0 ? (
+        <div className="flex items-baseline justify-between text-ink-3">
+          <span>{t('pos.loyalty.redeemedLabel')}</span>
+          <span className="tnum font-mono text-loss">
+            − {formatMoney(breakdown.loyaltyRedeemedMinor, currency, locale)}
+          </span>
+        </div>
+      ) : null}
+
       {/* Service charge */}
       <div className="flex items-center justify-between text-ink-3">
         <span className="flex items-center gap-1.5">
@@ -306,15 +423,141 @@ function InlineEstimatedBadge({ hint }: { hint: string }) {
 }
 
 // ---------------------------------------------------------------------------
+// Full-coverage panel — the gift card covers the ENTIRE residual (Phase 4, ADR 0027)
+// ---------------------------------------------------------------------------
+
+/**
+ * Rendered instead of the tender picker + Cash/Digital panels when the applied gift card fully
+ * covers `grandTotalMinor` (residualDueMinor === 0). One click completes the order.
+ *
+ * Wire-shape decision (documented per the task): the backend accepts EITHER omitting `payment`
+ * entirely (no payment row is written — a valid path) OR sending a payment object with the
+ * residual forced to zero (every vertical's writer special-cases a fully-gift-card-covered sale
+ * into an immediate zero-amount CAPTURED record, REGARDLESS of the chosen tenderType —
+ * restaurant's `PaymentWriter#captureZeroResidualInCurrentTx`, carwash/barbershop's inline
+ * `CarwashPayment.capturedCash(zero, zero, zero)` equivalent). This console ALWAYS sends the
+ * payment object (`CASH`, `tenderedMinor: 0`) — the simpler, single wire shape that works
+ * identically whether or not the vertical happens to require `payment` (carwash/barbershop's
+ * CheckoutRequest.payment is `@NotNull` — restaurant's is optional; sending it unconditionally
+ * means this panel never needs a per-vertical branch).
+ */
+interface FullCoveragePanelProps {
+  session: CompanySession
+  lines: OrderLineInput[]
+  discountMinor: number
+  couponCode?: string | null
+  loyaltyMemberId: string | null
+  loyaltyRedeemPoints: number
+  giftCardId: string
+  giftCardRedeemMinor: number
+  currency: string
+  locale: string
+  onSuccess: (order: OrderResponse, payment: PaymentResponse) => void
+  parkedOrderId?: string | null
+  orderType?: string
+  tableId?: string | null
+}
+
+function FullCoveragePanel({
+  session,
+  lines,
+  discountMinor,
+  couponCode,
+  loyaltyMemberId,
+  loyaltyRedeemPoints,
+  giftCardId,
+  giftCardRedeemMinor,
+  currency,
+  locale,
+  onSuccess,
+  parkedOrderId,
+  orderType,
+  tableId,
+}: FullCoveragePanelProps) {
+  const { t } = useTranslation()
+  const checkout = useCheckout(session)
+  const payParked = usePayParked(session)
+  const [idempotencyKey] = useState<string>(() => crypto.randomUUID())
+  const isBusy = checkout.isPending || payParked.isPending
+
+  function complete() {
+    if (parkedOrderId) {
+      payParked.mutate(
+        {
+          orderId: parkedOrderId,
+          payment: { tenderType: 'CASH', tenderedMinor: 0 },
+          couponCode,
+          loyaltyMemberId,
+          loyaltyRedeemPoints,
+          giftCardId,
+          giftCardRedeemMinor,
+        },
+        { onSuccess: (res) => res?.payment && onSuccess(res, res.payment) },
+      )
+    } else {
+      checkout.mutate(
+        {
+          idempotencyKey,
+          lines,
+          payment: { tenderType: 'CASH', tenderedMinor: 0 },
+          discountMinor,
+          orderType,
+          tableId,
+          couponCode,
+          loyaltyMemberId,
+          loyaltyRedeemPoints,
+          giftCardId,
+          giftCardRedeemMinor,
+        },
+        { onSuccess: (res) => res?.payment && onSuccess(res, res.payment) },
+      )
+    }
+  }
+
+  return (
+    <div className="px-5 pb-5">
+      <div className="mb-4 flex items-center gap-2.5 rounded-xl border border-emerald-line bg-emerald-tint px-4 py-3">
+        <Gift className="size-5 shrink-0 text-emerald-2" aria-hidden />
+        <div>
+          <p className="text-sm font-bold text-emerald-2">{t('pos.loyalty.giftCard.fullyCovered')}</p>
+          <p className="tnum mt-0.5 font-mono text-xs text-emerald-2/80">
+            {formatMoney(giftCardRedeemMinor, currency, locale)}
+          </p>
+        </div>
+      </div>
+
+      {(checkout.isError || payParked.isError) ? (
+        <p className="mb-3 text-xs text-loss" role="alert">
+          {(() => {
+            const err = checkout.error ?? payParked.error
+            const key = resolveSimpleErrorKey(err)
+            return key ? t(key) : (err as Error).message
+          })()}
+        </p>
+      ) : null}
+
+      <Button className="w-full" disabled={isBusy} onClick={complete}>
+        {isBusy ? <Spinner /> : t('pos.loyalty.giftCard.completeOrder')}
+      </Button>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Cash panel
 // ---------------------------------------------------------------------------
 
 interface CashPanelProps {
   session: CompanySession
   lines: OrderLineInput[]
-  grandTotalMinor: number
+  /** The amount to actually authorize — residualDueMinor (grandTotal minus any gift-card tender). */
+  chargeMinor: number
   discountMinor: number
   couponCode?: string | null
+  loyaltyMemberId: string | null
+  loyaltyRedeemPoints: number
+  giftCardId: string | null
+  giftCardRedeemMinor: number
   currency: string
   locale: string
   onSuccess: (order: OrderResponse, payment: PaymentResponse) => void
@@ -327,9 +570,13 @@ interface CashPanelProps {
 function CashPanel({
   session,
   lines,
-  grandTotalMinor,
+  chargeMinor,
   discountMinor,
   couponCode,
+  loyaltyMemberId,
+  loyaltyRedeemPoints,
+  giftCardId,
+  giftCardRedeemMinor,
   currency,
   locale,
   onSuccess,
@@ -353,10 +600,10 @@ function CashPanel({
   const [keyStr, setKeyStr] = useState<string>('')
 
   const tenderedMinor = keyStr === '' ? 0 : parseInt(keyStr, 10)
-  const changeMinor = tenderedMinor - grandTotalMinor
-  const canPay = tenderedMinor >= grandTotalMinor && !isBusy
+  const changeMinor = tenderedMinor - chargeMinor
+  const canPay = tenderedMinor >= chargeMinor && !isBusy
 
-  const chips = quickChips(grandTotalMinor, currency)
+  const chips = quickChips(chargeMinor, currency)
 
   function pressDigit(d: string) {
     if (keyStr === '0') return // prevent leading zero accumulation
@@ -378,7 +625,15 @@ function CashPanel({
     if (parkedOrderId) {
       // Resume path: finalise a PARKED order
       payParked.mutate(
-        { orderId: parkedOrderId, payment: { tenderType: 'CASH', tenderedMinor }, couponCode },
+        {
+          orderId: parkedOrderId,
+          payment: { tenderType: 'CASH', tenderedMinor },
+          couponCode,
+          loyaltyMemberId,
+          loyaltyRedeemPoints,
+          giftCardId,
+          giftCardRedeemMinor,
+        },
         {
           onSuccess: (res) => {
             if (res?.payment) {
@@ -400,6 +655,10 @@ function CashPanel({
           orderType,
           tableId,
           couponCode,
+          loyaltyMemberId,
+          loyaltyRedeemPoints,
+          giftCardId,
+          giftCardRedeemMinor,
         },
         {
           onSuccess: (res) => {
@@ -478,21 +737,21 @@ function CashPanel({
                 available: stockErr.available,
               })
             }
-            const couponKey = couponCheckoutErrorKey(err)
-            if (couponKey) {
-              return t(couponKey)
+            const key = resolveSimpleErrorKey(err)
+            if (key) {
+              return t(key)
             }
             return (err as Error).message
           })()}
         </p>
       ) : null}
 
-      {!canPay && tenderedMinor > 0 && tenderedMinor < grandTotalMinor ? (
+      {!canPay && tenderedMinor > 0 && tenderedMinor < chargeMinor ? (
         <p className="mb-3 text-xs text-amber-2">{t('pos.payment.insufficientTendered')}</p>
       ) : null}
 
       <Button className="w-full" disabled={!canPay} onClick={pay}>
-        {isBusy ? <Spinner /> : t('pos.payment.payAmount', { amount: formatMoney(grandTotalMinor, currency, locale) })}
+        {isBusy ? <Spinner /> : t('pos.payment.payAmount', { amount: formatMoney(chargeMinor, currency, locale) })}
       </Button>
     </div>
   )
@@ -517,9 +776,14 @@ function KeypadButton({ label, onClick }: { label: string; onClick: () => void }
 interface DigitalPanelProps {
   session: CompanySession
   lines: OrderLineInput[]
-  grandTotalMinor: number
+  /** The amount to actually authorize — residualDueMinor (grandTotal minus any gift-card tender). */
+  chargeMinor: number
   discountMinor: number
   couponCode?: string | null
+  loyaltyMemberId: string | null
+  loyaltyRedeemPoints: number
+  giftCardId: string | null
+  giftCardRedeemMinor: number
   currency: string
   locale: string
   tenderType: 'QRIS' | 'CARD'
@@ -533,9 +797,13 @@ interface DigitalPanelProps {
 function DigitalPanel({
   session,
   lines,
-  grandTotalMinor,
+  chargeMinor,
   discountMinor,
   couponCode,
+  loyaltyMemberId,
+  loyaltyRedeemPoints,
+  giftCardId,
+  giftCardRedeemMinor,
   currency,
   locale,
   tenderType,
@@ -561,7 +829,15 @@ function DigitalPanel({
     if (parkedOrderId) {
       // Resume path: finalise a PARKED order with a digital tender → AWAITING_PAYMENT
       payParked.mutate(
-        { orderId: parkedOrderId, payment: { tenderType }, couponCode },
+        {
+          orderId: parkedOrderId,
+          payment: { tenderType },
+          couponCode,
+          loyaltyMemberId,
+          loyaltyRedeemPoints,
+          giftCardId,
+          giftCardRedeemMinor,
+        },
         {
           onSuccess: (res) => {
             if (res?.payment) {
@@ -573,7 +849,19 @@ function DigitalPanel({
       )
     } else {
       checkout.mutate(
-        { idempotencyKey, lines, payment: { tenderType }, discountMinor, orderType, tableId, couponCode },
+        {
+          idempotencyKey,
+          lines,
+          payment: { tenderType },
+          discountMinor,
+          orderType,
+          tableId,
+          couponCode,
+          loyaltyMemberId,
+          loyaltyRedeemPoints,
+          giftCardId,
+          giftCardRedeemMinor,
+        },
         {
           onSuccess: (res) => {
             if (res?.payment) {
@@ -624,9 +912,9 @@ function DigitalPanel({
                   available: stockErr.available,
                 })
               }
-              const couponKey = couponCheckoutErrorKey(err)
-              if (couponKey) {
-                return t(couponKey)
+              const key = resolveSimpleErrorKey(err)
+              if (key) {
+                return t(key)
               }
               return (err as Error).message
             })()}
@@ -634,7 +922,7 @@ function DigitalPanel({
         ) : null}
 
         <Button className="w-full" disabled={isInitiating} onClick={initiatePayment}>
-          {isInitiating ? <Spinner /> : t('pos.payment.payAmount', { amount: formatMoney(grandTotalMinor, currency, locale) })}
+          {isInitiating ? <Spinner /> : t('pos.payment.payAmount', { amount: formatMoney(chargeMinor, currency, locale) })}
         </Button>
       </div>
     )

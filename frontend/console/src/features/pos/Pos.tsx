@@ -27,6 +27,7 @@ import {
   ChevronUp,
   ChefHat,
   ClipboardList,
+  Gift,
   ImageOff,
   LogOut,
   Moon,
@@ -51,6 +52,9 @@ import { OutletPicker } from '@/components/OutletPicker'
 import { OutletGate } from '@/components/OutletGate'
 import { CouponField } from '@/components/CouponField'
 import { AppliedPromotionChips } from '@/components/AppliedPromotionChips'
+import { MemberField } from '@/components/MemberField'
+import { GiftCardSellModal } from '@/components/GiftCardSellModal'
+import type { MemberResponse } from '@/features/loyalty/api'
 import {
   useMenu,
   useCategories,
@@ -126,6 +130,12 @@ function PosInner({ session }: { session: CompanySession }) {
   // Phase 3 (ADR 0026): the committed coupon code fed into the live quote + checkout/pay-parked.
   // Bills (guest tabs) are out of scope for coupons per the ADR — only the walk-in cart uses this.
   const [couponCode, setCouponCode] = useState<string | null>(null)
+  // Phase 4 (ADR 0027): the attached loyalty member + committed points redemption, fed into the
+  // live quote + checkout/pay-parked. Mirrors the coupon's scope decision — bills (guest tabs) are
+  // out of scope; only the walk-in cart attaches a member.
+  const [attachedMember, setAttachedMember] = useState<MemberResponse | null>(null)
+  const [loyaltyRedeemPoints, setLoyaltyRedeemPoints] = useState<number>(0)
+  const [showGiftCardSell, setShowGiftCardSell] = useState(false)
   // The manual discount is owner/manager-only (ADR 0026 §5; the server 403s anyway — this hides the
   // input for a cashier so it never sees an affordance it cannot use).
   const canManualDiscount = hasAnyRole(auth.roles, 'owner', 'manager')
@@ -235,7 +245,14 @@ function PosInner({ session }: { session: CompanySession }) {
 
   const lineCount = cart.reduce((sum, l) => sum + l.qty, 0)
   const discountMinor = parseDiscountInput(discountInput, currency)
-  const quoteQuery = useQuote(session, cartLines, discountMinor, couponCode)
+  const quoteQuery = useQuote(
+    session,
+    cartLines,
+    discountMinor,
+    couponCode,
+    attachedMember?.id ?? null,
+    loyaltyRedeemPoints,
+  )
   const breakdown = quoteQuery.data ?? resumedOrder?.breakdown ?? null
   const clientSubtotalMinor = cart.reduce(
     (sum, l) => sum + l.effectiveUnitPriceMinor * l.qty,
@@ -243,6 +260,16 @@ function PosInner({ session }: { session: CompanySession }) {
   )
   const grandTotalMinor =
     breakdown?.grandTotalMinor ?? (resumedOrder?.totalMinor ?? clientSubtotalMinor)
+  // The redemption ceiling: the member's balance, capped by the total due BEFORE this redemption
+  // (grandTotalMinor already has any currently-committed redemption subtracted — add it back so
+  // the cap doesn't shrink itself as points are applied; loyaltyRedeemedMinor is 0 until the quote
+  // resolves, which is a safe/conservative starting bound).
+  const maxRedeemablePoints = attachedMember
+    ? Math.max(
+        0,
+        Math.min(attachedMember.pointsBalance, grandTotalMinor + (breakdown?.loyaltyRedeemedMinor ?? 0)),
+      )
+    : 0
 
   const discountInvalid =
     discountInput !== '' && (isNaN(Number(discountInput)) || Number(discountInput) < 0)
@@ -331,6 +358,8 @@ function PosInner({ session }: { session: CompanySession }) {
     setResumedOrder(null)
     setResumeLoaded(false)
     setCouponCode(null)
+    setAttachedMember(null)
+    setLoyaltyRedeemPoints(0)
   }
 
   function handleResume(orderId: string) {
@@ -471,6 +500,16 @@ function PosInner({ session }: { session: CompanySession }) {
                 {parkedCount}
               </span>
             ) : null}
+          </button>
+          {/* Gift card sell — a distinct till action, not a cart line (ADR 0027) */}
+          <button
+            type="button"
+            onClick={() => setShowGiftCardSell(true)}
+            aria-label={t('pos.loyalty.giftCard.sellTitle')}
+            title={t('pos.loyalty.giftCard.sellTitle')}
+            className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+          >
+            <Gift className="size-4" aria-hidden="true" />
           </button>
           {/* Theme */}
           <button
@@ -625,6 +664,16 @@ function PosInner({ session }: { session: CompanySession }) {
           onCouponApply={setCouponCode}
           onCouponClear={() => setCouponCode(null)}
           appliedPromotions={breakdown?.appliedPromotions ?? []}
+          session={session}
+          attachedMember={attachedMember}
+          onMemberAttach={setAttachedMember}
+          onMemberClear={() => {
+            setAttachedMember(null)
+            setLoyaltyRedeemPoints(0)
+          }}
+          loyaltyRedeemPoints={loyaltyRedeemPoints}
+          maxRedeemablePoints={maxRedeemablePoints}
+          onLoyaltyRedeemChange={setLoyaltyRedeemPoints}
           onExpand={() => setBillSheetOpen(true)}
           onSend={() => {
             // In bill mode "Send" is handled by BillDetail; here we just open it
@@ -659,6 +708,8 @@ function PosInner({ session }: { session: CompanySession }) {
           grandTotalMinor={grandTotalMinor}
           discountMinor={discountMinor}
           couponCode={couponCode}
+          loyaltyMember={attachedMember}
+          loyaltyRedeemPoints={loyaltyRedeemPoints}
           currency={currency}
           locale={locale}
           onSuccess={handlePaymentSuccess}
@@ -666,6 +717,16 @@ function PosInner({ session }: { session: CompanySession }) {
           parkedOrderId={resumedOrder?.orderId ?? null}
           orderType={orderType}
           tableId={null}
+        />
+      ) : null}
+
+      {showGiftCardSell ? (
+        <GiftCardSellModal
+          vertical="restaurant"
+          session={session}
+          currency={currency}
+          locale={locale}
+          onClose={() => setShowGiftCardSell(false)}
         />
       ) : null}
 
@@ -1125,6 +1186,13 @@ function SummaryBar({
   onCouponApply,
   onCouponClear,
   appliedPromotions,
+  session,
+  attachedMember,
+  onMemberAttach,
+  onMemberClear,
+  loyaltyRedeemPoints,
+  maxRedeemablePoints,
+  onLoyaltyRedeemChange,
   onExpand,
   onSend,
   onPay,
@@ -1144,6 +1212,15 @@ function SummaryBar({
   onCouponApply: (code: string) => void
   onCouponClear: () => void
   appliedPromotions: AppliedPromotionResponse[]
+  session: CompanySession
+  /** Phase 4 (ADR 0027): the attached loyalty member — walk-in cart mode only, mirrors the coupon
+   * scope decision (bills are a follow-up). */
+  attachedMember: MemberResponse | null
+  onMemberAttach: (member: MemberResponse) => void
+  onMemberClear: () => void
+  loyaltyRedeemPoints: number
+  maxRedeemablePoints: number
+  onLoyaltyRedeemChange: (points: number) => void
   onExpand: () => void
   onSend: () => void
   onPay: () => void
@@ -1178,6 +1255,18 @@ function SummaryBar({
             className="max-w-sm"
           />
           <AppliedPromotionChips promotions={appliedPromotions} currency={currency} locale={locale} />
+          <MemberField
+            session={session}
+            currency={currency}
+            locale={locale}
+            member={attachedMember}
+            onAttach={onMemberAttach}
+            onClear={onMemberClear}
+            redeemPoints={loyaltyRedeemPoints}
+            maxRedeemable={maxRedeemablePoints}
+            onRedeemChange={onLoyaltyRedeemChange}
+            className="max-w-sm"
+          />
           {showDiscountInput ? (
             <div className="flex items-center gap-2">
               <label

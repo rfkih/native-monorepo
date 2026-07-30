@@ -19,6 +19,7 @@ import { Link } from 'react-router-dom'
 import {
   ArrowLeft,
   Car,
+  Gift,
   LogOut,
   Minus,
   Moon,
@@ -43,6 +44,9 @@ import { OutletPicker } from '@/components/OutletPicker'
 import { OutletGate } from '@/components/OutletGate'
 import { CouponField } from '@/components/CouponField'
 import { AppliedPromotionChips } from '@/components/AppliedPromotionChips'
+import { MemberField } from '@/components/MemberField'
+import { GiftCardSellModal } from '@/components/GiftCardSellModal'
+import type { MemberResponse } from '@/features/loyalty/api'
 import type { VerticalPosConfig } from './config'
 import {
   useCatalogPackages,
@@ -113,6 +117,11 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
   const [discountInput, setDiscountInput] = useState('')
   // Phase 3 (ADR 0026): the committed coupon code fed into the live quote + checkout.
   const [couponCode, setCouponCode] = useState<string | null>(null)
+  // Phase 4 (ADR 0027): the attached loyalty member + committed points redemption, fed into the
+  // live quote + checkout.
+  const [attachedMember, setAttachedMember] = useState<MemberResponse | null>(null)
+  const [loyaltyRedeemPoints, setLoyaltyRedeemPoints] = useState<number>(0)
+  const [showGiftCardSell, setShowGiftCardSell] = useState(false)
 
   // Overlay state
   const [modal, setModal] = useState<'payment' | 'receipt' | null>(null)
@@ -135,13 +144,28 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
   }, [config.primaryItemType, selectedPackage, addonLines])
 
   const discountMinor = parseDiscountInput(discountInput, currency)
-  const quoteQuery = useTicketQuote(config, session, lines, discountMinor, couponCode)
+  const quoteQuery = useTicketQuote(
+    config,
+    session,
+    lines,
+    discountMinor,
+    couponCode,
+    attachedMember?.id ?? null,
+    loyaltyRedeemPoints,
+  )
   const breakdown = quoteQuery.data ?? null
 
   const clientSubtotalMinor =
     (selectedPackage?.priceMinor ?? 0) +
     [...addonLines.values()].reduce((sum, l) => sum + l.item.priceMinor * l.qty, 0)
   const grandTotalMinor = breakdown?.grandTotalMinor ?? Math.max(0, clientSubtotalMinor - discountMinor)
+  // The redemption ceiling — see features/pos/Pos.tsx's twin computation doc.
+  const maxRedeemablePoints = attachedMember
+    ? Math.max(
+        0,
+        Math.min(attachedMember.pointsBalance, grandTotalMinor + (breakdown?.loyaltyRedeemedMinor ?? 0)),
+      )
+    : 0
 
   const discountInvalid =
     discountInput !== '' && (isNaN(Number(discountInput)) || Number(discountInput) < 0)
@@ -184,6 +208,8 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
     setStaffProfileId(null)
     setDiscountInput('')
     setCouponCode(null)
+    setAttachedMember(null)
+    setLoyaltyRedeemPoints(0)
   }
 
   function handlePaymentSuccess(paidTicket: TicketResponse) {
@@ -200,7 +226,7 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
 
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-paper">
-      <HeaderBar config={config} session={session} />
+      <HeaderBar config={config} session={session} onOpenGiftCardSell={() => setShowGiftCardSell(true)} />
 
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
         {/* Catalog — packages + add-ons */}
@@ -283,6 +309,16 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
             onCouponApply={setCouponCode}
             onCouponClear={() => setCouponCode(null)}
             appliedPromotions={breakdown?.appliedPromotions ?? []}
+            session={session}
+            attachedMember={attachedMember}
+            onMemberAttach={setAttachedMember}
+            onMemberClear={() => {
+              setAttachedMember(null)
+              setLoyaltyRedeemPoints(0)
+            }}
+            loyaltyRedeemPoints={loyaltyRedeemPoints}
+            maxRedeemablePoints={maxRedeemablePoints}
+            onLoyaltyRedeemChange={setLoyaltyRedeemPoints}
             breakdown={breakdown}
             grandTotalMinor={grandTotalMinor}
             canCharge={canCharge}
@@ -299,6 +335,8 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
           grandTotalMinor={grandTotalMinor}
           discountMinor={discountMinor}
           couponCode={couponCode}
+          loyaltyMember={attachedMember}
+          loyaltyRedeemPoints={loyaltyRedeemPoints}
           breakdown={breakdown}
           currency={currency}
           locale={locale}
@@ -307,6 +345,16 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
           staffProfileId={staffProfileId}
           onSuccess={handlePaymentSuccess}
           onClose={() => setModal(null)}
+        />
+      ) : null}
+
+      {showGiftCardSell ? (
+        <GiftCardSellModal
+          vertical={config.vertical}
+          session={session}
+          currency={currency}
+          locale={locale}
+          onClose={() => setShowGiftCardSell(false)}
         />
       ) : null}
 
@@ -328,7 +376,15 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
 // HeaderBar — simplified terminal chrome (title + outlet picker + utilities)
 // ---------------------------------------------------------------------------
 
-function HeaderBar({ config, session }: { config: VerticalPosConfig; session: CompanySession }) {
+function HeaderBar({
+  config,
+  session,
+  onOpenGiftCardSell,
+}: {
+  config: VerticalPosConfig
+  session: CompanySession
+  onOpenGiftCardSell: () => void
+}) {
   const { t } = useTranslation()
   const { theme, toggle } = useTheme()
   const auth = useAuth()
@@ -373,6 +429,16 @@ function HeaderBar({ config, session }: { config: VerticalPosConfig; session: Co
             <Settings className="size-4" />
           </Link>
         ) : null}
+        {/* Gift card sell — a distinct till action, not a cart line (ADR 0027) */}
+        <button
+          type="button"
+          onClick={onOpenGiftCardSell}
+          aria-label={t('pos.loyalty.giftCard.sellTitle')}
+          title={t('pos.loyalty.giftCard.sellTitle')}
+          className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+        >
+          <Gift className="size-4" aria-hidden="true" />
+        </button>
         <button
           type="button"
           onClick={toggle}
@@ -515,6 +581,14 @@ interface SummaryPanelProps {
   onCouponApply: (code: string) => void
   onCouponClear: () => void
   appliedPromotions: AppliedPromotionResponse[]
+  session: CompanySession
+  /** Phase 4 (ADR 0027): the attached loyalty member. */
+  attachedMember: MemberResponse | null
+  onMemberAttach: (member: MemberResponse) => void
+  onMemberClear: () => void
+  loyaltyRedeemPoints: number
+  maxRedeemablePoints: number
+  onLoyaltyRedeemChange: (points: number) => void
   breakdown: PriceBreakdownResponse | null
   grandTotalMinor: number
   canCharge: boolean
@@ -545,6 +619,13 @@ function SummaryPanel({
   onCouponApply,
   onCouponClear,
   appliedPromotions,
+  session,
+  attachedMember,
+  onMemberAttach,
+  onMemberClear,
+  loyaltyRedeemPoints,
+  maxRedeemablePoints,
+  onLoyaltyRedeemChange,
   breakdown,
   grandTotalMinor,
   canCharge,
@@ -690,6 +771,18 @@ function SummaryPanel({
         onClear={onCouponClear}
       />
 
+      <MemberField
+        session={session}
+        currency={currency}
+        locale={locale}
+        member={attachedMember}
+        onAttach={onMemberAttach}
+        onClear={onMemberClear}
+        redeemPoints={loyaltyRedeemPoints}
+        maxRedeemable={maxRedeemablePoints}
+        onRedeemChange={onLoyaltyRedeemChange}
+      />
+
       {showDiscountInput ? (
         <div>
           <label htmlFor="svc-discount" className="mb-1.5 block text-sm font-medium text-ink-2">
@@ -767,6 +860,15 @@ function BreakdownPanel({
           <span>{t('pos.discount')}</span>
           <span className="tnum font-mono text-loss">
             − {formatMoney(breakdown.discountMinor, currency, locale)}
+          </span>
+        </div>
+      ) : null}
+
+      {breakdown.loyaltyRedeemedMinor > 0 ? (
+        <div className="flex items-baseline justify-between text-ink-3">
+          <span>{t('pos.loyalty.redeemedLabel')}</span>
+          <span className="tnum font-mono text-loss">
+            − {formatMoney(breakdown.loyaltyRedeemedMinor, currency, locale)}
           </span>
         </div>
       ) : null}

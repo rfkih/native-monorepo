@@ -126,6 +126,15 @@ export function ServiceReceipt({ config, ticket, locale, businessName, appliedPr
       }
     }
   }
+  // Phase 4 (ADR 0027): loyalty points redeemed — a separate deduction row under the discount
+  // block (never folded into the promo-only discount above, matching the wire's split).
+  if (breakdown.loyaltyRedeemedMinor > 0) {
+    totalRows.push({
+      label: t('pos.loyalty.redeemedLabel'),
+      valueLabel: `- ${formatMoney(breakdown.loyaltyRedeemedMinor, currency, locale)}`,
+      isDeduction: true,
+    })
+  }
   totalRows.push({
     label: illustrative ? `${t('pos.serviceCharge')} · ${t('pos.estimated')}` : t('pos.serviceCharge'),
     valueLabel: formatMoney(breakdown.serviceChargeMinor, currency, locale),
@@ -137,7 +146,17 @@ export function ServiceReceipt({ config, ticket, locale, businessName, appliedPr
 
   const grandTotalLabel = formatMoney(breakdown.grandTotalMinor, currency, locale)
 
+  // Payment rows. Phase 4 (ADR 0027): a gift-card tender is a PAYMENT row (never a discount) —
+  // listed here, before the tender-in-hand row. Points EARNED on this sale are deliberately NOT
+  // shown — see features/pos/ReceiptView.tsx's twin comment (the response never echoes one back).
   const paymentRows: ThermalRow[] = []
+  if (breakdown.giftCardAppliedMinor > 0) {
+    paymentRows.push({
+      label: t('pos.loyalty.giftCard.paymentRowLabel'),
+      valueLabel: `- ${formatMoney(breakdown.giftCardAppliedMinor, currency, locale)}`,
+      isDeduction: true,
+    })
+  }
   if (payment) {
     paymentRows.push({ label: t('pos.receipt.tender'), valueLabel: t(tenderKey(payment.tenderType)) })
     if (isCash && payment.tenderedMinor != null) {

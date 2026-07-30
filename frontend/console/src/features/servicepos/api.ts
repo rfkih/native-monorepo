@@ -55,6 +55,9 @@ export interface AppliedPromotionResponse {
  *
  * Phase 3 (ADR 0026): appliedPromotions/couponStatus are populated ONLY on the quote response —
  * same contract as the restaurant POS (features/pos/api.ts's PriceBreakdownResponse doc).
+ *
+ * Phase 4 (ADR 0027, additive): see features/pos/api.ts's twin doc — loyaltyRedeemedMinor /
+ * giftCardAppliedMinor / residualDueMinor, all defaulting to 0 pre-Phase-4.
  */
 export interface PriceBreakdownResponse {
   subtotalMinor: number
@@ -66,6 +69,9 @@ export interface PriceBreakdownResponse {
   usesIllustrativeRules: boolean
   appliedPromotions: AppliedPromotionResponse[]
   couponStatus: 'APPLIED' | 'INVALID' | 'EXHAUSTED' | null
+  loyaltyRedeemedMinor: number
+  giftCardAppliedMinor: number
+  residualDueMinor: number
 }
 
 /** One quote/checkout line — a package (qty always 1) or an add-on (qty >= 1). */
@@ -246,29 +252,39 @@ export function useStaffProfiles(
 // Live quote — debounced, no side-effects (mirrors features/pos useQuote exactly).
 // ---------------------------------------------------------------------------
 
+/**
+ * Phase 4 (ADR 0027): loyaltyMemberId/loyaltyRedeemPoints (optional) preview a points redemption —
+ * see features/pos/api.ts's useQuote twin doc for the never-throws-on-preview contract and why
+ * giftCardId/giftCardRedeemMinor are deliberately NOT threaded here (the payment modal computes
+ * residualDueMinor client-side instead — components/GiftCardField.tsx).
+ */
 export function useTicketQuote(
   config: VerticalPosConfig,
   session: CompanySession,
   lines: TicketLineInput[],
   discountMinor: number,
   couponCode: string | null = null,
+  loyaltyMemberId: string | null = null,
+  loyaltyRedeemPoints: number = 0,
 ) {
   const [debounced, setDebounced] = useState<{
     lines: TicketLineInput[]
     discountMinor: number
     couponCode: string | null
-  }>(() => ({ lines, discountMinor, couponCode }))
+    loyaltyMemberId: string | null
+    loyaltyRedeemPoints: number
+  }>(() => ({ lines, discountMinor, couponCode, loyaltyMemberId, loyaltyRedeemPoints }))
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => {
-      setDebounced({ lines, discountMinor, couponCode })
+      setDebounced({ lines, discountMinor, couponCode, loyaltyMemberId, loyaltyRedeemPoints })
     }, 400)
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
     }
-  }, [lines, discountMinor, couponCode])
+  }, [lines, discountMinor, couponCode, loyaltyMemberId, loyaltyRedeemPoints])
 
   const enabled = debounced.lines.length > 0
 
@@ -282,6 +298,8 @@ export function useTicketQuote(
       debounced.lines,
       debounced.discountMinor,
       debounced.couponCode,
+      debounced.loyaltyMemberId,
+      debounced.loyaltyRedeemPoints,
     ],
     enabled,
     placeholderData: keepPreviousData,
@@ -295,6 +313,8 @@ export function useTicketQuote(
           lines: debounced.lines,
           discountMinor: debounced.discountMinor > 0 ? debounced.discountMinor : null,
           couponCode: debounced.couponCode || null,
+          loyaltyMemberId: debounced.loyaltyMemberId || null,
+          loyaltyRedeemPoints: debounced.loyaltyRedeemPoints > 0 ? debounced.loyaltyRedeemPoints : null,
         },
       }),
   })
@@ -321,6 +341,11 @@ export interface TicketCheckoutInput {
   payment: { tenderType: TenderType; tenderedMinor?: number }
   /** Phase 3 (ADR 0026): optional coupon code. Checkout REJECTS a bad/exhausted code (unlike the quote). */
   couponCode?: string | null
+  /** Phase 4 (ADR 0027): see features/pos/api.ts's CheckoutInput twin fields. */
+  loyaltyMemberId?: string | null
+  loyaltyRedeemPoints?: number | null
+  giftCardId?: string | null
+  giftCardRedeemMinor?: number | null
 }
 
 export function useTicketCheckout(config: VerticalPosConfig, session: CompanySession) {
@@ -335,6 +360,10 @@ export function useTicketCheckout(config: VerticalPosConfig, session: CompanySes
       lines,
       payment,
       couponCode,
+      loyaltyMemberId,
+      loyaltyRedeemPoints,
+      giftCardId,
+      giftCardRedeemMinor,
     }: TicketCheckoutInput) =>
       apiFetch<TicketResponse>(`${config.apiBase}/tickets/checkout`, {
         method: 'POST',
@@ -352,6 +381,10 @@ export function useTicketCheckout(config: VerticalPosConfig, session: CompanySes
           lines,
           payment,
           couponCode: couponCode || null,
+          loyaltyMemberId: loyaltyMemberId || null,
+          loyaltyRedeemPoints: loyaltyRedeemPoints && loyaltyRedeemPoints > 0 ? loyaltyRedeemPoints : null,
+          giftCardId: giftCardId || null,
+          giftCardRedeemMinor: giftCardRedeemMinor && giftCardRedeemMinor > 0 ? giftCardRedeemMinor : null,
         },
       }),
     onSuccess: (res) => {

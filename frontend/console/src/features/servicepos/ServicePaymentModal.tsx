@@ -1,7 +1,11 @@
 /**
  * ServicePaymentModal — the service-POS counterpart of features/pos/PaymentModal.tsx (adapted, not
  * imported: the checkout/capture calls and payload shape are specific to the ticket-based service
- * POS contract). Same three-tender UX (ADR 0006):
+ * POS contract). Same three-tender UX (ADR 0006), extended Phase 4 (ADR 0027) exactly like the
+ * restaurant PaymentModal — see that file's class doc for the gift-card residual/full-coverage
+ * design (identical here; ServicePaymentModal's `payment` field is always REQUIRED on the wire,
+ * unlike restaurant's optional one, but the full-coverage wire choice — always send a payment
+ * object — already accounted for that, so no branch is needed):
  *
  *   CASH  — numeric keypad + quick-cash chips; live change line; Pay fires
  *           POST {apiBase}/tickets/checkout with the payment block. CAPTURED immediately.
@@ -17,16 +21,23 @@
  */
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { X } from 'lucide-react'
+import { Gift, X } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
 import { Segmented } from '@/components/ui/Segmented'
 import { AppliedPromotionChips } from '@/components/AppliedPromotionChips'
+import { GiftCardField } from '@/components/GiftCardField'
 import { formatMoney } from '@/lib/money'
 import type { CompanySession } from '@/lib/session'
 import { ApiError, isOutletNotAssigned } from '@/lib/api'
+import {
+  isGiftCardUnusable,
+  isLoyaltyBalanceInsufficient,
+  type GiftCardResponse,
+  type MemberResponse,
+} from '@/features/loyalty/api'
 import type { VerticalPosConfig, TenderType } from './config'
 import {
   isModuleNotEntitled,
@@ -41,11 +52,16 @@ interface Props {
   config: VerticalPosConfig
   session: CompanySession
   lines: TicketLineInput[]
-  /** Server-authoritative grand total from the quote breakdown; drives the charge amount. */
+  /** Server-authoritative grand total from the quote breakdown; drives the charge amount BEFORE
+   * any gift-card tender. */
   grandTotalMinor: number
   discountMinor: number
   /** Phase 3 (ADR 0026): the committed coupon code (or null); forwarded to checkout. */
   couponCode?: string | null
+  /** Phase 4 (ADR 0027): the loyalty member attached upstream on the main POS screen (read-only
+   * here — attach/detach lives in MemberField, in ServicePos.tsx's SummaryPanel). */
+  loyaltyMember?: MemberResponse | null
+  loyaltyRedeemPoints?: number
   /** Live price breakdown from useTicketQuote — rendered in the modal header. */
   breakdown: PriceBreakdownResponse | null
   currency: string
@@ -76,11 +92,14 @@ function quickChips(totalMinor: number, currency: string): number[] {
 /**
  * Maps a checkout/capture error to a precise i18n message, or null for a generic fallback. The
  * coupon checks (ADR 0026: checkout REJECTS a bad/exhausted code, unlike the quote) reuse the same
- * copy CouponField's own inline error uses.
+ * copy CouponField's own inline error uses. Phase 4 (ADR 0027) adds the loyalty/gift-card
+ * checkout-time redemption faults (both 409).
  */
 function errorMessageKey(err: unknown): string | null {
   if (isOutletNotAssigned(err)) return 'pos.payment.outletNotAssigned'
   if (isModuleNotEntitled(err)) return 'servicePos.errors.moduleNotEntitled'
+  if (isLoyaltyBalanceInsufficient(err)) return 'pos.loyalty.member.insufficientBalance'
+  if (isGiftCardUnusable(err)) return 'pos.loyalty.giftCard.unusableAtCheckout'
   if (err instanceof ApiError) {
     const type = err.problem?.type ?? ''
     if (err.status === 422 && type.includes('coupon-invalid')) return 'pos.coupon.invalid'
@@ -96,6 +115,8 @@ export function ServicePaymentModal({
   grandTotalMinor,
   discountMinor,
   couponCode,
+  loyaltyMember,
+  loyaltyRedeemPoints,
   breakdown,
   currency,
   locale,
@@ -108,11 +129,21 @@ export function ServicePaymentModal({
   const { t } = useTranslation()
   const [tender, setTender] = useState<TenderType>('CASH')
 
+  // Phase 4 (ADR 0027): gift-card redemption entered HERE — see features/pos/PaymentModal.tsx's
+  // class doc for the residual/full-coverage design (identical here).
+  const [giftCard, setGiftCard] = useState<GiftCardResponse | null>(null)
+  const [giftCardRedeemMinor, setGiftCardRedeemMinor] = useState(0)
+  const residualDueMinor = Math.max(0, grandTotalMinor - giftCardRedeemMinor)
+  const fullyCoveredByGiftCard = giftCard != null && residualDueMinor === 0
+
   const tenderOptions: { value: TenderType; label: string }[] = [
     { value: 'CASH', label: t('pos.payment.tenderCash') },
     { value: 'QRIS', label: t('pos.payment.tenderQris') },
     { value: 'CARD', label: t('pos.payment.tenderCard') },
   ]
+
+  const loyaltyMemberId = loyaltyMember?.id ?? null
+  const effectiveLoyaltyRedeemPoints = loyaltyRedeemPoints ?? 0
 
   return (
     <div
@@ -136,23 +167,41 @@ export function ServicePaymentModal({
 
         <ModalBreakdown breakdown={breakdown} grandTotalMinor={grandTotalMinor} currency={currency} locale={locale} />
 
-        <div className="flex justify-center px-5 py-4">
-          <Segmented
-            options={tenderOptions}
-            value={tender}
-            onChange={setTender}
-            ariaLabel={t('pos.payment.selectTender')}
+        {/* Gift-card redemption (Phase 4, ADR 0027) */}
+        <div className="border-b border-line px-5 py-3">
+          <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-ink-3">
+            <Gift className="size-3.5 shrink-0" aria-hidden />
+            {t('pos.loyalty.giftCard.applyTitle')}
+          </p>
+          <GiftCardField
+            session={session}
+            locale={locale}
+            card={giftCard}
+            onApply={(card, redeem) => {
+              setGiftCard(card)
+              setGiftCardRedeemMinor(redeem)
+            }}
+            onClear={() => {
+              setGiftCard(null)
+              setGiftCardRedeemMinor(0)
+            }}
+            redeemMinor={giftCardRedeemMinor}
+            onRedeemChange={setGiftCardRedeemMinor}
+            dueBeforeCardMinor={grandTotalMinor}
           />
         </div>
 
-        {tender === 'CASH' ? (
-          <CashPanel
+        {fullyCoveredByGiftCard ? (
+          <FullCoveragePanel
             config={config}
             session={session}
             lines={lines}
-            grandTotalMinor={grandTotalMinor}
             discountMinor={discountMinor}
             couponCode={couponCode}
+            loyaltyMemberId={loyaltyMemberId}
+            loyaltyRedeemPoints={effectiveLoyaltyRedeemPoints}
+            giftCardId={giftCard!.id}
+            giftCardRedeemMinor={giftCardRedeemMinor}
             currency={currency}
             locale={locale}
             bay={bay}
@@ -161,22 +210,58 @@ export function ServicePaymentModal({
             onSuccess={onSuccess}
           />
         ) : (
-          <DigitalPanel
-            config={config}
-            session={session}
-            lines={lines}
-            grandTotalMinor={grandTotalMinor}
-            discountMinor={discountMinor}
-            couponCode={couponCode}
-            currency={currency}
-            locale={locale}
-            bay={bay}
-            vehiclePlate={vehiclePlate}
-            staffProfileId={staffProfileId}
-            tenderType={tender}
-            onSuccess={onSuccess}
-            onClose={onClose}
-          />
+          <>
+            <div className="flex justify-center px-5 py-4">
+              <Segmented
+                options={tenderOptions}
+                value={tender}
+                onChange={setTender}
+                ariaLabel={t('pos.payment.selectTender')}
+              />
+            </div>
+
+            {tender === 'CASH' ? (
+              <CashPanel
+                config={config}
+                session={session}
+                lines={lines}
+                chargeMinor={residualDueMinor}
+                discountMinor={discountMinor}
+                couponCode={couponCode}
+                loyaltyMemberId={loyaltyMemberId}
+                loyaltyRedeemPoints={effectiveLoyaltyRedeemPoints}
+                giftCardId={giftCard?.id ?? null}
+                giftCardRedeemMinor={giftCardRedeemMinor}
+                currency={currency}
+                locale={locale}
+                bay={bay}
+                vehiclePlate={vehiclePlate}
+                staffProfileId={staffProfileId}
+                onSuccess={onSuccess}
+              />
+            ) : (
+              <DigitalPanel
+                config={config}
+                session={session}
+                lines={lines}
+                chargeMinor={residualDueMinor}
+                discountMinor={discountMinor}
+                couponCode={couponCode}
+                loyaltyMemberId={loyaltyMemberId}
+                loyaltyRedeemPoints={effectiveLoyaltyRedeemPoints}
+                giftCardId={giftCard?.id ?? null}
+                giftCardRedeemMinor={giftCardRedeemMinor}
+                currency={currency}
+                locale={locale}
+                bay={bay}
+                vehiclePlate={vehiclePlate}
+                staffProfileId={staffProfileId}
+                tenderType={tender}
+                onSuccess={onSuccess}
+                onClose={onClose}
+              />
+            )}
+          </>
         )}
       </Card>
     </div>
@@ -230,6 +315,15 @@ function ModalBreakdown({
         </div>
       ) : null}
 
+      {breakdown.loyaltyRedeemedMinor > 0 ? (
+        <div className="flex items-baseline justify-between text-ink-3">
+          <span>{t('pos.loyalty.redeemedLabel')}</span>
+          <span className="tnum font-mono text-loss">
+            − {formatMoney(breakdown.loyaltyRedeemedMinor, currency, locale)}
+          </span>
+        </div>
+      ) : null}
+
       <div className="flex items-center justify-between text-ink-3">
         <span className="flex items-center gap-1.5">
           {t('pos.serviceCharge')}
@@ -275,6 +369,100 @@ function InlineEstimatedBadge({ hint }: { hint: string }) {
 }
 
 // ---------------------------------------------------------------------------
+// Full-coverage panel — the gift card covers the ENTIRE residual (Phase 4, ADR 0027). See
+// features/pos/PaymentModal.tsx's FullCoveragePanel doc for the wire-shape decision — identical
+// here, and ServicePaymentModal's payment field is REQUIRED on the wire anyway (unlike
+// restaurant's optional one), so sending a zero-amount CASH payment is the only valid shape.
+// ---------------------------------------------------------------------------
+
+interface FullCoveragePanelProps {
+  config: VerticalPosConfig
+  session: CompanySession
+  lines: TicketLineInput[]
+  discountMinor: number
+  couponCode?: string | null
+  loyaltyMemberId: string | null
+  loyaltyRedeemPoints: number
+  giftCardId: string
+  giftCardRedeemMinor: number
+  currency: string
+  locale: string
+  bay: string
+  vehiclePlate: string
+  staffProfileId: string | null
+  onSuccess: (ticket: TicketResponse) => void
+}
+
+function FullCoveragePanel({
+  config,
+  session,
+  lines,
+  discountMinor,
+  couponCode,
+  loyaltyMemberId,
+  loyaltyRedeemPoints,
+  giftCardId,
+  giftCardRedeemMinor,
+  currency,
+  locale,
+  bay,
+  vehiclePlate,
+  staffProfileId,
+  onSuccess,
+}: FullCoveragePanelProps) {
+  const { t } = useTranslation()
+  const checkout = useTicketCheckout(config, session)
+  const [idempotencyKey] = useState<string>(() => crypto.randomUUID())
+
+  function complete() {
+    checkout.mutate(
+      {
+        idempotencyKey,
+        bay,
+        vehiclePlate: vehiclePlate || null,
+        staffProfileId,
+        discountMinor,
+        lines,
+        payment: { tenderType: 'CASH', tenderedMinor: 0 },
+        couponCode,
+        loyaltyMemberId,
+        loyaltyRedeemPoints,
+        giftCardId,
+        giftCardRedeemMinor,
+      },
+      { onSuccess: (res) => res && onSuccess(res) },
+    )
+  }
+
+  return (
+    <div className="px-5 pb-5">
+      <div className="mb-4 flex items-center gap-2.5 rounded-xl border border-emerald-line bg-emerald-tint px-4 py-3">
+        <Gift className="size-5 shrink-0 text-emerald-2" aria-hidden />
+        <div>
+          <p className="text-sm font-bold text-emerald-2">{t('pos.loyalty.giftCard.fullyCovered')}</p>
+          <p className="tnum mt-0.5 font-mono text-xs text-emerald-2/80">
+            {formatMoney(giftCardRedeemMinor, currency, locale)}
+          </p>
+        </div>
+      </div>
+
+      {checkout.isError ? (
+        <p className="mb-3 text-xs text-loss" role="alert">
+          {(() => {
+            const key = errorMessageKey(checkout.error)
+            return key ? t(key) : (checkout.error as Error).message
+          })()}
+        </p>
+      ) : null}
+
+      <Button className="w-full" disabled={checkout.isPending} onClick={complete}>
+        {checkout.isPending ? <Spinner /> : t('pos.loyalty.giftCard.completeOrder')}
+      </Button>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Cash panel — one-shot checkout with the payment block attached
 // ---------------------------------------------------------------------------
 
@@ -282,9 +470,14 @@ interface CashPanelProps {
   config: VerticalPosConfig
   session: CompanySession
   lines: TicketLineInput[]
-  grandTotalMinor: number
+  /** The amount to actually authorize — residualDueMinor (grandTotal minus any gift-card tender). */
+  chargeMinor: number
   discountMinor: number
   couponCode?: string | null
+  loyaltyMemberId: string | null
+  loyaltyRedeemPoints: number
+  giftCardId: string | null
+  giftCardRedeemMinor: number
   currency: string
   locale: string
   bay: string
@@ -297,9 +490,13 @@ function CashPanel({
   config,
   session,
   lines,
-  grandTotalMinor,
+  chargeMinor,
   discountMinor,
   couponCode,
+  loyaltyMemberId,
+  loyaltyRedeemPoints,
+  giftCardId,
+  giftCardRedeemMinor,
   currency,
   locale,
   bay,
@@ -316,10 +513,10 @@ function CashPanel({
 
   const [keyStr, setKeyStr] = useState<string>('')
   const tenderedMinor = keyStr === '' ? 0 : parseInt(keyStr, 10)
-  const changeMinor = tenderedMinor - grandTotalMinor
-  const canPay = tenderedMinor >= grandTotalMinor && !checkout.isPending
+  const changeMinor = tenderedMinor - chargeMinor
+  const canPay = tenderedMinor >= chargeMinor && !checkout.isPending
 
-  const chips = quickChips(grandTotalMinor, currency)
+  const chips = quickChips(chargeMinor, currency)
 
   function pressDigit(d: string) {
     if (keyStr === '0') return
@@ -347,6 +544,10 @@ function CashPanel({
         lines,
         payment: { tenderType: 'CASH', tenderedMinor },
         couponCode,
+        loyaltyMemberId,
+        loyaltyRedeemPoints,
+        giftCardId,
+        giftCardRedeemMinor,
       },
       {
         onSuccess: (res) => {
@@ -411,7 +612,7 @@ function CashPanel({
         </p>
       ) : null}
 
-      {!canPay && tenderedMinor > 0 && tenderedMinor < grandTotalMinor ? (
+      {!canPay && tenderedMinor > 0 && tenderedMinor < chargeMinor ? (
         <p className="mb-3 text-xs text-amber-2">{t('pos.payment.insufficientTendered')}</p>
       ) : null}
 
@@ -419,7 +620,7 @@ function CashPanel({
         {checkout.isPending ? (
           <Spinner />
         ) : (
-          t('pos.payment.payAmount', { amount: formatMoney(grandTotalMinor, currency, locale) })
+          t('pos.payment.payAmount', { amount: formatMoney(chargeMinor, currency, locale) })
         )}
       </Button>
     </div>
@@ -446,9 +647,14 @@ interface DigitalPanelProps {
   config: VerticalPosConfig
   session: CompanySession
   lines: TicketLineInput[]
-  grandTotalMinor: number
+  /** The amount to actually authorize — residualDueMinor (grandTotal minus any gift-card tender). */
+  chargeMinor: number
   discountMinor: number
   couponCode?: string | null
+  loyaltyMemberId: string | null
+  loyaltyRedeemPoints: number
+  giftCardId: string | null
+  giftCardRedeemMinor: number
   currency: string
   locale: string
   bay: string
@@ -463,9 +669,13 @@ function DigitalPanel({
   config,
   session,
   lines,
-  grandTotalMinor,
+  chargeMinor,
   discountMinor,
   couponCode,
+  loyaltyMemberId,
+  loyaltyRedeemPoints,
+  giftCardId,
+  giftCardRedeemMinor,
   currency,
   locale,
   bay,
@@ -496,6 +706,10 @@ function DigitalPanel({
         lines,
         payment: { tenderType },
         couponCode,
+        loyaltyMemberId,
+        loyaltyRedeemPoints,
+        giftCardId,
+        giftCardRedeemMinor,
       },
       {
         onSuccess: (res) => {
@@ -537,14 +751,14 @@ function DigitalPanel({
           {checkout.isPending ? (
             <Spinner />
           ) : (
-            t('pos.payment.payAmount', { amount: formatMoney(grandTotalMinor, currency, locale) })
+            t('pos.payment.payAmount', { amount: formatMoney(chargeMinor, currency, locale) })
           )}
         </Button>
       </div>
     )
   }
 
-  const pendingAmount = pendingTicket.payment?.amountMinor ?? grandTotalMinor
+  const pendingAmount = pendingTicket.payment?.amountMinor ?? chargeMinor
 
   return (
     <div className="px-5 pb-5">
