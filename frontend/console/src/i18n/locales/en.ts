@@ -236,7 +236,9 @@ export const en = {
   },
   dashboard: {
     title: 'Consolidated position',
-    subtitle: 'Revenue, expense and net for the bound entity.',
+    scopeAllUnits: 'Consolidated position · all business units of this company',
+    unitContribution: 'Business unit contribution',
+    openUnitPnl: 'Open unit P&L',
     period: 'Period',
     prevPeriod: 'Previous period',
     nextPeriod: 'Next period',

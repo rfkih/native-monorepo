@@ -229,7 +229,9 @@ export const id = {
   },
   dashboard: {
     title: 'Posisi terkonsolidasi',
-    subtitle: 'Pendapatan, beban, dan laba bersih untuk entitas terikat.',
+    scopeAllUnits: 'Posisi terkonsolidasi · semua unit bisnis perusahaan ini',
+    unitContribution: 'Kontribusi unit bisnis',
+    openUnitPnl: 'Buka L/R unit',
     period: 'Periode',
     prevPeriod: 'Periode sebelumnya',
     nextPeriod: 'Periode berikutnya',
