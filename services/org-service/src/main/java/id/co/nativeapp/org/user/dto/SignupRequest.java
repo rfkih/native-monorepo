@@ -46,8 +46,9 @@ import jakarta.validation.constraints.Size;
  *     {@code firstName}
  * @param ownerLastName the owner's last name; OPTIONAL — Indonesian mononyms are common, so a
  *     single-name owner simply leaves this out
- * @param phone optional contact phone in a lenient international format; stored on the company,
- *     never verified by SMS
+ * @param phone optional contact phone in a lenient international format (digit-terminated, at most
+ *     32 characters — the column width, so a valid-per-regex value can never overflow the row);
+ *     stored on the company, never verified by SMS
  * @param companySize the employee-count band (Odoo-style funnel field; whitelisted)
  * @param primaryInterest why the owner is signing up (Odoo-style funnel field; whitelisted)
  * @param ownerEmail the email address of the owner; becomes the Keycloak username and is checked
@@ -68,7 +69,8 @@ public record SignupRequest(
     @NotBlank @Pattern(regexp = "restaurant|carwash|barbershop", message = "unsupported vertical") String vertical,
     @NotBlank @Size(max = 100) String ownerFirstName,
     @Size(max = 100) String ownerLastName,
-    @Pattern(regexp = "\\+?[0-9][0-9 ()\\-]{5,31}", message = "invalid phone number") String phone,
+    @Pattern(regexp = "\\+?[0-9][0-9 ()\\-]{3,29}[0-9]", message = "invalid phone number")
+        String phone,
     @NotBlank @Pattern(regexp = "1-5|6-20|21-50|51-250|250\\+", message = "unsupported company size") String companySize,
     @NotBlank @Pattern(
             regexp = "own-company|client-services|student|teacher",

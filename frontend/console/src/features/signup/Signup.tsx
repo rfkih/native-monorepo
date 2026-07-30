@@ -56,7 +56,8 @@ const INTEREST_KEYS: Record<(typeof INTERESTS)[number], string> = {
 
 const PASSWORD_MIN_LENGTH = 8
 // UI copy of the server's lenient phone check (SignupRequest @Pattern) — advisory only.
-const PHONE_RE = /^\+?[0-9][0-9 ()\-]{5,31}$/
+// Digit-terminated and ≤ 32 chars total (the company.phone column width).
+const PHONE_RE = /^\+?[0-9][0-9 ()\-]{3,29}[0-9]$/
 
 // Step indexes — the Review rows link back to these.
 const STEP_COMPANY = 0
@@ -903,7 +904,10 @@ export function Signup() {
                       step: STEP_YOU,
                     },
                     { label: t('signup.ownerEmail'), value: ownerEmail, step: STEP_YOU },
-                    { label: t('signup.phone'), value: phone, step: STEP_YOU },
+                    // Optional row — omitted entirely when no phone was given.
+                    ...(phone.trim()
+                      ? [{ label: t('signup.phone'), value: phone, step: STEP_YOU }]
+                      : []),
                     {
                       label: t('signup.companySize'),
                       value: t(SIZE_KEYS[companySize as (typeof COMPANY_SIZES)[number]] as Parameters<typeof t>[0]),

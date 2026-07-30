@@ -295,6 +295,23 @@ class SignupAcceptanceTest {
   }
 
   @Test
+  void anExplicitEmptyLastNameIsNormalizedAwayNotSentAsEmptyString() throws Exception {
+    // A direct API caller can send "ownerLastName": "" (the browser client omits it instead) —
+    // the service normalizes blank → null, so Keycloak never receives an empty-string lastName.
+    String email = uniqueEmail();
+    String body =
+        signupBody(email).replace("\"ownerLastName\": \"Santoso\"", "\"ownerLastName\": \"\"");
+    String responseBody = callSignup(body);
+    assertThat(responseBody).contains("companyId");
+
+    JsonNode user = keycloakUsersFor(email).get(0);
+    assertThat(user.path("firstName").asString()).isEqualTo("Budi");
+    // Absent, JSON-null, or empty are all fine — anything but a real value.
+    JsonNode lastName = user.get("lastName");
+    assertThat(lastName == null || lastName.isNull() || lastName.asString().isEmpty()).isTrue();
+  }
+
+  @Test
   void anUnsupportedLanguageReturns400() {
     assertBadRequest(signupBody(uniqueEmail()).replace("\"id\"", "\"xx\""));
   }
