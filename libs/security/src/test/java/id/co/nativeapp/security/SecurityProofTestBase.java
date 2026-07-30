@@ -172,6 +172,15 @@ abstract class SecurityProofTestBase {
     return obtainAccessToken(CLIENT_ID, CLIENT_SECRET, TENANTLESS_USERNAME, TENANTLESS_PASSWORD);
   }
 
+  /**
+   * A real RS256 token for {@code owner-multi} — the {@code company_id} claim carries BOTH tenants
+   * (A first, B second; the multivalued mapper emits a JSON array). Multi-company ownership, ADR
+   * 0021.
+   */
+  protected static String tokenWithBothTenants() throws IOException {
+    return obtainAccessToken(CLIENT_ID, CLIENT_SECRET, "owner-multi", "multi-password");
+  }
+
   private static String obtainAccessToken(
       String clientId, String clientSecret, String username, String password) throws IOException {
     String tokenUrl =

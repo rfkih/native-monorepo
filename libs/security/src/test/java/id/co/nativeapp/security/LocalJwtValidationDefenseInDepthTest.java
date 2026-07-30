@@ -30,9 +30,12 @@ import org.springframework.web.client.HttpClientErrorException;
  *   <li>(b) a forged {@code X-Company-Id} header but NO valid JWT -> {@code 401} (the header is
  *       ignored, no tenant is bound, the handler is never invoked);
  *   <li>(c) a real RS256 token binds {@code TenantContext} from its {@code company_id} claim, so
- *       the RLS-scoped read returns ONLY that tenant's widget — and ignores a spoofed {@code
- *       X-Company-Id} pointing at another tenant; and
- *   <li>(d) a valid token with NO {@code company_id} claim -> {@code 403} (RFC-7807).
+ *       the RLS-scoped read returns ONLY that tenant's widget;
+ *   <li>(c2) a spoofed {@code X-Company-Id} naming a tenant OUTSIDE the token's set -> {@code 403}
+ *       ({@code invalid-company-selection}, ADR 0021 — rejected outright, never silently replaced);
+ *   <li>(d) a valid token with NO {@code company_id} claim -> {@code 403} (RFC-7807); and
+ *   <li>(e) a MULTI-company token (claim = [A, B]) defaults to A, and an {@code X-Company-Id}
+ *       selection of B re-binds RLS to B — the token-validated company switch, end to end.
  * </ul>
  */
 @SpringBootTest(
@@ -93,16 +96,72 @@ class LocalJwtValidationDefenseInDepthTest extends SecurityProofTestBase {
             .get()
             .uri(WIDGETS)
             .header(HttpHeaders.AUTHORIZATION, bearer(token))
-            // The client TRIES to spoof another tenant via the header — it must be ignored; the
-            // tenant comes solely from the verified company_id claim (TENANT_A).
-            .header("X-Company-Id", TENANT_B)
             .retrieve()
             .body(List.class);
 
-    // RLS scoped the read to TENANT_A (the claim), NOT the spoofed TENANT_B header.
+    // RLS scoped the read to TENANT_A (the claim).
     assertThat(names).containsExactly("Tenant A Widget");
     assertThat(names).doesNotContain("Tenant B Widget");
     assertThat(WidgetController.INVOCATIONS.get()).isEqualTo(1);
+  }
+
+  @Test
+  void aSpoofedCompanyIdOutsideTheTokensSetIsRejectedWith403AndNeverReachesTheHandler()
+      throws Exception {
+    // owner-acme's token authorizes ONLY TENANT_A; naming TENANT_B is an invalid selection — it is
+    // rejected outright (never silently replaced with the claim value), so a forged header can
+    // never bind a foreign tenant NOR be quietly ignored (ADR 0021).
+    String token = tokenWithTenant();
+
+    assertThatThrownBy(
+            () ->
+                appClient()
+                    .get()
+                    .uri(WIDGETS)
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .header("X-Company-Id", TENANT_B)
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex -> {
+              HttpClientErrorException e = (HttpClientErrorException) ex;
+              assertThat(e.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+              assertThat(e.getResponseBodyAsString())
+                  .contains("https://errors.nativeapp.id/invalid-company-selection");
+            });
+
+    assertThat(WidgetController.INVOCATIONS.get()).isZero();
+  }
+
+  @Test
+  void aMultiCompanyTokenDefaultsToItsFirstCompanyAndSwitchesOnAValidatedSelection()
+      throws Exception {
+    // owner-multi's claim carries [TENANT_A, TENANT_B]. No selection → the first (A) binds.
+    String token = tokenWithBothTenants();
+
+    @SuppressWarnings("unchecked")
+    List<String> defaulted =
+        appClient()
+            .get()
+            .uri(WIDGETS)
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(List.class);
+    assertThat(defaulted).containsExactly("Tenant A Widget");
+
+    // Selecting TENANT_B (in the token's set) re-binds the tenant — RLS now returns B's widget.
+    @SuppressWarnings("unchecked")
+    List<String> switched =
+        appClient()
+            .get()
+            .uri(WIDGETS)
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .header("X-Company-Id", TENANT_B)
+            .retrieve()
+            .body(List.class);
+    assertThat(switched).containsExactly("Tenant B Widget");
+    assertThat(switched).doesNotContain("Tenant A Widget");
   }
 
   @Test

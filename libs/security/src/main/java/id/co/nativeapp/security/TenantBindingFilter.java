@@ -26,16 +26,21 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * resource-server decoder, and a missing/invalid/expired token was already rejected with {@code
  * 401} — so this filter only sees authenticated requests.
  *
- * <p>It reads the tenant ({@code company_id} claim) and actor ({@code sub}) <strong>from the
- * token's claims only</strong> and wraps the rest of the chain in {@link
+ * <p>It reads the login's ALLOWED companies ({@code company_id} claim — {@code string | string[]},
+ * multi-company ownership ADR 0021) and actor ({@code sub}) from the token, resolves the ACTIVE
+ * company (the inbound {@code X-Company-Id} selection when — and only when — it is in the token's
+ * allowed set; the first allowed company otherwise), and wraps the rest of the chain in {@link
  * TenantContext#callAs(String, String, java.util.concurrent.Callable)}, exactly where the dev
  * {@code DevTenantFilter} binds from trusted headers. The auto-RLS aspect then sets {@code
  * app.current_tenant} on every {@code @Transactional} unit of work, so row-level security keys on
  * the verified tenant.
  *
- * <p><strong>It never trusts an inbound {@code X-Company-Id} (or any client header).</strong> The
- * tenant comes solely from the verified token, so a forged {@code X-Company-Id} sent straight to a
- * service port cannot bind an arbitrary tenant. This is the gap the gateway alone could not close.
+ * <p><strong>An inbound {@code X-Company-Id} is honoured only as a TOKEN-VALIDATED selection,
+ * never trusted verbatim.</strong> A forged {@code X-Company-Id} sent straight to a service port
+ * naming a company outside the token's set is rejected {@code 403} ({@code
+ * invalid-company-selection}) — it can never bind an arbitrary tenant. This keeps the gap closed
+ * that the gateway alone could not (defense in depth), while letting a multi-company login switch
+ * its active company per request.
  *
  * <p>A valid token that carries no {@code company_id} claim is authenticated but not authorized to
  * reach a tenant-scoped service: it is rejected with {@code 403} as an RFC-7807 {@link
@@ -68,8 +73,21 @@ public final class TenantBindingFilter extends OncePerRequestFilter implements O
   /** Stable RFC-7807 problem type for a valid-but-tenant-less token (a 403 authZ denial). */
   static final String MISSING_TENANT_TYPE = "https://errors.nativeapp.id/missing-tenant-claim";
 
-  /** Custom claim carrying the tenant id (a Keycloak protocol mapper maps the user attribute). */
+  /**
+   * Stable RFC-7807 problem type for an {@code X-Company-Id} selection outside the token's allowed
+   * set (a 403 authZ denial — an authenticated caller asking for a tenant it does not belong to).
+   */
+  static final String INVALID_SELECTION_TYPE =
+      "https://errors.nativeapp.id/invalid-company-selection";
+
+  /**
+   * Custom claim carrying the login's allowed company ids (a Keycloak protocol mapper maps the
+   * multi-valued user attribute; {@code string | string[]} — scalar for pre-rollout tokens).
+   */
   static final String COMPANY_ID_CLAIM = "company_id";
+
+  /** The client's active-company selection header (validated against the claim set, never trusted). */
+  static final String COMPANY_HEADER = "X-Company-Id";
 
   /**
    * Endpoints on which a missing {@code company_id} claim is tolerated (the tenant bootstrap) — the
@@ -112,14 +130,15 @@ public final class TenantBindingFilter extends OncePerRequestFilter implements O
       return;
     }
 
-    String companyId = jwt.getClaimAsString(COMPANY_ID_CLAIM);
-    if (companyId == null || companyId.isBlank()) {
+    List<String> allowed = extractCompanyIds(jwt);
+    if (allowed.isEmpty()) {
       if (isTenantOptional(request)) {
-        // A tenant-bootstrap endpoint (e.g. POST /api/v1/companies): the token is authentic but
-        // legitimately carries no tenant yet, because this request CREATES the tenant. Proceed
-        // WITHOUT binding a scope — the controller opens its own (TenantContext.callAs over the
-        // freshly-generated company id). Authentication was still enforced upstream (a missing
-        // token would already be a 401), so this is not an open endpoint.
+        // A tenant-bootstrap endpoint (e.g. POST /api/v1/companies, GET /api/v1/companies/mine):
+        // the token is authentic but legitimately carries no tenant yet, because this request
+        // CREATES the tenant (or lists an empty membership set). Proceed WITHOUT binding a scope —
+        // the controller opens its own (TenantContext.callAs over the freshly-generated company
+        // id). Authentication was still enforced upstream (a missing token would already be a
+        // 401), so this is not an open endpoint.
         chain.doFilter(request, response);
         return;
       }
@@ -127,6 +146,20 @@ public final class TenantBindingFilter extends OncePerRequestFilter implements O
       // a tenant-scoped service: a tenant/authZ denial is 403, not 401 (ENGINEERING-STANDARDS
       // §1.1).
       writeForbiddenProblem(request, response);
+      return;
+    }
+
+    // Resolve the ACTIVE company: the client's X-Company-Id selection if (and only if) the token
+    // allows it, else the token's first company. A selection outside the allowed set is rejected —
+    // never silently replaced — so a forged header can never bind a foreign tenant (ADR 0021).
+    String requested = request.getHeader(COMPANY_HEADER);
+    String companyId;
+    if (requested == null || requested.isBlank()) {
+      companyId = allowed.getFirst();
+    } else if (allowed.contains(requested)) {
+      companyId = requested;
+    } else {
+      writeInvalidSelectionProblem(request, response);
       return;
     }
     String actor = jwt.getSubject();
@@ -193,6 +226,34 @@ public final class TenantBindingFilter extends OncePerRequestFilter implements O
   }
 
   /**
+   * Normalizes the {@code company_id} claim to the login's allowed-company list: a multi-valued
+   * mapper emits a JSON array (first = default active company); pre-rollout tokens carry a scalar.
+   * Blank values dropped; deduplicated, order-preserving; empty when the login has no company yet.
+   * Public so services can read the caller's membership set from the same verified token (e.g. the
+   * org-service {@code GET /api/v1/companies/mine}).
+   */
+  public static List<String> extractCompanyIds(Jwt jwt) {
+    Object claim = jwt.getClaim(COMPANY_ID_CLAIM);
+    List<String> ids = new java.util.ArrayList<>();
+    if (claim instanceof String s) {
+      if (!s.isBlank()) {
+        ids.add(s);
+      }
+    } else if (claim instanceof java.util.Collection<?> values) {
+      for (Object value : values) {
+        if (value == null) {
+          continue;
+        }
+        String id = value.toString();
+        if (!id.isBlank() && !ids.contains(id)) {
+          ids.add(id);
+        }
+      }
+    }
+    return ids;
+  }
+
+  /**
    * Writes an RFC-7807 {@code 403} {@code application/problem+json} body for a valid token that
    * carries no {@code company_id} claim. The JSON is written directly (rather than through a
    * message converter) because this runs inside a security filter, before MVC content negotiation —
@@ -212,6 +273,27 @@ public final class TenantBindingFilter extends OncePerRequestFilter implements O
                 + MISSING_TENANT_TYPE
                 + "\",\"title\":\"Missing tenant claim\",\"status\":403,"
                 + "\"detail\":\"The token is valid but carries no company_id claim.\","
+                + "\"instance\":\""
+                + escapeJson(request.getRequestURI())
+                + "\"}");
+  }
+
+  /**
+   * Writes an RFC-7807 {@code 403} for an {@code X-Company-Id} selection outside the token's
+   * allowed set — the caller is authenticated but asked for a tenant it does not belong to.
+   */
+  private static void writeInvalidSelectionProblem(
+      HttpServletRequest request, HttpServletResponse response) throws IOException {
+    response.setStatus(HttpStatus.FORBIDDEN.value());
+    response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+    response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+    response
+        .getWriter()
+        .write(
+            "{\"type\":\""
+                + INVALID_SELECTION_TYPE
+                + "\",\"title\":\"Invalid company selection\",\"status\":403,"
+                + "\"detail\":\"The selected company is not in the token's allowed set.\","
                 + "\"instance\":\""
                 + escapeJson(request.getRequestURI())
                 + "\"}");
