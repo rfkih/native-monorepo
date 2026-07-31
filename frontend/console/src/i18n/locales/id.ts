@@ -192,18 +192,28 @@ export const id = {
     backToDashboard: 'Kembali ke dasbor',
   },
   shell: {
-    switchCompany: 'Ganti bisnis',
-    yourBusinesses: 'Bisnis Anda',
-    addBusiness: 'Tambah bisnis',
+    switchCompany: 'Ganti perusahaan',
+    yourBusinesses: 'Perusahaan Anda',
+    addBusiness: 'Tambah perusahaan atau divisi',
   },
   onboarding: {
     title: 'Buat perusahaan',
-    addTitle: 'Tambah bisnis baru',
+    addTitle: 'Tambah perusahaan baru',
+    chooser: {
+      title: 'Apa yang ingin Anda tambahkan?',
+      subtitle:
+        'Perusahaan membayar pajaknya sendiri dan memiliki pembukuan sendiri. Divisi beroperasi di dalam perusahaan yang sudah ada — pembukuan dan pelaporan pajaknya menyatu.',
+      companyOption: 'Perusahaan terpisah',
+      companyOptionHint: 'Badan usaha sendiri (NPWP sendiri) — pembukuan, pajak, dan laporan terpisah.',
+      divisionOption: 'Divisi dari {{company}}',
+      divisionOptionHint:
+        'Badan usaha yang sama — pembukuan dan pajak menyatu; punya gerai dan laporan laba-ruginya sendiri.',
+    },
     subtitle:
       'Mata uang dasar dan bahasa ditetapkan sekarang — keduanya dikunci saat pembuatan dan tidak dapat diubah lagi.',
     stepCompany: 'Perusahaan',
     stepSettings: 'Pengaturan',
-    stepBusiness: 'Bisnis pertama',
+    stepBusiness: 'Divisi pertama',
     stepReview: 'Tinjau',
     companyName: 'Nama perusahaan',
     companyNamePlaceholder: 'mis. Nusantara Holdings',
@@ -211,7 +221,7 @@ export const id = {
     baseCurrencyHint: 'Mata uang pembukuan. Tidak dapat diubah setelah ada transaksi.',
     defaultLanguage: 'Bahasa bawaan',
     defaultLanguageHint: 'Bawaan untuk anggota tim baru. Tiap pengguna bisa menggantinya sendiri.',
-    firstBusinessName: 'Nama bisnis',
+    firstBusinessName: 'Nama divisi',
     firstBusinessNamePlaceholder: 'mis. Restoran Jakarta',
     vertical: 'Jenis bisnis apa ini?',
     verticalHint: 'Menentukan point of sale yang dipakai gerainya. Tidak dapat diubah nanti.',
@@ -234,8 +244,8 @@ export const id = {
   },
   dashboard: {
     title: 'Posisi terkonsolidasi',
-    scopeAllUnits: 'Posisi terkonsolidasi · semua unit bisnis perusahaan ini',
-    unitContribution: 'Kontribusi unit bisnis',
+    scopeAllUnits: 'Posisi terkonsolidasi · semua divisi perusahaan ini',
+    unitContribution: 'Kontribusi divisi',
     openUnitPnl: 'Buka L/R unit',
     period: 'Periode',
     prevPeriod: 'Periode sebelumnya',
@@ -291,7 +301,7 @@ export const id = {
     noCompanyHint: 'Buat perusahaan untuk melihat posisi terkonsolidasinya.',
   },
   statements: {
-    scopeAllUnits: 'semua unit bisnis',
+    scopeAllUnits: 'semua divisi',
     incomeTitle: 'Laporan laba rugi',
     incomeSubtitle: 'Pendapatan, beban, dan laba bersih untuk periode ini.',
     balanceTitle: 'Neraca',
@@ -685,7 +695,7 @@ export const id = {
       employees: 'Karyawan',
       people: 'Akses aplikasi',
       net: 'Neto periode ini',
-      parentUnit: 'Unit bisnis',
+      parentUnit: 'Divisi',
     },
     overview: {
       revenue: 'Pendapatan',
@@ -703,7 +713,7 @@ export const id = {
     outletsTab: {
       add: 'Tambah gerai',
       empty: 'Belum ada gerai',
-      emptyHint: 'Tambahkan gerai pertama untuk mulai berjualan di bawah unit bisnis ini.',
+      emptyHint: 'Tambahkan gerai pertama untuk mulai berjualan di bawah divisi ini.',
     },
     people: {
       empty: 'Belum ada yang ditugaskan di unit ini',
@@ -844,10 +854,10 @@ export const id = {
     },
     assignExisting: {
       title: 'Tugaskan ke {{unit}}',
-      subtitle: 'Pilih karyawan yang sudah ada di bisnis ini. Karyawan baru ditambahkan di unit bisnis.',
+      subtitle: 'Pilih karyawan yang sudah ada di perusahaan ini. Karyawan baru ditambahkan di divisi.',
       employee: 'Karyawan',
       pick: 'Pilih karyawan…',
-      empty: 'Tidak ada karyawan untuk ditugaskan. Tambahkan dulu di unit bisnis.',
+      empty: 'Tidak ada karyawan untuk ditugaskan. Tambahkan dulu di divisi.',
       submit: 'Tugaskan',
     },
     endAssignment: {
@@ -947,7 +957,7 @@ export const id = {
   posVertical: {
     badge: 'Segera hadir',
     title: 'Point of sale {{vertical}} segera hadir',
-    body: 'Gerai ini milik unit bisnis {{vertical}}. Penjualan, menu, dan tiket dapur saat ini hanya mendukung gerai restoran, cuci mobil, dan barbershop.',
+    body: 'Gerai ini milik divisi {{vertical}}. Penjualan, menu, dan tiket dapur saat ini hanya mendukung gerai restoran, cuci mobil, dan barbershop.',
     switchHint: 'Layani di gerai lain',
   },
   outletGate: {
@@ -964,7 +974,7 @@ export const id = {
     noCompany: 'Belum ada perusahaan dipilih',
     noCompanyHint: 'Buat perusahaan untuk mengelola struktur organisasinya.',
     empty: 'Belum ada unit organisasi',
-    emptyHint: 'Tambahkan unit bisnis tingkat atas untuk memulai.',
+    emptyHint: 'Tambahkan divisi tingkat atas untuk memulai.',
     error: 'Tidak dapat memuat struktur organisasi.',
     addUnit: 'Tambah unit',
     addChild: 'Tambah anak',
@@ -978,7 +988,7 @@ export const id = {
     inactive: 'Tidak aktif',
     active: 'Aktif',
     type: {
-      BUSINESS_UNIT: 'Unit bisnis',
+      BUSINESS_UNIT: 'Divisi',
       OUTLET: 'Gerai',
       TEAM: 'Tim',
     },

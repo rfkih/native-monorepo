@@ -23,10 +23,17 @@ const VERTICALS = ['restaurant', 'carwash', 'barbershop'] as const
 export function OnboardingWizard() {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
-  const { setCompany, companies } = useSession()
+  const { company, setCompany, companies } = useSession()
   const auth = useAuth()
-  // With ≥1 existing company this wizard is the "Add another business" flow (ADR 0021).
+  // With ≥1 existing company this wizard is the "Add another company" flow (ADR 0021).
   const isAdditional = companies.length > 0
+
+  // Company vs division gate (shown only when adding to an existing portfolio): a COMPANY is a
+  // separate legal entity with its own NPWP, taxes, and books; a DIVISION shares the current
+  // company's books and tax filing and is created on the Organization page instead. Asking here —
+  // the single entry point for "add" — stops legally-separate businesses being modeled as
+  // divisions and vice versa.
+  const [entityConfirmed, setEntityConfirmed] = useState(false)
 
   const [step, setStep] = useState(0)
   const [name, setName] = useState('')
@@ -84,6 +91,47 @@ export function OnboardingWizard() {
 
   if (created) {
     return <SuccessPanel company={created} onContinue={() => navigate('/')} />
+  }
+
+  // The company-vs-division gate: only when a portfolio already exists (a first-ever login has
+  // nothing to add a division TO).
+  if (isAdditional && !entityConfirmed) {
+    return (
+      <div className="mx-auto max-w-[680px]">
+        <header className="mb-8 text-center">
+          <h1 className="font-display text-[28px] font-bold tracking-[-0.02em] text-ink">
+            {t('onboarding.chooser.title')}
+          </h1>
+          <p className="mx-auto mt-1.5 max-w-md text-sm leading-relaxed text-ink-3">
+            {t('onboarding.chooser.subtitle')}
+          </p>
+        </header>
+        <Card className="rounded-[20px] p-7">
+          <ChoiceCards
+            name="entityKind"
+            value=""
+            onChange={(v) => {
+              if (v === 'company') setEntityConfirmed(true)
+              else navigate('/org')
+            }}
+            options={[
+              {
+                value: 'company',
+                title: t('onboarding.chooser.companyOption'),
+                subtitle: t('onboarding.chooser.companyOptionHint'),
+              },
+              {
+                value: 'division',
+                title: t('onboarding.chooser.divisionOption', {
+                  company: company?.name ?? '',
+                }),
+                subtitle: t('onboarding.chooser.divisionOptionHint'),
+              },
+            ]}
+          />
+        </Card>
+      </div>
+    )
   }
 
   return (

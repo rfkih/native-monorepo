@@ -199,18 +199,28 @@ export const en = {
     backToDashboard: 'Back to dashboard',
   },
   shell: {
-    switchCompany: 'Switch business',
-    yourBusinesses: 'Your businesses',
-    addBusiness: 'Add business',
+    switchCompany: 'Switch company',
+    yourBusinesses: 'Your companies',
+    addBusiness: 'Add company or division',
   },
   onboarding: {
     title: 'Create a company',
-    addTitle: 'Add another business',
+    addTitle: 'Add another company',
+    chooser: {
+      title: 'What are you adding?',
+      subtitle:
+        'A company files its own taxes and keeps its own books. A division operates inside an existing company and shares its books and tax filing.',
+      companyOption: 'A separate company',
+      companyOptionHint: 'Its own legal entity (own NPWP) — separate books, taxes, and statements.',
+      divisionOption: 'A division of {{company}}',
+      divisionOptionHint:
+        'Same legal entity — shares the books and tax filing; adds its own outlets and P&L view.',
+    },
     subtitle:
       'The base currency and language are set now — they are fixed at creation and cannot be changed later.',
     stepCompany: 'Company',
     stepSettings: 'Settings',
-    stepBusiness: 'First business',
+    stepBusiness: 'First division',
     stepReview: 'Review',
     companyName: 'Company name',
     companyNamePlaceholder: 'e.g. Nusantara Holdings',
@@ -218,7 +228,7 @@ export const en = {
     baseCurrencyHint: 'The currency the books are kept in. Immutable once transactions exist.',
     defaultLanguage: 'Default language',
     defaultLanguageHint: 'The default for new teammates. Each user can override their own.',
-    firstBusinessName: 'Business name',
+    firstBusinessName: 'Division name',
     firstBusinessNamePlaceholder: 'e.g. Jakarta Restaurant',
     vertical: 'What kind of business is it?',
     verticalHint: 'Sets which point of sale its outlets use. It cannot be changed later.',
@@ -241,8 +251,8 @@ export const en = {
   },
   dashboard: {
     title: 'Consolidated position',
-    scopeAllUnits: 'Consolidated position · all business units of this company',
-    unitContribution: 'Business unit contribution',
+    scopeAllUnits: 'Consolidated position · all divisions of this company',
+    unitContribution: 'Division contribution',
     openUnitPnl: 'Open unit P&L',
     period: 'Period',
     prevPeriod: 'Previous period',
@@ -296,7 +306,7 @@ export const en = {
     noCompanyHint: 'Create a company to see its consolidated position.',
   },
   statements: {
-    scopeAllUnits: 'all business units',
+    scopeAllUnits: 'all divisions',
     incomeTitle: 'Income statement',
     incomeSubtitle: 'Revenue, expense and net for the period.',
     balanceTitle: 'Balance sheet',
@@ -690,7 +700,7 @@ export const en = {
       employees: 'Employees',
       people: 'App access',
       net: 'Net this period',
-      parentUnit: 'Business unit',
+      parentUnit: 'Division',
     },
     overview: {
       revenue: 'Revenue',
@@ -707,7 +717,7 @@ export const en = {
     outletsTab: {
       add: 'Add outlet',
       empty: 'No outlets yet',
-      emptyHint: 'Add the first outlet to start selling under this business unit.',
+      emptyHint: 'Add the first outlet to start selling under this division.',
     },
     people: {
       empty: 'No one is assigned under this unit yet',
@@ -847,10 +857,10 @@ export const en = {
     },
     assignExisting: {
       title: 'Assign to {{unit}}',
-      subtitle: 'Pick an existing employee of this business. New employees are added at the business unit.',
+      subtitle: 'Pick an existing employee of this company. New employees are added at the division.',
       employee: 'Employee',
       pick: 'Select an employee…',
-      empty: 'No employees available to assign. Add them at the business unit first.',
+      empty: 'No employees available to assign. Add them at the division first.',
       submit: 'Assign',
     },
     endAssignment: {
@@ -950,7 +960,7 @@ export const en = {
   posVertical: {
     badge: 'Coming soon',
     title: 'The {{vertical}} point of sale is coming soon',
-    body: 'This outlet belongs to a {{vertical}} business unit. Sales, menus, and kitchen tickets currently support restaurant, car wash, and barbershop outlets only.',
+    body: 'This outlet belongs to a {{vertical}} division. Sales, menus, and kitchen tickets currently support restaurant, car wash, and barbershop outlets only.',
     switchHint: 'Ring on another outlet',
   },
   outletGate: {
@@ -967,7 +977,7 @@ export const en = {
     noCompany: 'No company selected',
     noCompanyHint: 'Create a company to manage its org tree.',
     empty: 'No org units yet',
-    emptyHint: 'Add a top-level business unit to get started.',
+    emptyHint: 'Add a top-level division to get started.',
     error: 'Could not load the org tree.',
     addUnit: 'Add unit',
     addChild: 'Add child',
@@ -981,7 +991,7 @@ export const en = {
     inactive: 'Inactive',
     active: 'Active',
     type: {
-      BUSINESS_UNIT: 'Business unit',
+      BUSINESS_UNIT: 'Division',
       OUTLET: 'Outlet',
       TEAM: 'Team',
     },
