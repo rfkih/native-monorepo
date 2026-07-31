@@ -574,6 +574,8 @@ export const id = {
     summary: 'Permintaan ke {{path}} gagal dengan status {{status}}.',
     tokenExpired: 'token sesi Anda sudah kedaluwarsa',
     tokenMissing: 'tidak ada token sesi yang terkirim',
+    staleCompanyClaim:
+      'sesi Anda dibuat sebelum akses ke perusahaan ini — menyegarkan sesi akan memperbaikinya',
     relogin: 'Masuk lagi',
     refreshSession: 'Segarkan sesi',
     refreshing: 'Menyegarkan…',

@@ -579,6 +579,8 @@ export const en = {
     summary: 'The request to {{path}} failed with status {{status}}.',
     tokenExpired: 'your session token has expired',
     tokenMissing: 'no session token was attached',
+    staleCompanyClaim:
+      'your session predates your access to this company — refreshing the session fixes it',
     relogin: 'Sign in again',
     refreshSession: 'Refresh session',
     refreshing: 'Refreshing…',

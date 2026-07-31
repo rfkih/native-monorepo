@@ -20,6 +20,14 @@ export interface TokenState {
   expiresInSeconds: number | null
   /** How many companies the token's company_id claim carried (0 = claim absent/malformed). */
   companyCount: number | null
+  /**
+   * Whether the X-Company-Id SELECTION the request carried is inside the token's company_id
+   * claim — `false` is the signature of a STALE CLAIM (a company created/bound after this token
+   * was minted): the gateway rejects the selection with a body-less 403, so this derived boolean
+   * is the only client-side way to recognize the case and offer a session refresh. `null` when
+   * the request carried no selection or the claim was undecodable.
+   */
+  selectedCompanyInClaim: boolean | null
 }
 
 export interface FailureRecord {
@@ -42,9 +50,19 @@ const MAX_ENTRIES = 20
 const failures: FailureRecord[] = []
 const listeners = new Set<() => void>()
 
-/** Decodes the non-secret state of a JWT (exp + company count) without verifying it. */
-export function deriveTokenState(token: string | null): TokenState {
-  if (!token) return { present: false, exp: null, expiresInSeconds: null, companyCount: null }
+/**
+ * Decodes the non-secret state of a JWT (exp + company count + whether the request's company
+ * SELECTION is inside the claim) without verifying it.
+ */
+export function deriveTokenState(token: string | null, selectedCompanyId?: string | null): TokenState {
+  if (!token)
+    return {
+      present: false,
+      exp: null,
+      expiresInSeconds: null,
+      companyCount: null,
+      selectedCompanyInClaim: null,
+    }
   try {
     const payloadB64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
     const payload = JSON.parse(atob(payloadB64)) as {
@@ -53,15 +71,22 @@ export function deriveTokenState(token: string | null): TokenState {
     }
     const exp = typeof payload.exp === 'number' ? payload.exp : null
     const cid = payload.company_id
-    const companyCount = cid == null ? 0 : Array.isArray(cid) ? cid.length : 1
+    const claimIds = cid == null ? [] : Array.isArray(cid) ? cid : [cid]
     return {
       present: true,
       exp,
       expiresInSeconds: exp != null ? Math.round(exp - Date.now() / 1000) : null,
-      companyCount,
+      companyCount: claimIds.length,
+      selectedCompanyInClaim: selectedCompanyId ? claimIds.includes(selectedCompanyId) : null,
     }
   } catch {
-    return { present: true, exp: null, expiresInSeconds: null, companyCount: null }
+    return {
+      present: true,
+      exp: null,
+      expiresInSeconds: null,
+      companyCount: null,
+      selectedCompanyInClaim: null,
+    }
   }
 }
 

@@ -46,11 +46,28 @@ function recoveryFor(failure: FailureRecord | null): RecoveryKind {
     // A present, unexpired token that still 401s is unusual — re-login is still the best lever.
     return 'relogin'
   }
-  if (failure.status === 403 && failure.problemType?.includes('invalid-company-selection')) {
-    // The claim set is stale (a company was added/bound after this token was minted).
-    return 'refreshSession'
+  if (failure.status === 403) {
+    // The claim set is stale (a company was added/bound after this token was minted). The
+    // gateway's selection rejection is body-less, so ALSO recognize the case from the derived
+    // token state: the selected company provably outside the claim → a refresh mints a token
+    // with the enlarged set.
+    if (
+      failure.problemType?.includes('invalid-company-selection') ||
+      failure.tokenState?.selectedCompanyInClaim === false
+    ) {
+      return 'refreshSession'
+    }
   }
   return null
+}
+
+/** True when the failure is the stale-company-claim 403 (see {@link recoveryFor}). */
+function isStaleCompanyClaim(failure: FailureRecord | null): boolean {
+  return (
+    failure?.status === 403 &&
+    (failure.problemType?.includes('invalid-company-selection') === true ||
+      failure.tokenState?.selectedCompanyInClaim === false)
+  )
 }
 
 export function ErrorDiagnostics({ message, pathPrefix, onRecovered }: Props) {
@@ -104,7 +121,9 @@ export function ErrorDiagnostics({ message, pathPrefix, onRecovered }: Props) {
             ? ` — ${t('errorDiag.tokenExpired')}`
             : failure.status === 401 && failure.tokenState && !failure.tokenState.present
               ? ` — ${t('errorDiag.tokenMissing')}`
-              : ''}
+              : isStaleCompanyClaim(failure)
+                ? ` — ${t('errorDiag.staleCompanyClaim')}`
+                : ''}
         </p>
       ) : null}
 

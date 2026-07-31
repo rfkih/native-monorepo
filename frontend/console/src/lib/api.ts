@@ -140,7 +140,8 @@ export async function apiFetch<T>(path: string, opts: RequestOptions = {}): Prom
           : null,
       companyId: opts.tenant?.companyId ?? null,
       authMode: AUTH_MODE,
-      tokenState: AUTH_MODE === 'oidc' ? deriveTokenState(accessToken) : null,
+      tokenState:
+        AUTH_MODE === 'oidc' ? deriveTokenState(accessToken, opts.tenant?.companyId) : null,
     })
     throw new ApiError(
       res.status,
