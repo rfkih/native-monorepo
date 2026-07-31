@@ -29,11 +29,11 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 /**
  * Integration tests for the ADR 0028 security-review defense-in-depth guard in {@link
- * id.co.nativeapp.finance.revenue.service.RevenuePostingWriter#post} — a {@code SaleRecorded}
- * whose period already has a FILED {@code tax_filing} (the VAT return seals it, ADR 0017) is
- * QUARANTINED: nothing is posted to the ledger/read-models, the event is recorded to the error
- * inbox instead (source {@code finance.revenue.sealed-period-quarantine}), and the delivery is
- * still marked {@code processed} so a redelivery can never retry it into the sealed books.
+ * id.co.nativeapp.finance.revenue.service.RevenuePostingWriter#post} — a {@code SaleRecorded} whose
+ * period already has a FILED {@code tax_filing} (the VAT return seals it, ADR 0017) is QUARANTINED:
+ * nothing is posted to the ledger/read-models, the event is recorded to the error inbox instead
+ * (source {@code finance.revenue.sealed-period-quarantine}), and the delivery is still marked
+ * {@code processed} so a redelivery can never retry it into the sealed books.
  *
  * <p>Arranges a real FILED {@code tax_filing} the same way {@link TaxFilingConcurrencyTest} does —
  * a draft+issued AR invoice and a draft+posted AP bill under {@link TenantContext#callAs}, then

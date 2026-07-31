@@ -33,7 +33,8 @@ public interface LedgerPostingRepository extends JpaRepository<LedgerPosting, UU
   @org.springframework.data.jpa.repository.Query(
       value = "SELECT EXISTS(SELECT 1 FROM tax_filing WHERE period = :period)",
       nativeQuery = true)
-  boolean sealedPeriodExists(@org.springframework.data.repository.query.Param("period") String period);
+  boolean sealedPeriodExists(
+      @org.springframework.data.repository.query.Param("period") String period);
 
   /**
    * The PRIMARY postings of a payroll run (within the bound tenant), used to REVERSE a superseded
