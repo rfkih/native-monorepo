@@ -45,8 +45,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * <p>Covers: the {@code clientOccurredAt} bounds matrix (&gt;48h past / &gt;5min future / accepted
  * 47h-past with the persisted {@code occurred_at} verified), {@code clientOccurredAt} without
  * {@code offlineReplay} rejected, the offline-forbidden-field matrix (coupon / points / gift-card /
- * non-CASH tender / missing payment each rejected; a bare {@code loyaltyMemberId} accepted), and one
- * focused idempotent-replay-of-an-offline-sale regression.
+ * non-CASH tender / missing payment each rejected; a bare {@code loyaltyMemberId} accepted), and
+ * one focused idempotent-replay-of-an-offline-sale regression.
  */
 @SpringBootTest
 class OfflineReplayCheckoutTest extends PostgresRlsTestBase {
@@ -105,8 +105,7 @@ class OfflineReplayCheckoutTest extends PostgresRlsTestBase {
             .truncatedTo(ChronoUnit.MICROS);
     CheckoutRequest req = offlineCheckout("offline-accepted-001", itemId, clientOccurredAt);
 
-    CheckoutResult result =
-        TenantContext.callAs(TENANT, ACTOR, () -> orderService.checkout(req));
+    CheckoutResult result = TenantContext.callAs(TENANT, ACTOR, () -> orderService.checkout(req));
 
     assertThat(result.created()).isTrue();
     assertThat(result.order().totalMinor()).isEqualTo(20_000L); // no tax/SC seeded for this tenant
@@ -286,8 +285,7 @@ class OfflineReplayCheckoutTest extends PostgresRlsTestBase {
             null,
             TenderType.CASH);
 
-    CheckoutResult result =
-        TenantContext.callAs(TENANT, ACTOR, () -> orderService.checkout(req));
+    CheckoutResult result = TenantContext.callAs(TENANT, ACTOR, () -> orderService.checkout(req));
 
     assertThat(result.created()).isTrue();
     assertThat(result.order().totalMinor()).isEqualTo(14_000L);
@@ -343,8 +341,9 @@ class OfflineReplayCheckoutTest extends PostgresRlsTestBase {
     assertThat(result.created()).isTrue();
     assertThat(result.order().totalMinor()).isEqualTo(20_000L);
     assertThat(result.order().payment().tenderedMinor())
-        .as("the server coerces the under-tendered offline CASH up to the due amount, not the"
-            + " client's 19,900")
+        .as(
+            "the server coerces the under-tendered offline CASH up to the due amount, not the"
+                + " client's 19,900")
         .isEqualTo(20_000L);
     assertThat(result.order().payment().changeMinor()).isZero();
   }
@@ -393,7 +392,9 @@ class OfflineReplayCheckoutTest extends PostgresRlsTestBase {
         });
   }
 
-  /** A minimal valid offline-replay checkout: one line, CASH payment, the given clientOccurredAt. */
+  /**
+   * A minimal valid offline-replay checkout: one line, CASH payment, the given clientOccurredAt.
+   */
   private CheckoutRequest offlineCheckout(
       String idempotencyKey, UUID itemId, Instant clientOccurredAt) {
     return new CheckoutRequest(

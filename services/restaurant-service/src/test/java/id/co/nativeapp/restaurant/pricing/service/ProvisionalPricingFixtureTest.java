@@ -77,8 +77,7 @@ class ProvisionalPricingFixtureTest {
         .as(
             "Shared pricing-parity fixture not found at %s (test cwd=%s) — see class javadoc for"
                 + " the relative-path assumption",
-            file.getAbsolutePath(),
-            new File(".").getAbsolutePath())
+            file.getAbsolutePath(), new File(".").getAbsolutePath())
         .exists();
     ObjectMapper mapper = new ObjectMapper();
     return mapper.readValue(

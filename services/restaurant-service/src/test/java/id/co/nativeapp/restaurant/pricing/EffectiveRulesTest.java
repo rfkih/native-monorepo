@@ -13,7 +13,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 /**
  * Integration tests for {@code GET /api/v1/pricing/effective-rules} (Phase 5, ADR 0028), exercised
  * at the {@link TaxChargeService#resolveEffectiveRules} level (the controller is a 3-line pass-
- * through, same convention as {@code CheckoutAcceptanceTest} testing {@code OrderService} directly).
+ * through, same convention as {@code CheckoutAcceptanceTest} testing {@code OrderService}
+ * directly).
  *
  * <p>{@code TENANT_A} is the demo tenant ({@code 11111111-...}) seeded with the V5 illustrative
  * {@code PB1_RESTAURANT}/{@code SERVICE_CHARGE} rules — reused here rather than re-seeding, exactly

@@ -75,8 +75,20 @@ public record CheckoutRequest(
   /** Convenience for a checkout with no payment and no discount (the original three-arg shape). */
   public CheckoutRequest(UUID businessId, String idempotencyKey, List<OrderLineRequest> lines) {
     this(
-        businessId, idempotencyKey, lines, null, null, null, null, null, null, null, null, null,
-        null, null);
+        businessId,
+        idempotencyKey,
+        lines,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
   }
 
   /**
@@ -89,8 +101,20 @@ public record CheckoutRequest(
       List<OrderLineRequest> lines,
       PaymentRequest payment) {
     this(
-        businessId, idempotencyKey, lines, payment, null, null, null, null, null, null, null, null,
-        null, null);
+        businessId,
+        idempotencyKey,
+        lines,
+        payment,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
   }
 
   /**

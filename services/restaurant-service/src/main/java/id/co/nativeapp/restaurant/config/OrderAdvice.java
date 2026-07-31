@@ -13,8 +13,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /**
  * The order-feature-specific RFC 7807 {@link ProblemDetail} advice — narrow, feature-scoped
- * handlers ordered ahead of the shared {@code libs/security ApiExceptionHandler} catch-all
- * (mirrors {@code PromotionAdvice}/{@code StockExceptionHandler}'s style).
+ * handlers ordered ahead of the shared {@code libs/security ApiExceptionHandler} catch-all (mirrors
+ * {@code PromotionAdvice}/{@code StockExceptionHandler}'s style).
  *
  * <ul>
  *   <li>{@link OfflineReplayValidationException} — a checkout request violates the Phase 5 (ADR

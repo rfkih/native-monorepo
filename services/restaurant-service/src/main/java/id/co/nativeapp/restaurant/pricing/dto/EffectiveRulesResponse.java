@@ -25,8 +25,8 @@ import java.time.LocalDate;
  *     the tax rule; defaults {@code true} when no tax rule is seeded, mirroring {@code
  *     TaxChargeService})
  * @param serviceChargeRuleVersion the resolved service-charge rule's version label, or {@code null}
- * @param serviceChargeProvenance {@code "ILLUSTRATIVE_PLACEHOLDER"} or {@code "OFFICIAL"}, or {@code
- *     null}
+ * @param serviceChargeProvenance {@code "ILLUSTRATIVE_PLACEHOLDER"} or {@code "OFFICIAL"}, or
+ *     {@code null}
  */
 public record EffectiveRulesResponse(
     String currency,

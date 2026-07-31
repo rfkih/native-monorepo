@@ -42,8 +42,9 @@ import org.springframework.transaction.annotation.Transactional;
  * #deductForLinesAllowingNegative} is the offline-replay counterpart to {@link #deductForLines}: it
  * NEVER throws {@link InsufficientStockException} — the cash is already in the drawer, so the sale
  * is recorded regardless — and instead deducts the tracked item's stock allowing the level to go
- * negative, recording a discrepancy to the error-log inbox ({@code libs/error-inbox}, ADR 0005/0009)
- * for repair by a physical count. {@link #deductForLines} (the online path) is unchanged.
+ * negative, recording a discrepancy to the error-log inbox ({@code libs/error-inbox}, ADR
+ * 0005/0009) for repair by a physical count. {@link #deductForLines} (the online path) is
+ * unchanged.
  */
 @Component
 public class StockDeductionWriter {
@@ -175,8 +176,8 @@ public class StockDeductionWriter {
    * CALLER'S TRANSACTION ({@link ErrorInboxWriter#recordInCurrentTx}): the discrepancy documents
    * this checkout's own stock side effect, so if the checkout rolls back after the deduction (a
    * later payment/sale failure) the record must roll back with it — a surviving row would be a
-   * phantom "oversold" alert for a sale that never happened (review W-2). The writer still
-   * swallows its own failures — ops infrastructure must never break the checkout it observes.
+   * phantom "oversold" alert for a sale that never happened (review W-2). The writer still swallows
+   * its own failures — ops infrastructure must never break the checkout it observes.
    */
   private void recordDiscrepancy(
       UUID orderId, UUID menuItemId, String itemName, int requested, int available) {

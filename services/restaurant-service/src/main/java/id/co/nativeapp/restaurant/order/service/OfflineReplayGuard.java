@@ -15,8 +15,8 @@ import org.springframework.stereotype.Component;
  * IndexedDB while disconnected and replays it, unchanged, once back online. Two request fields
  * carry the contract: {@code offlineReplay} and {@code clientOccurredAt}. Because the retry is
  * indistinguishable from a normal checkout apart from these two fields, this guard is the single
- * choke point that keeps the offline path CASH-only, quick-sale-only, and bounded in how far it
- * can back-date the GL period.
+ * choke point that keeps the offline path CASH-only, quick-sale-only, and bounded in how far it can
+ * back-date the GL period.
  *
  * <p>Shared by {@code OrderWriter#checkout} only — {@code park}/{@code payParked} are explicitly
  * out of scope for offline replay (ADR 0028: "No open bills, parking, voids, refunds, coupons,
@@ -34,8 +34,8 @@ public class OfflineReplayGuard {
   /**
    * Validates the request against the offline-replay contract and returns the order's effective
    * {@code occurredAt} — {@code request.clientOccurredAt()} when it was supplied and accepted, or
-   * {@code now} otherwise (the normal online path, and the {@code offlineReplay=true} /
-   * {@code clientOccurredAt=null} path both fall back to {@code now}).
+   * {@code now} otherwise (the normal online path, and the {@code offlineReplay=true} / {@code
+   * clientOccurredAt=null} path both fall back to {@code now}).
    *
    * @param request the checkout request
    * @param now the server's current instant (injected so tests can pin it)
@@ -98,8 +98,8 @@ public class OfflineReplayGuard {
   /**
    * Offline replay is CASH-only, quick-sale-only (ADR 0028): a coupon, a points redemption, a
    * gift-card redemption, or any non-CASH tender consumes shared server state that cannot be
-   * checked from a disconnected device. {@code loyaltyMemberId} alone (earn attribution) is
-   * allowed — it rides the queued payload harmlessly.
+   * checked from a disconnected device. {@code loyaltyMemberId} alone (earn attribution) is allowed
+   * — it rides the queued payload harmlessly.
    */
   private void enforceOfflineFieldMatrix(CheckoutRequest request) {
     if (request.payment() == null || request.payment().tenderType() != TenderType.CASH) {
