@@ -69,6 +69,17 @@ native:
         refill-tokens: ${SIGNUP_RATE_LIMIT_REFILL_TOKENS:10}
         refill-period: ${SIGNUP_RATE_LIMIT_REFILL_PERIOD:1h}
         trust-forwarded-for: ${SIGNUP_RATE_LIMIT_TRUST_XFF:false}
+      # Anonymous per-client-IP bucket for the PUBLIC /api/v1/self-order/** QR route (Phase 6,
+      # ADR 0029) — its OWN namespace, deliberately separate from `signup`. A QR scan opens a
+      # whole ordering SESSION (browse menu, edit cart, submit, poll status) from one IP that is
+      # very often shared restaurant/mall Wi-Fi across many diners at once, so the bucket is
+      # tuned looser than signup's rare one-shot tenant creation. trust-forwarded-for carries the
+      # same spoof-safe default as signup — only enable behind a trusted ingress.
+      self-order:
+        capacity: ${SELF_ORDER_RATE_LIMIT_CAPACITY:60}
+        refill-tokens: ${SELF_ORDER_RATE_LIMIT_REFILL_TOKENS:60}
+        refill-period: ${SELF_ORDER_RATE_LIMIT_REFILL_PERIOD:1m}
+        trust-forwarded-for: ${SELF_ORDER_RATE_LIMIT_TRUST_XFF:false}
 
 management:
   endpoints:

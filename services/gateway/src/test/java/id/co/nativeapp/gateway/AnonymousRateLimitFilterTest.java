@@ -96,7 +96,9 @@ class AnonymousRateLimitFilterTest {
 
   private AnonymousRateLimitFilter filter(boolean trustForwardedFor) {
     return new AnonymousRateLimitFilter(
-        limiter, new RateLimitProperties.Signup(3, 1, REFILL, trustForwardedFor));
+        limiter,
+        new RateLimitProperties.AnonymousBucket(3, 1, REFILL, trustForwardedFor),
+        "anon:signup:");
   }
 
   private static ServerRequest request(String remoteAddr, String forwardedFor) {

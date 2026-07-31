@@ -10,15 +10,16 @@ import org.springframework.web.servlet.function.ServerRequest;
 import org.springframework.web.servlet.function.ServerResponse;
 
 /**
- * Anonymous per-client-IP rate-limit filter for the PUBLIC sign-up route — rejects a client IP that
- * exceeds the signup token bucket with {@code 429 Too Many Requests}.
+ * Anonymous per-client-IP rate-limit filter for the gateway's unauthenticated routes — the PUBLIC
+ * sign-up route and the PUBLIC self-order QR route ({@code /api/v1/self-order/**}, Phase 6, ADR
+ * 0029) — rejecting a client IP that exceeds its bucket with {@code 429 Too Many Requests}.
  *
  * <p>The tenant {@link RateLimitFilter} keys on the validated JWT's {@code (company_id, sub)} and
- * therefore cannot protect an unauthenticated endpoint. This filter keys on the client IP instead,
- * with deliberately tight knobs ({@code native.gateway.rate-limit.signup}): one signup creates a
- * whole tenant (company row, org unit, outbox events, Keycloak user), so an unthrottled anonymous
- * endpoint is an amplification vector — and the throttle also blunts email enumeration via the
- * signup 409.
+ * therefore cannot protect an unauthenticated endpoint. This filter keys on the client IP instead.
+ * Each caller supplies its OWN {@link RateLimitProperties.AnonymousBucket} (its own knobs) and its
+ * OWN {@code keyNamespace} — the namespace is load-bearing: it keeps every anonymous route's bucket
+ * independent in Redis, so (for example) a busy dining room hammering self-order can never drain,
+ * or be drained by, the signup bucket.
  *
  * <p><strong>IP resolution is spoof-safe by default.</strong> {@code X-Forwarded-For} is honored
  * ONLY when {@code trust-forwarded-for} is explicitly enabled (deployments behind a trusted ingress
@@ -27,23 +28,29 @@ import org.springframework.web.servlet.function.ServerResponse;
  * cannot mint fresh buckets by varying a header.
  *
  * <p>The bucket itself (and its fail-closed Redis behavior) is {@link RedisTokenBucketRateLimiter}:
- * if Redis is down, signups are denied, never unmetered. A CAPTCHA / proof-of-work challenge at the
- * same edge remains a follow-up — this filter is the transport-level floor, not the whole bot
+ * if Redis is down, the request is denied, never unmetered. A CAPTCHA / proof-of-work challenge at
+ * the same edge remains a follow-up — this filter is the transport-level floor, not the whole bot
  * story.
  */
 public final class AnonymousRateLimitFilter
     implements HandlerFilterFunction<ServerResponse, ServerResponse> {
 
-  /** Namespace prefix separating anonymous signup buckets from the per-tenant buckets. */
-  private static final String KEY_NAMESPACE = "anon:signup:";
-
   private final RedisTokenBucketRateLimiter limiter;
-  private final RateLimitProperties.Signup props;
+  private final RateLimitProperties.AnonymousBucket props;
+  private final String keyNamespace;
 
+  /**
+   * @param keyNamespace the Redis key prefix for THIS route's bucket (e.g. {@code "anon:signup:"}
+   *     or {@code "anon:self-order:"}) — must be unique per anonymous route so buckets never
+   *     collide.
+   */
   public AnonymousRateLimitFilter(
-      RedisTokenBucketRateLimiter limiter, RateLimitProperties.Signup props) {
+      RedisTokenBucketRateLimiter limiter,
+      RateLimitProperties.AnonymousBucket props,
+      String keyNamespace) {
     this.limiter = limiter;
     this.props = props;
+    this.keyNamespace = keyNamespace;
   }
 
   @Override
@@ -52,7 +59,7 @@ public final class AnonymousRateLimitFilter
     String clientIp = resolveClientIp(request);
     boolean allowed =
         limiter.tryAcquire(
-            KEY_NAMESPACE + clientIp, props.capacity(), props.refillTokens(), props.refillPeriod());
+            keyNamespace + clientIp, props.capacity(), props.refillTokens(), props.refillPeriod());
     if (!allowed) {
       return ServerResponse.status(HttpStatus.TOO_MANY_REQUESTS)
           .header(

@@ -4,6 +4,7 @@ import static org.springframework.cloud.gateway.server.mvc.filter.BeforeFilterFu
 import static org.springframework.cloud.gateway.server.mvc.handler.HandlerFunctions.http;
 import static org.springframework.web.servlet.function.RequestPredicates.path;
 
+import id.co.nativeapp.gateway.filter.AnonymousTenantHeaderStripFilter;
 import id.co.nativeapp.gateway.filter.RoleAuthorizationFilter;
 import id.co.nativeapp.gateway.filter.TenantContextHeaderFilter;
 import id.co.nativeapp.gateway.ratelimit.AnonymousRateLimitFilter;
@@ -31,12 +32,21 @@ import org.springframework.web.servlet.function.ServerResponse;
  *       /api/v1/statements/**} → finance-service.
  * </ul>
  *
- * <p>Every route carries the same filter chain, in order: {@link RateLimitFilter} (per-tenant token
- * bucket → {@code 429}); {@link RoleAuthorizationFilter} (the route's allowed roles → {@code 403}
- * otherwise — this is the API half of the surface separation); {@link TenantContextHeaderFilter}
- * (strip client tenant headers, inject the JWT-derived {@code X-Company-Id}/{@code X-Actor}/{@code
- * X-Roles}). All run only after the security chain validated the bearer token, so an
- * unauthenticated request is already a {@code 401} and never reaches a route.
+ * <p>Every AUTHENTICATED route carries the same filter chain, in order: {@link RateLimitFilter}
+ * (per-tenant token bucket → {@code 429}); {@link RoleAuthorizationFilter} (the route's allowed
+ * roles → {@code 403} otherwise — this is the API half of the surface separation); {@link
+ * TenantContextHeaderFilter} (strip client tenant headers, inject the JWT-derived {@code
+ * X-Company-Id}/{@code X-Actor}/{@code X-Roles}). All run only after the security chain validated
+ * the bearer token, so an unauthenticated request is already a {@code 401} and never reaches a
+ * route.
+ *
+ * <p>Two routes are deliberately ANONYMOUS (no JWT, so none of the above): the public sign-up
+ * route ({@link #signupRoute}) and the public self-order QR route ({@link #selfOrderRoute}, Phase
+ * 6, ADR 0029). Each substitutes {@link AnonymousRateLimitFilter} (a per-client-IP bucket, its own
+ * Redis namespace) for {@link RateLimitFilter}, carries no {@link RoleAuthorizationFilter}, and
+ * cannot use {@link TenantContextHeaderFilter} (it requires a validated JWT and would 401 an
+ * anonymous caller) — the self-order route instead carries the strip-only {@link
+ * AnonymousTenantHeaderStripFilter} so a caller can never inject a trusted tenant header.
  *
  * <p>Targets come from {@link GatewayRouteProperties} (defaulted for the docker dev stack). The
  * full inbound path is preserved to the downstream, matching the {@code /api/v1/...} paths the
@@ -83,7 +93,51 @@ public class RoutingConfig {
     return GatewayRouterFunctions.route("org-service-signup")
         .route(path("/api/v1/signup"), http())
         .before(uri(routes.orgService()))
-        .filter(new AnonymousRateLimitFilter(limiter, rateLimits.signup()))
+        .filter(new AnonymousRateLimitFilter(limiter, rateLimits.signup(), "anon:signup:"))
+        // Same strip as self-order (Phase 6 hardening): signup previously forwarded any
+        // client-supplied X-Company-Id/X-Actor/X-Roles untouched — harmless only as long as
+        // org-service's signup path ignores them, which is one refactor away from not being true.
+        .filter(new AnonymousTenantHeaderStripFilter())
+        .build();
+  }
+
+  // ---------------------------------------------------------------------------
+  // restaurant-service (self-order QR — the program's only ANONYMOUS business route)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Public self-order QR route — {@code /api/v1/self-order/**} forwarded to restaurant-service
+   * with NO authentication, NO role check, and NO {@link TenantContextHeaderFilter} (Phase 6, ADR
+   * 0029). A diner scans a table's QR code and never logs in, so there is no JWT to validate, no
+   * tenant claim to trust, and no business role to gate on — restaurant-service owns the actual
+   * session logic once the request arrives, keyed by the QR-issued {@code X-Self-Order-Token} it
+   * validates itself (that header rides through this gateway untouched by every filter below).
+   *
+   * <p><strong>Throttle.</strong> The tenant {@link RateLimitFilter} keys on the JWT {@code
+   * (company_id, sub)} and cannot protect an anonymous endpoint, so this route carries the
+   * dedicated {@link AnonymousRateLimitFilter} instead — a per-client-IP token bucket under
+   * {@code native.gateway.rate-limit.self-order}, in its OWN Redis namespace ({@code
+   * anon:self-order:} — never {@code anon:signup:}) so a busy dining room can neither starve nor
+   * be starved by the tenant-creation throttle. Fail-closed like every other bucket: a Redis
+   * outage denies, never unmeters.
+   *
+   * <p><strong>Spoof defence.</strong> {@link TenantContextHeaderFilter} cannot run here (it 401s
+   * an unauthenticated caller), so it cannot do its usual header strip either. {@link
+   * AnonymousTenantHeaderStripFilter} does the strip half only, unconditionally removing any
+   * client-supplied {@code X-Company-Id}/{@code X-Actor}/{@code X-Roles} before the request
+   * reaches restaurant-service — an anonymous diner can never inject a trusted tenant/actor/role
+   * header.
+   */
+  @Bean
+  RouterFunction<ServerResponse> selfOrderRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      RateLimitProperties rateLimits) {
+    return GatewayRouterFunctions.route("restaurant-service-self-order")
+        .route(path("/api/v1/self-order/**"), http())
+        .before(uri(routes.restaurantService()))
+        .filter(new AnonymousRateLimitFilter(limiter, rateLimits.selfOrder(), "anon:self-order:"))
+        .filter(new AnonymousTenantHeaderStripFilter())
         .build();
   }
 
