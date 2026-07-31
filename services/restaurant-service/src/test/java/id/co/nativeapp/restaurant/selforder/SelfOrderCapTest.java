@@ -9,10 +9,10 @@ import id.co.nativeapp.restaurant.entitlement.dto.EntitlementProjectedEvent;
 import id.co.nativeapp.restaurant.entitlement.service.EntitlementProjectionService;
 import id.co.nativeapp.restaurant.menu.dto.CreateMenuItemRequest;
 import id.co.nativeapp.restaurant.menu.service.MenuService;
-import id.co.nativeapp.restaurant.order.dto.OrderLineRequest;
 import id.co.nativeapp.restaurant.order.dto.OrderResponse;
 import id.co.nativeapp.restaurant.selforder.domain.SelfOrderCapExceededException;
 import id.co.nativeapp.restaurant.selforder.dto.SelfOrderCreateRequest;
+import id.co.nativeapp.restaurant.selforder.dto.SelfOrderLineBounds;
 import id.co.nativeapp.restaurant.selforder.service.SelfOrderService;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
@@ -99,6 +99,6 @@ class SelfOrderCapTest extends PostgresRedisTestBase {
         () ->
             selfOrderService.createOrder(
                 new SelfOrderCreateRequest(
-                    idempotencyKey, List.of(new OrderLineRequest(itemId, 1)))));
+                    idempotencyKey, List.of(new SelfOrderLineBounds(itemId, 1, null)))));
   }
 }

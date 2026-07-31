@@ -12,9 +12,13 @@ import id.co.nativeapp.restaurant.menu.dto.CreateMenuItemRequest;
 import id.co.nativeapp.restaurant.menu.dto.MenuItemResponse;
 import id.co.nativeapp.restaurant.menu.service.MenuService;
 import id.co.nativeapp.restaurant.menu.service.StockService;
+import id.co.nativeapp.restaurant.order.dto.CheckoutResult;
 import id.co.nativeapp.restaurant.order.dto.OrderLineRequest;
 import id.co.nativeapp.restaurant.order.dto.OrderResponse;
+import id.co.nativeapp.restaurant.order.dto.ParkOrderRequest;
+import id.co.nativeapp.restaurant.order.service.OrderService;
 import id.co.nativeapp.restaurant.selforder.dto.SelfOrderCreateRequest;
+import id.co.nativeapp.restaurant.selforder.dto.SelfOrderLineBounds;
 import id.co.nativeapp.restaurant.selforder.service.SelfOrderService;
 import id.co.nativeapp.tenant.TenantContext;
 import java.sql.Connection;
@@ -55,6 +59,7 @@ class SelfOrderCreateGateTest extends PostgresRedisTestBase {
   @Autowired private MenuService menuService;
   @Autowired private StockService stockService;
   @Autowired private SelfOrderService selfOrderService;
+  @Autowired private OrderService orderService;
   @Autowired private EntitlementProjectionService entitlementProjectionService;
 
   @BeforeEach
@@ -124,6 +129,34 @@ class SelfOrderCreateGateTest extends PostgresRedisTestBase {
     assertThat(countAsAdmin("SELECT count(*) FROM restaurant_order")).isEqualTo(1L);
   }
 
+  @Test
+  void selfOrderIdempotencyKeyDoesNotCollideWithAPosOrderUsingTheSameRawKey() throws Exception {
+    grantSelfOrder();
+    UUID itemId = createMenuItem();
+    String sharedRawKey = "shared-key-" + UUID.randomUUID();
+
+    // A staff POS park using the raw key, on the same tenant/outlet.
+    CheckoutResult posParked =
+        TenantContext.callAs(
+            TENANT,
+            OWNER_ACTOR,
+            () ->
+                orderService.park(
+                    new ParkOrderRequest(
+                        OUTLET, sharedRawKey, List.of(new OrderLineRequest(itemId, 1)))));
+
+    // A self-order create with the SAME raw key: SelfOrderService namespaces it server-side
+    // ("self-order:" + key), so it must NOT idempotently resolve to the POS order above — it
+    // parks its own, distinct row.
+    OrderResponse selfOrderCreated = create(itemId, sharedRawKey);
+
+    assertThat(selfOrderCreated.orderId()).isNotEqualTo(posParked.order().orderId());
+    assertThat(countAsAdmin("SELECT count(*) FROM restaurant_order")).isEqualTo(2L);
+    assertThat(idempotencyKeyAsAdmin(posParked.order().orderId())).isEqualTo(sharedRawKey);
+    assertThat(idempotencyKeyAsAdmin(selfOrderCreated.orderId()))
+        .isEqualTo("self-order:" + sharedRawKey);
+  }
+
   private void grantSelfOrder() throws Exception {
     entitlementProjectionService.apply(
         new EntitlementProjectedEvent(UUID.randomUUID(), TENANT, SELF_ORDER, true));
@@ -146,7 +179,7 @@ class SelfOrderCreateGateTest extends PostgresRedisTestBase {
         () ->
             selfOrderService.createOrder(
                 new SelfOrderCreateRequest(
-                    idempotencyKey, List.of(new OrderLineRequest(itemId, 1)))));
+                    idempotencyKey, List.of(new SelfOrderLineBounds(itemId, 1, null)))));
   }
 
   private long countAsAdmin(String sql) throws Exception {
@@ -155,6 +188,17 @@ class SelfOrderCreateGateTest extends PostgresRedisTestBase {
         ResultSet rs = st.executeQuery(sql)) {
       rs.next();
       return rs.getLong(1);
+    }
+  }
+
+  private String idempotencyKeyAsAdmin(UUID orderId) throws Exception {
+    try (Connection admin = adminConnection();
+        Statement st = admin.createStatement();
+        ResultSet rs =
+            st.executeQuery(
+                "SELECT idempotency_key FROM restaurant_order WHERE id = '" + orderId + "'")) {
+      rs.next();
+      return rs.getString(1);
     }
   }
 

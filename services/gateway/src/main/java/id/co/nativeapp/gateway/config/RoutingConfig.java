@@ -140,6 +140,30 @@ public class RoutingConfig {
         .build();
   }
 
+  /**
+   * Self-order QR ADMINISTRATION ({@code /api/v1/self-order-access/**}) — the owner/manager surface
+   * that mints and ROTATES a table's tokens (Phase 6, ADR 0029). This is an ordinary AUTHENTICATED
+   * dashboard route (JWT + owner/manager role + trusted tenant headers), NOT part of the anonymous
+   * diner surface — and it is a SEPARATE path prefix: Spring's {@code /api/v1/self-order/**} pattern
+   * does NOT match the sibling segment {@code self-order-access}, so without this bean the mint/
+   * rotate endpoints would 404 at the gateway and rotation — the token's ONLY revocation control —
+   * would be unreachable in production (a leaked no-expiry QR could never be revoked). Mirrors
+   * {@link #promotionsRoute}'s money-adjacent-admin shape.
+   */
+  @Bean
+  RouterFunction<ServerResponse> selfOrderAccessRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("restaurant-service-self-order-access")
+        .route(path("/api/v1/self-order-access/**"), http())
+        .before(uri(routes.restaurantService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
   // ---------------------------------------------------------------------------
   // org-service (owner dashboard)
   // ---------------------------------------------------------------------------

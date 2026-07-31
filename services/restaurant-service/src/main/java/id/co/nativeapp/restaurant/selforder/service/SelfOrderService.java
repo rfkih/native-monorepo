@@ -80,18 +80,24 @@ public class SelfOrderService {
   public OrderResponse createOrder(SelfOrderCreateRequest request) {
     requireEntitled();
     SelfOrderPrincipal principal = principalProvider.require();
+    // The client key is NAMESPACED server-side (review W-2, defense in depth): the idempotent
+    // fast path / conflict re-read would otherwise return ANY same-company order matching the
+    // key — an (astronomically unlikely, but avoidable) collision with a POS order would hand an
+    // anonymous caller that order's contents. With the prefix, anonymous keys live in their own
+    // keyspace; an authenticated POS client gains nothing by imitating it.
+    String namespacedKey = "self-order:" + request.idempotencyKey();
     try {
       CheckoutResult result =
           orderWriter.parkSelfOrder(
               principal.businessId(),
-              request.lines(),
-              request.idempotencyKey(),
+              request.toOrderLines(),
+              namespacedKey,
               principal.tableLabel());
       return result.order();
     } catch (DataIntegrityViolationException conflict) {
       // A concurrent racer (e.g. a double-tap retry) already inserted the same idempotency key —
       // re-read the winner's order in a fresh transaction, exactly the OrderService.park recovery.
-      return orderWriter.findExistingByKey(request.idempotencyKey()).orElseThrow(() -> conflict);
+      return orderWriter.findExistingByKey(namespacedKey).orElseThrow(() -> conflict);
     }
   }
 

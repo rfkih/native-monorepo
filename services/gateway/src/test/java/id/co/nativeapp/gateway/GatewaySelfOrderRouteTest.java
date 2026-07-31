@@ -27,6 +27,9 @@ import org.springframework.web.client.RestClient;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class GatewaySelfOrderRouteTest extends GatewayIntegrationTestBase {
 
+  private static final String CASHIER_USERNAME = "cashier-acme";
+  private static final String CASHIER_PASSWORD = "cashier-password";
+
   @Test
   void anAnonymousRequestReachesTheRouteWithNoBearerTokenAndNo401() {
     String response =
@@ -103,5 +106,80 @@ class GatewaySelfOrderRouteTest extends GatewayIntegrationTestBase {
     assertThat(forwarded.getHeader(TenantContextHeaderFilter.COMPANY_HEADER))
         .isEqualTo(EXPECTED_COMPANY_ID);
     assertThat(forwarded.getHeader(TenantContextHeaderFilter.ACTOR_HEADER)).isNotBlank();
+  }
+
+  // ---------------------------------------------------------------------------
+  // /api/v1/self-order-access/** — the QR ADMINISTRATION surface (F-1 fix): an ordinary
+  // AUTHENTICATED dashboard route (owner/manager), NOT part of the anonymous diner surface above.
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void theSelfOrderAccessRouteRejectsAMissingBearerTokenWith401() {
+    // The core of the F-1 fix: /api/v1/self-order-access/** is a SIBLING path segment to
+    // /api/v1/self-order/** (Spring's ** pattern does not match across the extra "-access"
+    // characters), so it is NOT covered by the anonymous selfOrderRoute above. An unauthenticated
+    // request must be rejected 401, exactly like any other dashboard route — proving the mint/
+    // rotate admin endpoints are no longer reachable without a bearer token.
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/self-order-access/some-outlet")
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.UNAUTHORIZED));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void aCashierIsDeniedTheSelfOrderAccessRouteWith403() throws Exception {
+    // DASHBOARD_ROLES only — the cashier POS role has no business minting/rotating a table's QR
+    // tokens.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/self-order-access/some-outlet")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void anOwnerCanReachTheSelfOrderAccessRouteWithInjectedTrustedTenantHeaders() throws Exception {
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/self-order-access/some-outlet")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    RecordedRequest forwarded = theForwardedRequest();
+    assertThat(forwarded.getPath()).isEqualTo("/api/v1/self-order-access/some-outlet");
+    // Unlike the anonymous self-order route, this dashboard route DOES carry the gateway's own
+    // trusted tenant/actor/role headers (TenantContextHeaderFilter, not the strip-only filter).
+    assertThat(forwarded.getHeader(TenantContextHeaderFilter.COMPANY_HEADER))
+        .isEqualTo(EXPECTED_COMPANY_ID);
+    assertThat(forwarded.getHeader(TenantContextHeaderFilter.ACTOR_HEADER)).isNotBlank();
+    assertThat(forwarded.getHeader(TenantContextHeaderFilter.ROLES_HEADER)).isNotBlank();
   }
 }

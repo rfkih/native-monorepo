@@ -35,4 +35,18 @@ public class SelfOrderFilterConfig {
     registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
     return registration;
   }
+
+  /**
+   * Body-size guard for the same anonymous surface, ordered BEFORE the token filter (a huge body
+   * should be refused without even validating the token — cheapest rejection first). See {@link
+   * SelfOrderBodySizeFilter}.
+   */
+  @Bean
+  public FilterRegistrationBean<SelfOrderBodySizeFilter> selfOrderBodySizeFilterRegistration() {
+    FilterRegistrationBean<SelfOrderBodySizeFilter> registration = new FilterRegistrationBean<>();
+    registration.setFilter(new SelfOrderBodySizeFilter());
+    registration.addUrlPatterns(URL_PATTERN);
+    registration.setOrder(Ordered.HIGHEST_PRECEDENCE - 1);
+    return registration;
+  }
 }

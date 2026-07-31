@@ -103,7 +103,12 @@ public class DevTenantFilter extends OncePerRequestFilter implements Ordered {
   @Override
   protected boolean shouldNotFilter(HttpServletRequest request) {
     String path = request.getRequestURI();
-    return path.equals("/healthz") || path.startsWith("/actuator");
+    // /api/v1/self-order/** is ANONYMOUS (ADR 0029): its tenant is bound by SelfOrderTokenFilter
+    // from the verified token, never from headers — the same exemption the non-dev chain grants
+    // via native.security.public-paths. Without this, dev mode 400s every self-order request.
+    return path.equals("/healthz")
+        || path.startsWith("/actuator")
+        || path.startsWith("/api/v1/self-order/");
   }
 
   private static boolean isUuid(String value) {
