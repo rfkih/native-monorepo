@@ -47,7 +47,8 @@ class ErrorInboxWriterFailSafeTest {
             inv ->
                 ((org.springframework.transaction.support.TransactionCallback<Long>)
                         inv.getArgument(0))
-                    .doInTransaction(mock(org.springframework.transaction.TransactionStatus.class)));
+                    .doInTransaction(
+                        mock(org.springframework.transaction.TransactionStatus.class)));
     ErrorInboxWriter.Recorded r =
         writer.record(
             new IllegalStateException("fail for user@x.com nik 3201234567890123"),
@@ -63,7 +64,10 @@ class ErrorInboxWriterFailSafeTest {
   void recordInCurrentTxUpsertsDirectlyWithoutTheRequiresNewTemplate() {
     doReturn(3L)
         .when(jdbc)
-        .queryForObject(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq(Long.class), any(Object[].class));
+        .queryForObject(
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.eq(Long.class),
+            any(Object[].class));
     ErrorInboxWriter.Recorded r =
         writer.recordInCurrentTx(
             new IllegalStateException("oversold stock for user@x.com"),
@@ -80,7 +84,10 @@ class ErrorInboxWriterFailSafeTest {
   void recordInCurrentTxSwallowsAFailedUpsertAndReturnsTheFailedSentinel() {
     doThrow(new RuntimeException("db unreachable"))
         .when(jdbc)
-        .queryForObject(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq(Long.class), any(Object[].class));
+        .queryForObject(
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.eq(Long.class),
+            any(Object[].class));
     ErrorInboxWriter.Recorded r =
         writer.recordInCurrentTx(new IllegalStateException("boom"), "src", null, null);
     assertThat(r.occurrenceCount()).isZero();
