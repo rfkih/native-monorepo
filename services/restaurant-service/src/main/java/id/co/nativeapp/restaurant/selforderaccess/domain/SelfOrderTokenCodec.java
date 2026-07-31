@@ -1,7 +1,6 @@
 package id.co.nativeapp.restaurant.selforderaccess.domain;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.util.Base64;
