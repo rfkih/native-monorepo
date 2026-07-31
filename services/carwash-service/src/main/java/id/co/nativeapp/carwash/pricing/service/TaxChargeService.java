@@ -3,15 +3,18 @@ package id.co.nativeapp.carwash.pricing.service;
 import id.co.nativeapp.carwash.pricing.domain.PriceBreakdown;
 import id.co.nativeapp.carwash.pricing.domain.RuleProvenance;
 import id.co.nativeapp.carwash.pricing.domain.TaxChargeRule;
+import id.co.nativeapp.carwash.pricing.dto.EffectiveRulesResponse;
 import id.co.nativeapp.carwash.pricing.projection.TaxChargeRuleView;
 import id.co.nativeapp.carwash.pricing.repository.TaxChargeRuleRepository;
 import id.co.nativeapp.money.Money;
+import id.co.nativeapp.tenant.TenantContext;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Resolves the effective tax and service-charge rules at the ticket's {@code occurredAt} date and
@@ -159,5 +162,52 @@ public class TaxChargeService {
         grandTotal,
         taxRuleVersion,
         usesIllustrative);
+  }
+
+  /**
+   * Phase 5 (ADR 0028): resolves TODAY's (UTC) effective {@code VAT_CARWASH}/{@code
+   * SERVICE_CHARGE} rules for the offline POS's provisional-pricing snapshot — the same rule keys
+   * {@link #resolve} uses, with the same no-rule fall-through (rate {@code 0}, version/provenance
+   * {@code null}). Read-only; unlike {@link #resolve} (always called from inside an existing
+   * {@code REQUIRES_NEW} checkout transaction), this is a standalone GET so it opens its own
+   * transaction to engage the RLS tenant GUC.
+   */
+  @Transactional(readOnly = true)
+  public EffectiveRulesResponse resolveEffectiveRules() {
+    TenantContext.require();
+    LocalDate asOf = LocalDate.now(ZoneOffset.UTC);
+
+    Optional<TaxChargeRuleView> taxRuleOpt = repository.findEffective(TaxChargeRule.KEY_VAT, asOf);
+    Optional<TaxChargeRuleView> scRuleOpt =
+        repository.findEffective(TaxChargeRule.KEY_SERVICE_CHARGE, asOf);
+
+    long taxBp = taxRuleOpt.map(TaxChargeRuleView::getRateBp).orElse(0L);
+    String taxRuleVersion = taxRuleOpt.map(TaxChargeRuleView::getRuleVersion).orElse(null);
+    String taxProvenance = taxRuleOpt.map(TaxChargeRuleView::getProvenance).orElse(null);
+    // service_charge_in_tax_base is governed by the VAT rule, mirroring resolve() step 1 — the
+    // safe default (true) applies only when no VAT rule is seeded.
+    boolean serviceChargeInTaxBase =
+        taxRuleOpt.map(TaxChargeRuleView::isServiceChargeInTaxBase).orElse(true);
+
+    long serviceChargeBp = scRuleOpt.map(TaxChargeRuleView::getRateBp).orElse(0L);
+    String serviceChargeRuleVersion = scRuleOpt.map(TaxChargeRuleView::getRuleVersion).orElse(null);
+    String serviceChargeProvenance = scRuleOpt.map(TaxChargeRuleView::getProvenance).orElse(null);
+
+    String currency =
+        taxRuleOpt
+            .map(v -> v.getCurrency().strip())
+            .or(() -> scRuleOpt.map(v -> v.getCurrency().strip()))
+            .orElse(null);
+
+    return new EffectiveRulesResponse(
+        currency,
+        asOf,
+        taxBp,
+        taxRuleVersion,
+        taxProvenance,
+        serviceChargeBp,
+        serviceChargeInTaxBase,
+        serviceChargeRuleVersion,
+        serviceChargeProvenance);
   }
 }

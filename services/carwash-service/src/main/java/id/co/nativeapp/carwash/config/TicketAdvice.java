@@ -1,6 +1,7 @@
 package id.co.nativeapp.carwash.config;
 
 import id.co.nativeapp.carwash.ticket.domain.MixedCurrencyException;
+import id.co.nativeapp.carwash.ticket.domain.OfflineReplayInvalidException;
 import id.co.nativeapp.carwash.ticket.domain.PaymentNotPendingException;
 import id.co.nativeapp.carwash.ticket.domain.TicketNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -23,6 +24,10 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  *       currency → {@code 422 Unprocessable Entity}.
  *   <li>{@link PaymentNotPendingException} — a capture attempt on a payment that is neither {@code
  *       CAPTURED} (handled separately, no error) nor {@code PENDING} → {@code 409 Conflict}.
+ *   <li>{@link OfflineReplayInvalidException} — Phase 5 (ADR 0028): a malformed offline-replay
+ *       checkout (a {@code clientOccurredAt} without {@code offlineReplay}, an out-of-window {@code
+ *       clientOccurredAt}, or an offline-replay request carrying a non-CASH tender/coupon/points/
+ *       gift-card redemption) → {@code 422 Unprocessable Entity}.
  * </ul>
  */
 @RestControllerAdvice
@@ -54,6 +59,16 @@ public class TicketAdvice {
     ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
     problem.setType(URI.create(TYPE_BASE + "ticket-payment-not-pending"));
     problem.setTitle("Conflict");
+    problem.setDetail(ex.getMessage());
+    return decorate(problem, request);
+  }
+
+  @ExceptionHandler(OfflineReplayInvalidException.class)
+  public ProblemDetail handleOfflineReplayInvalid(
+      OfflineReplayInvalidException ex, HttpServletRequest request) {
+    ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.UNPROCESSABLE_ENTITY);
+    problem.setType(URI.create(TYPE_BASE + "ticket-offline-replay-invalid"));
+    problem.setTitle("Unprocessable Entity");
     problem.setDetail(ex.getMessage());
     return decorate(problem, request);
   }

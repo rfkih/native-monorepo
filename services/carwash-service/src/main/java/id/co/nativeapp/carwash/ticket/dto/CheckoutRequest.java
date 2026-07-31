@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -40,6 +41,17 @@ import java.util.UUID;
  * @param giftCardRedeemMinor Phase 4 (ADR 0027): optional amount to redeem from the gift card,
  *     minor units, clamped server-side to {@code min(requested, cached ACTIVE balance, grand
  *     total)}. Requires {@code giftCardId}; {@code null}/0 means no redemption.
+ * @param offlineReplay Phase 5 (ADR 0028): {@code true} marks this checkout as an offline-queued
+ *     cash sale being REPLAYED through this SAME endpoint once connectivity returns — exactly-once
+ *     delivery rides the existing {@code (company_id, idempotencyKey)} uniqueness (a replay is just
+ *     a retry). {@code null}/{@code false} is a normal online checkout.
+ * @param clientOccurredAt Phase 5 (ADR 0028): the till's client-side clock reading for when the
+ *     sale actually happened OFFLINE. Accepted ONLY when {@code offlineReplay} is {@code true}
+ *     ({@code 422} otherwise); must fall within {@code [now - 48h, now + 5m]} ({@code 422} outside
+ *     that window); {@code null} falls back to {@code now()}. A valid value becomes the ticket's
+ *     {@code occurredAt} — driving the resolved pricing/tax rule's effective date and the emitted
+ *     {@code SaleRecorded}'s {@code occurred_at} — so the sale posts into the GL period matching the
+ *     day it actually happened, not the day it was replayed.
  */
 public record CheckoutRequest(
     @NotNull UUID businessId,
@@ -54,7 +66,9 @@ public record CheckoutRequest(
     UUID loyaltyMemberId,
     @Min(0) Long loyaltyRedeemPoints,
     UUID giftCardId,
-    @Min(0) Long giftCardRedeemMinor) {
+    @Min(0) Long giftCardRedeemMinor,
+    Boolean offlineReplay,
+    Instant clientOccurredAt) {
 
   /** Convenience for the pre-Phase-3 eight-arg shape (no coupon code). */
   public CheckoutRequest(
@@ -75,6 +89,8 @@ public record CheckoutRequest(
         discountMinor,
         lines,
         payment,
+        null,
+        null,
         null,
         null,
         null,
@@ -105,6 +121,45 @@ public record CheckoutRequest(
         couponCode,
         null,
         null,
+        null,
+        null,
+        null,
+        null);
+  }
+
+  /**
+   * Convenience for the pre-Phase-5 thirteen-arg shape (loyalty/gift-card fields, no offline-replay
+   * fields).
+   */
+  @SuppressWarnings("checkstyle:ParameterNumber")
+  public CheckoutRequest(
+      UUID businessId,
+      String idempotencyKey,
+      String bay,
+      String vehiclePlate,
+      UUID staffProfileId,
+      Long discountMinor,
+      List<TicketLineInput> lines,
+      PaymentRequest payment,
+      String couponCode,
+      UUID loyaltyMemberId,
+      Long loyaltyRedeemPoints,
+      UUID giftCardId,
+      Long giftCardRedeemMinor) {
+    this(
+        businessId,
+        idempotencyKey,
+        bay,
+        vehiclePlate,
+        staffProfileId,
+        discountMinor,
+        lines,
+        payment,
+        couponCode,
+        loyaltyMemberId,
+        loyaltyRedeemPoints,
+        giftCardId,
+        giftCardRedeemMinor,
         null,
         null);
   }

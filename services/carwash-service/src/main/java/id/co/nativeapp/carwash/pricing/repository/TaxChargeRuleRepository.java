@@ -41,7 +41,8 @@ public interface TaxChargeRuleRepository extends JpaRepository<TaxChargeRule, ja
                  rule_version  AS ruleVersion,
                  rate_bp       AS rateBp,
                  service_charge_in_tax_base AS serviceChargeInTaxBase,
-                 provenance    AS provenance
+                 provenance    AS provenance,
+                 currency      AS currency
             FROM tax_charge_rule
            WHERE rule_key       = :ruleKey
              AND active         = TRUE

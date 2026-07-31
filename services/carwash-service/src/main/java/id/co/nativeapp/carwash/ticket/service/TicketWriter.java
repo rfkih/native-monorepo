@@ -27,6 +27,7 @@ import id.co.nativeapp.carwash.promotion.service.ManualDiscountGuard;
 import id.co.nativeapp.carwash.promotion.service.PromotionEngineService;
 import id.co.nativeapp.carwash.ticket.domain.CarwashTicket;
 import id.co.nativeapp.carwash.ticket.domain.CarwashTicketLine;
+import id.co.nativeapp.carwash.ticket.domain.OfflineReplayInvalidException;
 import id.co.nativeapp.carwash.ticket.domain.TicketNotFoundException;
 import id.co.nativeapp.carwash.ticket.dto.CheckoutRequest;
 import id.co.nativeapp.carwash.ticket.dto.CheckoutResult;
@@ -109,6 +110,7 @@ public class TicketWriter {
   private final AppliedPromotionRepository appliedPromotionRepository;
   private final ManualDiscountGuard manualDiscountGuard;
   private final LoyaltyRedemptionGuard loyaltyRedemptionGuard;
+  private final OfflineReplayGuard offlineReplayGuard;
 
   @SuppressWarnings("checkstyle:ParameterNumber")
   public TicketWriter(
@@ -126,7 +128,8 @@ public class TicketWriter {
       CouponRepository couponRepository,
       AppliedPromotionRepository appliedPromotionRepository,
       ManualDiscountGuard manualDiscountGuard,
-      LoyaltyRedemptionGuard loyaltyRedemptionGuard) {
+      LoyaltyRedemptionGuard loyaltyRedemptionGuard,
+      OfflineReplayGuard offlineReplayGuard) {
     this.ticketRepository = ticketRepository;
     this.lineRepository = lineRepository;
     this.paymentRepository = paymentRepository;
@@ -142,6 +145,7 @@ public class TicketWriter {
     this.appliedPromotionRepository = appliedPromotionRepository;
     this.manualDiscountGuard = manualDiscountGuard;
     this.loyaltyRedemptionGuard = loyaltyRedemptionGuard;
+    this.offlineReplayGuard = offlineReplayGuard;
   }
 
   /**
@@ -156,6 +160,8 @@ public class TicketWriter {
    *     usable coupon
    * @throws CouponExhaustedException if {@code couponCode} resolves to a coupon whose redemption
    *     limit is reached
+   * @throws OfflineReplayInvalidException if the request's Phase 5 (ADR 0028) offline-replay fields
+   *     are malformed (see {@link OfflineReplayGuard})
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public CheckoutResult create(CheckoutRequest request) {
@@ -180,7 +186,10 @@ public class TicketWriter {
 
     UUID washerEmployeeId = resolveWasher(request.businessId(), request.staffProfileId());
 
-    Instant now = Instant.now();
+    // Phase 5 (ADR 0028): validates + resolves the offline-replay occurredAt exactly where it was
+    // previously minted as a bare Instant.now() — a valid clientOccurredAt becomes the ticket's
+    // occurredAt (pricing effective date + SaleRecorded occurred_at); see OfflineReplayGuard.
+    Instant now = offlineReplayGuard.resolveOccurredAt(request, Instant.now());
 
     // Phase 3 (ADR 0026): pre-generate the ticket id and build the REAL CarwashTicketLine entities
     // now (their ids are already final, independent of ticket persistence — a plain-UUID FK, unlike

@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import id.co.nativeapp.barbershop.config.TicketAdvice;
 import id.co.nativeapp.barbershop.ticket.controller.TicketController;
 import id.co.nativeapp.barbershop.ticket.domain.MixedCurrencyException;
+import id.co.nativeapp.barbershop.ticket.domain.OfflineReplayInvalidException;
 import id.co.nativeapp.barbershop.ticket.domain.TicketNotFoundException;
 import id.co.nativeapp.barbershop.ticket.dto.CheckoutRequest;
 import id.co.nativeapp.barbershop.ticket.dto.CheckoutResult;
@@ -195,6 +196,19 @@ class TicketControllerValidationTest {
         .perform(checkoutRequest())
         .andExpect(status().isUnprocessableEntity())
         .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/ticket-mixed-currency"));
+  }
+
+  @Test
+  void offlineReplayInvalidIsRejectedWith422() throws Exception {
+    // Phase 5 (ADR 0028): any OfflineReplayGuard rejection (bounds, pairing, forbidden fields)
+    // surfaces as this SAME exception type; the HTTP mapping is what this slice proves.
+    when(ticketService.checkout(org.mockito.ArgumentMatchers.any(CheckoutRequest.class)))
+        .thenThrow(new OfflineReplayInvalidException("clientOccurredAt is more than 48h past"));
+    mockMvc
+        .perform(checkoutRequest())
+        .andExpect(status().isUnprocessableEntity())
+        .andExpect(
+            jsonPath("$.type").value("https://errors.nativeapp.id/ticket-offline-replay-invalid"));
   }
 
   @Test

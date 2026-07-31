@@ -19,4 +19,12 @@ public interface TaxChargeRuleView {
   boolean isServiceChargeInTaxBase();
 
   String getProvenance();
+
+  /**
+   * The rule's ISO-4217 currency ({@code CHAR(3)} — may carry trailing spaces; callers must {@link
+   * String#strip()} it). Selected for the {@code pricing.effective-rules} preview endpoint (Phase
+   * 5, ADR 0028); {@link id.co.nativeapp.barbershop.pricing.service.TaxChargeService
+   * TaxChargeService} does not read it.
+   */
+  String getCurrency();
 }

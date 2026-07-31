@@ -367,6 +367,27 @@ public class RoutingConfig {
   }
 
   /**
+   * Pricing-rule preview under {@code /api/v1/pricing/**} (restaurant-service, Phase 5 offline
+   * mode, ADR 0028) — {@code GET /api/v1/pricing/effective-rules}: a POS client caches the
+   * effective tax/service-charge rules to compute PROVISIONAL pricing while offline. Restaurant's
+   * surface is grandfathered unprefixed (like {@link #salesRoute}/{@link #menuRoute}), so this rides
+   * a fresh, restaurant-unprefixed path — POS_ROLES, same as every other restaurant POS route.
+   */
+  @Bean
+  RouterFunction<ServerResponse> pricingRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("restaurant-service-pricing")
+        .route(path("/api/v1/pricing/**"), http())
+        .before(uri(routes.restaurantService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(POS_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
    * All carwash POS traffic under {@code /api/v1/carwash/**} (carwash-service) — POS surface.
    * Vertical services after restaurant are namespaced by vertical (the {@code /api/v1/ap/**}
    * precedent applied at vertical scope): restaurant's unprefixed paths ({@code /orders}, {@code
