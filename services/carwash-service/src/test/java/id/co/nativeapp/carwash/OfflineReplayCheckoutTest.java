@@ -82,7 +82,10 @@ class OfflineReplayCheckoutTest extends KafkaPostgresRedisTestBase {
   void clientOccurredAt47HoursInThePastIsAcceptedAndPersistedAsOccurredAt() throws Exception {
     grantCarwash(TENANT);
     CatalogItemResponse pkg = createPackage();
-    Instant fortySevenHoursAgo = Instant.now().minus(Duration.ofHours(47));
+    // Truncated to micros: Postgres TIMESTAMPTZ stores microseconds, and Windows Instant.now()
+    // carries sub-micro precision — an untruncated instant would fail the round-trip equality.
+    Instant fortySevenHoursAgo =
+        Instant.now().minus(Duration.ofHours(47)).truncatedTo(java.time.temporal.ChronoUnit.MICROS);
     CheckoutRequest request =
         offlineRequest(
             pkg.id(), "offline-47h-past", TenderType.CASH, null, null, null, fortySevenHoursAgo);

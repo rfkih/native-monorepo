@@ -104,7 +104,10 @@ class OfflineReplayCheckoutTest extends KafkaPostgresRedisTestBase {
     grantBarbershop(TENANT);
     CatalogItemResponse service = createService();
     StaffProfileResponse barber = createStaffProfile();
-    Instant fortySevenHoursAgo = Instant.now().minus(Duration.ofHours(47));
+    // Truncated to micros: Postgres TIMESTAMPTZ stores microseconds, and Windows Instant.now()
+    // carries sub-micro precision — an untruncated instant would fail the round-trip equality.
+    Instant fortySevenHoursAgo =
+        Instant.now().minus(Duration.ofHours(47)).truncatedTo(java.time.temporal.ChronoUnit.MICROS);
     CheckoutRequest request =
         offlineRequest(
             service.id(),
