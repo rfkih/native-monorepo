@@ -370,8 +370,9 @@ public class RoutingConfig {
    * Pricing-rule preview under {@code /api/v1/pricing/**} (restaurant-service, Phase 5 offline
    * mode, ADR 0028) — {@code GET /api/v1/pricing/effective-rules}: a POS client caches the
    * effective tax/service-charge rules to compute PROVISIONAL pricing while offline. Restaurant's
-   * surface is grandfathered unprefixed (like {@link #salesRoute}/{@link #menuRoute}), so this rides
-   * a fresh, restaurant-unprefixed path — POS_ROLES, same as every other restaurant POS route.
+   * surface is grandfathered unprefixed (like {@link #salesRoute}/{@link #menuRoute}), so this
+   * rides a fresh, restaurant-unprefixed path — POS_ROLES, same as every other restaurant POS
+   * route.
    */
   @Bean
   RouterFunction<ServerResponse> pricingRoute(
