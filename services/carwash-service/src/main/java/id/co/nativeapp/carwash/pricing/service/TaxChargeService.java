@@ -165,12 +165,12 @@ public class TaxChargeService {
   }
 
   /**
-   * Phase 5 (ADR 0028): resolves TODAY's (UTC) effective {@code VAT_CARWASH}/{@code
-   * SERVICE_CHARGE} rules for the offline POS's provisional-pricing snapshot — the same rule keys
-   * {@link #resolve} uses, with the same no-rule fall-through (rate {@code 0}, version/provenance
-   * {@code null}). Read-only; unlike {@link #resolve} (always called from inside an existing
-   * {@code REQUIRES_NEW} checkout transaction), this is a standalone GET so it opens its own
-   * transaction to engage the RLS tenant GUC.
+   * Phase 5 (ADR 0028): resolves TODAY's (UTC) effective {@code VAT_CARWASH}/{@code SERVICE_CHARGE}
+   * rules for the offline POS's provisional-pricing snapshot — the same rule keys {@link #resolve}
+   * uses, with the same no-rule fall-through (rate {@code 0}, version/provenance {@code null}).
+   * Read-only; unlike {@link #resolve} (always called from inside an existing {@code REQUIRES_NEW}
+   * checkout transaction), this is a standalone GET so it opens its own transaction to engage the
+   * RLS tenant GUC.
    */
   @Transactional(readOnly = true)
   public EffectiveRulesResponse resolveEffectiveRules() {

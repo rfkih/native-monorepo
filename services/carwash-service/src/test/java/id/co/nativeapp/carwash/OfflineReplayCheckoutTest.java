@@ -63,8 +63,7 @@ class OfflineReplayCheckoutTest extends KafkaPostgresRedisTestBase {
     CheckoutRequest request =
         offlineRequest(pkg.id(), "offline-49h-past", TenderType.CASH, null, null, null, tooOld);
 
-    assertThatThrownBy(() -> checkoutAs(request))
-        .isInstanceOf(OfflineReplayInvalidException.class);
+    assertThatThrownBy(() -> checkoutAs(request)).isInstanceOf(OfflineReplayInvalidException.class);
   }
 
   @Test
@@ -76,8 +75,7 @@ class OfflineReplayCheckoutTest extends KafkaPostgresRedisTestBase {
         offlineRequest(
             pkg.id(), "offline-6min-future", TenderType.CASH, null, null, null, tooFuture);
 
-    assertThatThrownBy(() -> checkoutAs(request))
-        .isInstanceOf(OfflineReplayInvalidException.class);
+    assertThatThrownBy(() -> checkoutAs(request)).isInstanceOf(OfflineReplayInvalidException.class);
   }
 
   @Test
@@ -123,16 +121,9 @@ class OfflineReplayCheckoutTest extends KafkaPostgresRedisTestBase {
     Instant beforeCurrentMonth = startOfCurrentMonthUtc().minus(Duration.ofHours(1));
     CheckoutRequest request =
         offlineRequest(
-            pkg.id(),
-            "offline-month-clamp",
-            TenderType.CASH,
-            null,
-            null,
-            null,
-            beforeCurrentMonth);
+            pkg.id(), "offline-month-clamp", TenderType.CASH, null, null, null, beforeCurrentMonth);
 
-    assertThatThrownBy(() -> checkoutAs(request))
-        .isInstanceOf(OfflineReplayInvalidException.class);
+    assertThatThrownBy(() -> checkoutAs(request)).isInstanceOf(OfflineReplayInvalidException.class);
   }
 
   @Test
@@ -157,8 +148,7 @@ class OfflineReplayCheckoutTest extends KafkaPostgresRedisTestBase {
             null, // offlineReplay = null
             Instant.now()); // clientOccurredAt present without offlineReplay = true -> 422
 
-    assertThatThrownBy(() -> checkoutAs(request))
-        .isInstanceOf(OfflineReplayInvalidException.class);
+    assertThatThrownBy(() -> checkoutAs(request)).isInstanceOf(OfflineReplayInvalidException.class);
   }
 
   // -----------------------------------------------------------------------
@@ -187,8 +177,7 @@ class OfflineReplayCheckoutTest extends KafkaPostgresRedisTestBase {
             true,
             null);
 
-    assertThatThrownBy(() -> checkoutAs(request))
-        .isInstanceOf(OfflineReplayInvalidException.class);
+    assertThatThrownBy(() -> checkoutAs(request)).isInstanceOf(OfflineReplayInvalidException.class);
   }
 
   @Test
@@ -196,11 +185,9 @@ class OfflineReplayCheckoutTest extends KafkaPostgresRedisTestBase {
     grantCarwash(TENANT);
     CatalogItemResponse pkg = createPackage();
     CheckoutRequest request =
-        offlineRequest(
-            pkg.id(), "offline-coupon", TenderType.CASH, "SOMECODE", null, null, null);
+        offlineRequest(pkg.id(), "offline-coupon", TenderType.CASH, "SOMECODE", null, null, null);
 
-    assertThatThrownBy(() -> checkoutAs(request))
-        .isInstanceOf(OfflineReplayInvalidException.class);
+    assertThatThrownBy(() -> checkoutAs(request)).isInstanceOf(OfflineReplayInvalidException.class);
   }
 
   @Test
@@ -225,8 +212,7 @@ class OfflineReplayCheckoutTest extends KafkaPostgresRedisTestBase {
             true,
             null);
 
-    assertThatThrownBy(() -> checkoutAs(request))
-        .isInstanceOf(OfflineReplayInvalidException.class);
+    assertThatThrownBy(() -> checkoutAs(request)).isInstanceOf(OfflineReplayInvalidException.class);
   }
 
   @Test
@@ -235,13 +221,7 @@ class OfflineReplayCheckoutTest extends KafkaPostgresRedisTestBase {
     CatalogItemResponse pkg = createPackage();
     CheckoutRequest request =
         offlineRequest(
-            pkg.id(),
-            "offline-giftcard",
-            TenderType.CASH,
-            null,
-            null,
-            UUID.randomUUID(),
-            null);
+            pkg.id(), "offline-giftcard", TenderType.CASH, null, null, UUID.randomUUID(), null);
     // giftCardRedeemMinor omitted above (0) but giftCardId alone must also be rejected — rebuild
     // with an explicit positive redemption amount to prove the amount half alone is caught too.
     CheckoutRequest withAmount =
@@ -262,8 +242,7 @@ class OfflineReplayCheckoutTest extends KafkaPostgresRedisTestBase {
             request.offlineReplay(),
             request.clientOccurredAt());
 
-    assertThatThrownBy(() -> checkoutAs(request))
-        .isInstanceOf(OfflineReplayInvalidException.class);
+    assertThatThrownBy(() -> checkoutAs(request)).isInstanceOf(OfflineReplayInvalidException.class);
     assertThatThrownBy(() -> checkoutAs(withAmount))
         .isInstanceOf(OfflineReplayInvalidException.class);
   }
@@ -330,8 +309,9 @@ class OfflineReplayCheckoutTest extends KafkaPostgresRedisTestBase {
     assertThat(result.created()).isTrue();
     assertThat(result.ticket().breakdown().grandTotalMinor()).isEqualTo(5_550_000L);
     assertThat(result.ticket().payment().tenderedMinor())
-        .as("the server coerces the under-tendered offline CASH up to the due amount, not the"
-            + " client's 5,549,900")
+        .as(
+            "the server coerces the under-tendered offline CASH up to the due amount, not the"
+                + " client's 5,549,900")
         .isEqualTo(5_550_000L);
     assertThat(result.ticket().payment().changeMinor()).isZero();
   }
@@ -442,8 +422,7 @@ class OfflineReplayCheckoutTest extends KafkaPostgresRedisTestBase {
 
   private long outboxRowCount(String eventType) {
     List<Map<String, Object>> rows =
-        jdbcTemplate.queryForList(
-            "SELECT event_type FROM outbox WHERE event_type = ?", eventType);
+        jdbcTemplate.queryForList("SELECT event_type FROM outbox WHERE event_type = ?", eventType);
     return rows.size();
   }
 }

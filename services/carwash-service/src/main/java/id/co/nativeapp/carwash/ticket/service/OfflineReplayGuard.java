@@ -45,8 +45,8 @@ public class OfflineReplayGuard {
   /**
    * Validates {@code request}'s offline-replay fields against {@code now} and returns the ticket's
    * {@code occurredAt}: the validated {@code clientOccurredAt} for a valid offline replay, or
-   * {@code now} for every other case (normal online checkout, or an offline replay with no
-   * {@code clientOccurredAt}).
+   * {@code now} for every other case (normal online checkout, or an offline replay with no {@code
+   * clientOccurredAt}).
    *
    * @throws OfflineReplayInvalidException per the class javadoc's resolution rules (→ 422)
    */
