@@ -111,6 +111,9 @@ const Promotions = lazy(() =>
 const EarnRulesPage = lazy(() =>
   import('@/features/loyalty/EarnRulesPage').then((m) => ({ default: m.EarnRulesPage })),
 )
+const CustomerDisplay = lazy(() =>
+  import('@/features/pos/display/CustomerDisplay').then((m) => ({ default: m.CustomerDisplay })),
+)
 
 function CenteredSpinner() {
   return (
@@ -274,6 +277,9 @@ export function App() {
           {/* The POS is a full-screen "front office" — it renders OUTSIDE the sidebar/topbar shell.
               PosSwitch picks the per-vertical surface (restaurant Pos vs carwash ServicePos). */}
           {posAllowed && <Route path="/pos" element={<PosSwitch />} />}
+          {/* Phase 6 (ADR 0029): a second-screen, customer-facing view — same role gate as /pos
+              itself (a display is meaningless without a POS terminal driving it). */}
+          {posAllowed && <Route path="/pos/customer-display" element={<CustomerDisplay />} />}
           {menuAllowed && <Route path="/menu" element={<MenuManagement />} />}
           {/* /catalog is the carwash counterpart of /menu — gated identically (menuAllowed). */}
           {menuAllowed && <Route path="/catalog" element={<CatalogSwitch />} />}

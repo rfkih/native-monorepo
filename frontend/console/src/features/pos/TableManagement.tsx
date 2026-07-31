@@ -24,6 +24,7 @@ import {
   useActivateTable,
   useDeactivateTable,
 } from './api'
+import { SelfOrderQr } from './SelfOrderQr'
 
 interface Props {
   session: CompanySession
@@ -76,6 +77,10 @@ export function TableManagement({ session, onClose }: Props) {
             </ul>
           )}
         </div>
+
+        {/* Self-order QR codes (Phase 6, ADR 0029) — per-table + kiosk codes for the anonymous
+            self-order mini app, with print + rotate. */}
+        <SelfOrderQr session={session} outletId={session.businessId} />
 
         {/* Create form / CTA */}
         <div className="border-t border-line p-5">

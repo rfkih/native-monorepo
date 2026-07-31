@@ -10,7 +10,7 @@
  * Strings rule (rule 9): all labels are i18n keys.
  */
 import { useTranslation } from 'react-i18next'
-import { X, ShoppingBag, Table2 } from 'lucide-react'
+import { X, ShoppingBag, Table2, Smartphone } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
 import { formatMoney } from '@/lib/money'
@@ -134,6 +134,16 @@ function ParkedEntry({
           {order.tableLabel ? (
             <Badge tone="neutral" className="text-[10px] px-1.5 py-0">
               {order.tableLabel}
+            </Badge>
+          ) : null}
+          {/* Phase 6 (ADR 0029): a distinct badge for orders a customer placed themselves via a
+              table/kiosk QR code, so the cashier knows to confirm it rather than expecting a
+              walk-in. Missing `source` (a response from before this field existed) reads as POS —
+              no badge, the pre-existing look. */}
+          {order.source === 'SELF_ORDER' ? (
+            <Badge tone="info" className="text-[10px] px-1.5 py-0">
+              <Smartphone className="size-3" aria-hidden="true" />
+              {t('pos.parked.sourceSelfOrder')}
             </Badge>
           ) : null}
           <span className="ml-auto tnum font-mono text-sm font-medium text-ink">

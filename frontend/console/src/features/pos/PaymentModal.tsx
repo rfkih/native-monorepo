@@ -25,7 +25,7 @@
  * Money rule (rule 8): all amounts are integer minor units throughout. Displayed via formatMoney().
  * Strings rule (rule 9): every label is an i18n key — no hardcoded user-facing text.
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Gift, X } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
@@ -47,6 +47,7 @@ import {
 import { OfflineHint } from './offline/OfflineHint'
 import { enqueueSale } from './offline/queue'
 import type { ProvisionalTotals, SaleQueueRow } from './offline/db'
+import type { DisplayPublisher } from './display/displayPublisher'
 import type {
   OrderLineInput,
   OrderResponse,
@@ -143,6 +144,10 @@ interface Props {
   /** Called once the sale is durably enqueued (never after a real POST) instead of onSuccess — the
    * caller renders a provisional receipt. Only meaningful when `offline` is true. */
   onOfflineSuccess?: (row: SaleQueueRow, tenderedMinor: number, changeMinor: number) => void
+  /** Phase 6 (ADR 0029): the customer-display publisher (a no-op until a display has been opened —
+   * see displayPublisher.ts). Optional so every OTHER caller of this modal (there are none today,
+   * but the type stays honest) keeps working without wiring one up. */
+  displayPublisher?: DisplayPublisher
 }
 
 // Quick-cash chip amounts in IDR minor units (= whole rupiah, exponent 0).
@@ -182,6 +187,7 @@ export function PaymentModal({
   tableId,
   offline = false,
   onOfflineSuccess,
+  displayPublisher,
 }: Props) {
   const { t } = useTranslation()
   const [tender, setTender] = useState<TenderTab>('CASH')
@@ -196,6 +202,13 @@ export function PaymentModal({
   // so it is never applied and the residual is simply the (already provisional) grand total.
   const residualDueMinor = offline ? grandTotalMinor : Math.max(0, grandTotalMinor - giftCardRedeemMinor)
   const fullyCoveredByGiftCard = !offline && giftCard != null && residualDueMinor === 0
+
+  // Phase 6 (ADR 0029): "payment modal transitions" — opening this modal (and any subsequent change
+  // to what's actually due, e.g. a gift card applied mid-modal) is a PAYMENT_STARTED transition for
+  // the customer display. No-ops when no display has ever been opened (displayPublisher.ts).
+  useEffect(() => {
+    displayPublisher?.publishPaymentStarted({ amountMinor: residualDueMinor, currency })
+  }, [displayPublisher, residualDueMinor, currency])
   // The queue's stored breakdown mirrors the provisional one the caller already rendered via
   // `breakdown` (Pos.tsx swaps in `toDisplayBreakdown(provisionalBreakdown)` when offline) — reusing
   // it here keeps this component free of any dependency on provisionalPricing.ts itself.

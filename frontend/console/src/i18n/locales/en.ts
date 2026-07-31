@@ -512,6 +512,27 @@ export const en = {
       resume: 'Resume',
       resuming: 'Resuming',
       lineCount: '{{n}} item(s)',
+      sourceSelfOrder: 'Self-order',
+    },
+    customerDisplay: {
+      button: 'Customer display',
+      buttonHint: 'Open a second screen for the customer to follow the order and total.',
+    },
+    selfOrderQr: {
+      title: 'Self-order QR codes',
+      kioskLabel: 'Counter (no table)',
+      qrAriaLabel: 'Self-order QR code for {{label}}',
+      print: 'Print',
+      rotate: 'Rotate codes',
+      rotating: 'Rotating…',
+      rotateConfirmTitle: 'Rotate self-order QR codes?',
+      rotateConfirmBody:
+        'Every printed QR code for this outlet — every table and the counter — stops working immediately. Print the new codes before removing the old ones from the tables.',
+      rotateConfirmAction: 'Rotate codes',
+      loadError: 'Could not load the self-order QR codes.',
+      rotateError: 'Could not rotate the QR codes. Please try again.',
+      empty: 'No self-order QR codes yet.',
+      hint: "Customers scan a table's code to order from their phone — orders arrive as parked orders for you to confirm and pay.",
     },
     outletSelectorLabel: 'Ringing for {{name}}',
     outletSelectorAriaLabel: 'Select outlet',
@@ -2420,6 +2441,26 @@ export const en = {
       openBills: 'Open bills need a connection — cash quick-sale only offline.',
       parked: 'Parked orders need a connection — cash quick-sale only offline.',
       tableFloor: 'The table floor needs a connection — cash quick-sale only offline.',
+    },
+  },
+  posDisplay: {
+    noCompany: 'No company signed in on this device.',
+    missingOutlet:
+      'Open this screen from the "Customer display" button in the POS — it needs to know which outlet to follow.',
+    localeToggleAria: 'Switch display language',
+    idle: {
+      welcome: 'Welcome',
+    },
+    cart: {
+      yourOrder: 'Your order',
+      preparing: 'Preparing your order…',
+      total: 'Total',
+    },
+    payment: {
+      dueLabel: 'Amount due',
+      hint: 'Please pay at the counter.',
+      thankYou: 'Thank you!',
+      changeLabel: 'Your change',
     },
   },
 }

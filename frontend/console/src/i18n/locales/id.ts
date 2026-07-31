@@ -507,6 +507,27 @@ export const id = {
       resume: 'Lanjutkan',
       resuming: 'Melanjutkan',
       lineCount: '{{n}} item',
+      sourceSelfOrder: 'Pesan mandiri',
+    },
+    customerDisplay: {
+      button: 'Layar pelanggan',
+      buttonHint: 'Buka layar kedua agar pelanggan dapat mengikuti pesanan dan totalnya.',
+    },
+    selfOrderQr: {
+      title: 'Kode QR pesan mandiri',
+      kioskLabel: 'Kasir (tanpa meja)',
+      qrAriaLabel: 'Kode QR pesan mandiri untuk {{label}}',
+      print: 'Cetak',
+      rotate: 'Ganti kode',
+      rotating: 'Mengganti…',
+      rotateConfirmTitle: 'Ganti kode QR pesan mandiri?',
+      rotateConfirmBody:
+        'Semua kode QR yang sudah dicetak untuk outlet ini — setiap meja dan kasir — langsung berhenti berfungsi. Cetak kode baru sebelum melepas kode lama dari meja.',
+      rotateConfirmAction: 'Ganti kode',
+      loadError: 'Tidak dapat memuat kode QR pesan mandiri.',
+      rotateError: 'Tidak dapat mengganti kode QR. Silakan coba lagi.',
+      empty: 'Belum ada kode QR pesan mandiri.',
+      hint: 'Pelanggan memindai kode di meja untuk memesan dari ponsel mereka — pesanan masuk sebagai pesanan tertahan untuk Anda konfirmasi dan bayarkan.',
     },
     outletSelectorLabel: 'Melayani {{name}}',
     outletSelectorAriaLabel: 'Pilih outlet',
@@ -2416,6 +2437,26 @@ export const id = {
       openBills: 'Tagihan terbuka memerlukan koneksi — hanya penjualan tunai cepat saat offline.',
       parked: 'Pesanan ditahan memerlukan koneksi — hanya penjualan tunai cepat saat offline.',
       tableFloor: 'Denah meja memerlukan koneksi — hanya penjualan tunai cepat saat offline.',
+    },
+  },
+  posDisplay: {
+    noCompany: 'Tidak ada perusahaan yang masuk di perangkat ini.',
+    missingOutlet:
+      'Buka layar ini dari tombol "Layar pelanggan" di POS — layar ini perlu tahu outlet mana yang diikuti.',
+    localeToggleAria: 'Ganti bahasa layar',
+    idle: {
+      welcome: 'Selamat datang',
+    },
+    cart: {
+      yourOrder: 'Pesanan Anda',
+      preparing: 'Menyiapkan pesanan Anda…',
+      total: 'Total',
+    },
+    payment: {
+      dueLabel: 'Jumlah yang harus dibayar',
+      hint: 'Silakan bayar di kasir.',
+      thankYou: 'Terima kasih!',
+      changeLabel: 'Uang kembalian Anda',
     },
   },
 } satisfies typeof en

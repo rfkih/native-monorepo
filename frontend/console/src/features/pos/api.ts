@@ -33,6 +33,13 @@ export interface ParkedOrderSummary {
   lineCount: number
   occurredAt: string
   orderType: string
+  /**
+   * Phase 6 (ADR 0029): where the order was placed — 'POS' (the cashier terminal, the pre-existing
+   * default) or 'SELF_ORDER' (a customer scanning a table/kiosk QR code — see
+   * features/pos/selfOrderApi.ts). Optional/undefined on any response that predates this field so a
+   * stale cache never crashes the tray; ParkedTray treats a missing value as 'POS'.
+   */
+  source?: 'POS' | 'SELF_ORDER'
 }
 
 export interface ModifierOptionResponse {

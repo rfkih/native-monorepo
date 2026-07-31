@@ -41,6 +41,10 @@ const proxy: Record<string, ProxyOptions> = GATEWAY
       '/api/v1/sales': { target: RESTAURANT, changeOrigin: true },
       '/api/v1/payments': { target: RESTAURANT, changeOrigin: true },
       '/api/v1/tables': { target: RESTAURANT, changeOrigin: true },
+      // restaurant-service (Phase 6, ADR 0029) — MANAGEMENT side of self-order QR (owner/manager,
+      // authenticated). The anonymous `/api/v1/self-order/**` diner surface is reachable ONLY
+      // through the gateway (AnonymousRateLimitFilter) — see frontend/self-order's own dev proxy.
+      '/api/v1/self-order-access': { target: RESTAURANT, changeOrigin: true },
       // restaurant-service (Phase 5 offline mode, ADR 0028) — cached client-side for offline pricing
       '/api/v1/pricing': { target: RESTAURANT, changeOrigin: true },
     }

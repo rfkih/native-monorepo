@@ -17,7 +17,7 @@
  * All behaviour, hooks, mutations, and data flows are kept exactly as they were.
  * Only the presentation layer changes.
  */
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import {
@@ -30,6 +30,7 @@ import {
   Gift,
   ImageOff,
   LogOut,
+  Monitor,
   Moon,
   Plus,
   RefreshCw,
@@ -63,6 +64,8 @@ import type { EffectiveRulesResponse } from './offline/provisionalPricing'
 import { OfflineHint } from './offline/OfflineHint'
 import { SyncCenter } from './offline/SyncCenter'
 import type { SaleQueueRow } from './offline/db'
+import { useDisplayPublisher } from './display/displayPublisher'
+import type { DisplayBreakdown, DisplayLine } from './display/displayChannel'
 import {
   useMenu,
   useCategories,
@@ -158,6 +161,10 @@ function PosInner({ session }: { session: CompanySession }) {
     offline && !effectiveRulesQuery.data,
   )
   const effectiveRules = effectiveRulesQuery.data ?? cachedEffectiveRules ?? null
+
+  // Phase 6 (ADR 0029): the customer-display publisher — a no-op until the cashier opens a display
+  // window (see the "Customer display" utility button below and displayPublisher.ts).
+  const displayPublisher = useDisplayPublisher(session.businessId)
 
   // Cart state
   const [cart, setCart] = useState<CartLine[]>([])
@@ -328,6 +335,59 @@ function PosInner({ session }: { session: CompanySession }) {
         )
       : 0
 
+  // Phase 6 (ADR 0029): feed the customer-facing display. `displayPublisher` itself no-ops until a
+  // display has actually been opened this session, so this effect costs nothing beyond a re-render
+  // for the common terminal that never opens one — see displayPublisher.ts.
+  useEffect(() => {
+    if (!displayPublisher.isOpened) return
+    if (activeBill) {
+      if (activeBill.lineCount > 0) {
+        const activeBillBreakdown: DisplayBreakdown = {
+          subtotalMinor: activeBill.runningTotalMinor,
+          discountMinor: 0,
+          serviceChargeMinor: 0,
+          taxMinor: 0,
+          grandTotalMinor: activeBill.runningTotalMinor,
+          currency: activeBill.currency,
+        }
+        // BillSummaryResponse carries no per-line detail (see its class doc) — the display shows
+        // the running total only while a bill is open, no itemised lines.
+        displayPublisher.publishCartUpdated([], activeBillBreakdown)
+      } else {
+        displayPublisher.publishIdle()
+      }
+      return
+    }
+    if (lineCount === 0) {
+      displayPublisher.publishIdle()
+      return
+    }
+    const displayLines: DisplayLine[] = cart.map((l) => ({
+      name: items.find((i) => i.id === l.menuItemId)?.name ?? '',
+      qty: l.qty,
+      unitPriceMinor: l.effectiveUnitPriceMinor,
+      lineTotalMinor: l.effectiveUnitPriceMinor * l.qty,
+    }))
+    const cartDisplayBreakdown: DisplayBreakdown = breakdown
+      ? {
+          subtotalMinor: breakdown.subtotalMinor,
+          discountMinor: breakdown.discountMinor,
+          serviceChargeMinor: breakdown.serviceChargeMinor,
+          taxMinor: breakdown.taxMinor,
+          grandTotalMinor: breakdown.grandTotalMinor,
+          currency: breakdown.currency,
+        }
+      : {
+          subtotalMinor: clientSubtotalMinor,
+          discountMinor: 0,
+          serviceChargeMinor: 0,
+          taxMinor: 0,
+          grandTotalMinor,
+          currency,
+        }
+    displayPublisher.publishCartUpdated(displayLines, cartDisplayBreakdown)
+  }, [displayPublisher, activeBill, lineCount, cart, items, breakdown, clientSubtotalMinor, grandTotalMinor, currency])
+
   const discountInvalid =
     discountInput !== '' && (isNaN(Number(discountInput)) || Number(discountInput) < 0)
 
@@ -430,6 +490,10 @@ function PosInner({ session }: { session: CompanySession }) {
     setPlacedPayment(payment)
     setPlacedProvisional(false)
     setLastAppliedPromotions(breakdown?.appliedPromotions ?? [])
+    displayPublisher.publishPaymentCompleted({
+      amountMinor: payment.changeMinor ?? 0,
+      currency: payment.currency,
+    })
     clearCart()
     setModal('receipt')
   }
@@ -483,6 +547,7 @@ function PosInner({ session }: { session: CompanySession }) {
     setPlacedPayment(payment)
     setPlacedProvisional(true)
     setLastAppliedPromotions([])
+    displayPublisher.publishPaymentCompleted({ amountMinor: changeMinor, currency: row.provisional.currency })
     clearCart()
     setModal('receipt')
   }
@@ -632,6 +697,23 @@ function PosInner({ session }: { session: CompanySession }) {
                 {queuedCount + rejectedCount}
               </span>
             ) : null}
+          </button>
+          {/* Customer display (Phase 6, ADR 0029) — opens a second screen (e.g. a second monitor)
+              driven by displayPublisher; activating it is what turns the publisher's no-ops on. */}
+          <button
+            type="button"
+            onClick={() => {
+              displayPublisher.activate()
+              window.open(
+                `${window.location.origin}/pos/customer-display?outlet=${encodeURIComponent(session.businessId)}`,
+                'native-pos-display',
+              )
+            }}
+            aria-label={t('pos.customerDisplay.button')}
+            title={t('pos.customerDisplay.button')}
+            className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+          >
+            <Monitor className="size-4" aria-hidden="true" />
           </button>
           {/* Gift card sell — a distinct till action, not a cart line (ADR 0027) */}
           <button
@@ -853,6 +935,7 @@ function PosInner({ session }: { session: CompanySession }) {
           tableId={null}
           offline={offline}
           onOfflineSuccess={handleOfflineSuccess}
+          displayPublisher={displayPublisher}
         />
       ) : null}
 

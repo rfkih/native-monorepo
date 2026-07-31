@@ -277,33 +277,38 @@
 }
 
 /*
- * Print isolation — the customer receipt (#native-thermal-receipt-paper) and the
- * kitchen ticket (#native-kot-print) each inject their own <style> with a rule
+ * Print isolation — the customer receipt (#native-thermal-receipt-paper), the
+ * kitchen ticket (#native-kot-print), and the self-order QR sheet
+ * (#native-selforder-qr-print, Phase 6 ADR 0029) each inject their own <style> with a rule
  * that hides all OTHER body children when printing. At most one of these IDs is
  * present in the DOM at a time, so only the active print target is visible.
  * This block is the safety net: ensure the app chrome is always hidden.
  */
 @media print {
-  /* Reliable print isolation. The print target (receipt paper or KOT) is nested deep inside
-     #root, so hiding the app with `display:none` on body children ALSO hid the target (a
+  /* Reliable print isolation. The print target (receipt paper, KOT, or QR sheet) is nested deep
+     inside #root, so hiding the app with `display:none` on body children ALSO hid the target (a
      display:none ancestor can't be undone by a descendant) → blank pages. Use `visibility`
      instead: hide everything, then re-show ONLY the active target + its descendants — a
      visible child DOES override a hidden ancestor. Then pull the target to the page origin.
-     Scoped with :has() so it only bites while a receipt/KOT is actually mounted — the
-     statements print as ordinary pages (audit finding 16); each receipt injects its own
-     80mm @page rule. */
+     Scoped with :has() so it only bites while a receipt/KOT/QR sheet is actually mounted — the
+     statements print as ordinary pages (audit finding 16); each print surface injects its own
+     @page rule. */
   body:has(#native-thermal-receipt-paper) *,
-  body:has(#native-kot-print) * {
+  body:has(#native-kot-print) *,
+  body:has(#native-selforder-qr-print) * {
     visibility: hidden !important;
   }
   #native-thermal-receipt-paper,
   #native-thermal-receipt-paper *,
   #native-kot-print,
-  #native-kot-print * {
+  #native-kot-print *,
+  #native-selforder-qr-print,
+  #native-selforder-qr-print * {
     visibility: visible !important;
   }
   #native-thermal-receipt-paper,
-  #native-kot-print {
+  #native-kot-print,
+  #native-selforder-qr-print {
     position: absolute !important;
     left: 0 !important;
     top: 0 !important;

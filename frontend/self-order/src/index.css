@@ -1,0 +1,67 @@
+@import 'tailwindcss';
+
+/*
+ * Self-order mini app — a deliberately small, standalone stylesheet (this app has no shared
+ * package with the console; see frontend/self-order's own README-in-comments in main.tsx). Reuses
+ * the SAME brand cyan hue (193°) and type stack as the console so a diner who has also seen the
+ * console-driven customer display recognises the same product, without pulling in the console's
+ * full design-token file.
+ */
+
+@theme {
+  --font-display: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
+
+  --color-brand-50: #e4f6fa;
+  --color-brand-100: #bfe9f1;
+  --color-brand-200: #8bd5e3;
+  --color-brand-500: #0e8fab;
+  --color-brand-600: #0b7f99;
+  --color-brand-700: #095f73;
+
+  /* Light-only neutral scale (this kiosk app has no theme toggle) — same names as the console's
+   * own tokens so the two codebases read the same, without importing the console's full palette. */
+  --color-paper: #f6f9fa;
+  --color-ink: #0e1116;
+  --color-ink-2: #384151;
+  --color-ink-3: #6b7280;
+  --color-line: #e5e8ec;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background-color: #f6f9fa;
+    color: #0e1116;
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.5;
+  }
+}
+
+@layer utilities {
+  /* tabular numerals — for aligned money figures, mirrors the console's own .tnum */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+}
+
+/* A shared kiosk/table device — always respect the OS-level reduced-motion preference. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
