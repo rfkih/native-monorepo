@@ -74,7 +74,24 @@ cascade-deactivate + reactivation.)
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
-- **Offline mode — Phase 5 of the POS-parity program (2026-07-31, ADR 0028)** — cash-only offline
+- **Self-order QR + customer display — Phase 6, the POS-parity program's FINAL phase (2026-08-01,
+  ADR 0029)** — the fleet's second anonymous route and first anonymous TENANT-BINDING. A per-outlet
+  HMAC-SHA256 token (base64url payload `{v,kid,companyId,businessId,outletId,tableLabel}` +
+  signature; NO expiry — revocation = kid rotation killing every printed QR at once; secret
+  AES-256-GCM at rest under `NATIVE_SELFORDER_KEY`, V19 `self_order_access` one-ACTIVE-per-outlet)
+  admits a diner to EXACTLY two operations: read the menu, create a **PARKED order
+  `source=SELF_ORDER`** (no sale/payment/outbox/stock — blast radius is junk parked rows; 50-cap →
+  429 + 30-min sweep → EXPIRED). `SelfOrderTokenFilter` parses the claim, binds a provisional
+  tenant for ONE RLS-scoped access-row lookup, constant-time-verifies, then REBINDS from the
+  verified row's own company_id (actor `self-order:{table|kiosk}`). Gateway: `/api/v1/self-order/**`
+  no-JWT (signup-precedent permit), namespace-parameterized `AnonymousRateLimitFilter`
+  (60/min/IP), new `AnonymousTenantHeaderStripFilter` on BOTH anonymous routes (closed signup's
+  pre-existing unstripped-spoof-header gap). Restaurant gained the fleet entitlement-projection
+  pattern (first wiring; gates order-create on new `self_order` module, entitlement V5, defaults
+  6→7). Console: `/pos/customer-display` (typed BroadcastChannel `pos-display:{outlet}`, lazy
+  zero-overhead publisher, id-default locale), per-table + kiosk QR management with print-ready
+  tents + rotate-with-confirm, ParkedTray SELF_ORDER badges. NEW `frontend/self-order` mini app
+  (anonymous, token in memory only, menu grouped client-side, per-attempt idempotency key). — cash-only offline
   selling with NO new endpoint, event, or finance change: sales queue in IndexedDB (idempotency key
   minted+persisted at enqueue) and replay serially through the unchanged idempotent checkouts (409 on
   replay = already landed = synced). **Server** (all 3 verticals): `offlineReplay` +

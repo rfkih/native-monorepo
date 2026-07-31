@@ -90,6 +90,8 @@ Transport: outbox table → Debezium (one connector per service DB) → Kafka to
 | the outbox / idempotency / Avro serde | `libs/events/` |
 | the layering rules (enforced) | each service `…/config/LayeredArchitectureTest.java`; doc in `CODE-STRUCTURE.md` |
 | the POS offline queue / provisional pricing / sync | `frontend/console/src/features/pos/offline/` (ADR 0028; parity fixture `pricing-parity.fixture.json` asserted by BOTH restaurant `ProvisionalPricingFixtureTest` and the vitest suite) |
+| self-order QR (anonymous surface) | restaurant `selforder/` + `selforderaccess/` (token filter, mint/rotate), gateway `selfOrderRoute` + `AnonymousTenantHeaderStripFilter`, mini app `frontend/self-order/`, ADR 0029 |
+| the customer display | `frontend/console/src/features/pos/display/` (BroadcastChannel `pos-display:{outlet}`, zero backend) |
 | offline-replay server guards / effective-rules endpoints | each vertical's `…/order|ticket/service/OfflineReplayGuard.java` + `…/pricing/controller/PricingController.java` |
 | how to run / debug locally + gotchas | `docs/RUNBOOK.md` |
 | what was built / why / current status | `docs/DEVLOG.md` |
