@@ -24,8 +24,8 @@ import java.util.List;
  *
  * @param idempotencyKey the client's request id; dedupe key with company_id (the diner's device
  *     generates this once and retries with the same value on a network failure)
- * @param lines the cart lines; non-empty, at most {@value #MAX_LINES}, qty &ge; 1 per line —
- *     prices are ALWAYS server-resolved from the current menu, never trusted from the client
+ * @param lines the cart lines; non-empty, at most {@value #MAX_LINES}, qty &ge; 1 per line — prices
+ *     are ALWAYS server-resolved from the current menu, never trusted from the client
  */
 public record SelfOrderCreateRequest(
     @NotBlank String idempotencyKey,
@@ -34,7 +34,9 @@ public record SelfOrderCreateRequest(
   /** Max distinct cart lines an anonymous self-order may carry. */
   public static final int MAX_LINES = 100;
 
-  /** Maps the bounded self-order lines onto the shared {@link OrderLineRequest} the writer takes. */
+  /**
+   * Maps the bounded self-order lines onto the shared {@link OrderLineRequest} the writer takes.
+   */
   public List<OrderLineRequest> toOrderLines() {
     return lines.stream()
         .map(l -> new OrderLineRequest(l.menuItemId(), l.qty(), l.selectedOptionIds()))

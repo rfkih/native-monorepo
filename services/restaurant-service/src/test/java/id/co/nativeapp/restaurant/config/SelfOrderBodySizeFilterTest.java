@@ -18,7 +18,8 @@ import org.springframework.mock.web.MockHttpServletResponse;
  *
  * <p>No Spring context. The request is a Mockito mock so {@code getContentLengthLong()} can be
  * stubbed to an arbitrary value WITHOUT allocating a body of that size (the very thing the filter
- * exists to prevent) — {@code MockHttpServletRequest} would force a real {@code setContent(byte[])}.
+ * exists to prevent) — {@code MockHttpServletRequest} would force a real {@code
+ * setContent(byte[])}.
  */
 class SelfOrderBodySizeFilterTest {
 

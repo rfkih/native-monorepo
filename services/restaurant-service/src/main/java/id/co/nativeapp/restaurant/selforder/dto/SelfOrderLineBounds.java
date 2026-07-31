@@ -20,9 +20,7 @@ import java.util.UUID;
  * @param selectedOptionIds chosen modifier option ids (may be null/empty)
  */
 public record SelfOrderLineBounds(
-    @NotNull UUID menuItemId,
-    @Min(1) @Max(MAX_QTY) int qty,
-    List<UUID> selectedOptionIds) {
+    @NotNull UUID menuItemId, @Min(1) @Max(MAX_QTY) int qty, List<UUID> selectedOptionIds) {
 
   /** Max units of a single item an anonymous diner may add — generous for a table, DoS-safe. */
   public static final int MAX_QTY = 99;
