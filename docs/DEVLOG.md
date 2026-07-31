@@ -74,7 +74,24 @@ cascade-deactivate + reactivation.)
   for verified production values. Never invent tax/accounting law as production values.
 
 ## Milestone history (newest first; commit refs are illustrative anchors)
-- **Loyalty + gift cards — Phase 4 of the POS-parity program (2026-07-31, ADR 0027)** — the
+- **Offline mode — Phase 5 of the POS-parity program (2026-07-31, ADR 0028)** — cash-only offline
+  selling with NO new endpoint, event, or finance change: sales queue in IndexedDB (idempotency key
+  minted+persisted at enqueue) and replay serially through the unchanged idempotent checkouts (409 on
+  replay = already landed = synced). **Server** (all 3 verticals): `offlineReplay` +
+  `clientOccurredAt` (accepted only on replay; ≤48h past / ≤5min future → else 422
+  `offline-replay-invalid` / `ticket-offline-replay-invalid`) — the sale-day instant drives BOTH the
+  pricing effective date and `SaleRecorded.occurred_at`, so the GL period is the sale day, not the
+  sync day; replay is CASH-only (coupon/points/gift-card → 422; loyalty **earn** memberId rides);
+  restaurant replayed oversells are accepted with the shortfall written to the newly activated
+  `error_log` (V18) — money first, inventory repaired by count; per-vertical
+  `GET …/pricing/effective-rules` snapshots today's rules for the client. **Pricing parity**: the
+  server formula extracted into `PricingFormula`; a committed 12-case JSON fixture is asserted by a
+  restaurant JUnit test AND the console's BigInt HALF_EVEN `provisionalPricing` vitest suite — drift
+  breaks a build, not a drawer count. **Console**: vite-plugin-pwa (shell precache, `/api` NEVER
+  cached), OfflineBanner + SyncCenter (end-of-day SYNCED_WITH_MISMATCH report; REJECTED kept
+  visible), Web-Locks single replayer, `navigator.storage.persist()`, POS gates offline to cash
+  quick-sales (bills/parking/void disabled), provisional-marked receipts, en/id. RUNBOOK gained the
+  airplane-mode manual script.
   program's hardest design, shipped: a NEW **loyalty-service** (the sole ledger of record: members
   with AES-256-GCM-encrypted phone/name + a separate-key HMAC lookup hash — the ONLY PII home;
   append-only points + gift-card ledgers with UNIQUE(company, source_event_id, type) idempotency
