@@ -121,6 +121,25 @@ that already ran them.
 - The console POS/Menu/Kitchen now BLOCK on an "outlet gate" until the tenant has an active
   outlet the signed-in user may ring on; companies created after ADR 0012 always have one.
 
+## Offline-mode manual test (airplane-mode script, ADR 0028)
+
+1. Run the stack + console, sign in, open a POS (any vertical), let the catalog load once while
+   online (this primes the IndexedDB catalog + effective-rules cache).
+2. DevTools → Network → set **Offline** (or kill the gateway). The offline banner appears; the
+   POS keeps selling: **cash only**, coupon/points/gift-card inputs disabled, totals labeled
+   *provisional*.
+3. Ring 2–3 cash sales. Each lands in the queue (badge on the POS header); receipts are marked
+   provisional. Refresh the tab while offline — the queue must survive (persisted storage).
+4. Go back online. The queue replays serially (watch the sync center): rows go SYNCED; re-running
+   a replay (or a second tab) must never double-post — the server's idempotency key returns the
+   existing sale (409 → treated as synced).
+5. Verify in finance: each replayed sale posts into the **sale-day** period (`clientOccurredAt`),
+   not the sync time; dashboard revenue matches the drawer.
+6. Mismatch drill: while offline, change the tax rule (via API as owner), sell, reconnect — the
+   row lands SYNCED_WITH_MISMATCH with both totals in the end-of-day report.
+7. Rejection drill: queue a sale, keep the tab closed >48h (or fake `clientOccurredAt`), replay →
+   422 REJECTED, kept visible in the sync center; nothing silently re-dated.
+
 ## Tear down
 ```bash
 docker compose -f docker/compose.dev.yml down       # keep the Postgres volume (data persists)
