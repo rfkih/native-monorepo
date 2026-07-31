@@ -8,7 +8,6 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockHttpServletResponse;
 
 /**
@@ -36,7 +35,7 @@ class SelfOrderBodySizeFilterTest {
         chainThatSets(chainCalled));
 
     assertThat(chainCalled).isFalse();
-    assertThat(response.getStatus()).isEqualTo(HttpStatus.REQUEST_ENTITY_TOO_LARGE.value());
+    assertThat(response.getStatus()).isEqualTo(413);
   }
 
   @Test
@@ -47,7 +46,7 @@ class SelfOrderBodySizeFilterTest {
     filter.doFilter(requestWithLength(1_024), response, chainThatSets(chainCalled));
 
     assertThat(chainCalled).isTrue();
-    assertThat(response.getStatus()).isEqualTo(HttpStatus.OK.value());
+    assertThat(response.getStatus()).isEqualTo(200);
   }
 
   @Test
