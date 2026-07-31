@@ -9,6 +9,7 @@
  *    `DevTenantFilter` reads, exactly as before.
  */
 import { API_BASE_URL, AUTH_MODE } from '@/lib/config'
+import { deriveTokenState, recordFailure } from '@/lib/diagnostics'
 
 /** The current bearer token in oidc mode; null in dev mode. Set by the AuthProvider. */
 let accessToken: string | null = null
@@ -123,6 +124,24 @@ export async function apiFetch<T>(path: string, opts: RequestOptions = {}): Prom
 
   if (!res.ok) {
     const problem = (data as ProblemDetail | null) ?? null
+    // AI-native diagnostics: every failure is recorded with the non-secret facts an assistant
+    // needs to diagnose it in one hop (status, problem type, server traceId, the company
+    // SELECTION, and the token's derived state — never the token itself, never the body).
+    recordFailure({
+      at: new Date().toISOString(),
+      method: opts.method ?? 'GET',
+      path,
+      status: res.status,
+      problemType: problem?.type ?? null,
+      problemDetail: problem?.detail ?? problem?.title ?? null,
+      traceId:
+        typeof (problem as Record<string, unknown> | null)?.traceId === 'string'
+          ? ((problem as Record<string, unknown>).traceId as string)
+          : null,
+      companyId: opts.tenant?.companyId ?? null,
+      authMode: AUTH_MODE,
+      tokenState: AUTH_MODE === 'oidc' ? deriveTokenState(accessToken) : null,
+    })
     throw new ApiError(
       res.status,
       problem,

@@ -575,6 +575,17 @@ export const en = {
     selectAddonLabel: 'Add {{name}}',
     addonSelectedLabel: 'Remove {{name}}',
   },
+  errorDiag: {
+    summary: 'The request to {{path}} failed with status {{status}}.',
+    tokenExpired: 'your session token has expired',
+    tokenMissing: 'no session token was attached',
+    relogin: 'Sign in again',
+    refreshSession: 'Refresh session',
+    refreshing: 'Refreshing…',
+    copy: 'Copy diagnostics',
+    copied: 'Copied — paste it to your assistant',
+    detail: 'Technical detail',
+  },
   barbershopPos: {
     services: 'Services',
     emptyServices: 'No services yet',

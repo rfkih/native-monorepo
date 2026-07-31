@@ -5,6 +5,7 @@ import { ArrowRight, Info, TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Segmented } from '@/components/ui/Segmented'
+import { ErrorDiagnostics } from '@/components/ErrorDiagnostics'
 import { useSession } from '@/lib/session'
 import { cn } from '@/lib/cn'
 import { localeOf } from '@/i18n'
@@ -172,7 +173,11 @@ export function Dashboard() {
       </div>
 
       {query.isError ? (
-        <Card className="p-8 text-center text-sm text-loss">{t('dashboard.error')}</Card>
+        <ErrorDiagnostics
+          message={t('dashboard.error')}
+          pathPrefix="/api/v1/pnl"
+          onRecovered={() => query.refetch()}
+        />
       ) : view === 'overview' ? (
         <div className="flex flex-col gap-[18px]">
           {/* Hero: net + sparkline */}

@@ -570,6 +570,17 @@ export const id = {
     selectAddonLabel: 'Tambah {{name}}',
     addonSelectedLabel: 'Hapus {{name}}',
   },
+  errorDiag: {
+    summary: 'Permintaan ke {{path}} gagal dengan status {{status}}.',
+    tokenExpired: 'token sesi Anda sudah kedaluwarsa',
+    tokenMissing: 'tidak ada token sesi yang terkirim',
+    relogin: 'Masuk lagi',
+    refreshSession: 'Segarkan sesi',
+    refreshing: 'Menyegarkan…',
+    copy: 'Salin diagnostik',
+    copied: 'Tersalin — tempelkan ke asisten Anda',
+    detail: 'Detail teknis',
+  },
   barbershopPos: {
     services: 'Layanan',
     emptyServices: 'Belum ada layanan',
