@@ -1,12 +1,14 @@
 package id.co.nativeapp.restaurant.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import jakarta.servlet.FilterChain;
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
-import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
 /**
@@ -15,10 +17,9 @@ import org.springframework.mock.web.MockHttpServletResponse;
  * SelfOrderBodySizeFilter#MAX_BODY_BYTES} bytes is refused {@code 413} before the chain (and
  * therefore Jackson) ever sees the body.
  *
- * <p>No Spring context — a plain unit-level {@code doFilter} invocation, mirroring {@code
- * selforder.SelfOrderTokenFilterTest}'s style (direct filter construction + {@link
- * MockHttpServletRequest}/{@link MockHttpServletResponse} + an {@link AtomicBoolean} flag proving
- * whether the chain ran).
+ * <p>No Spring context. The request is a Mockito mock so {@code getContentLengthLong()} can be
+ * stubbed to an arbitrary value WITHOUT allocating a body of that size (the very thing the filter
+ * exists to prevent) — {@code MockHttpServletRequest} would force a real {@code setContent(byte[])}.
  */
 class SelfOrderBodySizeFilterTest {
 
@@ -26,13 +27,13 @@ class SelfOrderBodySizeFilterTest {
 
   @Test
   void anOversizedContentLengthIsRejectedWith413BeforeTheChainRuns() throws Exception {
-    MockHttpServletRequest request =
-        new MockHttpServletRequest("POST", "/api/v1/self-order/orders");
-    request.setContentLength((int) (SelfOrderBodySizeFilter.MAX_BODY_BYTES + 1));
     MockHttpServletResponse response = new MockHttpServletResponse();
     AtomicBoolean chainCalled = new AtomicBoolean(false);
 
-    filter.doFilter(request, response, chainThatSets(chainCalled));
+    filter.doFilter(
+        requestWithLength(SelfOrderBodySizeFilter.MAX_BODY_BYTES + 1),
+        response,
+        chainThatSets(chainCalled));
 
     assertThat(chainCalled).isFalse();
     assertThat(response.getStatus()).isEqualTo(HttpStatus.REQUEST_ENTITY_TOO_LARGE.value());
@@ -40,13 +41,10 @@ class SelfOrderBodySizeFilterTest {
 
   @Test
   void aNormalSizedBodyProceedsThroughTheChain() throws Exception {
-    MockHttpServletRequest request =
-        new MockHttpServletRequest("POST", "/api/v1/self-order/orders");
-    request.setContentLength(1_024);
     MockHttpServletResponse response = new MockHttpServletResponse();
     AtomicBoolean chainCalled = new AtomicBoolean(false);
 
-    filter.doFilter(request, response, chainThatSets(chainCalled));
+    filter.doFilter(requestWithLength(1_024), response, chainThatSets(chainCalled));
 
     assertThat(chainCalled).isTrue();
     assertThat(response.getStatus()).isEqualTo(HttpStatus.OK.value());
@@ -54,13 +52,13 @@ class SelfOrderBodySizeFilterTest {
 
   @Test
   void aBodyExactlyAtTheCeilingProceedsThroughTheChain() throws Exception {
-    MockHttpServletRequest request =
-        new MockHttpServletRequest("POST", "/api/v1/self-order/orders");
-    request.setContentLength((int) SelfOrderBodySizeFilter.MAX_BODY_BYTES);
     MockHttpServletResponse response = new MockHttpServletResponse();
     AtomicBoolean chainCalled = new AtomicBoolean(false);
 
-    filter.doFilter(request, response, chainThatSets(chainCalled));
+    filter.doFilter(
+        requestWithLength(SelfOrderBodySizeFilter.MAX_BODY_BYTES),
+        response,
+        chainThatSets(chainCalled));
 
     assertThat(chainCalled).isTrue();
   }
@@ -68,14 +66,18 @@ class SelfOrderBodySizeFilterTest {
   @Test
   void noContentLengthHeaderProceedsThroughTheChain() throws Exception {
     // getContentLengthLong() returns -1 when unset — must never be treated as oversized.
-    MockHttpServletRequest request =
-        new MockHttpServletRequest("POST", "/api/v1/self-order/orders");
     MockHttpServletResponse response = new MockHttpServletResponse();
     AtomicBoolean chainCalled = new AtomicBoolean(false);
 
-    filter.doFilter(request, response, chainThatSets(chainCalled));
+    filter.doFilter(requestWithLength(-1L), response, chainThatSets(chainCalled));
 
     assertThat(chainCalled).isTrue();
+  }
+
+  private HttpServletRequest requestWithLength(long contentLength) {
+    HttpServletRequest request = mock(HttpServletRequest.class);
+    when(request.getContentLengthLong()).thenReturn(contentLength);
+    return request;
   }
 
   private FilterChain chainThatSets(AtomicBoolean flag) {
