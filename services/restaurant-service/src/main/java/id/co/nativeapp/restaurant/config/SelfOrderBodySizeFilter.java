@@ -36,8 +36,10 @@ public class SelfOrderBodySizeFilter extends OncePerRequestFilter {
     // Content-Length, so the anonymous diner surface has no legitimate use for chunked encoding:
     // refuse it outright rather than let it slip the cap (security review O-2).
     String transferEncoding = request.getHeader("Transfer-Encoding");
-    if (transferEncoding != null && transferEncoding.toLowerCase(java.util.Locale.ROOT).contains("chunked")) {
-      response.sendError(HttpServletResponse.SC_LENGTH_REQUIRED, "self-order requires Content-Length");
+    if (transferEncoding != null
+        && transferEncoding.toLowerCase(java.util.Locale.ROOT).contains("chunked")) {
+      response.sendError(
+          HttpServletResponse.SC_LENGTH_REQUIRED, "self-order requires Content-Length");
       return;
     }
     long contentLength = request.getContentLengthLong();

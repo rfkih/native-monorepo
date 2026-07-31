@@ -63,12 +63,13 @@ public class SelfOrderAccessService {
 
   /**
    * First-provision the outlet's access row, converging on the winner if a concurrent call minted
-   * first (review N-1/O-1). This orchestration is deliberately in the NON-transactional service, not
-   * inside {@link SelfOrderAccessWriter#ensureActive}: the losing mint's unique-index violation
+   * first (review N-1/O-1). This orchestration is deliberately in the NON-transactional service,
+   * not inside {@link SelfOrderAccessWriter#ensureActive}: the losing mint's unique-index violation
    * aborts THAT method's transaction, so the recovering re-read must run afterwards in a FRESH
-   * transaction ({@link SelfOrderAccessReader#findActive}, its own {@code @Transactional}) — a catch
-   * inside the writer would re-read on the already-poisoned transaction and 500 anew. Mirrors the
-   * proven {@code SelfOrderService.createOrder} / {@code parkSelfOrder} + fresh-tx re-read pattern.
+   * transaction ({@link SelfOrderAccessReader#findActive}, its own {@code @Transactional}) — a
+   * catch inside the writer would re-read on the already-poisoned transaction and 500 anew. Mirrors
+   * the proven {@code SelfOrderService.createOrder} / {@code parkSelfOrder} + fresh-tx re-read
+   * pattern.
    */
   private SelfOrderAccess ensureActiveConvergingOnRace(UUID outletId) {
     try {
