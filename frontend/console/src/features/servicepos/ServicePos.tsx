@@ -24,6 +24,7 @@ import {
   Minus,
   Moon,
   Plus,
+  RefreshCw,
   Scissors,
   Settings,
   Store,
@@ -47,17 +48,26 @@ import { AppliedPromotionChips } from '@/components/AppliedPromotionChips'
 import { MemberField } from '@/components/MemberField'
 import { GiftCardSellModal } from '@/components/GiftCardSellModal'
 import type { MemberResponse } from '@/features/loyalty/api'
+import { useOffline } from '@/features/pos/offline/useOffline'
+import { useCachedCatalogFallback } from '@/features/pos/offline/catalogCache'
+import { computeProvisionalPricing, toDisplayBreakdown } from '@/features/pos/offline/provisionalPricing'
+import type { EffectiveRulesResponse } from '@/features/pos/offline/provisionalPricing'
+import { OfflineHint } from '@/features/pos/offline/OfflineHint'
+import { SyncCenter } from '@/features/pos/offline/SyncCenter'
+import type { SaleQueueRow } from '@/features/pos/offline/db'
 import type { VerticalPosConfig } from './config'
 import {
   useCatalogPackages,
   useCatalogAddons,
   useStaffProfiles,
+  useEffectiveRules,
   useTicketQuote,
   type AppliedPromotionResponse,
   type CatalogItemResponse,
   type PriceBreakdownResponse,
   type StaffProfileResponse,
   type TicketLineInput,
+  type TicketLineResponse,
   type TicketResponse,
 } from './api'
 import { ServicePaymentModal } from './ServicePaymentModal'
@@ -103,10 +113,40 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
   const packagesQuery = useCatalogPackages(config, session)
   const addonsQuery = useCatalogAddons(config, session)
   const staffQuery = useStaffProfiles(config, session)
+  const effectiveRulesQuery = useEffectiveRules(config, session)
 
-  const packages = (packagesQuery.data ?? []).filter((p) => p.active)
-  const addons = (addonsQuery.data ?? []).filter((a) => a.active)
-  const staffProfiles = (staffQuery.data ?? []).filter((s) => s.active)
+  // Phase 5 offline mode (ADR 0028) — see features/pos/Pos.tsx's twin doc for the fallback strategy.
+  const { offline, queuedCount, rejectedCount } = useOffline()
+  const [showSyncCenter, setShowSyncCenter] = useState(false)
+  const cachedPackages = useCachedCatalogFallback<CatalogItemResponse[]>(
+    session.companyId,
+    config.vertical,
+    'packages',
+    offline && !packagesQuery.data,
+  )
+  const cachedAddons = useCachedCatalogFallback<CatalogItemResponse[]>(
+    session.companyId,
+    config.vertical,
+    'addons',
+    offline && !addonsQuery.data,
+  )
+  const cachedStaffProfiles = useCachedCatalogFallback<StaffProfileResponse[]>(
+    session.companyId,
+    config.vertical,
+    'staffProfiles',
+    offline && !staffQuery.data,
+  )
+  const cachedEffectiveRules = useCachedCatalogFallback<EffectiveRulesResponse>(
+    session.companyId,
+    config.vertical,
+    'effectiveRules',
+    offline && !effectiveRulesQuery.data,
+  )
+  const effectiveRules = effectiveRulesQuery.data ?? cachedEffectiveRules ?? null
+
+  const packages = (packagesQuery.data ?? cachedPackages ?? []).filter((p) => p.active)
+  const addons = (addonsQuery.data ?? cachedAddons ?? []).filter((a) => a.active)
+  const staffProfiles = (staffQuery.data ?? cachedStaffProfiles ?? []).filter((s) => s.active)
 
   // Ticket-building state
   const [selectedPackage, setSelectedPackage] = useState<CatalogItemResponse | null>(null)
@@ -126,6 +166,8 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
   // Overlay state
   const [modal, setModal] = useState<'payment' | 'receipt' | null>(null)
   const [ticket, setTicket] = useState<TicketResponse | null>(null)
+  // Phase 5 (ADR 0028): true when `ticket` was built client-side from an enqueued offline sale.
+  const [placedProvisional, setPlacedProvisional] = useState(false)
   // The applied-promotion detail from the LAST live quote before payment — the checkout response
   // itself carries only the aggregate discount (ADR 0026), so the receipt uses this snapshot.
   const [lastAppliedPromotions, setLastAppliedPromotions] = useState<AppliedPromotionResponse[]>([])
@@ -144,6 +186,11 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
   }, [config.primaryItemType, selectedPackage, addonLines])
 
   const discountMinor = parseDiscountInput(discountInput, currency)
+  const clientSubtotalMinor =
+    (selectedPackage?.priceMinor ?? 0) +
+    [...addonLines.values()].reduce((sum, l) => sum + l.item.priceMinor * l.qty, 0)
+  // Offline (Phase 5, ADR 0028) — see features/pos/Pos.tsx's twin doc for the provisional-breakdown
+  // strategy; the live quote is disabled (it can only fail) via `!offline`.
   const quoteQuery = useTicketQuote(
     config,
     session,
@@ -152,15 +199,24 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
     couponCode,
     attachedMember?.id ?? null,
     loyaltyRedeemPoints,
+    !offline,
   )
-  const breakdown = quoteQuery.data ?? null
+  const provisionalBreakdown =
+    offline && effectiveRules && lines.length > 0
+      ? computeProvisionalPricing(clientSubtotalMinor, effectiveRules, {
+          fixedDiscountMinor: discountMinor > 0 ? discountMinor : null,
+        })
+      : null
+  const breakdown: PriceBreakdownResponse | null = offline
+    ? provisionalBreakdown
+      ? toDisplayBreakdown(provisionalBreakdown)
+      : null
+    : (quoteQuery.data ?? null)
 
-  const clientSubtotalMinor =
-    (selectedPackage?.priceMinor ?? 0) +
-    [...addonLines.values()].reduce((sum, l) => sum + l.item.priceMinor * l.qty, 0)
   const grandTotalMinor = breakdown?.grandTotalMinor ?? Math.max(0, clientSubtotalMinor - discountMinor)
-  // The redemption ceiling — see features/pos/Pos.tsx's twin computation doc.
-  const maxRedeemablePoints = attachedMember
+  // The redemption ceiling — see features/pos/Pos.tsx's twin computation doc. Offline: points
+  // redemption is disabled entirely (server 422s it on an offline replay) — ceiling forced to 0.
+  const maxRedeemablePoints = !offline && attachedMember
     ? Math.max(
         0,
         Math.min(attachedMember.pointsBalance, grandTotalMinor + (breakdown?.loyaltyRedeemedMinor ?? 0)),
@@ -214,19 +270,89 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
 
   function handlePaymentSuccess(paidTicket: TicketResponse) {
     setTicket(paidTicket)
+    setPlacedProvisional(false)
     setLastAppliedPromotions(breakdown?.appliedPromotions ?? [])
+    resetTicketState()
+    setModal('receipt')
+  }
+
+  /** Phase 5 (ADR 0028): the sale was durably enqueued (never POSTed) — build a client-side ticket
+   * from the current selection + provisional breakdown. See features/pos/Pos.tsx's twin doc. */
+  function handleOfflineSuccess(row: SaleQueueRow, tenderedMinor: number, changeMinor: number) {
+    const linesOut: TicketLineResponse[] = []
+    if (selectedPackage) {
+      linesOut.push({
+        itemType: config.primaryItemType,
+        itemId: selectedPackage.id,
+        name: selectedPackage.name,
+        priceMinor: selectedPackage.priceMinor,
+        currency: selectedPackage.currency,
+        qty: 1,
+      })
+    }
+    for (const { item, qty } of addonLines.values()) {
+      linesOut.push({
+        itemType: 'ADDON',
+        itemId: item.id,
+        name: item.name,
+        priceMinor: item.priceMinor,
+        currency: item.currency,
+        qty,
+      })
+    }
+    const staffLabel = staffProfileId
+      ? (staffProfiles.find((s) => s.id === staffProfileId)?.displayLabel ?? null)
+      : null
+    const locationValue = bay.trim() ? bay : null
+    const ticketOut: TicketResponse = {
+      ticketId: row.idempotencyKey,
+      businessId: session.businessId,
+      bay: config.location.fieldName === 'bay' ? locationValue : undefined,
+      chair: config.location.fieldName === 'chair' ? locationValue : undefined,
+      vehiclePlate: config.vehicleField ? vehiclePlate || null : undefined,
+      staffProfileId,
+      staffLabel,
+      saleId: null,
+      breakdown: toDisplayBreakdown(row.provisional),
+      occurredAt: new Date().toISOString(),
+      lines: linesOut,
+      payment: {
+        paymentId: row.idempotencyKey,
+        ticketId: row.idempotencyKey,
+        tenderType: 'CASH',
+        status: 'CAPTURED',
+        amountMinor: row.provisional.grandTotalMinor,
+        currency: row.provisional.currency,
+        tenderedMinor,
+        changeMinor,
+        providerPending: false,
+        saleId: null,
+      },
+    }
+    setTicket(ticketOut)
+    setPlacedProvisional(true)
+    setLastAppliedPromotions([])
     resetTicketState()
     setModal('receipt')
   }
 
   function handleNewTicket() {
     setTicket(null)
+    setPlacedProvisional(false)
     setModal(null)
   }
 
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-paper">
-      <HeaderBar config={config} session={session} onOpenGiftCardSell={() => setShowGiftCardSell(true)} />
+      <HeaderBar
+        config={config}
+        session={session}
+        offline={offline}
+        queuedCount={queuedCount}
+        rejectedCount={rejectedCount}
+        onOpenGiftCardSell={() => setShowGiftCardSell(true)}
+        onOpenSyncCenter={() => setShowSyncCenter(true)}
+      />
 
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
         {/* Catalog — packages + add-ons */}
@@ -304,6 +430,7 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
             discountInvalid={discountInvalid}
             onDiscountChange={setDiscountInput}
             showDiscountInput={canManualDiscount}
+            offline={offline}
             couponCode={couponCode}
             couponStatus={breakdown?.couponStatus ?? null}
             onCouponApply={setCouponCode}
@@ -316,7 +443,7 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
               setAttachedMember(null)
               setLoyaltyRedeemPoints(0)
             }}
-            loyaltyRedeemPoints={loyaltyRedeemPoints}
+            loyaltyRedeemPoints={offline ? 0 : loyaltyRedeemPoints}
             maxRedeemablePoints={maxRedeemablePoints}
             onLoyaltyRedeemChange={setLoyaltyRedeemPoints}
             breakdown={breakdown}
@@ -345,6 +472,8 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
           staffProfileId={staffProfileId}
           onSuccess={handlePaymentSuccess}
           onClose={() => setModal(null)}
+          offline={offline}
+          onOfflineSuccess={handleOfflineSuccess}
         />
       ) : null}
 
@@ -365,9 +494,12 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
           locale={locale}
           businessName={session.name}
           appliedPromotions={lastAppliedPromotions}
+          provisional={placedProvisional}
           onNew={handleNewTicket}
         />
       ) : null}
+
+      {showSyncCenter ? <SyncCenter locale={locale} onClose={() => setShowSyncCenter(false)} /> : null}
     </div>
   )
 }
@@ -379,11 +511,19 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
 function HeaderBar({
   config,
   session,
+  offline,
+  queuedCount,
+  rejectedCount,
   onOpenGiftCardSell,
+  onOpenSyncCenter,
 }: {
   config: VerticalPosConfig
   session: CompanySession
+  offline: boolean
+  queuedCount: number
+  rejectedCount: number
   onOpenGiftCardSell: () => void
+  onOpenSyncCenter: () => void
 }) {
   const { t } = useTranslation()
   const { theme, toggle } = useTheme()
@@ -429,15 +569,32 @@ function HeaderBar({
             <Settings className="size-4" />
           </Link>
         ) : null}
-        {/* Gift card sell — a distinct till action, not a cart line (ADR 0027) */}
+        {/* Gift card sell — a distinct till action, not a cart line (ADR 0027); unreachable offline
+            (Phase 5, ADR 0028). */}
         <button
           type="button"
           onClick={onOpenGiftCardSell}
+          disabled={offline}
           aria-label={t('pos.loyalty.giftCard.sellTitle')}
-          title={t('pos.loyalty.giftCard.sellTitle')}
-          className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+          title={offline ? t('offline.disabled.giftCard') : t('pos.loyalty.giftCard.sellTitle')}
+          className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line disabled:hover:bg-surface disabled:hover:text-ink-3"
         >
           <Gift className="size-4" aria-hidden="true" />
+        </button>
+        {/* Sync center (Phase 5, ADR 0028) — badge = queued + rejected */}
+        <button
+          type="button"
+          onClick={onOpenSyncCenter}
+          aria-label={t('offline.syncCenterButton')}
+          title={t('offline.syncCenterButton')}
+          className="relative grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+        >
+          <RefreshCw className="size-4" aria-hidden="true" />
+          {queuedCount + rejectedCount > 0 ? (
+            <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-amber px-1 text-[9px] font-bold text-ink">
+              {queuedCount + rejectedCount}
+            </span>
+          ) : null}
         </button>
         <button
           type="button"
@@ -576,6 +733,9 @@ interface SummaryPanelProps {
   onDiscountChange: (v: string) => void
   /** Manual discount is owner/manager-only (ADR 0026 §5) — hidden for a cashier session. */
   showDiscountInput: boolean
+  /** Phase 5 (ADR 0028): disables the coupon field (points redemption is hidden separately, via
+   * `maxRedeemablePoints` already forced to 0 by the caller). */
+  offline: boolean
   couponCode: string | null
   couponStatus: 'APPLIED' | 'INVALID' | 'EXHAUSTED' | null
   onCouponApply: (code: string) => void
@@ -614,6 +774,7 @@ function SummaryPanel({
   discountInvalid,
   onDiscountChange,
   showDiscountInput,
+  offline,
   couponCode,
   couponStatus,
   onCouponApply,
@@ -769,7 +930,9 @@ function SummaryPanel({
         status={couponStatus}
         onApply={onCouponApply}
         onClear={onCouponClear}
+        disabled={offline}
       />
+      {offline ? <OfflineHint text={t('offline.disabled.coupon')} /> : null}
 
       <MemberField
         session={session}
@@ -782,6 +945,7 @@ function SummaryPanel({
         maxRedeemable={maxRedeemablePoints}
         onRedeemChange={onLoyaltyRedeemChange}
       />
+      {offline ? <OfflineHint text={t('offline.disabled.pointsRedeem')} /> : null}
 
       {showDiscountInput ? (
         <div>

@@ -1,0 +1,302 @@
+[
+  {
+    "name": "zero-rules",
+    "subtotalMinor": 100000,
+    "rules": {
+      "currency": "IDR",
+      "asOf": "2026-07-31",
+      "taxBp": 0,
+      "taxRuleVersion": "OFFICIAL-2027.1",
+      "taxProvenance": "OFFICIAL",
+      "serviceChargeBp": 0,
+      "serviceChargeInTaxBase": true,
+      "serviceChargeRuleVersion": "OFFICIAL-2027.1",
+      "serviceChargeProvenance": "OFFICIAL"
+    },
+    "discountBp": 0,
+    "fixedDiscountMinor": null,
+    "expected": {
+      "subtotalMinor": 100000,
+      "discountMinor": 0,
+      "serviceChargeMinor": 0,
+      "taxMinor": 0,
+      "grandTotalMinor": 100000,
+      "currency": "IDR"
+    }
+  },
+  {
+    "name": "typical-sale-service-charge-in-tax-base",
+    "subtotalMinor": 100000,
+    "rules": {
+      "currency": "IDR",
+      "asOf": "2026-07-31",
+      "taxBp": 1000,
+      "taxRuleVersion": "OFFICIAL-2027.1",
+      "taxProvenance": "OFFICIAL",
+      "serviceChargeBp": 500,
+      "serviceChargeInTaxBase": true,
+      "serviceChargeRuleVersion": "OFFICIAL-2027.1",
+      "serviceChargeProvenance": "OFFICIAL"
+    },
+    "discountBp": 1000,
+    "fixedDiscountMinor": null,
+    "expected": {
+      "subtotalMinor": 100000,
+      "discountMinor": 10000,
+      "serviceChargeMinor": 4500,
+      "taxMinor": 9450,
+      "grandTotalMinor": 103950,
+      "currency": "IDR"
+    }
+  },
+  {
+    "name": "typical-sale-service-charge-NOT-in-tax-base",
+    "subtotalMinor": 100000,
+    "rules": {
+      "currency": "IDR",
+      "asOf": "2026-07-31",
+      "taxBp": 1000,
+      "taxRuleVersion": "OFFICIAL-2027.1",
+      "taxProvenance": "OFFICIAL",
+      "serviceChargeBp": 500,
+      "serviceChargeInTaxBase": false,
+      "serviceChargeRuleVersion": "OFFICIAL-2027.1",
+      "serviceChargeProvenance": "OFFICIAL"
+    },
+    "discountBp": 1000,
+    "fixedDiscountMinor": null,
+    "expected": {
+      "subtotalMinor": 100000,
+      "discountMinor": 10000,
+      "serviceChargeMinor": 4500,
+      "taxMinor": 9000,
+      "grandTotalMinor": 103500,
+      "currency": "IDR"
+    }
+  },
+  {
+    "name": "fixed-discount-overrides-percent",
+    "subtotalMinor": 100000,
+    "rules": {
+      "currency": "IDR",
+      "asOf": "2026-07-31",
+      "taxBp": 0,
+      "taxRuleVersion": "OFFICIAL-2027.1",
+      "taxProvenance": "OFFICIAL",
+      "serviceChargeBp": 0,
+      "serviceChargeInTaxBase": true,
+      "serviceChargeRuleVersion": "OFFICIAL-2027.1",
+      "serviceChargeProvenance": "OFFICIAL"
+    },
+    "discountBp": 1000,
+    "fixedDiscountMinor": 5000,
+    "expected": {
+      "subtotalMinor": 100000,
+      "discountMinor": 5000,
+      "serviceChargeMinor": 0,
+      "taxMinor": 0,
+      "grandTotalMinor": 95000,
+      "currency": "IDR"
+    }
+  },
+  {
+    "name": "discount-exceeds-subtotal-clamps-to-zero-total",
+    "subtotalMinor": 100000,
+    "rules": {
+      "currency": "IDR",
+      "asOf": "2026-07-31",
+      "taxBp": 1000,
+      "taxRuleVersion": "OFFICIAL-2027.1",
+      "taxProvenance": "OFFICIAL",
+      "serviceChargeBp": 500,
+      "serviceChargeInTaxBase": true,
+      "serviceChargeRuleVersion": "OFFICIAL-2027.1",
+      "serviceChargeProvenance": "OFFICIAL"
+    },
+    "discountBp": 0,
+    "fixedDiscountMinor": 150000,
+    "expected": {
+      "subtotalMinor": 100000,
+      "discountMinor": 100000,
+      "serviceChargeMinor": 0,
+      "taxMinor": 0,
+      "grandTotalMinor": 0,
+      "currency": "IDR"
+    }
+  },
+  {
+    "name": "discount-half-even-tie-rounds-down-to-even",
+    "subtotalMinor": 5000,
+    "rules": {
+      "currency": "IDR",
+      "asOf": "2026-07-31",
+      "taxBp": 0,
+      "taxRuleVersion": "OFFICIAL-2027.1",
+      "taxProvenance": "OFFICIAL",
+      "serviceChargeBp": 0,
+      "serviceChargeInTaxBase": true,
+      "serviceChargeRuleVersion": "OFFICIAL-2027.1",
+      "serviceChargeProvenance": "OFFICIAL"
+    },
+    "discountBp": 1,
+    "fixedDiscountMinor": null,
+    "expected": {
+      "subtotalMinor": 5000,
+      "discountMinor": 0,
+      "serviceChargeMinor": 0,
+      "taxMinor": 0,
+      "grandTotalMinor": 5000,
+      "currency": "IDR"
+    }
+  },
+  {
+    "name": "discount-half-even-tie-rounds-up-to-even",
+    "subtotalMinor": 15000,
+    "rules": {
+      "currency": "IDR",
+      "asOf": "2026-07-31",
+      "taxBp": 0,
+      "taxRuleVersion": "OFFICIAL-2027.1",
+      "taxProvenance": "OFFICIAL",
+      "serviceChargeBp": 0,
+      "serviceChargeInTaxBase": true,
+      "serviceChargeRuleVersion": "OFFICIAL-2027.1",
+      "serviceChargeProvenance": "OFFICIAL"
+    },
+    "discountBp": 1,
+    "fixedDiscountMinor": null,
+    "expected": {
+      "subtotalMinor": 15000,
+      "discountMinor": 2,
+      "serviceChargeMinor": 0,
+      "taxMinor": 0,
+      "grandTotalMinor": 14998,
+      "currency": "IDR"
+    }
+  },
+  {
+    "name": "service-charge-half-even-tie-rounds-down-to-even",
+    "subtotalMinor": 5000,
+    "rules": {
+      "currency": "IDR",
+      "asOf": "2026-07-31",
+      "taxBp": 0,
+      "taxRuleVersion": "OFFICIAL-2027.1",
+      "taxProvenance": "OFFICIAL",
+      "serviceChargeBp": 1,
+      "serviceChargeInTaxBase": true,
+      "serviceChargeRuleVersion": "OFFICIAL-2027.1",
+      "serviceChargeProvenance": "OFFICIAL"
+    },
+    "discountBp": 0,
+    "fixedDiscountMinor": null,
+    "expected": {
+      "subtotalMinor": 5000,
+      "discountMinor": 0,
+      "serviceChargeMinor": 0,
+      "taxMinor": 0,
+      "grandTotalMinor": 5000,
+      "currency": "IDR"
+    }
+  },
+  {
+    "name": "service-charge-half-even-tie-rounds-up-to-even",
+    "subtotalMinor": 15000,
+    "rules": {
+      "currency": "IDR",
+      "asOf": "2026-07-31",
+      "taxBp": 0,
+      "taxRuleVersion": "OFFICIAL-2027.1",
+      "taxProvenance": "OFFICIAL",
+      "serviceChargeBp": 1,
+      "serviceChargeInTaxBase": true,
+      "serviceChargeRuleVersion": "OFFICIAL-2027.1",
+      "serviceChargeProvenance": "OFFICIAL"
+    },
+    "discountBp": 0,
+    "fixedDiscountMinor": null,
+    "expected": {
+      "subtotalMinor": 15000,
+      "discountMinor": 0,
+      "serviceChargeMinor": 2,
+      "taxMinor": 0,
+      "grandTotalMinor": 15002,
+      "currency": "IDR"
+    }
+  },
+  {
+    "name": "tax-half-even-tie-rounds-down-to-even",
+    "subtotalMinor": 5000,
+    "rules": {
+      "currency": "IDR",
+      "asOf": "2026-07-31",
+      "taxBp": 1,
+      "taxRuleVersion": "OFFICIAL-2027.1",
+      "taxProvenance": "OFFICIAL",
+      "serviceChargeBp": 0,
+      "serviceChargeInTaxBase": true,
+      "serviceChargeRuleVersion": "OFFICIAL-2027.1",
+      "serviceChargeProvenance": "OFFICIAL"
+    },
+    "discountBp": 0,
+    "fixedDiscountMinor": null,
+    "expected": {
+      "subtotalMinor": 5000,
+      "discountMinor": 0,
+      "serviceChargeMinor": 0,
+      "taxMinor": 0,
+      "grandTotalMinor": 5000,
+      "currency": "IDR"
+    }
+  },
+  {
+    "name": "tax-half-even-tie-rounds-up-to-even",
+    "subtotalMinor": 15000,
+    "rules": {
+      "currency": "IDR",
+      "asOf": "2026-07-31",
+      "taxBp": 1,
+      "taxRuleVersion": "OFFICIAL-2027.1",
+      "taxProvenance": "OFFICIAL",
+      "serviceChargeBp": 0,
+      "serviceChargeInTaxBase": true,
+      "serviceChargeRuleVersion": "OFFICIAL-2027.1",
+      "serviceChargeProvenance": "OFFICIAL"
+    },
+    "discountBp": 0,
+    "fixedDiscountMinor": null,
+    "expected": {
+      "subtotalMinor": 15000,
+      "discountMinor": 0,
+      "serviceChargeMinor": 0,
+      "taxMinor": 2,
+      "grandTotalMinor": 15002,
+      "currency": "IDR"
+    }
+  },
+  {
+    "name": "composite-realistic-sale-non-tie-rounding",
+    "subtotalMinor": 125750,
+    "rules": {
+      "currency": "IDR",
+      "asOf": "2026-07-31",
+      "taxBp": 1100,
+      "taxRuleVersion": "OFFICIAL-2027.1",
+      "taxProvenance": "OFFICIAL",
+      "serviceChargeBp": 500,
+      "serviceChargeInTaxBase": true,
+      "serviceChargeRuleVersion": "OFFICIAL-2027.1",
+      "serviceChargeProvenance": "OFFICIAL"
+    },
+    "discountBp": 750,
+    "fixedDiscountMinor": null,
+    "expected": {
+      "subtotalMinor": 125750,
+      "discountMinor": 9431,
+      "serviceChargeMinor": 5816,
+      "taxMinor": 13435,
+      "grandTotalMinor": 135570,
+      "currency": "IDR"
+    }
+  }
+]

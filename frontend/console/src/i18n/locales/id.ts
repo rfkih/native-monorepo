@@ -2374,4 +2374,48 @@ export const id = {
       subtitle: 'Cari kartu hadiah berdasarkan kodenya.',
     },
   },
+  offline: {
+    banner: {
+      offline: 'Anda sedang offline — penjualan tetap berlanjut, tunai saja. Harga bersifat sementara.',
+      queuedCount: '{{count}} menunggu',
+      syncing: 'Kembali online — menyinkronkan {{count}} penjualan tertunda…',
+    },
+    syncCenterButton: 'Pusat sinkronisasi',
+    syncCenter: {
+      title: 'Pusat sinkronisasi',
+      retryNow: 'Coba lagi sekarang',
+      empty: 'Belum ada penjualan offline.',
+      mismatchSummary: '{{count}} tersinkron dengan selisih harga',
+      rejectedSummary: '{{count}} ditolak — perlu ditinjau',
+      provisionalLabel: 'Sementara',
+      deltaLabel: 'Selisih {{delta}}',
+      unknownError: 'Server menolak penjualan ini.',
+    },
+    status: {
+      queued: 'Menunggu',
+      syncing: 'Menyinkronkan',
+      synced: 'Tersinkron',
+      mismatch: 'Harga berbeda',
+      rejected: 'Ditolak',
+    },
+    vertical: {
+      restaurant: 'Penjualan restoran',
+      carwash: 'Tiket cuci mobil',
+      barbershop: 'Tiket pangkas rambut',
+    },
+    provisional: {
+      badge: 'Sementara',
+      hint: 'Harga offline diperkirakan dari tarif terakhir yang diketahui — total akhir mungkin sedikit berbeda setelah tersinkron.',
+      receiptNote: 'SEMENTARA — dicatat secara offline, belum dikonfirmasi oleh server.',
+    },
+    disabled: {
+      coupon: 'Kupon memerlukan koneksi — tidak tersedia saat offline.',
+      pointsRedeem: 'Penukaran poin memerlukan koneksi — tidak tersedia saat offline.',
+      giftCard: 'Kartu hadiah memerlukan koneksi — tidak tersedia saat offline.',
+      digitalTender: 'Kartu/QRIS memerlukan koneksi — tunai saja saat offline.',
+      openBills: 'Tagihan terbuka memerlukan koneksi — hanya penjualan tunai cepat saat offline.',
+      parked: 'Pesanan ditahan memerlukan koneksi — hanya penjualan tunai cepat saat offline.',
+      tableFloor: 'Denah meja memerlukan koneksi — hanya penjualan tunai cepat saat offline.',
+    },
+  },
 } satisfies typeof en

@@ -32,6 +32,7 @@ import {
   LogOut,
   Moon,
   Plus,
+  RefreshCw,
   Send,
   Store,
   Sun,
@@ -55,9 +56,17 @@ import { AppliedPromotionChips } from '@/components/AppliedPromotionChips'
 import { MemberField } from '@/components/MemberField'
 import { GiftCardSellModal } from '@/components/GiftCardSellModal'
 import type { MemberResponse } from '@/features/loyalty/api'
+import { useOffline } from './offline/useOffline'
+import { useCachedCatalogFallback } from './offline/catalogCache'
+import { computeProvisionalPricing, toDisplayBreakdown } from './offline/provisionalPricing'
+import type { EffectiveRulesResponse } from './offline/provisionalPricing'
+import { OfflineHint } from './offline/OfflineHint'
+import { SyncCenter } from './offline/SyncCenter'
+import type { SaleQueueRow } from './offline/db'
 import {
   useMenu,
   useCategories,
+  useEffectiveRules,
   useTables,
   useParkedOrders,
   type MenuItem,
@@ -71,7 +80,7 @@ import { ParkedTray } from './ParkedTray'
 import { TableFloor } from './TableFloor'
 import { BillDetail } from './BillDetail'
 import { useBills, useOpenBill, useAppendLines, type BillSummaryResponse } from './billsApi'
-import type { AppliedPromotionResponse, OrderResponse, PaymentResponse } from './api'
+import type { AppliedPromotionResponse, OrderResponse, PaymentResponse, PriceBreakdownResponse } from './api'
 import { useQuote, useGetOrder } from './api'
 
 // ---------------------------------------------------------------------------
@@ -122,6 +131,33 @@ function PosInner({ session }: { session: CompanySession }) {
   const parkedQuery = useParkedOrders(session)
   const billsQuery = useBills(session)
   const appendLines = useAppendLines(session)
+  const effectiveRulesQuery = useEffectiveRules(session)
+
+  // Phase 5 offline mode (ADR 0028). When the live catalog/rules queries have no data at all (a
+  // fresh page load while offline — the common case is a query that already succeeded THIS session
+  // simply keeps its last-good `data` on a failed background refetch, so this fallback only kicks
+  // in for the "opened the app already offline" case).
+  const { offline, queuedCount, rejectedCount } = useOffline()
+  const [showSyncCenter, setShowSyncCenter] = useState(false)
+  const cachedMenu = useCachedCatalogFallback<MenuItem[]>(
+    session.companyId,
+    'restaurant',
+    'menu',
+    offline && !menuQuery.data,
+  )
+  const cachedCategories = useCachedCatalogFallback<CategoryResponse[]>(
+    session.companyId,
+    'restaurant',
+    'menuCategories',
+    offline && !categoriesQuery.data,
+  )
+  const cachedEffectiveRules = useCachedCatalogFallback<EffectiveRulesResponse>(
+    session.companyId,
+    'restaurant',
+    'effectiveRules',
+    offline && !effectiveRulesQuery.data,
+  )
+  const effectiveRules = effectiveRulesQuery.data ?? cachedEffectiveRules ?? null
 
   // Cart state
   const [cart, setCart] = useState<CartLine[]>([])
@@ -145,6 +181,9 @@ function PosInner({ session }: { session: CompanySession }) {
   const [modifierItem, setModifierItem] = useState<MenuItem | null>(null)
   const [placedOrder, setPlacedOrder] = useState<OrderResponse | null>(null)
   const [placedPayment, setPlacedPayment] = useState<PaymentResponse | null>(null)
+  // Phase 5 (ADR 0028): true when the last placed order was enqueued offline (a client-side,
+  // not-yet-confirmed receipt) rather than a real server response.
+  const [placedProvisional, setPlacedProvisional] = useState(false)
   // The applied-promotion detail from the LAST live quote before payment — the checkout/pay-parked
   // response itself carries only the aggregate discount (ADR 0026), so the receipt uses this snapshot.
   const [lastAppliedPromotions, setLastAppliedPromotions] = useState<AppliedPromotionResponse[]>([])
@@ -188,9 +227,10 @@ function PosInner({ session }: { session: CompanySession }) {
     setShowParkedTray(false)
   }
 
-  // Data
-  const items = menuQuery.data ?? []
-  const categories = (categoriesQuery.data ?? []).filter((c) => c.active)
+  // Data — offline: falls back to the last cached catalog read (see hooks above) when the live
+  // query never resolved this session.
+  const items = menuQuery.data ?? cachedMenu ?? []
+  const categories = (categoriesQuery.data ?? cachedCategories ?? []).filter((c) => c.active)
   const tables = (tablesQuery.data ?? []).filter((tbl) => tbl.active)
   const parkedCount = parkedQuery.data?.length ?? 0
   const openBillsList = billsQuery.data ?? []
@@ -245,6 +285,14 @@ function PosInner({ session }: { session: CompanySession }) {
 
   const lineCount = cart.reduce((sum, l) => sum + l.qty, 0)
   const discountMinor = parseDiscountInput(discountInput, currency)
+  const clientSubtotalMinor = cart.reduce(
+    (sum, l) => sum + l.effectiveUnitPriceMinor * l.qty,
+    0,
+  )
+  // Offline (Phase 5, ADR 0028): the live quote can only fail, so it is disabled (enabledOverride
+  // below) and a provisional breakdown is computed locally from the cached effective-rules instead
+  // — converted to the SAME PriceBreakdownResponse shape so every downstream renderer (SummaryBar,
+  // PaymentModal's ModalBreakdown, the receipt) needs no offline-specific branch of its own.
   const quoteQuery = useQuote(
     session,
     cartLines,
@@ -252,24 +300,33 @@ function PosInner({ session }: { session: CompanySession }) {
     couponCode,
     attachedMember?.id ?? null,
     loyaltyRedeemPoints,
+    !offline,
   )
-  const breakdown = quoteQuery.data ?? resumedOrder?.breakdown ?? null
-  const clientSubtotalMinor = cart.reduce(
-    (sum, l) => sum + l.effectiveUnitPriceMinor * l.qty,
-    0,
-  )
+  const provisionalBreakdown =
+    offline && effectiveRules && cart.length > 0
+      ? computeProvisionalPricing(clientSubtotalMinor, effectiveRules, {
+          fixedDiscountMinor: discountMinor > 0 ? discountMinor : null,
+        })
+      : null
+  const breakdown: PriceBreakdownResponse | null = offline
+    ? provisionalBreakdown
+      ? toDisplayBreakdown(provisionalBreakdown)
+      : null
+    : (quoteQuery.data ?? resumedOrder?.breakdown ?? null)
   const grandTotalMinor =
     breakdown?.grandTotalMinor ?? (resumedOrder?.totalMinor ?? clientSubtotalMinor)
   // The redemption ceiling: the member's balance, capped by the total due BEFORE this redemption
   // (grandTotalMinor already has any currently-committed redemption subtracted — add it back so
   // the cap doesn't shrink itself as points are applied; loyaltyRedeemedMinor is 0 until the quote
-  // resolves, which is a safe/conservative starting bound).
-  const maxRedeemablePoints = attachedMember
-    ? Math.max(
-        0,
-        Math.min(attachedMember.pointsBalance, grandTotalMinor + (breakdown?.loyaltyRedeemedMinor ?? 0)),
-      )
-    : 0
+  // resolves, which is a safe/conservative starting bound). Offline: points redemption is disabled
+  // entirely (server 422s a redemption on an offline replay) — the ceiling is forced to 0.
+  const maxRedeemablePoints =
+    !offline && attachedMember
+      ? Math.max(
+          0,
+          Math.min(attachedMember.pointsBalance, grandTotalMinor + (breakdown?.loyaltyRedeemedMinor ?? 0)),
+        )
+      : 0
 
   const discountInvalid =
     discountInput !== '' && (isNaN(Number(discountInput)) || Number(discountInput) < 0)
@@ -371,7 +428,61 @@ function PosInner({ session }: { session: CompanySession }) {
   function handlePaymentSuccess(order: OrderResponse, payment: PaymentResponse) {
     setPlacedOrder(order)
     setPlacedPayment(payment)
+    setPlacedProvisional(false)
     setLastAppliedPromotions(breakdown?.appliedPromotions ?? [])
+    clearCart()
+    setModal('receipt')
+  }
+
+  /**
+   * Phase 5 (ADR 0028): the sale was durably enqueued (never POSTed) — build a client-side receipt
+   * from the cart + provisional breakdown already computed above. Line names come from `items`
+   * (already resolved for the tile grid); per-modifier price deltas are folded into
+   * `effectiveUnitPriceMinor` already, so the receipt itemizes modifier NAMES only (no delta) —
+   * an acceptable simplification for a provisional receipt, corrected once the sale syncs.
+   */
+  function handleOfflineSuccess(row: SaleQueueRow, tenderedMinor: number, changeMinor: number) {
+    const cartAtSubmit = cart
+    const order: OrderResponse = {
+      orderId: row.idempotencyKey,
+      businessId: session.businessId,
+      totalMinor: row.provisional.grandTotalMinor,
+      currency: row.provisional.currency,
+      saleId: null,
+      lines: cartAtSubmit.map((l) => ({
+        menuItemId: l.menuItemId,
+        name: items.find((i) => i.id === l.menuItemId)?.name ?? l.menuItemId,
+        unitPriceMinor: l.effectiveUnitPriceMinor,
+        qty: l.qty,
+        lineTotalMinor: l.effectiveUnitPriceMinor * l.qty,
+        modifiers: l.selectedOptionNames.map((name) => ({
+          optionId: '',
+          nameSnapshot: name,
+          priceDeltaMinor: 0,
+        })),
+      })),
+      payment: null,
+      breakdown: toDisplayBreakdown(row.provisional),
+      status: 'COMPLETED',
+      orderType,
+      tableId: null,
+    }
+    const payment: PaymentResponse = {
+      paymentId: row.idempotencyKey,
+      orderId: order.orderId,
+      tenderType: 'CASH',
+      status: 'CAPTURED',
+      amountMinor: row.provisional.grandTotalMinor,
+      currency: row.provisional.currency,
+      tenderedMinor,
+      changeMinor,
+      providerPending: false,
+      saleId: null,
+    }
+    setPlacedOrder(order)
+    setPlacedPayment(payment)
+    setPlacedProvisional(true)
+    setLastAppliedPromotions([])
     clearCart()
     setModal('receipt')
   }
@@ -379,6 +490,7 @@ function PosInner({ session }: { session: CompanySession }) {
   function handleNewOrder() {
     setPlacedOrder(null)
     setPlacedPayment(null)
+    setPlacedProvisional(false)
     setModal(null)
   }
 
@@ -404,6 +516,7 @@ function PosInner({ session }: { session: CompanySession }) {
         bills={openBillsList}
         activeBillId={openBillId}
         locale={locale}
+        offline={offline}
         onTabClick={handleTabClick}
         onNewBill={() => setShowOpenBillDialog(true)}
         onSelectorClick={() => setShowBillSelector(true)}
@@ -473,12 +586,14 @@ function PosInner({ session }: { session: CompanySession }) {
           >
             <ChefHat className="size-4" />
           </Link>
-          {/* Table floor */}
+          {/* Table floor — disabled offline (cash quick-sale only, Phase 5 ADR 0028) */}
           <button
             type="button"
             onClick={() => setShowTableFloor(true)}
+            disabled={offline}
             aria-label={t('bills.floorTitle')}
-            className="relative grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+            title={offline ? t('offline.disabled.tableFloor') : t('bills.floorTitle')}
+            className="relative grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line disabled:hover:bg-surface disabled:hover:text-ink-3"
           >
             <Table2 className="size-4" aria-hidden="true" />
             {totalBills > 0 ? (
@@ -487,12 +602,14 @@ function PosInner({ session }: { session: CompanySession }) {
               </span>
             ) : null}
           </button>
-          {/* Parked */}
+          {/* Parked — disabled offline (cash quick-sale only, Phase 5 ADR 0028) */}
           <button
             type="button"
             onClick={() => setShowParkedTray(true)}
+            disabled={offline}
             aria-label={t('pos.parked.trayTitle')}
-            className="relative grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+            title={offline ? t('offline.disabled.parked') : t('pos.parked.trayTitle')}
+            className="relative grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line disabled:hover:bg-surface disabled:hover:text-ink-3"
           >
             <ClipboardList className="size-4" aria-hidden="true" />
             {parkedCount > 0 ? (
@@ -501,13 +618,29 @@ function PosInner({ session }: { session: CompanySession }) {
               </span>
             ) : null}
           </button>
+          {/* Sync center (Phase 5, ADR 0028) — badge = queued + rejected, always reachable */}
+          <button
+            type="button"
+            onClick={() => setShowSyncCenter(true)}
+            aria-label={t('offline.syncCenterButton')}
+            title={t('offline.syncCenterButton')}
+            className="relative grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+          >
+            <RefreshCw className="size-4" aria-hidden="true" />
+            {queuedCount + rejectedCount > 0 ? (
+              <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-amber px-1 text-[9px] font-bold text-ink">
+                {queuedCount + rejectedCount}
+              </span>
+            ) : null}
+          </button>
           {/* Gift card sell — a distinct till action, not a cart line (ADR 0027) */}
           <button
             type="button"
             onClick={() => setShowGiftCardSell(true)}
+            disabled={offline}
             aria-label={t('pos.loyalty.giftCard.sellTitle')}
-            title={t('pos.loyalty.giftCard.sellTitle')}
-            className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+            title={offline ? t('offline.disabled.giftCard') : t('pos.loyalty.giftCard.sellTitle')}
+            className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line disabled:hover:bg-surface disabled:hover:text-ink-3"
           >
             <Gift className="size-4" aria-hidden="true" />
           </button>
@@ -659,6 +792,7 @@ function PosInner({ session }: { session: CompanySession }) {
           discountInvalid={discountInvalid}
           onDiscountChange={setDiscountInput}
           showDiscountInput={canManualDiscount}
+          offline={offline}
           couponCode={couponCode}
           couponStatus={breakdown?.couponStatus ?? null}
           onCouponApply={setCouponCode}
@@ -671,7 +805,7 @@ function PosInner({ session }: { session: CompanySession }) {
             setAttachedMember(null)
             setLoyaltyRedeemPoints(0)
           }}
-          loyaltyRedeemPoints={loyaltyRedeemPoints}
+          loyaltyRedeemPoints={offline ? 0 : loyaltyRedeemPoints}
           maxRedeemablePoints={maxRedeemablePoints}
           onLoyaltyRedeemChange={setLoyaltyRedeemPoints}
           onExpand={() => setBillSheetOpen(true)}
@@ -717,6 +851,8 @@ function PosInner({ session }: { session: CompanySession }) {
           parkedOrderId={resumedOrder?.orderId ?? null}
           orderType={orderType}
           tableId={null}
+          offline={offline}
+          onOfflineSuccess={handleOfflineSuccess}
         />
       ) : null}
 
@@ -738,9 +874,12 @@ function PosInner({ session }: { session: CompanySession }) {
           businessName={session.name}
           tableLabel={null}
           appliedPromotions={lastAppliedPromotions}
+          provisional={placedProvisional}
           onNew={handleNewOrder}
         />
       ) : null}
+
+      {showSyncCenter ? <SyncCenter locale={locale} onClose={() => setShowSyncCenter(false)} /> : null}
 
       {showParkedTray ? (
         <ParkedTray
@@ -825,6 +964,7 @@ function BillTabsBar({
   bills,
   activeBillId,
   locale,
+  offline,
   onTabClick,
   onNewBill,
   onSelectorClick,
@@ -832,6 +972,8 @@ function BillTabsBar({
   bills: BillSummaryResponse[]
   activeBillId: string | null
   locale: string
+  /** Phase 5 (ADR 0028): starting a new bill/tab is a server round-trip — disabled offline. */
+  offline: boolean
   onTabClick: (billId: string) => void
   onNewBill: () => void
   onSelectorClick: () => void
@@ -899,13 +1041,15 @@ function BillTabsBar({
 
         <div className="flex-1" />
 
-        {/* New bill button (dashed) */}
+        {/* New bill button (dashed) — disabled offline (cash quick-sale only) */}
         <div className="flex items-center">
           <button
             type="button"
             onClick={onNewBill}
+            disabled={offline}
             aria-label={t('bills.newBillAriaLabel')}
-            className="grid size-[52px] place-items-center rounded-xl border-[1.5px] border-dashed border-emerald-line bg-surface text-emerald-2 transition-all hover:bg-emerald-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+            title={offline ? t('offline.disabled.openBills') : undefined}
+            className="grid size-[52px] place-items-center rounded-xl border-[1.5px] border-dashed border-emerald-line bg-surface text-emerald-2 transition-all hover:bg-emerald-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-surface"
           >
             <Plus className="size-5" aria-hidden="true" />
           </button>
@@ -942,8 +1086,10 @@ function BillTabsBar({
         <button
           type="button"
           onClick={onNewBill}
+          disabled={offline}
           aria-label={t('bills.newBillAriaLabel')}
-          className="grid size-11 shrink-0 place-items-center rounded-xl border-[1.5px] border-dashed border-emerald-line bg-surface text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+          title={offline ? t('offline.disabled.openBills') : undefined}
+          className="grid size-11 shrink-0 place-items-center rounded-xl border-[1.5px] border-dashed border-emerald-line bg-surface text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Plus className="size-[18px]" aria-hidden="true" />
         </button>
@@ -1181,6 +1327,7 @@ function SummaryBar({
   discountInvalid,
   onDiscountChange,
   showDiscountInput,
+  offline,
   couponCode,
   couponStatus,
   onCouponApply,
@@ -1207,6 +1354,9 @@ function SummaryBar({
   onDiscountChange: (v: string) => void
   /** Manual discount is owner/manager-only (ADR 0026 §5) — hidden for a cashier session. */
   showDiscountInput: boolean
+  /** Phase 5 (ADR 0028): disables the coupon field (points redemption is hidden separately, via
+   * `maxRedeemablePoints` already forced to 0 by the caller). */
+  offline: boolean
   couponCode: string | null
   couponStatus: 'APPLIED' | 'INVALID' | 'EXHAUSTED' | null
   onCouponApply: (code: string) => void
@@ -1252,8 +1402,10 @@ function SummaryBar({
             status={couponStatus}
             onApply={onCouponApply}
             onClear={onCouponClear}
+            disabled={offline}
             className="max-w-sm"
           />
+          {offline ? <OfflineHint text={t('offline.disabled.coupon')} className="max-w-sm" /> : null}
           <AppliedPromotionChips promotions={appliedPromotions} currency={currency} locale={locale} />
           <MemberField
             session={session}
@@ -1267,6 +1419,7 @@ function SummaryBar({
             onRedeemChange={onLoyaltyRedeemChange}
             className="max-w-sm"
           />
+          {offline ? <OfflineHint text={t('offline.disabled.pointsRedeem')} className="max-w-sm" /> : null}
           {showDiscountInput ? (
             <div className="flex items-center gap-2">
               <label

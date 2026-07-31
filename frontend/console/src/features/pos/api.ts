@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tansta
 import { useEffect, useRef, useState } from 'react'
 import { apiFetch } from '@/lib/api'
 import type { CompanySession } from '@/lib/session'
+import { stashCatalog } from './offline/catalogCache'
+import type { EffectiveRulesResponse } from './offline/provisionalPricing'
 
 // ---------------------------------------------------------------------------
 // Table types
@@ -247,6 +249,9 @@ export function useQuote(
   couponCode: string | null = null,
   loyaltyMemberId: string | null = null,
   loyaltyRedeemPoints: number = 0,
+  /** Phase 5 (ADR 0028): the caller passes `!offline` — no point firing a quote that can only fail
+   * while the terminal is offline (Pos.tsx computes a provisional breakdown locally instead). */
+  enabledOverride: boolean = true,
 ) {
   // State-based debounce: both the query key and the request body read from `debounced`,
   // so they are always identical and the server always receives the full current cart.
@@ -269,7 +274,7 @@ export function useQuote(
     }
   }, [lines, discountMinor, couponCode, loyaltyMemberId, loyaltyRedeemPoints])
 
-  const enabled = debounced.lines.length > 0
+  const enabled = debounced.lines.length > 0 && enabledOverride
 
   return useQuery({
     queryKey: [
@@ -304,22 +309,54 @@ export function useQuote(
 export function useMenu(session: CompanySession) {
   return useQuery({
     queryKey: ['menu', session.companyId, session.businessId],
-    queryFn: () =>
-      apiFetch<MenuItem[]>('/api/v1/menu', {
+    queryFn: async () => {
+      const result = await apiFetch<MenuItem[]>('/api/v1/menu', {
         tenant: tenantOf(session),
         query: { businessId: session.businessId },
-      }),
+      })
+      // Write-through offline cache (Phase 5, ADR 0028): best-effort, never blocks the online read.
+      if (result) void stashCatalog(session.companyId, 'restaurant', 'menu', result)
+      return result
+    },
   })
 }
 
 export function useCategories(session: CompanySession) {
   return useQuery({
     queryKey: ['menu-categories', session.companyId, session.businessId],
-    queryFn: () =>
-      apiFetch<CategoryResponse[]>('/api/v1/menu/categories', {
+    queryFn: async () => {
+      const result = await apiFetch<CategoryResponse[]>('/api/v1/menu/categories', {
         tenant: tenantOf(session),
         query: { businessId: session.businessId },
-      }),
+      })
+      if (result) void stashCatalog(session.companyId, 'restaurant', 'menuCategories', result)
+      return result
+    },
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Effective pricing rules — GET /api/v1/pricing/effective-rules?businessId=
+// Phase 5 (ADR 0028): stashed into the offline catalog cache so an offline sale can compute a
+// provisional price breakdown from the last known rates (features/pos/offline/provisionalPricing).
+// ---------------------------------------------------------------------------
+
+export function useEffectiveRules(session: CompanySession) {
+  return useQuery({
+    queryKey: ['pricing-effective-rules', session.companyId, session.businessId],
+    queryFn: async () => {
+      const raw = await apiFetch<EffectiveRulesResponse>('/api/v1/pricing/effective-rules', {
+        tenant: tenantOf(session),
+        query: { businessId: session.businessId },
+      })
+      if (!raw) return raw
+      // The backend's `currency` is nullable (no rule seeded for this business at all) — the
+      // company's base currency is always the correct fallback (rule 8: every amount needs one).
+      const result: EffectiveRulesResponse = { ...raw, currency: raw.currency ?? session.baseCurrency }
+      void stashCatalog(session.companyId, 'restaurant', 'effectiveRules', result)
+      return result
+    },
+    staleTime: 5 * 60_000,
   })
 }
 

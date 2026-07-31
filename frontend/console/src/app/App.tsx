@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { Shell } from '@/app/Shell'
 import { Spinner } from '@/components/ui/Spinner'
 import { BrandMark } from '@/components/Wordmark'
+import { OfflineBanner } from '@/features/pos/offline/OfflineBanner'
 import { hasAnyRole, useAuth } from '@/lib/authContext'
 import { usePageAccess } from '@/lib/pageAccess'
 import { useSession } from '@/lib/session'
@@ -263,199 +264,205 @@ export function App() {
                     : '/me'
 
   return (
-    <Suspense fallback={<CenteredSpinner />}>
-      <Routes>
-        {/* The POS is a full-screen "front office" — it renders OUTSIDE the sidebar/topbar shell.
-            PosSwitch picks the per-vertical surface (restaurant Pos vs carwash ServicePos). */}
-        {posAllowed && <Route path="/pos" element={<PosSwitch />} />}
-        {menuAllowed && <Route path="/menu" element={<MenuManagement />} />}
-        {/* /catalog is the carwash counterpart of /menu — gated identically (menuAllowed). */}
-        {menuAllowed && <Route path="/catalog" element={<CatalogSwitch />} />}
-        {kitchenAllowed && <Route path="/kitchen" element={<Kitchen />} />}
-
-        {/* The employee self-service surface — full-screen, any business role may open it. */}
-        <Route path="/me" element={<Me />} />
-
-        {/* Everything else shares the back-office shell, mounted once via a layout route. */}
-        <Route
-          element={
-            <Shell>
-              <Outlet />
-            </Shell>
-          }
-        >
-          {canDashboard && <Route path="/onboarding" element={<OnboardingWizard />} />}
-          {dashboardAllowed && (
-            <Route
-              path="/"
-              element={company ? <Dashboard /> : <Navigate to="/onboarding" replace />}
-            />
-          )}
-          {reportsAllowed && (
-            <Route
-              path="/statements/income"
-              element={company ? <IncomeStatement /> : <Navigate to="/onboarding" replace />}
-            />
-          )}
-          {reportsAllowed && (
-            <Route
-              path="/statements/balance-sheet"
-              element={company ? <BalanceSheet /> : <Navigate to="/onboarding" replace />}
-            />
-          )}
-          {reportsAllowed && (
-            <Route
-              path="/statements/cash-flow"
-              element={company ? <CashFlow /> : <Navigate to="/onboarding" replace />}
-            />
-          )}
-          {canDashboard && (
-            <Route
-              path="/budgets"
-              element={company ? <Budgets /> : <Navigate to="/onboarding" replace />}
-            />
-          )}
-          {canDashboard && (
-            <Route
-              path="/budgets/:id"
-              element={company ? <BudgetDetail /> : <Navigate to="/onboarding" replace />}
-            />
-          )}
-          {canDashboard && (
-            <Route
-              path="/assets"
-              element={company ? <FixedAssets /> : <Navigate to="/onboarding" replace />}
-            />
-          )}
-          {canDashboard && (
-            <Route
-              path="/deferrals"
-              element={company ? <Deferrals /> : <Navigate to="/onboarding" replace />}
-            />
-          )}
-          {canDashboard && (
-            <Route
-              path="/promotions"
-              element={company ? <Promotions /> : <Navigate to="/onboarding" replace />}
-            />
-          )}
-          {canDashboard && (
-            <Route
-              path="/loyalty"
-              element={company ? <EarnRulesPage /> : <Navigate to="/onboarding" replace />}
-            />
-          )}
-          {canDashboard && (
-            <Route
-              path="/invoices"
-              element={company ? <InvoicesList /> : <Navigate to="/onboarding" replace />}
-            />
-          )}
-          {canDashboard && (
-            <Route
-              path="/invoices/new"
-              element={company ? <NewInvoice /> : <Navigate to="/onboarding" replace />}
-            />
-          )}
-          {canDashboard && (
-            <Route
-              path="/invoices/:id"
-              element={company ? <InvoiceDetail /> : <Navigate to="/onboarding" replace />}
-            />
-          )}
-          {canDashboard && (
-            <Route
-              path="/customers"
-              element={company ? <Customers /> : <Navigate to="/onboarding" replace />}
-            />
-          )}
-          {canDashboard && (
-            <Route
-              path="/ar/aging"
-              element={company ? <ArAging /> : <Navigate to="/onboarding" replace />}
-            />
-          )}
-          {canDashboard && (
-            <Route
-              path="/bills"
-              element={company ? <BillsList /> : <Navigate to="/onboarding" replace />}
-            />
-          )}
-          {canDashboard && (
-            <Route
-              path="/bills/new"
-              element={company ? <NewBill /> : <Navigate to="/onboarding" replace />}
-            />
-          )}
-          {canDashboard && (
-            <Route
-              path="/bills/:id"
-              element={company ? <BillDetail /> : <Navigate to="/onboarding" replace />}
-            />
-          )}
-          {canDashboard && (
-            <Route
-              path="/vendors"
-              element={company ? <Vendors /> : <Navigate to="/onboarding" replace />}
-            />
-          )}
-          {canDashboard && (
-            <Route
-              path="/ap/aging"
-              element={company ? <ApAging /> : <Navigate to="/onboarding" replace />}
-            />
-          )}
-          {canDashboard && (
-            <Route
-              path="/bank"
-              element={company ? <BankAccounts /> : <Navigate to="/onboarding" replace />}
-            />
-          )}
-          {canDashboard && (
-            <Route
-              path="/bank/:id"
-              element={company ? <BankReconcile /> : <Navigate to="/onboarding" replace />}
-            />
-          )}
-          {canDashboard && (
-            <Route
-              path="/tax"
-              element={company ? <TaxReport /> : <Navigate to="/onboarding" replace />}
-            />
-          )}
-          {orgAllowed && (
-            <Route
-              path="/org"
-              element={company ? <OrgTree /> : <Navigate to="/onboarding" replace />}
-            />
-          )}
-          {orgAllowed && (
-            <Route
-              path="/org/:unitId"
-              element={company ? <OrgUnitDetail /> : <Navigate to="/onboarding" replace />}
-            />
-          )}
-          {groupsAllowed && (
-            <Route
-              path="/groups"
-              element={company ? <GroupConsolidation /> : <Navigate to="/onboarding" replace />}
-            />
-          )}
-          {closeAllowed && (
-            <Route
-              path="/close"
-              element={company ? <PeriodClose /> : <Navigate to="/onboarding" replace />}
-            />
-          )}
-          {teamAllowed && (
-            <Route
-              path="/team"
-              element={company ? <Team /> : <Navigate to="/onboarding" replace />}
-            />
-          )}
-          <Route path="*" element={<Navigate to={home} replace />} />
-        </Route>
-      </Routes>
-    </Suspense>
+    <>
+      {/* App-global, mounted once here (not inside Shell) so it is visible on every authenticated
+          screen INCLUDING the full-screen POS surfaces, which render outside the dashboard shell
+          (Phase 5 offline mode, ADR 0028). Renders nothing when there is nothing to say. */}
+      <OfflineBanner />
+      <Suspense fallback={<CenteredSpinner />}>
+        <Routes>
+          {/* The POS is a full-screen "front office" — it renders OUTSIDE the sidebar/topbar shell.
+              PosSwitch picks the per-vertical surface (restaurant Pos vs carwash ServicePos). */}
+          {posAllowed && <Route path="/pos" element={<PosSwitch />} />}
+          {menuAllowed && <Route path="/menu" element={<MenuManagement />} />}
+          {/* /catalog is the carwash counterpart of /menu — gated identically (menuAllowed). */}
+          {menuAllowed && <Route path="/catalog" element={<CatalogSwitch />} />}
+          {kitchenAllowed && <Route path="/kitchen" element={<Kitchen />} />}
+  
+          {/* The employee self-service surface — full-screen, any business role may open it. */}
+          <Route path="/me" element={<Me />} />
+  
+          {/* Everything else shares the back-office shell, mounted once via a layout route. */}
+          <Route
+            element={
+              <Shell>
+                <Outlet />
+              </Shell>
+            }
+          >
+            {canDashboard && <Route path="/onboarding" element={<OnboardingWizard />} />}
+            {dashboardAllowed && (
+              <Route
+                path="/"
+                element={company ? <Dashboard /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {reportsAllowed && (
+              <Route
+                path="/statements/income"
+                element={company ? <IncomeStatement /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {reportsAllowed && (
+              <Route
+                path="/statements/balance-sheet"
+                element={company ? <BalanceSheet /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {reportsAllowed && (
+              <Route
+                path="/statements/cash-flow"
+                element={company ? <CashFlow /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {canDashboard && (
+              <Route
+                path="/budgets"
+                element={company ? <Budgets /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {canDashboard && (
+              <Route
+                path="/budgets/:id"
+                element={company ? <BudgetDetail /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {canDashboard && (
+              <Route
+                path="/assets"
+                element={company ? <FixedAssets /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {canDashboard && (
+              <Route
+                path="/deferrals"
+                element={company ? <Deferrals /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {canDashboard && (
+              <Route
+                path="/promotions"
+                element={company ? <Promotions /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {canDashboard && (
+              <Route
+                path="/loyalty"
+                element={company ? <EarnRulesPage /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {canDashboard && (
+              <Route
+                path="/invoices"
+                element={company ? <InvoicesList /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {canDashboard && (
+              <Route
+                path="/invoices/new"
+                element={company ? <NewInvoice /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {canDashboard && (
+              <Route
+                path="/invoices/:id"
+                element={company ? <InvoiceDetail /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {canDashboard && (
+              <Route
+                path="/customers"
+                element={company ? <Customers /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {canDashboard && (
+              <Route
+                path="/ar/aging"
+                element={company ? <ArAging /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {canDashboard && (
+              <Route
+                path="/bills"
+                element={company ? <BillsList /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {canDashboard && (
+              <Route
+                path="/bills/new"
+                element={company ? <NewBill /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {canDashboard && (
+              <Route
+                path="/bills/:id"
+                element={company ? <BillDetail /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {canDashboard && (
+              <Route
+                path="/vendors"
+                element={company ? <Vendors /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {canDashboard && (
+              <Route
+                path="/ap/aging"
+                element={company ? <ApAging /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {canDashboard && (
+              <Route
+                path="/bank"
+                element={company ? <BankAccounts /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {canDashboard && (
+              <Route
+                path="/bank/:id"
+                element={company ? <BankReconcile /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {canDashboard && (
+              <Route
+                path="/tax"
+                element={company ? <TaxReport /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {orgAllowed && (
+              <Route
+                path="/org"
+                element={company ? <OrgTree /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {orgAllowed && (
+              <Route
+                path="/org/:unitId"
+                element={company ? <OrgUnitDetail /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {groupsAllowed && (
+              <Route
+                path="/groups"
+                element={company ? <GroupConsolidation /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {closeAllowed && (
+              <Route
+                path="/close"
+                element={company ? <PeriodClose /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {teamAllowed && (
+              <Route
+                path="/team"
+                element={company ? <Team /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            <Route path="*" element={<Navigate to={home} replace />} />
+          </Route>
+        </Routes>
+      </Suspense>
+    </>
   )
 }

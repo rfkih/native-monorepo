@@ -12,6 +12,8 @@ import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tansta
 import { useEffect, useRef, useState } from 'react'
 import { apiFetch, ApiError } from '@/lib/api'
 import type { CompanySession } from '@/lib/session'
+import { stashCatalog } from '@/features/pos/offline/catalogCache'
+import type { EffectiveRulesResponse } from '@/features/pos/offline/provisionalPricing'
 import type { CatalogItemKind, TenderType, VerticalPosConfig } from './config'
 
 // ---------------------------------------------------------------------------
@@ -193,7 +195,11 @@ export function useCatalogPackages(
           query: { activeOnly, businessId: session.businessId },
         },
       )
-      return result ?? []
+      const rows = result ?? []
+      // Write-through offline cache (Phase 5, ADR 0028) — active-only reads only (the terminal's
+      // own read shape), best-effort.
+      if (activeOnly === 'true') void stashCatalog(session.companyId, config.vertical, 'packages', rows)
+      return rows
     },
   })
 }
@@ -218,7 +224,9 @@ export function useCatalogAddons(
         tenant: tenantOf(session),
         query: { activeOnly, businessId: session.businessId },
       })
-      return result ?? []
+      const rows = result ?? []
+      if (activeOnly === 'true') void stashCatalog(session.companyId, config.vertical, 'addons', rows)
+      return rows
     },
   })
 }
@@ -243,8 +251,36 @@ export function useStaffProfiles(
         tenant: tenantOf(session),
         query: { activeOnly, businessId: session.businessId },
       })
-      return result ?? []
+      const rows = result ?? []
+      if (activeOnly === 'true') {
+        void stashCatalog(session.companyId, config.vertical, 'staffProfiles', rows)
+      }
+      return rows
     },
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Effective pricing rules — GET {apiBase}/pricing/effective-rules?businessId=
+// Phase 5 (ADR 0028): stashed into the offline catalog cache — see features/pos/api.ts's twin.
+// ---------------------------------------------------------------------------
+
+export function useEffectiveRules(config: VerticalPosConfig, session: CompanySession) {
+  return useQuery({
+    queryKey: ['servicepos', config.vertical, 'pricing-effective-rules', session.companyId, session.businessId],
+    queryFn: async () => {
+      const raw = await apiFetch<EffectiveRulesResponse>(`${config.apiBase}/pricing/effective-rules`, {
+        tenant: tenantOf(session),
+        query: { businessId: session.businessId },
+      })
+      if (!raw) return raw
+      // The backend's `currency` is nullable (no rule seeded for this business at all) — the
+      // company's base currency is always the correct fallback (rule 8: every amount needs one).
+      const result: EffectiveRulesResponse = { ...raw, currency: raw.currency ?? session.baseCurrency }
+      void stashCatalog(session.companyId, config.vertical, 'effectiveRules', result)
+      return result
+    },
+    staleTime: 5 * 60_000,
   })
 }
 
@@ -266,6 +302,8 @@ export function useTicketQuote(
   couponCode: string | null = null,
   loyaltyMemberId: string | null = null,
   loyaltyRedeemPoints: number = 0,
+  /** Phase 5 (ADR 0028): the caller passes `!offline` — see features/pos/api.ts's useQuote twin. */
+  enabledOverride: boolean = true,
 ) {
   const [debounced, setDebounced] = useState<{
     lines: TicketLineInput[]
@@ -286,7 +324,7 @@ export function useTicketQuote(
     }
   }, [lines, discountMinor, couponCode, loyaltyMemberId, loyaltyRedeemPoints])
 
-  const enabled = debounced.lines.length > 0
+  const enabled = debounced.lines.length > 0 && enabledOverride
 
   return useQuery({
     queryKey: [

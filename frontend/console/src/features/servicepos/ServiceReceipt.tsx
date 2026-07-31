@@ -28,6 +28,9 @@ interface Props {
    * best-effort snapshot, rendered as extra deduction rows under the discount total.
    */
   appliedPromotions?: AppliedPromotionResponse[]
+  /** Phase 5 (ADR 0028): true for a client-side receipt generated while offline — see
+   * features/pos/ReceiptView.tsx's twin doc. */
+  provisional?: boolean
   onNew: () => void
 }
 
@@ -63,7 +66,15 @@ function tenderKey(tenderType: string): string {
   }
 }
 
-export function ServiceReceipt({ config, ticket, locale, businessName, appliedPromotions, onNew }: Props) {
+export function ServiceReceipt({
+  config,
+  ticket,
+  locale,
+  businessName,
+  appliedPromotions,
+  provisional,
+  onNew,
+}: Props) {
   const { t } = useTranslation()
   const payment = ticket.payment
   const isPending = payment?.status === 'PENDING'
@@ -192,6 +203,8 @@ export function ServiceReceipt({ config, ticket, locale, businessName, appliedPr
       actionLabel={t('servicePos.receipt.newTicket')}
       isPending={!!(isPending && payment?.providerPending)}
       pendingNote={isPending && payment?.providerPending ? t('pos.receipt.pendingNote') : undefined}
+      isProvisional={provisional}
+      provisionalNote={provisional ? t('offline.provisional.receiptNote') : undefined}
     />
   )
 }

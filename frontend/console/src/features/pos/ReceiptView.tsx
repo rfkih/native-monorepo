@@ -36,6 +36,9 @@ interface Props {
    * best-effort snapshot, rendered as extra deduction rows under the discount total.
    */
   appliedPromotions?: AppliedPromotionResponse[]
+  /** Phase 5 (ADR 0028): true for a client-side receipt generated while offline — the sale is
+   * queued and not yet confirmed by the server. Renders a solid provisional marker (ThermalReceipt). */
+  provisional?: boolean
   onNew: () => void
 }
 
@@ -91,6 +94,7 @@ export function ReceiptView({
   businessName,
   tableLabel,
   appliedPromotions,
+  provisional,
   onNew,
 }: Props) {
   const { t } = useTranslation()
@@ -221,6 +225,8 @@ export function ReceiptView({
       actionLabel={t('pos.receipt.newOrder')}
       isPending={isPending}
       pendingNote={isPending ? t('pos.receipt.pendingNote') : undefined}
+      isProvisional={provisional}
+      provisionalNote={provisional ? t('offline.provisional.receiptNote') : undefined}
     />
   )
 }

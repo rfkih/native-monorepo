@@ -2378,4 +2378,48 @@ export const en = {
       subtitle: 'Look up a gift card by its code.',
     },
   },
+  offline: {
+    banner: {
+      offline: 'You are offline — selling continues, cash only. Prices are provisional.',
+      queuedCount: '{{count}} queued',
+      syncing: 'Back online — syncing {{count}} queued sale(s)…',
+    },
+    syncCenterButton: 'Sync center',
+    syncCenter: {
+      title: 'Sync center',
+      retryNow: 'Retry now',
+      empty: 'No offline sales yet.',
+      mismatchSummary: '{{count}} synced with a price difference',
+      rejectedSummary: '{{count}} rejected — needs review',
+      provisionalLabel: 'Provisional',
+      deltaLabel: 'Difference {{delta}}',
+      unknownError: 'The server rejected this sale.',
+    },
+    status: {
+      queued: 'Queued',
+      syncing: 'Syncing',
+      synced: 'Synced',
+      mismatch: 'Price differs',
+      rejected: 'Rejected',
+    },
+    vertical: {
+      restaurant: 'Restaurant sale',
+      carwash: 'Carwash ticket',
+      barbershop: 'Barbershop ticket',
+    },
+    provisional: {
+      badge: 'Provisional',
+      hint: 'Offline prices are estimated from the last known rates — the final total may differ slightly once synced.',
+      receiptNote: 'PROVISIONAL — recorded offline, not yet confirmed by the server.',
+    },
+    disabled: {
+      coupon: 'Coupons need a connection — unavailable offline.',
+      pointsRedeem: 'Points redemption needs a connection — unavailable offline.',
+      giftCard: 'Gift cards need a connection — unavailable offline.',
+      digitalTender: 'Card/QRIS need a connection — cash only offline.',
+      openBills: 'Open bills need a connection — cash quick-sale only offline.',
+      parked: 'Parked orders need a connection — cash quick-sale only offline.',
+      tableFloor: 'The table floor needs a connection — cash quick-sale only offline.',
+    },
+  },
 }

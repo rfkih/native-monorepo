@@ -38,6 +38,9 @@ import {
   type GiftCardResponse,
   type MemberResponse,
 } from '@/features/loyalty/api'
+import { OfflineHint } from '@/features/pos/offline/OfflineHint'
+import { enqueueSale } from '@/features/pos/offline/queue'
+import type { ProvisionalTotals, SaleQueueRow } from '@/features/pos/offline/db'
 import type { VerticalPosConfig, TenderType } from './config'
 import {
   isModuleNotEntitled,
@@ -71,6 +74,9 @@ interface Props {
   staffProfileId: string | null
   onSuccess: (ticket: TicketResponse) => void
   onClose: () => void
+  /** Phase 5 (ADR 0028): true when the terminal is offline — see PaymentModal.tsx's twin doc. */
+  offline?: boolean
+  onOfflineSuccess?: (row: SaleQueueRow, tenderedMinor: number, changeMinor: number) => void
 }
 
 // Quick-cash chip amounts in IDR minor units (= whole rupiah, exponent 0) — mirrors the restaurant
@@ -125,6 +131,8 @@ export function ServicePaymentModal({
   staffProfileId,
   onSuccess,
   onClose,
+  offline = false,
+  onOfflineSuccess,
 }: Props) {
   const { t } = useTranslation()
   const [tender, setTender] = useState<TenderType>('CASH')
@@ -133,8 +141,21 @@ export function ServicePaymentModal({
   // class doc for the residual/full-coverage design (identical here).
   const [giftCard, setGiftCard] = useState<GiftCardResponse | null>(null)
   const [giftCardRedeemMinor, setGiftCardRedeemMinor] = useState(0)
-  const residualDueMinor = Math.max(0, grandTotalMinor - giftCardRedeemMinor)
-  const fullyCoveredByGiftCard = giftCard != null && residualDueMinor === 0
+  // Offline (Phase 5, ADR 0028) — see PaymentModal.tsx's twin doc.
+  const residualDueMinor = offline ? grandTotalMinor : Math.max(0, grandTotalMinor - giftCardRedeemMinor)
+  const fullyCoveredByGiftCard = !offline && giftCard != null && residualDueMinor === 0
+  const offlineProvisional: ProvisionalTotals | null =
+    offline && breakdown
+      ? {
+          subtotalMinor: breakdown.subtotalMinor,
+          discountMinor: breakdown.discountMinor,
+          serviceChargeMinor: breakdown.serviceChargeMinor,
+          taxMinor: breakdown.taxMinor,
+          grandTotalMinor: breakdown.grandTotalMinor,
+          currency: breakdown.currency,
+          usesCachedRules: true,
+        }
+      : null
 
   const tenderOptions: { value: TenderType; label: string }[] = [
     { value: 'CASH', label: t('pos.payment.tenderCash') },
@@ -167,31 +188,60 @@ export function ServicePaymentModal({
 
         <ModalBreakdown breakdown={breakdown} grandTotalMinor={grandTotalMinor} currency={currency} locale={locale} />
 
-        {/* Gift-card redemption (Phase 4, ADR 0027) */}
-        <div className="border-b border-line px-5 py-3">
-          <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-ink-3">
-            <Gift className="size-3.5 shrink-0" aria-hidden />
-            {t('pos.loyalty.giftCard.applyTitle')}
-          </p>
-          <GiftCardField
-            session={session}
-            locale={locale}
-            card={giftCard}
-            onApply={(card, redeem) => {
-              setGiftCard(card)
-              setGiftCardRedeemMinor(redeem)
-            }}
-            onClear={() => {
-              setGiftCard(null)
-              setGiftCardRedeemMinor(0)
-            }}
-            redeemMinor={giftCardRedeemMinor}
-            onRedeemChange={setGiftCardRedeemMinor}
-            dueBeforeCardMinor={grandTotalMinor}
-          />
-        </div>
+        {/* Gift-card redemption (Phase 4, ADR 0027) — unreachable offline (Phase 5, ADR 0028). */}
+        {offline ? (
+          <div className="border-b border-line px-5 py-3 space-y-1.5">
+            <OfflineHint text={t('offline.disabled.digitalTender')} />
+            <OfflineHint text={t('offline.disabled.giftCard')} />
+          </div>
+        ) : (
+          <div className="border-b border-line px-5 py-3">
+            <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-ink-3">
+              <Gift className="size-3.5 shrink-0" aria-hidden />
+              {t('pos.loyalty.giftCard.applyTitle')}
+            </p>
+            <GiftCardField
+              session={session}
+              locale={locale}
+              card={giftCard}
+              onApply={(card, redeem) => {
+                setGiftCard(card)
+                setGiftCardRedeemMinor(redeem)
+              }}
+              onClear={() => {
+                setGiftCard(null)
+                setGiftCardRedeemMinor(0)
+              }}
+              redeemMinor={giftCardRedeemMinor}
+              onRedeemChange={setGiftCardRedeemMinor}
+              dueBeforeCardMinor={grandTotalMinor}
+            />
+          </div>
+        )}
 
-        {fullyCoveredByGiftCard ? (
+        {offline ? (
+          <CashPanel
+            config={config}
+            session={session}
+            lines={lines}
+            chargeMinor={residualDueMinor}
+            discountMinor={discountMinor}
+            couponCode={null}
+            loyaltyMemberId={loyaltyMemberId}
+            loyaltyRedeemPoints={0}
+            giftCardId={null}
+            giftCardRedeemMinor={0}
+            currency={currency}
+            locale={locale}
+            bay={bay}
+            vehiclePlate={vehiclePlate}
+            staffProfileId={staffProfileId}
+            onSuccess={onSuccess}
+            offline
+            offlineProvisional={offlineProvisional}
+            onOfflineSuccess={onOfflineSuccess}
+          />
+        ) : fullyCoveredByGiftCard ? (
           <FullCoveragePanel
             config={config}
             session={session}
@@ -484,6 +534,10 @@ interface CashPanelProps {
   vehiclePlate: string
   staffProfileId: string | null
   onSuccess: (ticket: TicketResponse) => void
+  /** Phase 5 (ADR 0028): true when the terminal is offline — Pay enqueues instead of POSTing. */
+  offline?: boolean
+  offlineProvisional?: ProvisionalTotals | null
+  onOfflineSuccess?: (row: SaleQueueRow, tenderedMinor: number, changeMinor: number) => void
 }
 
 function CashPanel({
@@ -503,9 +557,14 @@ function CashPanel({
   vehiclePlate,
   staffProfileId,
   onSuccess,
+  offline = false,
+  offlineProvisional,
+  onOfflineSuccess,
 }: CashPanelProps) {
   const { t } = useTranslation()
   const checkout = useTicketCheckout(config, session)
+  const [offlineError, setOfflineError] = useState<string | null>(null)
+  const [offlineBusy, setOfflineBusy] = useState(false)
 
   // One idempotency key per payment ATTEMPT (panel mount), reused across retries — a retry after
   // an ambiguous failure replays the same key and resolves to the same ticket (review W1).
@@ -514,7 +573,11 @@ function CashPanel({
   const [keyStr, setKeyStr] = useState<string>('')
   const tenderedMinor = keyStr === '' ? 0 : parseInt(keyStr, 10)
   const changeMinor = tenderedMinor - chargeMinor
-  const canPay = tenderedMinor >= chargeMinor && !checkout.isPending
+  const canPay =
+    tenderedMinor >= chargeMinor &&
+    !checkout.isPending &&
+    !offlineBusy &&
+    (!offline || offlineProvisional != null)
 
   const chips = quickChips(chargeMinor, currency)
 
@@ -532,8 +595,44 @@ function CashPanel({
     setKeyStr(String(minor))
   }
 
+  /** Offline replacement for checkout.mutate — see features/pos/PaymentModal.tsx's CashPanel twin
+   * doc. `loyaltyMemberId` alone is forwarded (earn attribution allowed offline). */
+  async function payOffline() {
+    if (!canPay || !offlineProvisional) return
+    setOfflineBusy(true)
+    setOfflineError(null)
+    try {
+      const row = await enqueueSale({
+        vertical: config.vertical as 'carwash' | 'barbershop',
+        endpoint: `${config.apiBase}/tickets/checkout`,
+        companyId: session.companyId,
+        actor: session.actor,
+        body: {
+          businessId: session.businessId,
+          lines,
+          [config.location.fieldName]: bay.trim() ? bay : null,
+          ...(config.vehicleField ? { vehiclePlate: vehiclePlate || null } : {}),
+          staffProfileId: staffProfileId || null,
+          discountMinor: discountMinor && discountMinor > 0 ? discountMinor : null,
+          payment: { tenderType: 'CASH', tenderedMinor },
+          loyaltyMemberId: loyaltyMemberId || null,
+        },
+        provisional: offlineProvisional,
+      })
+      onOfflineSuccess?.(row, tenderedMinor, changeMinor)
+    } catch (err) {
+      setOfflineError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setOfflineBusy(false)
+    }
+  }
+
   function pay() {
     if (!canPay) return
+    if (offline) {
+      void payOffline()
+      return
+    }
     checkout.mutate(
       {
         idempotencyKey,
@@ -603,7 +702,13 @@ function CashPanel({
         </span>
       </div>
 
-      {checkout.isError ? (
+      {offlineError ? (
+        <p className="mb-3 text-xs text-loss" role="alert">
+          {offlineError}
+        </p>
+      ) : null}
+
+      {!offline && checkout.isError ? (
         <p className="mb-3 text-xs text-loss">
           {(() => {
             const key = errorMessageKey(checkout.error)
@@ -617,7 +722,7 @@ function CashPanel({
       ) : null}
 
       <Button className="w-full" disabled={!canPay} onClick={pay}>
-        {checkout.isPending ? (
+        {checkout.isPending || offlineBusy ? (
           <Spinner />
         ) : (
           t('pos.payment.payAmount', { amount: formatMoney(chargeMinor, currency, locale) })

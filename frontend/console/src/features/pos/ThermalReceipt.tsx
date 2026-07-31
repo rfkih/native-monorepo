@@ -87,6 +87,15 @@ export interface ThermalProps {
   isPending?: boolean
   /** Pending note text (shown when isPending is true). */
   pendingNote?: string
+  /**
+   * Phase 5 (ADR 0028): when true, this receipt was generated CLIENT-SIDE for an offline sale —
+   * the totals are a provisional estimate (provisionalPricing.ts) and the sale itself is still
+   * queued for replay. Renders a solid (not dashed) marker so it stands out on both screen and the
+   * printed thermal paper — a cashier must never mistake this for a server-confirmed receipt.
+   */
+  isProvisional?: boolean
+  /** Provisional marker text (shown when isProvisional is true). */
+  provisionalNote?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -311,6 +320,8 @@ export function ThermalReceipt({
   actionLabel,
   isPending,
   pendingNote,
+  isProvisional,
+  provisionalNote,
 }: ThermalProps) {
   const { t } = useTranslation()
   const headingId = useId()
@@ -378,6 +389,24 @@ export function ThermalReceipt({
                 {t('pos.receipt.ref')} #{reference}
               </div>
             </div>
+
+            {/* ---- PROVISIONAL BANNER (Phase 5 offline mode, ADR 0028) ---- */}
+            {isProvisional && provisionalNote ? (
+              <div
+                style={{
+                  border: '2px solid #000',
+                  padding: '4px 6px',
+                  marginBottom: 8,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  lineHeight: 1.4,
+                  textAlign: 'center',
+                  letterSpacing: '0.03em',
+                }}
+              >
+                {provisionalNote}
+              </div>
+            ) : null}
 
             {/* ---- PENDING BANNER ---- */}
             {isPending && pendingNote ? (

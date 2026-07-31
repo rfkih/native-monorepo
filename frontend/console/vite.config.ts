@@ -1,6 +1,7 @@
 import { defineConfig, type ProxyOptions } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { VitePWA } from 'vite-plugin-pwa'
 import { fileURLToPath, URL } from 'node:url'
 
 // Dev proxy targets. In the documented dev recipe each service runs directly (gradle bootRun) on a
@@ -40,11 +41,34 @@ const proxy: Record<string, ProxyOptions> = GATEWAY
       '/api/v1/sales': { target: RESTAURANT, changeOrigin: true },
       '/api/v1/payments': { target: RESTAURANT, changeOrigin: true },
       '/api/v1/tables': { target: RESTAURANT, changeOrigin: true },
+      // restaurant-service (Phase 5 offline mode, ADR 0028) — cached client-side for offline pricing
+      '/api/v1/pricing': { target: RESTAURANT, changeOrigin: true },
     }
+
+// PWA (Phase 5 offline mode, ADR 0028): precaches the built app shell so the POS UI itself loads
+// offline; API traffic is NEVER cached or served by the service worker — offline sales are queued
+// in IndexedDB (features/pos/offline) and replayed once connectivity returns, so a stale cached API
+// response would be actively wrong, not merely unhelpful. `devOptions.enabled: false` keeps the
+// service worker out of `npm run dev` entirely — it only activates in a production build/preview.
+const pwa = VitePWA({
+  registerType: 'autoUpdate',
+  devOptions: { enabled: false },
+  workbox: {
+    // Navigating to an API path (should never happen, defensive only) must not fall back to the
+    // cached index.html the way a normal SPA route does.
+    navigateFallbackDenylist: [/^\/api\//],
+    runtimeCaching: [
+      {
+        urlPattern: /^\/api\//,
+        handler: 'NetworkOnly',
+      },
+    ],
+  },
+})
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), pwa],
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
