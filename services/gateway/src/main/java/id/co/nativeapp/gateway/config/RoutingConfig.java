@@ -40,12 +40,12 @@ import org.springframework.web.servlet.function.ServerResponse;
  * the bearer token, so an unauthenticated request is already a {@code 401} and never reaches a
  * route.
  *
- * <p>Two routes are deliberately ANONYMOUS (no JWT, so none of the above): the public sign-up
- * route ({@link #signupRoute}) and the public self-order QR route ({@link #selfOrderRoute}, Phase
- * 6, ADR 0029). Each substitutes {@link AnonymousRateLimitFilter} (a per-client-IP bucket, its own
- * Redis namespace) for {@link RateLimitFilter}, carries no {@link RoleAuthorizationFilter}, and
- * cannot use {@link TenantContextHeaderFilter} (it requires a validated JWT and would 401 an
- * anonymous caller) — the self-order route instead carries the strip-only {@link
+ * <p>Two routes are deliberately ANONYMOUS (no JWT, so none of the above): the public sign-up route
+ * ({@link #signupRoute}) and the public self-order QR route ({@link #selfOrderRoute}, Phase 6, ADR
+ * 0029). Each substitutes {@link AnonymousRateLimitFilter} (a per-client-IP bucket, its own Redis
+ * namespace) for {@link RateLimitFilter}, carries no {@link RoleAuthorizationFilter}, and cannot
+ * use {@link TenantContextHeaderFilter} (it requires a validated JWT and would 401 an anonymous
+ * caller) — the self-order route instead carries the strip-only {@link
  * AnonymousTenantHeaderStripFilter} so a caller can never inject a trusted tenant header.
  *
  * <p>Targets come from {@link GatewayRouteProperties} (defaulted for the docker dev stack). The
@@ -106,27 +106,26 @@ public class RoutingConfig {
   // ---------------------------------------------------------------------------
 
   /**
-   * Public self-order QR route — {@code /api/v1/self-order/**} forwarded to restaurant-service
-   * with NO authentication, NO role check, and NO {@link TenantContextHeaderFilter} (Phase 6, ADR
-   * 0029). A diner scans a table's QR code and never logs in, so there is no JWT to validate, no
-   * tenant claim to trust, and no business role to gate on — restaurant-service owns the actual
-   * session logic once the request arrives, keyed by the QR-issued {@code X-Self-Order-Token} it
-   * validates itself (that header rides through this gateway untouched by every filter below).
+   * Public self-order QR route — {@code /api/v1/self-order/**} forwarded to restaurant-service with
+   * NO authentication, NO role check, and NO {@link TenantContextHeaderFilter} (Phase 6, ADR 0029).
+   * A diner scans a table's QR code and never logs in, so there is no JWT to validate, no tenant
+   * claim to trust, and no business role to gate on — restaurant-service owns the actual session
+   * logic once the request arrives, keyed by the QR-issued {@code X-Self-Order-Token} it validates
+   * itself (that header rides through this gateway untouched by every filter below).
    *
    * <p><strong>Throttle.</strong> The tenant {@link RateLimitFilter} keys on the JWT {@code
    * (company_id, sub)} and cannot protect an anonymous endpoint, so this route carries the
-   * dedicated {@link AnonymousRateLimitFilter} instead — a per-client-IP token bucket under
-   * {@code native.gateway.rate-limit.self-order}, in its OWN Redis namespace ({@code
-   * anon:self-order:} — never {@code anon:signup:}) so a busy dining room can neither starve nor
-   * be starved by the tenant-creation throttle. Fail-closed like every other bucket: a Redis
-   * outage denies, never unmeters.
+   * dedicated {@link AnonymousRateLimitFilter} instead — a per-client-IP token bucket under {@code
+   * native.gateway.rate-limit.self-order}, in its OWN Redis namespace ({@code anon:self-order:} —
+   * never {@code anon:signup:}) so a busy dining room can neither starve nor be starved by the
+   * tenant-creation throttle. Fail-closed like every other bucket: a Redis outage denies, never
+   * unmeters.
    *
    * <p><strong>Spoof defence.</strong> {@link TenantContextHeaderFilter} cannot run here (it 401s
    * an unauthenticated caller), so it cannot do its usual header strip either. {@link
    * AnonymousTenantHeaderStripFilter} does the strip half only, unconditionally removing any
-   * client-supplied {@code X-Company-Id}/{@code X-Actor}/{@code X-Roles} before the request
-   * reaches restaurant-service — an anonymous diner can never inject a trusted tenant/actor/role
-   * header.
+   * client-supplied {@code X-Company-Id}/{@code X-Actor}/{@code X-Roles} before the request reaches
+   * restaurant-service — an anonymous diner can never inject a trusted tenant/actor/role header.
    */
   @Bean
   RouterFunction<ServerResponse> selfOrderRoute(

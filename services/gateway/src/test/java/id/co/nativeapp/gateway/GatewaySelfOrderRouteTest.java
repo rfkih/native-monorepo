@@ -13,16 +13,16 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 /**
- * The gateway's one anonymous BUSINESS route: {@code /api/v1/self-order/**} (Phase 6 self-order
- * QR, ADR 0029), proxied to restaurant-service with no bearer token required.
+ * The gateway's one anonymous BUSINESS route: {@code /api/v1/self-order/**} (Phase 6 self-order QR,
+ * ADR 0029), proxied to restaurant-service with no bearer token required.
  *
  * <p>Proves the properties that make an anonymous route safe: it is reachable with no {@code
- * Authorization} header (no {@code 401}); a client cannot spoof a trusted tenant/actor/role
- * header onto the downstream request — {@code AnonymousTenantHeaderStripFilter} strips it, it is
- * not merely absent; and the diner-issued {@code X-Self-Order-Token} — the ONLY identity
+ * Authorization} header (no {@code 401}); a client cannot spoof a trusted tenant/actor/role header
+ * onto the downstream request — {@code AnonymousTenantHeaderStripFilter} strips it, it is not
+ * merely absent; and the diner-issued {@code X-Self-Order-Token} — the ONLY identity
  * restaurant-service trusts on this route — rides through untouched. A final pair of regression
- * tests proves the authenticated routes (bearer requirement + trusted tenant-header injection)
- * are unaffected by wiring this one anonymous exception in.
+ * tests proves the authenticated routes (bearer requirement + trusted tenant-header injection) are
+ * unaffected by wiring this one anonymous exception in.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class GatewaySelfOrderRouteTest extends GatewayIntegrationTestBase {
