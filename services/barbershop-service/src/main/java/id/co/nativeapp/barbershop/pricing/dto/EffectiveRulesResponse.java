@@ -12,8 +12,8 @@ import java.time.LocalDate;
  *
  * <p><strong>No-rule fall-through</strong> (mirrors {@code TaxChargeService}): a rule family with
  * no seeded row resolves to {@code 0} basis points and {@code null} version/provenance. {@code
- * currency} is the resolved tax rule's currency, falling back to the resolved service-charge
- * rule's currency, or {@code null} if neither rule is seeded.
+ * currency} is the resolved tax rule's currency, falling back to the resolved service-charge rule's
+ * currency, or {@code null} if neither rule is seeded.
  *
  * @param currency the resolved rule(s)' ISO-4217 currency, or {@code null} if no rule is seeded
  * @param asOf the resolution date (today, UTC)

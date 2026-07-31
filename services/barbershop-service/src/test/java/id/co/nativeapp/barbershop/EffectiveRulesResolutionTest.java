@@ -27,9 +27,9 @@ import org.springframework.boot.test.context.SpringBootTest;
  * distinct from that class's {@code 77777777-...} range).
  *
  * <p>{@link TaxChargeService#resolveEffectiveRules} is itself {@code @Transactional(readOnly =
- * true)} (unlike {@link TaxChargeService#resolve}, which relies on the caller's transaction), so
- * it is invoked directly through {@link TenantContext#callAs} with no test-only transactional
- * wrapper needed.
+ * true)} (unlike {@link TaxChargeService#resolve}, which relies on the caller's transaction), so it
+ * is invoked directly through {@link TenantContext#callAs} with no test-only transactional wrapper
+ * needed.
  */
 @SpringBootTest
 class EffectiveRulesResolutionTest extends PostgresRlsTestBase {

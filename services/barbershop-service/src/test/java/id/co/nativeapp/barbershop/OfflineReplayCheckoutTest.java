@@ -74,8 +74,7 @@ class OfflineReplayCheckoutTest extends KafkaPostgresRedisTestBase {
             null,
             tooOld);
 
-    assertThatThrownBy(() -> checkoutAs(request))
-        .isInstanceOf(OfflineReplayInvalidException.class);
+    assertThatThrownBy(() -> checkoutAs(request)).isInstanceOf(OfflineReplayInvalidException.class);
   }
 
   @Test
@@ -95,8 +94,7 @@ class OfflineReplayCheckoutTest extends KafkaPostgresRedisTestBase {
             null,
             tooFuture);
 
-    assertThatThrownBy(() -> checkoutAs(request))
-        .isInstanceOf(OfflineReplayInvalidException.class);
+    assertThatThrownBy(() -> checkoutAs(request)).isInstanceOf(OfflineReplayInvalidException.class);
   }
 
   @Test
@@ -147,8 +145,7 @@ class OfflineReplayCheckoutTest extends KafkaPostgresRedisTestBase {
             null, // offlineReplay = null
             Instant.now()); // clientOccurredAt present without offlineReplay = true -> 422
 
-    assertThatThrownBy(() -> checkoutAs(request))
-        .isInstanceOf(OfflineReplayInvalidException.class);
+    assertThatThrownBy(() -> checkoutAs(request)).isInstanceOf(OfflineReplayInvalidException.class);
   }
 
   // -----------------------------------------------------------------------
@@ -177,8 +174,7 @@ class OfflineReplayCheckoutTest extends KafkaPostgresRedisTestBase {
             true,
             null);
 
-    assertThatThrownBy(() -> checkoutAs(request))
-        .isInstanceOf(OfflineReplayInvalidException.class);
+    assertThatThrownBy(() -> checkoutAs(request)).isInstanceOf(OfflineReplayInvalidException.class);
   }
 
   @Test
@@ -197,8 +193,7 @@ class OfflineReplayCheckoutTest extends KafkaPostgresRedisTestBase {
             null,
             null);
 
-    assertThatThrownBy(() -> checkoutAs(request))
-        .isInstanceOf(OfflineReplayInvalidException.class);
+    assertThatThrownBy(() -> checkoutAs(request)).isInstanceOf(OfflineReplayInvalidException.class);
   }
 
   @Test
@@ -223,8 +218,7 @@ class OfflineReplayCheckoutTest extends KafkaPostgresRedisTestBase {
             true,
             null);
 
-    assertThatThrownBy(() -> checkoutAs(request))
-        .isInstanceOf(OfflineReplayInvalidException.class);
+    assertThatThrownBy(() -> checkoutAs(request)).isInstanceOf(OfflineReplayInvalidException.class);
   }
 
   @Test
@@ -261,8 +255,7 @@ class OfflineReplayCheckoutTest extends KafkaPostgresRedisTestBase {
             request.offlineReplay(),
             request.clientOccurredAt());
 
-    assertThatThrownBy(() -> checkoutAs(request))
-        .isInstanceOf(OfflineReplayInvalidException.class);
+    assertThatThrownBy(() -> checkoutAs(request)).isInstanceOf(OfflineReplayInvalidException.class);
     assertThatThrownBy(() -> checkoutAs(withAmount))
         .isInstanceOf(OfflineReplayInvalidException.class);
   }
@@ -388,8 +381,7 @@ class OfflineReplayCheckoutTest extends KafkaPostgresRedisTestBase {
 
   private long outboxRowCount(String eventType) {
     List<Map<String, Object>> rows =
-        jdbcTemplate.queryForList(
-            "SELECT event_type FROM outbox WHERE event_type = ?", eventType);
+        jdbcTemplate.queryForList("SELECT event_type FROM outbox WHERE event_type = ?", eventType);
     return rows.size();
   }
 }

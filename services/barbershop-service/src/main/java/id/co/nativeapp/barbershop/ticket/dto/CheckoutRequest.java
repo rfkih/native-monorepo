@@ -54,8 +54,8 @@ import java.util.UUID;
  *     ({@code 422} otherwise); must fall within {@code [now - 48h, now + 5m]} ({@code 422} outside
  *     that window); {@code null} falls back to {@code now()}. A valid value becomes the ticket's
  *     {@code occurredAt} — driving the resolved pricing/tax rule's effective date and the emitted
- *     {@code SaleRecorded}'s {@code occurred_at} — so the sale posts into the GL period matching the
- *     day it actually happened, not the day it was replayed.
+ *     {@code SaleRecorded}'s {@code occurred_at} — so the sale posts into the GL period matching
+ *     the day it actually happened, not the day it was replayed.
  */
 public record CheckoutRequest(
     @NotNull UUID businessId,
