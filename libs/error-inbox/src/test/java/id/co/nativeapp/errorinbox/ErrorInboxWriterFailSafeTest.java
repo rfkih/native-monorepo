@@ -44,4 +44,32 @@ class ErrorInboxWriterFailSafeTest {
     assertThat(r.redactedMessage()).contains("***@***").doesNotContain("3201234567890123");
     assertThat(r.fingerprint()).isNotBlank();
   }
+
+  @Test
+  void recordInCurrentTxUpsertsDirectlyWithoutTheRequiresNewTemplate() {
+    doReturn(3L)
+        .when(jdbc)
+        .queryForObject(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq(Long.class), any(Object[].class));
+    ErrorInboxWriter.Recorded r =
+        writer.recordInCurrentTx(
+            new IllegalStateException("oversold stock for user@x.com"),
+            "restaurant.stock.offline-discrepancy",
+            "company-1",
+            null);
+    assertThat(r.occurrenceCount()).isEqualTo(3L);
+    assertThat(r.redactedMessage()).contains("***@***");
+    // The caller's transaction is joined — the REQUIRES_NEW template must never be touched.
+    org.mockito.Mockito.verifyNoInteractions(tx);
+  }
+
+  @Test
+  void recordInCurrentTxSwallowsAFailedUpsertAndReturnsTheFailedSentinel() {
+    doThrow(new RuntimeException("db unreachable"))
+        .when(jdbc)
+        .queryForObject(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq(Long.class), any(Object[].class));
+    ErrorInboxWriter.Recorded r =
+        writer.recordInCurrentTx(new IllegalStateException("boom"), "src", null, null);
+    assertThat(r.occurrenceCount()).isZero();
+    assertThat(r.fingerprint()).isNull();
+  }
 }

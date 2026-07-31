@@ -116,8 +116,18 @@ public class ErrorInboxWriter {
       Timestamp now = Timestamp.from(Instant.now(clock));
       Long count =
           inNewTransaction
-              ? requiresNew.execute(status -> upsert(fingerprint, exceptionClass, redactedMessage, source, companyId, traceId, now))
-              : upsert(fingerprint, exceptionClass, redactedMessage, source, companyId, traceId, now);
+              ? requiresNew.execute(
+                  status ->
+                      upsert(
+                          fingerprint,
+                          exceptionClass,
+                          redactedMessage,
+                          source,
+                          companyId,
+                          traceId,
+                          now))
+              : upsert(
+                  fingerprint, exceptionClass, redactedMessage, source, companyId, traceId, now);
 
       return new Recorded(count != null ? count : 0L, fingerprint, redactedMessage);
     } catch (Exception e) {
