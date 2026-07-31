@@ -25,6 +25,17 @@ public interface LedgerPostingRepository extends JpaRepository<LedgerPosting, UU
   Optional<LedgerPosting> findBySourceEventId(UUID sourceEventId);
 
   /**
+   * Whether the bound tenant has FILED a tax return for {@code period} — the sealed-period probe
+   * behind the ADR 0028 quarantine. A SQL table reference to {@code tax_filing} (NOT a Java
+   * dependency on the {@code tax} feature — the e-Faktur precedent); RLS constrains the row set to
+   * the bound company. Scalar EXISTS, not a projection.
+   */
+  @org.springframework.data.jpa.repository.Query(
+      value = "SELECT EXISTS(SELECT 1 FROM tax_filing WHERE period = :period)",
+      nativeQuery = true)
+  boolean sealedPeriodExists(@org.springframework.data.repository.query.Param("period") String period);
+
+  /**
    * The PRIMARY postings of a payroll run (within the bound tenant), used to REVERSE a superseded
    * prior run — finance posts one contra entry per prior PRIMARY posting (#23). REVERSAL rows are
    * excluded so a re-run never reverses an already-contra row.

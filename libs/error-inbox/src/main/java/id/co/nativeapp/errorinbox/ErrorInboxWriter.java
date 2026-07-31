@@ -86,6 +86,23 @@ public class ErrorInboxWriter {
    *     egress path can use it — the raw message must NEVER leave this service (HR-6 / ADR 0005).
    */
   public Recorded record(Throwable ex, String source, String companyId, String traceId) {
+    return doRecord(ex, source, companyId, traceId, true);
+  }
+
+  /**
+   * Like {@link #record}, but the upsert joins the CALLER'S transaction instead of committing in
+   * {@code REQUIRES_NEW}. Use when the record documents a side effect of the surrounding business
+   * transaction (e.g. an offline-replay stock discrepancy, ADR 0028) — if that transaction rolls
+   * back, the side effect never happened and a surviving record would be a phantom alert. For
+   * failure paths (DLT consumers) keep {@link #record}: there the enclosing transaction is the
+   * thing that FAILED, and the record must survive its rollback.
+   */
+  public Recorded recordInCurrentTx(Throwable ex, String source, String companyId, String traceId) {
+    return doRecord(ex, source, companyId, traceId, false);
+  }
+
+  private Recorded doRecord(
+      Throwable ex, String source, String companyId, String traceId, boolean inNewTransaction) {
     try {
       Throwable cause = NestedExceptionUtils.getMostSpecificCause(ex);
       String exceptionClass = cause.getClass().getName();
@@ -98,20 +115,9 @@ public class ErrorInboxWriter {
       // Timestamp is the canonical JDBC mapping for TIMESTAMPTZ / TIMESTAMP columns.
       Timestamp now = Timestamp.from(Instant.now(clock));
       Long count =
-          requiresNew.execute(
-              status ->
-                  jdbc.queryForObject(
-                      UPSERT_SQL,
-                      Long.class,
-                      UUID.randomUUID(),
-                      fingerprint,
-                      exceptionClass,
-                      redactedMessage,
-                      source,
-                      companyId,
-                      traceId,
-                      now,
-                      now));
+          inNewTransaction
+              ? requiresNew.execute(status -> upsert(fingerprint, exceptionClass, redactedMessage, source, companyId, traceId, now))
+              : upsert(fingerprint, exceptionClass, redactedMessage, source, companyId, traceId, now);
 
       return new Recorded(count != null ? count : 0L, fingerprint, redactedMessage);
     } catch (Exception e) {
@@ -122,6 +128,28 @@ public class ErrorInboxWriter {
           e);
       return Recorded.failed();
     }
+  }
+
+  private Long upsert(
+      String fingerprint,
+      String exceptionClass,
+      String redactedMessage,
+      String source,
+      String companyId,
+      String traceId,
+      Timestamp now) {
+    return jdbc.queryForObject(
+        UPSERT_SQL,
+        Long.class,
+        UUID.randomUUID(),
+        fingerprint,
+        exceptionClass,
+        redactedMessage,
+        source,
+        companyId,
+        traceId,
+        now,
+        now);
   }
 
   /**

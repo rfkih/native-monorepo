@@ -9,7 +9,7 @@
  * module never tries to reason about duplicates itself, it only maps HTTP outcomes to queue states).
  */
 import { apiFetch, ApiError } from '@/lib/api'
-import { listQueue, updateQueueRow } from './queue'
+import { getQueueRow, listQueue, updateQueueRow } from './queue'
 import type { SaleQueueRow } from './db'
 
 const LOCK_NAME = 'native-pos-replay'
@@ -72,9 +72,14 @@ async function drainQueue(): Promise<void> {
   const rows = await listQueue()
   const queued = rows.filter((row) => row.status === 'QUEUED')
   for (const row of queued) {
-    // Re-read status immediately before each replay — a concurrent caller (should be impossible
-    // under the lock, but defensive against the no-locks fallback path) may have already moved it.
-    await replayOne(row)
+    // Re-read the row immediately before each replay — a concurrent caller (should be impossible
+    // under the lock, but defensive against the no-locks fallback path, and against a manual
+    // "retry now" racing the auto-sync between the listQueue() snapshot above and the lock
+    // acquisition) may have already moved it off QUEUED. Replaying the stale snapshot value would
+    // double-send; skip anything no longer QUEUED by the time we get to it.
+    const fresh = await getQueueRow(row.idempotencyKey)
+    if (!fresh || fresh.status !== 'QUEUED') continue
+    await replayOne(fresh)
   }
 }
 

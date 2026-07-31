@@ -316,6 +316,17 @@ public class OrderWriter {
 
       response = OrderResponse.from(saved, cart.breakdown());
       if (request.payment() != null) {
+        // Offline replay (ADR 0028): the cashier tendered against the PROVISIONAL total. If the
+        // server reprice moved the due amount UP inside the offline window, the cash is already
+        // in the drawer — record the sale at the server total instead of rejecting it (the cash
+        // provider would throw on tendered < due). The delta stays visible: the device's sync
+        // center compares provisional vs server totals and reports SYNCED_WITH_MISMATCH.
+        Long tenderedMinor = request.payment().tenderedMinor();
+        if (Boolean.TRUE.equals(request.offlineReplay())
+            && tenderedMinor != null
+            && tenderedMinor < residual.residualMinor()) {
+          tenderedMinor = residual.residualMinor();
+        }
         PaymentResponse paymentResponse =
             residual.giftCardFullyCovers()
                 ? paymentWriter.captureZeroResidualInCurrentTx(
@@ -331,7 +342,7 @@ public class OrderWriter {
                         request.businessId(),
                         request.payment().tenderType(),
                         Money.ofMinor(residual.residualMinor(), cart.currencyCode()),
-                        request.payment().tenderedMinor(),
+                        tenderedMinor,
                         request.idempotencyKey() + ":pay"),
                     saleResult.sale().id(),
                     now);

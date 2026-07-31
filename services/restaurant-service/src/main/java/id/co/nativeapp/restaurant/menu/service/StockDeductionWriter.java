@@ -171,10 +171,12 @@ public class StockDeductionWriter {
   }
 
   /**
-   * Records an offline-replay stock discrepancy to the error-log inbox (ADR 0005/0009). {@link
-   * ErrorInboxWriter#record} itself upserts in a {@code REQUIRES_NEW} transaction (so the record
-   * commits independently of the caller's in-flight checkout) and swallows any failure of its own —
-   * ops infrastructure must never break the checkout it is observing.
+   * Records an offline-replay stock discrepancy to the error-log inbox (ADR 0005/0009) IN THE
+   * CALLER'S TRANSACTION ({@link ErrorInboxWriter#recordInCurrentTx}): the discrepancy documents
+   * this checkout's own stock side effect, so if the checkout rolls back after the deduction (a
+   * later payment/sale failure) the record must roll back with it — a surviving row would be a
+   * phantom "oversold" alert for a sale that never happened (review W-2). The writer still
+   * swallows its own failures — ops infrastructure must never break the checkout it observes.
    */
   private void recordDiscrepancy(
       UUID orderId, UUID menuItemId, String itemName, int requested, int available) {
@@ -192,7 +194,7 @@ public class StockDeductionWriter {
             + " availableAtCartBuild="
             + available
             + " — stock allowed negative; repair by physical count.";
-    errorInboxWriter.record(
+    errorInboxWriter.recordInCurrentTx(
         new IllegalStateException(message), OFFLINE_DISCREPANCY_SOURCE, companyId, traceId);
   }
 }

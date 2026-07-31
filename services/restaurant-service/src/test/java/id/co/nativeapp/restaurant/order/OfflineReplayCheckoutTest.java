@@ -22,6 +22,8 @@ import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.YearMonth;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
@@ -88,12 +90,19 @@ class OfflineReplayCheckoutTest extends PostgresRlsTestBase {
   }
 
   @Test
-  void clientOccurredAt47hInThePastIsAcceptedAndPersistedAsTheOccurredAt() throws Exception {
+  void clientOccurredAtNear47hInThePastIsAcceptedAndPersistedAsTheOccurredAt() throws Exception {
     UUID itemId = createMenuItem("Soto Betawi", 20_000L);
-    // Millisecond precision only, so the round trip through TIMESTAMPTZ (microsecond precision)
-    // and the SaleRecorded Avro timestamp-millis field are both exact.
+    // Clamp-aware (ADR 0028 security review): the raw now-47h can itself fall before the start of
+    // the current UTC month during the first ~47h of a month, which the guard's month clamp would
+    // then reject — so the accepted instant is the LATER of now-47h and just-inside the month
+    // start, mirroring the guard's own earliestAllowed = max(now-48h, startOfMonth) computation.
+    // Accepted deterministically year-round, unlike a bare "now-47h".
+    // Truncated to micros: Postgres TIMESTAMPTZ stores microseconds, and the underlying clock can
+    // carry sub-micro precision — an untruncated instant would fail the round-trip equality below.
+    Instant now = Instant.now();
     Instant clientOccurredAt =
-        Instant.now().truncatedTo(ChronoUnit.MILLIS).minus(Duration.ofHours(47));
+        max(now.minus(Duration.ofHours(47)), startOfCurrentMonthUtc().plus(Duration.ofSeconds(1)))
+            .truncatedTo(ChronoUnit.MICROS);
     CheckoutRequest req = offlineCheckout("offline-accepted-001", itemId, clientOccurredAt);
 
     CheckoutResult result =
@@ -109,6 +118,22 @@ class OfflineReplayCheckoutTest extends PostgresRlsTestBase {
     // The SaleRecorded outbox payload carries the SAME instant (drives the GL period).
     GenericRecord decoded = decodeSoleSaleRecorded();
     assertThat(decoded.get("occurred_at")).isEqualTo(clientOccurredAt.toEpochMilli());
+  }
+
+  @Test
+  void clientOccurredAtBeforeTheStartOfTheCurrentMonthIsRejectedEvenWithin48h() throws Exception {
+    UUID itemId = createMenuItem("Nasi Uduk", 15_000L);
+    // Always outside the accepted window regardless of today's date-of-month: caught by the 48h
+    // bound early in the month, or by the month clamp later in the month — deterministic year-round
+    // (ADR 0028 security review: a replay must never cross a month boundary into a possibly-FILED
+    // prior period).
+    Instant beforeCurrentMonth = startOfCurrentMonthUtc().minus(Duration.ofHours(1));
+    CheckoutRequest req = offlineCheckout("offline-month-clamp-001", itemId, beforeCurrentMonth);
+
+    assertThatThrownBy(() -> TenantContext.callAs(TENANT, ACTOR, () -> orderService.checkout(req)))
+        .isInstanceOf(OfflineReplayValidationException.class);
+
+    assertThat(rowCountAsAdmin("restaurant_order")).isZero();
   }
 
   // ---------------------------------------------------------------------------
@@ -290,8 +315,72 @@ class OfflineReplayCheckoutTest extends PostgresRlsTestBase {
   }
 
   // ---------------------------------------------------------------------------
+  // Upward reprice: under-tendered CASH is coerced up to the due amount (offline only)
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void offlineReplayCoercesUnderTenderedCashUpToTheDueAmount() throws Exception {
+    UUID itemId = createMenuItem("Es Teh Manis", 20_000L);
+    CheckoutRequest req =
+        new CheckoutRequest(
+            BUSINESS_ID,
+            "offline-undertender-001",
+            List.of(new OrderLineRequest(itemId, 1)),
+            new PaymentRequest(TenderType.CASH, 19_900L), // due 20,000 (no tax/SC seeded) − 100
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            true,
+            Instant.now().minus(Duration.ofHours(1)));
+
+    CheckoutResult result = TenantContext.callAs(TENANT, ACTOR, () -> orderService.checkout(req));
+
+    assertThat(result.created()).isTrue();
+    assertThat(result.order().totalMinor()).isEqualTo(20_000L);
+    assertThat(result.order().payment().tenderedMinor())
+        .as("the server coerces the under-tendered offline CASH up to the due amount, not the"
+            + " client's 19,900")
+        .isEqualTo(20_000L);
+    assertThat(result.order().payment().changeMinor()).isZero();
+  }
+
+  @Test
+  void onlineUnderTenderedCashWithoutOfflineReplayIsRejected() throws Exception {
+    UUID itemId = createMenuItem("Es Jeruk", 20_000L);
+    CheckoutRequest req =
+        new CheckoutRequest(
+            BUSINESS_ID,
+            "online-undertender-001",
+            List.of(new OrderLineRequest(itemId, 1)),
+            new PaymentRequest(TenderType.CASH, 19_900L)); // 100 short of the 20,000 due; no replay
+
+    assertThatThrownBy(() -> TenantContext.callAs(TENANT, ACTOR, () -> orderService.checkout(req)))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("less than the amount due");
+
+    assertThat(rowCountAsAdmin("restaurant_order")).isZero();
+  }
+
+  // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
+
+  private static Instant max(Instant a, Instant b) {
+    return a.isAfter(b) ? a : b;
+  }
+
+  /** Mirrors {@code OfflineReplayGuard}'s own month-clamp computation. */
+  private static Instant startOfCurrentMonthUtc() {
+    return YearMonth.from(Instant.now().atZone(ZoneOffset.UTC))
+        .atDay(1)
+        .atStartOfDay(ZoneOffset.UTC)
+        .toInstant();
+  }
 
   private UUID createMenuItem(String name, long priceMinor) throws Exception {
     return TenantContext.callAs(

@@ -21,6 +21,8 @@ import id.co.nativeapp.barbershop.ticket.service.TicketService;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.YearMonth;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -98,14 +100,21 @@ class OfflineReplayCheckoutTest extends KafkaPostgresRedisTestBase {
   }
 
   @Test
-  void clientOccurredAt47HoursInThePastIsAcceptedAndPersistedAsOccurredAt() throws Exception {
+  void clientOccurredAtNear47HoursInThePastIsAcceptedAndPersistedAsOccurredAt() throws Exception {
     grantBarbershop(TENANT);
     CatalogItemResponse service = createService();
     StaffProfileResponse barber = createStaffProfile();
+    // Clamp-aware (ADR 0028 security review): the raw now-47h can itself fall before the start of
+    // the current UTC month during the first ~47h of a month, which the guard's month clamp would
+    // then reject — so the accepted instant is the LATER of now-47h and just-inside the month
+    // start, mirroring the guard's own earliestAllowed = max(now-48h, startOfMonth) computation.
+    // Accepted deterministically year-round, unlike a bare "now-47h".
     // Truncated to micros: Postgres TIMESTAMPTZ stores microseconds, and Windows Instant.now()
     // carries sub-micro precision — an untruncated instant would fail the round-trip equality.
-    Instant fortySevenHoursAgo =
-        Instant.now().minus(Duration.ofHours(47)).truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+    Instant now = Instant.now();
+    Instant nearFortySevenHoursAgo =
+        max(now.minus(Duration.ofHours(47)), startOfCurrentMonthUtc().plus(Duration.ofSeconds(1)))
+            .truncatedTo(java.time.temporal.ChronoUnit.MICROS);
     CheckoutRequest request =
         offlineRequest(
             service.id(),
@@ -115,12 +124,37 @@ class OfflineReplayCheckoutTest extends KafkaPostgresRedisTestBase {
             null,
             null,
             null,
-            fortySevenHoursAgo);
+            nearFortySevenHoursAgo);
 
     CheckoutResult result = checkoutAs(request);
 
     assertThat(result.created()).isTrue();
-    assertThat(result.ticket().occurredAt()).isEqualTo(fortySevenHoursAgo);
+    assertThat(result.ticket().occurredAt()).isEqualTo(nearFortySevenHoursAgo);
+  }
+
+  @Test
+  void clientOccurredAtBeforeTheStartOfTheCurrentMonthIsRejectedEvenWithin48Hours()
+      throws Exception {
+    grantBarbershop(TENANT);
+    CatalogItemResponse service = createService();
+    StaffProfileResponse barber = createStaffProfile();
+    // Always outside the accepted window regardless of today's date-of-month: caught by the 48h
+    // bound early in the month, or by the month clamp later in the month — deterministic year-round
+    // (ADR 0028 security review: a replay must never cross a month boundary into a possibly-FILED
+    // prior period).
+    Instant beforeCurrentMonth = startOfCurrentMonthUtc().minus(Duration.ofHours(1));
+    CheckoutRequest request =
+        offlineRequest(
+            service.id(),
+            barber.id(),
+            "offline-month-clamp",
+            TenderType.CASH,
+            null,
+            null,
+            null,
+            beforeCurrentMonth);
+
+    assertThatThrownBy(() -> checkoutAs(request)).isInstanceOf(OfflineReplayInvalidException.class);
   }
 
   @Test
@@ -290,6 +324,65 @@ class OfflineReplayCheckoutTest extends KafkaPostgresRedisTestBase {
   }
 
   // -----------------------------------------------------------------------
+  // Upward reprice: under-tendered CASH is coerced up to the due amount (offline only)
+  // -----------------------------------------------------------------------
+
+  @Test
+  void offlineReplayCoercesUnderTenderedCashUpToTheDueAmount() throws Exception {
+    grantBarbershop(TENANT);
+    CatalogItemResponse service = createService();
+    StaffProfileResponse barber = createStaffProfile();
+    // Due = subtotal 5,000,000 + 11% VAT_BARBERSHOP (illustrative, V1 seed for this tenant)
+    // 550,000 = 5,550,000.
+    CheckoutRequest request =
+        new CheckoutRequest(
+            OUTLET,
+            "offline-undertender-001",
+            "chair-1",
+            barber.id(),
+            null,
+            List.of(new TicketLineInput(ItemType.SERVICE, service.id(), 1)),
+            new PaymentRequest(TenderType.CASH, 5_549_900L), // due 5,550,000 − 100
+            null,
+            null,
+            null,
+            null,
+            null,
+            true,
+            Instant.now().minus(Duration.ofHours(1)));
+
+    CheckoutResult result = checkoutAs(request);
+
+    assertThat(result.created()).isTrue();
+    assertThat(result.ticket().breakdown().grandTotalMinor()).isEqualTo(5_550_000L);
+    assertThat(result.ticket().payment().tenderedMinor())
+        .as("the server coerces the under-tendered offline CASH up to the due amount, not the"
+            + " client's 5,549,900")
+        .isEqualTo(5_550_000L);
+    assertThat(result.ticket().payment().changeMinor()).isZero();
+  }
+
+  @Test
+  void onlineUnderTenderedCashWithoutOfflineReplayIsRejected() throws Exception {
+    grantBarbershop(TENANT);
+    CatalogItemResponse service = createService();
+    StaffProfileResponse barber = createStaffProfile();
+    CheckoutRequest request =
+        new CheckoutRequest(
+            OUTLET,
+            "online-undertender-001",
+            "chair-1",
+            barber.id(),
+            null,
+            List.of(new TicketLineInput(ItemType.SERVICE, service.id(), 1)),
+            new PaymentRequest(TenderType.CASH, 5_549_900L)); // 100 short; no offlineReplay
+
+    assertThatThrownBy(() -> checkoutAs(request))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("less than the amount due");
+  }
+
+  // -----------------------------------------------------------------------
   // Idempotent replay regression
   // -----------------------------------------------------------------------
 
@@ -377,6 +470,18 @@ class OfflineReplayCheckoutTest extends KafkaPostgresRedisTestBase {
   private void grantBarbershop(String companyId) {
     entitlementProjectionService.apply(
         new EntitlementProjectedEvent(UUID.randomUUID(), companyId, "barbershop", true));
+  }
+
+  private static Instant max(Instant a, Instant b) {
+    return a.isAfter(b) ? a : b;
+  }
+
+  /** Mirrors {@code OfflineReplayGuard}'s own month-clamp computation. */
+  private static Instant startOfCurrentMonthUtc() {
+    return YearMonth.from(Instant.now().atZone(ZoneOffset.UTC))
+        .atDay(1)
+        .atStartOfDay(ZoneOffset.UTC)
+        .toInstant();
   }
 
   private long outboxRowCount(String eventType) {

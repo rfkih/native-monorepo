@@ -303,17 +303,27 @@ public class TicketWriter {
       payment =
           CarwashPayment.capturedCash(savedTicket.getId(), request.businessId(), zero, zero, zero);
     } else {
+      // Offline replay (ADR 0028): the cashier tendered against the PROVISIONAL total. If the
+      // server reprice moved the due amount UP inside the offline window, the cash is already in
+      // the drawer — record the sale at the server total instead of rejecting it. The delta stays
+      // visible: the device's sync center reports SYNCED_WITH_MISMATCH with both totals.
+      Long tenderedMinor = request.payment().tenderedMinor();
+      if (Boolean.TRUE.equals(request.offlineReplay())
+          && tenderedMinor != null
+          && tenderedMinor < residualMinor) {
+        tenderedMinor = residualMinor;
+      }
       PaymentInstruction instruction =
           new PaymentInstruction(
               savedTicket.getId(),
               tenderType,
               Money.ofMinor(residualMinor, cart.currencyCode()),
-              request.payment().tenderedMinor(),
+              tenderedMinor,
               request.idempotencyKey());
       TenderAuthorization auth =
           paymentProviderRegistry.providerFor(tenderType).authorize(instruction);
       if (!tenderType.isDigital()) {
-        Money tendered = Money.ofMinor(request.payment().tenderedMinor(), cart.currencyCode());
+        Money tendered = Money.ofMinor(tenderedMinor, cart.currencyCode());
         payment =
             CarwashPayment.capturedCash(
                 savedTicket.getId(),

@@ -32,10 +32,21 @@ while the server is unreachable.
    carrying a non-cash tender, coupon, redemption, or gift card is rejected 422.
 3. **Two request fields, strictly bounded.** Checkout DTOs (all three verticals) gain
    `offlineReplay: Boolean` and `clientOccurredAt: Instant`. `clientOccurredAt` is accepted ONLY
-   with `offlineReplay=true`, bounded ≤48h in the past and ≤5min in the future, and becomes the
-   sale's `occurred_at` — the GL period reflects the day the sale happened, not the day it synced.
-   Beyond the bounds the replay is rejected (422) and stays visible in the device's sync center
-   for manual review; money is never silently re-dated.
+   with `offlineReplay=true`, bounded ≤48h in the past and ≤5min in the future, **and clamped to
+   the start of the current UTC month** — the GL/tax period is month-grained and the prior month
+   may already be FILED (the VAT return seals it, ADR 0017), so a replay must never cross a month
+   boundary (security review). The accepted instant becomes the sale's `occurred_at` — the GL
+   period reflects the day the sale happened, not the day it synced. Beyond the bounds the replay
+   is rejected (422) and stays visible in the device's sync center for manual review; money is
+   never silently re-dated.
+   **Defense in depth (the one finance change this ADR originally avoided):** finance's
+   `SaleRecorded` consumer independently QUARANTINES any event whose period already has a filed
+   tax return — nothing is posted, the event is recorded to the error inbox for manual accountant
+   action, and redelivery cannot retry it into the sealed books. The producer clamp makes this
+   unreachable for honest clients; the consumer guard makes it unreachable for dishonest ones.
+   **Upward reprice on replay:** the cashier tendered against the provisional total; if the
+   server's reprice is HIGHER, the sale is recorded at the server total (the cash is already in
+   the drawer) rather than rejected — the delta is visible in the sync center's mismatch report.
 4. **Provisional client pricing, authoritative server repricing.** The device prices offline sales
    from a TTL-cached catalog plus a new lightweight per-vertical
    `GET …/pricing/effective-rules` snapshot (tax/service-charge basis points + provenance),
@@ -56,8 +67,11 @@ while the server is unreachable.
 ## Consequences
 
 - Connectivity loss no longer stops cash sales; the queue survives restarts and replays without
-  double-posting, and every anomaly (price mismatch, oversell, out-of-bounds date, rejection) is
-  visible rather than silently absorbed.
+  double-posting, and every anomaly (price mismatch, oversell, out-of-bounds date, rejection,
+  sealed-period quarantine) is visible rather than silently absorbed.
+- A sale made offline on the last day of a month and synced after midnight UTC is REJECTED by the
+  month clamp and must be re-entered manually (visible in the sync center). Accepted: rarer and
+  safer than allowing any path into a possibly-filed period.
 - Provisional receipts can differ from the authoritative repriced total (rule changes inside the
   offline window). Accepted: labeled on receipt, reported end-of-day.
 - A lost/wiped device before sync loses unrecorded cash sales. Mitigated (persistent storage,

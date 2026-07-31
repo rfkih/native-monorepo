@@ -1,5 +1,6 @@
 package id.co.nativeapp.finance.revenue.service;
 
+import id.co.nativeapp.errorinbox.ErrorInboxWriter;
 import id.co.nativeapp.events.ProcessedEventStore;
 import id.co.nativeapp.finance.gl.domain.AccountRole;
 import id.co.nativeapp.finance.gl.domain.EventKind;
@@ -101,6 +102,10 @@ public class RevenuePostingWriter {
   private final JournalPostingService journalPostingService;
   private final JournalEntryRepository journalEntryRepository;
   private final JournalLineRepository journalLineRepository;
+  private final ErrorInboxWriter errorInbox;
+
+  private static final org.slf4j.Logger log =
+      org.slf4j.LoggerFactory.getLogger(RevenuePostingWriter.class);
 
   @SuppressWarnings("checkstyle:ParameterNumber")
   public RevenuePostingWriter(
@@ -111,7 +116,8 @@ public class RevenuePostingWriter {
       PnlReadModelWriter pnlReadModel,
       JournalPostingService journalPostingService,
       JournalEntryRepository journalEntryRepository,
-      JournalLineRepository journalLineRepository) {
+      JournalLineRepository journalLineRepository,
+      ErrorInboxWriter errorInbox) {
     this.ledgerRepository = ledgerRepository;
     this.processedEvents = processedEvents;
     this.jdbcTemplate = jdbcTemplate;
@@ -120,6 +126,7 @@ public class RevenuePostingWriter {
     this.journalPostingService = journalPostingService;
     this.journalEntryRepository = journalEntryRepository;
     this.journalLineRepository = journalLineRepository;
+    this.errorInbox = errorInbox;
   }
 
   /**
@@ -148,6 +155,33 @@ public class RevenuePostingWriter {
     TenantContext.Tenant tenant = TenantContext.require();
     String companyId = tenant.companyId();
     String actor = tenant.actor();
+
+    // SEALED-PERIOD QUARANTINE (ADR 0028 security review). Offline replay made occurred_at
+    // client-influenced (bounded to 48h AND the current month at the producer), so a misdated or
+    // malicious SaleRecorded could still target a period whose VAT return is already FILED
+    // (tax_filing seals it — ADR 0017; re-file is an idempotent no-op, so late output VAT would
+    // never be remitted). Defense in depth behind the producer clamp: post NOTHING and record the
+    // event to the error inbox for manual accountant action. The event is still marked processed
+    // (processOnce wraps this handler), so redelivery cannot retry it into the sealed books.
+    if (ledgerRepository.sealedPeriodExists(period)) {
+      log.warn(
+          "SaleRecorded {} targets sealed period {} — quarantined, not posted",
+          event.eventId(),
+          period);
+      errorInbox.record(
+          new IllegalStateException(
+              "SaleRecorded "
+                  + event.eventId()
+                  + " occurred_at "
+                  + event.occurredAt()
+                  + " targets sealed period "
+                  + period
+                  + " — quarantined for manual posting"),
+          "finance.revenue.sealed-period-quarantine",
+          companyId,
+          null);
+      return;
+    }
 
     // 0) GUARD the single-base-currency invariant (#26): a sale whose currency diverges from the
     //    period's already-established currency violates the company's immutable base currency (a

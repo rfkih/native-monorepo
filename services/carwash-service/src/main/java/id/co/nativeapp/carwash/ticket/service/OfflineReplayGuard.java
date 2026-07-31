@@ -63,15 +63,25 @@ public class OfflineReplayGuard {
     }
 
     if (clientOccurredAt != null) {
-      Instant earliestAllowed = now.minus(MAX_PAST);
+      // The 48h window is ADDITIONALLY clamped to the start of the current UTC month: the GL/tax
+      // period is month-grained and the prior month may already be FILED (the VAT return seals it,
+      // ADR 0017) — a replay must never be able to post into a sealed period (security review of
+      // ADR 0028). A cross-month replay is rejected and stays visible in the device's sync center
+      // for manual entry, mirroring the amortization "no backdating into sealed run months" guard.
+      Instant startOfCurrentMonthUtc =
+          java.time.YearMonth.from(now.atZone(java.time.ZoneOffset.UTC))
+              .atDay(1)
+              .atStartOfDay(java.time.ZoneOffset.UTC)
+              .toInstant();
+      Instant earliestAllowed = max(now.minus(MAX_PAST), startOfCurrentMonthUtc);
       Instant latestAllowed = now.plus(MAX_FUTURE);
       if (clientOccurredAt.isBefore(earliestAllowed)) {
         throw new OfflineReplayInvalidException(
             "clientOccurredAt "
                 + clientOccurredAt
-                + " is more than 48h in the past (earliest allowed "
+                + " is outside the allowed window (earliest allowed "
                 + earliestAllowed
-                + ")");
+                + " — at most 48h back and never before the current month's GL period)");
       }
       if (clientOccurredAt.isAfter(latestAllowed)) {
         throw new OfflineReplayInvalidException(
@@ -110,5 +120,9 @@ public class OfflineReplayGuard {
       throw new OfflineReplayInvalidException(
           "an offline-replay checkout may not redeem a gift card");
     }
+  }
+
+  private static Instant max(Instant a, Instant b) {
+    return a.isAfter(b) ? a : b;
   }
 }

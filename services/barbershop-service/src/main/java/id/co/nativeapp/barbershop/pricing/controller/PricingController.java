@@ -40,9 +40,12 @@ public class PricingController {
   /**
    * Returns TODAY's (UTC) effective tax/service-charge rules for the bound tenant.
    *
-   * <p>{@code businessId} is accepted for API-shape consistency with every other POS endpoint (and
-   * reserved for a future per-outlet rule override) but is NOT currently consulted — {@code
-   * tax_charge_rule} rows are resolved tenant-wide, exactly like {@link TaxChargeService#resolve}.
+   * <p>{@code businessId} is accepted (optionally — review W/S2) purely for POS-call-shape
+   * symmetry with every other POS endpoint (and reserved for a future per-outlet rule override);
+   * it is NOT an access key and is NOT currently consulted — {@code tax_charge_rule} rows are
+   * resolved tenant-wide from the bound {@link id.co.nativeapp.tenant.TenantContext TenantContext},
+   * exactly like {@link TaxChargeService#resolve}. Making it optional avoids a spurious 400 for a
+   * caller that omits it; it can never widen or narrow which rules are returned.
    */
   @Operation(
       summary = "Resolve today's effective tax/service-charge rules",
@@ -51,7 +54,8 @@ public class PricingController {
               + " version/provenance, for the offline POS's provisional-pricing snapshot (ADR 0028)."
               + " No-rule fall-through: bp=0, version/provenance=null.")
   @GetMapping("/effective-rules")
-  public ResponseEntity<EffectiveRulesResponse> effectiveRules(@RequestParam UUID businessId) {
+  public ResponseEntity<EffectiveRulesResponse> effectiveRules(
+      @RequestParam(required = false) UUID businessId) {
     return ResponseEntity.ok(taxChargeService.resolveEffectiveRules());
   }
 }
