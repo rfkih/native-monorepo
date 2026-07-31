@@ -18,6 +18,8 @@ import java.util.UUID;
  * @param lineCount the number of order lines in the cart
  * @param occurredAt when the order was parked
  * @param orderType DINE_IN / TAKEAWAY / DELIVERY
+ * @param source Phase 6 (ADR 0029): POS (default) or SELF_ORDER — badges an anonymous QR-scanned
+ *     park so the cashier's ParkedTray can flag it for confirmation
  */
 public record ParkedOrderSummary(
     UUID orderId,
@@ -27,4 +29,5 @@ public record ParkedOrderSummary(
     String tableLabel,
     int lineCount,
     Instant occurredAt,
-    String orderType) {}
+    String orderType,
+    String source) {}

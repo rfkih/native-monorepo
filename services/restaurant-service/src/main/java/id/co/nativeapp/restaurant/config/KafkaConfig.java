@@ -1,6 +1,8 @@
 package id.co.nativeapp.restaurant.config;
 
 import id.co.nativeapp.events.Base64ByteArraySerializer;
+import id.co.nativeapp.restaurant.entitlement.messaging.EntitlementDecodeException;
+import id.co.nativeapp.restaurant.entitlement.messaging.EntitlementMissingEventIdException;
 import id.co.nativeapp.restaurant.loyaltyref.messaging.LoyaltyRefDecodeException;
 import id.co.nativeapp.restaurant.loyaltyref.messaging.LoyaltyRefMissingEventIdException;
 import id.co.nativeapp.restaurant.outletref.messaging.UserOutletAssignmentDecodeException;
@@ -102,7 +104,9 @@ public class KafkaConfig {
         UserOutletAssignmentDecodeException.class,
         UserOutletAssignmentMissingEventIdException.class,
         LoyaltyRefDecodeException.class,
-        LoyaltyRefMissingEventIdException.class);
+        LoyaltyRefMissingEventIdException.class,
+        EntitlementDecodeException.class,
+        EntitlementMissingEventIdException.class);
     return handler;
   }
 

@@ -42,6 +42,19 @@ import java.util.UUID;
 @Table(name = "restaurant_order")
 public class Order extends Auditable {
 
+  /** Phase 6 (ADR 0029): a cashier/staff-created order — the default {@code source}. */
+  public static final String SOURCE_POS = "POS";
+
+  /** Phase 6 (ADR 0029): an anonymous diner's QR-scanned park. */
+  public static final String SOURCE_SELF_ORDER = "SELF_ORDER";
+
+  /**
+   * Phase 6 (ADR 0029): the terminal, non-money-moving status the lazy sweep moves a stale {@code
+   * PARKED SELF_ORDER} row to. {@code findParkedViewsByBusinessId} filters {@code status = 'PARKED'}
+   * only, so an EXPIRED row silently drops out of the ParkedTray.
+   */
+  public static final String STATUS_EXPIRED = "EXPIRED";
+
   @Id
   @Column(name = "id", nullable = false, updatable = false)
   private UUID id;
@@ -129,6 +142,24 @@ public class Order extends Auditable {
   @Column(name = "gift_card_redeemed_minor")
   private Long giftCardRedeemedMinor;
 
+  /**
+   * Phase 6 (ADR 0029): POS (a cashier/staff-created order, the default) or SELF_ORDER (an
+   * anonymous diner's QR-scanned park). Purely a badge/filter dimension — a SELF_ORDER row is
+   * otherwise an ordinary {@code PARKED} order the cashier confirms/pays through the normal flow.
+   */
+  @Column(name = "source", nullable = false, length = 16)
+  private String source;
+
+  /**
+   * Phase 6 (ADR 0029): a snapshot of the printed table's label from the self-order QR token, or
+   * {@code null} (POS orders, and self-order kiosk tokens with no specific table). Independent of
+   * {@link #tableId} — an anonymous QR scan is not guaranteed to reference a formally-created {@code
+   * restaurant_table} row, so this is a free-text label carried straight from the verified token,
+   * never a foreign key.
+   */
+  @Column(name = "table_label", length = 64)
+  private String tableLabel;
+
   @OneToMany(
       mappedBy = "order",
       cascade = CascadeType.ALL,
@@ -173,6 +204,38 @@ public class Order extends Auditable {
       String orderType,
       UUID tableId,
       Long discountMinor) {
+    this(businessId, total, occurredAt, idempotencyKey, orderType, tableId, discountMinor,
+        SOURCE_POS, null);
+  }
+
+  /**
+   * Phase 6 (ADR 0029): creates a new order in PENDING status with explicit order type, optional
+   * table, optional discount, AND an explicit {@code source}/{@code tableLabel} — the constructor
+   * {@code OrderWriter.parkSelfOrder} uses to stamp {@code source=SELF_ORDER} + the token's table
+   * label. Every other call site keeps using the 7-arg constructor above, which delegates here with
+   * {@code source=POS} and {@code tableLabel=null} (behaviour-unchanged).
+   *
+   * @param businessId the originating business unit
+   * @param total the pre-computed order total as {@link Money} (never a float)
+   * @param occurredAt when the order was placed
+   * @param idempotencyKey the client's request id (dedupe key with company_id)
+   * @param orderType DINE_IN / TAKEAWAY / DELIVERY (must not be null)
+   * @param tableId nullable; only valid for DINE_IN orders
+   * @param discountMinor optional fixed discount in minor units; {@code null} if none
+   * @param source POS or SELF_ORDER (must not be null)
+   * @param tableLabelSnapshot nullable; a self-order token's table-label snapshot (never a foreign
+   *     key — see {@link #tableLabel} field javadoc)
+   */
+  public Order(
+      UUID businessId,
+      Money total,
+      Instant occurredAt,
+      String idempotencyKey,
+      String orderType,
+      UUID tableId,
+      Long discountMinor,
+      String source,
+      String tableLabelSnapshot) {
     this.id = UUID.randomUUID();
     this.businessId = Objects.requireNonNull(businessId, "businessId");
     this.status = "PENDING";
@@ -182,6 +245,8 @@ public class Order extends Auditable {
     this.orderType = Objects.requireNonNull(orderType, "orderType");
     this.tableId = tableId;
     this.discountMinor = discountMinor;
+    this.source = Objects.requireNonNull(source, "source");
+    this.tableLabel = tableLabelSnapshot;
   }
 
   /**
@@ -271,6 +336,21 @@ public class Order extends Auditable {
     this.status = "PARKED";
   }
 
+  /**
+   * Phase 6 (ADR 0029): transitions a stale {@code PARKED} {@code SELF_ORDER} row to the terminal,
+   * non-money-moving {@code EXPIRED} status (the lazy sweep {@code OrderWriter.parkSelfOrder} runs
+   * before every self-order create). No sale, no payment, no outbox row — identical invariant to
+   * {@link #markParked}.
+   *
+   * <p>Legal source state: {@code PARKED}.
+   */
+  public void markExpired() {
+    if (!"PARKED".equals(this.status)) {
+      throw new IllegalStateException("markExpired requires PARKED; current status: " + status);
+    }
+    this.status = STATUS_EXPIRED;
+  }
+
   public UUID getId() {
     return id;
   }
@@ -281,6 +361,19 @@ public class Order extends Auditable {
 
   public String getStatus() {
     return status;
+  }
+
+  /** Phase 6 (ADR 0029): POS (default) or SELF_ORDER. */
+  public String getSource() {
+    return source;
+  }
+
+  /**
+   * Phase 6 (ADR 0029): the self-order token's table-label snapshot, or {@code null} (POS orders,
+   * and self-order kiosk tokens). Independent of {@link #getTableId()} — see field javadoc.
+   */
+  public String getTableLabel() {
+    return tableLabel;
   }
 
   /** The order total as a {@link Money} value (reconstructed from its columns). */

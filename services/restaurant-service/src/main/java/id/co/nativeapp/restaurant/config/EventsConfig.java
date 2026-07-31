@@ -1,18 +1,23 @@
 package id.co.nativeapp.restaurant.config;
 
+import id.co.nativeapp.entitlementcheck.CachedEntitlementChecker;
+import id.co.nativeapp.entitlementcheck.EntitlementCache;
 import id.co.nativeapp.events.MicrometerTraceparentSupplier;
 import id.co.nativeapp.events.OutboxLagMetrics;
 import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.events.ProcessedEventStore;
 import id.co.nativeapp.events.TraceparentSupplier;
+import id.co.nativeapp.restaurant.entitlement.service.ProjectionEntitlementLoader;
 import id.co.nativeapp.restaurant.sale.service.PostOutboxHook;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.tracing.Tracer;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
@@ -36,8 +41,16 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * <p>Outbox-lag metric (ADR 0010 #13): {@link OutboxLagMetrics} registers a Micrometer gauge {@code
  * native.outbox.unpublished} (tag: {@code service}) that counts unpublished outbox rows so Grafana
  * can alert on Debezium relay lag.
+ *
+ * <p>Phase 6 (ADR 0029) also wires the shared {@code libs/entitlement-check} Redis-cached {@code
+ * entitled?(company, module)} gate: {@link EntitlementCache} + {@link CachedEntitlementChecker},
+ * backed by this service's own {@link ProjectionEntitlementLoader} (the local {@code
+ * entitlement_projection} read model kept current by the consumed {@code
+ * EntitlementGranted}/{@code EntitlementRevoked} events) — mirrors barbershop-service's /
+ * carwash-service's identical wiring.
  */
 @Configuration
+@EnableConfigurationProperties(SelfOrderProperties.class)
 public class EventsConfig {
 
   @Bean
@@ -84,5 +97,28 @@ public class EventsConfig {
   @ConditionalOnMissingBean
   public PostOutboxHook postOutboxHook() {
     return new PostOutboxHook.Noop();
+  }
+
+  /**
+   * The per-company Redis cache behind the entitlement gate (Phase 6, ADR 0029). TTL is a safety
+   * net only — invalidation by {@code EntitlementGranted}/{@code EntitlementRevoked} is the primary
+   * consistency mechanism (see {@link
+   * id.co.nativeapp.restaurant.entitlement.service.EntitlementProjectionService}).
+   */
+  @Bean
+  public EntitlementCache entitlementCache(
+      StringRedisTemplate redisTemplate, SelfOrderProperties properties) {
+    return new EntitlementCache(redisTemplate, properties.cacheTtl());
+  }
+
+  /**
+   * The shared entitled?(company, module) gate {@code selforder.service.SelfOrderService} consults
+   * before creating a self-order-parked order, backed by this service's own {@link
+   * ProjectionEntitlementLoader} on a cache miss.
+   */
+  @Bean
+  public CachedEntitlementChecker entitlementChecker(
+      EntitlementCache entitlementCache, ProjectionEntitlementLoader loader) {
+    return new CachedEntitlementChecker(entitlementCache, loader);
   }
 }

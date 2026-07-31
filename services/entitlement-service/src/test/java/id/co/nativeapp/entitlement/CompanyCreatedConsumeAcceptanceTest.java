@@ -33,7 +33,7 @@ class CompanyCreatedConsumeAcceptanceTest extends KafkaPostgresRedisTestBase {
 
   /** The defaults configured in application.yml (the base verticals + the platform modules). */
   private static final List<String> DEFAULT_MODULES =
-      List.of("restaurant", "carwash", "laundromat", "hr", "finance", "barbershop");
+      List.of("restaurant", "carwash", "laundromat", "hr", "finance", "barbershop", "self_order");
 
   @Test
   void consumingCompanyCreatedGrantsTheDefaultsAndEmitsOneEntitlementGrantedPerModule()

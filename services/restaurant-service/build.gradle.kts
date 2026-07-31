@@ -53,6 +53,13 @@ dependencies {
     // security code.
     implementation(project(":libs:security"))
 
+    // The shared Redis-cached entitled?(company, module) gate (Phase 6, ADR 0029 — self-order is
+    // this service's first entitlement-gated feature). restaurant-service supplies the DB-backed
+    // loader over its LOCAL entitlement projection (kept current by EntitlementGranted/Revoked) and
+    // invalidates the cache from those same events. Pulls spring-data-redis (Lettuce) transitively
+    // as `api`.
+    implementation(project(":libs:entitlement-check"))
+
     // Web (/healthz + POST /sales) + JPA persistence.
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
@@ -100,6 +107,15 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.testcontainers:testcontainers-postgresql")
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
+
+    // Phase 6 (ADR 0029) entitlement-gate tests: a real Kafka broker (publish/await the consumed
+    // EntitlementGranted/Revoked Avro bytes) and a real Redis 7 (the entitlement-check cache gate) —
+    // mirrors barbershop-service's/carwash-service's KafkaPostgresRedisTestBase exactly. Redis is a
+    // plain GenericContainer from the core Testcontainers module (no dedicated Redis module here).
+    testImplementation("org.springframework.boot:spring-boot-starter-kafka-test")
+    testImplementation("org.testcontainers:testcontainers")
+    testImplementation("org.testcontainers:testcontainers-kafka")
+    testImplementation("org.awaitility:awaitility")
 }
 
 // libs/security (#16) ships an auto-configuration whose DEFAULT (non-dev) path stands up a JWT

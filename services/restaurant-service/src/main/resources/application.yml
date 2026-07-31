@@ -27,6 +27,13 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: false
 
+  data:
+    redis:
+      # The libs/entitlement-check cache (per-company entitlement hash, invalidated by the
+      # EntitlementGranted/Revoked events — Phase 6, ADR 0029). Overridden per environment.
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
   kafka:
     # UserOutletAssignmentChanged topic value is the org-service outbox Avro payload shipped by
     # Debezium: binary.handling.mode=base64 means the wire value is base64-encoded text arriving
@@ -63,6 +70,28 @@ native:
     # one whole rupiah, so 5,000,000 = Rp5,000,000. A request above this is rejected 422
     # (gift-card-mint-limit). NATIVE_GIFTCARD_MAX_MINT_MINOR env var.
     max-mint-minor: ${NATIVE_GIFTCARD_MAX_MINT_MINOR:5000000}
+  self-order:
+    # Phase 6 (ADR 0029): the AES-256-GCM key SelfOrderSecretCipher encrypts each outlet's per-QR
+    # HMAC secret with at rest (self_order_access.secret_encrypted), base64-encoded 32-byte value,
+    # NATIVE_SELFORDER_KEY env var, Vault-injected in prod. A DEDICATED key — unlike
+    # native.giftcard.code-key, this one is NOT fleet-shared (no other service ever needs to derive
+    # the same self-order secret), so there is no cross-service-match requirement. The committed
+    # default below is a DEV/TEST-ONLY placeholder, never a real secret.
+    secret-key: ${NATIVE_SELFORDER_KEY:Ghb7IF81XLo6yUS6NZQZBNveUV/utZeOm2zfd+RXXlg=}
+    # The ceiling on one outlet's UNCONFIRMED (PARKED, source=SELF_ORDER) order count. A create
+    # request once at/over this ceiling is rejected 429 (self-order-cap-exceeded).
+    # NATIVE_SELFORDER_PARK_CAP env var.
+    park-cap: ${NATIVE_SELFORDER_PARK_CAP:50}
+    # How long a PARKED SELF_ORDER row may sit unconfirmed before the lazy sweep (run on the next
+    # create for that outlet — no @Scheduled job in this fleet) moves it to the terminal EXPIRED
+    # status. NATIVE_SELFORDER_EXPIRY env var (ISO-8601 duration).
+    expiry: ${NATIVE_SELFORDER_EXPIRY:PT30M}
+    # The entitlement module the self-order-create path is gated on.
+    module-key: ${NATIVE_SELFORDER_MODULE_KEY:self_order}
+    # The entitlement-check Redis cache TTL safety net; invalidation by the
+    # EntitlementGranted/Revoked events is the primary consistency mechanism, this is only the
+    # backstop. NATIVE_SELFORDER_CACHE_TTL env var.
+    cache-ttl: ${NATIVE_SELFORDER_CACHE_TTL:PT30M}
 
 management:
   endpoints:
@@ -111,6 +140,17 @@ management:
 # It is scoped to !dev on purpose: in the `dev` profile there is NO resource-server config, so
 # Spring Boot's OAuth2 resource-server auto-configuration stays off and libs/security's permissive
 # DevSecurityConfig governs while the header-trust DevTenantFilter binds the tenant (no Keycloak).
+#
+# NOTE Phase 6 (ADR 0029): /api/v1/self-order/** is the fleet's second fully-anonymous route (after
+# org-service's POST /api/v1/signup) — a diner's phone carries no Keycloak token at all, only the
+# X-Self-Order-Token header id.co.nativeapp.restaurant.config.SelfOrderTokenFilter verifies. Without
+# this declaration the shared libs/security JwtSecurityConfig would 401 every self-order request
+# before the filter ever ran (every service independently validates JWTs — restaurant-service's own
+# chain, not just the gateway's). native.security.public-paths permitAlls these two paths AND makes
+# libs.security.TenantBindingFilter skip them entirely (see its shouldNotFilter), so
+# SelfOrderTokenFilter is the ONLY authentication step this surface sees — mirrors org-service's
+# POST /api/v1/signup exemption exactly (same mechanism, proven end-to-end there against a real
+# Keycloak by SignupAcceptanceTest/SecuredCompanyBootstrapTest).
 spring:
   config:
     activate:
@@ -121,3 +161,9 @@ spring:
         jwt:
           issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/native}
           jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://localhost:8080/realms/native/protocol/openid-connect/certs}
+
+native:
+  security:
+    public-paths:
+      - "GET /api/v1/self-order/menu"
+      - "POST /api/v1/self-order/orders"

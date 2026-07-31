@@ -28,4 +28,7 @@ public interface ParkedOrderView {
   Instant getOccurredAt();
 
   String getOrderType();
+
+  /** Phase 6 (ADR 0029): POS (default) or SELF_ORDER — badges an anonymous QR-scanned park. */
+  String getSource();
 }

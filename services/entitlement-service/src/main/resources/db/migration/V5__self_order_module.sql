@@ -1,0 +1,22 @@
+-- entitlement-service V5 — add the `self_order` module to the catalog (ADR 0029, POS-parity
+-- program Phase 6: anonymous QR self-ordering — restaurant-service's first entitlement-gated
+-- feature). Mirrors the V4 barbershop_module precedent exactly.
+--
+-- This migration ONLY inserts into module_catalog (global reference data — see V1 comment: NOT
+-- tenant-scoped, NOT Auditable, NOT under RLS). It deliberately does NOT backfill tenant_entitlement
+-- for existing companies — see V4's comment for the full rationale (a migration-time INSERT would
+-- create entitlement rows with no corresponding EntitlementGranted outbox event, a silent
+-- consistency break; every grant MUST flow through EntitlementService/EntitlementWriter).
+--
+-- Rollout path instead:
+--   * Existing companies self-serve via POST /api/v1/entitlements (module_key=self_order).
+--   * New companies get `self_order` automatically via the existing CompanyCreated default-grant
+--     flow once native.entitlement.default-modules includes it (application.yml, this same change).
+--
+-- SEQUENCING (read before deploying, same warning as V4): EntitlementService#grantDefaultsFor calls
+-- validateModulesExist(defaultModules) before granting a new company's defaults, which throws
+-- UnknownModuleException if a configured default module key is not yet in module_catalog. This
+-- migration MUST land in the same release BEFORE OR WITH the application.yml default-modules change
+-- that adds `self_order` — never after.
+INSERT INTO module_catalog (module_key, name, description) VALUES
+    ('self_order', 'Self-Order QR', 'Anonymous QR self-ordering: table/kiosk menu read + parked-order creation.');

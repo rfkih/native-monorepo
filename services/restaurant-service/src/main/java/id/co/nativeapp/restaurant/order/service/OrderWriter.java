@@ -1,6 +1,7 @@
 package id.co.nativeapp.restaurant.order.service;
 
 import id.co.nativeapp.money.Money;
+import id.co.nativeapp.restaurant.config.SelfOrderProperties;
 import id.co.nativeapp.restaurant.loyaltyref.service.LoyaltyRedemptionGuard;
 import id.co.nativeapp.restaurant.menu.projection.MenuItemView;
 import id.co.nativeapp.restaurant.menu.projection.ModifierOptionView;
@@ -44,6 +45,7 @@ import id.co.nativeapp.restaurant.promotion.service.PromotionEngineService;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
 import id.co.nativeapp.restaurant.sale.service.SaleWriter;
+import id.co.nativeapp.restaurant.selforder.domain.SelfOrderCapExceededException;
 import id.co.nativeapp.restaurant.table.repository.RestaurantTableRepository;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
@@ -128,6 +130,7 @@ public class OrderWriter {
   private final ManualDiscountGuard manualDiscountGuard;
   private final LoyaltyRedemptionGuard loyaltyRedemptionGuard;
   private final OfflineReplayGuard offlineReplayGuard;
+  private final SelfOrderProperties selfOrderProperties;
 
   @SuppressWarnings("checkstyle:ParameterNumber")
   public OrderWriter(
@@ -147,7 +150,8 @@ public class OrderWriter {
       AppliedPromotionRepository appliedPromotionRepository,
       ManualDiscountGuard manualDiscountGuard,
       LoyaltyRedemptionGuard loyaltyRedemptionGuard,
-      OfflineReplayGuard offlineReplayGuard) {
+      OfflineReplayGuard offlineReplayGuard,
+      SelfOrderProperties selfOrderProperties) {
     this.orderRepository = orderRepository;
     this.lineRepository = lineRepository;
     this.modifierRepository = modifierRepository;
@@ -165,6 +169,7 @@ public class OrderWriter {
     this.manualDiscountGuard = manualDiscountGuard;
     this.loyaltyRedemptionGuard = loyaltyRedemptionGuard;
     this.offlineReplayGuard = offlineReplayGuard;
+    this.selfOrderProperties = selfOrderProperties;
   }
 
   /**
@@ -438,6 +443,80 @@ public class OrderWriter {
     Order saved = orderRepository.saveAndFlush(order);
 
     // No SaleWriter call, no PaymentWriter call, no outbox row — park invariant.
+    return new CheckoutResult(OrderResponse.from(saved, cart.breakdown()), true);
+  }
+
+  /**
+   * Phase 6 (ADR 0029): parks a cart as a {@code source=SELF_ORDER} order from the ANONYMOUS
+   * self-order surface — the exact same park invariant as {@link #park}: no sale, no payment, no
+   * outbox row, no promotions evaluation, no stock movement. The two differences from staff {@link
+   * #park}: (1) NO {@link OutletAccessGuard} call — there is no staff/cashier identity to check an
+   * outlet assignment for, an anonymous diner is not a cashier; (2) a {@code tableLabel} SNAPSHOT
+   * (from the verified token, never a foreign key — see {@code Order#tableLabel} javadoc) instead
+   * of a {@code tableId}.
+   *
+   * <p>Before doing anything else, this method (a) LAZILY SWEEPS this outlet's stale {@code PARKED
+   * SELF_ORDER} rows (older than {@code native.self-order.expiry}) to the terminal {@code EXPIRED}
+   * status, then (b) rejects with {@link SelfOrderCapExceededException} (429) if the outlet's
+   * unconfirmed count is still at/over {@code native.self-order.park-cap} — bounding the junk-row
+   * blast radius of an abused/leaked QR without ever touching money.
+   *
+   * @param businessId the token-verified outlet (never client-supplied)
+   * @param lines the submitted cart lines (server-side price resolve, same as every other create)
+   * @param idempotencyKey the client's request id (dedupe key with company_id)
+   * @param tableLabel the token's table-label claim, or {@code null} for a kiosk token
+   * @throws org.springframework.dao.DataIntegrityViolationException on concurrent collision
+   * @throws IllegalArgumentException on invalid/inactive/unavailable items or a currency mismatch
+   * @throws SelfOrderCapExceededException if the outlet's unconfirmed self-order count is at/over
+   *     the configured cap
+   */
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public CheckoutResult parkSelfOrder(
+      UUID businessId, List<OrderLineRequest> lines, String idempotencyKey, String tableLabel) {
+    String companyId = TenantContext.require().companyId();
+
+    // Idempotency fast path — BEFORE the sweep/cap check, so a retried request never gets a
+    // spurious 429 just because other unrelated unconfirmed rows piled up in the meantime.
+    Optional<OrderView> existing = orderRepository.findViewByIdempotencyKey(idempotencyKey);
+    if (existing.isPresent()) {
+      return toIdempotentResult(existing.get(), companyId);
+    }
+
+    // Lazy sweep (no @Scheduled job in this fleet — see ADR 0029): expire this outlet's stale
+    // PARKED SELF_ORDER rows before counting/inserting, so an outlet that is never revisited does
+    // not permanently exhaust its cap.
+    Instant cutoff = Instant.now().minus(selfOrderProperties.expiry());
+    orderRepository.expireStaleSelfOrderParked(businessId, cutoff);
+
+    long unconfirmed = orderRepository.countUnconfirmedSelfOrder(businessId);
+    if (unconfirmed >= selfOrderProperties.parkCap()) {
+      throw new SelfOrderCapExceededException(businessId, unconfirmed, selfOrderProperties.parkCap());
+    }
+
+    // Validate items + pricing (same as staff park). No promotions engine, no loyalty/gift-card —
+    // identical posture to staff park (ADR 0026/0027: those evaluate at PAY time, not park time).
+    CartContext cart =
+        buildCart(businessId, lines, null, null, false, Instant.now(), null, null, null, null);
+
+    Instant now = Instant.now();
+    Order order =
+        new Order(
+            businessId,
+            cart.breakdown().grandTotal(),
+            now,
+            idempotencyKey,
+            DINE_IN,
+            null,
+            null,
+            Order.SOURCE_SELF_ORDER,
+            tableLabel);
+    order.markParked(); // PENDING → PARKED (no sale written here)
+    order.setCompanyId(companyId);
+    persistLines(order, cart.linesToAdd(), companyId);
+    Order saved = orderRepository.saveAndFlush(order);
+
+    // No SaleWriter call, no PaymentWriter call, no outbox row, no stock deduction — park
+    // invariant, asserted by the fleet's park-side-effect regression tests.
     return new CheckoutResult(OrderResponse.from(saved, cart.breakdown()), true);
   }
 

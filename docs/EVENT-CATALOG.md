@@ -775,6 +775,27 @@ DB-backed `EntitlementLoader` the shared `libs/entitlement-check` cache consults
 / revoke promptly. The `EntitlementConsumerContractTest` asserts the consumer copies stay
 backward-compatible with the producer schemas (rule 7).
 
+### `EntitlementGranted` / `EntitlementRevoked` — restaurant-service consumer view
+
+restaurant-service (Phase 6, ADR 0029 — self-order QR) **consumes** the entitlement-service
+`EntitlementGranted` / `EntitlementRevoked` (the producer contracts are documented above) into a
+**local entitlement projection** (`(company_id, module_key) -> entitled`) and, on apply,
+**invalidates the `entitlement-check` Redis cache** for that company — mirrors carwash-service's /
+barbershop-service's identical consumer exactly. Unlike those two, restaurant-service does **not**
+keep a per-service `.avsc` copy under `src/main/resources/avro/` — it resolves the schema straight
+from the shared `libs/contracts` classpath resource (`avro/EntitlementGranted.avsc` / `.../
+EntitlementRevoked.avsc`, ADR 0003's single source of truth), since restaurant-service already
+depends on `libs/contracts`. It reads the outbox payload as **raw Avro bytes** via `libs/events
+AvroSerde` (no Schema Registry serde) and dedupes by the event UUID (`ProcessedEventStore`) so a
+re-delivery never double-applies; the projection write runs inside a `TenantContext` scope bound to
+the event's `company_id` (RLS applies — rule 5). This projection backs the DB-backed
+`ProjectionEntitlementLoader` the shared `libs/entitlement-check` cache consults on a miss, so the
+**self-order-create gate** (`POST /api/v1/self-order/orders` → `403` when not entitled to
+`self_order`) reflects a grant/revoke promptly. `module_catalog` gained the `self_order` module in
+entitlement-service's `V5__self_order_module.sql`.
+
+**Topics consumed:** `EntitlementGranted`, `EntitlementRevoked`.
+
 ### `EmployeeChanged` / `AssignmentChanged` — carwash-service consumer view
 
 carwash-service (#20) also **consumes** the employee-service `EmployeeChanged` / `AssignmentChanged`

@@ -134,7 +134,8 @@ public class OrderService {
         view.getTableLabel(),
         view.getLineCount(),
         view.getOccurredAt(),
-        view.getOrderType());
+        view.getOrderType(),
+        view.getSource());
   }
 
   /**

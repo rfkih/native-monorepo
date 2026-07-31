@@ -64,7 +64,8 @@ public abstract class PostgresRlsTestBase {
               + " payment, order_line_modifier, order_line, restaurant_order,"
               + " restaurant_table, menu_item_modifier_option, menu_item_modifier_group, menu_item,"
               + " menu_category, sale, gift_card_sale, gift_card_ref, member_balance_ref, outbox,"
-              + " user_outlet_assignment_ref, processed_event, error_log CASCADE");
+              + " user_outlet_assignment_ref, processed_event, error_log,"
+              + " self_order_access, entitlement_projection CASCADE");
     } catch (SQLException ignored) {
       // Tables not created yet (pre-Flyway) — nothing to reset.
     }
