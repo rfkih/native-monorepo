@@ -74,6 +74,22 @@ class SelfOrderBodySizeFilterTest {
     assertThat(chainCalled).isTrue();
   }
 
+  @Test
+  void aChunkedBodyIsRejectedSoItCannotSlipTheContentLengthCap() throws Exception {
+    // Chunked = no Content-Length = the size cap is blind to it (review O-2). Refuse it: the
+    // anonymous diner surface has no legitimate chunked use (fetch() sends Content-Length).
+    HttpServletRequest request = mock(HttpServletRequest.class);
+    when(request.getContentLengthLong()).thenReturn(-1L);
+    when(request.getHeader("Transfer-Encoding")).thenReturn("chunked");
+    MockHttpServletResponse response = new MockHttpServletResponse();
+    AtomicBoolean chainCalled = new AtomicBoolean(false);
+
+    filter.doFilter(request, response, chainThatSets(chainCalled));
+
+    assertThat(chainCalled).isFalse();
+    assertThat(response.getStatus()).isEqualTo(411); // 411 Length Required
+  }
+
   private HttpServletRequest requestWithLength(long contentLength) {
     HttpServletRequest request = mock(HttpServletRequest.class);
     when(request.getContentLengthLong()).thenReturn(contentLength);

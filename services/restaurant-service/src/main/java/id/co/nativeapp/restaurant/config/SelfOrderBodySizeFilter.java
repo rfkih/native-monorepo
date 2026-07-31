@@ -30,6 +30,16 @@ public class SelfOrderBodySizeFilter extends OncePerRequestFilter {
   protected void doFilterInternal(
       HttpServletRequest request, HttpServletResponse response, FilterChain chain)
       throws ServletException, IOException {
+    // A chunked body has no Content-Length (getContentLengthLong() == -1), so the size cap below
+    // cannot see it — Jackson would materialize the whole List before @Size fires (the very
+    // heap-DoS this filter targets). A browser fetch() with a JSON body always sends
+    // Content-Length, so the anonymous diner surface has no legitimate use for chunked encoding:
+    // refuse it outright rather than let it slip the cap (security review O-2).
+    String transferEncoding = request.getHeader("Transfer-Encoding");
+    if (transferEncoding != null && transferEncoding.toLowerCase(java.util.Locale.ROOT).contains("chunked")) {
+      response.sendError(HttpServletResponse.SC_LENGTH_REQUIRED, "self-order requires Content-Length");
+      return;
+    }
     long contentLength = request.getContentLengthLong();
     if (contentLength > MAX_BODY_BYTES) {
       response.sendError(

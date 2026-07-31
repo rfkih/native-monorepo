@@ -45,17 +45,9 @@ public class SelfOrderAccessWriter {
   @Transactional
   public SelfOrderAccess ensureActive(UUID outletId) {
     String companyId = TenantContext.require().companyId();
-    try {
-      return repository
-          .findByOutletIdAndStatus(outletId, SelfOrderAccess.STATUS_ACTIVE)
-          .orElseGet(() -> mint(outletId, companyId));
-    } catch (org.springframework.dao.DataIntegrityViolationException raceLost) {
-      // Two concurrent first-provisioning calls both minted; the partial unique index let one
-      // through. Converge on the winner instead of surfacing a 500 (review N-1).
-      return repository
-          .findByOutletIdAndStatus(outletId, SelfOrderAccess.STATUS_ACTIVE)
-          .orElseThrow(() -> raceLost);
-    }
+    return repository
+        .findByOutletIdAndStatus(outletId, SelfOrderAccess.STATUS_ACTIVE)
+        .orElseGet(() -> mint(outletId, companyId));
   }
 
   /**
