@@ -147,6 +147,40 @@ public record CheckoutRequest(
   }
 
   /**
+   * Convenience for a full pre-Phase-5 checkout (ADR 0027 loyalty/gift-card fields, no offline
+   * fields — the pre-ADR-0028 twelve-arg canonical shape).
+   */
+  public CheckoutRequest(
+      UUID businessId,
+      String idempotencyKey,
+      List<OrderLineRequest> lines,
+      PaymentRequest payment,
+      Long discountMinor,
+      String orderType,
+      UUID tableId,
+      String couponCode,
+      UUID loyaltyMemberId,
+      Long loyaltyRedeemPoints,
+      UUID giftCardId,
+      Long giftCardRedeemMinor) {
+    this(
+        businessId,
+        idempotencyKey,
+        lines,
+        payment,
+        discountMinor,
+        orderType,
+        tableId,
+        couponCode,
+        loyaltyMemberId,
+        loyaltyRedeemPoints,
+        giftCardId,
+        giftCardRedeemMinor,
+        null,
+        null);
+  }
+
+  /**
    * Convenience for a checkout with a coupon but no Phase 4 (ADR 0027) loyalty/gift-card fields
    * (pre-Phase-4 eight-arg shape).
    */
