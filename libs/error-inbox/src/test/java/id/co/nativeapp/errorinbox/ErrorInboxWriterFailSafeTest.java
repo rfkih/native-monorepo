@@ -32,8 +32,22 @@ class ErrorInboxWriterFailSafeTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   void returnsTheRedactedMessageAndCountOnSuccess() {
-    doReturn(7L).when(tx).execute(any());
+    // Drive the REAL transaction callback (not a canned template return) so the upsert lambda body
+    // executes — the jdbc layer below it is stubbed to the post-upsert count.
+    doReturn(7L)
+        .when(jdbc)
+        .queryForObject(
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.eq(Long.class),
+            any(Object[].class));
+    org.mockito.Mockito.when(tx.execute(any()))
+        .thenAnswer(
+            inv ->
+                ((org.springframework.transaction.support.TransactionCallback<Long>)
+                        inv.getArgument(0))
+                    .doInTransaction(mock(org.springframework.transaction.TransactionStatus.class)));
     ErrorInboxWriter.Recorded r =
         writer.record(
             new IllegalStateException("fail for user@x.com nik 3201234567890123"),
