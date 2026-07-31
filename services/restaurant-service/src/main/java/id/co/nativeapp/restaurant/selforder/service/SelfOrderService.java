@@ -29,9 +29,9 @@ import org.springframework.stereotype.Service;
  * {@code self_order} module ({@link EntitlementChecker}, the fleet's shared Redis-cached gate) —
  * BEFORE any DB write. A company not entitled gets {@link NotEntitledException} (403) and NO row is
  * written. {@link #menu} is deliberately UNGATED, mirroring every other vertical's read-vs-write
- * entitlement asymmetry ({@code barbershop.ticket.service.TicketService.getById} etc.) — a menu read
- * carries no revenue/side-effect risk, and a diner must be able to see what they would be ordering
- * even on a not-yet-entitled trial company.
+ * entitlement asymmetry ({@code barbershop.ticket.service.TicketService.getById} etc.) — a menu
+ * read carries no revenue/side-effect risk, and a diner must be able to see what they would be
+ * ordering even on a not-yet-entitled trial company.
  *
  * <p>Not itself {@code @Transactional} — the transactional unit of work lives in {@link
  * OrderWriter#parkSelfOrder} so the proxy and the RLS aspect engage (same {@code OrderService}
@@ -91,9 +91,7 @@ public class SelfOrderService {
     } catch (DataIntegrityViolationException conflict) {
       // A concurrent racer (e.g. a double-tap retry) already inserted the same idempotency key —
       // re-read the winner's order in a fresh transaction, exactly the OrderService.park recovery.
-      return orderWriter
-          .findExistingByKey(request.idempotencyKey())
-          .orElseThrow(() -> conflict);
+      return orderWriter.findExistingByKey(request.idempotencyKey()).orElseThrow(() -> conflict);
     }
   }
 

@@ -38,8 +38,8 @@ import org.springframework.web.context.request.ServletRequestAttributes;
  *
  * <p>{@code native.self-order.expiry} is overridden to {@code PT0S} for this class ONLY, so the
  * FIRST parked row is already "stale" by the time the SECOND create call runs (no real 30-minute
- * wait, no {@code Thread.sleep}: {@code occurred_at} is set at INSERT time, and any later
- * {@code Instant.now()} is strictly after it).
+ * wait, no {@code Thread.sleep}: {@code occurred_at} is set at INSERT time, and any later {@code
+ * Instant.now()} is strictly after it).
  */
 @SpringBootTest
 class SelfOrderSweepTest extends PostgresRedisTestBase {
@@ -68,7 +68,8 @@ class SelfOrderSweepTest extends PostgresRedisTestBase {
   }
 
   @Test
-  void aStaleParkedSelfOrderRowIsExpiredOnTheNextCreateAndDropsOutOfTheParkedTray() throws Exception {
+  void aStaleParkedSelfOrderRowIsExpiredOnTheNextCreateAndDropsOutOfTheParkedTray()
+      throws Exception {
     entitlementProjectionService.apply(
         new EntitlementProjectedEvent(UUID.randomUUID(), TENANT, SELF_ORDER, true));
     UUID itemId =

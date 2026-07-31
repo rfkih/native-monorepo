@@ -19,8 +19,8 @@ import org.testcontainers.utility.DockerImageName;
  *
  * <p><strong>Deliberately does NOT extend {@link PostgresRlsTestBase}.</strong> That class's
  * {@code @DynamicPropertySource datasourceProperties} ALSO pins {@code
- * spring.kafka.bootstrap-servers} to a closed port (so the rest of this fleet's tests, which need no
- * broker, never talk to a foreign local Kafka). Spring resolves {@code @DynamicPropertySource}
+ * spring.kafka.bootstrap-servers} to a closed port (so the rest of this fleet's tests, which need
+ * no broker, never talk to a foreign local Kafka). Spring resolves {@code @DynamicPropertySource}
  * methods across a class hierarchy leaf-class-first but a LATER-registered value for the SAME key
  * WINS (last write to the backing map) — so a superclass method registering AFTER a subclass one
  * would silently overwrite this class's real Testcontainers Kafka endpoint back to the closed port.

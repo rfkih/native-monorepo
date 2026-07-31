@@ -8,8 +8,8 @@ import org.testcontainers.utility.DockerImageName;
 
 /**
  * {@link PostgresRlsTestBase} PLUS a real Redis 7 — for Phase 6 (ADR 0029) self-order tests that
- * exercise the entitlement-check gate (which hits Redis on every call) but need NO Kafka broker: the
- * entitlement projection is seeded directly via {@code
+ * exercise the entitlement-check gate (which hits Redis on every call) but need NO Kafka broker:
+ * the entitlement projection is seeded directly via {@code
  * entitlement.service.EntitlementProjectionService#apply} (a synchronous in-process call — no wire
  * needed), exactly mirroring barbershop-service's {@code EntitlementGateFailClosedTest} pattern.
  *

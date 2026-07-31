@@ -45,9 +45,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * <p>Phase 6 (ADR 0029) also wires the shared {@code libs/entitlement-check} Redis-cached {@code
  * entitled?(company, module)} gate: {@link EntitlementCache} + {@link CachedEntitlementChecker},
  * backed by this service's own {@link ProjectionEntitlementLoader} (the local {@code
- * entitlement_projection} read model kept current by the consumed {@code
- * EntitlementGranted}/{@code EntitlementRevoked} events) — mirrors barbershop-service's /
- * carwash-service's identical wiring.
+ * entitlement_projection} read model kept current by the consumed {@code EntitlementGranted}/{@code
+ * EntitlementRevoked} events) — mirrors barbershop-service's / carwash-service's identical wiring.
  */
 @Configuration
 @EnableConfigurationProperties(SelfOrderProperties.class)

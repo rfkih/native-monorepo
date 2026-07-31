@@ -30,10 +30,10 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 /**
  * The unconfirmed self-order cap (Phase 6, ADR 0029): once an outlet's {@code PARKED SELF_ORDER}
  * count is at/over {@code native.self-order.park-cap}, a further create is rejected {@code 429}
- * ({@link SelfOrderCapExceededException}) — bounds the junk-row blast radius of an abused/leaked QR.
- * {@code park-cap} is overridden to {@code 2} for this class ONLY (a new {@code
- * @DynamicPropertySource} key the shared bases never touch, so no collision) so the test does not
- * need to create 50 real rows to prove the boundary.
+ * ({@link SelfOrderCapExceededException}) — bounds the junk-row blast radius of an abused/leaked
+ * QR. {@code park-cap} is overridden to {@code 2} for this class ONLY (a new
+ * {@code @DynamicPropertySource} key the shared bases never touch, so no collision) so the test
+ * does not need to create 50 real rows to prove the boundary.
  */
 @SpringBootTest
 class SelfOrderCapTest extends PostgresRedisTestBase {

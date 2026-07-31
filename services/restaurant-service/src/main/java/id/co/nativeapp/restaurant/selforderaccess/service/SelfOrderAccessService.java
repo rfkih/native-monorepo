@@ -16,16 +16,16 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 
 /**
- * Orchestrates the owner/manager-only self-order QR management surface (Phase 6, ADR 0029):
- * {@code GET /api/v1/self-order-access?outletId=} (mint the current token set, provisioning a
- * secret on first use) and {@code POST /api/v1/self-order-access/rotate} (revoke every printed QR
- * for an outlet at once).
+ * Orchestrates the owner/manager-only self-order QR management surface (Phase 6, ADR 0029): {@code
+ * GET /api/v1/self-order-access?outletId=} (mint the current token set, provisioning a secret on
+ * first use) and {@code POST /api/v1/self-order-access/rotate} (revoke every printed QR for an
+ * outlet at once).
  *
  * <p><strong>Owner/manager-only, server-side.</strong> Both operations mint tokens that grant
  * order-creating access to the outlet, so both are gated exactly like {@code
- * promotion.service.PromotionAdminService}'s writes / {@code
- * promotion.service.ManualDiscountGuard} — the SAME empty-roles-pass semantics (a headerless call is
- * the gateway-less dev recipe / a direct service-layer test, never a real cashier token).
+ * promotion.service.PromotionAdminService}'s writes / {@code promotion.service.ManualDiscountGuard}
+ * — the SAME empty-roles-pass semantics (a headerless call is the gateway-less dev recipe / a
+ * direct service-layer test, never a real cashier token).
  *
  * <p>Not itself {@code @Transactional} — transactional units of work live in {@link
  * SelfOrderAccessWriter} / {@link SelfOrderAccessReader} so the proxy and the RLS aspect engage.
@@ -55,11 +55,14 @@ public class SelfOrderAccessService {
    */
   public SelfOrderAccessResponse getActive(UUID outletId) {
     requireOwnerOrManager();
-    SelfOrderAccess access = reader.findActive(outletId).orElseGet(() -> writer.ensureActive(outletId));
+    SelfOrderAccess access =
+        reader.findActive(outletId).orElseGet(() -> writer.ensureActive(outletId));
     return mintTokens(access, outletId);
   }
 
-  /** Retires the current row and mints a fresh one — every previously-printed QR stops verifying. */
+  /**
+   * Retires the current row and mints a fresh one — every previously-printed QR stops verifying.
+   */
   public SelfOrderAccessResponse rotate(UUID outletId) {
     requireOwnerOrManager();
     SelfOrderAccess access = writer.rotate(outletId);

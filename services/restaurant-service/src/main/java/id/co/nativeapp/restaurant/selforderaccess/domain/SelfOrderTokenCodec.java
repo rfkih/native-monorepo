@@ -10,21 +10,23 @@ import javax.crypto.spec.SecretKeySpec;
 
 /**
  * The self-order QR token format (Phase 6, ADR 0029) — mirrors the fleet's keyed-HMAC gift-card
- * -code precedent ({@code giftcard.domain.GiftCardCodeGenerator}) for the signing mechanics, applied
- * to a compact bearer token instead of a short display code:
+ * -code precedent ({@code giftcard.domain.GiftCardCodeGenerator}) for the signing mechanics,
+ * applied to a compact bearer token instead of a short display code:
  *
- * <pre>{@code base64url(payloadJson) + "." + base64url(HMAC_SHA256(outletSecret, payloadBytes))}</pre>
+ * <pre>{@code base64url(payloadJson) + "." + base64url(HMAC_SHA256(outletSecret, payloadBytes))}
+ * </pre>
  *
- * <p>{@code payloadJson} is the {@link SelfOrderTokenPayload} record serialized via Jackson (already
- * on the classpath fleet-wide for JSON web serialization — no new dependency). Unlike the fleet's
- * fleet-shared gift-card key, the HMAC key here is the PER-(company, outlet) secret stored (AES-256-
- * GCM encrypted) on the token's {@code self_order_access} row — so verifying a token requires
- * looking that row up first (see {@code selforderaccess.service.SelfOrderAccessReader#verify}).
+ * <p>{@code payloadJson} is the {@link SelfOrderTokenPayload} record serialized via Jackson
+ * (already on the classpath fleet-wide for JSON web serialization — no new dependency). Unlike the
+ * fleet's fleet-shared gift-card key, the HMAC key here is the PER-(company, outlet) secret stored
+ * (AES-256- GCM encrypted) on the token's {@code self_order_access} row — so verifying a token
+ * requires looking that row up first (see {@code
+ * selforderaccess.service.SelfOrderAccessReader#verify}).
  *
- * <p><strong>No expiry.</strong> A printed table tent cannot refresh itself, so the token carries no
- * {@code exp} claim; revocation is rotating the outlet's {@code self_order_access} row (a new {@code
- * kid} + secret, the old row RETIRED) — every token signed by the retired secret stops verifying
- * immediately regardless of how long ago it was printed.
+ * <p><strong>No expiry.</strong> A printed table tent cannot refresh itself, so the token carries
+ * no {@code exp} claim; revocation is rotating the outlet's {@code self_order_access} row (a new
+ * {@code kid} + secret, the old row RETIRED) — every token signed by the retired secret stops
+ * verifying immediately regardless of how long ago it was printed.
  *
  * <p><strong>Constant-time signature comparison.</strong> {@link #verifySignature} uses {@link
  * MessageDigest#isEqual(byte[], byte[])}, which runs in time independent of where the first
@@ -128,8 +130,7 @@ public final class SelfOrderTokenCodec {
     }
     String[] parts = token.split("\\.", 2);
     if (parts.length != 2 || parts[0].isEmpty() || parts[1].isEmpty()) {
-      throw new SelfOrderTokenMalformedException(
-          "Token must be exactly 'payload.signature'", null);
+      throw new SelfOrderTokenMalformedException("Token must be exactly 'payload.signature'", null);
     }
     return parts;
   }

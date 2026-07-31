@@ -29,7 +29,9 @@ import java.util.UUID;
 @Table(name = "self_order_access")
 public class SelfOrderAccess extends Auditable {
 
-  /** {@code kid} is a compact, printable identifier — never a token/secret; the DB column caps it. */
+  /**
+   * {@code kid} is a compact, printable identifier — never a token/secret; the DB column caps it.
+   */
   private static final int MAX_KID_LENGTH = 16;
 
   public static final String STATUS_ACTIVE = "ACTIVE";

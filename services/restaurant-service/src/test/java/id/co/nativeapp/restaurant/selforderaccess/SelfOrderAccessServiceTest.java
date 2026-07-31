@@ -12,7 +12,6 @@ import id.co.nativeapp.restaurant.table.service.TableService;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -52,9 +51,11 @@ class SelfOrderAccessServiceTest extends PostgresRlsTestBase {
   void cashierIsForbiddenFromReadingOrRotatingTheAccessSet() {
     setRoles("cashier");
 
-    assertThatThrownBy(() -> TenantContext.callAs(TENANT, CASHIER_ACTOR, () -> service.getActive(OUTLET)))
+    assertThatThrownBy(
+            () -> TenantContext.callAs(TENANT, CASHIER_ACTOR, () -> service.getActive(OUTLET)))
         .isInstanceOf(SelfOrderAccessForbiddenException.class);
-    assertThatThrownBy(() -> TenantContext.callAs(TENANT, CASHIER_ACTOR, () -> service.rotate(OUTLET)))
+    assertThatThrownBy(
+            () -> TenantContext.callAs(TENANT, CASHIER_ACTOR, () -> service.rotate(OUTLET)))
         .isInstanceOf(SelfOrderAccessForbiddenException.class);
   }
 
@@ -103,7 +104,9 @@ class SelfOrderAccessServiceTest extends PostgresRlsTestBase {
         TenantContext.callAs(TENANT, OWNER_ACTOR, () -> service.getActive(OUTLET));
 
     assertThat(active.tables()).hasSize(2);
-    assertThat(active.tables()).extracting(t -> t.tableLabel()).containsExactlyInAnyOrder("T1", "T2");
+    assertThat(active.tables())
+        .extracting(t -> t.tableLabel())
+        .containsExactlyInAnyOrder("T1", "T2");
     assertThat(active.kioskToken()).isNotBlank();
     // Every token is unique (different tableLabel claim -> different signed payload).
     assertThat(
@@ -116,6 +119,8 @@ class SelfOrderAccessServiceTest extends PostgresRlsTestBase {
 
   private void seedTable(String label) throws Exception {
     TenantContext.callAs(
-        TENANT, OWNER_ACTOR, () -> tableService.create(new CreateTableRequest(OUTLET, label, 4, null)));
+        TENANT,
+        OWNER_ACTOR,
+        () -> tableService.create(new CreateTableRequest(OUTLET, label, 4, null)));
   }
 }

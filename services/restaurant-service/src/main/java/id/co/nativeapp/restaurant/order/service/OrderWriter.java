@@ -490,7 +490,8 @@ public class OrderWriter {
 
     long unconfirmed = orderRepository.countUnconfirmedSelfOrder(businessId);
     if (unconfirmed >= selfOrderProperties.parkCap()) {
-      throw new SelfOrderCapExceededException(businessId, unconfirmed, selfOrderProperties.parkCap());
+      throw new SelfOrderCapExceededException(
+          businessId, unconfirmed, selfOrderProperties.parkCap());
     }
 
     // Validate items + pricing (same as staff park). No promotions engine, no loyalty/gift-card —

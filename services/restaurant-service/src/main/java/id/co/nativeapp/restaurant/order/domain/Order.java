@@ -50,8 +50,8 @@ public class Order extends Auditable {
 
   /**
    * Phase 6 (ADR 0029): the terminal, non-money-moving status the lazy sweep moves a stale {@code
-   * PARKED SELF_ORDER} row to. {@code findParkedViewsByBusinessId} filters {@code status = 'PARKED'}
-   * only, so an EXPIRED row silently drops out of the ParkedTray.
+   * PARKED SELF_ORDER} row to. {@code findParkedViewsByBusinessId} filters {@code status =
+   * 'PARKED'} only, so an EXPIRED row silently drops out of the ParkedTray.
    */
   public static final String STATUS_EXPIRED = "EXPIRED";
 
@@ -153,9 +153,9 @@ public class Order extends Auditable {
   /**
    * Phase 6 (ADR 0029): a snapshot of the printed table's label from the self-order QR token, or
    * {@code null} (POS orders, and self-order kiosk tokens with no specific table). Independent of
-   * {@link #tableId} — an anonymous QR scan is not guaranteed to reference a formally-created {@code
-   * restaurant_table} row, so this is a free-text label carried straight from the verified token,
-   * never a foreign key.
+   * {@link #tableId} — an anonymous QR scan is not guaranteed to reference a formally-created
+   * {@code restaurant_table} row, so this is a free-text label carried straight from the verified
+   * token, never a foreign key.
    */
   @Column(name = "table_label", length = 64)
   private String tableLabel;
@@ -204,8 +204,16 @@ public class Order extends Auditable {
       String orderType,
       UUID tableId,
       Long discountMinor) {
-    this(businessId, total, occurredAt, idempotencyKey, orderType, tableId, discountMinor,
-        SOURCE_POS, null);
+    this(
+        businessId,
+        total,
+        occurredAt,
+        idempotencyKey,
+        orderType,
+        tableId,
+        discountMinor,
+        SOURCE_POS,
+        null);
   }
 
   /**

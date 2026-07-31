@@ -48,17 +48,17 @@ public class SelfOrderAccessReader {
    * <p>Because the lookup is RLS-scoped to that tentatively-bound {@code companyId}, a token whose
    * claimed company does not actually own the {@code (outletId, kid)} row it names finds NOTHING —
    * RLS makes the real owner's row invisible under the wrong tenant — so a forged/cross-tenant
-   * {@code companyId} claim can never pass verification. A retired {@code kid} or an unknown
-   * {@code kid} likewise resolve to nothing (only {@code ACTIVE} rows are matched). Only once a row
-   * IS found does {@link SelfOrderTokenCodec#verifySignature} run — constant-time — against that
-   * row's decrypted secret, so signature verification always occurs against the secret whose company
+   * {@code companyId} claim can never pass verification. A retired {@code kid} or an unknown {@code
+   * kid} likewise resolve to nothing (only {@code ACTIVE} rows are matched). Only once a row IS
+   * found does {@link SelfOrderTokenCodec#verifySignature} run — constant-time — against that row's
+   * decrypted secret, so signature verification always occurs against the secret whose company
    * actually owns it.
    *
    * @return the verified {@link SelfOrderAccess} row iff a matching ACTIVE row exists AND the
-   *     token's HMAC signature verifies against its secret; {@link Optional#empty()} on ANY mismatch
-   *     (garbage token, retired/unknown kid, cross-outlet/cross-tenant claim, or a bad signature) —
-   *     the filter maps every case to a uniform {@code 401} so a probing attacker cannot distinguish
-   *     failure modes.
+   *     token's HMAC signature verifies against its secret; {@link Optional#empty()} on ANY
+   *     mismatch (garbage token, retired/unknown kid, cross-outlet/cross-tenant claim, or a bad
+   *     signature) — the filter maps every case to a uniform {@code 401} so a probing attacker
+   *     cannot distinguish failure modes.
    */
   @Transactional(readOnly = true)
   public Optional<SelfOrderAccess> verify(UUID outletId, String kid, String token) {

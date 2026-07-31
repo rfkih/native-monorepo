@@ -16,8 +16,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The owner/manager-only console surface for managing an outlet's self-order QR codes (Phase 6,
- * ADR 0029). These ride the existing authenticated DASHBOARD routes — unlike {@code
+ * The owner/manager-only console surface for managing an outlet's self-order QR codes (Phase 6, ADR
+ * 0029). These ride the existing authenticated DASHBOARD routes — unlike {@code
  * selforder.controller.SelfOrderController}, which is the ANONYMOUS surface a diner's phone talks
  * to.
  *

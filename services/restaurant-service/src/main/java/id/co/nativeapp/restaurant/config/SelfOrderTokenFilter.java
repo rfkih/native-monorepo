@@ -23,26 +23,27 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * #TOKEN_HEADER} header.
  *
  * <p><strong>The tenant-free-lookup problem, and the recipe this filter follows.</strong> Every
- * OTHER read/write in this service is RLS-scoped to an ALREADY-bound tenant (from a validated JWT or
- * the dev header). Here there is no tenant yet — the caller is anonymous — so the very first lookup
- * ("does this {@code (outletId, kid)} pair name a real, ACTIVE secret?") has no tenant to scope
- * itself by. A genuinely tenant-unbound probe (a second, unscoped DB role, or a Postgres SECURITY
- * DEFINER function) would need its own connection pool and its own hole punched through RLS — a
- * bigger, riskier surface than this feature warrants. Instead: <strong>parse {@code companyId} from
- * the token's UNVERIFIED payload FIRST, bind {@link TenantContext} to it with a placeholder actor,
- * THEN run the {@code (outletId, kid)} lookup RLS-scoped to that claimed tenant.</strong> RLS itself
- * closes the gap this opens: if the claimed {@code companyId} is wrong (forged, or simply names a
- * company that does not own that outlet/kid), the real row — owned by a DIFFERENT tenant — is
- * invisible under the wrong scope, so the lookup finds nothing and the request is rejected. Only
- * once a row IS found does the HMAC signature get checked (constant-time) against that row's
- * decrypted secret, so the final tenant binding used for the rest of the request is always the row's
- * OWN {@code company_id} — proven consistent by the RLS-scoped read that found it, never trusted
- * from the payload standing alone.
+ * OTHER read/write in this service is RLS-scoped to an ALREADY-bound tenant (from a validated JWT
+ * or the dev header). Here there is no tenant yet — the caller is anonymous — so the very first
+ * lookup ("does this {@code (outletId, kid)} pair name a real, ACTIVE secret?") has no tenant to
+ * scope itself by. A genuinely tenant-unbound probe (a second, unscoped DB role, or a Postgres
+ * SECURITY DEFINER function) would need its own connection pool and its own hole punched through
+ * RLS — a bigger, riskier surface than this feature warrants. Instead: <strong>parse {@code
+ * companyId} from the token's UNVERIFIED payload FIRST, bind {@link TenantContext} to it with a
+ * placeholder actor, THEN run the {@code (outletId, kid)} lookup RLS-scoped to that claimed
+ * tenant.</strong> RLS itself closes the gap this opens: if the claimed {@code companyId} is wrong
+ * (forged, or simply names a company that does not own that outlet/kid), the real row — owned by a
+ * DIFFERENT tenant — is invisible under the wrong scope, so the lookup finds nothing and the
+ * request is rejected. Only once a row IS found does the HMAC signature get checked (constant-time)
+ * against that row's decrypted secret, so the final tenant binding used for the rest of the request
+ * is always the row's OWN {@code company_id} — proven consistent by the RLS-scoped read that found
+ * it, never trusted from the payload standing alone.
  *
  * <p>On success, the actor bound for the remainder of the request is {@code self-order:<table>} (or
- * {@code self-order:kiosk} for a kiosk token) — it lands in every {@code Auditable created_by}/{@code
- * updated_by} the anonymous create writes, and {@link SelfOrderPrincipal} (the outlet/table
- * context) is set as a request attribute for {@code selforder.service.SelfOrderService} to read.
+ * {@code self-order:kiosk} for a kiosk token) — it lands in every {@code Auditable
+ * created_by}/{@code updated_by} the anonymous create writes, and {@link SelfOrderPrincipal} (the
+ * outlet/table context) is set as a request attribute for {@code
+ * selforder.service.SelfOrderService} to read.
  *
  * <p>ANY failure — missing header, malformed token, unknown/retired {@code kid}, cross-outlet/
  * cross-tenant claim, or a bad signature — is mapped to a UNIFORM {@code 401} RFC-7807 {@link
@@ -135,7 +136,8 @@ public class SelfOrderTokenFilter extends OncePerRequestFilter {
     } catch (Exception e) {
       // callAs declares checked Exception; reader.verify throws only unchecked, so this is
       // unreachable in practice.
-      throw new IllegalStateException("Unexpected checked exception verifying a self-order token", e);
+      throw new IllegalStateException(
+          "Unexpected checked exception verifying a self-order token", e);
     }
   }
 

@@ -21,8 +21,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  *
  * <ul>
  *   <li>{@link SelfOrderAccessForbiddenException} — a non-owner/manager caller attempted a
- *       self-order-access management write ({@code GET}/{@code POST /rotate}) -> {@code 403 Forbidden}
- *       ({@code self-order-access-forbidden}).
+ *       self-order-access management write ({@code GET}/{@code POST /rotate}) -> {@code 403
+ *       Forbidden} ({@code self-order-access-forbidden}).
  *   <li>{@link SelfOrderCapExceededException} — an outlet's unconfirmed self-order count is at/over
  *       the cap -> {@code 429 Too Many Requests} ({@code self-order-cap-exceeded}).
  * </ul>
@@ -45,7 +45,8 @@ public class SelfOrderAdvice {
   @ExceptionHandler(SelfOrderCapExceededException.class)
   public ProblemDetail handleCapExceeded(
       SelfOrderCapExceededException ex, HttpServletRequest request) {
-    ProblemDetail problem = problem(HttpStatus.TOO_MANY_REQUESTS, "self-order-cap-exceeded", request);
+    ProblemDetail problem =
+        problem(HttpStatus.TOO_MANY_REQUESTS, "self-order-cap-exceeded", request);
     problem.setTitle("Too many unconfirmed self-order rows");
     problem.setDetail(ex.getMessage());
     problem.setProperty("businessId", ex.getBusinessId().toString());

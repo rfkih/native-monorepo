@@ -12,12 +12,12 @@ import org.springframework.validation.annotation.Validated;
  * validated at startup (fail fast — ENGINEERING-STANDARDS §7). No business config is hardcoded in
  * Java.
  *
- * @param secretKey the base64-encoded 32-byte AES-256-GCM key {@link SelfOrderSecretCipher} encrypts
- *     each outlet's per-QR HMAC secret with at rest ({@code self_order_access.secret_encrypted}).
- *     Supplied as {@code NATIVE_SELFORDER_KEY} (Vault-injected in prod) — a DEDICATED key, distinct
- *     from every other service's {@code native.pii.key} / {@code native.giftcard.code-key}: this
- *     column is not fleet-shared PII, it is a per-outlet signing secret that never needs to compare
- *     equal across services.
+ * @param secretKey the base64-encoded 32-byte AES-256-GCM key {@link SelfOrderSecretCipher}
+ *     encrypts each outlet's per-QR HMAC secret with at rest ({@code
+ *     self_order_access.secret_encrypted}). Supplied as {@code NATIVE_SELFORDER_KEY}
+ *     (Vault-injected in prod) — a DEDICATED key, distinct from every other service's {@code
+ *     native.pii.key} / {@code native.giftcard.code-key}: this column is not fleet-shared PII, it
+ *     is a per-outlet signing secret that never needs to compare equal across services.
  * @param parkCap the ceiling on a single outlet's UNCONFIRMED (PARKED, {@code source=SELF_ORDER})
  *     order count. A create request once the outlet is at/over this ceiling is rejected {@code 429}
  *     ({@code self-order-cap-exceeded}) — bounds the junk-row blast radius of an abused/leaked QR.

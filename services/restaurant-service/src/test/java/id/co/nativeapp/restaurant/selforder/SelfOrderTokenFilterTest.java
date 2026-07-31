@@ -33,8 +33,8 @@ import org.springframework.mock.web.MockHttpServletResponse;
  * <p>Tokens are minted through the REAL management path ({@link SelfOrderAccessService}, called
  * with an EMPTY role set — the guard's documented empty-roles-pass semantics, so no {@code X-Roles}
  * header setup is needed), so this test exercises the exact same {@link SelfOrderTokenCodec}
- * encode/verify round trip production traffic does. The filter is instantiated directly (not via the
- * {@code FilterRegistrationBean}) since its constructor takes only the autowired {@link
+ * encode/verify round trip production traffic does. The filter is instantiated directly (not via
+ * the {@code FilterRegistrationBean}) since its constructor takes only the autowired {@link
  * SelfOrderAccessReader} — a plain unit-level invocation of {@code doFilter} is the most direct way
  * to assert the TenantContext/{@link SelfOrderPrincipal} binding a passing request produces.
  */
@@ -85,8 +85,12 @@ class SelfOrderTokenFilterTest extends PostgresRlsTestBase {
     createMenuItem(OUTLET_A, TENANT_A, "Kopi Susu");
     seedTable(TENANT_A, OUTLET_A, "T1");
     SelfOrderAccessResponse access = getActive(TENANT_A, OUTLET_A);
-    String tableToken = access.tables().stream().filter(t -> "T1".equals(t.tableLabel())).findFirst()
-        .orElseThrow().token();
+    String tableToken =
+        access.tables().stream()
+            .filter(t -> "T1".equals(t.tableLabel()))
+            .findFirst()
+            .orElseThrow()
+            .token();
 
     MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/self-order/menu");
     request.addHeader(SelfOrderTokenFilter.TOKEN_HEADER, tableToken);
@@ -158,10 +162,10 @@ class SelfOrderTokenFilterTest extends PostgresRlsTestBase {
    * what enforces isolation: a payload claiming {@code outletId = OUTLET_A} but carrying OUTLET_B's
    * {@code kid}, VALIDLY signed with OUTLET_B's REAL secret (recovered here only because the test
    * has white-box repository access an attacker never would — see {@link
-   * SelfOrderAccess#getSecretPlaintext()} javadoc: "never returned by any API"), still finds NO row:
-   * {@code findByOutletIdAndKidAndStatus(OUTLET_A, kidB, ACTIVE)} matches nothing, because OUTLET_B's
-   * kid was never registered under OUTLET_A. So even a cryptographically PERFECT forgery of this
-   * shape is rejected — the isolation does not rely on an attacker's inability to sign.
+   * SelfOrderAccess#getSecretPlaintext()} javadoc: "never returned by any API"), still finds NO
+   * row: {@code findByOutletIdAndKidAndStatus(OUTLET_A, kidB, ACTIVE)} matches nothing, because
+   * OUTLET_B's kid was never registered under OUTLET_A. So even a cryptographically PERFECT forgery
+   * of this shape is rejected — the isolation does not rely on an attacker's inability to sign.
    */
   @Test
   void tokenForOutletBSplicedOntoOutletAClaimIsRejectedEvenWithAValidSignature() throws Exception {
@@ -179,7 +183,12 @@ class SelfOrderTokenFilterTest extends PostgresRlsTestBase {
     String forgedToken =
         SelfOrderTokenCodec.encode(
             new SelfOrderTokenPayload(
-                SelfOrderTokenPayload.CURRENT_VERSION, rowB.getKid(), TENANT_A, OUTLET_A, OUTLET_A, null),
+                SelfOrderTokenPayload.CURRENT_VERSION,
+                rowB.getKid(),
+                TENANT_A,
+                OUTLET_A,
+                OUTLET_A,
+                null),
             secretBBytes);
 
     MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/self-order/menu");
@@ -197,9 +206,9 @@ class SelfOrderTokenFilterTest extends PostgresRlsTestBase {
    * The RLS/tenancy proof: company A's outlet/kid is real, but the payload's {@code companyId}
    * claim is forged to company B. Verified against company B's RLS scope, company A's row is
    * invisible (RLS keys strictly on {@code company_id}), so no row is found — even though the
-   * {@code (outletId, kid)} pair is completely genuine under its REAL owner, company A. This is
-   * the "company B's data never readable with company A's token" guarantee: a forged tenant claim
-   * can never smuggle a lookup into a foreign company's scope.
+   * {@code (outletId, kid)} pair is completely genuine under its REAL owner, company A. This is the
+   * "company B's data never readable with company A's token" guarantee: a forged tenant claim can
+   * never smuggle a lookup into a foreign company's scope.
    */
   @Test
   void aTokenWithAForgedCompanyIdClaimNeverResolvesUnderTheForeignTenantsRls() throws Exception {
@@ -252,10 +261,13 @@ class SelfOrderTokenFilterTest extends PostgresRlsTestBase {
     TenantContext.callAs(
         companyId,
         OWNER_ACTOR,
-        () -> menuService.createItem(new CreateMenuItemRequest(outletId, name, "BEVERAGE", 18_000L, "IDR")));
+        () ->
+            menuService.createItem(
+                new CreateMenuItemRequest(outletId, name, "BEVERAGE", 18_000L, "IDR")));
   }
 
   private SelfOrderAccessResponse getActive(String companyId, UUID outletId) throws Exception {
-    return TenantContext.callAs(companyId, OWNER_ACTOR, () -> selfOrderAccessService.getActive(outletId));
+    return TenantContext.callAs(
+        companyId, OWNER_ACTOR, () -> selfOrderAccessService.getActive(outletId));
   }
 }

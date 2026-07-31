@@ -6,10 +6,10 @@ import java.util.UUID;
  * The self-order QR token's decoded claims (Phase 6, ADR 0029): {@code {v, kid, companyId,
  * businessId, outletId, tableLabel}}. {@code businessId} and {@code outletId} carry the SAME value
  * in restaurant-service today — the org tree is flattened (ADR 0012: an outlet IS the business
- * unit's one physical selling location, and {@code restaurant_order}/{@code restaurant_table}/{@code
- * menu_item} all key on that single {@code business_id}) — but both claims are carried on the wire
- * so the token format stays meaningful for a future vertical whose "business" and "outlet" concepts
- * diverge.
+ * unit's one physical selling location, and {@code restaurant_order}/{@code
+ * restaurant_table}/{@code menu_item} all key on that single {@code business_id}) — but both claims
+ * are carried on the wire so the token format stays meaningful for a future vertical whose
+ * "business" and "outlet" concepts diverge.
  *
  * @param v the payload version (currently always {@code 1}; a filter rejects any other value —
  *     leaves room to evolve the claim shape without breaking already-printed QR codes)

@@ -17,13 +17,13 @@ import org.springframework.data.redis.core.StringRedisTemplate;
  * The entitlement gate, driven end-to-end through Kafka (Phase 6, ADR 0029) — restaurant-service's
  * first entitlement-gated feature. Mirrors barbershop-service's/carwash-service's {@code
  * EntitlementGateConsumeTest} exactly, adapted to probe the shared {@link EntitlementChecker} bean
- * directly (rather than a specific write path — self-order's create path needs BOTH a real menu item
- * AND a filter-bound {@code SelfOrderPrincipal}, so the checker itself is the more focused seam for
- * proving the WIRE consumption; the full create-path gate semantics — 403/429/side-effects — are
- * proven in {@code selforder.SelfOrderCreateGateTest}).
+ * directly (rather than a specific write path — self-order's create path needs BOTH a real menu
+ * item AND a filter-bound {@code SelfOrderPrincipal}, so the checker itself is the more focused
+ * seam for proving the WIRE consumption; the full create-path gate semantics — 403/429/side-effects
+ * — are proven in {@code selforder.SelfOrderCreateGateTest}).
  *
- * <p>Publishing an {@code EntitlementGranted} for {@code self_order} — the way entitlement-service +
- * Debezium would — is consumed into the local {@code entitlement_projection} and INVALIDATES the
+ * <p>Publishing an {@code EntitlementGranted} for {@code self_order} — the way entitlement-service
+ * + Debezium would — is consumed into the local {@code entitlement_projection} and INVALIDATES the
  * entitlement-check Redis cache, so a previously-false answer flips to {@code true}. Publishing an
  * {@code EntitlementRevoked} flips it back. Awaitility awaits the async consumption (no {@code
  * Thread.sleep}).
@@ -56,7 +56,8 @@ class EntitlementGateConsumeTest extends KafkaPostgresRedisTestBase {
     await()
         .atMost(Duration.ofSeconds(30))
         .pollInterval(Duration.ofMillis(200))
-        .untilAsserted(() -> assertThat(entitlementChecker.isEntitled(TENANT_A, SELF_ORDER)).isTrue());
+        .untilAsserted(
+            () -> assertThat(entitlementChecker.isEntitled(TENANT_A, SELF_ORDER)).isTrue());
 
     // Publish EntitlementRevoked — the consumer flips the projection + invalidates the cache
     // again.

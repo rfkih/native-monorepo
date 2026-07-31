@@ -21,8 +21,8 @@ import org.springframework.web.bind.annotation.RestController;
  * endpoints, authenticated ONLY by {@link id.co.nativeapp.restaurant.config.SelfOrderTokenFilter}
  * (registered solely for {@code /api/v1/self-order/**}; no JWT, no dashboard session). Both paths
  * are declared {@code native.security.public-paths} so the shared {@code libs/security} JWT chain
- * {@code permitAll}s them and never demands a bearer token (see {@code application.yml}) — the token
- * filter is the ONLY gate here.
+ * {@code permitAll}s them and never demands a bearer token (see {@code application.yml}) — the
+ * token filter is the ONLY gate here.
  *
  * <ul>
  *   <li>{@code GET /api/v1/self-order/menu} — the outlet's active menu (ungated read).
@@ -34,7 +34,9 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>The outlet/table come from the verified token (never the request body — rule 5's client-never-
  * supplies-the-tenant/scope principle applied to the anonymous surface too).
  */
-@Tag(name = "Self-Order", description = "Anonymous QR self-ordering: menu read + parked-order create")
+@Tag(
+    name = "Self-Order",
+    description = "Anonymous QR self-ordering: menu read + parked-order create")
 @RestController
 @RequestMapping("/api/v1/self-order")
 public class SelfOrderController {

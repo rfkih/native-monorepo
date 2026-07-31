@@ -18,8 +18,8 @@ import java.util.UUID;
  * this company entitled to self_order?" without a sync call (Phase 6, ADR 0029).
  *
  * <p>It is an <em>app-maintained</em> read model (NOT a Debezium-CDC-derived projection), so — like
- * barbershop-service's/carwash-service's identically-named table — the rule-4 Auditable + rule-5 RLS
- * guarantees apply uniformly: it extends {@link Auditable} and is under the {@code
+ * barbershop-service's/carwash-service's identically-named table — the rule-4 Auditable + rule-5
+ * RLS guarantees apply uniformly: it extends {@link Auditable} and is under the {@code
  * entitlement_projection} RLS policy. The consumer writes it inside a {@link
  * id.co.nativeapp.tenant.TenantContext} scope bound to the EVENT's {@code company_id}, so the RLS
  * {@code WITH CHECK} passes.

@@ -6,11 +6,11 @@ import org.springframework.stereotype.Component;
 
 /**
  * The JPA {@link AttributeConverter} that makes {@code self_order_access.secret_encrypted} (a
- * {@code TEXT} column) ciphertext at rest (Phase 6, ADR 0029). Applied via {@code @Convert(converter
- * = SelfOrderSecretConverter.class)} on the entity's {@code secretPlaintext} field, it encrypts on
- * write ({@link #convertToDatabaseColumn}) and decrypts on read ({@link
- * #convertToEntityAttribute}) so the application works with the plaintext secret while the database
- * row only ever holds AES-256-GCM ciphertext. Mirrors employee-service's {@code
+ * {@code TEXT} column) ciphertext at rest (Phase 6, ADR 0029). Applied via
+ * {@code @Convert(converter = SelfOrderSecretConverter.class)} on the entity's {@code
+ * secretPlaintext} field, it encrypts on write ({@link #convertToDatabaseColumn}) and decrypts on
+ * read ({@link #convertToEntityAttribute}) so the application works with the plaintext secret while
+ * the database row only ever holds AES-256-GCM ciphertext. Mirrors employee-service's {@code
  * PiiAttributeConverter} (a {@code TEXT}-column converter) exactly, just keyed by {@link
  * SelfOrderSecretCipher} instead.
  *
