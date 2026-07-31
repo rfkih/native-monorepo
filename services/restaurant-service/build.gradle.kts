@@ -32,6 +32,13 @@ dependencies {
     implementation(project(":libs:contracts")) // event Avro schemas: single source of truth
     implementation(project(":libs:tenant"))
 
+    // Error-inbox (ADR 0005 pilot -> ADR 0009 fleet rollout): fingerprint-deduped, PII-redacted
+    // error_log rows. Activated here for the Phase 5 (ADR 0028) offline-replay stock-discrepancy
+    // record (StockDeductionWriter#deductForLinesAllowingNegative) — restaurant-service was
+    // originally a "pure producer" exclusion in ADR 0009, but it has since grown a Kafka consumer
+    // (UserOutletAssignmentChanged) and now this business-discrepancy write path.
+    implementation(project(":libs:error-inbox"))
+
     // observability — the SHARED logback-native-json.xml (one-object-per-line JSON logs with the
     // trace/correlation MDC fields + a dev console fallback) this service's logback-spring.xml
     // <include>s, plus the logstash-logback-encoder it references (ENGINEERING-STANDARDS §5). One

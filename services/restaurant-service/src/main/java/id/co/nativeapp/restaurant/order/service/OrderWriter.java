@@ -127,6 +127,7 @@ public class OrderWriter {
   private final AppliedPromotionRepository appliedPromotionRepository;
   private final ManualDiscountGuard manualDiscountGuard;
   private final LoyaltyRedemptionGuard loyaltyRedemptionGuard;
+  private final OfflineReplayGuard offlineReplayGuard;
 
   @SuppressWarnings("checkstyle:ParameterNumber")
   public OrderWriter(
@@ -145,7 +146,8 @@ public class OrderWriter {
       CouponRepository couponRepository,
       AppliedPromotionRepository appliedPromotionRepository,
       ManualDiscountGuard manualDiscountGuard,
-      LoyaltyRedemptionGuard loyaltyRedemptionGuard) {
+      LoyaltyRedemptionGuard loyaltyRedemptionGuard,
+      OfflineReplayGuard offlineReplayGuard) {
     this.orderRepository = orderRepository;
     this.lineRepository = lineRepository;
     this.modifierRepository = modifierRepository;
@@ -162,6 +164,7 @@ public class OrderWriter {
     this.appliedPromotionRepository = appliedPromotionRepository;
     this.manualDiscountGuard = manualDiscountGuard;
     this.loyaltyRedemptionGuard = loyaltyRedemptionGuard;
+    this.offlineReplayGuard = offlineReplayGuard;
   }
 
   /**
@@ -201,7 +204,13 @@ public class OrderWriter {
     String orderType = resolveOrderType(request.orderType());
     UUID tableId = request.tableId();
 
-    Instant now = Instant.now();
+    // Phase 5 (ADR 0028): validates the offlineReplay/clientOccurredAt contract (bounds,
+    // CASH-only/quick-sale-only forbidden-field matrix) and resolves the effective occurredAt —
+    // request.clientOccurredAt() when offline replay accepted one, else now(). This instant drives
+    // BOTH TaxChargeService's effective-rule resolution below AND the SaleRecorded occurred_at
+    // (GL period), so a replayed offline sale posts into the day it actually happened.
+    Instant now = offlineReplayGuard.resolveOccurredAt(request, Instant.now());
+    boolean offlineReplay = Boolean.TRUE.equals(request.offlineReplay());
 
     // ------------------------------------------------------------------
     // 1. Load requested menu items, resolve modifiers, compute subtotal, evaluate promotions
@@ -269,8 +278,15 @@ public class OrderWriter {
     if (!isDigitalPayment) {
       // CASH / gift-card-fully-covers / no-payment path: deduct stock (tracked items only) then
       // record sale — all in this transaction. A stock shortfall throws InsufficientStockException
-      // → rolls back everything.
-      stockDeductionWriter.deductForLines(cart.linesToAdd(), cart.itemViews());
+      // → rolls back everything. Phase 5 (ADR 0028) exception: an offline-replay sale NEVER rejects
+      // for insufficient stock — the cash is already in the drawer — it deducts allowing the level
+      // to go negative and records a discrepancy for repair by count. Online checkout is unchanged.
+      if (offlineReplay) {
+        stockDeductionWriter.deductForLinesAllowingNegative(
+            cart.linesToAdd(), cart.itemViews(), saved.getId());
+      } else {
+        stockDeductionWriter.deductForLines(cart.linesToAdd(), cart.itemViews());
+      }
 
       String tenderTypeName =
           (request.payment() != null && !residual.giftCardFullyCovers())

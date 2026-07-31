@@ -6,6 +6,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -41,6 +42,19 @@ import java.util.UUID;
  * @param giftCardRedeemMinor Phase 4 (ADR 0027): optional amount to redeem from the gift card,
  *     minor units, clamped server-side to {@code min(requested, cached ACTIVE balance, grand
  *     total)}. Requires {@code giftCardId}; {@code null}/0 means no redemption.
+ * @param offlineReplay Phase 5 (ADR 0028): {@code true} when this checkout is a replay of a sale
+ *     queued while the POS device was offline; {@code null}/{@code false} is a normal online
+ *     checkout. Offline replay is CASH-only, quick-sale-only: it additionally REQUIRES a {@code
+ *     payment} with {@code tenderType == CASH} and forbids {@code couponCode}, a positive {@code
+ *     loyaltyRedeemPoints}, and any gift-card redemption ({@code loyaltyMemberId} alone — earn
+ *     attribution — remains allowed). A violation is rejected {@code 422}.
+ * @param clientOccurredAt Phase 5 (ADR 0028): accepted ONLY when {@code offlineReplay} is {@code
+ *     true} — when the sale actually happened on the device, bounded to &le; 48h in the past and
+ *     &le; 5min in the future (clock skew); a value outside that window, or supplied with {@code
+ *     offlineReplay} not {@code true}, is rejected {@code 422}. When accepted it becomes the
+ *     order's {@code occurredAt} (and the {@code SaleRecorded} event's {@code occurred_at}) so the
+ *     GL period reflects the day the sale actually happened, not the day it synced. {@code null}
+ *     with {@code offlineReplay=true} is allowed and falls back to {@code now()}.
  */
 public record CheckoutRequest(
     @NotNull UUID businessId,
@@ -54,11 +68,15 @@ public record CheckoutRequest(
     UUID loyaltyMemberId,
     @Min(0) Long loyaltyRedeemPoints,
     UUID giftCardId,
-    @Min(0) Long giftCardRedeemMinor) {
+    @Min(0) Long giftCardRedeemMinor,
+    Boolean offlineReplay,
+    Instant clientOccurredAt) {
 
   /** Convenience for a checkout with no payment and no discount (the original three-arg shape). */
   public CheckoutRequest(UUID businessId, String idempotencyKey, List<OrderLineRequest> lines) {
-    this(businessId, idempotencyKey, lines, null, null, null, null, null, null, null, null, null);
+    this(
+        businessId, idempotencyKey, lines, null, null, null, null, null, null, null, null, null,
+        null, null);
   }
 
   /**
@@ -71,7 +89,8 @@ public record CheckoutRequest(
       List<OrderLineRequest> lines,
       PaymentRequest payment) {
     this(
-        businessId, idempotencyKey, lines, payment, null, null, null, null, null, null, null, null);
+        businessId, idempotencyKey, lines, payment, null, null, null, null, null, null, null, null,
+        null, null);
   }
 
   /**
@@ -90,6 +109,8 @@ public record CheckoutRequest(
         lines,
         payment,
         discountMinor,
+        null,
+        null,
         null,
         null,
         null,
@@ -120,6 +141,8 @@ public record CheckoutRequest(
         null,
         null,
         null,
+        null,
+        null,
         null);
   }
 
@@ -145,6 +168,8 @@ public record CheckoutRequest(
         orderType,
         tableId,
         couponCode,
+        null,
+        null,
         null,
         null,
         null,

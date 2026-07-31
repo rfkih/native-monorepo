@@ -114,4 +114,33 @@ public interface MenuItemRepository extends JpaRepository<MenuItem, UUID> {
           """,
       nativeQuery = true)
   int deductStock(@Param("id") UUID id, @Param("qty") int qty);
+
+  /**
+   * Phase 5 (ADR 0028): the offline-replay stock policy — deducts {@code qty} from a
+   * <em>tracked</em> item's stock WITHOUT the {@code stock_quantity >= :qty} guard, so the level is
+   * allowed to go negative. Used ONLY for a replayed offline sale, which must never be rejected for
+   * insufficient stock (the cash is already in the drawer); the caller records a discrepancy for
+   * repair by count. Online checkout keeps using the guarded {@link #deductStock}.
+   *
+   * <p>Still skips an untracked item ({@code stock_quantity IS NULL}) silently — the WHERE clause
+   * excludes it, so a 0-row result on a caller-confirmed-tracked item id would indicate the row was
+   * concurrently deleted, not a stock shortfall.
+   *
+   * @param id the menu item id
+   * @param qty units to deduct (&ge; 1)
+   * @return 1 if the deduction applied; 0 if the item is untracked or no longer exists
+   */
+  @Modifying
+  @Query(
+      value =
+          """
+          UPDATE menu_item
+             SET stock_quantity = stock_quantity - :qty,
+                 updated_at     = NOW(),
+                 version        = version + 1
+           WHERE id             = :id
+             AND stock_quantity IS NOT NULL
+          """,
+      nativeQuery = true)
+  int forceDeductStock(@Param("id") UUID id, @Param("qty") int qty);
 }

@@ -1,15 +1,18 @@
 package id.co.nativeapp.restaurant.menu.service;
 
+import id.co.nativeapp.errorinbox.ErrorInboxWriter;
 import id.co.nativeapp.restaurant.menu.domain.InsufficientStockException;
 import id.co.nativeapp.restaurant.menu.projection.MenuItemView;
 import id.co.nativeapp.restaurant.menu.repository.MenuItemRepository;
 import id.co.nativeapp.restaurant.order.domain.OrderLine;
+import id.co.nativeapp.tenant.TenantContext;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,14 +37,27 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Untracked items ({@code stock_quantity IS NULL}) are silently skipped: the UPDATE WHERE clause
  * excludes them (0 rows updated is the correct outcome, and the caller treats 0 rows as "untracked"
  * when the item's {@code stockQuantity} view field is null).
+ *
+ * <p><strong>Phase 5 (ADR 0028) offline-replay policy.</strong> {@link
+ * #deductForLinesAllowingNegative} is the offline-replay counterpart to {@link #deductForLines}: it
+ * NEVER throws {@link InsufficientStockException} — the cash is already in the drawer, so the sale
+ * is recorded regardless — and instead deducts the tracked item's stock allowing the level to go
+ * negative, recording a discrepancy to the error-log inbox ({@code libs/error-inbox}, ADR 0005/0009)
+ * for repair by a physical count. {@link #deductForLines} (the online path) is unchanged.
  */
 @Component
 public class StockDeductionWriter {
 
-  private final MenuItemRepository menuItemRepository;
+  /** The error-inbox {@code source} label for an offline-replay stock discrepancy. */
+  static final String OFFLINE_DISCREPANCY_SOURCE = "checkout:offline-stock-discrepancy";
 
-  public StockDeductionWriter(MenuItemRepository menuItemRepository) {
+  private final MenuItemRepository menuItemRepository;
+  private final ErrorInboxWriter errorInboxWriter;
+
+  public StockDeductionWriter(
+      MenuItemRepository menuItemRepository, ErrorInboxWriter errorInboxWriter) {
     this.menuItemRepository = menuItemRepository;
+    this.errorInboxWriter = errorInboxWriter;
   }
 
   /**
@@ -107,5 +123,76 @@ public class StockDeductionWriter {
         throw new InsufficientStockException(itemId, itemName, qty, 0);
       }
     }
+  }
+
+  /**
+   * Phase 5 (ADR 0028): deducts stock for a replayed offline sale — NEVER throws {@link
+   * InsufficientStockException}. For each tracked item, the deduction always applies (the level is
+   * allowed to go negative); when the pre-loaded {@code itemViews} snapshot shows fewer units were
+   * available than requested, a discrepancy is recorded to the error-log inbox with enough context
+   * (order id, item id/name, requested vs. the snapshot-known available) for repair by a physical
+   * count. Untracked items are skipped, exactly like {@link #deductForLines}.
+   *
+   * <p>The "available" figure is the item's {@code stock_quantity} AS OBSERVED when the cart was
+   * built (before this deduction), not a race-exact read at deduction time — precise enough for a
+   * reconciliation report; the money is what matters here, not a perfectly race-free stock count.
+   *
+   * @param lines the order lines; each line contributes its {@code menuItemId} and {@code qty}
+   * @param itemViews pre-loaded projections from the checkout validation step
+   * @param orderId the order id, stamped on the discrepancy record for traceability
+   */
+  @Transactional(propagation = Propagation.MANDATORY)
+  public void deductForLinesAllowingNegative(
+      List<OrderLine> lines, List<MenuItemView> itemViews, UUID orderId) {
+    if (lines.isEmpty()) {
+      return;
+    }
+
+    Map<UUID, MenuItemView> viewMap =
+        itemViews.stream().collect(Collectors.toMap(MenuItemView::getId, Function.identity()));
+    Map<UUID, Integer> qtyByItem =
+        lines.stream()
+            .collect(Collectors.toMap(OrderLine::getMenuItemId, OrderLine::getQty, Integer::sum));
+
+    for (Map.Entry<UUID, Integer> entry : qtyByItem.entrySet()) {
+      UUID itemId = entry.getKey();
+      int qty = entry.getValue();
+      MenuItemView view = viewMap.get(itemId);
+      if (view == null || view.getStockQuantity() == null) {
+        // Untracked (or unknown) — no UPDATE needed, never a discrepancy.
+        continue;
+      }
+      int knownAvailable = view.getStockQuantity();
+      menuItemRepository.forceDeductStock(itemId, qty);
+      if (knownAvailable < qty) {
+        recordDiscrepancy(orderId, itemId, view.getName(), qty, knownAvailable);
+      }
+    }
+  }
+
+  /**
+   * Records an offline-replay stock discrepancy to the error-log inbox (ADR 0005/0009). {@link
+   * ErrorInboxWriter#record} itself upserts in a {@code REQUIRES_NEW} transaction (so the record
+   * commits independently of the caller's in-flight checkout) and swallows any failure of its own —
+   * ops infrastructure must never break the checkout it is observing.
+   */
+  private void recordDiscrepancy(
+      UUID orderId, UUID menuItemId, String itemName, int requested, int available) {
+    String companyId = TenantContext.require().companyId();
+    String traceId = MDC.get("traceId");
+    String message =
+        "Offline-replay checkout oversold tracked stock: order="
+            + orderId
+            + " menuItem="
+            + menuItemId
+            + " ('"
+            + itemName
+            + "') requested="
+            + requested
+            + " availableAtCartBuild="
+            + available
+            + " — stock allowed negative; repair by physical count.";
+    errorInboxWriter.record(
+        new IllegalStateException(message), OFFLINE_DISCREPANCY_SOURCE, companyId, traceId);
   }
 }

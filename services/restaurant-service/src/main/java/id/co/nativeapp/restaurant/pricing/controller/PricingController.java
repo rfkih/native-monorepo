@@ -1,0 +1,53 @@
+package id.co.nativeapp.restaurant.pricing.controller;
+
+import id.co.nativeapp.restaurant.pricing.dto.EffectiveRulesResponse;
+import id.co.nativeapp.restaurant.pricing.service.TaxChargeService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.UUID;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * {@code GET /api/v1/pricing/effective-rules} — Phase 5 (ADR 0028) offline-mode support: the
+ * currently-effective tax/service-charge basis-point rates the POS device caches so it can price a
+ * queued offline sale with the SAME formula the server applies on replay.
+ *
+ * <p>The tenant ({@code company_id}) comes from the bound {@link
+ * id.co.nativeapp.tenant.TenantContext TenantContext}, never from the query string (rule 5).
+ * Read-only, POS-role facing — the gateway handles role authorization; no service-side role check
+ * (mirrors the sibling {@code /orders/quote} read path).
+ */
+@Tag(name = "Pricing", description = "POS pricing snapshots (offline-mode provisional pricing)")
+@RestController
+@RequestMapping("/api/v1/pricing")
+public class PricingController {
+
+  private final TaxChargeService taxChargeService;
+
+  public PricingController(TaxChargeService taxChargeService) {
+    this.taxChargeService = taxChargeService;
+  }
+
+  /**
+   * Returns TODAY's (UTC) effective tax/service-charge rules for the bound tenant.
+   *
+   * <p>{@code businessId} is accepted for API-shape consistency with every other POS endpoint (and
+   * reserved for a future per-outlet rule override) but is NOT currently consulted — {@code
+   * tax_charge_rule} rows are resolved tenant-wide, exactly like {@link
+   * TaxChargeService#resolve}.
+   */
+  @Operation(
+      summary = "Resolve today's effective tax/service-charge rules",
+      description =
+          "Returns TODAY's (UTC) effective tax and service-charge basis-point rates plus their rule"
+              + " version/provenance, for the offline POS's provisional-pricing snapshot (ADR 0028)."
+              + " No-rule fall-through: bp=0, version/provenance=null.")
+  @GetMapping("/effective-rules")
+  public ResponseEntity<EffectiveRulesResponse> effectiveRules(@RequestParam UUID businessId) {
+    return ResponseEntity.ok(taxChargeService.resolveEffectiveRules());
+  }
+}

@@ -18,4 +18,11 @@ public interface TaxChargeRuleView {
   boolean isServiceChargeInTaxBase();
 
   String getProvenance();
+
+  /**
+   * ISO-4217 currency this rule applies to (CHAR(3), right-padded — callers {@code .strip()} it).
+   * Added for the Phase 5 (ADR 0028) {@code GET /api/v1/pricing/effective-rules} snapshot, which has
+   * no other source for the resolved rule's currency.
+   */
+  String getCurrency();
 }
