@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { UserManager, WebStorageStateStore, type User } from 'oidc-client-ts'
-import { setAccessToken } from '@/lib/api'
+import { setAccessToken, setUnauthorizedHandler } from '@/lib/api'
 import { AUTH_MODE, KEYCLOAK_CLIENT_ID, KEYCLOAK_REALM, KEYCLOAK_URL } from '@/lib/config'
 import { DEV_ACTOR } from '@/lib/devIdentity'
 import { AuthContext, BUSINESS_ROLES, type AuthState, type BusinessRole } from '@/lib/authContext'
@@ -150,14 +150,56 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
 
     void init()
 
+    // Recover-or-logout on an UNRECOVERABLE auth failure: an access token that expired without a
+    // successful automatic silent renew (addAccessTokenExpired), a silent-renew failure
+    // (addSilentRenewError), or a 401 from the API — the gateway rejecting the bearer (via
+    // setUnauthorizedHandler). Previously NONE of these were handled, so an expired session just
+    // kept firing requests with a dead token and surfacing silent errors while `state` still said
+    // authenticated. Now: try ONE silent renew; if it fails, the session is genuinely over → clear
+    // it and send the user to the sign-in screen. Debounced (`recovering`) so a burst of 401s (a
+    // dashboard fires ~10 queries at once) triggers a single attempt, not a storm of redirects.
+    let recovering = false
+    async function recoverOrLogout() {
+      if (!mounted || recovering) return
+      recovering = true
+      try {
+        // Success fires addUserLoaded → apply(newUser); in-flight react-query retries then succeed.
+        await manager.signinSilent()
+      } catch {
+        // Truly unrecoverable (refresh token expired / IdP session gone) → hard logout.
+        setAccessToken(null)
+        apply(null) // flip to unauthenticated so the app stops issuing tenant-scoped calls
+        try {
+          await manager.removeUser()
+        } catch {
+          // best-effort clear of the stored (dead) session
+        }
+        if (mounted) {
+          // Explicit re-login: seamless if the Keycloak SSO session is still alive, otherwise the
+          // login form. Either way the user is never stranded on a silently-broken page.
+          void manager.signinRedirect()
+        }
+      } finally {
+        recovering = false
+      }
+    }
+
     const onLoaded = (user: User) => apply(user)
     const onUnloaded = () => apply(null)
+    const onExpired = () => void recoverOrLogout()
+    const onRenewError = () => void recoverOrLogout()
     manager.events.addUserLoaded(onLoaded)
     manager.events.addUserUnloaded(onUnloaded)
+    manager.events.addAccessTokenExpired(onExpired)
+    manager.events.addSilentRenewError(onRenewError)
+    setUnauthorizedHandler(() => void recoverOrLogout())
     return () => {
       mounted = false
       manager.events.removeUserLoaded(onLoaded)
       manager.events.removeUserUnloaded(onUnloaded)
+      manager.events.removeAccessTokenExpired(onExpired)
+      manager.events.removeSilentRenewError(onRenewError)
+      setUnauthorizedHandler(null)
     }
   }, [manager])
 

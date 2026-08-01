@@ -19,6 +19,18 @@ export function setAccessToken(token: string | null): void {
   accessToken = token
 }
 
+/**
+ * A handler the auth layer registers to react to an AUTHORIZATION FAILURE in oidc mode: a request
+ * rejected with 401 means the bearer is expired/invalid at the gateway. Rather than surface a
+ * silent, un-actionable error, the auth layer recovers the session (silent renew) or ENDS it
+ * (log out → sign-in screen). The handler is debounced there, so many concurrent 401s (a dashboard
+ * fires ~10 queries at once) trigger a single recovery, not a storm.
+ */
+let onUnauthorized: (() => void) | null = null
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  onUnauthorized = handler
+}
+
 export interface ProblemDetail {
   type?: string
   title?: string
@@ -143,6 +155,13 @@ export async function apiFetch<T>(path: string, opts: RequestOptions = {}): Prom
       tokenState:
         AUTH_MODE === 'oidc' ? deriveTokenState(accessToken, opts.tenant?.companyId) : null,
     })
+    // 401 in oidc mode = the gateway rejected the bearer (expired/invalid). Signal the auth layer
+    // to recover-or-logout so the session can't just keep silently failing. Still throw so the
+    // caller's query settles; the auth layer runs its recovery in parallel (and, if it renews,
+    // react-query's retry succeeds with the fresh token).
+    if (res.status === 401 && AUTH_MODE === 'oidc') {
+      onUnauthorized?.()
+    }
     throw new ApiError(
       res.status,
       problem,
