@@ -187,7 +187,8 @@ public class ReversalPostingWriter {
     // 1) Contra dimensional ledger posting. Negate the sale's GRAND TOTAL (reconstructed from the
     //    original tender legs), NOT event.amount(): SaleVoided.amount is the PAYMENT amount, which
     //    for a gift-card-settled sale is only the cash residual (grand − gift_card). The SALE
-    //    ledger_posting was booked with the full grand total, so a residual-sized contra would leave
+    //    ledger_posting was booked with the full grand total, so a residual-sized contra would
+    // leave
     //    the gift-card portion standing and overstate the trial balance / unit-P&L / consolidation.
     //    Legacy sales with no original entry fall back to event.amount() (== grand total there).
     Money saleGrandTotal =
@@ -541,8 +542,8 @@ public class ReversalPostingWriter {
    * <p>The raw debit sum is NOT the grand total: the V37 SALE v3 template's debit side is {@code
    * NET_TENDER + GIFT_CARD_TENDER + SALES_DISCOUNT + LOYALTY_DISCOUNT}, i.e. {@code amount +
    * discount + loyalty} (the gift-card split nets within the tender). The two contra-revenue debits
-   * (SALES_DISCOUNT, LOYALTY_DISCOUNT) inflate the sum above the grand total, so they are excluded —
-   * leaving exactly the tender legs, which sum to {@code amount}. Works across every template
+   * (SALES_DISCOUNT, LOYALTY_DISCOUNT) inflate the sum above the grand total, so they are excluded
+   * — leaving exactly the tender legs, which sum to {@code amount}. Works across every template
    * version: legacy 2-line GROSS (no contra legs → Σdebit = grand), v2 (SALES_DISCOUNT only), v3
    * (both). Credit legs contribute 0 to a debit sum, so they are naturally ignored.
    *
@@ -553,7 +554,8 @@ public class ReversalPostingWriter {
   private Money resolveSaleGrandTotal(
       List<JournalLineReversalView> originalLines, java.time.Instant asOf, String currencyCode) {
     java.util.Set<String> contraRevenueCodes = new java.util.HashSet<>();
-    for (AccountRole contraRole : List.of(AccountRole.SALES_DISCOUNT, AccountRole.LOYALTY_DISCOUNT)) {
+    for (AccountRole contraRole :
+        List.of(AccountRole.SALES_DISCOUNT, AccountRole.LOYALTY_DISCOUNT)) {
       String code = roleAccountResolver.resolve(contraRole, asOf);
       if (code != null) {
         contraRevenueCodes.add(code);

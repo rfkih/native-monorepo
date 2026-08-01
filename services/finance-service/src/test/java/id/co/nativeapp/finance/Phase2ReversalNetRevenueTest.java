@@ -156,7 +156,8 @@ class Phase2ReversalNetRevenueTest extends PostgresRlsTestBase {
   void voidOfGiftCardSettledSaleNetsDimensionalLedgerToZero() throws Exception {
     UUID saleId = UUID.randomUUID();
     UUID saleEventId = UUID.randomUUID();
-    // subtotal=100,000 no discount/sc/tax → grand=100,000; 40,000 settled by gift card, 60,000 cash.
+    // subtotal=100,000 no discount/sc/tax → grand=100,000; 40,000 settled by gift card, 60,000
+    // cash.
     revenuePostingService.handle(giftCardSaleEvent(saleEventId, saleId, 100_000L, 40_000L));
 
     assertThat(ledgerPostingMinor())
@@ -169,8 +170,9 @@ class Phase2ReversalNetRevenueTest extends PostgresRlsTestBase {
     reversalPostingService.handleVoid(voidEvent(voidId, saleId, 60_000L));
 
     assertThat(ledgerPostingMinor())
-        .as("void must net the dimensional ledger to 0 by reversing the grand total, not the"
-            + " residual (M1 fix)")
+        .as(
+            "void must net the dimensional ledger to 0 by reversing the grand total, not the"
+                + " residual (M1 fix)")
         .isZero();
     assertGlEntryIsBalanced(voidId);
   }
@@ -227,8 +229,8 @@ class Phase2ReversalNetRevenueTest extends PostgresRlsTestBase {
    * CRITICAL (bug hunt): a FULL refund of a DISCOUNTED sale must be ACCEPTED and net revenue to
    * zero — not misclassified as partial and rejected. The full-vs-partial gate summed ALL debit
    * legs (grand + discount) and compared to the refund (grand), so every discounted / points /
-   * gift-card full refund was wrongly rejected and the sale stayed counted as revenue forever.
-   * This is the regression that was missing (the only full-refund test used a zero-discount sale).
+   * gift-card full refund was wrongly rejected and the sale stayed counted as revenue forever. This
+   * is the regression that was missing (the only full-refund test used a zero-discount sale).
    */
   @Test
   void fullRefundOfDiscountedSaleIsAcceptedAndNetsToZero() throws Exception {
@@ -417,9 +419,11 @@ class Phase2ReversalNetRevenueTest extends PostgresRlsTestBase {
 
   /**
    * A gift-card-settled SALE (Phase 4): {@code grand} owed, {@code giftCard} covered by stored
-   * value (the rest by cash). No discount/SC/tax so subtotal == grand, keeping the arithmetic clear.
+   * value (the rest by cash). No discount/SC/tax so subtotal == grand, keeping the arithmetic
+   * clear.
    */
-  private SaleRecordedEvent giftCardSaleEvent(UUID eventId, UUID saleId, long grand, long giftCard) {
+  private SaleRecordedEvent giftCardSaleEvent(
+      UUID eventId, UUID saleId, long grand, long giftCard) {
     return new SaleRecordedEvent(
         eventId,
         saleId,
