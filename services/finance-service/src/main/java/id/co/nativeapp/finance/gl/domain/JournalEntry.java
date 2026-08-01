@@ -115,6 +115,16 @@ public class JournalEntry extends Auditable {
   private Long netRevenueMinor;
 
   /**
+   * The precomputed GRAND TOTAL (what the customer owed = the tender legs) for SALE entries — set by
+   * {@code RevenuePostingWriter} at posting time (V38). The reversal writer reads it back so the
+   * void contra / refund full-vs-partial gate use a STORED grand total rather than reconstructing it
+   * from the GL lines (which depends on the mutable role_account_map — fragile). NULL for non-SALE
+   * entries and for SALE entries predating V38 (those fall back to line reconstruction).
+   */
+  @Column(name = "grand_total_minor", nullable = true)
+  private Long grandTotalMinor;
+
+  /**
    * The lines validated by {@link #balanced} — transient (not persisted here; the writer saves each
    * line explicitly via the line repository after saving the entry header).
    */
@@ -294,6 +304,23 @@ public class JournalEntry extends Auditable {
    */
   public void setNetRevenueMinor(Long netRevenueMinor) {
     this.netRevenueMinor = netRevenueMinor;
+  }
+
+  /**
+   * Returns the precomputed grand total in minor units for this SALE entry, or {@code null} for
+   * non-SALE entries and SALE entries predating V38.
+   */
+  public Long getGrandTotalMinor() {
+    return grandTotalMinor;
+  }
+
+  /**
+   * Sets the precomputed grand total (what the customer owed) for a SALE entry. Called by {@code
+   * RevenuePostingWriter} immediately after {@link #balanced} constructs the SALE entry, before the
+   * first save. Must not be called for non-SALE entries.
+   */
+  public void setGrandTotalMinor(Long grandTotalMinor) {
+    this.grandTotalMinor = grandTotalMinor;
   }
 
   /** The validated lines (transient — the writer saves them separately after the entry header). */

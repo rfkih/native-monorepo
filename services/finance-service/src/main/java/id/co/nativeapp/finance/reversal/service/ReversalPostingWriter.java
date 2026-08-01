@@ -22,8 +22,10 @@ import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -193,7 +195,7 @@ public class ReversalPostingWriter {
     //    Legacy sales with no original entry fall back to event.amount() (== grand total there).
     Money saleGrandTotal =
         originalEntry.isPresent()
-            ? resolveSaleGrandTotal(originalLines, event.occurredAt(), currencyCode)
+            ? resolveGrandTotal(originalEntry.get(), originalLines, event.occurredAt(), currencyCode)
             : amount;
     Money negatedGross = saleGrandTotal.negate();
     LedgerPosting posting =
@@ -344,7 +346,8 @@ public class ReversalPostingWriter {
       // the sale then stayed counted as revenue forever. See resolveSaleGrandTotal.
       String currencyCode = refundAmount.currency().getCurrencyCode();
       long originalGrandTotalMinor =
-          resolveSaleGrandTotal(originalLines, event.occurredAt(), currencyCode).amountMinor();
+          resolveGrandTotal(origEntryView, originalLines, event.occurredAt(), currencyCode)
+              .amountMinor();
       long refundMinor = refundAmount.amountMinor();
 
       if (refundMinor < originalGrandTotalMinor) {
@@ -352,6 +355,14 @@ public class ReversalPostingWriter {
         // with integer rounding that cannot be guaranteed balanced. Ship a clear 400 error
         // rather than an incoherent or unbalanced GL posting. The processOnce claim is
         // NOT yet consumed (this throw rolls back the transaction).
+        //
+        // KNOWN LIMITATION (bug audit W2): a GIFT-CARD-settled sale can only be refunded up to its
+        // PAYMENT (the cash residual = grand − gift_card), so its "full" refund carries the residual,
+        // which is < grand total and lands HERE as partial. That is correct-by-definition — refunding
+        // only the cash leaves the gift-card portion un-refunded — but it means a gift-card sale
+        // cannot be fully refunded through this flow yet: restoring the gift-card balance is a
+        // separate, unmodeled concern (loyalty-service re-credit). Discount/loyalty (non-gift-card)
+        // full refunds DO work — their payment equals the grand total. Tracked as a residual.
         throw new PartialRefundNotSupportedException(
             "Partial refund not yet supported: refundAmount="
                 + refundMinor
@@ -536,6 +547,24 @@ public class ReversalPostingWriter {
   }
 
   /**
+   * The sale's GRAND TOTAL. Prefers the value STORED on the SALE entry at posting time (V38 {@code
+   * grand_total_minor}) — stable regardless of any later {@code role_account_map} remap. Falls back
+   * to reconstructing it from the GL lines only for SALE entries predating V38 ({@code null} stored
+   * value), which is correct against the immutable v1 seed those entries were posted under.
+   */
+  private Money resolveGrandTotal(
+      JournalEntrySaleView entry,
+      List<JournalLineReversalView> lines,
+      Instant asOf,
+      String currencyCode) {
+    Long stored = entry.getGrandTotalMinor();
+    if (stored != null) {
+      return Money.ofMinor(stored, currencyCode);
+    }
+    return resolveSaleGrandTotal(lines, asOf, currencyCode);
+  }
+
+  /**
    * The sale's GRAND TOTAL (what the customer actually owed/paid) reconstructed from the original
    * SALE entry's TENDER debit legs = Σ(debit legs) − Σ(contra-revenue debit legs).
    *
@@ -552,8 +581,8 @@ public class ReversalPostingWriter {
    * resolving at the reversal instant matches the codes stamped on the original lines at sale time.
    */
   private Money resolveSaleGrandTotal(
-      List<JournalLineReversalView> originalLines, java.time.Instant asOf, String currencyCode) {
-    java.util.Set<String> contraRevenueCodes = new java.util.HashSet<>();
+      List<JournalLineReversalView> originalLines, Instant asOf, String currencyCode) {
+    Set<String> contraRevenueCodes = new HashSet<>();
     for (AccountRole contraRole :
         List.of(AccountRole.SALES_DISCOUNT, AccountRole.LOYALTY_DISCOUNT)) {
       String code = roleAccountResolver.resolve(contraRole, asOf);

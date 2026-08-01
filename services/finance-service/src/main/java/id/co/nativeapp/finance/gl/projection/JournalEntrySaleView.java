@@ -37,4 +37,14 @@ public interface JournalEntrySaleView {
    * falls back to the grand total (net == gross for legacy Phase 1 sales).
    */
   Long getNetRevenueMinor();
+
+  /**
+   * The precomputed grand total in minor units (what the customer owed = the tender legs) stored by
+   * {@code RevenuePostingWriter} at posting time (V38). The reversal writer negates this for the
+   * void contra and compares against it for the refund full-vs-partial gate — a STORED value rather
+   * than reconstructing it from the GL lines (which depends on the mutable role_account_map).
+   * Returns {@code null} for SALE entries predating V38; the reversal writer falls back to line
+   * reconstruction.
+   */
+  Long getGrandTotalMinor();
 }
