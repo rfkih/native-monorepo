@@ -281,7 +281,8 @@ public class RevenuePostingWriter {
     // inspection (which would be fragile).
     glEntry.setNetRevenueMinor(netRevenue.amountMinor());
     // V38: also store the GRAND TOTAL (= event.amount(), what the customer owed) so the reversal
-    // writer negates a STORED value instead of reconstructing it from the GL lines (which depends on
+    // writer negates a STORED value instead of reconstructing it from the GL lines (which depends
+    // on
     // the mutable role_account_map — fragile once an SME remaps the contra-revenue accounts).
     glEntry.setGrandTotalMinor(amount.amountMinor());
     // saveAndFlush flushes the journal_entry INSERT to Postgres immediately so the FK on

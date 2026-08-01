@@ -195,7 +195,8 @@ public class ReversalPostingWriter {
     //    Legacy sales with no original entry fall back to event.amount() (== grand total there).
     Money saleGrandTotal =
         originalEntry.isPresent()
-            ? resolveGrandTotal(originalEntry.get(), originalLines, event.occurredAt(), currencyCode)
+            ? resolveGrandTotal(
+                originalEntry.get(), originalLines, event.occurredAt(), currencyCode)
             : amount;
     Money negatedGross = saleGrandTotal.negate();
     LedgerPosting posting =
@@ -357,8 +358,10 @@ public class ReversalPostingWriter {
         // NOT yet consumed (this throw rolls back the transaction).
         //
         // KNOWN LIMITATION (bug audit W2): a GIFT-CARD-settled sale can only be refunded up to its
-        // PAYMENT (the cash residual = grand − gift_card), so its "full" refund carries the residual,
-        // which is < grand total and lands HERE as partial. That is correct-by-definition — refunding
+        // PAYMENT (the cash residual = grand − gift_card), so its "full" refund carries the
+        // residual,
+        // which is < grand total and lands HERE as partial. That is correct-by-definition —
+        // refunding
         // only the cash leaves the gift-card portion un-refunded — but it means a gift-card sale
         // cannot be fully refunded through this flow yet: restoring the gift-card balance is a
         // separate, unmodeled concern (loyalty-service re-credit). Discount/loyalty (non-gift-card)
