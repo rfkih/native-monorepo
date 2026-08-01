@@ -144,6 +144,37 @@ class Phase2ReversalNetRevenueTest extends PostgresRlsTestBase {
     assertGlEntryIsBalanced(voidId);
   }
 
+  /**
+   * M1 (bug hunt): voiding a GIFT-CARD-settled sale must net the DIMENSIONAL ledger_posting to
+   * zero. The SALE ledger_posting is booked with the grand total (100,000), but SaleVoided.amount
+   * is the PAYMENT residual (grand − gift_card = 60,000). Before the fix the contra used the
+   * residual → ledger_posting left standing at +40,000 (the gift-card portion), silently
+   * overstating the trial balance / unit-P&L / consolidation. After the fix the contra uses the
+   * reconstructed grand total (the tender legs) → nets to 0.
+   */
+  @Test
+  void voidOfGiftCardSettledSaleNetsDimensionalLedgerToZero() throws Exception {
+    UUID saleId = UUID.randomUUID();
+    UUID saleEventId = UUID.randomUUID();
+    // subtotal=100,000 no discount/sc/tax → grand=100,000; 40,000 settled by gift card, 60,000 cash.
+    revenuePostingService.handle(giftCardSaleEvent(saleEventId, saleId, 100_000L, 40_000L));
+
+    assertThat(ledgerPostingMinor())
+        .as("SALE dimensional ledger_posting is booked with the grand total")
+        .isEqualTo(100_000L);
+
+    // Void: SaleVoided carries the PAYMENT residual (grand − gift_card = 60,000), not the grand
+    // total.
+    UUID voidId = UUID.randomUUID();
+    reversalPostingService.handleVoid(voidEvent(voidId, saleId, 60_000L));
+
+    assertThat(ledgerPostingMinor())
+        .as("void must net the dimensional ledger to 0 by reversing the grand total, not the"
+            + " residual (M1 fix)")
+        .isZero();
+    assertGlEntryIsBalanced(voidId);
+  }
+
   /** B1: void idempotency — re-delivery does not double-unwind. */
   @Test
   void voidIdempotencyNoDoubleUnwind() throws Exception {
@@ -190,6 +221,41 @@ class Phase2ReversalNetRevenueTest extends PostgresRlsTestBase {
     assertThat(consolidatedRevenueMinor())
         .as("full refund must net consolidated_revenue to 0 (W1 fix)")
         .isZero();
+  }
+
+  /**
+   * CRITICAL (bug hunt): a FULL refund of a DISCOUNTED sale must be ACCEPTED and net revenue to
+   * zero — not misclassified as partial and rejected. The full-vs-partial gate summed ALL debit
+   * legs (grand + discount) and compared to the refund (grand), so every discounted / points /
+   * gift-card full refund was wrongly rejected and the sale stayed counted as revenue forever.
+   * This is the regression that was missing (the only full-refund test used a zero-discount sale).
+   */
+  @Test
+  void fullRefundOfDiscountedSaleIsAcceptedAndNetsToZero() throws Exception {
+    UUID saleId = UUID.randomUUID();
+    UUID saleEventId = UUID.randomUUID();
+    // Discounted sale: subtotal 30,000, discount 5,000, grand 28,875, net 25,000.
+    revenuePostingService.handle(phase2SaleWithDiscountEvent(saleEventId, saleId));
+    assertThat(consolidatedRevenueMinor()).isEqualTo(DISCOUNT_NONZERO_NET);
+
+    UUID refundId = UUID.randomUUID();
+    // Full refund = the grand total (28,875). Must NOT throw PartialRefundNotSupportedException.
+    reversalPostingService.handleRefund(
+        new SaleRefundedEvent(
+            refundId,
+            TENANT,
+            BUSINESS,
+            saleId,
+            UUID.randomUUID(),
+            Money.ofMinor(DISCOUNT_NONZERO_GRAND, "IDR"),
+            DISCOUNT_NONZERO_GRAND,
+            OCCURRED,
+            "CASH"));
+
+    assertThat(consolidatedRevenueMinor())
+        .as("full refund of a discounted sale must be accepted and net revenue to 0 (CRITICAL fix)")
+        .isZero();
+    assertGlEntryIsBalanced(refundId);
   }
 
   /** W1: full refund produces a balanced GL contra entry (per-leg, not GROSS template). */
@@ -349,6 +415,32 @@ class Phase2ReversalNetRevenueTest extends PostgresRlsTestBase {
         true);
   }
 
+  /**
+   * A gift-card-settled SALE (Phase 4): {@code grand} owed, {@code giftCard} covered by stored
+   * value (the rest by cash). No discount/SC/tax so subtotal == grand, keeping the arithmetic clear.
+   */
+  private SaleRecordedEvent giftCardSaleEvent(UUID eventId, UUID saleId, long grand, long giftCard) {
+    return new SaleRecordedEvent(
+        eventId,
+        saleId,
+        TENANT,
+        BUSINESS,
+        Money.ofMinor(grand, "IDR"),
+        OCCURRED,
+        "CASH",
+        grand, // subtotal == grand (no discount/sc/tax)
+        0L,
+        0L,
+        0L,
+        "v1-illustrative",
+        true,
+        null, // loyaltyMemberId
+        null, // loyaltyRedeemedPoints
+        null, // loyaltyRedeemedMinor
+        UUID.randomUUID().toString(), // giftCardId
+        giftCard); // giftCardRedeemedMinor
+  }
+
   private SaleVoidedEvent voidEvent(UUID voidId, UUID saleId) {
     return voidEvent(voidId, saleId, GRAND_TOTAL_MINOR);
   }
@@ -377,6 +469,22 @@ class Phase2ReversalNetRevenueTest extends PostgresRlsTestBase {
         ResultSet rs =
             st.executeQuery(
                 "SELECT COALESCE(sum(total_minor), 0) FROM consolidated_revenue"
+                    + " WHERE company_id = '"
+                    + TENANT
+                    + "'")) {
+      rs.next();
+      return rs.getLong(1);
+    }
+  }
+
+  private long ledgerPostingMinor() throws Exception {
+    try (Connection admin =
+            java.sql.DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        Statement st = admin.createStatement();
+        ResultSet rs =
+            st.executeQuery(
+                "SELECT COALESCE(sum(amount_minor), 0) FROM ledger_posting"
                     + " WHERE company_id = '"
                     + TENANT
                     + "'")) {

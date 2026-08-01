@@ -10,6 +10,7 @@ import id.co.nativeapp.finance.gl.projection.JournalLineReversalView;
 import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
 import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
 import id.co.nativeapp.finance.gl.service.JournalPostingService;
+import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
 import id.co.nativeapp.finance.mapping.service.GlAccountResolver;
 import id.co.nativeapp.finance.pnl.service.PnlReadModelWriter;
 import id.co.nativeapp.finance.revenue.domain.LedgerPosting;
@@ -110,6 +111,7 @@ public class ReversalPostingWriter {
   private final JournalPostingService journalPostingService;
   private final JournalEntryRepository journalEntryRepository;
   private final JournalLineRepository journalLineRepository;
+  private final RoleAccountResolver roleAccountResolver;
 
   @SuppressWarnings("checkstyle:ParameterNumber")
   public ReversalPostingWriter(
@@ -120,7 +122,8 @@ public class ReversalPostingWriter {
       PnlReadModelWriter pnlReadModel,
       JournalPostingService journalPostingService,
       JournalEntryRepository journalEntryRepository,
-      JournalLineRepository journalLineRepository) {
+      JournalLineRepository journalLineRepository,
+      RoleAccountResolver roleAccountResolver) {
     this.ledgerRepository = ledgerRepository;
     this.processedEvents = processedEvents;
     this.jdbcTemplate = jdbcTemplate;
@@ -129,6 +132,7 @@ public class ReversalPostingWriter {
     this.journalPostingService = journalPostingService;
     this.journalEntryRepository = journalEntryRepository;
     this.journalLineRepository = journalLineRepository;
+    this.roleAccountResolver = roleAccountResolver;
   }
 
   /**
@@ -165,9 +169,32 @@ public class ReversalPostingWriter {
     String actor = tenant.actor();
 
     String glAccountCode = glAccountResolver.resolveRevenue(event.occurredAt());
+    String currencyCode = amount.currency().getCurrencyCode();
 
-    // 1) Contra dimensional ledger posting (negated amount, REVENUE type, REVERSAL role).
-    Money negatedGross = amount.negate();
+    // Look up the original SALE entry FIRST (by sale_aggregate_id, set by RevenuePostingWriter —
+    // V18): its tender legs give the true grand total the SALE ledger_posting was booked with,
+    // which the contra must exactly negate. When absent (legacy/carwash), fall back to the GROSS
+    // template.
+    Optional<JournalEntrySaleView> originalEntry =
+        (event.saleId() != null)
+            ? journalEntryRepository.findBySaleAggregateId(event.saleId())
+            : Optional.empty();
+    List<JournalLineReversalView> originalLines =
+        originalEntry.isPresent()
+            ? journalLineRepository.findLinesByEntryId(originalEntry.get().getId())
+            : List.of();
+
+    // 1) Contra dimensional ledger posting. Negate the sale's GRAND TOTAL (reconstructed from the
+    //    original tender legs), NOT event.amount(): SaleVoided.amount is the PAYMENT amount, which
+    //    for a gift-card-settled sale is only the cash residual (grand − gift_card). The SALE
+    //    ledger_posting was booked with the full grand total, so a residual-sized contra would leave
+    //    the gift-card portion standing and overstate the trial balance / unit-P&L / consolidation.
+    //    Legacy sales with no original entry fall back to event.amount() (== grand total there).
+    Money saleGrandTotal =
+        originalEntry.isPresent()
+            ? resolveSaleGrandTotal(originalLines, event.occurredAt(), currencyCode)
+            : amount;
+    Money negatedGross = saleGrandTotal.negate();
     LedgerPosting posting =
         new LedgerPosting(
             PostingType.REVENUE,
@@ -180,26 +207,14 @@ public class ReversalPostingWriter {
     posting.setCompanyId(companyId);
     ledgerRepository.save(posting);
 
-    // 2+3) Phase 2 per-leg GL reversal: look up the original SALE entry by sale_aggregate_id
-    //      (set by RevenuePostingWriter — V18). When found, negate each component line exactly
-    //      (debit ↔ credit) and derive the NET revenue to unwind from the original entry's lines:
-    //      netRevenue = GROSS_REVENUE credit − SALES_DISCOUNT debit.
-    //      When no original SALE entry is found (legacy/carwash), fall back to the 2-line GROSS
-    //      template and unwind by the grand total (net == gross for legacy sales).
-    Optional<JournalEntrySaleView> originalEntry =
-        (event.saleId() != null)
-            ? journalEntryRepository.findBySaleAggregateId(event.saleId())
-            : Optional.empty();
-
+    // 2+3) Phase 2 per-leg GL reversal: negate each component line of the original SALE entry
+    //      exactly (debit ↔ credit) and unwind the read models by the NET revenue.
     if (originalEntry.isPresent()) {
       JournalEntrySaleView origEntryView = originalEntry.get();
-      List<JournalLineReversalView> originalLines =
-          journalLineRepository.findLinesByEntryId(origEntryView.getId());
 
       // Resolve the net revenue to unwind from the V19 net_revenue_minor column (the precomputed
       // net = subtotal − discount stored by RevenuePostingWriter at SALE posting time). For entries
       // predating V19 (null), fall back to the grand total (net == gross for Phase 1/legacy).
-      String currencyCode = amount.currency().getCurrencyCode();
       Money netRevenue = resolveNetRevenue(origEntryView, amount, currencyCode);
       Money negatedNet = netRevenue.negate();
       boolean usesIllustrative = origEntryView.getUsesIllustrativeRules();
@@ -244,7 +259,6 @@ public class ReversalPostingWriter {
           "SaleVoided: no original SALE entry found for saleId={}; using GROSS template fall-back",
           event.saleId());
       // Legacy/carwash: net == grand total; unwind by grand total.
-      String currencyCode = amount.currency().getCurrencyCode();
       jdbcTemplate.update(
           UPSERT_REVENUE_SQL,
           UUID.randomUUID(),
@@ -322,10 +336,14 @@ public class ReversalPostingWriter {
       List<JournalLineReversalView> originalLines =
           journalLineRepository.findLinesByEntryId(origEntryView.getId());
 
-      // Compute the original grand total from the original GL entry lines (Σdebit = grand total
-      // for a SALE entry, since the CLEARING debit == the customer-pays amount).
+      // Compute the original grand total from the original GL entry's TENDER legs (Σdebit EXCLUDING
+      // the contra-revenue debits). A naive Σ-all-debits OVERSTATES the grand total by discount +
+      // loyalty (the V37 SALE v3 debit side is amount + discount + loyalty), which wrongly
+      // classified EVERY discounted / points / gift-card full refund as "partial" and rejected it —
+      // the sale then stayed counted as revenue forever. See resolveSaleGrandTotal.
+      String currencyCode = refundAmount.currency().getCurrencyCode();
       long originalGrandTotalMinor =
-          originalLines.stream().mapToLong(JournalLineReversalView::getDebitMinor).sum();
+          resolveSaleGrandTotal(originalLines, event.occurredAt(), currencyCode).amountMinor();
       long refundMinor = refundAmount.amountMinor();
 
       if (refundMinor < originalGrandTotalMinor) {
@@ -344,7 +362,6 @@ public class ReversalPostingWriter {
       }
 
       // Full refund: resolve net revenue from V19 net_revenue_minor and unwind read models by NET.
-      String currencyCode = refundAmount.currency().getCurrencyCode();
       Money netRevenue = resolveNetRevenue(origEntryView, refundAmount, currencyCode);
       Money negatedNet = netRevenue.negate();
       boolean usesIllustrative = origEntryView.getUsesIllustrativeRules();
@@ -515,6 +532,39 @@ public class ReversalPostingWriter {
     }
     // V19 column absent (pre-V19 or non-Phase-2 entry): net == gross for legacy Phase 1 sales.
     return grandTotal;
+  }
+
+  /**
+   * The sale's GRAND TOTAL (what the customer actually owed/paid) reconstructed from the original
+   * SALE entry's TENDER debit legs = Σ(debit legs) − Σ(contra-revenue debit legs).
+   *
+   * <p>The raw debit sum is NOT the grand total: the V37 SALE v3 template's debit side is {@code
+   * NET_TENDER + GIFT_CARD_TENDER + SALES_DISCOUNT + LOYALTY_DISCOUNT}, i.e. {@code amount +
+   * discount + loyalty} (the gift-card split nets within the tender). The two contra-revenue debits
+   * (SALES_DISCOUNT, LOYALTY_DISCOUNT) inflate the sum above the grand total, so they are excluded —
+   * leaving exactly the tender legs, which sum to {@code amount}. Works across every template
+   * version: legacy 2-line GROSS (no contra legs → Σdebit = grand), v2 (SALES_DISCOUNT only), v3
+   * (both). Credit legs contribute 0 to a debit sum, so they are naturally ignored.
+   *
+   * <p>The contra-revenue account codes are resolved at {@code asOf}; the {@code role_account_map}
+   * for these two roles is seeded open-ended (2000-01-01..9999-12-31) and effectively immutable, so
+   * resolving at the reversal instant matches the codes stamped on the original lines at sale time.
+   */
+  private Money resolveSaleGrandTotal(
+      List<JournalLineReversalView> originalLines, java.time.Instant asOf, String currencyCode) {
+    java.util.Set<String> contraRevenueCodes = new java.util.HashSet<>();
+    for (AccountRole contraRole : List.of(AccountRole.SALES_DISCOUNT, AccountRole.LOYALTY_DISCOUNT)) {
+      String code = roleAccountResolver.resolve(contraRole, asOf);
+      if (code != null) {
+        contraRevenueCodes.add(code);
+      }
+    }
+    long grandTotalMinor =
+        originalLines.stream()
+            .filter(line -> !contraRevenueCodes.contains(line.getAccountCode()))
+            .mapToLong(JournalLineReversalView::getDebitMinor)
+            .sum();
+    return Money.ofMinor(grandTotalMinor, currencyCode);
   }
 
   private void saveEntryAndLines(JournalEntry glEntry, String companyId) {
