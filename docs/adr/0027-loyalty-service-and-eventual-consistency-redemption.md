@@ -32,13 +32,22 @@ Odoo solves this inside one database; Native cannot.
 
 3. **Redemption under eventual consistency — clamp locally, reconcile authoritatively,
    flag overdrafts.** The checkout clamps a redemption to the cached balance and atomically
-   decrements the cached row (zero rows → 409), making double-spend impossible *within one
-   vertical service*. Cross-outlet/cross-vertical races within replication lag can overdraft: the
-   authoritative ledger (loyalty-service consuming `SaleRecorded`) applies the redemption anyway,
-   lets the balance go NEGATIVE, and emits `LoyaltyRedemptionFlagged` for manual follow-up. This
-   is the pragmatic, Odoo-comparable choice: a reservation saga would put a customer-visible
-   async wait at the till to bound an exposure of one redemption per replication-lag window.
-   The saga is the documented escalation path if real-world flag volume demands it.
+   decrements the cached row (zero rows → 409), which substantially REDUCES — but does not
+   eliminate — double-spend *within one vertical service* (corrected 2026-08-01; see the
+   Consequences note below): the same cached row is also fed by `LoyaltyBalanceChanged`/
+   `GiftCardStateChanged`, an ABSOLUTE set-if-newer snapshot from loyalty-service, and that
+   snapshot upsert can land between a pending local decrement's read and write and overwrite it —
+   so a second, concurrent redemption against the same member/card can, in that narrow window,
+   clear against a stale cached balance instead of being rejected. Cross-outlet/cross-vertical
+   races within replication lag can overdraft the same way. Either way the authoritative ledger
+   (loyalty-service consuming `SaleRecorded`) applies every redemption it sees regardless of what
+   the cache locally allowed, lets the balance go NEGATIVE, and emits `LoyaltyRedemptionFlagged`
+   for manual follow-up. What this decision actually guarantees is that an overdraft is ALWAYS
+   bounded (one redemption per race/lag window), flagged, and self-healed by the next
+   authoritative snapshot — never silent, but not impossible to trigger. This is the pragmatic,
+   Odoo-comparable choice: a reservation saga would put a customer-visible async wait at the till
+   to close the window entirely. The saga is the documented escalation path if real-world flag
+   volume demands it.
 
 4. **Accounting treatment (ILLUSTRATIVE, SME-gated end to end):**
    - **Gift-card redemption is a TENDER settlement, not a discount.** Revenue legs are unchanged;
@@ -88,3 +97,11 @@ Odoo solves this inside one database; Native cannot.
   should route through the pending→capture flow so a card becomes redeemable only once tender is
   captured; a compensating un-redeem on void; the fleet-wide literal hash-chain for the journal
   remains a platform gap predating this phase.
+- **Correction (2026-08-01, bug audit):** decision 3 originally claimed the local atomic-decrement
+  clamp makes double-spend "impossible within one vertical service." That overstated the
+  guarantee — the incoming `LoyaltyBalanceChanged`/`GiftCardStateChanged` absolute-snapshot upsert
+  (decision 2) can interleave with and overwrite a pending local decrement, so a second redemption
+  can, in a narrow window, clear against a stale cached balance. The design is unchanged (no
+  reservation saga — still the documented escalation path); only the wording is corrected here:
+  the actual guarantee is that any resulting overdraft is bounded, flagged
+  (`LoyaltyRedemptionFlagged`), and self-heals — bounded and visible, not impossible.

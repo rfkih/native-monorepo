@@ -77,6 +77,12 @@ public class GiftCardRefRepository {
   /**
    * Set-if-newer upsert of the {@code GiftCardStateChanged} snapshot (ADR 0027 decision 2) —
    * identical discipline to {@link MemberBalanceRefRepository#upsertSetIfNewer}.
+   *
+   * <p><strong>Correction (bug audit, ADR 0027 decision 3):</strong> being an ABSOLUTE snapshot
+   * write, this upsert can land between {@link #decrementIfSufficient}'s read and write and
+   * overwrite a pending local decrement — so it narrows, but does not close, the within-vertical
+   * double-spend window; an overdraft this causes is bounded and self-heals via {@code
+   * LoyaltyRedemptionFlagged}, not prevented outright.
    */
   public void upsertSetIfNewer(
       UUID giftCardId,

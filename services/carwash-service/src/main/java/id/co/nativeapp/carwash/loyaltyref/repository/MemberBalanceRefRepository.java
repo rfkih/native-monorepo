@@ -85,6 +85,12 @@ public class MemberBalanceRefRepository {
    * regression. Conflict target is the tenant-composite unique constraint (belt-and-suspenders — a
    * cross-tenant {@code member_id} collision fails closed on the bare PK instead), mirroring {@code
    * UserOutletAssignmentRefWriter}.
+   *
+   * <p><strong>Correction (bug audit, ADR 0027 decision 3):</strong> being an ABSOLUTE snapshot
+   * write, this upsert can land between {@link #decrementIfSufficient}'s read and write and
+   * overwrite a pending local decrement — so it narrows, but does not close, the within-vertical
+   * double-spend window; an overdraft this causes is bounded and self-heals via {@code
+   * LoyaltyRedemptionFlagged}, not prevented outright.
    */
   public void upsertSetIfNewer(
       UUID memberId, String companyId, long pointsBalance, long balanceSeq, String actor) {
