@@ -1,11 +1,10 @@
 package id.co.nativeapp.restaurant.entitlement.service;
 
 import id.co.nativeapp.events.ProcessedEventStore;
-import id.co.nativeapp.restaurant.entitlement.domain.EntitlementProjection;
 import id.co.nativeapp.restaurant.entitlement.dto.EntitlementProjectedEvent;
 import id.co.nativeapp.restaurant.entitlement.repository.EntitlementProjectionRepository;
 import id.co.nativeapp.tenant.TenantContext;
-import java.util.Optional;
+import java.util.UUID;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -25,6 +24,17 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  * <p><strong>Idempotency (rule 3 / HR-3).</strong> The dedupe claim and the projection upsert
  * happen in ONE transaction: {@link ProcessedEventStore#processOnce} claims the event UUID and runs
  * the upsert only on the FIRST delivery, so a re-delivered entitlement event is a clean no-op.
+ *
+ * <p><strong>Set-if-newer ordering guard (bug-audit FIX 3, V20).</strong> Idempotency alone does
+ * NOT protect against reordering: {@code EntitlementGranted}/{@code EntitlementRevoked} are two
+ * DIFFERENT events (different UUIDs) arriving on two separate topics with independent consumer
+ * lag, so a Revoked can be delivered and applied before a lagging/redelivered, chronologically
+ * earlier Granted — deduping by event id lets both through, one per id. The upsert itself is
+ * therefore a SECOND, independent guard: {@link EntitlementProjectionRepository#upsertSetIfNewer}
+ * only overwrites the stored state when the incoming event's {@code occurredAt} is not older than
+ * the stored one, so an out-of-order delivery can never regress {@code entitled} back to a stale
+ * value — mirrors {@code loyaltyref.service.LoyaltyBalanceChangedWriter}'s {@code balance_seq}
+ * set-if-newer discipline.
  *
  * <p><strong>Cache invalidation on commit.</strong> The shared {@code libs/entitlement-check} Redis
  * cache is a separate system; the invalidation is registered as an {@code afterCommit} {@link
@@ -66,17 +76,13 @@ public class EntitlementProjectionWriter {
 
   private void upsert(EntitlementProjectedEvent event) {
     String tenant = TenantContext.require().companyId();
-    Optional<EntitlementProjection> existing = repository.findByModuleKey(event.moduleKey());
-    if (existing.isPresent()) {
-      EntitlementProjection projection = existing.get();
-      projection.setEntitled(event.entitled());
-      repository.save(projection);
-      return;
-    }
-    EntitlementProjection projection =
-        new EntitlementProjection(event.moduleKey(), event.entitled());
-    projection.setCompanyId(tenant);
-    repository.save(projection);
+    repository.upsertSetIfNewer(
+        UUID.randomUUID(),
+        event.moduleKey(),
+        event.entitled(),
+        event.occurredAt(),
+        EntitlementProjectionService.CONSUMER_ACTOR,
+        tenant);
   }
 
   /**

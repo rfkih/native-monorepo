@@ -20,6 +20,13 @@ import org.springframework.core.Ordered;
  * native.security.public-paths} so Spring Security {@code permitAll}s it and {@code
  * libs.security.TenantBindingFilter} skips it entirely; see {@code application.yml}) — so this
  * filter is the FIRST and ONLY authentication step {@code /api/v1/self-order/**} sees.
+ *
+ * <p><strong>Ordering.</strong> The body-size filter is registered at {@code
+ * Ordered.HIGHEST_PRECEDENCE} and the token filter one below it, at {@code
+ * Ordered.HIGHEST_PRECEDENCE + 1} — NOT {@code HIGHEST_PRECEDENCE - 1}, which would silently
+ * underflow past {@code Integer.MIN_VALUE} to {@code Integer.MAX_VALUE} (the LOWEST precedence)
+ * and put the body-size guard dead last instead of first. This way the body-size filter (the
+ * cheapest possible rejection) genuinely runs BEFORE the token filter.
  */
 @Configuration
 public class SelfOrderFilterConfig {
@@ -32,7 +39,7 @@ public class SelfOrderFilterConfig {
     FilterRegistrationBean<SelfOrderTokenFilter> registration = new FilterRegistrationBean<>();
     registration.setFilter(new SelfOrderTokenFilter(reader));
     registration.addUrlPatterns(URL_PATTERN);
-    registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
+    registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 1);
     return registration;
   }
 
@@ -46,7 +53,7 @@ public class SelfOrderFilterConfig {
     FilterRegistrationBean<SelfOrderBodySizeFilter> registration = new FilterRegistrationBean<>();
     registration.setFilter(new SelfOrderBodySizeFilter());
     registration.addUrlPatterns(URL_PATTERN);
-    registration.setOrder(Ordered.HIGHEST_PRECEDENCE - 1);
+    registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
     return registration;
   }
 }

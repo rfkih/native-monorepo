@@ -14,6 +14,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 
 /**
@@ -84,8 +85,30 @@ public class SelfOrderAccessService {
    */
   public SelfOrderAccessResponse rotate(UUID outletId) {
     requireOwnerOrManager();
-    SelfOrderAccess access = writer.rotate(outletId);
+    SelfOrderAccess access = rotateConvergingOnRace(outletId);
     return mintTokens(access, outletId);
+  }
+
+  /**
+   * Rotates, converging on the winner if a concurrent rotate (or a rotate racing a first-provision
+   * {@link #getActive}) got there first (mirrors {@link #ensureActiveConvergingOnRace}). {@link
+   * SelfOrderAccessWriter#rotate} retires the current ACTIVE row then inserts a fresh one, so a
+   * concurrent caller doing the same can lose either half of that sequence: the retiring {@code
+   * saveAndFlush} can raise {@link OptimisticLockingFailureException} (someone else already retired
+   * the row this call read) or the minting insert can raise {@link
+   * DataIntegrityViolationException} (someone else's fresh row already claimed the one-ACTIVE-per-
+   * outlet partial unique index). Either way the loser has no fresh row of its own to return, so —
+   * same reasoning as {@link #ensureActiveConvergingOnRace} — it re-reads the current ACTIVE row in
+   * a FRESH transaction ({@link SelfOrderAccessReader#findActive}) rather than catching inside the
+   * writer's own (already-poisoned) transaction, and returns the concurrent rotate's row: a valid
+   * current state, not a failure the caller should see as a 500.
+   */
+  private SelfOrderAccess rotateConvergingOnRace(UUID outletId) {
+    try {
+      return writer.rotate(outletId);
+    } catch (DataIntegrityViolationException | OptimisticLockingFailureException raceLost) {
+      return reader.findActive(outletId).orElseThrow(() -> raceLost);
+    }
   }
 
   private SelfOrderAccessResponse mintTokens(SelfOrderAccess access, UUID outletId) {

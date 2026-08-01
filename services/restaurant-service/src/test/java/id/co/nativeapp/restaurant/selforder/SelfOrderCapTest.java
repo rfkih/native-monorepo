@@ -15,6 +15,7 @@ import id.co.nativeapp.restaurant.selforder.dto.SelfOrderCreateRequest;
 import id.co.nativeapp.restaurant.selforder.dto.SelfOrderLineBounds;
 import id.co.nativeapp.restaurant.selforder.service.SelfOrderService;
 import id.co.nativeapp.tenant.TenantContext;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -64,7 +65,7 @@ class SelfOrderCapTest extends PostgresRedisTestBase {
   @Test
   void theCapPlusOnethCreateIsRejectedWith429() throws Exception {
     entitlementProjectionService.apply(
-        new EntitlementProjectedEvent(UUID.randomUUID(), TENANT, SELF_ORDER, true));
+        new EntitlementProjectedEvent(UUID.randomUUID(), TENANT, SELF_ORDER, true, Instant.now()));
     UUID itemId =
         TenantContext.callAs(
                 TENANT,

@@ -5,6 +5,7 @@ import id.co.nativeapp.restaurant.entitlement.dto.EntitlementProjectedEvent;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.time.Instant;
 import java.util.UUID;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericRecord;
@@ -69,7 +70,8 @@ public final class EntitlementEventSchemas {
   }
 
   /**
-   * Decodes raw {@code EntitlementGranted} Avro bytes into the projected event (entitled = true).
+   * Decodes raw {@code EntitlementGranted} Avro bytes into the projected event (entitled = true),
+   * carrying {@code granted_at} as the set-if-newer ordering guard the projection upsert applies.
    *
    * @param eventId the event's UUID — the idempotency key
    * @param payload the raw Avro bytes off the topic
@@ -77,11 +79,16 @@ public final class EntitlementEventSchemas {
   public static EntitlementProjectedEvent decodeGranted(UUID eventId, byte[] payload) {
     GenericRecord record = AvroSerde.deserialize(payload, Holder.GRANTED_SCHEMA);
     return new EntitlementProjectedEvent(
-        eventId, record.get("company_id").toString(), record.get("module_key").toString(), true);
+        eventId,
+        record.get("company_id").toString(),
+        record.get("module_key").toString(),
+        true,
+        Instant.ofEpochMilli((long) record.get("granted_at")));
   }
 
   /**
-   * Decodes raw {@code EntitlementRevoked} Avro bytes into the projected event (entitled = false).
+   * Decodes raw {@code EntitlementRevoked} Avro bytes into the projected event (entitled = false),
+   * carrying {@code revoked_at} as the set-if-newer ordering guard the projection upsert applies.
    *
    * @param eventId the event's UUID — the idempotency key
    * @param payload the raw Avro bytes off the topic
@@ -89,7 +96,11 @@ public final class EntitlementEventSchemas {
   public static EntitlementProjectedEvent decodeRevoked(UUID eventId, byte[] payload) {
     GenericRecord record = AvroSerde.deserialize(payload, Holder.REVOKED_SCHEMA);
     return new EntitlementProjectedEvent(
-        eventId, record.get("company_id").toString(), record.get("module_key").toString(), false);
+        eventId,
+        record.get("company_id").toString(),
+        record.get("module_key").toString(),
+        false,
+        Instant.ofEpochMilli((long) record.get("revoked_at")));
   }
 
   private static Schema parse(String resource) {

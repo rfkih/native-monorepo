@@ -24,6 +24,7 @@ import id.co.nativeapp.tenant.TenantContext;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -159,7 +160,7 @@ class SelfOrderCreateGateTest extends PostgresRedisTestBase {
 
   private void grantSelfOrder() throws Exception {
     entitlementProjectionService.apply(
-        new EntitlementProjectedEvent(UUID.randomUUID(), TENANT, SELF_ORDER, true));
+        new EntitlementProjectedEvent(UUID.randomUUID(), TENANT, SELF_ORDER, true, Instant.now()));
   }
 
   private UUID createMenuItem() throws Exception {

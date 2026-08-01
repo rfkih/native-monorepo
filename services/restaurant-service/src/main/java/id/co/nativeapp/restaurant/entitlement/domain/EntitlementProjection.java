@@ -23,6 +23,16 @@ import java.util.UUID;
  * entitlement_projection} RLS policy. The consumer writes it inside a {@link
  * id.co.nativeapp.tenant.TenantContext} scope bound to the EVENT's {@code company_id}, so the RLS
  * {@code WITH CHECK} passes.
+ *
+ * <p><strong>Writes bypass JPA (bug-audit FIX 3, V20).</strong> The table also carries an {@code
+ * event_occurred_at} column NOT mapped here: {@link
+ * id.co.nativeapp.restaurant.entitlement.service.EntitlementProjectionWriter} writes exclusively
+ * through {@link id.co.nativeapp.restaurant.entitlement.repository.EntitlementProjectionRepository
+ * #upsertSetIfNewer}, an atomic native set-if-newer upsert (the ordering guard needs the
+ * insert-or-update decision and the comparison to happen in ONE statement, which a JPA find-then-
+ * save round trip cannot give). This entity — and {@link #setEntitled}, kept for read-side/test
+ * completeness — remains the READ shape {@code EntitlementProjectionReader}'s derived query
+ * (findByModuleKey) returns.
  */
 @Entity
 @Table(name = "entitlement_projection")
