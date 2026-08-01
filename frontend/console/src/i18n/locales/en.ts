@@ -2435,7 +2435,7 @@ export const en = {
     },
     disabled: {
       coupon: 'Coupons need a connection — unavailable offline.',
-      pointsRedeem: 'Points redemption needs a connection — unavailable offline.',
+      member: 'Member lookup and points redemption need a connection — unavailable offline.',
       giftCard: 'Gift cards need a connection — unavailable offline.',
       digitalTender: 'Card/QRIS need a connection — cash only offline.',
       openBills: 'Open bills need a connection — cash quick-sale only offline.',

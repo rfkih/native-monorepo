@@ -8,9 +8,11 @@
  * Wire shapes VERIFIED against the landed backend (restaurant-service `selforder/` feature):
  * the menu is a bare `MenuItemResponse[]` (categories are derived client-side from each item's
  * categoryId/category name — there is no separate categories endpoint on the anonymous surface);
- * the create body is `SelfOrderCreateRequest {idempotencyKey, lines}` (the key is minted here,
- * fresh per attempt); the create response is the full `OrderResponse` of which this app reads
- * only `orderId`. The table label shown on the confirmation screen comes from the TOKEN payload
+ * the create body is `SelfOrderCreateRequest {idempotencyKey, lines}` (the key is minted by the
+ * CALLER — see App.tsx — once per cart-submission attempt and passed in, so a retry of an ambiguous
+ * failure reuses it instead of minting a fresh one, which would otherwise mint a second order
+ * server-side); the create response is the full `OrderResponse` of which this app reads only
+ * `orderId`. The table label shown on the confirmation screen comes from the TOKEN payload
  * (base64url JSON before the first dot — decodable by anyone, unforgeable without the secret).
  */
 
@@ -45,7 +47,12 @@ export function tokenTableLabel(): string | null {
   if (!token) return null
   try {
     const payloadB64 = token.split('.')[0].replace(/-/g, '+').replace(/_/g, '/')
-    const payload = JSON.parse(atob(payloadB64)) as { tableLabel?: string | null }
+    // `atob` decodes base64 into a byte string (one char per byte, i.e. Latin-1) — the payload JSON
+    // is UTF-8, so a non-ASCII table label (e.g. accented/CJK characters) would otherwise come out
+    // mojibake. Re-interpret those bytes as UTF-8 before parsing.
+    const bytes = Uint8Array.from(atob(payloadB64), (c) => c.charCodeAt(0))
+    const payloadJson = new TextDecoder().decode(bytes)
+    const payload = JSON.parse(payloadJson) as { tableLabel?: string | null }
     return payload.tableLabel ?? null
   } catch {
     return null
@@ -109,12 +116,20 @@ export interface SelfOrderCreateResponse {
   orderId: string
 }
 
-export async function submitOrder(lines: SelfOrderLineInput[]): Promise<SelfOrderCreateResponse> {
-  // Fresh idempotency key per attempt (SelfOrderCreateRequest requires it); a RETRY of the same
-  // failed submit reuses the same in-flight promise upstream, so per-call minting is correct here.
+/**
+ * `idempotencyKey` is minted ONCE per cart-submission attempt by the caller (App.tsx, held in state
+ * for the lifetime of that attempt) and passed in here verbatim — this function never mints its own,
+ * so a retry after an ambiguous network failure (tap "Send order" again with the SAME cart) reuses
+ * the same key instead of creating a second, duplicate order server-side. The key rotates only once
+ * the caller sees a confirmed success or the diner starts a fresh order ("order again").
+ */
+export async function submitOrder(
+  lines: SelfOrderLineInput[],
+  idempotencyKey: string,
+): Promise<SelfOrderCreateResponse> {
   const res = await apiFetch<SelfOrderCreateResponse>('/api/v1/self-order/orders', {
     method: 'POST',
-    body: { idempotencyKey: crypto.randomUUID(), lines },
+    body: { idempotencyKey, lines },
   })
   if (!res) throw new SelfOrderApiError(502, null, 'Empty response')
   return res

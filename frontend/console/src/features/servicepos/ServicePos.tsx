@@ -944,8 +944,9 @@ function SummaryPanel({
         redeemPoints={loyaltyRedeemPoints}
         maxRedeemable={maxRedeemablePoints}
         onRedeemChange={onLoyaltyRedeemChange}
+        disabled={offline}
       />
-      {offline ? <OfflineHint text={t('offline.disabled.pointsRedeem')} /> : null}
+      {offline ? <OfflineHint text={t('offline.disabled.member')} /> : null}
 
       {showDiscountInput ? (
         <div>

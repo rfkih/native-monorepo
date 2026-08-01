@@ -336,9 +336,14 @@ function PosInner({ session }: { session: CompanySession }) {
       : 0
 
   // Phase 6 (ADR 0029): feed the customer-facing display. `displayPublisher` itself no-ops until a
-  // display has actually been opened this session, so this effect costs nothing beyond a re-render
+  // display has actually been opened this session, so calling this costs nothing beyond a re-render
   // for the common terminal that never opens one — see displayPublisher.ts.
-  useEffect(() => {
+  //
+  // Bug fix: also called directly (not just from the effect below) when PaymentModal closes WITHOUT
+  // a completed payment (cancel/back) — opening the modal publishes PAYMENT_STARTED ("amount due"),
+  // and nothing else re-publishes the cart afterwards since the cart itself didn't change, so the
+  // display would otherwise keep showing "please pay" until the cashier next mutates the cart.
+  function publishCurrentDisplayState() {
     if (!displayPublisher.isOpened) return
     if (activeBill) {
       if (activeBill.lineCount > 0) {
@@ -386,6 +391,11 @@ function PosInner({ session }: { session: CompanySession }) {
           currency,
         }
     displayPublisher.publishCartUpdated(displayLines, cartDisplayBreakdown)
+  }
+
+  useEffect(() => {
+    publishCurrentDisplayState()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayPublisher, activeBill, lineCount, cart, items, breakdown, clientSubtotalMinor, grandTotalMinor, currency])
 
   const discountInvalid =
@@ -929,7 +939,12 @@ function PosInner({ session }: { session: CompanySession }) {
           currency={currency}
           locale={locale}
           onSuccess={handlePaymentSuccess}
-          onClose={() => setModal(null)}
+          onClose={() => {
+            setModal(null)
+            // Cancel/back without a completed payment — revert the customer display off
+            // "amount due" back to the live cart (or idle), since nothing else will (bug fix).
+            publishCurrentDisplayState()
+          }}
           parkedOrderId={resumedOrder?.orderId ?? null}
           orderType={orderType}
           tableId={null}
@@ -1500,9 +1515,10 @@ function SummaryBar({
             redeemPoints={loyaltyRedeemPoints}
             maxRedeemable={maxRedeemablePoints}
             onRedeemChange={onLoyaltyRedeemChange}
+            disabled={offline}
             className="max-w-sm"
           />
-          {offline ? <OfflineHint text={t('offline.disabled.pointsRedeem')} className="max-w-sm" /> : null}
+          {offline ? <OfflineHint text={t('offline.disabled.member')} className="max-w-sm" /> : null}
           {showDiscountInput ? (
             <div className="flex items-center gap-2">
               <label

@@ -2431,7 +2431,7 @@ export const id = {
     },
     disabled: {
       coupon: 'Kupon memerlukan koneksi — tidak tersedia saat offline.',
-      pointsRedeem: 'Penukaran poin memerlukan koneksi — tidak tersedia saat offline.',
+      member: 'Pencarian anggota dan penukaran poin memerlukan koneksi — tidak tersedia saat offline.',
       giftCard: 'Kartu hadiah memerlukan koneksi — tidak tersedia saat offline.',
       digitalTender: 'Kartu/QRIS memerlukan koneksi — tunai saja saat offline.',
       openBills: 'Tagihan terbuka memerlukan koneksi — hanya penjualan tunai cepat saat offline.',

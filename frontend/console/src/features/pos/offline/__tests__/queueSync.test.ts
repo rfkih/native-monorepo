@@ -18,7 +18,7 @@ vi.mock('@/lib/api', () => {
 
 import { apiFetch, ApiError } from '@/lib/api'
 import { __resetDbForTests, type ProvisionalTotals } from '../db'
-import { __resetQueueStoreForTests, enqueueSale, getQueueRow } from '../queue'
+import { __resetQueueStoreForTests, enqueueSale, getQueueRow, updateQueueRow } from '../queue'
 import { __resetAutoSyncForTests, replayQueue } from '../sync'
 
 const provisional: ProvisionalTotals = {
@@ -170,6 +170,26 @@ describe('offline sale queue + replay state machine', () => {
     const secondBody = calls[1]?.[1]?.body as { idempotencyKey: string }
     expect(firstBody.idempotencyKey).toBe(row.idempotencyKey)
     expect(secondBody.idempotencyKey).toBe(row.idempotencyKey)
+  })
+
+  it('a row left SYNCING from a prior crash is swept back to QUEUED and reaches SYNCED on the next replay', async () => {
+    const row = await enqueueOne()
+    // Simulate a crash/reload mid-POST on a PREVIOUS replay attempt: the row was moved to SYNCING
+    // but nothing ever recorded the outcome (drainQueue's stale-SYNCING sweep is the only thing that
+    // can recover it — neither the auto-sync triggers nor "Retry now" pick up anything but QUEUED).
+    await updateQueueRow(row.idempotencyKey, { status: 'SYNCING' })
+    const stuck = await getQueueRow(row.idempotencyKey)
+    expect(stuck?.status).toBe('SYNCING')
+
+    vi.mocked(apiFetch).mockResolvedValueOnce({
+      breakdown: { grandTotalMinor: row.provisional.grandTotalMinor },
+    })
+
+    await replayQueue()
+
+    const after = await getQueueRow(row.idempotencyKey)
+    expect(after?.status).toBe('SYNCED')
+    expect(apiFetch).toHaveBeenCalledTimes(1)
   })
 
   it('two concurrent replayQueue() invocations under a mocked Web Lock -> processed exactly once', async () => {

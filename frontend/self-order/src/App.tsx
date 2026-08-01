@@ -10,7 +10,7 @@
  * unconfirmed-order queue (429 on submit), and generic network failures each get their own
  * friendly, full-screen message — never a blank page or a raw error string.
  */
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   deriveCategories,
   fetchMenu,
@@ -45,6 +45,12 @@ export function App() {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<'queueFull' | 'other' | null>(null)
   const [confirmation, setConfirmation] = useState<{ orderId: string; tableLabel: string | null } | null>(null)
+  // One idempotency key per cart-submission ATTEMPT — minted lazily on the first "Send order" tap,
+  // then reused across every retry of an ambiguous failure (same cart, same key) so a duplicate
+  // network send can never mint a second order server-side. Rotated (cleared) only once the caller
+  // sees a CONFIRMED success or the diner starts over ("order again") — see handleSubmit/
+  // handleOrderAgain below. A ref (not state) since it never needs to trigger a re-render.
+  const idempotencyKeyRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!token) {
@@ -94,19 +100,31 @@ export function App() {
     if (cartLines.length === 0 || submitting) return
     setSubmitting(true)
     setSubmitError(null)
+    // Mint the key on the FIRST attempt only; a retry of a failed submit (same cart, tapping "Send
+    // order" again) falls through to the already-set ref and reuses it — see submitOrder's doc.
+    if (!idempotencyKeyRef.current) {
+      idempotencyKeyRef.current = crypto.randomUUID()
+    }
+    const idempotencyKey = idempotencyKeyRef.current
     try {
-      const res = await submitOrder(cartLines.map(([menuItemId, qty]) => ({ menuItemId, qty })))
+      const res = await submitOrder(
+        cartLines.map(([menuItemId, qty]) => ({ menuItemId, qty })),
+        idempotencyKey,
+      )
       // The table label is presentational and comes from the token's public payload half — the
       // server binds the REAL label from its verified access row regardless.
       setConfirmation({ orderId: res.orderId, tableLabel: tokenTableLabel() })
       setCart({})
       setScreen('confirmed')
+      // Rotate: the NEXT submission (a fresh cart, after "order again") must mint its own key.
+      idempotencyKeyRef.current = null
     } catch (err) {
       if (err instanceof SelfOrderApiError && err.status === 429) {
         setSubmitError('queueFull')
       } else {
         setSubmitError('other')
       }
+      // Ambiguous failure — keep the cart AND the key so a retry is a true retry, never a duplicate.
     } finally {
       setSubmitting(false)
     }
@@ -115,6 +133,7 @@ export function App() {
   function handleOrderAgain() {
     setConfirmation(null)
     setSubmitError(null)
+    idempotencyKeyRef.current = null
     setScreen('menu')
     void loadMenu()
   }

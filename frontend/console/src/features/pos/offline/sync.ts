@@ -7,6 +7,11 @@
  *
  * Exactly-once = the server's idempotency-key uniqueness (rule: "replay is just a retry" — this
  * module never tries to reason about duplicates itself, it only maps HTTP outcomes to queue states).
+ *
+ * Crash recovery: every drain first sweeps any row left `SYNCING` back to `QUEUED` (see
+ * sweepStaleSyncing()) — a row can only be in that state because an earlier replay was interrupted
+ * (tab crash/reload) before it could record the POST's outcome, so it would otherwise be invisible
+ * to every trigger above (all of which only pick up `QUEUED`) and orphaned forever.
  */
 import { apiFetch, ApiError } from '@/lib/api'
 import { getQueueRow, listQueue, updateQueueRow } from './queue'
@@ -69,6 +74,17 @@ export async function replayQueue(): Promise<void> {
 }
 
 async function drainQueue(): Promise<void> {
+  // A row can be left in SYNCING if a PRIOR replay was interrupted mid-flight (tab crash, reload,
+  // browser kill) between "set SYNCING" and the POST settling — nothing else ever moves a row off
+  // SYNCING, so an orphaned one would otherwise sit forever, invisible to both the automatic
+  // triggers (they only pick up QUEUED) and "Retry now" (same filter). This sweep runs at the very
+  // start of every drain, which only ever executes while this call holds the replay lock (or the
+  // no-locks fallback's in-flight guard) — so a row still SYNCING here is guaranteed to be leftover
+  // from a run that never got the chance to record its outcome, never one this same call is mid-way
+  // through. Re-queuing it is safe: replaying it again either completes normally or, if the earlier
+  // attempt actually reached the server, resolves via the existing 409 -> SYNCED path.
+  await sweepStaleSyncing()
+
   const rows = await listQueue()
   const queued = rows.filter((row) => row.status === 'QUEUED')
   for (const row of queued) {
@@ -80,6 +96,15 @@ async function drainQueue(): Promise<void> {
     const fresh = await getQueueRow(row.idempotencyKey)
     if (!fresh || fresh.status !== 'QUEUED') continue
     await replayOne(fresh)
+  }
+}
+
+/** Resets any row still `SYNCING` back to `QUEUED` — see the call site's comment in drainQueue(). */
+async function sweepStaleSyncing(): Promise<void> {
+  const rows = await listQueue()
+  const stuck = rows.filter((row) => row.status === 'SYNCING')
+  for (const row of stuck) {
+    await updateQueueRow(row.idempotencyKey, { status: 'QUEUED' })
   }
 }
 
