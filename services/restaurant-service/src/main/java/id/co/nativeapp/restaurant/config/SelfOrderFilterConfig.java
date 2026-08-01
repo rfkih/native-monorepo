@@ -24,9 +24,9 @@ import org.springframework.core.Ordered;
  * <p><strong>Ordering.</strong> The body-size filter is registered at {@code
  * Ordered.HIGHEST_PRECEDENCE} and the token filter one below it, at {@code
  * Ordered.HIGHEST_PRECEDENCE + 1} — NOT {@code HIGHEST_PRECEDENCE - 1}, which would silently
- * underflow past {@code Integer.MIN_VALUE} to {@code Integer.MAX_VALUE} (the LOWEST precedence)
- * and put the body-size guard dead last instead of first. This way the body-size filter (the
- * cheapest possible rejection) genuinely runs BEFORE the token filter.
+ * underflow past {@code Integer.MIN_VALUE} to {@code Integer.MAX_VALUE} (the LOWEST precedence) and
+ * put the body-size guard dead last instead of first. This way the body-size filter (the cheapest
+ * possible rejection) genuinely runs BEFORE the token filter.
  */
 @Configuration
 public class SelfOrderFilterConfig {

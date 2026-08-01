@@ -14,8 +14,8 @@ import org.springframework.data.repository.query.Param;
  *
  * <p>A thin data port: the read is a derived query, no business logic, no manual {@code WHERE
  * company_id} — tenant scoping comes solely from the auto-applied RLS GUC (rule 5). The gate looks
- * a module up by key <em>within</em> the bound tenant to learn whether the company is entitled;
- * RLS makes a cross-tenant projection row invisible (empty), so a company can never be entitled via
+ * a module up by key <em>within</em> the bound tenant to learn whether the company is entitled; RLS
+ * makes a cross-tenant projection row invisible (empty), so a company can never be entitled via
  * another tenant's row.
  */
 public interface EntitlementProjectionRepository
@@ -32,8 +32,8 @@ public interface EntitlementProjectionRepository
    * raced ahead of a lagging/redelivered, chronologically-earlier Granted (the two arrive on
    * separate topics with independent lag; there is no ordering guarantee between them) can never be
    * clobbered back to entitled=true. Mirrors {@code
-   * loyaltyref.repository.MemberBalanceRefRepository#upsertSetIfNewer}'s {@code balance_seq}
-   * guard, using the timestamp both entitlement events already carry ({@code granted_at}/{@code
+   * loyaltyref.repository.MemberBalanceRefRepository#upsertSetIfNewer}'s {@code balance_seq} guard,
+   * using the timestamp both entitlement events already carry ({@code granted_at}/{@code
    * revoked_at}) in place of a dedicated sequence number.
    *
    * @param id a freshly-minted id, used only on the INSERT branch (a conflict keeps the existing

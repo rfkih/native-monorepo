@@ -27,13 +27,13 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  *
  * <p><strong>Set-if-newer ordering guard (bug-audit FIX 3, V20).</strong> Idempotency alone does
  * NOT protect against reordering: {@code EntitlementGranted}/{@code EntitlementRevoked} are two
- * DIFFERENT events (different UUIDs) arriving on two separate topics with independent consumer
- * lag, so a Revoked can be delivered and applied before a lagging/redelivered, chronologically
- * earlier Granted — deduping by event id lets both through, one per id. The upsert itself is
- * therefore a SECOND, independent guard: {@link EntitlementProjectionRepository#upsertSetIfNewer}
- * only overwrites the stored state when the incoming event's {@code occurredAt} is not older than
- * the stored one, so an out-of-order delivery can never regress {@code entitled} back to a stale
- * value — mirrors {@code loyaltyref.service.LoyaltyBalanceChangedWriter}'s {@code balance_seq}
+ * DIFFERENT events (different UUIDs) arriving on two separate topics with independent consumer lag,
+ * so a Revoked can be delivered and applied before a lagging/redelivered, chronologically earlier
+ * Granted — deduping by event id lets both through, one per id. The upsert itself is therefore a
+ * SECOND, independent guard: {@link EntitlementProjectionRepository#upsertSetIfNewer} only
+ * overwrites the stored state when the incoming event's {@code occurredAt} is not older than the
+ * stored one, so an out-of-order delivery can never regress {@code entitled} back to a stale value
+ * — mirrors {@code loyaltyref.service.LoyaltyBalanceChangedWriter}'s {@code balance_seq}
  * set-if-newer discipline.
  *
  * <p><strong>Cache invalidation on commit.</strong> The shared {@code libs/entitlement-check} Redis
