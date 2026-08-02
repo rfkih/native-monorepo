@@ -70,6 +70,12 @@ const Me = lazy(() => import('@/features/me/Me').then((m) => ({ default: m.Me })
 const MyExpenses = lazy(() =>
   import('@/features/expenses/MyExpenses').then((m) => ({ default: m.MyExpenses })),
 )
+const ExpensesHub = lazy(() =>
+  import('@/features/expenses/ExpensesHub').then((m) => ({ default: m.ExpensesHub })),
+)
+const CategoriesAdmin = lazy(() =>
+  import('@/features/expenses/CategoriesAdmin').then((m) => ({ default: m.CategoriesAdmin })),
+)
 const Customers = lazy(() =>
   import('@/features/ar/Customers').then((m) => ({ default: m.Customers })),
 )
@@ -303,6 +309,7 @@ export function App() {
   const groupsAllowed = canDashboard && pageAccess.isAllowed('groups')
   const closeAllowed = canDashboard && pageAccess.isAllowed('close')
   const teamAllowed = canDashboard && pageAccess.isAllowed('team')
+  const expensesAllowed = canDashboard && pageAccess.isAllowed('expenses')
 
   // Land on the FIRST page the login can actually open — avoids a redirect loop when a grant hides
   // the login's natural landing page. /me is the always-available floor.
@@ -318,12 +325,14 @@ export function App() {
             ? '/close'
             : teamAllowed
               ? '/team'
-              : posAllowed
-                ? '/pos'
-                : menuAllowed
-                  ? '/menu'
-                  : kitchenAllowed
-                    ? '/kitchen'
+              : expensesAllowed
+                ? '/expenses'
+                : posAllowed
+                  ? '/pos'
+                  : menuAllowed
+                    ? '/menu'
+                    : kitchenAllowed
+                      ? '/kitchen'
                     : '/me'
 
   return (
@@ -422,6 +431,18 @@ export function App() {
               <Route
                 path="/loyalty"
                 element={company ? <EarnRulesPage /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {expensesAllowed && (
+              <Route
+                path="/expenses"
+                element={company ? <ExpensesHub /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {expensesAllowed && (
+              <Route
+                path="/expenses/categories"
+                element={company ? <CategoriesAdmin /> : <Navigate to="/onboarding" replace />}
               />
             )}
             {canDashboard && (

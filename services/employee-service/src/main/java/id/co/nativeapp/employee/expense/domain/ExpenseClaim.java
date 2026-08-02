@@ -260,6 +260,50 @@ public class ExpenseClaim extends Auditable {
   }
 
   /**
+   * Transitions {@code APPROVED -> VOIDED} — the correction path for an un-settled, un-linked
+   * approved claim (ADR 0030 §5, Phase E7). The expense was recognised on the books at approval
+   * (rule 3); this requires a comment, exactly like {@link #refuse}, and the CALLER emits {@code
+   * ExpenseClaimVoided} in the SAME transaction as this call so finance can post the exact contra.
+   *
+   * <p>Legal ONLY when APPROVED AND {@code reimbursement_run_id == null} AND {@code settled_at ==
+   * null} — once EITHER settlement path has claimed the reimbursement (a payroll link or a direct
+   * settlement), the money has moved and a void would desync the books from cash reality; that is
+   * also why refuse-after-approve is disallowed (ADR 0030 §5) — same reasoning, opposite direction.
+   * {@code settled_at} is checked defensively alongside {@code reimbursement_run_id} even though,
+   * today, nothing can set it while the claim is still APPROVED (both settlement paths flip the
+   * status to REIMBURSED in the same call that stamps it) — belt-and-suspenders against a future
+   * transition that might not.
+   *
+   * <p>Overwrites {@code decided_by}/{@code decided_at}/{@code decision_comment} with THIS decision
+   * (the void), exactly as every other decision method does — {@code approved_at} is left
+   * untouched, preserving the ORIGINAL approval instant the outbox event needs (ADR 0030 §5, the E2
+   * reviewer's S2 note: the contra resolves the mapping effective AT approval). The full decision
+   * history (including the original approval's actor/comment) lives in the append-only {@code
+   * expense_claim_event} audit trail the writer maintains, not on these mutable columns.
+   *
+   * @param actor the voiding login
+   * @param comment a REQUIRED explanation
+   * @param voidedAt the void instant; also stamped as {@code decidedAt}
+   * @throws ClaimStateException if not APPROVED, or linked to a payroll run, or already settled (→
+   *     409)
+   * @throws VoidCommentRequiredException if {@code comment} is blank (→ 422)
+   */
+  public void voidClaim(String actor, String comment, Instant voidedAt) {
+    if (this.status != ClaimStatus.APPROVED
+        || this.reimbursementRunId != null
+        || this.settledAt != null) {
+      throw new ClaimStateException(this.status, "void");
+    }
+    if (comment == null || comment.isBlank()) {
+      throw new VoidCommentRequiredException(this.id);
+    }
+    this.status = ClaimStatus.VOIDED;
+    this.decidedBy = requireNonBlank(actor, "actor");
+    this.decidedAt = Objects.requireNonNull(voidedAt, "voidedAt");
+    this.decisionComment = comment.strip();
+  }
+
+  /**
    * Transitions {@code DRAFT | SUBMITTED -> CANCELLED} — the employee withdrawing their own claim.
    *
    * @throws ClaimStateException if neither DRAFT nor SUBMITTED (→ 409)

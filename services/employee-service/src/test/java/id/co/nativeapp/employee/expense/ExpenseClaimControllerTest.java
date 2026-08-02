@@ -14,6 +14,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import id.co.nativeapp.employee.config.EmployeeApiAdvice;
 import id.co.nativeapp.employee.expense.controller.ExpenseClaimController;
 import id.co.nativeapp.employee.expense.domain.ClaimNotFoundException;
+import id.co.nativeapp.employee.expense.domain.ClaimStateException;
 import id.co.nativeapp.employee.expense.domain.ClaimStatus;
 import id.co.nativeapp.employee.expense.domain.ExpenseClaim;
 import id.co.nativeapp.employee.expense.domain.ExpenseReceipt;
@@ -267,6 +268,80 @@ class ExpenseClaimControllerTest {
         .perform(post("/api/v1/expense-claims/" + CLAIM + "/pay").header("Idempotency-Key", "k-7"))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/expense-claim-not-found"));
+  }
+
+  // ---------------------------------------------------------------------
+  // void (the correction path — ADR 0030 §5, Phase E7)
+  // ---------------------------------------------------------------------
+
+  @Test
+  void voidWithoutAnIdempotencyKeyIs400() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/v1/expense-claims/" + CLAIM + "/void")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"comment\":\"dup\"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/missing-required-header"));
+  }
+
+  @Test
+  void voidWithoutACommentIs400() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/v1/expense-claims/" + CLAIM + "/void")
+                .header("Idempotency-Key", "k-void-1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void voidReturns200() throws Exception {
+    ExpenseClaim voided = submittedClaim();
+    voided.approve("manager-sub", "ok", Instant.parse("2026-07-20T09:00:00Z"));
+    voided.voidClaim("manager-2", "dup", Instant.parse("2026-07-22T11:00:00Z"));
+    when(claimService.voidClaim(eq(CLAIM), eq("dup"), eq("k-void-2"))).thenReturn(voided);
+
+    mockMvc
+        .perform(
+            post("/api/v1/expense-claims/" + CLAIM + "/void")
+                .header("Idempotency-Key", "k-void-2")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"comment\":\"dup\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value(ClaimStatus.VOIDED.name()));
+  }
+
+  @Test
+  void voidOfAnUnknownClaimIs404() throws Exception {
+    when(claimService.voidClaim(eq(CLAIM), eq("dup"), eq("k-void-3")))
+        .thenThrow(new ClaimNotFoundException(CLAIM));
+
+    mockMvc
+        .perform(
+            post("/api/v1/expense-claims/" + CLAIM + "/void")
+                .header("Idempotency-Key", "k-void-3")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"comment\":\"dup\"}"))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/expense-claim-not-found"));
+  }
+
+  @Test
+  void voidOfAnIneligibleClaimIs409() throws Exception {
+    when(claimService.voidClaim(eq(CLAIM), eq("dup"), eq("k-void-4")))
+        .thenThrow(new ClaimStateException(ClaimStatus.SUBMITTED, "void"));
+
+    mockMvc
+        .perform(
+            post("/api/v1/expense-claims/" + CLAIM + "/void")
+                .header("Idempotency-Key", "k-void-4")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"comment\":\"dup\"}"))
+        .andExpect(status().isConflict())
+        .andExpect(
+            jsonPath("$.type").value("https://errors.nativeapp.id/expense-claim-state-conflict"));
   }
 
   // ---------------------------------------------------------------------

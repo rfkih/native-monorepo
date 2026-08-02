@@ -14,11 +14,13 @@ import id.co.nativeapp.employee.assignment.repository.AssignmentRepository;
 import id.co.nativeapp.employee.employee.domain.Employee;
 import id.co.nativeapp.employee.employee.domain.PtkpStatus;
 import id.co.nativeapp.employee.employee.repository.EmployeeRepository;
+import id.co.nativeapp.employee.expense.domain.ClaimStateException;
 import id.co.nativeapp.employee.expense.domain.ClaimStatus;
 import id.co.nativeapp.employee.expense.domain.ExpenseCategory;
 import id.co.nativeapp.employee.expense.domain.ExpenseClaim;
 import id.co.nativeapp.employee.expense.domain.SelfApprovalException;
 import id.co.nativeapp.employee.expense.dto.CreateClaimCommand;
+import id.co.nativeapp.employee.expense.messaging.ExpenseClaimVoidedSchema;
 import id.co.nativeapp.employee.expense.messaging.ExpenseReimbursementSettledSchema;
 import id.co.nativeapp.employee.expense.repository.ExpenseCategoryRepository;
 import id.co.nativeapp.employee.expense.repository.ExpenseClaimEventRepository;
@@ -266,6 +268,107 @@ class ExpenseClaimWriterTest {
     assertThat(claim.getStatus()).isEqualTo(ClaimStatus.REIMBURSED);
     verify(outboxWriter, never()).write(any(), any(), any(), any(), any(), any(), any());
     verify(eventRepository, never()).saveAndFlush(any());
+  }
+
+  // ---------------------------------------------------------------------
+  // voidClaim() — the correction path (ADR 0030 §5, Phase E7)
+  // ---------------------------------------------------------------------
+
+  @Test
+  void aFreshVoidWritesTheOutboxExactlyOnceWithTheCorrectFields() throws Exception {
+    UUID otherEmployee = UUID.randomUUID();
+    ExpenseClaim claim = approvedClaim(otherEmployee);
+    Instant originalApprovedAt = claim.getApprovedAt();
+    // The category's CURRENT hint may differ from what the approval actually carried (the
+    // documented divergence risk) — the writer re-resolves it the same way approve() does.
+    ExpenseCategory category = new ExpenseCategory("Supplies", "supplies", false);
+
+    when(eventRepository.findIdByClaimIdAndIdempotencyKey(
+            claim.getId(), "k-void", ExpenseClaimWriter.ACTION_VOID))
+        .thenReturn(Optional.empty());
+    when(claimRepository.findById(claim.getId())).thenReturn(Optional.of(claim));
+    when(categoryRepository.findById(CATEGORY)).thenReturn(Optional.of(category));
+
+    ExpenseClaim result =
+        TenantContext.callAs(
+            TENANT, ACTOR, () -> writer.voidClaim(claim.getId(), "duplicate submission", "k-void"));
+
+    assertThat(result.getStatus()).isEqualTo(ClaimStatus.VOIDED);
+    assertThat(result.getDecidedBy()).isEqualTo(ACTOR);
+    assertThat(result.getDecisionComment()).isEqualTo("duplicate submission");
+
+    ArgumentCaptor<byte[]> payloadCaptor = ArgumentCaptor.forClass(byte[].class);
+    verify(outboxWriter, times(1))
+        .write(
+            eq(ExpenseClaimVoidedSchema.AGGREGATE_TYPE),
+            eq(claim.getId().toString()),
+            eq(ExpenseClaimVoidedSchema.EVENT_TYPE),
+            payloadCaptor.capture(),
+            any(),
+            eq(UUID.fromString(TENANT)),
+            eq(Instant.parse("2026-07-20T09:00:00Z")));
+    verify(eventRepository, times(1)).saveAndFlush(any());
+    verify(claimRepository, times(1)).save(eq(claim));
+
+    GenericRecord record =
+        AvroSerde.deserialize(payloadCaptor.getValue(), ExpenseClaimVoidedSchema.schema());
+    assertThat(record.get("claim_id").toString()).isEqualTo(claim.getId().toString());
+    assertThat(record.get("company_id").toString()).isEqualTo(TENANT);
+    // org_unit_id is the claim row's own SNAPSHOT — never re-resolved (E2 reviewer's S2 note).
+    assertThat(record.get("org_unit_id").toString()).isEqualTo(ORG_UNIT.toString());
+    assertThat(record.get("employee_id").toString()).isEqualTo(otherEmployee.toString());
+    assertThat(record.get("amount_minor")).isEqualTo(250_000L);
+    assertThat(record.get("currency").toString()).isEqualTo("IDR");
+    assertThat(record.get("gl_hint").toString()).isEqualTo("supplies");
+    // approved_at carries the ORIGINAL approval instant, not the void instant.
+    assertThat(record.get("approved_at")).isEqualTo(originalApprovedAt.toEpochMilli());
+    assertThat(record.get("voided_at"))
+        .isEqualTo(Instant.parse("2026-07-20T09:00:00Z").toEpochMilli());
+  }
+
+  @Test
+  void aReplayedVoidReturnsTheClaimUnchangedWithNoSecondOutboxWrite() throws Exception {
+    UUID otherEmployee = UUID.randomUUID();
+    ExpenseClaim alreadyVoided = approvedClaim(otherEmployee);
+    alreadyVoided.voidClaim("manager-2", "dup", Instant.parse("2026-07-20T09:00:00Z"));
+
+    when(eventRepository.findIdByClaimIdAndIdempotencyKey(
+            alreadyVoided.getId(), "k-replay-void", ExpenseClaimWriter.ACTION_VOID))
+        .thenReturn(Optional.of(UUID.randomUUID()));
+    when(claimRepository.findById(alreadyVoided.getId())).thenReturn(Optional.of(alreadyVoided));
+
+    ExpenseClaim result =
+        TenantContext.callAs(
+            TENANT, ACTOR, () -> writer.voidClaim(alreadyVoided.getId(), "dup", "k-replay-void"));
+
+    assertThat(result).isSameAs(alreadyVoided);
+    assertThat(result.getStatus()).isEqualTo(ClaimStatus.VOIDED);
+    verify(outboxWriter, never()).write(any(), any(), any(), any(), any(), any(), any());
+    verify(eventRepository, never()).saveAndFlush(any());
+    verify(claimRepository, never()).save(any());
+  }
+
+  @Test
+  void voidingAClaimThatIsNotEligiblePropagatesTheDomainExceptionWithNoSideEffects()
+      throws Exception {
+    // SUBMITTED (never approved) — illegal source state for void.
+    UUID otherEmployee = UUID.randomUUID();
+    ExpenseClaim claim = submittedClaim(otherEmployee);
+
+    when(eventRepository.findIdByClaimIdAndIdempotencyKey(
+            claim.getId(), "k-illegal", ExpenseClaimWriter.ACTION_VOID))
+        .thenReturn(Optional.empty());
+    when(claimRepository.findById(claim.getId())).thenReturn(Optional.of(claim));
+
+    assertThatThrownBy(
+            () ->
+                TenantContext.callAs(
+                    TENANT, ACTOR, () -> writer.voidClaim(claim.getId(), "no", "k-illegal")))
+        .isInstanceOf(ClaimStateException.class);
+
+    verify(outboxWriter, never()).write(any(), any(), any(), any(), any(), any(), any());
+    verify(eventRepository, never()).saveAndFlush(any());
+    verify(claimRepository, never()).save(any());
   }
 
   @Test

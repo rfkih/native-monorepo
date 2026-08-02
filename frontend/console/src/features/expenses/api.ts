@@ -45,6 +45,95 @@ export function useMyCategories(params: TenantParams & { enabled: boolean }) {
 }
 
 // ---------------------------------------------------------------------------
+// Categories — admin CRUD (manager surface, Phase E7; endpoints existed since E1)
+// ---------------------------------------------------------------------------
+
+/** The finance-service `gl_hint` whitelist an expense category may carry (mirrors employee-service
+ *  `ExpenseCategory.GL_HINT_WHITELIST` — a new hint needs a finance mapping_rule seed first). */
+export const GL_HINT_OPTIONS = ['', 'cogs', 'supplies', 'utilities'] as const
+export type GlHint = (typeof GL_HINT_OPTIONS)[number]
+
+/** GET /api/v1/expense-categories — the admin catalog list (ACTIVE only — see CategoriesAdmin). */
+export function useCategories(params: TenantParams & { enabled: boolean }) {
+  const { companyId, actor, enabled } = params
+  return useQuery({
+    enabled,
+    queryKey: ['expenseCategories', companyId],
+    queryFn: async () => {
+      const result = await apiFetch<ExpenseCategory[]>('/api/v1/expense-categories', {
+        tenant: { companyId, actor },
+      })
+      return result ?? []
+    },
+  })
+}
+
+function invalidateCategories(queryClient: ReturnType<typeof useQueryClient>, companyId: string) {
+  void queryClient.invalidateQueries({ queryKey: ['expenseCategories', companyId] })
+  // A new/renamed/deactivated category also affects the employee-facing picker.
+  void queryClient.invalidateQueries({ queryKey: ['myExpenseCategories', companyId] })
+}
+
+/** POST /api/v1/expense-categories body. */
+export interface CreateCategoryBody {
+  name: string
+  glHint: string
+  taxable: boolean
+}
+
+/** POST /api/v1/expense-categories — create a category. */
+export function useCreateCategory(params: TenantParams) {
+  const { companyId, actor } = params
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: CreateCategoryBody) =>
+      apiFetch<ExpenseCategory>('/api/v1/expense-categories', {
+        method: 'POST',
+        tenant: { companyId, actor },
+        body,
+      }),
+    onSuccess: () => invalidateCategories(queryClient, companyId),
+  })
+}
+
+/** PATCH /api/v1/expense-categories/{id} body — partial; a missing field leaves it unchanged. */
+export interface UpdateCategoryBody {
+  name?: string
+  glHint?: string
+  taxable?: boolean
+  active?: boolean
+}
+
+/** PATCH /api/v1/expense-categories/{id} — partial update. */
+export function useUpdateCategory(params: TenantParams) {
+  const { companyId, actor } = params
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...body }: UpdateCategoryBody & { id: string }) =>
+      apiFetch<ExpenseCategory>(`/api/v1/expense-categories/${id}`, {
+        method: 'PATCH',
+        tenant: { companyId, actor },
+        body,
+      }),
+    onSuccess: () => invalidateCategories(queryClient, companyId),
+  })
+}
+
+/** POST /api/v1/expense-categories/seed-defaults — idempotent; returns the full active list. */
+export function useSeedDefaultCategories(params: TenantParams) {
+  const { companyId, actor } = params
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<ExpenseCategory[]>('/api/v1/expense-categories/seed-defaults', {
+        method: 'POST',
+        tenant: { companyId, actor },
+      }),
+    onSuccess: () => invalidateCategories(queryClient, companyId),
+  })
+}
+
+// ---------------------------------------------------------------------------
 // Claims — list + detail
 // ---------------------------------------------------------------------------
 
@@ -143,6 +232,179 @@ export function useMyClaim(params: TenantParams & { id: string | null; enabled: 
       apiFetch<ExpenseClaimDetail>(`/api/v1/me/expense-claims/${id}`, {
         tenant: { companyId, actor },
       }),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Manager surface — the tenant-wide claim list/detail + decisions (Phase E7)
+// ---------------------------------------------------------------------------
+
+/** One row of the manager-facing claim list (mirrors ExpenseClaimSummaryResponse). */
+export interface ExpenseClaimSummary {
+  id: string
+  employeeId: string
+  employeeName: string
+  status: ClaimStatus
+  amountMinor: number
+  currency: string
+  expenseDate: string
+  merchant: string | null
+  categoryName: string
+  orgUnitId: string
+  reimbursementMethod: ReimbursementMethod
+  decidedBy: string | null
+  decidedAt: string | null
+  decisionComment: string | null
+}
+
+const EMPTY_MANAGER_PAGE: PageResponse<ExpenseClaimSummary> = {
+  content: [],
+  page: 0,
+  size: 25,
+  totalElements: 0,
+  totalPages: 0,
+}
+
+/**
+ * GET /api/v1/expense-claims?status=&orgUnitId=&page=&size= — the tenant-wide claim list,
+ * SUBMITTED-first (pending work can never fall off the end of a page). `status` is an exact
+ * {@link ClaimStatus} filter (omit for every status); `orgUnitId` is a single org-unit filter (the
+ * server accepts a repeated/multi-value param, but the console offers one selection at a time).
+ */
+export function useClaims(
+  params: TenantParams & {
+    status?: ClaimStatus
+    orgUnitId?: string
+    page?: number
+    size?: number
+    enabled: boolean
+  },
+) {
+  const { companyId, actor, status, orgUnitId, page, size, enabled } = params
+  const boundedPage = page ?? 0
+  const boundedSize = size ?? 25
+  return useQuery({
+    enabled,
+    queryKey: ['expenseClaims', companyId, status ?? '', orgUnitId ?? '', boundedPage, boundedSize],
+    queryFn: async () => {
+      const result = await apiFetch<PageResponse<ExpenseClaimSummary>>('/api/v1/expense-claims', {
+        tenant: { companyId, actor },
+        query: {
+          status,
+          orgUnitId,
+          page: boundedPage.toString(),
+          size: boundedSize.toString(),
+        },
+      })
+      return result ?? EMPTY_MANAGER_PAGE
+    },
+  })
+}
+
+/** GET /api/v1/expense-claims/{id} — any claim visible in the bound tenant. */
+export function useClaim(params: TenantParams & { id: string | null; enabled: boolean }) {
+  const { companyId, actor, id, enabled } = params
+  return useQuery({
+    enabled: enabled && !!id,
+    queryKey: ['expenseClaim', companyId, id],
+    queryFn: () =>
+      apiFetch<ExpenseClaimDetail>(`/api/v1/expense-claims/${id}`, {
+        tenant: { companyId, actor },
+      }),
+  })
+}
+
+function invalidateManagerClaims(
+  queryClient: ReturnType<typeof useQueryClient>,
+  companyId: string,
+  id?: string,
+) {
+  void queryClient.invalidateQueries({ queryKey: ['expenseClaims', companyId] })
+  if (id) {
+    void queryClient.invalidateQueries({ queryKey: ['expenseClaim', companyId, id] })
+  }
+}
+
+/** Mutation variables shared by every guarded manager transition — see `ClaimTransitionVariables`
+ *  for why `idempotencyKey` must be minted ONCE per submit, in the calling component. */
+export interface ApproveClaimVariables {
+  id: string
+  comment?: string
+  idempotencyKey: string
+}
+
+/** POST /api/v1/expense-claims/{id}/approve — SUBMITTED -> APPROVED. Comment optional. */
+export function useApproveClaim(params: TenantParams) {
+  const { companyId, actor } = params
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, comment, idempotencyKey }: ApproveClaimVariables) =>
+      apiFetch<ExpenseClaimDetail>(`/api/v1/expense-claims/${id}/approve`, {
+        method: 'POST',
+        tenant: { companyId, actor },
+        headers: { 'Idempotency-Key': idempotencyKey },
+        body: { comment },
+      }),
+    onSuccess: (_, { id }) => invalidateManagerClaims(queryClient, companyId, id),
+  })
+}
+
+export interface RefuseClaimVariables {
+  id: string
+  comment: string
+  idempotencyKey: string
+}
+
+/** POST /api/v1/expense-claims/{id}/refuse — SUBMITTED -> REFUSED. Comment required. */
+export function useRefuseClaim(params: TenantParams) {
+  const { companyId, actor } = params
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, comment, idempotencyKey }: RefuseClaimVariables) =>
+      apiFetch<ExpenseClaimDetail>(`/api/v1/expense-claims/${id}/refuse`, {
+        method: 'POST',
+        tenant: { companyId, actor },
+        headers: { 'Idempotency-Key': idempotencyKey },
+        body: { comment },
+      }),
+    onSuccess: (_, { id }) => invalidateManagerClaims(queryClient, companyId, id),
+  })
+}
+
+/** POST /api/v1/expense-claims/{id}/pay — APPROVED + unlinked -> REIMBURSED (DIRECT). */
+export function usePayClaimNow(params: TenantParams) {
+  const { companyId, actor } = params
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, idempotencyKey }: ClaimTransitionVariables) =>
+      apiFetch<ExpenseClaimDetail>(`/api/v1/expense-claims/${id}/pay`, {
+        method: 'POST',
+        tenant: { companyId, actor },
+        headers: { 'Idempotency-Key': idempotencyKey },
+      }),
+    onSuccess: (_, { id }) => invalidateManagerClaims(queryClient, companyId, id),
+  })
+}
+
+export interface VoidClaimVariables {
+  id: string
+  comment: string
+  idempotencyKey: string
+}
+
+/** POST /api/v1/expense-claims/{id}/void — APPROVED + unlinked + unsettled -> VOIDED. */
+export function useVoidClaim(params: TenantParams) {
+  const { companyId, actor } = params
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, comment, idempotencyKey }: VoidClaimVariables) =>
+      apiFetch<ExpenseClaimDetail>(`/api/v1/expense-claims/${id}/void`, {
+        method: 'POST',
+        tenant: { companyId, actor },
+        headers: { 'Idempotency-Key': idempotencyKey },
+        body: { comment },
+      }),
+    onSuccess: (_, { id }) => invalidateManagerClaims(queryClient, companyId, id),
   })
 }
 
@@ -292,24 +554,31 @@ interface ReceiptPreviewState {
 const RECEIPT_IDLE: ReceiptPreviewState = { url: null, status: 'idle' }
 
 /**
- * GET /api/v1/me/expense-claims/{id}/receipt as an object URL for an `<img>` preview. Deliberately
- * NOT a TanStack Query: a Blob's object-URL lifetime needs an explicit revoke tied to THIS
- * component instance's mount/param changes, which a shared query cache would complicate (a second
- * mount reusing a cached Blob after the first mount revoked its URL). A 404 (no receipt on file
- * yet) resolves to the `'none'` status, not `'error'` — an expense claim legitimately may have none.
+ * Fetches a receipt at `path` as an object URL for an `<img>` preview. Deliberately NOT a TanStack
+ * Query: a Blob's object-URL lifetime needs an explicit revoke tied to THIS component instance's
+ * mount/param changes, which a shared query cache would complicate (a second mount reusing a
+ * cached Blob after the first mount revoked its URL). A 404 (no receipt on file yet) resolves to
+ * the `'none'` status, not `'error'` — an expense claim legitimately may have none.
  *
  * `url` and `status` are ONE state value (not two separate `useState` calls) updated with a single
  * `setState` per branch — avoids the cascading-render pattern of setting two pieces of state back
- * to back inside an effect. When disabled/no id, the hook returns the idle constant directly
+ * to back inside an effect. When disabled/no path, the hook returns the idle constant directly
  * (never runs the effect body at all) rather than resetting state from inside the effect.
+ *
+ * Shared by {@link useMyReceiptUrl} (the employee `/me` surface) and {@link useManagerReceiptUrl}
+ * (the manager surface, Phase E7) — same lifecycle, different endpoint.
  */
-export function useMyReceiptUrl(params: TenantParams & { id: string | null; enabled: boolean }) {
-  const { companyId, actor, id, enabled } = params
-  const active = enabled && !!id
+function useReceiptUrlAtPath(
+  path: string | null,
+  enabled: boolean,
+  companyId: string,
+  actor: string,
+) {
+  const active = enabled && !!path
   const [state, setState] = useState<ReceiptPreviewState>(RECEIPT_IDLE)
 
   useEffect(() => {
-    if (!active) return undefined
+    if (!active || !path) return undefined
 
     let objectUrl: string | null = null
     let cancelled = false
@@ -317,9 +586,7 @@ export function useMyReceiptUrl(params: TenantParams & { id: string | null; enab
     void (async () => {
       setState({ url: null, status: 'loading' })
       try {
-        const blob = await apiFetchBlob(`/api/v1/me/expense-claims/${id}/receipt`, {
-          tenant: { companyId, actor },
-        })
+        const blob = await apiFetchBlob(path, { tenant: { companyId, actor } })
         if (cancelled) return
         if (!blob) {
           setState({ url: null, status: 'none' })
@@ -337,7 +604,21 @@ export function useMyReceiptUrl(params: TenantParams & { id: string | null; enab
       cancelled = true
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
-  }, [companyId, actor, id, active])
+  }, [companyId, actor, path, active])
 
   return active ? state : RECEIPT_IDLE
+}
+
+/** GET /api/v1/me/expense-claims/{id}/receipt — the caller's own claim (employee surface). */
+export function useMyReceiptUrl(params: TenantParams & { id: string | null; enabled: boolean }) {
+  const { companyId, actor, id, enabled } = params
+  const path = id ? `/api/v1/me/expense-claims/${id}/receipt` : null
+  return useReceiptUrlAtPath(path, enabled, companyId, actor)
+}
+
+/** GET /api/v1/expense-claims/{id}/receipt — any claim in the tenant (manager surface, Phase E7). */
+export function useManagerReceiptUrl(params: TenantParams & { id: string | null; enabled: boolean }) {
+  const { companyId, actor, id, enabled } = params
+  const path = id ? `/api/v1/expense-claims/${id}/receipt` : null
+  return useReceiptUrlAtPath(path, enabled, companyId, actor)
 }

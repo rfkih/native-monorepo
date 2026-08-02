@@ -34,6 +34,7 @@ import {
   Truck,
   Users,
   UsersRound,
+  Wallet,
   X,
 } from 'lucide-react'
 import { Wordmark } from '@/components/Wordmark'
@@ -72,6 +73,7 @@ export function Shell({ children }: { children: ReactNode }) {
             { to: '/statements/income', label: t('nav.income'), icon: LineChart, page: 'reports' },
             { to: '/statements/balance-sheet', label: t('nav.balanceSheet'), icon: Scale, page: 'reports' },
             { to: '/statements/cash-flow', label: t('nav.cashFlow'), icon: ArrowLeftRight, page: 'reports' },
+            { to: '/expenses', label: t('nav.expenses'), icon: Wallet, page: 'expenses' },
             { to: '/invoices', label: t('nav.invoices'), icon: Receipt },
             { to: '/customers', label: t('nav.customers'), icon: Users },
             { to: '/ar/aging', label: t('nav.arAging'), icon: Clock },

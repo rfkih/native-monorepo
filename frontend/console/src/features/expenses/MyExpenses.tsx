@@ -18,7 +18,6 @@ import {
   Receipt as ReceiptIcon,
   TriangleAlert,
 } from 'lucide-react'
-import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Spinner } from '@/components/ui/Spinner'
@@ -33,36 +32,18 @@ import { formatMoney } from '@/lib/money'
 import { localeOf } from '@/i18n'
 import { formatDate } from './format'
 import { NewClaimDialog } from './NewClaimDialog'
+import { ClaimStatusBadge } from './parts'
 import {
   useCancelClaim,
   useMyClaim,
   useMyClaims,
   useMyReceiptUrl,
   useSubmitClaim,
-  type ClaimStatus,
   type ExpenseClaimDetail,
   type MyExpenseClaim,
 } from './api'
 
 const PAGE_SIZE = 10
-
-/** Mirrors Badge's (unexported) `Tone` union. */
-type StatusTone = 'neutral' | 'amber' | 'emerald' | 'profit' | 'info' | 'loss'
-
-const STATUS_TONE: Record<ClaimStatus, StatusTone> = {
-  DRAFT: 'neutral',
-  SUBMITTED: 'amber',
-  APPROVED: 'profit',
-  REFUSED: 'loss',
-  CANCELLED: 'neutral',
-  VOIDED: 'loss',
-  REIMBURSED: 'profit',
-}
-
-function StatusBadge({ status }: { status: ClaimStatus }) {
-  const { t } = useTranslation()
-  return <Badge tone={STATUS_TONE[status]}>{t(`expenses.status.${status}`)}</Badge>
-}
 
 type DialogState = { mode: 'create' } | { mode: 'edit'; claim: ExpenseClaimDetail }
 
@@ -208,7 +189,7 @@ function ClaimRow({
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="truncate text-sm font-semibold text-ink">{claim.categoryName}</span>
-          <StatusBadge status={claim.status} />
+          <ClaimStatusBadge status={claim.status} />
         </div>
         <p className="mt-0.5 truncate text-xs text-ink-3">
           {formatDate(claim.expenseDate, locale)}
@@ -349,7 +330,7 @@ function ClaimDetailSheet({
           ) : (
             <>
               <div className="flex items-center gap-3">
-                <StatusBadge status={claim.status} />
+                <ClaimStatusBadge status={claim.status} />
                 <span className="tnum font-mono text-xl font-semibold text-ink">
                   {formatMoney(claim.amountMinor, claim.currency, locale)}
                 </span>

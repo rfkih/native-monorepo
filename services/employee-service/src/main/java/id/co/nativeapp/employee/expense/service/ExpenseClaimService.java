@@ -104,6 +104,19 @@ public class ExpenseClaimService {
   }
 
   /**
+   * Voids an APPROVED, un-linked, un-settled claim, idempotently (ADR 0030 §5, Phase E7). The
+   * comment is required (enforced by the aggregate).
+   */
+  public ExpenseClaim voidClaim(UUID claimId, String comment, String idempotencyKey) {
+    TenantContext.require();
+    try {
+      return writer.voidClaim(claimId, comment, idempotencyKey);
+    } catch (DataIntegrityViolationException conflict) {
+      return recoverReplay(claimId, idempotencyKey, ExpenseClaimWriter.ACTION_VOID, conflict);
+    }
+  }
+
+  /**
    * Recovers a {@link DataIntegrityViolationException} ONLY when it is a genuine replay of THIS
    * (claim, key, action) triple; otherwise rethrows {@code conflict} unchanged (S1/S2, code
    * review).

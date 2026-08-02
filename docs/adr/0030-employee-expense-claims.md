@@ -182,3 +182,42 @@ existing totals read) also lets `work_inputs_json` freeze the INDIVIDUAL linked 
 the aggregate total/count — full details, including the regression-proving test, are in ADR 0032's P7
 review addendum (the liability-side ADR now owns both the settle-gating and the claim-id-freezing
 write-up, alongside the split it already owned, to keep the P7-review narrative in one place).
+
+## §11 — Phase E7 addendum: void + the manager console
+
+Point 5's `APPROVED -> VOIDED` transition ships in Phase E7: `ExpenseClaim#voidClaim(actor, comment,
+voidedAt)` is legal only from APPROVED with `reimbursement_run_id == null` AND `settled_at == null`
+(defense-in-depth on the latter — nothing can set it while still APPROVED today, both settlement
+paths flip straight to REIMBURSED), requires a comment exactly like `refuse`, and overwrites
+`decided_by`/`decided_at`/`decision_comment` with the void's own decision while leaving `approved_at`
+untouched — the outbox event needs that ORIGINAL instant. `ExpenseClaimWriter#voidClaim` mirrors
+`payDirect` exactly: a plain `claimRepository.findById` (self-approval is N/A for a void — the
+identity of who approved is not what a void guards against), the same replay/idempotency shape
+(`ACTION_VOID`), and an in-tx `ExpenseClaimVoided` outbox write.
+
+**The `org_unit_id` residual, closed.** The E2 reviewer's S2 note on this task was binding: the
+event's `org_unit_id` MUST be the claim row's own SNAPSHOT (`claim.getOrgUnitId()`), never
+re-resolved against the employee's current assignment. `ExpenseClaimVoidedSchema#toRecord` passes
+the snapshot straight through — there is no assignment-resolving call anywhere on the void path — so
+the contra always lands on the exact `business_id` the original approval posted under, even if the
+employee's assignment changed in the interim.
+
+**The `gl_hint` decision (documented honestly).** The claim row does not persist the category's
+`gl_hint` as it stood AT approval — only the CURRENT value is available via
+`ExpenseCategory#getGlHint()`. Adding a `gl_hint_at_approval` column (a new migration) was considered
+and rejected as disproportionate to what it buys: `ExpenseClaimWriter#voidClaim` re-resolves the
+category's CURRENT hint the same way `approve` does, and finance's `ExpenseClaimVoidWriter` already
+resolves the POSTING ACCOUNT via `GlAccountResolver#resolveExpense(glHint, approvedAt)` — the
+`mapping_rule` effective AT THE ORIGINAL APPROVAL INSTANT, not today. So the books stay correct
+unless an admin edits the category's `gl_hint` string itself in the (usually short) window between a
+claim's approval and its void — a rare, intentional admin action, not routine drift — AND that edit
+happens to change which mapping-rule row the (admin-edited) hint resolves to as-of the original
+`approved_at`. This residual is accepted for v1 and re-recorded on `ExpenseClaimVoidedSchema#toRecord`
+itself so it stays visible next to the code it describes.
+
+**Console.** `features/expenses/ExpenseInbox.tsx` (the SUBMITTED queue — approve/refuse), `.../
+ExpensesList.tsx` (tenant-wide list + filters + detail + Pay Now + Void), `.../CategoriesAdmin.tsx`
+(catalog CRUD + seed-defaults) round out the manager surface at `/expenses` + `/expenses/categories`,
+gated by a new client-only `pageAccess` key (`'expenses'`, `DASHBOARD_PAGES` only — the org-service
+page-grant whitelist is untouched, since page grants are a UI-narrowing convenience over the
+gateway's real role check, not a second authorization boundary).

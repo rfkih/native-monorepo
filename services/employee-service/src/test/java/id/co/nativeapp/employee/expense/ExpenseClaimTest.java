@@ -8,6 +8,7 @@ import id.co.nativeapp.employee.expense.domain.ClaimStatus;
 import id.co.nativeapp.employee.expense.domain.ExpenseClaim;
 import id.co.nativeapp.employee.expense.domain.RefusalCommentRequiredException;
 import id.co.nativeapp.employee.expense.domain.ReimbursementMethod;
+import id.co.nativeapp.employee.expense.domain.VoidCommentRequiredException;
 import id.co.nativeapp.money.Money;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -340,6 +341,141 @@ class ExpenseClaimTest {
     ReflectionTestUtils.setField(claim, "reimbursementRunId", UUID.randomUUID());
     assertThatThrownBy(() -> claim.settleByPayrollRun(Instant.parse("2026-07-25T10:00:00Z")))
         .isInstanceOf(ClaimStateException.class);
+  }
+
+  // ---------------------------------------------------------------------------
+  // voidClaim() — the correction path (ADR 0030 §5, Phase E7)
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void voidClaimFromApprovedAndUnlinkedAndUnsettledMovesToVoidedAndStampsTheDecision() {
+    ExpenseClaim claim = newDraft();
+    claim.submit();
+    Instant approvedAt = Instant.parse("2026-07-20T09:00:00Z");
+    claim.approve("manager-sub", "approval note", approvedAt);
+    Instant voidedAt = Instant.parse("2026-07-22T11:00:00Z");
+
+    claim.voidClaim("manager-2", "duplicate submission", voidedAt);
+
+    assertThat(claim.getStatus()).isEqualTo(ClaimStatus.VOIDED);
+    // approvedAt is the ORIGINAL approval instant, untouched by the void — the outbox event needs
+    // it (the E2 reviewer's S2 note: the contra resolves the mapping effective AT approval).
+    assertThat(claim.getApprovedAt()).isEqualTo(approvedAt);
+    // decided_by/decided_at/decision_comment are overwritten with THIS (the void's) decision —
+    // the full history, including the original approval's own actor/comment, lives in the
+    // append-only expense_claim_event audit trail instead.
+    assertThat(claim.getDecidedBy()).isEqualTo("manager-2");
+    assertThat(claim.getDecidedAt()).isEqualTo(voidedAt);
+    assertThat(claim.getDecisionComment()).isEqualTo("duplicate submission");
+  }
+
+  @Test
+  void voidClaimWithANullCommentIsRejected() {
+    ExpenseClaim claim = newDraft();
+    claim.submit();
+    claim.approve("manager-sub", "ok", Instant.parse("2026-07-20T09:00:00Z"));
+    assertThatThrownBy(
+            () -> claim.voidClaim("manager-2", null, Instant.parse("2026-07-22T11:00:00Z")))
+        .isInstanceOf(VoidCommentRequiredException.class);
+    // A rejected attempt is a pure no-op.
+    assertThat(claim.getStatus()).isEqualTo(ClaimStatus.APPROVED);
+  }
+
+  @Test
+  void voidClaimWithABlankCommentIsRejected() {
+    ExpenseClaim claim = newDraft();
+    claim.submit();
+    claim.approve("manager-sub", "ok", Instant.parse("2026-07-20T09:00:00Z"));
+    assertThatThrownBy(
+            () -> claim.voidClaim("manager-2", "   ", Instant.parse("2026-07-22T11:00:00Z")))
+        .isInstanceOf(VoidCommentRequiredException.class);
+  }
+
+  @Test
+  void voidClaimFromDraftIsRejected() {
+    ExpenseClaim claim = newDraft();
+    assertThatThrownBy(
+            () -> claim.voidClaim("manager-2", "no", Instant.parse("2026-07-22T11:00:00Z")))
+        .isInstanceOf(ClaimStateException.class);
+  }
+
+  @Test
+  void voidClaimFromSubmittedIsRejected() {
+    ExpenseClaim claim = newDraft();
+    claim.submit();
+    assertThatThrownBy(
+            () -> claim.voidClaim("manager-2", "no", Instant.parse("2026-07-22T11:00:00Z")))
+        .isInstanceOf(ClaimStateException.class);
+  }
+
+  @Test
+  void voidClaimFromRefusedIsRejected() {
+    ExpenseClaim claim = newDraft();
+    claim.submit();
+    claim.refuse("manager-sub", "no receipt", Instant.parse("2026-07-20T09:00:00Z"));
+    assertThatThrownBy(
+            () -> claim.voidClaim("manager-2", "no", Instant.parse("2026-07-22T11:00:00Z")))
+        .isInstanceOf(ClaimStateException.class);
+  }
+
+  @Test
+  void voidClaimFromCancelledIsRejected() {
+    ExpenseClaim claim = newDraft();
+    claim.cancel();
+    assertThatThrownBy(
+            () -> claim.voidClaim("manager-2", "no", Instant.parse("2026-07-22T11:00:00Z")))
+        .isInstanceOf(ClaimStateException.class);
+  }
+
+  @Test
+  void voidClaimFromAlreadyVoidedIsRejected() {
+    ExpenseClaim claim = newDraft();
+    claim.submit();
+    claim.approve("manager-sub", "ok", Instant.parse("2026-07-20T09:00:00Z"));
+    claim.voidClaim("manager-2", "dup", Instant.parse("2026-07-22T11:00:00Z"));
+    assertThatThrownBy(
+            () -> claim.voidClaim("manager-2", "again", Instant.parse("2026-07-23T11:00:00Z")))
+        .isInstanceOf(ClaimStateException.class);
+  }
+
+  @Test
+  void voidClaimFromDirectlyReimbursedIsRejected() {
+    // REIMBURSED via payDirect (ADR 0030 §6 DIRECT path) — money already moved.
+    ExpenseClaim claim = newDraft();
+    claim.submit();
+    claim.approve("manager-sub", "ok", Instant.parse("2026-07-20T09:00:00Z"));
+    claim.payDirect(Instant.parse("2026-07-21T10:00:00Z"));
+    assertThatThrownBy(
+            () -> claim.voidClaim("manager-2", "no", Instant.parse("2026-07-22T11:00:00Z")))
+        .isInstanceOf(ClaimStateException.class);
+  }
+
+  @Test
+  void voidClaimFromPayrollReimbursedIsRejected() {
+    // REIMBURSED via settleByPayrollRun (ADR 0030 §6 PAYROLL path) — money already moved.
+    ExpenseClaim claim = newDraft();
+    claim.submit();
+    claim.approve("manager-sub", "ok", Instant.parse("2026-07-20T09:00:00Z"));
+    ReflectionTestUtils.setField(claim, "reimbursementRunId", UUID.randomUUID());
+    claim.settleByPayrollRun(Instant.parse("2026-07-25T10:00:00Z"));
+    assertThatThrownBy(
+            () -> claim.voidClaim("manager-2", "no", Instant.parse("2026-07-26T11:00:00Z")))
+        .isInstanceOf(ClaimStateException.class);
+  }
+
+  @Test
+  void voidClaimWhenLinkedToAPayrollRunButStillApprovedIsRejected() {
+    // The E5-transitional case (ADR 0030 §5/§10): linked, but not yet flipped to REIMBURSED. Still
+    // un-voidable — the money is spoken-for by the link even though it hasn't settled yet.
+    ExpenseClaim claim = newDraft();
+    claim.submit();
+    claim.approve("manager-sub", "ok", Instant.parse("2026-07-20T09:00:00Z"));
+    ReflectionTestUtils.setField(claim, "reimbursementRunId", UUID.randomUUID());
+
+    assertThatThrownBy(
+            () -> claim.voidClaim("manager-2", "no", Instant.parse("2026-07-22T11:00:00Z")))
+        .isInstanceOf(ClaimStateException.class);
+    assertThat(claim.getStatus()).isEqualTo(ClaimStatus.APPROVED);
   }
 
   // ---------------------------------------------------------------------------

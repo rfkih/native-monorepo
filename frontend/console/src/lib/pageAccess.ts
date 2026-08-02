@@ -15,7 +15,14 @@ import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api'
 import { hasAnyRole, useAuth } from '@/lib/authContext'
 
-/** The grantable console page keys (mirrors the org-service whitelist). */
+/**
+ * The grantable console page keys. Mirrors the org-service whitelist for every key EXCEPT
+ * `'expenses'` (ADR 0030, Phase E7) — a CLIENT-ONLY addition: `/expenses` has no per-page role
+ * beyond the existing `canDashboard` (owner/manager) gate, so this key only ever NARROWS what an
+ * already-dashboard-eligible login sees; it never needs server-side whitelist changes because the
+ * gateway's real authorization boundary is the role check on `/api/v1/expense-claims/**`, unchanged
+ * by this UI-level grant.
+ */
 export type PageKey =
   | 'pos'
   | 'kitchen'
@@ -27,9 +34,18 @@ export type PageKey =
   | 'groups'
   | 'close'
   | 'team'
+  | 'expenses'
 
 /** Pages on the back-office (owner/manager) surface. */
-export const DASHBOARD_PAGES: PageKey[] = ['dashboard', 'reports', 'org', 'groups', 'close', 'team']
+export const DASHBOARD_PAGES: PageKey[] = [
+  'dashboard',
+  'reports',
+  'org',
+  'groups',
+  'close',
+  'team',
+  'expenses',
+]
 /** Pages on the POS (cashier) surface. */
 export const POS_PAGES: PageKey[] = ['pos', 'menu', 'kitchen']
 

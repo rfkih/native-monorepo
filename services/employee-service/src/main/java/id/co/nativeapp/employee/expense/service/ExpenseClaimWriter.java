@@ -13,6 +13,7 @@ import id.co.nativeapp.employee.expense.domain.ExpenseClaimEvent;
 import id.co.nativeapp.employee.expense.domain.SelfApprovalException;
 import id.co.nativeapp.employee.expense.dto.CreateClaimCommand;
 import id.co.nativeapp.employee.expense.messaging.ExpenseClaimApprovedSchema;
+import id.co.nativeapp.employee.expense.messaging.ExpenseClaimVoidedSchema;
 import id.co.nativeapp.employee.expense.messaging.ExpenseReimbursementSettledSchema;
 import id.co.nativeapp.employee.expense.repository.ExpenseCategoryRepository;
 import id.co.nativeapp.employee.expense.repository.ExpenseClaimEventRepository;
@@ -43,20 +44,20 @@ import org.springframework.transaction.annotation.Transactional;
  * constraint fires — the {@code SaleWriter}/{@code AssignmentWriter} idiom).
  *
  * <p><strong>Idempotency (ADR 0030 §5).</strong> {@code submit}/{@code cancel}/{@code approve}/
- * {@code refuse}/{@code payDirect} each take an {@code idempotencyKey}: the method first probes
- * {@link ExpenseClaimEventRepository#findIdByClaimIdAndIdempotencyKey}, scoped by BOTH the key AND
- * the transition's own action constant ({@link #ACTION_SUBMIT} etc.) — a hit means this exact
- * (claim, key, action) triple already ran, so the method returns the claim UNCHANGED (no second
- * mutation, no second outbox write); a miss proceeds to mutate + append the audit row, and the
- * per-tenant {@code UNIQUE (company_id, claim_id, idempotency_key)} (V9 — deliberately NOT
- * including {@code action}) is the concurrency backstop a concurrent racer's insert trips as a
- * {@link org.springframework.dao.DataIntegrityViolationException}. {@link ExpenseClaimService}
- * recovers it — but ONLY after confirming via {@link #isReplayedEvent} that an event row for THIS
- * (claim, key, action) triple really exists; the SAME key reused for a DIFFERENT action on the SAME
- * claim also trips the unique index (S1/S2, code review) but is NOT a replay of anything, so the
- * service rethrows rather than masking it as success. {@code create}/{@code updateDraft} are NOT
- * guarded transitions in the domain sense (they do not change {@link ClaimStatus}) and take no
- * idempotency key.
+ * {@code refuse}/{@code payDirect}/{@code voidClaim} each take an {@code idempotencyKey}: the
+ * method first probes {@link ExpenseClaimEventRepository#findIdByClaimIdAndIdempotencyKey}, scoped
+ * by BOTH the key AND the transition's own action constant ({@link #ACTION_SUBMIT} etc.) — a hit
+ * means this exact (claim, key, action) triple already ran, so the method returns the claim
+ * UNCHANGED (no second mutation, no second outbox write); a miss proceeds to mutate + append the
+ * audit row, and the per-tenant {@code UNIQUE (company_id, claim_id, idempotency_key)} (V9 —
+ * deliberately NOT including {@code action}) is the concurrency backstop a concurrent racer's
+ * insert trips as a {@link org.springframework.dao.DataIntegrityViolationException}. {@link
+ * ExpenseClaimService} recovers it — but ONLY after confirming via {@link #isReplayedEvent} that an
+ * event row for THIS (claim, key, action) triple really exists; the SAME key reused for a DIFFERENT
+ * action on the SAME claim also trips the unique index (S1/S2, code review) but is NOT a replay of
+ * anything, so the service rethrows rather than masking it as success. {@code create}/{@code
+ * updateDraft} are NOT guarded transitions in the domain sense (they do not change {@link
+ * ClaimStatus}) and take no idempotency key.
  *
  * <p><strong>Currency (v1 boundary, ADR 0030 §9).</strong> employee-service has NO persisted source
  * of a company base currency: {@code payroll_run.base_currency} is set purely from the caller's
@@ -94,6 +95,9 @@ public class ExpenseClaimWriter {
 
   /** The {@code expense_claim_event.action} value for {@link #payDirect}. */
   public static final String ACTION_PAY_DIRECT = "PAY_DIRECT";
+
+  /** The {@code expense_claim_event.action} value for {@link #voidClaim}. */
+  public static final String ACTION_VOID = "VOID";
 
   /**
    * The namespace prefix for the currency-establishment advisory lock key (W1, code review) — kept
@@ -390,6 +394,67 @@ public class ExpenseClaimWriter {
         now);
 
     appendEvent(claim, ACTION_PAY_DIRECT, from, actor, null, idempotencyKey, tenant);
+    return claim;
+  }
+
+  /**
+   * Voids an APPROVED, un-linked, un-settled claim (ADR 0030 §5, Phase E7 — the manager surface's
+   * {@code POST /{id}/void}): flips VOIDED, stamps the decision, and writes the {@code
+   * ExpenseClaimVoided} outbox row — atomically with the state flip (rule 3). Self-approval is N/A
+   * here (unlike {@link #approve}, voiding is not "deciding your own claim" in the same sense — the
+   * money is already recognised, and ADR 0030 does not gate this transition on approver identity),
+   * so this mirrors {@link #payDirect}'s shape exactly: a plain {@code claimRepository.findById}
+   * (the manager-wide surface), no {@code requireOwnClaim}.
+   *
+   * <p>{@code glHint} is the category's CURRENT {@code gl_hint}, resolved the same way {@link
+   * #approve} resolves it — see {@link ExpenseClaimVoidedSchema#toRecord} for the documented
+   * divergence risk (the claim row does not store the hint that was current AT approval).
+   *
+   * @throws ClaimNotFoundException if the claim is unknown in this tenant (→ 404)
+   * @throws CategoryNotFoundException if the claim's category has since been deleted (never happens
+   *     in v1 — categories are deactivated, not deleted — but the lookup still guards it)
+   * @throws id.co.nativeapp.employee.expense.domain.ClaimStateException if not APPROVED, or linked
+   *     to a payroll run, or already settled (→ 409)
+   * @throws id.co.nativeapp.employee.expense.domain.VoidCommentRequiredException if {@code comment}
+   *     is blank (→ 422; unreachable over HTTP — {@code VoidClaimRequest.comment} is
+   *     {@code @NotBlank})
+   */
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public ExpenseClaim voidClaim(UUID claimId, String comment, String idempotencyKey) {
+    String tenant = TenantContext.require().companyId();
+    String actor = TenantContext.require().actor();
+
+    Optional<UUID> replay =
+        eventRepository.findIdByClaimIdAndIdempotencyKey(claimId, idempotencyKey, ACTION_VOID);
+    if (replay.isPresent()) {
+      return claimRepository
+          .findById(claimId)
+          .orElseThrow(() -> new ClaimNotFoundException(claimId));
+    }
+
+    ExpenseClaim claim =
+        claimRepository.findById(claimId).orElseThrow(() -> new ClaimNotFoundException(claimId));
+
+    ClaimStatus from = claim.getStatus();
+    Instant now = clock.instant();
+    claim.voidClaim(actor, comment, now);
+    claimRepository.save(claim);
+
+    ExpenseCategory category =
+        categoryRepository
+            .findById(claim.getCategoryId())
+            .orElseThrow(() -> new CategoryNotFoundException(claim.getCategoryId()));
+    GenericRecord record = ExpenseClaimVoidedSchema.toRecord(claim, category.getGlHint(), now);
+    outboxWriter.write(
+        ExpenseClaimVoidedSchema.AGGREGATE_TYPE,
+        claim.getId().toString(),
+        ExpenseClaimVoidedSchema.EVENT_TYPE,
+        AvroSerde.serialize(record),
+        null,
+        UUID.fromString(tenant),
+        now);
+
+    appendEvent(claim, ACTION_VOID, from, actor, comment, idempotencyKey, tenant);
     return claim;
   }
 
