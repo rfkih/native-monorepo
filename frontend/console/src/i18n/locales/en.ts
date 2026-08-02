@@ -757,6 +757,20 @@ export const en = {
     selectAddonLabel: 'Add {{name}}',
     addonSelectedLabel: 'Remove {{name}}',
   },
+  posShell: {
+    /** Redesign P4 — the shared POS shell chrome (status bar, till menu, ticket dock). */
+    online: 'Online',
+    onlineQueued: 'Online · {{n}} queued',
+    offlineQueued: 'Offline · {{n}} queued',
+    tillMenu: 'Till menu',
+    walkIn: 'Walk-in',
+    walkInSale: 'Walk-in sale',
+    chargeAmount: 'Charge {{amount}}',
+    currentOrder: 'Current order',
+    switcherTitle: 'Orders',
+    switcherFloor: 'Table floor',
+    switcherParked: 'Parked orders',
+  },
   servicePos: {
     noCompanyHint: 'Create a company first — the POS rings up tickets for its business.',
     noneOption: '—',

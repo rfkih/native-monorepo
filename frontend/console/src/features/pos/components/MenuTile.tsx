@@ -51,12 +51,12 @@ export function MenuTile({
       aria-disabled={unavailable}
       style={{ animationDelay: `${delayMs}ms` }}
       className={cn(
-        'reveal relative flex flex-col overflow-hidden rounded-xl border bg-surface text-left transition-all duration-200',
+        'reveal relative flex flex-col overflow-hidden rounded-xl bg-surface text-left transition-all duration-200',
         unavailable
-          ? 'cursor-not-allowed border-line opacity-55'
+          ? 'cursor-not-allowed opacity-55 shadow-sm'
           : qty > 0
-            ? 'border-emerald shadow-md ring-2 ring-emerald/20 hover:-translate-y-0.5 hover:shadow-lg active:scale-[0.98]'
-            : 'border-line shadow-sm hover:-translate-y-0.5 hover:border-emerald-line hover:shadow-md active:scale-[0.98]',
+            ? 'shadow-md ring-2 ring-emerald/25 hover:-translate-y-0.5 hover:shadow-lg active:scale-[0.98]'
+            : 'shadow-sm hover:-translate-y-0.5 hover:shadow-md active:scale-[0.98]',
       )}
     >
       {/* Image area (104px) or placeholder */}

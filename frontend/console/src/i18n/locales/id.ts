@@ -752,6 +752,20 @@ export const id = {
     selectAddonLabel: 'Tambah {{name}}',
     addonSelectedLabel: 'Hapus {{name}}',
   },
+  posShell: {
+    /** Redesign P4 — kerangka POS bersama (bilah status, menu kasir, dok tiket). */
+    online: 'Online',
+    onlineQueued: 'Online · {{n}} antre',
+    offlineQueued: 'Offline · {{n}} antre',
+    tillMenu: 'Menu kasir',
+    walkIn: 'Walk-in',
+    walkInSale: 'Penjualan walk-in',
+    chargeAmount: 'Tagih {{amount}}',
+    currentOrder: 'Pesanan aktif',
+    switcherTitle: 'Pesanan',
+    switcherFloor: 'Denah meja',
+    switcherParked: 'Pesanan ditahan',
+  },
   servicePos: {
     noCompanyHint: 'Buat perusahaan dulu — kasir membuat tiket untuk bisnisnya.',
     noneOption: '—',

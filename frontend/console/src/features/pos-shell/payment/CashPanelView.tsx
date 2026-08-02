@@ -21,6 +21,7 @@ export function CashPanelView({
   busy,
   payDisabled = false,
   errorSlot,
+  initialTenderedMinor,
   onPay,
 }: {
   /** The amount to authorize — residualDueMinor (grand total minus any gift-card tender). */
@@ -33,12 +34,17 @@ export function CashPanelView({
   payDisabled?: boolean
   /** Adapter-rendered error line(s) — CheckoutErrorText or an offline error. */
   errorSlot?: React.ReactNode
+  /** P4: pre-fill the keypad (exact-tendered default) so Pay is one tap; chips/keypad override. */
+  initialTenderedMinor?: number
   onPay: (tenderedMinor: number, changeMinor: number) => void
 }) {
   const { t } = useTranslation()
 
   // tenderedMinor is held as an integer; the keypad appends digits to a string, then parsed.
-  const [keyStr, setKeyStr] = useState<string>('')
+  // P4: mounts with the exact amount pre-filled (when given) — the common cash sale is one tap.
+  const [keyStr, setKeyStr] = useState<string>(() =>
+    initialTenderedMinor && initialTenderedMinor > 0 ? String(initialTenderedMinor) : '',
+  )
   const tenderedMinor = keyStr === '' ? 0 : parseInt(keyStr, 10)
   const changeMinor = tenderedMinor - chargeMinor
   const canPay = tenderedMinor >= chargeMinor && !busy && !payDisabled

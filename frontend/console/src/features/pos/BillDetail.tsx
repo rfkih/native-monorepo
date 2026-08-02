@@ -8,7 +8,7 @@
  * Money rule (rule 8): all amounts are integer minor units, rendered via formatMoney().
  * Strings rule (rule 9): every user-facing string is an i18n key.
  */
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ArrowLeft,
@@ -62,6 +62,10 @@ interface Props {
   /** When true the component renders as a bottom sheet (tablet+) */
   sheetOpen: boolean
   onSheetOpenChange: (open: boolean) => void
+  /** P4: each increment fires the kitchen ticket as soon as the bill is loaded (dock Send). */
+  autoKotToken?: number
+  /** P4: each increment opens the pay modal for the full unpaid check (dock Pay). */
+  autoPayToken?: number
   onBack: () => void
   onPaid: () => void
 }
@@ -77,6 +81,8 @@ export function BillDetail({
   tableLabel,
   sheetOpen,
   onSheetOpenChange,
+  autoKotToken = 0,
+  autoPayToken = 0,
   onBack,
   onPaid,
 }: Props) {
@@ -202,6 +208,24 @@ export function BillDetail({
   // count between the loading render and the loaded render, which crashes React ("Rendered more
   // hooks than during the previous render") and blanks the whole POS on every freshly opened bill.
   const isTablet = useMediaQuery('(min-width: 640px)')
+
+  // P4 dock verbs: consume each token once, as soon as the bill has loaded and is OPEN. A token
+  // arriving while the bill is still loading waits for the next effect run (isLoading in deps).
+  const consumedKotToken = useRef(0)
+  const consumedPayToken = useRef(0)
+  const billReady = !billQuery.isLoading && !!bill && bill.status === 'OPEN'
+  useEffect(() => {
+    if (!autoKotToken || autoKotToken === consumedKotToken.current || !billReady) return
+    consumedKotToken.current = autoKotToken
+    setShowKot(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoKotToken, billReady])
+  useEffect(() => {
+    if (!autoPayToken || autoPayToken === consumedPayToken.current || !billReady) return
+    consumedPayToken.current = autoPayToken
+    openPayModal()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoPayToken, billReady])
 
   function openPayModal() {
     if (splitMode) {

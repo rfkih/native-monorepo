@@ -1,12 +1,15 @@
 /**
- * SummaryBar.tsx — extracted VERBATIM from Pos.tsx (redesign P2, mechanical move only).
- * Markup and behavior unchanged; closures became props where needed.
+ * SummaryBar — the TICKET DOCK (redesign P4).
+ *
+ * The always-visible bottom dock of the restaurant POS: a destination pill (tap = the order
+ * switcher) makes the ticket's target explicit, the dock total is the money hierarchy's 20px
+ * mono tier, and the action verbs are honest — walk-in: [Charge amount]; bill: [Send n] (fires
+ * the kitchen ticket DIRECTLY, no sheet detour) + [Pay total] (opens payment without expanding
+ * the sheet). The coupon/member/discount stack above the action row is unchanged (walk-in cart
+ * only — ADR 0026/0027 scope).
  */
 import { useTranslation } from 'react-i18next'
-import {
-  ChevronUp,
-  Send,
-} from 'lucide-react'
+import { ChevronUp, ChevronsUpDown, Send, ShoppingBag, Users } from 'lucide-react'
 import type { CompanySession } from '@/lib/session'
 import { cn } from '@/lib/cn'
 import { formatMoney } from '@/lib/money'
@@ -48,6 +51,7 @@ export function SummaryBar({
   maxRedeemablePoints,
   onLoyaltyRedeemChange,
   onExpand,
+  onDestinationClick,
   onSend,
   onPay,
 }: {
@@ -79,6 +83,9 @@ export function SummaryBar({
   maxRedeemablePoints: number
   onLoyaltyRedeemChange: (points: number) => void
   onExpand: () => void
+  /** Opens the order switcher (walk-in / bills / floor / parked). */
+  onDestinationClick: () => void
+  /** Bill mode only: fires the kitchen ticket directly. */
   onSend: () => void
   onPay: () => void
 }) {
@@ -161,55 +168,85 @@ export function SummaryBar({
         </div>
       ) : null}
 
-      {/* Main action row */}
-      <div className="flex h-24 items-center gap-3.5 px-5">
-        {/* Chevron expand */}
+      {/* Main action row — destination pill · total · verbs (P4 dock) */}
+      <div className="flex h-24 items-center gap-3 px-4 sm:px-5">
+        {/* Destination pill — the ticket's target, always visible; tap = order switcher */}
         <button
           type="button"
-          onClick={onExpand}
-          aria-label={t('bills.viewBill')}
-          className="grid size-11 shrink-0 place-items-center rounded-full bg-ink-50 text-ink-2 transition-colors hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+          data-testid="pos-destination"
+          onClick={onDestinationClick}
+          aria-label={t('posShell.currentOrder')}
+          className="flex h-14 min-w-0 shrink items-center gap-2.5 rounded-xl bg-ink-50 px-3.5 text-left transition-colors hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
         >
-          <ChevronUp className="size-[18px]" aria-hidden="true" />
+          {activeBill ? (
+            <Users className="size-4 shrink-0 text-ink-2" aria-hidden="true" />
+          ) : (
+            <ShoppingBag className="size-4 shrink-0 text-ink-2" aria-hidden="true" />
+          )}
+          <span className="flex min-w-0 flex-col">
+            <span className="truncate text-[13px] font-bold leading-tight text-ink">
+              {activeBill ? displayName : t('posShell.walkInSale')}
+            </span>
+            <span className="text-[11px] leading-tight text-ink-3">
+              {displayCount > 0 ? t('bills.lineCount', { n: displayCount }) : t('bills.noBillsHint')}
+            </span>
+          </span>
+          <ChevronsUpDown className="size-3.5 shrink-0 text-ink-3" aria-hidden="true" />
         </button>
 
-        {/* Item / bill info */}
-        <div className="min-w-0 flex-1">
-          <div className="text-[15px] font-bold text-ink">
-            {displayCount > 0
-              ? t('bills.itemsAndBill', { n: displayCount, bill: displayName })
-              : displayName}
-          </div>
-          <div className="mt-0.5 text-[11px] text-ink-3">
-            {displayCount > 0
-              ? t('bills.unsent', { n: unsentCount })
-              : t('bills.noBillsHint')}
+        {/* Dock total — the 20px mono tier of the money hierarchy */}
+        <div className="min-w-0 flex-1 text-right sm:pr-1">
+          <div className="tnum truncate font-mono text-[20px] font-bold leading-tight text-ink">
+            {displayTotal}
           </div>
         </div>
 
-        {/* Send button (secondary) */}
-        {displayCount > 0 ? (
+        {/* Expand chevron — bill mode only (walk-in has no sheet) */}
+        {activeBill ? (
           <button
             type="button"
-            data-testid="pos-send"
-            onClick={onSend}
-            className="flex h-14 items-center gap-2 rounded-xl border border-emerald-line bg-emerald-tint px-5 text-[15px] font-bold text-emerald-2 transition-all hover:bg-emerald-tint/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+            onClick={onExpand}
+            aria-label={t('bills.viewBill')}
+            className="grid size-11 shrink-0 place-items-center rounded-full bg-ink-50 text-ink-2 transition-colors hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
           >
-            <Send className="size-[17px]" aria-hidden="true" />
-            {t('bills.sendN', { n: unsentCount })}
+            <ChevronUp className="size-[18px]" aria-hidden="true" />
           </button>
         ) : null}
 
-        {/* Pay button (primary) */}
-        <button
-          type="button"
-          data-testid="pos-pay"
-          onClick={onPay}
-          disabled={displayCount === 0 && !activeBill}
-          className="tnum h-14 rounded-xl bg-emerald px-6 font-mono text-[15px] font-bold text-on-emerald transition-all hover:bg-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald disabled:opacity-40"
-        >
-          {t('bills.payTotal', { total: displayTotal })}
-        </button>
+        {activeBill ? (
+          <>
+            {/* Send — fires the kitchen ticket directly (no sheet detour, P4) */}
+            {displayCount > 0 ? (
+              <button
+                type="button"
+                data-testid="pos-send"
+                onClick={onSend}
+                className="flex h-14 shrink-0 items-center gap-2 rounded-xl border border-emerald-line bg-emerald-tint px-4 text-[15px] font-bold text-emerald-2 transition-all hover:bg-emerald-tint/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+              >
+                <Send className="size-[17px]" aria-hidden="true" />
+                {t('bills.sendN', { n: unsentCount })}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              data-testid="pos-pay"
+              onClick={onPay}
+              className="tnum h-14 shrink-0 rounded-xl bg-emerald px-5 font-mono text-[15px] font-bold text-on-emerald transition-all hover:bg-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+            >
+              {t('bills.payTotal', { total: displayTotal })}
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            data-testid="pos-pay"
+            onClick={onPay}
+            disabled={displayCount === 0}
+            className="tnum h-14 shrink-0 rounded-xl bg-emerald px-5 font-mono text-[15px] font-bold text-on-emerald transition-all hover:bg-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald disabled:opacity-40"
+          >
+            {t('posShell.chargeAmount', { amount: displayTotal })}
+          </button>
+        )}
       </div>
     </div>
   )

@@ -301,6 +301,7 @@ function ServiceCashAttempt({
       chargeMinor={chargeMinor}
       currency={currency}
       locale={locale}
+      initialTenderedMinor={chargeMinor}
       busy={checkout.isPending || offlineBusy}
       payDisabled={offline && offlineProvisional == null}
       errorSlot={

@@ -29,10 +29,17 @@ export function CategoryCell({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        'flex h-[76px] w-full flex-col items-center justify-center gap-1.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald',
-        active ? 'bg-emerald-tint' : 'hover:bg-ink-50',
+        'relative flex h-[76px] w-full flex-col items-center justify-center gap-1.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald',
+        !active && 'hover:bg-ink-50',
       )}
     >
+      {/* Active = a 3px brand indicator bar + tinted icon — quieter than a full cell fill (P4). */}
+      {active ? (
+        <span
+          className="absolute left-0 top-1/2 h-9 w-[3px] -translate-y-1/2 rounded-r-full bg-emerald"
+          aria-hidden="true"
+        />
+      ) : null}
       <span className={active ? 'text-emerald-2' : 'text-ink-3'}>{icon}</span>
       <span
         className={cn(

@@ -19,9 +19,7 @@
  */
 import { useState, useMemo, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link } from 'react-router-dom'
 import {
-  ArrowLeft,
   BookOpen,
   ChefHat,
   ClipboardList,
@@ -29,8 +27,6 @@ import {
   LogOut,
   Monitor,
   Moon,
-  RefreshCw,
-  Store,
   Sun,
   Table2,
 } from 'lucide-react'
@@ -86,6 +82,8 @@ import { MenuSkeleton, EmptyMenu, EmptyCategory } from './components/MenuStates'
 import { BillSelectorOverlay } from './components/BillSelectorOverlay'
 import { OpenBillDialog } from './components/OpenBillDialog'
 import { NoCompany } from './components/NoCompany'
+import { PosStatusBar } from '@/features/pos-shell/layout/PosStatusBar'
+import { TillMenuSheet } from '@/features/pos-shell/layout/TillMenuSheet'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -143,6 +141,11 @@ function PosInner({ session }: { session: CompanySession }) {
   // in for the "opened the app already offline" case).
   const { offline, queuedCount, rejectedCount } = useOffline()
   const [showSyncCenter, setShowSyncCenter] = useState(false)
+  const [showTillMenu, setShowTillMenu] = useState(false)
+  // P4: the dock's Send/Pay reach INTO the bill sheet — each ++ asks BillDetail to fire the
+  // kitchen ticket / the pay modal as soon as the bill is loaded (no manual sheet detour).
+  const [autoKotToken, setAutoKotToken] = useState(0)
+  const [autoPayToken, setAutoPayToken] = useState(0)
   const cachedMenu = useCachedCatalogFallback<MenuItem[]>(
     session.companyId,
     'restaurant',
@@ -554,180 +557,56 @@ function PosInner({ session }: { session: CompanySession }) {
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-paper">
 
-      {/* ── 1. Bill tabs bar (88px) ─────────────────────────────────────────── */}
+      {/* ── 1. Status bar (56px ink band — redesign P4) ─────────────────────── */}
+      <PosStatusBar
+        businessName={session.name}
+        outletPicker={<OutletPicker />}
+        offline={offline}
+        queuedCount={queuedCount + rejectedCount}
+        onConnectionClick={() => setShowSyncCenter(true)}
+        pinned={[
+          {
+            key: 'tables',
+            icon: <Table2 className="size-4" aria-hidden="true" />,
+            label: t('bills.floorTitle'),
+            onClick: () => setShowTableFloor(true),
+            disabled: offline,
+            disabledTitle: t('offline.disabled.tableFloor'),
+            badge: totalBills > 0 ? { count: totalBills, tone: 'brand' } : null,
+            testId: 'pos-tables',
+          },
+          {
+            key: 'parked',
+            icon: <ClipboardList className="size-4" aria-hidden="true" />,
+            label: t('pos.parked.trayTitle'),
+            onClick: () => setShowParkedTray(true),
+            disabled: offline,
+            disabledTitle: t('offline.disabled.parked'),
+            badge: parkedCount > 0 ? { count: parkedCount, tone: 'warning' } : null,
+            testId: 'pos-parked',
+          },
+        ]}
+        onOverflowClick={() => setShowTillMenu((v) => !v)}
+        overflowOpen={showTillMenu}
+      />
+
+      {/* ── 2. Bill context strip (64px) — Walk-in tab + open-bill tabs ─────── */}
       <BillTabsBar
         bills={openBillsList}
         activeBillId={openBillId}
         locale={locale}
         offline={offline}
+        walkInCount={lineCount}
+        walkInTotalMinor={grandTotalMinor}
+        currency={currency}
+        onWalkInClick={() => {
+          setOpenBillId(null)
+          setBillSheetOpen(false)
+        }}
         onTabClick={handleTabClick}
         onNewBill={() => setShowOpenBillDialog(true)}
         onSelectorClick={() => setShowBillSelector(true)}
       />
-
-      {/* ── 2. Search + utility row (64px) ──────────────────────────────────── */}
-      <div className="flex h-16 shrink-0 items-center gap-2.5 border-b border-line bg-surface px-4 sm:px-6">
-        {/* Back to dashboard */}
-        <Link
-          to="/"
-          aria-label={t('a11y.backToDashboard')}
-          className="grid size-9 shrink-0 place-items-center rounded-xl border border-line text-ink-3 transition-all hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
-        >
-          <ArrowLeft className="size-4" />
-        </Link>
-
-        {/* Business identity (md+) */}
-        <span className="hidden items-center gap-2 md:flex">
-          <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white">
-            <Store className="size-[16px]" />
-          </span>
-          <span className="hidden truncate font-display text-[15px] font-bold leading-tight text-ink lg:block">
-            {session.name}
-          </span>
-        </span>
-
-        {/* Outlet picker — visible when the tenant has ≥1 OUTLET org units */}
-        <OutletPicker />
-
-        {/* Search field — flex-1 */}
-        <div className="relative flex-1">
-          <svg
-            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-3"
-            width="17" height="17" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
-            aria-hidden="true"
-          >
-            <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-          </svg>
-          <input
-            type="search"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t('bills.searchItems', { count: items.length })}
-            aria-label={t('bills.searchItems', { count: items.length })}
-            className="h-11 w-full rounded-xl border border-line bg-surface pl-10 pr-4 text-sm text-ink placeholder:text-ink-3 transition-colors focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/10"
-          />
-        </div>
-
-        {/* Utility buttons cluster */}
-        <div className="flex items-center gap-1.5">
-          {/* Menu */}
-          <Link
-            to="/menu"
-            aria-label={t('nav.menu')}
-            title={t('nav.menu')}
-            className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
-          >
-            <BookOpen className="size-4" />
-          </Link>
-          {/* Kitchen */}
-          <Link
-            to="/kitchen"
-            aria-label={t('nav.kitchen')}
-            title={t('nav.kitchen')}
-            className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
-          >
-            <ChefHat className="size-4" />
-          </Link>
-          {/* Table floor — disabled offline (cash quick-sale only, Phase 5 ADR 0028) */}
-          <button
-            type="button"
-            onClick={() => setShowTableFloor(true)}
-            disabled={offline}
-            aria-label={t('bills.floorTitle')}
-            title={offline ? t('offline.disabled.tableFloor') : t('bills.floorTitle')}
-            className="relative grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line disabled:hover:bg-surface disabled:hover:text-ink-3"
-          >
-            <Table2 className="size-4" aria-hidden="true" />
-            {totalBills > 0 ? (
-              <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-emerald px-1 text-[9px] font-bold text-on-emerald">
-                {totalBills}
-              </span>
-            ) : null}
-          </button>
-          {/* Parked — disabled offline (cash quick-sale only, Phase 5 ADR 0028) */}
-          <button
-            type="button"
-            onClick={() => setShowParkedTray(true)}
-            disabled={offline}
-            aria-label={t('pos.parked.trayTitle')}
-            title={offline ? t('offline.disabled.parked') : t('pos.parked.trayTitle')}
-            className="relative grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line disabled:hover:bg-surface disabled:hover:text-ink-3"
-          >
-            <ClipboardList className="size-4" aria-hidden="true" />
-            {parkedCount > 0 ? (
-              <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-warning px-1 text-[9px] font-bold text-ink">
-                {parkedCount}
-              </span>
-            ) : null}
-          </button>
-          {/* Sync center (Phase 5, ADR 0028) — badge = queued + rejected, always reachable */}
-          <button
-            type="button"
-            onClick={() => setShowSyncCenter(true)}
-            aria-label={t('offline.syncCenterButton')}
-            title={t('offline.syncCenterButton')}
-            className="relative grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
-          >
-            <RefreshCw className="size-4" aria-hidden="true" />
-            {queuedCount + rejectedCount > 0 ? (
-              <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-amber px-1 text-[9px] font-bold text-ink">
-                {queuedCount + rejectedCount}
-              </span>
-            ) : null}
-          </button>
-          {/* Customer display (Phase 6, ADR 0029) — opens a second screen (e.g. a second monitor)
-              driven by displayPublisher; activating it is what turns the publisher's no-ops on. */}
-          <button
-            type="button"
-            onClick={() => {
-              displayPublisher.activate()
-              window.open(
-                `${window.location.origin}/pos/customer-display?outlet=${encodeURIComponent(session.businessId)}`,
-                'native-pos-display',
-              )
-            }}
-            aria-label={t('pos.customerDisplay.button')}
-            title={t('pos.customerDisplay.button')}
-            className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
-          >
-            <Monitor className="size-4" aria-hidden="true" />
-          </button>
-          {/* Gift card sell — a distinct till action, not a cart line (ADR 0027) */}
-          <button
-            type="button"
-            onClick={() => setShowGiftCardSell(true)}
-            disabled={offline}
-            aria-label={t('pos.loyalty.giftCard.sellTitle')}
-            title={offline ? t('offline.disabled.giftCard') : t('pos.loyalty.giftCard.sellTitle')}
-            className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line disabled:hover:bg-surface disabled:hover:text-ink-3"
-          >
-            <Gift className="size-4" aria-hidden="true" />
-          </button>
-          {/* Theme */}
-          <button
-            type="button"
-            onClick={toggle}
-            aria-label={t('a11y.toggleTheme')}
-            className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2"
-          >
-            {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
-          </button>
-          {/* Logout */}
-          <button
-            type="button"
-            onClick={auth.logout}
-            aria-label={t('nav.logout')}
-            className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-tint-loss hover:bg-tint-loss hover:text-loss focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
-          >
-            <LogOut className="size-4" />
-          </button>
-          {/* Avatar */}
-          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-emerald-tint font-semibold text-[13px] text-emerald-2">
-            {session.name.slice(0, 2).toUpperCase()}
-          </span>
-        </div>
-      </div>
 
       {/* ── Body: category rail + menu grid ─────────────────────────────────── */}
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
@@ -735,7 +614,7 @@ function PosInner({ session }: { session: CompanySession }) {
         {/* ── 3. Category rail (104px, hidden <560px) ───────────────────── */}
         <nav
           aria-label={t('pos.categories')}
-          className="hidden w-[104px] shrink-0 flex-col overflow-y-auto border-r border-line bg-surface pt-2 sm:flex"
+          className="hidden w-[88px] shrink-0 flex-col overflow-y-auto border-r border-line bg-surface pt-2 sm:flex"
         >
           {/* "All" cell */}
           <CategoryCell
@@ -799,9 +678,29 @@ function PosInner({ session }: { session: CompanySession }) {
         </div>
 
         {/* ── 4. Menu grid ─────────────────────────────────────────────── */}
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-28 pt-3 sm:pt-5 sm:pb-28">
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-28 pt-3 sm:pb-28">
           {/* Phone: spacer for the chip row */}
           <div className="h-14 sm:hidden" aria-hidden="true" />
+
+          {/* Catalog search — lives WITH the catalog it filters (redesign P4), not in the chrome */}
+          <div className="relative mb-3 max-w-md">
+            <svg
+              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-3"
+              width="17" height="17" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
+              aria-hidden="true"
+            >
+              <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+            </svg>
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t('bills.searchItems', { count: items.length })}
+              aria-label={t('bills.searchItems', { count: items.length })}
+              className="h-11 w-full rounded-xl border border-line bg-surface pl-10 pr-4 text-sm text-ink placeholder:text-ink-3 transition-colors focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/10"
+            />
+          </div>
 
           {menuQuery.isLoading ? (
             <MenuSkeleton />
@@ -880,13 +779,16 @@ function PosInner({ session }: { session: CompanySession }) {
           maxRedeemablePoints={maxRedeemablePoints}
           onLoyaltyRedeemChange={setLoyaltyRedeemPoints}
           onExpand={() => setBillSheetOpen(true)}
+          onDestinationClick={() => setShowBillSelector(true)}
           onSend={() => {
-            // In bill mode "Send" is handled by BillDetail; here we just open it
-            setBillSheetOpen(true)
+            // P4: Send SENDS — the kitchen ticket fires directly; the sheet stays collapsed
+            // (the KOT and payment overlays render sheet-independently inside BillDetail).
+            setAutoKotToken((k) => k + 1)
           }}
           onPay={() => {
             if (openBillId) {
-              setBillSheetOpen(true)
+              // P4: Pay pays — BillDetail opens its pay modal directly (full unpaid check).
+              setAutoPayToken((k) => k + 1)
             } else {
               setModal('payment')
             }
@@ -956,6 +858,49 @@ function PosInner({ session }: { session: CompanySession }) {
         />
       ) : null}
 
+      {showTillMenu ? (
+        <TillMenuSheet
+          onClose={() => setShowTillMenu(false)}
+          items={[
+            {
+              key: 'display',
+              icon: <Monitor className="size-4" aria-hidden="true" />,
+              label: t('pos.customerDisplay.button'),
+              onSelect: () => {
+                displayPublisher.activate()
+                window.open(
+                  `${window.location.origin}/pos/customer-display?outlet=${encodeURIComponent(session.businessId)}`,
+                  'native-pos-display',
+                )
+              },
+            },
+            {
+              key: 'giftcard',
+              icon: <Gift className="size-4" aria-hidden="true" />,
+              label: t('pos.loyalty.giftCard.sellTitle'),
+              onSelect: () => setShowGiftCardSell(true),
+              disabled: offline,
+              disabledTitle: t('offline.disabled.giftCard'),
+            },
+            { key: 'kitchen', icon: <ChefHat className="size-4" aria-hidden="true" />, label: t('nav.kitchen'), to: '/kitchen' },
+            { key: 'menu', icon: <BookOpen className="size-4" aria-hidden="true" />, label: t('nav.menu'), to: '/menu' },
+            {
+              key: 'theme',
+              icon: theme === 'dark' ? <Sun className="size-4" aria-hidden="true" /> : <Moon className="size-4" aria-hidden="true" />,
+              label: t('a11y.toggleTheme'),
+              onSelect: toggle,
+            },
+            {
+              key: 'logout',
+              icon: <LogOut className="size-4" aria-hidden="true" />,
+              label: t('nav.logout'),
+              onSelect: auth.logout,
+              danger: true,
+            },
+          ]}
+        />
+      ) : null}
+
       {showSyncCenter ? <SyncCenter locale={locale} onClose={() => setShowSyncCenter(false)} /> : null}
 
       {showParkedTray ? (
@@ -990,6 +935,8 @@ function PosInner({ session }: { session: CompanySession }) {
           tableLabel={activeTableLabel}
           sheetOpen={billSheetOpen}
           onSheetOpenChange={setBillSheetOpen}
+          autoKotToken={autoKotToken}
+          autoPayToken={autoPayToken}
           onBack={() => {
             setOpenBillId(null)
             setBillSheetOpen(false)
@@ -1017,6 +964,30 @@ function PosInner({ session }: { session: CompanySession }) {
           bills={openBillsList}
           activeBillId={openBillId}
           locale={locale}
+          walkInCount={lineCount}
+          walkInTotalMinor={grandTotalMinor}
+          currency={currency}
+          onWalkIn={() => {
+            setOpenBillId(null)
+            setShowBillSelector(false)
+            setBillSheetOpen(false)
+          }}
+          onOpenFloor={
+            offline
+              ? null
+              : () => {
+                  setShowBillSelector(false)
+                  setShowTableFloor(true)
+                }
+          }
+          onOpenParked={
+            offline
+              ? null
+              : () => {
+                  setShowBillSelector(false)
+                  setShowParkedTray(true)
+                }
+          }
           onSelect={(billId) => {
             setOpenBillId(billId)
             setShowBillSelector(false)

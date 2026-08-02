@@ -85,6 +85,7 @@ export function BillPaymentModal({
           chargeMinor={grandTotalMinor}
           currency={currency}
           locale={locale}
+          initialTenderedMinor={grandTotalMinor}
           busy={payBill.isPending}
           errorSlot={errorSlot}
           onPay={(tenderedMinor) => pay({ tenderType: 'CASH', tenderedMinor })}

@@ -350,6 +350,7 @@ function RestaurantCashAttempt({
       chargeMinor={chargeMinor}
       currency={currency}
       locale={locale}
+      initialTenderedMinor={chargeMinor}
       busy={isBusy}
       payDisabled={offline && offlineProvisional == null}
       errorSlot={
