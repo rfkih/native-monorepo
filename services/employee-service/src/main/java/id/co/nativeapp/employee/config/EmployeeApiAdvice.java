@@ -20,6 +20,8 @@ import id.co.nativeapp.employee.payroll.domain.CompensationNotFoundException;
 import id.co.nativeapp.employee.payroll.domain.DuplicateCommissionException;
 import id.co.nativeapp.employee.payroll.domain.IncompletePeriodException;
 import id.co.nativeapp.employee.payroll.domain.OverlappingCompensationException;
+import id.co.nativeapp.employee.payroll.domain.PayrollRunNotFoundException;
+import id.co.nativeapp.employee.payroll.domain.PayrollRunNotPostedException;
 import id.co.nativeapp.employee.payroll.domain.PayrollSetupNotSeededException;
 import id.co.nativeapp.employee.payroll.domain.UnknownDatasetVersionException;
 import id.co.nativeapp.employee.payroll.domain.UnknownStatutoryRuleException;
@@ -255,6 +257,30 @@ public class EmployeeApiAdvice {
     ProblemDetail problem = problem(HttpStatus.BAD_REQUEST, "missing-required-header", request);
     problem.setTitle("Missing required header");
     problem.setDetail("The '" + ex.getHeaderName() + "' header is required.");
+    return problem;
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Payroll bank file (Track P phase P5)
+  // -------------------------------------------------------------------------------------------
+
+  /** A bank-file request for a run not visible in the bound tenant -> 404 Not Found. */
+  @ExceptionHandler(PayrollRunNotFoundException.class)
+  public ProblemDetail handlePayrollRunNotFound(
+      PayrollRunNotFoundException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.NOT_FOUND, "payroll-run-not-found", request);
+    problem.setTitle("Payroll run not found");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /** A bank-file request for a run that has not reached POSTED -> 409 Conflict. */
+  @ExceptionHandler(PayrollRunNotPostedException.class)
+  public ProblemDetail handlePayrollRunNotPosted(
+      PayrollRunNotPostedException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.CONFLICT, "payroll-run-not-posted", request);
+    problem.setTitle("Payroll run not posted");
+    problem.setDetail(ex.getMessage());
     return problem;
   }
 

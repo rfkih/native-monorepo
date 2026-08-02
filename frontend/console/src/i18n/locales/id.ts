@@ -978,6 +978,27 @@ export const id = {
         title: 'Biaya tenaga kerja per gerai',
         unallocated: 'Belum teralokasi (tanpa penugasan gerai)',
       },
+      liabilities: {
+        title: 'Kewajiban',
+        kind: {
+          NET_WAGES: 'Utang gaji bersih',
+          PPH21: 'Utang PPh21 (pajak penghasilan)',
+          BPJS_KES: 'Utang BPJS Kesehatan',
+          BPJS_TK: 'Utang BPJS Ketenagakerjaan',
+          OTHER: 'Utang potongan lainnya',
+        },
+        settleCta: 'Selesaikan',
+        settling: 'Menyelesaikan…',
+        settledBadge: 'Selesai',
+        settledAt: 'Diselesaikan {{date}}',
+        negativeExplanation:
+          'Kewajiban ini negatif (pengembalian penyesuaian akhir Desember) — kompensasikan dengan setoran periode berikutnya. Tidak dapat diselesaikan secara terpisah.',
+      },
+      bankFile: {
+        cta: 'Unduh berkas bank',
+        downloading: 'Menyiapkan…',
+        error: 'Berkas bank gagal diunduh — coba lagi.',
+      },
       rerun: {
         warning:
           'Memproses lagi MENGGANTIKAN proses periode ini sebelumnya: pembukuan tenaga kerjanya dibalik dan diganti proses baru. Gunakan untuk koreksi periode — selalu seluruh perusahaan.',

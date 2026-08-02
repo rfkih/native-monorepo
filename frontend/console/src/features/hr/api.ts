@@ -7,7 +7,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiFetch } from '@/lib/api'
+import { apiDownload, apiFetch } from '@/lib/api'
 
 // ---------------------------------------------------------------------------
 // Types (mirrors of employee-service DTOs)
@@ -797,4 +797,100 @@ export function usePayslip(
       return result ?? []
     },
   })
+}
+
+// ---------------------------------------------------------------------------
+// Payroll liabilities + settlement (finance-service, ADR 0032, Track P phase P5)
+// ---------------------------------------------------------------------------
+
+export type SettlementKind = 'NET_WAGES' | 'PPH21' | 'BPJS_KES' | 'BPJS_TK' | 'OTHER'
+
+/** One of the five liability buckets on a GET /api/v1/payroll-liabilities row. */
+export interface PayrollLiabilityBucket {
+  kind: SettlementKind
+  amountMinor: number
+  currency: string
+  negative: boolean
+  settled: boolean
+  settledAt: string | null
+  journalEntryId: string | null
+}
+
+/** GET /api/v1/payroll-liabilities?period= row — one ACTIVE payroll run's liability buckets. */
+export interface PayrollLiabilityRun {
+  runLedgerId: string
+  payrollRunId: string
+  period: string
+  runSeq: number
+  runType: string
+  currency: string
+  buckets: PayrollLiabilityBucket[]
+}
+
+/**
+ * GET /api/v1/payroll-liabilities?period= — console HR reads finance-service DIRECTLY (the
+ * established cross-service read pattern; finance owns the books). Filtered client-side to the
+ * selected run (see the `payrollRunId` field) by the caller.
+ */
+export function usePayrollLiabilities(
+  params: TenantParams & { period: string; enabled: boolean },
+) {
+  const { companyId, actor, period, enabled } = params
+  return useQuery({
+    enabled,
+    queryKey: ['payrollLiabilities', companyId, period],
+    queryFn: async () => {
+      const result = await apiFetch<PayrollLiabilityRun[]>(
+        `/api/v1/payroll-liabilities?period=${encodeURIComponent(period)}`,
+        { tenant: { companyId, actor } },
+      )
+      return result ?? []
+    },
+  })
+}
+
+/**
+ * POST /api/v1/payroll-liabilities/{runLedgerId}/settlements — settle one bucket. The amount is
+ * never sent by the client (the server reads it back from the run's own liability entry); the
+ * caller supplies a fresh `crypto.randomUUID()` Idempotency-Key per click.
+ */
+export function useSettlePayrollLiability(params: TenantParams) {
+  const { companyId, actor } = params
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      runLedgerId,
+      kind,
+      idempotencyKey,
+    }: {
+      runLedgerId: string
+      kind: SettlementKind
+      idempotencyKey: string
+    }) =>
+      apiFetch<PayrollLiabilityRun>(`/api/v1/payroll-liabilities/${runLedgerId}/settlements`, {
+        method: 'POST',
+        tenant: { companyId, actor },
+        body: { kind },
+        headers: { 'Idempotency-Key': idempotencyKey },
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['payrollLiabilities', companyId] })
+    },
+  })
+}
+
+/**
+ * GET /api/v1/payroll-runs/{runId}/bank-file — triggers a browser download of the net-pay CSV.
+ * Owner-only at the gateway (bank-account PII); the caller gates the button client-side too (see
+ * `hasAnyRole(auth.roles, 'owner')` in PayrollTab).
+ */
+export function downloadPayrollBankFile(
+  params: TenantParams & { runId: string; period: string; runSeq: number },
+): Promise<void> {
+  const { companyId, actor, runId, period, runSeq } = params
+  return apiDownload(
+    `/api/v1/payroll-runs/${runId}/bank-file`,
+    { tenant: { companyId, actor } },
+    `payroll-${period}-seq${runSeq}.csv`,
+  )
 }

@@ -321,6 +321,18 @@ public class Employee extends Auditable {
   }
 
   /**
+   * The raw decrypted bank account, for the {@code payroll.service.BankFileReader} net-pay bank
+   * file export ONLY (Track P phase P5) — the single OTHER authorized boundary besides the
+   * encrypt/decrypt round-trip test and {@link #bankAccountPlaintext()}. A deliberate, minimal
+   * PUBLIC widening (a different feature package needs it) documented at the call site too: the
+   * decrypted value crosses this boundary and is placed directly into the CSV response body, NEVER
+   * logged (rule 6) — {@code BankFileReader}'s audit line carries only {@code runId} + a row count.
+   */
+  public String bankAccountForBankFile() {
+    return bankAccount;
+  }
+
+  /**
    * The raw decrypted NPWP, or null if none is on file. Restricted exactly as {@link
    * #nikPlaintext()}.
    */

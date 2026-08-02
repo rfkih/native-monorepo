@@ -1,6 +1,7 @@
 package id.co.nativeapp.finance.labor.repository;
 
 import id.co.nativeapp.finance.labor.domain.PayrollRunLedger;
+import id.co.nativeapp.finance.labor.projection.PayrollLiabilityRunView;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -138,4 +139,81 @@ public interface PayrollRunLedgerRepository extends JpaRepository<PayrollRunLedg
       @Param("period") String period,
       @Param("runType") String runType,
       @Param("runSeq") int runSeq);
+
+  /**
+   * The shared SELECT/FROM/JOIN core for the two liability-bucket reads below (ADR 0032, Track P
+   * phase P5) — a single {@code interface}-constant (compile-time constant expression, mirroring
+   * {@code PayslipLineRepository.ACTIVE_RUN_PREDICATE}) so the period-scoped and single-run-scoped
+   * queries can never drift apart. See {@link PayrollLiabilityRunView}'s javadoc for the full
+   * bucket-amount read design (the {@code LATERAL} role-resolution join, keyed on the liability
+   * entry's OWN {@code occurred_at} so a later {@code role_account_map} edit can never misattribute
+   * a historical line).
+   */
+  String LIABILITY_BUCKET_SELECT =
+      """
+      SELECT prl.id                            AS run_ledger_id,
+             prl.payroll_run_id                 AS payroll_run_id,
+             prl.period                         AS period,
+             prl.run_seq                        AS run_seq,
+             prl.run_type                       AS run_type,
+             prl.liability_state                AS liability_state,
+             prl.currency                       AS currency,
+             COALESCE(SUM(CASE WHEN ram.account_role = 'NET_WAGES_PAYABLE'
+                                THEN jl.credit_minor - jl.debit_minor END), 0) AS net_wages_minor,
+             COALESCE(SUM(CASE WHEN ram.account_role = 'PPH21_PAYABLE'
+                                THEN jl.credit_minor - jl.debit_minor END), 0) AS pph21_minor,
+             COALESCE(SUM(CASE WHEN ram.account_role = 'BPJS_KES_PAYABLE'
+                                THEN jl.credit_minor - jl.debit_minor END), 0) AS bpjs_kes_minor,
+             COALESCE(SUM(CASE WHEN ram.account_role = 'BPJS_TK_PAYABLE'
+                                THEN jl.credit_minor - jl.debit_minor END), 0) AS bpjs_tk_minor,
+             COALESCE(SUM(CASE WHEN ram.account_role = 'OTHER_DEDUCTIONS_PAYABLE'
+                                THEN jl.credit_minor - jl.debit_minor END), 0) AS other_minor
+        FROM payroll_run_ledger prl
+        JOIN journal_entry je ON je.id = prl.liability_entry_id
+        JOIN journal_line jl ON jl.entry_id = je.id
+        LEFT JOIN LATERAL (
+                 SELECT ram.account_role
+                   FROM role_account_map ram
+                  WHERE ram.gl_account_code = jl.account_code
+                    AND je.occurred_at::date BETWEEN ram.effective_from AND ram.effective_to
+                  ORDER BY ram.version DESC, ram.effective_from DESC
+                  LIMIT 1
+             ) ram ON TRUE
+      """;
+
+  /** The shared {@code GROUP BY} clause paired with {@link #LIABILITY_BUCKET_SELECT}. */
+  String LIABILITY_BUCKET_GROUP_BY =
+      """
+      GROUP BY prl.id, prl.payroll_run_id, prl.period, prl.run_seq, prl.run_type,
+               prl.liability_state, prl.currency
+      """;
+
+  /**
+   * The period's ACTIVE ({@code liability_state = 'POSTED'}) runs with their five payroll-liability
+   * bucket totals (ADR 0032, Track P phase P5). A run whose {@code liability_state} is {@code NULL}
+   * (no {@code PayrollLiabilitiesPosted} has landed yet) or {@code SUPERSEDED} is excluded — those
+   * are not currently-owed liabilities.
+   */
+  @Query(
+      value =
+          LIABILITY_BUCKET_SELECT
+              + " WHERE prl.period = :period AND prl.liability_state = 'POSTED' "
+              + LIABILITY_BUCKET_GROUP_BY
+              + " ORDER BY prl.run_seq DESC",
+      nativeQuery = true)
+  List<PayrollLiabilityRunView> findLiabilityRunsForPeriod(@Param("period") String period);
+
+  /**
+   * A single run's liability bucket totals by its {@code payroll_run_ledger} id, regardless of
+   * {@code liability_state} (unlike {@link #findLiabilityRunsForPeriod}) — used to build the
+   * settlement response/{@code GET} detail for one run, including a SUPERSEDED run's last-known
+   * historical totals for audit purposes (settling one is still blocked by {@code
+   * PayrollSettlementWriter}'s own state guard). Empty when {@code liability_entry_id} is NULL (no
+   * liability recognised yet) — the join naturally returns no rows.
+   */
+  @Query(
+      value = LIABILITY_BUCKET_SELECT + " WHERE prl.id = :runLedgerId " + LIABILITY_BUCKET_GROUP_BY,
+      nativeQuery = true)
+  Optional<PayrollLiabilityRunView> findLiabilityRunByRunLedgerId(
+      @Param("runLedgerId") UUID runLedgerId);
 }

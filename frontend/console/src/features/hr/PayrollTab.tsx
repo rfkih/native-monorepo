@@ -14,7 +14,7 @@
 
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronDown, ChevronRight, Play, TriangleAlert } from 'lucide-react'
+import { ChevronDown, ChevronRight, Download, Play, TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -23,12 +23,15 @@ import { Segmented } from '@/components/ui/Segmented'
 import { EmptyState, KpiTile, PeriodNav } from '@/features/_shared/financeUi'
 import { DialogOverlay } from '@/features/org/parts'
 import type { OrgUnit } from '@/features/org/api'
+import { hasAnyRole, useAuth } from '@/lib/authContext'
 import { cn } from '@/lib/cn'
 import { formatMoney } from '@/lib/money'
 import { currentPeriod, shiftPeriod } from '@/lib/period'
 import { PayrollSetupTab } from './PayrollSetupTab'
 import {
+  downloadPayrollBankFile,
   useEmployees,
+  usePayrollLiabilities,
   usePayrollRuns,
   usePayrollSetup,
   usePayslip,
@@ -36,7 +39,10 @@ import {
   useRunAllocations,
   useRunPayroll,
   useSeedIllustrative,
+  useSettlePayrollLiability,
+  type PayrollLiabilityBucket,
   type PayrollRunSummary,
+  type SettlementKind,
 } from './api'
 
 type PayrollView = 'runs' | 'setup'
@@ -290,7 +296,11 @@ function RunDetail({
   locale: string
 }) {
   const { t } = useTranslation()
+  const auth = useAuth()
+  const isOwner = hasAnyRole(auth.roles, 'owner')
   const [openEmployee, setOpenEmployee] = useState<string | null>(null)
+  const [downloadingBankFile, setDownloadingBankFile] = useState(false)
+  const [bankFileError, setBankFileError] = useState(false)
   const allocations = useRunAllocations({ companyId, actor, runId: run.id, enabled: true })
   const payslips = usePayslipIndex({ companyId, actor, runId: run.id, enabled: true })
   const lines = usePayslip({
@@ -305,8 +315,46 @@ function RunDetail({
 
   const allocationTotal = (allocations.data ?? []).reduce((sum, a) => sum + a.amountMinor, 0)
 
+  async function handleDownloadBankFile() {
+    setBankFileError(false)
+    setDownloadingBankFile(true)
+    try {
+      await downloadPayrollBankFile({
+        companyId,
+        actor,
+        runId: run.id,
+        period: run.period,
+        runSeq: run.runSeq,
+      })
+    } catch {
+      setBankFileError(true)
+    } finally {
+      setDownloadingBankFile(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
+      {/* Owner-only net-pay bank file (Track P phase P5) — bank-account PII, gateway-gated too. */}
+      {isOwner && run.status === 'POSTED' ? (
+        <div className="flex items-center justify-end gap-2">
+          {bankFileError ? (
+            <span className="text-xs text-loss">{t('hr.payroll.bankFile.error')}</span>
+          ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void handleDownloadBankFile()}
+            disabled={downloadingBankFile}
+          >
+            <Download className="size-4" />
+            {downloadingBankFile
+              ? t('hr.payroll.bankFile.downloading')
+              : t('hr.payroll.bankFile.cta')}
+          </Button>
+        </div>
+      ) : null}
+
       {/* Company totals */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiTile
@@ -437,6 +485,137 @@ function RunDetail({
           })}
         </div>
       </Card>
+
+      {/* Liabilities — five settleable buckets recognised when the run posted (ADR 0032, P5). */}
+      <LiabilitiesPanel
+        companyId={companyId}
+        actor={actor}
+        period={run.period}
+        payrollRunId={run.id}
+        locale={locale}
+      />
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Liabilities panel — five buckets, settle button, settled badge (ADR 0032, Track P phase P5)
+// ---------------------------------------------------------------------------
+
+function LiabilitiesPanel({
+  companyId,
+  actor,
+  period,
+  payrollRunId,
+  locale,
+}: {
+  companyId: string
+  actor: string
+  period: string
+  payrollRunId: string
+  locale: string
+}) {
+  const { t } = useTranslation()
+  const liabilities = usePayrollLiabilities({ companyId, actor, period, enabled: true })
+  const settle = useSettlePayrollLiability({ companyId, actor })
+  const [settlingKind, setSettlingKind] = useState<SettlementKind | null>(null)
+
+  const run = (liabilities.data ?? []).find((r) => r.payrollRunId === payrollRunId)
+
+  if (liabilities.isLoading) {
+    return (
+      <Card className="p-10 text-center">
+        <Spinner className="mx-auto text-brand-500" />
+      </Card>
+    )
+  }
+  // No liability recognised for this run yet (finance's PayrollLiabilitiesPosted consumer may lag
+  // the run-posted event briefly), or the run's liability was superseded — nothing to show.
+  if (!run) {
+    return null
+  }
+
+  function handleSettle(kind: SettlementKind) {
+    setSettlingKind(kind)
+    settle.mutate(
+      { runLedgerId: run!.runLedgerId, kind, idempotencyKey: crypto.randomUUID() },
+      { onSettled: () => setSettlingKind(null) },
+    )
+  }
+
+  return (
+    <Card className="p-4">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+        {t('hr.payroll.liabilities.title')}
+      </p>
+      <div className="mt-2 divide-y divide-line">
+        {run.buckets.map((bucket) => (
+          <LiabilityRow
+            key={bucket.kind}
+            bucket={bucket}
+            locale={locale}
+            settling={settlingKind === bucket.kind && settle.isPending}
+            onSettle={() => handleSettle(bucket.kind)}
+          />
+        ))}
+      </div>
+      {settle.isError ? <p className="mt-2 text-sm text-loss">{t('hr.assign.error')}</p> : null}
+    </Card>
+  )
+}
+
+function LiabilityRow({
+  bucket,
+  locale,
+  settling,
+  onSettle,
+}: {
+  bucket: PayrollLiabilityBucket
+  locale: string
+  settling: boolean
+  onSettle: () => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <div className="flex items-center justify-between gap-3 py-2">
+      <div>
+        <p className="text-sm font-semibold text-ink">
+          {t(`hr.payroll.liabilities.kind.${bucket.kind}`)}
+        </p>
+        {bucket.negative ? (
+          <p className="mt-0.5 max-w-md text-xs leading-relaxed text-amber">
+            {t('hr.payroll.liabilities.negativeExplanation')}
+          </p>
+        ) : bucket.settled && bucket.settledAt ? (
+          <p className="mt-0.5 text-xs text-ink-3">
+            {t('hr.payroll.liabilities.settledAt', {
+              date: new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(
+                new Date(bucket.settledAt),
+              ),
+            })}
+          </p>
+        ) : null}
+      </div>
+      <div className="flex items-center gap-3">
+        <span className="tnum font-mono text-sm font-semibold text-ink">
+          {formatMoney(bucket.amountMinor, bucket.currency, locale)}
+        </span>
+        {bucket.settled ? (
+          <Badge tone="profit">{t('hr.payroll.liabilities.settledBadge')}</Badge>
+        ) : bucket.negative ? null : (
+          <Button
+            type="button"
+            variant="outline"
+            className="h-8 px-3 text-xs"
+            onClick={onSettle}
+            disabled={settling || bucket.amountMinor === 0}
+          >
+            {settling
+              ? t('hr.payroll.liabilities.settling')
+              : t('hr.payroll.liabilities.settleCta')}
+          </Button>
+        )}
+      </div>
     </div>
   )
 }

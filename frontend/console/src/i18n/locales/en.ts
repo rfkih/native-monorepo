@@ -981,6 +981,27 @@ export const en = {
         title: 'Labor cost by outlet',
         unallocated: 'Unallocated (no outlet assignment)',
       },
+      liabilities: {
+        title: 'Liabilities',
+        kind: {
+          NET_WAGES: 'Net wages payable',
+          PPH21: 'PPh21 (income tax) payable',
+          BPJS_KES: 'BPJS Kesehatan payable',
+          BPJS_TK: 'BPJS Ketenagakerjaan payable',
+          OTHER: 'Other deductions payable',
+        },
+        settleCta: 'Settle',
+        settling: 'Settling…',
+        settledBadge: 'Settled',
+        settledAt: 'Settled {{date}}',
+        negativeExplanation:
+          'This bucket is negative (a December true-up refund) — net it against the next period’s remittance. Not settleable standalone.',
+      },
+      bankFile: {
+        cta: 'Download bank file',
+        downloading: 'Preparing…',
+        error: 'Could not download the bank file — try again.',
+      },
       rerun: {
         warning:
           'Running again SUPERSEDES the period’s earlier runs: their labor postings are reversed on the books and replaced by the new run. Use it to correct a period — always company-wide.',

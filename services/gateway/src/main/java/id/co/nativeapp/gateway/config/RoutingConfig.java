@@ -68,6 +68,14 @@ public class RoutingConfig {
    */
   private static final String[] ME_ROLES = {"owner", "manager", "cashier", "employee"};
 
+  /**
+   * Roles allowed on the OWNER-ONLY surface — narrower than {@link #DASHBOARD_ROLES} (which also
+   * admits {@code manager}). Reserved for the highest-sensitivity PII exports (the payroll net-pay
+   * bank file with decrypted bank accounts, Track P phase P5; the future {@code 1721-A1}/{@code
+   * bpjs-summary} statutory reports, Track P phase P9).
+   */
+  private static final String[] OWNER_ROLES = {"owner"};
+
   // ---------------------------------------------------------------------------
   // org-service (public — unauthenticated)
   // ---------------------------------------------------------------------------
@@ -660,6 +668,38 @@ public class RoutingConfig {
         .build();
   }
 
+  /**
+   * {@code GET /api/v1/payroll-runs/{runId}/bank-file} — the net-pay bank file (Track P phase P5):
+   * decrypted bank-account PII, OWNER-ONLY (narrower than {@link #payrollRunsRoute}'s
+   * DASHBOARD_ROLES, which also admits {@code manager}).
+   *
+   * <p>{@code @Order(HIGHEST_PRECEDENCE)} is load-bearing — the same {@code
+   * userMeOutletsRoute}/{@code currentCompanyRoute} pattern: RouterFunction beans are matched in
+   * declaration order across the WHOLE bean set (first match wins, NOT most-specific-path wins), so
+   * without this the general {@code /api/v1/payroll-runs/**} route below (DASHBOARD_ROLES) would
+   * swallow this exact path FIRST and let a {@code manager} token through — this route must be
+   * checked before that one for its narrower OWNER_ROLES gate to apply. The route path pattern
+   * carries a single-path-SEGMENT wildcard between {@code payroll-runs} and {@code bank-file} (one
+   * {@code *}, not {@code **}), matching only {@code /payroll-runs/{runId}/bank-file}, never a
+   * longer sub-path, so it cannot accidentally shadow any OTHER {@code /payroll-runs/**} path
+   * (payslips, allocations, the run list) — those still fall through to {@link #payrollRunsRoute}
+   * untouched.
+   */
+  @Bean
+  @Order(Ordered.HIGHEST_PRECEDENCE)
+  RouterFunction<ServerResponse> payrollRunBankFileRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("employee-service-payroll-run-bank-file")
+        .route(path("/api/v1/payroll-runs/*/bank-file"), http())
+        .before(uri(routes.employeeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(OWNER_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
   /** Payroll runs (execute + read summaries/payslips/allocations) — owner/manager only. */
   @Bean
   RouterFunction<ServerResponse> payrollRunsRoute(
@@ -994,6 +1034,26 @@ public class RoutingConfig {
       TenantContextHeaderFilter tenantFilter) {
     return GatewayRouterFunctions.route("finance-service-deferrals")
         .route(path("/api/v1/deferrals/**"), http())
+        .before(uri(routes.financeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
+   * Payroll liabilities (finance-service) — owner/manager only. {@code
+   * /api/v1/payroll-liabilities/**} covers the period's liability-bucket read + the settlement
+   * write ({@code POST .../{runLedgerId}/settlements}) (ADR 0032, Track P phase P5). Fresh prefix —
+   * no collision.
+   */
+  @Bean
+  RouterFunction<ServerResponse> payrollLiabilitiesRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("finance-service-payroll-liabilities")
+        .route(path("/api/v1/payroll-liabilities/**"), http())
         .before(uri(routes.financeService()))
         .filter(new RateLimitFilter(limiter))
         .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))

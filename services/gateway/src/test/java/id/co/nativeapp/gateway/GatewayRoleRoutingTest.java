@@ -306,6 +306,49 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
     assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/deferrals");
   }
 
+  // ---------------------------------------------------------------------------
+  // /api/v1/payroll-liabilities/** — liability read + settlement (finance-service, ADR 0032 P5)
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void aCashierIsDeniedThePayrollLiabilitiesRouteWith403() throws Exception {
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/payroll-liabilities?period=2026-07")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void anOwnerCanReachThePayrollLiabilitiesRoute() throws Exception {
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/payroll-liabilities?period=2026-07")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath())
+        .isEqualTo("/api/v1/payroll-liabilities?period=2026-07");
+  }
+
   // --- New dashboard routes: org-units, consolidation-groups, groups, closes ---
 
   @Test
@@ -839,6 +882,75 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
 
     assertThat(response).isEqualTo("ok");
     assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/payroll-setup");
+  }
+
+  // ---------------------------------------------------------------------------
+  // /api/v1/payroll-runs/{runId}/bank-file — the net-pay bank file, OWNER-ONLY (ADR 0032, P5)
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void aCashierIsDeniedTheBankFileRouteWith403() throws Exception {
+    // Bank-account PII — narrower than the DASHBOARD_ROLES payroll-runs surface (owner-only, not
+    // owner/manager).
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/payroll-runs/some-run-id/bank-file")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void anOwnerCanReachTheBankFileRoute() throws Exception {
+    // The HIGHEST_PRECEDENCE-ordered specific route must be checked BEFORE the general
+    // /api/v1/payroll-runs/** (DASHBOARD_ROLES) route, so an owner token reaches it.
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/payroll-runs/some-run-id/bank-file")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath())
+        .isEqualTo("/api/v1/payroll-runs/some-run-id/bank-file");
+  }
+
+  @Test
+  void theBankFileRouteDoesNotShadowOtherPayrollRunsSubPaths() throws Exception {
+    // Regression guard (route-precedence proof, the other direction): the narrow
+    // /payroll-runs/*/bank-file wildcard must NOT swallow an unrelated /payroll-runs/** sub-path
+    // (e.g. /payslips) — those still fall through to the DASHBOARD_ROLES payrollRunsRoute, so a
+    // manager-eligible (owner here, no manager fixture in this harness) caller reaches it exactly
+    // as before this phase.
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/payroll-runs/some-run-id/payslips")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath())
+        .isEqualTo("/api/v1/payroll-runs/some-run-id/payslips");
   }
 
   // ---------------------------------------------------------------------------

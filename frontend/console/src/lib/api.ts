@@ -250,3 +250,50 @@ export async function apiUpload<T>(
 
   return handleResponse<T>(res, 'POST', path, opts.tenant?.companyId)
 }
+
+/**
+ * Downloads a non-JSON response (e.g. the payroll bank-file CSV) as a browser file save, reusing
+ * the same auth/tenant headers as {@link apiFetch}. On a non-2xx response it decodes the
+ * `problem+json` body through the SAME {@link handleResponse} error path as every other call (a
+ * typed {@link ApiError}, AI-native diagnostics, the 401 recovery hook) — the caller sees the
+ * identical error shape whether the request was JSON or a file.
+ *
+ * The filename comes from the response's `Content-Disposition` header (the server names the file,
+ * e.g. `payroll-2026-07-seq1.csv`); a fallback name is used only if the header is absent.
+ */
+export async function apiDownload(
+  path: string,
+  opts: RequestOptions = {},
+  fallbackFilename = 'download',
+): Promise<void> {
+  const headers: Record<string, string> = {}
+  Object.assign(headers, authHeaders(opts.tenant, opts.actor))
+  if (opts.headers) Object.assign(headers, opts.headers)
+
+  const res = await fetch(API_BASE_URL + path + buildQuery(opts.query), {
+    method: opts.method ?? 'GET',
+    headers,
+  })
+
+  if (!res.ok) {
+    await handleResponse(res, opts.method ?? 'GET', path, opts.tenant?.companyId)
+    return
+  }
+
+  const blob = await res.blob()
+  const disposition = res.headers.get('Content-Disposition') ?? ''
+  const match = /filename="?([^";]+)"?/i.exec(disposition)
+  const filename = match?.[1] ?? fallbackFilename
+
+  const url = URL.createObjectURL(blob)
+  try {
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
