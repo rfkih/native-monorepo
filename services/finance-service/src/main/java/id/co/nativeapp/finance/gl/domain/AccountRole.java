@@ -187,5 +187,13 @@ public enum AccountRole {
    * precedent (V17): recognising breakage needs an SME-confirmed policy (rate + timing) not yet
    * decided. Maps to account 4900 (ILLUSTRATIVE, V37).
    */
-  GIFT_CARD_BREAKAGE_INCOME
+  GIFT_CARD_BREAKAGE_INCOME,
+  /**
+   * Expense-claims program (ADR 0030, ILLUSTRATIVE — SME-gated): the employee expense payable
+   * control account. Credited when a manager approves a claim (the expense recognition), debited
+   * when the claim is voided (the exact contra) or settled (DIRECT pay or a POSTED payroll run).
+   * Outstanding balance = what the company owes its employees for approved, un-settled claims. Maps
+   * to account 2600 (ILLUSTRATIVE — SME-gated, V39).
+   */
+  EMPLOYEE_EXPENSE_PAYABLE
 }

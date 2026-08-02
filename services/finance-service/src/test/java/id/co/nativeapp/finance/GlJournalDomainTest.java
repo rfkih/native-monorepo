@@ -160,6 +160,9 @@ class GlJournalDomainTest {
             EventKind.BILL_POSTED,
             EventKind.BILL_PAYMENT_MADE,
             EventKind.BILL_VOID,
-            EventKind.GIFT_CARD_SALE); // Phase 4, ADR 0027
+            EventKind.GIFT_CARD_SALE, // Phase 4, ADR 0027
+            EventKind.EXPENSE_CLAIM_APPROVED, // ADR 0030, expense-claims program
+            EventKind.EXPENSE_CLAIM_VOID,
+            EventKind.EXPENSE_CLAIM_SETTLED);
   }
 }

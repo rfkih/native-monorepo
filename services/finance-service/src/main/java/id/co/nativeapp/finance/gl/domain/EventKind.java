@@ -37,5 +37,26 @@ public enum EventKind {
    * — a LIABILITY event, never revenue: Dr &lt;tender clearing&gt; / Cr {@link
    * AccountRole#GIFT_CARD_LIABILITY} (both {@code GROSS}, V37 seed).
    */
-  GIFT_CARD_SALE
+  GIFT_CARD_SALE,
+  /**
+   * Expense-claims program (ADR 0030): a manager APPROVED an employee expense claim — recognition
+   * at approval: Dr {@link AccountRole#EXPENSE} (generic role; the claim's {@code gl_hint} drives
+   * only the dimensional {@code ledger_posting}, resolved separately) / Cr {@link
+   * AccountRole#EMPLOYEE_EXPENSE_PAYABLE} (both {@code GROSS}, V39 seed).
+   */
+  EXPENSE_CLAIM_APPROVED,
+  /**
+   * Expense-claims program (ADR 0030): an APPROVED, un-settled claim was VOIDED — the exact contra
+   * of {@link #EXPENSE_CLAIM_APPROVED}: Dr {@link AccountRole#EMPLOYEE_EXPENSE_PAYABLE} / Cr {@link
+   * AccountRole#EXPENSE} (both {@code GROSS}, V39 seed).
+   */
+  EXPENSE_CLAIM_VOID,
+  /**
+   * Expense-claims program (ADR 0030): an APPROVED claim was reimbursed (DIRECT pay or a POSTED
+   * payroll run) — a balance-sheet-only move, the expense having already been recognised at
+   * approval: Dr {@link AccountRole#EMPLOYEE_EXPENSE_PAYABLE} / Cr {@link
+   * AccountRole#CASH_CLEARING} (both {@code GROSS}, V39 seed). Settle-once guarded by {@code
+   * employee_expense_settlement}.
+   */
+  EXPENSE_CLAIM_SETTLED
 }

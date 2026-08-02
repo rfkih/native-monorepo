@@ -148,6 +148,12 @@ public class KafkaConfig {
         id.co.nativeapp.finance.orgref.messaging.OrgUnitRefDecodeException.class,
         id.co.nativeapp.finance.orgref.messaging.OrgUnitRefMissingEventIdException.class,
         id.co.nativeapp.finance.revenue.messaging.MissingEventIdException.class,
+        // ADR 0030 (expense-claims program) — the same fail-closed decode contract as every other
+        // event this consumer decodes with libs/events AvroSerde.
+        id.co.nativeapp.finance.empexpense.messaging.ExpenseClaimApprovedDecodeException.class,
+        id.co.nativeapp.finance.empexpense.messaging.ExpenseClaimVoidedDecodeException.class,
+        id.co.nativeapp.finance.empexpense.messaging.ExpenseReimbursementSettledDecodeException
+            .class,
         // A posting whose currency diverges from the period's established base currency (#26) is a
         // deterministic producer contract violation (a company has one immutable base currency) —
         // it can NEVER succeed on retry, so DLT it immediately rather than burning the retry
