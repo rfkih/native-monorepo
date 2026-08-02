@@ -186,6 +186,22 @@ public class StatutoryRule extends Auditable {
     }
   }
 
+  /**
+   * Deactivates this rule with NO specific superseding row (Track P phase P2's official-dataset
+   * "orphan sweep" — ADR 0031 review finding C1). An {@code ILLUSTRATIVE_PLACEHOLDER} rule whose
+   * {@code rule_key} has no counterpart in an activated OFFICIAL dataset (e.g. {@code
+   * PPH21_PROGRESSIVE} once {@code PPH21} rewires to {@code PPH21_TER}) is never reached by {@link
+   * #supersede}'s per-key overlap loop — there is no new row of the SAME key to reason a closing
+   * date from. Left active, such an orphan would keep resolving forever and tainting {@code
+   * uses_illustrative_rules} on every run (the run-level OR-fold does not care whether any {@code
+   * pay_component} actually references the rule). {@code effective_to} is left untouched — never a
+   * delete, the row stays on file for audit; {@code active=false} alone removes it from {@code
+   * PayrollRunWriter.resolveStatutoryRules} regardless of its stale date range.
+   */
+  public void deactivate() {
+    this.active = false;
+  }
+
   @Override
   public String toString() {
     return "StatutoryRule[id="

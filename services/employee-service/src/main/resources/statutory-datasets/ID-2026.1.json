@@ -378,7 +378,7 @@
     {
       "component_key": "PPH21",
       "kind": "DEDUCTION",
-      "calc_type": "STATUTORY_PROGRESSIVE",
+      "calc_type": "STATUTORY_TER",
       "bearer": "EMPLOYEE",
       "gl_account": "2110-PPH21",
       "taxable": false,

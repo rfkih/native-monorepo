@@ -6,6 +6,7 @@ import id.co.nativeapp.employee.payroll.dto.StatutoryRuleDetailResponse;
 import id.co.nativeapp.employee.payroll.dto.StatutoryRuleResponse;
 import id.co.nativeapp.employee.payroll.repository.PayComponentRepository;
 import id.co.nativeapp.employee.payroll.repository.StatutoryRuleRepository;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
@@ -30,11 +31,16 @@ public class PayrollSetupReader {
     this.statutoryRuleRepository = statutoryRuleRepository;
   }
 
-  /** The bound tenant's setup status ({@code count}/{@code DISTINCT} scalars — no projection). */
+  /**
+   * The bound tenant's setup status ({@code count}/{@code DISTINCT} scalars — no projection).
+   * Provenance is derived from rows CURRENTLY RESOLVABLE as of today (ADR 0031 review finding C2) —
+   * a deactivated/date-closed illustrative row must not keep the badge stuck at {@code MIXED}
+   * forever after the tenant activates a fully OFFICIAL dataset.
+   */
   @Transactional(readOnly = true)
   public PayrollSetupResponse status() {
     long componentCount = payComponentRepository.count();
-    List<String> provenances = statutoryRuleRepository.findDistinctProvenances();
+    List<String> provenances = statutoryRuleRepository.findDistinctProvenances(LocalDate.now());
     String provenance =
         provenances.isEmpty() ? null : provenances.size() == 1 ? provenances.get(0) : "MIXED";
     String illustrativeVersion = statutoryRuleRepository.findLatestIllustrativeVersion();

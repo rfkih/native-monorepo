@@ -79,23 +79,7 @@ figures the implementing agent structurally could not.
    revision, or a company that never activates the official dataset at all (staying on
    `ILLUSTRATIVE-2026.1`), still needs the loud flag, and `BPJS_JP`'s ceiling / `BPJS_JKK`'s risk
    class are standing re-verification needs even for an all-OFFICIAL dataset (see the checklist).
-3. **`OfficialStatutorySeedWriter` closes/deactivates overlapping rows, never edits in place.**
-   For a `rule_key` already carrying an open row (e.g. the illustrative `BPJS_KESEHATAN` /
-   `PTKP_RELIEF` / `PPH21_PROGRESSIVE`, whose `BPJS_KESEHATAN`/`PTKP_RELIEF` keys the official
-   dataset reuses — `PPH21_PROGRESSIVE` has no official counterpart key and is left orphaned-but-
-   active, harmless since no `pay_component` references it once `PPH21` rewires to `PPH21_TER`),
-   the writer supersedes it
-   (`StatutoryRule#supersede`) before inserting the new one — mirroring how
-   `PayrollRunWriter.resolveStatutoryRules` throws on an ambiguous overlap, this is the write-side
-   guard that prevents one. **Edge case: same-day activation.** The illustrative and official rows
-   share `effective_from = 2026-01-01`; closing the prior row to `effective_from − 1 day` would
-   produce `effective_to < effective_from` (invalid) or, if closed to the same day, a same-day
-   double-resolution the run-time resolver rejects. `supersede` instead **deactivates**
-   (`active = false`) whenever closing would not leave a valid, non-overlapping range — never a
-   delete, and the row stays on file for audit. `PayComponent#applyCatalog` is the analogous
-   upsert for the component catalog: it is how `PPH21` rewires from `PPH21_PROGRESSIVE` to
-   `PPH21_TER` without a migration (insert-if-absent, else align every field, returning whether
-   anything changed — the idempotent-reseed proof).
+3. **`OfficialStatutorySeedWriter` closes/deactivates overlapping rows, never edits in place — AND sweeps orphaned illustrative rows a same-key overlap can never reach (fresh-context review finding C1).** For a `rule_key` already carrying an open row that the dataset REUSES (e.g. the illustrative `BPJS_KESEHATAN` / `PTKP_RELIEF`), the writer supersedes it (`StatutoryRule#supersede`) before inserting the new one — mirroring how `PayrollRunWriter.resolveStatutoryRules` throws on an ambiguous overlap, this is the write-side guard that prevents one. **Edge case: same-day activation.** The illustrative and official rows share `effective_from = 2026-01-01`; closing the prior row to `effective_from − 1 day` would produce `effective_to < effective_from` (invalid) or, if closed to the same day, a same-day double-resolution the run-time resolver rejects. `supersede` instead **deactivates** (`active = false`) whenever closing would not leave a valid, non-overlapping range — never a delete, and the row stays on file for audit. **`PPH21_PROGRESSIVE` has NO official counterpart key** (`PPH21` rewires to `PPH21_TER` instead) and is therefore never reached by the same-key loop at all — C1 caught that `resolveStatutoryRules` resolves EVERY active row regardless of whether any `pay_component` references it, and `freezeRuleSet` OR-folds `isIllustrative()` across the WHOLE resolved set, so an untouched `PPH21_PROGRESSIVE` would keep tainting `uses_illustrative_rules = true` on EVERY future run forever — never "harmless." The writer therefore runs a second pass after the same-key loop: every remaining ACTIVE `ILLUSTRATIVE_PLACEHOLDER` row whose `rule_key` is NOT among the dataset's own keys is `StatutoryRule#deactivate`d (counted into the same `rulesClosed` total). `PayComponent#applyCatalog` is the analogous upsert for the component catalog: it is how `PPH21` rewires from `PPH21_PROGRESSIVE` to `PPH21_TER` — and from `CalcType.STATUTORY_PROGRESSIVE` to the new `CalcType.STATUTORY_TER` (fresh-context review finding S2: the catalog label now matches the linked rule's real family; purely descriptive — `GrossToNetCalculator` dispatches on the linked `StatutoryRule`'s `StatutoryCalcType`, never on `PayComponent.getCalcType()`) — without a migration (insert-if-absent, else align every field, returning whether anything changed — the idempotent-reseed proof).
 4. **`BIAYA_JABATAN` and `OVERTIME_HOURLY` ship as their own dataset rows without a linking
    `pay_component`.** Biaya jabatan's figures are consumed INLINE by `PPH21_ARTICLE17`'s
    `occupational_cost_bp`/`occupational_cost_cap_annual_minor` (the December true-up, phase P3);
@@ -115,7 +99,14 @@ figures the implementing agent structurally could not.
    bootstrap step in practice and the console never renders Setup before that; 200 + the
    inserted/closed/skipped/updated summary, idempotent), `PATCH /rules/{ruleKey}` (see §6). No
    `Idempotency-Key` header on any of these — they mirror `seed-illustrative`'s existing precedent
-   (config-plane writes, not money movement; naturally idempotent by construction).
+   (config-plane writes, not money movement; naturally idempotent by construction). **The status
+   badge (`GET /api/v1/payroll-setup`, fresh-context review finding C2) derives its `provenance`
+   from rows CURRENTLY RESOLVABLE as of today** (`active = true AND effective_from <= today <=
+   effective_to` — the exact predicate `PayrollRunWriter.resolveStatutoryRules` uses), not from
+   `SELECT DISTINCT` over EVERY historical row. The prior unfiltered query could never stop
+   reporting `MIXED` once both an illustrative and an official row had ever existed for the same
+   `rule_key`, even after the illustrative row was fully superseded — a permanently-stuck console
+   banner with no way to clear it short of deleting history.
 6. **PATCH creates a NEW effective-dated row — the human-verification / TER-activation path.**
    `StatutoryRuleOverrideWriter.override(ruleKey, paramsJson, effectiveFrom, sourceNote,
    provenance)` supersedes the rule_key's currently-open row and inserts a fresh one
@@ -138,15 +129,20 @@ figures the implementing agent structurally could not.
   secondary sources (klikpajak.id/blog/pajak-penghasilan-pasal-21-2, full tables;
   akuntansimandiri.com/2026/05/cara-hitung-pph-21-ter.html, spot rows) and the anchors of the
   reconciled domain spec — every spot-checked row matched between sources — then loaded verbatim into
-  `ID-2026.1.json` and validated through `StatutoryParams.terTable` at classpath-load time
-  (`OfficialStatutoryDatasetTest`'s drift guard pins the band COUNTS — 44/40/41 — plus three
-  cross-verified spot rows, so a future edit that silently drops/reorders/mistypes a row fails a
-  build-time test). **Recommended before go-live:** spot-check the loaded table against the
-  official PDF — PMK 168/2023 Tentang PPh Pasal 21 TER
+  `ID-2026.1.json` and validated through `StatutoryParams.terTable` at classpath-load time.
+  **The drift guard now pins the ENTIRE table, element-for-element (fresh-context review finding
+  W1 widened it beyond the original 3-spot-row + count-only version):**
+  `OfficialStatutoryDatasetTest.terBandTablesMatchTheVerbatimTranscribedPmk168TablesElementForElement`
+  asserts all 44 (A) + 40 (B) + 41 (C) = 125 `{up_to_minor, rate_bp}` pairs against expected arrays
+  independently re-typed from the same cross-verified source as the JSON — a full double-entry pin,
+  not a sampled one. A future edit to the dataset that drops, reorders, or mistypes ANY row — not
+  just one of a handful of spot rows — now fails a build-time test rather than shipping a silently
+  wrong withholding rate for whichever untested row was corrupted. **Recommended before go-live:**
+  spot-check the loaded table against the official PDF — PMK 168/2023 Tentang PPh Pasal 21 TER
   (https://pajak.go.id/sites/default/files/2024-02/PMK%20168%20Tahun%202023%20Tentang%20PPh%20Pasal%2021%20TER.pdf)
   — as a third, primary-source confirmation. A future PMK amendment repeats this same checklist
-  entry (transcribe, cross-verify against ≥2 sources, drift-guard the counts + spot rows, `PATCH
-  /rules/PPH21_TER` with a fresh `rule_version`/`sourceNote`).
+  entry (transcribe, cross-verify against ≥2 sources, re-double-enter the FULL table into the
+  drift guard, `PATCH /rules/PPH21_TER` with a fresh `rule_version`/`sourceNote`).
 - **`BPJS_JP`'s ceiling (`ceiling_minor`)** — BPJS Ketenagakerjaan adjusts this figure EVERY MARCH
   by public announcement. Before/at activation in any given year, verify the current ceiling
   against the latest announcement and `PATCH /rules/BPJS_JP` if it has changed (the shipped
@@ -175,11 +171,16 @@ figures the implementing agent structurally could not.
   briefly held within this phase, before the coordinating agent's cross-verified transcription
   landed pre-commit). The activation checklist — not the provenance enum — is now the durable
   artifact recording exactly what was verified, against how many sources, and when.
-- The band-table drift guard (`OfficialStatutoryDatasetTest`'s count + spot-row assertions) is the
-  concrete enforcement that stands in for "don't silently regress a transcribed table" — anyone
-  editing `ID-2026.1.json`'s `PPH21_TER` bands in the future trips a build-time failure unless the
-  counts and the three cross-verified rows still hold, which is deliberately cheaper than re-fetching
-  and re-diffing the full 44/40/41-row tables on every change.
+- The band-table drift guard is the concrete enforcement that stands in for "don't silently regress
+  a transcribed table" — it now pins EVERY band, not a sample: anyone editing `ID-2026.1.json`'s
+  `PPH21_TER` bands trips a build-time failure the moment ANY of the 125 `{up_to_minor, rate_bp}`
+  pairs across the three categories drifts from the independently re-typed expected arrays in
+  `OfficialStatutoryDatasetTest`, not just when one of a handful of sampled rows happens to move.
+  The trade-off this widened guard accepts on purpose: the expected arrays are a SECOND manual
+  transcription of the same source data, so a shared transcription error in BOTH the JSON and the
+  test (as opposed to a drift introduced by a later edit) would still pass — the guard's job is
+  regression detection, not a substitute for the checklist's independent-source cross-verification
+  and the recommended go-live PDF spot-check above.
 - `StatutoryRule#supersede`'s same-day-deactivate branch is a genuine new edge case future dataset
   authors must respect: shipping a NEW dataset version with the SAME `effective_from` as an
   existing open row is fine (it deactivates cleanly), but two dataset rows for the SAME `rule_key`

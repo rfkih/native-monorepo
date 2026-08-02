@@ -5,14 +5,17 @@ import id.co.nativeapp.employee.payroll.domain.OfficialStatutoryDataset.DatasetC
 import id.co.nativeapp.employee.payroll.domain.OfficialStatutoryDataset.DatasetRule;
 import id.co.nativeapp.employee.payroll.domain.PayComponent;
 import id.co.nativeapp.employee.payroll.domain.PayrollSetupNotSeededException;
+import id.co.nativeapp.employee.payroll.domain.RuleProvenance;
 import id.co.nativeapp.employee.payroll.domain.StatutoryRule;
 import id.co.nativeapp.employee.payroll.domain.UnknownDatasetVersionException;
 import id.co.nativeapp.employee.payroll.dto.SeedOfficialResponse;
 import id.co.nativeapp.employee.payroll.repository.PayComponentRepository;
 import id.co.nativeapp.employee.payroll.repository.StatutoryRuleRepository;
 import id.co.nativeapp.tenant.TenantContext;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -33,9 +36,24 @@ import org.springframework.transaction.annotation.Transactional;
  * aligns the existing row's fields ({@link PayComponent#applyCatalog}) — this is how {@code PPH21}
  * rewires from {@code PPH21_PROGRESSIVE} to {@code PPH21_TER} without a migration.
  *
+ * <p><strong>The orphan sweep (ADR 0031 review finding C1).</strong> {@code
+ * PayrollRunWriter.resolveStatutoryRules} resolves EVERY active {@code statutory_rule} row
+ * effective as-of a run's date, and {@code freezeRuleSet} OR-folds {@code rule.isIllustrative()}
+ * across ALL of them — regardless of whether any {@code pay_component} actually references the
+ * rule. The per-key overlap loop above only closes a rule sharing its {@code rule_key} with a
+ * dataset row (e.g. {@code BPJS_KESEHATAN}, {@code PTKP_RELIEF}); an illustrative rule with NO
+ * official counterpart key (the canonical case: {@code PPH21_PROGRESSIVE}, orphaned the moment
+ * {@code PPH21} rewires its {@code statutory_rule_key} to {@code PPH21_TER}) is never touched by
+ * that loop and would keep resolving — and tainting {@code uses_illustrative_rules = true} on EVERY
+ * future run — forever, even after the tenant activates a fully OFFICIAL dataset. After the per-key
+ * loop, this writer therefore sweeps every remaining ACTIVE {@code ILLUSTRATIVE_PLACEHOLDER} row
+ * whose {@code rule_key} is not among the dataset's own keys and {@link StatutoryRule#deactivate
+ * deactivates} it (counted into {@code rulesClosed}) — catching {@code PPH21_PROGRESSIVE} today and
+ * any future orphan the same way.
+ *
  * <p>A re-run over the SAME dataset version is a byte-identical no-op (every rule/component is
- * already at its target state, so nothing is inserted/closed/updated) — the idempotent-reseed
- * proof.
+ * already at its target state — including every orphan already deactivated — so nothing is
+ * inserted/closed/updated) — the idempotent-reseed proof.
  */
 @Component
 public class OfficialStatutorySeedWriter {
@@ -105,6 +123,25 @@ public class OfficialStatutorySeedWriter {
       fresh.setCompanyId(tenant);
       statutoryRuleRepository.save(fresh);
       rulesInserted++;
+    }
+
+    // The orphan sweep (ADR 0031 review finding C1 — see the class javadoc): any ACTIVE
+    // ILLUSTRATIVE_PLACEHOLDER row whose rule_key this dataset does NOT carry (e.g.
+    // PPH21_PROGRESSIVE, once PPH21 rewires below to PPH21_TER) is never reached by the per-key
+    // loop above — deactivate it explicitly so it stops tainting uses_illustrative_rules on every
+    // future run.
+    Set<String> datasetRuleKeys = new HashSet<>();
+    for (DatasetRule rule : dataset.rules()) {
+      datasetRuleKeys.add(rule.ruleKey());
+    }
+    for (StatutoryRule illustrative :
+        statutoryRuleRepository.findByProvenanceAndActiveTrue(
+            RuleProvenance.ILLUSTRATIVE_PLACEHOLDER)) {
+      if (!datasetRuleKeys.contains(illustrative.getRuleKey())) {
+        illustrative.deactivate();
+        statutoryRuleRepository.save(illustrative);
+        rulesClosed++;
+      }
     }
 
     int componentsInserted = 0;

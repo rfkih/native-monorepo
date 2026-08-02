@@ -83,49 +83,180 @@ class OfficialStatutoryDatasetTest {
   }
 
   /**
-   * Drift guard for the verbatim-transcribed PMK 168/2023 TER band tables: pins the exact band
-   * COUNT per category (44/40/41) and three spot-checked rows independently cross-verified against
-   * two secondary sources — a future edit to the dataset that silently drops/reorders/mistypes a
-   * row trips this test rather than shipping a silently wrong withholding rate.
+   * Drift guard for the verbatim-transcribed PMK 168/2023 TER band tables (ADR 0031 review finding
+   * W1) — a FULL element-for-element double-entry pin: every one of the 44/40/41 bands per category
+   * (A/B/C), independently re-typed here from the same cross-verified source as {@code
+   * ID-2026.1.json} (2026-08-02, two independent secondary sources, every spot-checked row
+   * matched), is asserted against the dataset's parsed table in order. A future edit to the dataset
+   * that drops, reorders, or mistypes ANY row — not just one of a handful of spot rows — trips this
+   * test rather than shipping a silently wrong withholding rate.
    */
   @Test
-  void terBandTablesMatchTheVerbatimTranscribedPmk168CountsAndCrossVerifiedSpotRows() {
+  void terBandTablesMatchTheVerbatimTranscribedPmk168TablesElementForElement() {
     Dataset dataset = OfficialStatutoryDataset.load(VERSION).orElseThrow();
     DatasetRule ter =
         dataset.rules().stream().filter(r -> r.ruleKey().equals("PPH21_TER")).findFirst().get();
     StatutoryParams.TerTableParams params = StatutoryParams.terTable(ter.paramsJson());
 
-    assertThat(countBands(params, "TK0")).isEqualTo(44); // category A
-    assertThat(countBands(params, "TK2")).isEqualTo(40); // category B
-    assertThat(countBands(params, "K3")).isEqualTo(41); // category C
-
-    // Cross-verified spot rows (2026-08-02, two independent sources, all matched).
-    assertThat(
-            params
-                .categoryFor(id.co.nativeapp.employee.employee.domain.PtkpStatus.TK0)
-                .rateBpFor(10_350_000L))
-        .as("category A 2.25%% up to 10,350,000")
-        .isEqualTo(225);
-    assertThat(
-            params
-                .categoryFor(id.co.nativeapp.employee.employee.domain.PtkpStatus.TK2)
-                .rateBpFor(26_000_000L))
-        .as("category B 9%% up to 26,000,000")
-        .isEqualTo(900);
-    assertThat(
-            params
-                .categoryFor(id.co.nativeapp.employee.employee.domain.PtkpStatus.K3)
-                .rateBpFor(110_000_000L))
-        .as("category C 24%% up to 110,000,000")
-        .isEqualTo(2400);
+    assertBandsMatch(
+        params.categoryFor(id.co.nativeapp.employee.employee.domain.PtkpStatus.TK0),
+        CATEGORY_A_BANDS);
+    assertBandsMatch(
+        params.categoryFor(id.co.nativeapp.employee.employee.domain.PtkpStatus.TK2),
+        CATEGORY_B_BANDS);
+    assertBandsMatch(
+        params.categoryFor(id.co.nativeapp.employee.employee.domain.PtkpStatus.K3),
+        CATEGORY_C_BANDS);
   }
 
-  private static int countBands(StatutoryParams.TerTableParams params, String ptkpStatus) {
-    return params
-        .categoryFor(id.co.nativeapp.employee.employee.domain.PtkpStatus.valueOf(ptkpStatus))
-        .bands()
-        .size();
+  private static void assertBandsMatch(
+      StatutoryParams.TerCategoryTable table, long[][] expectedUpToAndRateBp) {
+    List<StatutoryParams.TerBand> bands = table.bands();
+    assertThat(bands).hasSize(expectedUpToAndRateBp.length);
+    for (int i = 0; i < expectedUpToAndRateBp.length; i++) {
+      long expectedUpTo = expectedUpToAndRateBp[i][0];
+      int expectedRateBp = (int) expectedUpToAndRateBp[i][1];
+      assertThat(bands.get(i).upToMinor()).as("band[%d].up_to_minor", i).isEqualTo(expectedUpTo);
+      assertThat(bands.get(i).rateBp()).as("band[%d].rate_bp", i).isEqualTo(expectedRateBp);
+    }
   }
+
+  /** PMK 168/2023 Lampiran category A (TK0/TK1/K0) — 44 bands, verbatim + cross-verified. */
+  private static final long[][] CATEGORY_A_BANDS = {
+    {5_400_000L, 0},
+    {5_650_000L, 25},
+    {5_950_000L, 50},
+    {6_300_000L, 75},
+    {6_750_000L, 100},
+    {7_500_000L, 125},
+    {8_550_000L, 150},
+    {9_650_000L, 175},
+    {10_050_000L, 200},
+    {10_350_000L, 225},
+    {10_700_000L, 250},
+    {11_050_000L, 300},
+    {11_600_000L, 350},
+    {12_500_000L, 400},
+    {13_750_000L, 500},
+    {15_100_000L, 600},
+    {16_950_000L, 700},
+    {19_750_000L, 800},
+    {24_150_000L, 900},
+    {26_450_000L, 1000},
+    {28_000_000L, 1100},
+    {30_050_000L, 1200},
+    {32_400_000L, 1300},
+    {35_400_000L, 1400},
+    {39_100_000L, 1500},
+    {43_850_000L, 1600},
+    {47_800_000L, 1700},
+    {51_400_000L, 1800},
+    {56_300_000L, 1900},
+    {62_200_000L, 2000},
+    {68_600_000L, 2100},
+    {77_500_000L, 2200},
+    {89_000_000L, 2300},
+    {103_000_000L, 2400},
+    {125_000_000L, 2500},
+    {157_000_000L, 2600},
+    {206_000_000L, 2700},
+    {337_000_000L, 2800},
+    {454_000_000L, 2900},
+    {550_000_000L, 3000},
+    {695_000_000L, 3100},
+    {910_000_000L, 3200},
+    {1_400_000_000L, 3300},
+    {StatutoryParams.UNBOUNDED_TOP_CAP_MINOR, 3400},
+  };
+
+  /** PMK 168/2023 Lampiran category B (TK2/TK3/K1/K2) — 40 bands, verbatim + cross-verified. */
+  private static final long[][] CATEGORY_B_BANDS = {
+    {6_200_000L, 0},
+    {6_500_000L, 25},
+    {6_850_000L, 50},
+    {7_300_000L, 75},
+    {9_200_000L, 100},
+    {10_750_000L, 150},
+    {11_250_000L, 200},
+    {11_600_000L, 250},
+    {12_600_000L, 300},
+    {13_600_000L, 400},
+    {14_950_000L, 500},
+    {16_400_000L, 600},
+    {18_450_000L, 700},
+    {21_850_000L, 800},
+    {26_000_000L, 900},
+    {27_700_000L, 1000},
+    {29_350_000L, 1100},
+    {31_450_000L, 1200},
+    {33_950_000L, 1300},
+    {37_100_000L, 1400},
+    {41_100_000L, 1500},
+    {45_800_000L, 1600},
+    {49_500_000L, 1700},
+    {53_800_000L, 1800},
+    {58_500_000L, 1900},
+    {64_000_000L, 2000},
+    {71_000_000L, 2100},
+    {80_000_000L, 2200},
+    {93_000_000L, 2300},
+    {109_000_000L, 2400},
+    {129_000_000L, 2500},
+    {163_000_000L, 2600},
+    {211_000_000L, 2700},
+    {374_000_000L, 2800},
+    {459_000_000L, 2900},
+    {555_000_000L, 3000},
+    {704_000_000L, 3100},
+    {957_000_000L, 3200},
+    {1_405_000_000L, 3300},
+    {StatutoryParams.UNBOUNDED_TOP_CAP_MINOR, 3400},
+  };
+
+  /** PMK 168/2023 Lampiran category C (K3) — 41 bands, verbatim + cross-verified. */
+  private static final long[][] CATEGORY_C_BANDS = {
+    {6_600_000L, 0},
+    {6_950_000L, 25},
+    {7_350_000L, 50},
+    {7_800_000L, 75},
+    {8_850_000L, 100},
+    {9_800_000L, 125},
+    {10_950_000L, 150},
+    {11_200_000L, 175},
+    {12_050_000L, 200},
+    {12_950_000L, 300},
+    {14_150_000L, 400},
+    {15_550_000L, 500},
+    {17_050_000L, 600},
+    {19_500_000L, 700},
+    {22_700_000L, 800},
+    {26_600_000L, 900},
+    {28_100_000L, 1000},
+    {30_100_000L, 1100},
+    {32_600_000L, 1200},
+    {35_400_000L, 1300},
+    {38_900_000L, 1400},
+    {43_000_000L, 1500},
+    {47_400_000L, 1600},
+    {51_200_000L, 1700},
+    {55_800_000L, 1800},
+    {60_400_000L, 1900},
+    {66_700_000L, 2000},
+    {74_500_000L, 2100},
+    {83_200_000L, 2200},
+    {95_600_000L, 2300},
+    {110_000_000L, 2400},
+    {134_000_000L, 2500},
+    {169_000_000L, 2600},
+    {221_000_000L, 2700},
+    {390_000_000L, 2800},
+    {463_000_000L, 2900},
+    {561_000_000L, 3000},
+    {709_000_000L, 3100},
+    {965_000_000L, 3200},
+    {1_419_000_000L, 3300},
+    {StatutoryParams.UNBOUNDED_TOP_CAP_MINOR, 3400},
+  };
 
   @Test
   void terAnchorBandsMatchTheSpecZeroPercentThresholdsAndTheUnboundedThirtyFourPercentTop() {
@@ -283,6 +414,11 @@ class OfficialStatutoryDatasetTest {
     assertThat(pph21.kind()).isEqualTo(PayComponentKind.DEDUCTION);
     assertThat(pph21.glAccount()).isEqualTo("2110-PPH21");
     assertThat(pph21.displayOrder()).isEqualTo(30);
+    // ADR 0031 review finding S2: the catalog label matches the LINKED rule's real family
+    // (TER_TABLE) — STATUTORY_TER, not the legacy STATUTORY_PROGRESSIVE. Purely descriptive: the
+    // calculator dispatches on the RULE's StatutoryCalcType, never the component's CalcType.
+    assertThat(pph21.calcType())
+        .isEqualTo(id.co.nativeapp.employee.payroll.domain.CalcType.STATUTORY_TER);
   }
 
   @Test

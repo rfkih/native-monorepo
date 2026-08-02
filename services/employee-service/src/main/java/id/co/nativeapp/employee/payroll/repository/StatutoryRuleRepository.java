@@ -1,5 +1,6 @@
 package id.co.nativeapp.employee.payroll.repository;
 
+import id.co.nativeapp.employee.payroll.domain.RuleProvenance;
 import id.co.nativeapp.employee.payroll.domain.StatutoryRule;
 import id.co.nativeapp.employee.payroll.projection.StatutoryRuleDetailView;
 import id.co.nativeapp.employee.payroll.projection.StatutoryRuleSummaryView;
@@ -55,9 +56,33 @@ public interface StatutoryRuleRepository extends JpaRepository<StatutoryRule, UU
    */
   Optional<StatutoryRule> findFirstByActiveTrue();
 
-  /** The distinct provenances present (scalar strings — the setup-status read). */
-  @Query(value = "SELECT DISTINCT sr.provenance FROM statutory_rule sr", nativeQuery = true)
-  List<String> findDistinctProvenances();
+  /**
+   * Every ACTIVE row of a given provenance — the official-dataset seed's "orphan sweep" (ADR 0031
+   * review finding C1): every {@code ILLUSTRATIVE_PLACEHOLDER} row still active after the per-key
+   * overlap loop has run is a candidate to deactivate if its {@code rule_key} has no counterpart in
+   * the dataset just activated.
+   */
+  List<StatutoryRule> findByProvenanceAndActiveTrue(RuleProvenance provenance);
+
+  /**
+   * The distinct provenances CURRENTLY RESOLVABLE as of {@code asOf} (scalar strings — the
+   * setup-status read) — mirrors {@code PayrollRunWriter.resolveStatutoryRules}'s exact predicate
+   * (active AND effective_from &lt;= asOf &lt;= effective_to) so the console's provenance badge
+   * reflects what a run would actually freeze today, not every historical row ever seeded. A row
+   * closed by date ({@code effective_to} narrowed) or deactivated as an orphan ({@code active =
+   * false}) — either closure mechanism {@link StatutoryRule#supersede}/{@link
+   * StatutoryRule#deactivate} may have used — is excluded either way (ADR 0031 review finding C2:
+   * the prior unfiltered {@code SELECT DISTINCT} over EVERY row, including deactivated ones, could
+   * never stop reporting {@code MIXED} once both an illustrative and an official row existed for
+   * the same rule_key, even after the illustrative row was fully superseded).
+   */
+  @Query(
+      value =
+          "SELECT DISTINCT sr.provenance FROM statutory_rule sr"
+              + " WHERE sr.active = true"
+              + " AND sr.effective_from <= :asOf AND sr.effective_to >= :asOf",
+      nativeQuery = true)
+  List<String> findDistinctProvenances(@Param("asOf") LocalDate asOf);
 
   /** The newest illustrative rule-version label, or null when none exists (scalar). */
   @Query(

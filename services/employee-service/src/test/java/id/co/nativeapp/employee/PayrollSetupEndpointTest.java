@@ -140,9 +140,12 @@ class PayrollSetupEndpointTest extends PostgresRlsTestBase {
             .getContentAsString();
     JsonNode first = json.readTree(firstBody);
     assertThat(first.get("rulesInserted").asInt()).isEqualTo(10);
-    // The illustrative BPJS_KESEHATAN and PTKP_RELIEF rows share a rule_key with an official row
-    // dated the SAME day (2026-01-01) — StatutoryRule#supersede deactivates them (never a delete).
-    assertThat(first.get("rulesClosed").asInt()).isEqualTo(2);
+    // 3 rows closed: the illustrative BPJS_KESEHATAN and PTKP_RELIEF rows share a rule_key with an
+    // official row dated the SAME day (2026-01-01) — StatutoryRule#supersede deactivates them
+    // (never a delete) — PLUS the orphan sweep (ADR 0031 review finding C1): PPH21_PROGRESSIVE has
+    // no official counterpart key (PPh21 rewires to PPH21_TER below), so it is never reached by the
+    // per-key loop and is deactivated separately.
+    assertThat(first.get("rulesClosed").asInt()).isEqualTo(3);
     assertThat(first.get("rulesSkipped").asInt()).isZero();
     // JHT_EE/ER, JP_EE/ER, JKK_ER, JKM_ER are new; PPh21 REWIRES (statutory_rule_key changes) —
     // an update, not an insert.
@@ -173,6 +176,20 @@ class PayrollSetupEndpointTest extends PostgresRlsTestBase {
         });
     assertThat(activeCountByKey).allSatisfy((key, count) -> assertThat(count).isEqualTo(1));
 
+    // The orphan sweep (ADR 0031 review finding C1): PPH21_PROGRESSIVE has no official counterpart
+    // key, so it is on file (never deleted) but no longer ACTIVE — it must not appear in the
+    // active-rows map above, and no row for it may claim active=true here.
+    assertThat(activeCountByKey).doesNotContainKey("PPH21_PROGRESSIVE");
+    boolean pph21ProgressiveStillActive =
+        java.util.stream.StreamSupport.stream(rules.spliterator(), false)
+            .anyMatch(
+                r ->
+                    r.get("ruleKey").asText().equals("PPH21_PROGRESSIVE")
+                        && r.get("active").asBoolean());
+    assertThat(pph21ProgressiveStillActive)
+        .as("PPH21_PROGRESSIVE must be deactivated by the orphan sweep, not left resolvable")
+        .isFalse();
+
     // The official BPJS_KESEHATAN row is now the one that resolves (OFFICIAL, not the illustrative
     // placeholder).
     mvc.perform(
@@ -189,6 +206,14 @@ class PayrollSetupEndpointTest extends PostgresRlsTestBase {
             get("/api/v1/payroll-setup/rules/PPH21_TER")
                 .header("X-Company-Id", TENANT_A)
                 .header("X-Actor", ACTOR))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.provenance").value("OFFICIAL"));
+
+    // ADR 0031 review finding C2: the console's status badge derives provenance from CURRENTLY
+    // RESOLVABLE rows only — it must read OFFICIAL here, never stuck at MIXED just because a
+    // deactivated/superseded illustrative row is still on file for audit.
+    mvc.perform(
+            get("/api/v1/payroll-setup").header("X-Company-Id", TENANT_A).header("X-Actor", ACTOR))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.provenance").value("OFFICIAL"));
 
