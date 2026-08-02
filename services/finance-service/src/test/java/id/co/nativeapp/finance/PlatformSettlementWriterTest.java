@@ -8,7 +8,7 @@ import id.co.nativeapp.finance.platform.domain.PlatformOverSettlementException;
 import id.co.nativeapp.finance.platform.domain.PlatformSettlementIdempotencyKeyConflictException;
 import id.co.nativeapp.finance.platform.dto.PlatformOutstandingResponse;
 import id.co.nativeapp.finance.platform.dto.PlatformSettlementResult;
-import id.co.nativeapp.finance.platform.service.PlatformReceivableAccumulator;
+import id.co.nativeapp.finance.platform.service.PlatformReceivableWriter;
 import id.co.nativeapp.finance.platform.service.PlatformSettlementWriter;
 import id.co.nativeapp.tenant.TenantContext;
 import java.sql.Connection;
@@ -27,7 +27,7 @@ import org.springframework.boot.test.context.SpringBootTest;
  * legs and decrementing the channel accumulator; fee-free payout omits the fee leg; same-key replay
  * returns the original without posting again; replayed key with a different payload → 409;
  * over-settlement (outstanding &lt; gross) → 422 with NOTHING touched; net &gt; gross → 422. The
- * accumulator is seeded through {@link PlatformReceivableAccumulator} — the same component the
+ * accumulator is seeded through {@link PlatformReceivableWriter} — the same component the
  * revenue/reversal writers use in production.
  */
 @SpringBootTest
@@ -38,7 +38,7 @@ class PlatformSettlementWriterTest extends PostgresRlsTestBase {
   private static final String ACTOR = "platform@integration.co.id";
 
   @Autowired private PlatformSettlementWriter writer;
-  @Autowired private PlatformReceivableAccumulator accumulator;
+  @Autowired private PlatformReceivableWriter accumulator;
 
   private void seedOutstanding(long minor) {
     // accumulate is @Transactional, so the RLS aspect binds the GUC from this scope.
