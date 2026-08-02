@@ -759,6 +759,27 @@ export const id = {
     selectAddonLabel: 'Tambah {{name}}',
     addonSelectedLabel: 'Hapus {{name}}',
   },
+  register: {
+    /** ADR 0036 — closing kasir (sesi kasir). */
+    title: 'Kasir — closing kasir',
+    openHint: 'Buka laci untuk memulai hari: hitung uang kembalian (modal awal) yang dimasukkan.',
+    floatLabel: 'Modal awal',
+    openAction: 'Buka kasir',
+    openedAt: 'Dibuka',
+    float: 'Modal awal',
+    countedLabel: 'Uang tunai terhitung di laci',
+    countedHint: 'Hitung SELURUH isi laci termasuk modal awal. Jumlah seharusnya dan selisihnya dihitung oleh sistem.',
+    closeAction: 'Tutup kasir',
+    cashSales: 'Penjualan tunai',
+    cashRefunds: 'Refund tunai',
+    expected: 'Seharusnya di laci',
+    counted: 'Terhitung',
+    resultOver: 'Kas lebih (selisih lebih)',
+    resultShort: 'Kas kurang (selisih kurang)',
+    resultBalanced: 'Seimbang — tidak ada selisih',
+    done: 'Selesai',
+    disabledOffline: 'Closing membutuhkan koneksi dan antrean penjualan yang sudah tersinkron.',
+  },
   posShell: {
     /** Redesign P4 — kerangka POS bersama (bilah status, menu kasir, dok tiket). */
     online: 'Online',

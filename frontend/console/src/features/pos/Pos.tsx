@@ -20,6 +20,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
+  Banknote,
   BookOpen,
   ChefHat,
   ClipboardList,
@@ -83,6 +84,7 @@ import { MenuSkeleton, EmptyMenu, EmptyCategory } from './components/MenuStates'
 import { BillSelectorOverlay } from './components/BillSelectorOverlay'
 import { OpenBillDialog } from './components/OpenBillDialog'
 import { NoCompany } from './components/NoCompany'
+import { RegisterSheet } from './RegisterSheet'
 import { PosStatusBar } from '@/features/pos-shell/layout/PosStatusBar'
 import { TillMenuSheet } from '@/features/pos-shell/layout/TillMenuSheet'
 
@@ -144,6 +146,7 @@ function PosInner({ session }: { session: CompanySession }) {
   const { offline, queuedCount, rejectedCount } = useOffline()
   const [showSyncCenter, setShowSyncCenter] = useState(false)
   const [showTillMenu, setShowTillMenu] = useState(false)
+  const [showRegisterSheet, setShowRegisterSheet] = useState(false)
   // P4: the dock's Send/Pay reach INTO the bill sheet — each ++ asks BillDetail to fire the
   // kitchen ticket / the pay modal as soon as the bill is loaded (no manual sheet detour).
   const [autoKotToken, setAutoKotToken] = useState(0)
@@ -875,6 +878,16 @@ function PosInner({ session }: { session: CompanySession }) {
           onClose={() => setShowTillMenu(false)}
           items={[
             {
+              key: 'register',
+              icon: <Banknote className="size-4" aria-hidden="true" />,
+              label: t('register.title'),
+              onSelect: () => setShowRegisterSheet(true),
+              // ADR 0028: never close a drawer offline or over an unsynced queue — expected cash
+              // would understate the replayed sales.
+              disabled: offline || queuedCount + rejectedCount > 0,
+              disabledTitle: t('register.disabledOffline'),
+            },
+            {
               key: 'display',
               icon: <Monitor className="size-4" aria-hidden="true" />,
               label: t('pos.customerDisplay.button'),
@@ -910,6 +923,15 @@ function PosInner({ session }: { session: CompanySession }) {
               danger: true,
             },
           ]}
+        />
+      ) : null}
+
+      {showRegisterSheet ? (
+        <RegisterSheet
+          session={session}
+          currency={currency}
+          locale={locale}
+          onClose={() => setShowRegisterSheet(false)}
         />
       ) : null}
 

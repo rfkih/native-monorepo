@@ -766,6 +766,27 @@ export const en = {
     selectAddonLabel: 'Add {{name}}',
     addonSelectedLabel: 'Remove {{name}}',
   },
+  register: {
+    /** ADR 0036 — closing kasir (register sessions). */
+    title: 'Register — closing kasir',
+    openHint: 'Open the drawer to start the day: count the change fund (float) you are putting in.',
+    floatLabel: 'Opening float',
+    openAction: 'Open register',
+    openedAt: 'Opened',
+    float: 'Opening float',
+    countedLabel: 'Counted cash in drawer',
+    countedHint: 'Count the WHOLE drawer including the float. The expected amount and the difference are computed by the system.',
+    closeAction: 'Close register',
+    cashSales: 'Cash sales',
+    cashRefunds: 'Cash refunds',
+    expected: 'Expected in drawer',
+    counted: 'Counted',
+    resultOver: 'Cash over (selisih lebih)',
+    resultShort: 'Cash short (selisih kurang)',
+    resultBalanced: 'Balanced — no difference',
+    done: 'Done',
+    disabledOffline: 'Closing needs a connection and a fully synced sale queue.',
+  },
   posShell: {
     /** Redesign P4 — the shared POS shell chrome (status bar, till menu, ticket dock). */
     online: 'Online',
