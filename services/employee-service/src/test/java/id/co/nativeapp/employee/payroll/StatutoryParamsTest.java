@@ -134,6 +134,56 @@ class StatutoryParamsTest {
   }
 
   @Test
+  void terTableRejectsAMissingNoNpwpSurcharge() {
+    // P1 review C1: the field is the FULL multiplier — an omitted field defaulting to 0 would
+    // ZERO a no-NPWP employee's monthly tax (and refund the whole year in the December branch).
+    String json =
+        terJson(
+                "{\"up_to_minor\":" + UNBOUNDED + ",\"rate_bp\":500}",
+                "{\"up_to_minor\":" + UNBOUNDED + ",\"rate_bp\":1500}",
+                "{\"up_to_minor\":" + UNBOUNDED + ",\"rate_bp\":2500}")
+            .replace(",\"no_npwp_surcharge_bp\":12000", "");
+
+    assertThatThrownBy(() -> StatutoryParams.terTable(json))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("no_npwp_surcharge_bp");
+  }
+
+  @Test
+  void terTableRejectsASurchargeBelowTheIdentityMultiplier() {
+    // 2000 is the natural misreading ("the 20% surcharge") — it would tax at x0.20. The floor is
+    // 10000 (x1.0): a missing NPWP can never REDUCE tax (UU PPh Art 21(5a)).
+    String json =
+        terJson(
+                "{\"up_to_minor\":" + UNBOUNDED + ",\"rate_bp\":500}",
+                "{\"up_to_minor\":" + UNBOUNDED + ",\"rate_bp\":1500}",
+                "{\"up_to_minor\":" + UNBOUNDED + ",\"rate_bp\":2500}")
+            .replace("\"no_npwp_surcharge_bp\":12000", "\"no_npwp_surcharge_bp\":2000");
+
+    assertThatThrownBy(() -> StatutoryParams.terTable(json))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("[10000, 20000]");
+  }
+
+  @Test
+  void annualProgressiveRejectsAMissingOrSubIdentitySurcharge() {
+    String base =
+        "{\"brackets\":[{\"floor_minor\":0,\"cap_minor\":"
+            + UNBOUNDED
+            + ",\"rate_bp\":500}],"
+            + "\"occupational_cost_bp\":500,"
+            + "\"occupational_cost_cap_annual_minor\":6000000"; // no closing brace yet
+
+    assertThatThrownBy(() -> StatutoryParams.annualProgressive(base + "}"))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("no_npwp_surcharge_bp");
+    assertThatThrownBy(
+            () -> StatutoryParams.annualProgressive(base + ",\"no_npwp_surcharge_bp\":2000}"))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("[10000, 20000]");
+  }
+
+  @Test
   void terTableRejectsUnsortedBandsRatherThanSilentlySortingThem() {
     // Bands supplied out of order. Unlike PROGRESSIVE_BRACKET, a TER table is REJECTED, not sorted.
     String json =

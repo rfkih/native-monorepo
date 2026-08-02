@@ -313,9 +313,35 @@ public final class StatutoryParams {
       }
     }
 
-    int surchargeBp =
-        root.has("no_npwp_surcharge_bp") ? root.get("no_npwp_surcharge_bp").asInt() : 0;
+    int surchargeBp = requireSurchargeMultiplier(root, "TER_TABLE");
     return new TerTableParams(Map.copyOf(ptkpCategory), Map.copyOf(categories), surchargeBp);
+  }
+
+  /**
+   * The no-NPWP surcharge is the FULL multiplier in basis points (12000 = ×1.20, UU PPh Art
+   * 21(5a)), not the +20% increment — and it is REQUIRED with a hard floor of 10000: a defaulted or
+   * sub-10000 value would make a missing NPWP REDUCE tax (an omitted field would zero it, and in
+   * the December branch refund the whole year's withholding) — the exact opposite of the
+   * conservative posture the spec mandates (P1 review C1). Upper bound 20000 (×2.0) rejects a
+   * fat-fingered order of magnitude.
+   */
+  private static int requireSurchargeMultiplier(JsonNode root, String family) {
+    if (!root.has("no_npwp_surcharge_bp")) {
+      throw new IllegalArgumentException(
+          family
+              + " params require no_npwp_surcharge_bp (the FULL multiplier, e.g. 12000 = x1.20"
+              + " per UU PPh Art 21(5a)) — omitting it would zero a no-NPWP employee's tax");
+    }
+    int surchargeBp = root.get("no_npwp_surcharge_bp").asInt();
+    if (surchargeBp < 10_000 || surchargeBp > 20_000) {
+      throw new IllegalArgumentException(
+          family
+              + " no_npwp_surcharge_bp is "
+              + surchargeBp
+              + " but must be within [10000, 20000]: it is the FULL multiplier (12000 = x1.20);"
+              + " below 10000 a missing NPWP would REDUCE tax");
+    }
+    return surchargeBp;
   }
 
   private static TerCategoryTable terCategoryTable(String categoryKey, JsonNode categoryNode) {
@@ -393,8 +419,7 @@ public final class StatutoryParams {
     }
     int occupationalCostBp = root.get("occupational_cost_bp").asInt();
     requireInBasisPointRange(occupationalCostBp, "ANNUAL_PROGRESSIVE occupational_cost_bp");
-    int surchargeBp =
-        root.has("no_npwp_surcharge_bp") ? root.get("no_npwp_surcharge_bp").asInt() : 0;
+    int surchargeBp = requireSurchargeMultiplier(root, "ANNUAL_PROGRESSIVE");
 
     return new AnnualProgressiveParams(
         List.copyOf(parsed),
