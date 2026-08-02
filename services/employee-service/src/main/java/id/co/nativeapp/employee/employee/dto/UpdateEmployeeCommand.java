@@ -13,4 +13,5 @@ public record UpdateEmployeeCommand(
     String ptkpStatus,
     String nik,
     String bankAccount,
+    String npwp,
     String status) {}

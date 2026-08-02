@@ -36,6 +36,30 @@ public final class PayrollInputs {
   public record DeductionInput(PayComponent component, Money amount) {}
 
   /**
+   * The December / final-month Art-17 true-up context (Track P phases P1/P3): the employee's
+   * year-to-date figures BEFORE this month, decrypted and summed by the writer from the active
+   * payslip-line history (phase P3). {@code null} for every non-December run — the calculator only
+   * computes the {@code ANNUAL_PROGRESSIVE} branch when BOTH a resolved {@code ANNUAL_PROGRESSIVE}
+   * rule AND a non-null context are present, and throws if one is present without the other (a
+   * misconfiguration must fail loudly, never silently skip the true-up or silently annualize
+   * garbage).
+   *
+   * @param cumulativeGrossBrutoMinor Jan..(month-1) gross bruto (taxable cash earnings + taxable
+   *     employer premiums), minor units of the run's base currency
+   * @param cumulativeDeductibleSocialMinor Jan..(month-1) employee-deductible social legs (e.g.
+   *     JHT-EE + JP-EE; BPJS-Kesehatan-EE is NOT deductible), minor units
+   * @param cumulativeWithheldMinor Jan..(month-1) PPh21 actually withheld, minor units
+   * @param monthsInYear how many months this employee was paid in the fiscal year so far; carried
+   *     for a future partial-year-joiner PTKP-proration follow-up (documented, NOT yet consumed by
+   *     the December formula — a permanent employee paid the full year needs no proration)
+   */
+  public record AnnualContext(
+      long cumulativeGrossBrutoMinor,
+      long cumulativeDeductibleSocialMinor,
+      long cumulativeWithheldMinor,
+      int monthsInYear) {}
+
+  /**
    * Everything the calculator needs for one person, on the run's base currency.
    *
    * @param employeeId the person
@@ -47,6 +71,10 @@ public final class PayrollInputs {
    *     order; each links to a {@link StatutoryRule} via its {@code statutory_rule_key}
    * @param otherDeductions non-statutory deductions
    * @param resolvedRules the FROZEN resolved statutory rules (rule_key -> rule)
+   * @param hasNpwp whether the employee has an NPWP on file — drives the {@code TER_TABLE}/{@code
+   *     ANNUAL_PROGRESSIVE} no-NPWP x120% surcharge (UU PPh Art 21(5a))
+   * @param annualContext the December/final-month true-up context, or {@code null} for every other
+   *     month (see {@link AnnualContext})
    */
   public record PersonInput(
       UUID employeeId,
@@ -56,5 +84,7 @@ public final class PayrollInputs {
       List<EarningInput> earnings,
       List<PayComponent> statutoryComponents,
       List<DeductionInput> otherDeductions,
-      Map<String, StatutoryRule> resolvedRules) {}
+      Map<String, StatutoryRule> resolvedRules,
+      boolean hasNpwp,
+      AnnualContext annualContext) {}
 }

@@ -99,6 +99,7 @@ public class EmployeeWriter {
             command.ptkpStatus() == null ? null : PtkpStatus.from(command.ptkpStatus()),
             command.nik(),
             command.bankAccount(),
+            command.npwp(),
             command.status() == null ? null : EmployeeStatus.from(command.status()));
 
     if (changed) {

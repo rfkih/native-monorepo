@@ -2,6 +2,7 @@ package id.co.nativeapp.employee.payroll.service;
 
 import id.co.nativeapp.employee.payroll.domain.PayComponent;
 import id.co.nativeapp.employee.payroll.domain.PayComponentBearer;
+import id.co.nativeapp.employee.payroll.domain.PayrollInputs.AnnualContext;
 import id.co.nativeapp.employee.payroll.domain.PayrollInputs.DeductionInput;
 import id.co.nativeapp.employee.payroll.domain.PayrollInputs.EarningInput;
 import id.co.nativeapp.employee.payroll.domain.PayrollInputs.PersonInput;
@@ -12,6 +13,7 @@ import id.co.nativeapp.employee.payroll.dto.PayrollResult.ComputedLine;
 import id.co.nativeapp.employee.payroll.dto.PayrollResult.PersonResult;
 import id.co.nativeapp.money.Money;
 import java.util.ArrayList;
+import java.util.Currency;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Component;
@@ -30,11 +32,17 @@ import org.springframework.stereotype.Component;
  * <p>Calculation order, on the AGGREGATED multi-assignment total:
  *
  * <ol>
- *   <li>EARNINGS — base + each earning; produce gross_earnings and a taxable_base.
+ *   <li>EARNINGS — base + each earning; produce gross_earnings and the taxable cash-earnings gross.
  *   <li>SOCIAL INSURANCE — percentage-with-ceiling rules; employee leg (DEDUCTION) + employer leg
- *       (EMPLOYER-borne, not net); some legs reduce the income-tax base.
- *   <li>INCOME TAX — progressive brackets on annualized (taxable - deductible_social - PTKP
- *       relief), de-annualized; an EMPLOYEE deduction.
+ *       (EMPLOYER-borne, not net); some legs reduce the income-tax base, some EMPLOYER legs are a
+ *       taxable fringe benefit that raises the tax base ONLY (never grossEarnings/net/cash) — the
+ *       two-pass tax-base assembly (Track P phase P1, the BPJS tax-treatment matrix).
+ *   <li>INCOME TAX — exactly ONE of three families resolves per run, driven by the linked {@link
+ *       StatutoryRule}'s {@link StatutoryCalcType}: the legacy {@code PROGRESSIVE_BRACKET}
+ *       annualize/de-annualize path (byte-identical to the pre-TER illustrative behaviour), the
+ *       {@code TER_TABLE} monthly effective-rate lookup (PMK 168/2023), or the {@code
+ *       ANNUAL_PROGRESSIVE} December/final-month Art-17 true-up (needs a non-null {@link
+ *       AnnualContext}).
  *   <li>OTHER DEDUCTIONS — non-statutory employee deductions.
  *   <li>NET = gross_earnings - sum(EMPLOYEE-bearing deductions).
  * </ol>
@@ -44,22 +52,26 @@ public class GrossToNetCalculator {
 
   private static final long BP_DENOMINATOR = 10_000L;
 
+  /** PKP (taxable income) is floored to the nearest 1000 minor units (UU HPP 7/2021 convention). */
+  private static final long PKP_FLOOR_UNIT = 1_000L;
+
   /** Computes the full per-person result deterministically. */
   public PersonResult compute(PersonInput input) {
-    Money zero = Money.ofMinor(0L, input.basePay().currency());
+    Currency currency = input.basePay().currency();
+    Money zero = Money.ofMinor(0L, currency);
     List<ComputedLine> lines = new ArrayList<>();
     boolean usesIllustrative = false;
 
     // ---- 1. EARNINGS -------------------------------------------------------
     Money grossEarnings = zero;
-    Money taxableBase = zero;
+    Money taxableCashEarnings = zero;
 
     // BASE line.
     lines.add(
         new ComputedLine(input.baseComponent(), input.basePay(), input.basePay(), null, false));
     grossEarnings = grossEarnings.plus(input.basePay());
     if (input.baseComponent().isTaxable()) {
-      taxableBase = taxableBase.plus(input.basePay());
+      taxableCashEarnings = taxableCashEarnings.plus(input.basePay());
     }
 
     // Other earnings (allowances, commission, metric-driven).
@@ -68,14 +80,15 @@ public class GrossToNetCalculator {
       lines.add(new ComputedLine(earning.component(), amount, amount, null, false));
       grossEarnings = grossEarnings.plus(amount);
       if (earning.taxable()) {
-        taxableBase = taxableBase.plus(amount);
+        taxableCashEarnings = taxableCashEarnings.plus(amount);
       }
     }
 
     // ---- 2. SOCIAL INSURANCE (percentage-with-ceiling) --------------------
     Money employerContributions = zero;
     Money employeeDeductions = zero;
-    Money deductibleSocial = zero; // social legs that reduce the income-tax base
+    Money deductibleSocial = zero; // employee legs that reduce the income-tax base
+    Money employerTaxableAdditions = zero; // employer legs that are a taxable fringe benefit
 
     for (PayComponent component : statutoryByCalc(input, StatutoryCalcType.PERCENTAGE_CEILING)) {
       StatutoryRule rule = input.resolvedRules().get(component.getStatutoryRuleKey());
@@ -84,8 +97,12 @@ public class GrossToNetCalculator {
       }
       usesIllustrative |= rule.isIllustrative();
       StatutoryParams.CeilingParams params = StatutoryParams.ceiling(rule.getParamsJson());
-      Money ceiling = Money.ofMinor(params.ceilingMinor(), input.basePay().currency());
-      Money cappedBase = taxableBase.min(ceiling);
+      Money percentageBase =
+          params.baseKind() == StatutoryParams.BaseKind.BASE_PAY
+              ? input.basePay()
+              : taxableCashEarnings;
+      Money ceiling = Money.ofMinor(params.ceilingMinor(), currency);
+      Money cappedBase = percentageBase.min(ceiling);
 
       Money leg = cappedBase.applyBasisPoints(legBp(component, params));
       ComputedLine line =
@@ -100,10 +117,25 @@ public class GrossToNetCalculator {
         }
       } else {
         employerContributions = employerContributions.plus(leg);
+        if (params.employerAddsToTaxBase()) {
+          employerTaxableAdditions = employerTaxableAdditions.plus(leg);
+        }
       }
     }
 
-    // ---- 3. INCOME TAX (progressive brackets + PTKP relief) ---------------
+    // The gross bruto (Track P phase P1 two-pass tax-base assembly): taxable cash earnings PLUS
+    // taxable employer additions. Employer legs never touch grossEarnings/net — tax base only.
+    Money grossBruto = taxableCashEarnings.plus(employerTaxableAdditions);
+
+    // ---- 3. INCOME TAX ------------------------------------------------------
+    // Exactly one of the three families below resolves statutory components per run: the legacy
+    // PROGRESSIVE_BRACKET rule set does not also carry a TER_TABLE/ANNUAL_PROGRESSIVE rule (and
+    // vice-versa) — statutoryByCalc filters per-component by its RESOLVED rule's calc type, so an
+    // absent family is simply an empty loop (zero lines, zero deduction contribution).
+
+    // 3a. Legacy PROGRESSIVE_BRACKET — BYTE-IDENTICAL to the pre-TER illustrative behaviour
+    // (periodTaxable = grossBruto - deductibleSocial equals the old taxableBase - deductibleSocial
+    // whenever no rule sets employer_adds_to_tax_base, true for every existing illustrative rule).
     StatutoryRule reliefRule = ruleByCalc(input.resolvedRules(), StatutoryCalcType.RELIEF_TABLE);
     for (PayComponent component : statutoryByCalc(input, StatutoryCalcType.PROGRESSIVE_BRACKET)) {
       StatutoryRule rule = input.resolvedRules().get(component.getStatutoryRuleKey());
@@ -115,22 +147,21 @@ public class GrossToNetCalculator {
           StatutoryParams.progressive(rule.getParamsJson());
 
       int months = 12;
-      Money relief = Money.ofMinor(0L, input.basePay().currency());
+      Money relief = zero;
       if (reliefRule != null) {
         usesIllustrative |= reliefRule.isIllustrative();
         StatutoryParams.ReliefParams reliefParams =
             StatutoryParams.relief(reliefRule.getParamsJson());
         months = reliefParams.annualizationMonths();
         long reliefMinor = reliefParams.ptkpByStatus().getOrDefault(input.ptkpStatus().name(), 0L);
-        relief = Money.ofMinor(reliefMinor, input.basePay().currency());
+        relief = Money.ofMinor(reliefMinor, currency);
       }
 
-      // Period taxable income for the tax = taxable base minus deductible social legs.
-      Money periodTaxable = taxableBase.minus(deductibleSocial);
+      // Period taxable income for the tax = gross bruto minus deductible social legs.
+      Money periodTaxable = grossBruto.minus(deductibleSocial);
       // Annualize, subtract relief, floor at zero.
       Money annualTaxable = periodTaxable.multiply(months).minus(relief);
-      Money annualTax =
-          walkBrackets(annualTaxable, brackets.brackets(), input.basePay().currency());
+      Money annualTax = walkBrackets(annualTaxable, brackets.brackets(), currency);
       // De-annualize back to the period.
       Money periodTax = annualTax.mulDiv(1L, months);
 
@@ -139,6 +170,89 @@ public class GrossToNetCalculator {
               component, periodTax, periodTaxable, rule.getRuleVersion(), rule.isIllustrative()));
       // Income tax is always an EMPLOYEE deduction.
       employeeDeductions = employeeDeductions.plus(periodTax);
+    }
+
+    // 3b. TER_TABLE — PMK 168/2023 monthly effective-rate-on-WHOLE-gross lookup. No annualization,
+    // no PTKP subtraction, no biaya jabatan.
+    for (PayComponent component : statutoryByCalc(input, StatutoryCalcType.TER_TABLE)) {
+      StatutoryRule rule = input.resolvedRules().get(component.getStatutoryRuleKey());
+      if (rule == null) {
+        continue;
+      }
+      usesIllustrative |= rule.isIllustrative();
+      StatutoryParams.TerTableParams params = StatutoryParams.terTable(rule.getParamsJson());
+      StatutoryParams.TerCategoryTable category = params.categoryFor(input.ptkpStatus());
+      int rateBp = category.rateBpFor(grossBruto.amountMinor());
+      Money tax = grossBruto.applyBasisPoints(rateBp);
+      tax = applyNoNpwpSurcharge(tax, params.noNpwpSurchargeBp(), input.hasNpwp());
+
+      lines.add(
+          new ComputedLine(
+              component, tax, grossBruto, rule.getRuleVersion(), rule.isIllustrative()));
+      employeeDeductions = employeeDeductions.plus(tax);
+    }
+
+    // 3c. ANNUAL_PROGRESSIVE — the December/final-month Art-17 true-up (needs a non-null
+    // AnnualContext; a resolved rule without one is a misconfiguration and fails loudly rather than
+    // silently skip the true-up or compute against garbage).
+    for (PayComponent component : statutoryByCalc(input, StatutoryCalcType.ANNUAL_PROGRESSIVE)) {
+      StatutoryRule rule = input.resolvedRules().get(component.getStatutoryRuleKey());
+      if (rule == null) {
+        continue;
+      }
+      AnnualContext context = input.annualContext();
+      if (context == null) {
+        throw new IllegalStateException(
+            "Statutory component '"
+                + component.getComponentKey()
+                + "' resolved an ANNUAL_PROGRESSIVE rule but no AnnualContext was supplied for"
+                + " employee "
+                + input.employeeId()
+                + " — the December/final-month true-up requires the writer to inject year-to-date"
+                + " figures (Track P phase P3)");
+      }
+      usesIllustrative |= rule.isIllustrative();
+      StatutoryParams.AnnualProgressiveParams params =
+          StatutoryParams.annualProgressive(rule.getParamsJson());
+
+      Money annualGross =
+          Money.ofMinor(context.cumulativeGrossBrutoMinor(), currency).plus(grossBruto);
+      Money occupationalCost =
+          annualGross
+              .applyBasisPoints(params.occupationalCostBp())
+              .min(Money.ofMinor(params.occupationalCostCapAnnualMinor(), currency));
+      Money cumulativeDeductibleSocial =
+          Money.ofMinor(context.cumulativeDeductibleSocialMinor(), currency);
+      // Pengurang: biaya jabatan (capped) + JHT/JP-EE contributions Jan..(month-1) AND this month.
+      Money pengurang = occupationalCost.plus(cumulativeDeductibleSocial).plus(deductibleSocial);
+
+      Money relief = zero;
+      if (reliefRule != null) {
+        usesIllustrative |= reliefRule.isIllustrative();
+        StatutoryParams.ReliefParams reliefParams =
+            StatutoryParams.relief(reliefRule.getParamsJson());
+        long reliefMinor = reliefParams.ptkpByStatus().getOrDefault(input.ptkpStatus().name(), 0L);
+        relief = Money.ofMinor(reliefMinor, currency);
+      }
+
+      Money netAnnual = annualGross.minus(pengurang).minus(relief);
+      if (netAnnual.isNegative()) {
+        netAnnual = zero;
+      }
+      Money pkp = Money.ofMinor(floorToNearest(netAnnual.amountMinor(), PKP_FLOOR_UNIT), currency);
+
+      Money annualLiability = walkBrackets(pkp, params.brackets(), currency);
+      annualLiability =
+          applyNoNpwpSurcharge(annualLiability, params.noNpwpSurchargeBp(), input.hasNpwp());
+
+      Money cumulativeWithheld = Money.ofMinor(context.cumulativeWithheldMinor(), currency);
+      // MAY be negative — an over-withheld employee gets a refund line this month.
+      Money thisMonthLine = annualLiability.minus(cumulativeWithheld);
+
+      lines.add(
+          new ComputedLine(
+              component, thisMonthLine, pkp, rule.getRuleVersion(), rule.isIllustrative()));
+      employeeDeductions = employeeDeductions.plus(thisMonthLine);
     }
 
     // ---- 4. OTHER DEDUCTIONS ----------------------------------------------
@@ -171,7 +285,7 @@ public class GrossToNetCalculator {
    * multiply-then-divide rounds once (HALF_EVEN) per bracket.
    */
   private Money walkBrackets(
-      Money income, List<StatutoryParams.Bracket> brackets, java.util.Currency currency) {
+      Money income, List<StatutoryParams.Bracket> brackets, Currency currency) {
     Money tax = Money.ofMinor(0L, currency);
     long incomeMinor = income.amountMinor();
     if (incomeMinor <= 0L) {
@@ -201,6 +315,22 @@ public class GrossToNetCalculator {
       tax = tax.plus(bandAmount.applyBasisPoints(bracket.rateBp()));
     }
     return tax;
+  }
+
+  /**
+   * Applies the UU PPh Art 21(5a) no-NPWP surcharge (typically {@code 12000} bp = 120%) to a
+   * computed tax amount when the employee has no NPWP on file; returns the amount unchanged when
+   * they do.
+   */
+  private Money applyNoNpwpSurcharge(Money amount, int surchargeBp, boolean hasNpwp) {
+    return hasNpwp ? amount : amount.mulDiv(surchargeBp, BP_DENOMINATOR);
+  }
+
+  /**
+   * Floors a non-negative minor-unit amount to the nearest multiple of {@code unit} (PKP rounding).
+   */
+  private long floorToNearest(long amountMinor, long unit) {
+    return (amountMinor / unit) * unit;
   }
 
   private long legBp(PayComponent component, StatutoryParams.CeilingParams params) {

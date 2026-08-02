@@ -197,6 +197,8 @@ public class MeReader {
         me.getStatus().name(),
         me.maskedNik(),
         me.maskedBankAccount(),
+        me.hasNpwp(),
+        me.maskedNpwp(),
         assignments,
         contracts);
   }

@@ -16,6 +16,8 @@ import java.util.UUID;
  * @param status ACTIVE | INACTIVE
  * @param maskedNik the NIK, fully redacted
  * @param maskedBankAccount the bank account, masked to its last 4 digits
+ * @param hasNpwp whether an NPWP is on file
+ * @param maskedNpwp the NPWP, fully redacted, or null when none is on file
  * @param assignments the caller's assignments (current and past)
  * @param contracts the caller's employment contracts
  */
@@ -26,5 +28,7 @@ public record MeProfileResponse(
     String status,
     String maskedNik,
     String maskedBankAccount,
+    boolean hasNpwp,
+    String maskedNpwp,
     List<AssignmentResponse> assignments,
     List<ContractResponse> contracts) {}

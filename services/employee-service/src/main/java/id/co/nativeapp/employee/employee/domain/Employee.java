@@ -58,6 +58,16 @@ public class Employee extends Auditable {
   @Column(name = "bank_account", nullable = false)
   private String bankAccount;
 
+  /**
+   * The Indonesian tax id (NPWP) — PII. Column-encrypted at rest exactly like {@link #nik}, but
+   * NULLABLE with no backfill (V10): a new employee, or one HR hasn't recorded it for yet, simply
+   * has none on file. {@link #hasNpwp()} — not the plaintext — is the payroll engine's signal for
+   * the UU PPh Art 21(5a) no-NPWP x120% surcharge.
+   */
+  @Convert(converter = PiiAttributeConverter.class)
+  @Column(name = "npwp_enc")
+  private String npwp;
+
   @Enumerated(EnumType.STRING)
   @Column(name = "status", nullable = false, length = 16)
   private EmployeeStatus status;
@@ -117,6 +127,7 @@ public class Employee extends Auditable {
       PtkpStatus newPtkpStatus,
       String newNik,
       String newBankAccount,
+      String newNpwp,
       EmployeeStatus newStatus) {
     boolean changed = false;
     if (newFullName != null) {
@@ -141,6 +152,13 @@ public class Employee extends Auditable {
       String trimmed = requireNonBlank(newBankAccount, "bankAccount");
       if (!trimmed.equals(this.bankAccount)) {
         this.bankAccount = trimmed;
+        changed = true;
+      }
+    }
+    if (newNpwp != null) {
+      String trimmed = requireNonBlank(newNpwp, "npwp");
+      if (!trimmed.equals(this.npwp)) {
+        this.npwp = trimmed;
         changed = true;
       }
     }
@@ -272,6 +290,23 @@ public class Employee extends Auditable {
   }
 
   /**
+   * Whether an NPWP is on file — the payroll engine's no-PII signal for the UU PPh Art 21(5a)
+   * no-NPWP x120% surcharge. NOT the plaintext.
+   */
+  public boolean hasNpwp() {
+    return npwp != null && !npwp.isBlank();
+  }
+
+  /**
+   * The NPWP fully redacted for a response/DTO (mirrors {@link #maskedNik()} — too sensitive to
+   * partially reveal), or {@code null} when none is on file. The raw plaintext is NEVER returned
+   * (rule 6).
+   */
+  public String maskedNpwp() {
+    return PiiMasking.redact(npwp);
+  }
+
+  /**
    * The raw decrypted NIK. <strong>Restricted:</strong> intended only for the encrypt/decrypt path
    * and authorized internal use — it is never placed in a response, log, or event. Package-private
    * so only the feature can reach it (e.g. a round-trip test in the same package).
@@ -283,6 +318,14 @@ public class Employee extends Auditable {
   /** The raw decrypted bank account. Restricted exactly as {@link #nikPlaintext()}. */
   String bankAccountPlaintext() {
     return bankAccount;
+  }
+
+  /**
+   * The raw decrypted NPWP, or null if none is on file. Restricted exactly as {@link
+   * #nikPlaintext()}.
+   */
+  String npwpPlaintext() {
+    return npwp;
   }
 
   /**

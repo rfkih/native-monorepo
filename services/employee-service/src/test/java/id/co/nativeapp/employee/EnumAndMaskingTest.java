@@ -45,17 +45,20 @@ class EnumAndMaskingTest {
         new Employee("Budi", PtkpStatus.TK0, "3201000000000000", "1111222233334444");
 
     // A no-op update (identical values, all nulls) reports no change.
-    assertThat(employee.update(null, null, null, null, null)).isFalse();
-    assertThat(employee.update("Budi", PtkpStatus.TK0, null, null, EmployeeStatus.ACTIVE))
+    assertThat(employee.update(null, null, null, null, null, null)).isFalse();
+    assertThat(employee.update("Budi", PtkpStatus.TK0, null, null, null, EmployeeStatus.ACTIVE))
         .isFalse();
 
     // A real change reports true and applies.
-    assertThat(employee.update("Budi Santoso", null, null, null, EmployeeStatus.INACTIVE)).isTrue();
+    assertThat(employee.update("Budi Santoso", null, null, null, null, EmployeeStatus.INACTIVE))
+        .isTrue();
     assertThat(employee.getFullName()).isEqualTo("Budi Santoso");
     assertThat(employee.getStatus()).isEqualTo(EmployeeStatus.INACTIVE);
 
     // Changing the PII updates it (still masked everywhere).
-    assertThat(employee.update(null, PtkpStatus.K2, "3209999999999999", "5555666677778888", null))
+    assertThat(
+            employee.update(
+                null, PtkpStatus.K2, "3209999999999999", "5555666677778888", null, null))
         .isTrue();
     assertThat(employee.getPtkpStatus()).isEqualTo(PtkpStatus.K2);
     assertThat(employee.maskedBankAccount()).isEqualTo("****8888");
@@ -66,5 +69,23 @@ class EnumAndMaskingTest {
     Employee employee = new Employee("X", PtkpStatus.TK0, "3201000000000000", "12");
     // Too short to reveal a last-4 tail safely.
     assertThat(employee.maskedBankAccount()).isEqualTo("****");
+  }
+
+  @Test
+  void npwpStartsAbsentAndBecomesSetOnUpdateThenMasksFully() {
+    Employee employee =
+        new Employee("Budi", PtkpStatus.TK0, "3201000000000000", "1111222233334444");
+
+    // No NPWP on file yet — a new employee, or one HR hasn't recorded it for yet.
+    assertThat(employee.hasNpwp()).isFalse();
+    assertThat(employee.maskedNpwp()).isNull();
+
+    // Setting it reports a real change and is fully redacted (rule 6), same as the NIK.
+    assertThat(employee.update(null, null, null, null, "091234567891000", null)).isTrue();
+    assertThat(employee.hasNpwp()).isTrue();
+    assertThat(employee.maskedNpwp()).isEqualTo("***REDACTED***");
+
+    // Re-applying the same value is a no-op.
+    assertThat(employee.update(null, null, null, null, "091234567891000", null)).isFalse();
   }
 }

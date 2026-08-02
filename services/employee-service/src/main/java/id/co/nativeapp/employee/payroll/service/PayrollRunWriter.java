@@ -476,7 +476,13 @@ public class PayrollRunWriter {
         List.copyOf(earnings),
         List.copyOf(statutoryComponents),
         List.copyOf(deductions),
-        resolvedRules);
+        resolvedRules,
+        employee.hasNpwp(),
+        // The December/final-month Art-17 true-up context is null on every run in this phase — the
+        // active-payslip-history decrypt-and-sum that builds it is Track P phase P3; until then no
+        // resolved rule set may legally carry an ANNUAL_PROGRESSIVE rule, so the calculator never
+        // needs one.
+        null);
   }
 
   private void resolveEarningRule(
