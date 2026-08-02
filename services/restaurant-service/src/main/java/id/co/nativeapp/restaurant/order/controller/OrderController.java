@@ -2,6 +2,7 @@ package id.co.nativeapp.restaurant.order.controller;
 
 import id.co.nativeapp.restaurant.order.dto.CheckoutRequest;
 import id.co.nativeapp.restaurant.order.dto.CheckoutResult;
+import id.co.nativeapp.restaurant.order.dto.ItemPopularityResponse;
 import id.co.nativeapp.restaurant.order.dto.OrderResponse;
 import id.co.nativeapp.restaurant.order.dto.ParkOrderRequest;
 import id.co.nativeapp.restaurant.order.dto.ParkedOrderSummary;
@@ -119,6 +120,21 @@ public class OrderController {
           "Unsupported status filter: " + status + ". Supported: PARKED");
     }
     return ResponseEntity.ok(orderService.listParked(businessId));
+  }
+
+  /**
+   * Units sold per menu item at a business (completed walk-in orders + paid bill lines),
+   * best-sellers first. The POS uses it to sort the "All" tab by popularity. Returns {@code 200
+   * OK} with the ranking (empty list when nothing has been sold yet).
+   */
+  @Operation(
+      summary = "Menu-item sales popularity",
+      description =
+          "Units sold per menu item at a business (completed walk-in orders + paid bill lines),"
+              + " best-sellers first. Returns 200 OK; empty list when nothing has been sold yet.")
+  @GetMapping("/item-popularity")
+  public ResponseEntity<List<ItemPopularityResponse>> itemPopularity(@RequestParam UUID businessId) {
+    return ResponseEntity.ok(orderService.itemPopularity(businessId));
   }
 
   /**

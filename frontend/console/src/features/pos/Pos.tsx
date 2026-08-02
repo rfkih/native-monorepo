@@ -58,6 +58,7 @@ import {
   useMenu,
   useCategories,
   useEffectiveRules,
+  useItemPopularity,
   useTables,
   useParkedOrders,
   type MenuItem,
@@ -134,6 +135,7 @@ function PosInner({ session }: { session: CompanySession }) {
   const billsQuery = useBills(session)
   const appendLines = useAppendLines(session)
   const effectiveRulesQuery = useEffectiveRules(session)
+  const popularityQuery = useItemPopularity(session)
 
   // Phase 5 offline mode (ADR 0028). When the live catalog/rules queries have no data at all (a
   // fresh page load while offline — the common case is a query that already succeeded THIS session
@@ -259,12 +261,22 @@ function PosInner({ session }: { session: CompanySession }) {
   // `!cat → return true` branch shows everything.
   const resolvedCategoryId: string = activeCategoryId ?? ''
 
-  // Filtered items — memoized; hoist trimmed lower-case search once (logic in lib/categories.ts)
+  // Filtered items — memoized; hoist trimmed lower-case search once (logic in lib/categories.ts).
+  // The "All" tab (and only it) orders best-sellers first: units ever sold per item (completed
+  // walk-in orders + paid bill lines, useItemPopularity). Ties/no-data keep the API order (stable
+  // sort), so a brand-new outlet still renders and offline simply falls back unsorted.
   const searchLower = searchQuery.trim().toLowerCase()
-  const visibleItems = useMemo(
-    () => visibleMenuItems(items, orderedCategories, resolvedCategoryId, searchLower),
-    [items, orderedCategories, resolvedCategoryId, searchLower],
-  )
+  const popularity = popularityQuery.data
+  const visibleItems = useMemo(() => {
+    const base = visibleMenuItems(items, orderedCategories, resolvedCategoryId, searchLower)
+    if (activeCategoryId !== null || searchLower || !popularity || popularity.length === 0) {
+      return base
+    }
+    const soldByItem = new Map(popularity.map((row) => [row.menuItemId, row.soldQty]))
+    return [...base].sort(
+      (a, b) => (soldByItem.get(b.id) ?? 0) - (soldByItem.get(a.id) ?? 0),
+    )
+  }, [items, orderedCategories, resolvedCategoryId, searchLower, activeCategoryId, popularity])
 
   // Cart helpers — memoized
   const cartLines: OrderLineInput[] = useMemo(

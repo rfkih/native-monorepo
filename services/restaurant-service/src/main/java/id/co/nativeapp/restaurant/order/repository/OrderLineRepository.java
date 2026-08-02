@@ -1,6 +1,7 @@
 package id.co.nativeapp.restaurant.order.repository;
 
 import id.co.nativeapp.restaurant.order.domain.OrderLine;
+import id.co.nativeapp.restaurant.order.projection.ItemPopularityView;
 import id.co.nativeapp.restaurant.order.projection.OrderLineView;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import java.util.List;
@@ -37,4 +38,36 @@ public interface OrderLineRepository extends JpaRepository<OrderLine, UUID> {
           """,
       nativeQuery = true)
   List<OrderLineView> findViewsByOrderId(@Param("orderId") UUID orderId);
+
+  /**
+   * Units SOLD per menu item at a business, best-sellers first — the union of (a) lines on
+   * COMPLETED walk-in orders and (b) PAID bill lines (a guest-tab line only counts once its check
+   * is settled). Projected to {@link ItemPopularityView}; RLS additionally scopes both sides to
+   * the session tenant (rule 5).
+   */
+  @Query(
+      value =
+          """
+          SELECT t.menu_item_id AS menu_item_id,
+                 SUM(t.sold_qty) AS sold_qty
+            FROM (
+                  SELECT ol.menu_item_id AS menu_item_id, SUM(ol.qty) AS sold_qty
+                    FROM order_line ol
+                    JOIN restaurant_order o ON o.id = ol.order_id
+                   WHERE o.business_id = :businessId
+                     AND o.status = 'COMPLETED'
+                   GROUP BY ol.menu_item_id
+                  UNION ALL
+                  SELECT bl.menu_item_id AS menu_item_id, SUM(bl.qty) AS sold_qty
+                    FROM bill_line bl
+                    JOIN bill b ON b.id = bl.bill_id
+                   WHERE b.business_id = :businessId
+                     AND bl.paid = TRUE
+                   GROUP BY bl.menu_item_id
+                 ) t
+           GROUP BY t.menu_item_id
+           ORDER BY sold_qty DESC
+          """,
+      nativeQuery = true)
+  List<ItemPopularityView> itemPopularityByBusinessId(@Param("businessId") UUID businessId);
 }

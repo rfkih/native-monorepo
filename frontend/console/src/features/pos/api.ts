@@ -313,6 +313,29 @@ export function useQuote(
   })
 }
 
+/** One row of the best-seller ranking (GET /api/v1/orders/item-popularity). */
+export interface ItemPopularityResponse {
+  menuItemId: string
+  soldQty: number
+}
+
+/**
+ * Units sold per menu item (completed walk-in orders + paid bill lines), best-sellers first —
+ * the "All" tab sorts by this. Refreshes lazily (5 min stale time); offline or failed → the
+ * caller falls back to the unsorted order.
+ */
+export function useItemPopularity(session: CompanySession) {
+  return useQuery({
+    queryKey: ['item-popularity', session.companyId, session.businessId],
+    staleTime: 5 * 60_000,
+    queryFn: () =>
+      apiFetch<ItemPopularityResponse[]>('/api/v1/orders/item-popularity', {
+        tenant: tenantOf(session),
+        query: { businessId: session.businessId },
+      }),
+  })
+}
+
 export function useMenu(session: CompanySession) {
   return useQuery({
     queryKey: ['menu', session.companyId, session.businessId],

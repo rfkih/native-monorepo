@@ -2,6 +2,7 @@ package id.co.nativeapp.restaurant.order.service;
 
 import id.co.nativeapp.restaurant.order.dto.CheckoutRequest;
 import id.co.nativeapp.restaurant.order.dto.CheckoutResult;
+import id.co.nativeapp.restaurant.order.dto.ItemPopularityResponse;
 import id.co.nativeapp.restaurant.order.dto.OrderResponse;
 import id.co.nativeapp.restaurant.order.dto.ParkOrderRequest;
 import id.co.nativeapp.restaurant.order.dto.ParkedOrderSummary;
@@ -9,6 +10,7 @@ import id.co.nativeapp.restaurant.order.dto.PayParkedRequest;
 import id.co.nativeapp.restaurant.order.dto.PriceBreakdownResponse;
 import id.co.nativeapp.restaurant.order.dto.QuoteRequest;
 import id.co.nativeapp.restaurant.order.projection.ParkedOrderView;
+import id.co.nativeapp.restaurant.order.repository.OrderLineRepository;
 import id.co.nativeapp.restaurant.order.repository.OrderRepository;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
@@ -36,11 +38,17 @@ public class OrderService {
   private final OrderWriter writer;
   private final OrderReader reader;
   private final OrderRepository orderRepository;
+  private final OrderLineRepository orderLineRepository;
 
-  public OrderService(OrderWriter writer, OrderReader reader, OrderRepository orderRepository) {
+  public OrderService(
+      OrderWriter writer,
+      OrderReader reader,
+      OrderRepository orderRepository,
+      OrderLineRepository orderLineRepository) {
     this.writer = writer;
     this.reader = reader;
     this.orderRepository = orderRepository;
+    this.orderLineRepository = orderLineRepository;
   }
 
   /**
@@ -122,6 +130,18 @@ public class OrderService {
     TenantContext.require();
     return orderRepository.findParkedViewsByBusinessId(businessId).stream()
         .map(OrderService::toParkedSummary)
+        .toList();
+  }
+
+  /**
+   * Units sold per menu item (completed walk-in orders + paid bill lines), best-sellers first —
+   * the POS sorts its "All" tab with this. Read-only; RLS-scoped.
+   */
+  @Transactional(readOnly = true)
+  public List<ItemPopularityResponse> itemPopularity(UUID businessId) {
+    TenantContext.require();
+    return orderLineRepository.itemPopularityByBusinessId(businessId).stream()
+        .map(v -> new ItemPopularityResponse(v.getMenuItemId(), v.getSoldQty()))
         .toList();
   }
 
