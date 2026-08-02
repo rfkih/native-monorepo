@@ -95,8 +95,10 @@ export interface AppendLinesInput {
 export interface PayBillInput {
   billId: string
   payment?: {
-    tenderType: 'CASH' | 'QRIS' | 'CARD'
+    tenderType: 'CASH' | 'QRIS' | 'CARD' | 'ONLINE'
     tenderedMinor?: number
+    /** Required for ONLINE — the picked sales channel's immutable UPPERCASE code (ADR 0036 Phase B). */
+    channelCode?: string
   }
   discountMinor?: number
   /** Restrict this check to a subset of unpaid lines (Increment 3 split-by-item). */

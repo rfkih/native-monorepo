@@ -28,8 +28,10 @@ import { TenderPickerRow, type PosTender } from '@/features/pos-shell/payment/Te
 import { CashPanelView } from '@/features/pos-shell/payment/CashPanelView'
 import { DigitalInitiateView, DigitalPendingView } from '@/features/pos-shell/payment/DigitalPanelViews'
 import { FullCoverageView } from '@/features/pos-shell/payment/FullCoverageView'
+import { ChannelListPanelView } from '@/features/pos-shell/payment/ChannelListPanelView'
 import { CheckoutErrorText } from '@/features/pos-shell/payment/CheckoutErrorText'
 import { usePaymentAttempt } from '@/features/pos-shell/payment/usePaymentAttempt'
+import { useSalesChannels, type SalesChannel } from '@/features/channels/channelsApi'
 import { OfflineHint } from './offline/OfflineHint'
 import { enqueueSale } from './offline/queue'
 import type { ProvisionalTotals, SaleQueueRow } from './offline/db'
@@ -124,6 +126,11 @@ export function PaymentModal({
   const { t } = useTranslation()
   const [tender, setTender] = useState<PosTender>('CASH')
 
+  // ADR 0036 Phase B3: the ONLINE tender's channel roster — fetched only while this payment
+  // surface is mounted (component-scoped, like usePaymentAttempt's key), and never while offline
+  // (a platform order needs a live round-trip regardless).
+  const channelsQuery = useSalesChannels(session, { enabled: !offline })
+
   // Phase 4 (ADR 0027): gift-card redemption is entered HERE (unlike the loyalty member, which is
   // attached upstream). `residualDueMinor` is the identity the server's PriceBreakdownResponse
   // factory uses — no second quote round-trip needed (see GiftCardField's class doc).
@@ -133,6 +140,16 @@ export function PaymentModal({
   // offline, so it is never applied and the residual is simply the provisional grand total.
   const residualDueMinor = offline ? grandTotalMinor : Math.max(0, grandTotalMinor - giftCardRedeemMinor)
   const fullyCoveredByGiftCard = !offline && giftCard != null && residualDueMinor === 0
+
+  // ADR 0036: ONLINE "carries no gift-card/loyalty legs" — the server rejects the combination, so
+  // the picker disables ONLINE outright whenever either is active rather than ever letting the
+  // cashier build the invalid payload. Offline is included too (TenderPickerRow only ever renders
+  // reachable while !offline, but the guard is correct/self-documenting either way — ADR 0028).
+  const onlineDisabledReason = offline
+    ? t('offline.disabled.onlineTender')
+    : giftCardRedeemMinor > 0 || (loyaltyRedeemPoints ?? 0) > 0
+      ? t('pos.payment.onlineBlockedByRedemption')
+      : null
 
   // Phase 6 (ADR 0029): opening this modal (and any change to what's due) is a PAYMENT_STARTED
   // transition for the customer display. No-ops when no display has ever been opened.
@@ -177,11 +194,16 @@ export function PaymentModal({
       <PaymentBreakdown breakdown={breakdown} grandTotalMinor={grandTotalMinor} currency={currency} locale={locale} />
 
       {/* Gift-card redemption (Phase 4, ADR 0027) — a checkout-time server lookup, unreachable
-          offline (Phase 5, ADR 0028). */}
+          offline (Phase 5, ADR 0028) and hidden for ONLINE (ADR 0036: the server rejects ONLINE
+          combined with a gift-card redemption — never let the cashier build that payload). */}
       {offline ? (
         <div className="border-b border-line px-5 py-3 space-y-1.5">
           <OfflineHint text={t('offline.disabled.digitalTender')} />
           <OfflineHint text={t('offline.disabled.giftCard')} />
+        </div>
+      ) : tender === 'ONLINE' ? (
+        <div className="border-b border-line px-5 py-3">
+          <p className="text-xs text-ink-3">{t('pos.payment.giftCardUnavailableOnline')}</p>
         </div>
       ) : (
         <div className="border-b border-line px-5 py-3">
@@ -223,9 +245,23 @@ export function PaymentModal({
         <RestaurantFullCoverageAttempt attempt={attempt} giftCardRedeemMinor={giftCardRedeemMinor} currency={currency} locale={locale} />
       ) : (
         <>
-          <TenderPickerRow value={tender} onChange={setTender} />
+          <TenderPickerRow
+            value={tender}
+            onChange={setTender}
+            showOnline
+            onlineDisabledReason={onlineDisabledReason}
+          />
           {tender === 'CASH' ? (
             <RestaurantCashAttempt attempt={attempt} chargeMinor={residualDueMinor} currency={currency} locale={locale} />
+          ) : tender === 'ONLINE' ? (
+            <RestaurantOnlineAttempt
+              attempt={attempt}
+              chargeMinor={residualDueMinor}
+              currency={currency}
+              locale={locale}
+              channels={channelsQuery.data ?? []}
+              channelsError={channelsQuery.isError}
+            />
           ) : (
             <RestaurantDigitalAttempt attempt={attempt} chargeMinor={residualDueMinor} currency={currency} locale={locale} tenderType={tender} />
           )}
@@ -485,6 +521,97 @@ function RestaurantDigitalAttempt({
       captureError={capture.isError}
       onConfirm={confirmPayment}
       onCancel={onClose}
+    />
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Online attempt — a platform-channel order (ADR 0036 Phase B3): one-shot checkout, synchronous
+// capture, EXACT amount (no keypad/change), no gift-card/loyalty legs.
+// ---------------------------------------------------------------------------
+
+function RestaurantOnlineAttempt({
+  attempt,
+  chargeMinor,
+  currency,
+  locale,
+  channels,
+  channelsError,
+}: {
+  attempt: AttemptArgs
+  chargeMinor: number
+  currency: string
+  locale: string
+  channels: SalesChannel[]
+  channelsError: boolean
+}) {
+  const { t } = useTranslation()
+  const { session, lines, onSuccess, onClose, parkedOrderId, orderType, tableId } = attempt
+  const checkout = useCheckout(session)
+  const payParked = usePayParked(session)
+
+  // One idempotency key per payment ATTEMPT (panel mount), reused across retries (review W2).
+  const idempotencyKey = usePaymentAttempt()
+
+  const isBusy = checkout.isPending || payParked.isPending
+
+  function pay(channelCode: string) {
+    // Defense-in-depth (the tender picker already blocks ONLINE while either is active — see
+    // onlineDisabledReason above): the ONLINE payload NEVER carries a gift-card or loyalty
+    // redemption, mirroring the offline cash attempt's explicit-zero idiom.
+    if (parkedOrderId) {
+      payParked.mutate(
+        {
+          orderId: parkedOrderId,
+          payment: { tenderType: 'ONLINE', channelCode },
+          couponCode: attempt.couponCode,
+          loyaltyMemberId: attempt.loyaltyMemberId,
+          loyaltyRedeemPoints: 0,
+          giftCardId: null,
+          giftCardRedeemMinor: 0,
+        },
+        { onSuccess: (res) => (res?.payment ? onSuccess(res, res.payment) : onClose()) },
+      )
+    } else {
+      checkout.mutate(
+        {
+          idempotencyKey,
+          lines,
+          payment: { tenderType: 'ONLINE', channelCode },
+          discountMinor: attempt.discountMinor,
+          orderType,
+          tableId,
+          couponCode: attempt.couponCode,
+          loyaltyMemberId: attempt.loyaltyMemberId,
+          loyaltyRedeemPoints: 0,
+          giftCardId: null,
+          giftCardRedeemMinor: 0,
+        },
+        { onSuccess: (res) => (res?.payment ? onSuccess(res, res.payment) : onClose()) },
+      )
+    }
+  }
+
+  return (
+    <ChannelListPanelView
+      channels={channels}
+      chargeMinor={chargeMinor}
+      currency={currency}
+      locale={locale}
+      busy={isBusy}
+      errorSlot={
+        <>
+          {channelsError ? (
+            <p className="mb-3 text-xs text-loss" role="alert">
+              {t('pos.payment.channelsLoadError')}
+            </p>
+          ) : null}
+          {checkout.isError || payParked.isError ? (
+            <CheckoutErrorText error={checkout.error ?? payParked.error} />
+          ) : null}
+        </>
+      }
+      onPay={pay}
     />
   )
 }

@@ -20,7 +20,7 @@ import type { CompanySession } from '@/lib/session'
 import type { GiftCardResponse, MemberResponse } from '@/features/loyalty/api'
 import { PaymentSurfaceFrame } from '@/features/pos-shell/payment/PaymentSurfaceFrame'
 import { PaymentBreakdown } from '@/features/pos-shell/payment/PaymentBreakdown'
-import { TenderPickerRow, type PosTender } from '@/features/pos-shell/payment/TenderPickerRow'
+import { TenderPickerRow } from '@/features/pos-shell/payment/TenderPickerRow'
 import { CashPanelView } from '@/features/pos-shell/payment/CashPanelView'
 import { DigitalInitiateView, DigitalPendingView } from '@/features/pos-shell/payment/DigitalPanelViews'
 import { FullCoverageView } from '@/features/pos-shell/payment/FullCoverageView'
@@ -84,6 +84,14 @@ interface TicketAttemptArgs {
   onClose: () => void
 }
 
+/**
+ * Carwash/barbershop tickets have no channel-checkout contract yet (ADR 0036 Phase B3 is
+ * restaurant orders/bills only) — this vertical's own tender stays the pre-ONLINE trio.
+ * `TenderPickerRow` defaults `showOnline` to false, so the ONLINE option is never rendered here;
+ * this local, narrower type keeps every wire payload below honest about that at compile time too.
+ */
+type ServiceTender = 'CASH' | 'QRIS' | 'CARD'
+
 export function ServicePaymentModal({
   config,
   session,
@@ -105,7 +113,7 @@ export function ServicePaymentModal({
   onOfflineSuccess,
 }: Props) {
   const { t } = useTranslation()
-  const [tender, setTender] = useState<PosTender>('CASH')
+  const [tender, setTender] = useState<ServiceTender>('CASH')
 
   // Phase 4 (ADR 0027): gift-card redemption entered HERE — see PaymentModal's class doc for the
   // residual/full-coverage design (identical here).
@@ -193,7 +201,10 @@ export function ServicePaymentModal({
         <ServiceFullCoverageAttempt attempt={attempt} giftCardRedeemMinor={giftCardRedeemMinor} currency={currency} locale={locale} />
       ) : (
         <>
-          <TenderPickerRow value={tender} onChange={setTender} />
+          {/* showOnline defaults false — see the ServiceTender doc above. The narrowing guard
+              (excluding 'ONLINE') is unreachable in practice but keeps this type-safe without a
+              cast, since TenderPickerRow's onChange is typed against the shared PosTender union. */}
+          <TenderPickerRow value={tender} onChange={(t) => t !== 'ONLINE' && setTender(t)} />
           {tender === 'CASH' ? (
             <ServiceCashAttempt attempt={attempt} chargeMinor={residualDueMinor} currency={currency} locale={locale} />
           ) : (
@@ -206,7 +217,7 @@ export function ServicePaymentModal({
 }
 
 /** The checkout mutation body every attempt shares (the ticket wire shape). */
-function ticketBody(a: TicketAttemptArgs, idempotencyKey: string, payment: { tenderType: PosTender; tenderedMinor?: number }) {
+function ticketBody(a: TicketAttemptArgs, idempotencyKey: string, payment: { tenderType: ServiceTender; tenderedMinor?: number }) {
   return {
     idempotencyKey,
     bay: a.bay,

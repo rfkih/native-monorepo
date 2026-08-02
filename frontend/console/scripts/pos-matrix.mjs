@@ -16,6 +16,9 @@
  *      (incl. "Nasi Goreng Special" with modifier groups), Acme Car Wash packages,
  *      Acme Barbershop services + barbers. Outlet ids below are the dev-stack ids;
  *      override via NATIVE_SHOT_OUTLET_RESTAURANT / _CARWASH / _BARBERSHOP.
+ *      Optional: at least one active /channels sales channel (ADR 0036 Phase B3) to capture the
+ *      ONLINE tender's populated state — without one the shot still succeeds, just showing the
+ *      panel's empty state instead.
  *
  * Usage:
  *   node scripts/pos-matrix.mjs [--base http://localhost:5173] [--out shots/base]
@@ -177,6 +180,14 @@ await scenario('restaurant-flow', async () => {
   await page.getByRole('tab', { name: 'QRIS' }).first().click()
   await page.waitForTimeout(400)
   await shot('restaurant-payment-digital')
+
+  // ONLINE panel (ADR 0036 Phase B3) — the sales-channel picker. Renders its empty state (with a
+  // hint to add one in the dashboard) if the dev stack has no /channels seeded yet; either way the
+  // shot captures the panel-open state the task asked for.
+  await page.getByRole('tab', { name: 'Online' }).first().click()
+  await page.waitForTimeout(400)
+  await shot('restaurant-payment-online')
+
   await page.getByRole('tab', { name: 'Cash' }).first().click()
   await page.waitForTimeout(300)
 

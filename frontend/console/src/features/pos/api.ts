@@ -166,7 +166,7 @@ export interface PriceBreakdownResponse {
 export interface PaymentResponse {
   paymentId: string
   orderId: string
-  /** String name of TenderType enum: CASH | QRIS | CARD */
+  /** String name of TenderType enum: CASH | QRIS | CARD | ONLINE */
   tenderType: string
   /** String name of Payment.Status enum: PENDING | CAPTURED | VOIDED | REFUNDED | PARTIALLY_REFUNDED | ABANDONED | FAILED */
   status: string
@@ -209,11 +209,17 @@ export interface OrderResponse {
   tableId: string | null
 }
 
-/** Payment block sent on checkout — tenderType must be CASH | QRIS | CARD. */
+/** Payment block sent on checkout — tenderType must be CASH | QRIS | CARD | ONLINE. */
 export interface CheckoutPaymentInput {
-  tenderType: 'CASH' | 'QRIS' | 'CARD'
-  /** Required for CASH: the physical amount handed over in minor units. Ignored for digital. */
+  tenderType: 'CASH' | 'QRIS' | 'CARD' | 'ONLINE'
+  /** Required for CASH: the physical amount handed over in minor units. Ignored for digital/ONLINE. */
   tenderedMinor?: number
+  /**
+   * Required for ONLINE — the picked sales channel's immutable UPPERCASE code (ADR 0036 Phase B).
+   * Sent ONLY with tenderType 'ONLINE'; the server rejects ONLINE combined with a gift-card or
+   * loyalty-points redemption, or a missing/inactive channel.
+   */
+  channelCode?: string
 }
 
 function tenantOf(session: CompanySession) {

@@ -7,20 +7,25 @@
  *   - The idempotency key is minted by BillDetail per pay-initiation and passed as a PROP
  *     (freshIdempotencyKey — see usePaymentAttempt's doc for why bills are the exception).
  *   - Digital tenders are ONE-step (pay directly; no PENDING/capture leg) with a ghost cancel.
- *   - No gift-card field, no coupon/loyalty detail (ADR 0026/0027 scope), 'simple' breakdown.
+ *   - No gift-card field, no coupon/loyalty detail (ADR 0026/0027 scope), 'simple' breakdown —
+ *     which also means ONLINE (ADR 0036 Phase B3) has nothing to hide/disable here: bills never
+ *     carry a gift-card or loyalty redemption in the first place, so the tender is always offered.
  *   - Stacks over the bill sheet at z-[60].
  *
  * Money rule (rule 8): all amounts are integer minor units.
  * Strings rule (rule 9): all user-facing text is in i18n keys.
  */
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { CompanySession } from '@/lib/session'
 import { PaymentSurfaceFrame } from '@/features/pos-shell/payment/PaymentSurfaceFrame'
 import { PaymentBreakdown } from '@/features/pos-shell/payment/PaymentBreakdown'
 import { TenderPickerRow, type PosTender } from '@/features/pos-shell/payment/TenderPickerRow'
 import { CashPanelView } from '@/features/pos-shell/payment/CashPanelView'
 import { DigitalInitiateView } from '@/features/pos-shell/payment/DigitalPanelViews'
+import { ChannelListPanelView } from '@/features/pos-shell/payment/ChannelListPanelView'
 import { CheckoutErrorText } from '@/features/pos-shell/payment/CheckoutErrorText'
+import { useSalesChannels } from '@/features/channels/channelsApi'
 import { usePayBill, type BillResponse } from './billsApi'
 
 interface Props {
@@ -47,8 +52,11 @@ export function BillPaymentModal({
   onSuccess,
   onClose,
 }: Props) {
+  const { t } = useTranslation()
   const [tender, setTender] = useState<PosTender>('CASH')
   const payBill = usePayBill(session)
+  // ADR 0036 Phase B3: fetched only while this payment surface is mounted, same as PaymentModal.
+  const channelsQuery = useSalesChannels(session)
 
   const currency = bill.currency
   // For a split check use the caller-supplied subtotal; otherwise fall back to the full breakdown.
@@ -60,8 +68,18 @@ export function BillPaymentModal({
   const breakdown = lineIds && lineIds.length > 0 ? null : bill.breakdown
 
   const errorSlot = payBill.isError ? <CheckoutErrorText error={payBill.error} /> : null
+  const onlineErrorSlot = (
+    <>
+      {channelsQuery.isError ? (
+        <p className="mb-3 text-xs text-loss" role="alert">
+          {t('pos.payment.channelsLoadError')}
+        </p>
+      ) : null}
+      {errorSlot}
+    </>
+  )
 
-  function pay(payment: { tenderType: PosTender; tenderedMinor?: number }) {
+  function pay(payment: { tenderType: PosTender; tenderedMinor?: number; channelCode?: string }) {
     payBill.mutate(
       { billId: bill.id, payment, lineIds, idempotencyKey },
       { onSuccess: () => onSuccess() },
@@ -78,7 +96,7 @@ export function BillPaymentModal({
         variant="simple"
       />
 
-      <TenderPickerRow value={tender} onChange={setTender} />
+      <TenderPickerRow value={tender} onChange={setTender} showOnline />
 
       {tender === 'CASH' ? (
         <CashPanelView
@@ -89,6 +107,16 @@ export function BillPaymentModal({
           busy={payBill.isPending}
           errorSlot={errorSlot}
           onPay={(tenderedMinor) => pay({ tenderType: 'CASH', tenderedMinor })}
+        />
+      ) : tender === 'ONLINE' ? (
+        <ChannelListPanelView
+          channels={channelsQuery.data ?? []}
+          chargeMinor={grandTotalMinor}
+          currency={currency}
+          locale={locale}
+          busy={payBill.isPending}
+          errorSlot={onlineErrorSlot}
+          onPay={(channelCode) => pay({ tenderType: 'ONLINE', channelCode })}
         />
       ) : (
         // Bills settle digital tenders in ONE step (no PENDING/capture leg) with a ghost cancel.
