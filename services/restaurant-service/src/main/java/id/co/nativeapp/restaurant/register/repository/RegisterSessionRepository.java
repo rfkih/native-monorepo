@@ -88,8 +88,8 @@ public interface RegisterSessionRepository extends JpaRepository<RegisterSession
 
   /**
    * Σ CASH refund DELTAS paid out of the drawer in the window — exact per-refund attribution via
-   * the append-only {@code payment_refund} ledger (V22, review C3: summing the payment's
-   * CUMULATIVE refunded_minor double-counted partial refunds spanning sessions).
+   * the append-only {@code payment_refund} ledger (V22, review C3: summing the payment's CUMULATIVE
+   * refunded_minor double-counted partial refunds spanning sessions).
    */
   @Query(
       value =

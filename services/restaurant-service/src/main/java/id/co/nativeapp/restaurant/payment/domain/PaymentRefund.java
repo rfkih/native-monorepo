@@ -15,9 +15,9 @@ import org.hibernate.type.SqlTypes;
 /**
  * One row per REFUND EVENT — the append-only refund ledger (V22, ADR 0036 review C3). {@code
  * payment.refunded_minor} stays the cumulative total (the domain guard), but window-scoped
- * consumers (the register close's cash-refunds sum) need the per-refund DELTA at its own
- * timestamp: attributing a cumulative total to one window double-counts partial refunds that span
- * sessions. Money rule 8: integer minor units + ISO-4217.
+ * consumers (the register close's cash-refunds sum) need the per-refund DELTA at its own timestamp:
+ * attributing a cumulative total to one window double-counts partial refunds that span sessions.
+ * Money rule 8: integer minor units + ISO-4217.
  */
 @Entity
 @Table(name = "payment_refund")

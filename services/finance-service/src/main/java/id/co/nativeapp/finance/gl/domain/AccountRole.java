@@ -239,8 +239,8 @@ public enum AccountRole {
 
   /**
    * Register-close cash OVER (selisih kas lebih, ADR 0036) — the other-income side: Dr
-   * CASH_CLEARING / Cr this when the counted drawer EXCEEDS expected. Illustrative seed 4300
-   * (V43); SME-gated.
+   * CASH_CLEARING / Cr this when the counted drawer EXCEEDS expected. Illustrative seed 4300 (V43);
+   * SME-gated.
    */
   CASH_OVER_INCOME
 }

@@ -32,8 +32,8 @@ import org.springframework.transaction.annotation.Transactional;
  * <ul>
  *   <li>SHORT ({@code over_short < 0}): {@code Dr CASH_SHORT_EXPENSE (5700) / Cr CASH_CLEARING}
  *   <li>OVER ({@code over_short > 0}): {@code Dr CASH_CLEARING / Cr CASH_OVER_INCOME (4300)}
- *   <li>ZERO: no journal entry — the event is still claimed by {@code processOnce} so redelivery
- *       is a no-op
+ *   <li>ZERO: no journal entry — the event is still claimed by {@code processOnce} so redelivery is
+ *       a no-op
  * </ul>
  *
  * <p>Idempotency: {@link ProcessedEventStore#processOnce} claims the event UUID inside THIS

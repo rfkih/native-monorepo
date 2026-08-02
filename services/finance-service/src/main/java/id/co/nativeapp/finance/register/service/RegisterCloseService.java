@@ -7,9 +7,9 @@ import org.springframework.stereotype.Service;
 /**
  * Binds the {@code RegisterSessionClosed} consumer path to the EVENT's tenant (ADR 0036). There is
  * no JWT on a Kafka consumer; {@link TenantContext#callAs} scopes the handler to the event's {@code
- * company_id} with the fixed {@code finance-consumer} actor so RLS + Auditable stamping apply —
- * the {@code RevenuePostingService} pattern. The transactional dedupe + posting lives in the
- * proxied {@link RegisterCloseWriter} (separate bean; self-invocation would bypass the advice).
+ * company_id} with the fixed {@code finance-consumer} actor so RLS + Auditable stamping apply — the
+ * {@code RevenuePostingService} pattern. The transactional dedupe + posting lives in the proxied
+ * {@link RegisterCloseWriter} (separate bean; self-invocation would bypass the advice).
  */
 @Service
 public class RegisterCloseService {

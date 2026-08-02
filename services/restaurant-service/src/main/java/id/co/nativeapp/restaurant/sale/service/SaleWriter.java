@@ -225,8 +225,7 @@ public class SaleWriter {
     if (!"CASH".equals(command.tenderType())) {
       return null;
     }
-    long giftCard =
-        command.giftCardRedeemedMinor() != null ? command.giftCardRedeemedMinor() : 0L;
+    long giftCard = command.giftCardRedeemedMinor() != null ? command.giftCardRedeemedMinor() : 0L;
     return Math.subtractExact(command.amountMinor(), giftCard);
   }
 

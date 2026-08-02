@@ -7,5 +7,4 @@ package id.co.nativeapp.restaurant.register.dto;
  *     the only client-supplied figure at close — expected cash and the variance are server-computed
  */
 public record CloseSessionRequest(
-    @jakarta.validation.constraints.NotNull @jakarta.validation.constraints.PositiveOrZero
-        Long countedCashMinor) {}
+    @jakarta.validation.constraints.NotNull @jakarta.validation.constraints.PositiveOrZero Long countedCashMinor) {}

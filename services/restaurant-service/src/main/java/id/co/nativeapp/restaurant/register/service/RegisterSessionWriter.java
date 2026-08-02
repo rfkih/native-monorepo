@@ -168,13 +168,7 @@ public class RegisterSessionWriter {
     long overShort = Math.subtractExact(countedCash, expected);
 
     session.close(
-        closeInstant,
-        cashSales,
-        cashRefunds,
-        expected,
-        countedCash,
-        overShort,
-        idempotencyKey);
+        closeInstant, cashSales, cashRefunds, expected, countedCash, overShort, idempotencyKey);
     repository.saveAndFlush(session);
 
     GenericRecord event =

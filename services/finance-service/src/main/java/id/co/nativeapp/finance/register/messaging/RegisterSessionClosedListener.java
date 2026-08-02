@@ -39,7 +39,8 @@ public class RegisterSessionClosedListener {
     RegisterSessionClosedEvent event = decodeAndAssert(eventId, record);
     boolean posted = service.handle(event);
     if (!posted) {
-      log.debug("Skipped re-delivered RegisterSessionClosed eventId={} (already processed)", eventId);
+      log.debug(
+          "Skipped re-delivered RegisterSessionClosed eventId={} (already processed)", eventId);
     }
   }
 

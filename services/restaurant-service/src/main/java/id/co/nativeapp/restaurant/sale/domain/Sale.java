@@ -95,8 +95,8 @@ public class Sale extends Auditable {
   /**
    * Full constructor incl. the drawer-cash figure (review C1).
    *
-   * @param cashCollectedMinor the cash physically collected (grand total − gift-card portion) for
-   *     a CASH sale; null for non-cash/legacy
+   * @param cashCollectedMinor the cash physically collected (grand total − gift-card portion) for a
+   *     CASH sale; null for non-cash/legacy
    */
   public Sale(
       UUID businessId,
