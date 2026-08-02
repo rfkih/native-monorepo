@@ -49,3 +49,4 @@ boundary, a security posture. Routine, local choices do not need one — use a c
 | [0028](0028-offline-mode-cash-only-queue.md) | Offline mode — cash-only client queue replayed through the online checkout | Accepted |
 | [0029](0029-self-order-qr-and-customer-display.md) | Self-order QR — an anonymous surface whose blast radius is a parked row | Accepted |
 | [0030](0030-employee-expense-claims.md) | Employee expense claims — recognition at approval, a new event family, settle-once payable | Accepted |
+| [0031](0031-indonesian-statutory-payroll-official-datasets.md) | Indonesian statutory payroll — OFFICIAL canned datasets, the TER-transcription activation checklist, PATCH-creates-new-row overrides | Accepted |

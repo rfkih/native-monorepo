@@ -509,6 +509,31 @@ public final class StatutoryParams {
     }
   }
 
+  /**
+   * Validates that {@code json} parses through the family parser matching {@code calcType},
+   * discarding the parsed result — the transcription-safety net for a canned dataset (Track P phase
+   * P2): {@link OfficialStatutoryDataset#load} calls this for EVERY rule so a malformed
+   * transcription fails the moment the dataset loads, not the first time a run resolves the rule. A
+   * switch EXPRESSION (mirrors {@code PayrollRunWriter}'s exhaustive enum dispatch) so the compiler
+   * enforces a branch for every {@link StatutoryCalcType} constant.
+   *
+   * @throws IllegalArgumentException if {@code json} does not parse for the given calc type
+   */
+  public static void validate(StatutoryCalcType calcType, String json) {
+    Object parsed =
+        switch (calcType) {
+          case PROGRESSIVE_BRACKET -> progressive(json);
+          case PERCENTAGE_CEILING -> ceiling(json);
+          case RELIEF_TABLE -> relief(json);
+          case TER_TABLE -> terTable(json);
+          case ANNUAL_PROGRESSIVE -> annualProgressive(json);
+          case HOURLY_RATE_TABLE -> hourlyRateTable(json);
+        };
+    if (parsed == null) {
+      throw new IllegalArgumentException("Statutory params parsed to null for " + calcType);
+    }
+  }
+
   private static void requireInBasisPointRange(int rateBp, String label) {
     if (rateBp < 0 || rateBp > MAX_BASIS_POINTS) {
       throw new IllegalArgumentException(

@@ -19,12 +19,14 @@ import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
+import { Segmented } from '@/components/ui/Segmented'
 import { EmptyState, KpiTile, PeriodNav } from '@/features/_shared/financeUi'
 import { DialogOverlay } from '@/features/org/parts'
 import type { OrgUnit } from '@/features/org/api'
 import { cn } from '@/lib/cn'
 import { formatMoney } from '@/lib/money'
 import { currentPeriod, shiftPeriod } from '@/lib/period'
+import { PayrollSetupTab } from './PayrollSetupTab'
 import {
   useEmployees,
   usePayrollRuns,
@@ -36,6 +38,8 @@ import {
   useSeedIllustrative,
   type PayrollRunSummary,
 } from './api'
+
+type PayrollView = 'runs' | 'setup'
 
 export function PayrollTab({
   units,
@@ -54,6 +58,7 @@ export function PayrollTab({
   const [period, setPeriod] = useState(currentPeriod())
   const [runDialog, setRunDialog] = useState(false)
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
+  const [view, setView] = useState<PayrollView>('runs')
 
   const setup = usePayrollSetup({ companyId, actor, enabled: true })
   const seed = useSeedIllustrative({ companyId, actor })
@@ -129,102 +134,123 @@ export function PayrollTab({
         </Card>
       ) : (
         <>
-          {/* Period + scope + run */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <PeriodNav
-              period={period}
-              locale={locale}
-              onPrev={() => setPeriod((p) => shiftPeriod(p, -1))}
-              onNext={() => setPeriod((p) => shiftPeriod(p, 1))}
-              prevLabel={t('orgHub.overview.prevMonth')}
-              nextLabel={t('orgHub.overview.nextMonth')}
-            />
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-ink-3">
-                {t('hr.payroll.scope.count', {
-                  total: scoped.size,
-                  withComp: payableIds.length,
-                })}
-              </span>
-              <Button
-                type="button"
-                onClick={() => setRunDialog(true)}
-                disabled={payableIds.length === 0}
-              >
-                <Play className="size-4" />
-                {t('hr.payroll.run.cta')}
-              </Button>
-            </div>
-          </div>
+          {/* Runs / Setup sub-view — statutory-rule administration lives beside the run history
+              (Track P phase P2, ADR 0031), not as a separate org-hub tab. */}
+          <Segmented<PayrollView>
+            options={[
+              { value: 'runs', label: t('hr.payroll.view.runs') },
+              { value: 'setup', label: t('hr.payroll.view.setup') },
+            ]}
+            value={view}
+            onChange={setView}
+            ariaLabel={t('hr.payroll.view.label')}
+          />
 
-          {scoped.size > 0 && payableIds.length === 0 ? (
-            <EmptyState
-              title={t('hr.payroll.scope.noneWithComp')}
-              hint={t('hr.payroll.scope.noneHint')}
-            />
-          ) : null}
-
-          {/* Run history */}
-          {runsQuery.isLoading ? (
-            <Card className="p-10 text-center">
-              <Spinner className="mx-auto text-brand-500" />
-            </Card>
-          ) : runs.length === 0 ? (
-            <EmptyState title={t('hr.payroll.history.empty')} hint={t('hr.payroll.history.emptyHint')} />
+          {view === 'setup' ? (
+            <PayrollSetupTab companyId={companyId} actor={actor} locale={locale} />
           ) : (
             <>
-              <Card className="rounded-[20px] p-2.5">
-                {runs.map((run) => (
-                  <button
-                    key={run.id}
-                    type="button"
-                    onClick={() => setSelectedRunId(run.id)}
-                    className={cn(
-                      'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-hover',
-                      selectedRun?.id === run.id && 'bg-emerald-tint/50',
-                    )}
-                  >
-                    <span className="text-[14px] font-semibold text-ink">
-                      {t('hr.payroll.history.runLabel', { seq: run.runSeq })}
-                    </span>
-                    {run.usesIllustrativeRules ? (
-                      <Badge tone="amber">{t('hr.payroll.illustrativeBanner.badge')}</Badge>
-                    ) : null}
-                    <span className="text-xs text-ink-3">
-                      {run.postedAt
-                        ? new Intl.DateTimeFormat(locale, {
-                            dateStyle: 'medium',
-                            timeStyle: 'short',
-                          }).format(new Date(run.postedAt))
-                        : run.status === 'FAILED'
-                          ? t('hr.payroll.history.failedLabel')
-                          : run.status}
-                    </span>
-                    <span className="tnum ml-auto font-mono text-sm font-semibold text-ink">
-                      {formatMoney(run.netTotalMinor, run.baseCurrency, locale)}
-                    </span>
-                  </button>
-                ))}
-              </Card>
-
-              {selectedRun ? (
-                <RunDetail
-                  run={selectedRun}
-                  units={units}
-                  companyId={companyId}
-                  actor={actor}
+              {/* Period + scope + run */}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <PeriodNav
+                  period={period}
                   locale={locale}
+                  onPrev={() => setPeriod((p) => shiftPeriod(p, -1))}
+                  onNext={() => setPeriod((p) => shiftPeriod(p, 1))}
+                  prevLabel={t('orgHub.overview.prevMonth')}
+                  nextLabel={t('orgHub.overview.nextMonth')}
                 />
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-ink-3">
+                    {t('hr.payroll.scope.count', {
+                      total: scoped.size,
+                      withComp: payableIds.length,
+                    })}
+                  </span>
+                  <Button
+                    type="button"
+                    onClick={() => setRunDialog(true)}
+                    disabled={payableIds.length === 0}
+                  >
+                    <Play className="size-4" />
+                    {t('hr.payroll.run.cta')}
+                  </Button>
+                </div>
+              </div>
+
+              {scoped.size > 0 && payableIds.length === 0 ? (
+                <EmptyState
+                  title={t('hr.payroll.scope.noneWithComp')}
+                  hint={t('hr.payroll.scope.noneHint')}
+                />
+              ) : null}
+
+              {/* Run history */}
+              {runsQuery.isLoading ? (
+                <Card className="p-10 text-center">
+                  <Spinner className="mx-auto text-brand-500" />
+                </Card>
+              ) : runs.length === 0 ? (
+                <EmptyState
+                  title={t('hr.payroll.history.empty')}
+                  hint={t('hr.payroll.history.emptyHint')}
+                />
+              ) : (
+                <>
+                  <Card className="rounded-[20px] p-2.5">
+                    {runs.map((run) => (
+                      <button
+                        key={run.id}
+                        type="button"
+                        onClick={() => setSelectedRunId(run.id)}
+                        className={cn(
+                          'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-hover',
+                          selectedRun?.id === run.id && 'bg-emerald-tint/50',
+                        )}
+                      >
+                        <span className="text-[14px] font-semibold text-ink">
+                          {t('hr.payroll.history.runLabel', { seq: run.runSeq })}
+                        </span>
+                        {run.usesIllustrativeRules ? (
+                          <Badge tone="amber">{t('hr.payroll.illustrativeBanner.badge')}</Badge>
+                        ) : null}
+                        <span className="text-xs text-ink-3">
+                          {run.postedAt
+                            ? new Intl.DateTimeFormat(locale, {
+                                dateStyle: 'medium',
+                                timeStyle: 'short',
+                              }).format(new Date(run.postedAt))
+                            : run.status === 'FAILED'
+                              ? t('hr.payroll.history.failedLabel')
+                              : run.status}
+                        </span>
+                        <span className="tnum ml-auto font-mono text-sm font-semibold text-ink">
+                          {formatMoney(run.netTotalMinor, run.baseCurrency, locale)}
+                        </span>
+                      </button>
+                    ))}
+                  </Card>
+
+                  {selectedRun ? (
+                    <RunDetail
+                      run={selectedRun}
+                      units={units}
+                      companyId={companyId}
+                      actor={actor}
+                      locale={locale}
+                    />
+                  ) : null}
+                </>
+              )}
+
+              {runs.length > 0 ? (
+                <p className="text-xs leading-relaxed text-ink-3">
+                  <TriangleAlert className="mr-1 inline size-3.5 text-amber" aria-hidden="true" />
+                  {t('hr.payroll.rerun.warning')}
+                </p>
               ) : null}
             </>
           )}
-
-          {runs.length > 0 ? (
-            <p className="text-xs leading-relaxed text-ink-3">
-              <TriangleAlert className="mr-1 inline size-3.5 text-amber" aria-hidden="true" />
-              {t('hr.payroll.rerun.warning')}
-            </p>
-          ) : null}
         </>
       )}
 

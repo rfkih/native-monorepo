@@ -1,0 +1,389 @@
+{
+  "dataset_version": "ID-2026.1",
+  "rules": [
+    {
+      "rule_key": "PPH21_TER",
+      "rule_version": "ID-2026.1",
+      "calc_type": "TER_TABLE",
+      "provenance": "OFFICIAL",
+      "source_note": "PMK 168/2023 Lampiran (PP 58/2023) — transcribed + cross-verified against two secondary sources 2026-08-02; spot-check against the pajak.go.id PDF recommended at go-live (ADR 0031 checklist).",
+      "effective_from": "2026-01-01",
+      "params": {
+        "ptkp_category": {
+          "TK0": "A",
+          "TK1": "A",
+          "K0": "A",
+          "TK2": "B",
+          "TK3": "B",
+          "K1": "B",
+          "K2": "B",
+          "K3": "C"
+        },
+        "categories": {
+          "A": {
+            "bands": [
+              { "up_to_minor": 5400000, "rate_bp": 0 },
+              { "up_to_minor": 5650000, "rate_bp": 25 },
+              { "up_to_minor": 5950000, "rate_bp": 50 },
+              { "up_to_minor": 6300000, "rate_bp": 75 },
+              { "up_to_minor": 6750000, "rate_bp": 100 },
+              { "up_to_minor": 7500000, "rate_bp": 125 },
+              { "up_to_minor": 8550000, "rate_bp": 150 },
+              { "up_to_minor": 9650000, "rate_bp": 175 },
+              { "up_to_minor": 10050000, "rate_bp": 200 },
+              { "up_to_minor": 10350000, "rate_bp": 225 },
+              { "up_to_minor": 10700000, "rate_bp": 250 },
+              { "up_to_minor": 11050000, "rate_bp": 300 },
+              { "up_to_minor": 11600000, "rate_bp": 350 },
+              { "up_to_minor": 12500000, "rate_bp": 400 },
+              { "up_to_minor": 13750000, "rate_bp": 500 },
+              { "up_to_minor": 15100000, "rate_bp": 600 },
+              { "up_to_minor": 16950000, "rate_bp": 700 },
+              { "up_to_minor": 19750000, "rate_bp": 800 },
+              { "up_to_minor": 24150000, "rate_bp": 900 },
+              { "up_to_minor": 26450000, "rate_bp": 1000 },
+              { "up_to_minor": 28000000, "rate_bp": 1100 },
+              { "up_to_minor": 30050000, "rate_bp": 1200 },
+              { "up_to_minor": 32400000, "rate_bp": 1300 },
+              { "up_to_minor": 35400000, "rate_bp": 1400 },
+              { "up_to_minor": 39100000, "rate_bp": 1500 },
+              { "up_to_minor": 43850000, "rate_bp": 1600 },
+              { "up_to_minor": 47800000, "rate_bp": 1700 },
+              { "up_to_minor": 51400000, "rate_bp": 1800 },
+              { "up_to_minor": 56300000, "rate_bp": 1900 },
+              { "up_to_minor": 62200000, "rate_bp": 2000 },
+              { "up_to_minor": 68600000, "rate_bp": 2100 },
+              { "up_to_minor": 77500000, "rate_bp": 2200 },
+              { "up_to_minor": 89000000, "rate_bp": 2300 },
+              { "up_to_minor": 103000000, "rate_bp": 2400 },
+              { "up_to_minor": 125000000, "rate_bp": 2500 },
+              { "up_to_minor": 157000000, "rate_bp": 2600 },
+              { "up_to_minor": 206000000, "rate_bp": 2700 },
+              { "up_to_minor": 337000000, "rate_bp": 2800 },
+              { "up_to_minor": 454000000, "rate_bp": 2900 },
+              { "up_to_minor": 550000000, "rate_bp": 3000 },
+              { "up_to_minor": 695000000, "rate_bp": 3100 },
+              { "up_to_minor": 910000000, "rate_bp": 3200 },
+              { "up_to_minor": 1400000000, "rate_bp": 3300 },
+              { "up_to_minor": 999999999999, "rate_bp": 3400 }
+            ]
+          },
+          "B": {
+            "bands": [
+              { "up_to_minor": 6200000, "rate_bp": 0 },
+              { "up_to_minor": 6500000, "rate_bp": 25 },
+              { "up_to_minor": 6850000, "rate_bp": 50 },
+              { "up_to_minor": 7300000, "rate_bp": 75 },
+              { "up_to_minor": 9200000, "rate_bp": 100 },
+              { "up_to_minor": 10750000, "rate_bp": 150 },
+              { "up_to_minor": 11250000, "rate_bp": 200 },
+              { "up_to_minor": 11600000, "rate_bp": 250 },
+              { "up_to_minor": 12600000, "rate_bp": 300 },
+              { "up_to_minor": 13600000, "rate_bp": 400 },
+              { "up_to_minor": 14950000, "rate_bp": 500 },
+              { "up_to_minor": 16400000, "rate_bp": 600 },
+              { "up_to_minor": 18450000, "rate_bp": 700 },
+              { "up_to_minor": 21850000, "rate_bp": 800 },
+              { "up_to_minor": 26000000, "rate_bp": 900 },
+              { "up_to_minor": 27700000, "rate_bp": 1000 },
+              { "up_to_minor": 29350000, "rate_bp": 1100 },
+              { "up_to_minor": 31450000, "rate_bp": 1200 },
+              { "up_to_minor": 33950000, "rate_bp": 1300 },
+              { "up_to_minor": 37100000, "rate_bp": 1400 },
+              { "up_to_minor": 41100000, "rate_bp": 1500 },
+              { "up_to_minor": 45800000, "rate_bp": 1600 },
+              { "up_to_minor": 49500000, "rate_bp": 1700 },
+              { "up_to_minor": 53800000, "rate_bp": 1800 },
+              { "up_to_minor": 58500000, "rate_bp": 1900 },
+              { "up_to_minor": 64000000, "rate_bp": 2000 },
+              { "up_to_minor": 71000000, "rate_bp": 2100 },
+              { "up_to_minor": 80000000, "rate_bp": 2200 },
+              { "up_to_minor": 93000000, "rate_bp": 2300 },
+              { "up_to_minor": 109000000, "rate_bp": 2400 },
+              { "up_to_minor": 129000000, "rate_bp": 2500 },
+              { "up_to_minor": 163000000, "rate_bp": 2600 },
+              { "up_to_minor": 211000000, "rate_bp": 2700 },
+              { "up_to_minor": 374000000, "rate_bp": 2800 },
+              { "up_to_minor": 459000000, "rate_bp": 2900 },
+              { "up_to_minor": 555000000, "rate_bp": 3000 },
+              { "up_to_minor": 704000000, "rate_bp": 3100 },
+              { "up_to_minor": 957000000, "rate_bp": 3200 },
+              { "up_to_minor": 1405000000, "rate_bp": 3300 },
+              { "up_to_minor": 999999999999, "rate_bp": 3400 }
+            ]
+          },
+          "C": {
+            "bands": [
+              { "up_to_minor": 6600000, "rate_bp": 0 },
+              { "up_to_minor": 6950000, "rate_bp": 25 },
+              { "up_to_minor": 7350000, "rate_bp": 50 },
+              { "up_to_minor": 7800000, "rate_bp": 75 },
+              { "up_to_minor": 8850000, "rate_bp": 100 },
+              { "up_to_minor": 9800000, "rate_bp": 125 },
+              { "up_to_minor": 10950000, "rate_bp": 150 },
+              { "up_to_minor": 11200000, "rate_bp": 175 },
+              { "up_to_minor": 12050000, "rate_bp": 200 },
+              { "up_to_minor": 12950000, "rate_bp": 300 },
+              { "up_to_minor": 14150000, "rate_bp": 400 },
+              { "up_to_minor": 15550000, "rate_bp": 500 },
+              { "up_to_minor": 17050000, "rate_bp": 600 },
+              { "up_to_minor": 19500000, "rate_bp": 700 },
+              { "up_to_minor": 22700000, "rate_bp": 800 },
+              { "up_to_minor": 26600000, "rate_bp": 900 },
+              { "up_to_minor": 28100000, "rate_bp": 1000 },
+              { "up_to_minor": 30100000, "rate_bp": 1100 },
+              { "up_to_minor": 32600000, "rate_bp": 1200 },
+              { "up_to_minor": 35400000, "rate_bp": 1300 },
+              { "up_to_minor": 38900000, "rate_bp": 1400 },
+              { "up_to_minor": 43000000, "rate_bp": 1500 },
+              { "up_to_minor": 47400000, "rate_bp": 1600 },
+              { "up_to_minor": 51200000, "rate_bp": 1700 },
+              { "up_to_minor": 55800000, "rate_bp": 1800 },
+              { "up_to_minor": 60400000, "rate_bp": 1900 },
+              { "up_to_minor": 66700000, "rate_bp": 2000 },
+              { "up_to_minor": 74500000, "rate_bp": 2100 },
+              { "up_to_minor": 83200000, "rate_bp": 2200 },
+              { "up_to_minor": 95600000, "rate_bp": 2300 },
+              { "up_to_minor": 110000000, "rate_bp": 2400 },
+              { "up_to_minor": 134000000, "rate_bp": 2500 },
+              { "up_to_minor": 169000000, "rate_bp": 2600 },
+              { "up_to_minor": 221000000, "rate_bp": 2700 },
+              { "up_to_minor": 390000000, "rate_bp": 2800 },
+              { "up_to_minor": 463000000, "rate_bp": 2900 },
+              { "up_to_minor": 561000000, "rate_bp": 3000 },
+              { "up_to_minor": 709000000, "rate_bp": 3100 },
+              { "up_to_minor": 965000000, "rate_bp": 3200 },
+              { "up_to_minor": 1419000000, "rate_bp": 3300 },
+              { "up_to_minor": 999999999999, "rate_bp": 3400 }
+            ]
+          }
+        },
+        "no_npwp_surcharge_bp": 12000
+      }
+    },
+    {
+      "rule_key": "PPH21_ARTICLE17",
+      "rule_version": "ID-2026.1",
+      "calc_type": "ANNUAL_PROGRESSIVE",
+      "provenance": "OFFICIAL",
+      "source_note": "UU HPP No. 7/2021 Pasal 17 ayat (1) huruf a (Art-17 annual progressive brackets: 5% s.d. Rp60.000.000, 15% s.d. Rp250.000.000, 25% s.d. Rp500.000.000, 30% s.d. Rp5.000.000.000, 35% di atasnya). Biaya jabatan (occupational cost) rate and annual cap per PMK 250/2008 Pasal 1 (5%, capped Rp500.000/bulan = Rp6.000.000/tahun). No-NPWP surcharge per UU PPh Pasal 21 ayat (5a). DORMANT until Track P phase P3 wires the December/final-month true-up — no pay_component references this rule yet.",
+      "effective_from": "2026-01-01",
+      "params": {
+        "brackets": [
+          { "floor_minor": 0, "cap_minor": 60000000, "rate_bp": 500 },
+          { "floor_minor": 60000000, "cap_minor": 250000000, "rate_bp": 1500 },
+          { "floor_minor": 250000000, "cap_minor": 500000000, "rate_bp": 2500 },
+          { "floor_minor": 500000000, "cap_minor": 5000000000, "rate_bp": 3000 },
+          { "floor_minor": 5000000000, "cap_minor": 999999999999, "rate_bp": 3500 }
+        ],
+        "occupational_cost_bp": 500,
+        "occupational_cost_cap_annual_minor": 6000000,
+        "no_npwp_surcharge_bp": 12000
+      }
+    },
+    {
+      "rule_key": "PTKP_RELIEF",
+      "rule_version": "ID-2026.1",
+      "calc_type": "RELIEF_TABLE",
+      "provenance": "OFFICIAL",
+      "source_note": "PMK 101/PMK.010/2016 Pasal 1 (PTKP annual amounts): TK/0 Rp54.000.000; TK/1 = K/0 Rp58.500.000; TK/2 = K/1 Rp63.000.000; TK/3 = K/2 Rp67.500.000; K/3 Rp72.000.000. Feeds the legacy PROGRESSIVE_BRACKET path and the December ANNUAL_PROGRESSIVE true-up (phase P3) — the monthly TER path (PMK 168/2023) needs no PTKP subtraction.",
+      "effective_from": "2026-01-01",
+      "params": {
+        "annualization_months": 12,
+        "ptkp": {
+          "TK0": 54000000,
+          "TK1": 58500000,
+          "TK2": 63000000,
+          "TK3": 67500000,
+          "K0": 58500000,
+          "K1": 63000000,
+          "K2": 67500000,
+          "K3": 72000000
+        }
+      }
+    },
+    {
+      "rule_key": "BIAYA_JABATAN",
+      "rule_version": "ID-2026.1",
+      "calc_type": "PERCENTAGE_CEILING",
+      "provenance": "OFFICIAL",
+      "source_note": "PMK 250/2008 Pasal 1 (biaya jabatan / occupational cost: 5% of gross income, capped Rp500.000/bulan = Rp6.000.000/tahun). DOCUMENTATION-ONLY row: this figure is consumed INLINE by PPH21_ARTICLE17's occupational_cost_bp/occupational_cost_cap_annual_minor (the December Art-17 true-up, phase P3) — no pay_component references BIAYA_JABATAN directly. It ships as its own dataset row so the regulation's figure has an independently-citable, auditable record. ceiling_minor mirrors the ANNUAL cap (not a per-run monthly cap); employer_bp is 0 (biaya jabatan has no employer leg).",
+      "effective_from": "2026-01-01",
+      "params": {
+        "ceiling_minor": 6000000,
+        "employee_bp": 500,
+        "employer_bp": 0,
+        "reduces_tax_base": true
+      }
+    },
+    {
+      "rule_key": "BPJS_KESEHATAN",
+      "rule_version": "ID-2026.1",
+      "calc_type": "PERCENTAGE_CEILING",
+      "provenance": "OFFICIAL",
+      "source_note": "Perpres 64/2020 Pasal 30 (Jaminan Kesehatan Nasional iuran): employer 4%, employee 1%, base capped at Rp12.000.000/bulan. The employee 1% leg is NOT deductible from the PPh21 base; the employer 4% leg IS a taxable fringe benefit to the employee (raises the tax base only, never gross earnings/net cash).",
+      "effective_from": "2026-01-01",
+      "params": {
+        "ceiling_minor": 12000000,
+        "employee_bp": 100,
+        "employer_bp": 400,
+        "reduces_tax_base": false,
+        "employer_adds_to_tax_base": true
+      }
+    },
+    {
+      "rule_key": "BPJS_JHT",
+      "rule_version": "ID-2026.1",
+      "calc_type": "PERCENTAGE_CEILING",
+      "provenance": "OFFICIAL",
+      "source_note": "PP 46/2015 (Jaminan Hari Tua): employer 3.7%, employee 2%, uncapped base (modeled with the agreed unbounded sentinel 999999999999 minor — never a real ceiling). The employee 2% leg IS deductible from the PPh21 base (December true-up); the employer 3.7% leg is NOT a taxable fringe benefit.",
+      "effective_from": "2026-01-01",
+      "params": {
+        "ceiling_minor": 999999999999,
+        "employee_bp": 200,
+        "employer_bp": 370,
+        "reduces_tax_base": true,
+        "employer_adds_to_tax_base": false
+      }
+    },
+    {
+      "rule_key": "BPJS_JP",
+      "rule_version": "ID-2026.1",
+      "calc_type": "PERCENTAGE_CEILING",
+      "provenance": "OFFICIAL",
+      "source_note": "PP 45/2015 (Jaminan Pensiun): employer 2%, employee 1%, base capped at the annually-announced JP ceiling (Rp10.547.400/bulan as of this dataset's authoring). WARNING: the JP ceiling is ADJUSTED EVERY MARCH by BPJS Ketenagakerjaan announcement — verify the current figure against the latest announcement before/at activation and PATCH this rule with the corrected ceiling_minor if it has changed. The employee 1% leg IS deductible from the PPh21 base; the employer 2% leg is NOT a taxable fringe benefit.",
+      "effective_from": "2026-01-01",
+      "params": {
+        "ceiling_minor": 10547400,
+        "employee_bp": 100,
+        "employer_bp": 200,
+        "reduces_tax_base": true,
+        "employer_adds_to_tax_base": false
+      }
+    },
+    {
+      "rule_key": "BPJS_JKK",
+      "rule_version": "ID-2026.1",
+      "calc_type": "PERCENTAGE_CEILING",
+      "provenance": "OFFICIAL",
+      "source_note": "PP 44/2015 (Jaminan Kecelakaan Kerja): employer-only, rate by COMPANY risk class I-V (I 0.24%, II 0.54%, III 0.89%, IV 1.27%, V 1.74%). This row encodes the DEFAULT class II rate (0.54%) only, uncapped base; a per-company risk-class attribute plus a dedicated risk-class calc family to select among the five rates is a documented follow-up (ADR 0031) — until then every tenant is seeded at class II regardless of its real registered risk class. The employer leg IS a taxable fringe benefit to the employee.",
+      "effective_from": "2026-01-01",
+      "params": {
+        "ceiling_minor": 999999999999,
+        "employee_bp": 0,
+        "employer_bp": 54,
+        "reduces_tax_base": false,
+        "employer_adds_to_tax_base": true
+      }
+    },
+    {
+      "rule_key": "BPJS_JKM",
+      "rule_version": "ID-2026.1",
+      "calc_type": "PERCENTAGE_CEILING",
+      "provenance": "OFFICIAL",
+      "source_note": "PP 44/2015 (Jaminan Kematian): employer-only, 0.3%, uncapped base. The employer leg IS a taxable fringe benefit to the employee.",
+      "effective_from": "2026-01-01",
+      "params": {
+        "ceiling_minor": 999999999999,
+        "employee_bp": 0,
+        "employer_bp": 30,
+        "reduces_tax_base": false,
+        "employer_adds_to_tax_base": true
+      }
+    },
+    {
+      "rule_key": "OVERTIME_HOURLY",
+      "rule_version": "ID-2026.1",
+      "calc_type": "HOURLY_RATE_TABLE",
+      "provenance": "OFFICIAL",
+      "source_note": "PP 35/2021 j.o. Kepmenaker 102/2004 (upah lembur): hourly rate = monthly wage (pokok + tunjangan tetap) / 173; weekday overtime 1.5x the first hour then 2x thereafter; rest-day/holiday overtime 2x hours 1-7, 3x hour 8, 4x hours 9-10. DORMANT: parsed/validated by this dataset but not yet consumed by any pay_component — the OVERTIME earning component and the writer logic that turns approved overtime minutes into a payslip line land in Track P phase P7.",
+      "effective_from": "2026-01-01",
+      "params": {
+        "monthly_divisor": 173,
+        "tiers": {
+          "weekday": [
+            { "hours": 1, "multiplier_bp": 15000 },
+            { "hours": null, "multiplier_bp": 20000 }
+          ],
+          "rest_day": [
+            { "hours": 7, "multiplier_bp": 20000 },
+            { "hours": 1, "multiplier_bp": 30000 },
+            { "hours": null, "multiplier_bp": 40000 }
+          ]
+        }
+      }
+    }
+  ],
+  "components": [
+    {
+      "component_key": "JHT_EE",
+      "kind": "DEDUCTION",
+      "calc_type": "STATUTORY_CEILING",
+      "bearer": "EMPLOYEE",
+      "gl_account": "2100-BPJS",
+      "taxable": false,
+      "statutory_rule_key": "BPJS_JHT",
+      "display_order": 22
+    },
+    {
+      "component_key": "JHT_ER",
+      "kind": "DEDUCTION",
+      "calc_type": "STATUTORY_CEILING",
+      "bearer": "EMPLOYER",
+      "gl_account": "5200-BPJS-ER",
+      "taxable": false,
+      "statutory_rule_key": "BPJS_JHT",
+      "display_order": 23
+    },
+    {
+      "component_key": "JP_EE",
+      "kind": "DEDUCTION",
+      "calc_type": "STATUTORY_CEILING",
+      "bearer": "EMPLOYEE",
+      "gl_account": "2100-BPJS",
+      "taxable": false,
+      "statutory_rule_key": "BPJS_JP",
+      "display_order": 24
+    },
+    {
+      "component_key": "JP_ER",
+      "kind": "DEDUCTION",
+      "calc_type": "STATUTORY_CEILING",
+      "bearer": "EMPLOYER",
+      "gl_account": "5200-BPJS-ER",
+      "taxable": false,
+      "statutory_rule_key": "BPJS_JP",
+      "display_order": 25
+    },
+    {
+      "component_key": "JKK_ER",
+      "kind": "DEDUCTION",
+      "calc_type": "STATUTORY_CEILING",
+      "bearer": "EMPLOYER",
+      "gl_account": "5200-BPJS-ER",
+      "taxable": false,
+      "statutory_rule_key": "BPJS_JKK",
+      "display_order": 26
+    },
+    {
+      "component_key": "JKM_ER",
+      "kind": "DEDUCTION",
+      "calc_type": "STATUTORY_CEILING",
+      "bearer": "EMPLOYER",
+      "gl_account": "5200-BPJS-ER",
+      "taxable": false,
+      "statutory_rule_key": "BPJS_JKM",
+      "display_order": 27
+    },
+    {
+      "component_key": "PPH21",
+      "kind": "DEDUCTION",
+      "calc_type": "STATUTORY_PROGRESSIVE",
+      "bearer": "EMPLOYEE",
+      "gl_account": "2110-PPH21",
+      "taxable": false,
+      "statutory_rule_key": "PPH21_TER",
+      "display_order": 30
+    }
+  ]
+}

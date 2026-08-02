@@ -88,6 +88,43 @@ export interface PayrollSetup {
   illustrativeVersion: string | null
 }
 
+/** GET /api/v1/payroll-setup/rules row — no params (Track P phase P2, ADR 0031). */
+export interface StatutoryRuleRow {
+  ruleKey: string
+  ruleVersion: string
+  calcType: string
+  provenance: 'ILLUSTRATIVE_PLACEHOLDER' | 'OFFICIAL'
+  effectiveFrom: string
+  effectiveTo: string
+  sourceNote: string
+  /** Whether this row is the one that actually resolves (a same-day supersession can leave a
+   * still-open-looking row that is nonetheless inactive — see StatutoryRule#supersede). */
+  active: boolean
+}
+
+/** GET /api/v1/payroll-setup/rules/{ruleKey} — the full row including paramsJson. */
+export interface StatutoryRuleDetail {
+  ruleKey: string
+  ruleVersion: string
+  calcType: string
+  paramsJson: string
+  currency: string
+  provenance: 'ILLUSTRATIVE_PLACEHOLDER' | 'OFFICIAL'
+  sourceNote: string
+  effectiveFrom: string
+  effectiveTo: string
+}
+
+/** POST /api/v1/payroll-setup/seed-official response — the idempotent activation summary. */
+export interface SeedOfficialSummary {
+  datasetVersion: string
+  rulesInserted: number
+  rulesClosed: number
+  rulesSkipped: number
+  componentsInserted: number
+  componentsUpdated: number
+}
+
 export interface PayrollRunSummary {
   id: string
   period: string
@@ -587,6 +624,89 @@ export function useSeedIllustrative(params: TenantParams) {
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['payrollSetup', companyId] })
+    },
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Statutory rules administration (Track P phase P2, ADR 0031)
+// ---------------------------------------------------------------------------
+
+/** GET /api/v1/payroll-setup/rules — the tenant's rules table. */
+export function useStatutoryRules(params: TenantParams & { enabled: boolean }) {
+  const { companyId, actor, enabled } = params
+  return useQuery({
+    enabled,
+    queryKey: ['statutoryRules', companyId],
+    queryFn: async () => {
+      const result = await apiFetch<StatutoryRuleRow[]>('/api/v1/payroll-setup/rules', {
+        tenant: { companyId, actor },
+      })
+      return result ?? []
+    },
+  })
+}
+
+/** GET /api/v1/payroll-setup/rules/{ruleKey} — the full detail (params JSON) for the drawer. */
+export function useStatutoryRuleDetail(
+  params: TenantParams & { ruleKey: string | null; enabled: boolean },
+) {
+  const { companyId, actor, ruleKey, enabled } = params
+  return useQuery({
+    enabled: enabled && !!ruleKey,
+    queryKey: ['statutoryRuleDetail', companyId, ruleKey],
+    queryFn: () =>
+      apiFetch<StatutoryRuleDetail>(`/api/v1/payroll-setup/rules/${ruleKey}`, {
+        tenant: { companyId, actor },
+      }),
+  })
+}
+
+/** POST /api/v1/payroll-setup/seed-official — activate a canned OFFICIAL dataset (idempotent). */
+export function useSeedOfficial(params: TenantParams) {
+  const { companyId, actor } = params
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (datasetVersion: string) =>
+      apiFetch<SeedOfficialSummary>('/api/v1/payroll-setup/seed-official', {
+        method: 'POST',
+        tenant: { companyId, actor },
+        body: { datasetVersion },
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['payrollSetup', companyId] })
+      void queryClient.invalidateQueries({ queryKey: ['statutoryRules', companyId] })
+    },
+  })
+}
+
+/** PATCH /api/v1/payroll-setup/rules/{ruleKey} — the human-verification override path. */
+export function useOverrideStatutoryRule(params: TenantParams) {
+  const { companyId, actor } = params
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      ruleKey,
+      body,
+    }: {
+      ruleKey: string
+      body: {
+        paramsJson: string
+        effectiveFrom: string
+        sourceNote: string
+        provenance: 'ILLUSTRATIVE_PLACEHOLDER' | 'OFFICIAL'
+      }
+    }) =>
+      apiFetch<StatutoryRuleDetail>(`/api/v1/payroll-setup/rules/${ruleKey}`, {
+        method: 'PATCH',
+        tenant: { companyId, actor },
+        body,
+      }),
+    onSuccess: (_d, { ruleKey }) => {
+      void queryClient.invalidateQueries({ queryKey: ['statutoryRules', companyId] })
+      void queryClient.invalidateQueries({
+        queryKey: ['statutoryRuleDetail', companyId, ruleKey],
+      })
     },
   })
 }

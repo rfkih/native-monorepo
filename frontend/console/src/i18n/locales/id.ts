@@ -973,6 +973,64 @@ export const id = {
         warning:
           'Memproses lagi MENGGANTIKAN proses periode ini sebelumnya: pembukuan tenaga kerjanya dibalik dan diganti proses baru. Gunakan untuk koreksi periode — selalu seluruh perusahaan.',
       },
+      view: {
+        label: 'Tampilan penggajian',
+        runs: 'Proses',
+        setup: 'Pengaturan',
+      },
+    },
+  },
+  payrollSetup: {
+    title: 'Aturan statutori',
+    subtitle:
+      'Aturan pajak dan BPJS di balik setiap proses penggajian — setiap aturan menunjukkan apakah angkanya sudah terverifikasi RESMI atau masih ILUSTRATIF sementara.',
+    table: {
+      ruleKey: 'Aturan',
+      version: 'Versi',
+      calcType: 'Jenis perhitungan',
+      provenance: 'Status',
+      effective: 'Berlaku',
+      openEnded: 'Terbuka',
+      superseded: 'Digantikan',
+      empty: 'Belum ada aturan statutori',
+      emptyHint: 'Gunakan pengaturan ilustratif di tab Proses terlebih dahulu, lalu aktifkan dataset resmi di sini.',
+    },
+    provenance: {
+      illustrative: 'Ilustratif',
+      official: 'Resmi',
+    },
+    activate: {
+      button: 'Aktifkan dataset resmi {{version}}',
+      confirmTitle: 'Aktifkan dataset statutori resmi?',
+      confirmBody:
+        'Ini menambahkan aturan BPJS, PTKP, Pasal 17, dan PPh 21 bulanan (TER) asli {{version}}, menggantikan aturan ilustratif dengan kunci yang sama. Idempoten — aman dijalankan berulang kali.',
+      activating: 'Mengaktifkan…',
+      success:
+        'Dataset {{version}} diaktifkan: {{inserted}} aturan ditambahkan, {{closed}} digantikan, {{updated}} komponen gaji diperbarui.',
+      error: 'Dataset resmi gagal diaktifkan.',
+    },
+    detail: {
+      calcType: 'Jenis perhitungan',
+      ruleVersion: 'Versi aturan',
+      effective: 'Berlaku',
+      sourceNote: 'Catatan sumber',
+      params: 'Parameter (JSON)',
+      notFound: 'Aturan ini belum diisi untuk perusahaan ini.',
+      illustrativeHint:
+        'Aturan ini masih placeholder ilustratif — verifikasi angkanya terhadap regulasi utama, lalu gunakan Timpa untuk mencatat nilai terverifikasi sebagai RESMI.',
+    },
+    override: {
+      open: 'Timpa…',
+      title: 'Timpa {{ruleKey}}',
+      paramsLabel: 'Parameter baru (JSON)',
+      paramsHint: 'Harus sesuai bentuk jenis-perhitungan aturan yang ada — divalidasi saat disimpan.',
+      effectiveFromLabel: 'Berlaku mulai',
+      sourceNoteLabel: 'Catatan sumber',
+      sourceNoteHint: 'Sebutkan regulasi dan siapa yang memverifikasi (mis. "Lampiran PMK 168/2023, diverifikasi oleh …").',
+      provenanceLabel: 'Status',
+      submit: 'Simpan perubahan',
+      saving: 'Menyimpan…',
+      error: 'Gagal menyimpan perubahan — periksa tanggal berlaku dan bentuk JSON.',
     },
   },
   posVertical: {

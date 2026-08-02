@@ -18,6 +18,9 @@ import id.co.nativeapp.employee.payroll.domain.CompensationNotFoundException;
 import id.co.nativeapp.employee.payroll.domain.DuplicateCommissionException;
 import id.co.nativeapp.employee.payroll.domain.IncompletePeriodException;
 import id.co.nativeapp.employee.payroll.domain.OverlappingCompensationException;
+import id.co.nativeapp.employee.payroll.domain.PayrollSetupNotSeededException;
+import id.co.nativeapp.employee.payroll.domain.UnknownDatasetVersionException;
+import id.co.nativeapp.employee.payroll.domain.UnknownStatutoryRuleException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
@@ -191,6 +194,40 @@ public class EmployeeApiAdvice {
     ProblemDetail problem = problem(HttpStatus.NOT_FOUND, "employee-not-found", request);
     problem.setTitle("Employee not found");
     // The message names only the employee id (a UUID), never PII (rule 6).
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Statutory setup / official datasets (Track P phase P2, ADR 0031)
+  // -------------------------------------------------------------------------------------------
+
+  /** An unknown {@code datasetVersion} on {@code seed-official} → 404 Not Found. */
+  @ExceptionHandler(UnknownDatasetVersionException.class)
+  public ProblemDetail handleUnknownDatasetVersion(
+      UnknownDatasetVersionException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.NOT_FOUND, "unknown-dataset-version", request);
+    problem.setTitle("Unknown statutory dataset version");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /** A rule_key with no currently-open row (PATCH override target) → 404 Not Found. */
+  @ExceptionHandler(UnknownStatutoryRuleException.class)
+  public ProblemDetail handleUnknownStatutoryRule(
+      UnknownStatutoryRuleException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.NOT_FOUND, "unknown-statutory-rule", request);
+    problem.setTitle("Unknown statutory rule");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /** {@code seed-official} called before any statutory rule exists for the tenant → 409. */
+  @ExceptionHandler(PayrollSetupNotSeededException.class)
+  public ProblemDetail handlePayrollSetupNotSeeded(
+      PayrollSetupNotSeededException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.CONFLICT, "payroll-setup-not-seeded", request);
+    problem.setTitle("Payroll setup not seeded");
     problem.setDetail(ex.getMessage());
     return problem;
   }

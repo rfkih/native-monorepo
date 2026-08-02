@@ -89,6 +89,55 @@ public class PayComponent extends Auditable {
     this.active = true;
   }
 
+  /**
+   * Aligns this component's catalog fields with a dataset's declared row (Track P phase P2 official
+   * seed/upsert) — used both to REWIRE an existing component's {@link #statutoryRuleKey} (e.g.
+   * {@code PPH21_PROGRESSIVE -> PPH21_TER}) and to keep every other field in sync with a dataset
+   * revision. Never touches {@link #componentKey} (the natural key) or {@link #active}.
+   *
+   * @return {@code true} if any field actually changed (so the caller can skip a no-op save — the
+   *     idempotent-reseed proof)
+   */
+  public boolean applyCatalog(
+      PayComponentKind newKind,
+      CalcType newCalcType,
+      PayComponentBearer newBearer,
+      String newGlAccount,
+      boolean newTaxable,
+      String newStatutoryRuleKey,
+      int newDisplayOrder) {
+    boolean changed = false;
+    if (this.kind != newKind) {
+      this.kind = newKind;
+      changed = true;
+    }
+    if (this.calcType != newCalcType) {
+      this.calcType = newCalcType;
+      changed = true;
+    }
+    if (this.bearer != newBearer) {
+      this.bearer = newBearer;
+      changed = true;
+    }
+    if (!this.glAccount.equals(newGlAccount)) {
+      this.glAccount = newGlAccount;
+      changed = true;
+    }
+    if (this.taxable != newTaxable) {
+      this.taxable = newTaxable;
+      changed = true;
+    }
+    if (!Objects.equals(this.statutoryRuleKey, newStatutoryRuleKey)) {
+      this.statutoryRuleKey = newStatutoryRuleKey;
+      changed = true;
+    }
+    if (this.displayOrder != newDisplayOrder) {
+      this.displayOrder = newDisplayOrder;
+      changed = true;
+    }
+    return changed;
+  }
+
   public UUID getId() {
     return id;
   }

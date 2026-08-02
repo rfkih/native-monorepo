@@ -976,6 +976,64 @@ export const en = {
         warning:
           'Running again SUPERSEDES the period’s earlier runs: their labor postings are reversed on the books and replaced by the new run. Use it to correct a period — always company-wide.',
       },
+      view: {
+        label: 'Payroll view',
+        runs: 'Runs',
+        setup: 'Setup',
+      },
+    },
+  },
+  payrollSetup: {
+    title: 'Statutory rules',
+    subtitle:
+      'The tax and BPJS rules behind every payroll run — each rule shows whether it is a verified OFFICIAL figure or an ILLUSTRATIVE PLACEHOLDER.',
+    table: {
+      ruleKey: 'Rule',
+      version: 'Version',
+      calcType: 'Calc type',
+      provenance: 'Provenance',
+      effective: 'Effective',
+      openEnded: 'Open',
+      superseded: 'Superseded',
+      empty: 'No statutory rules yet',
+      emptyHint: 'Use illustrative setup on the Runs tab first, then activate the official dataset here.',
+    },
+    provenance: {
+      illustrative: 'Illustrative',
+      official: 'Official',
+    },
+    activate: {
+      button: 'Activate official dataset {{version}}',
+      confirmTitle: 'Activate the official statutory dataset?',
+      confirmBody:
+        'This inserts {{version}}’s real BPJS, PTKP, Art-17, and monthly income-tax (PPh 21 TER) rules, superseding any illustrative rule sharing the same key. Idempotent — safe to run again.',
+      activating: 'Activating…',
+      success:
+        'Activated {{version}}: {{inserted}} rule(s) inserted, {{closed}} superseded, {{updated}} pay component(s) updated.',
+      error: 'Could not activate the official dataset.',
+    },
+    detail: {
+      calcType: 'Calc type',
+      ruleVersion: 'Rule version',
+      effective: 'Effective',
+      sourceNote: 'Source note',
+      params: 'Parameters (JSON)',
+      notFound: 'This rule has not been seeded for this company yet.',
+      illustrativeHint:
+        'This rule is still an illustrative placeholder — verify the figures against the primary regulation, then use Override to record the verified values as OFFICIAL.',
+    },
+    override: {
+      open: 'Override…',
+      title: 'Override {{ruleKey}}',
+      paramsLabel: 'New parameters (JSON)',
+      paramsHint: 'Must match the existing rule’s calc-type shape — validated on save.',
+      effectiveFromLabel: 'Effective from',
+      sourceNoteLabel: 'Source note',
+      sourceNoteHint: 'Cite the regulation and who verified it (e.g. “PMK 168/2023 Lampiran, verified by …”).',
+      provenanceLabel: 'Provenance',
+      submit: 'Save override',
+      saving: 'Saving…',
+      error: 'Could not save the override — check the effective date and JSON shape.',
     },
   },
   posVertical: {

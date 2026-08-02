@@ -164,6 +164,28 @@ public class StatutoryRule extends Auditable {
     return provenance == RuleProvenance.ILLUSTRATIVE_PLACEHOLDER;
   }
 
+  /**
+   * Supersedes this rule by a NEW row starting {@code supersedingEffectiveFrom} (Track P phase P2
+   * dataset seed/override — never a delete, mirrors {@code CompensationPackage#end}/{@code
+   * Assignment#end}'s effective-dated-close idiom). When the day before the superseding row still
+   * leaves a valid (non-empty) range for THIS row, {@code effective_to} closes to that day. When it
+   * does not — the superseding row starts on or before this row's own {@code effective_from} (the
+   * same-day dataset-activation case, e.g. an illustrative and an official rule both dated {@code
+   * 2026-01-01}) — closing to an earlier date would leave {@code effective_to < effective_from} (an
+   * invalid range) or, worse, a same-day range that still resolves ALONGSIDE the new row and trips
+   * {@code PayrollRunWriter}'s "more than one effective rule" guard. This row is DEACTIVATED
+   * instead: {@code active=false} removes it from resolution regardless of its stale date range.
+   */
+  public void supersede(LocalDate supersedingEffectiveFrom) {
+    Objects.requireNonNull(supersedingEffectiveFrom, "supersedingEffectiveFrom");
+    LocalDate closeAt = supersedingEffectiveFrom.minusDays(1);
+    if (!closeAt.isBefore(this.effectiveFrom)) {
+      this.effectiveTo = closeAt;
+    } else {
+      this.active = false;
+    }
+  }
+
   @Override
   public String toString() {
     return "StatutoryRule[id="
