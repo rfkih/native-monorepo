@@ -5,6 +5,34 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-03 — Closing kasir (register sessions) Phase A + money-review fix round (ADR 0036)
+
+First slice of the settlement program (plan: functional-popping-gizmo): per-outlet-per-day cash
+register sessions (open w/ float → close w/ drawer recount), the `RegisterSessionClosed` event, and
+finance posting ONLY the signed variance (selisih kas: short → Dr 5700/Cr 1900, over → Dr 1900/Cr
+4300, zero → processed-no-entry, sealed period → error-inbox quarantine carrying amount+currency).
+Restaurant V21 (`cash_register_session`, one-OPEN-per-outlet partial unique, `sale.tender_type`) +
+finance V43 (two new AccountRoles so an SME can remap both onto one "Selisih Kas" account). POS till
+menu → RegisterSheet (open/close/verdict; disabled offline or with a non-empty sync queue, ADR 0028).
+
+**Money review round** (all fixed, live-drilled): C1 a gift-card-split CASH sale overstated expected
+cash → `sale.cash_collected_minor` (V22; COALESCE fallback for legacy rows); C3 cumulative
+`payment.refunded_minor` double-counts partials spanning sessions → append-only `payment_refund`
+delta ledger (V22) summed per window; **found live in the re-drill**: a cash GIFT-CARD SALE is
+drawer money living outside `sale` (liability, not revenue) → third window term + V23 index; W1
+OutletAccessGuard on close/current/history AND replay branches; W2/W3 replayed Idempotency-Key with
+a different payload → 409 (`register-session-idempotency-key-conflict`), never a silent 200; W4
+console close key is the STABLE `close:<sessionId>` (a fresh-per-attempt key made the server replay
+path unreachable) + 409 → refetch; W5 `@NotNull Long countedCashMinor` (missing field used to
+deserialize to a silent 0 count); W6 consumer identity asserts use `Math.*Exact`. Unit pins in
+`RegisterSessionWriterTest`. The close's SELECT-FOR-UPDATE is the authorized pessimistic-lock
+exception — rationale + quantified v1 approximations (window attribution, MVCC boundary, legacy
+null-tender, Asia/Jakarta default, commission PPN) in ADR 0036. Next: Phase B (sales channels +
+ONLINE tender → PLATFORM_RECEIVABLE, finance deploys FIRST), Phase C (platform settlements).
+NOTE: restaurant V22+V23 are consumed by this fix round — Phase B's migration is V24+. loyalty-service
+is NOT in scripts/start-dev-services.ps1; the gift-card mirror needs it running (manual launch, port
+8093 — add it to the script when it grows a dev port).
+
 ## 2026-08-02 — POS redesign (P0–P5): shared shell, one-tap flows, 2 latent bugs fixed
 
 Full-program UI/UX redesign of the POS across all three verticals (plan: functional-popping-gizmo;
