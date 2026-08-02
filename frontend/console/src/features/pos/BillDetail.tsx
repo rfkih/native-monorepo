@@ -226,6 +226,11 @@ export function BillDetail({
   }
   const [pendingPay, setPendingPay] = useState<PendingPayInfo | null>(null)
 
+  // Must run on EVERY render — a hook below the loading/non-OPEN early returns changes the hook
+  // count between the loading render and the loaded render, which crashes React ("Rendered more
+  // hooks than during the previous render") and blanks the whole POS on every freshly opened bill.
+  const isTablet = useMediaQuery('(min-width: 640px)')
+
   function openPayModal() {
     if (splitMode) {
       setPendingPay({
@@ -311,9 +316,6 @@ export function BillDetail({
   }
 
   const allLinesPaid = bill.lines.length > 0 && bill.lines.every((l) => l.paid)
-
-  // Mount only the active subtree to avoid double-mounting hidden content
-  const isTablet = useMediaQuery('(min-width: 640px)')
 
   // ---------------------------------------------------------------------------
   // 3b Sheet layout
