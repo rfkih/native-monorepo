@@ -58,13 +58,33 @@ public final class PayrollInputs {
    *     PTKP regardless of when in the year they joined (the domain spec is explicit on this; K/I
    *     spouse-combined PTKP proration is a separate, out-of-scope annual-return concern). A
    *     permanent employee paid the full year passes {@code monthsInYear = 12}, under which the cap
-   *     is unprorated (identity division) — byte-identical to the pre-W2 behaviour.
+   *     is unprorated (identity division) — byte-identical to the pre-W2 behaviour. VALIDATED to
+   *     {@code [1, 12]} (Track P phase P3 review S3): {@code monthsInYear = 0} would silently zero
+   *     the occupational-cost cap via {@code mulDiv(0, 12)} rather than fail loudly, and a value
+   *     above 12 is not a meaningful count of months within one fiscal year.
    */
   public record AnnualContext(
       long cumulativeGrossBrutoMinor,
       long cumulativeDeductibleSocialMinor,
       long cumulativeWithheldMinor,
-      int monthsInYear) {}
+      int monthsInYear) {
+
+    /**
+     * Fails loudly on a {@code monthsInYear} outside {@code [1, 12]} rather than let the writer
+     * hand the calculator a value that would silently zero (0) or misrepresent (&gt;12) the
+     * biaya-jabatan cap proration (Track P phase P3 review S3).
+     */
+    public AnnualContext {
+      if (monthsInYear < 1 || monthsInYear > 12) {
+        throw new IllegalArgumentException(
+            "AnnualContext.monthsInYear must be within [1, 12] (a fiscal-year month count"
+                + " inclusive of this run's own month), got "
+                + monthsInYear
+                + " — 0 would silently zero the biaya-jabatan occupational-cost cap via"
+                + " mulDiv(0, 12) instead of failing loudly");
+      }
+    }
+  }
 
   /**
    * Everything the calculator needs for one person, on the run's base currency.

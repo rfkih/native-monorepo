@@ -15,6 +15,7 @@ import id.co.nativeapp.employee.payroll.domain.CompensationPackage;
 import id.co.nativeapp.employee.payroll.dto.PayrollRunResponse;
 import id.co.nativeapp.employee.payroll.dto.PayslipLineResponse;
 import id.co.nativeapp.employee.payroll.dto.RunPayrollCommand;
+import id.co.nativeapp.employee.payroll.messaging.PayrollLiabilitiesPostedSchema;
 import id.co.nativeapp.employee.payroll.messaging.PayrollPostedSchema;
 import id.co.nativeapp.employee.payroll.service.CompensationWriter;
 import id.co.nativeapp.employee.payroll.service.IllustrativeStatutorySeedWriter;
@@ -294,6 +295,107 @@ class PayrollAnnualTrueUpEndToEndTest extends PostgresRlsTestBase {
   }
 
   // ---------------------------------------------------------------------
+  // W1 (P3 review round-2 carry-in): the ACTIVE_RUN_PREDICATE's status='POSTED' filter is
+  // load-bearing and was previously unproven for a higher run_seq that never reached POSTED. A
+  // November run_seq=2 that only reached CALCULATED (payslip lines genuinely persisted, never
+  // posted) must NOT contribute to December's AnnualContext; a FAILED run_seq=3 (rolled back, no
+  // lines at all) must not disturb which lower run_seq resolves as "active" either.
+  // ---------------------------------------------------------------------
+
+  @Test
+  void decemberTrueUpIgnoresAnUnpostedOrFailedHigherRunSeqWhenSelectingTheActiveNovemberRun()
+      throws Exception {
+    Map<String, UUID> ids =
+        TenantContext.callAs(
+            TENANT_A,
+            ACTOR_A,
+            () -> {
+              illustrativeSeeder.seed(IDR); // the bootstrap: seeds BASE/COMMISSION/BPJS_KES_*/PPH21
+              officialSeeder.seed(DATASET_VERSION); // rewires onto the OFFICIAL TER/Art-17 rules
+              UUID outlet = openOutlet();
+
+              // A single 30,000,000 package, open Jan onward — the SAME shape already
+              // hand-verified as employee C (the control) in
+              // decemberTrueUpExcludesASupersededNovemberRunFromTheAnnualContext, so this test
+              // reuses that exact hand-derived expectation rather than re-deriving new arithmetic.
+              UUID employeeA = employeeWithNpwp("Dimas", "3209000000000007", "TK0");
+              EmploymentContract contractA = addPermanentContract(employeeA);
+              compensationWriter.createPackage(
+                  employeeA,
+                  contractA.getId(),
+                  Money.ofMinor(30_000_000L, IDR),
+                  LocalDate.of(2026, 1, 1),
+                  LocalDate.of(9999, 12, 31));
+              assign(employeeA, outlet);
+
+              // run_seq=1 for period 2026-11: POSTED. This is the run that MUST end up "active".
+              payrollRunService.calculateAndPost(
+                  new RunPayrollCommand("2026-11", List.of(employeeA), List.of()), IDR);
+
+              // A SECOND, November-only package stacks an extra 99,000,000 on top of the first —
+              // a massively different (and unmistakably wrong if it leaked) figure. It does not
+              // cover December (effective_to = 2026-11-30), so it cannot skew December directly.
+              compensationWriter.createPackage(
+                  employeeA,
+                  contractA.getId(),
+                  Money.ofMinor(99_000_000L, IDR),
+                  LocalDate.of(2026, 11, 1),
+                  LocalDate.of(2026, 11, 30));
+
+              // run_seq=2 for period 2026-11: calculate() ONLY — never post(). Its payslip lines
+              // ARE persisted (calculate() writes them before the run reaches CALCULATED), but the
+              // run's status stays CALCULATED, never POSTED. The predicate's outer `status =
+              // 'POSTED'` must exclude this row from December's sum.
+              payrollRunService.calculate(
+                  new RunPayrollCommand("2026-11", List.of(employeeA), List.of()), IDR);
+
+              // run_seq=3 for period 2026-11: an unknown employee id fails calculate() loudly;
+              // PayrollRunService.calculate catches the RuntimeException and records a FAILED
+              // audit row (a separate REQUIRES_NEW transaction) with NO payslip lines at all — the
+              // doomed compute transaction rolled back entirely. The mere EXISTENCE of this higher
+              // run_seq row must not perturb the MAX(run_seq) resolution for run_seq=1 either.
+              try {
+                payrollRunService.calculate(
+                    new RunPayrollCommand("2026-11", List.of(UUID.randomUUID()), List.of()), IDR);
+                throw new AssertionError("expected the unknown-employee run to fail");
+              } catch (IllegalArgumentException expected) {
+                // recordFailedAttempt already wrote the FAILED row — asserted below.
+              }
+
+              UUID failedRunId =
+                  payrollRunReader.listByPeriod("2026-11").stream()
+                      .filter(r -> "FAILED".equals(r.status()))
+                      .findFirst()
+                      .orElseThrow(() -> new AssertionError("no FAILED run recorded"))
+                      .id();
+
+              // December: run_seq=1 for the period, using employee A's ORIGINAL 30,000,000
+              // package only (the November-only 99,000,000 package does not cover December).
+              UUID decRunId =
+                  payrollRunService
+                      .calculateAndPost(
+                          new RunPayrollCommand("2026-12", List.of(employeeA), List.of()), IDR)
+                      .getId();
+              return Map.of("employee", employeeA, "run", decRunId, "failedRun", failedRunId);
+            });
+
+    // The FAILED run genuinely exists but carries ZERO payslip lines.
+    UUID failedRunId = ids.get("failedRun");
+    assertThat(
+            TenantContext.callAs(
+                TENANT_A, ACTOR_A, () -> payrollRunReader.payslipIndex(failedRunId).orElseThrow()))
+        .isEmpty();
+
+    // December's AnnualContext reflects ONLY the POSTED run_seq=1 (base 30,000,000) — the SAME
+    // hand-derived figure as decemberTrueUpExcludesASupersededNovemberRunFromTheAnnualContext's
+    // control employee (single 30,000,000 November + December, monthsInYear=2) — NOT the
+    // CALCULATED-but-unposted run_seq=2's 129,000,000-base figure, and undisturbed by the FAILED
+    // run_seq=3's mere existence.
+    PayslipLineResponse pph21 = pph21Line(ids.get("run"), ids.get("employee"));
+    assertThat(pph21.amountMinor()).isEqualTo(-3_742_510L);
+  }
+
+  // ---------------------------------------------------------------------
   // W1 (P1-review carry-in): a NEGATIVE December PPh21 line survives the full path — two months
   // of high TER withholding followed by a low-income December produces a large refund. Run
   // totals stay consistent, PayrollPosted's decoded Avro totals agree with the persisted run, and
@@ -374,6 +476,39 @@ class PayrollAnnualTrueUpEndToEndTest extends PostgresRlsTestBase {
         AvroSerde.deserialize((byte[]) posted.get("payload"), PayrollPostedSchema.schema());
     assertThat(postedRecord.get("employee_deduction_total_minor")).isEqualTo(-62_465_700L);
     assertThat(postedRecord.get("net_total_minor")).isEqualTo(67_465_700L);
+
+    // ADR 0032 (Track P phase P4): PayrollLiabilitiesPosted survives the negative-December-PPh21
+    // case — PPH21_PAYABLE is NEGATIVE (a refund), and the identity still balances.
+    // employer_cost_total = gross 5,000,000 + employer BPJS (OFFICIAL 10.54% of 5,000,000)
+    // 527,000 = 5,527,000. Buckets: NET_WAGES_PAYABLE 67,465,700; PPH21_PAYABLE -62,665,700;
+    // BPJS_KES_PAYABLE 250,000 (50,000 EE + 200,000 ER); BPJS_TK_PAYABLE 477,000 (100,000 JHT-EE +
+    // 50,000 JP-EE + 185,000 JHT-ER + 100,000 JP-ER + 27,000 JKK-ER + 15,000 JKM-ER). Sum:
+    // 67,465,700 - 62,665,700 + 250,000 + 477,000 = 5,527,000.
+    Map<String, Object> liabilitiesRow =
+        jdbcTemplate.queryForMap(
+            "SELECT payload FROM outbox WHERE event_type = 'PayrollLiabilitiesPosted' AND"
+                + " aggregate_id = ?",
+            runId.toString());
+    GenericRecord liabilitiesRecord =
+        AvroSerde.deserialize(
+            (byte[]) liabilitiesRow.get("payload"), PayrollLiabilitiesPostedSchema.schema());
+    assertThat(liabilitiesRecord.get("employer_cost_total_minor")).isEqualTo(5_527_000L);
+
+    @SuppressWarnings("unchecked")
+    List<GenericRecord> liabilityBuckets =
+        (List<GenericRecord>) liabilitiesRecord.get("liabilities");
+    Map<String, Long> byRole = new java.util.LinkedHashMap<>();
+    for (GenericRecord bucket : liabilityBuckets) {
+      byRole.put(bucket.get("liability_role").toString(), (Long) bucket.get("amount_minor"));
+    }
+    assertThat(byRole).containsEntry("NET_WAGES_PAYABLE", 67_465_700L);
+    assertThat(byRole).containsEntry("PPH21_PAYABLE", -62_665_700L); // NEGATIVE — the refund month
+    assertThat(byRole).containsEntry("BPJS_KES_PAYABLE", 250_000L);
+    assertThat(byRole).containsEntry("BPJS_TK_PAYABLE", 477_000L);
+    assertThat(byRole).doesNotContainKey("OTHER_DEDUCTIONS_PAYABLE");
+
+    long liabilitySum = byRole.values().stream().mapToLong(Long::longValue).sum();
+    assertThat(liabilitySum).isEqualTo(5_527_000L);
 
     // MoneyPiiConverter round-trip: the ciphertext at rest carries no plaintext digits of the
     // negative amount (rule 6) — the decrypted authorized read matching the hand-derived figure

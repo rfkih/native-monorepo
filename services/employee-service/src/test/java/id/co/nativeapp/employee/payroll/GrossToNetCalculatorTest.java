@@ -704,6 +704,21 @@ class GrossToNetCalculatorTest {
     assertThat(lineAmount(result, "PPH21")).isEqualTo(Money.ofMinor(25_000L, IDR));
   }
 
+  @Test
+  void annualContextRejectsAMonthsInYearOutsideOneToTwelve() {
+    // Review S3: monthsInYear=0 would silently ZERO the biaya-jabatan cap via mulDiv(0, 12)
+    // instead of failing loudly; a value above 12 cannot be a real fiscal-year month count.
+    assertThatThrownBy(() -> new AnnualContext(0L, 0L, 0L, 0))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("monthsInYear");
+    assertThatThrownBy(() -> new AnnualContext(0L, 0L, 0L, 13))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("monthsInYear");
+    // The boundary values are valid (never thrown for the legal range).
+    assertThat(new AnnualContext(0L, 0L, 0L, 1).monthsInYear()).isEqualTo(1);
+    assertThat(new AnnualContext(0L, 0L, 0L, 12).monthsInYear()).isEqualTo(12);
+  }
+
   private static ComputedLine line(PersonResult result, String key) {
     return result.lines().stream()
         .filter(l -> l.component().getComponentKey().equals(key))

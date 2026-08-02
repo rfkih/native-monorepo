@@ -211,7 +211,7 @@ export function PayrollTab({
                         <span className="text-[14px] font-semibold text-ink">
                           {t('hr.payroll.history.runLabel', { seq: run.runSeq })}
                         </span>
-                        {run.period.endsWith('-12') ? (
+                        {run.period.endsWith('-12') && !run.usesIllustrativeRules ? (
                           <Badge tone="info">{t('hr.payroll.history.trueUpBadge')}</Badge>
                         ) : null}
                         {run.usesIllustrativeRules ? (

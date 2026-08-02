@@ -314,7 +314,7 @@ function PayslipRow({
         {slip.runSeq > 1 ? (
           <span className="text-xs text-ink-3">{t('me.payslips.runSeq', { seq: slip.runSeq })}</span>
         ) : null}
-        {isDecemberPeriod(slip.period) ? (
+        {isDecemberPeriod(slip.period) && !slip.illustrative ? (
           <Badge tone="info">{t('me.payslips.trueUp')}</Badge>
         ) : null}
         {slip.illustrative ? (
@@ -378,7 +378,10 @@ function PayslipRow({
                       // negative value) — that was the bug: "−" + "-Rp150.000" rendered as a
                       // double negative.
                       const displayMinor = line.kind === 'DEDUCTION' ? -line.amountMinor : line.amountMinor
-                      const isCredit = line.kind === 'DEDUCTION' && displayMinor >= 0
+                      // > 0, not >= 0: a zero PPh21 line (no liability, nothing withheld either)
+                      // is not a refund — only a STRICTLY positive displayed deduction (the
+                      // stored amount was negative) is an actual credit back to the employee.
+                      const isCredit = line.kind === 'DEDUCTION' && displayMinor > 0
                       return (
                         <tr key={`${line.componentKey}-${i}`} className="text-ink-2">
                           <td className="py-1.5 pr-4 font-mono text-xs">{line.componentKey}</td>

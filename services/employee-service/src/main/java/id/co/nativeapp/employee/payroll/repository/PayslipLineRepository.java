@@ -29,6 +29,17 @@ public interface PayslipLineRepository extends JpaRepository<PayslipLine, UUID> 
    * SAME set of runs finance's books already reflect. A single {@code interface}-constant (a
    * compile-time constant expression) so the two queries below can never drift apart from each
    * other.
+   *
+   * <p><strong>⚠ P8 LANDMINE — MUST add {@code run_type} scoping here before THR ships (ADR
+   * 0034).</strong> {@code payroll_run} is currently keyed {@code (company_id, period, run_seq)}
+   * only; Track P phase P8 lands per-{@code (period, run_type)} sequences (a THR off-cycle run and
+   * the REGULAR run for the same period each get their OWN {@code run_seq} series). The moment that
+   * lands, this predicate's {@code MAX(pr2.run_seq) WHERE pr2.period = pr.period} — with NO {@code
+   * run_type} in the WHERE — would let a THR run's {@code run_seq} supersede a REGULAR run's (or
+   * vice versa) for the SAME period, and would leak THR payslip lines (a different, non-monthly
+   * income shape) into the December Art-17 annual base. P8 MUST add {@code AND pr.run_type =
+   * pr2.run_type} (or equivalent) to both the outer join predicate and the correlated subselect the
+   * moment {@code run_type} exists on this table — tracked on the P8 task, not just here.
    */
   String ACTIVE_RUN_PREDICATE =
       """
