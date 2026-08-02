@@ -1,6 +1,6 @@
 {
   "dataset_version": "ID-2026.2",
-  "_self_contained_topup_note": "Track P Phase P7 (ADR 0031 addendum). This dataset is a SELF-CONTAINED TOP-UP: every rule below is BYTE-IDENTICAL to ID-2026.1 (same rule_key AND same rule_version 'ID-2026.1' — the figures have not changed) so OfficialStatutorySeedWriter's existing exact-match lookup (findByRuleKeyAndRuleVersion) naturally SKIPS re-inserting them (rulesSkipped++, zero history churn) while still satisfying 'a dataset must be self-contained' (a fresh tenant activating ID-2026.2 directly, never having seen ID-2026.1, gets the full rule set in one call). Only the THREE new pay_component rows (OVERTIME, UNPAID_LEAVE, EXPENSE_REIMBURSEMENT) and the OVERTIME_HOURLY rule's now-LIVE consumer are new in this version — OVERTIME_HOURLY itself was already shipped DORMANT in ID-2026.1 (Track P phase P1/P2) and is unchanged here. See ADR 0031's P7 addendum for the full skip-if-identical rationale (why a rule_version bump was deliberately NOT used for unchanged figures).",
+  "_self_contained_topup_note": "Track P Phase P7 (ADR 0031 addendum). This dataset is a SELF-CONTAINED TOP-UP over ID-2026.1: FOUR rules (PPH21_TER, PPH21_ARTICLE17, PTKP_RELIEF, BIAYA_JABATAN) plus OVERTIME_HOURLY are BYTE-IDENTICAL (same rule_key AND same rule_version 'ID-2026.1' — the figures have not changed) so OfficialStatutorySeedWriter's existing exact-match lookup (findByRuleKeyAndRuleVersion) naturally SKIPS re-inserting them (rulesSkipped++, zero history churn). The FIVE BPJS rules (BPJS_KESEHATAN/JHT/JP/JKK/JKM) are a GENUINE REVISION in this version — rule_version bumped to 'ID-2026.2' and base_kind=BASE_PAY added (P7 review W5 fix: BPJS legs must base on wage, not a commission/overtime-laden taxable gross; ID-2026.1 shipped without base_kind, defaulting to TAXABLE_GROSS, an oversight this version corrects) — so the seeder's exact-match lookup correctly does NOT skip them: it supersedes (deactivates) the ID-2026.1 rows and inserts the ID-2026.2 ones, exactly as designed for a genuine figure change. This still satisfies 'self-contained' — a fresh tenant activating ID-2026.2 directly, never having seen ID-2026.1, gets the full correct rule set in one call. The THREE new pay_component rows (OVERTIME, UNPAID_LEAVE, EXPENSE_REIMBURSEMENT) and the OVERTIME_HOURLY rule's now-LIVE consumer are also new in this version. See ADR 0031's P7 addendum for the full skip-if-identical-vs-genuine-revision rationale.",
   "rules": [
     {
       "rule_key": "PPH21_TER",
@@ -219,77 +219,82 @@
     },
     {
       "rule_key": "BPJS_KESEHATAN",
-      "rule_version": "ID-2026.1",
+      "rule_version": "ID-2026.2",
       "calc_type": "PERCENTAGE_CEILING",
       "provenance": "OFFICIAL",
-      "source_note": "Perpres 64/2020 Pasal 30 (Jaminan Kesehatan Nasional iuran): employer 4%, employee 1%, base capped at Rp12.000.000/bulan. The employee 1% leg is NOT deductible from the PPh21 base; the employer 4% leg IS a taxable fringe benefit to the employee (raises the tax base only, never gross earnings/net cash).",
+      "source_note": "Perpres 64/2020 Pasal 30 (Jaminan Kesehatan Nasional iuran): employer 4%, employee 1%, base capped at Rp12.000.000/bulan. The employee 1% leg is NOT deductible from the PPh21 base; the employer 4% leg IS a taxable fringe benefit to the employee (raises the tax base only, never gross earnings/net cash). P7 REVIEW W5 FIX (ID-2026.2, supersedes the ID-2026.1 row): base_kind=BASE_PAY — the statutory spec (§3.1, the BPJS matrix) bases every BPJS leg on WAGE (pokok + tunjangan tetap), never on a commission/overtime/THR-laden taxable gross; ID-2026.1 shipped with the base_kind field OMITTED (defaulting to TAXABLE_GROSS), an oversight this version corrects. APPROXIMATION (documented, ADR 0031 P7 addendum): 'base pay' here is engine's PersonInput.basePay — the person's aggregated comp-package base ONLY; fixed allowances (tunjangan tetap) are not yet a distinct, separately-summed input this engine models, so a company paying meaningful fixed (non-variable) allowances alongside base pay under-bases BPJS relative to the true statutory wage until that modeling lands — a tracked follow-up, not silently claimed complete.",
       "effective_from": "2026-01-01",
       "params": {
         "ceiling_minor": 12000000,
         "employee_bp": 100,
         "employer_bp": 400,
         "reduces_tax_base": false,
-        "employer_adds_to_tax_base": true
+        "employer_adds_to_tax_base": true,
+        "base_kind": "BASE_PAY"
       }
     },
     {
       "rule_key": "BPJS_JHT",
-      "rule_version": "ID-2026.1",
+      "rule_version": "ID-2026.2",
       "calc_type": "PERCENTAGE_CEILING",
       "provenance": "OFFICIAL",
-      "source_note": "PP 46/2015 (Jaminan Hari Tua): employer 3.7%, employee 2%, uncapped base (modeled with the agreed unbounded sentinel 999999999999 minor — never a real ceiling). The employee 2% leg IS deductible from the PPh21 base (December true-up); the employer 3.7% leg is NOT a taxable fringe benefit.",
+      "source_note": "PP 46/2015 (Jaminan Hari Tua): employer 3.7%, employee 2%, uncapped base (modeled with the agreed unbounded sentinel 999999999999 minor — never a real ceiling). The employee 2% leg IS deductible from the PPh21 base (December true-up); the employer 3.7% leg is NOT a taxable fringe benefit. P7 REVIEW W5 FIX (ID-2026.2, supersedes ID-2026.1): base_kind=BASE_PAY — see BPJS_KESEHATAN's source_note for the full rationale + the fixed-allowances-not-yet-modeled approximation this shares.",
       "effective_from": "2026-01-01",
       "params": {
         "ceiling_minor": 999999999999,
         "employee_bp": 200,
         "employer_bp": 370,
         "reduces_tax_base": true,
-        "employer_adds_to_tax_base": false
+        "employer_adds_to_tax_base": false,
+        "base_kind": "BASE_PAY"
       }
     },
     {
       "rule_key": "BPJS_JP",
-      "rule_version": "ID-2026.1",
+      "rule_version": "ID-2026.2",
       "calc_type": "PERCENTAGE_CEILING",
       "provenance": "OFFICIAL",
-      "source_note": "PP 45/2015 (Jaminan Pensiun): employer 2%, employee 1%, base capped at the annually-announced JP ceiling (Rp10.547.400/bulan as of this dataset's authoring). WARNING: the JP ceiling is ADJUSTED EVERY MARCH by BPJS Ketenagakerjaan announcement — verify the current figure against the latest announcement before/at activation and PATCH this rule with the corrected ceiling_minor if it has changed. The employee 1% leg IS deductible from the PPh21 base; the employer 2% leg is NOT a taxable fringe benefit.",
+      "source_note": "PP 45/2015 (Jaminan Pensiun): employer 2%, employee 1%, base capped at the annually-announced JP ceiling (Rp10.547.400/bulan as of this dataset's authoring). WARNING: the JP ceiling is ADJUSTED EVERY MARCH by BPJS Ketenagakerjaan announcement — verify the current figure against the latest announcement before/at activation and PATCH this rule with the corrected ceiling_minor if it has changed. The employee 1% leg IS deductible from the PPh21 base; the employer 2% leg is NOT a taxable fringe benefit. P7 REVIEW W5 FIX (ID-2026.2, supersedes ID-2026.1): base_kind=BASE_PAY — see BPJS_KESEHATAN's source_note for the full rationale + the fixed-allowances-not-yet-modeled approximation this shares.",
       "effective_from": "2026-01-01",
       "params": {
         "ceiling_minor": 10547400,
         "employee_bp": 100,
         "employer_bp": 200,
         "reduces_tax_base": true,
-        "employer_adds_to_tax_base": false
+        "employer_adds_to_tax_base": false,
+        "base_kind": "BASE_PAY"
       }
     },
     {
       "rule_key": "BPJS_JKK",
-      "rule_version": "ID-2026.1",
+      "rule_version": "ID-2026.2",
       "calc_type": "PERCENTAGE_CEILING",
       "provenance": "OFFICIAL",
-      "source_note": "PP 44/2015 (Jaminan Kecelakaan Kerja): employer-only, rate by COMPANY risk class I-V (I 0.24%, II 0.54%, III 0.89%, IV 1.27%, V 1.74%). This row encodes the DEFAULT class II rate (0.54%) only, uncapped base; a per-company risk-class attribute plus a dedicated risk-class calc family to select among the five rates is a documented follow-up (ADR 0031) — until then every tenant is seeded at class II regardless of its real registered risk class. The employer leg IS a taxable fringe benefit to the employee.",
+      "source_note": "PP 44/2015 (Jaminan Kecelakaan Kerja): employer-only, rate by COMPANY risk class I-V (I 0.24%, II 0.54%, III 0.89%, IV 1.27%, V 1.74%). This row encodes the DEFAULT class II rate (0.54%) only, uncapped base; a per-company risk-class attribute plus a dedicated risk-class calc family to select among the five rates is a documented follow-up (ADR 0031) — until then every tenant is seeded at class II regardless of its real registered risk class. The employer leg IS a taxable fringe benefit to the employee. P7 REVIEW W5 FIX (ID-2026.2, supersedes ID-2026.1): base_kind=BASE_PAY — see BPJS_KESEHATAN's source_note for the full rationale + the fixed-allowances-not-yet-modeled approximation this shares.",
       "effective_from": "2026-01-01",
       "params": {
         "ceiling_minor": 999999999999,
         "employee_bp": 0,
         "employer_bp": 54,
         "reduces_tax_base": false,
-        "employer_adds_to_tax_base": true
+        "employer_adds_to_tax_base": true,
+        "base_kind": "BASE_PAY"
       }
     },
     {
       "rule_key": "BPJS_JKM",
-      "rule_version": "ID-2026.1",
+      "rule_version": "ID-2026.2",
       "calc_type": "PERCENTAGE_CEILING",
       "provenance": "OFFICIAL",
-      "source_note": "PP 44/2015 (Jaminan Kematian): employer-only, 0.3%, uncapped base. The employer leg IS a taxable fringe benefit to the employee.",
+      "source_note": "PP 44/2015 (Jaminan Kematian): employer-only, 0.3%, uncapped base. The employer leg IS a taxable fringe benefit to the employee. P7 REVIEW W5 FIX (ID-2026.2, supersedes ID-2026.1): base_kind=BASE_PAY — see BPJS_KESEHATAN's source_note for the full rationale + the fixed-allowances-not-yet-modeled approximation this shares.",
       "effective_from": "2026-01-01",
       "params": {
         "ceiling_minor": 999999999999,
         "employee_bp": 0,
         "employer_bp": 30,
         "reduces_tax_base": false,
-        "employer_adds_to_tax_base": true
+        "employer_adds_to_tax_base": true,
+        "base_kind": "BASE_PAY"
       }
     },
     {

@@ -21,6 +21,17 @@ import org.springframework.stereotype.Component;
  * would only invite drift; the single-month invariant makes it unnecessary). {@link
  * #unpaidLeaveEarning} therefore takes the ALREADY-SUMMED day count as a plain {@code int}.
  *
+ * <p><strong>The labor-pay floor (P7 review W1).</strong> {@link #unpaidLeaveEarning} CLAMPS {@code
+ * unpaidDays} at {@code monthlyDivisor} before computing the deduction: the {@code work_calendar}
+ * divisor IS "a full month" in this convention (PP 36/2021's daily-wage divisor), so more unpaid
+ * days than that cannot deduct further — a full month of unpaid leave means zero base pay, never a
+ * NEGATIVE one. Without this clamp, an employee with unpaid days exceeding the divisor (e.g. 31
+ * approved unpaid days against a 21-day divisor — legal today, since a whole-month `UNPAID` leave
+ * request is a single calendar month, up to 31 days) would deduct MORE than their entire base pay,
+ * driving labor net negative — the employee would owe the company money for taking unpaid leave, an
+ * absurd result. {@link #clampUnpaidDays} exposes the SAME clamp so the caller can detect and WARN
+ * when it actually bites.
+ *
  * <p><strong>Overtime minute pro-ration convention (statutory spec / this phase).</strong> PP
  * 35/2021 defines multiplier TIERS in whole hours (weekday: 1.5x hour 1, 2x thereafter; rest-day:
  * 2x hours 1-7, 3x hour 8, 4x hours 9-10). An approved {@code overtime_entry} carries MINUTES,
@@ -38,17 +49,35 @@ public class WorkInputCalculator {
   private static final int MINUTES_PER_HOUR = 60;
 
   /**
-   * The unpaid-leave EARNING amount (Track P phase P7): {@code -(basePay × unpaidDays /
+   * The unpaid-leave EARNING amount (Track P phase P7): {@code -(basePay × clamp(unpaidDays) /
    * monthlyDivisor)} — a SIGNED-NEGATIVE Money (PP 36/2021 daily-wage convention, the tenant's
-   * {@code work_calendar.monthly_divisor}, 21 or 25). Rounds once via {@link Money#mulDiv}
-   * (HALF_EVEN) then negates; never rounds a second time. Returns zero (never a negative-zero
-   * surprise) when {@code unpaidDays <= 0}.
+   * {@code work_calendar.monthly_divisor}, 21 or 25). {@code unpaidDays} is CLAMPED at {@code
+   * monthlyDivisor} first (W1, review fix — see the class javadoc): the deduction can never exceed
+   * {@code -basePay} exactly (a full month), so labor pay floors at zero and never goes negative.
+   * Rounds once via {@link Money#mulDiv} (HALF_EVEN) then negates; never rounds a second time.
+   * Returns zero (never a negative-zero surprise) when {@code unpaidDays <= 0}.
    */
   public Money unpaidLeaveEarning(Money basePay, int unpaidDays, int monthlyDivisor) {
     if (unpaidDays <= 0) {
       return Money.ofMinor(0L, basePay.currency());
     }
-    return basePay.mulDiv(unpaidDays, monthlyDivisor).negate();
+    int clampedDays = clampUnpaidDays(unpaidDays, monthlyDivisor);
+    return basePay.mulDiv(clampedDays, monthlyDivisor).negate();
+  }
+
+  /**
+   * Clamps {@code unpaidDays} at {@code monthlyDivisor} (W1, review fix) — "a full month" in the PP
+   * 36/2021 daily-wage convention, so days beyond it cannot deduct further. {@link
+   * #unpaidLeaveEarning} always applies this clamp internally (defense in depth); this method is
+   * exposed separately so {@code PayrollRunWriter} can detect when clamping actually occurred and
+   * log a loud WARN (HR-9) — an unpaid-days count exceeding the divisor is unusual enough to flag,
+   * even though the resulting Money is always safe either way.
+   *
+   * @return {@code unpaidDays} unchanged when already {@code <= monthlyDivisor}, else {@code
+   *     monthlyDivisor}
+   */
+  public int clampUnpaidDays(int unpaidDays, int monthlyDivisor) {
+    return Math.min(unpaidDays, monthlyDivisor);
   }
 
   /**

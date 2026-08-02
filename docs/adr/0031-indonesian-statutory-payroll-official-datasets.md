@@ -308,3 +308,81 @@ hourly-rate base is `basePay` only (`base × 1/173`), not `pokok + tunjangan tet
 as the full regulation text allows — the task's own literal formula; folding fixed allowances in is a
 tracked follow-up. The PP 35/2021 4h/day regulatory cap is still only the 10h/entry DB `CHECK` (P6
 residual, unchanged).
+
+## P7 review round (2026-08-02) — a CRITICAL per-day overtime fix, the unpaid-leave floor, and `ID-2026.2`'s BPJS base_kind correction
+
+An adversarial review of the P7 build above found one CRITICAL defect and several hardening gaps,
+fixed in `ID-2026.2.json` and `PayrollRunWriter`/`WorkInputCalculator` without touching the
+calculation MACHINERY this ADR's Decision §1 shipped (`StatutoryCalcType`/`StatutoryParams` are
+unchanged; only the CALLER's aggregation and one dataset field changed):
+
+**C1 (CRITICAL, 11-44% overpayment) — PP 35/2021's multiplier tiers reset PER CALENDAR DAY, never
+aggregated across a month.** The original `PayrollRunWriter.appendWorkInputs` summed a WHOLE month's
+approved overtime minutes into ONE call to `WorkInputCalculator.overtimeEarning`, which walks the
+tier table assuming continuous minutes — granting the cheap first tier's rate only ONCE for the
+entire month instead of once per day. Hand-derived proof: 5 weekday days × 2h each (10h total) is
+CORRECTLY `5 × (1h@1.5x + 1h@2.0x) = 17.5×` hourly per-day, but the bug computed `1h@1.5x + 9h@2.0x
+= 19.5×` hourly — an 11.4% overpayment. 2 rest days × 8h each (16h total) is CORRECTLY `2 ×
+(7h@2x + 1h@3x) = 34×` hourly per-day, but the bug computed `7h@2x + 1h@3x + 8h@4x = 49×` hourly — a
+44.1% overpayment. **Fix:** `ApprovedOvertimeView`/`OvertimeEntryRepository.findApprovedForPeriod`
+now carry `work_date`; `appendWorkInputs` groups approved entries into `Map<LocalDate, Integer>` per
+`(work_date, day_kind)` and calls `WorkInputCalculator.overtimeEarning` ONCE PER DAY, summing the
+per-day results — `WorkInputCalculator.overtimeEarning` itself is UNCHANGED (it was always a correct
+pure function of ONE day's minutes; the bug was entirely in how the caller aggregated inputs across
+days). Both worked examples above are now regression-pinned end-to-end in
+`PayrollWorkInputsEndToEndTest` against the real writer path (not just the pure calculator), and
+`WorkInputCalculatorTest`'s prior "same month" unit test was renamed/re-scoped to make clear it only
+ever asserted ONE call's internal tier independence, never monthly-aggregation validity. The rest-day
+h9-10 open-ended tier bound is unaffected — the existing 4h/day `overtime_entry` DB `CHECK` (10h max
+per entry, P6) already bounds any single day's minutes below the point where the open tier would
+even engage past hour 10.
+
+**W1 — the unpaid-leave deduction now clamps at the work calendar's monthly divisor, so labor pay
+floors at zero and never goes negative.** `WorkInputCalculator.unpaidLeaveEarning` now calls a new
+`clampUnpaidDays(unpaidDays, monthlyDivisor)` (`Math.min`) before computing the deduction — days
+beyond a full month (the divisor) cannot deduct further, since "a full month" IS the deduction's own
+unit of account (PP 36/2021's daily-wage convention). Without this, an employee with unpaid days
+EXCEEDING the divisor (legal today: a single-month `UNPAID` request can span up to 31 days, while the
+default divisor is 21) would deduct MORE than their entire base pay — the employee would owe the
+company money for taking unpaid leave, an absurd result. `PayrollRunWriter` detects when the clamp
+actually bit and logs a loud WARN (HR-9) plus freezes an `appliedDays` field into `work_inputs_json`
+distinct from the raw approved `days`, so the record is honest about what was actually deducted.
+**Residual interaction with W5 (documented, not silently resolved):** once W5's `base_kind=BASE_PAY`
+applies, BPJS legs compute on the person's UNCLAMPED `basePay` regardless of how much the unpaid-leave
+earning line reduces taxable/net pay — so "net pay floors at zero" is a property of LABOR earnings
+only; a run with BOTH real BPJS legs AND a fully-clamped unpaid-leave line can still show a small
+negative or positive net driven by the (unclamped-base) BPJS-EE withholding, not by unpaid leave
+itself. The "the cash circle holds exactly" identity (`net == reimbursement` when labor floors to
+zero) is therefore proven in `PayrollWorkInputsEndToEndTest` against an ISOLATED minimal catalog
+(BASE + UNPAID_LEAVE + EXPENSE_REIMBURSEMENT only, zero BPJS/PPh21) rather than claimed as a general
+invariant once real statutory deductions are also in play — see ADR 0032's P7 review addendum for the
+liability-side framing of the same point.
+
+**`ID-2026.2`'s five BPJS rules now carry `base_kind = BASE_PAY` (W5) — a genuine content revision,
+not a skip-if-identical re-ship.** `ID-2026.1` shipped every `PERCENTAGE_CEILING` BPJS rule
+(`BPJS_KESEHATAN`/`JHT`/`JP`/`JKK`/`JKM`) with `base_kind` OMITTED, defaulting to `TAXABLE_GROSS` — an
+oversight this phase's review caught: the statutory BPJS matrix bases every leg on WAGE (pokok +
+tunjangan tetap), never on a commission/overtime/THR-laden taxable gross, so a tenant with meaningful
+commission or overtime earnings was OVER-withholding/over-contributing BPJS relative to the real
+statutory base. `ID-2026.2.json` amends these five rules in place with `base_kind: "BASE_PAY"` AND
+bumps their `rule_version` to `"ID-2026.2"` (the other four rules — `PPH21_TER`/`PPH21_ARTICLE17`/
+`PTKP_RELIEF`/`BIAYA_JABATAN` — plus `OVERTIME_HOURLY` are unchanged, still `"ID-2026.1"`, so
+`OfficialStatutorySeedWriter`'s existing exact-match skip-if-identical logic naturally re-ships them
+as no-ops while the five BPJS rules genuinely supersede). **APPROXIMATION (documented, not silently
+claimed complete):** "base pay" here is the engine's `PersonInput.basePay()` — the person's
+aggregated comp-package base ONLY. Fixed allowances (`tunjangan tetap`) are not yet a distinct,
+separately-summed input this engine models as of P7, so a company paying meaningful fixed
+(non-variable) allowances alongside base pay still under-bases BPJS relative to the true statutory
+wage until that modeling lands — a tracked follow-up, the same honest posture this ADR already takes
+for the JKK risk-class gap. `GrossToNetOfficialDatasetTest.bpjsLegsUnderId20262ExcludeATaxableCommissionEarningFromTheirBase`
+regression-pins the fix: an otherwise-identical person with a 5,000,000 IDR taxable COMMISSION earning
+produces IDENTICAL BPJS legs to the commission-free control (proving the commission is excluded from
+every BPJS base under `BASE_PAY`), while PPh21 correctly still taxes the commission (it is not exempt
+from income tax, only from the BPJS base).
+
+**W2 — the `EXPENSE_REIMBURSEMENT` component's non-taxability is now a hard, fail-loud invariant, not
+an assumption.** `PayrollRunWriter` asserts `!reimbursementComponent.isTaxable()` at rule-resolution/
+freeze time, once per run, regardless of whether there is an actual reimbursement to apply this
+period — a `taxable=true` catalog misconfiguration throws `TaxableReimbursementComponentException`
+(422) rather than silently taxing a reimbursement, which would corrupt the NET_WAGES_PAYABLE split's
+identity (ADR 0032 §P7 addendum assumes the reimbursement never enters the PPh21/BPJS base).

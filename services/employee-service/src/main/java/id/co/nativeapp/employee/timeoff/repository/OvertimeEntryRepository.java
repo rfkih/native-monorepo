@@ -92,12 +92,14 @@ public interface OvertimeEntryRepository extends JpaRepository<OvertimeEntry, UU
   /**
    * Every APPROVED overtime entry among {@code employeeIds} whose {@code work_date} falls in {@code
    * period} (Track P Phase P7's overtime earning resolution) — the caller chunks {@code
-   * employeeIds} at ≤1000.
+   * employeeIds} at ≤1000. {@code work_date} is REQUIRED (P7 review C1): PP 35/2021's tiers reset
+   * per calendar day, so the caller must group these rows by {@code (work_date, day_kind)} before
+   * applying the tier walk — never aggregate a whole month's minutes into one walk.
    */
   @Query(
       value =
           """
-          SELECT id, employee_id, minutes, day_kind
+          SELECT id, employee_id, minutes, day_kind, work_date
             FROM overtime_entry
            WHERE employee_id IN (:employeeIds)
              AND status = 'APPROVED'

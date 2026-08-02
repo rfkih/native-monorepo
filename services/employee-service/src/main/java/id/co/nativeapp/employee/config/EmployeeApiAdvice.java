@@ -25,6 +25,7 @@ import id.co.nativeapp.employee.payroll.domain.PayrollRunNotFoundException;
 import id.co.nativeapp.employee.payroll.domain.PayrollRunNotPostedException;
 import id.co.nativeapp.employee.payroll.domain.PayrollSetupNotSeededException;
 import id.co.nativeapp.employee.payroll.domain.PendingWorkEntriesException;
+import id.co.nativeapp.employee.payroll.domain.TaxableReimbursementComponentException;
 import id.co.nativeapp.employee.payroll.domain.UnknownDatasetVersionException;
 import id.co.nativeapp.employee.payroll.domain.UnknownStatutoryRuleException;
 import id.co.nativeapp.employee.timeoff.domain.CrossMonthLeaveRequestException;
@@ -127,6 +128,20 @@ public class EmployeeApiAdvice {
     ProblemDetail problem =
         problem(HttpStatus.UNPROCESSABLE_ENTITY, "non-monthly-compensation", request);
     problem.setTitle("Unsupported compensation cadence");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /**
+   * The EXPENSE_REIMBURSEMENT catalog component is misconfigured taxable=true → 422 (Track P Phase
+   * P7 review W2).
+   */
+  @ExceptionHandler(TaxableReimbursementComponentException.class)
+  public ProblemDetail handleTaxableReimbursementComponent(
+      TaxableReimbursementComponentException ex, HttpServletRequest request) {
+    ProblemDetail problem =
+        problem(HttpStatus.UNPROCESSABLE_ENTITY, "taxable-reimbursement-component", request);
+    problem.setTitle("Reimbursement component misconfigured taxable");
     problem.setDetail(ex.getMessage());
     return problem;
   }

@@ -367,4 +367,64 @@ investigate rather than a fragmented one.
 **Regression note.** This bucket split changed `PayrollRunEndToEndTest`'s pre-existing single-bucket
 assertion (an illustrative-dataset employee with BASE + BPJS-Kes-ER now emits TWO `LaborCostAllocated`
 events, not one) — updated to sum across however many buckets land, an intentional, reviewed behaviour
-change, not a regression.
+change, not a regression. A dedicated golden test,
+`PayrollRunEndToEndTest#aWorkInputFreeTenantsPayslipAndTotalsAreByteIdenticalToAPreP7Run` (P7 review
+S1), pins that THIS bucket split is the ONLY externally-visible difference for a work-input-free
+tenant — every other figure (gross/employeeDeductions/employerContributions/net,
+`payroll_run.work_inputs_json == "{}"`) is byte-identical to a pre-P7 run.
+
+## P7 review addendum (2026-08-02) — claim-id freezing, per-employee settle gating, and the "cash circle" honestly scoped
+
+An adversarial review of the P7 addendum above found three liability/reproducibility gaps in
+`ExpenseClaimPayrollLinker`/`PayrollRunWriter`, fixed without changing the NET_WAGES_PAYABLE split
+identity itself (the algebra above is unchanged):
+
+**W3 — `work_inputs_json` now freezes the INDIVIDUAL claim ids that make up a reimbursement, not just
+the aggregate total/count.** The original `reimbursementTotalsByEmployee` read only
+`ExpenseClaimPayrollLinker#findLinkedClaimTotalsByEmployee` (one aggregate row per employee) — a
+reproducibility gap: re-deriving WHICH claims a frozen total came from required a live join against
+`expense_claim.reimbursement_run_id`, not the immutable run record itself. A new
+`ExpenseClaimRepository#findLinkedClaimIdsByEmployee` (via `ExpenseClaimPayrollLinker
+#findLinkedClaimIdsByEmployee`, `propagation = MANDATORY` like every other linker method) returns one
+`(employeeId, claimId, currency)` row per linked-and-still-APPROVED claim; `PayrollRunWriter`'s new
+`ReimbursementInfo` record (`total`, `claimCount`, `claimIds`) combines both reads (same currency
+filter as the total) so `work_inputs_json`'s `reimbursement` node now carries `claimIds: [...]`
+alongside `amountMinor`/`claimCount` — a re-run's `work_inputs_json` is now a COMPLETE reproducibility
+record of exactly which claims funded the reimbursement line, not just how much.
+
+**W4 — `markReimbursedAndEmit` now settles a claim ONLY if its OWN employee actually received an
+`EXPENSE_REIMBURSEMENT` payslip line THIS run, not merely if ANY employee in the run did.** The
+original E5-transitional gate (`existsByPayrollRunIdAndComponentKey`) checked whether the component
+key appeared ANYWHERE in the run — sufficient while every linked claim's employee unconditionally got
+a line, but `reimbursementInfoByEmployee`'s currency-mismatch skip (ADR 0030 §9 — a linked claim in a
+currency other than the run's base currency is a data anomaly, logged and excluded) can leave ONE
+employee's reimbursement un-applied while OTHERS in the same run settle normally. Settling that
+skipped employee's claim would book a `2600`→settled transition, and emit
+`ExpenseReimbursementSettled(PAYROLL)`, for money they never actually received via this run — the
+exact wrong-books failure mode the gate exists to prevent, just at finer grain than the original
+caught. `markReimbursedAndEmit` now derives, via a new
+`PayslipLineRepository#findDistinctEmployeeIdsByPayrollRunIdAndComponentKey`, the SET of employee ids
+that actually carry the line this run, and settles a linked claim only when its `employee_id` is in
+that set; a skipped claim stays `APPROVED` + linked — `ExpenseClaimRepository#releaseForPeriod`'s
+existing "POSTED but still APPROVED" branch (unchanged, the E5-transitional recovery path) releases it
+for the NEXT `calculate()` to re-link and retry, exactly as it already did for the whole-run gate.
+`PayrollWorkInputsEndToEndTest#aCurrencyMismatchedLinkedClaimStaysApprovedAndLinkedWhileAnotherEmployeesClaimSettles`
+proves BOTH halves in one run: the matching-currency employee's claim settles, the mismatched
+employee's claim stays APPROVED+linked, and a follow-up `calculate()` re-links it.
+
+**The "cash circle" (`net == reimbursement` when labor floors to zero) is proven on an ISOLATED
+catalog, not claimed as a general invariant.** See ADR 0031's P7 review addendum (W1) for the full
+framing: once ID-2026.2's `base_kind=BASE_PAY` fix (ADR 0031 W5) is active, BPJS legs compute on the
+UNCLAMPED base pay regardless of how far the unpaid-leave earning line reduces labor pay — so a run
+with BOTH real BPJS/PPh21 AND a fully-clamped unpaid-leave line does NOT generally satisfy `net ==
+reimbursement` (BPJS-EE/PPh21 still withhold against the unclamped base). `PayrollWorkInputsEndToEndTest`
+proves the EXACT identity against a deliberately minimal catalog (BASE + UNPAID_LEAVE +
+EXPENSE_REIMBURSEMENT only, zero statutory deductions) where no such confound exists, and separately
+proves the hard invariant that DOES generalize unconditionally — labor net never goes negative — for
+both the isolated catalog and (via ADR 0031's W5 regression test) the full BPJS-bearing case.
+`PayrollAnnualTrueUpEndToEndTest#aNegativeDecemberPphRefundCombinedWithALinkedClaimReimbursementBalancesTheLiabilitySplit`
+(P7 review S2c) is the complementary proof at the OTHER end of the scale: a large NEGATIVE December
+PPh21 refund combined with a linked reimbursement in the SAME run, showing the liability split
+identity balances even when PPh21 itself is a credit — the reimbursement rides alongside the true-up
+without perturbing it (PPh21/BPJS figures are byte-identical with or without the reimbursement, since
+it is non-taxable and never enters either base).

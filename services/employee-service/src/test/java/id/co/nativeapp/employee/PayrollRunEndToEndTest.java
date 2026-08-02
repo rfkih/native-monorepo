@@ -143,6 +143,56 @@ class PayrollRunEndToEndTest extends PostgresRlsTestBase {
     assertThat(warned).as("the loud illustrative WARN is logged").isTrue();
   }
 
+  /**
+   * P7 review S1 — the golden regression: a work-input-free tenant (the illustrative-only dataset,
+   * never seeded {@code ID-2026.2}, so it carries NO {@code OVERTIME}/{@code UNPAID_LEAVE}/{@code
+   * EXPENSE_REIMBURSEMENT} catalog components at all) computes a payslip + totals BYTE-IDENTICAL to
+   * a pre-Track-P-Phase-P7 run. The ONE documented, deliberate exception is the {@code
+   * LaborCostAllocated} GL-bucket SPLIT ({@link
+   * #runsPayrollPostsEventsFlagsIllustrativeAndKeepsSalaryOutOfLogsAndEvents} already asserts
+   * {@code hasSize(2)} — BASE's 5100 bucket separate from the employer BPJS leg's 5200 bucket, an
+   * allocation-engine change with no schema/event shape change) — every other figure
+   * (gross/employeeDeductions/employerContributions/net, the PayrollPosted total, the sum of
+   * allocated buckets) is UNCHANGED.
+   */
+  @Test
+  void aWorkInputFreeTenantsPayslipAndTotalsAreByteIdenticalToAPreP7Run() throws Exception {
+    UUID runId = TenantContext.callAs(TENANT_A, ACTOR_A, () -> setUpAndRun());
+
+    PayrollRunResponse run =
+        TenantContext.callAs(
+            TENANT_A, ACTOR_A, () -> payrollRunReader.findRun(runId).orElseThrow());
+
+    // Pre-P7 golden figures (unchanged from before Track P Phase P7 landed — see the sibling test
+    // above for the SAME numbers, independently re-asserted here under the S1 golden-test name).
+    assertThat(run.grossTotalMinor()).isEqualTo(20_000_000L);
+    assertThat(run.employeeDeductionTotalMinor()).isEqualTo(2_201_667L);
+    assertThat(run.employerContributionTotalMinor()).isEqualTo(400_000L);
+    assertThat(run.netTotalMinor()).isEqualTo(17_798_333L);
+    assertThat(run.status()).isEqualTo("POSTED");
+
+    // Zero P7 interference: no OVERTIME/UNPAID_LEAVE/EXPENSE_REIMBURSEMENT catalog component exists
+    // for this tenant (illustrative-only), so work_inputs_json freezes NOTHING for ANY employee.
+    assertThat(run.workInputsJson()).isEqualTo("{}");
+
+    // The ONE documented exception: the bucket split. Still sums to the SAME total employer labor
+    // cost a pre-P7 single-bucket run would have produced (gross + employerContributions).
+    List<Map<String, Object>> allocated =
+        jdbcTemplate.queryForList(
+            "SELECT payload FROM outbox WHERE event_type = 'LaborCostAllocated' AND aggregate_id ="
+                + " ?",
+            runId.toString());
+    assertThat(allocated).hasSize(2); // BASE (5100) + the employer BPJS leg (5200), split apart
+    long allocatedSum = 0L;
+    for (Map<String, Object> ev : allocated) {
+      GenericRecord rec =
+          AvroSerde.deserialize((byte[]) ev.get("payload"), LaborCostAllocatedSchema.schema());
+      allocatedSum += (long) rec.get("amount_minor");
+    }
+    assertThat(allocatedSum)
+        .isEqualTo(run.grossTotalMinor() + run.employerContributionTotalMinor());
+  }
+
   @Test
   void postEmitsPayrollLiabilitiesPostedThirdWithIdentityBalancingBuckets() throws Exception {
     // ADR 0032 (Track P phase P4): post() emits PayrollLiabilitiesPosted THIRD, in the SAME outbox

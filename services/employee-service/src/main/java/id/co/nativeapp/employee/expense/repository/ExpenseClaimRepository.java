@@ -2,6 +2,7 @@ package id.co.nativeapp.employee.expense.repository;
 
 import id.co.nativeapp.employee.expense.domain.ExpenseClaim;
 import id.co.nativeapp.employee.expense.projection.ExpenseClaimSummaryView;
+import id.co.nativeapp.employee.expense.projection.LinkedClaimIdView;
 import id.co.nativeapp.employee.expense.projection.LinkedClaimTotalView;
 import id.co.nativeapp.employee.expense.projection.MyExpenseClaimView;
 import java.util.List;
@@ -332,4 +333,23 @@ public interface ExpenseClaimRepository extends JpaRepository<ExpenseClaim, UUID
           """,
       nativeQuery = true)
   List<LinkedClaimTotalView> findLinkedClaimTotalsByEmployee(@Param("runId") UUID runId);
+
+  /**
+   * One (employee, claim) row per claim currently linked to {@code runId} AND STILL {@code
+   * APPROVED} — the SAME predicate as {@link #findLinkedClaimTotalsByEmployee}, but un-aggregated
+   * (P7 review W3): {@code PayrollRunWriter} freezes these individual claim ids into {@code
+   * work_inputs_json}'s {@code reimbursement.claimIds} for full reproducibility, alongside the
+   * aggregate total {@link #findLinkedClaimTotalsByEmployee} already provides.
+   */
+  @Query(
+      value =
+          """
+          SELECT employee_id AS employee_id, id AS claim_id, amount_currency AS currency
+            FROM expense_claim
+           WHERE reimbursement_run_id = :runId
+             AND status = 'APPROVED'
+           ORDER BY employee_id, id
+          """,
+      nativeQuery = true)
+  List<LinkedClaimIdView> findLinkedClaimIdsByEmployee(@Param("runId") UUID runId);
 }

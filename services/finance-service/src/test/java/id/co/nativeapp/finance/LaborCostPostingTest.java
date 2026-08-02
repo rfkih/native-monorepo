@@ -188,6 +188,47 @@ class LaborCostPostingTest extends PostgresRlsTestBase {
     assertThat(pnl.expense()).isEqualTo(Money.ofMinor(amount, "IDR"));
   }
 
+  /**
+   * P7 review S5 — pins the {@code 5130-OVERTIME} labor gl_hint's resolution to the {@code 6110}
+   * Overtime Expense account (V42, Track P Phase P7 GL wiring): a dedicated proof that
+   * employee-service's per-component bucket split (reconciliation #4) actually resolves to a REAL
+   * account on this side of the seam, not the suspense fallback {@link
+   * #anUnrecognisedLaborHintFailsSafeToSuspenseNeverDropped} would otherwise mask a missing
+   * mapping_rule as.
+   */
+  @Test
+  void theOvertimeLaborHintResolvesToTheDedicatedOvertimeExpenseAccount6110() throws Exception {
+    Instant occurredAt = Instant.parse("2026-08-31T10:00:00Z");
+    String period = "2026-08";
+    long amount = 550_000L;
+
+    boolean posted =
+        laborService.handle(
+            laborEvent(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                1,
+                period,
+                OUTLET,
+                "5130-OVERTIME",
+                amount,
+                false,
+                false,
+                occurredAt));
+    assertThat(posted).isTrue();
+
+    LedgerRow row = singleLedgerRowAsAdmin();
+    assertThat(row.postingType).isEqualTo("EXPENSE");
+    assertThat(row.glAccountCode).isEqualTo("6110"); // NOT the suspense 9999 — a real mapping_rule
+    assertThat(row.amountMinor).isEqualTo(amount);
+    assertThat(row.postingRole).isEqualTo("PRIMARY");
+
+    // The cost is visible in the P&L expense leg like any other labor bucket.
+    ConsolidatedPnl pnl =
+        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.pnlForPeriod(period)).orElseThrow();
+    assertThat(pnl.expense()).isEqualTo(Money.ofMinor(amount, "IDR"));
+  }
+
   @Test
   void anUnrecognisedLaborHintFailsSafeToSuspenseNeverDropped() throws Exception {
     Instant occurredAt = Instant.parse("2026-06-30T10:00:00Z");

@@ -8,6 +8,7 @@ import id.co.nativeapp.employee.assignment.domain.ConflictingLegalEmployerExcept
 import id.co.nativeapp.employee.assignment.repository.AssignmentRepository;
 import id.co.nativeapp.employee.employee.domain.Employee;
 import id.co.nativeapp.employee.employee.repository.EmployeeRepository;
+import id.co.nativeapp.employee.expense.projection.LinkedClaimIdView;
 import id.co.nativeapp.employee.expense.projection.LinkedClaimTotalView;
 import id.co.nativeapp.employee.expense.service.ExpenseClaimPayrollLinker;
 import id.co.nativeapp.employee.org.domain.OrgUnitProjection;
@@ -35,6 +36,7 @@ import id.co.nativeapp.employee.payroll.domain.RunStatus;
 import id.co.nativeapp.employee.payroll.domain.StatutoryCalcType;
 import id.co.nativeapp.employee.payroll.domain.StatutoryParams;
 import id.co.nativeapp.employee.payroll.domain.StatutoryRule;
+import id.co.nativeapp.employee.payroll.domain.TaxableReimbursementComponentException;
 import id.co.nativeapp.employee.payroll.dto.PayrollResult.ComputedLine;
 import id.co.nativeapp.employee.payroll.dto.PayrollResult.PersonResult;
 import id.co.nativeapp.employee.payroll.dto.RunPayrollCommand;
@@ -281,8 +283,8 @@ public class PayrollRunWriter {
     // work calendar (seeded on first use if missing — the P6 lazy-seed precedent, called explicitly
     // here rather than assumed already seeded), and every APPROVED unpaid-leave/overtime row for
     // this run's employees in this period.
-    Map<UUID, Money> reimbursementByEmployee =
-        reimbursementTotalsByEmployee(run.getId(), baseCurrency);
+    Map<UUID, ReimbursementInfo> reimbursementByEmployee =
+        reimbursementInfoByEmployee(run.getId(), baseCurrency);
     WorkCalendar calendar = workCalendarWriter.seedDefaultIfMissing();
     Map<UUID, List<ApprovedUnpaidLeaveView>> unpaidByEmployee =
         approvedUnpaidLeaveByEmployee(command.employeeIds(), command.period());
@@ -332,6 +334,11 @@ public class PayrollRunWriter {
     Optional<PayComponent> reimbursementComponent =
         payComponentRepository.findByComponentKey(
             ExpenseClaimPayrollLinker.COMPONENT_KEY_EXPENSE_REIMBURSEMENT);
+    // P7 review W2 — a catalog integrity check, at rule-resolution/freeze time, regardless of
+    // whether this run actually has a reimbursement to apply: a taxable=true misconfiguration must
+    // fail LOUDLY, never silently tax the reimbursement (which would corrupt the NET_WAGES_PAYABLE
+    // split's identity — ADR 0032 §P7 addendum assumes it never enters the PPh21/BPJS base).
+    reimbursementComponent.ifPresent(this::requireReimbursementComponentNonTaxable);
     warnIfWorkInputComponentMissing(
         run, COMPONENT_KEY_OVERTIME, overtimeComponent, !overtimeByEmployee.isEmpty());
     warnIfWorkInputComponentMissing(
@@ -409,6 +416,7 @@ public class PayrollRunWriter {
       // existing (see the warnIfWorkInputComponentMissing call above).
       WorkInputAppendResult appended =
           appendWorkInputs(
+              run,
               employee.getId(),
               personInput,
               calendar,
@@ -793,14 +801,36 @@ public class PayrollRunWriter {
   }
 
   /**
-   * The linked (still-APPROVED) expense-claim reimbursement total per employee for {@code runId} —
-   * reads {@link ExpenseClaimPayrollLinker#findLinkedClaimTotalsByEmployee}, keeping only rows in
-   * the run's OWN {@code baseCurrency} (v1 claims are single-currency per tenant, ADR 0030 §9 — a
-   * row in a different currency is a data anomaly this run cannot safely apply and is logged +
-   * skipped rather than silently mis-added or crashing the run).
+   * The result of {@link #reimbursementInfoByEmployee}: one employee's linked (still-APPROVED)
+   * expense-claim reimbursement — the aggregate total AND the individual claim ids that make it up
+   * (P7 review W3 — {@code work_inputs_json} freezes the ids, not just the total/count, for full
+   * reproducibility).
    */
-  private Map<UUID, Money> reimbursementTotalsByEmployee(UUID runId, String baseCurrency) {
-    Map<UUID, Money> totals = new LinkedHashMap<>();
+  private record ReimbursementInfo(Money total, long claimCount, List<UUID> claimIds) {}
+
+  /**
+   * The linked (still-APPROVED) expense-claim reimbursement info per employee for {@code runId} —
+   * combines {@link ExpenseClaimPayrollLinker#findLinkedClaimTotalsByEmployee} (the aggregate) with
+   * {@link ExpenseClaimPayrollLinker#findLinkedClaimIdsByEmployee} (the individual claim ids, P7
+   * review W3), keeping only rows in the run's OWN {@code baseCurrency} (v1 claims are
+   * single-currency per tenant, ADR 0030 §9 — a row in a different currency is a data anomaly this
+   * run cannot safely apply and is logged + skipped rather than silently mis-added or crashing the
+   * run; see {@code ExpenseClaimPayrollLinker#markReimbursedAndEmit}'s W4 fix for how a skipped
+   * employee's claim stays APPROVED+linked rather than being settled for money never received).
+   */
+  private Map<UUID, ReimbursementInfo> reimbursementInfoByEmployee(
+      UUID runId, String baseCurrency) {
+    Map<UUID, List<UUID>> claimIdsByEmployee = new LinkedHashMap<>();
+    for (LinkedClaimIdView idView : expenseClaimPayrollLinker.findLinkedClaimIdsByEmployee(runId)) {
+      if (!baseCurrency.equals(idView.getCurrency())) {
+        continue; // symmetric with the total-currency filter below — never mix currencies (rule 8)
+      }
+      claimIdsByEmployee
+          .computeIfAbsent(idView.getEmployeeId(), k -> new ArrayList<>())
+          .add(idView.getClaimId());
+    }
+
+    Map<UUID, ReimbursementInfo> infoByEmployee = new LinkedHashMap<>();
     for (LinkedClaimTotalView view :
         expenseClaimPayrollLinker.findLinkedClaimTotalsByEmployee(runId)) {
       if (!baseCurrency.equals(view.getCurrency())) {
@@ -813,9 +843,13 @@ public class PayrollRunWriter {
             baseCurrency);
         continue;
       }
-      totals.put(view.getEmployeeId(), Money.ofMinor(view.getTotalMinor(), baseCurrency));
+      List<UUID> claimIds = claimIdsByEmployee.getOrDefault(view.getEmployeeId(), List.of());
+      infoByEmployee.put(
+          view.getEmployeeId(),
+          new ReimbursementInfo(
+              Money.ofMinor(view.getTotalMinor(), baseCurrency), view.getClaimCount(), claimIds));
     }
-    return totals;
+    return infoByEmployee;
   }
 
   /** Every APPROVED {@code UNPAID} leave request for {@code period}, grouped by employee. */
@@ -865,6 +899,18 @@ public class PayrollRunWriter {
   }
 
   /**
+   * Fail-loud carry-in (P7 review W2): the EXPENSE_REIMBURSEMENT catalog component MUST be
+   * non-taxable — see {@link TaxableReimbursementComponentException}'s Javadoc for the full
+   * rationale. Checked at rule-resolution/freeze time, once per run, regardless of whether there is
+   * an actual reimbursement to apply this period.
+   */
+  private void requireReimbursementComponentNonTaxable(PayComponent component) {
+    if (component.isTaxable()) {
+      throw new TaxableReimbursementComponentException(component.getComponentKey());
+    }
+  }
+
+  /**
    * The result of {@link #appendWorkInputs}: the person input WITH the work-input earnings
    * appended, the reimbursement amount actually applied (zero if none/component missing — the
    * caller accumulates this to exclude it from labor cost), and the frozen per-employee JSON node
@@ -885,20 +931,25 @@ public class PayrollRunWriter {
    * Synthesizes the UNPAID_LEAVE / OVERTIME / EXPENSE_REIMBURSEMENT {@link EarningInput}s for one
    * employee (each independently gated on its catalog component actually existing) and appends them
    * to {@code base}'s earnings — returning a NEW {@link PersonInput} (records are immutable) plus
-   * the frozen work-input breakdown. UNPAID_LEAVE is a SIGNED-NEGATIVE, TAXABLE earning (shrinks
-   * the PPh21/BPJS tax bases, per the component's catalog {@code taxable=true}); OVERTIME is a
-   * positive TAXABLE earning; EXPENSE_REIMBURSEMENT is a positive NON-taxable earning (lifts {@code
-   * grossEarnings}/net but never the tax/BPJS base — the component's catalog {@code taxable=false}
-   * already makes {@link GrossToNetCalculator} exclude it from {@code taxableCashEarnings}).
+   * the frozen work-input breakdown. UNPAID_LEAVE is a SIGNED-NEGATIVE, TAXABLE earning, CLAMPED at
+   * the work-calendar divisor so labor pay floors at zero (P7 review W1 — shrinks the PPh21/BPJS
+   * tax bases, per the component's catalog {@code taxable=true}); OVERTIME is a positive TAXABLE
+   * earning, summed from PER-CALENDAR-DAY tier walks (P7 review C1 — PP 35/2021 tiers reset per
+   * day, never aggregated across a whole month); EXPENSE_REIMBURSEMENT is a positive NON-taxable
+   * earning (lifts {@code grossEarnings}/net but never the tax/BPJS base — the component's catalog
+   * {@code taxable=false} already makes {@link GrossToNetCalculator} exclude it from {@code
+   * taxableCashEarnings}; {@link #requireReimbursementComponentNonTaxable} asserts this holds, P7
+   * review W2).
    */
   @SuppressWarnings("checkstyle:ParameterNumber")
   private WorkInputAppendResult appendWorkInputs(
+      PayrollRun run,
       UUID employeeId,
       PersonInput base,
       WorkCalendar calendar,
       List<ApprovedUnpaidLeaveView> unpaidLeaves,
       List<ApprovedOvertimeView> overtimeEntries,
-      Money reimbursementTotal,
+      ReimbursementInfo reimbursementInfo,
       Optional<PayComponent> overtimeComponent,
       Optional<PayComponent> unpaidLeaveComponent,
       Optional<PayComponent> reimbursementComponent,
@@ -911,29 +962,58 @@ public class PayrollRunWriter {
     // ---- UNPAID_LEAVE ----------------------------------------------------
     int unpaidDays = unpaidLeaves.stream().mapToInt(ApprovedUnpaidLeaveView::getDays).sum();
     if (unpaidDays > 0 && unpaidLeaveComponent.isPresent()) {
+      int clampedDays =
+          workInputCalculator.clampUnpaidDays(unpaidDays, calendar.getMonthlyDivisor());
+      if (clampedDays < unpaidDays) {
+        // P7 review W1: unpaid days beyond a full month can never deduct further — labor pay
+        // floors at zero, never goes negative. Loud WARN (HR-9), no PII beyond ids already public
+        // within the tenant.
+        log.warn(
+            "payroll_run {} employee {} has {} approved unpaid day(s) this period, exceeding the"
+                + " work calendar's monthly divisor {} — clamped to {} (a full month's base pay;"
+                + " unpaid leave can never drive net below the labor floor)",
+            run.getId(),
+            employeeId,
+            unpaidDays,
+            calendar.getMonthlyDivisor(),
+            clampedDays);
+      }
       Money amount =
           workInputCalculator.unpaidLeaveEarning(
               base.basePay(), unpaidDays, calendar.getMonthlyDivisor());
       earnings.add(new EarningInput(unpaidLeaveComponent.get(), amount));
       ObjectNode leaveNode = node.putObject("unpaidLeave");
       leaveNode.put("days", unpaidDays);
+      if (clampedDays < unpaidDays) {
+        leaveNode.put("appliedDays", clampedDays);
+      }
       ArrayNode ids = leaveNode.putArray("requestIds");
       unpaidLeaves.forEach(v -> ids.add(v.getId().toString()));
       hasAnyWorkInput = true;
     }
 
-    // ---- OVERTIME ----------------------------------------------------------
-    int weekdayMinutes =
-        overtimeEntries.stream()
-            .filter(v -> "WEEKDAY".equals(v.getDayKind()))
-            .mapToInt(ApprovedOvertimeView::getMinutes)
-            .sum();
-    int restDayMinutes =
-        overtimeEntries.stream()
-            .filter(v -> "REST_DAY".equals(v.getDayKind()))
-            .mapToInt(ApprovedOvertimeView::getMinutes)
-            .sum();
-    if ((weekdayMinutes > 0 || restDayMinutes > 0) && overtimeComponent.isPresent()) {
+    // ---- OVERTIME ------------------------------------------------------------
+    // P7 review C1 (CRITICAL): PP 35/2021's multiplier tiers reset PER CALENDAR DAY. Group
+    // approved entries by (work_date, day_kind) and apply ONE independent tier walk per day,
+    // summing the results — walking the tiers ONCE over the whole month's aggregated minutes
+    // would grant the cheap first-tier rate only once for the entire month, overpaying by
+    // 11-44% in the review's worked examples (5 weekday days x 2h = 17.5x hourly per-day-correct,
+    // vs 19.5x wrongly aggregated; 2 rest days x 8h = 34x per-day-correct, vs 49x wrongly
+    // aggregated).
+    Map<LocalDate, Integer> weekdayMinutesByDate = new LinkedHashMap<>();
+    Map<LocalDate, Integer> restDayMinutesByDate = new LinkedHashMap<>();
+    for (ApprovedOvertimeView v : overtimeEntries) {
+      if ("WEEKDAY".equals(v.getDayKind())) {
+        weekdayMinutesByDate.merge(v.getWorkDate(), v.getMinutes(), Integer::sum);
+      } else {
+        restDayMinutesByDate.merge(v.getWorkDate(), v.getMinutes(), Integer::sum);
+      }
+    }
+    int totalWeekdayMinutes =
+        weekdayMinutesByDate.values().stream().mapToInt(Integer::intValue).sum();
+    int totalRestDayMinutes =
+        restDayMinutesByDate.values().stream().mapToInt(Integer::intValue).sum();
+    if ((totalWeekdayMinutes > 0 || totalRestDayMinutes > 0) && overtimeComponent.isPresent()) {
       StatutoryRule overtimeRule = resolvedRules.get(overtimeComponent.get().getStatutoryRuleKey());
       if (overtimeRule == null) {
         log.warn(
@@ -944,13 +1024,19 @@ public class PayrollRunWriter {
       } else {
         StatutoryParams.HourlyRateTableParams params =
             StatutoryParams.hourlyRateTable(overtimeRule.getParamsJson());
-        Money amount =
-            workInputCalculator.overtimeEarning(
-                base.basePay(), params, weekdayMinutes, restDayMinutes);
+        Money amount = Money.ofMinor(0L, base.basePay().currency());
+        for (int minutes : weekdayMinutesByDate.values()) {
+          amount =
+              amount.plus(workInputCalculator.overtimeEarning(base.basePay(), params, minutes, 0));
+        }
+        for (int minutes : restDayMinutesByDate.values()) {
+          amount =
+              amount.plus(workInputCalculator.overtimeEarning(base.basePay(), params, 0, minutes));
+        }
         earnings.add(new EarningInput(overtimeComponent.get(), amount));
         ObjectNode overtimeNode = node.putObject("overtime");
-        overtimeNode.put("weekdayMinutes", weekdayMinutes);
-        overtimeNode.put("restDayMinutes", restDayMinutes);
+        overtimeNode.put("weekdayMinutes", totalWeekdayMinutes);
+        overtimeNode.put("restDayMinutes", totalRestDayMinutes);
         ArrayNode ids = overtimeNode.putArray("entryIds");
         overtimeEntries.forEach(v -> ids.add(v.getId().toString()));
         hasAnyWorkInput = true;
@@ -958,13 +1044,17 @@ public class PayrollRunWriter {
     }
 
     // ---- EXPENSE_REIMBURSEMENT ---------------------------------------------
-    if (reimbursementTotal != null
-        && reimbursementTotal.isPositive()
+    if (reimbursementInfo != null
+        && reimbursementInfo.total().isPositive()
         && reimbursementComponent.isPresent()) {
+      Money reimbursementTotal = reimbursementInfo.total();
       earnings.add(new EarningInput(reimbursementComponent.get(), reimbursementTotal));
       ObjectNode reimbursementNode = node.putObject("reimbursement");
       reimbursementNode.put("amountMinor", reimbursementTotal.amountMinor());
       reimbursementNode.put("currency", reimbursementTotal.currency().getCurrencyCode());
+      reimbursementNode.put("claimCount", reimbursementInfo.claimCount());
+      ArrayNode claimIds = reimbursementNode.putArray("claimIds");
+      reimbursementInfo.claimIds().forEach(id -> claimIds.add(id.toString()));
       reimbursementApplied = reimbursementTotal;
       hasAnyWorkInput = true;
     }

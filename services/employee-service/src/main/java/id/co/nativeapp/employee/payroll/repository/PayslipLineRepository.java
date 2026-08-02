@@ -54,20 +54,21 @@ public interface PayslipLineRepository extends JpaRepository<PayslipLine, UUID> 
   List<PayslipLine> findByPayrollRunId(UUID payrollRunId);
 
   /**
-   * Whether run {@code payrollRunId} produced ANY payslip line for {@code componentKey} — the gate
-   * {@code ExpenseClaimPayrollLinker#markReimbursedAndEmit} (ADR 0030 §6, Phase E5) checks before
-   * flipping any linked claim to REIMBURSED: pre-Track-P-Phase-P7 no {@code earning_rule} ever
-   * produces an {@code EXPENSE_REIMBURSEMENT} line, so this is always {@code false} and the method
-   * safely no-ops (claims stay APPROVED+linked for a later re-run to pick up). {@code
-   * component_key} is a plaintext catalog column, not the PII-encrypted amount (rule 6) — safe to
-   * query directly.
+   * The DISTINCT employee ids that have a {@code componentKey} payslip line on run {@code
+   * payrollRunId} (P7 review W4) — {@code ExpenseClaimPayrollLinker#markReimbursedAndEmit} uses
+   * this to settle ONLY the claims whose employee actually received an {@code
+   * EXPENSE_REIMBURSEMENT} line this run; a claim whose employee was SKIPPED (e.g. a
+   * currency-mismatched linked total, {@code PayrollRunWriter#reimbursementInfoByEmployee}) must
+   * stay {@code APPROVED}+linked rather than be settled for money that employee never actually
+   * received via this run. A scalar-column query (a single {@code UUID} column needs no projection
+   * interface).
    */
   @Query(
       value =
-          "SELECT EXISTS (SELECT 1 FROM payslip_line WHERE payroll_run_id = :payrollRunId"
-              + " AND component_key = :componentKey)",
+          "SELECT DISTINCT employee_id FROM payslip_line WHERE payroll_run_id = :payrollRunId"
+              + " AND component_key = :componentKey",
       nativeQuery = true)
-  boolean existsByPayrollRunIdAndComponentKey(
+  List<UUID> findDistinctEmployeeIdsByPayrollRunIdAndComponentKey(
       @Param("payrollRunId") UUID payrollRunId, @Param("componentKey") String componentKey);
 
   /** Every payslip line for a run + employee (within the bound tenant). */

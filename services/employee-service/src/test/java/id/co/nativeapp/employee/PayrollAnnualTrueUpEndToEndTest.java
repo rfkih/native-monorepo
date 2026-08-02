@@ -10,6 +10,9 @@ import id.co.nativeapp.employee.employee.dto.AddContractCommand;
 import id.co.nativeapp.employee.employee.dto.CreateEmployeeCommand;
 import id.co.nativeapp.employee.employee.dto.UpdateEmployeeCommand;
 import id.co.nativeapp.employee.employee.service.EmployeeService;
+import id.co.nativeapp.employee.expense.dto.CreateClaimCommand;
+import id.co.nativeapp.employee.expense.service.ExpenseCategoryWriter;
+import id.co.nativeapp.employee.expense.service.ExpenseClaimService;
 import id.co.nativeapp.employee.org.dto.OrgUnitProjectedEvent;
 import id.co.nativeapp.employee.org.service.OrgProjectionService;
 import id.co.nativeapp.employee.payroll.domain.CompensationPackage;
@@ -57,6 +60,10 @@ class PayrollAnnualTrueUpEndToEndTest extends PostgresRlsTestBase {
       UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
   private static final String IDR = "IDR";
   private static final String DATASET_VERSION = "ID-2026.1";
+  // A SECOND linked employee identity (P7 review S2c) — expense-claim self-service create/submit
+  // needs a caller resolvable to an employee link, distinct from ACTOR_A (the HR-admin who
+  // approves; self-approval is rejected).
+  private static final String EMPLOYEE_ACTOR = "aaaaaaaa-6666-6666-6666-666666666666";
 
   @Autowired private IllustrativeStatutorySeedWriter illustrativeSeeder;
   @Autowired private OfficialStatutorySeedWriter officialSeeder;
@@ -67,6 +74,8 @@ class PayrollAnnualTrueUpEndToEndTest extends PostgresRlsTestBase {
   @Autowired private PayrollRunService payrollRunService;
   @Autowired private PayrollRunReader payrollRunReader;
   @Autowired private JdbcTemplate jdbcTemplate;
+  @Autowired private ExpenseCategoryWriter categoryWriter;
+  @Autowired private ExpenseClaimService claimService;
 
   // ---------------------------------------------------------------------
   // Golden: a non-December run under the OFFICIAL dataset is COMPLETELY unaffected — the exact
@@ -577,6 +586,162 @@ class PayrollAnnualTrueUpEndToEndTest extends PostgresRlsTestBase {
     List<String> ciphertexts = queryAsAdmin(runId);
     assertThat(ciphertexts).hasSize(1);
     assertThat(ciphertexts.get(0)).isNotBlank().doesNotContain("62665700").doesNotContain("IDR");
+  }
+
+  // ---------------------------------------------------------------------
+  // P7 review S2(c) — a NEGATIVE December PPh21 (a refund month) COMBINED with a linked
+  // expense-claim reimbursement in the SAME run: the SAME recipe as the test immediately above
+  // (two high-TER months then a low December, ID-2026.1's exact hand-derived -62,665,700 refund),
+  // PLUS ID-2026.2's P7 catalog top-up (W5's BASE_PAY fix) and a claim riding this December
+  // payslip. Since the ONLY earnings are BASE (taxable) and EXPENSE_REIMBURSEMENT (non-taxable),
+  // switching from ID-2026.1 to ID-2026.2 changes NEITHER PPh21 NOR the BPJS legs (BASE_PAY ==
+  // taxableCashEarnings whenever there is no OTHER taxable earning like commission/overtime) — the
+  // combined scenario's PPh21/BPJS figures are IDENTICAL to the sibling test's, proving the
+  // reimbursement rides alongside the true-up without perturbing it, and the liability split still
+  // balances with reimbursement excluded from NET_WAGES_PAYABLE.
+  // ---------------------------------------------------------------------
+
+  @Test
+  void aNegativeDecemberPphRefundCombinedWithALinkedClaimReimbursementBalancesTheLiabilitySplit()
+      throws Exception {
+    Map<String, UUID> ids =
+        TenantContext.callAs(
+            TENANT_A,
+            ACTOR_A,
+            () -> {
+              illustrativeSeeder.seed(IDR);
+              officialSeeder.seed(DATASET_VERSION); // ID-2026.1
+              officialSeeder.seed("ID-2026.2"); // the P7 top-up (W5's BASE_PAY fix; OVERTIME/
+              // UNPAID_LEAVE/EXPENSE_REIMBURSEMENT components) — supersedes the 5 BPJS rules.
+              UUID outlet = openOutlet();
+              UUID employeeId = employeeWithNpwp("Farhan", "3209000000000007", "TK0");
+              employeeService.linkUser(employeeId, EMPLOYEE_ACTOR, null);
+              EmploymentContract contract = addPermanentContract(employeeId);
+              CompensationPackage highPkg =
+                  compensationWriter.createPackage(
+                      employeeId,
+                      contract.getId(),
+                      Money.ofMinor(300_000_000L, IDR),
+                      LocalDate.of(2026, 1, 1),
+                      LocalDate.of(9999, 12, 31));
+              assign(employeeId, outlet);
+
+              payrollRunService.calculateAndPost(
+                  new RunPayrollCommand("2026-10", List.of(employeeId), List.of()), IDR);
+              payrollRunService.calculateAndPost(
+                  new RunPayrollCommand("2026-11", List.of(employeeId), List.of()), IDR);
+
+              compensationWriter.endPackage(
+                  employeeId, highPkg.getId(), LocalDate.of(2026, 11, 30));
+              compensationWriter.createPackage(
+                  employeeId,
+                  contract.getId(),
+                  Money.ofMinor(5_000_000L, IDR),
+                  LocalDate.of(2026, 12, 1),
+                  LocalDate.of(9999, 12, 31));
+
+              return Map.of("employee", employeeId, "outlet", outlet);
+            });
+
+    UUID employeeId = ids.get("employee");
+    long claimMinor = 400_000L;
+    UUID claimId =
+        TenantContext.callAs(
+            TENANT_A,
+            EMPLOYEE_ACTOR,
+            () -> {
+              UUID categoryId =
+                  categoryWriter.create("Supplies-" + employeeId, "supplies", false).getId();
+              UUID id =
+                  claimService
+                      .create(
+                          new CreateClaimCommand(
+                              categoryId,
+                              claimMinor,
+                              IDR,
+                              LocalDate.of(2026, 12, 5),
+                              "Toko ATK",
+                              "note",
+                              null))
+                      .getId();
+              claimService.submit(id, "submit-" + id);
+              return id;
+            });
+    TenantContext.callAs(
+        TENANT_A, ACTOR_A, () -> claimService.approve(claimId, "ok", "approve-" + claimId));
+
+    UUID runId =
+        TenantContext.callAs(
+            TENANT_A,
+            ACTOR_A,
+            () ->
+                payrollRunService
+                    .calculateAndPost(
+                        new RunPayrollCommand("2026-12", List.of(employeeId), List.of()), IDR)
+                    .getId());
+
+    PayrollRunResponse run =
+        TenantContext.callAs(
+            TENANT_A, ACTOR_A, () -> payrollRunReader.findRun(runId).orElseThrow());
+    assertThat(run.status()).isEqualTo("POSTED");
+
+    // PPh21 is UNCHANGED from the sibling test — the reimbursement never touches the tax base.
+    PayslipLineResponse pph21 = pph21Line(runId, employeeId);
+    assertThat(pph21.amountMinor()).isEqualTo(-62_665_700L);
+
+    // gross now ALSO carries the claimMinor reimbursement on top of the sibling test's 5,000,000.
+    assertThat(run.grossTotalMinor()).isEqualTo(5_000_000L + claimMinor);
+    // employeeDeductionTotal is UNCHANGED (BPJS EE legs + PPh21 — the reimbursement is NOT a
+    // deduction, and non-taxable so it never enters any deduction computation).
+    assertThat(run.employeeDeductionTotalMinor()).isEqualTo(-62_465_700L);
+    assertThat(run.netTotalMinor()).isEqualTo(67_465_700L + claimMinor);
+
+    List<PayslipLineResponse> lines =
+        TenantContext.callAs(
+            TENANT_A, ACTOR_A, () -> payrollRunReader.findPayslipAuthorized(runId, employeeId));
+    assertThat(
+            lines.stream()
+                .filter(l -> l.componentKey().equals("EXPENSE_REIMBURSEMENT"))
+                .findFirst()
+                .orElseThrow()
+                .amountMinor())
+        .isEqualTo(claimMinor);
+
+    // The claim settled: REIMBURSED + ExpenseReimbursementSettled(PAYROLL).
+    assertThat(
+            countAsTenant(
+                TENANT_A,
+                "SELECT count(*) FROM expense_claim WHERE id = ? AND status = 'REIMBURSED'",
+                claimId))
+        .isEqualTo(1L);
+
+    // The liability split: NET_WAGES_PAYABLE = net_total - reimbursement (the claim's own 2600
+    // payable, already settled separately, must not double-book here); the other buckets
+    // (PPH21/BPJS) are IDENTICAL to the sibling test since the reimbursement never touches them;
+    // employer_cost_total EXCLUDES the reimbursement too — the full identity still balances.
+    Map<String, Object> liabilitiesRow =
+        jdbcTemplate.queryForMap(
+            "SELECT payload FROM outbox WHERE event_type = 'PayrollLiabilitiesPosted' AND"
+                + " aggregate_id = ?",
+            runId.toString());
+    GenericRecord liabilitiesRecord =
+        AvroSerde.deserialize(
+            (byte[]) liabilitiesRow.get("payload"), PayrollLiabilitiesPostedSchema.schema());
+    assertThat(liabilitiesRecord.get("employer_cost_total_minor")).isEqualTo(5_527_000L);
+
+    @SuppressWarnings("unchecked")
+    List<GenericRecord> liabilityBuckets =
+        (List<GenericRecord>) liabilitiesRecord.get("liabilities");
+    Map<String, Long> byRole = new java.util.LinkedHashMap<>();
+    for (GenericRecord bucket : liabilityBuckets) {
+      byRole.put(bucket.get("liability_role").toString(), (Long) bucket.get("amount_minor"));
+    }
+    assertThat(byRole).containsEntry("NET_WAGES_PAYABLE", 67_465_700L); // run.netTotal - claimMinor
+    assertThat(byRole).containsEntry("PPH21_PAYABLE", -62_665_700L);
+    assertThat(byRole).containsEntry("BPJS_KES_PAYABLE", 250_000L);
+    assertThat(byRole).containsEntry("BPJS_TK_PAYABLE", 477_000L);
+    long liabilitySum = byRole.values().stream().mapToLong(Long::longValue).sum();
+    assertThat(liabilitySum).isEqualTo(5_527_000L);
   }
 
   private List<String> queryAsAdmin(UUID runId) throws Exception {

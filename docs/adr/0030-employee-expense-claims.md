@@ -169,3 +169,16 @@ The reimbursement's LIABILITY-side accounting (why `NET_WAGES_PAYABLE` is `net �
 never the full net, and why `LaborCostAllocated` excludes it entirely) is recorded in ADR 0032's own
 P7 addendum, not repeated here — that ADR owns the liability/allocation side of the books; this one
 owns the claim lifecycle and the `2600`/`2600`-settlement side, both unchanged by P7.
+
+**P7 review round — the settle gate is now PER-EMPLOYEE, and claim ids are frozen (W3/W4).** A P7
+review found the §10 gate above ("checking for an actual `EXPENSE_REIMBURSEMENT` payslip line")
+described a WHOLE-RUN check that was too coarse once `reimbursementInfoByEmployee`'s currency-mismatch
+skip (§9) can leave one employee's claim un-applied while others in the same run settle —
+`markReimbursedAndEmit` now derives the SET of employees who actually carry the line THIS run and
+settles a claim only when its own employee is in that set; a skipped employee's claim stays
+`APPROVED` + linked exactly as point 6/§10 already describe for the whole-dataset-not-activated case.
+`ExpenseClaimPayrollLinker#findLinkedClaimIdsByEmployee` (a new `MANDATORY` read alongside the
+existing totals read) also lets `work_inputs_json` freeze the INDIVIDUAL linked claim ids, not just
+the aggregate total/count — full details, including the regression-proving test, are in ADR 0032's P7
+review addendum (the liability-side ADR now owns both the settle-gating and the claim-id-freezing
+write-up, alongside the split it already owned, to keep the P7-review narrative in one place).

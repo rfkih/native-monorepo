@@ -3,6 +3,7 @@ package id.co.nativeapp.employee.expense.service;
 import id.co.nativeapp.employee.expense.domain.ClaimStatus;
 import id.co.nativeapp.employee.expense.domain.ExpenseClaim;
 import id.co.nativeapp.employee.expense.messaging.ExpenseReimbursementSettledSchema;
+import id.co.nativeapp.employee.expense.projection.LinkedClaimIdView;
 import id.co.nativeapp.employee.expense.projection.LinkedClaimTotalView;
 import id.co.nativeapp.employee.expense.repository.ExpenseClaimRepository;
 import id.co.nativeapp.employee.payroll.domain.PayrollRun;
@@ -13,7 +14,9 @@ import id.co.nativeapp.tenant.TenantContext;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import org.apache.avro.generic.GenericRecord;
 import org.slf4j.Logger;
@@ -194,16 +197,32 @@ public class ExpenseClaimPayrollLinker {
 
   /**
    * Flips every claim linked to {@code run} from {@code APPROVED} to {@code REIMBURSED} and emits
-   * one {@code ExpenseReimbursementSettled(PAYROLL)} outbox row per claim — but ONLY if {@code run}
-   * actually produced an {@link #COMPONENT_KEY_EXPENSE_REIMBURSEMENT} payslip line (see the class
-   * Javadoc's E5-transitional-gating note). Called from {@code PayrollRunWriter#post}, in the SAME
-   * CALCULATED→POSTED transaction as the run's other outbox writes — the run's exactly-once posting
-   * discipline extends to these emits.
+   * one {@code ExpenseReimbursementSettled(PAYROLL)} outbox row per claim — but ONLY for a claim
+   * whose EMPLOYEE actually received an {@link #COMPONENT_KEY_EXPENSE_REIMBURSEMENT} payslip line
+   * THIS run (P7 review W4, tightened from the original E5-transitional coarse gate below).
+   *
+   * <p><strong>W4 — per-claim settle gating.</strong> The ORIGINAL gate only checked whether the
+   * run carried the component key ANYWHERE (one employee having a line was enough to unlock
+   * settling EVERY linked claim) — but {@code PayrollRunWriter#reimbursementTotalsByEmployee} can
+   * SKIP an individual employee (e.g. a currency-mismatched linked total, ADR 0030 §9) while still
+   * producing a line for OTHER employees in the same run. Settling that skipped employee's claim
+   * would book a payable settlement for money they never actually received via this run — the exact
+   * wrong-books failure mode the original gate existed to prevent, just at finer grain. This method
+   * now RE- DERIVES, via {@link
+   * PayslipLineRepository#findDistinctEmployeeIdsByPayrollRunIdAndComponentKey}, the set of
+   * employee ids that actually carry the line THIS run, and only flips/settles a claim whose {@code
+   * employee_id} is in that set. A skipped claim stays {@code APPROVED}+linked — {@link
+   * ExpenseClaimRepository#releaseForPeriod}'s "POSTED but still APPROVED" branch (the
+   * E5-transitional recovery path, unchanged) releases it for the next {@code calculate()} to
+   * re-link and retry.
+   *
+   * <p>Called from {@code PayrollRunWriter#post}, in the SAME CALCULATED→POSTED transaction as the
+   * run's other outbox writes — the run's exactly-once posting discipline extends to these emits.
    *
    * @throws IllegalStateException if {@code run} has no {@code posted_at} yet (this method must run
    *     AFTER {@link PayrollRun#markPosted}, never before)
-   * @return the number of claims flipped + settled; {@code 0} when the E5-transitional gate is
-   *     closed (pre-P7) or when the run has no linked claims
+   * @return the number of claims flipped + settled; {@code 0} when NO employee in the run carries
+   *     the component (pre-P7 / dataset not activated) or when the run has no linked claims
    */
   @Transactional(propagation = Propagation.MANDATORY)
   public int markReimbursedAndEmit(PayrollRun run) {
@@ -215,14 +234,16 @@ public class ExpenseClaimPayrollLinker {
               + " has no posted_at — markReimbursedAndEmit must run AFTER PayrollRun#markPosted");
     }
 
-    boolean wired =
-        payslipLineRepository.existsByPayrollRunIdAndComponentKey(
-            run.getId(), COMPONENT_KEY_EXPENSE_REIMBURSEMENT);
-    if (!wired) {
+    Set<UUID> employeesWithReimbursementLine =
+        new HashSet<>(
+            payslipLineRepository.findDistinctEmployeeIdsByPayrollRunIdAndComponentKey(
+                run.getId(), COMPONENT_KEY_EXPENSE_REIMBURSEMENT));
+    if (employeesWithReimbursementLine.isEmpty()) {
       log.info(
           "expense_claim payroll-linker: run {} (period {}, run_seq {}) carries no {} payslip"
-              + " line yet (E5-transitional, pre-Track-P-Phase-P7) — any linked claims stay"
-              + " APPROVED+linked for a later re-run's release+relink",
+              + " line for ANY employee (E5-transitional, pre-Track-P-Phase-P7 or dataset not"
+              + " activated) — any linked claims stay APPROVED+linked for a later re-run's"
+              + " release+relink",
           run.getId(),
           run.getPeriod(),
           run.getRunSeq(),
@@ -234,10 +255,18 @@ public class ExpenseClaimPayrollLinker {
     UUID companyId = UUID.fromString(tenant);
     List<ExpenseClaim> linked = claimRepository.findByReimbursementRunId(run.getId());
     int settled = 0;
+    int skipped = 0;
     for (ExpenseClaim claim : linked) {
       if (claim.getStatus() != ClaimStatus.APPROVED) {
         // Defensive: post() only calls this once per run (the CALCULATED->POSTED transition is
         // itself one-shot), but never trust a single caller for an idempotency guarantee.
+        continue;
+      }
+      if (!employeesWithReimbursementLine.contains(claim.getEmployeeId())) {
+        // W4: this employee's reimbursement was SKIPPED this run (e.g. currency mismatch) — the
+        // claim never actually rode a payslip line, so it must NOT be settled. Stays
+        // APPROVED+linked; releaseForPeriod's POSTED-but-still-APPROVED branch recovers it.
+        skipped++;
         continue;
       }
       claim.settleByPayrollRun(settledAt);
@@ -265,6 +294,17 @@ public class ExpenseClaimPayrollLinker {
           run.getPeriod(),
           run.getRunSeq());
     }
+    if (skipped > 0) {
+      log.warn(
+          "expense_claim payroll-linker: {} claim(s) linked to run {} (period {}, run_seq {}) had"
+              + " NO {} payslip line for their employee this run (W4) — left APPROVED+linked for a"
+              + " later re-run",
+          skipped,
+          run.getId(),
+          run.getPeriod(),
+          run.getRunSeq(),
+          COMPONENT_KEY_EXPENSE_REIMBURSEMENT);
+    }
     return settled;
   }
 
@@ -278,5 +318,16 @@ public class ExpenseClaimPayrollLinker {
   @Transactional(propagation = Propagation.MANDATORY, readOnly = true)
   public List<LinkedClaimTotalView> findLinkedClaimTotalsByEmployee(UUID runId) {
     return claimRepository.findLinkedClaimTotalsByEmployee(runId);
+  }
+
+  /**
+   * One (employee, claim) row per claim currently linked to {@code runId} AND STILL {@code
+   * APPROVED} (P7 review W3) — {@code PayrollRunWriter} freezes these individual claim ids into
+   * {@code work_inputs_json}'s {@code reimbursement.claimIds}, alongside the aggregate total {@link
+   * #findLinkedClaimTotalsByEmployee} already provides.
+   */
+  @Transactional(propagation = Propagation.MANDATORY, readOnly = true)
+  public List<LinkedClaimIdView> findLinkedClaimIdsByEmployee(UUID runId) {
+    return claimRepository.findLinkedClaimIdsByEmployee(runId);
   }
 }

@@ -173,10 +173,10 @@ class ExpenseClaimPayrollLinkerTest {
   void markReimbursedAndEmitNoOpsWhenTheRunCarriesNoExpenseReimbursementPayslipLine()
       throws Exception {
     // E5-TRANSITIONAL: pre-Track-P-Phase-P7, no earning_rule ever produces this component, so
-    // the gate is always closed and this method must flip NOTHING.
-    when(payslipLineRepository.existsByPayrollRunIdAndComponentKey(
+    // the gate is always closed (NO employee carries the line) and this method must flip NOTHING.
+    when(payslipLineRepository.findDistinctEmployeeIdsByPayrollRunIdAndComponentKey(
             RUN_ID, ExpenseClaimPayrollLinker.COMPONENT_KEY_EXPENSE_REIMBURSEMENT))
-        .thenReturn(false);
+        .thenReturn(List.of());
 
     int settled =
         TenantContext.callAs(TENANT, ACTOR, () -> linker.markReimbursedAndEmit(postedRun()));
@@ -193,9 +193,11 @@ class ExpenseClaimPayrollLinkerTest {
     ExpenseClaim claimA = approvedClaim(employeeA, RUN_ID);
     ExpenseClaim claimB = approvedClaim(employeeB, RUN_ID);
 
-    when(payslipLineRepository.existsByPayrollRunIdAndComponentKey(
+    // Both employees actually carry the EXPENSE_REIMBURSEMENT line this run (P7 review W4 —
+    // per-employee gating, not the coarse "any employee anywhere" check this replaced).
+    when(payslipLineRepository.findDistinctEmployeeIdsByPayrollRunIdAndComponentKey(
             RUN_ID, ExpenseClaimPayrollLinker.COMPONENT_KEY_EXPENSE_REIMBURSEMENT))
-        .thenReturn(true);
+        .thenReturn(List.of(employeeA, employeeB));
     when(claimRepository.findByReimbursementRunId(RUN_ID)).thenReturn(List.of(claimA, claimB));
 
     int settled =
@@ -235,12 +237,15 @@ class ExpenseClaimPayrollLinkerTest {
   void markReimbursedAndEmitSkipsAClaimThatIsAlreadyReimbursed() throws Exception {
     // Defensive re-entrancy guard: post() only calls this once per run, but the method itself
     // never trusts a single caller for that guarantee.
-    ExpenseClaim already = approvedClaim(UUID.randomUUID(), RUN_ID);
+    UUID employeeId = UUID.randomUUID();
+    ExpenseClaim already = approvedClaim(employeeId, RUN_ID);
     already.settleByPayrollRun(Instant.parse("2026-07-24T09:00:00Z"));
 
-    when(payslipLineRepository.existsByPayrollRunIdAndComponentKey(
+    // The employee DOES carry the line (so the loop reaches the claim, not the empty-set early
+    // return) — the STATUS guard, not the W4 employee-set guard, is what this test proves.
+    when(payslipLineRepository.findDistinctEmployeeIdsByPayrollRunIdAndComponentKey(
             RUN_ID, ExpenseClaimPayrollLinker.COMPONENT_KEY_EXPENSE_REIMBURSEMENT))
-        .thenReturn(true);
+        .thenReturn(List.of(employeeId));
     when(claimRepository.findByReimbursementRunId(RUN_ID)).thenReturn(List.of(already));
 
     int settled =
@@ -249,6 +254,33 @@ class ExpenseClaimPayrollLinkerTest {
     assertThat(settled).isZero();
     verify(claimRepository, never()).save(any());
     verify(outboxWriter, never()).write(any(), any(), any(), any(), any(), any(), any());
+  }
+
+  @Test
+  void markReimbursedAndEmitSkipsAClaimWhoseEmployeeDidNotCarryTheLineThisRunW4() throws Exception {
+    // P7 review W4 — the per-employee gating: employeeA's claim settles (carries the line);
+    // employeeB's claim stays APPROVED+linked (does NOT carry the line this run — e.g. a
+    // currency-mismatched linked total, PayrollRunWriter#reimbursementInfoByEmployee) even though
+    // the run overall DOES carry the component (employeesWithReimbursementLine is non-empty).
+    UUID employeeA = UUID.randomUUID();
+    UUID employeeB = UUID.randomUUID();
+    ExpenseClaim claimA = approvedClaim(employeeA, RUN_ID);
+    ExpenseClaim claimB = approvedClaim(employeeB, RUN_ID);
+
+    when(payslipLineRepository.findDistinctEmployeeIdsByPayrollRunIdAndComponentKey(
+            RUN_ID, ExpenseClaimPayrollLinker.COMPONENT_KEY_EXPENSE_REIMBURSEMENT))
+        .thenReturn(List.of(employeeA)); // employeeB is NOT in this set
+    when(claimRepository.findByReimbursementRunId(RUN_ID)).thenReturn(List.of(claimA, claimB));
+
+    int settled =
+        TenantContext.callAs(TENANT, ACTOR, () -> linker.markReimbursedAndEmit(postedRun()));
+
+    assertThat(settled).isEqualTo(1);
+    assertThat(claimA.getStatus()).isEqualTo(ClaimStatus.REIMBURSED);
+    assertThat(claimB.getStatus()).isEqualTo(ClaimStatus.APPROVED); // untouched — stays linked
+    verify(claimRepository, times(1)).save(claimA);
+    verify(claimRepository, never()).save(claimB);
+    verify(outboxWriter, times(1)).write(any(), any(), any(), any(), any(), any(), any());
   }
 
   // ---------------------------------------------------------------------

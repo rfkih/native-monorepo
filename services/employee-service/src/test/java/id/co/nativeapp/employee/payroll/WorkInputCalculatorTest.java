@@ -85,8 +85,18 @@ class WorkInputCalculatorTest {
     assertThat(pay).isEqualTo(Money.ofMinor(1_000_000L, IDR)); // 100,000 * 2.0 * 5
   }
 
+  /**
+   * The pure {@code overtimeEarning} call independently tier-walks its {@code weekdayMinutes}/
+   * {@code restDayMinutes} arguments — a property of ONE call, not a claim about how a real
+   * multi-day month should be aggregated (P7 review C1: {@code PayrollRunWriter#appendWorkInputs}
+   * NEVER passes a whole month's aggregated minutes in one call; it groups by {@code (work_date,
+   * day_kind)} and calls this method ONCE PER DAY, summing the results — see {@code
+   * PayrollWorkInputsEndToEndTest} for the multi-day proofs against the real writer path). This
+   * test name previously read "in the same month", which could be misread as endorsing monthly
+   * aggregation — renamed to avoid that implication.
+   */
   @Test
-  void weekdayAndRestDayMinutesInTheSameMonthAreSummedIndependently() {
+  void weekdayAndRestDayTierTablesAreAppliedIndependentlyWithinOneCall() {
     Money base = Money.ofMinor(17_300_000L, IDR);
     Money pay = calculator.overtimeEarning(base, OVERTIME_PARAMS, 60, 300);
     // weekday 1h = 150,000; rest-day 5h = 1,000,000. Total 1,150,000.
@@ -134,6 +144,29 @@ class WorkInputCalculatorTest {
     Money base = Money.ofMinor(10_000_000L, IDR);
     assertThat(calculator.unpaidLeaveEarning(base, 0, 21)).isEqualTo(Money.ofMinor(0L, IDR));
     assertThat(calculator.unpaidLeaveEarning(base, -1, 21)).isEqualTo(Money.ofMinor(0L, IDR));
+  }
+
+  // ---------------------------------------------------------------------
+  // Unpaid leave — the labor-pay floor (P7 review W1)
+  // ---------------------------------------------------------------------
+
+  @Test
+  void clampUnpaidDaysCapsAtTheMonthlyDivisor() {
+    assertThat(calculator.clampUnpaidDays(31, 21)).isEqualTo(21);
+    assertThat(calculator.clampUnpaidDays(21, 21)).isEqualTo(21);
+    assertThat(calculator.clampUnpaidDays(20, 21)).isEqualTo(20);
+    assertThat(calculator.clampUnpaidDays(25, 25)).isEqualTo(25);
+  }
+
+  @Test
+  void unpaidLeaveExceedingTheDivisorClampsToExactlyNegativeBasePayNeverMore() {
+    // 31 approved unpaid days against a divisor-21 calendar (legal today — a single-month UNPAID
+    // request can span up to 31 days): the clamp caps the deduction at -basePay EXACTLY, never
+    // driving labor pay negative.
+    Money base = Money.ofMinor(21_000_000L, IDR);
+    Money deduction = calculator.unpaidLeaveEarning(base, 31, 21);
+    assertThat(deduction).isEqualTo(Money.ofMinor(-21_000_000L, IDR));
+    assertThat(deduction.negate()).isEqualTo(base); // exactly -basePay, not more
   }
 
   // ---------------------------------------------------------------------
