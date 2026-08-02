@@ -96,8 +96,7 @@ class RegisterSessionWriterTest {
   void closeOfAlreadyClosedSessionWithNewKeyConflicts() {
     RegisterSession session = openSession(0L);
     session.close(Instant.now(), 0L, 0L, 0L, 0L, 0L, "first-close-key");
-    when(repository.findViewByCloseIdempotencyKey("second-close-key"))
-        .thenReturn(Optional.empty());
+    when(repository.findViewByCloseIdempotencyKey("second-close-key")).thenReturn(Optional.empty());
     when(repository.findWithLockById(session.getId())).thenReturn(Optional.of(session));
 
     assertThatThrownBy(

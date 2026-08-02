@@ -107,9 +107,9 @@ public interface RegisterSessionRepository extends JpaRepository<RegisterSession
 
   /**
    * Σ CASH taken for GIFT CARD SALES in the window — the third drawer inflow. A gift card sold for
-   * cash is a liability, not revenue, so it lives in {@code gift_card_sale}, not {@code sale} —
-   * but its cash is physically in the drawer and MUST count toward expected cash (found live: a
-   * 30k cash gift-card sale otherwise surfaces as a phantom 30k OVER at close). ADR 0036.
+   * cash is a liability, not revenue, so it lives in {@code gift_card_sale}, not {@code sale} — but
+   * its cash is physically in the drawer and MUST count toward expected cash (found live: a 30k
+   * cash gift-card sale otherwise surfaces as a phantom 30k OVER at close). ADR 0036.
    */
   @Query(
       value =
