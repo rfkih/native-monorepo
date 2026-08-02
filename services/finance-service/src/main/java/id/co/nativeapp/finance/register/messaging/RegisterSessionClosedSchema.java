@@ -17,6 +17,9 @@ public final class RegisterSessionClosedSchema {
   /** Classpath location of the {@code .avsc} (also embedded in the event catalog). */
   public static final String RESOURCE = "avro/RegisterSessionClosed.avsc";
 
+  /** The Kafka topic — the Debezium outbox router names topics exactly after the event_type. */
+  public static final String TOPIC = "RegisterSessionClosed";
+
   private static final Schema SCHEMA = parse();
 
   private RegisterSessionClosedSchema() {
@@ -26,6 +29,12 @@ public final class RegisterSessionClosedSchema {
   /** The parsed reader schema for {@code RegisterSessionClosed}. */
   public static Schema schema() {
     return SCHEMA;
+  }
+
+  /** Decodes the raw outbox Avro payload into the typed event (see AvroSerde). */
+  public static RegisterSessionClosedEvent decode(java.util.UUID eventId, byte[] payload) {
+    return RegisterSessionClosedEvent.from(
+        eventId, id.co.nativeapp.events.AvroSerde.deserialize(payload, SCHEMA));
   }
 
   private static Schema parse() {

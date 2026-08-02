@@ -227,5 +227,20 @@ public enum AccountRole {
    * deduction line that is not PPh21 or a named BPJS leg -- e.g. a future custom component such as
    * a loan repayment. Maps to account 2690 (ILLUSTRATIVE -- SME-gated, V40).
    */
-  OTHER_DEDUCTIONS_PAYABLE
+  OTHER_DEDUCTIONS_PAYABLE,
+
+  /**
+   * Register-close cash SHORT (selisih kas kurang, ADR 0036) — the expense side of the drawer
+   * variance: Dr this / Cr CASH_CLEARING when the counted drawer is BELOW expected. Illustrative
+   * seed 5700 (V43); SME-gated. Two roles (with CASH_OVER_INCOME) so an SME can keep them split or
+   * remap both onto one netted "Selisih Kas" account — the GAIN/LOSS_ON_DISPOSAL precedent.
+   */
+  CASH_SHORT_EXPENSE,
+
+  /**
+   * Register-close cash OVER (selisih kas lebih, ADR 0036) — the other-income side: Dr
+   * CASH_CLEARING / Cr this when the counted drawer EXCEEDS expected. Illustrative seed 4300
+   * (V43); SME-gated.
+   */
+  CASH_OVER_INCOME
 }
