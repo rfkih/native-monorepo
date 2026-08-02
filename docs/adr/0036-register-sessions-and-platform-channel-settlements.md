@@ -47,6 +47,9 @@ posting only the **variance**.
 4. **Online sales post gross** (PSAK 72 — the merchant is principal, the platform an agent): tender
    `ONLINE` + channel routes the clearing leg to `Dr PLATFORM_RECEIVABLE (1250 illustrative)`;
    revenue/tax legs unchanged; ONLINE is synchronous capture and carries no gift-card/loyalty legs.
+   An ONLINE payment refunds **all-or-nothing** (review W4): finance rejects partial refunds, so a
+   partial ONLINE refund would leave the per-channel receivable permanently overstated — the
+   restaurant edge rejects it (400) instead of letting the two services silently diverge.
    Finance keeps a per-channel `platform_receivable` accumulator (GL account shared), tolerant of
    negative balances (refund clawbacks); the reversal writer decrements it.
 5. **Platform settlement** (dashboard, per channel, repeatable): input gross settled + net

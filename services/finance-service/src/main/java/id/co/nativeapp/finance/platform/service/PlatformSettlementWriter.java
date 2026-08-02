@@ -84,6 +84,9 @@ public class PlatformSettlementWriter {
     Objects.requireNonNull(channelCode, "channelCode");
     Objects.requireNonNull(currency, "currency");
     Objects.requireNonNull(idempotencyKey, "idempotencyKey");
+    // Review S1: restaurant stores channel codes uppercase — normalize so a lowercase request
+    // matches the accumulator row instead of masquerading as an over-settlement.
+    channelCode = channelCode.strip().toUpperCase(java.util.Locale.ROOT);
 
     // 1) Replay-by-key probe FIRST (PayrollSettlementWriter idiom): a genuine retry never re-runs
     //    the decrement — the original attempt already moved the money.
@@ -118,7 +121,17 @@ public class PlatformSettlementWriter {
     //    balance instead of double-spending the guard window.
     jdbcTemplate.queryForList(
         "SELECT pg_advisory_xact_lock(hashtext(?))",
-        "platform_settle:" + companyId + ":" + channelCode);
+        "platform_settlement:" + companyId + ":" + channelCode);
+
+    // 3a) Review W2: RE-probe the key now that we hold the lock. Two concurrent same-key POSTs
+    // both miss the top probe; the loser blocks here until the winner COMMITS (xact lock),
+    // so this second probe sees the winner's row and replays 200 — without it the loser
+    // re-decrements and dies on uq_platform_settlement_idem as an opaque 500.
+    Optional<PlatformSettlement> afterLock =
+        settlementRepository.findByIdempotencyKey(idempotencyKey);
+    if (afterLock.isPresent()) {
+      return new PlatformSettlementResult(afterLock.get(), false);
+    }
 
     // 4) GUARDED single-statement decrement (the OrgUnitRefWriter JdbcTemplate idiom — no entity
     //    exists for the accumulator row): the outstanding_minor >= gross predicate makes an
@@ -135,12 +148,14 @@ public class PlatformSettlementWriter {
                    version           = version + 1
              WHERE channel_code = ?
                AND currency = ?
+               AND company_id = ?
                AND outstanding_minor >= ?
             """,
             grossMinor,
             actor,
             channelCode,
             currency,
+            companyId,
             grossMinor);
     if (updated == 0) {
       throw new PlatformOverSettlementException(channelCode, grossMinor, currency);

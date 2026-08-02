@@ -44,7 +44,7 @@ import java.util.UUID;
  * ONLINE-tender sale; finance routes the ONLINE clearing debit to PLATFORM_RECEIVABLE and
  * accumulates a per-channel receivable sub-ledger under this code (a null channel on an ONLINE sale
  * accumulates under UNKNOWN rather than dropping money) — that routing lands with the tender value
- * itself in a LATER phase. In THIS wave every producer emits an explicit null, so finance never
+ * itself in a LATER phase. In THIS wave carwash/barbershop emit an explicit null; restaurant threads the real value (B2), so finance never
  * actually observes a non-null channel yet; this record component and the decode path are
  * schema-first, exactly as the Phase 4 fields were.
  *
@@ -76,7 +76,7 @@ import java.util.UUID;
  *     {@code <= amount_minor} when present
  * @param channel the sales-channel code for an ONLINE-tender sale (e.g. {@code GOFOOD}, {@code
  *     GRABFOOD}), or null (Phase B, ADR 0036) — null for every non-ONLINE tender and for every
- *     producer in this wave (no producer threads a real channel yet; that lands in Phase B2).
+ *     producer in this wave (restaurant threads the real channel for ONLINE tenders since Phase B2).
  *     Appended LAST (positional decode safety, the same discipline the Phase 4 fields follow).
  */
 public record SaleRecordedEvent(
