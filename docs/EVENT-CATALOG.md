@@ -1881,7 +1881,7 @@ consumer uses the `refund_id` as the dedup key via `ProcessedEventStore`.
 ### `RegisterSessionClosed`
 
 Emitted by restaurant-service when a cash-register session (closing kasir — one per outlet per
-day, ADR 0035) is CLOSED with a drawer count. Finance consumes it to post ONLY the cash
+day, ADR 0036) is CLOSED with a drawer count. Finance consumes it to post ONLY the cash
 variance (selisih kas) that trues `CASH_CLEARING` to physical drawer cash: short →
 `Dr CASH_SHORT_EXPENSE / Cr CASH_CLEARING`, over → `Dr CASH_CLEARING / Cr CASH_OVER_INCOME`,
 zero variance → no entry (still marked processed). Revenue was already recognized at sale time

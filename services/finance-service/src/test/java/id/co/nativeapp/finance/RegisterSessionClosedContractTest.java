@@ -13,7 +13,7 @@ import org.apache.avro.generic.GenericRecord;
 import org.junit.jupiter.api.Test;
 
 /**
- * Contract test for {@code RegisterSessionClosed} (ADR 0035) — consumer side, no Spring context.
+ * Contract test for {@code RegisterSessionClosed} (ADR 0036) — consumer side, no Spring context.
  * Proves the single-source {@code .avsc} parses on finance's classpath, producer-shaped bytes
  * decode into {@link RegisterSessionClosedEvent}, the reconciliation-identity guard accepts a
  * consistent event and rejects an inconsistent one (the poison/DLT path), and schema evolution

@@ -8,7 +8,7 @@ import org.apache.avro.Schema;
 /**
  * Finance-side (consumer) holder for the {@code RegisterSessionClosed} Avro schema — parses the
  * single-source {@code avro/RegisterSessionClosed.avsc} from the classpath ({@code libs/contracts},
- * ADR 0003). The producer is restaurant-service's register feature (closing kasir, ADR 0035);
+ * ADR 0003). The producer is restaurant-service's register feature (closing kasir, ADR 0036);
  * finance consumes it to post ONLY the signed cash variance (selisih kas) that trues CASH_CLEARING
  * to the physically counted drawer.
  */

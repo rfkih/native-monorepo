@@ -47,6 +47,15 @@ public class Sale extends Auditable {
   @Column(name = "idempotency_key", nullable = false, updatable = false)
   private String idempotencyKey;
 
+  /**
+   * The tender that settled this sale ({@code CASH | QRIS | CARD}, later {@code ONLINE}) — V21,
+   * ADR 0036 (closing kasir). Nullable: legacy pre-V21 rows and no-payment paths have no tender;
+   * a NULL row is simply outside every register session's cash window. Deliberately a String (not
+   * the payment feature's enum) — the sale aggregate stores what the wire carries.
+   */
+  @Column(name = "tender_type", updatable = false)
+  private String tenderType;
+
   protected Sale() {
     // for JPA
   }
@@ -60,11 +69,23 @@ public class Sale extends Auditable {
    * @param idempotencyKey the client's request id (dedupe key with company_id)
    */
   public Sale(UUID businessId, Money amount, Instant occurredAt, String idempotencyKey) {
+    this(businessId, amount, occurredAt, idempotencyKey, null);
+  }
+
+  /**
+   * Creates a new sale with a freshly generated id and the settling tender (ADR 0036).
+   *
+   * @param tenderType the tender enum name ({@code CASH | QRIS | CARD}), or null for
+   *     legacy/no-payment sales
+   */
+  public Sale(
+      UUID businessId, Money amount, Instant occurredAt, String idempotencyKey, String tenderType) {
     this.id = UUID.randomUUID();
     this.businessId = Objects.requireNonNull(businessId, "businessId");
     this.amount = MoneyEmbeddable.of(amount);
     this.occurredAt = Objects.requireNonNull(occurredAt, "occurredAt");
     this.idempotencyKey = Objects.requireNonNull(idempotencyKey, "idempotencyKey");
+    this.tenderType = tenderType;
   }
 
   public UUID getId() {
@@ -86,5 +107,10 @@ public class Sale extends Auditable {
 
   public String getIdempotencyKey() {
     return idempotencyKey;
+  }
+
+  /** The settling tender ({@code CASH | QRIS | CARD}), or null for legacy/no-payment sales. */
+  public String getTenderType() {
+    return tenderType;
   }
 }

@@ -102,7 +102,12 @@ public class SaleWriter {
     Money amount = Money.ofMinor(command.amountMinor(), command.currency());
 
     Sale sale =
-        new Sale(command.businessId(), amount, command.occurredAt(), command.idempotencyKey());
+        new Sale(
+            command.businessId(),
+            amount,
+            command.occurredAt(),
+            command.idempotencyKey(),
+            command.tenderType());
     sale.setCompanyId(companyId);
     Sale saved = repository.saveAndFlush(sale);
 
@@ -172,7 +177,12 @@ public class SaleWriter {
 
     Money amount = Money.ofMinor(command.amountMinor(), command.currency());
     Sale sale =
-        new Sale(command.businessId(), amount, command.occurredAt(), command.idempotencyKey());
+        new Sale(
+            command.businessId(),
+            amount,
+            command.occurredAt(),
+            command.idempotencyKey(),
+            command.tenderType());
     sale.setCompanyId(companyId);
     Sale saved = repository.saveAndFlush(sale);
 

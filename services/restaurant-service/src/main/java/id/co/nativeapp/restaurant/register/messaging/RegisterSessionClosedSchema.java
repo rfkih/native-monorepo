@@ -15,7 +15,7 @@ import org.apache.avro.generic.GenericRecord;
  * code-generation, matching every other schema holder. The schema is single-sourced in {@code
  * libs/contracts} (ADR 0003) and registered in {@code docs/EVENT-CATALOG.md}.
  *
- * <p>Emitted when a cash-register session (closing kasir, ADR 0035) is CLOSED: finance posts ONLY
+ * <p>Emitted when a cash-register session (closing kasir, ADR 0036) is CLOSED: finance posts ONLY
  * the signed cash variance ({@code over_short_minor = counted − expected}) — revenue was already
  * recognized at sale time by {@code SaleRecorded}. Every amount is integer minor units in one
  * currency (rule 8). The producer computes {@code expected_cash_minor} server-side; the consumer

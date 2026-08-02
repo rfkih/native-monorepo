@@ -11,7 +11,7 @@ import org.apache.avro.generic.GenericRecord;
 import org.junit.jupiter.api.Test;
 
 /**
- * Contract test for {@code RegisterSessionClosed} (ADR 0035, closing kasir) — producer side, no
+ * Contract test for {@code RegisterSessionClosed} (ADR 0036, closing kasir) — producer side, no
  * Spring context. Proves the single-source {@code .avsc} parses, a record built by the schema
  * holder round-trips through {@code libs/events} {@link AvroSerde}, the reconciliation-identity
  * fields survive the wire (finance DLTs on violation, so the producer-side shape is load-bearing),

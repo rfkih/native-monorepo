@@ -5,7 +5,7 @@ import java.util.UUID;
 import org.apache.avro.generic.GenericRecord;
 
 /**
- * Decoded {@code RegisterSessionClosed} event (ADR 0035, closing kasir) — the finance-side view of
+ * Decoded {@code RegisterSessionClosed} event (ADR 0036, closing kasir) — the finance-side view of
  * a closed cash-register session. Finance posts ONLY the signed variance ({@link #overShortMinor}):
  * negative = short → {@code Dr CASH_SHORT_EXPENSE / Cr CASH_CLEARING}; positive = over → {@code Dr
  * CASH_CLEARING / Cr CASH_OVER_INCOME}; zero = no journal entry (still marked processed).
