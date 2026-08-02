@@ -122,12 +122,28 @@ public interface ExpenseClaimRepository extends JpaRepository<ExpenseClaim, UUID
    * in practice, but grouping by currency too means a hypothetical mixed-currency tenant surfaces
    * as separate rows instead of a silently corrupted cross-currency sum, rule 8). ONLY {@code
    * APPROVED}/{@code REIMBURSED} claims count — the two states in which the expense is actually
-   * recognised on the books (ADR 0030 §2); a DRAFT/SUBMITTED/REFUSED/CANCELLED/VOIDED claim never
-   * posted, so including it here would show a total finance's per-unit P&amp;L rollup for these org
-   * units does not (and should not) match. {@code orgUnitIds} follows the {@link #findForManager}
-   * sentinel-list idiom (hasUnits=false = the whole tenant); {@code period} is an optional {@code
-   * YYYY-MM} filter matched against {@code expense_date} ({@code NULL} = no filter — validated by
-   * {@code ExpenseClaimReader}, not here).
+   * recognised on the books (ADR 0030 §2).
+   *
+   * <p><strong>THE RECOGNITION period, not the incurred date (W1, E8 review — a reconciliation gap,
+   * since fixed).</strong> {@code period} filters on {@code to_char(c.approved_at AT TIME ZONE
+   * 'UTC', 'YYYY-MM')}, EXACTLY mirroring finance {@code LedgerPosting.periodOf(Instant)} ({@code
+   * YearMonth.from(occurredAt.atZone(ZoneOffset.UTC))}) — the period {@code
+   * ExpenseClaimPostingWriter} books the Dr-expense/Cr-payable entry into (it keys off {@code
+   * event.approvedAt()}, never {@code expense_date}). This is WHY this total reconciles to the
+   * org-unit's P&amp;L rollup for the SAME period: a claim incurred 2026-07-31 but approved
+   * 2026-08-01 posts (and therefore must sum here) under AUGUST, not July — the two dates can
+   * legitimately fall in different months (submission/approval lag), and getting this wrong
+   * silently desyncs the tile from the books it claims to summarize. {@code approved_at} is NEVER
+   * {@code NULL} for this {@code APPROVED}/{@code REIMBURSED} subset ({@link
+   * id.co.nativeapp.employee.expense.domain.ExpenseClaim#approve} always stamps it as part of the
+   * SAME {@code SUBMITTED -> APPROVED} transition, and {@code REIMBURSED} is only ever reached FROM
+   * {@code APPROVED}). {@code orgUnitIds} follows the {@link #findForManager} sentinel-list idiom
+   * (hasUnits=false = the whole tenant); {@code period} is optional ({@code NULL} = no filter —
+   * validated by {@code ExpenseClaimReader}, not here).
+   *
+   * <p>Contrast {@link #summarizeByStatus}, which is deliberately a DIFFERENT date dimension
+   * ({@code expense_date}, the operational incurred-on date) — do not "fix" the two queries to
+   * agree; they answer different questions on purpose (see that method's Javadoc).
    */
   @Query(
       value =
@@ -138,7 +154,8 @@ public interface ExpenseClaimRepository extends JpaRepository<ExpenseClaim, UUID
             JOIN expense_category cat ON cat.id = c.category_id
            WHERE c.status IN ('APPROVED', 'REIMBURSED')
              AND (:hasUnits = FALSE OR c.org_unit_id IN (:orgUnitIds))
-             AND (CAST(:period AS text) IS NULL OR to_char(c.expense_date, 'YYYY-MM') = :period)
+             AND (CAST(:period AS text) IS NULL
+                  OR to_char(c.approved_at AT TIME ZONE 'UTC', 'YYYY-MM') = :period)
            GROUP BY cat.name, c.amount_currency
            ORDER BY total_minor DESC
           """,
@@ -149,9 +166,21 @@ public interface ExpenseClaimRepository extends JpaRepository<ExpenseClaim, UUID
       @Param("period") String period);
 
   /**
-   * Claim counts by status for the SAME scope as {@link #summarizeByCategory} (Phase E8) — EVERY
-   * status, not just {@code APPROVED}/{@code REIMBURSED}, so a manager sees how many claims are
-   * still pending a decision ({@code SUBMITTED}) alongside the recognised spend total.
+   * Claim counts by status for the SAME org-unit scope as {@link #summarizeByCategory} (Phase E8) —
+   * EVERY status, not just {@code APPROVED}/{@code REIMBURSED}, so a manager sees how many claims
+   * are still pending a decision ({@code SUBMITTED}) alongside the recognised spend total.
+   *
+   * <p><strong>OPERATIONAL incurred-date view — a DELIBERATELY DIFFERENT date dimension than {@link
+   * #summarizeByCategory} (W1, E8 review).</strong> {@code period} here filters on {@code
+   * to_char(c.expense_date, 'YYYY-MM')} (when the expense was INCURRED), not {@code approved_at}
+   * (when it was RECOGNISED) — and it cannot: a DRAFT/SUBMITTED/REFUSED/CANCELLED claim has no
+   * {@code approved_at} at all (it is {@code NULL} until an approval ever happens), so this
+   * EVERY-status count has no recognition date to key off for most of its rows. This means the SAME
+   * {@code period} value can legitimately select a DIFFERENT set of claims here than in {@link
+   * #summarizeByCategory} — e.g. a claim incurred in July but approved in August appears under July
+   * here (operational: "what did we spend on in July") and under August there (recognition: "what
+   * does August's P&amp;L carry"). This total does {@code NOT} reconcile to any GL figure and must
+   * never be presented as if it does — it is a pending-work signal only.
    */
   @Query(
       value =

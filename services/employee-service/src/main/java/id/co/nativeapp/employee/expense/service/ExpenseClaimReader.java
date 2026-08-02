@@ -123,11 +123,25 @@ public class ExpenseClaimReader {
   }
 
   /**
-   * The org-unit hub's Expenses tab rollup (Phase E8): per-category totals (APPROVED/REIMBURSED
-   * only — the recognised subset, ADR 0030 §2), claim counts by every status, and the
-   * approved+reimbursed grand total (the category rows' sum). {@code orgUnitIds} follows the same
-   * sentinel-list idiom as {@link #forManager}; {@code period} is an optional {@code YYYY-MM}
-   * filter on {@code expense_date}.
+   * The org-unit hub's Expenses tab rollup (Phase E8): per-category totals, claim counts by every
+   * status, and the approved+reimbursed grand total (the category rows' sum). {@code orgUnitIds}
+   * follows the same sentinel-list idiom as {@link #forManager}; {@code period} is an optional
+   * {@code YYYY-MM} filter, applied the SAME way to both underlying queries — but the two return
+   * lists filter on TWO DIFFERENT date columns (W1, E8 review; a reconciliation gap, since fixed):
+   *
+   * <ul>
+   *   <li>{@code byCategory} (APPROVED/REIMBURSED only) — {@code period} filters on {@code
+   *       approved_at}, the RECOGNITION date, EXACTLY matching finance's {@code
+   *       ExpenseClaimPostingWriter}/{@code LedgerPosting.periodOf}. This is the figure that
+   *       reconciles to the org-unit's P&amp;L rollup for the SAME period.
+   *   <li>{@code byStatus} (every status) — {@code period} filters on {@code expense_date}, the
+   *       OPERATIONAL incurred date (most rows have no {@code approved_at} to key off at all). This
+   *       is a pending-work signal, NOT a figure that reconciles to any GL total — do not read it
+   *       as agreeing with {@code byCategory} for the same {@code period}.
+   * </ul>
+   *
+   * See {@code ExpenseClaimRepository#summarizeByCategory}/{@code #summarizeByStatus} for the full
+   * rationale.
    *
    * @throws IllegalArgumentException if {@code period} is present but not {@code YYYY-MM} (→ 400)
    * @throws IllegalStateException if the category rows mix currencies — never expected while v1's

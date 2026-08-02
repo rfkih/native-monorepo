@@ -94,6 +94,11 @@ export function OrgUnitExpensesTab({
         </Link>
       </div>
 
+      {/* The spend/category tiles reconcile to the GL on the APPROVAL period (matches finance's
+          ExpenseClaimPostingWriter); the pending count is an operational view on the EXPENSE
+          date — the two can legitimately disagree for the same selected period (E8 review W1). */}
+      <p className="text-xs text-ink-3">{t('orgHub.expensesTab.periodHint')}</p>
+
       <div className="grid gap-4 sm:grid-cols-2">
         <KpiTile
           label={t('orgHub.expensesTab.recognisedSpend')}

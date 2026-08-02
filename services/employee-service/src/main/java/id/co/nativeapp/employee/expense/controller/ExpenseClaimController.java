@@ -78,10 +78,12 @@ public class ExpenseClaimController {
   @Operation(
       summary = "Org-unit expense summary — the org-unit hub's Expenses tab rollup",
       description =
-          "Per-category totals (APPROVED/REIMBURSED claims only — the recognised subset, ADR 0030"
-              + " §2), claim counts by every status, and the approved+reimbursed grand total, over"
-              + " the given org units. orgUnitIds omitted/empty = the whole tenant; period is an"
-              + " optional YYYY-MM filter on expense_date.")
+          "Per-category totals (APPROVED/REIMBURSED claims only, period-filtered on approved_at —"
+              + " the SAME recognition period finance books into, so this reconciles to the"
+              + " org-unit's P&L), claim counts by every status (period-filtered on expense_date —"
+              + " an operational incurred-date view that does NOT reconcile to the GL), and the"
+              + " approved+reimbursed grand total, over the given org units. orgUnitIds"
+              + " omitted/empty = the whole tenant; period is an optional YYYY-MM filter.")
   @GetMapping("/summary")
   public OrgUnitExpenseSummaryResponse summary(
       @RequestParam(required = false) List<UUID> orgUnitIds,

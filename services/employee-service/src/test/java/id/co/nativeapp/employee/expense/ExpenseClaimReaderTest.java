@@ -211,4 +211,27 @@ class ExpenseClaimReaderTest {
     verify(claimRepository).summarizeByCategory(eq(false), eq(sentinel), any());
     verify(claimRepository).summarizeByStatus(eq(false), eq(sentinel), any());
   }
+
+  /**
+   * (W1, E8 review) The reader passes the SAME caller-supplied {@code period} string to BOTH {@code
+   * summarizeByCategory} AND {@code summarizeByStatus}, unmodified — the reader itself never
+   * rewrites/derives a different value for either. The approved_at-vs-expense_date DATE DIMENSION
+   * split (category totals reconcile to the GL on the approval period; status counts are an
+   * operational incurred-date view) lives entirely inside the two native queries' WHERE clauses,
+   * not here — this test is a plumbing/regression guard only. The real approved_at-vs- expense_date
+   * SQL behaviour is proven against real Postgres in {@code
+   * ExpenseClaimRlsIsolationTest#summaryReconcilesOnApprovedAtPeriodNotExpenseDateAndIsRlsScoped}
+   * (mirrors {@code findForManager}'s RLS coverage).
+   */
+  @Test
+  void summaryPassesTheIdenticalPeriodArgumentToBothTheCategoryAndStatusQueries() throws Exception {
+    when(claimRepository.summarizeByCategory(eq(false), any(), eq("2026-08")))
+        .thenReturn(List.of());
+    when(claimRepository.summarizeByStatus(eq(false), any(), eq("2026-08"))).thenReturn(List.of());
+
+    TenantContext.callAs(TENANT, ACTOR, () -> reader.summary(null, "2026-08"));
+
+    verify(claimRepository).summarizeByCategory(eq(false), any(), eq("2026-08"));
+    verify(claimRepository).summarizeByStatus(eq(false), any(), eq("2026-08"));
+  }
 }

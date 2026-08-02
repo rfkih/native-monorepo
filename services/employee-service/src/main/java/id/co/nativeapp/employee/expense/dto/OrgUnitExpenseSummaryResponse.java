@@ -5,19 +5,32 @@ import java.util.List;
 /**
  * {@code GET /api/v1/expense-claims/summary} response (Phase E8) — the org-unit hub's Expenses tab
  * rollup: a per-category breakdown, claim counts by status, and the approved+reimbursed grand total
- * the category breakdown already implies. Both {@code byCategory} and {@code byStatus} share the
- * SAME org-unit/period scope the caller requested.
+ * the category breakdown already implies. {@code byCategory} and {@code byStatus} share the SAME
+ * org-unit scope, but read the SAME {@code period} value against TWO DIFFERENT date columns (W1, E8
+ * review — a reconciliation gap, since fixed): they are NOT two views of the same money.
  *
- * <p>{@code byCategory} counts ONLY {@code APPROVED}/{@code REIMBURSED} claims (the two states in
- * which the expense is recognised on the books, ADR 0030 §2) — the same subset finance's per-unit
- * P&amp;L rollup carries for these org units (zero finance change, E8 spec), so this tile and the
- * Overview tab's expense figure agree. {@code byStatus} counts EVERY status, so a manager also sees
- * how many claims are still pending a decision.
+ * <p><strong>{@code byCategory}/{@code approvedReimbursedTotalMinor} — RECONCILES to the
+ * GL.</strong> Counts ONLY {@code APPROVED}/{@code REIMBURSED} claims (the two states in which the
+ * expense is recognised on the books, ADR 0030 §2), {@code period}-filtered on {@code approved_at}
+ * — EXACTLY the period {@code ExpenseClaimPostingWriter} books into (it keys off {@code
+ * approvedAt}, never {@code expense_date}). This is the figure that agrees with the org-unit's
+ * P&amp;L rollup for the SAME period (zero finance change, E8 spec).
  *
- * @param byCategory per-category totals, largest first; empty if nothing is recognised in scope
- * @param byStatus claim counts by status; empty if no claim exists in scope
+ * <p><strong>{@code byStatus} — OPERATIONAL only, does NOT reconcile.</strong> Counts EVERY status
+ * (so a manager sees how many claims are pending a decision), {@code period}-filtered on {@code
+ * expense_date} — the incurred date, not the recognition date (most rows have no {@code
+ * approved_at} at all). A claim incurred in one month but approved in the next therefore shows
+ * under DIFFERENT months in {@code byCategory} vs {@code byStatus} for the SAME requested {@code
+ * period} — by design, not a bug. Never present {@code byStatus} counts as if they sum to a GL
+ * total.
+ *
+ * @param byCategory per-category totals (approval-period, reconciles to the GL), largest first;
+ *     empty if nothing is recognised in scope for the period
+ * @param byStatus claim counts by status (incurred-period, operational only); empty if no claim
+ *     exists in scope for the period
  * @param approvedReimbursedTotalMinor the sum of every {@code byCategory} row's {@code totalMinor}
- *     (zero when {@code byCategory} is empty)
+ *     (zero when {@code byCategory} is empty) — reconciles to the GL, same caveat as {@code
+ *     byCategory}
  * @param currency the tenant's established expense-claim currency, or {@code null} when {@code
  *     byCategory} is empty — never invented (mirrors {@code UnitPnlResponse})
  */
