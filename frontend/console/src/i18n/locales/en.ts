@@ -425,6 +425,10 @@ export const en = {
     },
     category: {
       all: 'All',
+      emptyTitle: 'Nothing in {{name}} yet',
+      emptyHint:
+        'An item appears here when its category matches this name. Set each item’s category in Menu management.',
+      emptyCta: 'Open menu management',
       mains: 'Mains',
       drinks: 'Drinks',
       desserts: 'Desserts',

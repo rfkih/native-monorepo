@@ -22,6 +22,7 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import {
   ArrowLeft,
+  ArrowRight,
   BookOpen,
   ChevronDown,
   ChevronUp,
@@ -38,6 +39,7 @@ import {
   Store,
   Sun,
   Table2,
+  Tag,
   Utensils,
   X,
 } from 'lucide-react'
@@ -263,7 +265,10 @@ function PosInner({ session }: { session: CompanySession }) {
       const cat = orderedCategories.find((c) => c.id === resolvedCategoryId)
       if (!cat) return true
       if (item.categoryId) return item.categoryId === resolvedCategoryId
-      return item.category === cat.legacyKey
+      // Name bridge: items carry a free-text category (the write path has no categoryId yet), so
+      // a managed category adopts items whose text matches its name CASE-INSENSITIVELY. legacyKey
+      // is always lowercased in deriveCategories — compare apples to apples.
+      return (item.category ?? '').toLowerCase() === cat.legacyKey
     })
   }, [items, orderedCategories, resolvedCategoryId, searchLower])
 
@@ -848,24 +853,35 @@ function PosInner({ session }: { session: CompanySession }) {
                 </div>
               ) : null}
 
-              {/* Responsive grid: ≥1180→4 cols, 768-1179→3, 560-767→2, <560→2 (156px floor) */}
-              <div
-                className="grid gap-3"
-                style={{
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(156px, 1fr))',
-                }}
-              >
-                {visibleItems.map((item, idx) => (
-                  <MenuTile
-                    key={item.id}
-                    item={item}
-                    qty={tileQty(item.id)}
-                    locale={locale}
-                    index={idx}
-                    onAdd={() => handleItemTap(item)}
-                  />
-                ))}
-              </div>
+              {/* Empty category tab → a designed explanation, never a silent void. */}
+              {!searchLower && visibleItems.length === 0 && orderedCategories.length > 0 ? (
+                <EmptyCategory
+                  name={
+                    orderedCategories.find((c) => c.id === resolvedCategoryId)?.name ??
+                    t('pos.category.all', 'All')
+                  }
+                  canManage={hasAnyRole(auth.roles, 'owner', 'manager')}
+                />
+              ) : (
+                /* Responsive grid: ≥1180→4 cols, 768-1179→3, 560-767→2, <560→2 (156px floor) */
+                <div
+                  className="grid gap-3"
+                  style={{
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(156px, 1fr))',
+                  }}
+                >
+                  {visibleItems.map((item, idx) => (
+                    <MenuTile
+                      key={item.id}
+                      item={item}
+                      qty={tileQty(item.id)}
+                      locale={locale}
+                      index={idx}
+                      onAdd={() => handleItemTap(item)}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1644,6 +1660,40 @@ function EmptyMenu() {
   )
 }
 
+/**
+ * A category tab with no items — a designed answer instead of a silent void. Explains WHY it is
+ * empty (items join a category by matching name until real category links exist) and, for
+ * owner/manager, offers the one action that fixes it. Cashiers get the explanation only.
+ */
+function EmptyCategory({ name, canManage }: { name: string; canManage: boolean }) {
+  const { t } = useTranslation()
+  return (
+    <div className="reveal flex flex-col items-center justify-center px-6 py-16 text-center">
+      <div className="mb-4 grid size-14 place-items-center rounded-2xl bg-ink-50 text-ink-3">
+        <Tag className="size-6" aria-hidden="true" />
+      </div>
+      <h2 className="font-display text-lg font-bold text-ink">
+        {t('pos.category.emptyTitle', { name })}
+      </h2>
+      <p className="mx-auto mt-1.5 max-w-sm text-sm leading-relaxed text-ink-3">
+        {t('pos.category.emptyHint')}
+      </p>
+      {canManage ? (
+        <Link
+          to="/menu"
+          className={cn(
+            'mt-5 inline-flex items-center gap-2 rounded-xl border border-line bg-surface px-4 py-2',
+            'text-sm font-semibold text-emerald-2 transition-colors hover:border-emerald-line',
+            'focus-visible:outline-2 focus-visible:outline-brand-500',
+          )}
+        >
+          {t('pos.category.emptyCta')} <ArrowRight className="size-4" aria-hidden="true" />
+        </Link>
+      ) : null}
+    </div>
+  )
+}
+
 // ---------------------------------------------------------------------------
 // BillSelectorOverlay — phone full-screen bill list
 // ---------------------------------------------------------------------------
@@ -1942,7 +1992,12 @@ function deriveCategories(
           (c) => c.name.toLowerCase() === item.category.toLowerCase(),
         )
         if (!covered) {
-          result.push({ id: item.category, name: item.category, legacyKey: item.category })
+          // legacyKey is the LOWERCASED match key (the item filter compares lowercased text).
+          result.push({
+            id: item.category,
+            name: item.category,
+            legacyKey: item.category.toLowerCase(),
+          })
         }
       }
     }

@@ -420,6 +420,10 @@ export const id = {
     },
     category: {
       all: 'Semua',
+      emptyTitle: 'Belum ada apa pun di {{name}}',
+      emptyHint:
+        'Item muncul di sini bila kategorinya cocok dengan nama ini. Atur kategori tiap item di manajemen menu.',
+      emptyCta: 'Buka manajemen menu',
       mains: 'Makanan',
       drinks: 'Minuman',
       desserts: 'Pencuci mulut',
