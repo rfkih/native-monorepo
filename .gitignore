@@ -21,3 +21,7 @@ frontend/console/*shot.mjs
 
 # Gradle build-logic CLI worktree workaround output
 build-logic/tmp/
+
+# UAT stack runtime env — the current tunnel URL + GENERATED SECRETS (KC admin password,
+# PII/gift-card keys). Never commit; losing it strands the UAT data (see docker/uat/README.md).
+docker/uat.env

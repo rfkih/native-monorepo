@@ -1,0 +1,410 @@
+# Native — UAT stack: the full platform (10 services + console) containerized on one
+# machine, exposed to the public internet through a cloudflared QUICK tunnel.
+#
+#   Internet ──https──> xxx.trycloudflare.com ──tunnel──> cloudflared ──> edge (nginx)
+#     edge: / -> console · /auth/ -> keycloak · /api/ -> gateway   (single public origin)
+#
+# Operate it ONLY via scripts/uat-up.ps1 / uat-down.ps1 — the quick-tunnel URL changes
+# on every tunnel restart and the script re-wires Keycloak + services to the new URL.
+# Interpolation comes from the gitignored docker/uat.env (PUBLIC_URL + generated
+# secrets): docker compose --env-file docker/uat.env -f docker/compose.uat.yml ...
+#
+# Design notes:
+#   - Same-origin console+API+auth: matches the gateway's no-CORS design; console uses
+#     runtime env.js config, so ONE image survives URL churn.
+#   - Services validate token `iss` against the PUBLIC url (KEYCLOAK_ISSUER_URI) but
+#     fetch JWKS internally (KEYCLOAK_JWK_SET_URI) — no hairpin through the tunnel.
+#   - Nothing is published to the network except three 127.0.0.1 operator ports:
+#     12000 (cloudflared metrics/quicktunnel), 18090 (KC admin), 18093 (Connect REST).
+#   - mem_limits are sized to fit alongside the native-dev stack under the ~13.5 GiB
+#     Docker/WSL2 ceiling (UAT total ~8.5 GiB).
+
+name: native-uat
+
+x-java-env: &java-env
+  SPRING_PROFILES_ACTIVE: prod
+  KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+  KEYCLOAK_ISSUER_URI: ${PUBLIC_URL}/auth/realms/native
+  KEYCLOAK_JWK_SET_URI: http://keycloak:8080/auth/realms/native/protocol/openid-connect/certs
+  # 9 DB-owning services x Hikari's default 10 connections would exhaust Postgres
+  # (even at max_connections=150 with Keycloak + Debezium sharing the instance).
+  SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE: "5"
+  SPRING_DATASOURCE_HIKARI_MINIMUMIDLE: "1"
+  # 55% of the 512m cap ≈ 282m heap; ActiveProcessorCount trims GC/pool threads on the
+  # 16-core host; ExitOnOOM + restart:unless-stopped = fail fast, come back clean.
+  JDK_JAVA_OPTIONS: "-XX:MaxRAMPercentage=55.0 -XX:ActiveProcessorCount=2 -XX:+ExitOnOutOfMemoryError"
+
+x-java-service: &java-service
+  restart: unless-stopped
+  mem_limit: 512m
+  healthcheck:
+    # Temurin JRE has bash but no curl; /dev/tcp is a bash builtin.
+    test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /actuator/health/readiness HTTP/1.0\r\n\r\n' >&3 && grep -q UP <&3"]
+    interval: 10s
+    timeout: 5s
+    retries: 18
+    start_period: 120s
+
+services:
+  # ---------------------------------------------------------------------------
+  # Infra (adapted from compose.dev.yml; no host ports, own volume/network).
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: native-uat-postgres
+    restart: unless-stopped
+    mem_limit: 512m
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_wal_senders=10
+      - -c
+      - max_replication_slots=10
+      - -c
+      # One instance serves 9 service pools + Keycloak + 7 Debezium connectors; the
+      # default 100 slots ran dry during connector validation.
+      - max_connections=150
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+      - native-uat-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  kafka:
+    image: confluentinc/cp-kafka:7.7.1
+    container_name: native-uat-kafka
+    restart: unless-stopped
+    mem_limit: 768m
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      # Internal-only: no EXTERNAL listener — nothing outside the compose network
+      # talks to this broker.
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      CLUSTER_ID: native-uat-cluster-0001
+      KAFKA_HEAP_OPTS: "-Xms256M -Xmx512M"
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:29092"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  connect:
+    image: debezium/connect:2.7.3.Final
+    container_name: native-uat-connect
+    restart: unless-stopped
+    mem_limit: 896m
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:18093:8083" # operator-only: connector registration/status
+    environment:
+      BOOTSTRAP_SERVERS: kafka:29092
+      GROUP_ID: native-uat-connect
+      CONFIG_STORAGE_TOPIC: _connect_configs
+      OFFSET_STORAGE_TOPIC: _connect_offsets
+      STATUS_STORAGE_TOPIC: _connect_status
+      CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      STATUS_STORAGE_REPLICATION_FACTOR: 1
+      KEY_CONVERTER: org.apache.kafka.connect.storage.StringConverter
+      VALUE_CONVERTER: org.apache.kafka.connect.converters.ByteArrayConverter
+      KAFKA_HEAP_OPTS: "-Xms256M -Xmx512M"
+      HEAP_OPTS: "-Xms256M -Xmx512M"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/connectors"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: native-uat-keycloak
+    restart: unless-stopped
+    mem_limit: 1024m
+    command: ["start-dev", "--import-realm"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD} # effective only on first (empty-DB) boot
+      # Persistent store: users + the script's kcadm client patches survive container
+      # recreation. --import-realm only fires into an EMPTY DB (first boot).
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak
+      # Single public origin: Keycloak lives under /auth of the tunnel URL. hostname-v2
+      # accepts a full URL incl. sub-path -> issuer = ${PUBLIC_URL}/auth/realms/native.
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_HOSTNAME: ${PUBLIC_URL}/auth
+      KC_HOSTNAME_ADMIN: http://localhost:18090/auth # operator admin via loopback port
+      KC_HOSTNAME_STRICT: "false"
+      KC_PROXY_HEADERS: xforwarded # trust edge's X-Forwarded-Proto=https
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "127.0.0.1:18090:8080" # operator-only: admin console (blocked at the edge)
+    volumes:
+      - ./keycloak:/opt/keycloak/data/import:ro
+      - ./keycloak/themes/native:/opt/keycloak/themes/native:ro
+    healthcheck:
+      # Management interface :9000 inherits the /auth relative path in KC 26.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /auth/health/ready HTTP/1.0\r\n\r\n' >&3 && grep -q UP <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  redis:
+    image: redis:7-alpine
+    container_name: native-uat-redis
+    restart: unless-stopped
+    mem_limit: 128m
+    # noeviction: the gateway's rate-limit buckets must never be silently dropped.
+    command: ["redis-server", "--maxmemory", "64mb", "--maxmemory-policy", "noeviction"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ---------------------------------------------------------------------------
+  # The 10 Native services — images built by scripts/uat-up.ps1 from host-built
+  # bootJars via docker/runtime.Dockerfile. All listen on 8080, nothing published;
+  # the gateway reaches them by compose hostname (its route-URI yml defaults).
+  # ---------------------------------------------------------------------------
+  gateway:
+    <<: *java-service
+    image: native-uat/gateway:latest
+    container_name: native-uat-gateway
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      <<: *java-env
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # Behind cloudflared+edge the client IP arrives as a single-entry XFF that the
+      # edge OVERWRITES from CF-Connecting-IP (see docker/uat/edge.conf).
+      SIGNUP_RATE_LIMIT_TRUST_XFF: "true"
+      SELF_ORDER_RATE_LIMIT_TRUST_XFF: "true"
+
+  org-service:
+    <<: *java-service
+    image: native-uat/org-service:latest
+    container_name: native-uat-org-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+    environment:
+      <<: *java-env
+      DB_URL: jdbc:postgresql://postgres:5432/org_service
+      DB_USERNAME: org_service
+      DB_PASSWORD: org_service
+      KEYCLOAK_BASE_URL: http://keycloak:8080/auth # KC admin REST, internal
+      KEYCLOAK_ADMIN_SECRET: ${KEYCLOAK_ADMIN_SECRET} # rotated by uat-up.ps1
+
+  restaurant-service:
+    <<: *java-service
+    image: native-uat/restaurant-service:latest
+    container_name: native-uat-restaurant-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      <<: *java-env
+      DB_URL: jdbc:postgresql://postgres:5432/restaurant_service
+      DB_USERNAME: restaurant_service
+      DB_PASSWORD: restaurant_service
+      NATIVE_GIFTCARD_CODE_KEY: ${NATIVE_GIFTCARD_CODE_KEY}
+
+  carwash-service:
+    <<: *java-service
+    image: native-uat/carwash-service:latest
+    container_name: native-uat-carwash-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      <<: *java-env
+      DB_URL: jdbc:postgresql://postgres:5432/carwash_service
+      DB_USERNAME: carwash_service
+      DB_PASSWORD: carwash_service
+      NATIVE_GIFTCARD_CODE_KEY: ${NATIVE_GIFTCARD_CODE_KEY}
+
+  barbershop-service:
+    <<: *java-service
+    image: native-uat/barbershop-service:latest
+    container_name: native-uat-barbershop-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      <<: *java-env
+      DB_URL: jdbc:postgresql://postgres:5432/barbershop_service
+      DB_USERNAME: barbershop_service
+      DB_PASSWORD: barbershop_service
+      NATIVE_GIFTCARD_CODE_KEY: ${NATIVE_GIFTCARD_CODE_KEY}
+
+  loyalty-service:
+    <<: *java-service
+    image: native-uat/loyalty-service:latest
+    container_name: native-uat-loyalty-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      <<: *java-env
+      DB_URL: jdbc:postgresql://postgres:5432/loyalty_service
+      DB_USERNAME: loyalty_service
+      DB_PASSWORD: loyalty_service
+      NATIVE_PII_KEY: ${NATIVE_PII_KEY}
+      NATIVE_PII_HMAC_KEY: ${NATIVE_PII_HMAC_KEY}
+      NATIVE_GIFTCARD_CODE_KEY: ${NATIVE_GIFTCARD_CODE_KEY}
+
+  finance-service:
+    <<: *java-service
+    image: native-uat/finance-service:latest
+    container_name: native-uat-finance-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      <<: *java-env
+      DB_URL: jdbc:postgresql://postgres:5432/finance_service
+      DB_USERNAME: finance_service
+      DB_PASSWORD: finance_service
+
+  entitlement-service:
+    <<: *java-service
+    image: native-uat/entitlement-service:latest
+    container_name: native-uat-entitlement-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      <<: *java-env
+      DB_URL: jdbc:postgresql://postgres:5432/entitlement_service
+      DB_USERNAME: entitlement_service
+      DB_PASSWORD: entitlement_service
+
+  employee-service:
+    <<: *java-service
+    image: native-uat/employee-service:latest
+    container_name: native-uat-employee-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      <<: *java-env
+      DB_URL: jdbc:postgresql://postgres:5432/employee_service
+      DB_USERNAME: employee_service
+      DB_PASSWORD: employee_service
+      NATIVE_PII_KEY: ${NATIVE_PII_KEY}
+
+  notification-service:
+    <<: *java-service
+    image: native-uat/notification-service:latest
+    container_name: native-uat-notification-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      <<: *java-env
+      DB_URL: jdbc:postgresql://postgres:5432/notification_service
+      DB_USERNAME: notification_service
+      DB_PASSWORD: notification_service
+
+  # ---------------------------------------------------------------------------
+  # Console SPA — one image for any URL: entrypoint rewrites env.js from NATIVE_*.
+  # ---------------------------------------------------------------------------
+  console:
+    image: native-uat/console:latest
+    container_name: native-uat-console
+    restart: unless-stopped
+    mem_limit: 64m
+    environment:
+      NATIVE_AUTH_MODE: oidc
+      NATIVE_API_BASE_URL: "" # same-origin: relative /api through the edge
+      NATIVE_KEYCLOAK_URL: ${PUBLIC_URL}/auth
+      NATIVE_KEYCLOAK_REALM: native
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8080/index.html"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Edge + tunnel. The edge starts BEFORE the app containers (the tunnel URL must be
+  # discovered first) — its nginx config resolves upstreams per-request.
+  # ---------------------------------------------------------------------------
+  edge:
+    image: nginx:alpine
+    container_name: native-uat-edge
+    restart: unless-stopped
+    mem_limit: 64m
+    volumes:
+      - ./uat/edge.conf:/etc/nginx/conf.d/default.conf:ro
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: native-uat-cloudflared
+    # restart: "no" ON PURPOSE — an auto-restarted quick tunnel would mint a NEW public
+    # URL while Keycloak + all services still validate the old issuer. Fail loud;
+    # re-run scripts/uat-up.ps1 -SkipBuild to re-wire.
+    restart: "no"
+    mem_limit: 128m
+    command:
+      - tunnel
+      - --no-autoupdate
+      - --metrics
+      - 0.0.0.0:2000
+      - --url
+      - http://edge:8080
+    ports:
+      - "127.0.0.1:12000:2000" # GET /quicktunnel -> {"hostname":"xxx.trycloudflare.com"}
+
+volumes:
+  native-uat-pgdata:
