@@ -14,6 +14,12 @@ export function formatDate(iso: string | null | undefined, locale: string): stri
   return new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(d)
 }
 
+/** Locale-aware plain integer count (grouping separators, no currency) — the org-unit hub's
+ *  Expenses tab pending-claims tile (rule 9: every number through Intl, never string concatenation). */
+export function formatCount(value: number, locale: string): string {
+  return new Intl.NumberFormat(locale).format(value)
+}
+
 /**
  * Why "Pay now" (the DIRECT reimbursement, ADR 0030 §6) is disabled for this claim — an i18n key
  * under `expenses.actions.payDisabled.*`, or `null` when the action is enabled. Mirrors the

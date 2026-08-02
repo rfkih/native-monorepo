@@ -860,11 +860,17 @@ export const id = {
       unknownUser: 'Pengguna tidak dikenal',
       editAccess: 'Akses halaman',
     },
-    comingSoon: {
-      badge: 'Segera hadir',
-      title: 'Modul ini ada di peta jalan',
-      expensesBody:
-        'Pencatatan pengeluaran untuk unit ini segera hadir — entri pengeluaran akan langsung masuk ke laba ruginya.',
+    expensesTab: {
+      viewAll: 'Lihat semua pengeluaran',
+      recognisedSpend: 'Pengeluaran disetujui + diganti',
+      pending: 'Menunggu keputusan',
+      byCategory: 'Berdasarkan kategori',
+      shareOfTotal: '{{percent}} dari total',
+      noPostings: 'Belum ada pengeluaran yang diakui untuk unit ini. Klaim yang disetujui muncul di sini.',
+      error: 'Gagal memuat ringkasan pengeluaran unit ini.',
+      recentTitle: 'Klaim terbaru',
+      recentEmpty: 'Belum ada klaim',
+      recentEmptyHint: 'Klaim yang diajukan oleh karyawan unit ini akan muncul di sini.',
     },
     notFound: {
       title: 'Unit tidak ditemukan',

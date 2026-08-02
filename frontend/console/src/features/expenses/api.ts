@@ -268,8 +268,10 @@ const EMPTY_MANAGER_PAGE: PageResponse<ExpenseClaimSummary> = {
 /**
  * GET /api/v1/expense-claims?status=&orgUnitId=&page=&size= — the tenant-wide claim list,
  * SUBMITTED-first (pending work can never fall off the end of a page). `status` is an exact
- * {@link ClaimStatus} filter (omit for every status); `orgUnitId` is a single org-unit filter (the
- * server accepts a repeated/multi-value param, but the console offers one selection at a time).
+ * {@link ClaimStatus} filter (omit for every status). `orgUnitId` is bound server-side to a
+ * `List<UUID>` — the manager filter dropdown (ExpensesList) passes one id, but the org-unit hub's
+ * recent-claims panel (OrgUnitExpensesTab) passes a comma-joined multi-id BU scope, the SAME
+ * `useEmployees` idiom {@link useOrgUnitExpenseSummary} also uses.
  */
 export function useClaims(
   params: TenantParams & {
@@ -311,6 +313,64 @@ export function useClaim(params: TenantParams & { id: string | null; enabled: bo
       apiFetch<ExpenseClaimDetail>(`/api/v1/expense-claims/${id}`, {
         tenant: { companyId, actor },
       }),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Org-unit hub rollup (Phase E8) — the Expenses tab's summary tiles + breakdown.
+// ---------------------------------------------------------------------------
+
+/** One category's recognised (APPROVED/REIMBURSED) spend (mirrors OrgUnitExpenseSummaryResponse.CategoryTotal). */
+export interface ExpenseCategoryTotal {
+  categoryName: string
+  totalMinor: number
+  currency: string
+}
+
+/** One status's claim count (mirrors OrgUnitExpenseSummaryResponse.StatusCount). */
+export interface ExpenseStatusCount {
+  status: ClaimStatus
+  count: number
+}
+
+/** GET /api/v1/expense-claims/summary response (mirrors OrgUnitExpenseSummaryResponse). */
+export interface OrgUnitExpenseSummary {
+  byCategory: ExpenseCategoryTotal[]
+  byStatus: ExpenseStatusCount[]
+  approvedReimbursedTotalMinor: number
+  currency: string | null
+}
+
+const EMPTY_SUMMARY: OrgUnitExpenseSummary = {
+  byCategory: [],
+  byStatus: [],
+  approvedReimbursedTotalMinor: 0,
+  currency: null,
+}
+
+/**
+ * GET /api/v1/expense-claims/summary?orgUnitIds=&period= — the org-unit hub's Expenses tab rollup:
+ * per-category spend (APPROVED/REIMBURSED only — the recognised subset), claim counts by status,
+ * and the approved+reimbursed grand total. `orgUnitIds` follows the `useEmployees` BU-rollup idiom
+ * (features/hr/api.ts): the caller passes [buId, ...childOutletIds] from the org tree it already
+ * has, joined into one comma-separated value the server's `List<UUID>` param binds transparently —
+ * empty/omitted = the whole tenant. `period` is an optional `YYYY-MM` filter.
+ */
+export function useOrgUnitExpenseSummary(
+  params: TenantParams & { orgUnitIds: string[]; period?: string; enabled: boolean },
+) {
+  const { companyId, actor, orgUnitIds, period, enabled } = params
+  const scope = orgUnitIds.join(',')
+  return useQuery({
+    enabled,
+    queryKey: ['orgUnitExpenseSummary', companyId, scope, period ?? ''],
+    queryFn: async () => {
+      const result = await apiFetch<OrgUnitExpenseSummary>('/api/v1/expense-claims/summary', {
+        tenant: { companyId, actor },
+        query: { orgUnitIds: scope || undefined, period },
+      })
+      return result ?? EMPTY_SUMMARY
+    },
   })
 }
 

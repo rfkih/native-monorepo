@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatDate, payDisabledReason, voidDisabledReason } from '../format'
+import { formatCount, formatDate, payDisabledReason, voidDisabledReason } from '../format'
 
 describe('formatDate', () => {
   it('returns an em dash for a null/undefined/empty value', () => {
@@ -16,6 +16,21 @@ describe('formatDate', () => {
     const formatted = formatDate('2026-07-20', 'en-US')
     expect(formatted).toContain('2026')
     expect(formatted).toContain('Jul')
+  })
+})
+
+describe('formatCount', () => {
+  it('formats a plain integer with locale grouping (no currency)', () => {
+    expect(formatCount(1234, 'en-US')).toBe('1,234')
+  })
+
+  it('formats zero', () => {
+    expect(formatCount(0, 'en-US')).toBe('0')
+  })
+
+  it('uses the locale-appropriate grouping separator', () => {
+    // id-ID groups with a period, not a comma (rule 9 — locale-aware, never hardcoded).
+    expect(formatCount(1234, 'id-ID')).toBe('1.234')
   })
 })
 

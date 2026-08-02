@@ -7,6 +7,7 @@ import id.co.nativeapp.employee.expense.domain.ClaimStatus;
 import id.co.nativeapp.employee.expense.dto.ExpenseClaimResponse;
 import id.co.nativeapp.employee.expense.dto.ExpenseClaimSummaryResponse;
 import id.co.nativeapp.employee.expense.dto.MyExpenseClaimResponse;
+import id.co.nativeapp.employee.expense.dto.OrgUnitExpenseSummaryResponse;
 import id.co.nativeapp.employee.expense.dto.PageResponse;
 import id.co.nativeapp.employee.expense.projection.ExpenseClaimSummaryView;
 import id.co.nativeapp.employee.expense.projection.MyExpenseClaimView;
@@ -16,6 +17,7 @@ import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,6 +46,12 @@ public class ExpenseClaimReader {
    * IN-list).
    */
   private static final List<UUID> NO_SCOPE = List.of(new UUID(0L, 0L));
+
+  /**
+   * The {@code YYYY-MM} shape {@link #summary} validates an optional {@code period} against
+   * (mirrors {@code UnitPnlController}'s stricter month-range pattern).
+   */
+  private static final Pattern PERIOD_PATTERN = Pattern.compile("\\d{4}-(0[1-9]|1[0-2])");
 
   private final ExpenseClaimRepository claimRepository;
   private final EmployeeRepository employeeRepository;
@@ -112,6 +120,65 @@ public class ExpenseClaimReader {
             .map(ExpenseClaimReader::toSummaryResponse)
             .toList();
     return PageResponse.of(content, boundedPage, boundedSize, totalElements);
+  }
+
+  /**
+   * The org-unit hub's Expenses tab rollup (Phase E8): per-category totals (APPROVED/REIMBURSED
+   * only — the recognised subset, ADR 0030 §2), claim counts by every status, and the
+   * approved+reimbursed grand total (the category rows' sum). {@code orgUnitIds} follows the same
+   * sentinel-list idiom as {@link #forManager}; {@code period} is an optional {@code YYYY-MM}
+   * filter on {@code expense_date}.
+   *
+   * @throws IllegalArgumentException if {@code period} is present but not {@code YYYY-MM} (→ 400)
+   * @throws IllegalStateException if the category rows mix currencies — never expected while v1's
+   *     single-currency-per-tenant invariant holds (see {@code ExpenseClaimRepository} Javadoc);
+   *     failing loud beats silently mis-summing money (rule 8, mirrors {@code UnitPnlReader})
+   */
+  @Transactional(readOnly = true)
+  public OrgUnitExpenseSummaryResponse summary(List<UUID> orgUnitIds, String period) {
+    String normalizedPeriod = normalizePeriod(period);
+    boolean hasUnits = orgUnitIds != null && !orgUnitIds.isEmpty();
+    List<UUID> scope = hasUnits ? orgUnitIds : NO_SCOPE;
+
+    List<OrgUnitExpenseSummaryResponse.CategoryTotal> byCategory =
+        claimRepository.summarizeByCategory(hasUnits, scope, normalizedPeriod).stream()
+            .map(
+                v ->
+                    new OrgUnitExpenseSummaryResponse.CategoryTotal(
+                        v.getCategoryName(), v.getTotalMinor(), v.getCurrency().strip()))
+            .toList();
+    List<OrgUnitExpenseSummaryResponse.StatusCount> byStatus =
+        claimRepository.summarizeByStatus(hasUnits, scope, normalizedPeriod).stream()
+            .map(v -> new OrgUnitExpenseSummaryResponse.StatusCount(v.getStatus(), v.getCount()))
+            .toList();
+
+    long grandTotal = 0L;
+    String currency = null;
+    for (OrgUnitExpenseSummaryResponse.CategoryTotal row : byCategory) {
+      grandTotal = Math.addExact(grandTotal, row.totalMinor());
+      if (currency != null && !currency.equals(row.currency())) {
+        throw new IllegalStateException(
+            "Mixed expense-claim currencies in one org-unit summary — single-currency-per-tenant"
+                + " invariant violated");
+      }
+      currency = row.currency();
+    }
+    return new OrgUnitExpenseSummaryResponse(byCategory, byStatus, grandTotal, currency);
+  }
+
+  /**
+   * Normalizes and validates an optional {@code period} filter — {@code null}/blank means "no
+   * filter"; anything else must be {@code YYYY-MM} (a real month, {@code 01}-{@code 12}).
+   */
+  private static String normalizePeriod(String period) {
+    if (period == null || period.isBlank()) {
+      return null;
+    }
+    String trimmed = period.strip();
+    if (!PERIOD_PATTERN.matcher(trimmed).matches()) {
+      throw new IllegalArgumentException("period must be YYYY-MM: " + period);
+    }
+    return trimmed;
   }
 
   /**

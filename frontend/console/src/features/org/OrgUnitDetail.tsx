@@ -24,6 +24,7 @@ import { useEmployees } from '@/features/hr/api'
 import { AttendanceTab } from '@/features/hr/AttendanceTab'
 import { EmployeesTab } from '@/features/hr/EmployeesTab'
 import { PayrollTab } from '@/features/hr/PayrollTab'
+import { OrgUnitExpensesTab } from '@/features/expenses/OrgUnitExpensesTab'
 import { useSession } from '@/lib/session'
 import { cn } from '@/lib/cn'
 import { formatMoney, formatPercent } from '@/lib/money'
@@ -48,10 +49,9 @@ import {
 
 /**
  * Org-unit hub — the Odoo-style record detail page at /org/:unitId for a BUSINESS_UNIT or
- * OUTLET: breadcrumb trail, sheet header (name + type + status + actions), a smart-button row,
- * and notebook tabs (Overview P&L / Outlets / People / Expenses / Payroll — the last two are
- * coming-soon panels until their backends exist). All copy via i18n (rule 9); money via
- * formatMoney minor units + Intl.
+ * OUTLET: breadcrumb trail, sheet header (name + type + status + actions), a smart-button row, and
+ * notebook tabs (Overview P&L / Outlets / Employees / App access / Expenses / Attendance / Payroll).
+ * All copy via i18n (rule 9); money via formatMoney minor units + Intl.
  */
 
 type TabKey = 'overview' | 'outlets' | 'employees' | 'people' | 'expenses' | 'attendance' | 'payroll'
@@ -306,7 +306,13 @@ export function OrgUnitDetail() {
       ) : null}
 
       {tab === 'expenses' ? (
-        <ComingSoon body={t('orgHub.comingSoon.expensesBody')} />
+        <OrgUnitExpensesTab
+          unit={unit}
+          childOutlets={childOutlets}
+          companyId={company.companyId}
+          actor={company.actor}
+          baseCurrency={company.baseCurrency}
+        />
       ) : null}
       {tab === 'attendance' ? (
         <AttendanceTab companyId={company.companyId} actor={company.actor} />
@@ -785,23 +791,6 @@ function PeopleTab({
           onClose={() => setEditingPages(null)}
         />
       ) : null}
-    </Card>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Coming-soon panel (Expenses / Payroll)
-// ---------------------------------------------------------------------------
-
-function ComingSoon({ body }: { body: string }) {
-  const { t } = useTranslation()
-  return (
-    <Card className="py-12 text-center">
-      <Badge tone="amber">{t('orgHub.comingSoon.badge')}</Badge>
-      <h2 className="mt-3 font-display text-lg font-semibold text-ink">
-        {t('orgHub.comingSoon.title')}
-      </h2>
-      <p className="mx-auto mt-1.5 max-w-sm text-sm text-ink-3">{body}</p>
     </Card>
   )
 }

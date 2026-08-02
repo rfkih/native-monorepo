@@ -864,11 +864,17 @@ export const en = {
       unknownUser: 'Unknown user',
       editAccess: 'Page access',
     },
-    comingSoon: {
-      badge: 'Coming soon',
-      title: 'This module is on the roadmap',
-      expensesBody:
-        'Recording expenses against this unit is coming soon — expense entries will post straight into its P&L.',
+    expensesTab: {
+      viewAll: 'View all expenses',
+      recognisedSpend: 'Approved + reimbursed spend',
+      pending: 'Pending decision',
+      byCategory: 'By category',
+      shareOfTotal: '{{percent}} of total',
+      noPostings: 'No expenses recognised for this unit yet. Approved claims appear here.',
+      error: 'Could not load the expense summary for this unit.',
+      recentTitle: 'Recent claims',
+      recentEmpty: 'No claims yet',
+      recentEmptyHint: "Claims raised against this unit's employees appear here.",
     },
     notFound: {
       title: 'Unit not found',

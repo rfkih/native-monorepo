@@ -21,6 +21,7 @@ import id.co.nativeapp.employee.expense.domain.ExpenseReceipt;
 import id.co.nativeapp.employee.expense.domain.ReceiptNotFoundException;
 import id.co.nativeapp.employee.expense.domain.SelfApprovalException;
 import id.co.nativeapp.employee.expense.dto.ExpenseClaimResponse;
+import id.co.nativeapp.employee.expense.dto.OrgUnitExpenseSummaryResponse;
 import id.co.nativeapp.employee.expense.dto.PageResponse;
 import id.co.nativeapp.employee.expense.service.ExpenseClaimReader;
 import id.co.nativeapp.employee.expense.service.ExpenseClaimService;
@@ -117,6 +118,40 @@ class ExpenseClaimControllerTest {
         .perform(get("/api/v1/expense-claims/" + CLAIM))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value(ClaimStatus.SUBMITTED.name()));
+  }
+
+  // ---------------------------------------------------------------------
+  // summary (org-unit hub Expenses tab rollup — Phase E8)
+  // ---------------------------------------------------------------------
+
+  @Test
+  void summaryReturns200WithTheRollupShape() throws Exception {
+    when(claimReader.summary(any(), any()))
+        .thenReturn(
+            new OrgUnitExpenseSummaryResponse(
+                List.of(new OrgUnitExpenseSummaryResponse.CategoryTotal("Travel", 300_000L, "IDR")),
+                List.of(new OrgUnitExpenseSummaryResponse.StatusCount("SUBMITTED", 1L)),
+                300_000L,
+                "IDR"));
+
+    mockMvc
+        .perform(get("/api/v1/expense-claims/summary"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.byCategory[0].categoryName").value("Travel"))
+        .andExpect(jsonPath("$.byCategory[0].totalMinor").value(300_000))
+        .andExpect(jsonPath("$.byStatus[0].status").value("SUBMITTED"))
+        .andExpect(jsonPath("$.approvedReimbursedTotalMinor").value(300_000))
+        .andExpect(jsonPath("$.currency").value("IDR"));
+  }
+
+  @Test
+  void summaryWithAMalformedPeriodIs400() throws Exception {
+    when(claimReader.summary(any(), eq("bogus")))
+        .thenThrow(new IllegalArgumentException("period must be YYYY-MM: bogus"));
+
+    mockMvc
+        .perform(get("/api/v1/expense-claims/summary?period=bogus"))
+        .andExpect(status().isBadRequest());
   }
 
   @Test

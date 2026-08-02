@@ -4,6 +4,7 @@ import id.co.nativeapp.employee.expense.domain.ExpenseClaim;
 import id.co.nativeapp.employee.expense.dto.ApproveClaimRequest;
 import id.co.nativeapp.employee.expense.dto.ExpenseClaimResponse;
 import id.co.nativeapp.employee.expense.dto.ExpenseClaimSummaryResponse;
+import id.co.nativeapp.employee.expense.dto.OrgUnitExpenseSummaryResponse;
 import id.co.nativeapp.employee.expense.dto.PageResponse;
 import id.co.nativeapp.employee.expense.dto.ReceiptContentResponse;
 import id.co.nativeapp.employee.expense.dto.RefuseClaimRequest;
@@ -35,7 +36,8 @@ import org.springframework.web.bind.annotation.RestController;
  * {@code Idempotency-Key} header (missing → 400). Self-approval is rejected with 403, owners
  * included (void has no such guard — see {@code ExpenseClaimWriter#voidClaim}). This surface rides
  * the EXISTING {@code /api/v1/expense-claims/**} gateway route — no new route was needed for the
- * receipt GET (ADR 0030 §8, Phase E3 spike), {@code pay} (Phase E4), or {@code void} (Phase E7).
+ * receipt GET (ADR 0030 §8, Phase E3 spike), {@code pay} (Phase E4), {@code void} (Phase E7), or
+ * {@code summary} (the org-unit hub's Expenses tab rollup, Phase E8).
  */
 @Tag(
     name = "Expense Claims",
@@ -71,6 +73,20 @@ public class ExpenseClaimController {
   @GetMapping("/{id}")
   public ExpenseClaimResponse get(@PathVariable UUID id) {
     return claimReader.one(id);
+  }
+
+  @Operation(
+      summary = "Org-unit expense summary — the org-unit hub's Expenses tab rollup",
+      description =
+          "Per-category totals (APPROVED/REIMBURSED claims only — the recognised subset, ADR 0030"
+              + " §2), claim counts by every status, and the approved+reimbursed grand total, over"
+              + " the given org units. orgUnitIds omitted/empty = the whole tenant; period is an"
+              + " optional YYYY-MM filter on expense_date.")
+  @GetMapping("/summary")
+  public OrgUnitExpenseSummaryResponse summary(
+      @RequestParam(required = false) List<UUID> orgUnitIds,
+      @RequestParam(required = false) String period) {
+    return claimReader.summary(orgUnitIds, period);
   }
 
   @Operation(summary = "Approve a SUBMITTED expense claim — recognises the expense at approval")

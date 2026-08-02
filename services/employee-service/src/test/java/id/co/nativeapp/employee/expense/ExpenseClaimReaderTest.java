@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -15,12 +16,16 @@ import id.co.nativeapp.employee.employee.domain.PtkpStatus;
 import id.co.nativeapp.employee.employee.repository.EmployeeRepository;
 import id.co.nativeapp.employee.expense.dto.ExpenseClaimSummaryResponse;
 import id.co.nativeapp.employee.expense.dto.MyExpenseClaimResponse;
+import id.co.nativeapp.employee.expense.dto.OrgUnitExpenseSummaryResponse;
 import id.co.nativeapp.employee.expense.dto.PageResponse;
+import id.co.nativeapp.employee.expense.projection.OrgUnitExpenseCategoryTotalView;
+import id.co.nativeapp.employee.expense.projection.OrgUnitExpenseStatusCountView;
 import id.co.nativeapp.employee.expense.repository.ExpenseClaimRepository;
 import id.co.nativeapp.employee.expense.service.ExpenseClaimReader;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -98,5 +103,112 @@ class ExpenseClaimReaderTest {
 
     assertThat(page.page()).isEqualTo(0);
     assertThat(page.size()).isEqualTo(ExpenseClaimReader.DEFAULT_PAGE_SIZE);
+  }
+
+  // ---------------------------------------------------------------------
+  // summary (Phase E8 — org-unit hub Expenses tab rollup)
+  // ---------------------------------------------------------------------
+
+  private static OrgUnitExpenseCategoryTotalView categoryRow(
+      String categoryName, long totalMinor, String currency) {
+    OrgUnitExpenseCategoryTotalView view = mock(OrgUnitExpenseCategoryTotalView.class);
+    when(view.getCategoryName()).thenReturn(categoryName);
+    when(view.getTotalMinor()).thenReturn(totalMinor);
+    when(view.getCurrency()).thenReturn(currency);
+    return view;
+  }
+
+  private static OrgUnitExpenseStatusCountView statusRow(String status, long count) {
+    OrgUnitExpenseStatusCountView view = mock(OrgUnitExpenseStatusCountView.class);
+    when(view.getStatus()).thenReturn(status);
+    when(view.getCount()).thenReturn(count);
+    return view;
+  }
+
+  @Test
+  void summarySumsCategoryTotalsIntoTheGrandTotalAndCarriesTheirCurrency() throws Exception {
+    // Build every mocked view FIRST, as separate statements — nesting a mock()/when() call
+    // inside the argument list of another in-flight when(...).thenReturn(...) confuses
+    // Mockito's (thread-local) "ongoing stubbing" state (UnfinishedStubbingException).
+    List<OrgUnitExpenseCategoryTotalView> categories =
+        List.of(categoryRow("Travel", 300_000L, "IDR"), categoryRow("Supplies", 120_000L, "IDR"));
+    List<OrgUnitExpenseStatusCountView> statuses =
+        List.of(statusRow("SUBMITTED", 2L), statusRow("APPROVED", 3L));
+    when(claimRepository.summarizeByCategory(eq(true), any(), eq("2026-07")))
+        .thenReturn(categories);
+    when(claimRepository.summarizeByStatus(eq(true), any(), eq("2026-07"))).thenReturn(statuses);
+
+    UUID unit = UUID.randomUUID();
+    OrgUnitExpenseSummaryResponse summary =
+        TenantContext.callAs(TENANT, ACTOR, () -> reader.summary(List.of(unit), "2026-07"));
+
+    assertThat(summary.approvedReimbursedTotalMinor()).isEqualTo(420_000L);
+    assertThat(summary.currency()).isEqualTo("IDR");
+    assertThat(summary.byCategory()).hasSize(2);
+    assertThat(summary.byStatus())
+        .extracting(OrgUnitExpenseSummaryResponse.StatusCount::status)
+        .containsExactlyInAnyOrder("SUBMITTED", "APPROVED");
+  }
+
+  @Test
+  void summaryWithNoCategoryRowsReturnsAZeroTotalAndANullCurrency() throws Exception {
+    when(claimRepository.summarizeByCategory(eq(false), any(), any())).thenReturn(List.of());
+    when(claimRepository.summarizeByStatus(eq(false), any(), any())).thenReturn(List.of());
+
+    OrgUnitExpenseSummaryResponse summary =
+        TenantContext.callAs(TENANT, ACTOR, () -> reader.summary(null, null));
+
+    assertThat(summary.approvedReimbursedTotalMinor()).isZero();
+    assertThat(summary.currency()).isNull();
+    assertThat(summary.byCategory()).isEmpty();
+  }
+
+  @Test
+  void summaryWithMixedCategoryCurrenciesFailsLoudRatherThanMisSummingMoney() {
+    List<OrgUnitExpenseCategoryTotalView> categories =
+        List.of(categoryRow("Travel", 300_000L, "IDR"), categoryRow("Supplies", 20L, "USD"));
+    when(claimRepository.summarizeByCategory(eq(false), any(), any())).thenReturn(categories);
+    when(claimRepository.summarizeByStatus(eq(false), any(), any())).thenReturn(List.of());
+
+    assertThatThrownBy(() -> TenantContext.callAs(TENANT, ACTOR, () -> reader.summary(null, null)))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("currencies");
+  }
+
+  @Test
+  void summaryWithAMalformedPeriodThrowsIllegalArgument() {
+    assertThatThrownBy(
+            () -> TenantContext.callAs(TENANT, ACTOR, () -> reader.summary(null, "not-a-period")))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("YYYY-MM");
+  }
+
+  @Test
+  void summaryRejectsAnImpossibleMonth() {
+    assertThatThrownBy(
+            () -> TenantContext.callAs(TENANT, ACTOR, () -> reader.summary(null, "2026-13")))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void summaryWithABlankPeriodAppliesNoFilter() throws Exception {
+    when(claimRepository.summarizeByCategory(eq(false), any(), isNull())).thenReturn(List.of());
+    when(claimRepository.summarizeByStatus(eq(false), any(), isNull())).thenReturn(List.of());
+
+    TenantContext.callAs(TENANT, ACTOR, () -> reader.summary(List.of(), "  "));
+
+    verify(claimRepository).summarizeByCategory(eq(false), any(), isNull());
+  }
+
+  @Test
+  void summaryWithNoOrgUnitsUsesTheSentinelScopeNotARealEmptyInList() throws Exception {
+    List<UUID> sentinel = List.of(new UUID(0L, 0L));
+    when(claimRepository.summarizeByCategory(eq(false), eq(sentinel), any())).thenReturn(List.of());
+    when(claimRepository.summarizeByStatus(eq(false), eq(sentinel), any())).thenReturn(List.of());
+
+    TenantContext.callAs(TENANT, ACTOR, () -> reader.summary(null, null));
+
+    verify(claimRepository).summarizeByCategory(eq(false), eq(sentinel), any());
+    verify(claimRepository).summarizeByStatus(eq(false), eq(sentinel), any());
   }
 }

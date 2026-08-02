@@ -5,6 +5,8 @@ import id.co.nativeapp.employee.expense.projection.ExpenseClaimSummaryView;
 import id.co.nativeapp.employee.expense.projection.LinkedClaimIdView;
 import id.co.nativeapp.employee.expense.projection.LinkedClaimTotalView;
 import id.co.nativeapp.employee.expense.projection.MyExpenseClaimView;
+import id.co.nativeapp.employee.expense.projection.OrgUnitExpenseCategoryTotalView;
+import id.co.nativeapp.employee.expense.projection.OrgUnitExpenseStatusCountView;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -108,6 +110,63 @@ public interface ExpenseClaimRepository extends JpaRepository<ExpenseClaim, UUID
       @Param("status") String status,
       @Param("hasUnits") boolean hasUnits,
       @Param("orgUnitIds") List<UUID> orgUnitIds);
+
+  // ---------------------------------------------------------------------
+  // Org-unit hub Expenses tab rollup (Phase E8) — GET /api/v1/expense-claims/summary.
+  // ---------------------------------------------------------------------
+
+  /**
+   * Per-category totals for the org-unit hub's Expenses tab rollup (Phase E8): sums {@code
+   * amount_minor} grouped by category name AND currency (the {@link
+   * #findLinkedClaimTotalsByEmployee} defensive-grouping idiom — v1 is single-currency per tenant
+   * in practice, but grouping by currency too means a hypothetical mixed-currency tenant surfaces
+   * as separate rows instead of a silently corrupted cross-currency sum, rule 8). ONLY {@code
+   * APPROVED}/{@code REIMBURSED} claims count — the two states in which the expense is actually
+   * recognised on the books (ADR 0030 §2); a DRAFT/SUBMITTED/REFUSED/CANCELLED/VOIDED claim never
+   * posted, so including it here would show a total finance's per-unit P&amp;L rollup for these org
+   * units does not (and should not) match. {@code orgUnitIds} follows the {@link #findForManager}
+   * sentinel-list idiom (hasUnits=false = the whole tenant); {@code period} is an optional {@code
+   * YYYY-MM} filter matched against {@code expense_date} ({@code NULL} = no filter — validated by
+   * {@code ExpenseClaimReader}, not here).
+   */
+  @Query(
+      value =
+          """
+          SELECT cat.name AS category_name, SUM(c.amount_minor) AS total_minor,
+                 c.amount_currency AS currency
+            FROM expense_claim c
+            JOIN expense_category cat ON cat.id = c.category_id
+           WHERE c.status IN ('APPROVED', 'REIMBURSED')
+             AND (:hasUnits = FALSE OR c.org_unit_id IN (:orgUnitIds))
+             AND (CAST(:period AS text) IS NULL OR to_char(c.expense_date, 'YYYY-MM') = :period)
+           GROUP BY cat.name, c.amount_currency
+           ORDER BY total_minor DESC
+          """,
+      nativeQuery = true)
+  List<OrgUnitExpenseCategoryTotalView> summarizeByCategory(
+      @Param("hasUnits") boolean hasUnits,
+      @Param("orgUnitIds") List<UUID> orgUnitIds,
+      @Param("period") String period);
+
+  /**
+   * Claim counts by status for the SAME scope as {@link #summarizeByCategory} (Phase E8) — EVERY
+   * status, not just {@code APPROVED}/{@code REIMBURSED}, so a manager sees how many claims are
+   * still pending a decision ({@code SUBMITTED}) alongside the recognised spend total.
+   */
+  @Query(
+      value =
+          """
+          SELECT c.status AS status, COUNT(*) AS count
+            FROM expense_claim c
+           WHERE (:hasUnits = FALSE OR c.org_unit_id IN (:orgUnitIds))
+             AND (CAST(:period AS text) IS NULL OR to_char(c.expense_date, 'YYYY-MM') = :period)
+           GROUP BY c.status
+          """,
+      nativeQuery = true)
+  List<OrgUnitExpenseStatusCountView> summarizeByStatus(
+      @Param("hasUnits") boolean hasUnits,
+      @Param("orgUnitIds") List<UUID> orgUnitIds,
+      @Param("period") String period);
 
   /**
    * Any one claim's currency, oldest-first — the tenant-currency-consistency probe {@code
