@@ -37,9 +37,11 @@ import {
   isNotLinked,
   useMyPayslip,
   useMyPayslips,
+  useMyPayslipsYtd,
   useMyProfile,
   useMySales,
   type MyPayslipHeader,
+  type MyPayslipsYtdSummary,
 } from './api'
 import { MyTimeoff } from './MyTimeoff'
 
@@ -137,6 +139,13 @@ export function Me() {
                 </Detail>
                 <Detail label={t('me.profile.bank')}>
                   <span className="font-mono">{profile.data.maskedBankAccount}</span>
+                </Detail>
+                <Detail label={t('me.profile.npwp')}>
+                  {profile.data.hasNpwp ? (
+                    <span className="font-mono">{profile.data.maskedNpwp}</span>
+                  ) : (
+                    <span className="text-amber">{t('me.profile.npwpNone')}</span>
+                  )}
                 </Detail>
               </Card>
             </div>
@@ -312,6 +321,9 @@ function PayslipsSection({
   const { t } = useTranslation()
   const payslips = useMyPayslips({ companyId, actor, enabled: true })
   const [openRunId, setOpenRunId] = useState<string | null>(null)
+  // Track P Phase P10 — the YTD summary card, client-summed from the caller's own payslips (see
+  // useMyPayslipsYtd's doc comment for the cache-sharing story; no new endpoint).
+  const ytd = useMyPayslipsYtd({ companyId, actor, year: new Date().getFullYear(), enabled: true })
 
   return (
     <section>
@@ -322,27 +334,74 @@ function PayslipsSection({
         <Card className="mt-2 p-8 text-center">
           <Spinner className="mx-auto text-brand-500" />
         </Card>
+      ) : payslips.isError ? (
+        <Card className="mt-2 p-8 text-center text-sm text-loss">
+          <TriangleAlert className="mx-auto mb-2 size-5" />
+          {t('me.error')}
+        </Card>
       ) : (payslips.data ?? []).length === 0 ? (
         <p className="mt-2 text-sm text-ink-3">{t('me.payslips.empty')}</p>
       ) : (
-        <Card className="mt-2 rounded-[20px] p-2.5">
-          {(payslips.data ?? []).map((slip) => (
-            <PayslipRow
-              key={slip.runId}
-              slip={slip}
-              open={openRunId === slip.runId}
-              onToggle={() =>
-                setOpenRunId((cur) => (cur === slip.runId ? null : slip.runId))
-              }
-              companyId={companyId}
-              actor={actor}
-              locale={locale}
-              employeeName={employeeName}
-            />
-          ))}
-        </Card>
+        <>
+          <PayslipYtdCard ytd={ytd} locale={locale} />
+          <Card className="mt-2 rounded-[20px] p-2.5">
+            {(payslips.data ?? []).map((slip) => (
+              <PayslipRow
+                key={slip.runId}
+                slip={slip}
+                open={openRunId === slip.runId}
+                onToggle={() =>
+                  setOpenRunId((cur) => (cur === slip.runId ? null : slip.runId))
+                }
+                companyId={companyId}
+                actor={actor}
+                locale={locale}
+                employeeName={employeeName}
+              />
+            ))}
+          </Card>
+        </>
       )}
     </section>
+  )
+}
+
+/** Track P Phase P10 — gross + PPh 21 withheld year-to-date, above the run-by-run payslip list. */
+function PayslipYtdCard({ ytd, locale }: { ytd: MyPayslipsYtdSummary; locale: string }) {
+  const { t } = useTranslation()
+  const { company } = useSession()
+  // Every fetched run detail already carries its own currency; this only covers the sliver where
+  // `loading` has settled false but every per-run detail request errored (currency never arrives).
+  const fallbackCurrency = ytd.currency ?? company?.baseCurrency ?? 'IDR'
+  return (
+    <Card className="mt-2 p-4">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+        {t('me.payslips.ytd.title', { year: ytd.year })}
+      </p>
+      {ytd.runCount === 0 ? (
+        <p className="mt-2 text-sm text-ink-3">{t('me.payslips.ytd.empty')}</p>
+      ) : (
+        <>
+          <div className="mt-2 grid gap-3 sm:grid-cols-2">
+            <KpiTile
+              label={t('me.payslips.ytd.gross')}
+              minor={ytd.grossMinor}
+              currency={fallbackCurrency}
+              locale={locale}
+              loading={ytd.loading}
+            />
+            <KpiTile
+              label={t('me.payslips.ytd.pph21')}
+              minor={ytd.pph21Minor}
+              currency={fallbackCurrency}
+              locale={locale}
+              loading={ytd.loading}
+            />
+          </div>
+          {ytd.isError ? <p className="mt-2 text-xs text-loss">{t('me.error')}</p> : null}
+        </>
+      )}
+    </Card>
   )
 }
 

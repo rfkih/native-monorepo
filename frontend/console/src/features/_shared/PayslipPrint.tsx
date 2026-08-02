@@ -158,7 +158,10 @@ export function PayslipPrint({
                 defaultValue: runType,
               })}
             </Badge>
-            <Badge tone={illustrative ? 'amber' : 'emerald'}>
+            {/* Green (profit tone) is reserved for done/official — matches PayrollSetupTab's
+                provenance badges and PayrollTab's RunDetail provenance chip (never a second tone
+                for the same OFFICIAL state). */}
+            <Badge tone={illustrative ? 'amber' : 'profit'}>
               {illustrative
                 ? t('payslip.print.provenanceIllustrative')
                 : t('payslip.print.provenanceOfficial')}

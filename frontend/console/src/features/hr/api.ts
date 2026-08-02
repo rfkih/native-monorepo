@@ -39,6 +39,11 @@ export interface EmployeeDetail {
     status: string
     maskedNik: string
     maskedBankAccount: string
+    /** Track P Phase P1 (ADR 0031) — whether an NPWP is on file; drives the payroll engine's
+     * no-NPWP ×120% surcharge. Not shown in the console before P10 — now wired into the drawer. */
+    hasNpwp: boolean
+    /** The NPWP, fully redacted, or null when none is on file. PII (rule 6). */
+    maskedNpwp: string | null
     userId: string | null
     /** Track P Phase P8 — feeds THR proration. Not PII. */
     hireDate: string | null
@@ -309,7 +314,14 @@ export function useUpdateEmployee(params: TenantParams) {
       body,
     }: {
       employeeId: string
-      body: { fullName?: string; ptkpStatus?: string; status?: string; hireDate?: string }
+      /** `npwp` is PII (rule 6) — sent plaintext only when changing it, never echoed back. */
+      body: {
+        fullName?: string
+        ptkpStatus?: string
+        status?: string
+        hireDate?: string
+        npwp?: string
+      }
     }) =>
       apiFetch<EmployeeDetail['employee']>(`/api/v1/employees/${employeeId}`, {
         method: 'PATCH',

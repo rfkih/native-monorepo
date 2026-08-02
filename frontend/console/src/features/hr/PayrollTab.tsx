@@ -184,7 +184,12 @@ export function PayrollTab({
           {view === 'setup' ? (
             <PayrollSetupTab companyId={companyId} actor={actor} locale={locale} />
           ) : view === 'reports' ? (
-            <PayrollReportsTab companyId={companyId} actor={actor} locale={locale} />
+            <PayrollReportsTab
+              companyId={companyId}
+              actor={actor}
+              locale={locale}
+              initialPeriod={period}
+            />
           ) : (
             <>
               {/* Period + scope + run */}
@@ -323,6 +328,7 @@ export function PayrollTab({
                       companyId={companyId}
                       actor={actor}
                       locale={locale}
+                      onViewReports={() => setView('reports')}
                     />
                   ) : null}
                 </>
@@ -365,12 +371,15 @@ function RunDetail({
   companyId,
   actor,
   locale,
+  onViewReports,
 }: {
   run: PayrollRunSummary
   units: OrgUnit[]
   companyId: string
   actor: string
   locale: string
+  /** Track P Phase P10 — switches the parent Segmented view to Reports (a unified-view shortcut). */
+  onViewReports: () => void
 }) {
   const { t } = useTranslation()
   const auth = useAuth()
@@ -422,25 +431,60 @@ function RunDetail({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Owner-only net-pay bank file (Track P phase P5) — bank-account PII, gateway-gated too. */}
-      {isOwner && run.status === 'POSTED' ? (
-        <div className="flex items-center justify-end gap-2">
-          {bankFileError ? (
-            <span className="text-xs text-loss">{t('hr.payroll.bankFile.error')}</span>
-          ) : null}
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => void handleDownloadBankFile()}
-            disabled={downloadingBankFile}
-          >
-            <Download className="size-4" />
-            {downloadingBankFile
-              ? t('hr.payroll.bankFile.downloading')
-              : t('hr.payroll.bankFile.cta')}
-          </Button>
+      {/* Unified header (Track P Phase P10) — composes what P2/P5/P7/P8/P9 each added: run
+          identity + status timeline, the THR/true-up/provenance chips (mirroring the run-list row
+          exactly, same tones/keys — never a second label for the same state), and shortcuts to
+          Reports + the bank file. No new logic; every figure below is read from hooks the other
+          tabs already use. */}
+      <Card className="flex flex-col gap-3 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[15px] font-semibold text-ink">
+              {t('hr.payroll.history.runLabel', { seq: run.runSeq })}
+            </span>
+            {run.runType === 'THR' ? (
+              <Badge tone="info">{t('hr.payroll.history.thrBadge')}</Badge>
+            ) : null}
+            {run.period.endsWith('-12') && !run.usesIllustrativeRules ? (
+              <Badge tone="info">{t('hr.payroll.history.trueUpBadge')}</Badge>
+            ) : null}
+            {/* The provenance chip (P2) — green ONLY for OFFICIAL (done/verified), never for
+                illustrative, reusing PayrollSetupTab's exact short labels (single source). */}
+            <Badge tone={run.usesIllustrativeRules ? 'amber' : 'profit'}>
+              {run.usesIllustrativeRules
+                ? t('payrollSetup.provenance.illustrative')
+                : t('payrollSetup.provenance.official')}
+            </Badge>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-8 px-3 text-xs"
+              onClick={onViewReports}
+            >
+              {t('hr.payroll.actions.viewReports')}
+            </Button>
+            {/* Owner-only net-pay bank file (Track P phase P5) — bank-account PII, gateway-gated too. */}
+            {isOwner && run.status === 'POSTED' ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-8 px-3 text-xs"
+                onClick={() => void handleDownloadBankFile()}
+                disabled={downloadingBankFile}
+              >
+                <Download className="size-3.5" />
+                {downloadingBankFile
+                  ? t('hr.payroll.bankFile.downloading')
+                  : t('hr.payroll.bankFile.cta')}
+              </Button>
+            ) : null}
+          </div>
         </div>
-      ) : null}
+        {bankFileError ? <p className="text-xs text-loss">{t('hr.payroll.bankFile.error')}</p> : null}
+        <RunStatusTimeline status={run.status} />
+      </Card>
 
       {/* Company totals */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -648,6 +692,75 @@ function sumByBearerAndKind(
   return lines
     .filter((l) => l.bearer === bearer && l.kind === kind)
     .reduce((sum, l) => sum + (l.amountMinor ?? 0), 0)
+}
+
+// ---------------------------------------------------------------------------
+// Run status timeline (Track P Phase P10) — RunStatus is DRAFT -> SEALED_GATE_PENDING ->
+// CALCULATING -> CALCULATED -> POSTED, with FAILED reachable from any of those (see the backend
+// RunStatus javadoc). A run is computed synchronously within one POST, so by the time it appears in
+// history it is almost always POSTED or FAILED — this renders honestly from `run.status` alone
+// (there are no per-transition timestamps to show), it never fabricates which step a FAILED run
+// reached.
+// ---------------------------------------------------------------------------
+
+const RUN_STATUS_STEPS = [
+  'DRAFT',
+  'SEALED_GATE_PENDING',
+  'CALCULATING',
+  'CALCULATED',
+  'POSTED',
+] as const
+
+function RunStatusTimeline({ status }: { status: string }) {
+  const { t } = useTranslation()
+
+  if (status === 'FAILED') {
+    return (
+      <div className="flex items-center gap-2">
+        <Badge tone="loss">{t('hr.payroll.timeline.failed')}</Badge>
+        <span className="text-xs text-ink-3">{t('hr.payroll.timeline.failedHint')}</span>
+      </div>
+    )
+  }
+
+  const currentIndex = RUN_STATUS_STEPS.indexOf(status as (typeof RUN_STATUS_STEPS)[number])
+
+  return (
+    <div
+      role="list"
+      aria-label={t('hr.payroll.timeline.label')}
+      className="flex flex-wrap items-center gap-1.5"
+    >
+      {RUN_STATUS_STEPS.map((step, i) => (
+        <div key={step} className="flex items-center gap-1.5">
+          {i > 0 ? (
+            <span
+              aria-hidden="true"
+              className={cn('h-px w-4', i <= currentIndex ? 'bg-emerald-line' : 'bg-line')}
+            />
+          ) : null}
+          <span
+            role="listitem"
+            className={cn(
+              'rounded-full px-2.5 py-1 text-[11px] font-semibold',
+              // Reaching POSTED is the only truly "done" state — green (profit) is reserved for
+              // it, matching the design system rule; every earlier/current step reads as brand
+              // (emerald) or neutral, never green.
+              step === 'POSTED' && i === currentIndex
+                ? 'bg-tint-profit text-profit-ink'
+                : i < currentIndex
+                  ? 'bg-emerald-tint text-emerald-2'
+                  : i === currentIndex
+                    ? 'bg-emerald-tint text-emerald-2'
+                    : 'bg-ink-50 text-ink-3',
+            )}
+          >
+            {t(`hr.payroll.timeline.step.${step}`)}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 // ---------------------------------------------------------------------------

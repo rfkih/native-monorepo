@@ -19,6 +19,8 @@ export const en = {
       ptkp: 'PTKP status',
       nik: 'NIK',
       bank: 'Bank account',
+      npwp: 'NPWP',
+      npwpNone: 'Not on file',
     },
     assignments: {
       title: 'Assignments',
@@ -41,6 +43,14 @@ export const en = {
       earning: 'Earning',
       deduction: 'Deduction',
       employer: 'employer-borne',
+      // Track P Phase P10 — the year-to-date summary card, client-summed from the payslips already
+      // fetched below (no new endpoint).
+      ytd: {
+        title: 'Year to date ({{year}})',
+        gross: 'Gross YTD',
+        pph21: 'PPh 21 withheld YTD',
+        empty: 'No payslips posted yet this year.',
+      },
     },
     sales: {
       title: 'Sales this month',
@@ -1170,6 +1180,14 @@ export const en = {
       hireDateSaving: 'Saving…',
       hireDateCancel: 'Cancel',
       hireDateError: 'Could not save the hire date. Try again.',
+      // Track P Phase P1/P10 (ADR 0031) — drives the payroll engine's ×120% no-NPWP surcharge.
+      npwp: 'NPWP',
+      npwpHint: 'A missing NPWP applies a ×120% withholding surcharge — add it once available.',
+      npwpEdit: 'Edit',
+      npwpAdd: 'Add NPWP',
+      npwpMissingBadge: 'Missing',
+      npwpMissingHint: 'No NPWP on file — payroll applies the statutory ×120% surcharge until it is added.',
+      npwpError: 'Could not save the NPWP. Try again.',
       loginTitle: 'Login',
       noLogin: 'No login yet. Create one so this employee can sign in.',
       username: 'Username',
@@ -1204,9 +1222,11 @@ export const en = {
       piiHint: 'Stored encrypted; shown masked everywhere after this.',
       nikHint: '16 digits. Stored encrypted; shown masked everywhere after this.',
       bankHint: 'Digits only. Stored encrypted; shown masked everywhere after this.',
+      npwpHint: '15–16 digits. Stored encrypted; shown masked everywhere after this.',
       nameInvalid: 'Enter a name (up to 255 characters).',
       nikInvalid: 'The NIK must be exactly 16 digits.',
       bankInvalid: 'The bank account must be 6–32 digits.',
+      npwpInvalid: 'The NPWP must be 15–16 digits.',
       roleInvalid: 'Enter a job role (up to 128 characters).',
       dateInvalid: 'Pick a start date.',
       unitChecking: 'Checking the unit…',
@@ -1328,6 +1348,23 @@ export const en = {
         filterAll: 'All',
         filterRegular: 'Regular',
         filterThr: 'THR',
+      },
+      // Track P Phase P10 — the unified run-detail status timeline (honest: DRAFT/gate/calculating/
+      // calculated are only ever observed transiently since a run completes within one POST).
+      timeline: {
+        label: 'Run status',
+        failed: 'Failed',
+        failedHint: 'This run did not complete — nothing was posted to the books.',
+        step: {
+          DRAFT: 'Draft',
+          SEALED_GATE_PENDING: 'Completeness gate',
+          CALCULATING: 'Calculating',
+          CALCULATED: 'Calculated',
+          POSTED: 'Posted',
+        },
+      },
+      actions: {
+        viewReports: 'View reports',
       },
       kpi: {
         gross: 'Gross',

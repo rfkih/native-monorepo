@@ -30,17 +30,21 @@ export function PayrollReportsTab({
   companyId,
   actor,
   locale,
+  initialPeriod,
 }: {
   companyId: string
   actor: string
   locale: string
+  /** Track P Phase P10 — seeds the period/year nav from a run-detail "View reports" shortcut
+   * (PayrollTab); read only once, on mount — the nav below still moves independently after that. */
+  initialPeriod?: string
 }) {
   const { t } = useTranslation()
   const auth = useAuth()
   const isOwner = hasAnyRole(auth.roles, 'owner')
 
-  const [year, setYear] = useState(String(new Date().getFullYear()))
-  const [period, setPeriod] = useState(currentPeriod())
+  const [year, setYear] = useState(initialPeriod?.slice(0, 4) ?? String(new Date().getFullYear()))
+  const [period, setPeriod] = useState(initialPeriod ?? currentPeriod())
   const [downloading, setDownloading] = useState<ReportKind | null>(null)
   const [errorKind, setErrorKind] = useState<ReportKind | null>(null)
 

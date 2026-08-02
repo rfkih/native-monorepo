@@ -4,7 +4,7 @@
  * Payslip amounts are the caller's OWN real figures; NIK/bank stay masked (rule 6).
  */
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch, ApiError } from '@/lib/api'
 
 export interface MeAssignment {
@@ -30,6 +30,10 @@ export interface MeProfile {
   status: string
   maskedNik: string
   maskedBankAccount: string
+  /** Track P Phase P1 (ADR 0031) — whether an NPWP is on file (drives the ×120% no-NPWP
+   * surcharge); read-only here — corrections go through HR, same posture as NIK/bank (rule 6). */
+  hasNpwp: boolean
+  maskedNpwp: string | null
   assignments: MeAssignment[]
   contracts: MeContract[]
 }
@@ -130,6 +134,72 @@ export function useMyPayslip(
     queryFn: () =>
       apiFetch<MyPayslipDetail>(`/api/v1/me/payslips/${runId}`, { tenant: { companyId, actor } }),
   })
+}
+
+/** A year-to-date summary derived client-side from the caller's own payslips (Track P Phase P10 —
+ * the Me consolidation card). No new endpoint: {@link useMyPayslipsYtd} reads the same header index
+ * `useMyPayslips` already fetches, then re-uses the per-run detail endpoint under the EXACT same
+ * query key `useMyPayslip` does (`['myPayslip', companyId, runId]`) — so opening a payslip row on
+ * the page and the YTD card never double-fetch the same run (mirrors the dashboard's
+ * `usePnlTrend`/`usePnl` cache-sharing idiom). */
+export interface MyPayslipsYtdSummary {
+  year: number
+  /** Null until at least one run's detail has loaded. */
+  currency: string | null
+  grossMinor: number
+  /** Σ stored PPH21 deduction lines for the year — Jan–Nov positive withholding plus December's
+   * true-up line (which can be NEGATIVE, an over-withheld refund per Track P Phase P3), so this is
+   * already the correct NET annual withholding figure, not a display-flipped one. */
+  pph21Minor: number
+  runCount: number
+  loading: boolean
+  isError: boolean
+}
+
+/** Client-side year-to-date sum of the caller's own gross pay and PPh 21 withheld — no new endpoint. */
+export function useMyPayslipsYtd(
+  params: TenantParams & { year: number; enabled: boolean },
+): MyPayslipsYtdSummary {
+  const { companyId, actor, year, enabled } = params
+  const headers = useMyPayslips({ companyId, actor, enabled })
+  const yearRuns = (headers.data ?? []).filter((h) => h.period.startsWith(String(year)))
+
+  const detailQueries = useQueries({
+    queries: yearRuns.map((h) => ({
+      enabled: enabled && !headers.isLoading,
+      retry: false,
+      // Deliberately the SAME key as useMyPayslip — see the doc comment above.
+      queryKey: ['myPayslip', companyId, h.runId],
+      queryFn: () =>
+        apiFetch<MyPayslipDetail>(`/api/v1/me/payslips/${h.runId}`, {
+          tenant: { companyId, actor },
+        }),
+    })),
+  })
+
+  let grossMinor = 0
+  let pph21Minor = 0
+  let currency: string | null = null
+  for (const q of detailQueries) {
+    if (!q.data) continue
+    grossMinor += q.data.grossMinor
+    currency = currency ?? q.data.currency
+    for (const line of q.data.lines) {
+      if (line.componentKey === 'PPH21' && line.kind === 'DEDUCTION') {
+        pph21Minor += line.amountMinor
+      }
+    }
+  }
+
+  return {
+    year,
+    currency,
+    grossMinor,
+    pph21Minor,
+    runCount: yearRuns.length,
+    loading: headers.isLoading || detailQueries.some((q) => q.isLoading),
+    isError: headers.isError || detailQueries.some((q) => q.isError),
+  }
 }
 
 /** GET /api/v1/me/sales — own sales + commission preview for the current month. */

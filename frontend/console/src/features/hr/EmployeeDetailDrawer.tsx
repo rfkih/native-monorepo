@@ -60,12 +60,29 @@ export function EmployeeDetailDrawer({
   // Track P Phase P8 — the hire_date inline editor (feeds THR proration).
   const [editingHireDate, setEditingHireDate] = useState(false)
   const [hireDateDraft, setHireDateDraft] = useState('')
+  // Track P Phase P10 — the npwp inline editor (Track P Phase P1/ADR 0031: drives the payroll
+  // engine's no-NPWP ×120% surcharge). PII (rule 6): sent plaintext only when changing it, shown
+  // masked everywhere after that — same posture as NIK/bank account, mirrors the hire_date editor.
+  const [editingNpwp, setEditingNpwp] = useState(false)
+  const [npwpDraft, setNpwpDraft] = useState('')
+  const npwpValid = /^\d{15,16}$/.test(npwpDraft)
 
   async function handleSaveHireDate() {
     if (!hireDateDraft) return
     try {
       await updateEmployee.mutateAsync({ employeeId, body: { hireDate: hireDateDraft } })
       setEditingHireDate(false)
+    } catch {
+      // surfaced by updateEmployee.isError below
+    }
+  }
+
+  async function handleSaveNpwp() {
+    if (!npwpValid) return
+    try {
+      await updateEmployee.mutateAsync({ employeeId, body: { npwp: npwpDraft } })
+      setEditingNpwp(false)
+      setNpwpDraft('')
     } catch {
       // surfaced by updateEmployee.isError below
     }
@@ -196,6 +213,76 @@ export function EmployeeDetailDrawer({
             </div>
           ) : (
             <p className="mt-2 text-sm text-ink">{emp?.hireDate ?? t('hr.detail.hireDateNone')}</p>
+          )}
+        </section>
+
+        {/* npwp (Track P Phase P1/P10, ADR 0031) — PII (rule 6): masked once on file; missing NPWP
+            drives the payroll engine's ×120% no-NPWP surcharge, so this nudges completion loudly. */}
+        <section className="rounded-2xl border border-line bg-surface p-4">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-semibold text-ink">{t('hr.detail.npwp')}</h3>
+              <p className="mt-0.5 text-xs text-ink-3">{t('hr.detail.npwpHint')}</p>
+            </div>
+            {!editingNpwp ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-8 px-3 text-xs"
+                onClick={() => {
+                  setNpwpDraft('')
+                  setEditingNpwp(true)
+                }}
+              >
+                <Pencil className="size-3.5" />
+                {emp?.hasNpwp ? t('hr.detail.npwpEdit') : t('hr.detail.npwpAdd')}
+              </Button>
+            ) : null}
+          </div>
+
+          {editingNpwp ? (
+            <div className="mt-3 space-y-2">
+              <Field label={t('hr.detail.npwp')} htmlFor="hr-npwp" hint={t('hr.form.npwpHint')}>
+                <TextInput
+                  id="hr-npwp"
+                  value={npwpDraft}
+                  onChange={(e) => setNpwpDraft(e.target.value.replace(/\D/g, ''))}
+                  inputMode="numeric"
+                  maxLength={16}
+                />
+              </Field>
+              {npwpDraft && !npwpValid ? (
+                <p className="text-sm text-loss">{t('hr.form.npwpInvalid')}</p>
+              ) : updateEmployee.isError ? (
+                <p className="text-sm text-loss">{t('hr.detail.npwpError')}</p>
+              ) : null}
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  className="h-8 px-3 text-xs"
+                  onClick={handleSaveNpwp}
+                  disabled={!npwpValid || updateEmployee.isPending}
+                >
+                  {updateEmployee.isPending ? t('hr.detail.hireDateSaving') : t('hr.detail.hireDateSave')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-8 px-3 text-xs"
+                  onClick={() => setEditingNpwp(false)}
+                  disabled={updateEmployee.isPending}
+                >
+                  {t('hr.detail.hireDateCancel')}
+                </Button>
+              </div>
+            </div>
+          ) : emp?.hasNpwp ? (
+            <p className="mt-2 font-mono text-sm text-ink">{emp.maskedNpwp}</p>
+          ) : (
+            <div className="mt-2 flex items-center gap-2">
+              <Badge tone="amber">{t('hr.detail.npwpMissingBadge')}</Badge>
+              <span className="text-xs text-ink-3">{t('hr.detail.npwpMissingHint')}</span>
+            </div>
           )}
         </section>
 
