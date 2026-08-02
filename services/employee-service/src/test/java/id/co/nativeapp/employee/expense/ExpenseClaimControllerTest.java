@@ -218,6 +218,58 @@ class ExpenseClaimControllerTest {
   }
 
   // ---------------------------------------------------------------------
+  // pay (DIRECT reimbursement — ADR 0030 §6, Phase E4)
+  // ---------------------------------------------------------------------
+
+  @Test
+  void payWithoutAnIdempotencyKeyIs400() throws Exception {
+    mockMvc
+        .perform(post("/api/v1/expense-claims/" + CLAIM + "/pay"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/missing-required-header"));
+  }
+
+  @Test
+  void payReturns200() throws Exception {
+    ExpenseClaim paid = submittedClaim();
+    paid.approve("manager-sub", "ok", Instant.parse("2026-07-20T09:00:00Z"));
+    paid.payDirect(Instant.parse("2026-07-21T10:00:00Z"));
+    when(claimService.payDirect(eq(CLAIM), eq("k-5"))).thenReturn(paid);
+
+    mockMvc
+        .perform(post("/api/v1/expense-claims/" + CLAIM + "/pay").header("Idempotency-Key", "k-5"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value(ClaimStatus.REIMBURSED.name()));
+  }
+
+  @Test
+  void payAcceptsAnOptionalEmptyBody() throws Exception {
+    ExpenseClaim paid = submittedClaim();
+    paid.approve("manager-sub", "ok", Instant.parse("2026-07-20T09:00:00Z"));
+    paid.payDirect(Instant.parse("2026-07-21T10:00:00Z"));
+    when(claimService.payDirect(eq(CLAIM), eq("k-6"))).thenReturn(paid);
+
+    mockMvc
+        .perform(
+            post("/api/v1/expense-claims/" + CLAIM + "/pay")
+                .header("Idempotency-Key", "k-6")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value(ClaimStatus.REIMBURSED.name()));
+  }
+
+  @Test
+  void payOfAnUnknownClaimIs404() throws Exception {
+    when(claimService.payDirect(eq(CLAIM), eq("k-7"))).thenThrow(new ClaimNotFoundException(CLAIM));
+
+    mockMvc
+        .perform(post("/api/v1/expense-claims/" + CLAIM + "/pay").header("Idempotency-Key", "k-7"))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/expense-claim-not-found"));
+  }
+
+  // ---------------------------------------------------------------------
   // Receipt serve (manager surface — ADR 0030 §8, Phase E3)
   // ---------------------------------------------------------------------
 

@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 /**
  * Pure-JUnit domain logic proofs — no Spring context: every legal and illegal transition on {@link
@@ -201,6 +202,81 @@ class ExpenseClaimTest {
     assertThatThrownBy(
             () -> claim.refuse("manager-sub", "no", Instant.parse("2026-07-20T09:00:00Z")))
         .isInstanceOf(ClaimStateException.class);
+  }
+
+  // ---------------------------------------------------------------------------
+  // payDirect() — DIRECT reimbursement (ADR 0030 §6, Phase E4)
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void payDirectFromApprovedAndUnlinkedMovesToReimbursedAndStampsSettledAt() {
+    ExpenseClaim claim = newDraft();
+    claim.submit();
+    claim.approve("manager-sub", "ok", Instant.parse("2026-07-20T09:00:00Z"));
+    Instant settledAt = Instant.parse("2026-07-21T10:00:00Z");
+
+    claim.payDirect(settledAt);
+
+    assertThat(claim.getStatus()).isEqualTo(ClaimStatus.REIMBURSED);
+    assertThat(claim.getSettledAt()).isEqualTo(settledAt);
+  }
+
+  @Test
+  void payDirectFromDraftIsRejected() {
+    ExpenseClaim claim = newDraft();
+    assertThatThrownBy(() -> claim.payDirect(Instant.parse("2026-07-21T10:00:00Z")))
+        .isInstanceOf(ClaimStateException.class);
+  }
+
+  @Test
+  void payDirectFromSubmittedIsRejected() {
+    ExpenseClaim claim = newDraft();
+    claim.submit();
+    assertThatThrownBy(() -> claim.payDirect(Instant.parse("2026-07-21T10:00:00Z")))
+        .isInstanceOf(ClaimStateException.class);
+  }
+
+  @Test
+  void payDirectFromRefusedIsRejected() {
+    ExpenseClaim claim = newDraft();
+    claim.submit();
+    claim.refuse("manager-sub", "no receipt", Instant.parse("2026-07-20T09:00:00Z"));
+    assertThatThrownBy(() -> claim.payDirect(Instant.parse("2026-07-21T10:00:00Z")))
+        .isInstanceOf(ClaimStateException.class);
+  }
+
+  @Test
+  void payDirectFromCancelledIsRejected() {
+    ExpenseClaim claim = newDraft();
+    claim.cancel();
+    assertThatThrownBy(() -> claim.payDirect(Instant.parse("2026-07-21T10:00:00Z")))
+        .isInstanceOf(ClaimStateException.class);
+  }
+
+  @Test
+  void payDirectFromAlreadyReimbursedIsRejected() {
+    ExpenseClaim claim = newDraft();
+    claim.submit();
+    claim.approve("manager-sub", "ok", Instant.parse("2026-07-20T09:00:00Z"));
+    claim.payDirect(Instant.parse("2026-07-21T10:00:00Z"));
+    assertThatThrownBy(() -> claim.payDirect(Instant.parse("2026-07-22T10:00:00Z")))
+        .isInstanceOf(ClaimStateException.class);
+  }
+
+  @Test
+  void payDirectWhenLinkedToAPayrollRunIsRejectedEvenThoughApproved() {
+    // The linker (E5) sets reimbursement_run_id via an atomic conditional UPDATE that bypasses
+    // the aggregate's own API entirely — simulated here via the JPA field directly (no production
+    // setter exists for it yet, deliberately: nothing in E4's scope should add one).
+    ExpenseClaim claim = newDraft();
+    claim.submit();
+    claim.approve("manager-sub", "ok", Instant.parse("2026-07-20T09:00:00Z"));
+    ReflectionTestUtils.setField(claim, "reimbursementRunId", UUID.randomUUID());
+
+    assertThatThrownBy(() -> claim.payDirect(Instant.parse("2026-07-21T10:00:00Z")))
+        .isInstanceOf(ClaimStateException.class);
+    // The status is left untouched — a rejected attempt is a pure no-op.
+    assertThat(claim.getStatus()).isEqualTo(ClaimStatus.APPROVED);
   }
 
   // ---------------------------------------------------------------------------

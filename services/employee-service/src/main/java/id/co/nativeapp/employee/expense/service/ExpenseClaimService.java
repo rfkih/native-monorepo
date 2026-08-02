@@ -92,6 +92,18 @@ public class ExpenseClaimService {
   }
 
   /**
+   * Pays an APPROVED, un-linked claim directly, idempotently (ADR 0030 §6 DIRECT path, Phase E4).
+   */
+  public ExpenseClaim payDirect(UUID claimId, String idempotencyKey) {
+    TenantContext.require();
+    try {
+      return writer.payDirect(claimId, idempotencyKey);
+    } catch (DataIntegrityViolationException conflict) {
+      return recoverReplay(claimId, idempotencyKey, ExpenseClaimWriter.ACTION_PAY_DIRECT, conflict);
+    }
+  }
+
+  /**
    * Recovers a {@link DataIntegrityViolationException} ONLY when it is a genuine replay of THIS
    * (claim, key, action) triple; otherwise rethrows {@code conflict} unchanged (S1/S2, code
    * review).

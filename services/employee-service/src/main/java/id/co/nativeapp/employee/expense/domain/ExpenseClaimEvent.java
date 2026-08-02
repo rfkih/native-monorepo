@@ -10,10 +10,10 @@ import java.util.UUID;
 
 /**
  * An append-only audit row for exactly one guarded {@link ExpenseClaim} transition (submit, cancel,
- * approve, refuse, and later void/pay) — ADR 0030 §5, the AP-Bill idempotency idiom. The per-tenant
- * {@code UNIQUE (company_id, claim_id, idempotency_key)} (V9) is BOTH the audit trail of who did
- * what and when, and the replay/concurrency backstop {@code ExpenseClaimWriter} probes before
- * mutating the aggregate and recovers against if a concurrent racer wins the insert.
+ * approve, refuse, pay, and later void) — ADR 0030 §5, the AP-Bill idempotency idiom. The
+ * per-tenant {@code UNIQUE (company_id, claim_id, idempotency_key)} (V9) is BOTH the audit trail of
+ * who did what and when, and the replay/concurrency backstop {@code ExpenseClaimWriter} probes
+ * before mutating the aggregate and recovers against if a concurrent racer wins the insert.
  *
  * <p>Extends {@link Auditable} (rule 4); under the {@code expense_claim_event} RLS policy (rule 5,
  * V9).

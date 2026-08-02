@@ -19,10 +19,12 @@ import id.co.nativeapp.employee.expense.domain.ExpenseCategory;
 import id.co.nativeapp.employee.expense.domain.ExpenseClaim;
 import id.co.nativeapp.employee.expense.domain.SelfApprovalException;
 import id.co.nativeapp.employee.expense.dto.CreateClaimCommand;
+import id.co.nativeapp.employee.expense.messaging.ExpenseReimbursementSettledSchema;
 import id.co.nativeapp.employee.expense.repository.ExpenseCategoryRepository;
 import id.co.nativeapp.employee.expense.repository.ExpenseClaimEventRepository;
 import id.co.nativeapp.employee.expense.repository.ExpenseClaimRepository;
 import id.co.nativeapp.employee.expense.service.ExpenseClaimWriter;
+import id.co.nativeapp.events.AvroSerde;
 import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.TenantContext;
@@ -33,7 +35,9 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.apache.avro.generic.GenericRecord;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 /**
  * Writer unit tests with mocked repositories — no Spring context, no database. Proves the
@@ -82,6 +86,12 @@ class ExpenseClaimWriterTest {
     // record's company_id field needs it too.
     claim.setCompanyId(TENANT);
     claim.submit();
+    return claim;
+  }
+
+  private static ExpenseClaim approvedClaim(UUID employeeId) {
+    ExpenseClaim claim = submittedClaim(employeeId);
+    claim.approve("manager-sub", "ok", Instant.parse("2026-07-19T09:00:00Z"));
     return claim;
   }
 
@@ -152,6 +162,77 @@ class ExpenseClaimWriterTest {
     verify(outboxWriter, times(1)).write(any(), any(), any(), any(), any(), any(), any());
     verify(eventRepository, times(1)).saveAndFlush(any());
     verify(claimRepository, times(1)).save(eq(claim));
+  }
+
+  // ---------------------------------------------------------------------
+  // payDirect() — DIRECT reimbursement (ADR 0030 §6, Phase E4)
+  // ---------------------------------------------------------------------
+
+  @Test
+  void aFreshPayDirectWritesTheOutboxExactlyOnceWithTheCorrectDirectFields() throws Exception {
+    UUID otherEmployee = UUID.randomUUID();
+    ExpenseClaim claim = approvedClaim(otherEmployee);
+
+    when(eventRepository.findIdByClaimIdAndIdempotencyKey(
+            claim.getId(), "k-pay", ExpenseClaimWriter.ACTION_PAY_DIRECT))
+        .thenReturn(Optional.empty());
+    when(claimRepository.findById(claim.getId())).thenReturn(Optional.of(claim));
+
+    ExpenseClaim result =
+        TenantContext.callAs(TENANT, ACTOR, () -> writer.payDirect(claim.getId(), "k-pay"));
+
+    assertThat(result.getStatus()).isEqualTo(ClaimStatus.REIMBURSED);
+    assertThat(result.getSettledAt()).isEqualTo(Instant.parse("2026-07-20T09:00:00Z"));
+
+    ArgumentCaptor<byte[]> payloadCaptor = ArgumentCaptor.forClass(byte[].class);
+    verify(outboxWriter, times(1))
+        .write(
+            eq(ExpenseReimbursementSettledSchema.AGGREGATE_TYPE),
+            eq(claim.getId().toString()),
+            eq(ExpenseReimbursementSettledSchema.EVENT_TYPE),
+            payloadCaptor.capture(),
+            any(),
+            eq(UUID.fromString(TENANT)),
+            eq(Instant.parse("2026-07-20T09:00:00Z")));
+    verify(eventRepository, times(1)).saveAndFlush(any());
+    verify(claimRepository, times(1)).save(eq(claim));
+
+    GenericRecord record =
+        AvroSerde.deserialize(payloadCaptor.getValue(), ExpenseReimbursementSettledSchema.schema());
+    assertThat(record.get("claim_id").toString()).isEqualTo(claim.getId().toString());
+    assertThat(record.get("company_id").toString()).isEqualTo(TENANT);
+    assertThat(record.get("org_unit_id").toString()).isEqualTo(ORG_UNIT.toString());
+    assertThat(record.get("employee_id").toString()).isEqualTo(otherEmployee.toString());
+    assertThat(record.get("amount_minor")).isEqualTo(250_000L);
+    assertThat(record.get("currency").toString()).isEqualTo("IDR");
+    assertThat(record.get("settlement_kind").toString())
+        .isEqualTo(ExpenseReimbursementSettledSchema.KIND_DIRECT);
+    assertThat(record.get("payroll_run_id")).isNull();
+    assertThat(record.get("run_seq")).isNull();
+    assertThat(record.get("settled_at"))
+        .isEqualTo(Instant.parse("2026-07-20T09:00:00Z").toEpochMilli());
+  }
+
+  @Test
+  void aReplayedPayDirectReturnsTheClaimUnchangedWithNoSecondOutboxWrite() throws Exception {
+    UUID otherEmployee = UUID.randomUUID();
+    ExpenseClaim alreadyPaid = approvedClaim(otherEmployee);
+    alreadyPaid.payDirect(Instant.parse("2026-07-20T09:00:00Z"));
+
+    when(eventRepository.findIdByClaimIdAndIdempotencyKey(
+            alreadyPaid.getId(), "k-replay-pay", ExpenseClaimWriter.ACTION_PAY_DIRECT))
+        .thenReturn(Optional.of(UUID.randomUUID()));
+    when(claimRepository.findById(alreadyPaid.getId())).thenReturn(Optional.of(alreadyPaid));
+
+    ExpenseClaim result =
+        TenantContext.callAs(
+            TENANT, ACTOR, () -> writer.payDirect(alreadyPaid.getId(), "k-replay-pay"));
+
+    assertThat(result).isSameAs(alreadyPaid);
+    assertThat(result.getStatus()).isEqualTo(ClaimStatus.REIMBURSED);
+    verify(outboxWriter, never()).write(any(), any(), any(), any(), any(), any(), any());
+    verify(eventRepository, never()).saveAndFlush(any());
+    verify(claimRepository, never()).save(any());
   }
 
   @Test

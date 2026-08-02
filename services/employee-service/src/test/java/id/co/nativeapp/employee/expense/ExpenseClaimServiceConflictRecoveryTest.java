@@ -139,4 +139,32 @@ class ExpenseClaimServiceConflictRecoveryTest {
 
     assertThat(result).isSameAs(existing);
   }
+
+  @Test
+  void aUniqueConstraintConflictRecoversTheExistingClaimOnPayDirect() throws Exception {
+    ExpenseClaim existing = existingClaim();
+    when(writer.payDirect(CLAIM, "k-4")).thenThrow(new DataIntegrityViolationException("dup key"));
+    when(writer.isReplayedEvent(CLAIM, "k-4", ExpenseClaimWriter.ACTION_PAY_DIRECT))
+        .thenReturn(true);
+    when(writer.findByIdForReplay(CLAIM)).thenReturn(Optional.of(existing));
+
+    ExpenseClaim result =
+        TenantContext.callAs(TENANT, ACTOR, () -> service.payDirect(CLAIM, "k-4"));
+
+    assertThat(result).isSameAs(existing);
+  }
+
+  @Test
+  void aConflictFromAKeyReusedForADifferentActionRethrowsOnPayDirect() throws Exception {
+    when(writer.payDirect(CLAIM, "shared-key"))
+        .thenThrow(new DataIntegrityViolationException("dup key, different action"));
+    when(writer.isReplayedEvent(CLAIM, "shared-key", ExpenseClaimWriter.ACTION_PAY_DIRECT))
+        .thenReturn(false);
+
+    assertThatThrownBy(
+            () -> TenantContext.callAs(TENANT, ACTOR, () -> service.payDirect(CLAIM, "shared-key")))
+        .isInstanceOf(DataIntegrityViolationException.class);
+
+    verify(writer, never()).findByIdForReplay(any());
+  }
 }

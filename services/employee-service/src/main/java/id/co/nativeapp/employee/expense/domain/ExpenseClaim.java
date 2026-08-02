@@ -214,6 +214,28 @@ public class ExpenseClaim extends Auditable {
   }
 
   /**
+   * Transitions {@code APPROVED -> REIMBURSED} via the DIRECT pay-now path (ADR 0030 §6, Phase E4)
+   * — the manager surface's {@code POST /{id}/pay}. Legal ONLY when the claim is APPROVED AND not
+   * yet linked to a payroll run ({@code reimbursement_run_id == null}): the two settlement paths
+   * (DIRECT here; PAYROLL via the future {@code ExpenseClaimPayrollLinker}, E5) race-guard each
+   * other on that same field. This method enforces the conditional guard; the caller ({@code
+   * ExpenseClaimWriter}) relies on the entity's optimistic {@code @Version} (rule 4, {@link
+   * Auditable}) to make a concurrent linker race lose cleanly — whichever transaction commits first
+   * wins, the other's {@code save} fails with an optimistic-locking exception rather than silently
+   * clobbering the winner (E5 documents the mirror image of this race).
+   *
+   * @param settledAt the settlement instant; also drives the settlement entry's accounting period
+   * @throws ClaimStateException if not APPROVED, or already linked to a payroll run (→ 409)
+   */
+  public void payDirect(Instant settledAt) {
+    if (this.status != ClaimStatus.APPROVED || this.reimbursementRunId != null) {
+      throw new ClaimStateException(this.status, "pay");
+    }
+    this.status = ClaimStatus.REIMBURSED;
+    this.settledAt = Objects.requireNonNull(settledAt, "settledAt");
+  }
+
+  /**
    * Transitions {@code DRAFT | SUBMITTED -> CANCELLED} — the employee withdrawing their own claim.
    *
    * @throws ClaimStateException if neither DRAFT nor SUBMITTED (→ 409)

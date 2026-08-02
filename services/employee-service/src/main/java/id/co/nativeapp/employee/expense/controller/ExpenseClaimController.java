@@ -28,15 +28,16 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * {@code /api/v1/expense-claims} — the manager/owner surface (ADR 0030): the tenant-wide claim
- * list/detail plus the approve/refuse decisions, plus (Phase E3) streaming any tenant claim's
- * receipt photo. {@code approve}/{@code refuse} are guarded state transitions and require an {@code
- * Idempotency-Key} header (missing → 400). Self-approval is rejected with 403, owners included.
- * This surface rides the EXISTING {@code /api/v1/expense-claims/**} gateway route — no new route
- * was needed for the receipt GET (ADR 0030 §8, Phase E3 spike).
+ * list/detail plus the approve/refuse decisions, the DIRECT pay-now settlement (Phase E4), plus
+ * (Phase E3) streaming any tenant claim's receipt photo. {@code approve}/{@code refuse}/{@code pay}
+ * are guarded state transitions and require an {@code Idempotency-Key} header (missing → 400).
+ * Self-approval is rejected with 403, owners included. This surface rides the EXISTING {@code
+ * /api/v1/expense-claims/**} gateway route — no new route was needed for the receipt GET (ADR 0030
+ * §8, Phase E3 spike) nor for {@code pay} (Phase E4).
  */
 @Tag(
     name = "Expense Claims",
-    description = "Manager surface: the tenant-wide claim list, approve, and refuse")
+    description = "Manager surface: the tenant-wide claim list, approve, refuse, and pay")
 @RestController
 @RequestMapping("/api/v1/expense-claims")
 public class ExpenseClaimController {
@@ -87,6 +88,18 @@ public class ExpenseClaimController {
       @Valid @RequestBody RefuseClaimRequest request,
       @RequestHeader("Idempotency-Key") String idempotencyKey) {
     ExpenseClaim claim = claimService.refuse(id, request.comment(), idempotencyKey);
+    return ExpenseClaimResponse.from(claim);
+  }
+
+  @Operation(
+      summary = "Pay an APPROVED expense claim directly — settles the payable now",
+      description =
+          "DIRECT reimbursement (ADR 0030 §6): legal only from APPROVED with no payroll run"
+              + " link. Idempotent via the required Idempotency-Key header.")
+  @PostMapping("/{id}/pay")
+  public ExpenseClaimResponse pay(
+      @PathVariable UUID id, @RequestHeader("Idempotency-Key") String idempotencyKey) {
+    ExpenseClaim claim = claimService.payDirect(id, idempotencyKey);
     return ExpenseClaimResponse.from(claim);
   }
 
