@@ -1878,6 +1878,70 @@ consumer uses the `refund_id` as the dedup key via `ProcessedEventStore`.
 
 ---
 
+### `RegisterSessionClosed`
+
+Emitted by restaurant-service when a cash-register session (closing kasir — one per outlet per
+day, ADR 0035) is CLOSED with a drawer count. Finance consumes it to post ONLY the cash
+variance (selisih kas) that trues `CASH_CLEARING` to physical drawer cash: short →
+`Dr CASH_SHORT_EXPENSE / Cr CASH_CLEARING`, over → `Dr CASH_CLEARING / Cr CASH_OVER_INCOME`,
+zero variance → no entry (still marked processed). Revenue was already recognized at sale time
+by `SaleRecorded` — this event never re-posts it. The consumer asserts both reconciliation
+identities (`expected == float + sales − refunds`, `over_short == counted − expected`) and
+treats a violation as poison (DLT).
+
+- **Producer:** `restaurant-service`
+- **Consumers:** `finance-service` (post the cash-variance journal entry)
+- **Aggregate type / partition key:** `register_session` / `session_id`
+- **Outbox `event_type`:** `RegisterSessionClosed`
+- **Schema:** `libs/contracts/src/main/resources/avro/RegisterSessionClosed.avsc`
+- **Full name:** `id.co.nativeapp.events.restaurant.RegisterSessionClosed`
+
+**Key fields**
+
+| Field | Avro type | Meaning |
+|---|---|---|
+| `session_id` | `string` | The cash_register_session id (UUID as string); partition key |
+| `company_id` | `string` | The owning tenant (UUID as string) |
+| `business_id` | `string` | The outlet whose drawer was counted (real OUTLET id, ADR 0012) |
+| `opened_at` / `closed_at` | `timestamp-millis` | The session window `[opened_at, closed_at)`; finance posts into `periodOf(closed_at)` (sealed → error-inbox quarantine) |
+| `opening_float_minor` | `long` | Change fund at open (≥ 0); part of the count, never part of the clearing trueing |
+| `cash_sales_minor` | `long` | Σ CASH-tender sale amounts in the window (customer-pays amount) |
+| `cash_refunds_minor` | `long` | Σ CASH refunds paid from the drawer in the window (≥ 0; v1 timestamp attribution) |
+| `expected_cash_minor` | `long` | Server-computed: `float + sales − refunds`; identity re-asserted by the consumer |
+| `counted_cash_minor` | `long` | The cashier's physical whole-drawer count (≥ 0, includes float) |
+| `over_short_minor` | `long` | SIGNED `counted − expected`: negative = short (expense), positive = over (other income), zero = no entry |
+| `currency` | `string` | ISO-4217 code for every amount on the event |
+
+**Compatibility:** new event, all fields required. Evolve additively only — append new fields as
+`["null", ...]` with `default: null` (never reorder; consumers may decode positionally).
+
+**Avro schema** (single source of truth in `libs/contracts/src/main/resources/avro/RegisterSessionClosed.avsc`)
+
+```json
+{
+  "type": "record",
+  "name": "RegisterSessionClosed",
+  "namespace": "id.co.nativeapp.events.restaurant",
+  "doc": "Emitted by restaurant-service when a cash-register session (closing kasir, one per outlet per day) is CLOSED with a drawer count; consumed by finance-service to post ONLY the cash variance (selisih kas) that trues CASH_CLEARING to physical drawer cash — revenue was already recognized at sale time by SaleRecorded, and the register close never re-posts it. Money is an integer minor-units amount plus an ISO-4217 currency code, never a float (CLAUDE.md rule 8). expected_cash_minor is SERVER-computed by the producer (opening_float + CASH-tender sales in the session window − CASH refunds in the window) and never client-supplied. The consumer asserts BOTH reconciliation identities — expected_cash == opening_float + cash_sales − cash_refunds AND over_short == counted_cash − expected_cash — and treats a violation as a poison message (DLT), mirroring SaleRecorded's reconciliation-identity guard. over_short_minor is SIGNED: negative = short (Dr CASH_SHORT_EXPENSE / Cr CASH_CLEARING), positive = over (Dr CASH_CLEARING / Cr CASH_OVER_INCOME), zero = no journal entry (the event is still marked processed).",
+  "fields": [
+    {"name": "session_id", "type": "string", "doc": "The cash_register_session aggregate id (UUID as string); also the Kafka partition key."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string)."},
+    {"name": "business_id", "type": "string", "doc": "The outlet whose drawer this session counted (UUID as string; a real OUTLET org unit, never the business-unit id — ADR 0012)."},
+    {"name": "opened_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the session was opened, epoch millis (UTC). The cash-sales window is [opened_at, closed_at)."},
+    {"name": "closed_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the session was closed, epoch millis (UTC). Finance posts the variance into periodOf(closed_at); a sealed period quarantines to the error inbox (no posting), mirroring the SaleRecorded consumer."},
+    {"name": "opening_float_minor", "type": "long", "doc": "The change fund placed in the drawer at open, minor units (>= 0; 0 when no float). Part of the counted drawer but NEVER part of the CASH_CLEARING trueing — it never entered the clearing account."},
+    {"name": "cash_sales_minor", "type": "long", "doc": "Sum of CASH-tender sale amounts (the customer-pays amount, i.e. tendered − change) recorded in the session window, minor units. Producer-computed from its own sale rows; carried so the consumer can assert the reconciliation identity."},
+    {"name": "cash_refunds_minor", "type": "long", "doc": "Sum of CASH-tender refunds paid out of the drawer during the session window, minor units (>= 0). v1 approximation: attributed by refund timestamp, documented in ADR 0035."},
+    {"name": "expected_cash_minor", "type": "long", "doc": "The server-computed expected whole-drawer count: opening_float_minor + cash_sales_minor − cash_refunds_minor. The consumer re-asserts this identity and DLTs on violation."},
+    {"name": "counted_cash_minor", "type": "long", "doc": "The physical whole-drawer count entered by the cashier at close, minor units (>= 0; includes the float)."},
+    {"name": "over_short_minor", "type": "long", "doc": "SIGNED variance: counted_cash_minor − expected_cash_minor. Negative = short (missing cash, expense), positive = over (excess cash, other income), zero = no entry. The float cancels out of this difference by construction, so the variance is exactly the CASH_CLEARING adjustment."},
+    {"name": "currency", "type": "string", "doc": "ISO-4217 currency code of every amount on this event, e.g. IDR or USD."}
+  ]
+}
+```
+
+---
+
 ## Phase 4 (ADR 0027) — loyalty + gift cards: schema foundation
 
 The four events below are the **event-contract foundation** of Phase 4 of the POS-parity program
