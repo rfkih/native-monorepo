@@ -37,6 +37,13 @@ curl -fsS -X POST http://localhost:8083/connectors -H 'Content-Type: application
   -d @docker/debezium/outbox-connector.json
 curl -fsS http://localhost:8083/connectors/restaurant-outbox-connector/status   # task must be RUNNING
 ```
+> **One-command restart:** `.\scripts\start-dev-services.ps1 [-JarRoot C:\some-worktree] [-Only a,b]`
+> checks all eight host-service ports, launches only what's dead (detached; logs in
+> `%TEMP%\native-services\`), and waits for health. This is the recovery for "reboot/closed terminal
+> killed my services → the console shows bodyless 500s/502s". Jars must already be bootJar-built —
+> when the main checkout's build-logic is poisoned (gotcha above), build in a worktree and pass it
+> as `-JarRoot`.
+
 Drive the loop: `POST /api/v1/sales` (headers `X-Company-Id: <uuid>`, `X-Actor: x`, `X-Roles: cashier`,
 body `{businessId,amountMinor,currency,idempotencyKey}`) → then `GET /api/v1/revenue?period=YYYY-MM` on
 finance (same `X-Company-Id`) shows the consolidated revenue move.
