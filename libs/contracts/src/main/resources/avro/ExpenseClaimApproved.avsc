@@ -6,7 +6,7 @@
   "fields": [
     {"name": "claim_id", "type": "string", "doc": "The expense_claim aggregate id (UUID as string); also the Kafka partition key."},
     {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string)."},
-    {"name": "org_unit_id", "type": "string", "doc": "The claim's business-unit/outlet dimension (UUID as string) -> ledger_posting.business_id; the all-zeros UUID sentinel when the employee had no active assignment at expense_date (mirrors LaborCostAllocator.UNALLOCATED_OUTLET)."},
+    {"name": "org_unit_id", "type": "string", "doc": "The claim's business-unit/outlet dimension (UUID as string) -> ledger_posting.business_id; the all-zeros UUID sentinel when the employee had no active assignment at expense_date (mirrors PayrollRunWriter.UNALLOCATED_OUTLET — reuse that constant, do not define a second sentinel)."},
     {"name": "employee_id", "type": "string", "doc": "The claiming employee (UUID as string). A reference, not PII — see the record doc."},
     {"name": "amount_minor", "type": "long", "doc": "Claim amount in the currency's minor units. Never a float."},
     {"name": "currency", "type": "string", "doc": "ISO-4217 currency code; v1 always the company base currency (ADR 0030)."},

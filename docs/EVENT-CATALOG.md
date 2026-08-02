@@ -40,6 +40,9 @@ to the value:
 Seeded from ARCHITECTURE.md §5. These are the *planned* inter-service contracts; an
 event is only **live** once it has a concrete section below with its registered Avro
 schema. Until then a row here is documentation of intent, not a shippable contract.
+A **SCHEMA REGISTERED** status sits between the two: the `.avsc` + section + contract
+triads exist (a shippable contract, contracts-first), but no runtime producer/consumer
+has landed yet — the status names the phases that will land them.
 
 | Event | Producer | Consumers | Key fields | Status |
 |---|---|---|---|---|

@@ -88,4 +88,32 @@ class ExpenseClaimApprovedContractTest {
                 """);
     assertThat(AvroSerde.isBackwardCompatible(registered, incompatible)).isFalse();
   }
+
+  @Test
+  void addingAnOptionalFieldWithADefaultStaysBackwardCompatible() {
+    Schema registered = ExpenseClaimApprovedSchema.schema();
+    Schema evolved =
+        new Schema.Parser()
+            .parse(
+                """
+                {
+                  "type": "record",
+                  "name": "ExpenseClaimApproved",
+                  "namespace": "id.co.nativeapp.events.employee",
+                  "fields": [
+                    {"name": "claim_id", "type": "string"},
+                    {"name": "company_id", "type": "string"},
+                    {"name": "org_unit_id", "type": "string"},
+                    {"name": "employee_id", "type": "string"},
+                    {"name": "amount_minor", "type": "long"},
+                    {"name": "currency", "type": "string"},
+                    {"name": "gl_hint", "type": "string"},
+                    {"name": "expense_date", "type": {"type": "int", "logicalType": "date"}},
+                    {"name": "approved_at", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+                    {"name": "approver_note", "type": ["null", "string"], "default": null}
+                  ]
+                }
+                """);
+    assertThat(AvroSerde.isBackwardCompatible(registered, evolved)).isTrue();
+  }
 }

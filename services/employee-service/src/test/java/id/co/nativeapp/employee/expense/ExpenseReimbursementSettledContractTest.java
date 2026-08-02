@@ -103,4 +103,33 @@ class ExpenseReimbursementSettledContractTest {
                 """);
     assertThat(AvroSerde.isBackwardCompatible(registered, incompatible)).isFalse();
   }
+
+  @Test
+  void addingAnOptionalFieldWithADefaultStaysBackwardCompatible() {
+    Schema registered = ExpenseReimbursementSettledSchema.schema();
+    Schema evolved =
+        new Schema.Parser()
+            .parse(
+                """
+                {
+                  "type": "record",
+                  "name": "ExpenseReimbursementSettled",
+                  "namespace": "id.co.nativeapp.events.employee",
+                  "fields": [
+                    {"name": "claim_id", "type": "string"},
+                    {"name": "company_id", "type": "string"},
+                    {"name": "org_unit_id", "type": "string"},
+                    {"name": "employee_id", "type": "string"},
+                    {"name": "amount_minor", "type": "long"},
+                    {"name": "currency", "type": "string"},
+                    {"name": "settlement_kind", "type": "string"},
+                    {"name": "payroll_run_id", "type": ["null", "string"], "default": null},
+                    {"name": "run_seq", "type": ["null", "int"], "default": null},
+                    {"name": "settled_at", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+                    {"name": "bank_reference", "type": ["null", "string"], "default": null}
+                  ]
+                }
+                """);
+    assertThat(AvroSerde.isBackwardCompatible(registered, evolved)).isTrue();
+  }
 }
