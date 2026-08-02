@@ -1,35 +1,136 @@
-# Native CI — build, test (unit + Testcontainers integration), ArchUnit, spotless,
-# checkstyle, jacoco. One Gradle invocation (`./gradlew build`) runs every gate.
+# Native CI — path-scoped quality gates for the Gradle monorepo + the two Vite frontends.
 #
-# Testcontainers spins up real Postgres / Kafka / Redis containers; the GitHub-hosted
-# `ubuntu-latest` runner ships a working Docker daemon, so integration tests run as-is.
+# Efficiency model (GitHub free tier):
+#   - The `changes` job (dorny/paths-filter) scopes the Gradle build to the service
+#     modules that actually changed; libs/build-logic/config/workflow changes escalate
+#     to a full `./gradlew build`.
+#   - The Gradle cache is written ONLY on master (`cache-read-only` elsewhere) so PR
+#     churn never evicts the shared cache (10 GB per-repo Actions cache limit).
+#   - PRs never build container images — images.yml handles that on master pushes only.
+#   - Branch protection should require exactly ONE status check: `gate`. It always
+#     runs and fails if any upstream job failed; path-skipped jobs count as success.
 #
-# AUTHORED BUT UNVERIFIED: this workflow has NOT been executed on a real Actions runner
-# (no actionlint available locally). It is YAML-validated only. See deploy/README.md.
+# Testcontainers spins up real Postgres / Kafka / Redis / Keycloak containers; the
+# GitHub-hosted `ubuntu-latest` runner ships a working Docker daemon.
 name: ci
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
-    branches: [main]
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      full:
+        description: "Run the full build regardless of changed paths"
+        type: boolean
+        default: false
+  schedule:
+    # Weekly full build (Mon 03:00 WIB): keeps the cache warm end-to-end, catches drift.
+    - cron: "0 20 * * 0"
 
-# Cancel superseded runs on the same ref to save runner minutes.
+# Cancel superseded runs on the same ref — but never on master, where cancelling would
+# also abort the cache write that later runs depend on.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 permissions:
   contents: read
 
 jobs:
-  build:
+  # Decide what actually needs to run. Filter names that match a Gradle service module
+  # feed the scoped target list; `full-backend` (build-logic/libs/config/...) escalates
+  # to a full build. Keep the service list in sync with settings.gradle.kts — both the
+  # filters below and the ALL array in the jq step (mirrored in images.yml).
+  changes:
+    name: detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      backend_run: ${{ steps.plan.outputs.backend_run }}
+      backend_targets: ${{ steps.plan.outputs.backend_targets }}
+      console: ${{ steps.filter.outputs.console }}
+      self_order: ${{ steps.filter.outputs['self-order'] }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Filter changed paths
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          # Needed on push events (diff against the pre-push commit); ignored on PRs.
+          base: ${{ github.ref_name }}
+          filters: |
+            gradle-core: &gradle-core
+              - 'build-logic/**'
+              - 'gradle/**'
+              - 'gradlew'
+              - 'gradlew.bat'
+              - 'settings.gradle.kts'
+              - 'build.gradle.kts'
+              - 'gradle.properties'
+              - 'config/**'
+              - '.github/workflows/**'
+            libs: &libs
+              - 'libs/**'
+              - 'service-template/**'
+            full-backend:
+              - *gradle-core
+              - *libs
+            docs-verify:
+              - 'docs/generated/**'
+              - 'docs/EVENT-CATALOG.md'
+            gateway: ['services/gateway/**']
+            org-service: ['services/org-service/**']
+            restaurant-service: ['services/restaurant-service/**']
+            carwash-service: ['services/carwash-service/**']
+            barbershop-service: ['services/barbershop-service/**']
+            loyalty-service: ['services/loyalty-service/**']
+            finance-service: ['services/finance-service/**']
+            entitlement-service: ['services/entitlement-service/**']
+            employee-service: ['services/employee-service/**']
+            notification-service: ['services/notification-service/**']
+            console: ['frontend/console/**']
+            self-order: ['frontend/self-order/**']
+
+      - name: Compute Gradle targets
+        id: plan
+        env:
+          CHANGED: ${{ steps.filter.outputs.changes }}
+          FORCE_FULL: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full) }}
+        run: |
+          ALL='["gateway","org-service","restaurant-service","carwash-service","barbershop-service","loyalty-service","finance-service","entitlement-service","employee-service","notification-service"]'
+          if [ "$FORCE_FULL" = "true" ] || echo "$CHANGED" | jq -e 'any(. == "full-backend")' > /dev/null; then
+            echo "backend_run=true" >> "$GITHUB_OUTPUT"
+            echo "backend_targets=build" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          SVCS=$(echo "$CHANGED" | jq -c --argjson all "$ALL" 'map(select(. as $x | $all | index($x) != null))')
+          TARGETS=$(echo "$SVCS" | jq -r 'map(":services:" + . + ":build") | join(" ")')
+          if [ "$SVCS" != "[]" ] || echo "$CHANGED" | jq -e 'any(. == "docs-verify")' > /dev/null; then
+            echo "backend_run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "backend_run=false" >> "$GITHUB_OUTPUT"
+          fi
+          # verifyProjectDocs is wired into the ROOT project's check only
+          # (build.gradle.kts:148) — a scoped :services:X:build silently skips it, so
+          # always append it (costs seconds).
+          echo "backend_targets=$TARGETS verifyProjectDocs" >> "$GITHUB_OUTPUT"
+
+  # Full quality gate for the changed scope: compile, unit + integration
+  # (Testcontainers) tests, ArchUnit, spotless, checkstyle, jacoco ratchet — all wired
+  # into `build`/`check` by build-logic.
+  backend:
     name: build + test
+    needs: changes
+    if: needs.changes.outputs.backend_run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up JDK 25 (Temurin)
         uses: actions/setup-java@v4
@@ -37,104 +138,88 @@ jobs:
           distribution: temurin
           java-version: "25"
 
-      - name: Set up Gradle (with build cache)
+      - name: Set up Gradle (cache written on master only)
         uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/master' }}
 
-      # Full quality gate: compile, unit + integration (Testcontainers) tests, ArchUnit,
-      # spotless, checkstyle, jacoco. A red gate fails the job and blocks the merge.
       - name: Build
-        run: ./gradlew build --no-daemon --stacktrace
+        run: ./gradlew ${{ needs.changes.outputs.backend_targets }} --no-daemon --stacktrace
 
-      - name: Upload test reports
-        if: always()
+      - name: Upload reports on failure
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: test-reports
           path: |
             **/build/reports/tests/
-            **/build/reports/jacoco/
+            **/build/reports/checkstyle/
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 5
 
-  # Build (do NOT push) each service container image so the Dockerfiles stay buildable
-  # in CI. There is no registry wired yet, so this is build-only; the push step is
-  # authored below but guarded behind a registry secret and disabled by default.
-  #
-  # AUTHORED BUT UNVERIFIED: never run on a real runner; no registry configured.
-  images:
-    name: build images
+  console:
+    name: console lint + test + build
+    needs: changes
+    if: needs.changes.outputs.console == 'true'
     runs-on: ubuntu-latest
-    needs: build
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        service:
-          - gateway
-          - org-service
-          - restaurant-service
-          - carwash-service
-          - finance-service
-          - employee-service
-          - notification-service
-          - entitlement-service
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend/console
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      # Optional registry login — only runs if the repo sets a REGISTRY variable.
-      # Without it the image is built but never pushed (no credentials leave CI).
-      - name: Log in to registry
-        if: ${{ vars.REGISTRY != '' }}
-        uses: docker/login-action@v3
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
         with:
-          registry: ${{ vars.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.REGISTRY_TOKEN }}
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/console/package-lock.json
 
-      - name: Build image (push only when a registry is configured)
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: services/${{ matrix.service }}/Dockerfile
-          push: ${{ vars.REGISTRY != '' }}
-          tags: ${{ vars.REGISTRY != '' && format('{0}/native/{1}:{2}', vars.REGISTRY, matrix.service, github.sha) || format('native/{0}:{1}', matrix.service, github.sha) }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
 
-  # The console SPA image (separate build context from the Gradle services: frontend/console).
-  # Build-only by default; pushes only when a registry is configured, like the services above.
-  #
-  # AUTHORED BUT UNVERIFIED: never run on a real runner; no registry configured.
-  console-image:
-    name: build console image
+  self_order:
+    name: self-order build
+    needs: changes
+    if: needs.changes.outputs.self_order == 'true'
     runs-on: ubuntu-latest
-    needs: build
-    timeout-minutes: 20
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend/self-order
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to registry
-        if: ${{ vars.REGISTRY != '' }}
-        uses: docker/login-action@v3
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
         with:
-          registry: ${{ vars.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.REGISTRY_TOKEN }}
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/self-order/package-lock.json
 
-      - name: Build console-web image (push only when a registry is configured)
-        uses: docker/build-push-action@v6
-        with:
-          context: frontend/console
-          file: frontend/console/Dockerfile
-          push: ${{ vars.REGISTRY != '' }}
-          tags: ${{ vars.REGISTRY != '' && format('{0}/native/console-web:{1}', vars.REGISTRY, github.sha) || format('native/console-web:{0}', github.sha) }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - run: npm ci
+      # No lint script and no test files yet (vitest fails on an empty suite) — the
+      # build (`tsc -b && vite build`) is the gate. Add `npm test` when tests land.
+      - run: npm run build
+
+  # The ONLY check branch protection should require. Skipped upstream jobs (path
+  # filtering) count as success; any failure or cancellation turns the gate red.
+  gate:
+    name: gate
+    needs: [changes, backend, console, self_order]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fail if any upstream job failed or was cancelled
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: |
+          echo "upstream results: changes=${{ needs.changes.result }} backend=${{ needs.backend.result }} console=${{ needs.console.result }} self_order=${{ needs.self_order.result }}"
+          exit 1
+      - name: All required jobs passed
+        run: echo "gate green"

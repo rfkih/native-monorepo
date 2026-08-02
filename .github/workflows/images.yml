@@ -1,0 +1,183 @@
+# Native images — build + push container images to GHCR, on pushes to master only.
+# PRs never build images (see ci.yml).
+#
+# Efficiency model: one Gradle invocation builds the changed services' boot jars with
+# the warm cache, then each jar is packaged into a thin JRE-only runtime image
+# (docker/runtime.Dockerfile) — instead of the per-service Dockerfiles, which re-run
+# the whole Gradle build inside Docker with zero cache (kept for local builds only).
+# The loop (not a job matrix) exists so the Gradle build runs once, not once per image.
+#
+# Images: ghcr.io/<owner>/<repo>/<service>:{<sha>,latest} + console-web. GHCR packages
+# are created PRIVATE on first push even in a public repo — flip visibility once.
+name: images
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      all:
+        description: "Force-build and push all images"
+        type: boolean
+        default: false
+
+# Never cancel a half-pushed tag set; superseded runs just queue.
+concurrency:
+  group: images-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  # Same filter map as ci.yml (keep the two in sync; extract a reusable workflow only
+  # if the duplication starts to grind).
+  changes:
+    name: detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      services: ${{ steps.plan.outputs.services }}
+      console: ${{ steps.plan.outputs.console }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Filter changed paths
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          base: ${{ github.ref_name }}
+          filters: |
+            gradle-core: &gradle-core
+              - 'build-logic/**'
+              - 'gradle/**'
+              - 'gradlew'
+              - 'gradlew.bat'
+              - 'settings.gradle.kts'
+              - 'build.gradle.kts'
+              - 'gradle.properties'
+              - 'config/**'
+              - '.github/workflows/**'
+            libs: &libs
+              - 'libs/**'
+              - 'service-template/**'
+            full-backend:
+              - *gradle-core
+              - *libs
+            gateway: ['services/gateway/**']
+            org-service: ['services/org-service/**']
+            restaurant-service: ['services/restaurant-service/**']
+            carwash-service: ['services/carwash-service/**']
+            barbershop-service: ['services/barbershop-service/**']
+            loyalty-service: ['services/loyalty-service/**']
+            finance-service: ['services/finance-service/**']
+            entitlement-service: ['services/entitlement-service/**']
+            employee-service: ['services/employee-service/**']
+            notification-service: ['services/notification-service/**']
+            console: ['frontend/console/**']
+
+      - name: Compute image list
+        id: plan
+        env:
+          CHANGED: ${{ steps.filter.outputs.changes }}
+          CONSOLE: ${{ steps.filter.outputs.console }}
+          FORCE_ALL: ${{ github.event_name == 'workflow_dispatch' && inputs.all }}
+        run: |
+          ALL='["gateway","org-service","restaurant-service","carwash-service","barbershop-service","loyalty-service","finance-service","entitlement-service","employee-service","notification-service"]'
+          if [ "$FORCE_ALL" = "true" ] || echo "$CHANGED" | jq -e 'any(. == "full-backend")' > /dev/null; then
+            echo "services=$ALL" >> "$GITHUB_OUTPUT"
+            echo "console=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "services=$(echo "$CHANGED" | jq -c --argjson all "$ALL" 'map(select(. as $x | $all | index($x) != null))')" >> "$GITHUB_OUTPUT"
+          echo "console=$CONSOLE" >> "$GITHUB_OUTPUT"
+
+  service-images:
+    name: service images
+    needs: changes
+    if: needs.changes.outputs.services != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up JDK 25 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Set up Gradle (read-only cache)
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          # ci.yml on this same master push owns the cache write; this job only reads.
+          cache-read-only: true
+
+      - name: Build boot jars (one Gradle invocation)
+        env:
+          SERVICES: ${{ needs.changes.outputs.services }}
+        run: ./gradlew $(echo "$SERVICES" | jq -r 'map(":services:" + . + ":bootJar") | join(" ")') --no-daemon --stacktrace
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Package and push runtime images
+        env:
+          SERVICES: ${{ needs.changes.outputs.services }}
+          IMAGE_BASE: ghcr.io/${{ github.repository }}
+        run: |
+          # Build context = the jar's own directory: tiny, and unaffected by the root
+          # .dockerignore (which excludes **/build/ for the local from-source builds).
+          # No buildx cache: the only layer beyond the JRE base is the jar COPY, which
+          # changes every build — caching it would only churn the 10 GB cache limit.
+          for svc in $(echo "$SERVICES" | jq -r '.[]'); do
+            docker buildx build --push \
+              -f docker/runtime.Dockerfile \
+              -t "$IMAGE_BASE/$svc:${{ github.sha }}" \
+              -t "$IMAGE_BASE/$svc:latest" \
+              "services/$svc/build/libs"
+          done
+
+  console-image:
+    name: console image
+    needs: changes
+    if: needs.changes.outputs.console == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push console-web image
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend/console
+          file: frontend/console/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/console-web:${{ github.sha }}
+            ghcr.io/${{ github.repository }}/console-web:latest
+          # mode=min (final-stage layers only): the sole buildx cache in the repo, so
+          # the Gradle cache never gets evicted by image-layer churn.
+          cache-from: type=gha,scope=console
+          cache-to: type=gha,mode=min,scope=console
