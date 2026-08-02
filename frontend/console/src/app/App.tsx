@@ -1,9 +1,10 @@
 import { Suspense, lazy, useEffect, useRef } from 'react'
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { LogOut } from 'lucide-react'
 import { Shell } from '@/app/Shell'
 import { Spinner } from '@/components/ui/Spinner'
-import { BrandMark } from '@/components/Wordmark'
+import { BrandMark, Wordmark } from '@/components/Wordmark'
 import { OfflineBanner } from '@/features/pos/offline/OfflineBanner'
 import { hasAnyRole, useAuth } from '@/lib/authContext'
 import { usePageAccess } from '@/lib/pageAccess'
@@ -160,6 +161,62 @@ function LoginLauncher() {
   )
 }
 
+/**
+ * The /onboarding route decides its chrome ONCE, when it mounts: a first-ever company (no company
+ * in the session yet) gets the standalone full-page wizard; adding another company keeps the shell.
+ *
+ * The decision is captured in a ref, NOT re-derived per render: creating the first company sets the
+ * session company MID-FLOW (before the wizard's success panel), and a live condition would remount
+ * the wizard at that instant — wiping the success state the user is looking at.
+ */
+function OnboardingRoute() {
+  const { company } = useSession()
+  const firstRun = useRef(company == null).current
+  if (firstRun) {
+    return <OnboardingStandalone />
+  }
+  return (
+    <Shell>
+      <Suspense fallback={<CenteredSpinner />}>
+        <OnboardingWizard />
+      </Suspense>
+    </Shell>
+  )
+}
+
+/**
+ * First-run onboarding — the wizard is the ONLY thing on screen. A brand-new owner has no company
+ * yet, so the shell's sidebar/topbar would be pure noise (every destination just redirects back
+ * here). Minimal chrome: the wordmark for orientation and sign-out as the one escape hatch.
+ */
+function OnboardingStandalone() {
+  const { t } = useTranslation()
+  const auth = useAuth()
+  return (
+    <div className="min-h-screen bg-paper">
+      <header className="mx-auto flex h-16 w-full max-w-[1100px] items-center justify-between px-5">
+        <Wordmark />
+        <button
+          type="button"
+          onClick={auth.logout}
+          className={
+            'flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-ink-3 ' +
+            'transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-brand-500'
+          }
+        >
+          <LogOut className="size-4" />
+          <span className="hidden sm:inline">{t('nav.logout')}</span>
+        </button>
+      </header>
+      <main className="px-4 pb-16 pt-6 sm:pt-10">
+        <Suspense fallback={<CenteredSpinner />}>
+          <OnboardingWizard />
+        </Suspense>
+      </main>
+    </div>
+  )
+}
+
 /** True for routes that must be reachable without authentication. */
 const PUBLIC_PATHS = new Set(['/signup'])
 
@@ -287,6 +344,11 @@ export function App() {
   
           {/* The employee self-service surface — full-screen, any business role may open it. */}
           <Route path="/me" element={<Me />} />
+
+          {/* Onboarding picks its chrome ONCE, on entry (see OnboardingRoute): first company →
+              full-page standalone wizard (no shell to wander off into); adding another company →
+              the normal shell around it. */}
+          {canDashboard && <Route path="/onboarding" element={<OnboardingRoute />} />}
   
           {/* Everything else shares the back-office shell, mounted once via a layout route. */}
           <Route
@@ -296,7 +358,6 @@ export function App() {
               </Shell>
             }
           >
-            {canDashboard && <Route path="/onboarding" element={<OnboardingWizard />} />}
             {dashboardAllowed && (
               <Route
                 path="/"
