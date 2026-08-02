@@ -220,9 +220,10 @@ public class ExpenseClaim extends Auditable {
    * (DIRECT here; PAYROLL via the future {@code ExpenseClaimPayrollLinker}, E5) race-guard each
    * other on that same field. This method enforces the conditional guard; the caller ({@code
    * ExpenseClaimWriter}) relies on the entity's optimistic {@code @Version} (rule 4, {@link
-   * Auditable}) to make a concurrent linker race lose cleanly — whichever transaction commits first
-   * wins, the other's {@code save} fails with an optimistic-locking exception rather than silently
-   * clobbering the winner (E5 documents the mirror image of this race).
+   * Auditable}) to make a concurrent linker race lose cleanly — CONTINGENT on E5's linker UPDATE
+   * incrementing {@code version} in the same statement (ADR 0030 §6, BINDING): pay-direct flushes a
+   * full-column versioned UPDATE, so a linker that skips the bump would let a stale pay pass its
+   * {@code WHERE version =} check and clobber the link back to null — a double payment.
    *
    * @param settledAt the settlement instant; also drives the settlement entry's accounting period
    * @throws ClaimStateException if not APPROVED, or already linked to a payroll run (→ 409)

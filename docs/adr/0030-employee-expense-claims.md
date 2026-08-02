@@ -54,6 +54,10 @@ storage, no human approve/reject state machine, and `/api/v1/me/**` has never ha
      settlements — safe because of (7).
    - The two paths race-guard each other: pay requires `reimbursement_run_id IS NULL` under the
      optimistic version; the linker's conditional UPDATE loses cleanly to a concurrent pay.
+     **BINDING on the linker (E4 review W1): every linker UPDATE that sets or clears
+     `reimbursement_run_id` MUST increment `version` in the same statement** — pay-direct flushes
+     a full-column versioned UPDATE, so a linker that skips the version bump lets a stale pay
+     clobber the link back to NULL and the employee is paid twice (direct cash + payslip).
 7. **Finance settles once per claim.** A `employee_expense_claim_ledger` row with
    `UNIQUE (company_id, claim_id)`: any second settlement for a claim — re-delivery or
    supersession re-emission — is a logged no-op. This single invariant collapses every

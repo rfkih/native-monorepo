@@ -346,10 +346,12 @@ public class ExpenseClaimWriter {
    *
    * <p>The {@code reimbursement_run_id IS NULL} guard lives in {@link ExpenseClaim#payDirect}
    * itself, not here. A concurrent {@code ExpenseClaimPayrollLinker} race (E5) loses cleanly
-   * against the entity's optimistic {@code @Version} column (rule 4, {@code Auditable}): whichever
-   * transaction commits first wins, and the other's {@code save} fails with an optimistic-locking
-   * exception — mapped to {@code 409} by {@code EmployeeApiAdvice}'s concurrent-conflict handler,
-   * never a silent double settlement. The caller may safely retry to observe the now-settled state.
+   * against the entity's optimistic {@code @Version} column ONLY IF the linker's UPDATE increments
+   * {@code version} in the same statement (ADR 0030 §6, BINDING on E5 — without the bump, a stale
+   * pay-direct flush passes its {@code WHERE version =} check and clobbers the link: a double
+   * payment). Same-key racers are caught earlier by the idempotency unique index; different-key
+   * racers by the version check — the loser maps to {@code 409} via {@code EmployeeApiAdvice},
+   * never a silent double settlement. The caller may safely retry to observe the settled state.
    *
    * @throws ClaimNotFoundException if the claim is unknown in this tenant (→ 404)
    * @throws id.co.nativeapp.employee.expense.domain.ClaimStateException if not APPROVED, or already
