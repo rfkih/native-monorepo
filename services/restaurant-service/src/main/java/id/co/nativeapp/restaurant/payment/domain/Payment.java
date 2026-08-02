@@ -83,6 +83,15 @@ public class Payment extends Auditable {
   @Column(name = "refunded_minor", nullable = false)
   private long refundedMinor;
 
+  /**
+   * When the most recent refund was applied (V21, ADR 0036) — the v1 attribution key for the
+   * register close's cash-refunds window (a refund is counted in whichever session window contains
+   * this instant). Null until the first refund. Approximation documented in ADR 0036: multiple
+   * partial refunds keep only the LAST timestamp.
+   */
+  @Column(name = "last_refund_at")
+  private Instant lastRefundAt;
+
   @Column(name = "provider_ref", length = 128)
   private String providerRef;
 
@@ -243,6 +252,7 @@ public class Payment extends Auditable {
       throw new IllegalArgumentException("refund exceeds refundable remaining");
     }
     this.refundedMinor = newTotal.amountMinor();
+    this.lastRefundAt = Instant.now(); // ADR 0036: the register-close cash-refund window key
     this.status =
         newTotal.amountMinor() == captured.amountMinor()
             ? Status.REFUNDED

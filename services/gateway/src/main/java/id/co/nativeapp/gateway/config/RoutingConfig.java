@@ -397,6 +397,24 @@ public class RoutingConfig {
         .build();
   }
 
+  /**
+   * Register sessions — closing kasir (ADR 0036): the cashier opens/closes the till, so the route
+   * carries POS_ROLES (owner, manager, cashier), like every till surface.
+   */
+  @Bean
+  RouterFunction<ServerResponse> registerSessionsRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("restaurant-service-register-sessions")
+        .route(path("/api/v1/register-sessions/**"), http())
+        .before(uri(routes.restaurantService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(POS_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
   @Bean
   RouterFunction<ServerResponse> ordersRoute(
       GatewayRouteProperties routes,

@@ -53,6 +53,23 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
   }
 
   @Test
+  void aCashierCanReachTheRegisterSessionsRoute() throws Exception {
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/register-sessions/current?businessId=x")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/register-sessions/current");
+  }
+
+  @Test
   void aCashierCanReachThePosPaymentsRoute() throws Exception {
     String token =
         obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
