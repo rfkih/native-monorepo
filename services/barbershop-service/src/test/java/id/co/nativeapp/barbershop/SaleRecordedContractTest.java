@@ -352,7 +352,6 @@ class SaleRecordedContractTest {
             breakdown);
     withChannel.put("channel", "GOFOOD");
     byte[] bytes = AvroSerde.serialize(withChannel);
-    assertThat(AvroSerde.deserialize(bytes, schema).get("channel").toString())
-        .isEqualTo("GOFOOD");
+    assertThat(AvroSerde.deserialize(bytes, schema).get("channel").toString()).isEqualTo("GOFOOD");
   }
 }

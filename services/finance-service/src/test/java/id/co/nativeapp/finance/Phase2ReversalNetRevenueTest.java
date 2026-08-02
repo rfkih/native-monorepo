@@ -218,7 +218,8 @@ class Phase2ReversalNetRevenueTest extends PostgresRlsTestBase {
             Money.ofMinor(GRAND_TOTAL_MINOR, "IDR"), // full refund = grand total
             GRAND_TOTAL_MINOR,
             OCCURRED,
-            "CASH", null));
+            "CASH",
+            null));
 
     assertThat(consolidatedRevenueMinor())
         .as("full refund must net consolidated_revenue to 0 (W1 fix)")
@@ -252,7 +253,8 @@ class Phase2ReversalNetRevenueTest extends PostgresRlsTestBase {
             Money.ofMinor(DISCOUNT_NONZERO_GRAND, "IDR"),
             DISCOUNT_NONZERO_GRAND,
             OCCURRED,
-            "CASH", null));
+            "CASH",
+            null));
 
     assertThat(consolidatedRevenueMinor())
         .as("full refund of a discounted sale must be accepted and net revenue to 0 (CRITICAL fix)")
@@ -278,7 +280,8 @@ class Phase2ReversalNetRevenueTest extends PostgresRlsTestBase {
             Money.ofMinor(GRAND_TOTAL_MINOR, "IDR"),
             GRAND_TOTAL_MINOR,
             OCCURRED,
-            "CASH", null));
+            "CASH",
+            null));
 
     assertGlEntryIsBalanced(refundId);
     // Full refund per-leg: expect the same number of lines as the original SALE entry (not 2).
@@ -305,7 +308,8 @@ class Phase2ReversalNetRevenueTest extends PostgresRlsTestBase {
             Money.ofMinor(GRAND_TOTAL_MINOR, "IDR"),
             GRAND_TOTAL_MINOR,
             OCCURRED,
-            "CASH", null);
+            "CASH",
+            null);
 
     boolean first = reversalPostingService.handleRefund(refundEvent);
     boolean second = reversalPostingService.handleRefund(refundEvent);
@@ -333,7 +337,8 @@ class Phase2ReversalNetRevenueTest extends PostgresRlsTestBase {
             Money.ofMinor(10_000L, "IDR"), // partial: 10,000 < 34,650
             10_000L,
             OCCURRED,
-            "CASH", null);
+            "CASH",
+            null);
 
     assertThatThrownBy(() -> reversalPostingService.handleRefund(partialRefund))
         .isInstanceOf(PartialRefundNotSupportedException.class)
@@ -372,7 +377,8 @@ class Phase2ReversalNetRevenueTest extends PostgresRlsTestBase {
             UUID.randomUUID(),
             Money.ofMinor(legacyAmount, "IDR"),
             OCCURRED,
-            "CASH", null));
+            "CASH",
+            null));
 
     assertThat(consolidatedRevenueMinor())
         .as("legacy void must unwind by grand total (net == gross for legacy)")
@@ -459,7 +465,8 @@ class Phase2ReversalNetRevenueTest extends PostgresRlsTestBase {
         UUID.randomUUID(),
         Money.ofMinor(amountMinor, "IDR"),
         OCCURRED,
-        "CASH", null);
+        "CASH",
+        null);
   }
 
   // -----------------------------------------------------------------------

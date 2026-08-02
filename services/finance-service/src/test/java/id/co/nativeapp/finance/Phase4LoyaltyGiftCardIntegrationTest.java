@@ -157,7 +157,8 @@ class Phase4LoyaltyGiftCardIntegrationTest extends PostgresRlsTestBase {
             UUID.randomUUID(),
             Money.ofMinor(45_000L, "IDR"),
             OCCURRED,
-            "CASH", null));
+            "CASH",
+            null));
 
     // The per-leg contra entry mechanism replays EVERY stored line of the original SALE entry
     // (ReversalPostingWriter#buildAndSavePerLegReversalEntryFromLines) — it must therefore

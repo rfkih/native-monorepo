@@ -263,10 +263,9 @@ class SaleRecordedContractTest {
   }
 
   /**
-   * The PRE-Phase-B producer/consumer shape (18 fields, through {@code
-   * gift_card_redeemed_minor}) — the schema every service ran before ADR 0036 (Phase B) appended
-   * the trailing {@code channel} field. Mirrors {@link #PRE_PHASE4_SCHEMA_JSON}'s role for the
-   * Phase 4 fields.
+   * The PRE-Phase-B producer/consumer shape (18 fields, through {@code gift_card_redeemed_minor}) —
+   * the schema every service ran before ADR 0036 (Phase B) appended the trailing {@code channel}
+   * field. Mirrors {@link #PRE_PHASE4_SCHEMA_JSON}'s role for the Phase 4 fields.
    */
   private static final String PRE_CHANNEL_SCHEMA_JSON =
       """

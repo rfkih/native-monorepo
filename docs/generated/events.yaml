@@ -262,6 +262,22 @@ events:
       - { name: business_id, type: "string" }
       - { name: period, type: "string" }
       - { name: sealed_at, type: "timestamp-millis" }
+  - name: RegisterSessionClosed
+    namespace: id.co.nativeapp.events.restaurant
+    schema: libs/contracts/src/main/resources/avro/RegisterSessionClosed.avsc
+    fields:
+      - { name: session_id, type: "string" }
+      - { name: company_id, type: "string" }
+      - { name: business_id, type: "string" }
+      - { name: opened_at, type: "timestamp-millis" }
+      - { name: closed_at, type: "timestamp-millis" }
+      - { name: opening_float_minor, type: "long" }
+      - { name: cash_sales_minor, type: "long" }
+      - { name: cash_refunds_minor, type: "long" }
+      - { name: expected_cash_minor, type: "long" }
+      - { name: counted_cash_minor, type: "long" }
+      - { name: over_short_minor, type: "long" }
+      - { name: currency, type: "string" }
   - name: SaleRecorded
     namespace: id.co.nativeapp.events.restaurant
     schema: libs/contracts/src/main/resources/avro/SaleRecorded.avsc
@@ -284,6 +300,7 @@ events:
       - { name: loyalty_redeemed_minor, type: "null|long" }
       - { name: gift_card_id, type: "null|string" }
       - { name: gift_card_redeemed_minor, type: "null|long" }
+      - { name: channel, type: "null|string" }
   - name: SaleRefunded
     namespace: id.co.nativeapp.events.restaurant
     schema: libs/contracts/src/main/resources/avro/SaleRefunded.avsc
@@ -298,6 +315,7 @@ events:
       - { name: total_refunded_minor, type: "long" }
       - { name: occurred_at, type: "timestamp-millis" }
       - { name: tender_type, type: "null|string" }
+      - { name: channel, type: "null|string" }
   - name: SaleVoided
     namespace: id.co.nativeapp.events.restaurant
     schema: libs/contracts/src/main/resources/avro/SaleVoided.avsc
@@ -311,6 +329,7 @@ events:
       - { name: currency, type: "string" }
       - { name: occurred_at, type: "timestamp-millis" }
       - { name: tender_type, type: "null|string" }
+      - { name: channel, type: "null|string" }
   - name: TrialBalancePublished
     namespace: id.co.nativeapp.events.finance
     schema: libs/contracts/src/main/resources/avro/TrialBalancePublished.avsc

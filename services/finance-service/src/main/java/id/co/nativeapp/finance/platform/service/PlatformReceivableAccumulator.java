@@ -14,10 +14,9 @@ import org.springframework.stereotype.Component;
  * <p>Called INSIDE the caller's {@code @Transactional} unit of work (RevenuePostingWriter accrues
  * on an ONLINE sale, ReversalPostingWriter decrements on void/refund), so the accumulate commits or
  * rolls back atomically with the GL posting and the {@code ProcessedEventStore} claim. The upsert
- * is a single atomic {@code INSERT … ON CONFLICT … DO UPDATE} (the consolidated_revenue idiom) —
- * no read-modify-write window under listener concurrency. RLS applies: the tenant GUC is bound by
- * the aspect on the calling transaction and the policy's {@code WITH CHECK} binds {@code
- * company_id}.
+ * is a single atomic {@code INSERT … ON CONFLICT … DO UPDATE} (the consolidated_revenue idiom) — no
+ * read-modify-write window under listener concurrency. RLS applies: the tenant GUC is bound by the
+ * aspect on the calling transaction and the policy's {@code WITH CHECK} binds {@code company_id}.
  *
  * <p><strong>Negative balances are TOLERATED by design</strong> (no CHECK constraint, V44): a
  * refund clawback landing after the channel was settled in full legitimately drives the channel

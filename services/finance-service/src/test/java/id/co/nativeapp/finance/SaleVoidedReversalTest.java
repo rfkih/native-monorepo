@@ -65,7 +65,8 @@ class SaleVoidedReversalTest extends PostgresRlsTestBase {
             UUID.randomUUID(), // paymentId
             Money.ofMinor(AMOUNT_IDR, "IDR"),
             OCCURRED,
-            "CASH", null));
+            "CASH",
+            null));
 
     // consolidated_revenue must have been decremented back to 0.
     long revenueAfter = consolidatedRevenueMinorAsAdmin(TENANT);
@@ -98,7 +99,8 @@ class SaleVoidedReversalTest extends PostgresRlsTestBase {
             UUID.randomUUID(),
             Money.ofMinor(20_000L, "IDR"),
             OCCURRED,
-            "QRIS", null));
+            "QRIS",
+            null));
 
     // The SALE_VOID debit line must route to REVENUE (4000), not CLEARING.
     String debitAccount = debitAccountForVoidEntry(voidId);
@@ -124,7 +126,8 @@ class SaleVoidedReversalTest extends PostgresRlsTestBase {
             UUID.randomUUID(),
             Money.ofMinor(15_000L, "IDR"),
             OCCURRED,
-            null, null);
+            null,
+            null);
 
     boolean firstPosting = reversalPostingService.handleVoid(voidEvent);
     boolean secondPosting = reversalPostingService.handleVoid(voidEvent); // re-delivery

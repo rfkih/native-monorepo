@@ -42,10 +42,10 @@ import java.util.UUID;
  * <p><strong>{@code channel} field</strong> (Phase B, ADR 0036) is nullable, appended LAST after
  * the Phase 4 fields (positional decode safety). It carries the sales-channel code for an
  * ONLINE-tender sale; finance routes the ONLINE clearing debit to PLATFORM_RECEIVABLE and
- * accumulates a per-channel receivable sub-ledger under this code (a null channel on an ONLINE
- * sale accumulates under UNKNOWN rather than dropping money) — that routing lands with the tender
- * value itself in a LATER phase. In THIS wave every producer emits an explicit null, so finance
- * never actually observes a non-null channel yet; this record component and the decode path are
+ * accumulates a per-channel receivable sub-ledger under this code (a null channel on an ONLINE sale
+ * accumulates under UNKNOWN rather than dropping money) — that routing lands with the tender value
+ * itself in a LATER phase. In THIS wave every producer emits an explicit null, so finance never
+ * actually observes a non-null channel yet; this record component and the decode path are
  * schema-first, exactly as the Phase 4 fields were.
  *
  * @param eventId the source event UUID (idempotency key — the outbox row UUID)

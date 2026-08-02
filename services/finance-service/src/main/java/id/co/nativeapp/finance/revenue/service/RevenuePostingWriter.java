@@ -305,7 +305,10 @@ public class RevenuePostingWriter {
     // with the GL posting above. Null channel → UNKNOWN bucket + warn, never dropped.
     if ("ONLINE".equals(event.tenderType())) {
       platformReceivable.accumulate(
-          companyId, event.channel(), amount.currency().getCurrencyCode(), amount.amountMinor(),
+          companyId,
+          event.channel(),
+          amount.currency().getCurrencyCode(),
+          amount.amountMinor(),
           actor);
     }
   }

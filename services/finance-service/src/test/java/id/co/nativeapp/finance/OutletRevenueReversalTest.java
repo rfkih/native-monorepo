@@ -69,7 +69,8 @@ class OutletRevenueReversalTest extends PostgresRlsTestBase {
             UUID.randomUUID(), // paymentId
             Money.ofMinor(amount, "IDR"),
             OCCURRED,
-            "CASH", null));
+            "CASH",
+            null));
 
     // Outlet accumulator must be wound back to zero.
     long outletAfter = outletRevenueMinorAsAdmin(TENANT, OUTLET, PERIOD);
@@ -104,7 +105,8 @@ class OutletRevenueReversalTest extends PostgresRlsTestBase {
             Money.ofMinor(amount, "IDR"), // full refund
             amount, // totalRefundedMinor
             OCCURRED,
-            "QRIS", null));
+            "QRIS",
+            null));
 
     // Outlet accumulator must be wound back to zero.
     long outletAfter = outletRevenueMinorAsAdmin(TENANT, OUTLET, PERIOD);
@@ -142,7 +144,8 @@ class OutletRevenueReversalTest extends PostgresRlsTestBase {
             UUID.randomUUID(),
             Money.ofMinor(amountA, "IDR"),
             OCCURRED,
-            null, null));
+            null,
+            null));
 
     // Outlet A is zero; outlet B is untouched.
     assertThat(outletRevenueMinorAsAdmin(TENANT, outletA, PERIOD))
