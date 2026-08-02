@@ -114,18 +114,20 @@ public class LaborCostPostingWriter {
     String companyId = tenant.companyId();
     String actor = tenant.actor();
 
-    // 1) Serialize per (company, period) with a DETERMINISTIC transaction-scoped advisory lock
-    // taken
+    // 1) Serialize per (company, period, run_type) with a DETERMINISTIC transaction-scoped
+    // advisory lock taken
     //    BEFORE any run-row read/insert. Unlike a SELECT ... FOR UPDATE on the highest existing run
     //    row (which locks NOTHING when no row exists yet), pg_advisory_xact_lock keyed on the
-    //    (company, period) pair is held even for the period's very first activity — so two
-    // genuinely
+    //    (company, period, run_type) triple (ADR 0032, Track P phase P4 — was (company, period)
+    //    pre-P4) is held even for the period's very first activity — so two genuinely
     //    NEW runs (run_seq=1 and run_seq=2) processed by parallel READ_COMMITTED consumers cannot
     //    both post a PRIMARY without seeing each other (the double-count CRITICAL, #23). The later
     //    run serializes behind the earlier run's row creation and correctly sees-and-reverses (or
-    //    self-supersedes) it. The lock auto-releases at commit/rollback. Then find-or-create THIS
-    //    run's row and accumulate the bucket onto its running sum (reconciliation accumulator).
-    runLedgerRepository.lockPeriod(companyId + ":" + event.period());
+    //    self-supersedes) it. This SAME lock key is also taken by PayrollReconciliationWriter and
+    //    PayrollLiabilityWriter, so all three writers that may touch this run's row serialize with
+    //    each other too. The lock auto-releases at commit/rollback. Then find-or-create THIS run's
+    //    row and accumulate the bucket onto its running sum (reconciliation accumulator).
+    runLedgerRepository.lockPeriod(companyId + ":" + event.period() + ":" + event.runType());
     PayrollRunLedger runRow = upsertRunRow(event, companyId);
 
     // 1a) Currency-consistency guard (#23, no-FX scope): a bucket whose currency differs from the
@@ -159,9 +161,10 @@ public class LaborCostPostingWriter {
     runRow.accumulate(event.amount(), event.usesIllustrativeRules());
     runLedgerRepository.save(runRow);
 
-    // 2) Supersession: if this run supersedes lower-seq ACTIVE runs, reverse each append-only.
+    // 2) Supersession: if this run supersedes lower-seq ACTIVE runs of the SAME run_type, reverse
+    //    each append-only.
     for (PayrollRunLedger prior :
-        runLedgerRepository.findActivePriorRuns(event.period(), event.runSeq())) {
+        runLedgerRepository.findActivePriorRuns(event.period(), event.runType(), event.runSeq())) {
       reversePriorRun(prior, companyId, actor);
       prior.transitionTo(PayrollRunState.SUPERSEDED);
       runLedgerRepository.save(prior);
@@ -178,7 +181,7 @@ public class LaborCostPostingWriter {
     //     compensating REVERSAL so it contributes ZERO net, and flip its run row to SUPERSEDED. The
     //     synthetic reversal id is deterministic, so re-delivery is a clean no-op (idempotent).
     boolean alreadySuperseded =
-        runLedgerRepository.existsActiveHigherRun(event.period(), event.runSeq());
+        runLedgerRepository.existsActiveHigherRun(event.period(), event.runType(), event.runSeq());
 
     // 3) Resolve the labor gl_account. The UNALLOCATED bucket goes to the explicit 6900 labor-
     //    clearing account (visible suspense); every other bucket re-resolves the hint via
@@ -369,6 +372,7 @@ public class LaborCostPostingWriter {
                       event.payrollRunId(),
                       event.period(),
                       event.runSeq(),
+                      event.runType(),
                       event.amount().currency().getCurrencyCode(),
                       event.usesIllustrativeRules());
               row.setCompanyId(companyId);

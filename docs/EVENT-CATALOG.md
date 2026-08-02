@@ -63,8 +63,9 @@ has landed yet — the status names the phases that will land them.
 | **`GiftCardStateChanged`** | **loyalty-service** | **the verticals** | **gift_card_id, company_id, state, balance_minor (absolute), currency, balance_seq (monotonic), occurred_at** | **LIVE (ADR 0027, Phase 4): loyalty-service producer + vertical consumers built** |
 | **`LoyaltyRedemptionFlagged`** | **loyalty-service** | **notification-service** | **flag_id, company_id, business_id, sale_id, member_id, gift_card_id, shortfall_minor, shortfall_points, occurred_at** | **LIVE (ADR 0027, Phase 4): loyalty-service producer + vertical consumers built** |
 | **`ExpenseRecorded`** | **verticals** | **finance** | **expense_id, company_id, business_id, amount_minor, currency, gl_hint, occurred_at** | **LIVE (finance consumer #21)** |
-| **`PayrollPosted`** | **employee-service** | **finance** | **payroll_run_id, run_seq, company_id, period, base_currency, totals, rule_versions, uses_illustrative_rules, posted_at** | **LIVE (#23); finance consumer #23** |
-| **`LaborCostAllocated`** | **employee-service** | **finance** | **payroll_run_id, run_seq, company_id, period, outlet_id, gl_account, amount_minor, currency, uses_illustrative_rules, unallocated** | **LIVE (#23); finance consumer #23** |
+| **`PayrollPosted`** | **employee-service** | **finance** | **payroll_run_id, run_seq, run_type, company_id, period, base_currency, totals, rule_versions, uses_illustrative_rules, posted_at** | **LIVE (#23); finance consumer #23; run_type added ADR 0032 P4** |
+| **`LaborCostAllocated`** | **employee-service** | **finance** | **payroll_run_id, run_seq, run_type, company_id, period, outlet_id, gl_account, amount_minor, currency, uses_illustrative_rules, unallocated** | **LIVE (#23); finance consumer #23; run_type added ADR 0032 P4** |
+| **`PayrollLiabilitiesPosted`** | **employee-service** | **finance** | **payroll_run_id, company_id, period, run_seq, run_type, base_currency, employer_cost_total_minor, liabilities[], uses_illustrative_rules, posted_at** | **LIVE (ADR 0032, Track P phase P4); finance consumer P4** |
 | **`ExpenseClaimApproved`** | **employee-service** | **finance** | **claim_id, company_id, org_unit_id, employee_id, amount_minor, currency, gl_hint, expense_date, approved_at** | **SCHEMA REGISTERED (ADR 0030, E0); producer E1, finance consumer E2** |
 | **`ExpenseClaimVoided`** | **employee-service** | **finance** | **claim_id, company_id, org_unit_id, employee_id, amount_minor, currency, gl_hint, approved_at, voided_at** | **SCHEMA REGISTERED (ADR 0030, E0); producer E7, finance consumer E2** |
 | **`ExpenseReimbursementSettled`** | **employee-service** | **finance** | **claim_id, company_id, org_unit_id, employee_id, amount_minor, currency, settlement_kind, payroll_run_id?, run_seq?, settled_at** | **SCHEMA REGISTERED (ADR 0030, E0); producers E4/E5, finance consumer E2** |
@@ -1075,7 +1076,7 @@ double post, so a retried post cannot double-emit.
 
 - **Producer aggregate:** `payroll_run` (the run id is the Kafka partition key).
 - **Outbox `event_type`:** `PayrollPosted`
-- **Schema:** `services/employee-service/src/main/resources/avro/PayrollPosted.avsc`
+- **Schema:** `libs/contracts/src/main/resources/avro/PayrollPosted.avsc` (single source, ADR 0003)
 - **Full name:** `id.co.nativeapp.events.employee.PayrollPosted`
 
 **NO PII (rule 6).** Company-level **totals only** — no per-person amounts, no salary, no NIK/bank.
@@ -1106,6 +1107,7 @@ handles supersession, not double-counting two runs for one period).
       {"name": "rule_version", "type": "string"}
     ]}}},
     {"name": "run_seq", "type": "int", "default": 1},
+    {"name": "run_type", "type": "string", "default": "REGULAR"},
     {"name": "uses_illustrative_rules", "type": "boolean"},
     {"name": "posted_at", "type": {"type": "long", "logicalType": "timestamp-millis"}}
   ]
@@ -1114,26 +1116,33 @@ handles supersession, not double-counting two runs for one period).
 
 **Compatibility.** Backward-compatible evolution only: `uses_illustrative_rules` is present from v1;
 `run_seq` is added **backward-compatibly** (`default: 1`, so an old-producer record with no `run_seq`
-reads as the first run); future fields are added as a union-with-default. The producer **populates
-`run_seq` from `payroll_run.run_seq`** on the wire (a corrected re-run carries `run_seq=2`), so finance
-reads the real sequence — not the default 1 — and supersession actually fires. The contract test
-(`PayrollPostedContractTest`) enforces the triad (parse + `AvroSerde` round-trip + add-optional
-compatible / new-required broken) and that a `run_seq=2` record round-trips as `2`.
+reads as the first run); `run_type` is added **backward-compatibly** (`default: "REGULAR"`, ADR 0032,
+Track P phase P4 — an old-producer record with no `run_type` reads as `REGULAR`); future fields are
+added as a union-with-default. The producer **populates `run_seq` from `payroll_run.run_seq`** on the
+wire (a corrected re-run carries `run_seq=2`) and **stamps `run_type` as the constant `REGULAR`**
+until Track P phase P8 (THR, ADR 0034) gives `payroll_run` a real `run_type` column — so finance reads
+the real sequence, not the default 1, and supersession actually fires, now scoped to `(company_id,
+period, run_type, run_seq)`. The contract test (`PayrollPostedContractTest`, both services) enforces
+the triad (parse + `AvroSerde` round-trip + add-optional compatible / new-required broken), that a
+`run_seq=2` record round-trips as `2`, and that a pre-ADR-0032 record with no `run_type` reads as
+`REGULAR`.
 
-**Finance CONSUMER view (#23).** finance-service consumes `PayrollPosted` as the run-level
-**control/announcement** — it **produces NO ledger posting**. It is used only for: (a) **reconciliation**
-— the labor control total (`employer_contribution_total_minor + gross_total_minor`, the employer-borne
-base, in minor units, same currency) is compared against the running sum of the run's
-`LaborCostAllocated` buckets on the `payroll_run_ledger` control row keyed on `(company_id, period,
-run_seq)`: **match → `RECONCILED`**, **mismatch → `RECONCILE_FAILED`** (loud; postings stay on the books,
-the period is held back from being presented as final — never silently accept a partial run); (b)
-recording the run-level **illustrative flag**; (c) the **supersession** trigger / run-state machine. The
+**Finance CONSUMER view (#23; ADR 0032 P4 for `run_type`).** finance-service consumes `PayrollPosted`
+as the run-level **control/announcement** — it **produces NO ledger posting**. It is used only for: (a)
+**reconciliation** — the labor control total (`employer_contribution_total_minor + gross_total_minor`,
+the employer-borne base, in minor units, same currency) is compared against the running sum of the
+run's `LaborCostAllocated` buckets on the `payroll_run_ledger` control row keyed on `(company_id,
+period, run_type, run_seq)`: **match → `RECONCILED`**, **mismatch → `RECONCILE_FAILED`** (loud;
+postings stay on the books, the period is held back from being presented as final — never silently
+accept a partial run); (b) recording the run-level **illustrative flag**; (c) the **supersession**
+trigger / run-state machine — the per-`(company, period, run_type)` advisory lock and the
+supersession-scan queries are shared with `LaborCostAllocated`'s consumer AND `PayrollLiabilitiesPosted`'s
+(below), so all three payroll consumers serialize against each other on the same control row. The
 consumer is **idempotent** (dedupe by the `id`-header event UUID via `ProcessedEventStore`, inside the
 reconciliation `@Transactional`), binds the tenant from the event `company_id` (RLS — rule 5), and
 fails closed to `PayrollPosted.DLT` on a missing/non-UUID `id` header or an undecodable payload
-(`PayrollPostedDecodeException`, non-retryable). finance's consumer copy of the `.avsc` lives at
-`services/finance-service/src/main/resources/avro/PayrollPosted.avsc`; `PayrollPostedContractTest`
-asserts back-compat.
+(`PayrollPostedDecodeException`, non-retryable). `PayrollPostedContractTest` (both services) asserts
+back-compat.
 
 ### `LaborCostAllocated`
 
@@ -1143,7 +1152,7 @@ Emitted by **employee-service** (#23) per **(outlet_org_unit_id, gl_account) buc
 
 - **Producer aggregate:** `payroll_run` (the run id is the Kafka partition key).
 - **Outbox `event_type`:** `LaborCostAllocated`
-- **Schema:** `services/employee-service/src/main/resources/avro/LaborCostAllocated.avsc`
+- **Schema:** `libs/contracts/src/main/resources/avro/LaborCostAllocated.avsc` (single source, ADR 0003)
 - **Full name:** `id.co.nativeapp.events.employee.LaborCostAllocated`
 
 **NO PII (rule 6).** One event **per outlet/GL bucket, AGGREGATED across employees** so no individual
@@ -1177,6 +1186,7 @@ field was added **backward-compatibly** with a `default: false`, so an old reade
     {"name": "amount_minor", "type": "long"},
     {"name": "currency", "type": "string"},
     {"name": "run_seq", "type": "int", "default": 1},
+    {"name": "run_type", "type": "string", "default": "REGULAR"},
     {"name": "uses_illustrative_rules", "type": "boolean"},
     {"name": "unallocated", "type": "boolean", "default": false},
     {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}}
@@ -1184,11 +1194,14 @@ field was added **backward-compatibly** with a `default: false`, so an old reade
 }
 ```
 
-**Compatibility.** Backward-compatible evolution only (the `unallocated` and `run_seq` fields carry
-defaults — `run_seq` `default: 1`). The producer **populates `run_seq` from `payroll_run.run_seq`** on
-the wire (a corrected re-run carries `run_seq=2`), so finance reads the real sequence — not the default
-1 — and supersession actually fires. The contract test (`LaborCostAllocatedContractTest`) enforces the
-triad and that a `run_seq=2` record round-trips as `2`.
+**Compatibility.** Backward-compatible evolution only (the `unallocated`, `run_seq`, and `run_type`
+fields all carry defaults — `run_seq` `default: 1`, `run_type` `default: "REGULAR"`, ADR 0032 Track P
+phase P4). The producer **populates `run_seq` from `payroll_run.run_seq`** on the wire (a corrected
+re-run carries `run_seq=2`) and **stamps `run_type` as the constant `REGULAR`** until Track P phase P8
+(THR, ADR 0034), so finance reads the real sequence — not the default 1 — and supersession actually
+fires, now scoped to `(company_id, period, run_type, run_seq)`. The contract test
+(`LaborCostAllocatedContractTest`, both services) enforces the triad, that a `run_seq=2` record
+round-trips as `2`, and that a pre-ADR-0032 record with no `run_type` reads as `REGULAR`.
 
 **Finance CONSUMER view (#23).** finance-service consumes each `LaborCostAllocated` bucket as exactly
 one **EXPENSE `ledger_posting`** (the labor cost is genuinely an expense). The posting's
@@ -1202,20 +1215,117 @@ sentinel, `gl_account = 9999-UNALLOCATED-LABOR`, `unallocated = true`) is routed
 visible **`6900` Unallocated-Labor-Clearing** account (distinct from the general suspense) with the
 `unallocated` flag stamped on the posting. Each PRIMARY posting moves the consolidated P&L expense leg
 up (`PnlReadModelWriter.addExpense`), carrying `uses_illustrative_rules` **sticky-OR** onto the
-`consolidated_pnl` row. **Supersession** (a higher `run_seq` for the same `(company_id, period)`) is
-**append-only**: finance posts one **REVERSAL** contra per prior PRIMARY posting (amount negated, a
-deterministic synthetic `source_event_id`, `posting_role = REVERSAL`) and flips the prior
-`payroll_run_ledger` row to `SUPERSEDED` — the ledger never mutates and the supersession is itself
-idempotent under re-delivery. The consumer is **idempotent** (dedupe by the `id`-header event UUID;
+`consolidated_pnl` row. **Supersession** (a higher `run_seq` of the same `run_type` for the same
+`(company_id, period)` — ADR 0032 Track P phase P4 added `run_type` to the scope) is **append-only**:
+finance posts one **REVERSAL** contra per prior PRIMARY posting (amount negated, a deterministic
+synthetic `source_event_id`, `posting_role = REVERSAL`) and flips the prior `payroll_run_ledger` row's
+`state` to `SUPERSEDED` — the ledger never mutates and the supersession is itself idempotent under
+re-delivery. The consumer is **idempotent** (dedupe by the `id`-header event UUID;
 `ledger_posting.source_event_id` UNIQUE backstop), binds the tenant from the event `company_id` (RLS),
 and fails closed to `LaborCostAllocated.DLT` on a bad `id` header or an undecodable payload
-(`LaborCostAllocatedDecodeException`, non-retryable). finance's consumer copy of the `.avsc` lives at
-`services/finance-service/src/main/resources/avro/LaborCostAllocated.avsc`;
-`LaborCostAllocatedContractTest` asserts back-compat. **`employee_id` is intentionally omitted** —
-finance needs only `(outlet, gl_account)` granularity; a per-employee amount would leak individual
-labor cost ≈ salary (rule 6). This is the recorded **finance sign-off** (see ARCHITECTURE.md §5), and
-the **k=1** single-occupant-outlet residual (a one-employee outlet's bucket equals that person's cost)
-is an accepted, RLS-/role-gated residual, not mitigated by suppression.
+(`LaborCostAllocatedDecodeException`, non-retryable). `LaborCostAllocatedContractTest` (both services)
+asserts back-compat. **`employee_id` is intentionally omitted** — finance needs only `(outlet,
+gl_account)` granularity; a per-employee amount would leak individual labor cost ≈ salary (rule 6).
+This is the recorded **finance sign-off** (see ARCHITECTURE.md §5), and the **k=1**
+single-occupant-outlet residual (a one-employee outlet's bucket equals that person's cost) is an
+accepted, RLS-/role-gated residual, not mitigated by suppression.
+
+### `PayrollLiabilitiesPosted`
+
+Emitted by **employee-service** (ADR 0032, Track P phase P4) when a `payroll_run` transitions
+`CALCULATED -> POSTED` — the **THIRD** event of the `post()` transaction, after `PayrollPosted` and
+every `LaborCostAllocated` bucket, in the SAME outbox transaction (rule 3). Carries the run's total
+employer-borne labor cost split into WHO it is owed to — net wages to employees, PPh21 to the tax
+office, BPJS to the two BPJS bodies, any other deduction — so finance can finally book the LIABILITY
+side of the money `LaborCostAllocated` already expensed, closing the #1 payroll-parity honesty gap
+(`6900 LABOR_CLEARING` accumulated forever with nothing ever clearing it).
+
+- **Producer aggregate:** `payroll_run` (the run id is the Kafka partition key).
+- **Consumer:** `finance-service` (`labor` package: `PayrollLiabilityWriter`).
+- **Outbox `event_type`:** `PayrollLiabilitiesPosted`
+- **Schema:** `libs/contracts/src/main/resources/avro/PayrollLiabilitiesPosted.avsc` (single source, ADR 0003)
+- **Full name:** `id.co.nativeapp.events.employee.PayrollLiabilitiesPosted`
+
+**NO PII (rule 6).** Company-level bucket **TOTALS only** — no per-person amounts, no salary, no
+NIK/bank, exactly like `PayrollPosted`/`LaborCostAllocated`.
+
+**The producer asserts the accounting identity before writing anything**:
+`employer_cost_total_minor == Σ(liability bucket amounts)` — `liabilities` already INCLUDES the
+`NET_WAGES_PAYABLE` bucket (== `net_total_minor`), so it is never added a second time on top of the
+buckets sum (an implementation bug that double-counted it this way was caught by the P4 test suite
+before it shipped). Never emits an unbalanced set (HR-3; see ADR 0032 for the full derivation, incl.
+why the identity holds structurally). **A bucket amount MAY be negative** — the December Art-17
+true-up refund month (ADR 0031) can drive `PPH21_PAYABLE` negative; finance posts a negative bucket
+as a Dr leg for its absolute value instead of a negative Cr leg (`JournalLine`'s single-sided,
+strictly-positive invariant).
+
+**Avro schema**
+
+```json
+{
+  "type": "record",
+  "name": "PayrollLiabilitiesPosted",
+  "namespace": "id.co.nativeapp.events.employee",
+  "fields": [
+    {"name": "payroll_run_id", "type": "string"},
+    {"name": "company_id", "type": "string"},
+    {"name": "period", "type": "string"},
+    {"name": "run_seq", "type": "int", "default": 1},
+    {"name": "run_type", "type": "string", "default": "REGULAR"},
+    {"name": "base_currency", "type": "string"},
+    {"name": "employer_cost_total_minor", "type": "long"},
+    {"name": "liabilities", "type": {"type": "array", "items": {"type": "record", "name": "PayrollLiabilityBucket", "fields": [
+      {"name": "liability_role", "type": "string"},
+      {"name": "amount_minor", "type": "long"}
+    ]}}, "default": []},
+    {"name": "uses_illustrative_rules", "type": "boolean"},
+    {"name": "posted_at", "type": {"type": "long", "logicalType": "timestamp-millis"}}
+  ]
+}
+```
+
+**`liability_role`** is one of `NET_WAGES_PAYABLE`, `PPH21_PAYABLE`, `BPJS_KES_PAYABLE` (Kesehatan
+EE-withheld + ER-contribution together — both owed to the same BPJS body), `BPJS_TK_PAYABLE` (JHT +
+JP, EE+ER, plus JKK/JKM ER-only — all owed to the same BPJS body), `OTHER_DEDUCTIONS_PAYABLE` (any
+deduction line not named above, EMPLOYEE- or EMPLOYER-borne alike — e.g. a future custom component
+such as a loan repayment). A zero-amount bucket is omitted by the producer.
+
+**Compatibility.** A brand-new event (no prior version to be backward-compatible WITH); `run_seq`
+and `run_type` both carry defaults from day one (mirroring the ADR 0032 addition to `PayrollPosted`/
+`LaborCostAllocated` in the SAME phase) so a FUTURE additive field follows the same union-with-default
+idiom. The contract test (`PayrollLiabilitiesPostedContractTest`, both services) enforces the triad
+(parse + shape, `AvroSerde` round-trip incl. a negative bucket amount, add-optional compatible /
+new-required broken).
+
+**Finance CONSUMER view (ADR 0032, Track P phase P4).** finance-service books ONE ad-hoc balanced
+`JournalEntry` per run — **not** a `posting_template` (the leg count is variable, 1–5 non-zero
+buckets, and a bucket may sit on either side depending on sign): `Dr LABOR_CLEARING (6900)` for
+`employer_cost_total_minor` / `Cr` one leg per positive bucket (a negative bucket instead `Dr`s its
+resolved account for the absolute value). Each `liability_role` string resolves to an `AccountRole`
+by name, then to a `chart_of_account` code via `role_account_map`; an unrecognised role string, or a
+role with no effective mapping, **fails safe** to `SUSPENSE` with a logged WARN (money never dropped
+— HR-3). The five liability accounts (`2610` PPh21 / `2620` BPJS-Kes / `2630` BPJS-TK / `2640` Net
+Wages / `2690` Other) are ILLUSTRATIVE, SME-gated (V40) exactly like every other account seeded since
+V13.
+
+**Supersession** is tracked on its OWN `payroll_run_ledger.liability_state` column — INDEPENDENTLY of
+the `state` column `LaborCostAllocated`'s consumer owns (ADR 0032 explains why sharing one column
+would create a cross-writer coordination gap). A higher `run_seq` of the same `(company_id, period,
+run_type)` reverses each prior run's ACTIVE liability entry (append-only, per-leg debit↔credit swap,
+deterministic synthetic `source_event_id`) and flips the prior row's `liability_state` to
+`SUPERSEDED`; an out-of-order lower-seq event that arrives after a higher-seq run's liability already
+posted posts its own PRIMARY then immediately self-contras (mirrors `LaborCostAllocated`'s consumer
+steps 2a/6 exactly). The SAME per-`(company, period, run_type)` advisory lock `PayrollPosted`'s and
+`LaborCostAllocated`'s consumers take serializes all three writers against each other on the shared
+control row. The consumer is **idempotent** (dedupe by the `id`-header event UUID via
+`ProcessedEventStore`; `journal_entry.source_event_id` UNIQUE backstop), binds the tenant from the
+event `company_id` (RLS), and fails closed to `PayrollLiabilitiesPosted.DLT` on a bad `id` header or
+an undecodable payload (`PayrollLiabilitiesPostedDecodeException`, non-retryable).
+`PayrollLiabilitiesPostedContractTest` (both services) asserts the triad.
+
+**No settlement yet.** This event only RECOGNISES the liability; clearing it (a bank-file payment for
+net wages, a tax-office remittance, a BPJS contribution payment) is Track P phase P5
+(`payroll_settlement`).
 
 ### `PeriodSealed`
 

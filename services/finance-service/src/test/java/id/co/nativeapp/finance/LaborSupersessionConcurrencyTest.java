@@ -184,6 +184,7 @@ class LaborSupersessionConcurrencyTest extends PostgresRlsTestBase {
         TENANT_A,
         runId,
         runSeq,
+        "REGULAR",
         period,
         OUTLET,
         glAccount,

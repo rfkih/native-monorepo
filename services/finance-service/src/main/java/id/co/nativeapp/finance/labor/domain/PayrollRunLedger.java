@@ -15,16 +15,25 @@ import org.hibernate.type.SqlTypes;
 
 /**
  * The {@code payroll_run_ledger} control/state row (#23) — one per {@code (company_id, period,
- * run_seq)}. Drives RECONCILIATION (the running {@code allocated_sum_minor} of the run's buckets vs
- * the {@code control_total_minor} carried on {@code PayrollPosted}) and SUPERSESSION (a higher
- * {@code run_seq} supersedes lower ones; the prior row flips to {@link
+ * run_type, run_seq)} (ADR 0032, Track P phase P4 re-keyed the row onto {@code run_type} too; the
+ * DEFAULT {@code 'REGULAR'} keeps every pre-P4 row and behaviour byte-identical). Drives
+ * RECONCILIATION (the running {@code allocated_sum_minor} of the run's buckets vs the {@code
+ * control_total_minor} carried on {@code PayrollPosted}) and SUPERSESSION (a higher {@code run_seq}
+ * of the SAME {@code run_type} supersedes lower ones; the prior row flips to {@link
  * PayrollRunState#SUPERSEDED}).
+ *
+ * <p><strong>Two independent lifecycles on ONE row (ADR 0032).</strong> {@link #state} stays the
+ * pre-existing LaborCostPostingWriter/PayrollReconciliationWriter reconciliation lifecycle; {@link
+ * #liabilityState} is the LIABILITY dimension's OWN lifecycle, tracked separately (see {@link
+ * LiabilityState}) so a cross-writer coordination gap cannot hide a prior run's un-reversed
+ * liability entry behind an already-{@code SUPERSEDED} {@link #state}.
  *
  * <p>Extends {@link Auditable} (rule 4) and is under FORCE RLS (rule 5) — it is per-tenant control
  * data, so a tenant only ever sees its own runs. Money stays minor units + currency, never a float
- * (rule 8). Unlike the append-only {@code ledger_posting}, this control row IS mutated in place
- * (accumulate the sum, set the control total, transition state) — the LEDGER never mutates; only
- * this control table does, which is what keeps supersession auditable and the ledger immutable.
+ * (rule 8). Unlike the append-only {@code ledger_posting}/{@code journal_entry}, this control row
+ * IS mutated in place (accumulate the sum, set the control total, transition state) — the LEDGER
+ * never mutates; only this control table does, which is what keeps supersession auditable and the
+ * ledger immutable.
  */
 @Entity
 @Table(name = "payroll_run_ledger")
@@ -43,9 +52,29 @@ public class PayrollRunLedger extends Auditable {
   @Column(name = "run_seq", nullable = false, updatable = false)
   private int runSeq;
 
+  /**
+   * The payroll run type ({@code REGULAR} today; {@code THR} lands at Track P phase P8, ADR 0034).
+   * Supersession is scoped to {@code (company_id, period, run_type, run_seq)} — ADR 0032, Track P
+   * phase P4 — so a future THR run never supersedes a REGULAR run for the same period.
+   */
+  @Column(name = "run_type", nullable = false, updatable = false, length = 16)
+  private String runType;
+
   @Enumerated(EnumType.STRING)
   @Column(name = "state", nullable = false, length = 24)
   private PayrollRunState state;
+
+  /**
+   * The journal_entry id of this run's LIABILITY recognition entry (ADR 0032, Track P phase P4), or
+   * {@code null} until {@code PayrollLiabilitiesPosted} lands. Tracked independently from the
+   * pre-existing {@code state}/reconciliation lifecycle above — see {@link LiabilityState}.
+   */
+  @Column(name = "liability_entry_id")
+  private UUID liabilityEntryId;
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = "liability_state", length = 32)
+  private LiabilityState liabilityState;
 
   @Column(name = "allocated_sum_minor", nullable = false)
   private long allocatedSumMinor;
@@ -72,6 +101,7 @@ public class PayrollRunLedger extends Auditable {
    * @param payrollRunId the owning payroll run
    * @param period the run's authoritative accounting period {@code YYYY-MM}
    * @param runSeq the run sequence (the supersession signal)
+   * @param runType the payroll run type ({@code REGULAR} today — ADR 0032, Track P phase P4)
    * @param currency the run's base currency (ISO-4217)
    * @param usesIllustrativeRules whether the run is illustrative-placeholder-derived
    */
@@ -79,12 +109,14 @@ public class PayrollRunLedger extends Auditable {
       UUID payrollRunId,
       String period,
       int runSeq,
+      String runType,
       String currency,
       boolean usesIllustrativeRules) {
     this.id = UUID.randomUUID();
     this.payrollRunId = Objects.requireNonNull(payrollRunId, "payrollRunId");
     this.period = Objects.requireNonNull(period, "period");
     this.runSeq = runSeq;
+    this.runType = Objects.requireNonNull(runType, "runType");
     this.currency = Objects.requireNonNull(currency, "currency");
     this.usesIllustrativeRules = usesIllustrativeRules;
     this.state = PayrollRunState.PENDING;
@@ -200,8 +232,43 @@ public class PayrollRunLedger extends Auditable {
     return runSeq;
   }
 
+  public String getRunType() {
+    return runType;
+  }
+
   public PayrollRunState getState() {
     return state;
+  }
+
+  public UUID getLiabilityEntryId() {
+    return liabilityEntryId;
+  }
+
+  public LiabilityState getLiabilityState() {
+    return liabilityState;
+  }
+
+  /**
+   * Records the run's freshly-posted LIABILITY recognition entry (ADR 0032, Track P phase P4) and
+   * marks the liability dimension {@link LiabilityState#POSTED}. Called once per run by {@code
+   * PayrollLiabilityWriter} on the first delivery of its {@code PayrollLiabilitiesPosted}.
+   */
+  public void markLiabilityPosted(UUID entryId) {
+    this.liabilityEntryId = Objects.requireNonNull(entryId, "entryId");
+    this.liabilityState = LiabilityState.POSTED;
+  }
+
+  /**
+   * Marks the run's liability dimension {@link LiabilityState#SUPERSEDED} — either because a higher
+   * {@code run_seq} of the same {@code run_type} reversed this run's liability entry, or because
+   * THIS run itself arrived after a higher-seq run already posted (the out-of-order
+   * self-supersession case, mirroring {@code LaborCostPostingWriter} step 2a/6). Idempotent:
+   * re-applying to an already-{@code SUPERSEDED} row is a harmless no-op (unlike {@link
+   * PayrollRunState}, the liability dimension has no self-heal path to guard against, so no
+   * terminal-state check is needed here).
+   */
+  public void markLiabilitySuperseded() {
+    this.liabilityState = LiabilityState.SUPERSEDED;
   }
 
   /** The running sum of this run's bucket amounts as {@link Money}. */

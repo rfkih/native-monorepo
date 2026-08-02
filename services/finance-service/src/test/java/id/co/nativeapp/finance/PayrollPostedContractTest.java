@@ -59,6 +59,9 @@ class PayrollPostedContractTest {
         .isEqualTo(Schema.Type.LONG);
     assertThat(schema.getField("rule_versions").schema().getType()).isEqualTo(Schema.Type.ARRAY);
     assertThat(schema.getField("run_seq").schema().getType()).isEqualTo(Schema.Type.INT);
+    // run_type rides the wire (ADR 0032, Track P phase P4), added backward-compatibly.
+    assertThat(schema.getField("run_type").schema().getType()).isEqualTo(Schema.Type.STRING);
+    assertThat(schema.getField("run_type").hasDefaultValue()).isTrue();
     assertThat(schema.getField("uses_illustrative_rules")).isNotNull();
     assertThat(schema.getField("posted_at").schema().getLogicalType().getName())
         .isEqualTo("timestamp-millis");
@@ -78,6 +81,7 @@ class PayrollPostedContractTest {
     record.put("net_total_minor", 35_596_666L);
     record.put("rule_versions", List.of());
     record.put("run_seq", 1);
+    record.put("run_type", "REGULAR");
     record.put("uses_illustrative_rules", true);
     record.put("posted_at", 1_750_000_000_000L);
 
@@ -87,6 +91,7 @@ class PayrollPostedContractTest {
     assertThat(decoded.get("gross_total_minor")).isEqualTo(40_000_000L);
     assertThat(decoded.get("employer_contribution_total_minor")).isEqualTo(800_000L);
     assertThat(decoded.get("run_seq")).isEqualTo(1);
+    assertThat(decoded.get("run_type").toString()).isEqualTo("REGULAR");
     assertThat(decoded.get("uses_illustrative_rules")).isEqualTo(true);
   }
 
@@ -95,6 +100,62 @@ class PayrollPostedContractTest {
     Schema producer = new Schema.Parser().parse(PRODUCER_SCHEMA_JSON);
     Schema consumer = PayrollPostedSchema.schema();
     assertThat(AvroSerde.isBackwardCompatible(producer, consumer)).isTrue();
+  }
+
+  /**
+   * The producer's PRE-{@code run_type} {@code PayrollPosted} schema (has {@code run_seq} but no
+   * {@code run_type}) — the CURRENT ADR 0032 addition (Track P phase P4).
+   */
+  private static final String PRE_RUN_TYPE_SCHEMA_JSON =
+      """
+      {
+        "type": "record",
+        "name": "PayrollPosted",
+        "namespace": "id.co.nativeapp.events.employee",
+        "fields": [
+          {"name": "payroll_run_id", "type": "string"},
+          {"name": "company_id", "type": "string"},
+          {"name": "period", "type": "string"},
+          {"name": "base_currency", "type": "string"},
+          {"name": "gross_total_minor", "type": "long"},
+          {"name": "employee_deduction_total_minor", "type": "long"},
+          {"name": "employer_contribution_total_minor", "type": "long"},
+          {"name": "net_total_minor", "type": "long"},
+          {"name": "rule_versions", "type": {"type": "array", "items": {"type": "record", "name": "RuleVersion", "fields": [
+            {"name": "rule_key", "type": "string"},
+            {"name": "rule_version", "type": "string"}
+          ]}}},
+          {"name": "run_seq", "type": "int", "default": 1},
+          {"name": "uses_illustrative_rules", "type": "boolean"},
+          {"name": "posted_at", "type": {"type": "long", "logicalType": "timestamp-millis"}}
+        ]
+      }
+      """;
+
+  @Test
+  void preRunTypeBytesReadAsTheDefaultRegularRunTypeUnderTheCurrentSchema() {
+    // An already-shipped producer with no run_type: its bytes must still read under the current
+    // schema, defaulting run_type to REGULAR (ADR 0032, Track P phase P4).
+    Schema preRunType = new Schema.Parser().parse(PRE_RUN_TYPE_SCHEMA_JSON);
+    assertThat(AvroSerde.isBackwardCompatible(preRunType, PayrollPostedSchema.schema())).isTrue();
+
+    GenericRecord old = new GenericData.Record(preRunType);
+    old.put("payroll_run_id", "55555555-5555-5555-5555-555555555555");
+    old.put("company_id", "11111111-1111-1111-1111-111111111111");
+    old.put("period", "2026-06");
+    old.put("base_currency", "IDR");
+    old.put("gross_total_minor", 20_000_000L);
+    old.put("employee_deduction_total_minor", 2_201_667L);
+    old.put("employer_contribution_total_minor", 400_000L);
+    old.put("net_total_minor", 17_798_333L);
+    old.put("rule_versions", List.of());
+    old.put("run_seq", 1);
+    old.put("uses_illustrative_rules", false);
+    old.put("posted_at", 1_750_000_000_000L);
+
+    GenericRecord decoded =
+        AvroSerde.deserialize(AvroSerde.serialize(old), preRunType, PayrollPostedSchema.schema());
+    assertThat(decoded.get("run_type").toString()).isEqualTo("REGULAR");
   }
 
   @Test

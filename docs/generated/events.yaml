@@ -163,6 +163,7 @@ events:
       - { name: amount_minor, type: "long" }
       - { name: currency, type: "string" }
       - { name: run_seq, type: "int" }
+      - { name: run_type, type: "string" }
       - { name: uses_illustrative_rules, type: "boolean" }
       - { name: unallocated, type: "boolean" }
       - { name: occurred_at, type: "timestamp-millis" }
@@ -222,6 +223,20 @@ events:
       - { name: legal_employer_id, type: "string" }
       - { name: name, type: "string" }
       - { name: vertical, type: "null|string" }
+  - name: PayrollLiabilitiesPosted
+    namespace: id.co.nativeapp.events.employee
+    schema: libs/contracts/src/main/resources/avro/PayrollLiabilitiesPosted.avsc
+    fields:
+      - { name: payroll_run_id, type: "string" }
+      - { name: company_id, type: "string" }
+      - { name: period, type: "string" }
+      - { name: run_seq, type: "int" }
+      - { name: run_type, type: "string" }
+      - { name: base_currency, type: "string" }
+      - { name: employer_cost_total_minor, type: "long" }
+      - { name: liabilities, type: "array<record:PayrollLiabilityBucket>" }
+      - { name: uses_illustrative_rules, type: "boolean" }
+      - { name: posted_at, type: "timestamp-millis" }
   - name: PayrollPosted
     namespace: id.co.nativeapp.events.employee
     schema: libs/contracts/src/main/resources/avro/PayrollPosted.avsc
@@ -236,6 +251,7 @@ events:
       - { name: net_total_minor, type: "long" }
       - { name: rule_versions, type: "array<record:RuleVersion>" }
       - { name: run_seq, type: "int" }
+      - { name: run_type, type: "string" }
       - { name: uses_illustrative_rules, type: "boolean" }
       - { name: posted_at, type: "timestamp-millis" }
   - name: PeriodSealed

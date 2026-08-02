@@ -72,6 +72,10 @@ public final class PayrollPostedSchema {
     record.put("rule_versions", rvRecords);
 
     record.put("run_seq", run.getRunSeq());
+    // ADR 0032 (Track P phase P4): run_type rides the wire ahead of Track P phase P8 (THR, ADR
+    // 0034), which is when payroll_run itself grows a real run_type column. Stamped as the
+    // constant REGULAR until then.
+    record.put("run_type", PayrollRun.RUN_TYPE_REGULAR);
     record.put("uses_illustrative_rules", run.usesIllustrativeRules());
     record.put("posted_at", run.getPostedAt().toEpochMilli());
     return record;

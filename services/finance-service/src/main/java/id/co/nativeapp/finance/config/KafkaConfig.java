@@ -139,6 +139,9 @@ public class KafkaConfig {
         id.co.nativeapp.finance.expense.messaging.ExpenseRecordedDecodeException.class,
         id.co.nativeapp.finance.labor.messaging.LaborCostAllocatedDecodeException.class,
         id.co.nativeapp.finance.labor.messaging.PayrollPostedDecodeException.class,
+        // ADR 0032 (Track P phase P4) — the same fail-closed decode contract as PayrollPosted /
+        // LaborCostAllocated.
+        id.co.nativeapp.finance.labor.messaging.PayrollLiabilitiesPostedDecodeException.class,
         id.co.nativeapp.finance.group.messaging.GroupDefinedDecodeException.class,
         id.co.nativeapp.finance.group.messaging.GroupMembershipChangedDecodeException.class,
         id.co.nativeapp.finance.grouptb.messaging.TrialBalancePublishedDecodeException.class,

@@ -276,6 +276,7 @@ class LaborSupersessionTest extends PostgresRlsTestBase {
         TENANT_A,
         runId,
         runSeq,
+        "REGULAR",
         period,
         outlet,
         glAccount,

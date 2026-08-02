@@ -42,6 +42,7 @@ class LaborTenancyIsolationTest extends PostgresRlsTestBase {
             TENANT_A,
             UUID.randomUUID(),
             1,
+            "REGULAR",
             period,
             OUTLET,
             "5100-SALARY",

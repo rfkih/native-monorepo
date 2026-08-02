@@ -60,6 +60,9 @@ class LaborCostAllocatedContractTest {
     assertThat(schema.getField("amount_minor").schema().getType()).isEqualTo(Schema.Type.LONG);
     assertThat(schema.getField("currency")).isNotNull();
     assertThat(schema.getField("run_seq").schema().getType()).isEqualTo(Schema.Type.INT);
+    // run_type rides the wire (ADR 0032, Track P phase P4), added backward-compatibly.
+    assertThat(schema.getField("run_type").schema().getType()).isEqualTo(Schema.Type.STRING);
+    assertThat(schema.getField("run_type").hasDefaultValue()).isTrue();
     assertThat(schema.getField("uses_illustrative_rules")).isNotNull();
     assertThat(schema.getField("unallocated")).isNotNull();
     assertThat(schema.getField("occurred_at").schema().getLogicalType().getName())
@@ -78,6 +81,7 @@ class LaborCostAllocatedContractTest {
     record.put("amount_minor", 20_400_000L); // money is integer minor units, never a float
     record.put("currency", "IDR");
     record.put("run_seq", 1);
+    record.put("run_type", "REGULAR");
     record.put("uses_illustrative_rules", true);
     record.put("unallocated", false);
     record.put("occurred_at", 1_750_000_000_000L);
@@ -88,6 +92,7 @@ class LaborCostAllocatedContractTest {
     assertThat(decoded.get("amount_minor")).isEqualTo(20_400_000L);
     assertThat(decoded.get("gl_account").toString()).isEqualTo("5100-SALARY");
     assertThat(decoded.get("run_seq")).isEqualTo(1);
+    assertThat(decoded.get("run_type").toString()).isEqualTo("REGULAR");
     assertThat(decoded.get("uses_illustrative_rules")).isEqualTo(true);
   }
 
@@ -121,6 +126,61 @@ class LaborCostAllocatedContractTest {
     assertThat(decoded.get("amount_minor")).isEqualTo(900_000L);
     // The missing run_seq reads as the default first run.
     assertThat(decoded.get("run_seq")).isEqualTo(1);
+  }
+
+  /**
+   * The producer's PRE-{@code run_type} {@code LaborCostAllocated} schema (has {@code run_seq} but
+   * no {@code run_type}) — the CURRENT ADR 0032 addition. Proves the backward-compatible add: a
+   * consumer with {@code run_type default REGULAR} reads these older bytes as REGULAR.
+   */
+  private static final String PRE_RUN_TYPE_SCHEMA_JSON =
+      """
+      {
+        "type": "record",
+        "name": "LaborCostAllocated",
+        "namespace": "id.co.nativeapp.events.employee",
+        "fields": [
+          {"name": "payroll_run_id", "type": "string"},
+          {"name": "company_id", "type": "string"},
+          {"name": "period", "type": "string"},
+          {"name": "outlet_id", "type": "string"},
+          {"name": "gl_account", "type": "string"},
+          {"name": "amount_minor", "type": "long"},
+          {"name": "currency", "type": "string"},
+          {"name": "run_seq", "type": "int", "default": 1},
+          {"name": "uses_illustrative_rules", "type": "boolean"},
+          {"name": "unallocated", "type": "boolean", "default": false},
+          {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}}
+        ]
+      }
+      """;
+
+  @Test
+  void preRunTypeBytesReadAsTheDefaultRegularRunTypeUnderTheCurrentSchema() {
+    // An already-shipped producer with no run_type: its bytes must still read under the current
+    // schema, defaulting run_type to REGULAR (ADR 0032, Track P phase P4) — the run_seq idiom
+    // applied to the new field.
+    Schema preRunType = new Schema.Parser().parse(PRE_RUN_TYPE_SCHEMA_JSON);
+    assertThat(AvroSerde.isBackwardCompatible(preRunType, LaborCostAllocatedSchema.schema()))
+        .isTrue();
+
+    GenericRecord old = new GenericData.Record(preRunType);
+    old.put("payroll_run_id", "33333333-3333-3333-3333-333333333333");
+    old.put("company_id", "11111111-1111-1111-1111-111111111111");
+    old.put("period", "2026-06");
+    old.put("outlet_id", "22222222-2222-2222-2222-222222222222");
+    old.put("gl_account", "5100-SALARY");
+    old.put("amount_minor", 900_000L);
+    old.put("currency", "IDR");
+    old.put("run_seq", 1);
+    old.put("uses_illustrative_rules", false);
+    old.put("unallocated", false);
+    old.put("occurred_at", 1_750_000_000_000L);
+
+    GenericRecord decoded =
+        AvroSerde.deserialize(
+            AvroSerde.serialize(old), preRunType, LaborCostAllocatedSchema.schema());
+    assertThat(decoded.get("run_type").toString()).isEqualTo("REGULAR");
   }
 
   @Test

@@ -31,6 +31,9 @@ class LaborCostAllocatedContractTest {
     // run_seq rides the wire (the supersession signal finance keys on), added backward-compatibly.
     assertThat(schema.getField("run_seq").schema().getType()).isEqualTo(Schema.Type.INT);
     assertThat(schema.getField("run_seq").hasDefaultValue()).isTrue();
+    // run_type rides the wire (ADR 0032, Track P phase P4), added backward-compatibly.
+    assertThat(schema.getField("run_type").schema().getType()).isEqualTo(Schema.Type.STRING);
+    assertThat(schema.getField("run_type").hasDefaultValue()).isTrue();
     // The UNALLOCATED-suspense marker rides the wire with a default (backward-compatible add).
     assertThat(schema.getField("unallocated")).isNotNull();
     assertThat(schema.getField("unallocated").hasDefaultValue()).isTrue();
@@ -80,6 +83,8 @@ class LaborCostAllocatedContractTest {
     assertThat(decoded.get("gl_account").toString()).isEqualTo("5100-SALARY");
     // run_seq=2 round-trips as 2 (not the default 1) so finance can supersede the prior run.
     assertThat(decoded.get("run_seq")).isEqualTo(2);
+    // toRecord() stamps run_type REGULAR unconditionally (ADR 0032; THR lands at Track P phase P8).
+    assertThat(decoded.get("run_type").toString()).isEqualTo("REGULAR");
     assertThat(decoded.get("uses_illustrative_rules")).isEqualTo(true);
     assertThat(decoded.get("unallocated")).isEqualTo(false);
   }
@@ -109,6 +114,60 @@ class LaborCostAllocatedContractTest {
             AvroSerde.serialize(old), preRunSeq, LaborCostAllocatedSchema.schema());
     assertThat(decoded.get("run_seq")).isEqualTo(1);
   }
+
+  @Test
+  void preRunTypeBytesReadAsTheDefaultRegularRunTypeUnderTheCurrentSchema() {
+    // An already-shipped producer with no run_type: its bytes still read under the current schema,
+    // defaulting run_type to REGULAR (ADR 0032, Track P phase P4) — the run_seq idiom applied to
+    // the new field.
+    Schema preRunType = new Schema.Parser().parse(PRE_RUN_TYPE_SCHEMA_JSON);
+    assertThat(AvroSerde.isBackwardCompatible(preRunType, LaborCostAllocatedSchema.schema()))
+        .isTrue();
+
+    GenericRecord old = new GenericData.Record(preRunType);
+    old.put("payroll_run_id", "55555555-5555-5555-5555-555555555555");
+    old.put("company_id", "11111111-1111-1111-1111-111111111111");
+    old.put("period", "2026-06");
+    old.put("outlet_id", "22222222-2222-2222-2222-222222222222");
+    old.put("gl_account", "5100-SALARY");
+    old.put("amount_minor", 900_000L);
+    old.put("currency", "IDR");
+    old.put("run_seq", 1);
+    old.put("uses_illustrative_rules", false);
+    old.put("unallocated", false);
+    old.put("occurred_at", 1_750_000_000_000L);
+
+    GenericRecord decoded =
+        AvroSerde.deserialize(
+            AvroSerde.serialize(old), preRunType, LaborCostAllocatedSchema.schema());
+    assertThat(decoded.get("run_type").toString()).isEqualTo("REGULAR");
+  }
+
+  /**
+   * The producer's PRE-{@code run_type} {@code LaborCostAllocated} schema (has {@code run_seq} but
+   * no {@code run_type}) — the CURRENT ADR 0032 addition.
+   */
+  private static final String PRE_RUN_TYPE_SCHEMA_JSON =
+      """
+      {
+        "type": "record",
+        "name": "LaborCostAllocated",
+        "namespace": "id.co.nativeapp.events.employee",
+        "fields": [
+          {"name": "payroll_run_id", "type": "string"},
+          {"name": "company_id", "type": "string"},
+          {"name": "period", "type": "string"},
+          {"name": "outlet_id", "type": "string"},
+          {"name": "gl_account", "type": "string"},
+          {"name": "amount_minor", "type": "long"},
+          {"name": "currency", "type": "string"},
+          {"name": "run_seq", "type": "int", "default": 1},
+          {"name": "uses_illustrative_rules", "type": "boolean"},
+          {"name": "unallocated", "type": "boolean", "default": false},
+          {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}}
+        ]
+      }
+      """;
 
   /** The producer's PRE-run_seq {@code LaborCostAllocated} schema (no {@code run_seq}). */
   private static final String PRE_RUN_SEQ_SCHEMA_JSON =

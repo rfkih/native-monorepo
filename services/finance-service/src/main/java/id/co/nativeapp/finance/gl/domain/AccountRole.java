@@ -195,5 +195,37 @@ public enum AccountRole {
    * Outstanding balance = what the company owes its employees for approved, un-settled claims. Maps
    * to account 2600 (ILLUSTRATIVE — SME-gated, V39).
    */
-  EMPLOYEE_EXPENSE_PAYABLE
+  EMPLOYEE_EXPENSE_PAYABLE,
+  /**
+   * Payroll liability recognition (ADR 0032, ILLUSTRATIVE -- SME-gated): PPh21 payable to the tax
+   * office, recognised the moment a payroll run posts (Dr {@link #LABOR_CLEARING} / Cr this role).
+   * MAY be posted as the Dr leg instead when the run's PPh21 bucket is negative (the December
+   * Art-17 true-up refund month, ADR 0031). Maps to account 2610 (ILLUSTRATIVE -- SME-gated, V40).
+   */
+  PPH21_PAYABLE,
+  /**
+   * Payroll liability recognition (ADR 0032, ILLUSTRATIVE -- SME-gated): BPJS Kesehatan payable --
+   * the employee-withheld leg PLUS the employer-contribution leg together (both are owed to the
+   * SAME BPJS body). Maps to account 2620 (ILLUSTRATIVE -- SME-gated, V40).
+   */
+  BPJS_KES_PAYABLE,
+  /**
+   * Payroll liability recognition (ADR 0032, ILLUSTRATIVE -- SME-gated): BPJS Ketenagakerjaan
+   * payable -- JHT + JP (employee-withheld PLUS employer-contribution legs) and JKK/JKM
+   * (employer-only) together (all four programs are owed to the SAME BPJS body). Maps to account
+   * 2630 (ILLUSTRATIVE -- SME-gated, V40).
+   */
+  BPJS_TK_PAYABLE,
+  /**
+   * Payroll liability recognition (ADR 0032, ILLUSTRATIVE -- SME-gated): unpaid net wages owed to
+   * employees -- the run's net total, recognised as a liability the moment the run posts (rather
+   * than assumed disbursed). Maps to account 2640 (ILLUSTRATIVE -- SME-gated, V40).
+   */
+  NET_WAGES_PAYABLE,
+  /**
+   * Payroll liability recognition (ADR 0032, ILLUSTRATIVE -- SME-gated): the catch-all for any
+   * deduction line that is not PPh21 or a named BPJS leg -- e.g. a future custom component such as
+   * a loan repayment. Maps to account 2690 (ILLUSTRATIVE -- SME-gated, V40).
+   */
+  OTHER_DEDUCTIONS_PAYABLE
 }

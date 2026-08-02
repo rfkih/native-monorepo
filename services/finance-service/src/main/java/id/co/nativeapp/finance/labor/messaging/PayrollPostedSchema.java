@@ -55,6 +55,7 @@ public final class PayrollPostedSchema {
         record.get("company_id").toString(),
         UUID.fromString(record.get("payroll_run_id").toString()),
         (int) record.get("run_seq"),
+        record.get("run_type").toString(),
         record.get("period").toString(),
         currency,
         Money.ofMinor((long) record.get("gross_total_minor"), currency),

@@ -19,6 +19,7 @@ import id.co.nativeapp.employee.payroll.dto.MetricProjectedEvent;
 import id.co.nativeapp.employee.payroll.dto.PayrollRunResponse;
 import id.co.nativeapp.employee.payroll.dto.RunPayrollCommand;
 import id.co.nativeapp.employee.payroll.messaging.LaborCostAllocatedSchema;
+import id.co.nativeapp.employee.payroll.messaging.PayrollLiabilitiesPostedSchema;
 import id.co.nativeapp.employee.payroll.messaging.PayrollPostedSchema;
 import id.co.nativeapp.employee.payroll.service.CompensationWriter;
 import id.co.nativeapp.employee.payroll.service.IllustrativeStatutorySeedWriter;
@@ -134,6 +135,187 @@ class PayrollRunEndToEndTest extends PostgresRlsTestBase {
       }
     }
     assertThat(warned).as("the loud illustrative WARN is logged").isTrue();
+  }
+
+  @Test
+  void postEmitsPayrollLiabilitiesPostedThirdWithIdentityBalancingBuckets() throws Exception {
+    // ADR 0032 (Track P phase P4): post() emits PayrollLiabilitiesPosted THIRD, in the SAME outbox
+    // transaction as PayrollPosted + LaborCostAllocated. gross 20,000,000 + employer BPJS 400,000
+    // (illustrative dataset, 4%) = employer_cost_total 20,400,000; buckets: NET_WAGES_PAYABLE
+    // 17,798,333, PPH21_PAYABLE 2,101,667 (= employeeDeductionTotal 2,201,667 - BPJS-Kes-EE
+    // 100,000), BPJS_KES_PAYABLE 500,000 (100,000 EE + 400,000 ER) — the identity holds:
+    // 17,798,333 + 2,101,667 + 500,000 = 20,400,000.
+    UUID runId = TenantContext.callAs(TENANT_A, ACTOR_A, () -> setUpAndRun());
+
+    // All THREE payroll events landed in the outbox for the SAME run — the emit-third-in-tx proof.
+    long payrollPostedCount =
+        jdbcTemplate.queryForObject(
+            "SELECT count(*) FROM outbox WHERE event_type = 'PayrollPosted' AND aggregate_id = ?",
+            Long.class,
+            runId.toString());
+    long laborCostAllocatedCount =
+        jdbcTemplate.queryForObject(
+            "SELECT count(*) FROM outbox WHERE event_type = 'LaborCostAllocated' AND aggregate_id"
+                + " = ?",
+            Long.class,
+            runId.toString());
+    long liabilitiesPostedCount =
+        jdbcTemplate.queryForObject(
+            "SELECT count(*) FROM outbox WHERE event_type = 'PayrollLiabilitiesPosted' AND"
+                + " aggregate_id = ?",
+            Long.class,
+            runId.toString());
+    assertThat(payrollPostedCount).isEqualTo(1L);
+    assertThat(laborCostAllocatedCount).isGreaterThanOrEqualTo(1L);
+    assertThat(liabilitiesPostedCount).isEqualTo(1L);
+
+    Map<String, Object> liabilitiesRow =
+        jdbcTemplate.queryForMap(
+            "SELECT payload FROM outbox WHERE event_type = 'PayrollLiabilitiesPosted' AND"
+                + " aggregate_id = ?",
+            runId.toString());
+    GenericRecord liabilitiesRecord =
+        AvroSerde.deserialize(
+            (byte[]) liabilitiesRow.get("payload"), PayrollLiabilitiesPostedSchema.schema());
+    assertThat(liabilitiesRecord.get("run_seq")).isEqualTo(1);
+    assertThat(liabilitiesRecord.get("run_type").toString()).isEqualTo("REGULAR");
+    assertThat(liabilitiesRecord.get("employer_cost_total_minor")).isEqualTo(20_400_000L);
+    assertThat(liabilitiesRecord.get("uses_illustrative_rules")).isEqualTo(true);
+
+    @SuppressWarnings("unchecked")
+    List<GenericRecord> buckets = (List<GenericRecord>) liabilitiesRecord.get("liabilities");
+    Map<String, Long> byRole = new java.util.LinkedHashMap<>();
+    for (GenericRecord bucket : buckets) {
+      byRole.put(bucket.get("liability_role").toString(), (Long) bucket.get("amount_minor"));
+    }
+    assertThat(byRole).containsEntry("NET_WAGES_PAYABLE", 17_798_333L);
+    assertThat(byRole).containsEntry("PPH21_PAYABLE", 2_101_667L);
+    assertThat(byRole).containsEntry("BPJS_KES_PAYABLE", 500_000L);
+    // No JHT/JP/JKK/JKM (illustrative dataset) and no custom deduction — both zero, both omitted.
+    assertThat(byRole).doesNotContainKey("BPJS_TK_PAYABLE");
+    assertThat(byRole).doesNotContainKey("OTHER_DEDUCTIONS_PAYABLE");
+
+    long sum = byRole.values().stream().mapToLong(Long::longValue).sum();
+    assertThat(sum).isEqualTo(20_400_000L);
+  }
+
+  @Test
+  void aCustomDeductionComponentLandsInTheOtherDeductionsPayableCatchAllBucket() throws Exception {
+    // ADR 0032: any deduction component that is not PPH21 or a named BPJS leg — e.g. a future
+    // custom component such as a loan repayment — falls into the OTHER_DEDUCTIONS_PAYABLE
+    // catch-all, and the identity still balances. A non-statutory EMPLOYEE deduction is applied
+    // AFTER income tax (step 4 of the engine), so it does NOT change PPh21 (tax base untouched).
+    long loanRepaymentMinor = 300_000L;
+    UUID runId =
+        TenantContext.callAs(
+            TENANT_A,
+            ACTOR_A,
+            () -> {
+              seeder.seed(IDR);
+              UUID outlet = UUID.randomUUID();
+              orgProjectionService.apply(
+                  new OrgUnitProjectedEvent(
+                      UUID.randomUUID(), outlet, TENANT_A, LEGAL_EMPLOYER, "OUTLET", true));
+              UUID loanComponentId = insertLoanRepaymentComponentAsAdmin();
+
+              UUID employeeId =
+                  employeeService
+                      .create(
+                          new CreateEmployeeCommand(
+                              "Rudi", "TK0", "3209555555555555", "1231231231231234"))
+                      .getId();
+              var contract =
+                  employeeService.addContract(
+                      new AddContractCommand(
+                          employeeId,
+                          "PERMANENT",
+                          LEGAL_EMPLOYER,
+                          LocalDate.of(2026, 1, 1),
+                          LocalDate.of(9999, 12, 31)));
+              CompensationPackage pkg =
+                  compensationWriter.createPackage(
+                      employeeId,
+                      contract.getId(),
+                      Money.ofMinor(BASE_MINOR, IDR),
+                      LocalDate.of(2026, 1, 1),
+                      LocalDate.of(9999, 12, 31));
+              compensationWriter.addFixedEarning(
+                  pkg.getId(),
+                  loanComponentId,
+                  Money.ofMinor(loanRepaymentMinor, IDR),
+                  LocalDate.of(2026, 1, 1),
+                  LocalDate.of(9999, 12, 31));
+              assignmentService.add(
+                  new AddAssignmentCommand(
+                      employeeId,
+                      outlet,
+                      null,
+                      "cashier",
+                      LocalDate.of(2026, 1, 1),
+                      LocalDate.of(9999, 12, 31)));
+              return payrollRunService
+                  .calculateAndPost(
+                      new RunPayrollCommand("2026-06", List.of(employeeId), List.of()), IDR)
+                  .getId();
+            });
+
+    PayrollRunResponse run =
+        TenantContext.callAs(
+            TENANT_A, ACTOR_A, () -> payrollRunReader.findRun(runId).orElseThrow());
+    // PPh21 unchanged (2,101,667) since the loan deduction never touches the tax base; the loan
+    // adds on top: 100,000 (BPJS-Kes-EE) + 2,101,667 (PPh21) + 300,000 (loan) = 2,501,667.
+    assertThat(run.employeeDeductionTotalMinor()).isEqualTo(2_501_667L);
+    assertThat(run.netTotalMinor()).isEqualTo(BASE_MINOR - 2_501_667L);
+
+    Map<String, Object> liabilitiesRow =
+        jdbcTemplate.queryForMap(
+            "SELECT payload FROM outbox WHERE event_type = 'PayrollLiabilitiesPosted' AND"
+                + " aggregate_id = ?",
+            runId.toString());
+    GenericRecord liabilitiesRecord =
+        AvroSerde.deserialize(
+            (byte[]) liabilitiesRow.get("payload"), PayrollLiabilitiesPostedSchema.schema());
+    assertThat(liabilitiesRecord.get("employer_cost_total_minor")).isEqualTo(20_400_000L);
+
+    @SuppressWarnings("unchecked")
+    List<GenericRecord> buckets = (List<GenericRecord>) liabilitiesRecord.get("liabilities");
+    Map<String, Long> byRole = new java.util.LinkedHashMap<>();
+    for (GenericRecord bucket : buckets) {
+      byRole.put(bucket.get("liability_role").toString(), (Long) bucket.get("amount_minor"));
+    }
+    assertThat(byRole).containsEntry("OTHER_DEDUCTIONS_PAYABLE", loanRepaymentMinor);
+    assertThat(byRole).containsEntry("PPH21_PAYABLE", 2_101_667L);
+    assertThat(byRole).containsEntry("BPJS_KES_PAYABLE", 500_000L);
+    assertThat(byRole).containsEntry("NET_WAGES_PAYABLE", BASE_MINOR - 2_501_667L);
+
+    long sum = byRole.values().stream().mapToLong(Long::longValue).sum();
+    assertThat(sum).isEqualTo(20_400_000L);
+  }
+
+  /**
+   * Inserts a custom, non-statutory DEDUCTION pay component (EMPLOYEE-bearer, no {@code
+   * statutory_rule_key}) for TENANT_A over the admin/BYPASSRLS connection — proves the {@code
+   * OTHER_DEDUCTIONS_PAYABLE} catch-all bucket (ADR 0032).
+   */
+  private UUID insertLoanRepaymentComponentAsAdmin() throws Exception {
+    UUID id = UUID.randomUUID();
+    String sql =
+        "INSERT INTO pay_component (id, component_key, kind, calc_type, bearer, gl_account,"
+            + " taxable, statutory_rule_key, display_order, active, created_at, created_by,"
+            + " updated_at, updated_by, version, company_id) VALUES ('"
+            + id
+            + "', 'LOAN_REPAYMENT', 'DEDUCTION', 'FIXED', 'EMPLOYEE', '2900-LOAN',"
+            + " false, NULL, 40,"
+            + " true, now(), 'test', now(), 'test', 0, '"
+            + TENANT_A
+            + "')";
+    try (java.sql.Connection admin =
+            java.sql.DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        java.sql.Statement st = admin.createStatement()) {
+      st.executeUpdate(sql);
+    }
+    return id;
   }
 
   @Test

@@ -23,7 +23,11 @@ import java.util.UUID;
  * @param companyId the owning tenant the consumer binds the handler to (from the event, not a
  *     request)
  * @param payrollRunId the owning payroll run
- * @param runSeq the run sequence (the supersession signal; a higher seq supersedes lower)
+ * @param runSeq the run sequence (the supersession signal; a higher seq of the SAME runType
+ *     supersedes lower ones)
+ * @param runType the payroll run type ({@code REGULAR} today; {@code THR} lands at Track P phase
+ *     P8, ADR 0034 — added backward-compatibly with a {@code REGULAR} default, ADR 0032 Track P
+ *     phase P4)
  * @param period the run's authoritative accounting period {@code YYYY-MM}
  * @param outletId the bucket's outlet (the all-zeros sentinel for the UNALLOCATED suspense bucket)
  * @param glAccount the labor GL account hint (re-resolved against {@code mapping_rule})
@@ -38,6 +42,7 @@ public record LaborCostAllocatedEvent(
     String companyId,
     UUID payrollRunId,
     int runSeq,
+    String runType,
     String period,
     UUID outletId,
     String glAccount,

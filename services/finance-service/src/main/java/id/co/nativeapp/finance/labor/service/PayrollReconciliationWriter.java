@@ -73,11 +73,12 @@ public class PayrollReconciliationWriter {
     TenantContext.Tenant tenant = TenantContext.require();
     String companyId = tenant.companyId();
 
-    // Serialize per (company, period) with the SAME deterministic advisory lock the bucket path
-    // takes, BEFORE any run-row read/insert. This serializes a PayrollPosted against concurrent
-    // bucket deliveries (and against a parallel reconcile) so the supersession view both paths
-    // observe is consistent — the fix for the first-two-runs double-count (#23).
-    runLedgerRepository.lockPeriod(companyId + ":" + event.period());
+    // Serialize per (company, period, run_type) with the SAME deterministic advisory lock the
+    // bucket path (and PayrollLiabilityWriter) take, BEFORE any run-row read/insert (ADR 0032,
+    // Track P phase P4 — was (company, period) pre-P4). This serializes a PayrollPosted against
+    // concurrent bucket deliveries (and against a parallel reconcile) so the supersession view
+    // every writer observes is consistent — the fix for the first-two-runs double-count (#23).
+    runLedgerRepository.lockPeriod(companyId + ":" + event.period() + ":" + event.runType());
 
     PayrollRunLedger runRow = upsertRunRow(event, companyId);
 
@@ -138,6 +139,7 @@ public class PayrollReconciliationWriter {
                       event.payrollRunId(),
                       event.period(),
                       event.runSeq(),
+                      event.runType(),
                       event.baseCurrency(),
                       event.usesIllustrativeRules());
               row.setCompanyId(companyId);

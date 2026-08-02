@@ -32,6 +32,16 @@ import org.hibernate.type.SqlTypes;
 @Table(name = "payroll_run")
 public class PayrollRun extends Auditable {
 
+  /**
+   * The only run type that exists before Track P phase P8 (THR, ADR 0034). Stamped as a constant
+   * onto the {@code run_type} field of {@code PayrollPosted}, {@code LaborCostAllocated}, and
+   * {@code PayrollLiabilitiesPosted} (ADR 0032, Track P phase P4) until the {@code payroll_run}
+   * table itself grows a real {@code run_type} column at P8 — no schema/behaviour change here, only
+   * the wire events become run-type-aware ahead of time so finance is ready before any THR run
+   * exists.
+   */
+  public static final String RUN_TYPE_REGULAR = "REGULAR";
+
   @Id
   @Column(name = "id", nullable = false, updatable = false)
   private UUID id;

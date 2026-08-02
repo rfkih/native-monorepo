@@ -99,6 +99,7 @@ class PayrollReconciliationTest extends PostgresRlsTestBase {
             TENANT_A,
             run,
             1,
+            "REGULAR",
             period,
             "IDR",
             Money.ofMinor(5_000_000L, "IDR"),
@@ -242,7 +243,18 @@ class PayrollReconciliationTest extends PostgresRlsTestBase {
       Money amount,
       Instant occurredAt) {
     return new LaborCostAllocatedEvent(
-        eventId, TENANT_A, runId, 1, period, outlet, glAccount, amount, false, false, occurredAt);
+        eventId,
+        TENANT_A,
+        runId,
+        1,
+        "REGULAR",
+        period,
+        outlet,
+        glAccount,
+        amount,
+        false,
+        false,
+        occurredAt);
   }
 
   private LaborCostAllocatedEvent bucket2(
@@ -259,6 +271,7 @@ class PayrollReconciliationTest extends PostgresRlsTestBase {
         TENANT_A,
         runId,
         runSeq,
+        "REGULAR",
         period,
         outlet,
         glAccount,
@@ -282,6 +295,7 @@ class PayrollReconciliationTest extends PostgresRlsTestBase {
         TENANT_A,
         runId,
         1,
+        "REGULAR",
         period,
         outlet,
         glAccount,
@@ -298,6 +312,7 @@ class PayrollReconciliationTest extends PostgresRlsTestBase {
         TENANT_A,
         runId,
         1,
+        "REGULAR",
         period,
         "IDR",
         Money.ofMinor(grossMinor, "IDR"),

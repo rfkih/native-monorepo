@@ -34,6 +34,7 @@ import id.co.nativeapp.employee.payroll.dto.PayrollResult.ComputedLine;
 import id.co.nativeapp.employee.payroll.dto.PayrollResult.PersonResult;
 import id.co.nativeapp.employee.payroll.dto.RunPayrollCommand;
 import id.co.nativeapp.employee.payroll.messaging.LaborCostAllocatedSchema;
+import id.co.nativeapp.employee.payroll.messaging.PayrollLiabilitiesPostedSchema;
 import id.co.nativeapp.employee.payroll.messaging.PayrollPostedSchema;
 import id.co.nativeapp.employee.payroll.repository.CompensationPackageRepository;
 import id.co.nativeapp.employee.payroll.repository.EarningRuleRepository;
@@ -57,6 +58,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -324,10 +326,13 @@ public class PayrollRunWriter {
 
   /**
    * Posts a CALCULATED run: flips it to POSTED and emits {@code PayrollPosted} + aggregated {@code
-   * LaborCostAllocated} via the outbox — atomically (rule 3). Only a CALCULATED -&gt; POSTED
-   * transition emits, so a retried post cannot double-emit.
+   * LaborCostAllocated} + {@code PayrollLiabilitiesPosted} (ADR 0032, Track P phase P4, emitted
+   * THIRD) via the outbox — atomically (rule 3). Only a CALCULATED -&gt; POSTED transition emits,
+   * so a retried post cannot double-emit.
    *
-   * @throws IllegalStateException if the run is not in CALCULATED state
+   * @throws IllegalStateException if the run is not in CALCULATED state, or if the freshly
+   *     decrypt-and-summed liability buckets do not balance against the run's stored totals (never
+   *     emits an unbalanced {@code PayrollLiabilitiesPosted})
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public PayrollRun post(UUID runId) {
@@ -381,7 +386,143 @@ public class PayrollRunWriter {
           companyId,
           clock.instant());
     }
+
+    // PayrollLiabilitiesPosted (ADR 0032, Track P phase P4): emitted THIRD, after PayrollPosted
+    // and every LaborCostAllocated bucket, in the SAME outbox transaction. employerCostTotal is
+    // the SAME sum LaborCostAllocated's buckets total to (gross + employer contributions) — the Dr
+    // leg finance's liability writer books against. The identity is asserted BEFORE writing: an
+    // unbalanced set is never emitted (HR-3).
+    Money employerCostTotal = run.getGrossTotal().plus(run.getEmployerContributionTotal());
+    List<PayrollLiabilitiesPostedSchema.LiabilityBucket> liabilityBuckets =
+        computeLiabilityBuckets(run);
+    assertLiabilityIdentity(run, employerCostTotal, liabilityBuckets);
+    outboxWriter.write(
+        PayrollLiabilitiesPostedSchema.AGGREGATE_TYPE,
+        run.getId().toString(),
+        PayrollLiabilitiesPostedSchema.EVENT_TYPE,
+        AvroSerde.serialize(
+            PayrollLiabilitiesPostedSchema.toRecord(run, employerCostTotal, liabilityBuckets)),
+        null,
+        companyId,
+        clock.instant());
+
     return run;
+  }
+
+  // ---------------------------------------------------------------------
+  // Liabilities (Track P phase P4, ADR 0032)
+  // ---------------------------------------------------------------------
+
+  /** The five liability roles {@code PayrollLiabilitiesPosted}'s buckets carry (ADR 0032). */
+  private static final String ROLE_NET_WAGES = "NET_WAGES_PAYABLE";
+
+  private static final String ROLE_PPH21 = "PPH21_PAYABLE";
+  private static final String ROLE_BPJS_KES = "BPJS_KES_PAYABLE";
+  private static final String ROLE_BPJS_TK = "BPJS_TK_PAYABLE";
+  private static final String ROLE_OTHER = "OTHER_DEDUCTIONS_PAYABLE";
+
+  /** {@code component_key}s carrying BPJS Kesehatan (both the EE and ER legs). */
+  private static final Set<String> BPJS_KES_COMPONENT_KEYS = Set.of("BPJS_KES_EE", "BPJS_KES_ER");
+
+  /** {@code component_key}s carrying BPJS Ketenagakerjaan — JHT + JP (EE and ER), JKK/JKM (ER). */
+  private static final Set<String> BPJS_TK_COMPONENT_KEYS =
+      Set.of("JHT_EE", "JHT_ER", "JP_EE", "JP_ER", "JKK_ER", "JKM_ER");
+
+  /**
+   * Computes the run's liability buckets by decrypting and summing every DEDUCTION {@link
+   * PayslipLine} across every employee of the run (ADR 0032): {@code PPH21} lines → PPH21_PAYABLE;
+   * {@link #BPJS_KES_COMPONENT_KEYS} → BPJS_KES_PAYABLE (EE withheld + ER contribution together);
+   * {@link #BPJS_TK_COMPONENT_KEYS} → BPJS_TK_PAYABLE (EE withheld + ER contribution together); any
+   * OTHER deduction line — EMPLOYEE or EMPLOYER bearer alike, e.g. a future custom component such
+   * as a loan repayment — → the catch-all OTHER_DEDUCTIONS_PAYABLE. Bucketing EVERY deduction line
+   * regardless of bearer (not just EMPLOYEE-borne ones) is what makes {@link
+   * #assertLiabilityIdentity} hold structurally for ANY future custom component, not only the named
+   * BPJS/PPh21 legs: {@code net_total + Σ(buckets) = (gross - employeeDeductions) +
+   * (employeeDeductions + employerContributions) = gross + employerContributions =
+   * employerCostTotal}. {@code NET_WAGES_PAYABLE} is the run's stored net total directly — not
+   * derived from EARNING lines. A zero-amount bucket is OMITTED from the returned list (mirrors
+   * {@code TaxFilingWriter}'s zero-leg omission); the December Art-17 true-up (Track P phase P3)
+   * can drive {@code PPH21_PAYABLE} negative (a refund month) — finance posts a negative bucket as
+   * the opposite journal side (ADR 0032).
+   */
+  private List<PayrollLiabilitiesPostedSchema.LiabilityBucket> computeLiabilityBuckets(
+      PayrollRun run) {
+    String baseCurrency = run.getBaseCurrency();
+    Money zero = Money.ofMinor(0L, baseCurrency);
+    Money pph21 = zero;
+    Money bpjsKes = zero;
+    Money bpjsTk = zero;
+    Money other = zero;
+
+    for (PayslipLine line : payslipLineRepository.findByPayrollRunId(run.getId())) {
+      if (line.getKind() != PayComponentKind.DEDUCTION) {
+        continue;
+      }
+      Money amount = line.getAmount();
+      String componentKey = line.getComponentKey();
+      if ("PPH21".equals(componentKey)) {
+        pph21 = pph21.plus(amount);
+      } else if (BPJS_KES_COMPONENT_KEYS.contains(componentKey)) {
+        bpjsKes = bpjsKes.plus(amount);
+      } else if (BPJS_TK_COMPONENT_KEYS.contains(componentKey)) {
+        bpjsTk = bpjsTk.plus(amount);
+      } else {
+        other = other.plus(amount);
+      }
+    }
+
+    List<PayrollLiabilitiesPostedSchema.LiabilityBucket> buckets = new ArrayList<>(5);
+    addBucketIfNonZero(buckets, ROLE_NET_WAGES, run.getNetTotal());
+    addBucketIfNonZero(buckets, ROLE_PPH21, pph21);
+    addBucketIfNonZero(buckets, ROLE_BPJS_KES, bpjsKes);
+    addBucketIfNonZero(buckets, ROLE_BPJS_TK, bpjsTk);
+    addBucketIfNonZero(buckets, ROLE_OTHER, other);
+    return buckets;
+  }
+
+  private void addBucketIfNonZero(
+      List<PayrollLiabilitiesPostedSchema.LiabilityBucket> buckets, String role, Money amount) {
+    if (!amount.isZero()) {
+      buckets.add(new PayrollLiabilitiesPostedSchema.LiabilityBucket(role, amount));
+    }
+  }
+
+  /**
+   * Asserts the accounting identity BEFORE any {@code PayrollLiabilitiesPosted} event is written:
+   * {@code employerCostTotal == Σ(bucket amounts)} — {@code buckets} already INCLUDES {@code
+   * NET_WAGES_PAYABLE} (== {@code run.getNetTotal()}, see {@link #computeLiabilityBuckets}), so it
+   * must NOT be added again here (a prior version of this method double-counted it — summing {@code
+   * run.getNetTotal()} AND iterating {@code buckets}, whose first entry already carries that same
+   * net total — inflating the check by exactly one extra net total; caught by the P4 test suite,
+   * never shipped). This is still a genuine cross-check, not a restatement of the same arithmetic:
+   * {@code employerCostTotal} comes from {@link PayrollRun}'s STORED {@code gross_total}/{@code
+   * employer_contribution_total} (accumulated by {@link #calculate}); {@code NET_WAGES_PAYABLE} is
+   * the STORED {@code net_total}; the other buckets are FRESHLY decrypted-and-summed from {@code
+   * payslip_line} rows in {@link #computeLiabilityBuckets} — independently derived from the same
+   * underlying data, so a mismatch signals a genuine bug (e.g. a component miscategorised EARNING
+   * vs DEDUCTION) rather than a tautology. Never emits an unbalanced event — throws loudly instead
+   * (HR-3: money is never silently misreported).
+   */
+  private void assertLiabilityIdentity(
+      PayrollRun run,
+      Money employerCostTotal,
+      List<PayrollLiabilitiesPostedSchema.LiabilityBucket> buckets) {
+    Money sum = Money.ofMinor(0L, run.getBaseCurrency());
+    for (PayrollLiabilitiesPostedSchema.LiabilityBucket bucket : buckets) {
+      sum = sum.plus(bucket.amount());
+    }
+    if (!sum.equals(employerCostTotal)) {
+      throw new IllegalStateException(
+          "payroll_run "
+              + run.getId()
+              + " period "
+              + run.getPeriod()
+              + " liability identity violated: Σ(buckets) = "
+              + sum.amountMinor()
+              + " != employer_cost_total = "
+              + employerCostTotal.amountMinor()
+              + " — refusing to emit an unbalanced PayrollLiabilitiesPosted event");
+    }
   }
 
   // ---------------------------------------------------------------------

@@ -52,6 +52,7 @@ final class LaborEventFixtures {
     record.put("amount_minor", amountMinor);
     record.put("currency", currency);
     record.put("run_seq", runSeq);
+    record.put("run_type", "REGULAR");
     record.put("uses_illustrative_rules", usesIllustrative);
     record.put("unallocated", unallocated);
     record.put("occurred_at", occurredAt.toEpochMilli());
@@ -82,6 +83,7 @@ final class LaborEventFixtures {
     record.put("net_total_minor", netMinor);
     record.put("rule_versions", List.of());
     record.put("run_seq", runSeq);
+    record.put("run_type", "REGULAR");
     record.put("uses_illustrative_rules", usesIllustrative);
     record.put("posted_at", postedAt.toEpochMilli());
     return record;

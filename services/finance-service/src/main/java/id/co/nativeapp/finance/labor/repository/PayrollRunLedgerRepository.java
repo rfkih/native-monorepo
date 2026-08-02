@@ -46,40 +46,96 @@ public interface PayrollRunLedgerRepository extends JpaRepository<PayrollRunLedg
   boolean lockPeriod(@Param("key") String key);
 
   /**
-   * The prior runs for a period that a run of {@code runSeq} supersedes: every row with a strictly
-   * lower {@code run_seq} that is still ACTIVE (not already SUPERSEDED). These are reversed
-   * append-only and flipped to {@link PayrollRunState#SUPERSEDED}.
+   * The prior runs for a {@code (period, runType)} that a run of {@code runSeq} supersedes: every
+   * row with a strictly lower {@code run_seq} of the SAME {@code run_type} that is still ACTIVE
+   * (not already SUPERSEDED). These are reversed append-only and flipped to {@link
+   * PayrollRunState#SUPERSEDED}. Keyed on {@code run_type} too (ADR 0032, Track P phase P4) so a
+   * future THR run never supersedes — or is superseded by — a REGULAR run of the same period.
    */
   @Query(
       value =
           """
           SELECT r.* FROM payroll_run_ledger r
            WHERE r.period = :period
+             AND r.run_type = :runType
              AND r.run_seq < :runSeq
              AND r.state <> 'SUPERSEDED'
           """,
       nativeQuery = true)
   List<PayrollRunLedger> findActivePriorRuns(
-      @Param("period") String period, @Param("runSeq") int runSeq);
+      @Param("period") String period,
+      @Param("runType") String runType,
+      @Param("runSeq") int runSeq);
 
   /**
-   * Whether an ACTIVE (non-SUPERSEDED) run with a strictly HIGHER {@code run_seq} already exists
-   * for the period (within the bound tenant). Out-of-order guard (#23): if a higher-seq run is
-   * already active when a LOWER-seq run's bucket arrives (parallel consumers / different
-   * partitions), the incoming lower-seq run is ALREADY superseded — it must not be allowed to leave
-   * a net residual (it would never be reversed by the higher run, which already ran its reversal
-   * scan against the rows present then), so the lower-seq bucket is posted-and-immediately-reversed
-   * and its run row flipped to {@link PayrollRunState#SUPERSEDED} on the spot, never
-   * double-counting the period.
+   * Whether an ACTIVE (non-SUPERSEDED) run with a strictly HIGHER {@code run_seq} of the SAME
+   * {@code run_type} already exists for the {@code (period, runType)} (within the bound tenant).
+   * Out-of-order guard (#23): if a higher-seq run is already active when a LOWER-seq run's bucket
+   * arrives (parallel consumers / different partitions), the incoming lower-seq run is ALREADY
+   * superseded — it must not be allowed to leave a net residual (it would never be reversed by the
+   * higher run, which already ran its reversal scan against the rows present then), so the
+   * lower-seq bucket is posted-and-immediately-reversed and its run row flipped to {@link
+   * PayrollRunState#SUPERSEDED} on the spot, never double-counting the period.
    */
   @Query(
       value =
           """
           SELECT count(r.*) > 0 FROM payroll_run_ledger r
            WHERE r.period = :period
+             AND r.run_type = :runType
              AND r.run_seq > :runSeq
              AND r.state <> 'SUPERSEDED'
           """,
       nativeQuery = true)
-  boolean existsActiveHigherRun(@Param("period") String period, @Param("runSeq") int runSeq);
+  boolean existsActiveHigherRun(
+      @Param("period") String period,
+      @Param("runType") String runType,
+      @Param("runSeq") int runSeq);
+
+  /**
+   * The prior runs for a {@code (period, runType)} whose LIABILITY dimension {@code
+   * PayrollLiabilityWriter} of a run of {@code runSeq} must reverse: every row with a strictly
+   * lower {@code run_seq} of the SAME {@code run_type} that carries an ACTIVE (non-SUPERSEDED)
+   * liability entry. Tracked on the {@code liability_state} column, INDEPENDENTLY of {@link
+   * #findActivePriorRuns}'s {@code state} column (ADR 0032 — see {@link PayrollRunLedger}'s class
+   * javadoc for why the two lifecycles must stay separate) — a row whose {@code liability_entry_id}
+   * is still NULL has nothing to reverse yet and is correctly excluded.
+   */
+  @Query(
+      value =
+          """
+          SELECT r.* FROM payroll_run_ledger r
+           WHERE r.period = :period
+             AND r.run_type = :runType
+             AND r.run_seq < :runSeq
+             AND r.liability_entry_id IS NOT NULL
+             AND (r.liability_state IS NULL OR r.liability_state <> 'SUPERSEDED')
+          """,
+      nativeQuery = true)
+  List<PayrollRunLedger> findActiveLiabilityPriorRuns(
+      @Param("period") String period,
+      @Param("runType") String runType,
+      @Param("runSeq") int runSeq);
+
+  /**
+   * Whether an ACTIVE (non-SUPERSEDED) LIABILITY entry with a strictly HIGHER {@code run_seq} of
+   * the SAME {@code run_type} already exists for the {@code (period, runType)} — the liability
+   * dimension's own out-of-order guard (ADR 0032), mirroring {@link #existsActiveHigherRun} exactly
+   * but scoped to {@code liability_state} instead of the shared {@code state} column.
+   */
+  @Query(
+      value =
+          """
+          SELECT count(r.*) > 0 FROM payroll_run_ledger r
+           WHERE r.period = :period
+             AND r.run_type = :runType
+             AND r.run_seq > :runSeq
+             AND r.liability_entry_id IS NOT NULL
+             AND (r.liability_state IS NULL OR r.liability_state <> 'SUPERSEDED')
+          """,
+      nativeQuery = true)
+  boolean existsActiveHigherLiabilityRun(
+      @Param("period") String period,
+      @Param("runType") String runType,
+      @Param("runSeq") int runSeq);
 }
