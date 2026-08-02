@@ -131,4 +131,15 @@ public interface ExpenseClaimRepository extends JpaRepository<ExpenseClaim, UUID
    */
   @Query(value = "SELECT pg_advisory_xact_lock(hashtext(:key)::bigint) IS NULL", nativeQuery = true)
   boolean lockCurrencyEstablishment(@Param("key") String key);
+
+  /**
+   * Locks the claim ROW ({@code FOR UPDATE}) to serialize a receipt replace-swap (E3 review W1):
+   * two concurrent uploads to the same claim would otherwise each delete-then-insert under READ
+   * COMMITTED and commit two receipt rows. RLS-scoped like every query here; returns the id (or
+   * empty for a claim this tenant cannot see — the caller has already 404'd by then).
+   */
+  @Query(
+      value = "SELECT ec.id FROM expense_claim ec WHERE ec.id = :claimId FOR UPDATE",
+      nativeQuery = true)
+  Optional<UUID> lockForReceiptSwap(@Param("claimId") UUID claimId);
 }

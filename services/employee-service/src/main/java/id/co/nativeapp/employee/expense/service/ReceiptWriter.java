@@ -48,9 +48,11 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
  * Content-Type} before anything is persisted; a mismatch is a {@code 422}, never silently accepted.
  *
  * <p><strong>Replace on re-upload.</strong> A claim carries at most one live receipt in v1: this
- * method deletes any existing row(s) for the claim, then inserts the freshly-validated one, in the
- * SAME transaction — an atomic swap, never a window where the claim briefly has zero or two
- * receipts visible to a concurrent reader.
+ * method locks the claim row ({@code SELECT … FOR UPDATE} — E3 review W1), deletes any existing
+ * receipt row(s) for the claim, then inserts the freshly-validated one, in the SAME transaction.
+ * The row lock serializes concurrent uploads to the same claim (a double-tap / PWA retry), so the
+ * delete always sees the winner's committed row and the post-state is exactly one receipt; each
+ * swap is atomic to concurrent readers either way.
  *
  * <p><strong>Retention (v1, documented — not enforced here).</strong> Cancelling or refusing a
  * claim does NOT delete its receipt row; only a re-upload (replace) or (a later phase) an explicit
@@ -98,19 +100,28 @@ public class ReceiptWriter {
   public ExpenseReceipt upload(UUID claimId, String declaredContentType, byte[] data) {
     String tenant = TenantContext.require().companyId();
     Employee me = resolveMe();
-    requireOwnDraftClaim(claimId, me.getId());
 
+    // Fail fast on the bytes BEFORE touching any row lock — no DB work for garbage input.
     Objects.requireNonNull(data, "data");
     if (data.length > ExpenseReceipt.MAX_BYTES) {
       throw new MaxUploadSizeExceededException(ExpenseReceipt.MAX_BYTES);
     }
-    ReceiptContentTypeValidator.validate(declaredContentType, data);
+    // The CANONICAL detected type is what gets stored (and later served) — never the raw declared
+    // header, which may be a case/whitespace variant or absent entirely (E3 review S1/S2).
+    String canonicalContentType = ReceiptContentTypeValidator.validate(declaredContentType, data);
     String sha256 = sha256Hex(data);
+
+    // Serialize concurrent uploads to the same claim on the claim ROW (E3 review W1): without
+    // this, two READ COMMITTED transactions could each delete-then-insert and commit TWO rows.
+    // Lock FIRST, then check ownership/DRAFT — the check must see post-lock committed state, or a
+    // concurrent submit between check and lock could sneak a receipt onto a SUBMITTED claim.
+    claimRepository.lockForReceiptSwap(claimId);
+    requireOwnDraftClaim(claimId, me.getId());
 
     // Replace-on-reupload, atomically: delete the claim's existing receipt(s), then insert the
     // freshly-validated one in the same transaction (class Javadoc).
     receiptRepository.deleteByClaimId(claimId);
-    ExpenseReceipt receipt = new ExpenseReceipt(claimId, declaredContentType, data, sha256);
+    ExpenseReceipt receipt = new ExpenseReceipt(claimId, canonicalContentType, data, sha256);
     receipt.setCompanyId(tenant);
     return receiptRepository.saveAndFlush(receipt);
   }

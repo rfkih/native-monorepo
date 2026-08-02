@@ -115,4 +115,22 @@ class ReceiptContentTypeValidatorTest {
     assertThatThrownBy(() -> ReceiptContentTypeValidator.validate(null, "junk".getBytes()))
         .isInstanceOf(InvalidReceiptContentTypeException.class);
   }
+
+  @Test
+  void validateToleratesAMissingDeclaredHeaderWhenTheBytesMatchAWhitelistedSignature() {
+    // E3 review S2: browsers always send a part Content-Type, some API clients don't — the magic
+    // bytes are the authority; a null header with genuine JPEG bytes passes.
+    byte[] jpeg = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 0x00};
+    assertThat(ReceiptContentTypeValidator.validate(null, jpeg))
+        .isEqualTo(ReceiptContentTypeValidator.CONTENT_TYPE_JPEG);
+  }
+
+  @Test
+  void validateReturnsTheCanonicalConstantForACaseVariantDeclaredHeader() {
+    // E3 review S1: the stored (and later served) value is the canonical detected constant — a
+    // case/whitespace variant of the declared header never leaks into the DB.
+    byte[] jpeg = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 0x00};
+    assertThat(ReceiptContentTypeValidator.validate("  IMAGE/JPEG ", jpeg))
+        .isEqualTo(ReceiptContentTypeValidator.CONTENT_TYPE_JPEG);
+  }
 }

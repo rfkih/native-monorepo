@@ -96,6 +96,11 @@ storage, no human approve/reject state machine, and `/api/v1/me/**` has never ha
 - Receipt blobs grow the employee DB (~MBs per claim); acceptable at SME scale, and the separate
   table + projection discipline keeps hot paths blob-free. An object store can replace the table
   behind the same endpoints if scale demands (a future ADR).
+- **Residual (E3 spike finding): the gateway enforces NO body-size cap on any proxied request.**
+  spring-cloud-gateway-server-mvc force-disables multipart resolution, so uploads stream through
+  untouched and only the terminating service's limits bind (employee-service caps receipts at
+  5 MB/6 MB) — but every other route is equally unbounded, a fleet-wide DoS/bandwidth surface
+  that needs its own gateway ADR. Pinned by the permanent `MultipartUploadStreamingSpikeTest`.
 - The per-tenant advisory lock that serializes first-currency establishment (W1, E1 code review)
   only closes the RACE — it cannot validate CORRECTNESS. Whichever concurrent request wins still
   pins the tenant's expense-claim currency for good, with no admin "reset" path in v1; in practice

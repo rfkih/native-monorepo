@@ -59,18 +59,25 @@ public final class ReceiptContentTypeValidator {
 
   /**
    * Validates that {@code declaredContentType} matches the type {@link #detect(byte[])} derives
-   * from {@code data} itself (case-insensitive on the declared value).
+   * from {@code data} itself (case-insensitive on the declared value) and returns the CANONICAL
+   * detected constant — callers persist THAT, never the raw declared header, so the later serve
+   * {@code Content-Type} is guaranteed-canonical (E3 review S1). A {@code null} declared header (a
+   * multipart part without one — browsers always send it, some API clients don't) is tolerated when
+   * the bytes themselves match a whitelisted signature: the magic bytes are the authority, the
+   * header only cross-checks it (E3 review S2).
    *
+   * @return the canonical {@code CONTENT_TYPE_*} constant detected from the bytes
    * @throws InvalidReceiptContentTypeException if the actual bytes are unrecognised, or disagree
-   *     with the declared header (→ 422)
+   *     with a non-null declared header (→ 422)
    */
-  public static void validate(String declaredContentType, byte[] data) {
+  public static String validate(String declaredContentType, byte[] data) {
     String detected = detect(data);
     String normalizedDeclared =
         declaredContentType == null ? null : declaredContentType.strip().toLowerCase(Locale.ROOT);
-    if (detected == null || !detected.equals(normalizedDeclared)) {
+    if (detected == null || (normalizedDeclared != null && !detected.equals(normalizedDeclared))) {
       throw new InvalidReceiptContentTypeException(declaredContentType, detected);
     }
+    return detected;
   }
 
   private static boolean startsWith(byte[] data, int offset, byte[] magic) {
