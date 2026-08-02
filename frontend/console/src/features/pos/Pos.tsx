@@ -252,7 +252,10 @@ function PosInner({ session }: { session: CompanySession }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [items, categories],
   )
-  const resolvedCategoryId: string = activeCategoryId ?? orderedCategories[0]?.id ?? ''
+  // null = the "All" tab (the DEFAULT): a cashier opening the POS sees the whole menu, never a
+  // single — possibly empty — first category. '' matches no category id, so the item filter's
+  // `!cat → return true` branch shows everything.
+  const resolvedCategoryId: string = activeCategoryId ?? ''
 
   // Filtered items — memoized; hoist trimmed lower-case search once
   const searchLower = searchQuery.trim().toLowerCase()
@@ -778,7 +781,7 @@ function PosInner({ session }: { session: CompanySession }) {
           <CategoryCell
             label={t('pos.category.all', 'All')}
             icon={<AllCategoriesIcon />}
-            active={resolvedCategoryId === '__all__' || (activeCategoryId === null && orderedCategories.length === 0)}
+            active={activeCategoryId === null}
             onClick={() => {
               setActiveCategoryId(null)
               setSearchQuery('')
@@ -789,7 +792,7 @@ function PosInner({ session }: { session: CompanySession }) {
               key={cat.id}
               label={cat.name}
               icon={<CategoryIcon name={cat.name} />}
-              active={cat.id === resolvedCategoryId && activeCategoryId !== null}
+              active={cat.id === activeCategoryId}
               onClick={() => {
                 setActiveCategoryId(cat.id)
                 setSearchQuery('')
