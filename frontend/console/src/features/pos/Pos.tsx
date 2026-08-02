@@ -51,7 +51,7 @@ import { useAuth, hasAnyRole } from '@/lib/authContext'
 import { useTheme } from '@/lib/theme'
 import { localeOf } from '@/i18n'
 import { cn } from '@/lib/cn'
-import { formatMoney, isoMinorExponent } from '@/lib/money'
+import { formatMoney } from '@/lib/money'
 import { OutletPicker } from '@/components/OutletPicker'
 import { OutletGate } from '@/components/OutletGate'
 import { CouponField } from '@/components/CouponField'
@@ -67,7 +67,14 @@ import { OfflineHint } from './offline/OfflineHint'
 import { SyncCenter } from './offline/SyncCenter'
 import type { SaleQueueRow } from './offline/db'
 import { useDisplayPublisher } from './display/displayPublisher'
-import type { DisplayBreakdown, DisplayLine } from './display/displayChannel'
+import { deriveCategories, visibleMenuItems } from './lib/categories'
+import { lineKey } from './lib/lineKey'
+import { parseDiscountInput } from './lib/discountInput'
+import {
+  billDisplayBreakdown,
+  cartDisplayBreakdown,
+  cartDisplayLines,
+} from './lib/displayPayload'
 import {
   useMenu,
   useCategories,
@@ -257,23 +264,12 @@ function PosInner({ session }: { session: CompanySession }) {
   // `!cat → return true` branch shows everything.
   const resolvedCategoryId: string = activeCategoryId ?? ''
 
-  // Filtered items — memoized; hoist trimmed lower-case search once
+  // Filtered items — memoized; hoist trimmed lower-case search once (logic in lib/categories.ts)
   const searchLower = searchQuery.trim().toLowerCase()
-  const visibleItems = useMemo(() => {
-    if (searchLower) {
-      return items.filter((item) => item.name.toLowerCase().includes(searchLower))
-    }
-    return items.filter((item) => {
-      if (orderedCategories.length === 0) return true
-      const cat = orderedCategories.find((c) => c.id === resolvedCategoryId)
-      if (!cat) return true
-      if (item.categoryId) return item.categoryId === resolvedCategoryId
-      // Name bridge: items carry a free-text category (the write path has no categoryId yet), so
-      // a managed category adopts items whose text matches its name CASE-INSENSITIVELY. legacyKey
-      // is always lowercased in deriveCategories — compare apples to apples.
-      return (item.category ?? '').toLowerCase() === cat.legacyKey
-    })
-  }, [items, orderedCategories, resolvedCategoryId, searchLower])
+  const visibleItems = useMemo(
+    () => visibleMenuItems(items, orderedCategories, resolvedCategoryId, searchLower),
+    [items, orderedCategories, resolvedCategoryId, searchLower],
+  )
 
   // Cart helpers — memoized
   const cartLines: OrderLineInput[] = useMemo(
@@ -355,17 +351,9 @@ function PosInner({ session }: { session: CompanySession }) {
     if (!displayPublisher.isOpened) return
     if (activeBill) {
       if (activeBill.lineCount > 0) {
-        const activeBillBreakdown: DisplayBreakdown = {
-          subtotalMinor: activeBill.runningTotalMinor,
-          discountMinor: 0,
-          serviceChargeMinor: 0,
-          taxMinor: 0,
-          grandTotalMinor: activeBill.runningTotalMinor,
-          currency: activeBill.currency,
-        }
         // BillSummaryResponse carries no per-line detail (see its class doc) — the display shows
         // the running total only while a bill is open, no itemised lines.
-        displayPublisher.publishCartUpdated([], activeBillBreakdown)
+        displayPublisher.publishCartUpdated([], billDisplayBreakdown(activeBill))
       } else {
         displayPublisher.publishIdle()
       }
@@ -375,30 +363,10 @@ function PosInner({ session }: { session: CompanySession }) {
       displayPublisher.publishIdle()
       return
     }
-    const displayLines: DisplayLine[] = cart.map((l) => ({
-      name: items.find((i) => i.id === l.menuItemId)?.name ?? '',
-      qty: l.qty,
-      unitPriceMinor: l.effectiveUnitPriceMinor,
-      lineTotalMinor: l.effectiveUnitPriceMinor * l.qty,
-    }))
-    const cartDisplayBreakdown: DisplayBreakdown = breakdown
-      ? {
-          subtotalMinor: breakdown.subtotalMinor,
-          discountMinor: breakdown.discountMinor,
-          serviceChargeMinor: breakdown.serviceChargeMinor,
-          taxMinor: breakdown.taxMinor,
-          grandTotalMinor: breakdown.grandTotalMinor,
-          currency: breakdown.currency,
-        }
-      : {
-          subtotalMinor: clientSubtotalMinor,
-          discountMinor: 0,
-          serviceChargeMinor: 0,
-          taxMinor: 0,
-          grandTotalMinor,
-          currency,
-        }
-    displayPublisher.publishCartUpdated(displayLines, cartDisplayBreakdown)
+    displayPublisher.publishCartUpdated(
+      cartDisplayLines(cart, items),
+      cartDisplayBreakdown(breakdown, { clientSubtotalMinor, grandTotalMinor, currency }),
+    )
   }
 
   useEffect(() => {
@@ -1962,52 +1930,4 @@ function NoCompany() {
 // Pure helpers
 // ---------------------------------------------------------------------------
 
-function parseDiscountInput(input: string, currency: string): number {
-  if (!input || input.trim() === '') return 0
-  const major = Number(input)
-  if (isNaN(major) || major < 0) return 0
-  const exp = isoMinorExponent(currency)
-  return Math.round(major * 10 ** exp)
-}
-
-interface VirtualCategory {
-  id: string
-  name: string
-  legacyKey: string
-}
-
-function deriveCategories(
-  items: MenuItem[],
-  backendCategories: CategoryResponse[],
-): VirtualCategory[] {
-  const result: VirtualCategory[] = backendCategories.map((c) => ({
-    id: c.id,
-    name: c.name,
-    legacyKey: c.name.toLowerCase(),
-  }))
-  const backendIds = new Set(backendCategories.map((c) => c.id))
-  const legacyKeys = new Set<string>()
-  for (const item of items) {
-    if (!item.categoryId || !backendIds.has(item.categoryId)) {
-      if (item.category && !legacyKeys.has(item.category)) {
-        legacyKeys.add(item.category)
-        const covered = backendCategories.some(
-          (c) => c.name.toLowerCase() === item.category.toLowerCase(),
-        )
-        if (!covered) {
-          // legacyKey is the LOWERCASED match key (the item filter compares lowercased text).
-          result.push({
-            id: item.category,
-            name: item.category,
-            legacyKey: item.category.toLowerCase(),
-          })
-        }
-      }
-    }
-  }
-  return result
-}
-
-function lineKey(menuItemId: string, selectedOptionIds: string[]): string {
-  return `${menuItemId}::${[...selectedOptionIds].sort().join(',')}`
-}
+// (parseDiscountInput, deriveCategories, and lineKey moved to ./lib — redesign P1.)

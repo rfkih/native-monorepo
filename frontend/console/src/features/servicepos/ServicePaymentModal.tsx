@@ -31,19 +31,14 @@ import { AppliedPromotionChips } from '@/components/AppliedPromotionChips'
 import { GiftCardField } from '@/components/GiftCardField'
 import { formatMoney } from '@/lib/money'
 import type { CompanySession } from '@/lib/session'
-import { ApiError, isOutletNotAssigned } from '@/lib/api'
-import {
-  isGiftCardUnusable,
-  isLoyaltyBalanceInsufficient,
-  type GiftCardResponse,
-  type MemberResponse,
-} from '@/features/loyalty/api'
+import type { GiftCardResponse, MemberResponse } from '@/features/loyalty/api'
+import { checkoutErrorKey } from '@/features/pos-shell/payment/errorKeys'
+import { quickChips } from '@/features/pos-shell/payment/quickChips'
 import { OfflineHint } from '@/features/pos/offline/OfflineHint'
 import { enqueueSale } from '@/features/pos/offline/queue'
 import type { ProvisionalTotals, SaleQueueRow } from '@/features/pos/offline/db'
 import type { VerticalPosConfig, TenderType } from './config'
 import {
-  isModuleNotEntitled,
   useTicketCapture,
   useTicketCheckout,
   type PriceBreakdownResponse,
@@ -79,40 +74,8 @@ interface Props {
   onOfflineSuccess?: (row: SaleQueueRow, tenderedMinor: number, changeMinor: number) => void
 }
 
-// Quick-cash chip amounts in IDR minor units (= whole rupiah, exponent 0) — mirrors the restaurant
-// POS's PaymentModal chip set exactly.
-const IDR_QUICK_CHIPS = [50_000, 100_000] as const
-
-function quickChips(totalMinor: number, currency: string): number[] {
-  if (currency === 'IDR') {
-    return [totalMinor, ...IDR_QUICK_CHIPS.filter((v) => v > totalMinor)]
-  }
-  const round500 = Math.ceil(totalMinor / 500) * 500
-  const round1000 = Math.ceil(totalMinor / 1000) * 1000
-  const chips = [totalMinor]
-  if (round500 > totalMinor) chips.push(round500)
-  if (round1000 > round500) chips.push(round1000)
-  return chips
-}
-
-/**
- * Maps a checkout/capture error to a precise i18n message, or null for a generic fallback. The
- * coupon checks (ADR 0026: checkout REJECTS a bad/exhausted code, unlike the quote) reuse the same
- * copy CouponField's own inline error uses. Phase 4 (ADR 0027) adds the loyalty/gift-card
- * checkout-time redemption faults (both 409).
- */
-function errorMessageKey(err: unknown): string | null {
-  if (isOutletNotAssigned(err)) return 'pos.payment.outletNotAssigned'
-  if (isModuleNotEntitled(err)) return 'servicePos.errors.moduleNotEntitled'
-  if (isLoyaltyBalanceInsufficient(err)) return 'pos.loyalty.member.insufficientBalance'
-  if (isGiftCardUnusable(err)) return 'pos.loyalty.giftCard.unusableAtCheckout'
-  if (err instanceof ApiError) {
-    const type = err.problem?.type ?? ''
-    if (err.status === 422 && type.includes('coupon-invalid')) return 'pos.coupon.invalid'
-    if (err.status === 409 && type.includes('coupon-exhausted')) return 'pos.coupon.exhausted'
-  }
-  return null
-}
+// quickChips + the error → i18n-key mapping moved to features/pos-shell/payment (redesign P1) —
+// the three payment modals carried byte-identical copies.
 
 export function ServicePaymentModal({
   config,
@@ -499,7 +462,7 @@ function FullCoveragePanel({
       {checkout.isError ? (
         <p className="mb-3 text-xs text-loss" role="alert">
           {(() => {
-            const key = errorMessageKey(checkout.error)
+            const key = checkoutErrorKey(checkout.error)
             return key ? t(key) : (checkout.error as Error).message
           })()}
         </p>
@@ -711,7 +674,7 @@ function CashPanel({
       {!offline && checkout.isError ? (
         <p className="mb-3 text-xs text-loss">
           {(() => {
-            const key = errorMessageKey(checkout.error)
+            const key = checkoutErrorKey(checkout.error)
             return key ? t(key) : (checkout.error as Error).message
           })()}
         </p>
@@ -846,7 +809,7 @@ function DigitalPanel({
         {checkout.isError ? (
           <p className="mb-3 text-xs text-loss">
             {(() => {
-              const key = errorMessageKey(checkout.error)
+              const key = checkoutErrorKey(checkout.error)
               return key ? t(key) : (checkout.error as Error).message
             })()}
           </p>

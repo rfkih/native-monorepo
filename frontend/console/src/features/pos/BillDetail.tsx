@@ -35,10 +35,10 @@ import {
   useMenu,
   useCategories,
   type MenuItem,
-  type CategoryResponse,
   type PriceBreakdownResponse,
 } from './api'
 import { ModifierModal } from './ModifierModal'
+import { deriveCategories, visibleMenuItems, type VirtualCategory } from './lib/categories'
 import { BillPaymentModal } from './BillPaymentModal'
 import { BillReceiptView } from './BillReceiptView'
 import { KotView } from './KotView'
@@ -142,13 +142,7 @@ export function BillDetail({
   const orderedCategories = deriveCategories(items, categories)
   const resolvedCategoryId: string = activeCategoryId ?? orderedCategories[0]?.id ?? ''
 
-  const visibleItems = items.filter((item) => {
-    if (orderedCategories.length === 0) return true
-    const cat = orderedCategories.find((c) => c.id === resolvedCategoryId)
-    if (!cat) return true
-    if (item.categoryId) return item.categoryId === resolvedCategoryId
-    return item.category === cat.legacyKey
-  })
+  const visibleItems = visibleMenuItems(items, orderedCategories, resolvedCategoryId, '')
 
   const currency = bill?.currency ?? items[0]?.currency ?? session.baseCurrency
   const lineCount = bill?.lines.reduce((s, l) => s + l.qty, 0) ?? 0
@@ -719,8 +713,6 @@ interface PhoneSheetProps {
 
 function PhoneSheetContent({
   bill,
-  visibleItems: _visibleItems,
-  orderedCategories: _orderedCategories,
   tableLabel,
   locale,
   currency,
@@ -733,7 +725,6 @@ function PhoneSheetContent({
   selectedLineIds,
   splitMode,
   allLinesPaid,
-  removeLine: _removeLine,
   isRemoving,
   onToggleSplitMode,
   onToggleLineSelect,
@@ -742,7 +733,6 @@ function PhoneSheetContent({
   onCancel,
   onPayModal,
   onClose,
-  onBack: _onBack,
 }: PhoneSheetProps) {
   const { t } = useTranslation()
 
@@ -1116,35 +1106,5 @@ function freshIdempotencyKey(): string {
   return crypto.randomUUID()
 }
 
-interface VirtualCategory {
-  id: string
-  name: string
-  legacyKey: string
-}
-
-function deriveCategories(
-  items: MenuItem[],
-  backendCategories: CategoryResponse[],
-): VirtualCategory[] {
-  const result: VirtualCategory[] = backendCategories.map((c) => ({
-    id: c.id,
-    name: c.name,
-    legacyKey: c.name.toLowerCase(),
-  }))
-  const backendIds = new Set(backendCategories.map((c) => c.id))
-  const legacyKeys = new Set<string>()
-  for (const item of items) {
-    if (!item.categoryId || !backendIds.has(item.categoryId)) {
-      if (item.category && !legacyKeys.has(item.category)) {
-        legacyKeys.add(item.category)
-        const covered = backendCategories.some(
-          (c) => c.name.toLowerCase() === item.category.toLowerCase(),
-        )
-        if (!covered) {
-          result.push({ id: item.category, name: item.category, legacyKey: item.category })
-        }
-      }
-    }
-  }
-  return result
-}
+// deriveCategories/VirtualCategory now come from ./lib/categories (redesign P1) — this file
+// carried a STALE case-sensitive fork of the category-adoption logic (missed fix f050be1).

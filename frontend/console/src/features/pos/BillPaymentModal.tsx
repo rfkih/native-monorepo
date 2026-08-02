@@ -20,42 +20,14 @@ import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
 import { Segmented } from '@/components/ui/Segmented'
 import { formatMoney } from '@/lib/money'
-import { ApiError, isOutletNotAssigned } from '@/lib/api'
+import { isOutletNotAssigned } from '@/lib/api'
 import type { CompanySession } from '@/lib/session'
 import type { PriceBreakdownResponse } from './api'
 import { usePayBill, type BillResponse } from './billsApi'
+import { parseInsufficientStock } from '@/features/pos-shell/payment/errorKeys'
+import { quickChips } from '@/features/pos-shell/payment/quickChips'
 
 type TenderTab = 'CASH' | 'QRIS' | 'CARD'
-
-/**
- * Detects a 422 insufficient-stock problem+json (same shape as order checkout).
- */
-function parseInsufficientStock(err: unknown): { itemName: string; available: number } | null {
-  if (!(err instanceof ApiError)) return null
-  if (err.status !== 422) return null
-  const p = err.problem
-  if (!p) return null
-  if (typeof p.type !== 'string' || !p.type.includes('insufficient-stock')) return null
-  const raw = p as Record<string, unknown>
-  if (typeof raw.itemName === 'string' && typeof raw.available === 'number') {
-    return { itemName: raw.itemName, available: raw.available }
-  }
-  return null
-}
-
-const IDR_QUICK_CHIPS = [50_000, 100_000] as const
-
-function quickChips(totalMinor: number, currency: string): number[] {
-  if (currency === 'IDR') {
-    return [totalMinor, ...IDR_QUICK_CHIPS.filter((v) => v > totalMinor)]
-  }
-  const round500 = Math.ceil(totalMinor / 500) * 500
-  const round1000 = Math.ceil(totalMinor / 1000) * 1000
-  const chips = [totalMinor]
-  if (round500 > totalMinor) chips.push(round500)
-  if (round1000 > round500) chips.push(round1000)
-  return chips
-}
 
 interface Props {
   session: CompanySession

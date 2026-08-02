@@ -37,13 +37,10 @@ import { AppliedPromotionChips } from '@/components/AppliedPromotionChips'
 import { GiftCardField } from '@/components/GiftCardField'
 import { formatMoney } from '@/lib/money'
 import type { CompanySession } from '@/lib/session'
-import { ApiError, isOutletNotAssigned } from '@/lib/api'
-import {
-  isGiftCardUnusable,
-  isLoyaltyBalanceInsufficient,
-  type GiftCardResponse,
-  type MemberResponse,
-} from '@/features/loyalty/api'
+import { isOutletNotAssigned } from '@/lib/api'
+import { checkoutErrorKey, parseInsufficientStock } from '@/features/pos-shell/payment/errorKeys'
+import { quickChips } from '@/features/pos-shell/payment/quickChips'
+import type { GiftCardResponse, MemberResponse } from '@/features/loyalty/api'
 import { OfflineHint } from './offline/OfflineHint'
 import { enqueueSale } from './offline/queue'
 import type { ProvisionalTotals, SaleQueueRow } from './offline/db'
@@ -57,54 +54,6 @@ import type {
 import { useCheckout, useCapturePayment, usePayParked } from './api'
 
 type TenderTab = 'CASH' | 'QRIS' | 'CARD'
-
-/**
- * Detects the checkout-time coupon rejections (ADR 0026: unlike the quote, checkout/pay-parked
- * REJECT a bad/exhausted coupon rather than reporting couponStatus) — 422 coupon-invalid or 409
- * coupon-exhausted (PromotionAdvice.java). Returns the matching i18n key, reusing the same copy the
- * CouponField's inline error uses, or null for any other error shape.
- */
-function couponCheckoutErrorKey(err: unknown): 'pos.coupon.invalid' | 'pos.coupon.exhausted' | null {
-  if (!(err instanceof ApiError)) return null
-  const type = err.problem?.type ?? ''
-  if (err.status === 422 && type.includes('coupon-invalid')) return 'pos.coupon.invalid'
-  if (err.status === 409 && type.includes('coupon-exhausted')) return 'pos.coupon.exhausted'
-  return null
-}
-
-/**
- * Detects a 422 insufficient-stock problem+json and returns a structured object
- * with itemName and available so the UI can surface a precise message.
- * Returns null for any other error shape.
- */
-function parseInsufficientStock(
-  err: unknown,
-): { itemName: string; available: number } | null {
-  if (!(err instanceof ApiError)) return null
-  if (err.status !== 422) return null
-  const p = err.problem
-  if (!p) return null
-  if (typeof p.type !== 'string' || !p.type.includes('insufficient-stock')) return null
-  const raw = p as Record<string, unknown>
-  if (typeof raw.itemName === 'string' && typeof raw.available === 'number') {
-    return { itemName: raw.itemName, available: raw.available }
-  }
-  return null
-}
-
-/**
- * Simple (non-parameterised) checkout-time error keys shared by every tender panel — outlet
- * assignment, coupon, and the Phase 4 (ADR 0027) loyalty/gift-card redemption faults. Stock is
- * handled separately ({@link parseInsufficientStock}) since it needs interpolated params.
- */
-function resolveSimpleErrorKey(err: unknown): string | null {
-  if (isOutletNotAssigned(err)) return 'pos.payment.outletNotAssigned'
-  const couponKey = couponCheckoutErrorKey(err)
-  if (couponKey) return couponKey
-  if (isLoyaltyBalanceInsufficient(err)) return 'pos.loyalty.member.insufficientBalance'
-  if (isGiftCardUnusable(err)) return 'pos.loyalty.giftCard.unusableAtCheckout'
-  return null
-}
 
 interface Props {
   session: CompanySession
@@ -148,25 +97,6 @@ interface Props {
    * see displayPublisher.ts). Optional so every OTHER caller of this modal (there are none today,
    * but the type stays honest) keeps working without wiring one up. */
   displayPublisher?: DisplayPublisher
-}
-
-// Quick-cash chip amounts in IDR minor units (= whole rupiah, exponent 0).
-// For USD we build chips relative to the total (exact, +$5, +$10).
-const IDR_QUICK_CHIPS = [50_000, 100_000] as const
-
-/** Build quick-cash chip options: [exact, ...preset-overs] all as minor units. */
-function quickChips(totalMinor: number, currency: string): number[] {
-  if (currency === 'IDR') {
-    // Exact + preset IDR chips that exceed the total
-    return [totalMinor, ...IDR_QUICK_CHIPS.filter((v) => v > totalMinor)]
-  }
-  // For non-IDR: exact + a couple of round-up multiples of 500 minor units (e.g. USD cents)
-  const round500 = Math.ceil(totalMinor / 500) * 500
-  const round1000 = Math.ceil(totalMinor / 1000) * 1000
-  const chips = [totalMinor]
-  if (round500 > totalMinor) chips.push(round500)
-  if (round1000 > round500) chips.push(round1000)
-  return chips
 }
 
 export function PaymentModal({
@@ -608,7 +538,7 @@ function FullCoveragePanel({
         <p className="mb-3 text-xs text-loss" role="alert">
           {(() => {
             const err = checkout.error ?? payParked.error
-            const key = resolveSimpleErrorKey(err)
+            const key = checkoutErrorKey(err)
             return key ? t(key) : (err as Error).message
           })()}
         </p>
@@ -871,7 +801,7 @@ function CashPanel({
                 available: stockErr.available,
               })
             }
-            const key = resolveSimpleErrorKey(err)
+            const key = checkoutErrorKey(err)
             if (key) {
               return t(key)
             }
@@ -1046,7 +976,7 @@ function DigitalPanel({
                   available: stockErr.available,
                 })
               }
-              const key = resolveSimpleErrorKey(err)
+              const key = checkoutErrorKey(err)
               if (key) {
                 return t(key)
               }

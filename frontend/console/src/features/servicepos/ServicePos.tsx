@@ -40,7 +40,7 @@ import { useAuth, hasAnyRole } from '@/lib/authContext'
 import { useTheme } from '@/lib/theme'
 import { localeOf } from '@/i18n'
 import { cn } from '@/lib/cn'
-import { formatMoney, isoMinorExponent } from '@/lib/money'
+import { formatMoney } from '@/lib/money'
 import { OutletPicker } from '@/components/OutletPicker'
 import { OutletGate } from '@/components/OutletGate'
 import { CouponField } from '@/components/CouponField'
@@ -52,6 +52,7 @@ import { useOffline } from '@/features/pos/offline/useOffline'
 import { useCachedCatalogFallback } from '@/features/pos/offline/catalogCache'
 import { computeProvisionalPricing, toDisplayBreakdown } from '@/features/pos/offline/provisionalPricing'
 import type { EffectiveRulesResponse } from '@/features/pos/offline/provisionalPricing'
+import { parseDiscountInput } from '@/features/pos/lib/discountInput'
 import { OfflineHint } from '@/features/pos/offline/OfflineHint'
 import { SyncCenter } from '@/features/pos/offline/SyncCenter'
 import type { SaleQueueRow } from '@/features/pos/offline/db'
@@ -1132,14 +1133,4 @@ function NoCompany() {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Pure helpers
-// ---------------------------------------------------------------------------
-
-function parseDiscountInput(input: string, currency: string): number {
-  if (!input || input.trim() === '') return 0
-  const major = Number(input)
-  if (isNaN(major) || major < 0) return 0
-  const exp = isoMinorExponent(currency)
-  return Math.round(major * 10 ** exp)
-}
+// (parseDiscountInput moved to features/pos/lib/discountInput.ts — redesign P1.)
