@@ -134,8 +134,10 @@ figures the implementing agent structurally could not.
 ## The activation checklist (who verifies what, now and going forward)
 
 - **`PPH21_TER`** — DONE for `ID-2026.1`: the full 44/40/41-band-per-category (A/B/C) PMK
-  168/2023 Lampiran table was transcribed and cross-verified against two independent secondary sources (klikpajak.id/blog/pajak-penghasilan-pasal-21-2 full tables; akuntansimandiri.com/2026/05/cara-hitung-pph-21-ter.html spot rows) and the anchors of the reconciled domain spec
-  sources 2026-08-02 (every spot-checked row matched between sources), then loaded verbatim into
+  168/2023 Lampiran table was transcribed and cross-verified 2026-08-02 against two independent
+  secondary sources (klikpajak.id/blog/pajak-penghasilan-pasal-21-2, full tables;
+  akuntansimandiri.com/2026/05/cara-hitung-pph-21-ter.html, spot rows) and the anchors of the
+  reconciled domain spec — every spot-checked row matched between sources — then loaded verbatim into
   `ID-2026.1.json` and validated through `StatutoryParams.terTable` at classpath-load time
   (`OfficialStatutoryDatasetTest`'s drift guard pins the band COUNTS — 44/40/41 — plus three
   cross-verified spot rows, so a future edit that silently drops/reorders/mistypes a row fails a
