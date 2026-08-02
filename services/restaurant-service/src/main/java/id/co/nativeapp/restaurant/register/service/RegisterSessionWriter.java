@@ -157,8 +157,13 @@ public class RegisterSessionWriter {
     long countedCash = request.countedCashMinor(); // @NotNull @PositiveOrZero at the edge
 
     Instant closeInstant = Instant.now();
+    // Cash INTO the drawer = cash-collected sale portions + cash gift-card sales (a gift card
+    // sold for cash is drawer money even though it is a liability, not revenue — ADR 0036).
     long cashSales =
-        repository.sumCashSales(session.getBusinessId(), session.getOpenedAt(), closeInstant);
+        Math.addExact(
+            repository.sumCashSales(session.getBusinessId(), session.getOpenedAt(), closeInstant),
+            repository.sumCashGiftCardSales(
+                session.getBusinessId(), session.getOpenedAt(), closeInstant));
     long cashRefunds =
         repository.sumCashRefunds(session.getBusinessId(), session.getOpenedAt(), closeInstant);
     // expected = float + sales − refunds; overShort = counted − expected. Overflow-safe (the

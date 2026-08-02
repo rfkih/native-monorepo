@@ -37,11 +37,13 @@ posting only the **variance**.
    OVER: `Dr CASH_CLEARING` / `Cr CASH_OVER_INCOME (4300 illustrative, other income)`.
    Zero variance → no journal entry (event still marked processed). Sealed period at `closed_at` →
    error-inbox quarantine carrying the over/short amount + currency for manual posting.
-3. **Expected-cash inputs are drawer-accurate** (restaurant V22): `sale.cash_collected_minor`
+3. **Expected-cash inputs are drawer-accurate** (restaurant V22/V23): `sale.cash_collected_minor`
    stores the cash physically collected per CASH sale (grand total − gift-card-redeemed portion;
-   pre-V22 rows COALESCE to `amount_minor`), and `payment_refund` is an append-only per-refund
-   delta ledger (a cumulative `payment.refunded_minor` attributed to one window would double-count
-   partial refunds spanning sessions).
+   pre-V22 rows COALESCE to `amount_minor`), `payment_refund` is an append-only per-refund delta
+   ledger (a cumulative `payment.refunded_minor` attributed to one window would double-count
+   partial refunds spanning sessions), and cash **gift-card sales** count as a third drawer inflow
+   (a gift card sold for cash is a liability, not revenue, so it lives in `gift_card_sale` — but
+   its cash is in the drawer; without this term it surfaces as a phantom OVER at close).
 4. **Online sales post gross** (PSAK 72 — the merchant is principal, the platform an agent): tender
    `ONLINE` + channel routes the clearing leg to `Dr PLATFORM_RECEIVABLE (1250 illustrative)`;
    revenue/tax legs unchanged; ONLINE is synchronous capture and carries no gift-card/loyalty legs.
