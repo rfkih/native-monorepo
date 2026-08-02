@@ -134,7 +134,7 @@ export function ModifierModal({ item, locale, onConfirm, onClose }: Props) {
       aria-modal="true"
       aria-label={t('pos.modifiers.modalLabel', { name: item.name })}
     >
-      <Card className="reveal w-full max-w-md overflow-hidden">
+      <Card className="reveal flex max-h-full w-full max-w-md flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-start justify-between border-b border-line px-5 py-4">
           <div className="min-w-0 pr-3">
@@ -152,7 +152,7 @@ export function ModifierModal({ item, locale, onConfirm, onClose }: Props) {
         </div>
 
         {/* Groups */}
-        <div className="max-h-[60vh] overflow-y-auto overscroll-contain">
+        <div className="min-h-0 max-h-[60vh] overflow-y-auto overscroll-contain">
           {item.modifierGroups
             .slice()
             .sort((a, b) => a.displayOrder - b.displayOrder)

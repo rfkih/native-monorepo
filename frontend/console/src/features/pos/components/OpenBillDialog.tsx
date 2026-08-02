@@ -66,7 +66,7 @@ export function OpenBillDialog({
       aria-modal="true"
       aria-label={t('bills.openBillTitle')}
     >
-      <div className="w-full max-w-sm rounded-[20px] border border-line bg-surface shadow-xl">
+      <div className="max-h-full w-full max-w-sm overflow-y-auto overscroll-contain rounded-[20px] border border-line bg-surface shadow-xl">
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <h3 className="font-display text-lg font-semibold text-ink">{t('bills.openBillTitle')}</h3>
           <button

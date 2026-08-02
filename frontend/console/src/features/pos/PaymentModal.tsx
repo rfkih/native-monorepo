@@ -172,7 +172,7 @@ export function PaymentModal({
       aria-modal="true"
       aria-label={t('pos.payment.title')}
     >
-      <Card className="reveal w-full max-w-sm overflow-hidden">
+      <Card className="reveal max-h-full w-full max-w-sm overflow-y-auto overscroll-contain">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <h2 className="font-display text-lg font-semibold text-ink">{t('pos.payment.title')}</h2>

@@ -43,7 +43,7 @@ export function KotView({ bill, lines, locale, tableLabel, onClose }: Props) {
         aria-modal="true"
         aria-label={t('kot.title')}
       >
-        <Card className="reveal w-full max-w-sm overflow-hidden">
+        <Card className="reveal flex max-h-full w-full max-w-sm flex-col overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between border-b border-line px-5 py-4">
             <div className="flex items-center gap-2">

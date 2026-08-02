@@ -129,7 +129,7 @@ export function GiftCardSellModal({ vertical, session, currency, locale, onClose
         aria-modal="true"
         aria-label={t('pos.loyalty.giftCard.sellSuccessTitle')}
       >
-        <Card className="reveal w-full max-w-sm overflow-hidden p-6 text-center">
+        <Card className="reveal max-h-full w-full max-w-sm overflow-y-auto overscroll-contain p-6 text-center">
           <div className="mx-auto mb-3 grid size-12 place-items-center rounded-2xl bg-emerald-tint text-emerald-2">
             <Gift className="size-6" aria-hidden />
           </div>
@@ -173,7 +173,7 @@ export function GiftCardSellModal({ vertical, session, currency, locale, onClose
       aria-modal="true"
       aria-label={t('pos.loyalty.giftCard.sellTitle')}
     >
-      <Card className="reveal w-full max-w-sm overflow-hidden">
+      <Card className="reveal max-h-full w-full max-w-sm overflow-y-auto overscroll-contain">
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <h2 className="font-display text-lg font-semibold text-ink">{t('pos.loyalty.giftCard.sellTitle')}</h2>
           <button
