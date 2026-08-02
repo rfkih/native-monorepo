@@ -48,10 +48,10 @@ public class Sale extends Auditable {
   private String idempotencyKey;
 
   /**
-   * The tender that settled this sale ({@code CASH | QRIS | CARD}, later {@code ONLINE}) — V21,
-   * ADR 0036 (closing kasir). Nullable: legacy pre-V21 rows and no-payment paths have no tender;
-   * a NULL row is simply outside every register session's cash window. Deliberately a String (not
-   * the payment feature's enum) — the sale aggregate stores what the wire carries.
+   * The tender that settled this sale ({@code CASH | QRIS | CARD}, later {@code ONLINE}) — V21, ADR
+   * 0036 (closing kasir). Nullable: legacy pre-V21 rows and no-payment paths have no tender; a NULL
+   * row is simply outside every register session's cash window. Deliberately a String (not the
+   * payment feature's enum) — the sale aggregate stores what the wire carries.
    */
   @Column(name = "tender_type", updatable = false)
   private String tenderType;

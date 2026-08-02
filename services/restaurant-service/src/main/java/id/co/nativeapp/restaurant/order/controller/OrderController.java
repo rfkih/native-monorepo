@@ -124,8 +124,8 @@ public class OrderController {
 
   /**
    * Units sold per menu item at a business (completed walk-in orders + paid bill lines),
-   * best-sellers first. The POS uses it to sort the "All" tab by popularity. Returns {@code 200
-   * OK} with the ranking (empty list when nothing has been sold yet).
+   * best-sellers first. The POS uses it to sort the "All" tab by popularity. Returns {@code 200 OK}
+   * with the ranking (empty list when nothing has been sold yet).
    */
   @Operation(
       summary = "Menu-item sales popularity",
@@ -133,7 +133,8 @@ public class OrderController {
           "Units sold per menu item at a business (completed walk-in orders + paid bill lines),"
               + " best-sellers first. Returns 200 OK; empty list when nothing has been sold yet.")
   @GetMapping("/item-popularity")
-  public ResponseEntity<List<ItemPopularityResponse>> itemPopularity(@RequestParam UUID businessId) {
+  public ResponseEntity<List<ItemPopularityResponse>> itemPopularity(
+      @RequestParam UUID businessId) {
     return ResponseEntity.ok(orderService.itemPopularity(businessId));
   }
 

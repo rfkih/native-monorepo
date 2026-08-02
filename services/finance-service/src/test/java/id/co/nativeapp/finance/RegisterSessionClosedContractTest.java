@@ -45,7 +45,8 @@ class RegisterSessionClosedContractTest {
   void producerBytesDecodeAndConsistentIdentityPasses() {
     // Short drawer: 200k float + 1.5M sales − 50k refunds = 1.65M expected; counted 1.6M → −50k.
     byte[] bytes =
-        AvroSerde.serialize(producerRecord(200_000L, 1_500_000L, 50_000L, 1_650_000L, 1_600_000L, -50_000L));
+        AvroSerde.serialize(
+            producerRecord(200_000L, 1_500_000L, 50_000L, 1_650_000L, 1_600_000L, -50_000L));
     GenericRecord decoded = AvroSerde.deserialize(bytes, RegisterSessionClosedSchema.schema());
     RegisterSessionClosedEvent event = RegisterSessionClosedEvent.from(EVENT_ID, decoded);
 
@@ -60,7 +61,8 @@ class RegisterSessionClosedContractTest {
   void violatedExpectedIdentityIsPoison() {
     // expected claims 1.7M but float+sales−refunds = 1.65M → inconsistent → DLT path.
     byte[] bytes =
-        AvroSerde.serialize(producerRecord(200_000L, 1_500_000L, 50_000L, 1_700_000L, 1_600_000L, -100_000L));
+        AvroSerde.serialize(
+            producerRecord(200_000L, 1_500_000L, 50_000L, 1_700_000L, 1_600_000L, -100_000L));
     RegisterSessionClosedEvent event =
         RegisterSessionClosedEvent.from(
             EVENT_ID, AvroSerde.deserialize(bytes, RegisterSessionClosedSchema.schema()));
@@ -73,7 +75,8 @@ class RegisterSessionClosedContractTest {
   void violatedVarianceIdentityIsPoison() {
     // counted − expected = −50k but over_short claims −60k.
     byte[] bytes =
-        AvroSerde.serialize(producerRecord(200_000L, 1_500_000L, 50_000L, 1_650_000L, 1_600_000L, -60_000L));
+        AvroSerde.serialize(
+            producerRecord(200_000L, 1_500_000L, 50_000L, 1_650_000L, 1_600_000L, -60_000L));
     RegisterSessionClosedEvent event =
         RegisterSessionClosedEvent.from(
             EVENT_ID, AvroSerde.deserialize(bytes, RegisterSessionClosedSchema.schema()));
@@ -84,8 +87,7 @@ class RegisterSessionClosedContractTest {
 
   @Test
   void negativeCountedCashIsPoison() {
-    byte[] bytes =
-        AvroSerde.serialize(producerRecord(0L, 100_000L, 0L, 100_000L, -1L, -100_001L));
+    byte[] bytes = AvroSerde.serialize(producerRecord(0L, 100_000L, 0L, 100_000L, -1L, -100_001L));
     RegisterSessionClosedEvent event =
         RegisterSessionClosedEvent.from(
             EVENT_ID, AvroSerde.deserialize(bytes, RegisterSessionClosedSchema.schema()));

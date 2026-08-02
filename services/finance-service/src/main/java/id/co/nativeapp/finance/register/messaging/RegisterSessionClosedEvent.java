@@ -17,8 +17,8 @@ import org.apache.avro.generic.GenericRecord;
  * the sign guards, and a violation is a poison message the listener routes to the DLT (the {@code
  * SaleRecordedEvent.assertReconciliationIdentity} precedent).
  *
- * @param eventId the source event UUID (idempotency key — the outbox row UUID from the Kafka
- *     {@code id} header)
+ * @param eventId the source event UUID (idempotency key — the outbox row UUID from the Kafka {@code
+ *     id} header)
  * @param sessionId the cash_register_session aggregate id
  * @param companyId the owning tenant (UUID as string)
  * @param businessId the outlet whose drawer was counted

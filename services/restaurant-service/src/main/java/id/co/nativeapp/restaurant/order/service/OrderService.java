@@ -134,8 +134,8 @@ public class OrderService {
   }
 
   /**
-   * Units sold per menu item (completed walk-in orders + paid bill lines), best-sellers first —
-   * the POS sorts its "All" tab with this. Read-only; RLS-scoped.
+   * Units sold per menu item (completed walk-in orders + paid bill lines), best-sellers first — the
+   * POS sorts its "All" tab with this. Read-only; RLS-scoped.
    */
   @Transactional(readOnly = true)
   public List<ItemPopularityResponse> itemPopularity(UUID businessId) {

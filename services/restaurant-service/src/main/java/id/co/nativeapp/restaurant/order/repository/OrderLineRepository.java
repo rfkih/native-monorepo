@@ -42,8 +42,8 @@ public interface OrderLineRepository extends JpaRepository<OrderLine, UUID> {
   /**
    * Units SOLD per menu item at a business, best-sellers first — the union of (a) lines on
    * COMPLETED walk-in orders and (b) PAID bill lines (a guest-tab line only counts once its check
-   * is settled). Projected to {@link ItemPopularityView}; RLS additionally scopes both sides to
-   * the session tenant (rule 5).
+   * is settled). Projected to {@link ItemPopularityView}; RLS additionally scopes both sides to the
+   * session tenant (rule 5).
    */
   @Query(
       value =

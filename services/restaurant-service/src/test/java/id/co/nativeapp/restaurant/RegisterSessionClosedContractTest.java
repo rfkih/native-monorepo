@@ -118,7 +118,9 @@ class RegisterSessionClosedContractTest {
     Schema v1 = RegisterSessionClosedSchema.schema();
     Schema incompatible =
         new Schema.Parser()
-            .parse(v1.toString().replaceFirst("\\]\\}$", ",{\"name\":\"cashier_id\",\"type\":\"string\"}]}"));
+            .parse(
+                v1.toString()
+                    .replaceFirst("\\]\\}$", ",{\"name\":\"cashier_id\",\"type\":\"string\"}]}"));
     // A reader on the new schema cannot read v1 data — no value for cashier_id.
     assertThat(AvroSerde.isBackwardCompatible(v1, incompatible)).isFalse();
   }
