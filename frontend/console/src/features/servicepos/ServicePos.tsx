@@ -15,37 +15,10 @@
  */
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link } from 'react-router-dom'
-import {
-  ArrowLeft,
-  Car,
-  Gift,
-  LogOut,
-  Minus,
-  Moon,
-  Plus,
-  RefreshCw,
-  Scissors,
-  Settings,
-  Store,
-  Sun,
-  X,
-} from 'lucide-react'
-import { Card } from '@/components/ui/Card'
-import { Button } from '@/components/ui/Button'
-import { Badge } from '@/components/ui/Badge'
-import { Field, TextInput } from '@/components/ui/Field'
 import { useSession, type CompanySession } from '@/lib/session'
 import { useAuth, hasAnyRole } from '@/lib/authContext'
-import { useTheme } from '@/lib/theme'
 import { localeOf } from '@/i18n'
-import { cn } from '@/lib/cn'
-import { formatMoney } from '@/lib/money'
-import { OutletPicker } from '@/components/OutletPicker'
 import { OutletGate } from '@/components/OutletGate'
-import { CouponField } from '@/components/CouponField'
-import { AppliedPromotionChips } from '@/components/AppliedPromotionChips'
-import { MemberField } from '@/components/MemberField'
 import { GiftCardSellModal } from '@/components/GiftCardSellModal'
 import type { MemberResponse } from '@/features/loyalty/api'
 import { useOffline } from '@/features/pos/offline/useOffline'
@@ -53,7 +26,6 @@ import { useCachedCatalogFallback } from '@/features/pos/offline/catalogCache'
 import { computeProvisionalPricing, toDisplayBreakdown } from '@/features/pos/offline/provisionalPricing'
 import type { EffectiveRulesResponse } from '@/features/pos/offline/provisionalPricing'
 import { parseDiscountInput } from '@/features/pos/lib/discountInput'
-import { OfflineHint } from '@/features/pos/offline/OfflineHint'
 import { SyncCenter } from '@/features/pos/offline/SyncCenter'
 import type { SaleQueueRow } from '@/features/pos/offline/db'
 import type { VerticalPosConfig } from './config'
@@ -73,9 +45,12 @@ import {
 } from './api'
 import { ServicePaymentModal } from './ServicePaymentModal'
 import { ServiceReceipt } from './ServiceReceipt'
+import { HeaderBar } from './components/HeaderBar'
+import { PackageCard } from './components/PackageCard'
+import { AddonChip } from './components/AddonChip'
+import { SummaryPanel, type AddonLine } from './components/SummaryPanel'
+import { EmptyCatalog, CatalogSkeleton, ChipsSkeleton, NoCompany } from './components/ServiceStates'
 
-const SELECT_CLASS =
-  'h-[52px] w-full rounded-xl border border-line bg-surface px-4 text-[15px] text-ink transition-colors focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15'
 
 // ---------------------------------------------------------------------------
 // Root
@@ -98,10 +73,6 @@ export function ServicePos({ config }: { config: VerticalPosConfig }) {
 // Inner
 // ---------------------------------------------------------------------------
 
-interface AddonLine {
-  item: CatalogItemResponse
-  qty: number
-}
 
 function ServicePosInner({ config, session }: { config: VerticalPosConfig; session: CompanySession }) {
   const { t, i18n } = useTranslation()
@@ -206,7 +177,7 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
     offline && effectiveRules && lines.length > 0
       ? computeProvisionalPricing(clientSubtotalMinor, effectiveRules, {
           fixedDiscountMinor: discountMinor > 0 ? discountMinor : null,
-        })
+})
       : null
   const breakdown: PriceBreakdownResponse | null = offline
     ? provisionalBreakdown
@@ -289,7 +260,7 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
         priceMinor: selectedPackage.priceMinor,
         currency: selectedPackage.currency,
         qty: 1,
-      })
+})
     }
     for (const { item, qty } of addonLines.values()) {
       linesOut.push({
@@ -299,7 +270,7 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
         priceMinor: item.priceMinor,
         currency: item.currency,
         qty,
-      })
+})
     }
     const staffLabel = staffProfileId
       ? (staffProfiles.find((s) => s.id === staffProfileId)?.displayLabel ?? null)
@@ -328,8 +299,8 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
         changeMinor,
         providerPending: false,
         saleId: null,
-      },
-    }
+},
+}
     setTicket(ticketOut)
     setPlacedProvisional(true)
     setLastAppliedPromotions([])
@@ -504,633 +475,4 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
     </div>
   )
 }
-
-// ---------------------------------------------------------------------------
-// HeaderBar — simplified terminal chrome (title + outlet picker + utilities)
-// ---------------------------------------------------------------------------
-
-function HeaderBar({
-  config,
-  session,
-  offline,
-  queuedCount,
-  rejectedCount,
-  onOpenGiftCardSell,
-  onOpenSyncCenter,
-}: {
-  config: VerticalPosConfig
-  session: CompanySession
-  offline: boolean
-  queuedCount: number
-  rejectedCount: number
-  onOpenGiftCardSell: () => void
-  onOpenSyncCenter: () => void
-}) {
-  const { t } = useTranslation()
-  const { theme, toggle } = useTheme()
-  const auth = useAuth()
-  const canDashboard = hasAnyRole(auth.roles, 'owner', 'manager')
-  // Inline ternary (not a helper function) — mirrors VerticalComingSoon.tsx's icon selection so the
-  // react-hooks/static-components lint rule can see the component reference is render-stable.
-  const Icon = config.vertical === 'carwash' ? Car : config.vertical === 'barbershop' ? Scissors : Store
-
-  return (
-    <div className="flex h-16 shrink-0 items-center gap-2.5 border-b border-line bg-surface px-4 sm:px-6">
-      {canDashboard ? (
-        <Link
-          to="/"
-          aria-label={t('a11y.backToDashboard')}
-          className="grid size-9 shrink-0 place-items-center rounded-xl border border-line text-ink-3 transition-all hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
-        >
-          <ArrowLeft className="size-4" />
-        </Link>
-      ) : null}
-
-      <span className="hidden items-center gap-2 md:flex">
-        <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white">
-          <Icon className="size-[16px]" />
-        </span>
-        <span className="hidden truncate font-display text-[15px] font-bold leading-tight text-ink lg:block">
-          {session.name}
-        </span>
-      </span>
-
-      <OutletPicker />
-
-      <div className="flex-1" />
-
-      <div className="flex items-center gap-1.5">
-        {canDashboard ? (
-          <Link
-            to="/catalog"
-            aria-label={t(`${config.i18nNs}.manageCatalog`)}
-            title={t(`${config.i18nNs}.manageCatalog`)}
-            className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
-          >
-            <Settings className="size-4" />
-          </Link>
-        ) : null}
-        {/* Gift card sell — a distinct till action, not a cart line (ADR 0027); unreachable offline
-            (Phase 5, ADR 0028). */}
-        <button
-          type="button"
-          onClick={onOpenGiftCardSell}
-          disabled={offline}
-          aria-label={t('pos.loyalty.giftCard.sellTitle')}
-          title={offline ? t('offline.disabled.giftCard') : t('pos.loyalty.giftCard.sellTitle')}
-          className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line disabled:hover:bg-surface disabled:hover:text-ink-3"
-        >
-          <Gift className="size-4" aria-hidden="true" />
-        </button>
-        {/* Sync center (Phase 5, ADR 0028) — badge = queued + rejected */}
-        <button
-          type="button"
-          onClick={onOpenSyncCenter}
-          aria-label={t('offline.syncCenterButton')}
-          title={t('offline.syncCenterButton')}
-          className="relative grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
-        >
-          <RefreshCw className="size-4" aria-hidden="true" />
-          {queuedCount + rejectedCount > 0 ? (
-            <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-amber px-1 text-[9px] font-bold text-ink">
-              {queuedCount + rejectedCount}
-            </span>
-          ) : null}
-        </button>
-        <button
-          type="button"
-          onClick={toggle}
-          aria-label={t('a11y.toggleTheme')}
-          className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2"
-        >
-          {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
-        </button>
-        <button
-          type="button"
-          onClick={auth.logout}
-          aria-label={t('nav.logout')}
-          className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-tint-loss hover:bg-tint-loss hover:text-loss focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
-        >
-          <LogOut className="size-4" />
-        </button>
-        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-emerald-tint font-semibold text-[13px] text-emerald-2">
-          {session.name.slice(0, 2).toUpperCase()}
-        </span>
-      </div>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// PackageCard — single-select tile
-// ---------------------------------------------------------------------------
-
-function PackageCard({
-  item,
-  config,
-  locale,
-  selected,
-  onSelect,
-}: {
-  item: CatalogItemResponse
-  config: VerticalPosConfig
-  locale: string
-  selected: boolean
-  onSelect: () => void
-}) {
-  const { t } = useTranslation()
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-pressed={selected}
-      aria-label={
-        selected
-          ? t(config.primaryItemLabels.selectedLabelKey, { name: item.name })
-          : t(config.primaryItemLabels.selectLabelKey, { name: item.name })
-      }
-      className={cn(
-        'flex flex-col rounded-xl border bg-surface p-4 text-left transition-all duration-200',
-        selected
-          ? 'border-emerald shadow-md ring-2 ring-emerald/20'
-          : 'border-line shadow-sm hover:-translate-y-0.5 hover:border-emerald-line hover:shadow-md active:scale-[0.98]',
-      )}
-    >
-      <span className="line-clamp-2 text-[13px] font-semibold leading-snug text-ink">{item.name}</span>
-      {item.description ? (
-        <span className="mt-1 line-clamp-2 text-xs text-ink-3">{item.description}</span>
-      ) : null}
-      <span className="tnum mt-2 font-mono text-[14px] font-semibold text-ink">
-        {formatMoney(item.priceMinor, item.currency, locale)}
-      </span>
-    </button>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// AddonChip — toggle multi-select
-// ---------------------------------------------------------------------------
-
-function AddonChip({
-  item,
-  config,
-  locale,
-  selected,
-  onToggle,
-}: {
-  item: CatalogItemResponse
-  config: VerticalPosConfig
-  locale: string
-  selected: boolean
-  onToggle: () => void
-}) {
-  const { t } = useTranslation()
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-pressed={selected}
-      aria-label={
-        selected
-          ? t(`${config.i18nNs}.addonSelectedLabel`, { name: item.name })
-          : t(`${config.i18nNs}.selectAddonLabel`, { name: item.name })
-      }
-      className={cn(
-        'flex h-10 shrink-0 items-center gap-2 rounded-full border-[1.5px] px-4 text-[13px] font-semibold transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
-        selected
-          ? 'border-emerald bg-emerald text-on-emerald'
-          : 'border-line bg-surface text-ink-2 hover:border-emerald-line hover:bg-emerald-tint',
-      )}
-    >
-      <span>{item.name}</span>
-      <span className="tnum font-mono text-[11px] opacity-80">
-        {formatMoney(item.priceMinor, item.currency, locale)}
-      </span>
-    </button>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// SummaryPanel
-// ---------------------------------------------------------------------------
-
-interface SummaryPanelProps {
-  config: VerticalPosConfig
-  currency: string
-  locale: string
-  selectedPackage: CatalogItemResponse | null
-  addonLines: Map<string, AddonLine>
-  onRemovePackage: () => void
-  onSetAddonQty: (itemId: string, qty: number) => void
-  bay: string
-  onBayChange: (v: string) => void
-  vehiclePlate: string
-  onVehicleChange: (v: string) => void
-  staffProfiles: StaffProfileResponse[]
-  staffProfileId: string | null
-  onStaffChange: (v: string | null) => void
-  discountInput: string
-  discountInvalid: boolean
-  onDiscountChange: (v: string) => void
-  /** Manual discount is owner/manager-only (ADR 0026 §5) — hidden for a cashier session. */
-  showDiscountInput: boolean
-  /** Phase 5 (ADR 0028): disables the coupon field (points redemption is hidden separately, via
-   * `maxRedeemablePoints` already forced to 0 by the caller). */
-  offline: boolean
-  couponCode: string | null
-  couponStatus: 'APPLIED' | 'INVALID' | 'EXHAUSTED' | null
-  onCouponApply: (code: string) => void
-  onCouponClear: () => void
-  appliedPromotions: AppliedPromotionResponse[]
-  session: CompanySession
-  /** Phase 4 (ADR 0027): the attached loyalty member. */
-  attachedMember: MemberResponse | null
-  onMemberAttach: (member: MemberResponse) => void
-  onMemberClear: () => void
-  loyaltyRedeemPoints: number
-  maxRedeemablePoints: number
-  onLoyaltyRedeemChange: (points: number) => void
-  breakdown: PriceBreakdownResponse | null
-  grandTotalMinor: number
-  canCharge: boolean
-  onCharge: () => void
-}
-
-function SummaryPanel({
-  config,
-  currency,
-  locale,
-  selectedPackage,
-  addonLines,
-  onRemovePackage,
-  onSetAddonQty,
-  bay,
-  onBayChange,
-  vehiclePlate,
-  onVehicleChange,
-  staffProfiles,
-  staffProfileId,
-  onStaffChange,
-  discountInput,
-  discountInvalid,
-  onDiscountChange,
-  showDiscountInput,
-  offline,
-  couponCode,
-  couponStatus,
-  onCouponApply,
-  onCouponClear,
-  appliedPromotions,
-  session,
-  attachedMember,
-  onMemberAttach,
-  onMemberClear,
-  loyaltyRedeemPoints,
-  maxRedeemablePoints,
-  onLoyaltyRedeemChange,
-  breakdown,
-  grandTotalMinor,
-  canCharge,
-  onCharge,
-}: SummaryPanelProps) {
-  const { t } = useTranslation()
-  const hasSelection = !!selectedPackage || addonLines.size > 0
-
-  return (
-    <div className="flex flex-col gap-5 p-5">
-      <div>
-        <h2 className="mb-2 text-[11px] font-bold uppercase tracking-[.08em] text-ink-3">
-          {t('servicePos.summary.title')}
-        </h2>
-        {!hasSelection ? (
-          <p className="rounded-xl border border-dashed border-line bg-paper px-4 py-6 text-center text-sm text-ink-3">
-            {t(config.primaryItemLabels.summaryEmptyKey)}
-          </p>
-        ) : (
-          <ul className="space-y-2">
-            {selectedPackage ? (
-              <li className="flex items-center justify-between gap-2 rounded-xl border border-line bg-paper px-3 py-2.5">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-ink">{selectedPackage.name}</p>
-                  <p className="tnum font-mono text-xs text-ink-3">
-                    {formatMoney(selectedPackage.priceMinor, currency, locale)}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={onRemovePackage}
-                  aria-label={t('servicePos.summary.removeItem', { name: selectedPackage.name })}
-                  className="grid size-7 shrink-0 place-items-center rounded-lg text-ink-3 hover:bg-hover hover:text-loss focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
-                >
-                  <X className="size-3.5" />
-                </button>
-              </li>
-            ) : null}
-            {[...addonLines.values()].map(({ item, qty }) => (
-              <li
-                key={item.id}
-                className="flex items-center justify-between gap-2 rounded-xl border border-line bg-paper px-3 py-2.5"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-ink">{item.name}</p>
-                  <p className="tnum font-mono text-xs text-ink-3">
-                    {formatMoney(item.priceMinor * qty, currency, locale)}
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => onSetAddonQty(item.id, qty - 1)}
-                    aria-label={t('pos.decreaseQty', { name: item.name })}
-                    className="grid size-7 place-items-center rounded-lg border border-line text-ink-2 hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
-                  >
-                    <Minus className="size-3" />
-                  </button>
-                  <span className="tnum w-5 text-center text-sm font-semibold text-ink">{qty}</span>
-                  <button
-                    type="button"
-                    onClick={() => onSetAddonQty(item.id, qty + 1)}
-                    aria-label={t('pos.increaseQty', { name: item.name })}
-                    className="grid size-7 place-items-center rounded-lg border border-line text-ink-2 hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
-                  >
-                    <Plus className="size-3" />
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      <div className="space-y-4">
-        <Field label={t(config.location.labelKey)} htmlFor="svc-location">
-          <TextInput
-            id="svc-location"
-            value={bay}
-            onChange={(e) => onBayChange(e.target.value)}
-            placeholder={t(config.location.placeholderKey)}
-            required={config.location.required}
-          />
-        </Field>
-
-        {config.vehicleField ? (
-          <Field label={t('carwashPos.vehiclePlate')} htmlFor="svc-plate">
-            <TextInput
-              id="svc-plate"
-              value={vehiclePlate}
-              onChange={(e) => onVehicleChange(e.target.value.toUpperCase())}
-              placeholder={t('carwashPos.vehiclePlatePlaceholder')}
-            />
-          </Field>
-        ) : null}
-
-        {config.attribution.enabled ? (
-          <Field
-            label={
-              <span className="inline-flex items-center gap-1.5">
-                {t(config.attribution.labelKey)}
-                {config.attribution.required ? (
-                  <Badge tone="amber" className="px-1.5 py-0 text-[10px]">
-                    {t('common.required')}
-                  </Badge>
-                ) : null}
-              </span>
-            }
-            htmlFor="svc-staff"
-            hint={
-              config.attribution.required && config.attribution.requiredHintKey
-                ? t(config.attribution.requiredHintKey)
-                : undefined
-            }
-          >
-            <select
-              id="svc-staff"
-              className={SELECT_CLASS}
-              value={staffProfileId ?? ''}
-              onChange={(e) => onStaffChange(e.target.value || null)}
-              required={config.attribution.required}
-              aria-required={config.attribution.required}
-            >
-              <option value="">{t('servicePos.noneOption')}</option>
-              {staffProfiles.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.displayLabel}
-                </option>
-              ))}
-            </select>
-          </Field>
-        ) : null}
-      </div>
-
-      <BreakdownPanel breakdown={breakdown} grandTotalMinor={grandTotalMinor} currency={currency} locale={locale} />
-
-      <AppliedPromotionChips promotions={appliedPromotions} currency={currency} locale={locale} />
-
-      <CouponField
-        code={couponCode}
-        status={couponStatus}
-        onApply={onCouponApply}
-        onClear={onCouponClear}
-        disabled={offline}
-      />
-      {offline ? <OfflineHint text={t('offline.disabled.coupon')} /> : null}
-
-      <MemberField
-        session={session}
-        currency={currency}
-        locale={locale}
-        member={attachedMember}
-        onAttach={onMemberAttach}
-        onClear={onMemberClear}
-        redeemPoints={loyaltyRedeemPoints}
-        maxRedeemable={maxRedeemablePoints}
-        onRedeemChange={onLoyaltyRedeemChange}
-        disabled={offline}
-      />
-      {offline ? <OfflineHint text={t('offline.disabled.member')} /> : null}
-
-      {showDiscountInput ? (
-        <div>
-          <label htmlFor="svc-discount" className="mb-1.5 block text-sm font-medium text-ink-2">
-            {t('pos.addDiscount')}
-          </label>
-          <input
-            id="svc-discount"
-            type="number"
-            min="0"
-            step="any"
-            value={discountInput}
-            onChange={(e) => onDiscountChange(e.target.value)}
-            placeholder="0"
-            aria-describedby={discountInvalid ? 'svc-discount-error' : undefined}
-            className={cn(
-              'h-11 w-full rounded-xl border bg-surface px-3 text-sm text-ink placeholder:text-ink-3/50 transition-colors',
-              'focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15',
-              discountInvalid ? 'border-loss' : 'border-line',
-            )}
-          />
-          {discountInvalid ? (
-            <p id="svc-discount-error" className="mt-1 text-xs text-loss" role="alert">
-              {t('pos.discountInvalid')}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-
-      <Button size="xl" className="tnum w-full font-mono" disabled={!canCharge} onClick={onCharge}>
-        {t('servicePos.chargeButton', { amount: formatMoney(grandTotalMinor, currency, locale) })}
-      </Button>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// BreakdownPanel — mirrors PaymentModal's ModalBreakdown (not exported, so re-implemented here)
-// ---------------------------------------------------------------------------
-
-function BreakdownPanel({
-  breakdown,
-  grandTotalMinor,
-  currency,
-  locale,
-}: {
-  breakdown: PriceBreakdownResponse | null
-  grandTotalMinor: number
-  currency: string
-  locale: string
-}) {
-  const { t } = useTranslation()
-
-  if (!breakdown) {
-    return (
-      <div className="flex items-baseline justify-between border-t border-line pt-3 text-sm text-ink-3">
-        <span>{t('pos.total')}</span>
-        <span className="tnum font-mono text-xl font-medium text-ink">
-          {formatMoney(grandTotalMinor, currency, locale)}
-        </span>
-      </div>
-    )
-  }
-
-  const illustrative = breakdown.usesIllustrativeRules
-
-  return (
-    <div className="space-y-1.5 border-t border-line pt-3 text-sm">
-      <div className="flex items-baseline justify-between text-ink-3">
-        <span>{t('pos.subtotal')}</span>
-        <span className="tnum font-mono">{formatMoney(breakdown.subtotalMinor, currency, locale)}</span>
-      </div>
-
-      {breakdown.discountMinor > 0 ? (
-        <div className="flex items-baseline justify-between text-ink-3">
-          <span>{t('pos.discount')}</span>
-          <span className="tnum font-mono text-loss">
-            − {formatMoney(breakdown.discountMinor, currency, locale)}
-          </span>
-        </div>
-      ) : null}
-
-      {breakdown.loyaltyRedeemedMinor > 0 ? (
-        <div className="flex items-baseline justify-between text-ink-3">
-          <span>{t('pos.loyalty.redeemedLabel')}</span>
-          <span className="tnum font-mono text-loss">
-            − {formatMoney(breakdown.loyaltyRedeemedMinor, currency, locale)}
-          </span>
-        </div>
-      ) : null}
-
-      <div className="flex items-center justify-between text-ink-3">
-        <span className="flex items-center gap-1.5">
-          {t('pos.serviceCharge')}
-          {illustrative ? <EstimatedBadge hint={t('pos.illustrativeHint')} /> : null}
-        </span>
-        <span className="tnum font-mono">{formatMoney(breakdown.serviceChargeMinor, currency, locale)}</span>
-      </div>
-
-      <div className="flex items-center justify-between text-ink-3">
-        <span className="flex items-center gap-1.5">
-          {t('pos.tax')}
-          {illustrative ? <EstimatedBadge hint={t('pos.illustrativeHint')} /> : null}
-        </span>
-        <span className="tnum font-mono">{formatMoney(breakdown.taxMinor, currency, locale)}</span>
-      </div>
-
-      <div className="flex items-baseline justify-between border-t border-line pt-1.5 mt-0.5 font-medium">
-        <span className="text-ink">{t('pos.total')}</span>
-        <span className="tnum font-mono text-xl text-ink">
-          {formatMoney(breakdown.grandTotalMinor, currency, locale)}
-        </span>
-      </div>
-    </div>
-  )
-}
-
-function EstimatedBadge({ hint }: { hint: string }) {
-  const { t } = useTranslation()
-  return (
-    <span title={hint} aria-label={hint}>
-      <Badge tone="amber" className="text-[10px] py-0 px-1.5">
-        {t('pos.estimated')}
-      </Badge>
-    </span>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Empty / loading states
-// ---------------------------------------------------------------------------
-
-function EmptyCatalog({ message }: { message: string }) {
-  return (
-    <p className="rounded-xl border border-dashed border-line bg-paper px-4 py-6 text-center text-sm text-ink-3">
-      {message}
-    </p>
-  )
-}
-
-function CatalogSkeleton() {
-  return (
-    <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
-      {Array.from({ length: 4 }).map((_, i) => (
-        <div key={i} className="overflow-hidden rounded-xl border border-line bg-surface p-4" aria-hidden="true">
-          <div className="shimmer h-3.5 w-3/4 rounded-md" />
-          <div className="shimmer mt-2 h-3 w-1/3 rounded-md" />
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function ChipsSkeleton() {
-  return (
-    <div className="flex flex-wrap gap-2" aria-hidden="true">
-      {Array.from({ length: 4 }).map((_, i) => (
-        <div key={i} className="shimmer h-10 w-24 rounded-full" />
-      ))}
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// NoCompany
-// ---------------------------------------------------------------------------
-
-function NoCompany() {
-  const { t } = useTranslation()
-  return (
-    <div className="grid min-h-screen place-items-center bg-paper px-5">
-      <Card className="w-full max-w-md p-10 text-center">
-        <h2 className="font-display text-xl font-semibold text-ink">{t('dashboard.noCompany')}</h2>
-        <p className="mt-2 text-sm text-ink-3">{t('servicePos.noCompanyHint')}</p>
-        <Link
-          to="/onboarding"
-          className="mt-5 inline-block rounded-xl bg-emerald px-4 py-2.5 text-sm font-bold text-on-emerald shadow-sm transition-colors hover:bg-emerald-2"
-        >
-          {t('nav.onboarding')}
-        </Link>
-      </Card>
-    </div>
-  )
-}
-
 // (parseDiscountInput moved to features/pos/lib/discountInput.ts — redesign P1.)

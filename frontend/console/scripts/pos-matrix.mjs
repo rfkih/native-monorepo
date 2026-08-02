@@ -109,6 +109,8 @@ async function scenario(key, fn) {
 
 const tile = (name) => page.getByText(name, { exact: true }).first()
 const btn = (re) => page.getByRole('button', { name: re })
+// data-testid first (added in redesign P2), aria/text as fallback for older builds
+const tid = (id) => page.locator(`[data-testid="${id}"]`)
 
 async function login() {
   await page.goto(BASE + '/login', { waitUntil: 'domcontentloaded' })
@@ -167,7 +169,7 @@ await scenario('restaurant-flow', async () => {
   await shot('restaurant-order')
 
   // Payment — cash panel, then the digital (QRIS) panel
-  await btn(/^Pay /).first().click()
+  await tid('pos-pay').click()
   await page.getByText('Quick cash').first().waitFor({ state: 'visible' })
   await page.waitForTimeout(400)
   await shot('restaurant-payment-cash')
@@ -239,7 +241,7 @@ await scenario('restaurant-bills', async () => {
   await page.waitForTimeout(300)
 
   // Settle the whole bill so re-runs don't accumulate open bills
-  await btn(/^Pay /).last().click()
+  await tid('bill-pay').click()
   await page.getByText('Quick cash').first().waitFor({ state: 'visible' })
   await page.waitForTimeout(400)
   await shot('restaurant-bill-payment')
@@ -274,7 +276,7 @@ await scenario('restaurant-phone', async () => {
   await tile('Kopi Susu').click()
   await page.waitForTimeout(1200)
   await shot('restaurant-order-phone')
-  await btn(/^Pay /).first().click()
+  await tid('pos-pay').click()
   await page.getByText('Quick cash').first().waitFor({ state: 'visible' })
   await page.waitForTimeout(400)
   await shot('restaurant-payment-phone')
@@ -297,7 +299,7 @@ await scenario('carwash-flow', async () => {
   await page.waitForTimeout(1200) // quote lands
   await shot('carwash-ticket')
 
-  await btn(/^Charge /).first().click()
+  await tid('service-charge').click()
   await page.getByText('Quick cash').first().waitFor({ state: 'visible' })
   await page.waitForTimeout(400)
   await shot('carwash-payment')

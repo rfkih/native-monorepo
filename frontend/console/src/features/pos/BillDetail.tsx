@@ -8,25 +8,20 @@
  * Money rule (rule 8): all amounts are integer minor units, rendered via formatMoney().
  * Strings rule (rule 9): every user-facing string is an i18n key.
  */
-import { useState, useEffect } from 'react'
+import { useState,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ArrowLeft,
-  Trash2,
   Table2,
   ReceiptText,
-  AlertTriangle,
-  X,
   ChefHat,
   SplitSquareHorizontal,
-  Check,
   ChevronDown,
   Send,
 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
 import { cn } from '@/lib/cn'
 import { formatMoney } from '@/lib/money'
@@ -35,10 +30,15 @@ import {
   useMenu,
   useCategories,
   type MenuItem,
-  type PriceBreakdownResponse,
 } from './api'
 import { ModifierModal } from './ModifierModal'
-import { deriveCategories, visibleMenuItems, type VirtualCategory } from './lib/categories'
+import { deriveCategories, visibleMenuItems,
+} from './lib/categories'
+import { useMediaQuery } from './lib/useMediaQuery'
+import { PhoneSheetContent } from './components/PhoneSheetContent'
+import { BillLineItem } from './components/BillLineItem'
+import { BillBreakdown } from './components/BillBreakdown'
+import { CancelConfirmDialog } from './components/CancelConfirmDialog'
 import { BillPaymentModal } from './BillPaymentModal'
 import { BillReceiptView } from './BillReceiptView'
 import { KotView } from './KotView'
@@ -47,29 +47,8 @@ import {
   useAppendLines,
   useRemoveLine,
   useCancelBill,
-  type BillResponse,
   type BillLineResponse,
 } from './billsApi'
-
-// ---------------------------------------------------------------------------
-// useMediaQuery — SSR-safe matchMedia subscriber
-// ---------------------------------------------------------------------------
-
-function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false
-    return window.matchMedia(query).matches
-  })
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const mql = window.matchMedia(query)
-    setMatches(mql.matches)
-    const handler = (e: MediaQueryListEvent) => setMatches(e.matches)
-    mql.addEventListener('change', handler)
-    return () => mql.removeEventListener('change', handler)
-  }, [query])
-  return matches
-}
 
 // ---------------------------------------------------------------------------
 // Props
@@ -171,7 +150,7 @@ export function BillDetail({
     appendLines.mutate({
       billId,
       lines: [{ menuItemId: item.id, qty: 1, selectedOptionIds: [] }],
-    })
+})
   }
 
   function handleModifierConfirm(selectedOptionIds: string[]) {
@@ -179,7 +158,7 @@ export function BillDetail({
     appendLines.mutate({
       billId,
       lines: [{ menuItemId: modifierItem.id, qty: 1, selectedOptionIds }],
-    })
+})
     setModifierItem(null)
   }
 
@@ -192,7 +171,7 @@ export function BillDetail({
       onSuccess: () => {
         onBack()
       },
-    })
+})
   }
 
   function toggleSplitMode() {
@@ -232,14 +211,14 @@ export function BillDetail({
         checkTotalMinor: selectedTotal,
         idempotencyKey: freshIdempotencyKey(),
         paidLineObjects: selectedLines,
-      })
+})
     } else {
       setPendingPay({
         lineIds: undefined,
         checkTotalMinor: unpaidTotal,
         idempotencyKey: freshIdempotencyKey(),
         paidLineObjects: unpaidLines,
-      })
+})
     }
     setShowPayModal(true)
   }
@@ -252,7 +231,7 @@ export function BillDetail({
         paidLines: pendingPay.paidLineObjects,
         checkTotalMinor: pendingPay.checkTotalMinor,
         tenderType: 'CASH',
-      })
+})
     }
     setPendingPay(null)
     setSelectedLineIds(new Set())
@@ -543,6 +522,7 @@ export function BillDetail({
             {splitMode ? (
               <button
                 type="button"
+                data-testid="bill-pay-split"
                 disabled={selectedLines.length === 0 || billQuery.isFetching}
                 onClick={openPayModal}
                 className="tnum h-[60px] flex-1 rounded-xl bg-emerald px-6 font-mono text-[15px] font-bold text-on-emerald transition-all hover:bg-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald disabled:opacity-40"
@@ -553,6 +533,7 @@ export function BillDetail({
             ) : (
               <button
                 type="button"
+                data-testid="bill-pay"
                 disabled={unpaidLines.length === 0 || billQuery.isFetching}
                 onClick={openPayModal}
                 className="tnum h-[60px] flex-1 rounded-xl bg-emerald px-6 font-mono text-[15px] font-bold text-on-emerald transition-all hover:bg-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald disabled:opacity-40"
@@ -670,431 +651,6 @@ export function BillDetail({
         />
       ) : null}
     </>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// PhoneSheetContent — full-page content for <sm screens
-// ---------------------------------------------------------------------------
-
-interface PhoneSheetProps {
-  bill: BillResponse
-  items: MenuItem[]
-  visibleItems: MenuItem[]
-  orderedCategories: VirtualCategory[]
-  resolvedCategoryId: string
-  activeCategoryId: string | null
-  setActiveCategoryId: (id: string | null) => void
-  tableLabel: string | null
-  locale: string
-  currency: string
-  lineCount: number
-  unpaidLines: BillLineResponse[]
-  unpaidTotal: number
-  grandTotal: number
-  selectedLines: BillLineResponse[]
-  selectedTotal: number
-  selectedLineIds: Set<string>
-  splitMode: boolean
-  allLinesPaid: boolean
-  appendLines: { isPending: boolean; isError: boolean; error: unknown }
-  removeLine: { isPending: boolean; isError: boolean; error: unknown }
-  isRemoving: boolean
-  onItemTap: (item: MenuItem) => void
-  onToggleSplitMode: () => void
-  onToggleLineSelect: (lineId: string) => void
-  onRemoveLine: (lineId: string) => void
-  onKot: () => void
-  onCancel: () => void
-  onPayModal: () => void
-  onClose: () => void
-  onBack: () => void
-}
-
-function PhoneSheetContent({
-  bill,
-  tableLabel,
-  locale,
-  currency,
-  lineCount,
-  unpaidLines,
-  unpaidTotal,
-  grandTotal,
-  selectedLines,
-  selectedTotal,
-  selectedLineIds,
-  splitMode,
-  allLinesPaid,
-  isRemoving,
-  onToggleSplitMode,
-  onToggleLineSelect,
-  onRemoveLine,
-  onKot,
-  onCancel,
-  onPayModal,
-  onClose,
-}: PhoneSheetProps) {
-  const { t } = useTranslation()
-
-  return (
-    <>
-      {/* Drag handle */}
-      <div className="flex shrink-0 flex-col items-center pt-3 pb-1">
-        <div className="h-1 w-11 rounded-full bg-line" aria-hidden="true" />
-      </div>
-
-      {/* Header */}
-      <div className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-3">
-        <h2 className="font-display text-base font-bold text-ink">{bill.guestLabel}</h2>
-        {tableLabel ? (
-          <span className="flex items-center gap-1 text-sm text-ink-3">
-            <Table2 className="size-3.5" aria-hidden="true" />
-            {tableLabel}
-          </span>
-        ) : null}
-        <div className="flex-1" />
-        <button
-          type="button"
-          onClick={onKot}
-          disabled={lineCount === 0}
-          aria-label={t('kot.title')}
-          className="grid size-9 place-items-center rounded-xl border border-line text-ink-3 hover:bg-hover disabled:opacity-40"
-        >
-          <ChefHat className="size-4" />
-        </button>
-        {unpaidLines.length > 1 ? (
-          <button
-            type="button"
-            onClick={onToggleSplitMode}
-            aria-pressed={splitMode}
-            aria-label={t('bills.splitToggle')}
-            className={cn(
-              'grid size-9 place-items-center rounded-xl border',
-              splitMode ? 'border-emerald bg-emerald-tint text-emerald-2' : 'border-line text-ink-3 hover:bg-hover',
-            )}
-          >
-            <SplitSquareHorizontal className="size-4" />
-          </button>
-        ) : null}
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label={t('common.close')}
-          className="grid size-9 place-items-center rounded-xl text-ink-3 hover:bg-hover"
-        >
-          <X className="size-5" />
-        </button>
-      </div>
-
-      {/* Lines (scrollable) */}
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        {lineCount === 0 ? (
-          <p className="px-4 py-10 text-center text-sm text-ink-3">{t('bills.noLines')}</p>
-        ) : (
-          <ul className="divide-y divide-line">
-            {bill.lines.map((line) => (
-              <BillLineItem
-                key={line.id}
-                line={line}
-                locale={locale}
-                currency={currency}
-                splitMode={splitMode}
-                selected={selectedLineIds.has(line.id)}
-                onToggleSelect={() => onToggleLineSelect(line.id)}
-                onRemove={() => onRemoveLine(line.id)}
-                isRemoving={isRemoving}
-              />
-            ))}
-          </ul>
-        )}
-      </div>
-
-      {/* Totals + Footer */}
-      <div className="shrink-0 border-t border-line">
-        {lineCount > 0 ? (
-          <div className="border-b border-line px-4 py-3">
-            <div className="flex items-baseline justify-between text-sm">
-              <span className="text-ink-3">{t('pos.total')}</span>
-              <span className="tnum font-mono font-bold text-ink">
-                {formatMoney(
-                  bill.lines.some((l) => l.paid) ? unpaidTotal : grandTotal,
-                  currency,
-                  locale,
-                )}
-              </span>
-            </div>
-          </div>
-        ) : null}
-
-        {splitMode && selectedLines.length > 0 ? (
-          <div className="border-b border-line bg-emerald-tint px-4 py-2.5">
-            <div className="flex items-baseline justify-between text-sm">
-              <span className="font-semibold text-emerald-2">
-                {t('bills.splitSelected', { n: selectedLines.length })}
-              </span>
-              <span className="tnum font-mono font-bold text-emerald-2">
-                {formatMoney(selectedTotal, currency, locale)}
-              </span>
-            </div>
-          </div>
-        ) : null}
-
-        <div className="flex gap-2 px-4 py-4">
-          {splitMode ? (
-            <button
-              type="button"
-              disabled={selectedLines.length === 0}
-              onClick={onPayModal}
-              className="tnum h-14 flex-1 rounded-xl bg-emerald px-4 font-mono text-sm font-bold text-on-emerald disabled:opacity-40"
-            >
-              {t('bills.paySplit', { n: selectedLines.length })} ·{' '}
-              {formatMoney(selectedTotal, currency, locale)}
-            </button>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={onKot}
-                disabled={lineCount === 0}
-                className="flex h-14 items-center gap-2 rounded-xl border border-emerald-line bg-emerald-tint px-4 text-[14px] font-bold text-emerald-2 disabled:opacity-40"
-              >
-                <Send className="size-4" aria-hidden="true" />
-                {t('bills.sendN', { n: unpaidLines.length })}
-              </button>
-              <button
-                type="button"
-                disabled={unpaidLines.length === 0}
-                onClick={onPayModal}
-                className="tnum h-14 flex-1 rounded-xl bg-emerald px-4 font-mono text-[14px] font-bold text-on-emerald disabled:opacity-40"
-              >
-                {allLinesPaid
-                  ? t('bills.allPaid')
-                  : t('bills.payTotal', { total: formatMoney(unpaidTotal, currency, locale) })}
-              </button>
-            </>
-          )}
-        </div>
-        <div className="pb-4 text-center">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="text-xs text-ink-3 underline hover:text-loss"
-          >
-            {t('bills.cancelBill')}
-          </button>
-        </div>
-      </div>
-    </>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// BillLineItem
-// ---------------------------------------------------------------------------
-
-function BillLineItem({
-  line,
-  locale,
-  currency,
-  splitMode,
-  selected,
-  onToggleSelect,
-  onRemove,
-  isRemoving,
-}: {
-  line: BillLineResponse
-  locale: string
-  currency: string
-  splitMode: boolean
-  selected: boolean
-  onToggleSelect: () => void
-  onRemove: () => void
-  isRemoving: boolean
-}) {
-  const { t } = useTranslation()
-  const isPaid = line.paid
-
-  return (
-    <li
-      className={cn(
-        'px-5 py-3 transition-colors',
-        isPaid && 'bg-ink-50/40',
-        splitMode && !isPaid && selected && 'bg-emerald-tint',
-      )}
-    >
-      <div className="flex items-center gap-3">
-        {splitMode ? (
-          isPaid ? (
-            <span className="grid size-5 shrink-0 place-items-center rounded-full bg-profit" aria-hidden="true">
-              <Check className="size-3 text-white" />
-            </span>
-          ) : (
-            <input
-              type="checkbox"
-              checked={selected}
-              onChange={onToggleSelect}
-              aria-label={t('bills.selectLine', { name: line.nameSnapshot })}
-              className="size-4 shrink-0 cursor-pointer accent-emerald focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
-            />
-          )
-        ) : null}
-
-        <div className="min-w-0 flex-1">
-          <div className={cn('truncate text-sm font-medium', isPaid ? 'text-ink-3 line-through' : 'text-ink')}>
-            {line.nameSnapshot}
-          </div>
-          <div className="tnum mt-0.5 font-mono text-xs text-ink-3">
-            {line.qty > 1 ? `${line.qty} × ` : ''}
-            {formatMoney(line.unitPriceMinor + line.modifierDeltaMinor, currency, locale)}
-          </div>
-          {/* Modifier pills */}
-          {line.modifiers.length > 0 ? (
-            <div className="mt-1 flex flex-wrap gap-1">
-              {line.modifiers.map((mod) => (
-                <span key={mod.optionId} className="text-[11px] text-ink-3">
-                  {mod.nameSnapshot}
-                </span>
-              ))}
-            </div>
-          ) : null}
-        </div>
-
-        <div className={cn('tnum shrink-0 font-mono text-sm font-medium', isPaid ? 'text-ink-3' : 'text-ink')}>
-          {formatMoney(line.lineTotalMinor, currency, locale)}
-        </div>
-
-        {/* Paid badge (non-split) */}
-        {!splitMode && isPaid ? (
-          <Badge tone="emerald" className="shrink-0 px-1.5 py-0 text-[10px]">
-            {t('bills.paid')}
-          </Badge>
-        ) : null}
-
-        {/* Remove button — only for unpaid in non-split mode */}
-        {!splitMode && !isPaid ? (
-          <button
-            type="button"
-            onClick={onRemove}
-            disabled={isRemoving}
-            aria-label={t('bills.removeLine', { name: line.nameSnapshot })}
-            className="grid size-7 shrink-0 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-hover hover:text-loss focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
-          >
-            <Trash2 className="size-3.5" />
-          </button>
-        ) : null}
-      </div>
-    </li>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// BillBreakdown
-// ---------------------------------------------------------------------------
-
-function BillBreakdown({
-  breakdown,
-  currency,
-  locale,
-}: {
-  breakdown: PriceBreakdownResponse
-  currency: string
-  locale: string
-}) {
-  const { t } = useTranslation()
-  return (
-    <div className="space-y-2 text-sm">
-      <div className="flex items-baseline justify-between">
-        <span className="text-[11px] text-ink-3">{t('pos.subtotal')}</span>
-        <span className="tnum font-mono text-ink">
-          {formatMoney(breakdown.subtotalMinor, currency, locale)}
-        </span>
-      </div>
-      {breakdown.discountMinor > 0 ? (
-        <div className="flex items-baseline justify-between">
-          <span className="text-[11px] text-ink-3">{t('pos.discount')}</span>
-          <span className="tnum font-mono text-loss">
-            − {formatMoney(breakdown.discountMinor, currency, locale)}
-          </span>
-        </div>
-      ) : null}
-      <div className="flex items-baseline justify-between">
-        <span className="text-[11px] text-ink-3">{t('pos.serviceCharge')}</span>
-        <span className="tnum font-mono text-ink">
-          {formatMoney(breakdown.serviceChargeMinor, currency, locale)}
-        </span>
-      </div>
-      <div className="flex items-baseline justify-between">
-        <span className="text-[11px] text-ink-3">{t('pos.tax')}</span>
-        <span className="tnum font-mono text-ink">
-          {formatMoney(breakdown.taxMinor, currency, locale)}
-        </span>
-      </div>
-      <div className="flex items-baseline justify-between border-t border-line pt-2">
-        <span className="font-semibold text-ink">{t('pos.total')}</span>
-        <span className="tnum font-mono text-[26px] font-bold leading-none text-ink">
-          {formatMoney(breakdown.grandTotalMinor, currency, locale)}
-        </span>
-      </div>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// CancelConfirmDialog
-// ---------------------------------------------------------------------------
-
-function CancelConfirmDialog({
-  bill,
-  isCancelling,
-  error,
-  onConfirm,
-  onClose,
-}: {
-  bill: BillResponse
-  isCancelling: boolean
-  error: string | null
-  onConfirm: () => void
-  onClose: () => void
-}) {
-  const { t } = useTranslation()
-  return (
-    <div
-      className="fixed inset-0 z-[70] grid place-items-center bg-black/40 p-4 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-label={t('bills.cancelBillTitle')}
-    >
-      <Card className="w-full max-w-sm overflow-hidden">
-        <div className="flex items-start gap-3 border-b border-line px-5 py-4">
-          <AlertTriangle className="mt-0.5 size-5 shrink-0 text-loss" aria-hidden="true" />
-          <div>
-            <h3 className="font-display text-lg font-semibold text-ink">
-              {t('bills.cancelBillTitle')}
-            </h3>
-            <p className="mt-1 text-sm text-ink-3">
-              {t('bills.cancelBillBody', { label: bill.guestLabel })}
-            </p>
-          </div>
-        </div>
-        {error ? (
-          <p className="px-5 pt-3 text-xs text-loss" role="alert">
-            {error}
-          </p>
-        ) : null}
-        <div className="flex gap-2 px-5 py-4">
-          <Button variant="outline" className="flex-1" onClick={onClose} disabled={isCancelling}>
-            {t('common.cancel')}
-          </Button>
-          <Button
-            className="flex-1 bg-loss hover:bg-loss/90 focus-visible:outline-loss"
-            onClick={onConfirm}
-            disabled={isCancelling}
-          >
-            {isCancelling ? <Spinner /> : t('bills.cancelBillConfirm')}
-          </Button>
-        </div>
-      </Card>
-    </div>
   )
 }
 
