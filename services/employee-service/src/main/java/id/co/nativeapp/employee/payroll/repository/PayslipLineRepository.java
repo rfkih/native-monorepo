@@ -266,9 +266,21 @@ public interface PayslipLineRepository extends JpaRepository<PayslipLine, UUID> 
   List<PayslipIndexView> findPayslipIndex(@Param("runId") UUID runId);
 
   /**
-   * The caller's OWN payslip index — run headers for every run carrying the employee's lines,
-   * newest first. NO amount columns are selected (the encrypted amounts are only decrypted on the
-   * own-row detail read). RLS applies to both tables (rule 5).
+   * The caller's OWN payslip index — run headers for every ACTIVE (see {@link
+   * #ACTIVE_RUN_PREDICATE}) run carrying the employee's lines, newest first. NO amount columns are
+   * selected (the encrypted amounts are only decrypted on the own-row detail read). RLS applies to
+   * both tables (rule 5).
+   *
+   * <p><strong>P10 review C1 fix.</strong> Before this fix the query had NEITHER {@code status =
+   * 'POSTED'} NOR the {@code run_seq}-supersession filter — every run that ever produced a line for
+   * this employee was listed, so (1) a superseded correction re-run's stale {@code run_seq} 1 lines
+   * summed ALONGSIDE the correct {@code run_seq} 2 lines (double-counted gross/PPh21 downstream —
+   * Me's payslip list AND the payslip YTD card, which sums every listed header's detail), and (2) a
+   * {@code CALCULATED}-but-not-{@code POSTED} (or {@code FAILED}-after-calculate) run's already-
+   * persisted lines appeared as if final. {@link #ACTIVE_RUN_PREDICATE} is scoped per {@code
+   * (period, run_type)} (Track P Phase P8), so a REGULAR and a THR run for the same period both
+   * still legitimately appear — only same-{@code run_type} supersession and non-{@code POSTED}
+   * status are excluded.
    */
   @Query(
       value =
@@ -283,6 +295,9 @@ public interface PayslipLineRepository extends JpaRepository<PayslipLine, UUID> 
             JOIN payroll_run pr ON pr.id = pl.payroll_run_id
            WHERE pl.employee_id = :employeeId
              AND (CAST(:period AS text) IS NULL OR pr.period = CAST(:period AS text))
+             AND \s"""
+              + ACTIVE_RUN_PREDICATE
+              + """
            GROUP BY pl.payroll_run_id, pr.period, pr.run_seq, pr.posted_at
            ORDER BY pr.period DESC, pr.run_seq DESC
           """,

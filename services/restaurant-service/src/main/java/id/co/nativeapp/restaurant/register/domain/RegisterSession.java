@@ -4,6 +4,8 @@ import id.co.nativeapp.tenant.Auditable;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Objects;
@@ -51,7 +53,8 @@ public class RegisterSession extends Auditable {
   @Column(name = "opening_float_minor", nullable = false, updatable = false)
   private long openingFloatMinor;
 
-  @Column(name = "currency", nullable = false, updatable = false)
+  @JdbcTypeCode(SqlTypes.CHAR)
+  @Column(name = "currency", nullable = false, updatable = false, length = 3)
   private String currency;
 
   @Column(name = "closed_at")
