@@ -58,6 +58,25 @@ storage, no human approve/reject state machine, and `/api/v1/me/**` has never ha
      `reimbursement_run_id` MUST increment `version` in the same statement** — pay-direct flushes
      a full-column versioned UPDATE, so a linker that skips the version bump lets a stale pay
      clobber the link back to NULL and the employee is paid twice (direct cash + payslip).
+   - **E5 transitional gating (`ExpenseClaimPayrollLinker` ships in E5; the `EXPENSE_REIMBURSEMENT`
+     payslip line ships later, Track P Phase P7).** E5 wires `releaseForPeriod` + `linkForRun` +
+     `findLinkedClaimTotalsByEmployee` + `ExpenseClaim#settleByPayrollRun` +
+     `ExpenseReimbursementSettledSchema#toRecordPayroll` — the full atomic link/release
+     machinery — but `markReimbursedAndEmit` (the CALCULATED→POSTED step that flips a linked claim
+     to REIMBURSED and emits its settlement) is gated OFF until the run it is posting actually
+     carries an `EXPENSE_REIMBURSEMENT` payslip line: it checks for that line's existence and, pre-
+     P7, always finds none — logs and returns without flipping or emitting anything. This is
+     deliberate, not a gap: flipping a claim to REIMBURSED and settling the payable BEFORE the
+     employee's payslip actually carries the reimbursement line would book money the employee never
+     received via that run — wrong books, the exact failure mode (7) exists to prevent. A claim
+     linked in this window stays `APPROVED` + linked indefinitely. To recover it,
+     `releaseForPeriod`'s predicate carries a THIRD branch alongside "run not POSTED" and "a higher
+     POSTED run_seq exists": **linked to a POSTED run whose claim is still `APPROVED` (never flipped)
+     is released unconditionally**, so the next `calculate()` for that period (any re-run — a
+     correction, or simply an operator forcing one once P7 lands) frees it for re-linking. P7's own
+     work is therefore additive: wire the earning line, and the very next re-run for a period with
+     stranded claims picks them up with no further change to the linker. No claim is ever silently
+     stuck forever, and none is ever falsely settled early.
 7. **Finance settles once per claim.** A `employee_expense_claim_ledger` row with
    `UNIQUE (company_id, claim_id)`: any second settlement for a claim — re-delivery or
    supersession re-emission — is a logged no-op. This single invariant collapses every

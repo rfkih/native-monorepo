@@ -237,6 +237,29 @@ public class ExpenseClaim extends Auditable {
   }
 
   /**
+   * Transitions {@code APPROVED -> REIMBURSED} via the PAYROLL path (ADR 0030 §6, Phase E5) —
+   * {@code ExpenseClaimPayrollLinker#markReimbursedAndEmit} calls this for every claim still linked
+   * to a POSTED payroll run once that run actually carries the {@code EXPENSE_REIMBURSEMENT}
+   * payslip line (Track P Phase P7; pre-P7 the linker's gate never reaches this call at all — see
+   * its class Javadoc). Legal ONLY when APPROVED AND already linked to a payroll run ({@code
+   * reimbursement_run_id != null}) — the LINK itself was established earlier by {@code
+   * ExpenseClaimRepository#linkForRunChunk}'s own conditional UPDATE; this method never sets or
+   * clears {@code reimbursement_run_id}, only the status + settlement stamp, so it carries no
+   * version-bump obligation of its own beyond the entity's ordinary optimistic {@code @Version}
+   * (the caller's plain {@code save()} increments it via JPA, exactly like {@link #payDirect}).
+   *
+   * @param settledAt the settlement instant; also drives the settlement entry's accounting period
+   * @throws ClaimStateException if not APPROVED, or not linked to a payroll run (→ 409)
+   */
+  public void settleByPayrollRun(Instant settledAt) {
+    if (this.status != ClaimStatus.APPROVED || this.reimbursementRunId == null) {
+      throw new ClaimStateException(this.status, "settleByPayrollRun");
+    }
+    this.status = ClaimStatus.REIMBURSED;
+    this.settledAt = Objects.requireNonNull(settledAt, "settledAt");
+  }
+
+  /**
    * Transitions {@code DRAFT | SUBMITTED -> CANCELLED} — the employee withdrawing their own claim.
    *
    * @throws ClaimStateException if neither DRAFT nor SUBMITTED (→ 409)

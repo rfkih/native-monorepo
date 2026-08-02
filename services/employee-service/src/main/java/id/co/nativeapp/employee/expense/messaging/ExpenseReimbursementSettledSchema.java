@@ -6,6 +6,7 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.UUID;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericRecord;
@@ -71,6 +72,37 @@ public final class ExpenseReimbursementSettledSchema {
     record.put("settlement_kind", KIND_DIRECT);
     record.put("payroll_run_id", null);
     record.put("run_seq", null);
+    record.put("settled_at", settledAt.toEpochMilli());
+    return record;
+  }
+
+  /**
+   * Builds an {@code ExpenseReimbursementSettled} record with {@code settlement_kind=PAYROLL} — the
+   * payroll path (E5, ADR 0030 §6): the claim rode {@code payrollRunId}'s (at {@code runSeq})
+   * payslip as the non-taxable {@code EXPENSE_REIMBURSEMENT} line and that run POSTED.
+   *
+   * @param claim a claim whose status is already {@code REIMBURSED} (the caller mutates via {@link
+   *     ExpenseClaim#settleByPayrollRun} before building the record, in the same transaction — rule
+   *     3)
+   * @param payrollRunId the settling payroll run
+   * @param runSeq the settling run's supersession sequence
+   * @param settledAt the settlement instant; must equal {@code claim.getSettledAt()}
+   */
+  public static GenericRecord toRecordPayroll(
+      ExpenseClaim claim, UUID payrollRunId, int runSeq, Instant settledAt) {
+    Objects.requireNonNull(claim, "claim");
+    Objects.requireNonNull(payrollRunId, "payrollRunId");
+    Objects.requireNonNull(settledAt, "settledAt");
+    GenericRecord record = new GenericData.Record(SCHEMA);
+    record.put("claim_id", claim.getId().toString());
+    record.put("company_id", claim.getCompanyId());
+    record.put("org_unit_id", claim.getOrgUnitId().toString());
+    record.put("employee_id", claim.getEmployeeId().toString());
+    record.put("amount_minor", claim.getAmount().amountMinor());
+    record.put("currency", claim.getAmount().currency().getCurrencyCode());
+    record.put("settlement_kind", KIND_PAYROLL);
+    record.put("payroll_run_id", payrollRunId.toString());
+    record.put("run_seq", runSeq);
     record.put("settled_at", settledAt.toEpochMilli());
     return record;
   }

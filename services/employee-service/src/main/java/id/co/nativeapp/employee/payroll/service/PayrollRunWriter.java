@@ -8,6 +8,7 @@ import id.co.nativeapp.employee.assignment.domain.ConflictingLegalEmployerExcept
 import id.co.nativeapp.employee.assignment.repository.AssignmentRepository;
 import id.co.nativeapp.employee.employee.domain.Employee;
 import id.co.nativeapp.employee.employee.repository.EmployeeRepository;
+import id.co.nativeapp.employee.expense.service.ExpenseClaimPayrollLinker;
 import id.co.nativeapp.employee.org.domain.OrgUnitProjection;
 import id.co.nativeapp.employee.org.repository.OrgUnitProjectionRepository;
 import id.co.nativeapp.employee.payroll.domain.AllocationInputs.OutletShare;
@@ -92,6 +93,15 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>PII (salary) is encrypted at rest on the lines and is NEVER logged or evented; events carry
  * only company totals / outlet-GL buckets (rule 6).
+ *
+ * <p><strong>Expense-claim seam (ADR 0030 §6, Track E phase E5).</strong> {@code calculate} opens
+ * by calling {@link ExpenseClaimPayrollLinker#releaseForPeriod} then {@link
+ * ExpenseClaimPayrollLinker#linkForRun} — both {@code propagation = MANDATORY}, joining THIS
+ * method's own transaction — so a stale/superseded claim link is freed and every eligible claim is
+ * atomically linked to the run being calculated. {@code post} closes by calling {@link
+ * ExpenseClaimPayrollLinker#markReimbursedAndEmit}, which is E5-TRANSITIONALLY gated: it no-ops
+ * until Track P Phase P7 adds the {@code EXPENSE_REIMBURSEMENT} payslip line a linked claim needs
+ * to actually ride the payslip (see that method's Javadoc).
  */
 @Component
 public class PayrollRunWriter {
@@ -126,7 +136,9 @@ public class PayrollRunWriter {
   private final LaborCostAllocator allocator;
   private final OutboxWriter outboxWriter;
   private final Clock clock;
+  private final ExpenseClaimPayrollLinker expenseClaimPayrollLinker;
 
+  @SuppressWarnings("checkstyle:ParameterNumber")
   public PayrollRunWriter(
       PayrollRunRepository runRepository,
       PayslipLineRepository payslipLineRepository,
@@ -143,7 +155,8 @@ public class PayrollRunWriter {
       GrossToNetCalculator calculator,
       LaborCostAllocator allocator,
       OutboxWriter outboxWriter,
-      Clock clock) {
+      Clock clock,
+      ExpenseClaimPayrollLinker expenseClaimPayrollLinker) {
     this.runRepository = runRepository;
     this.payslipLineRepository = payslipLineRepository;
     this.allocationRepository = allocationRepository;
@@ -160,6 +173,7 @@ public class PayrollRunWriter {
     this.allocator = allocator;
     this.outboxWriter = outboxWriter;
     this.clock = clock;
+    this.expenseClaimPayrollLinker = expenseClaimPayrollLinker;
   }
 
   /**
@@ -181,6 +195,18 @@ public class PayrollRunWriter {
     run.markGatePending();
     recordSealedLedger(run, command.period());
     run.markCalculating();
+
+    // ADR 0030 §6 (Track E phase E5) — the payroll<->expense-claim seam, joined to THIS
+    // transaction (ExpenseClaimPayrollLinker is propagation MANDATORY). release FIRST: frees
+    // claims stuck on a stale/superseded run of this SAME period so they are eligible below. link
+    // SECOND: atomically claims every un-linked APPROVED+PAYROLL claim for this run's employees.
+    // NOTE (E5-transitional, see ExpenseClaimPayrollLinker's class Javadoc): a claim linked here
+    // does NOT yet ride a payslip line — Track P Phase P7 adds the EXPENSE_REIMBURSEMENT earning.
+    // Until then, post()'s markReimbursedAndEmit call intentionally leaves these claims
+    // APPROVED+linked (never flips/settles them) rather than settling money the employee never
+    // actually received via this run.
+    expenseClaimPayrollLinker.releaseForPeriod(command.period());
+    expenseClaimPayrollLinker.linkForRun(run.getId(), command.period(), command.employeeIds());
 
     if (ungated) {
       // An ungated run must NEVER be silent (no expected-source set means the completeness gate
@@ -405,6 +431,17 @@ public class PayrollRunWriter {
         null,
         companyId,
         clock.instant());
+
+    // ADR 0030 §6 (Track E phase E5) — the payroll<->expense-claim seam, joined to THIS SAME
+    // CALCULATED->POSTED transaction (ExpenseClaimPayrollLinker is propagation MANDATORY): flips
+    // every claim linked to this run from APPROVED to REIMBURSED and emits one
+    // ExpenseReimbursementSettled(PAYROLL) per claim — the run's exactly-once posting discipline
+    // extends to these emits. E5-TRANSITIONAL (see the linker's class Javadoc): this call is a
+    // safe no-op (returns 0, flips nothing) until the run actually carries an
+    // EXPENSE_REIMBURSEMENT payslip line (Track P Phase P7) — settling before that line exists
+    // would book a payable settlement for money the employee never actually received via this
+    // run.
+    expenseClaimPayrollLinker.markReimbursedAndEmit(run);
 
     return run;
   }

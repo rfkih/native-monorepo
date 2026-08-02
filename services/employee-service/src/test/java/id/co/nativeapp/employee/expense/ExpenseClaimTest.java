@@ -280,6 +280,69 @@ class ExpenseClaimTest {
   }
 
   // ---------------------------------------------------------------------------
+  // settleByPayrollRun() — PAYROLL reimbursement (ADR 0030 §6, Phase E5)
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void settleByPayrollRunFromApprovedAndLinkedMovesToReimbursedAndStampsSettledAt() {
+    ExpenseClaim claim = newDraft();
+    claim.submit();
+    claim.approve("manager-sub", "ok", Instant.parse("2026-07-20T09:00:00Z"));
+    UUID runId = UUID.randomUUID();
+    ReflectionTestUtils.setField(claim, "reimbursementRunId", runId);
+    Instant settledAt = Instant.parse("2026-07-25T10:00:00Z");
+
+    claim.settleByPayrollRun(settledAt);
+
+    assertThat(claim.getStatus()).isEqualTo(ClaimStatus.REIMBURSED);
+    assertThat(claim.getSettledAt()).isEqualTo(settledAt);
+    // The link itself is left untouched — settleByPayrollRun never sets/clears
+    // reimbursement_run_id (only the linker's own conditional UPDATEs do, ADR 0030 §6 BINDING).
+    assertThat(claim.getReimbursementRunId()).isEqualTo(runId);
+  }
+
+  @Test
+  void settleByPayrollRunFromApprovedButNotLinkedIsRejected() {
+    ExpenseClaim claim = newDraft();
+    claim.submit();
+    claim.approve("manager-sub", "ok", Instant.parse("2026-07-20T09:00:00Z"));
+    // No reimbursement_run_id set — the linker never claimed this one.
+    assertThatThrownBy(() -> claim.settleByPayrollRun(Instant.parse("2026-07-25T10:00:00Z")))
+        .isInstanceOf(ClaimStateException.class);
+    assertThat(claim.getStatus()).isEqualTo(ClaimStatus.APPROVED);
+  }
+
+  @Test
+  void settleByPayrollRunFromDraftIsRejected() {
+    ExpenseClaim claim = newDraft();
+    ReflectionTestUtils.setField(claim, "reimbursementRunId", UUID.randomUUID());
+    assertThatThrownBy(() -> claim.settleByPayrollRun(Instant.parse("2026-07-25T10:00:00Z")))
+        .isInstanceOf(ClaimStateException.class);
+  }
+
+  @Test
+  void settleByPayrollRunFromAlreadyReimbursedIsRejected() {
+    ExpenseClaim claim = newDraft();
+    claim.submit();
+    claim.approve("manager-sub", "ok", Instant.parse("2026-07-20T09:00:00Z"));
+    ReflectionTestUtils.setField(claim, "reimbursementRunId", UUID.randomUUID());
+    claim.settleByPayrollRun(Instant.parse("2026-07-25T10:00:00Z"));
+
+    assertThatThrownBy(() -> claim.settleByPayrollRun(Instant.parse("2026-07-26T10:00:00Z")))
+        .isInstanceOf(ClaimStateException.class);
+  }
+
+  @Test
+  void settleByPayrollRunFromRefusedIsRejected() {
+    ExpenseClaim claim = newDraft();
+    claim.submit();
+    claim.refuse("manager-sub", "no receipt", Instant.parse("2026-07-20T09:00:00Z"));
+    ReflectionTestUtils.setField(claim, "reimbursementRunId", UUID.randomUUID());
+    assertThatThrownBy(() -> claim.settleByPayrollRun(Instant.parse("2026-07-25T10:00:00Z")))
+        .isInstanceOf(ClaimStateException.class);
+  }
+
+  // ---------------------------------------------------------------------------
   // cancel()
   // ---------------------------------------------------------------------------
 

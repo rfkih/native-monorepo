@@ -2,11 +2,13 @@ package id.co.nativeapp.employee.expense.repository;
 
 import id.co.nativeapp.employee.expense.domain.ExpenseClaim;
 import id.co.nativeapp.employee.expense.projection.ExpenseClaimSummaryView;
+import id.co.nativeapp.employee.expense.projection.LinkedClaimTotalView;
 import id.co.nativeapp.employee.expense.projection.MyExpenseClaimView;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -142,4 +144,137 @@ public interface ExpenseClaimRepository extends JpaRepository<ExpenseClaim, UUID
       value = "SELECT ec.id FROM expense_claim ec WHERE ec.id = :claimId FOR UPDATE",
       nativeQuery = true)
   Optional<UUID> lockForReceiptSwap(@Param("claimId") UUID claimId);
+
+  // ---------------------------------------------------------------------
+  // ADR 0030 §6 (Phase E5) — the payroll<->expense-claim seam. Called ONLY from {@code
+  // ExpenseClaimPayrollLinker} (expense.service), joined to the CALLER's transaction
+  // (PayrollRunWriter#calculate / #post, both propagation MANDATORY on the linker side).
+  // ---------------------------------------------------------------------
+
+  /**
+   * Releases every claim linked to a {@code payroll_run} of {@code period} whose link is now STALE,
+   * resetting {@code reimbursement_run_id}/{@code settled_at} to {@code NULL} and {@code status}
+   * back to {@code APPROVED} so {@link #linkForRunChunk} can re-link the claim to a corrective run.
+   *
+   * <p><strong>BINDING (ADR 0030 §6, E4 review W1).</strong> Bumps {@code version} in the SAME
+   * statement as every other column: {@code ExpenseClaimWriter#payDirect} flushes a full-column
+   * OPTIMISTIC-LOCKED {@code UPDATE ... WHERE id = ? AND version = ?}; if this UPDATE skipped the
+   * bump, a stale {@code payDirect} (the entity loaded BEFORE this release ran) would pass its
+   * {@code WHERE version =} check and clobber the just-released row — a double payment (direct cash
+   * + a later payslip settlement). Bumping it here makes that stale flush lose the optimistic-lock
+   * race with {@link org.springframework.orm.ObjectOptimisticLockingFailureException} (→ 409)
+   * instead.
+   *
+   * <p>Released when the linked run is:
+   *
+   * <ul>
+   *   <li>NOT POSTED — a failed/stale/abandoned {@code CALCULATING}/{@code CALCULATED}/{@code
+   *       FAILED} run for this period never reached POSTED, so no reimbursement it "carries" ever
+   *       actually happened; or
+   *   <li>POSTED but a STRICTLY HIGHER {@code run_seq} POSTED run for the SAME period already
+   *       exists — this run is superseded. This necessarily lags ONE {@code calculate()} cycle
+   *       behind the actual supersession (the higher run does not exist yet at the moment its OWN
+   *       {@code calculate()} runs), mirroring finance's own {@code LaborCostAllocated}/{@code
+   *       PayrollPosted} reversal timing, which likewise reverses a run only once the NEXT run
+   *       POSTS — see {@code ExpenseClaimPayrollLinker}'s class Javadoc for the full trace; or
+   *   <li>POSTED (this run itself, not superseded) but the claim is STILL {@code APPROVED} — the
+   *       <strong>E5-transitional</strong> case: {@code markReimbursedAndEmit} found no {@code
+   *       EXPENSE_REIMBURSEMENT} payslip line for this run (pre-Track-P-Phase-P7) and skipped it,
+   *       leaving the claim linked+APPROVED indefinitely unless a later re-run releases and
+   *       re-links it.
+   * </ul>
+   *
+   * <p>A claim already REIMBURSED by the run that is CURRENT (POSTED, not superseded) for this
+   * period matches none of the three OR-branches and is left untouched.
+   *
+   * @return the number of claims released
+   */
+  @Modifying
+  @Query(
+      value =
+          """
+          UPDATE expense_claim c
+             SET reimbursement_run_id = NULL,
+                 status               = 'APPROVED',
+                 settled_at           = NULL,
+                 updated_at           = NOW(),
+                 version              = c.version + 1
+            FROM payroll_run pr
+           WHERE c.reimbursement_run_id = pr.id
+             AND pr.period              = :period
+             AND c.status               IN ('APPROVED', 'REIMBURSED')
+             AND (
+                   pr.status <> 'POSTED'
+                   OR EXISTS (
+                        SELECT 1
+                          FROM payroll_run pr2
+                         WHERE pr2.period  = pr.period
+                           AND pr2.status  = 'POSTED'
+                           AND pr2.run_seq > pr.run_seq
+                      )
+                   OR (pr.status = 'POSTED' AND c.status = 'APPROVED')
+                 )
+          """,
+      nativeQuery = true)
+  int releaseForPeriod(@Param("period") String period);
+
+  /**
+   * Chunk-scoped conditional UPDATE (caller chunks {@code employeeIds} at ≤1000 — CLAUDE.md) —
+   * links every un-linked {@code APPROVED} + {@code PAYROLL}-method claim among {@code employeeIds}
+   * to {@code runId}.
+   *
+   * <p><strong>BINDING (ADR 0030 §6, same reasoning as {@link #releaseForPeriod}).</strong> Bumps
+   * {@code version} in the SAME statement — the version bump is what makes a concurrent {@code
+   * payDirect} (which read the claim BEFORE this link landed) lose its optimistic-lock race instead
+   * of silently clobbering the link back to {@code NULL}.
+   *
+   * @return the number of claims linked in this chunk
+   */
+  @Modifying
+  @Query(
+      value =
+          """
+          UPDATE expense_claim
+             SET reimbursement_run_id = :runId,
+                 updated_at           = NOW(),
+                 version              = version + 1
+           WHERE status                = 'APPROVED'
+             AND reimbursement_method  = 'PAYROLL'
+             AND reimbursement_run_id IS NULL
+             AND employee_id IN (:employeeIds)
+          """,
+      nativeQuery = true)
+  int linkForRunChunk(@Param("runId") UUID runId, @Param("employeeIds") List<UUID> employeeIds);
+
+  /**
+   * Every claim currently linked to {@code runId} — the WRITE-path read {@code
+   * ExpenseClaimPayrollLinker#markReimbursedAndEmit} mutates (flips to REIMBURSED) and saves, so
+   * the full entity is loaded (CODE-STRUCTURE §3.3, the write-path exception), not a projection.
+   */
+  List<ExpenseClaim> findByReimbursementRunId(UUID reimbursementRunId);
+
+  /**
+   * One row per (employee, currency) among the claims currently linked to {@code runId} — the
+   * source Track P Phase P7 reads to build the non-taxable {@code EXPENSE_REIMBURSEMENT} payslip
+   * line per employee. GROUP BY {@code amount_currency} as well as {@code employee_id}: v1 claims
+   * are single-currency per tenant (see {@code ExpenseClaimWriter}'s currency-establishment
+   * Javadoc), so in practice this is exactly one row per employee — but grouping by currency too
+   * means a hypothetical future multi-currency tenant surfaces as MULTIPLE rows per employee (one
+   * per currency) instead of silently summing across currencies into one corrupted total (never mix
+   * currencies in one {@code Money} sum, rule 8).
+   */
+  @Query(
+      value =
+          """
+          SELECT employee_id       AS employee_id,
+                 SUM(amount_minor) AS total_minor,
+                 amount_currency   AS currency,
+                 COUNT(*)          AS claim_count
+            FROM expense_claim
+           WHERE reimbursement_run_id = :runId
+           GROUP BY employee_id, amount_currency
+           ORDER BY employee_id
+          """,
+      nativeQuery = true)
+  List<LinkedClaimTotalView> findLinkedClaimTotalsByEmployee(@Param("runId") UUID runId);
 }

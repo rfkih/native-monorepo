@@ -150,11 +150,13 @@ class LayeredArchitectureTest {
             .should()
             .onlyHaveDependentClassesThat(
                 describe(
-                    "are in the service layer (*Service/*Writer/*Reader) or are repositories",
+                    "are in the service layer (*Service/*Writer/*Reader/*Linker) or are"
+                        + " repositories",
                     javaClass ->
                         javaClass.getSimpleName().endsWith("Service")
                             || javaClass.getSimpleName().endsWith("Writer")
                             || javaClass.getSimpleName().endsWith("Reader")
+                            || javaClass.getSimpleName().endsWith("Linker")
                             || javaClass.isAssignableTo(
                                 org.springframework.data.repository.Repository.class)))
             .as("repositories are a data port used only from the service layer");
@@ -260,6 +262,16 @@ class LayeredArchitectureTest {
     rule.check(classes);
   }
 
+  /**
+   * {@code *Linker} is a recognized service-layer transactional-bean suffix ALONGSIDE {@code
+   * *Service}/{@code *Writer}/{@code *Reader} — {@code ExpenseClaimPayrollLinker} (ADR 0030 §6,
+   * Track E phase E5) is the first instance: a bean whose {@code @Transactional} methods are all
+   * {@code propagation = MANDATORY} (it NEVER opens its own transaction; it only ever joins a
+   * caller's, e.g. {@code PayrollRunWriter#calculate}/{@code #post}) — architecturally a deliberate
+   * variant of the {@code *Writer} pattern (which typically opens {@code REQUIRES_NEW}), distinct
+   * enough to warrant its own name, but every bit as much a service-layer transactional unit of
+   * work that the tx proxy + {@code RlsAutoApplyAspect} must engage on.
+   */
   @Test
   void transactionalLivesOnlyInTheServiceLayer() {
     ArchRule rule =
@@ -277,6 +289,8 @@ class LayeredArchitectureTest {
             .haveSimpleNameEndingWith("Writer")
             .orShould()
             .haveSimpleNameEndingWith("Reader")
+            .orShould()
+            .haveSimpleNameEndingWith("Linker")
             .as("tx boundaries live in the service layer so the tx proxy and RLS aspect engage");
     rule.check(classes);
   }
