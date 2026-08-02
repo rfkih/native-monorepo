@@ -3,9 +3,9 @@ package id.co.nativeapp.employee.payroll.service;
 import id.co.nativeapp.employee.employee.domain.Employee;
 import id.co.nativeapp.employee.employee.repository.EmployeeRepository;
 import id.co.nativeapp.employee.payroll.domain.PayComponent;
-import id.co.nativeapp.employee.payroll.domain.PayComponentBearer;
 import id.co.nativeapp.employee.payroll.domain.PayComponentKind;
 import id.co.nativeapp.employee.payroll.domain.PayslipLine;
+import id.co.nativeapp.employee.payroll.domain.StatutoryCalcType;
 import id.co.nativeapp.employee.payroll.domain.StatutoryParams;
 import id.co.nativeapp.employee.payroll.domain.StatutoryRule;
 import id.co.nativeapp.employee.payroll.repository.PayComponentRepository;
@@ -13,6 +13,7 @@ import id.co.nativeapp.employee.payroll.repository.PayslipLineRepository;
 import id.co.nativeapp.employee.payroll.repository.StatutoryRuleRepository;
 import id.co.nativeapp.money.Money;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -45,12 +46,19 @@ import org.springframework.transaction.annotation.Transactional;
  * payslip_line} carries only {@code component_key}/{@code kind}/{@code bearer} — not whether the
  * component was taxable, or which rule family produced a deduction, AT THE TIME the line was
  * produced. Every method below classifies a historical line by the CURRENT {@code pay_component}
- * catalog (taxable flag) and, for the deduction side, by a FIXED recognition of the OFFICIAL
- * dataset's own component/rule keys ({@code PPH21} for income tax; {@code BPJS_JHT}/{@code BPJS_JP}
- * rule keys for the deductible social legs) rather than re-resolving each historical month's actual
- * statutory rule family — simpler than {@code classifyPayslipLine}'s dynamic rule-family lookup,
- * and correct for the shipped datasets (ID-2026.1/.2/.3), but a residual if a future dataset
- * renames those keys. Documented, not silently assumed correct.
+ * catalog (taxable flag for an EARNING line; the CURRENT ACTIVE resolved {@link StatutoryRule} for
+ * a DEDUCTION line's {@code statutory_rule_key}, {@link #resolveActiveRulesByKey}) rather than
+ * re-resolving each historical month's ACTUAL rule as it stood that month — a real approximation
+ * (documented, not silently assumed correct; a residual if a rule's shape changed mid-year), but
+ * NOT a second hand-copied classification: {@code PPH21} for income tax stays a fixed component-key
+ * check (there is no "resolve params" for the tax line itself), while every OTHER deduction line
+ * (the BPJS legs) is classified via the LITERAL SAME {@link
+ * GrossToNetCalculator#classifyCeilingLegForTaxBase} method {@link GrossToNetCalculator#compute}
+ * itself calls — one tax-base-assembly source of truth, made true by extraction rather than claimed
+ * by parallel hand-written logic (the W1 review finding this closes: the prior version summed
+ * taxable EARNING lines only, silently dropping the notional employer BPJS premiums {@code
+ * compute()} DOES fold into {@code grossBruto}, understating {@code annual_bruto_minor} / {@code
+ * gross_bruto_minor} for every taxpayer).
  */
 @Service
 public class PayrollReportReader {
@@ -59,9 +67,6 @@ public class PayrollReportReader {
 
   /** {@code pay_component.component_key} for the monthly/annual income-tax deduction line. */
   private static final String COMPONENT_KEY_PPH21 = "PPH21";
-
-  /** {@code statutory_rule.rule_key}s whose EMPLOYEE-borne leg reduces the PPh21 tax base. */
-  private static final Set<String> DEDUCTIBLE_SOCIAL_RULE_KEYS = Set.of("BPJS_JHT", "BPJS_JP");
 
   private static final String RULE_KEY_ARTICLE_17 = "PPH21_ARTICLE17";
   private static final String RULE_KEY_PTKP_RELIEF = "PTKP_RELIEF";
@@ -146,6 +151,7 @@ public class PayrollReportReader {
   public String bukti1721A1(String year) {
     Map<String, PayComponent> catalog = catalogByKey();
     LocalDate yearEnd = LocalDate.of(Integer.parseInt(year), 12, 31);
+    Map<String, StatutoryRule> activeRulesByKey = resolveActiveRulesByKey(catalog, yearEnd);
     StatutoryRule annualRule =
         statutoryRuleRepository
             .findByRuleKeyAndActiveTrueAndEffectiveFromLessThanEqualAndEffectiveToGreaterThanEqual(
@@ -184,11 +190,14 @@ public class PayrollReportReader {
         } else if (line.getKind() == PayComponentKind.DEDUCTION) {
           if (COMPONENT_KEY_PPH21.equals(line.getComponentKey())) {
             withheld = withheld.plus(line.getAmount());
-          } else if (line.getBearer() == PayComponentBearer.EMPLOYEE
-              && current != null
-              && current.getStatutoryRuleKey() != null
-              && DEDUCTIBLE_SOCIAL_RULE_KEYS.contains(current.getStatutoryRuleKey())) {
-            deductibleSocial = deductibleSocial.plus(line.getAmount());
+          } else {
+            // W1 review fix: the notional employer BPJS premiums (BPJS_KES_ER/JKK_ER/JKM_ER) that
+            // GrossToNetCalculator#compute folds into grossBruto MUST also land in annual_bruto
+            // here, via the SAME classification method — see taxBaseContribution's javadoc.
+            GrossToNetCalculator.CeilingLegTaxBaseContribution contribution =
+                taxBaseContribution(line, catalog, activeRulesByKey);
+            deductibleSocial = deductibleSocial.plus(contribution.deductibleSocialDelta());
+            bruto = bruto.plus(contribution.employerTaxableAdditionDelta());
           }
         }
       }
@@ -289,6 +298,8 @@ public class PayrollReportReader {
   public String pph21Monthly(String period) {
     List<PayslipLine> lines = payslipLineRepository.findActiveLinesForPeriod(period);
     Map<String, PayComponent> catalog = catalogByKey();
+    LocalDate periodEnd = YearMonth.parse(period).atEndOfMonth();
+    Map<String, StatutoryRule> activeRulesByKey = resolveActiveRulesByKey(catalog, periodEnd);
 
     String currency = null;
     long grossBrutoMinor = 0L;
@@ -300,11 +311,20 @@ public class PayrollReportReader {
         currency = line.getAmount().currency().getCurrencyCode();
       }
       PayComponent current = catalog.get(line.getComponentKey());
-      if (line.getKind() == PayComponentKind.EARNING && current != null && current.isTaxable()) {
-        grossBrutoMinor += line.getAmount().amountMinor();
-      } else if (line.getKind() == PayComponentKind.DEDUCTION
-          && COMPONENT_KEY_PPH21.equals(line.getComponentKey())) {
-        pph21Minor += line.getAmount().amountMinor();
+      if (line.getKind() == PayComponentKind.EARNING) {
+        if (current != null && current.isTaxable()) {
+          grossBrutoMinor += line.getAmount().amountMinor();
+        }
+      } else if (line.getKind() == PayComponentKind.DEDUCTION) {
+        if (COMPONENT_KEY_PPH21.equals(line.getComponentKey())) {
+          pph21Minor += line.getAmount().amountMinor();
+        } else {
+          // W1 review fix — see bukti1721A1's identical comment: the notional employer BPJS
+          // premiums belong in gross bruto here too.
+          GrossToNetCalculator.CeilingLegTaxBaseContribution contribution =
+              taxBaseContribution(line, catalog, activeRulesByKey);
+          grossBrutoMinor += contribution.employerTaxableAdditionDelta().amountMinor();
+        }
       }
     }
 
@@ -431,6 +451,54 @@ public class PayrollReportReader {
       byKey.put(component.getComponentKey(), component);
     }
     return byKey;
+  }
+
+  /**
+   * Resolves the CURRENTLY ACTIVE {@link StatutoryRule} for every DISTINCT {@code
+   * statutory_rule_key} the {@code catalog} references, as-of {@code asOf} — the SAME
+   * historical-reconstruction approximation the class javadoc documents (the CURRENT rule set, not
+   * a per-month re-resolution of what was active back then). Feeds {@link #taxBaseContribution}.
+   */
+  private Map<String, StatutoryRule> resolveActiveRulesByKey(
+      Map<String, PayComponent> catalog, LocalDate asOf) {
+    Map<String, StatutoryRule> byKey = new LinkedHashMap<>();
+    for (PayComponent component : catalog.values()) {
+      String ruleKey = component.getStatutoryRuleKey();
+      if (ruleKey == null || byKey.containsKey(ruleKey)) {
+        continue;
+      }
+      statutoryRuleRepository
+          .findByRuleKeyAndActiveTrueAndEffectiveFromLessThanEqualAndEffectiveToGreaterThanEqual(
+              ruleKey, asOf, asOf)
+          .ifPresent(rule -> byKey.put(ruleKey, rule));
+    }
+    return byKey;
+  }
+
+  /**
+   * One historical {@link PayslipLine}'s tax-base contribution, via the LITERAL SAME classification
+   * {@link GrossToNetCalculator#compute} uses for a live run (W1 review fix — the class javadoc's
+   * "one tax source of truth" claim, made true by extraction): resolves the line's CURRENT catalog
+   * component's CURRENT active rule and, when it is {@code PERCENTAGE_CEILING}, delegates to {@link
+   * GrossToNetCalculator#classifyCeilingLegForTaxBase}. Zero for a line whose component is unknown,
+   * has no statutory rule, or resolves a non-{@code PERCENTAGE_CEILING} family (e.g. the {@code
+   * PPH21} income-tax line itself, which callers handle separately).
+   */
+  private GrossToNetCalculator.CeilingLegTaxBaseContribution taxBaseContribution(
+      PayslipLine line,
+      Map<String, PayComponent> catalog,
+      Map<String, StatutoryRule> activeRulesByKey) {
+    Money zero = Money.ofMinor(0L, line.getAmount().currency());
+    PayComponent current = catalog.get(line.getComponentKey());
+    if (current == null) {
+      return new GrossToNetCalculator.CeilingLegTaxBaseContribution(zero, zero);
+    }
+    StatutoryRule rule = activeRulesByKey.get(current.getStatutoryRuleKey());
+    if (rule == null || rule.getCalcType() != StatutoryCalcType.PERCENTAGE_CEILING) {
+      return new GrossToNetCalculator.CeilingLegTaxBaseContribution(zero, zero);
+    }
+    StatutoryParams.CeilingParams params = StatutoryParams.ceiling(rule.getParamsJson());
+    return calculator.classifyCeilingLegForTaxBase(line.getBearer(), params, line.getAmount());
   }
 
   private record Bukti1721A1Row(

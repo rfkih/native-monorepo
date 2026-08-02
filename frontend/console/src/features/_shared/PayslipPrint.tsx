@@ -89,7 +89,15 @@ export function PayslipPrint({
 
   return (
     <div
-      className="fixed inset-0 z-[70] grid place-items-start justify-center overflow-y-auto bg-black/60 p-4 py-8 backdrop-blur-sm print:hidden"
+      // Deliberately NO print:hidden here (review finding C1): this div is an ANCESTOR of the print
+      // target #native-payslip-print below. @media print's display:none on an ancestor removes the
+      // whole subtree from the print box tree — a descendant's visibility:visible (the global
+      // index.css print-isolation rule) can NEVER undo that (see index.css's own comment on exactly
+      // this hazard). Isolation instead relies purely on the global visibility-based rule, the same
+      // as ThermalReceipt/SelfOrderQr (whose print targets also carry no print:hidden ancestor);
+      // only the header CONTROLS below (a sibling of the print target, not an ancestor) are
+      // print:hidden, mirroring KotView's modal-chrome-as-sibling shape.
+      className="fixed inset-0 z-[70] grid place-items-start justify-center overflow-y-auto bg-black/60 p-4 py-8 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={t('payslip.print.title')}

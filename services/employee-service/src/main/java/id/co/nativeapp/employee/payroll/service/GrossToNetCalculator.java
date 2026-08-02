@@ -117,15 +117,14 @@ public class GrossToNetCalculator {
 
       if (component.getBearer() == PayComponentBearer.EMPLOYEE) {
         employeeDeductions = employeeDeductions.plus(leg);
-        if (params.reducesTaxBase()) {
-          deductibleSocial = deductibleSocial.plus(leg);
-        }
       } else {
         employerContributions = employerContributions.plus(leg);
-        if (params.employerAddsToTaxBase()) {
-          employerTaxableAdditions = employerTaxableAdditions.plus(leg);
-        }
       }
+      CeilingLegTaxBaseContribution contribution =
+          classifyCeilingLegForTaxBase(component.getBearer(), params, leg);
+      deductibleSocial = deductibleSocial.plus(contribution.deductibleSocialDelta());
+      employerTaxableAdditions =
+          employerTaxableAdditions.plus(contribution.employerTaxableAdditionDelta());
     }
 
     // The gross bruto (Track P phase P1 two-pass tax-base assembly): taxable cash earnings PLUS
@@ -313,6 +312,44 @@ public class GrossToNetCalculator {
         employerContributions,
         net,
         usesIllustrative);
+  }
+
+  /**
+   * The two-pass tax-base assembly's classification of ONE {@code PERCENTAGE_CEILING} leg (Track P
+   * phase P1's BPJS tax-treatment matrix): an EMPLOYEE-borne leg may REDUCE the tax base ({@code
+   * reduces_tax_base}), an EMPLOYER-borne leg may ADD a taxable notional-fringe-benefit amount
+   * ({@code employer_adds_to_tax_base}) — never both, and a leg matching neither flag contributes
+   * zero to both.
+   *
+   * @param deductibleSocialDelta the EMPLOYEE-leg amount to add to {@code deductibleSocial} (zero
+   *     unless {@code bearer == EMPLOYEE && params.reducesTaxBase()})
+   * @param employerTaxableAdditionDelta the EMPLOYER-leg amount to add to {@code
+   *     employerTaxableAdditions}/{@code grossBruto} (zero unless {@code bearer == EMPLOYER &&
+   *     params.employerAddsToTaxBase()})
+   */
+  record CeilingLegTaxBaseContribution(
+      Money deductibleSocialDelta, Money employerTaxableAdditionDelta) {}
+
+  /**
+   * Classifies one resolved {@code PERCENTAGE_CEILING} leg's tax-base contribution — see {@link
+   * CeilingLegTaxBaseContribution}. Package-private (not {@code private}): {@link
+   * PayrollReportReader}'s statutory reports reuse this EXACT classification (an injected {@link
+   * GrossToNetCalculator} instance), resolving the CURRENT active rule for a historical line's
+   * CURRENT catalog component, so {@code grossBruto} in a report can NEVER drift from what {@link
+   * #compute} itself would have assembled for the SAME rule — this is the "one tax source of truth"
+   * the class javadoc claims, made literally true by extracting the SAME method both callers invoke
+   * (the W1 review finding this closes: a report that summed taxable EARNING lines only, silently
+   * dropping the notional employer premiums BPJS_KES_ER/JKK_ER/JKM_ER that {@link #compute} DOES
+   * fold into {@code grossBruto}, understated bruto for every taxpayer).
+   */
+  CeilingLegTaxBaseContribution classifyCeilingLegForTaxBase(
+      PayComponentBearer bearer, StatutoryParams.CeilingParams params, Money legAmount) {
+    Money zero = Money.ofMinor(0L, legAmount.currency());
+    if (bearer == PayComponentBearer.EMPLOYEE) {
+      return new CeilingLegTaxBaseContribution(params.reducesTaxBase() ? legAmount : zero, zero);
+    }
+    return new CeilingLegTaxBaseContribution(
+        zero, params.employerAddsToTaxBase() ? legAmount : zero);
   }
 
   /**

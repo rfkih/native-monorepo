@@ -26,6 +26,15 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
   private static final String CASHIER_USERNAME = "cashier-acme";
   private static final String CASHIER_PASSWORD = "cashier-password";
 
+  // A MANAGER-ONLY user (realmRoles: ["manager"] only, no "owner") — W2 review fix. owner-acme
+  // itself carries BOTH "owner" AND "manager" realm roles, so it can never prove a manager-only
+  // token is denied an owner-only route (it would pass on the "owner" role alone); a cashier is
+  // denied everywhere anyway and proves nothing about the owner/manager boundary specifically.
+  // This is the ONLY persona the owner-only gate (bank-file, payslip /authorized, 1721a1,
+  // bpjs-summary) actually exists to exclude.
+  private static final String MANAGER_USERNAME = "manager-acme";
+  private static final String MANAGER_PASSWORD = "manager-password";
+
   @Test
   void aCashierCanReachThePosMenuRoute() throws Exception {
     String token =
@@ -932,12 +941,37 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
   }
 
   @Test
+  void aManagerIsDeniedTheBankFileRouteWith403() throws Exception {
+    // W2 review fix: the persona the owner-only gate EXISTS to exclude is the MANAGER (a cashier
+    // is denied everywhere anyway, proving nothing about the owner/manager boundary specifically).
+    // manager-acme carries ONLY the "manager" realm role — unlike owner-acme, which also carries
+    // "manager" and so could never prove this on its own.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, MANAGER_USERNAME, MANAGER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/payroll-runs/some-run-id/bank-file")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
   void theBankFileRouteDoesNotShadowOtherPayrollRunsSubPaths() throws Exception {
     // Regression guard (route-precedence proof, the other direction): the narrow
     // /payroll-runs/*/bank-file wildcard must NOT swallow an unrelated /payroll-runs/** sub-path
     // (e.g. /payslips) — those still fall through to the DASHBOARD_ROLES payrollRunsRoute, so a
-    // manager-eligible (owner here, no manager fixture in this harness) caller reaches it exactly
-    // as before this phase.
+    // manager-eligible caller reaches it exactly as before this phase.
     String token = obtainAccessToken();
 
     String response =
@@ -997,6 +1031,30 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
     assertThat(response).isEqualTo("ok");
     assertThat(theForwardedRequest().getPath())
         .isEqualTo("/api/v1/payroll-runs/some-run-id/payslips/some-employee-id/authorized");
+  }
+
+  @Test
+  void aManagerIsDeniedThePayslipAuthorizedRouteWith403() throws Exception {
+    // W2 review fix — see aManagerIsDeniedTheBankFileRouteWith403's javadoc for why a manager
+    // fixture (not just cashier) is required to prove this owner-only gate.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, MANAGER_USERNAME, MANAGER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/payroll-runs/some-run-id/payslips/some-employee-id/authorized")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
   }
 
   @Test
@@ -1063,6 +1121,29 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
   }
 
   @Test
+  void aManagerIsDeniedThe1721A1ReportRouteWith403() throws Exception {
+    // W2 review fix — see aManagerIsDeniedTheBankFileRouteWith403's javadoc.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, MANAGER_USERNAME, MANAGER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/payroll-reports/1721a1?year=2026")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
   void aCashierIsDeniedTheBpjsSummaryReportRouteWith403() throws Exception {
     String token =
         obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
@@ -1102,6 +1183,29 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
   }
 
   @Test
+  void aManagerIsDeniedTheBpjsSummaryReportRouteWith403() throws Exception {
+    // W2 review fix — see aManagerIsDeniedTheBankFileRouteWith403's javadoc.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, MANAGER_USERNAME, MANAGER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/payroll-reports/bpjs-summary?period=2026-07")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
   void aCashierIsDeniedThePph21MonthlyReportRouteWith403() throws Exception {
     // pph21-monthly is a DASHBOARD_ROLES route (owner/manager) — still not the cashier POS surface.
     String token =
@@ -1129,6 +1233,27 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
     // The general DASHBOARD_ROLES /api/v1/payroll-reports/** route serves this — not one of the
     // two HIGHEST_PRECEDENCE owner-only carve-outs above.
     String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/payroll-reports/pph21-monthly?period=2026-07")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath())
+        .isEqualTo("/api/v1/payroll-reports/pph21-monthly?period=2026-07");
+  }
+
+  @Test
+  void aManagerCanReachThePph21MonthlyReportRoute() throws Exception {
+    // W2 review fix: pph21-monthly is the ordinary DASHBOARD_ROLES aggregate (owner OR manager) —
+    // the positive counterpart to the three owner-only manager-denied tests above, proving the
+    // manager fixture genuinely reaches a DASHBOARD_ROLES route rather than being denied globally.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, MANAGER_USERNAME, MANAGER_PASSWORD);
 
     String response =
         gatewayClient()
