@@ -1,5 +1,6 @@
 package id.co.nativeapp.finance.labor.service;
 
+import id.co.nativeapp.finance.labor.dto.PageResponse;
 import id.co.nativeapp.finance.labor.dto.PayrollLiabilityBucketResponse;
 import id.co.nativeapp.finance.labor.dto.PayrollLiabilityRunResponse;
 import id.co.nativeapp.finance.labor.projection.PayrollLiabilityRunView;
@@ -33,6 +34,12 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class PayrollLiabilityReader {
 
+  /** ENGINEERING-STANDARDS §1.3 default page size (P5 review S1). */
+  public static final int DEFAULT_PAGE_SIZE = 20;
+
+  /** ENGINEERING-STANDARDS §1.3 max page size (P5 review S1). */
+  public static final int MAX_PAGE_SIZE = 100;
+
   private static final List<String> BUCKET_ORDER =
       List.of("NET_WAGES", "PPH21", "BPJS_KES", "BPJS_TK", "OTHER");
 
@@ -46,12 +53,22 @@ public class PayrollLiabilityReader {
     this.settlementRepository = settlementRepository;
   }
 
-  /** Every ACTIVE run's liability buckets + settlement status for {@code period}, newest first. */
+  /**
+   * Every ACTIVE run's liability buckets + settlement status for {@code period}, newest first —
+   * wrapped in the ENGINEERING-STANDARDS §1.3 pagination envelope (P5 review S1; a bare array is
+   * never returned, so fields stay additive). Paginated IN-MEMORY over the already-fetched full
+   * list, not via a DB {@code LIMIT}/{@code OFFSET}: a single company's single period's run count
+   * is small (one row per {@code run_seq} correction, generous defaults) — the same bounded-scope
+   * reasoning as the settlement-status batch read below.
+   */
   @Transactional(readOnly = true)
-  public List<PayrollLiabilityRunResponse> forPeriod(String period) {
+  public PageResponse<PayrollLiabilityRunResponse> forPeriod(
+      String period, Integer page, Integer size) {
     List<PayrollLiabilityRunView> runs = runLedgerRepository.findLiabilityRunsForPeriod(period);
+    int boundedPage = boundPage(page);
+    int boundedSize = boundSize(size);
     if (runs.isEmpty()) {
-      return List.of();
+      return PageResponse.of(List.of(), boundedPage, boundedSize, 0L);
     }
 
     List<UUID> runLedgerIds = runs.stream().map(PayrollLiabilityRunView::getRunLedgerId).toList();
@@ -62,11 +79,24 @@ public class PayrollLiabilityReader {
           settlement.getPayrollRunLedgerId() + ":" + settlement.getKind(), settlement);
     }
 
-    List<PayrollLiabilityRunResponse> result = new ArrayList<>(runs.size());
+    List<PayrollLiabilityRunResponse> all = new ArrayList<>(runs.size());
     for (PayrollLiabilityRunView run : runs) {
-      result.add(toResponse(run, settlementsByRunAndKind));
+      all.add(toResponse(run, settlementsByRunAndKind));
     }
-    return result;
+    List<PayrollLiabilityRunResponse> content =
+        all.stream().skip((long) boundedPage * boundedSize).limit(boundedSize).toList();
+    return PageResponse.of(content, boundedPage, boundedSize, all.size());
+  }
+
+  private static int boundPage(Integer page) {
+    return page == null || page < 0 ? 0 : page;
+  }
+
+  private static int boundSize(Integer size) {
+    if (size == null || size < 1) {
+      return DEFAULT_PAGE_SIZE;
+    }
+    return Math.min(size, MAX_PAGE_SIZE);
   }
 
   /**

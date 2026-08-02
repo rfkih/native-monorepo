@@ -259,6 +259,23 @@ public class PayrollRunLedger extends Auditable {
   }
 
   /**
+   * Marks the liability dimension {@link LiabilityState#POSTED} with NO recognised entry — the
+   * all-zero-run case (ADR 0032, Track P phase P5 review W1): a run whose employer-cost total AND
+   * every liability bucket are zero has nothing to recognise ({@code PayrollLiabilityWriter} never
+   * builds a {@code JournalEntry} for it — a fewer-than-2-line entry would fail {@link
+   * id.co.nativeapp.finance.gl.domain.JournalEntry#balanced}). The lifecycle is still COMPLETE:
+   * {@link #liabilityEntryId} stays {@code null}, and a later corrective run's supersession scan
+   * still finds this row (via {@code liability_state = 'POSTED'}, not gated on a non-null entry id)
+   * and flips it to {@link LiabilityState#SUPERSEDED} — reversing it is a documented no-op ({@code
+   * PayrollLiabilityWriter#reversePriorRunLiability} returns immediately for a {@code null} prior
+   * entry id) since nothing was ever posted for it.
+   */
+  public void markLiabilityPostedEmpty() {
+    this.liabilityEntryId = null;
+    this.liabilityState = LiabilityState.POSTED;
+  }
+
+  /**
    * Marks the run's liability dimension {@link LiabilityState#SUPERSEDED} — either because a higher
    * {@code run_seq} of the same {@code run_type} reversed this run's liability entry, or because
    * THIS run itself arrived after a higher-seq run already posted (the out-of-order

@@ -832,6 +832,15 @@ export interface PayrollLiabilityRun {
  * established cross-service read pattern; finance owns the books). Filtered client-side to the
  * selected run (see the `payrollRunId` field) by the caller.
  */
+/** The ENGINEERING-STANDARDS §1.3 pagination envelope (backend review S1, ADR 0032 P5 addendum). */
+interface PageResponse<T> {
+  content: T[]
+  page: number
+  size: number
+  totalElements: number
+  totalPages: number
+}
+
 export function usePayrollLiabilities(
   params: TenantParams & { period: string; enabled: boolean },
 ) {
@@ -840,11 +849,13 @@ export function usePayrollLiabilities(
     enabled,
     queryKey: ['payrollLiabilities', companyId, period],
     queryFn: async () => {
-      const result = await apiFetch<PayrollLiabilityRun[]>(
+      // The run count for one company/period is small, so the console fetches the default page
+      // (size 20) without its own pager UI — every practical case fits on page 0.
+      const result = await apiFetch<PageResponse<PayrollLiabilityRun>>(
         `/api/v1/payroll-liabilities?period=${encodeURIComponent(period)}`,
         { tenant: { companyId, actor } },
       )
-      return result ?? []
+      return result?.content ?? []
     },
   })
 }

@@ -15,6 +15,7 @@ import id.co.nativeapp.finance.labor.domain.PayrollLiabilityNotSettleableExcepti
 import id.co.nativeapp.finance.labor.domain.PayrollSettlementAlreadySettledException;
 import id.co.nativeapp.finance.labor.domain.PayrollSettlementIdempotencyKeyConflictException;
 import id.co.nativeapp.finance.labor.domain.SettlementKind;
+import id.co.nativeapp.finance.labor.dto.PageResponse;
 import id.co.nativeapp.finance.labor.dto.PayrollLiabilityBucketResponse;
 import id.co.nativeapp.finance.labor.dto.PayrollLiabilityRunResponse;
 import id.co.nativeapp.finance.labor.service.PayrollLiabilityReader;
@@ -77,15 +78,18 @@ class PayrollLiabilityControllerTest {
   }
 
   @Test
-  void listReturnsThePeriodsActiveRuns() throws Exception {
-    when(payrollLiabilityReader.forPeriod("2026-07")).thenReturn(List.of(sampleRun(false)));
+  void listReturnsThePeriodsActiveRunsInAPageEnvelope() throws Exception {
+    when(payrollLiabilityReader.forPeriod("2026-07", null, null))
+        .thenReturn(PageResponse.of(List.of(sampleRun(false)), 0, 20, 1L));
 
     mockMvc
         .perform(get("/api/v1/payroll-liabilities").param("period", "2026-07"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$[0].runLedgerId").value(RUN_LEDGER.toString()))
-        .andExpect(jsonPath("$[0].buckets[0].kind").value("NET_WAGES"))
-        .andExpect(jsonPath("$[0].buckets[0].amountMinor").value(17_798_333L));
+        .andExpect(jsonPath("$.content[0].runLedgerId").value(RUN_LEDGER.toString()))
+        .andExpect(jsonPath("$.content[0].buckets[0].kind").value("NET_WAGES"))
+        .andExpect(jsonPath("$.content[0].buckets[0].amountMinor").value(17_798_333L))
+        .andExpect(jsonPath("$.page").value(0))
+        .andExpect(jsonPath("$.totalElements").value(1));
   }
 
   @Test

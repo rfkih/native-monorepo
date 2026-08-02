@@ -16,7 +16,7 @@ import java.util.UUID;
  * was built ({@code account_role WHERE occurred_at BETWEEN effective_from AND effective_to ORDER BY
  * version DESC, effective_from DESC LIMIT 1}), keyed on the journal entry's OWN {@code occurred_at}
  * (not "now") — so a later {@code role_account_map} change can never misattribute a historical
- * line. The signed bucket total is {@code credit_minor - credit_minor} summed per role: a positive
+ * line. The signed bucket total is {@code credit_minor - debit_minor} summed per role: a positive
  * bucket was posted as a credit leg, a negative bucket (the December Art-17 refund case) as a debit
  * leg of its absolute value (ADR 0032 §3) — the subtraction reconstructs the ORIGINAL signed amount
  * exactly. The {@code LABOR_CLEARING} (6900) line never matches one of the five bucket roles, so it

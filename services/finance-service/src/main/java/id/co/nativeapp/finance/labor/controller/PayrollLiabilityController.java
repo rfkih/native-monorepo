@@ -2,6 +2,7 @@ package id.co.nativeapp.finance.labor.controller;
 
 import id.co.nativeapp.finance.labor.domain.PayrollRunLedgerNotFoundException;
 import id.co.nativeapp.finance.labor.domain.SettlementKind;
+import id.co.nativeapp.finance.labor.dto.PageResponse;
 import id.co.nativeapp.finance.labor.dto.PayrollLiabilityRunResponse;
 import id.co.nativeapp.finance.labor.dto.SettlePayrollLiabilityRequest;
 import id.co.nativeapp.finance.labor.service.PayrollLiabilityReader;
@@ -12,7 +13,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 import java.net.URI;
-import java.util.List;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -56,13 +56,15 @@ public class PayrollLiabilityController {
   @Operation(
       summary = "The period's ACTIVE payroll runs — five liability buckets + settlement status")
   @GetMapping
-  public List<PayrollLiabilityRunResponse> list(
+  public PageResponse<PayrollLiabilityRunResponse> list(
       @RequestParam
           @Pattern(
               regexp = "\\d{4}-(0[1-9]|1[0-2])",
               message = "period must be a valid YYYY-MM month")
-          String period) {
-    return payrollLiabilityReader.forPeriod(period);
+          String period,
+      @RequestParam(required = false) Integer page,
+      @RequestParam(required = false) Integer size) {
+    return payrollLiabilityReader.forPeriod(period, page, size);
   }
 
   @Operation(summary = "One run's liability buckets + settlement status by run-ledger id")

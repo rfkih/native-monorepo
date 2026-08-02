@@ -11,6 +11,7 @@ import id.co.nativeapp.finance.labor.domain.LiabilityState;
 import id.co.nativeapp.finance.labor.domain.NegativeLiabilityBucketException;
 import id.co.nativeapp.finance.labor.domain.PayrollLiabilityBucketEmptyException;
 import id.co.nativeapp.finance.labor.domain.PayrollLiabilityNotSettleableException;
+import id.co.nativeapp.finance.labor.domain.PayrollLiabilitySuspenseBucketException;
 import id.co.nativeapp.finance.labor.domain.PayrollRunLedger;
 import id.co.nativeapp.finance.labor.domain.PayrollRunLedgerNotFoundException;
 import id.co.nativeapp.finance.labor.domain.PayrollSettlement;
@@ -46,14 +47,50 @@ import org.springframework.transaction.annotation.Transactional;
  * <p><strong>The settled amount is NEVER client-supplied.</strong> It is read back from the run's
  * OWN liability {@code journal_entry} — the same entry {@code PayrollLiabilityWriter} built when
  * the run posted — by resolving the bucket's {@link AccountRole} to the account code that role
- * mapped to AT THE ENTRY'S {@code occurred_at} (mirroring the READ design documented on {@link
- * id.co.nativeapp.finance.labor.projection.PayrollLiabilityRunView}) and summing that account
- * code's lines' {@code credit_minor - debit_minor} (positive = a credit-side bucket, negative = the
- * December Art-17 refund's debit-side bucket).
+ * mapped to AT THE ENTRY'S {@code occurred_at} and summing that account code's lines' {@code
+ * credit_minor - debit_minor} (positive = a credit-side bucket, negative = the December Art-17
+ * refund's debit-side bucket).
+ *
+ * <p><strong>The Dr leg debits that SAME as-of-{@code occurred_at} account code — never a
+ * re-resolution at "now" (P5 review C1, a critical fix).</strong> An earlier revision resolved the
+ * bucket's role a SECOND time via {@code requireMapped(kind.liabilityRole(), now)} when building
+ * the settlement entry; under a {@code role_account_map} remap between accrual and settlement, that
+ * would debit the NEW account while the amount was reconstructed against the OLD one — the original
+ * payable is never cleared and the new account goes negative. The fix threads the ALREADY-COMPUTED
+ * {@code bucketAccountCode} (resolved once, as of the liability entry's {@code occurred_at})
+ * through to {@link #buildSettlementEntry}; ONLY the {@code CASH_CLEARING} leg resolves at "now"
+ * (mirroring every other settlement writer — cash always clears through the CURRENT mapping). A
+ * side effect: a role whose mapping has since EXPIRED (unmapped at "now") no longer 500s — settling
+ * still works, because the writer never asks what the role maps to now.
+ *
+ * <p><strong>A NOTE on the read design vs {@link
+ * id.co.nativeapp.finance.labor.projection.PayrollLiabilityRunView}'s GET read (P5 review
+ * W3).</strong> The GET read reverse-resolves EVERY line of the liability entry (account code →
+ * role, via a {@code LATERAL} join) and pivots by role name — it never assumes a role maps to a
+ * unique account. This writer instead FORWARD-resolves the ONE role being settled to a single
+ * account code (the same resolution {@code PayrollLiabilityWriter} used to build the line) and
+ * filters the entry's lines by that code — cheaper, but only correct if the resolution is
+ * unambiguous. It is NOT literally "the same way" the GET read works; the two are only equivalent
+ * when at most one bucket role is unmapped at any given instant. The {@link
+ * PayrollLiabilitySuspenseBucketException} guard below closes the gap: a bucket that posted to
+ * SUSPENSE (unmapped at accrual) cannot be settled at all, so the ambiguous
+ * multi-role-sharing-suspense case can never reach a settlement debit.
  *
  * <p><strong>A negative bucket is rejected (422, v1 residual, ADR 0032 §P5).</strong> A negative
  * payable is in substance a receivable from the tax office, netted against the next remittance —
  * not a standalone payment; see {@link NegativeLiabilityBucketException}.
+ *
+ * <p><strong>Concurrency (P5 review W2).</strong> Two DIFFERENT keys settling the SAME {@code (run,
+ * kind)} concurrently: the loser's insert trips {@code uq_payroll_settlement_once} → a {@code
+ * DataIntegrityViolationException} the shared advice maps to {@code 409} — no double-post, exactly
+ * one settlement + one journal entry survive. A raced retry with the SAME key (two requests for the
+ * identical replay racing each other, neither having committed yet when the other's replay-probe
+ * runs) is a NARROWER, ACCEPTED residual: both may pass the up-front replay probe, one wins the
+ * {@code uq_payroll_settlement_idempotency_key} insert and the other trips it — the loser sees a
+ * generic {@code 409} rather than a graceful {@code 200} replay. A client that retries a genuinely
+ * lost response (not a true concurrent double-send) will not observe this in practice; a {@code
+ * REQUIRES_NEW} re-read recovery (the {@code SaleWriter} idiom) is more machinery than this
+ * bucket-settlement action currently warrants and is not implemented.
  */
 @Component
 public class PayrollSettlementWriter {
@@ -101,6 +138,8 @@ public class PayrollSettlementWriter {
    * @throws PayrollLiabilityNotSettleableException if the run's liability is not POSTED (never
    *     recognised, or SUPERSEDED) — 409
    * @throws PayrollLiabilityBucketEmptyException if the run never recognised this bucket — 409
+   * @throws PayrollLiabilitySuspenseBucketException if the bucket posted to SUSPENSE (unmapped at
+   *     accrual time) and must be reclassified before settling — 409
    * @throws NegativeLiabilityBucketException if the bucket's recognised amount is negative — 422
    * @throws MismatchedPostingCurrencyException if the settlement currency diverges from the current
    *     period's GL — 422
@@ -158,6 +197,16 @@ public class PayrollSettlementWriter {
                             + " does not exist"));
     Instant liabilityOccurredAt = liabilityEntry.getOccurredAt();
     String bucketAccountCode = resolveOrSuspense(kind.liabilityRole(), liabilityOccurredAt);
+
+    // 4a) A suspense-parked bucket (P5 review W3): the role was unrecognised/unmapped AT ACCRUAL
+    // TIME, so PayrollLiabilityWriter routed it to SUSPENSE. Settling it would (a) not clear the
+    // intended payable account, and (b) if a DIFFERENT bucket role were ALSO unmapped at accrual
+    // time, be indistinguishable from that other bucket's line by account code alone — reject
+    // until an accountant reclassifies it.
+    if (bucketAccountCode.equals(RoleAccountResolver.SUSPENSE_ACCOUNT_CODE)) {
+      throw new PayrollLiabilitySuspenseBucketException(runLedgerId, kind.name());
+    }
+
     List<JournalLineReversalView> liabilityLines =
         journalLineRepository.findLinesByEntryId(runRow.getLiabilityEntryId());
     long signedAmountMinor =
@@ -181,7 +230,11 @@ public class PayrollSettlementWriter {
     requireConsistentGlCurrency(period, amount);
 
     UUID entryId = UUID.randomUUID();
-    JournalEntry entry = buildSettlementEntry(kind, amount, period, now, entryId);
+    // The Dr leg debits the SAME as-of-occurred_at bucketAccountCode computed above — NEVER a
+    // fresh role→code resolution at "now" (P5 review C1; see the class javadoc). Only the Cr
+    // CASH_CLEARING leg resolves at "now" inside buildSettlementEntry.
+    JournalEntry entry =
+        buildSettlementEntry(kind, bucketAccountCode, amount, period, now, entryId);
     persistEntry(entry, companyId);
 
     PayrollSettlement settlement =
@@ -193,18 +246,34 @@ public class PayrollSettlementWriter {
   }
 
   /**
-   * Builds (but does not persist) the balanced settlement entry: {@code Dr <bucket role account> /
-   * Cr CASH_CLEARING} for {@code amount}. Public + pure (mocked resolver, no DB) so a unit test can
-   * assert the exact legs, mirroring {@code TaxSettlementWriter#buildSettlementEntry}. {@code
-   * source_event_id = entryId} (its own id, UNIQUE).
+   * Builds (but does not persist) the balanced settlement entry: {@code Dr bucketAccountCode / Cr
+   * CASH_CLEARING} for {@code amount}. Public + pure (no DB beyond the CASH_CLEARING resolver
+   * lookup) so a unit test can assert the exact legs, mirroring {@code
+   * TaxSettlementWriter#buildSettlementEntry}. {@code source_event_id = entryId} (its own id,
+   * UNIQUE).
+   *
+   * <p><strong>{@code bucketAccountCode} is the caller's ALREADY-RESOLVED, as-of-{@code
+   * occurred_at} account code (P5 review C1)</strong> — this method does NOT re-resolve {@code
+   * kind}'s role at {@code now}. Only {@code CASH_CLEARING} resolves at {@code now}: cash always
+   * clears through the account currently mapped, but the payable being cleared must be the SAME
+   * account the liability was originally recognised against, or a {@code role_account_map} remap
+   * between accrual and settlement would debit the wrong (new) account and leave the original
+   * payable un-cleared.
+   *
+   * @param bucketAccountCode the bucket's account code, resolved by the caller as of the liability
+   *     entry's {@code occurred_at} — never re-resolved here
    */
   public JournalEntry buildSettlementEntry(
-      SettlementKind kind, Money amount, String period, Instant now, UUID entryId) {
-    String bucketCode = requireMapped(kind.liabilityRole(), now);
+      SettlementKind kind,
+      String bucketAccountCode,
+      Money amount,
+      String period,
+      Instant now,
+      UUID entryId) {
     String clearingCode = requireMapped(AccountRole.CASH_CLEARING, now);
     List<JournalLine> lines =
         List.of(
-            JournalLine.debit(entryId, 1, bucketCode, amount),
+            JournalLine.debit(entryId, 1, bucketAccountCode, amount),
             JournalLine.credit(entryId, 2, clearingCode, amount));
     return JournalEntry.balanced(
         entryId,

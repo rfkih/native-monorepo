@@ -66,6 +66,19 @@ import org.springframework.transaction.annotation.Transactional;
  * string that does not name a known {@link AccountRole}, or a role with no effective {@code
  * role_account_map} row, resolves to {@link RoleAccountResolver#SUSPENSE_ACCOUNT_CODE} with a
  * logged WARN — the money still posts, on the books, just not to the intended control account.
+ *
+ * <p><strong>An all-zero run recognises nothing (P5 review W1).</strong> When {@code
+ * employer_cost_total} is not positive AND every liability bucket is zero/absent, {@link
+ * #buildLiabilityEntry} returns {@code null} — there is nothing to recognise, and a
+ * fewer-than-2-line {@link JournalEntry} would fail {@link JournalEntry#balanced} and DLT a
+ * perfectly legitimate empty run. The ledger row is still stamped {@code liability_state = POSTED}
+ * with a {@code null liability_entry_id} ({@link PayrollRunLedger#markLiabilityPostedEmpty}) — the
+ * lifecycle is COMPLETE, just empty. The supersession queries ({@link
+ * PayrollRunLedgerRepository#findActiveLiabilityPriorRuns}/{@link
+ * PayrollRunLedgerRepository#existsActiveHigherLiabilityRun}) key on {@code liability_state =
+ * 'POSTED'} alone (not on a non-null entry id), so a later corrective run still finds and flips
+ * this row to {@code SUPERSEDED}; {@link #reversePriorRunLiability} already no-ops for a {@code
+ * null} prior entry id — nothing was ever posted, so there is nothing to reverse.
  */
 @Component
 public class PayrollLiabilityWriter {
@@ -131,8 +144,29 @@ public class PayrollLiabilityWriter {
         runLedgerRepository.existsActiveHigherLiabilityRun(
             event.period(), event.runType(), event.runSeq());
 
-    // 3) Build + persist the balanced ad-hoc liability entry.
+    // 3) Build the balanced ad-hoc liability entry — null for a genuinely EMPTY liability set (P5
+    //    review W1): employer_cost_total = 0 AND every bucket is zero/absent, so there is nothing
+    //    to recognise and no <2-line JournalEntry to attempt (JournalEntry#balanced would reject
+    //    one, DLT-ing a perfectly valid run). The lifecycle still completes: POSTED with no entry.
     JournalEntry entry = buildLiabilityEntry(event);
+    if (entry == null) {
+      log.info(
+          "PayrollLiabilitiesPosted runId={} period={} runType={} run_seq={} carries an EMPTY"
+              + " liability set (employer_cost_total=0, no non-zero buckets) — nothing to"
+              + " recognise; marking the liability dimension POSTED with no entry",
+          event.payrollRunId(),
+          event.period(),
+          event.runType(),
+          event.runSeq());
+      runRow.markLiabilityPostedEmpty();
+      if (alreadySuperseded) {
+        // Out-of-order: a higher-seq run's liability is already active. There was never a PRIMARY
+        // entry to self-contra, so this is a direct terminal transition, not a reversal.
+        runRow.markLiabilitySuperseded();
+      }
+      runLedgerRepository.save(runRow);
+      return;
+    }
     persistEntry(entry, companyId);
 
     // 4) Record the posted liability entry on the run row.
@@ -167,6 +201,11 @@ public class PayrollLiabilityWriter {
    * class javadoc for the balance derivation). Public + pure (no DB writes beyond the read-only
    * {@link RoleAccountResolver} lookups) so a unit test can assert the exact legs with a mocked
    * resolver, mirroring {@code TaxFilingWriter#buildFilingEntry}.
+   *
+   * @return the balanced entry, or {@code null} if the run's liability set is genuinely EMPTY
+   *     (employer_cost_total is not positive AND every bucket is zero/absent, P5 review W1) — the
+   *     caller then stamps the ledger row POSTED-with-no-entry instead of attempting a
+   *     fewer-than-2-line {@link JournalEntry}, which {@link JournalEntry#balanced} would reject
    */
   public JournalEntry buildLiabilityEntry(PayrollLiabilitiesPostedEvent event) {
     UUID entryId = UUID.randomUUID();
@@ -197,6 +236,14 @@ public class PayrollLiabilityWriter {
       } else {
         lines.add(JournalLine.debit(entryId, lineNo++, accountCode, bucket.amount().negate()));
       }
+    }
+
+    if (lines.isEmpty()) {
+      // Genuinely EMPTY (P5 review W1): employer_cost_total == 0 (skipped the 6900 leg above) AND
+      // every bucket is zero/absent (skipped by the loop above) — an all-zero run. Returning null
+      // rather than calling JournalEntry#balanced (which requires >= 2 lines) lets the caller stamp
+      // the ledger POSTED-with-no-entry instead of DLT-ing a legitimate empty run.
+      return null;
     }
 
     return JournalEntry.balanced(

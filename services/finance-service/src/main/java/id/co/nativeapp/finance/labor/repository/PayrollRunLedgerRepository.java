@@ -10,9 +10,10 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 /**
- * Spring Data port for the {@link PayrollRunLedger} control table (#23). Derived/JPQL queries only,
- * no business logic, no manual {@code WHERE company_id} — tenant scoping comes solely from the
- * auto-applied RLS GUC on every {@code @Transactional} method (rule 5).
+ * Spring Data port for the {@link PayrollRunLedger} control table (#23). Derived-query methods plus
+ * NATIVE {@code @Query} methods only (CLAUDE.md — no JPQL anywhere in this codebase), no business
+ * logic, no manual {@code WHERE company_id} — tenant scoping comes solely from the auto-applied RLS
+ * GUC on every {@code @Transactional} method (rule 5).
  */
 public interface PayrollRunLedgerRepository extends JpaRepository<PayrollRunLedger, UUID> {
 
@@ -96,11 +97,22 @@ public interface PayrollRunLedgerRepository extends JpaRepository<PayrollRunLedg
   /**
    * The prior runs for a {@code (period, runType)} whose LIABILITY dimension {@code
    * PayrollLiabilityWriter} of a run of {@code runSeq} must reverse: every row with a strictly
-   * lower {@code run_seq} of the SAME {@code run_type} that carries an ACTIVE (non-SUPERSEDED)
-   * liability entry. Tracked on the {@code liability_state} column, INDEPENDENTLY of {@link
-   * #findActivePriorRuns}'s {@code state} column (ADR 0032 — see {@link PayrollRunLedger}'s class
-   * javadoc for why the two lifecycles must stay separate) — a row whose {@code liability_entry_id}
-   * is still NULL has nothing to reverse yet and is correctly excluded.
+   * lower {@code run_seq} of the SAME {@code run_type} whose {@code liability_state = 'POSTED'}
+   * (the ONLY ACTIVE liability value — {@code NULL} means never touched, {@code SUPERSEDED} means
+   * already inactive, so {@code = 'POSTED'} is the precise ACTIVE predicate). Tracked on the {@code
+   * liability_state} column, INDEPENDENTLY of {@link #findActivePriorRuns}'s {@code state} column
+   * (ADR 0032 — see {@link PayrollRunLedger}'s class javadoc for why the two lifecycles must stay
+   * separate).
+   *
+   * <p><strong>Deliberately NOT filtered on {@code liability_entry_id IS NOT NULL}</strong> (P5
+   * review W1): an all-zero run (employer cost + every bucket zero) is stamped {@code
+   * liability_state = 'POSTED'} with a {@code NULL liability_entry_id} — {@code
+   * PayrollLiabilityWriter} never builds a {@code JournalEntry} for it (see {@code
+   * PayrollRunLedger#markLiabilityPostedEmpty}). Such a row MUST still be found here so a later
+   * corrective run correctly flips it to {@code SUPERSEDED}; reversing it is a documented no-op
+   * ({@code PayrollLiabilityWriter#reversePriorRunLiability} returns immediately when {@code
+   * priorEntryId} is {@code null} — nothing was ever posted for it, so there is nothing to
+   * reverse).
    */
   @Query(
       value =
@@ -109,8 +121,7 @@ public interface PayrollRunLedgerRepository extends JpaRepository<PayrollRunLedg
            WHERE r.period = :period
              AND r.run_type = :runType
              AND r.run_seq < :runSeq
-             AND r.liability_entry_id IS NOT NULL
-             AND (r.liability_state IS NULL OR r.liability_state <> 'SUPERSEDED')
+             AND r.liability_state = 'POSTED'
           """,
       nativeQuery = true)
   List<PayrollRunLedger> findActiveLiabilityPriorRuns(
@@ -119,10 +130,13 @@ public interface PayrollRunLedgerRepository extends JpaRepository<PayrollRunLedg
       @Param("runSeq") int runSeq);
 
   /**
-   * Whether an ACTIVE (non-SUPERSEDED) LIABILITY entry with a strictly HIGHER {@code run_seq} of
-   * the SAME {@code run_type} already exists for the {@code (period, runType)} — the liability
-   * dimension's own out-of-order guard (ADR 0032), mirroring {@link #existsActiveHigherRun} exactly
-   * but scoped to {@code liability_state} instead of the shared {@code state} column.
+   * Whether an ACTIVE ({@code liability_state = 'POSTED'}) LIABILITY row with a strictly HIGHER
+   * {@code run_seq} of the SAME {@code run_type} already exists for the {@code (period, runType)} —
+   * the liability dimension's own out-of-order guard (ADR 0032), mirroring {@link
+   * #existsActiveHigherRun} exactly but scoped to {@code liability_state} instead of the shared
+   * {@code state} column. See {@link #findActiveLiabilityPriorRuns}'s javadoc for why this is NOT
+   * additionally filtered on {@code liability_entry_id IS NOT NULL} (P5 review W1, the all-zero-run
+   * case).
    */
   @Query(
       value =
@@ -131,8 +145,7 @@ public interface PayrollRunLedgerRepository extends JpaRepository<PayrollRunLedg
            WHERE r.period = :period
              AND r.run_type = :runType
              AND r.run_seq > :runSeq
-             AND r.liability_entry_id IS NOT NULL
-             AND (r.liability_state IS NULL OR r.liability_state <> 'SUPERSEDED')
+             AND r.liability_state = 'POSTED'
           """,
       nativeQuery = true)
   boolean existsActiveHigherLiabilityRun(

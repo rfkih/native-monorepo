@@ -28,6 +28,13 @@ import org.springframework.boot.test.context.SpringBootTest;
  * orders, and order-independence against the pre-existing Labor/Reconciliation control row. Posting
  * through the service (not Kafka) keeps the assertions deterministic, exactly like the existing
  * labor test suite.
+ *
+ * <p>Track P phase P5 review W1 adds the ALL-ZERO run matrix: {@code employer_cost_total == 0} AND
+ * NO non-zero buckets at all (distinct from {@link
+ * #aRefundOnlyRunWithZeroEmployerCostPostsWithoutTheClearingLeg}, whose buckets still balance each
+ * other) — no entry is ever built, the ledger row is stamped POSTED with a {@code null} entry id,
+ * redelivery no-ops, and a later run's supersession scan still finds and flips it (both arrival
+ * orders) without NPE-ing on the missing entry.
  */
 @SpringBootTest
 class PayrollLiabilityWriterTest extends PostgresRlsTestBase {
@@ -160,6 +167,94 @@ class PayrollLiabilityWriterTest extends PostgresRlsTestBase {
     LineRow suspense =
         lines.stream().filter(l -> l.accountCode.equals("9999")).findFirst().orElseThrow();
     assertThat(suspense.creditMinor).isEqualTo(1_000_000L); // money posted, not dropped
+  }
+
+  @Test
+  void anAllZeroRunRecognisesNothingAndMarksTheLedgerPostedWithNoEntry() throws Exception {
+    // P5 review W1: employer_cost_total == 0 AND no non-zero buckets at all — a genuinely EMPTY
+    // liability set (distinct from aRefundOnlyRunWithZeroEmployerCostPostsWithoutTheClearingLeg's
+    // case, where employer cost is zero but the buckets still balance each other). No JournalEntry
+    // is ever built; the lifecycle still completes.
+    UUID runId = UUID.randomUUID();
+    PayrollLiabilitiesPostedEvent event = event(UUID.randomUUID(), runId, 1, 0L, List.of());
+
+    assertThat(liabilityService.handle(event)).as("first delivery claims the dedupe key").isTrue();
+
+    assertThat(entryCountAsAdmin()).as("no journal entry is ever built").isZero();
+    assertThat(liabilityStateAsAdmin(runId)).isEqualTo("POSTED");
+    assertThat(liabilityEntryIdAsAdmin(runId)).as("no entry to point at").isNull();
+  }
+
+  @Test
+  void redeliveryOfAnAllZeroEventIsANoOp() throws Exception {
+    UUID eventId = UUID.randomUUID();
+    UUID runId = UUID.randomUUID();
+    PayrollLiabilitiesPostedEvent event = event(eventId, runId, 1, 0L, List.of());
+
+    assertThat(liabilityService.handle(event)).as("first delivery").isTrue();
+    assertThat(liabilityService.handle(event)).as("re-delivery is a no-op").isFalse();
+
+    assertThat(entryCountAsAdmin()).isZero();
+    assertThat(liabilityStateAsAdmin(runId)).isEqualTo("POSTED");
+    assertThat(liabilityEntryIdAsAdmin(runId)).isNull();
+  }
+
+  @Test
+  void aLaterRealRunSupersedesAnAllZeroPriorRunWithoutAnNpe() throws Exception {
+    // P5 review W1: the supersession scan must still FIND a POSTED-with-null-entry prior run (so
+    // it correctly flips to SUPERSEDED) and reversing it (nothing to reverse) must not NPE.
+    UUID run1 = UUID.randomUUID();
+    UUID run2 = UUID.randomUUID();
+
+    assertThat(liabilityService.handle(event(UUID.randomUUID(), run1, 1, 0L, List.of()))).isTrue();
+    assertThat(liabilityStateAsAdmin(run1)).isEqualTo("POSTED");
+    assertThat(liabilityEntryIdAsAdmin(run1)).isNull();
+
+    assertThat(
+            liabilityService.handle(
+                event(
+                    UUID.randomUUID(),
+                    run2,
+                    2,
+                    20_000_000L,
+                    List.of(
+                        new LiabilityBucket(
+                            "NET_WAGES_PAYABLE", Money.ofMinor(20_000_000L, "IDR"))))))
+        .isTrue();
+
+    // Only run2's PRIMARY entry exists — run1 had nothing to reverse (no NPE, no phantom entry).
+    assertThat(entryCountAsAdmin()).isEqualTo(1L);
+    assertThat(liabilityStateAsAdmin(run1)).isEqualTo("SUPERSEDED");
+    assertThat(liabilityEntryIdAsAdmin(run1)).as("still no entry after supersession").isNull();
+    assertThat(liabilityStateAsAdmin(run2)).isEqualTo("POSTED");
+    assertThat(liabilityEntryIdAsAdmin(run2)).isNotNull();
+  }
+
+  @Test
+  void anAllZeroRunArrivingAfterAHigherSeqRunIsPostedThenImmediatelySuperseded() throws Exception {
+    // Out-of-order (P5 review W1 + the existing 2a self-supersession guard): a higher-seq run's
+    // liability is already ACTIVE when the all-zero lower-seq run arrives late. There was never a
+    // PRIMARY entry to self-contra, so this is a direct terminal transition to SUPERSEDED.
+    UUID run1 = UUID.randomUUID();
+    UUID run2 = UUID.randomUUID();
+
+    assertThat(
+            liabilityService.handle(
+                event(
+                    UUID.randomUUID(),
+                    run2,
+                    2,
+                    20_000_000L,
+                    List.of(
+                        new LiabilityBucket(
+                            "NET_WAGES_PAYABLE", Money.ofMinor(20_000_000L, "IDR"))))))
+        .isTrue();
+
+    assertThat(liabilityService.handle(event(UUID.randomUUID(), run1, 1, 0L, List.of()))).isTrue();
+
+    assertThat(entryCountAsAdmin()).as("run1 never posted an entry").isEqualTo(1L);
+    assertThat(liabilityStateAsAdmin(run1)).isEqualTo("SUPERSEDED");
+    assertThat(liabilityEntryIdAsAdmin(run1)).isNull();
   }
 
   @Test

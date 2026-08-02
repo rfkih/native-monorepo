@@ -146,24 +146,31 @@ event — `docs/EVENT-CATALOG.md` is unchanged):
    design below); a zero/absent bucket is `409` (`payroll-liability-bucket-empty`, nothing to pay);
    a negative bucket is `422` (below).
 
-2. **The bucket-amount READ design.** No bucket total is stored per-role on `payroll_run_ledger` —
-   only the run's single liability `journal_entry_id` is (P4's design). Both the settlement writer
-   and the `GET /api/v1/payroll-liabilities` read reconstruct a bucket's signed total the SAME way:
-   resolve the bucket's `AccountRole` to the `chart_of_account.account_code` it mapped to AT THE
-   LIABILITY ENTRY'S OWN `occurred_at` (a `LATERAL` join against `role_account_map` using the exact
-   `RoleAccountResolver` tie-break — `version DESC, effective_from DESC LIMIT 1` — so a LATER
-   `role_account_map` edit can never misattribute a historical line), then sum that account code's
-   `journal_line` rows as `credit_minor - debit_minor` — reconstructing the signed amount exactly as
-   P4 posted it (positive = credit-side bucket, negative = the December Art-17 refund's debit-side
-   bucket, ADR 0031). The settlement writer additionally falls back to
-   `RoleAccountResolver.SUSPENSE_ACCOUNT_CODE` when a role is unmapped (mirroring
-   `PayrollLiabilityWriter`'s own posting-time fallback) so the historical lookup finds the SAME
-   line the entry actually carries — a documented residual: if two DIFFERENT bucket roles were BOTH
-   unmapped at posting time, both would resolve to the SAME suspense account and become
-   indistinguishable by role at settlement time (not reachable today — V40 maps all five roles).
-   The `GET` read (`PayrollLiabilityRunView`, `PayrollRunLedgerRepository.LIABILITY_BUCKET_SELECT`)
-   is the SAME join, generalized across all five roles in one query, restricted to
-   `liability_state = 'POSTED'` runs (the currently-owed set) for the period-scoped list, or
+2. **The bucket-amount READ design — NOT literally the same mechanism on both sides (corrected
+   post-review, W3).** No bucket total is stored per-role on `payroll_run_ledger` — only the run's
+   single liability `journal_entry_id` is (P4's design). The `GET /api/v1/payroll-liabilities` read
+   REVERSE-resolves: for every `journal_line` of the entry, a `LATERAL` join against
+   `role_account_map` (the exact `RoleAccountResolver` tie-break — `version DESC, effective_from
+   DESC LIMIT 1` — keyed on the liability entry's OWN `occurred_at`, so a LATER `role_account_map`
+   edit can never misattribute a historical line) maps that line's account code BACK to a role, and
+   the five totals are pivoted by role name — this never assumes a role maps to a unique account, so
+   it is correct even if two roles briefly shared an account. `PayrollSettlementWriter` instead
+   FORWARD-resolves: it resolves the ONE role being settled to a single account code (the same
+   resolution `PayrollLiabilityWriter` used when it built the line, at the entry's `occurred_at`,
+   never at "now" — the P5 review C1 fix) and filters the entry's lines by that code — cheaper, but
+   only correct while the resolution is unambiguous. **The original text here claimed both sides
+   reconstruct a bucket "the SAME way"; that was inaccurate — the forward/reverse distinction above
+   is the truth, and it is the reason the SUSPENSE guard below exists.** The settlement writer falls
+   back to `RoleAccountResolver.SUSPENSE_ACCOUNT_CODE` when a role was unmapped at accrual time
+   (mirroring `PayrollLiabilityWriter`'s own posting-time fallback) so the historical lookup finds
+   the SAME line the entry actually carries — but a bucket resolving to SUSPENSE is REJECTED before
+   settling (`PayrollLiabilitySuspenseBucketException`, `409`, P5 review W3): the ambiguous case (two
+   DIFFERENT bucket roles BOTH unmapped at accrual time, sharing the suspense account and therefore
+   indistinguishable by account code alone) can never reach a settlement debit, closing the residual
+   this section previously only documented. The `GET` read
+   (`PayrollLiabilityRunView`, `PayrollRunLedgerRepository.LIABILITY_BUCKET_SELECT`) is unaffected —
+   it stays the reverse-resolution join, generalized across all five roles in one query, restricted
+   to `liability_state = 'POSTED'` runs (the currently-owed set) for the period-scoped list, or
    unrestricted for the single-run-by-id read (so a SUPERSEDED run's historical totals remain
    auditable even though settling it is blocked).
 
@@ -221,3 +228,83 @@ event — `docs/EVENT-CATALOG.md` is unchanged):
   append at the end, and drain in-flight topics before deploying a consumer whose schema changed
   mid-record.** The real fix (propagating the writer schema / a registry-backed serde) is a
   documented platform residual.
+
+## Post-review amendments (P5 review, same phase)
+
+- **C1 (CRITICAL, fixed) — the settlement Dr leg now debits the SAME as-of-`occurred_at` account
+  the amount was reconstructed from, never a fresh "now" resolution.** The original
+  `PayrollSettlementWriter.buildSettlementEntry` called `requireMapped(kind.liabilityRole(), now)`
+  — a SECOND, independent resolution of the bucket's role at settlement time — while the amount had
+  already been reconstructed by resolving the SAME role at the liability entry's `occurred_at`.
+  Under a `role_account_map` remap landing between accrual and settlement, the two resolutions
+  diverge: the entry debited the NEW account while the amount (and the original payable) sat on the
+  OLD one — the original account is never cleared, and the new one goes net-negative for money it
+  never actually received. The fix threads the writer's ALREADY-COMPUTED, as-of-`occurred_at`
+  account code straight into `buildSettlementEntry` (a new parameter); the method no longer resolves
+  the bucket's role at all — ONLY `CASH_CLEARING` still resolves at "now" (mirroring every other
+  settlement writer: cash always clears through the currently-mapped account). A side effect,
+  covered by its own test: a role whose mapping has since EXPIRED by settlement time no longer
+  surfaces an unhandled `IllegalStateException` (→ 500) — settling never asks what the role maps to
+  "now", so it succeeds regardless. Regression tests: `PayrollSettlementWriterTest#aRoleAccountMapRemapBetweenAccrualAndSettlementStillDebitsTheOriginalAccrualAccount`,
+  `#settlingSucceedsEvenWhenTheBucketRolesMappingHasExpiredByNow`, and a DB-independent proof
+  (`#buildSettlementEntryNeverResolvesTheBucketRoleItselfOnlyCashClearingResolvesAtNow`).
+
+- **W1 (fixed) — an all-zero run (gross, employer contributions, and every liability bucket all
+  zero) now completes its liability lifecycle instead of DLT-ing forever.** `employer_cost_total ==
+  0` (so the 6900 leg is skipped, P4's W1 fix) combined with an EMPTY `liabilities` array produces
+  ZERO `JournalLine`s; `PayrollLiabilityWriter.buildLiabilityEntry` previously still called {@code
+  JournalEntry.balanced}, which requires ≥ 2 lines and throws — the consumer went to the DLT and
+  `liability_state` stayed `NULL` forever (this run's liability could never be settled OR correctly
+  reported as "nothing owed"). The fix: `buildLiabilityEntry` returns `null` for a genuinely empty
+  set; the writer then stamps the ledger row `liability_state = POSTED` with `liability_entry_id =
+  NULL` (`PayrollRunLedger#markLiabilityPostedEmpty`) — the lifecycle is COMPLETE, just empty, and
+  no entry is ever attempted. The supersession queries
+  (`findActiveLiabilityPriorRuns`/`existsActiveHigherLiabilityRun`) were re-keyed onto `liability_state
+  = 'POSTED'` alone (dropping the `liability_entry_id IS NOT NULL` filter, which would otherwise hide
+  a POSTED-with-no-entry row from a later corrective run's supersession scan forever) — reversing a
+  null-entry prior run is already a documented no-op in `reversePriorRunLiability`. Regression tests
+  in `PayrollLiabilityWriterTest`: `anAllZeroRunRecognisesNothingAndMarksTheLedgerPostedWithNoEntry`,
+  `redeliveryOfAnAllZeroEventIsANoOp`, `aLaterRealRunSupersedesAnAllZeroPriorRunWithoutAnNpe`,
+  `anAllZeroRunArrivingAfterAHigherSeqRunIsPostedThenImmediatelySuperseded`.
+
+- **W2 (documented, not code-changed) — the settlement writer takes NO advisory lock.** Two
+  DIFFERENT Idempotency-Keys racing the SAME `(run, kind)` are serialized purely by the
+  `uq_payroll_settlement_once` DB unique constraint: exactly one wins, the loser's WHOLE transaction
+  (including its orphan journal entry) rolls back on the `DataIntegrityViolationException`, which
+  `PayrollLiabilityAdvice#handleConcurrentConflict` maps to `409` — proven by the dedicated
+  `PayrollSettlementConcurrencyTest`. A raced SAME-key replay (two requests carrying the IDENTICAL
+  key, neither committed when the other's replay probe runs) is a narrower, ACCEPTED residual: the
+  loser sees a generic `409` instead of the graceful `200` a sequential retry would get. Documented
+  on `PayrollSettlementWriter`'s class javadoc; a `REQUIRES_NEW` re-read recovery (the `SaleWriter`
+  idiom) is more machinery than this action currently warrants.
+
+- **W3 (fixed) — a suspense-parked bucket cannot be settled.** Per the corrected bucket-amount READ
+  design above (§2), the settlement writer's forward-resolution is only unambiguous while at most one
+  bucket role is unmapped at any instant; `PayrollLiabilitySuspenseBucketException` (`409`,
+  `payroll-liability-suspense-bucket`) now rejects settling ANY bucket whose accrual-time resolution
+  is `SUSPENSE`, closing that latent double-pay window entirely rather than accepting the residual.
+  An accountant must map the role (a higher-version `role_account_map` row) and let the run be
+  corrected/re-posted before the bucket becomes settleable. Test:
+  `PayrollSettlementWriterTest#settlingABucketPostedToSuspenseAtAccrualTimeIsRejected`.
+
+- **S1 (fixed) — `GET /api/v1/payroll-liabilities` now returns the ENGINEERING-STANDARDS §1.3
+  pagination envelope** (`{content, page, size, totalElements, totalPages}`, a new local
+  `finance.labor.dto.PageResponse<T>` mirroring `employee-service`'s `expense.dto.PageResponse`
+  exactly — no fleet-wide shared version exists yet), never a bare array. Paginated IN-MEMORY over
+  the already-fetched full list (default size 20, max 100, per the standard) rather than a DB
+  `LIMIT`/`OFFSET`: one company's one period's run count is small. The console `usePayrollLiabilities`
+  hook was updated to read `.content`.
+
+- **S2 / S3 (residual, no code change this phase).** (a) The bank-file CSV does not defend against
+  formula injection: a `bank_account`/`employee_name` cell beginning with `=`, `+`, `-`, or `@` could
+  be interpreted as a formula by a spreadsheet application that opens the file (a known CSV-export
+  hazard, not specific to this endpoint). (b) A payslip line whose net amount is exactly zero or
+  negative (e.g. a fully-clawed-back advance) still produces a bank-file row with that
+  `net_amount_minor` — no floor/skip/flag exists for a non-positive net, which a real bank transfer
+  file would need to reject or special-case. Both are tracked as follow-ups for whenever the bank
+  file moves beyond its current illustrative/manual-review posture, not fixed in this pass.
+
+- **S4 — two doc typos fixed.** `PayrollLiabilityRunView`'s javadoc stated the signed-bucket formula
+  as `credit_minor - credit_minor` (should read `credit_minor - debit_minor`); `PayrollRunLedgerRepository`'s
+  class javadoc called its queries "Derived/JPQL" (this codebase has no JPQL anywhere — corrected to
+  "Derived-query methods plus NATIVE `@Query` methods").

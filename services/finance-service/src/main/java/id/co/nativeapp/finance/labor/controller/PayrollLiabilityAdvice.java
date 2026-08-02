@@ -3,6 +3,7 @@ package id.co.nativeapp.finance.labor.controller;
 import id.co.nativeapp.finance.labor.domain.NegativeLiabilityBucketException;
 import id.co.nativeapp.finance.labor.domain.PayrollLiabilityBucketEmptyException;
 import id.co.nativeapp.finance.labor.domain.PayrollLiabilityNotSettleableException;
+import id.co.nativeapp.finance.labor.domain.PayrollLiabilitySuspenseBucketException;
 import id.co.nativeapp.finance.labor.domain.PayrollRunLedgerNotFoundException;
 import id.co.nativeapp.finance.labor.domain.PayrollSettlementAlreadySettledException;
 import id.co.nativeapp.finance.labor.domain.PayrollSettlementIdempotencyKeyConflictException;
@@ -33,6 +34,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  *       already used for a different {@code (run, kind)} — path/body authoritative).
  *   <li>{@link PayrollLiabilityBucketEmptyException} -> {@code 409} (the run never recognised this
  *       bucket — nothing to settle).
+ *   <li>{@link PayrollLiabilitySuspenseBucketException} -> {@code 409} (the bucket posted to
+ *       SUSPENSE, unmapped at accrual time — must be reclassified before it can be settled).
  *   <li>{@link IllegalArgumentException} -> {@code 400} (bad input not caught by bean validation,
  *       incl. the keyless-settle guard).
  *   <li>{@link NegativeLiabilityBucketException} / {@link MismatchedPostingCurrencyException} ->
@@ -94,6 +97,17 @@ public class PayrollLiabilityAdvice {
       PayrollLiabilityBucketEmptyException ex, HttpServletRequest request) {
     ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
     problem.setType(URI.create(TYPE_BASE + "payroll-liability-bucket-empty"));
+    problem.setTitle("Conflict");
+    problem.setDetail(ex.getMessage());
+    return decorate(problem, request);
+  }
+
+  /** A suspense-parked bucket must be reclassified before it can be settled -> 409. */
+  @ExceptionHandler(PayrollLiabilitySuspenseBucketException.class)
+  public ProblemDetail handleSuspenseBucket(
+      PayrollLiabilitySuspenseBucketException ex, HttpServletRequest request) {
+    ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+    problem.setType(URI.create(TYPE_BASE + "payroll-liability-suspense-bucket"));
     problem.setTitle("Conflict");
     problem.setDetail(ex.getMessage());
     return decorate(problem, request);
