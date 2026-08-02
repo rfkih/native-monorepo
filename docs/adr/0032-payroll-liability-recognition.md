@@ -122,3 +122,102 @@ Design (2) is the decision.
   would surface as a `MismatchedCurrencyException`/`UnbalancedJournalException` propagating out of
   the consumer to the bounded-retry-then-DLT path, not a dedicated terminal state. Add one if this
   ever proves reachable in practice.
+
+## P5 addendum — settlement + the net-pay bank file (finance V41, employee-service)
+
+Track P phase P5 closes the gap #8 above left open: clearing the five liability accounts P4
+recognised. Two new surfaces land in the SAME phase, both read-only against each other (no new
+event — `docs/EVENT-CATALOG.md` is unchanged):
+
+1. **`payroll_settlement`** (finance, V41) — a one-shot settlement of exactly one bucket of one
+   run: `Dr <bucket role account> / Cr CASH_CLEARING (1900)`, posted in the CURRENT period (the
+   `TaxSettlementWriter` convention — the payment is made now, regardless of the liability's
+   original period). `PayrollSettlementWriter` guards, in order: (a) an Idempotency-Key replay —
+   the SAME key against the SAME `(run, kind)` returns the original settlement, `200`, posting
+   nothing again; the SAME key against a DIFFERENT `(run, kind)` is a `409`
+   (`payroll-settlement-idempotency-key-conflict`, the path/body-authoritative
+   `AssetDisposalWriter` idiom); (b) the run must exist in the bound tenant (`404` otherwise); (c) a
+   DIFFERENT key against an already-settled `(run, kind)` is a `409`
+   (`payroll-settlement-already-settled` — a genuine second attempt, not a retry); (d) the run's
+   `liability_state` must be `POSTED` — `NULL` (never recognised) or `SUPERSEDED` both fail `409`
+   (`payroll-liability-not-settleable`) — **settling a superseded run is forbidden**, its liability
+   entry has already been reversed by P4's supersession contra; (e) the bucket amount is read back
+   from the run's OWN liability `journal_entry` (never client-supplied — see the bucket-amount read
+   design below); a zero/absent bucket is `409` (`payroll-liability-bucket-empty`, nothing to pay);
+   a negative bucket is `422` (below).
+
+2. **The bucket-amount READ design.** No bucket total is stored per-role on `payroll_run_ledger` —
+   only the run's single liability `journal_entry_id` is (P4's design). Both the settlement writer
+   and the `GET /api/v1/payroll-liabilities` read reconstruct a bucket's signed total the SAME way:
+   resolve the bucket's `AccountRole` to the `chart_of_account.account_code` it mapped to AT THE
+   LIABILITY ENTRY'S OWN `occurred_at` (a `LATERAL` join against `role_account_map` using the exact
+   `RoleAccountResolver` tie-break — `version DESC, effective_from DESC LIMIT 1` — so a LATER
+   `role_account_map` edit can never misattribute a historical line), then sum that account code's
+   `journal_line` rows as `credit_minor - debit_minor` — reconstructing the signed amount exactly as
+   P4 posted it (positive = credit-side bucket, negative = the December Art-17 refund's debit-side
+   bucket, ADR 0031). The settlement writer additionally falls back to
+   `RoleAccountResolver.SUSPENSE_ACCOUNT_CODE` when a role is unmapped (mirroring
+   `PayrollLiabilityWriter`'s own posting-time fallback) so the historical lookup finds the SAME
+   line the entry actually carries — a documented residual: if two DIFFERENT bucket roles were BOTH
+   unmapped at posting time, both would resolve to the SAME suspense account and become
+   indistinguishable by role at settlement time (not reachable today — V40 maps all five roles).
+   The `GET` read (`PayrollLiabilityRunView`, `PayrollRunLedgerRepository.LIABILITY_BUCKET_SELECT`)
+   is the SAME join, generalized across all five roles in one query, restricted to
+   `liability_state = 'POSTED'` runs (the currently-owed set) for the period-scoped list, or
+   unrestricted for the single-run-by-id read (so a SUPERSEDED run's historical totals remain
+   auditable even though settling it is blocked).
+
+3. **A negative bucket is REJECTED, v1 residual.** The December Art-17 true-up (ADR 0031) can drive
+   `PPH21_PAYABLE` negative — a negative payable is in substance a RECEIVABLE from the tax office,
+   netted against the NEXT period's remittance, not a standalone payment. Rather than invent an
+   unmodeled receivable-settlement flow, `NegativeLiabilityBucketException` rejects it with a `422`
+   typed problem directing the caller to net it against the next remittance. Tracked as a residual
+   for whenever a real tax-remittance netting flow is designed.
+
+4. **The net-pay bank file is a NEW employee-service endpoint**, not a finance one — the amounts
+   come from `payslip_line` (PII, employee-service's own aggregate), not the GL. `GET
+   /api/v1/payroll-runs/{runId}/bank-file` (POSTED runs only, `409` otherwise) streams a `text/csv`
+   CSV (`employee_name, bank_account, net_amount_minor, currency, reference`) built by
+   `BankFileReader`: net mirrors `MeReader#payslipDetail`'s own computation exactly (`Σ
+   EMPLOYEE-borne EARNING − Σ EMPLOYEE-borne DEDUCTION`; EMPLOYER-borne lines are cost, never net
+   pay). `Employee#bankAccountForBankFile()` is a NEW, deliberately narrow public accessor — the
+   ONE OTHER place (besides the encrypt/decrypt round-trip test) the decrypted bank account crosses
+   a boundary; it lands directly in the CSV body and is NEVER logged. The one audit line this reader
+   emits carries `runId` + a row count ONLY (rule 6). An employee whose decrypted bank account is
+   blank still gets a CSV row (an empty cell, never silently dropped) — defensive: the aggregate's
+   constructor requires a non-blank value today, so this is unreachable in practice, but a future
+   relaxation must not vanish a row; the trailing `# row_count=N` comment line lets a recipient
+   verify no row was ever dropped.
+
+5. **Route posture.** `/api/v1/payroll-liabilities/**` rides the ordinary DASHBOARD_ROLES
+   (owner/manager) gate, like every other finance read/write surface. The bank file is
+   OWNER-ONLY — a NEW, narrower `OWNER_ROLES = {"owner"}` gateway constant (manager is excluded, a
+   posture stricter than the payroll-runs DASHBOARD surface it nests under) — via a
+   `@Order(HIGHEST_PRECEDENCE)` exact route (`path("/api/v1/payroll-runs/*/bank-file")`, a
+   single-path-segment wildcard) checked BEFORE the general `/api/v1/payroll-runs/**`
+   (DASHBOARD_ROLES) route, mirroring the `userMeOutletsRoute`/`currentCompanyRoute`
+   first-match-wins precedent — RouterFunction beans are matched in DECLARATION order across the
+   WHOLE bean set, not most-specific-path-wins, so ordering is load-bearing, not cosmetic.
+
+6. **Deviation from the original column list.** `payroll_settlement` also carries an
+   `idempotency_key` column (V41) not in the original phase brief's literal column list — required
+   to implement BOTH halves of the spec (same-key replay `200`; a different key against an
+   already-settled bucket `409`), mirroring `invoice_payment.idempotency_key` (V26) rather than
+   `TaxSettlementWriter`'s keyless one-shot-transition idiom (settlement here is a genuinely
+   repeatable client action, unlike a filing-status flip).
+
+## Post-review amendments (P4 review, same phase)
+
+- **W1 — a refund-only run may carry `employer_cost_total == 0`** (every employee zero-gross, one
+  over-withheld December refund): the accrual's Dr 6900 leg is now CONDITIONAL on a positive
+  employer cost — the bucket legs balance on their own (e.g. Dr 2610 / Cr 2640) by the producer
+  identity. An unconditional strictly-positive debit would have DLT'd a valid run and left 6900
+  uncleared for it.
+- **W2 — additive fields go at the RECORD END.** The runtime decodes with a single schema (no
+  writer-schema resolution — `AvroSerde.deserialize(payload, SCHEMA)`), so a mid-record insertion
+  makes genuinely-old bytes silently MISREAD every following field; at the record end, old bytes
+  fail fast (EOF → DLT) instead. `run_type` was moved to the end of all three schemas while the
+  events have never left dev. **Standing rule for every future additive field on a live event:
+  append at the end, and drain in-flight topics before deploying a consumer whose schema changed
+  mid-record.** The real fix (propagating the writer schema / a registry-backed serde) is a
+  documented platform residual.

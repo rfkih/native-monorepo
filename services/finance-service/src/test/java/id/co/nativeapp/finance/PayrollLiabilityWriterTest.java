@@ -112,6 +112,36 @@ class PayrollLiabilityWriterTest extends PostgresRlsTestBase {
   }
 
   @Test
+  void aRefundOnlyRunWithZeroEmployerCostPostsWithoutTheClearingLeg() throws Exception {
+    // P4 review W1: every employee zero-gross, one over-withheld December refund. The producer
+    // identity legitimately yields employer_cost_total == 0 with balancing buckets — the 6900
+    // Dr leg must be OMITTED (a strictly-positive debit of zero would throw and DLT this valid
+    // run, leaving its liability unrecognised forever). The bucket legs balance on their own.
+    UUID runId = UUID.randomUUID();
+    PayrollLiabilitiesPostedEvent event =
+        event(
+            UUID.randomUUID(),
+            runId,
+            1,
+            0L,
+            List.of(
+                new LiabilityBucket("NET_WAGES_PAYABLE", Money.ofMinor(300_000L, "IDR")),
+                new LiabilityBucket("PPH21_PAYABLE", Money.ofMinor(-300_000L, "IDR"))));
+
+    assertThat(liabilityService.handle(event)).isTrue();
+
+    List<LineRow> lines = linesAsAdmin();
+    assertThat(lines).noneMatch(l -> l.accountCode.equals("6900"));
+    LineRow pph21 =
+        lines.stream().filter(l -> l.accountCode.equals("2610")).findFirst().orElseThrow();
+    assertThat(pph21.debitMinor).isEqualTo(300_000L);
+    assertThat(creditFor(lines, "2640")).isEqualTo(300_000L);
+    long totalDebit = lines.stream().mapToLong(l -> l.debitMinor).sum();
+    long totalCredit = lines.stream().mapToLong(l -> l.creditMinor).sum();
+    assertThat(totalDebit).isEqualTo(totalCredit).isEqualTo(300_000L);
+  }
+
+  @Test
   void anUnrecognisedLiabilityRoleFailsSafeToSuspenseNeverDropped() throws Exception {
     UUID runId = UUID.randomUUID();
     PayrollLiabilitiesPostedEvent event =

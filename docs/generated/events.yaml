@@ -163,10 +163,10 @@ events:
       - { name: amount_minor, type: "long" }
       - { name: currency, type: "string" }
       - { name: run_seq, type: "int" }
-      - { name: run_type, type: "string" }
       - { name: uses_illustrative_rules, type: "boolean" }
       - { name: unallocated, type: "boolean" }
       - { name: occurred_at, type: "timestamp-millis" }
+      - { name: run_type, type: "string" }
   - name: LoyaltyBalanceChanged
     namespace: id.co.nativeapp.events.loyalty
     schema: libs/contracts/src/main/resources/avro/LoyaltyBalanceChanged.avsc
@@ -231,12 +231,12 @@ events:
       - { name: company_id, type: "string" }
       - { name: period, type: "string" }
       - { name: run_seq, type: "int" }
-      - { name: run_type, type: "string" }
       - { name: base_currency, type: "string" }
       - { name: employer_cost_total_minor, type: "long" }
       - { name: liabilities, type: "array<record:PayrollLiabilityBucket>" }
       - { name: uses_illustrative_rules, type: "boolean" }
       - { name: posted_at, type: "timestamp-millis" }
+      - { name: run_type, type: "string" }
   - name: PayrollPosted
     namespace: id.co.nativeapp.events.employee
     schema: libs/contracts/src/main/resources/avro/PayrollPosted.avsc
@@ -251,9 +251,9 @@ events:
       - { name: net_total_minor, type: "long" }
       - { name: rule_versions, type: "array<record:RuleVersion>" }
       - { name: run_seq, type: "int" }
-      - { name: run_type, type: "string" }
       - { name: uses_illustrative_rules, type: "boolean" }
       - { name: posted_at, type: "timestamp-millis" }
+      - { name: run_type, type: "string" }
   - name: PeriodSealed
     namespace: id.co.nativeapp.events.carwash
     schema: libs/contracts/src/main/resources/avro/PeriodSealed.avsc

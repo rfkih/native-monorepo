@@ -1107,9 +1107,9 @@ handles supersession, not double-counting two runs for one period).
       {"name": "rule_version", "type": "string"}
     ]}}},
     {"name": "run_seq", "type": "int", "default": 1},
-    {"name": "run_type", "type": "string", "default": "REGULAR"},
     {"name": "uses_illustrative_rules", "type": "boolean"},
-    {"name": "posted_at", "type": {"type": "long", "logicalType": "timestamp-millis"}}
+    {"name": "posted_at", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+    {"name": "run_type", "type": "string", "default": "REGULAR"}
   ]
 }
 ```
@@ -1186,10 +1186,10 @@ field was added **backward-compatibly** with a `default: false`, so an old reade
     {"name": "amount_minor", "type": "long"},
     {"name": "currency", "type": "string"},
     {"name": "run_seq", "type": "int", "default": 1},
-    {"name": "run_type", "type": "string", "default": "REGULAR"},
     {"name": "uses_illustrative_rules", "type": "boolean"},
     {"name": "unallocated", "type": "boolean", "default": false},
-    {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}}
+    {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+    {"name": "run_type", "type": "string", "default": "REGULAR"}
   ]
 }
 ```
@@ -1271,7 +1271,6 @@ strictly-positive invariant).
     {"name": "company_id", "type": "string"},
     {"name": "period", "type": "string"},
     {"name": "run_seq", "type": "int", "default": 1},
-    {"name": "run_type", "type": "string", "default": "REGULAR"},
     {"name": "base_currency", "type": "string"},
     {"name": "employer_cost_total_minor", "type": "long"},
     {"name": "liabilities", "type": {"type": "array", "items": {"type": "record", "name": "PayrollLiabilityBucket", "fields": [
@@ -1279,7 +1278,8 @@ strictly-positive invariant).
       {"name": "amount_minor", "type": "long"}
     ]}}, "default": []},
     {"name": "uses_illustrative_rules", "type": "boolean"},
-    {"name": "posted_at", "type": {"type": "long", "logicalType": "timestamp-millis"}}
+    {"name": "posted_at", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+    {"name": "run_type", "type": "string", "default": "REGULAR"}
   ]
 }
 ```

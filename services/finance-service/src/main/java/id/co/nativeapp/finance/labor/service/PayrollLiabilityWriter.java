@@ -176,8 +176,15 @@ public class PayrollLiabilityWriter {
     List<JournalLine> lines = new ArrayList<>(event.liabilities().size() + 1);
     int lineNo = 1;
 
-    String clearingCode = resolveOrSuspense(AccountRole.LABOR_CLEARING, occurredAt);
-    lines.add(JournalLine.debit(entryId, lineNo++, clearingCode, event.employerCostTotal()));
+    // The 6900 re-class leg only exists when there is employer cost to re-class (P4 review W1):
+    // a refund-only run (every employee zero-gross, one over-withheld PPh21 refund) legitimately
+    // carries employerCostTotal == 0 with balancing buckets (e.g. Dr 2610 X / Cr 2640 X) — an
+    // unconditional strictly-positive debit would throw and DLT a VALID run, so 6900 would never
+    // clear for it. The remaining bucket legs balance on their own by the producer identity.
+    if (event.employerCostTotal().isPositive()) {
+      String clearingCode = resolveOrSuspense(AccountRole.LABOR_CLEARING, occurredAt);
+      lines.add(JournalLine.debit(entryId, lineNo++, clearingCode, event.employerCostTotal()));
+    }
 
     for (PayrollLiabilitiesPostedEvent.LiabilityBucket bucket : event.liabilities()) {
       long amountMinor = bucket.amount().amountMinor();
