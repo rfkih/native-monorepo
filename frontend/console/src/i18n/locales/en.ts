@@ -519,7 +519,6 @@ export const en = {
     noCompanyHint: 'Create a company first — the POS rings up orders for its business.',
     soldOut: 'Sold out',
     soldOutLabel: '{{name}} — sold out',
-    hasOptions: 'Customisable',
     categories: 'Categories',
     modifiers: {
       modalLabel: 'Customise {{name}}',
@@ -880,6 +879,8 @@ export const en = {
     },
     expensesTab: {
       viewAll: 'View all expenses',
+      periodHint:
+        'Spend and category figures use the approval date; the pending count uses the expense date.',
       recognisedSpend: 'Approved + reimbursed spend',
       pending: 'Pending decision',
       byCategory: 'By category',

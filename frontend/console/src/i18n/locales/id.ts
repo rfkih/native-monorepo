@@ -514,7 +514,6 @@ export const id = {
     noCompanyHint: 'Buat perusahaan dulu — kasir membuat pesanan untuk bisnisnya.',
     soldOut: 'Habis',
     soldOutLabel: '{{name}} — habis',
-    hasOptions: 'Bisa dikustomisasi',
     categories: 'Kategori',
     modifiers: {
       modalLabel: 'Pilihan untuk {{name}}',
@@ -876,6 +875,8 @@ export const id = {
     },
     expensesTab: {
       viewAll: 'Lihat semua pengeluaran',
+      periodHint:
+        'Angka pengeluaran dan kategori menggunakan tanggal persetujuan; jumlah tertunda menggunakan tanggal pengeluaran.',
       recognisedSpend: 'Pengeluaran disetujui + diganti',
       pending: 'Menunggu keputusan',
       byCategory: 'Berdasarkan kategori',

@@ -129,11 +129,6 @@ export function MenuTile({
           >
             {formatMoney(item.priceMinor, item.currency, locale)}
           </span>
-          {item.modifierGroups.length > 0 && !unavailable ? (
-            <span className="rounded-full bg-emerald-tint px-1.5 py-0.5 text-[10px] font-semibold text-emerald-2">
-              {t('pos.hasOptions')}
-            </span>
-          ) : null}
         </div>
       </div>
     </button>
