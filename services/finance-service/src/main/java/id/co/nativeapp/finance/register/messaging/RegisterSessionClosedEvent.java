@@ -83,7 +83,14 @@ public record RegisterSessionClosedEvent(
               + countedCashMinor
               + ") must all be >= 0 — poison event, routing to DLT");
     }
-    long expected = openingFloatMinor + cashSalesMinor - cashRefundsMinor;
+    long expected;
+    try {
+      expected =
+          Math.subtractExact(Math.addExact(openingFloatMinor, cashSalesMinor), cashRefundsMinor);
+    } catch (ArithmeticException overflow) {
+      throw new IllegalStateException(
+          "RegisterSessionClosed identity overflow — poison event, routing to DLT", overflow);
+    }
     if (expected != expectedCashMinor) {
       throw new IllegalStateException(
           "RegisterSessionClosed reconciliation identity violated: float("
@@ -98,7 +105,7 @@ public record RegisterSessionClosedEvent(
               + expectedCashMinor
               + ") — poison event, routing to DLT");
     }
-    long overShort = countedCashMinor - expectedCashMinor;
+    long overShort = Math.subtractExact(countedCashMinor, expectedCashMinor);
     if (overShort != overShortMinor) {
       throw new IllegalStateException(
           "RegisterSessionClosed variance identity violated: counted("

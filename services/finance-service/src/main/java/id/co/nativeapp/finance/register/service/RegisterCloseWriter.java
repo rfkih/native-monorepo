@@ -101,7 +101,11 @@ public class RegisterCloseWriter {
                   + event.closedAt()
                   + " targets sealed period "
                   + period
-                  + " — variance quarantined for manual posting"),
+                  + " — variance "
+                  + event.overShortMinor()
+                  + " "
+                  + event.currency()
+                  + " quarantined for manual posting"),
           "finance.register.sealed-period-quarantine",
           companyId,
           null);

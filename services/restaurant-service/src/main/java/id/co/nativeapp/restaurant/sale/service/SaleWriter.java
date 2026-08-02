@@ -107,7 +107,8 @@ public class SaleWriter {
             amount,
             command.occurredAt(),
             command.idempotencyKey(),
-            command.tenderType());
+            command.tenderType(),
+            cashCollectedOf(command));
     sale.setCompanyId(companyId);
     Sale saved = repository.saveAndFlush(sale);
 
@@ -182,7 +183,8 @@ public class SaleWriter {
             amount,
             command.occurredAt(),
             command.idempotencyKey(),
-            command.tenderType());
+            command.tenderType(),
+            cashCollectedOf(command));
     sale.setCompanyId(companyId);
     Sale saved = repository.saveAndFlush(sale);
 
@@ -212,6 +214,20 @@ public class SaleWriter {
     postOutboxHook.afterOutboxWrite(saved);
 
     return new RecordSaleResult(SaleResponse.from(saved), true);
+  }
+
+  /**
+   * The CASH physically entering the drawer (review C1): for a CASH tender, the grand total minus
+   * any gift-card-redeemed portion (a split sale collects only the residual). Null for non-cash
+   * tenders — the register close only sums cash.
+   */
+  private static Long cashCollectedOf(RecordSaleCommand command) {
+    if (!"CASH".equals(command.tenderType())) {
+      return null;
+    }
+    long giftCard =
+        command.giftCardRedeemedMinor() != null ? command.giftCardRedeemedMinor() : 0L;
+    return Math.subtractExact(command.amountMinor(), giftCard);
   }
 
   /**

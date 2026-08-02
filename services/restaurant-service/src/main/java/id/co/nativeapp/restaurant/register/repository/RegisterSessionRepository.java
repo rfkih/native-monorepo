@@ -67,14 +67,15 @@ public interface RegisterSessionRepository extends JpaRepository<RegisterSession
   List<RegisterSessionView> findHistoryViewsByBusinessId(@Param("businessId") UUID businessId);
 
   /**
-   * Σ CASH-tender sale amounts (the customer-pays amount) for the outlet in the session window
-   * {@code [from, to)} — the expected-cash term. Uses the V21 partial index; NULL-tender legacy
-   * rows are excluded by the predicate (documented undercount for pre-V21 data, ADR 0036).
+   * Σ CASH physically collected for the outlet in the session window {@code [from, to)} — the
+   * expected-cash term. Review C1: {@code cash_collected_minor} (grand total − gift-card portion,
+   * V22) is the drawer figure; pre-V22 rows fall back to {@code amount_minor} via COALESCE.
+   * NULL-tender legacy rows are excluded by the predicate (documented undercount, ADR 0036).
    */
   @Query(
       value =
           """
-          SELECT COALESCE(SUM(s.amount_minor), 0)
+          SELECT COALESCE(SUM(COALESCE(s.cash_collected_minor, s.amount_minor)), 0)
             FROM sale s
            WHERE s.business_id = :businessId
              AND s.tender_type = 'CASH'
@@ -86,21 +87,19 @@ public interface RegisterSessionRepository extends JpaRepository<RegisterSession
       @Param("businessId") UUID businessId, @Param("from") Instant from, @Param("to") Instant to);
 
   /**
-   * Σ CASH refunds paid out of the drawer in the window — v1 attribution by {@code
-   * payment.last_refund_at} (a payment's CUMULATIVE refunded_minor is attributed to the window
-   * containing its LAST refund; multiple partials across sessions over-attribute to the last one —
-   * the documented ADR 0036 approximation).
+   * Σ CASH refund DELTAS paid out of the drawer in the window — exact per-refund attribution via
+   * the append-only {@code payment_refund} ledger (V22, review C3: summing the payment's
+   * CUMULATIVE refunded_minor double-counted partial refunds spanning sessions).
    */
   @Query(
       value =
           """
-          SELECT COALESCE(SUM(p.refunded_minor), 0)
-            FROM payment p
-           WHERE p.business_id = :businessId
-             AND p.tender_type = 'CASH'
-             AND p.last_refund_at IS NOT NULL
-             AND p.last_refund_at >= :from
-             AND p.last_refund_at < :to
+          SELECT COALESCE(SUM(r.amount_minor), 0)
+            FROM payment_refund r
+           WHERE r.business_id = :businessId
+             AND r.tender_type = 'CASH'
+             AND r.refunded_at >= :from
+             AND r.refunded_at < :to
           """,
       nativeQuery = true)
   long sumCashRefunds(

@@ -56,6 +56,15 @@ public class Sale extends Auditable {
   @Column(name = "tender_type", updatable = false)
   private String tenderType;
 
+  /**
+   * The CASH physically entering the drawer for a CASH-tender sale (V22, review C1): grand total
+   * minus any gift-card-redeemed portion. A gift-card-split sale collects only the residual —
+   * summing amount_minor would overstate expected drawer cash and post phantom shortages. Null for
+   * legacy rows and non-cash tenders; the register query falls back to amount_minor via COALESCE.
+   */
+  @Column(name = "cash_collected_minor", updatable = false)
+  private Long cashCollectedMinor;
+
   protected Sale() {
     // for JPA
   }
@@ -80,12 +89,29 @@ public class Sale extends Auditable {
    */
   public Sale(
       UUID businessId, Money amount, Instant occurredAt, String idempotencyKey, String tenderType) {
+    this(businessId, amount, occurredAt, idempotencyKey, tenderType, null);
+  }
+
+  /**
+   * Full constructor incl. the drawer-cash figure (review C1).
+   *
+   * @param cashCollectedMinor the cash physically collected (grand total − gift-card portion) for
+   *     a CASH sale; null for non-cash/legacy
+   */
+  public Sale(
+      UUID businessId,
+      Money amount,
+      Instant occurredAt,
+      String idempotencyKey,
+      String tenderType,
+      Long cashCollectedMinor) {
     this.id = UUID.randomUUID();
     this.businessId = Objects.requireNonNull(businessId, "businessId");
     this.amount = MoneyEmbeddable.of(amount);
     this.occurredAt = Objects.requireNonNull(occurredAt, "occurredAt");
     this.idempotencyKey = Objects.requireNonNull(idempotencyKey, "idempotencyKey");
     this.tenderType = tenderType;
+    this.cashCollectedMinor = cashCollectedMinor;
   }
 
   public UUID getId() {
@@ -112,5 +138,10 @@ public class Sale extends Auditable {
   /** The settling tender ({@code CASH | QRIS | CARD}), or null for legacy/no-payment sales. */
   public String getTenderType() {
     return tenderType;
+  }
+
+  /** Drawer cash collected for a CASH sale (grand total − gift-card portion), or null. */
+  public Long getCashCollectedMinor() {
+    return cashCollectedMinor;
   }
 }

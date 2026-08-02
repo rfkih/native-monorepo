@@ -1,5 +1,8 @@
 package id.co.nativeapp.restaurant.register.dto;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.PositiveOrZero;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -14,4 +17,7 @@ import java.util.UUID;
  *     timezone is the additive follow-up)
  */
 public record OpenSessionRequest(
-    UUID businessId, Long openingFloatMinor, String currency, LocalDate businessDate) {}
+    @NotNull UUID businessId,
+    @PositiveOrZero Long openingFloatMinor,
+    @NotBlank String currency,
+    LocalDate businessDate) {}

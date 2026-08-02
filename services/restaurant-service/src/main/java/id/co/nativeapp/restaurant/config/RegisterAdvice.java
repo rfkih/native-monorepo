@@ -1,6 +1,7 @@
 package id.co.nativeapp.restaurant.config;
 
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionAlreadyOpenException;
+import id.co.nativeapp.restaurant.register.domain.RegisterSessionIdempotencyKeyConflictException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionNotFoundException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionNotOpenException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -23,6 +24,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  *       ({@code register-session-already-open})
  *   <li>{@link RegisterSessionNotOpenException} — double-close with a NEW key → {@code 409} ({@code
  *       register-session-not-open})
+ *   <li>{@link RegisterSessionIdempotencyKeyConflictException} — replayed key, different payload →
+ *       {@code 409} ({@code register-session-idempotency-key-conflict})
  *   <li>{@link RegisterSessionNotFoundException} — unknown/cross-tenant id → {@code 404} ({@code
  *       register-session-not-found})
  * </ul>
@@ -47,6 +50,16 @@ public class RegisterAdvice {
       RegisterSessionNotOpenException ex, HttpServletRequest request) {
     ProblemDetail problem = problem(HttpStatus.CONFLICT, "register-session-not-open", request);
     problem.setTitle("The register session is not open");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  @ExceptionHandler(RegisterSessionIdempotencyKeyConflictException.class)
+  public ProblemDetail handleKeyConflict(
+      RegisterSessionIdempotencyKeyConflictException ex, HttpServletRequest request) {
+    ProblemDetail problem =
+        problem(HttpStatus.CONFLICT, "register-session-idempotency-key-conflict", request);
+    problem.setTitle("Idempotency-Key conflict");
     problem.setDetail(ex.getMessage());
     return problem;
   }

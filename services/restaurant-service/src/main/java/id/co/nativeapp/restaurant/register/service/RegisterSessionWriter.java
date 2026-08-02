@@ -5,6 +5,7 @@ import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
 import id.co.nativeapp.restaurant.register.domain.RegisterSession;
+import id.co.nativeapp.restaurant.register.domain.RegisterSessionIdempotencyKeyConflictException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionNotFoundException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionNotOpenException;
 import id.co.nativeapp.restaurant.register.dto.CloseSessionRequest;
@@ -69,7 +70,23 @@ public class RegisterSessionWriter {
 
     Optional<RegisterSessionView> replay = repository.findViewByOpenIdempotencyKey(idempotencyKey);
     if (replay.isPresent()) {
-      return new OpenSessionResult(toResponse(replay.get()), false);
+      RegisterSessionView existing = replay.get();
+      // Review W2/W3: a replay must be the SAME logical request — same outlet, float, currency.
+      // A reused key with a different payload is a client bug surfaced as 409, never a silent 200
+      // with another outlet's session.
+      long requestedFloat = request.openingFloatMinor() == null ? 0L : request.openingFloatMinor();
+      boolean samePayload =
+          existing.getBusinessId().equals(request.businessId())
+              && existing.getOpeningFloatMinor() == requestedFloat
+              && existing.getCurrency() != null
+              && existing.getCurrency().strip().equals(request.currency());
+      if (!samePayload) {
+        throw new RegisterSessionIdempotencyKeyConflictException(
+            "Idempotency-Key was already used to open a different session");
+      }
+      // The replay still answers with session data — same outlet gate as the original open (W1).
+      outletAccessGuard.enforce(existing.getBusinessId());
+      return new OpenSessionResult(toResponse(existing), false);
     }
 
     outletAccessGuard.enforce(request.businessId());
@@ -113,19 +130,31 @@ public class RegisterSessionWriter {
 
     Optional<RegisterSessionView> replay = repository.findViewByCloseIdempotencyKey(idempotencyKey);
     if (replay.isPresent()) {
-      return toResponse(replay.get());
+      RegisterSessionView existing = replay.get();
+      // Review W3: same key must mean the same logical close (same session, same count).
+      Long replayCounted = existing.getCountedCashMinor();
+      if (!existing.getId().equals(sessionId)
+          || replayCounted == null
+          || !replayCounted.equals(request.countedCashMinor())) {
+        throw new RegisterSessionIdempotencyKeyConflictException(
+            "Idempotency-Key was already used to close with a different request");
+      }
+      // The replay still answers with session data — same outlet gate as the live close (W1).
+      outletAccessGuard.enforce(existing.getBusinessId());
+      return toResponse(existing);
     }
 
     RegisterSession session =
         repository
             .findWithLockById(sessionId)
             .orElseThrow(() -> new RegisterSessionNotFoundException(sessionId));
+    // Review W1: closing another outlet's drawer needs the same outlet-assignment gate as opening
+    // it — RLS scopes the company, not the outlet.
+    outletAccessGuard.enforce(session.getBusinessId());
     if (!RegisterSession.STATUS_OPEN.equals(session.getStatus())) {
       throw new RegisterSessionNotOpenException(sessionId, session.getStatus());
     }
-    if (request.countedCashMinor() < 0) {
-      throw new IllegalArgumentException("countedCashMinor must be >= 0");
-    }
+    long countedCash = request.countedCashMinor(); // @NotNull @PositiveOrZero at the edge
 
     Instant closeInstant = Instant.now();
     long cashSales =
@@ -136,14 +165,14 @@ public class RegisterSessionWriter {
     // AssetDisposalWriter precedent) — a poisoned sum must throw, never wrap.
     long expected =
         Math.subtractExact(Math.addExact(session.getOpeningFloatMinor(), cashSales), cashRefunds);
-    long overShort = Math.subtractExact(request.countedCashMinor(), expected);
+    long overShort = Math.subtractExact(countedCash, expected);
 
     session.close(
         closeInstant,
         cashSales,
         cashRefunds,
         expected,
-        request.countedCashMinor(),
+        countedCash,
         overShort,
         idempotencyKey);
     repository.saveAndFlush(session);
@@ -159,7 +188,7 @@ public class RegisterSessionWriter {
             cashSales,
             cashRefunds,
             expected,
-            request.countedCashMinor(),
+            countedCash,
             overShort,
             session.getCurrency());
     outboxWriter.write(
@@ -182,15 +211,17 @@ public class RegisterSessionWriter {
         .map(RegisterSessionWriter::toResponse);
   }
 
-  /** The outlet's current OPEN session, if any. */
+  /** The outlet's current OPEN session, if any (outlet-assignment gated — review W1). */
   @Transactional(readOnly = true)
   public Optional<RegisterSessionResponse> findCurrent(UUID businessId) {
+    outletAccessGuard.enforce(businessId);
     return repository.findOpenViewByBusinessId(businessId).map(RegisterSessionWriter::toResponse);
   }
 
   /** The outlet's session history (most recent first, capped at 50). */
   @Transactional(readOnly = true)
   public List<RegisterSessionResponse> findHistory(UUID businessId) {
+    outletAccessGuard.enforce(businessId);
     return repository.findHistoryViewsByBusinessId(businessId).stream()
         .map(RegisterSessionWriter::toResponse)
         .toList();

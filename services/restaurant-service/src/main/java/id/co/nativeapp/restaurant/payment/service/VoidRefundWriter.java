@@ -4,9 +4,11 @@ import id.co.nativeapp.events.AvroSerde;
 import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.restaurant.payment.domain.Payment;
+import id.co.nativeapp.restaurant.payment.domain.PaymentRefund;
 import id.co.nativeapp.restaurant.payment.dto.PaymentResponse;
 import id.co.nativeapp.restaurant.payment.messaging.SaleRefundedSchema;
 import id.co.nativeapp.restaurant.payment.messaging.SaleVoidedSchema;
+import id.co.nativeapp.restaurant.payment.repository.PaymentRefundRepository;
 import id.co.nativeapp.restaurant.payment.repository.PaymentRepository;
 import id.co.nativeapp.tenant.TenantContext;
 import java.nio.charset.StandardCharsets;
@@ -41,10 +43,15 @@ import org.springframework.transaction.annotation.Transactional;
 public class VoidRefundWriter {
 
   private final PaymentRepository paymentRepository;
+  private final PaymentRefundRepository paymentRefundRepository;
   private final OutboxWriter outboxWriter;
 
-  public VoidRefundWriter(PaymentRepository paymentRepository, OutboxWriter outboxWriter) {
+  public VoidRefundWriter(
+      PaymentRepository paymentRepository,
+      PaymentRefundRepository paymentRefundRepository,
+      OutboxWriter outboxWriter) {
     this.paymentRepository = paymentRepository;
+    this.paymentRefundRepository = paymentRefundRepository;
     this.outboxWriter = outboxWriter;
   }
 
@@ -127,6 +134,12 @@ public class VoidRefundWriter {
     // Domain guard: accumulates refund, transitions CAPTURED→PARTIALLY_REFUNDED or REFUNDED.
     Money newTotal = payment.refund(refundAmount);
     paymentRepository.saveAndFlush(payment);
+
+    // Append-only refund-event ledger (V22, ADR 0036 review C3): the per-refund DELTA at its own
+    // timestamp — the register close attributes cash refunds to session windows exactly.
+    PaymentRefund refundEvent = new PaymentRefund(payment, refundAmount, occurredAt);
+    refundEvent.setCompanyId(companyId);
+    paymentRefundRepository.save(refundEvent);
 
     // Emit SaleRefunded outbox event — commits in this transaction.
     // DETERMINISTIC refund id: a name-based UUID (type 3, MD5) over

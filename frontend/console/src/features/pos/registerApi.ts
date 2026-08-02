@@ -3,12 +3,15 @@
  *
  * The cashier opens the drawer with a counted float and closes it with a physical recount; the
  * SERVER computes expected cash and the signed over/short and emits the variance to finance.
- * Mutations mint a fresh UUID Idempotency-Key per attempt (the payment-surface convention) and
- * are DISABLED offline by the caller (closing over unsynced cash would understate expected cash —
- * ADR 0028).
+ * Open mints a fresh UUID Idempotency-Key per attempt; close uses the STABLE key
+ * `close:<sessionId>` (review W4) so a retry after a lost response replays the original 200 —
+ * a per-attempt key would make the server's replay path unreachable. A 409 on close means the
+ * session was already closed under a different request (changed count, other device): refetch
+ * the truth instead of retrying. Mutations are DISABLED offline by the caller (closing over
+ * unsynced cash would understate expected cash — ADR 0028).
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiFetch } from '@/lib/api'
+import { ApiError, apiFetch } from '@/lib/api'
 import type { CompanySession } from '@/lib/session'
 
 export interface RegisterSessionResponse {
@@ -66,9 +69,16 @@ export function useCloseRegisterSession(session: CompanySession) {
       apiFetch<RegisterSessionResponse>(`/api/v1/register-sessions/${sessionId}/close`, {
         method: 'POST',
         tenant: tenantOf(session),
-        headers: { 'Idempotency-Key': crypto.randomUUID() },
+        headers: { 'Idempotency-Key': `close:${sessionId}` },
         body: { countedCashMinor },
       }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: currentKey(session) }),
+    onError: (err) => {
+      // Already closed (double-close race or a changed recount after a lost response): the
+      // server state is the truth — refetch so the sheet flips out of the close form.
+      if (err instanceof ApiError && err.status === 409) {
+        void qc.invalidateQueries({ queryKey: currentKey(session) })
+      }
+    },
   })
 }

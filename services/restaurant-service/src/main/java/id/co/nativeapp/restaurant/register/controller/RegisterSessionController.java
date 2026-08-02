@@ -46,7 +46,7 @@ public class RegisterSessionController {
               + " session is already open.")
   @PostMapping
   public ResponseEntity<RegisterSessionResponse> open(
-      @RequestBody OpenSessionRequest request,
+      @jakarta.validation.Valid @RequestBody OpenSessionRequest request,
       @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
     requireKey(idempotencyKey);
     OpenSessionResult result = service.open(request, idempotencyKey);
@@ -71,7 +71,7 @@ public class RegisterSessionController {
   @PostMapping("/{id}/close")
   public ResponseEntity<RegisterSessionResponse> close(
       @PathVariable("id") UUID id,
-      @RequestBody CloseSessionRequest request,
+      @jakarta.validation.Valid @RequestBody CloseSessionRequest request,
       @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
     requireKey(idempotencyKey);
     return ResponseEntity.ok(service.close(id, request, idempotencyKey));

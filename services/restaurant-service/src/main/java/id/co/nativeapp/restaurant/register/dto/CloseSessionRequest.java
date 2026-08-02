@@ -6,4 +6,6 @@ package id.co.nativeapp.restaurant.register.dto;
  * @param countedCashMinor the whole-drawer count INCLUDING the float, minor units (≥ 0). This is
  *     the only client-supplied figure at close — expected cash and the variance are server-computed
  */
-public record CloseSessionRequest(long countedCashMinor) {}
+public record CloseSessionRequest(
+    @jakarta.validation.constraints.NotNull @jakarta.validation.constraints.PositiveOrZero
+        Long countedCashMinor) {}
