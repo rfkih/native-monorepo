@@ -5,6 +5,37 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-03 — Online channels + platform settlements, Phases B+C (ADR 0036) — settlement program COMPLETE
+
+**B1 (finance deployed FIRST)**: additive `channel` on SaleRecorded/SaleVoided/SaleRefunded (LAST,
+default null — rule 7; every producer puts explicit values; contract tests across all 5 consumers
+prove old-payload→null both directions). BOTH `resolveClearingRole` switches (Revenue + Reversal
+posting writers) learn `ONLINE → PLATFORM_RECEIVABLE` + WARN on unknown tenders. V44: 1250 Platform
+Receivable / 5710 Platform Fee Expense + the negative-tolerant per-channel `platform_receivable`
+accumulator (`PlatformReceivableWriter` atomic upsert inside the posting tx; null channel →
+UNKNOWN + warn, money never dropped). **B2**: restaurant `sales_channel` CRUD (code immutable +
+uppercase, soft-deactivate, owner/manager mutations service-side, cashier-readable) + V24 +
+`TenderType.ONLINE` = synchronous capture (`Payment.capturedOnline`, tendered = amount, change 0);
+checkout/payParked/payBill reject ONLINE without an active channel or with gift-card/loyalty
+redemption; the channel snapshot rides Sale → SaleRecorded and void/refund from
+`payment.channel_code`. **B3/C2 console**: /channels CRUD, POS ONLINE tender with channel-tap
+panel (greyed while a redemption is active — stripping it would charge more than the screen
+shows), /platform-settlements (outstanding incl. negative clawbacks, settle form w/ derived fee,
+history). **C1**: V45 `platform_settlement` + `PlatformSettlementWriter` — required
+Idempotency-Key replay-by-key-first (payload conflict 409), per-(company,channel) advisory lock,
+GUARDED decrement (`outstanding >= gross` or 422, nothing touched), posts `Dr 1900 net + Dr 5710
+fee / Cr 1250 gross` (zero legs omitted) so the payout's bank line reconciles via the ADR-0016
+CLEARING sweep.
+
+Live-proven end-to-end: 2 ONLINE sales → Dr 1250 JEs + accumulator 90k; full ONLINE refund →
+clawback to 52k; settle 40k/34k → exact 3-leg JE + outstanding 12k; replay 200 / conflict 409 /
+over-settle 422 / net>gross 422 / keyless 400; channel CRUD 201-403-409. Full gates green
+(restaurant+finance+gateway+carwash+barbershop+loyalty + console tsc/vitest 144). Two gate
+findings fixed: ArchUnit tx-naming (accumulator → `PlatformReceivableWriter`) and a latent phase-A
+gateway test asserting a forwarded path without its query string. Ops: `native-postgres`
+max_connections 100→300 (fleet outgrew it); NEVER rebuild a bootJar in C:\native-pos-build while a
+service runs from it (lazy class loads explode — restart after building).
+
 ## 2026-08-03 — Closing kasir (register sessions) Phase A + money-review fix round (ADR 0036)
 
 First slice of the settlement program (plan: functional-popping-gizmo): per-outlet-per-day cash
