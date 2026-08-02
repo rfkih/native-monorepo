@@ -89,6 +89,63 @@ public class PayComponent extends Auditable {
     this.active = true;
   }
 
+  /** Copy constructor for {@link #asAnnualTrueUpVariant} — preserves the SAME {@code id}. */
+  private PayComponent(
+      UUID id,
+      String componentKey,
+      PayComponentKind kind,
+      CalcType calcType,
+      PayComponentBearer bearer,
+      String glAccount,
+      boolean taxable,
+      String statutoryRuleKey,
+      int displayOrder,
+      boolean active) {
+    this.id = id;
+    this.componentKey = componentKey;
+    this.kind = kind;
+    this.calcType = calcType;
+    this.bearer = bearer;
+    this.glAccount = glAccount;
+    this.taxable = taxable;
+    this.statutoryRuleKey = statutoryRuleKey;
+    this.displayOrder = displayOrder;
+    this.active = active;
+  }
+
+  /**
+   * Returns an in-memory VARIANT of this component that resolves against {@code annualRuleKey}
+   * instead of its catalog {@link #statutoryRuleKey} — used ONLY by {@code PayrollRunWriter} for
+   * the December/final-month Art-17 true-up (Track P phase P3) to swap the monthly income-tax
+   * component (e.g. {@code PPH21}, normally wired to {@code PPH21_TER}) onto the resolved {@code
+   * ANNUAL_PROGRESSIVE} rule ({@code PPH21_ARTICLE17}) for that ONE month's compute — so {@link
+   * id.co.nativeapp.employee.payroll.service.GrossToNetCalculator}'s {@code
+   * statutoryByCalc(ANNUAL_PROGRESSIVE)} finds it and, just as importantly, {@code
+   * statutoryByCalc(TER_TABLE)}/{@code PROGRESSIVE_BRACKET} no longer does — December must use
+   * EXACTLY ONE income-tax family, never both (that would double-tax the month).
+   *
+   * <p>NEVER persisted: no repository ever sees this instance, and the catalog row itself is left
+   * completely untouched — every OTHER month still resolves the real {@link #statutoryRuleKey}
+   * normally. The {@code id} is preserved (not a fresh random one) so the resulting {@code
+   * payslip_line.pay_component_id} still traces back to the real catalog row; every other catalog
+   * field ({@code component_key}, {@code kind}, {@code bearer}, {@code gl_account}, {@code
+   * taxable}, {@code display_order}) is copied unchanged.
+   */
+  public PayComponent asAnnualTrueUpVariant(String annualRuleKey) {
+    Objects.requireNonNull(annualRuleKey, "annualRuleKey");
+    return new PayComponent(
+        this.id,
+        this.componentKey,
+        this.kind,
+        this.calcType,
+        this.bearer,
+        this.glAccount,
+        this.taxable,
+        annualRuleKey,
+        this.displayOrder,
+        this.active);
+  }
+
   /**
    * Aligns this component's catalog fields with a dataset's declared row (Track P phase P2 official
    * seed/upsert) — used both to REWIRE an existing component's {@link #statutoryRuleKey} (e.g.

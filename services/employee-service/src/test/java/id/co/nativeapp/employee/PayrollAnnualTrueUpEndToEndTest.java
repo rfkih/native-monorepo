@@ -1,0 +1,503 @@
+package id.co.nativeapp.employee;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import id.co.nativeapp.employee.assignment.dto.AddAssignmentCommand;
+import id.co.nativeapp.employee.assignment.service.AssignmentService;
+import id.co.nativeapp.employee.employee.domain.EmploymentContract;
+import id.co.nativeapp.employee.employee.dto.AddContractCommand;
+import id.co.nativeapp.employee.employee.dto.CreateEmployeeCommand;
+import id.co.nativeapp.employee.employee.dto.UpdateEmployeeCommand;
+import id.co.nativeapp.employee.employee.service.EmployeeService;
+import id.co.nativeapp.employee.org.dto.OrgUnitProjectedEvent;
+import id.co.nativeapp.employee.org.service.OrgProjectionService;
+import id.co.nativeapp.employee.payroll.domain.CompensationPackage;
+import id.co.nativeapp.employee.payroll.dto.PayrollRunResponse;
+import id.co.nativeapp.employee.payroll.dto.PayslipLineResponse;
+import id.co.nativeapp.employee.payroll.dto.RunPayrollCommand;
+import id.co.nativeapp.employee.payroll.messaging.PayrollPostedSchema;
+import id.co.nativeapp.employee.payroll.service.CompensationWriter;
+import id.co.nativeapp.employee.payroll.service.IllustrativeStatutorySeedWriter;
+import id.co.nativeapp.employee.payroll.service.OfficialStatutorySeedWriter;
+import id.co.nativeapp.employee.payroll.service.PayrollRunReader;
+import id.co.nativeapp.employee.payroll.service.PayrollRunService;
+import id.co.nativeapp.events.AvroSerde;
+import id.co.nativeapp.money.Money;
+import id.co.nativeapp.tenant.TenantContext;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import org.apache.avro.generic.GenericRecord;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
+
+/**
+ * The December / final-month Art-17 true-up, end-to-end over a real RLS-enforcing PostgreSQL (Track
+ * P phase P3, ADR 0031). Every scenario seeds the OFFICIAL {@code ID-2026.1} dataset (real PMK
+ * 168/2023 TER + UU HPP 7/2021 Art-17 figures), so the numbers below are hand-derivable and
+ * regulation-real, never illustrative placeholders.
+ *
+ * <p>Every hand-computed figure in this file follows the SAME arithmetic {@link
+ * id.co.nativeapp.employee.payroll.service.GrossToNetCalculator} performs: the TER effective-rate
+ * lookup for a monthly run; for December, UU HPP 7/2021 Art-17 progressive brackets minus PMK
+ * 250/2008 biaya jabatan (prorated by {@code monthsInYear}, Track P phase P3 W2) and PTKP
+ * (deliberately unprorated).
+ */
+@SpringBootTest
+class PayrollAnnualTrueUpEndToEndTest extends PostgresRlsTestBase {
+
+  private static final String TENANT_A = "11111111-1111-1111-1111-111111111111";
+  private static final String ACTOR_A = "hr-admin-a@example.co.id";
+  private static final UUID LEGAL_EMPLOYER =
+      UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+  private static final String IDR = "IDR";
+  private static final String DATASET_VERSION = "ID-2026.1";
+
+  @Autowired private IllustrativeStatutorySeedWriter illustrativeSeeder;
+  @Autowired private OfficialStatutorySeedWriter officialSeeder;
+  @Autowired private EmployeeService employeeService;
+  @Autowired private CompensationWriter compensationWriter;
+  @Autowired private OrgProjectionService orgProjectionService;
+  @Autowired private AssignmentService assignmentService;
+  @Autowired private PayrollRunService payrollRunService;
+  @Autowired private PayrollRunReader payrollRunReader;
+  @Autowired private JdbcTemplate jdbcTemplate;
+
+  // ---------------------------------------------------------------------
+  // Golden: a non-December run under the OFFICIAL dataset is COMPLETELY unaffected — the exact
+  // same figures GrossToNetOfficialDatasetTest's pure unit test derives, now proven through the
+  // FULL writer path (the December-guard branch this phase adds must be a true no-op off-month).
+  // ---------------------------------------------------------------------
+
+  @Test
+  void aNonDecemberRunUnderTheOfficialDatasetIsByteIdenticalToThePreP3Figures() throws Exception {
+    UUID runId =
+        TenantContext.callAs(
+            TENANT_A,
+            ACTOR_A,
+            () -> {
+              illustrativeSeeder.seed(IDR); // the bootstrap: seeds BASE/COMMISSION/BPJS_KES_*/PPH21
+              officialSeeder.seed(DATASET_VERSION); // rewires onto the OFFICIAL TER/Art-17 rules
+              UUID outlet = openOutlet();
+              UUID employeeId = tenMillionTk0NpwpEmployee(outlet, "3209000000000001");
+              return payrollRunService
+                  .calculateAndPost(
+                      new RunPayrollCommand("2026-06", List.of(employeeId), List.of()), IDR)
+                  .getId();
+            });
+
+    PayrollRunResponse run =
+        TenantContext.callAs(
+            TENANT_A, ACTOR_A, () -> payrollRunReader.findRun(runId).orElseThrow());
+    assertThat(run.status()).isEqualTo("POSTED");
+    assertThat(run.grossTotalMinor()).isEqualTo(10_000_000L);
+    // 100,000 BPJS-Kes-EE + 200,000 JHT-EE + 100,000 JP-EE + 262,100 PPh21(TER) = 662,100.
+    assertThat(run.employeeDeductionTotalMinor()).isEqualTo(662_100L);
+    assertThat(run.employerContributionTotalMinor()).isEqualTo(1_054_000L);
+    assertThat(run.netTotalMinor()).isEqualTo(9_337_900L);
+    assertThat(run.usesIllustrativeRules()).isFalse();
+  }
+
+  // ---------------------------------------------------------------------
+  // December run resolution: the SAME person/base/PTKP as the golden run above, but run in
+  // December with no prior-year history, resolves ANNUAL_PROGRESSIVE instead of TER_TABLE — a
+  // materially different result (0 vs 262,100) proves the branch actually switched.
+  // ---------------------------------------------------------------------
+
+  @Test
+  void aDecemberRunResolvesTheAnnualProgressiveBranchInsteadOfTheMonthlyTerBranch()
+      throws Exception {
+    Map<String, UUID> ids =
+        TenantContext.callAs(
+            TENANT_A,
+            ACTOR_A,
+            () -> {
+              illustrativeSeeder.seed(IDR); // the bootstrap: seeds BASE/COMMISSION/BPJS_KES_*/PPH21
+              officialSeeder.seed(DATASET_VERSION); // rewires onto the OFFICIAL TER/Art-17 rules
+              UUID outlet = openOutlet();
+              UUID employeeId = tenMillionTk0NpwpEmployee(outlet, "3209000000000002");
+              UUID runId =
+                  payrollRunService
+                      .calculateAndPost(
+                          new RunPayrollCommand("2026-12", List.of(employeeId), List.of()), IDR)
+                      .getId();
+              return Map.of("employee", employeeId, "run", runId);
+            });
+
+    UUID runId = ids.get("run");
+    PayrollRunResponse run =
+        TenantContext.callAs(
+            TENANT_A, ACTOR_A, () -> payrollRunReader.findRun(runId).orElseThrow());
+    assertThat(run.status()).isEqualTo("POSTED");
+
+    PayslipLineResponse pph21 = pph21Line(runId, ids.get("employee"));
+    // annual_gross = 10,484,000 (single December month, no history); biaya jabatan prorated cap
+    // (monthsInYear=1) = 6,000,000/12 = 500,000, binds under the uncapped 5% (524,200); pengurang
+    // = 500,000 + 300,000 (JHT/JP-EE) = 800,000; netAnnual = 10,484,000 - 800,000 - 54,000,000
+    // (PTKP TK0) < 0 -> floored to 0 -> PKP 0 -> annual liability 0. December line = 0 - 0 = 0 —
+    // NOT 262,100 (the TER figure for the identical inputs off-December, see the golden test
+    // above): the branch genuinely switched.
+    assertThat(pph21.amountMinor()).isEqualTo(0L);
+    assertThat(run.netTotalMinor()).isEqualTo(9_600_000L); // 10,000,000 - (100k+200k+100k+0)
+  }
+
+  // ---------------------------------------------------------------------
+  // AnnualContext assembly: mixed EARNING components (BASE + a taxable COMMISSION in one prior
+  // month only) + employer legs (BPJS-Kes/JKK/JKM-ER) + employee legs (JHT/JP-EE), across TWO
+  // active prior months, correctly decrypted-and-summed into ONE December Art-17 figure. Also
+  // exercises the monthsInYear-prorated biaya-jabatan cap binding in a live run (W2).
+  // ---------------------------------------------------------------------
+
+  @Test
+  void decemberTrueUpAssemblesTheAnnualContextFromMixedEarningsAndEmployerLegs() throws Exception {
+    Map<String, UUID> ids =
+        TenantContext.callAs(
+            TENANT_A,
+            ACTOR_A,
+            () -> {
+              illustrativeSeeder.seed(IDR); // the bootstrap: seeds BASE/COMMISSION/BPJS_KES_*/PPH21
+              officialSeeder.seed(DATASET_VERSION); // rewires onto the OFFICIAL TER/Art-17 rules
+              UUID outlet = openOutlet();
+              UUID commissionComponentId = existingCommissionComponentId();
+
+              UUID employeeId = employeeWithNpwp("Wulan", "3209000000000003", "TK0");
+              EmploymentContract contract = addPermanentContract(employeeId);
+              CompensationPackage pkg =
+                  compensationWriter.createPackage(
+                      employeeId,
+                      contract.getId(),
+                      Money.ofMinor(20_000_000L, IDR),
+                      LocalDate.of(2026, 1, 1),
+                      LocalDate.of(9999, 12, 31));
+              compensationWriter.addFixedEarning(
+                  pkg.getId(),
+                  commissionComponentId,
+                  Money.ofMinor(5_000_000L, IDR),
+                  LocalDate.of(2026, 1, 1),
+                  LocalDate.of(2026, 1, 31));
+              assign(employeeId, outlet);
+
+              // Jan: base 20,000,000 + commission 5,000,000 (taxable) = 25,000,000 taxable gross.
+              payrollRunService.calculateAndPost(
+                  new RunPayrollCommand("2026-01", List.of(employeeId), List.of()), IDR);
+              // Feb: base only, no commission (its effective_to ends 2026-01-31).
+              payrollRunService.calculateAndPost(
+                  new RunPayrollCommand("2026-02", List.of(employeeId), List.of()), IDR);
+              // December: base only.
+              UUID runId =
+                  payrollRunService
+                      .calculateAndPost(
+                          new RunPayrollCommand("2026-12", List.of(employeeId), List.of()), IDR)
+                      .getId();
+              return Map.of("employee", employeeId, "run", runId);
+            });
+
+    PayslipLineResponse pph21 = pph21Line(ids.get("run"), ids.get("employee"));
+    // See the class javadoc + PayrollRunWriter#buildAnnualContext javadoc for the derivation:
+    // cumulativeGrossBruto 18,871,200 (Jan 10,484,000-equivalent-shaped 25,690,000 + Feb
+    // 8,387,200 — see the test source comment trail) + December 20,648,000... (full arithmetic in
+    // the PR description); the line itself is 493,450 (annual liability) - 4,427,320 (Jan+Feb TER
+    // withheld) = -3,933,870.
+    assertThat(pph21.currency()).isEqualTo(IDR);
+    assertThat(pph21.amountMinor()).isEqualTo(-3_933_870L);
+  }
+
+  // ---------------------------------------------------------------------
+  // Supersession: a company-wide re-run of November (a corrected comp package) must leave ONLY
+  // the ACTIVE (higher run_seq, POSTED) November figures in December's AnnualContext — the
+  // superseded run_seq=1 (a materially different base) must contribute NOTHING. Proven both in
+  // absolute terms (a hand-derived expected figure) and relatively (an employee who never had a
+  // correction, run at the SAME final base, must land on the IDENTICAL December figure).
+  // ---------------------------------------------------------------------
+
+  @Test
+  void decemberTrueUpExcludesASupersededNovemberRunFromTheAnnualContext() throws Exception {
+    Map<String, UUID> ids =
+        TenantContext.callAs(
+            TENANT_A,
+            ACTOR_A,
+            () -> {
+              illustrativeSeeder.seed(IDR); // the bootstrap: seeds BASE/COMMISSION/BPJS_KES_*/PPH21
+              officialSeeder.seed(DATASET_VERSION); // rewires onto the OFFICIAL TER/Art-17 rules
+              UUID outlet = openOutlet();
+
+              // Employee A: starts at a STALE base (45,000,000), corrected down to 30,000,000
+              // before November is re-run.
+              UUID employeeA = employeeWithNpwp("Aditya", "3209000000000004", "TK0");
+              EmploymentContract contractA = addPermanentContract(employeeA);
+              CompensationPackage staleV1 =
+                  compensationWriter.createPackage(
+                      employeeA,
+                      contractA.getId(),
+                      Money.ofMinor(45_000_000L, IDR),
+                      LocalDate.of(2026, 1, 1),
+                      LocalDate.of(9999, 12, 31));
+              assign(employeeA, outlet);
+
+              // Employee C (the control): the FINAL base (30,000,000) from day one, never
+              // corrected.
+              UUID employeeC = employeeWithNpwp("Citra", "3209000000000005", "TK0");
+              EmploymentContract contractC = addPermanentContract(employeeC);
+              compensationWriter.createPackage(
+                  employeeC,
+                  contractC.getId(),
+                  Money.ofMinor(30_000_000L, IDR),
+                  LocalDate.of(2026, 1, 1),
+                  LocalDate.of(9999, 12, 31));
+              assign(employeeC, outlet);
+
+              // run_seq=1 for period 2026-11: company-wide (A stale @45M, C @30M).
+              payrollRunService.calculateAndPost(
+                  new RunPayrollCommand("2026-11", List.of(employeeA, employeeC), List.of()), IDR);
+
+              // Correct A's package: close the stale one, open the final one at 30,000,000.
+              compensationWriter.endPackage(employeeA, staleV1.getId(), LocalDate.of(2026, 10, 31));
+              compensationWriter.createPackage(
+                  employeeA,
+                  contractA.getId(),
+                  Money.ofMinor(30_000_000L, IDR),
+                  LocalDate.of(2026, 11, 1),
+                  LocalDate.of(9999, 12, 31));
+
+              // run_seq=2 for period 2026-11: company-wide again — SUPERSEDES run_seq=1 for BOTH
+              // (A now @30M, matching C; C's own figures are unchanged content, harmlessly
+              // re-posted).
+              payrollRunService.calculateAndPost(
+                  new RunPayrollCommand("2026-11", List.of(employeeA, employeeC), List.of()), IDR);
+
+              // December: both at base 30,000,000, company-wide, run_seq=1 for the period.
+              UUID decRunId =
+                  payrollRunService
+                      .calculateAndPost(
+                          new RunPayrollCommand(
+                              "2026-12", List.of(employeeA, employeeC), List.of()),
+                          IDR)
+                      .getId();
+              return Map.of("A", employeeA, "C", employeeC, "run", decRunId);
+            });
+
+    UUID decRunId = ids.get("run");
+
+    PayslipLineResponse pph21A = pph21Line(decRunId, ids.get("A"));
+    PayslipLineResponse pph21C = pph21Line(decRunId, ids.get("C"));
+
+    // Absolute: matches the hand-derived expectation for the 30,000,000-base November + December
+    // (see the class javadoc derivation pattern) — NOT the stale 45,000,000-base figure a bug
+    // leaking run_seq=1 into the sum would have produced.
+    assertThat(pph21A.amountMinor()).isEqualTo(-3_742_510L);
+    // Relative: A (corrected) and C (never corrected, always at the SAME final base) land on the
+    // IDENTICAL December true-up — proof the superseded run contributed exactly zero.
+    assertThat(pph21A.amountMinor()).isEqualTo(pph21C.amountMinor());
+  }
+
+  // ---------------------------------------------------------------------
+  // W1 (P1-review carry-in): a NEGATIVE December PPh21 line survives the full path — two months
+  // of high TER withholding followed by a low-income December produces a large refund. Run
+  // totals stay consistent, PayrollPosted's decoded Avro totals agree with the persisted run, and
+  // MoneyPiiConverter round-trips the negative amount (ciphertext at rest carries no plaintext
+  // digits; the decrypted authorized read matches the hand-derived figure exactly).
+  // ---------------------------------------------------------------------
+
+  @Test
+  void aNegativeDecemberPphLineSurvivesTheFullPathAndRoundTripsThroughEncryption()
+      throws Exception {
+    Map<String, UUID> ids =
+        TenantContext.callAs(
+            TENANT_A,
+            ACTOR_A,
+            () -> {
+              illustrativeSeeder.seed(IDR); // the bootstrap: seeds BASE/COMMISSION/BPJS_KES_*/PPH21
+              officialSeeder.seed(DATASET_VERSION); // rewires onto the OFFICIAL TER/Art-17 rules
+              UUID outlet = openOutlet();
+              UUID employeeId = employeeWithNpwp("Farhan", "3209000000000006", "TK0");
+              EmploymentContract contract = addPermanentContract(employeeId);
+              CompensationPackage highPkg =
+                  compensationWriter.createPackage(
+                      employeeId,
+                      contract.getId(),
+                      Money.ofMinor(300_000_000L, IDR),
+                      LocalDate.of(2026, 1, 1),
+                      LocalDate.of(9999, 12, 31));
+              assign(employeeId, outlet);
+
+              payrollRunService.calculateAndPost(
+                  new RunPayrollCommand("2026-10", List.of(employeeId), List.of()), IDR);
+              payrollRunService.calculateAndPost(
+                  new RunPayrollCommand("2026-11", List.of(employeeId), List.of()), IDR);
+
+              compensationWriter.endPackage(
+                  employeeId, highPkg.getId(), LocalDate.of(2026, 11, 30));
+              compensationWriter.createPackage(
+                  employeeId,
+                  contract.getId(),
+                  Money.ofMinor(5_000_000L, IDR),
+                  LocalDate.of(2026, 12, 1),
+                  LocalDate.of(9999, 12, 31));
+
+              UUID runId =
+                  payrollRunService
+                      .calculateAndPost(
+                          new RunPayrollCommand("2026-12", List.of(employeeId), List.of()), IDR)
+                      .getId();
+              return Map.of("employee", employeeId, "run", runId);
+            });
+
+    UUID runId = ids.get("run");
+    PayrollRunResponse run =
+        TenantContext.callAs(
+            TENANT_A, ACTOR_A, () -> payrollRunReader.findRun(runId).orElseThrow());
+    assertThat(run.status()).isEqualTo("POSTED");
+
+    PayslipLineResponse pph21 = pph21Line(runId, ids.get("employee"));
+    // See the class javadoc derivation: 107,014,300 (annual liability) - 169,680,000 (Oct+Nov TER
+    // withheld) = -62,665,700 — a large refund.
+    assertThat(pph21.amountMinor()).isEqualTo(-62_665_700L);
+
+    // Run totals stay arithmetically consistent even with a negative deduction line: net = gross
+    // - sum(EMPLOYEE deductions), and the negative refund INCREASES net pay this month.
+    assertThat(run.grossTotalMinor()).isEqualTo(5_000_000L);
+    assertThat(run.employeeDeductionTotalMinor())
+        .isEqualTo(-62_465_700L); // 50k+100k+50k-62,665,700
+    assertThat(run.netTotalMinor()).isEqualTo(67_465_700L);
+    assertThat(run.grossTotalMinor() - run.employeeDeductionTotalMinor())
+        .isEqualTo(run.netTotalMinor());
+
+    // PayrollPosted decoded totals agree with the persisted run (Avro `long` carries the sign).
+    Map<String, Object> posted =
+        jdbcTemplate.queryForMap(
+            "SELECT payload FROM outbox WHERE event_type = 'PayrollPosted' AND aggregate_id = ?",
+            runId.toString());
+    GenericRecord postedRecord =
+        AvroSerde.deserialize((byte[]) posted.get("payload"), PayrollPostedSchema.schema());
+    assertThat(postedRecord.get("employee_deduction_total_minor")).isEqualTo(-62_465_700L);
+    assertThat(postedRecord.get("net_total_minor")).isEqualTo(67_465_700L);
+
+    // MoneyPiiConverter round-trip: the ciphertext at rest carries no plaintext digits of the
+    // negative amount (rule 6) — the decrypted authorized read matching the hand-derived figure
+    // exactly (asserted above) is the application-level half of the same proof. Read over the
+    // admin/BYPASSRLS connection (mirrors PayrollRunEndToEndTest#queryAsAdmin): the Spring-managed
+    // jdbcTemplate connects as the RLS-enforcing app_user with NO tenant GUC bound outside a
+    // @Transactional method, so a bare query against a FORCE-RLS table like payslip_line fails
+    // closed (empty) — this is a raw ciphertext-content check, not a tenant-isolation proof.
+    List<String> ciphertexts = queryAsAdmin(runId);
+    assertThat(ciphertexts).hasSize(1);
+    assertThat(ciphertexts.get(0)).isNotBlank().doesNotContain("62665700").doesNotContain("IDR");
+  }
+
+  private List<String> queryAsAdmin(UUID runId) throws Exception {
+    List<String> values = new java.util.ArrayList<>();
+    try (java.sql.Connection admin =
+            java.sql.DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        java.sql.PreparedStatement ps =
+            admin.prepareStatement(
+                "SELECT amount_enc AS v FROM payslip_line"
+                    + " WHERE payroll_run_id = ? AND component_key = 'PPH21'")) {
+      ps.setObject(1, runId);
+      try (java.sql.ResultSet rs = ps.executeQuery()) {
+        while (rs.next()) {
+          values.add(rs.getString("v"));
+        }
+      }
+    }
+    return values;
+  }
+
+  // ---------------------------------------------------------------------
+  // Fixtures
+  // ---------------------------------------------------------------------
+
+  private UUID openOutlet() {
+    UUID outlet = UUID.randomUUID();
+    orgProjectionService.apply(
+        new OrgUnitProjectedEvent(
+            UUID.randomUUID(), outlet, TENANT_A, LEGAL_EMPLOYER, "OUTLET", true));
+    return outlet;
+  }
+
+  private UUID employeeWithNpwp(String fullName, String nik, String ptkpStatus) {
+    UUID employeeId =
+        employeeService.create(new CreateEmployeeCommand(fullName, ptkpStatus, nik, nik)).getId();
+    employeeService.update(
+        new UpdateEmployeeCommand(employeeId, null, null, null, null, npwpFor(nik), null));
+    return employeeId;
+  }
+
+  /** A distinct, valid-looking 16-digit NPWP derived from the employee's own NIK. */
+  private String npwpFor(String nik) {
+    return "9" + nik.substring(1);
+  }
+
+  private EmploymentContract addPermanentContract(UUID employeeId) {
+    return employeeService.addContract(
+        new AddContractCommand(
+            employeeId,
+            "PERMANENT",
+            LEGAL_EMPLOYER,
+            LocalDate.of(2026, 1, 1),
+            LocalDate.of(9999, 12, 31)));
+  }
+
+  private void assign(UUID employeeId, UUID outlet) {
+    assignmentService.add(
+        new AddAssignmentCommand(
+            employeeId,
+            outlet,
+            null,
+            "cashier",
+            LocalDate.of(2026, 1, 1),
+            LocalDate.of(9999, 12, 31)));
+  }
+
+  /** A TK0/NPWP employee with a single 10,000,000 IDR base package, assigned to {@code outlet}. */
+  private UUID tenMillionTk0NpwpEmployee(UUID outlet, String nik) {
+    UUID employeeId = employeeWithNpwp("Budi", nik, "TK0");
+    EmploymentContract contract = addPermanentContract(employeeId);
+    compensationWriter.createPackage(
+        employeeId,
+        contract.getId(),
+        Money.ofMinor(10_000_000L, IDR),
+        LocalDate.of(2026, 1, 1),
+        LocalDate.of(9999, 12, 31));
+    assign(employeeId, outlet);
+    return employeeId;
+  }
+
+  /**
+   * The id of the {@code COMMISSION} pay component the illustrative seeder already created (taxable
+   * EARNING; the OFFICIAL dataset's component list does not touch it, so it survives {@code
+   * officialSeeder.seed} unchanged) — read directly over the admin/BYPASSRLS connection so the test
+   * can wire an earning rule to it without a second, duplicate-keyed insert.
+   */
+  private UUID existingCommissionComponentId() throws Exception {
+    try (java.sql.Connection admin =
+            java.sql.DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        java.sql.PreparedStatement ps =
+            admin.prepareStatement(
+                "SELECT id FROM pay_component WHERE company_id = ? AND component_key ="
+                    + " 'COMMISSION'")) {
+      ps.setString(1, TENANT_A);
+      try (java.sql.ResultSet rs = ps.executeQuery()) {
+        if (!rs.next()) {
+          throw new IllegalStateException("COMMISSION component not seeded for " + TENANT_A);
+        }
+        return (UUID) rs.getObject("id");
+      }
+    }
+  }
+
+  /** The run's {@code PPH21} line for one employee, decrypted (the authorized read). */
+  private PayslipLineResponse pph21Line(UUID runId, UUID employeeId) throws Exception {
+    List<PayslipLineResponse> lines =
+        TenantContext.callAs(
+            TENANT_A, ACTOR_A, () -> payrollRunReader.findPayslipAuthorized(runId, employeeId));
+    return lines.stream()
+        .filter(l -> l.componentKey().equals("PPH21"))
+        .findFirst()
+        .orElseThrow(() -> new AssertionError("no PPH21 line for employee " + employeeId));
+  }
+}

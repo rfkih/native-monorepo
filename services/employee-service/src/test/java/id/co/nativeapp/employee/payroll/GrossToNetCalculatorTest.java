@@ -623,11 +623,14 @@ class GrossToNetCalculatorTest {
 
   @Test
   void decemberTrueUpAppliesTheNoNpwpSurchargeToTheAnnualLiability() {
-    // annual_gross = 70,000,000 (single month, no cumulative); biaya jabatan = 3,500,000; PTKP
-    // TK0 = 54,000,000. netAnnual = 70,000,000 - 3,500,000 - 54,000,000 = 12,500,000 -> first
-    // (5%) bracket -> liability 625,000. no_npwp_surcharge_bp (12000 = x1.20) applies to the
-    // ANNUAL LIABILITY itself, exactly like the TER branch.
-    AnnualContext context = new AnnualContext(0L, 0L, 0L, 1);
+    // annual_gross = 70,000,000 (single month, no cumulative); a FULL-YEAR employee
+    // (monthsInYear=12, so the occupational-cost cap is UNPRORATED — this test isolates the
+    // no-NPWP surcharge only, W2's proration is covered separately below) -> biaya jabatan =
+    // 3,500,000 (well under the unprorated 6,000,000 cap); PTKP TK0 = 54,000,000. netAnnual =
+    // 70,000,000 - 3,500,000 - 54,000,000 = 12,500,000 -> first (5%) bracket -> liability
+    // 625,000. no_npwp_surcharge_bp (12000 = x1.20) applies to the ANNUAL LIABILITY itself,
+    // exactly like the TER branch.
+    AnnualContext context = new AnnualContext(0L, 0L, 0L, 12);
 
     PersonResult withNpwp =
         calculator.compute(
@@ -647,6 +650,58 @@ class GrossToNetCalculatorTest {
     assertThatThrownBy(() -> calculator.compute(input))
         .isInstanceOf(IllegalStateException.class)
         .hasMessageContaining("AnnualContext");
+  }
+
+  // =========================================================================
+  // monthsInYear proration of the biaya-jabatan occupational-cost cap (Track P phase P3 W2):
+  // occupational_cost_cap_annual_minor * monthsInYear / 12. PTKP relief is NEVER prorated.
+  // =========================================================================
+
+  @Test
+  void decemberTrueUpProratesTheOccupationalCostCapByMonthsInYear() {
+    // A 3-month joiner: prorated cap = 6,000,000 * 3/12 = 1,500,000, well under the uncapped 5%
+    // of a 70,000,000 annual gross (3,500,000) — the cap BINDS where the unprorated annual cap
+    // (6,000,000) would not have. pengurang = 1,500,000 (capped) + 0; netAnnual = 70,000,000 -
+    // 1,500,000 - 54,000,000 (PTKP, unprorated) = 14,500,000 -> first (5%) bracket -> 725,000.
+    AnnualContext threeMonths = new AnnualContext(0L, 0L, 0L, 3);
+    PersonResult result =
+        calculator.compute(
+            annualInput(Money.ofMinor(70_000_000L, IDR), true, threeMonths, annualRules()));
+
+    assertThat(line(result, "PPH21").calcBasis()).isEqualTo(Money.ofMinor(14_500_000L, IDR));
+    assertThat(lineAmount(result, "PPH21")).isEqualTo(Money.ofMinor(725_000L, IDR));
+  }
+
+  @Test
+  void decemberTrueUpDoesNotCapTheOccupationalCostWhenTheProratedCapDoesNotBind() {
+    // A full-year employee (monthsInYear=12) computing the SAME 70,000,000 annual gross as the
+    // no-NPWP-surcharge test above: the cap is unprorated (6,000,000) and does not bind against
+    // the uncapped 5% (3,500,000) — byte-identical to the pre-W2 (monthsInYear-oblivious)
+    // behaviour. Directly contrasts with the capped 3-month case above: SAME annual_gross, a
+    // DIFFERENT (larger) pengurang because more months means a larger, non-binding cap.
+    AnnualContext twelveMonths = new AnnualContext(0L, 0L, 0L, 12);
+    PersonResult result =
+        calculator.compute(
+            annualInput(Money.ofMinor(70_000_000L, IDR), true, twelveMonths, annualRules()));
+
+    assertThat(line(result, "PPH21").calcBasis()).isEqualTo(Money.ofMinor(12_500_000L, IDR));
+    assertThat(lineAmount(result, "PPH21")).isEqualTo(Money.ofMinor(625_000L, IDR));
+  }
+
+  @Test
+  void decemberTrueUpNeverProratesPtkpRelief() {
+    // Even at monthsInYear=1 (the shortest possible partial year), PTKP stays the FULL annual
+    // 54,000,000 TK0 figure — only biaya jabatan is prorated. annual_gross = 55,000,000; biaya
+    // jabatan uncapped = 2,750,000, prorated cap (1/12) = 500,000 -> capped at 500,000; netAnnual
+    // = 55,000,000 - 500,000 - 54,000,000 = 500,000 (NOT negative, proving the full 54,000,000
+    // PTKP was subtracted, not a fraction of it) -> first (5%) bracket -> 25,000.
+    AnnualContext oneMonth = new AnnualContext(0L, 0L, 0L, 1);
+    PersonResult result =
+        calculator.compute(
+            annualInput(Money.ofMinor(55_000_000L, IDR), true, oneMonth, annualRules()));
+
+    assertThat(line(result, "PPH21").calcBasis()).isEqualTo(Money.ofMinor(500_000L, IDR));
+    assertThat(lineAmount(result, "PPH21")).isEqualTo(Money.ofMinor(25_000L, IDR));
   }
 
   private static ComputedLine line(PersonResult result, String key) {

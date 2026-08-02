@@ -196,3 +196,39 @@ figures the implementing agent structurally could not.
   `PPH21_ARTICLE17`/`BIAYA_JABATAN` (phase P3) are the two most consequential tracked follow-ups
   from this phase — both already called out at their exact insertion point above rather than
   buried in a changelog.
+
+## P3 update (2026-08-02) — the December Art-17 branch is wired; residual notes
+
+Track P phase P3 wires the December/final-month true-up this ADR anticipated. `PayrollRunWriter`
+detects a December period whose frozen rule set resolves an `ANNUAL_PROGRESSIVE` rule (`PPH21_ARTICLE17`
+in `ID-2026.1`) and, ONLY then, swaps the person's monthly income-tax component (`PPH21`, normally
+`PPH21_TER`) onto the annual rule via an in-memory `PayComponent#asAnnualTrueUpVariant` — never a
+catalog write, so every other month is unaffected. `PayslipLineRepository.findActiveLinesForEmployeeYear`
++ `findActivePriorPeriodsForEmployeeYear` supply the year-to-date history (POSTED, max `run_seq` per
+period — the correlated-subselect definition of "active" this ADR's supersession discussion assumed),
+decrypted and Money-summed by the writer into `AnnualContext` — no `payroll_ytd` accumulator table,
+per the reconciliation notes.
+
+**Historical-reconstruction approximation (documented honestly).** A historical `payslip_line` stamps
+`component_key`/`kind`/`bearer` but not whether the component was taxable, nor whether its rule's
+`employer_adds_to_tax_base`/`reduces_tax_base` flags held, AT THE TIME the line was produced — those
+live on the mutable `pay_component` catalog / effective-dated `statutory_rule`. `buildAnnualContext`
+resolves every historical line against the CURRENT catalog / the CURRENT frozen rule set (the same one
+December's own run just resolved), not a re-resolution of each prior month's own as-of rule set. This
+is correct whenever a component's taxability and a rule's tax-base flags are stable all year (the
+expected case) but can misclassify a prior month's line if either was edited mid-year (e.g. a PATCH
+override changing a BPJS leg's tax treatment in July). Re-resolving each historical month's own as-of
+rule set exactly would be materially more complex for a benefit that is rare in practice; tracked as a
+residual, not silently claimed to be handled.
+
+**monthsInYear now drives the biaya-jabatan cap only (W2).** `occupational_cost_cap_annual_minor *
+monthsInYear / 12` prorates PMK 250/2008's inherently-monthly Rp500,000/month cap for a partial-year
+joiner. PTKP relief is deliberately NEVER prorated — a full-year-resident employee's Art-17 employer
+annual reconciliation applies the full annual PTKP regardless of when in the year they joined (K/I
+spouse-combined PTKP proration remains the separate, out-of-scope annual-return concern this ADR's
+statutory specification already excluded).
+
+**Residual, unchanged from phase P2's forecast:** the JKK risk-class gap, and now also a
+termination-month final true-up (an employee who leaves mid-year needs their OWN Art-17 reconciliation
+at their last paid month, not only ever in December — this needs employment end dates the run does not
+yet consume) — both remain tracked follow-ups, not silently claimed complete by this phase.

@@ -29,6 +29,8 @@ export const en = {
       empty: 'No payslips yet. They appear here after payroll runs.',
       runSeq: 'Run #{{seq}}',
       illustrative: 'Illustrative',
+      trueUp: 'Annual true-up',
+      trueUpCredit: 'Refund',
       lines: '{{count}} lines',
       gross: 'Gross',
       deductions: 'Deductions',
@@ -951,6 +953,7 @@ export const en = {
       },
       history: {
         runLabel: 'Run #{{seq}}',
+        trueUpBadge: 'Annual true-up',
         empty: 'No payroll runs for this period',
         emptyHint: 'Run payroll to see totals, payslips, and labor cost by outlet here.',
         failedLabel: 'Failed — nothing posted',

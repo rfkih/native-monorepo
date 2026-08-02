@@ -49,9 +49,16 @@ public final class PayrollInputs {
    * @param cumulativeDeductibleSocialMinor Jan..(month-1) employee-deductible social legs (e.g.
    *     JHT-EE + JP-EE; BPJS-Kesehatan-EE is NOT deductible), minor units
    * @param cumulativeWithheldMinor Jan..(month-1) PPh21 actually withheld, minor units
-   * @param monthsInYear how many months this employee was paid in the fiscal year so far; carried
-   *     for a future partial-year-joiner PTKP-proration follow-up (documented, NOT yet consumed by
-   *     the December formula — a permanent employee paid the full year needs no proration)
+   * @param monthsInYear how many months (inclusive of this run's own month) this employee was paid
+   *     in the fiscal year so far — prorates the biaya-jabatan occupational-cost cap ({@code
+   *     occupational_cost_cap_annual_minor × monthsInYear / 12}; PMK 250/2008's Rp500,000/month
+   *     figure is inherently monthly, so a mid-year joiner's ANNUAL cap must scale down with them,
+   *     Track P phase P3 W2). <strong>PTKP relief is deliberately NOT prorated</strong> — a
+   *     full-year-resident employee's Art-17 employer annual reconciliation applies the FULL annual
+   *     PTKP regardless of when in the year they joined (the domain spec is explicit on this; K/I
+   *     spouse-combined PTKP proration is a separate, out-of-scope annual-return concern). A
+   *     permanent employee paid the full year passes {@code monthsInYear = 12}, under which the cap
+   *     is unprorated (identity division) — byte-identical to the pre-W2 behaviour.
    */
   public record AnnualContext(
       long cumulativeGrossBrutoMinor,

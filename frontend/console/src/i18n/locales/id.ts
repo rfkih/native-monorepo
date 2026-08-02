@@ -27,6 +27,8 @@ export const id = {
       empty: 'Belum ada slip gaji. Muncul di sini setelah penggajian diproses.',
       runSeq: 'Proses #{{seq}}',
       illustrative: 'Ilustratif',
+      trueUp: 'Penyesuaian tahunan',
+      trueUpCredit: 'Pengembalian',
       lines: '{{count}} baris',
       gross: 'Bruto',
       deductions: 'Potongan',
@@ -948,6 +950,7 @@ export const id = {
       },
       history: {
         runLabel: 'Proses #{{seq}}',
+        trueUpBadge: 'Penyesuaian tahunan',
         empty: 'Belum ada proses gaji periode ini',
         emptyHint: 'Proses gaji untuk melihat total, slip gaji, dan biaya tenaga kerja per gerai.',
         failedLabel: 'Gagal — tidak ada yang dibukukan',

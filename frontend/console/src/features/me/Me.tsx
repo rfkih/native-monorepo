@@ -162,6 +162,11 @@ export function Me() {
   )
 }
 
+/** A period ("YYYY-MM") is December — the run that may carry the annual Art-17 true-up. */
+function isDecemberPeriod(period: string): boolean {
+  return period.endsWith('-12')
+}
+
 function Detail({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-4 sm:block">
@@ -309,6 +314,9 @@ function PayslipRow({
         {slip.runSeq > 1 ? (
           <span className="text-xs text-ink-3">{t('me.payslips.runSeq', { seq: slip.runSeq })}</span>
         ) : null}
+        {isDecemberPeriod(slip.period) ? (
+          <Badge tone="info">{t('me.payslips.trueUp')}</Badge>
+        ) : null}
         {slip.illustrative ? (
           <Badge tone="amber">{t('me.payslips.illustrative')}</Badge>
         ) : null}
@@ -359,32 +367,53 @@ function PayslipRow({
                     </tr>
                   </thead>
                   <tbody>
-                    {detail.data.lines.map((line, i) => (
-                      <tr key={`${line.componentKey}-${i}`} className="text-ink-2">
-                        <td className="py-1.5 pr-4 font-mono text-xs">{line.componentKey}</td>
-                        <td className="py-1.5 pr-4 text-xs">
-                          {t(
-                            line.kind === 'EARNING'
-                              ? 'me.payslips.earning'
-                              : 'me.payslips.deduction',
-                          )}
-                          {line.bearer === 'EMPLOYER' ? (
-                            <span className="ml-1 text-ink-3">
-                              ({t('me.payslips.employer')})
-                            </span>
-                          ) : null}
-                        </td>
-                        <td
-                          className={cn(
-                            'tnum py-1.5 text-right font-mono text-xs',
-                            line.kind === 'DEDUCTION' ? 'text-loss' : 'text-ink',
-                          )}
-                        >
-                          {line.kind === 'DEDUCTION' ? '−' : ''}
-                          {formatMoney(line.amountMinor, line.currency, locale)}
-                        </td>
-                      </tr>
-                    ))}
+                    {detail.data.lines.map((line, i) => {
+                      // A DEDUCTION is conventionally shown NEGATED (it subtracts from net pay);
+                      // stored deduction amounts are ordinarily positive, so this flips the sign
+                      // for display. The December/final-month Art-17 true-up (Track P phase P3)
+                      // can produce a NEGATIVE stored PPh21 line (an over-withheld refund) —
+                      // flipping ITS sign correctly renders a POSITIVE credit, not a double
+                      // minus. Never concatenate a literal minus glyph in front of
+                      // Intl.NumberFormat's own sign (formatMoney already renders one for a
+                      // negative value) — that was the bug: "−" + "-Rp150.000" rendered as a
+                      // double negative.
+                      const displayMinor = line.kind === 'DEDUCTION' ? -line.amountMinor : line.amountMinor
+                      const isCredit = line.kind === 'DEDUCTION' && displayMinor >= 0
+                      return (
+                        <tr key={`${line.componentKey}-${i}`} className="text-ink-2">
+                          <td className="py-1.5 pr-4 font-mono text-xs">{line.componentKey}</td>
+                          <td className="py-1.5 pr-4 text-xs">
+                            {t(
+                              line.kind === 'EARNING'
+                                ? 'me.payslips.earning'
+                                : 'me.payslips.deduction',
+                            )}
+                            {line.bearer === 'EMPLOYER' ? (
+                              <span className="ml-1 text-ink-3">
+                                ({t('me.payslips.employer')})
+                              </span>
+                            ) : null}
+                            {isCredit ? (
+                              <span className="ml-1.5">
+                                <Badge tone="profit">{t('me.payslips.trueUpCredit')}</Badge>
+                              </span>
+                            ) : null}
+                          </td>
+                          <td
+                            className={cn(
+                              'tnum py-1.5 text-right font-mono text-xs',
+                              line.kind !== 'DEDUCTION'
+                                ? 'text-ink'
+                                : isCredit
+                                  ? 'text-profit-ink'
+                                  : 'text-loss',
+                            )}
+                          >
+                            {formatMoney(displayMinor, line.currency, locale)}
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>

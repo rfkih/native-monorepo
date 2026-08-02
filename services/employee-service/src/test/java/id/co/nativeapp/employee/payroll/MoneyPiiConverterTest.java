@@ -37,6 +37,18 @@ class MoneyPiiConverterTest {
   }
 
   @Test
+  void encryptsToCiphertextAndDecryptsBackToTheSameNegativeMoney() {
+    // The December/final-month Art-17 true-up (Track P phase P3) can produce a NEGATIVE payslip
+    // line (an over-withheld refund) — the converter must round-trip the sign, not just positive
+    // salary figures.
+    Money refund = Money.ofMinor(-62_665_700L, "IDR");
+    String ciphertext = converter.convertToDatabaseColumn(refund);
+
+    assertThat(ciphertext).doesNotContain("62665700").doesNotContain("-62665700");
+    assertThat(converter.convertToEntityAttribute(ciphertext)).isEqualTo(refund);
+  }
+
+  @Test
   void randomIvMeansTwoEncryptionsOfTheSameValueDiffer() {
     Money salary = Money.ofMinor(12_345_678L, "USD");
     String a = converter.convertToDatabaseColumn(salary);

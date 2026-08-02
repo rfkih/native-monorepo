@@ -18,13 +18,17 @@ import id.co.nativeapp.employee.payroll.domain.IncompletePeriodException;
 import id.co.nativeapp.employee.payroll.domain.LaborCostAllocation;
 import id.co.nativeapp.employee.payroll.domain.MetricInput;
 import id.co.nativeapp.employee.payroll.domain.PayComponent;
+import id.co.nativeapp.employee.payroll.domain.PayComponentBearer;
 import id.co.nativeapp.employee.payroll.domain.PayComponentKind;
+import id.co.nativeapp.employee.payroll.domain.PayrollInputs.AnnualContext;
 import id.co.nativeapp.employee.payroll.domain.PayrollInputs.DeductionInput;
 import id.co.nativeapp.employee.payroll.domain.PayrollInputs.EarningInput;
 import id.co.nativeapp.employee.payroll.domain.PayrollInputs.PersonInput;
 import id.co.nativeapp.employee.payroll.domain.PayrollRun;
 import id.co.nativeapp.employee.payroll.domain.PayslipLine;
 import id.co.nativeapp.employee.payroll.domain.RunStatus;
+import id.co.nativeapp.employee.payroll.domain.StatutoryCalcType;
+import id.co.nativeapp.employee.payroll.domain.StatutoryParams;
 import id.co.nativeapp.employee.payroll.domain.StatutoryRule;
 import id.co.nativeapp.employee.payroll.dto.PayrollResult.ComputedLine;
 import id.co.nativeapp.employee.payroll.dto.PayrollResult.PersonResult;
@@ -73,6 +77,16 @@ import org.springframework.transaction.annotation.Transactional;
  * stores the company-level totals. <strong>post</strong> flips CALCULATED -&gt; POSTED and emits
  * {@code PayrollPosted} + aggregated {@code LaborCostAllocated} via the outbox in the SAME
  * transaction (rule 3) — only that transition emits, so a retried post cannot double-emit.
+ *
+ * <p><strong>December / final-month Art-17 true-up (Track P phase P3).</strong> When a run's period
+ * is December AND the frozen rule set resolves an {@code ANNUAL_PROGRESSIVE} rule ({@code
+ * PPH21_ARTICLE17} in the OFFICIAL dataset), {@code calculate} swaps every person's monthly
+ * income-tax component onto the annual rule (see {@link #swapForAnnualTrueUp}) and builds each
+ * person's year-to-date {@link id.co.nativeapp.employee.payroll.domain.PayrollInputs.AnnualContext}
+ * by decrypting and summing their ACTIVE prior-period payslip lines this fiscal year (see {@link
+ * #buildAnnualContext}) — no separate accumulator table; the immutable payslip-line history is the
+ * single source of truth. A non-December run, or a December run for a tenant with no resolved
+ * annual rule, is completely unaffected (byte-identical to a pre-P3 run).
  *
  * <p>PII (salary) is encrypted at rest on the lines and is NEVER logged or evented; events carry
  * only company totals / outlet-GL buckets (rule 6).
@@ -192,6 +206,28 @@ public class PayrollRunWriter {
     List<PayComponent> statutoryComponents = activeStatutoryComponents();
     PayComponent baseComponent = requireComponent("BASE");
 
+    // December / final-month Art-17 true-up (Track P phase P3): wire ONLY when (a) this run's
+    // period is December AND (b) the frozen rule set actually resolves an ANNUAL_PROGRESSIVE rule
+    // (PPH21_ARTICLE17) — a tenant still on the illustrative-only catalog (no such rule) simply
+    // stays on its ordinary monthly branch, byte-identical to a pre-P3 run. When both hold, the
+    // monthly income-tax component (PPH21, normally TER_TABLE/PROGRESSIVE_BRACKET) is swapped
+    // in-memory onto the annual rule for every person in this run — never persisted, the catalog
+    // itself is untouched (see PayComponent#asAnnualTrueUpVariant).
+    boolean isFinalMonth = YearMonth.parse(command.period()).getMonthValue() == 12;
+    String annualTrueUpRuleKey = isFinalMonth ? annualProgressiveRuleKey(resolvedRules) : null;
+    Map<String, PayComponent> catalogByKey = null;
+    if (annualTrueUpRuleKey != null) {
+      statutoryComponents =
+          swapForAnnualTrueUp(statutoryComponents, resolvedRules, annualTrueUpRuleKey);
+      catalogByKey = catalogByComponentKey();
+      log.info(
+          "payroll_run {} period {} is the December/final-month Art-17 true-up — resolved rule"
+              + " {}",
+          run.getId(),
+          run.getPeriod(),
+          annualTrueUpRuleKey);
+    }
+
     Money zero = Money.ofMinor(0L, baseCurrency);
     Money grossTotal = zero;
     Money employeeDeductionTotal = zero;
@@ -209,9 +245,20 @@ public class PayrollRunWriter {
                       new IllegalArgumentException(
                           "Unknown employee in this tenant for payroll run"));
 
+      AnnualContext annualContext =
+          annualTrueUpRuleKey != null
+              ? buildAnnualContext(
+                  employee.getId(), command.period(), baseCurrency, resolvedRules, catalogByKey)
+              : null;
       PersonInput personInput =
           resolvePersonInput(
-              employee, baseComponent, statutoryComponents, resolvedRules, asOf, baseCurrency);
+              employee,
+              baseComponent,
+              statutoryComponents,
+              resolvedRules,
+              asOf,
+              baseCurrency,
+              annualContext);
       PersonResult result = calculator.compute(personInput);
 
       persistPayslipLines(run, employee.getId(), result, tenant);
@@ -443,7 +490,8 @@ public class PayrollRunWriter {
       List<PayComponent> statutoryComponents,
       Map<String, StatutoryRule> resolvedRules,
       LocalDate asOf,
-      String baseCurrency) {
+      String baseCurrency,
+      AnnualContext annualContext) {
     Money base = Money.ofMinor(0L, baseCurrency);
     List<EarningInput> earnings = new ArrayList<>();
     List<DeductionInput> deductions = new ArrayList<>();
@@ -478,11 +526,10 @@ public class PayrollRunWriter {
         List.copyOf(deductions),
         resolvedRules,
         employee.hasNpwp(),
-        // The December/final-month Art-17 true-up context is null on every run in this phase — the
-        // active-payslip-history decrypt-and-sum that builds it is Track P phase P3; until then no
-        // resolved rule set may legally carry an ANNUAL_PROGRESSIVE rule, so the calculator never
-        // needs one.
-        null);
+        // Null on every run except the December/final-month Art-17 true-up (Track P phase P3),
+        // where the caller has already decrypt-and-summed this employee's active prior-period
+        // payslip lines into the year-to-date figures the ANNUAL_PROGRESSIVE branch needs.
+        annualContext);
   }
 
   private void resolveEarningRule(
@@ -637,6 +684,171 @@ public class PayrollRunWriter {
           throw new IllegalStateException(
               "Metric period '" + period + "' is neither monthly (YYYY-MM) nor daily (YYYY-MM-DD)");
     };
+  }
+
+  // ---------------------------------------------------------------------
+  // December / final-month Art-17 true-up (Track P phase P3)
+  // ---------------------------------------------------------------------
+
+  /**
+   * The rule_key of the run's SINGLE resolved {@code ANNUAL_PROGRESSIVE} rule ({@code
+   * PPH21_ARTICLE17} in the OFFICIAL dataset), or {@code null} if the frozen rule set carries none
+   * (a tenant still on the illustrative-only catalog, or a future dataset that drops the family).
+   * {@link #calculate} uses this as the sole guard on whether a December run wires the true-up at
+   * all — a December run with no resolved ANNUAL_PROGRESSIVE rule stays on its ordinary monthly
+   * branch, byte-identical to a pre-P3 run.
+   */
+  private String annualProgressiveRuleKey(Map<String, StatutoryRule> resolvedRules) {
+    for (Map.Entry<String, StatutoryRule> entry : resolvedRules.entrySet()) {
+      if (entry.getValue().getCalcType() == StatutoryCalcType.ANNUAL_PROGRESSIVE) {
+        return entry.getKey();
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Swaps every statutory component whose OWN resolved rule is a MONTHLY income-tax family ({@code
+   * PROGRESSIVE_BRACKET}/{@code TER_TABLE} — i.e. PPH21, whichever family the tenant's catalog
+   * currently wires) onto {@code annualRuleKey} via {@link PayComponent#asAnnualTrueUpVariant};
+   * every other component (the BPJS legs etc.) is left untouched. December must resolve EXACTLY ONE
+   * income-tax family — never both the monthly branch AND the annual true-up, which would
+   * double-tax the month. Computed ONCE per run (not per person): the swap depends only on the
+   * frozen rule set, identical for every employee.
+   */
+  private List<PayComponent> swapForAnnualTrueUp(
+      List<PayComponent> statutoryComponents,
+      Map<String, StatutoryRule> resolvedRules,
+      String annualRuleKey) {
+    List<PayComponent> swapped = new ArrayList<>(statutoryComponents.size());
+    for (PayComponent component : statutoryComponents) {
+      StatutoryRule rule = resolvedRules.get(component.getStatutoryRuleKey());
+      if (rule != null && isMonthlyIncomeTaxFamily(rule.getCalcType())) {
+        swapped.add(component.asAnnualTrueUpVariant(annualRuleKey));
+      } else {
+        swapped.add(component);
+      }
+    }
+    return List.copyOf(swapped);
+  }
+
+  private boolean isMonthlyIncomeTaxFamily(StatutoryCalcType calcType) {
+    return calcType == StatutoryCalcType.PROGRESSIVE_BRACKET
+        || calcType == StatutoryCalcType.TER_TABLE;
+  }
+
+  /**
+   * The full active pay-component catalog keyed by {@code component_key} — fetched ONCE per
+   * December run and shared across every employee's {@link #buildAnnualContext} call, which reads
+   * it to resolve each historical {@link PayslipLine}'s CURRENT taxability / tax-base flags (see
+   * that method's historical-reconstruction javadoc).
+   */
+  private Map<String, PayComponent> catalogByComponentKey() {
+    Map<String, PayComponent> byKey = new LinkedHashMap<>();
+    for (PayComponent component : payComponentRepository.findByActiveTrueOrderByDisplayOrderAsc()) {
+      byKey.put(component.getComponentKey(), component);
+    }
+    return byKey;
+  }
+
+  /**
+   * Builds the December/final-month Art-17 {@link AnnualContext} for one employee: decrypts and
+   * Money-sums their ACTIVE prior-period payslip lines this fiscal year ({@link
+   * PayslipLineRepository#findActiveLinesForEmployeeYear}) — the reconciliation notes' documented
+   * choice over a separate {@code payroll_ytd} accumulator table (immutable payslip lines are the
+   * single source of truth; an accumulator is a perf fallback only if run cost ever bites).
+   *
+   * <p><strong>Historical-reconstruction approximation — documented honestly (ADR 0031 P3 residual
+   * note).</strong> {@code payslip_line} stamps {@code component_key}/{@code kind}/{@code bearer}
+   * but NOT whether the component was taxable, nor whether its rule's {@code
+   * employer_adds_to_tax_base}/{@code reduces_tax_base} flags held, AT THE TIME each historical
+   * line was produced — those flags live on the MUTABLE {@code pay_component} catalog and the
+   * effective-dated {@code statutory_rule}, and reconstructing them exactly as they stood in, say,
+   * March would require re-resolving March's as-of rule set for every prior month individually.
+   * This method instead uses the CURRENT catalog / the CURRENT frozen {@code resolvedRules} (the
+   * SAME map this December run just resolved) for every historical line. This is CORRECT whenever a
+   * component's taxability and a rule's tax-base flags stayed stable all year (the expected, common
+   * case — the OFFICIAL dataset's flags do not change mid-year in the ordinary course), but it CAN
+   * mis-classify a prior month's line if the catalog or a rule's {@code base_kind}/{@code
+   * employer_adds_to_tax_base}/{@code reduces_tax_base} were edited mid-year (e.g. a PATCH override
+   * that changes a BPJS leg's tax treatment in, say, July). That edge case is a tracked follow-up,
+   * never silently claimed to be handled here.
+   *
+   * <ul>
+   *   <li>{@code cumulativeGrossBrutoMinor} = Σ(EARNING lines whose CURRENT catalog component is
+   *       {@code taxable}) + Σ(EMPLOYER-bearer DEDUCTION lines whose CURRENT resolved rule is
+   *       {@code PERCENTAGE_CEILING} with {@code employer_adds_to_tax_base = true}).
+   *   <li>{@code cumulativeDeductibleSocialMinor} = Σ(EMPLOYEE-bearer DEDUCTION lines whose CURRENT
+   *       resolved rule is {@code PERCENTAGE_CEILING} with {@code reduces_tax_base = true} — {@code
+   *       JHT_EE}/{@code JP_EE} in the OFFICIAL dataset; BPJS-Kesehatan-EE is correctly excluded,
+   *       its rule has {@code reduces_tax_base = false}).
+   *   <li>{@code cumulativeWithheldMinor} = Σ(DEDUCTION lines whose CURRENT resolved rule is an
+   *       income-tax family — {@code PROGRESSIVE_BRACKET}/{@code TER_TABLE}/{@code
+   *       ANNUAL_PROGRESSIVE} — i.e. every historical PPh21 line, whichever branch produced it).
+   *   <li>{@code monthsInYear} = the count of DISTINCT active prior periods carrying a line for
+   *       this employee, plus 1 (this month).
+   * </ul>
+   *
+   * <p>A DEDUCTION line whose CURRENT catalog component carries no {@code statutory_rule_key} (a
+   * non-statutory deduction, e.g. a loan repayment) — or whose component was removed from the
+   * catalog entirely — contributes to neither sum: it never affected the tax base and was never
+   * PPh21 either way.
+   */
+  private AnnualContext buildAnnualContext(
+      UUID employeeId,
+      String period,
+      String baseCurrency,
+      Map<String, StatutoryRule> resolvedRules,
+      Map<String, PayComponent> catalogByKey) {
+    String yearPrefix = period.substring(0, 4);
+    List<PayslipLine> priorLines =
+        payslipLineRepository.findActiveLinesForEmployeeYear(employeeId, yearPrefix, period);
+    List<String> priorPeriods =
+        payslipLineRepository.findActivePriorPeriodsForEmployeeYear(employeeId, yearPrefix, period);
+
+    Money grossBruto = Money.ofMinor(0L, baseCurrency);
+    Money deductibleSocial = Money.ofMinor(0L, baseCurrency);
+    Money withheld = Money.ofMinor(0L, baseCurrency);
+
+    for (PayslipLine line : priorLines) {
+      Money amount = line.getAmount();
+      PayComponent current = catalogByKey.get(line.getComponentKey());
+
+      if (line.getKind() == PayComponentKind.EARNING) {
+        if (current != null && current.isTaxable()) {
+          grossBruto = grossBruto.plus(amount);
+        }
+        continue;
+      }
+
+      // DEDUCTION line: classify by the CURRENT catalog component's rule family (see javadoc).
+      String ruleKey = current != null ? current.getStatutoryRuleKey() : null;
+      StatutoryRule rule = ruleKey != null ? resolvedRules.get(ruleKey) : null;
+      if (rule == null) {
+        continue; // non-statutory deduction (e.g. a loan) — no tax-base effect either way
+      }
+
+      if (isMonthlyIncomeTaxFamily(rule.getCalcType())
+          || rule.getCalcType() == StatutoryCalcType.ANNUAL_PROGRESSIVE) {
+        withheld = withheld.plus(amount);
+      } else if (rule.getCalcType() == StatutoryCalcType.PERCENTAGE_CEILING) {
+        StatutoryParams.CeilingParams params = StatutoryParams.ceiling(rule.getParamsJson());
+        if (line.getBearer() == PayComponentBearer.EMPLOYER) {
+          if (params.employerAddsToTaxBase()) {
+            grossBruto = grossBruto.plus(amount);
+          }
+        } else if (params.reducesTaxBase()) {
+          deductibleSocial = deductibleSocial.plus(amount);
+        }
+      }
+    }
+
+    int monthsInYear = priorPeriods.size() + 1;
+    return new AnnualContext(
+        grossBruto.amountMinor(),
+        deductibleSocial.amountMinor(),
+        withheld.amountMinor(),
+        monthsInYear);
   }
 
   // ---------------------------------------------------------------------

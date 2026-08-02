@@ -217,10 +217,18 @@ public class GrossToNetCalculator {
 
       Money annualGross =
           Money.ofMinor(context.cumulativeGrossBrutoMinor(), currency).plus(grossBruto);
+      // Biaya jabatan (occupational cost) cap is PRORATED by monthsInYear (Track P phase P3 W2):
+      // PMK 250/2008's Rp500,000/month figure is inherently monthly (the annual cap is simply
+      // 12 * that), so a partial-year joiner's cap must scale down with them — an unprorated FULL
+      // annual cap would let a 2-month joiner deduct a whole year's occupational-cost allowance.
+      // monthsInYear = 12 (a full-year employee) divides back to the unprorated cap exactly
+      // (identity), so this is byte-identical to the pre-W2 behaviour for the common case. PTKP
+      // relief below is deliberately NOT prorated (see AnnualContext#monthsInYear Javadoc).
+      Money occupationalCostCap =
+          Money.ofMinor(params.occupationalCostCapAnnualMinor(), currency)
+              .mulDiv(context.monthsInYear(), 12L);
       Money occupationalCost =
-          annualGross
-              .applyBasisPoints(params.occupationalCostBp())
-              .min(Money.ofMinor(params.occupationalCostCapAnnualMinor(), currency));
+          annualGross.applyBasisPoints(params.occupationalCostBp()).min(occupationalCostCap);
       Money cumulativeDeductibleSocial =
           Money.ofMinor(context.cumulativeDeductibleSocialMinor(), currency);
       // Pengurang: biaya jabatan (capped) + JHT/JP-EE contributions Jan..(month-1) AND this month.
