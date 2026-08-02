@@ -3,7 +3,10 @@ package id.co.nativeapp.employee.expense;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import id.co.nativeapp.employee.expense.domain.ExpenseClaim;
@@ -21,6 +24,12 @@ import org.springframework.dao.DataIntegrityViolationException;
  * Deterministic proof of {@link ExpenseClaimService}'s conflict-recovery branch — the one a
  * concurrent idempotency-key insert race triggers — without depending on thread timing. Mirrors
  * {@code SaleServiceConflictRecoveryTest}.
+ *
+ * <p><strong>Action-guarded recovery (S1/S2, code review).</strong> Every recovery now goes through
+ * {@link ExpenseClaimWriter#isReplayedEvent}: a raced {@link DataIntegrityViolationException} is
+ * treated as a genuine replay ONLY when an audit row for the EXACT (claim, key, action) triple
+ * exists. When it does not — e.g. the same key reused for a DIFFERENT action on the same claim —
+ * the service rethrows rather than masking the conflict as a successful re-read.
  */
 class ExpenseClaimServiceConflictRecoveryTest {
 
@@ -48,6 +57,7 @@ class ExpenseClaimServiceConflictRecoveryTest {
     ExpenseClaim existing = existingClaim();
     when(writer.approve(CLAIM, "ok", "k-1"))
         .thenThrow(new DataIntegrityViolationException("dup key"));
+    when(writer.isReplayedEvent(CLAIM, "k-1", ExpenseClaimWriter.ACTION_APPROVE)).thenReturn(true);
     when(writer.findByIdForReplay(CLAIM)).thenReturn(Optional.of(existing));
 
     ExpenseClaim result =
@@ -60,6 +70,9 @@ class ExpenseClaimServiceConflictRecoveryTest {
   void aConflictWithNoRecoverableRowRethrowsOnApprove() throws Exception {
     when(writer.approve(CLAIM, "ok", "k-1"))
         .thenThrow(new DataIntegrityViolationException("dup key"));
+    // A genuine replay of THIS action (the audit row exists) but the claim itself is somehow
+    // unreadable — the original conflict, not a fabricated NoSuchElementException, must surface.
+    when(writer.isReplayedEvent(CLAIM, "k-1", ExpenseClaimWriter.ACTION_APPROVE)).thenReturn(true);
     when(writer.findByIdForReplay(CLAIM)).thenReturn(Optional.empty());
 
     assertThatThrownBy(
@@ -71,9 +84,58 @@ class ExpenseClaimServiceConflictRecoveryTest {
   void aUniqueConstraintConflictRecoversTheExistingClaimOnSubmit() throws Exception {
     ExpenseClaim existing = existingClaim();
     when(writer.submit(any(), any())).thenThrow(new DataIntegrityViolationException("dup key"));
+    when(writer.isReplayedEvent(CLAIM, "k-2", ExpenseClaimWriter.ACTION_SUBMIT)).thenReturn(true);
     when(writer.findByIdForReplay(CLAIM)).thenReturn(Optional.of(existing));
 
     ExpenseClaim result = TenantContext.callAs(TENANT, ACTOR, () -> service.submit(CLAIM, "k-2"));
+
+    assertThat(result).isSameAs(existing);
+  }
+
+  @Test
+  void aConflictFromAKeyReusedForADifferentActionRethrowsRatherThanMaskingAsReplay()
+      throws Exception {
+    // S1/S2: the SAME idempotency key was already used for CANCEL on this claim; a later SUBMIT
+    // reusing it trips the (company_id, claim_id, idempotency_key) unique index too, but it is NOT
+    // a replay of the submit — isReplayedEvent(..., ACTION_SUBMIT) correctly returns false because
+    // the existing audit row's action is CANCEL, not SUBMIT.
+    when(writer.submit(CLAIM, "shared-key"))
+        .thenThrow(new DataIntegrityViolationException("dup key, different action"));
+    when(writer.isReplayedEvent(CLAIM, "shared-key", ExpenseClaimWriter.ACTION_SUBMIT))
+        .thenReturn(false);
+
+    assertThatThrownBy(
+            () -> TenantContext.callAs(TENANT, ACTOR, () -> service.submit(CLAIM, "shared-key")))
+        .isInstanceOf(DataIntegrityViolationException.class);
+
+    // Never masks the conflict with a stale re-read when it is not a genuine replay.
+    verify(writer, never()).findByIdForReplay(any());
+  }
+
+  @Test
+  void aConflictFromAKeyReusedForADifferentActionRethrowsOnCancel() throws Exception {
+    when(writer.cancel(CLAIM, "shared-key"))
+        .thenThrow(new DataIntegrityViolationException("dup key, different action"));
+    when(writer.isReplayedEvent(CLAIM, "shared-key", ExpenseClaimWriter.ACTION_CANCEL))
+        .thenReturn(false);
+
+    assertThatThrownBy(
+            () -> TenantContext.callAs(TENANT, ACTOR, () -> service.cancel(CLAIM, "shared-key")))
+        .isInstanceOf(DataIntegrityViolationException.class);
+
+    verify(writer, never()).findByIdForReplay(any());
+  }
+
+  @Test
+  void aGenuineReplayOnRefuseStillRecoversViaTheExistingClaim() throws Exception {
+    ExpenseClaim existing = existingClaim();
+    when(writer.refuse(eq(CLAIM), any(), eq("k-3")))
+        .thenThrow(new DataIntegrityViolationException("dup key"));
+    when(writer.isReplayedEvent(CLAIM, "k-3", ExpenseClaimWriter.ACTION_REFUSE)).thenReturn(true);
+    when(writer.findByIdForReplay(CLAIM)).thenReturn(Optional.of(existing));
+
+    ExpenseClaim result =
+        TenantContext.callAs(TENANT, ACTOR, () -> service.refuse(CLAIM, "no receipt", "k-3"));
 
     assertThat(result).isSameAs(existing);
   }

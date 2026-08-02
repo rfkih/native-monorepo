@@ -6,13 +6,13 @@ import id.co.nativeapp.employee.expense.dto.CreateClaimCommand;
 import id.co.nativeapp.employee.expense.dto.CreateClaimRequest;
 import id.co.nativeapp.employee.expense.dto.ExpenseClaimResponse;
 import id.co.nativeapp.employee.expense.dto.MyExpenseClaimResponse;
+import id.co.nativeapp.employee.expense.dto.PageResponse;
 import id.co.nativeapp.employee.expense.service.ExpenseClaimReader;
 import id.co.nativeapp.employee.expense.service.ExpenseClaimService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
-import java.util.List;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -83,10 +84,11 @@ public class MyExpenseClaimController {
     return ExpenseClaimResponse.from(claim);
   }
 
-  @Operation(summary = "List the caller's own expense claims")
+  @Operation(summary = "List the caller's own expense claims (paginated)")
   @GetMapping
-  public List<MyExpenseClaimResponse> list() {
-    return claimReader.myClaims();
+  public PageResponse<MyExpenseClaimResponse> list(
+      @RequestParam(required = false) Integer page, @RequestParam(required = false) Integer size) {
+    return claimReader.myClaims(page, size);
   }
 
   @Operation(summary = "Get one of the caller's own expense claims")

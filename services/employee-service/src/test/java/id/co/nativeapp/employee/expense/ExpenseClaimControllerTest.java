@@ -14,20 +14,22 @@ import id.co.nativeapp.employee.expense.controller.ExpenseClaimController;
 import id.co.nativeapp.employee.expense.domain.ClaimNotFoundException;
 import id.co.nativeapp.employee.expense.domain.ClaimStatus;
 import id.co.nativeapp.employee.expense.domain.ExpenseClaim;
-import id.co.nativeapp.employee.expense.domain.RefusalCommentRequiredException;
 import id.co.nativeapp.employee.expense.domain.SelfApprovalException;
 import id.co.nativeapp.employee.expense.dto.ExpenseClaimResponse;
+import id.co.nativeapp.employee.expense.dto.PageResponse;
 import id.co.nativeapp.employee.expense.service.ExpenseClaimReader;
 import id.co.nativeapp.employee.expense.service.ExpenseClaimService;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.security.ApiExceptionHandler;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -66,8 +68,26 @@ class ExpenseClaimControllerTest {
   }
 
   @Test
-  void listReturns200() throws Exception {
-    mockMvc.perform(get("/api/v1/expense-claims")).andExpect(status().isOk());
+  void listReturns200WithThePaginationEnvelope() throws Exception {
+    when(claimReader.forManager(any(), any(), any(), any()))
+        .thenReturn(PageResponse.of(List.of(), 0, 25, 0));
+
+    mockMvc
+        .perform(get("/api/v1/expense-claims"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.content").isArray())
+        .andExpect(jsonPath("$.page").value(0))
+        .andExpect(jsonPath("$.size").value(25))
+        .andExpect(jsonPath("$.totalElements").value(0))
+        .andExpect(jsonPath("$.totalPages").value(0));
+  }
+
+  @Test
+  void listWithAnUnknownStatusIs400() throws Exception {
+    when(claimReader.forManager(eq("bogus"), any(), any(), any()))
+        .thenThrow(new IllegalArgumentException("Unknown expense claim status: bogus"));
+
+    mockMvc.perform(get("/api/v1/expense-claims?status=bogus")).andExpect(status().isBadRequest());
   }
 
   @Test
@@ -170,18 +190,22 @@ class ExpenseClaimControllerTest {
   }
 
   @Test
-  void refuseWithABlankCommentSurfacesTheDomainRuleAs422() throws Exception {
-    when(claimService.refuse(eq(CLAIM), any(), eq("k-5")))
-        .thenThrow(new RefusalCommentRequiredException(CLAIM));
+  void aConflictThatIsNotAGenuineReplaySurfacesAs409NotA500() throws Exception {
+    // S1/S2: ExpenseClaimService rethrows the raw DataIntegrityViolationException when the raced
+    // idempotency key does NOT belong to a genuine replay of THIS action (e.g. the same key reused
+    // for a different action on the same claim) — the controller must map it to 409, never let it
+    // fall to the shared catch-all 500.
+    when(claimService.approve(any(), any(), any()))
+        .thenThrow(new DataIntegrityViolationException("dup key, different action"));
 
     mockMvc
         .perform(
-            post("/api/v1/expense-claims/" + CLAIM + "/refuse")
-                .header("Idempotency-Key", "k-5")
+            post("/api/v1/expense-claims/" + CLAIM + "/approve")
+                .header("Idempotency-Key", "k-reused")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"comment\":\"x\"}"))
-        .andExpect(status().isUnprocessableEntity())
+                .content("{}"))
+        .andExpect(status().isConflict())
         .andExpect(
-            jsonPath("$.type").value("https://errors.nativeapp.id/refusal-comment-required"));
+            jsonPath("$.type").value("https://errors.nativeapp.id/expense-concurrent-conflict"));
   }
 }

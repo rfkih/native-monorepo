@@ -3,9 +3,11 @@ package id.co.nativeapp.employee.expense.service;
 import id.co.nativeapp.employee.employee.domain.Employee;
 import id.co.nativeapp.employee.employee.repository.EmployeeRepository;
 import id.co.nativeapp.employee.expense.domain.ClaimNotFoundException;
+import id.co.nativeapp.employee.expense.domain.ClaimStatus;
 import id.co.nativeapp.employee.expense.dto.ExpenseClaimResponse;
 import id.co.nativeapp.employee.expense.dto.ExpenseClaimSummaryResponse;
 import id.co.nativeapp.employee.expense.dto.MyExpenseClaimResponse;
+import id.co.nativeapp.employee.expense.dto.PageResponse;
 import id.co.nativeapp.employee.expense.projection.ExpenseClaimSummaryView;
 import id.co.nativeapp.employee.expense.projection.MyExpenseClaimView;
 import id.co.nativeapp.employee.expense.repository.ExpenseClaimRepository;
@@ -21,9 +23,21 @@ import org.springframework.transaction.annotation.Transactional;
  * The read side for expense claims: the caller's own list/detail (resolved strictly from {@link
  * TenantContext} — the {@code /me} idiom, rule 5) and the manager-facing tenant-wide list/detail.
  * Projection-to-DTO mapping happens here in the service layer (CODE-STRUCTURE §3.3).
+ *
+ * <p><strong>Pagination (ENGINEERING-STANDARDS §1.3, W2 code review).</strong> Both list reads
+ * return a {@link PageResponse} envelope, never a bare array. {@code size} is bounded to {@code [1,
+ * MAX_PAGE_SIZE]} (default {@link #DEFAULT_PAGE_SIZE}) and {@code page} floored at {@code 0} here —
+ * silently clamped, not rejected, so a slightly-out-of-range client request degrades gracefully
+ * instead of 400ing.
  */
 @Service
 public class ExpenseClaimReader {
+
+  /** The default page size when the caller omits {@code size}. */
+  public static final int DEFAULT_PAGE_SIZE = 25;
+
+  /** The maximum page size a caller may request (ENGINEERING-STANDARDS §1.3 cap). */
+  public static final int MAX_PAGE_SIZE = 100;
 
   /**
    * The sentinel single-element scope list when no org-unit filter is supplied (never a real empty
@@ -40,13 +54,20 @@ public class ExpenseClaimReader {
     this.employeeRepository = employeeRepository;
   }
 
-  /** The caller's own claims, newest-updated first. */
+  /** One page of the caller's own claims, newest-updated first. */
   @Transactional(readOnly = true)
-  public List<MyExpenseClaimResponse> myClaims() {
+  public PageResponse<MyExpenseClaimResponse> myClaims(Integer page, Integer size) {
     Employee me = resolveMe();
-    return claimRepository.findMyClaims(me.getId()).stream()
-        .map(ExpenseClaimReader::toMyResponse)
-        .toList();
+    int boundedPage = boundPage(page);
+    int boundedSize = boundSize(size);
+    long offset = (long) boundedPage * boundedSize;
+
+    long totalElements = claimRepository.countMyClaims(me.getId());
+    List<MyExpenseClaimResponse> content =
+        claimRepository.findMyClaims(me.getId(), boundedSize, offset).stream()
+            .map(ExpenseClaimReader::toMyResponse)
+            .toList();
+    return PageResponse.of(content, boundedPage, boundedSize, totalElements);
   }
 
   /**
@@ -65,21 +86,32 @@ public class ExpenseClaimReader {
   }
 
   /**
-   * The manager-facing tenant-wide claim list, newest-updated first.
+   * One page of the manager-facing tenant-wide claim list — SUBMITTED-first, then newest-updated
+   * (pending work can never fall off the end of a page).
    *
    * @param status an optional exact status filter (case-insensitive)
    * @param orgUnitIds an optional org-unit scope; null/empty = the whole tenant
+   * @throws IllegalArgumentException if {@code status} is not a known {@link ClaimStatus} (→ 400,
+   *     S4 code review — an unrecognised filter must not silently resolve to an empty page)
    */
   @Transactional(readOnly = true)
-  public List<ExpenseClaimSummaryResponse> forManager(String status, List<UUID> orgUnitIds) {
+  public PageResponse<ExpenseClaimSummaryResponse> forManager(
+      String status, List<UUID> orgUnitIds, Integer page, Integer size) {
     boolean hasUnits = orgUnitIds != null && !orgUnitIds.isEmpty();
-    String normalizedStatus =
-        (status == null || status.isBlank()) ? null : status.strip().toUpperCase(Locale.ROOT);
-    return claimRepository
-        .findForManager(normalizedStatus, hasUnits, hasUnits ? orgUnitIds : NO_SCOPE)
-        .stream()
-        .map(ExpenseClaimReader::toSummaryResponse)
-        .toList();
+    String normalizedStatus = normalizeStatus(status);
+    int boundedPage = boundPage(page);
+    int boundedSize = boundSize(size);
+    long offset = (long) boundedPage * boundedSize;
+    List<UUID> scope = hasUnits ? orgUnitIds : NO_SCOPE;
+
+    long totalElements = claimRepository.countForManager(normalizedStatus, hasUnits, scope);
+    List<ExpenseClaimSummaryResponse> content =
+        claimRepository
+            .findForManager(normalizedStatus, hasUnits, scope, boundedSize, offset)
+            .stream()
+            .map(ExpenseClaimReader::toSummaryResponse)
+            .toList();
+    return PageResponse.of(content, boundedPage, boundedSize, totalElements);
   }
 
   /**
@@ -93,6 +125,35 @@ public class ExpenseClaimReader {
         .findById(claimId)
         .map(ExpenseClaimResponse::from)
         .orElseThrow(() -> new ClaimNotFoundException(claimId));
+  }
+
+  /**
+   * Normalizes and validates an optional status filter against {@link ClaimStatus} — {@code null}/
+   * blank means "no filter"; an unrecognised value is rejected rather than silently matching
+   * nothing (S4 code review).
+   */
+  private static String normalizeStatus(String status) {
+    if (status == null || status.isBlank()) {
+      return null;
+    }
+    String normalized = status.strip().toUpperCase(Locale.ROOT);
+    try {
+      ClaimStatus.valueOf(normalized);
+    } catch (IllegalArgumentException e) {
+      throw new IllegalArgumentException("Unknown expense claim status: " + status, e);
+    }
+    return normalized;
+  }
+
+  private static int boundPage(Integer page) {
+    return page == null || page < 0 ? 0 : page;
+  }
+
+  private static int boundSize(Integer size) {
+    if (size == null || size < 1) {
+      return DEFAULT_PAGE_SIZE;
+    }
+    return Math.min(size, MAX_PAGE_SIZE);
   }
 
   private Employee resolveMe() {

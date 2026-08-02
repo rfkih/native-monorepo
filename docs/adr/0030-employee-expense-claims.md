@@ -90,3 +90,8 @@ storage, no human approve/reject state machine, and `/api/v1/me/**` has never ha
 - Receipt blobs grow the employee DB (~MBs per claim); acceptable at SME scale, and the separate
   table + projection discipline keeps hot paths blob-free. An object store can replace the table
   behind the same endpoints if scale demands (a future ADR).
+- The per-tenant advisory lock that serializes first-currency establishment (W1, E1 code review)
+  only closes the RACE — it cannot validate CORRECTNESS. Whichever concurrent request wins still
+  pins the tenant's expense-claim currency for good, with no admin "reset" path in v1; in practice
+  the console always sends the company's base currency on every claim, so this residual only bites
+  a non-console API caller.

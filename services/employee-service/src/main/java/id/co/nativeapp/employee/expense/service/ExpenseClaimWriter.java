@@ -43,14 +43,19 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p><strong>Idempotency (ADR 0030 §5).</strong> {@code submit}/{@code cancel}/{@code approve}/
  * {@code refuse} each take an {@code idempotencyKey}: the method first probes {@link
- * ExpenseClaimEventRepository#findIdByClaimIdAndIdempotencyKey} — a hit means this exact transition
- * already ran, so the method returns the claim UNCHANGED (no second mutation, no second outbox
- * write); a miss proceeds to mutate + append the audit row, and the per-tenant {@code UNIQUE
- * (company_id, claim_id, idempotency_key)} (V9) is the concurrency backstop a concurrent racer's
- * insert trips as a {@link org.springframework.dao.DataIntegrityViolationException} — {@link
- * ExpenseClaimService} recovers it with a separate-transaction re-read. {@code create}/ {@code
- * updateDraft} are NOT guarded transitions in the domain sense (they do not change {@link
- * ClaimStatus}) and take no idempotency key.
+ * ExpenseClaimEventRepository#findIdByClaimIdAndIdempotencyKey}, scoped by BOTH the key AND the
+ * transition's own action constant ({@link #ACTION_SUBMIT} etc.) — a hit means this exact (claim,
+ * key, action) triple already ran, so the method returns the claim UNCHANGED (no second mutation,
+ * no second outbox write); a miss proceeds to mutate + append the audit row, and the per-tenant
+ * {@code UNIQUE (company_id, claim_id, idempotency_key)} (V9 — deliberately NOT including {@code
+ * action}) is the concurrency backstop a concurrent racer's insert trips as a {@link
+ * org.springframework.dao.DataIntegrityViolationException}. {@link ExpenseClaimService} recovers it
+ * — but ONLY after confirming via {@link #isReplayedEvent} that an event row for THIS (claim, key,
+ * action) triple really exists; the SAME key reused for a DIFFERENT action on the SAME claim also
+ * trips the unique index (S1/S2, code review) but is NOT a replay of anything, so the service
+ * rethrows rather than masking it as success. {@code create}/{@code updateDraft} are NOT guarded
+ * transitions in the domain sense (they do not change {@link ClaimStatus}) and take no idempotency
+ * key.
  *
  * <p><strong>Currency (v1 boundary, ADR 0030 §9).</strong> employee-service has NO persisted source
  * of a company base currency: {@code payroll_run.base_currency} is set purely from the caller's
@@ -61,10 +66,37 @@ import org.springframework.transaction.annotation.Transactional;
  * subsequent create/edit must match it exactly (checked via {@link
  * ExpenseClaimRepository#findAnyCurrency()}) — else {@link IllegalArgumentException} (→ 400,
  * reusing the same code path {@code Money.ofMinor} already uses for an unknown ISO-4217 code, for
- * one consistent client contract).
+ * one consistent client contract). Establishing the first currency is otherwise a check-then-act
+ * race (W1, code review): {@link #requireConsistentCurrency} closes it with a per-tenant {@link
+ * ExpenseClaimRepository#lockCurrencyEstablishment} advisory lock, taken ONLY when {@code
+ * findAnyCurrency()} is empty, followed by a RE-PROBE under the lock. <strong>Residual (documented,
+ * not fixed here):</strong> the lock only serializes WHO gets to establish the currency first — it
+ * cannot validate that the first claim's currency is CORRECT. A typo'd or wrong first entry
+ * (whichever concurrent request wins the race) still pins the tenant's expense-claim currency for
+ * good; there is no admin "reset" path in v1. In practice the console always sends the company's
+ * base currency on every claim, so this residual only bites a non-console API caller.
  */
 @Component
 public class ExpenseClaimWriter {
+
+  /** The {@code expense_claim_event.action} value for {@link #submit}. */
+  public static final String ACTION_SUBMIT = "SUBMIT";
+
+  /** The {@code expense_claim_event.action} value for {@link #cancel}. */
+  public static final String ACTION_CANCEL = "CANCEL";
+
+  /** The {@code expense_claim_event.action} value for {@link #approve}. */
+  public static final String ACTION_APPROVE = "APPROVE";
+
+  /** The {@code expense_claim_event.action} value for {@link #refuse}. */
+  public static final String ACTION_REFUSE = "REFUSE";
+
+  /**
+   * The namespace prefix for the currency-establishment advisory lock key (W1, code review) — kept
+   * distinct so {@code hashtext(:key)} can never collide with a differently-purposed lock keyed on
+   * the same {@code company_id} (e.g. a future payroll advisory lock).
+   */
+  private static final String CURRENCY_LOCK_NAMESPACE = "expense_claim_currency";
 
   private final ExpenseClaimRepository claimRepository;
   private final ExpenseCategoryRepository categoryRepository;
@@ -169,7 +201,7 @@ public class ExpenseClaimWriter {
     Employee me = resolveMe();
 
     Optional<UUID> replay =
-        eventRepository.findIdByClaimIdAndIdempotencyKey(claimId, idempotencyKey);
+        eventRepository.findIdByClaimIdAndIdempotencyKey(claimId, idempotencyKey, ACTION_SUBMIT);
     if (replay.isPresent()) {
       return requireOwnClaim(claimId, me.getId());
     }
@@ -178,7 +210,7 @@ public class ExpenseClaimWriter {
     ClaimStatus from = claim.getStatus();
     claim.submit();
     claimRepository.save(claim);
-    appendEvent(claim, "SUBMIT", from, actor, null, idempotencyKey, tenant);
+    appendEvent(claim, ACTION_SUBMIT, from, actor, null, idempotencyKey, tenant);
     return claim;
   }
 
@@ -196,7 +228,7 @@ public class ExpenseClaimWriter {
     Employee me = resolveMe();
 
     Optional<UUID> replay =
-        eventRepository.findIdByClaimIdAndIdempotencyKey(claimId, idempotencyKey);
+        eventRepository.findIdByClaimIdAndIdempotencyKey(claimId, idempotencyKey, ACTION_CANCEL);
     if (replay.isPresent()) {
       return requireOwnClaim(claimId, me.getId());
     }
@@ -205,7 +237,7 @@ public class ExpenseClaimWriter {
     ClaimStatus from = claim.getStatus();
     claim.cancel();
     claimRepository.save(claim);
-    appendEvent(claim, "CANCEL", from, actor, null, idempotencyKey, tenant);
+    appendEvent(claim, ACTION_CANCEL, from, actor, null, idempotencyKey, tenant);
     return claim;
   }
 
@@ -224,7 +256,7 @@ public class ExpenseClaimWriter {
     String actor = TenantContext.require().actor();
 
     Optional<UUID> replay =
-        eventRepository.findIdByClaimIdAndIdempotencyKey(claimId, idempotencyKey);
+        eventRepository.findIdByClaimIdAndIdempotencyKey(claimId, idempotencyKey, ACTION_APPROVE);
     if (replay.isPresent()) {
       return claimRepository
           .findById(claimId)
@@ -262,7 +294,7 @@ public class ExpenseClaimWriter {
         UUID.fromString(tenant),
         now);
 
-    appendEvent(claim, "APPROVE", from, actor, comment, idempotencyKey, tenant);
+    appendEvent(claim, ACTION_APPROVE, from, actor, comment, idempotencyKey, tenant);
     return claim;
   }
 
@@ -272,8 +304,13 @@ public class ExpenseClaimWriter {
    *
    * @throws ClaimNotFoundException if the claim is unknown in this tenant (→ 404)
    * @throws id.co.nativeapp.employee.expense.domain.ClaimStateException if not SUBMITTED (→ 409)
-   * @throws id.co.nativeapp.employee.expense.domain.RefusalCommentRequiredException if {@code
-   *     comment} is blank (→ 422)
+   * @throws id.co.nativeapp.employee.expense.domain.RefusalCommentRequiredException
+   *     DEFENSE-IN-DEPTH ONLY (S3, code review): the aggregate re-checks that {@code comment} is
+   *     non-blank, but this is UNREACHABLE over HTTP — the controller's {@code @NotBlank} on {@code
+   *     RefuseClaimRequest.comment} already rejects a blank comment with {@code 400} before this
+   *     method is ever called. No {@code @ExceptionHandler} maps it (there is nothing left over
+   *     HTTP to map); it exists purely so a future non-HTTP caller of this writer cannot slip a
+   *     blank comment past the aggregate's own invariant.
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public ExpenseClaim refuse(UUID claimId, String comment, String idempotencyKey) {
@@ -281,7 +318,7 @@ public class ExpenseClaimWriter {
     String actor = TenantContext.require().actor();
 
     Optional<UUID> replay =
-        eventRepository.findIdByClaimIdAndIdempotencyKey(claimId, idempotencyKey);
+        eventRepository.findIdByClaimIdAndIdempotencyKey(claimId, idempotencyKey, ACTION_REFUSE);
     if (replay.isPresent()) {
       return claimRepository
           .findById(claimId)
@@ -294,7 +331,7 @@ public class ExpenseClaimWriter {
     Instant now = clock.instant();
     claim.refuse(actor, comment, now);
     claimRepository.save(claim);
-    appendEvent(claim, "REFUSE", from, actor, comment, idempotencyKey, tenant);
+    appendEvent(claim, ACTION_REFUSE, from, actor, comment, idempotencyKey, tenant);
     return claim;
   }
 
@@ -306,6 +343,21 @@ public class ExpenseClaimWriter {
   @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
   public Optional<ExpenseClaim> findByIdForReplay(UUID claimId) {
     return claimRepository.findById(claimId);
+  }
+
+  /**
+   * Whether an audit row for this EXACT (claim, idempotency-key, action) triple exists — the check
+   * {@link ExpenseClaimService} runs, in a FRESH transaction, before treating a {@link
+   * org.springframework.dao.DataIntegrityViolationException} as a successful replay (S1/S2, code
+   * review). {@code false} means the collision was NOT this transition replaying itself (e.g. the
+   * same key reused for a different action on the same claim), so the caller must rethrow rather
+   * than mask a genuine integrity error as success.
+   */
+  @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
+  public boolean isReplayedEvent(UUID claimId, String idempotencyKey, String action) {
+    return eventRepository
+        .findIdByClaimIdAndIdempotencyKey(claimId, idempotencyKey, action)
+        .isPresent();
   }
 
   private void appendEvent(
@@ -354,21 +406,33 @@ public class ExpenseClaimWriter {
     return PayrollRunWriter.UNALLOCATED_OUTLET;
   }
 
-  /** See the class Javadoc's "Currency (v1 boundary)" note. */
+  /** See the class Javadoc's "Currency (v1 boundary)" note (W1, code review, for the lock). */
   private void requireConsistentCurrency(Money amount) {
-    claimRepository
-        .findAnyCurrency()
-        .ifPresent(
-            existing -> {
-              String establishedCode = existing.strip();
-              if (!establishedCode.equals(amount.currency().getCurrencyCode())) {
-                throw new IllegalArgumentException(
-                    "expense claim currency "
-                        + amount.currency().getCurrencyCode()
-                        + " does not match this tenant's established expense-claim currency "
-                        + establishedCode);
-              }
-            });
+    Optional<String> existing = claimRepository.findAnyCurrency();
+    if (existing.isEmpty()) {
+      // Possibly establishing this tenant's FIRST expense-claim currency — a check-then-act race
+      // otherwise: two concurrent first-claims could both observe "no currency yet" here and each
+      // proceed under a DIFFERENT currency, since nothing else constrains it. Serialize every
+      // would-be-first-claim attempt for this tenant behind a per-tenant advisory lock, held only
+      // for the remainder of THIS transaction (pg_advisory_xact_lock auto-releases at
+      // commit/rollback), then RE-PROBE under the lock: the genuinely-first transaction still sees
+      // empty and proceeds to establish; every other, having waited out the lock behind the
+      // first transaction's commit, now sees the just-committed row and validates normally below.
+      String tenant = TenantContext.require().companyId();
+      claimRepository.lockCurrencyEstablishment(CURRENCY_LOCK_NAMESPACE + ":" + tenant);
+      existing = claimRepository.findAnyCurrency();
+    }
+    existing.ifPresent(
+        code -> {
+          String establishedCode = code.strip();
+          if (!establishedCode.equals(amount.currency().getCurrencyCode())) {
+            throw new IllegalArgumentException(
+                "expense claim currency "
+                    + amount.currency().getCurrencyCode()
+                    + " does not match this tenant's established expense-claim currency "
+                    + establishedCode);
+          }
+        });
   }
 
   private Employee resolveMe() {

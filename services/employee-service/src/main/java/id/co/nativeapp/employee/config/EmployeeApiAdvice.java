@@ -10,7 +10,6 @@ import id.co.nativeapp.employee.expense.domain.ClaimNotFoundException;
 import id.co.nativeapp.employee.expense.domain.ClaimStateException;
 import id.co.nativeapp.employee.expense.domain.DuplicateCategoryNameException;
 import id.co.nativeapp.employee.expense.domain.InvalidGlHintException;
-import id.co.nativeapp.employee.expense.domain.RefusalCommentRequiredException;
 import id.co.nativeapp.employee.expense.domain.SelfApprovalException;
 import id.co.nativeapp.employee.me.domain.EmployeeNotLinkedException;
 import id.co.nativeapp.employee.payroll.domain.CommissionNotFoundException;
@@ -26,8 +25,10 @@ import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.MDC;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -248,14 +249,22 @@ public class EmployeeApiAdvice {
     return problem;
   }
 
-  /** A refusal was attempted with no (or a blank) comment → 422. */
-  @ExceptionHandler(RefusalCommentRequiredException.class)
-  public ProblemDetail handleRefusalCommentRequired(
-      RefusalCommentRequiredException ex, HttpServletRequest request) {
-    ProblemDetail problem =
-        problem(HttpStatus.UNPROCESSABLE_ENTITY, "refusal-comment-required", request);
-    problem.setTitle("A refusal requires a comment");
-    problem.setDetail(ex.getMessage());
+  /**
+   * A concurrent conflict on an expense-claims write → 409 rather than a leaked 500 (S1/S2, code
+   * review): a raced idempotency-key insert whose {@link ExpenseClaimService} recovery determined
+   * was NOT a genuine replay (e.g. the same key reused for a DIFFERENT action on the same claim),
+   * or a raced {@code expense_category} name insert past the {@code ExpenseCategoryWriter}
+   * pre-check. Mirrors finance's {@code ApAdvice}/{@code ArAdvice} concurrent-conflict mapping. No
+   * money/state is double-applied — the losing transaction rolled back; the client may retry.
+   */
+  @ExceptionHandler({
+    DataIntegrityViolationException.class,
+    ObjectOptimisticLockingFailureException.class
+  })
+  public ProblemDetail handleConcurrentConflict(RuntimeException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.CONFLICT, "expense-concurrent-conflict", request);
+    problem.setTitle("Conflict");
+    problem.setDetail("The operation conflicted with a concurrent change; please retry.");
     return problem;
   }
 

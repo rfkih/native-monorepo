@@ -18,6 +18,7 @@ import id.co.nativeapp.employee.expense.domain.ClaimStatus;
 import id.co.nativeapp.employee.expense.domain.ExpenseCategory;
 import id.co.nativeapp.employee.expense.domain.ExpenseClaim;
 import id.co.nativeapp.employee.expense.domain.SelfApprovalException;
+import id.co.nativeapp.employee.expense.dto.CreateClaimCommand;
 import id.co.nativeapp.employee.expense.repository.ExpenseCategoryRepository;
 import id.co.nativeapp.employee.expense.repository.ExpenseClaimEventRepository;
 import id.co.nativeapp.employee.expense.repository.ExpenseClaimRepository;
@@ -29,6 +30,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -91,7 +93,8 @@ class ExpenseClaimWriterTest {
     Employee approver =
         new Employee("Manager", PtkpStatus.TK0, "3201234567890123", "1234567890123456");
     ExpenseClaim claim = submittedClaim(approver.getId());
-    when(eventRepository.findIdByClaimIdAndIdempotencyKey(claim.getId(), "k-self"))
+    when(eventRepository.findIdByClaimIdAndIdempotencyKey(
+            claim.getId(), "k-self", ExpenseClaimWriter.ACTION_APPROVE))
         .thenReturn(Optional.empty());
     when(claimRepository.findById(claim.getId())).thenReturn(Optional.of(claim));
     when(employeeRepository.findByUserId(ACTOR)).thenReturn(Optional.of(approver));
@@ -111,7 +114,8 @@ class ExpenseClaimWriterTest {
     ExpenseClaim alreadyApproved = submittedClaim(otherEmployee);
     alreadyApproved.approve("manager-sub", "ok", Instant.parse("2026-07-19T09:00:00Z"));
 
-    when(eventRepository.findIdByClaimIdAndIdempotencyKey(alreadyApproved.getId(), "k-replay"))
+    when(eventRepository.findIdByClaimIdAndIdempotencyKey(
+            alreadyApproved.getId(), "k-replay", ExpenseClaimWriter.ACTION_APPROVE))
         .thenReturn(Optional.of(UUID.randomUUID()));
     when(claimRepository.findById(alreadyApproved.getId()))
         .thenReturn(Optional.of(alreadyApproved));
@@ -133,7 +137,8 @@ class ExpenseClaimWriterTest {
     ExpenseClaim claim = submittedClaim(otherEmployee);
     ExpenseCategory category = new ExpenseCategory("Supplies", "supplies", false);
 
-    when(eventRepository.findIdByClaimIdAndIdempotencyKey(claim.getId(), "k-fresh"))
+    when(eventRepository.findIdByClaimIdAndIdempotencyKey(
+            claim.getId(), "k-fresh", ExpenseClaimWriter.ACTION_APPROVE))
         .thenReturn(Optional.empty());
     when(claimRepository.findById(claim.getId())).thenReturn(Optional.of(claim));
     when(employeeRepository.findByUserId(ACTOR)).thenReturn(Optional.empty());
@@ -147,5 +152,92 @@ class ExpenseClaimWriterTest {
     verify(outboxWriter, times(1)).write(any(), any(), any(), any(), any(), any(), any());
     verify(eventRepository, times(1)).saveAndFlush(any());
     verify(claimRepository, times(1)).save(eq(claim));
+  }
+
+  @Test
+  void isReplayedEventReadsThroughToTheEventRepository() {
+    UUID claimId = UUID.randomUUID();
+    when(eventRepository.findIdByClaimIdAndIdempotencyKey(
+            claimId, "k", ExpenseClaimWriter.ACTION_SUBMIT))
+        .thenReturn(Optional.of(UUID.randomUUID()));
+
+    boolean result = writer.isReplayedEvent(claimId, "k", ExpenseClaimWriter.ACTION_SUBMIT);
+
+    assertThat(result).isTrue();
+  }
+
+  @Test
+  void isReplayedEventIsFalseWhenNoEventRowExistsForThisActionSpecifically() {
+    // The S1/S2 scenario: a row exists for the SAME (claim, key) but a DIFFERENT action.
+    UUID claimId = UUID.randomUUID();
+    when(eventRepository.findIdByClaimIdAndIdempotencyKey(
+            claimId, "k", ExpenseClaimWriter.ACTION_CANCEL))
+        .thenReturn(Optional.empty());
+
+    boolean result = writer.isReplayedEvent(claimId, "k", ExpenseClaimWriter.ACTION_CANCEL);
+
+    assertThat(result).isFalse();
+  }
+
+  // ---------------------------------------------------------------------
+  // W1 (code review): the currency-establishment check-then-act race
+  // ---------------------------------------------------------------------
+
+  private static CreateClaimCommand createCommand() {
+    return new CreateClaimCommand(
+        CATEGORY, 250_000L, "IDR", LocalDate.of(2026, 7, 15), "Warung Makan", "lunch", null);
+  }
+
+  private Employee stubOwnEmployeeAndCategory() {
+    Employee me = new Employee("Budi", PtkpStatus.TK0, "3201234567890123", "1234567890123456");
+    ExpenseCategory category = new ExpenseCategory("Supplies", "supplies", false);
+    when(employeeRepository.findByUserId(ACTOR)).thenReturn(Optional.of(me));
+    when(categoryRepository.findById(CATEGORY)).thenReturn(Optional.of(category));
+    when(assignmentRepository.findByEmployeeId(me.getId())).thenReturn(List.of());
+    when(claimRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+    return me;
+  }
+
+  @Test
+  void createNeverLocksWhenACurrencyIsAlreadyEstablished() throws Exception {
+    stubOwnEmployeeAndCategory();
+    when(claimRepository.findAnyCurrency()).thenReturn(Optional.of("IDR"));
+
+    TenantContext.callAs(TENANT, ACTOR, () -> writer.create(createCommand()));
+
+    verify(claimRepository, never()).lockCurrencyEstablishment(any());
+  }
+
+  @Test
+  void createLocksAndReProbesWhenNoCurrencyIsEstablishedYet() throws Exception {
+    stubOwnEmployeeAndCategory();
+    // Empty both times — this really is the first claim; it establishes IDR without conflict.
+    when(claimRepository.findAnyCurrency()).thenReturn(Optional.empty());
+
+    ExpenseClaim result = TenantContext.callAs(TENANT, ACTOR, () -> writer.create(createCommand()));
+
+    assertThat(result).isNotNull();
+    verify(claimRepository, times(1))
+        .lockCurrencyEstablishment(eq("expense_claim_currency:" + TENANT));
+    verify(claimRepository, times(2)).findAnyCurrency();
+    verify(claimRepository, times(1)).save(any());
+  }
+
+  @Test
+  void createRejectsAMismatchDiscoveredOnlyAfterTheLockReProbe() throws Exception {
+    stubOwnEmployeeAndCategory();
+    // First probe empty (no established currency yet); while this call waits for/holds the lock,
+    // a concurrent racer is modeled as having ALREADY established USD, so the RE-PROBE under the
+    // lock now sees it — proving the re-probe result (not the stale first probe) governs.
+    when(claimRepository.findAnyCurrency()).thenReturn(Optional.empty(), Optional.of("USD"));
+
+    assertThatThrownBy(
+            () -> TenantContext.callAs(TENANT, ACTOR, () -> writer.create(createCommand())))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("USD");
+
+    verify(claimRepository, times(1)).lockCurrencyEstablishment(any());
+    // The mismatch is caught before anything is persisted.
+    verify(claimRepository, never()).save(any());
   }
 }

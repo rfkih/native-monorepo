@@ -9,6 +9,7 @@ import id.co.nativeapp.tenant.TenantContext;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,6 +18,15 @@ import org.springframework.transaction.annotation.Transactional;
  * Owns the {@code @Transactional} units of work for the {@link ExpenseCategory} admin catalog. A
  * distinct bean (the {@code *Writer} pattern) so each method is invoked through the Spring proxy
  * and the {@link RlsAutoApplyAspect} sets the tenant GUC (rule 5).
+ *
+ * <p><strong>Duplicate-name race backstop (data-engineer review).</strong> {@code create}/{@code
+ * update} pre-check {@link ExpenseCategoryRepository#existsByNameIgnoreCase} for a friendly {@code
+ * 409} on the common case, but that check-then-act is itself racy: two concurrent requests for the
+ * SAME name can both pass the pre-check before either commits. The {@code uq_expense_category_name}
+ * unique index is the real backstop — both {@code create} and {@code update} therefore {@code
+ * saveAndFlush} inside a {@code try/catch} that translates a resulting {@link
+ * DataIntegrityViolationException} into the same {@link DuplicateCategoryNameException} (→ 409) the
+ * pre-check throws, so a raced request never leaks a raw {@code 500}.
  */
 @Component
 public class ExpenseCategoryWriter {
@@ -43,7 +53,8 @@ public class ExpenseCategoryWriter {
    * Creates a new active category.
    *
    * @throws DuplicateCategoryNameException if a category with this name (case-insensitive) already
-   *     exists in the tenant (→ 409)
+   *     exists in the tenant (→ 409) — either the pre-check, or the {@code
+   *     uq_expense_category_name} backstop under a concurrent race
    * @throws id.co.nativeapp.employee.expense.domain.InvalidGlHintException if {@code glHint} is not
    *     whitelisted (→ 422)
    */
@@ -55,7 +66,13 @@ public class ExpenseCategoryWriter {
     }
     ExpenseCategory category = new ExpenseCategory(name, glHint, taxable);
     category.setCompanyId(tenant);
-    return repository.save(category);
+    try {
+      return repository.saveAndFlush(category);
+    } catch (DataIntegrityViolationException raced) {
+      // A concurrent request for the SAME name won the race between our pre-check and this
+      // insert; the unique index is the real backstop (this pre-check is only the friendly path).
+      throw new DuplicateCategoryNameException(name);
+    }
   }
 
   /**
@@ -63,7 +80,8 @@ public class ExpenseCategoryWriter {
    *
    * @throws CategoryNotFoundException if the category is unknown in this tenant (→ 404)
    * @throws DuplicateCategoryNameException if renaming to a name another category already holds (→
-   *     409)
+   *     409) — either the pre-check, or the {@code uq_expense_category_name} backstop under a
+   *     concurrent race
    * @throws id.co.nativeapp.employee.expense.domain.InvalidGlHintException if a non-null {@code
    *     newGlHint} is not whitelisted (→ 422)
    */
@@ -78,7 +96,11 @@ public class ExpenseCategoryWriter {
       throw new DuplicateCategoryNameException(newName);
     }
     category.update(newName, newGlHint, newTaxable, newActive);
-    return repository.save(category);
+    try {
+      return repository.saveAndFlush(category);
+    } catch (DataIntegrityViolationException raced) {
+      throw new DuplicateCategoryNameException(newName != null ? newName : category.getName());
+    }
   }
 
   /**

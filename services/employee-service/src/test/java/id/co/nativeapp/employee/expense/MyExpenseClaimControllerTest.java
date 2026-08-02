@@ -17,11 +17,13 @@ import id.co.nativeapp.employee.expense.domain.ClaimStateException;
 import id.co.nativeapp.employee.expense.domain.ClaimStatus;
 import id.co.nativeapp.employee.expense.domain.ExpenseClaim;
 import id.co.nativeapp.employee.expense.dto.ExpenseClaimResponse;
+import id.co.nativeapp.employee.expense.dto.PageResponse;
 import id.co.nativeapp.employee.expense.service.ExpenseClaimReader;
 import id.co.nativeapp.employee.expense.service.ExpenseClaimService;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.security.ApiExceptionHandler;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -220,7 +222,27 @@ class MyExpenseClaimControllerTest {
   }
 
   @Test
-  void listReturns200() throws Exception {
-    mockMvc.perform(get("/api/v1/me/expense-claims")).andExpect(status().isOk());
+  void listReturns200WithThePaginationEnvelope() throws Exception {
+    when(claimReader.myClaims(any(), any())).thenReturn(PageResponse.of(List.of(), 0, 25, 0));
+
+    mockMvc
+        .perform(get("/api/v1/me/expense-claims"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.content").isArray())
+        .andExpect(jsonPath("$.page").value(0))
+        .andExpect(jsonPath("$.size").value(25))
+        .andExpect(jsonPath("$.totalElements").value(0))
+        .andExpect(jsonPath("$.totalPages").value(0));
+  }
+
+  @Test
+  void listPassesPageAndSizeQueryParamsThrough() throws Exception {
+    when(claimReader.myClaims(eq(2), eq(10))).thenReturn(PageResponse.of(List.of(), 2, 10, 25));
+
+    mockMvc
+        .perform(get("/api/v1/me/expense-claims?page=2&size=10"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.page").value(2))
+        .andExpect(jsonPath("$.size").value(10));
   }
 }

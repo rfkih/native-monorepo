@@ -4,6 +4,7 @@ import id.co.nativeapp.employee.expense.domain.ExpenseClaim;
 import id.co.nativeapp.employee.expense.dto.ApproveClaimRequest;
 import id.co.nativeapp.employee.expense.dto.ExpenseClaimResponse;
 import id.co.nativeapp.employee.expense.dto.ExpenseClaimSummaryResponse;
+import id.co.nativeapp.employee.expense.dto.PageResponse;
 import id.co.nativeapp.employee.expense.dto.RefuseClaimRequest;
 import id.co.nativeapp.employee.expense.service.ExpenseClaimReader;
 import id.co.nativeapp.employee.expense.service.ExpenseClaimService;
@@ -42,12 +43,14 @@ public class ExpenseClaimController {
     this.claimReader = claimReader;
   }
 
-  @Operation(summary = "List expense claims for the tenant, optionally filtered")
+  @Operation(summary = "List expense claims for the tenant, optionally filtered (paginated)")
   @GetMapping
-  public List<ExpenseClaimSummaryResponse> list(
+  public PageResponse<ExpenseClaimSummaryResponse> list(
       @RequestParam(required = false) String status,
-      @RequestParam(required = false) List<UUID> orgUnitId) {
-    return claimReader.forManager(status, orgUnitId);
+      @RequestParam(required = false) List<UUID> orgUnitId,
+      @RequestParam(required = false) Integer page,
+      @RequestParam(required = false) Integer size) {
+    return claimReader.forManager(status, orgUnitId, page, size);
   }
 
   @Operation(summary = "Get one expense claim")
