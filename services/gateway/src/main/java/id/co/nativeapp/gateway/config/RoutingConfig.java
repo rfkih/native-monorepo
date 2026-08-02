@@ -690,6 +690,45 @@ public class RoutingConfig {
         .build();
   }
 
+  /**
+   * Expense claims — the manager/owner decision surface ({@code /api/v1/expense-claims/**}, ADR
+   * 0030 Phase E1): the tenant-wide claim list plus approve/refuse. Owner/manager only; the
+   * employee's own self-service half rides {@code /api/v1/me/expense-claims/**} on {@link #meRoute}
+   * (every business role, resolved strictly from the caller's own {@code X-Actor}).
+   */
+  @Bean
+  RouterFunction<ServerResponse> expenseClaimsRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("employee-service-expense-claims")
+        .route(path("/api/v1/expense-claims/**"), http())
+        .before(uri(routes.employeeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
+   * Expense-category admin catalog ({@code /api/v1/expense-categories/**}, ADR 0030 Phase E1) —
+   * owner/manager only: the category set drives finance's expense-account mapping, config an
+   * employee never touches directly.
+   */
+  @Bean
+  RouterFunction<ServerResponse> expenseCategoriesRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("employee-service-expense-categories")
+        .route(path("/api/v1/expense-categories/**"), http())
+        .before(uri(routes.employeeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
   // ---------------------------------------------------------------------------
   // finance-service (owner dashboard)
   // ---------------------------------------------------------------------------

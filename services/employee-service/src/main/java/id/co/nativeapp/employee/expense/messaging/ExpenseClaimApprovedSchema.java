@@ -1,9 +1,14 @@
 package id.co.nativeapp.employee.expense.messaging;
 
+import id.co.nativeapp.employee.expense.domain.ExpenseClaim;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.time.Instant;
+import java.util.Objects;
 import org.apache.avro.Schema;
+import org.apache.avro.generic.GenericData;
+import org.apache.avro.generic.GenericRecord;
 
 /**
  * Loads the {@code ExpenseClaimApproved} Avro schema ({@code avro/ExpenseClaimApproved.avsc},
@@ -12,8 +17,6 @@ import org.apache.avro.Schema;
  * 0030). Carries {@code employee_id} as a UUID reference (not PII — a claim amount derives nothing
  * about compensation); merchant/note/receipt never cross an event. Money is integer minor units +
  * ISO-4217, never a float (rule 6/8).
- *
- * <p>The {@code toRecord(...)} builder lands with the {@code ExpenseClaim} aggregate (E1).
  */
 public final class ExpenseClaimApprovedSchema {
 
@@ -35,6 +38,35 @@ public final class ExpenseClaimApprovedSchema {
   /** The parsed reader/writer schema. */
   public static Schema schema() {
     return SCHEMA;
+  }
+
+  /**
+   * Builds an {@code ExpenseClaimApproved} record from a just-APPROVED claim. {@code glHint} is the
+   * claim's category's {@code gl_hint} AT approval time (resolved by the caller — the aggregate
+   * itself does not know its category's current hint); {@code expense_date} encodes as epoch days
+   * (the Avro {@code date} logical type, the {@code AssignmentChanged} idiom), {@code approved_at}
+   * as epoch millis.
+   *
+   * @param claim a claim whose status is already {@code APPROVED} (the caller mutates before
+   *     building the record, in the same transaction — rule 3)
+   * @param glHint the category's {@code gl_hint}; never null (empty string = general)
+   * @param approvedAt the approval instant; must equal {@code claim.getApprovedAt()}
+   */
+  public static GenericRecord toRecord(ExpenseClaim claim, String glHint, Instant approvedAt) {
+    Objects.requireNonNull(claim, "claim");
+    Objects.requireNonNull(glHint, "glHint");
+    Objects.requireNonNull(approvedAt, "approvedAt");
+    GenericRecord record = new GenericData.Record(SCHEMA);
+    record.put("claim_id", claim.getId().toString());
+    record.put("company_id", claim.getCompanyId());
+    record.put("org_unit_id", claim.getOrgUnitId().toString());
+    record.put("employee_id", claim.getEmployeeId().toString());
+    record.put("amount_minor", claim.getAmount().amountMinor());
+    record.put("currency", claim.getAmount().currency().getCurrencyCode());
+    record.put("gl_hint", glHint);
+    record.put("expense_date", (int) claim.getExpenseDate().toEpochDay());
+    record.put("approved_at", approvedAt.toEpochMilli());
+    return record;
   }
 
   private static Schema parse() {

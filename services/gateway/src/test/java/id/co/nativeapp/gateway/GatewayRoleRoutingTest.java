@@ -842,6 +842,112 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
   }
 
   // ---------------------------------------------------------------------------
+  // /api/v1/expense-claims/** + /api/v1/expense-categories/** — expense claims (ADR 0030, E1)
+  // owner/manager dashboard surface only; the employee self-service half rides /api/v1/me/**
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void aCashierIsDeniedTheExpenseClaimsRouteWith403() throws Exception {
+    // The manager decision surface (approve/refuse/list) — never POS.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/expense-claims")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void anOwnerCanReachTheExpenseClaimsRouteWithInjectedTenantHeaders() throws Exception {
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/expense-claims")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    RecordedRequest forwarded = theForwardedRequest();
+    assertThat(forwarded.getPath()).isEqualTo("/api/v1/expense-claims");
+    assertThat(forwarded.getHeader("X-Company-Id")).isEqualTo(EXPECTED_COMPANY_ID);
+    assertThat(forwarded.getHeader("X-Actor")).isNotBlank();
+  }
+
+  @Test
+  void aCashierIsDeniedTheExpenseCategoriesRouteWith403() throws Exception {
+    // The category admin catalog — config an employee never touches directly.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/expense-categories")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void anOwnerCanReachTheExpenseCategoriesRoute() throws Exception {
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/expense-categories")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/expense-categories");
+  }
+
+  @Test
+  void aCashierCanStillReachTheirOwnExpenseClaimsUnderMe() throws Exception {
+    // Regression guard: the new DASHBOARD_ROLES-gated /expense-claims/** route must NOT narrow
+    // the pre-existing /api/v1/me/** surface, which already carries /api/v1/me/expense-claims/**
+    // for every business role (ME_ROLES).
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/me/expense-claims")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/me/expense-claims");
+  }
+
+  // ---------------------------------------------------------------------------
   // /api/v1/pricing/** — restaurant pricing-rule preview (POS_ROLES, offline mode, ADR 0028)
   // ---------------------------------------------------------------------------
 

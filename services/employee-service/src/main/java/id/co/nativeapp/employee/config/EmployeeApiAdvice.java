@@ -5,6 +5,13 @@ import id.co.nativeapp.employee.assignment.domain.AssignmentNotFoundException;
 import id.co.nativeapp.employee.assignment.domain.ConflictingLegalEmployerException;
 import id.co.nativeapp.employee.employee.domain.EmployeeNotFoundException;
 import id.co.nativeapp.employee.employee.domain.UserAlreadyLinkedException;
+import id.co.nativeapp.employee.expense.domain.CategoryNotFoundException;
+import id.co.nativeapp.employee.expense.domain.ClaimNotFoundException;
+import id.co.nativeapp.employee.expense.domain.ClaimStateException;
+import id.co.nativeapp.employee.expense.domain.DuplicateCategoryNameException;
+import id.co.nativeapp.employee.expense.domain.InvalidGlHintException;
+import id.co.nativeapp.employee.expense.domain.RefusalCommentRequiredException;
+import id.co.nativeapp.employee.expense.domain.SelfApprovalException;
 import id.co.nativeapp.employee.me.domain.EmployeeNotLinkedException;
 import id.co.nativeapp.employee.payroll.domain.CommissionNotFoundException;
 import id.co.nativeapp.employee.payroll.domain.CompensationAlreadyEndedException;
@@ -21,6 +28,7 @@ import java.util.Map;
 import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -196,6 +204,88 @@ public class EmployeeApiAdvice {
     List<Map<String, String>> errors =
         ex.getConstraintViolations().stream().map(EmployeeApiAdvice::toViolation).toList();
     problem.setProperty("errors", errors);
+    return problem;
+  }
+
+  /** A required header (e.g. {@code Idempotency-Key}) is missing from the request → 400. */
+  @ExceptionHandler(MissingRequestHeaderException.class)
+  public ProblemDetail handleMissingRequestHeader(
+      MissingRequestHeaderException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.BAD_REQUEST, "missing-required-header", request);
+    problem.setTitle("Missing required header");
+    problem.setDetail("The '" + ex.getHeaderName() + "' header is required.");
+    return problem;
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Expense claims (ADR 0030)
+  // -------------------------------------------------------------------------------------------
+
+  /** An expense claim referenced by id is unknown, or not visible to the caller → 404. */
+  @ExceptionHandler(ClaimNotFoundException.class)
+  public ProblemDetail handleClaimNotFound(ClaimNotFoundException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.NOT_FOUND, "expense-claim-not-found", request);
+    problem.setTitle("Expense claim not found");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /** An expense-claim transition was attempted from a state that does not allow it → 409. */
+  @ExceptionHandler(ClaimStateException.class)
+  public ProblemDetail handleClaimState(ClaimStateException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.CONFLICT, "expense-claim-state-conflict", request);
+    problem.setTitle("Expense claim state conflict");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /** A login attempted to approve their own expense claim → 403 (owners included). */
+  @ExceptionHandler(SelfApprovalException.class)
+  public ProblemDetail handleSelfApproval(SelfApprovalException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.FORBIDDEN, "self-approval-forbidden", request);
+    problem.setTitle("Self-approval forbidden");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /** A refusal was attempted with no (or a blank) comment → 422. */
+  @ExceptionHandler(RefusalCommentRequiredException.class)
+  public ProblemDetail handleRefusalCommentRequired(
+      RefusalCommentRequiredException ex, HttpServletRequest request) {
+    ProblemDetail problem =
+        problem(HttpStatus.UNPROCESSABLE_ENTITY, "refusal-comment-required", request);
+    problem.setTitle("A refusal requires a comment");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /** An expense category referenced by id is unknown, or inactive on a create/edit path → 404. */
+  @ExceptionHandler(CategoryNotFoundException.class)
+  public ProblemDetail handleCategoryNotFound(
+      CategoryNotFoundException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.NOT_FOUND, "expense-category-not-found", request);
+    problem.setTitle("Expense category not found");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /** An expense category was created/updated with a {@code gl_hint} outside the whitelist → 422. */
+  @ExceptionHandler(InvalidGlHintException.class)
+  public ProblemDetail handleInvalidGlHint(InvalidGlHintException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.UNPROCESSABLE_ENTITY, "invalid-gl-hint", request);
+    problem.setTitle("Invalid gl_hint");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /** An expense category name (case-insensitive) collides with an existing one → 409. */
+  @ExceptionHandler(DuplicateCategoryNameException.class)
+  public ProblemDetail handleDuplicateCategoryName(
+      DuplicateCategoryNameException ex, HttpServletRequest request) {
+    ProblemDetail problem =
+        problem(HttpStatus.CONFLICT, "duplicate-expense-category-name", request);
+    problem.setTitle("Duplicate expense category name");
+    problem.setDetail(ex.getMessage());
     return problem;
   }
 
