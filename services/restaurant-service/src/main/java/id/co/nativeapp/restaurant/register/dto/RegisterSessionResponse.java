@@ -1,7 +1,6 @@
 package id.co.nativeapp.restaurant.register.dto;
 
 import id.co.nativeapp.restaurant.register.domain.RegisterSession;
-import id.co.nativeapp.restaurant.register.projection.RegisterSessionView;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -41,23 +40,5 @@ public record RegisterSessionResponse(
         s.getExpectedCashMinor(),
         s.getCountedCashMinor(),
         s.getOverShortMinor());
-  }
-
-  /** Maps the native read projection to the response shape (CHAR(3) currency stripped). */
-  public static RegisterSessionResponse from(RegisterSessionView v) {
-    return new RegisterSessionResponse(
-        v.getId(),
-        v.getBusinessId(),
-        v.getStatus(),
-        v.getBusinessDate(),
-        v.getOpenedAt(),
-        v.getOpeningFloatMinor(),
-        v.getCurrency() == null ? null : v.getCurrency().strip(),
-        v.getClosedAt(),
-        v.getCashSalesMinor(),
-        v.getCashRefundsMinor(),
-        v.getExpectedCashMinor(),
-        v.getCountedCashMinor(),
-        v.getOverShortMinor());
   }
 }

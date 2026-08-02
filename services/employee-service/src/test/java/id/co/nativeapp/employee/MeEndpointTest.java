@@ -17,6 +17,7 @@ import id.co.nativeapp.employee.employee.dto.UpdateEmployeeCommand;
 import id.co.nativeapp.employee.employee.service.EmployeeService;
 import id.co.nativeapp.employee.org.dto.OrgUnitProjectedEvent;
 import id.co.nativeapp.employee.org.service.OrgProjectionService;
+import id.co.nativeapp.employee.payroll.domain.CompensationPackage;
 import id.co.nativeapp.employee.payroll.domain.PayrollRun;
 import id.co.nativeapp.employee.payroll.dto.RunPayrollCommand;
 import id.co.nativeapp.employee.payroll.service.CompensationWriter;
@@ -249,8 +250,7 @@ class MeEndpointTest extends PostgresRlsTestBase {
               PayrollRun neverPosted =
                   payrollRunService.calculate(
                       new RunPayrollCommand("2026-07", List.of(employeeId), List.of()), "IDR");
-              org.assertj.core.api.Assertions.assertThat(neverPosted.getStatus().name())
-                  .isEqualTo("CALCULATED");
+              assertThat(neverPosted.getStatus().name()).isEqualTo("CALCULATED");
 
               return employeeId;
             });
@@ -326,7 +326,7 @@ class MeEndpointTest extends PostgresRlsTestBase {
                           LEGAL_EMPLOYER,
                           LocalDate.of(2026, 1, 1),
                           LocalDate.of(9999, 12, 31)));
-              var highPkg =
+              CompensationPackage highPkg =
                   compensationWriter.createPackage(
                       employeeId,
                       contract.getId(),

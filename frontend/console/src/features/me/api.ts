@@ -6,6 +6,7 @@
 
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch, ApiError } from '@/lib/api'
+import { sumYtd } from './ytd'
 
 export interface MeAssignment {
   id: string
@@ -147,9 +148,10 @@ export interface MyPayslipsYtdSummary {
   /** Null until at least one run's detail has loaded. */
   currency: string | null
   grossMinor: number
-  /** Σ stored PPH21 deduction lines for the year — Jan–Nov positive withholding plus December's
-   * true-up line (which can be NEGATIVE, an over-withheld refund per Track P Phase P3), so this is
-   * already the correct NET annual withholding figure, not a display-flipped one. */
+  /** Σ every EMPLOYEE-borne PPH21 DEDUCTION line for the year (see `./ytd`'s `sumYtd`) — Jan–Nov
+   * positive withholding plus December's true-up line (which can be NEGATIVE, an over-withheld
+   * refund per Track P Phase P3), so this is already the correct NET annual withholding figure, not
+   * a display-flipped one. */
   pph21Minor: number
   runCount: number
   loading: boolean
@@ -177,19 +179,11 @@ export function useMyPayslipsYtd(
     })),
   })
 
-  let grossMinor = 0
-  let pph21Minor = 0
-  let currency: string | null = null
-  for (const q of detailQueries) {
-    if (!q.data) continue
-    grossMinor += q.data.grossMinor
-    currency = currency ?? q.data.currency
-    for (const line of q.data.lines) {
-      if (line.componentKey === 'PPH21' && line.kind === 'DEDUCTION') {
-        pph21Minor += line.amountMinor
-      }
-    }
-  }
+  // The actual sum lives in the pure, unit-tested `./ytd` module (P10 review W1/S3) — this hook is
+  // just the React Query plumbing around it.
+  const { grossMinor, pph21Minor, currency } = sumYtd(
+    detailQueries.map((q) => q.data).filter((d): d is MyPayslipDetail => !!d),
+  )
 
   return {
     year,

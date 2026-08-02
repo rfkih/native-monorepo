@@ -69,7 +69,7 @@ public class RegisterSessionWriter {
 
     Optional<RegisterSessionView> replay = repository.findViewByOpenIdempotencyKey(idempotencyKey);
     if (replay.isPresent()) {
-      return new OpenSessionResult(RegisterSessionResponse.from(replay.get()), false);
+      return new OpenSessionResult(toResponse(replay.get()), false);
     }
 
     outletAccessGuard.enforce(request.businessId());
@@ -113,7 +113,7 @@ public class RegisterSessionWriter {
 
     Optional<RegisterSessionView> replay = repository.findViewByCloseIdempotencyKey(idempotencyKey);
     if (replay.isPresent()) {
-      return RegisterSessionResponse.from(replay.get());
+      return toResponse(replay.get());
     }
 
     RegisterSession session =
@@ -178,21 +178,41 @@ public class RegisterSessionWriter {
   /** Open-replay re-read used by the service's double-open race recovery. */
   @Transactional(readOnly = true)
   public Optional<RegisterSessionResponse> findByOpenKey(String idempotencyKey) {
-    return repository.findViewByOpenIdempotencyKey(idempotencyKey)
-        .map(RegisterSessionResponse::from);
+    return repository.findViewByOpenIdempotencyKey(idempotencyKey).map(RegisterSessionWriter::toResponse);
   }
 
   /** The outlet's current OPEN session, if any. */
   @Transactional(readOnly = true)
   public Optional<RegisterSessionResponse> findCurrent(UUID businessId) {
-    return repository.findOpenViewByBusinessId(businessId).map(RegisterSessionResponse::from);
+    return repository.findOpenViewByBusinessId(businessId).map(RegisterSessionWriter::toResponse);
   }
 
   /** The outlet's session history (most recent first, capped at 50). */
   @Transactional(readOnly = true)
   public List<RegisterSessionResponse> findHistory(UUID businessId) {
     return repository.findHistoryViewsByBusinessId(businessId).stream()
-        .map(RegisterSessionResponse::from)
+        .map(RegisterSessionWriter::toResponse)
         .toList();
+  }
+
+  /**
+   * Maps the native read projection to the response shape (CHAR(3) currency stripped). Lives in
+   * the SERVICE layer — the dto boundary must not reach into projections (ArchUnit).
+   */
+  private static RegisterSessionResponse toResponse(RegisterSessionView v) {
+    return new RegisterSessionResponse(
+        v.getId(),
+        v.getBusinessId(),
+        v.getStatus(),
+        v.getBusinessDate(),
+        v.getOpenedAt(),
+        v.getOpeningFloatMinor(),
+        v.getCurrency() == null ? null : v.getCurrency().strip(),
+        v.getClosedAt(),
+        v.getCashSalesMinor(),
+        v.getCashRefundsMinor(),
+        v.getExpectedCashMinor(),
+        v.getCountedCashMinor(),
+        v.getOverShortMinor());
   }
 }
