@@ -21,6 +21,7 @@ import { EmptyState, KpiTile, PeriodNav } from '@/features/_shared/financeUi'
 import { useTeam, type TeamMember } from '@/features/team/api'
 import { EditPagesDialog } from '@/features/team/EditPagesDialog'
 import { useEmployees } from '@/features/hr/api'
+import { AttendanceTab } from '@/features/hr/AttendanceTab'
 import { EmployeesTab } from '@/features/hr/EmployeesTab'
 import { PayrollTab } from '@/features/hr/PayrollTab'
 import { useSession } from '@/lib/session'
@@ -53,7 +54,7 @@ import {
  * formatMoney minor units + Intl.
  */
 
-type TabKey = 'overview' | 'outlets' | 'employees' | 'people' | 'expenses' | 'payroll'
+type TabKey = 'overview' | 'outlets' | 'employees' | 'people' | 'expenses' | 'attendance' | 'payroll'
 
 type DialogState =
   | { kind: 'addOutlet' }
@@ -145,6 +146,7 @@ export function OrgUnitDetail() {
     { value: 'employees', label: t('orgHub.tabs.employees') },
     { value: 'people', label: t('orgHub.tabs.people') },
     { value: 'expenses', label: t('orgHub.tabs.expenses') },
+    { value: 'attendance', label: t('orgHub.tabs.attendance') },
     { value: 'payroll', label: t('orgHub.tabs.payroll') },
   ]
 
@@ -305,6 +307,9 @@ export function OrgUnitDetail() {
 
       {tab === 'expenses' ? (
         <ComingSoon body={t('orgHub.comingSoon.expensesBody')} />
+      ) : null}
+      {tab === 'attendance' ? (
+        <AttendanceTab companyId={company.companyId} actor={company.actor} />
       ) : null}
       {tab === 'payroll' ? (
         <PayrollTab

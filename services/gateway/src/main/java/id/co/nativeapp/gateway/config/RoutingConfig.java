@@ -769,6 +769,82 @@ public class RoutingConfig {
         .build();
   }
 
+  /**
+   * Leave requests — the manager/owner decision surface ({@code /api/v1/leave-requests/**}, ADR
+   * 0033 Track P Phase P6): the tenant-wide list plus approve/reject. Owner/manager only; the
+   * employee's own self-service half rides {@code /api/v1/me/leave-requests/**} on {@link #meRoute}
+   * (every business role, resolved strictly from the caller's own {@code X-Actor}).
+   */
+  @Bean
+  RouterFunction<ServerResponse> leaveRequestsRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("employee-service-leave-requests")
+        .route(path("/api/v1/leave-requests/**"), http())
+        .before(uri(routes.employeeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
+   * Overtime entries — the manager/owner decision surface ({@code /api/v1/overtime-entries/**}, ADR
+   * 0033 Track P Phase P6), mirroring {@link #leaveRequestsRoute}.
+   */
+  @Bean
+  RouterFunction<ServerResponse> overtimeEntriesRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("employee-service-overtime-entries")
+        .route(path("/api/v1/overtime-entries/**"), http())
+        .before(uri(routes.employeeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
+   * The tenant's single work-calendar row ({@code /api/v1/work-calendar/**}, ADR 0033 §6 Track P
+   * Phase P6) — owner/manager only: the divisor/days-per-week config feeds unpaid-leave pay math
+   * (Track P Phase P7), never an employee-editable setting.
+   */
+  @Bean
+  RouterFunction<ServerResponse> workCalendarRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("employee-service-work-calendar")
+        .route(path("/api/v1/work-calendar/**"), http())
+        .before(uri(routes.employeeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
+   * Per-employee derived leave balances + adjustments ({@code /api/v1/leave-balances/**}, ADR 0033
+   * §4 Track P Phase P6) — owner/manager only; the employee's own balance rides {@code
+   * /api/v1/me/leave-balance} on {@link #meRoute}.
+   */
+  @Bean
+  RouterFunction<ServerResponse> leaveBalancesRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("employee-service-leave-balances")
+        .route(path("/api/v1/leave-balances/**"), http())
+        .before(uri(routes.employeeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
   // ---------------------------------------------------------------------------
   // finance-service (owner dashboard)
   // ---------------------------------------------------------------------------

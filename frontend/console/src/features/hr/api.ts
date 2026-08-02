@@ -905,3 +905,250 @@ export function downloadPayrollBankFile(
     `payroll-${period}-seq${runSeq}.csv`,
   )
 }
+
+// ---------------------------------------------------------------------------
+// Attendance & time-off — manager surface (ADR 0033, Track P Phase P6)
+// ---------------------------------------------------------------------------
+
+export type TimeoffStatus = 'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'CANCELLED'
+
+/** GET /api/v1/leave-requests row — the manager-facing tenant-wide list. */
+export interface LeaveRequestSummary {
+  id: string
+  employeeId: string
+  employeeName: string
+  leaveType: 'ANNUAL' | 'UNPAID' | 'SICK'
+  startDate: string
+  endDate: string
+  days: number
+  status: TimeoffStatus
+  decidedBy: string | null
+  decidedAt: string | null
+  decisionNote: string | null
+}
+
+/** GET /api/v1/overtime-entries row — the manager-facing tenant-wide list. */
+export interface OvertimeEntrySummary {
+  id: string
+  employeeId: string
+  employeeName: string
+  workDate: string
+  minutes: number
+  dayKind: 'WEEKDAY' | 'REST_DAY'
+  status: TimeoffStatus
+  decidedBy: string | null
+  decidedAt: string | null
+  decisionNote: string | null
+}
+
+/** GET/PUT /api/v1/work-calendar — one row per tenant. */
+export interface WorkCalendarRow {
+  daysPerWeek: 5 | 6
+  monthlyDivisor: 21 | 25
+}
+
+/** GET /api/v1/leave-balances row — the per-employee DERIVED annual-leave balance for a year. */
+export interface LeaveBalanceRow {
+  employeeId: string
+  employeeName: string
+  year: number
+  grantedDays: number
+  adjustmentDays: number
+  usedDays: number
+  remaining: number
+}
+
+export function useLeaveRequests(
+  params: TenantParams & { status?: string; page?: number; size?: number; enabled: boolean },
+) {
+  const { companyId, actor, status, page, size, enabled } = params
+  return useQuery({
+    enabled,
+    queryKey: ['leaveRequests', companyId, status ?? 'all', page ?? 0, size ?? 25],
+    queryFn: () =>
+      apiFetch<PageResponse<LeaveRequestSummary>>('/api/v1/leave-requests', {
+        tenant: { companyId, actor },
+        query: { status, page: page?.toString(), size: size?.toString() },
+      }),
+  })
+}
+
+function useTimeoffInvalidate(companyId: string) {
+  const queryClient = useQueryClient()
+  return () => {
+    void queryClient.invalidateQueries({ queryKey: ['leaveRequests', companyId] })
+    void queryClient.invalidateQueries({ queryKey: ['overtimeEntries', companyId] })
+    void queryClient.invalidateQueries({ queryKey: ['leaveBalances', companyId] })
+  }
+}
+
+export function useApproveLeaveRequest(params: TenantParams) {
+  const { companyId, actor } = params
+  const invalidate = useTimeoffInvalidate(companyId)
+  return useMutation({
+    mutationFn: ({
+      requestId,
+      note,
+      idempotencyKey,
+    }: {
+      requestId: string
+      note?: string
+      idempotencyKey: string
+    }) =>
+      apiFetch(`/api/v1/leave-requests/${requestId}/approve`, {
+        method: 'POST',
+        tenant: { companyId, actor },
+        body: { note },
+        headers: { 'Idempotency-Key': idempotencyKey },
+      }),
+    onSuccess: () => invalidate(),
+  })
+}
+
+export function useRejectLeaveRequest(params: TenantParams) {
+  const { companyId, actor } = params
+  const invalidate = useTimeoffInvalidate(companyId)
+  return useMutation({
+    mutationFn: ({
+      requestId,
+      note,
+      idempotencyKey,
+    }: {
+      requestId: string
+      note: string
+      idempotencyKey: string
+    }) =>
+      apiFetch(`/api/v1/leave-requests/${requestId}/reject`, {
+        method: 'POST',
+        tenant: { companyId, actor },
+        body: { note },
+        headers: { 'Idempotency-Key': idempotencyKey },
+      }),
+    onSuccess: () => invalidate(),
+  })
+}
+
+export function useOvertimeEntries(
+  params: TenantParams & { status?: string; page?: number; size?: number; enabled: boolean },
+) {
+  const { companyId, actor, status, page, size, enabled } = params
+  return useQuery({
+    enabled,
+    queryKey: ['overtimeEntries', companyId, status ?? 'all', page ?? 0, size ?? 25],
+    queryFn: () =>
+      apiFetch<PageResponse<OvertimeEntrySummary>>('/api/v1/overtime-entries', {
+        tenant: { companyId, actor },
+        query: { status, page: page?.toString(), size: size?.toString() },
+      }),
+  })
+}
+
+export function useApproveOvertimeEntry(params: TenantParams) {
+  const { companyId, actor } = params
+  const invalidate = useTimeoffInvalidate(companyId)
+  return useMutation({
+    mutationFn: ({
+      entryId,
+      note,
+      idempotencyKey,
+    }: {
+      entryId: string
+      note?: string
+      idempotencyKey: string
+    }) =>
+      apiFetch(`/api/v1/overtime-entries/${entryId}/approve`, {
+        method: 'POST',
+        tenant: { companyId, actor },
+        body: { note },
+        headers: { 'Idempotency-Key': idempotencyKey },
+      }),
+    onSuccess: () => invalidate(),
+  })
+}
+
+export function useRejectOvertimeEntry(params: TenantParams) {
+  const { companyId, actor } = params
+  const invalidate = useTimeoffInvalidate(companyId)
+  return useMutation({
+    mutationFn: ({
+      entryId,
+      note,
+      idempotencyKey,
+    }: {
+      entryId: string
+      note: string
+      idempotencyKey: string
+    }) =>
+      apiFetch(`/api/v1/overtime-entries/${entryId}/reject`, {
+        method: 'POST',
+        tenant: { companyId, actor },
+        body: { note },
+        headers: { 'Idempotency-Key': idempotencyKey },
+      }),
+    onSuccess: () => invalidate(),
+  })
+}
+
+/** GET /api/v1/work-calendar — seeds the tenant's default (5, 21) row on first read (server-side). */
+export function useWorkCalendar(params: TenantParams & { enabled: boolean }) {
+  const { companyId, actor, enabled } = params
+  return useQuery({
+    enabled,
+    queryKey: ['workCalendar', companyId],
+    queryFn: () => apiFetch<WorkCalendarRow>('/api/v1/work-calendar', { tenant: { companyId, actor } }),
+  })
+}
+
+export function useUpsertWorkCalendar(params: TenantParams) {
+  const { companyId, actor } = params
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: WorkCalendarRow) =>
+      apiFetch<WorkCalendarRow>('/api/v1/work-calendar', {
+        method: 'PUT',
+        tenant: { companyId, actor },
+        body,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['workCalendar', companyId] })
+    },
+  })
+}
+
+export function useLeaveBalances(
+  params: TenantParams & { year: number; page?: number; size?: number; enabled: boolean },
+) {
+  const { companyId, actor, year, page, size, enabled } = params
+  return useQuery({
+    enabled,
+    queryKey: ['leaveBalances', companyId, year, page ?? 0, size ?? 50],
+    queryFn: () =>
+      apiFetch<PageResponse<LeaveBalanceRow>>('/api/v1/leave-balances', {
+        tenant: { companyId, actor },
+        query: { year: year.toString(), page: page?.toString(), size: size?.toString() },
+      }),
+  })
+}
+
+export function useAdjustLeaveBalance(params: TenantParams) {
+  const { companyId, actor } = params
+  const invalidate = useTimeoffInvalidate(companyId)
+  return useMutation({
+    mutationFn: ({
+      employeeId,
+      year,
+      adjustmentDays,
+    }: {
+      employeeId: string
+      year: number
+      adjustmentDays: number
+    }) =>
+      apiFetch<LeaveBalanceRow>(`/api/v1/leave-balances/${employeeId}`, {
+        method: 'PATCH',
+        tenant: { companyId, actor },
+        query: { year: year.toString() },
+        body: { adjustmentDays },
+      }),
+    onSuccess: () => invalidate(),
+  })
+}

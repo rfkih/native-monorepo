@@ -25,6 +25,12 @@ import id.co.nativeapp.employee.payroll.domain.PayrollRunNotPostedException;
 import id.co.nativeapp.employee.payroll.domain.PayrollSetupNotSeededException;
 import id.co.nativeapp.employee.payroll.domain.UnknownDatasetVersionException;
 import id.co.nativeapp.employee.payroll.domain.UnknownStatutoryRuleException;
+import id.co.nativeapp.employee.timeoff.domain.DecisionCommentRequiredException;
+import id.co.nativeapp.employee.timeoff.domain.InsufficientLeaveBalanceException;
+import id.co.nativeapp.employee.timeoff.domain.LeaveOverlapException;
+import id.co.nativeapp.employee.timeoff.domain.LeaveRequestNotFoundException;
+import id.co.nativeapp.employee.timeoff.domain.OvertimeEntryNotFoundException;
+import id.co.nativeapp.employee.timeoff.domain.TimeoffStateException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
@@ -400,6 +406,71 @@ public class EmployeeApiAdvice {
       ReceiptNotFoundException ex, HttpServletRequest request) {
     ProblemDetail problem = problem(HttpStatus.NOT_FOUND, "expense-receipt-not-found", request);
     problem.setTitle("Expense receipt not found");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Attendance & time-off (ADR 0033, Track P Phase P6)
+  // -------------------------------------------------------------------------------------------
+
+  /** A leave request referenced by id is unknown, or not visible to the caller → 404. */
+  @ExceptionHandler(LeaveRequestNotFoundException.class)
+  public ProblemDetail handleLeaveRequestNotFound(
+      LeaveRequestNotFoundException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.NOT_FOUND, "leave-request-not-found", request);
+    problem.setTitle("Leave request not found");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /** An overtime entry referenced by id is unknown, or not visible to the caller → 404. */
+  @ExceptionHandler(OvertimeEntryNotFoundException.class)
+  public ProblemDetail handleOvertimeEntryNotFound(
+      OvertimeEntryNotFoundException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.NOT_FOUND, "overtime-entry-not-found", request);
+    problem.setTitle("Overtime entry not found");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /** A leave/overtime transition was attempted from a state that does not allow it → 409. */
+  @ExceptionHandler(TimeoffStateException.class)
+  public ProblemDetail handleTimeoffState(TimeoffStateException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.CONFLICT, "timeoff-state-conflict", request);
+    problem.setTitle("Time-off state conflict");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /** A REJECTED decision with no note → 422. */
+  @ExceptionHandler(DecisionCommentRequiredException.class)
+  public ProblemDetail handleDecisionCommentRequired(
+      DecisionCommentRequiredException ex, HttpServletRequest request) {
+    ProblemDetail problem =
+        problem(HttpStatus.UNPROCESSABLE_ENTITY, "decision-comment-required", request);
+    problem.setTitle("A rejection note is required");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /**
+   * A leave request overlaps an existing SUBMITTED/APPROVED request for the same employee → 409.
+   */
+  @ExceptionHandler(LeaveOverlapException.class)
+  public ProblemDetail handleLeaveOverlap(LeaveOverlapException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.CONFLICT, "leave-request-overlap", request);
+    problem.setTitle("Overlapping leave request");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /** Approving would exceed the employee's derived annual-leave balance for the year → 409. */
+  @ExceptionHandler(InsufficientLeaveBalanceException.class)
+  public ProblemDetail handleInsufficientLeaveBalance(
+      InsufficientLeaveBalanceException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.CONFLICT, "insufficient-leave-balance", request);
+    problem.setTitle("Insufficient leave balance");
     problem.setDetail(ex.getMessage());
     return problem;
   }

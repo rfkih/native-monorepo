@@ -57,6 +57,8 @@ abstract class PostgresRlsTestBase {
               + " comp_package, pay_component, earning_rule, statutory_rule, payroll_run,"
               + " payslip_line, labor_cost_allocation, metric_input, period_seal,"
               + " expense_category, expense_claim, expense_claim_event, expense_receipt,"
+              + " leave_request, overtime_entry, leave_balance, work_calendar,"
+              + " timeoff_request_event,"
               + " outbox, processed_event");
     } catch (SQLException ignored) {
       // Tables not created yet (pre-Flyway) — nothing to reset.

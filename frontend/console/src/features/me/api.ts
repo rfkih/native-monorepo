@@ -4,7 +4,7 @@
  * Payslip amounts are the caller's OWN real figures; NIK/bank stay masked (rule 6).
  */
 
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch, ApiError } from '@/lib/api'
 
 export interface MeAssignment {
@@ -138,6 +138,185 @@ export function useMySales(params: TenantParams & { period?: string; enabled: bo
     queryFn: () => {
       const qs = period ? `?period=${encodeURIComponent(period)}` : ''
       return apiFetch<MySales>(`/api/v1/me/sales${qs}`, { tenant: { companyId, actor } })
+    },
+  })
+}
+
+// ---------------------------------------------------------------------------
+// My time off — self-service (ADR 0033, Track P Phase P6)
+// ---------------------------------------------------------------------------
+
+export type TimeoffStatus = 'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'CANCELLED'
+
+interface PageResponse<T> {
+  content: T[]
+  page: number
+  size: number
+  totalElements: number
+  totalPages: number
+}
+
+/** GET /api/v1/me/leave-requests row. */
+export interface MyLeaveRequest {
+  id: string
+  leaveType: 'ANNUAL' | 'UNPAID' | 'SICK'
+  startDate: string
+  endDate: string
+  days: number
+  status: TimeoffStatus
+  decidedBy: string | null
+  decidedAt: string | null
+  decisionNote: string | null
+}
+
+/** GET /api/v1/me/overtime-entries row. */
+export interface MyOvertimeEntry {
+  id: string
+  workDate: string
+  minutes: number
+  dayKind: 'WEEKDAY' | 'REST_DAY'
+  status: TimeoffStatus
+  decidedBy: string | null
+  decidedAt: string | null
+  decisionNote: string | null
+}
+
+/** GET /api/v1/me/leave-balance — the caller's own DERIVED annual-leave balance for a year. */
+export interface MyLeaveBalance {
+  year: number
+  grantedDays: number
+  adjustmentDays: number
+  usedDays: number
+  remaining: number
+}
+
+/** GET /api/v1/me/leave-requests — the caller's own requests (paginated). */
+export function useMyLeaveRequests(params: TenantParams & { enabled: boolean }) {
+  const { companyId, actor, enabled } = params
+  return useQuery({
+    enabled,
+    retry: false,
+    queryKey: ['myLeaveRequests', companyId],
+    queryFn: async () => {
+      const result = await apiFetch<PageResponse<MyLeaveRequest>>('/api/v1/me/leave-requests', {
+        tenant: { companyId, actor },
+      })
+      return result?.content ?? []
+    },
+  })
+}
+
+/** GET /api/v1/me/leave-balance?year= — the caller's own derived balance. */
+export function useMyLeaveBalance(params: TenantParams & { year: number; enabled: boolean }) {
+  const { companyId, actor, year, enabled } = params
+  return useQuery({
+    enabled,
+    retry: false,
+    queryKey: ['myLeaveBalance', companyId, year],
+    queryFn: () =>
+      apiFetch<MyLeaveBalance>('/api/v1/me/leave-balance', {
+        tenant: { companyId, actor },
+        query: { year: year.toString() },
+      }),
+  })
+}
+
+/** POST /api/v1/me/leave-requests — submits a new leave request (create IS the submit transition). */
+export function useCreateLeaveRequest(params: TenantParams) {
+  const { companyId, actor } = params
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      body,
+      idempotencyKey,
+    }: {
+      body: { leaveType: string; startDate: string; endDate: string; days: number }
+      idempotencyKey: string
+    }) =>
+      apiFetch<MyLeaveRequest>('/api/v1/me/leave-requests', {
+        method: 'POST',
+        tenant: { companyId, actor },
+        body,
+        headers: { 'Idempotency-Key': idempotencyKey },
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['myLeaveRequests', companyId] })
+      void queryClient.invalidateQueries({ queryKey: ['myLeaveBalance', companyId] })
+    },
+  })
+}
+
+/** POST /api/v1/me/leave-requests/{id}/cancel */
+export function useCancelLeaveRequest(params: TenantParams) {
+  const { companyId, actor } = params
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ requestId, idempotencyKey }: { requestId: string; idempotencyKey: string }) =>
+      apiFetch<MyLeaveRequest>(`/api/v1/me/leave-requests/${requestId}/cancel`, {
+        method: 'POST',
+        tenant: { companyId, actor },
+        headers: { 'Idempotency-Key': idempotencyKey },
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['myLeaveRequests', companyId] })
+      void queryClient.invalidateQueries({ queryKey: ['myLeaveBalance', companyId] })
+    },
+  })
+}
+
+/** GET /api/v1/me/overtime-entries — the caller's own entries (paginated). */
+export function useMyOvertimeEntries(params: TenantParams & { enabled: boolean }) {
+  const { companyId, actor, enabled } = params
+  return useQuery({
+    enabled,
+    retry: false,
+    queryKey: ['myOvertimeEntries', companyId],
+    queryFn: async () => {
+      const result = await apiFetch<PageResponse<MyOvertimeEntry>>('/api/v1/me/overtime-entries', {
+        tenant: { companyId, actor },
+      })
+      return result?.content ?? []
+    },
+  })
+}
+
+/** POST /api/v1/me/overtime-entries — logs a new overtime entry (create IS the submit transition). */
+export function useCreateOvertimeEntry(params: TenantParams) {
+  const { companyId, actor } = params
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      body,
+      idempotencyKey,
+    }: {
+      body: { workDate: string; minutes: number; dayKind: string }
+      idempotencyKey: string
+    }) =>
+      apiFetch<MyOvertimeEntry>('/api/v1/me/overtime-entries', {
+        method: 'POST',
+        tenant: { companyId, actor },
+        body,
+        headers: { 'Idempotency-Key': idempotencyKey },
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['myOvertimeEntries', companyId] })
+    },
+  })
+}
+
+/** POST /api/v1/me/overtime-entries/{id}/cancel */
+export function useCancelOvertimeEntry(params: TenantParams) {
+  const { companyId, actor } = params
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ entryId, idempotencyKey }: { entryId: string; idempotencyKey: string }) =>
+      apiFetch<MyOvertimeEntry>(`/api/v1/me/overtime-entries/${entryId}/cancel`, {
+        method: 'POST',
+        tenant: { companyId, actor },
+        headers: { 'Idempotency-Key': idempotencyKey },
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['myOvertimeEntries', companyId] })
     },
   })
 }

@@ -1060,6 +1060,187 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
   }
 
   // ---------------------------------------------------------------------------
+  // /api/v1/leave-requests/**, /api/v1/overtime-entries/**, /api/v1/work-calendar/**,
+  // /api/v1/leave-balances/** — attendance & time-off (ADR 0033, Track P Phase P6);
+  // owner/manager dashboard surface only; the employee self-service half rides /api/v1/me/**
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void aCashierIsDeniedTheLeaveRequestsRouteWith403() throws Exception {
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/leave-requests")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void anOwnerCanReachTheLeaveRequestsRouteWithInjectedTenantHeaders() throws Exception {
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/leave-requests")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    RecordedRequest forwarded = theForwardedRequest();
+    assertThat(forwarded.getPath()).isEqualTo("/api/v1/leave-requests");
+    assertThat(forwarded.getHeader("X-Company-Id")).isEqualTo(EXPECTED_COMPANY_ID);
+    assertThat(forwarded.getHeader("X-Actor")).isNotBlank();
+  }
+
+  @Test
+  void aCashierIsDeniedTheOvertimeEntriesRouteWith403() throws Exception {
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/overtime-entries")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void anOwnerCanReachTheOvertimeEntriesRoute() throws Exception {
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/overtime-entries")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/overtime-entries");
+  }
+
+  @Test
+  void aCashierIsDeniedTheWorkCalendarRouteWith403() throws Exception {
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/work-calendar")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void anOwnerCanReachTheWorkCalendarRoute() throws Exception {
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/work-calendar")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/work-calendar");
+  }
+
+  @Test
+  void aCashierIsDeniedTheLeaveBalancesRouteWith403() throws Exception {
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/leave-balances")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void anOwnerCanReachTheLeaveBalancesRoute() throws Exception {
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/leave-balances")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/leave-balances");
+  }
+
+  @Test
+  void aCashierCanStillReachTheirOwnLeaveRequestsUnderMe() throws Exception {
+    // Regression guard: the new DASHBOARD_ROLES-gated /leave-requests/** route must NOT narrow
+    // the pre-existing /api/v1/me/** surface, which already carries /api/v1/me/leave-requests/**
+    // for every business role (ME_ROLES).
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/me/leave-requests")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/me/leave-requests");
+  }
+
+  // ---------------------------------------------------------------------------
   // /api/v1/pricing/** — restaurant pricing-rule preview (POS_ROLES, offline mode, ADR 0028)
   // ---------------------------------------------------------------------------
 

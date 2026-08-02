@@ -29,6 +29,7 @@ import {
   useMySales,
   type MyPayslipHeader,
 } from './api'
+import { MyTimeoff } from './MyTimeoff'
 
 export function Me() {
   const { t, i18n } = useTranslation()
@@ -152,6 +153,9 @@ export function Me() {
 
             {/* Sales + commission */}
             <SalesSection companyId={companyId} actor={actor} locale={locale} />
+
+            {/* My time off (ADR 0033, Track P Phase P6) */}
+            <MyTimeoff companyId={companyId} actor={actor} />
 
             {/* Payslips */}
             <PayslipsSection companyId={companyId} actor={actor} locale={locale} />
