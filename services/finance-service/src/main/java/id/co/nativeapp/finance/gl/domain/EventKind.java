@@ -56,7 +56,7 @@ public enum EventKind {
    * payroll run) — a balance-sheet-only move, the expense having already been recognised at
    * approval: Dr {@link AccountRole#EMPLOYEE_EXPENSE_PAYABLE} / Cr {@link
    * AccountRole#CASH_CLEARING} (both {@code GROSS}, V39 seed). Settle-once guarded by {@code
-   * employee_expense_settlement}.
+   * employee_expense_claim_ledger}.
    */
   EXPENSE_CLAIM_SETTLED
 }

@@ -1,8 +1,9 @@
 package id.co.nativeapp.finance.empexpense.service;
 
 import id.co.nativeapp.events.ProcessedEventStore;
+import id.co.nativeapp.finance.empexpense.domain.EmployeeExpenseClaimLedger;
 import id.co.nativeapp.finance.empexpense.messaging.ExpenseClaimVoidedEvent;
-import id.co.nativeapp.finance.empexpense.repository.EmployeeExpenseSettlementRepository;
+import id.co.nativeapp.finance.empexpense.repository.EmployeeExpenseClaimLedgerRepository;
 import id.co.nativeapp.finance.gl.domain.EventKind;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
@@ -16,6 +17,7 @@ import id.co.nativeapp.finance.revenue.domain.PostingType;
 import id.co.nativeapp.finance.revenue.repository.LedgerPostingRepository;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.TenantContext;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -35,18 +37,24 @@ import org.springframework.transaction.annotation.Transactional;
  * dedupe claim and the side effects commit (or roll back) together, exactly like {@link
  * ExpenseClaimPostingWriter}.
  *
- * <p><strong>Same account, contra amount.</strong> The dimensional contra resolves the SAME expense
- * account the original approval posted to — {@link GlAccountResolver#resolveExpense} evaluated at
- * the ORIGINAL {@code approvedAt} (so it reverses the exact account even if the mapping has since
- * changed) — and hits the SAME {@code business_id} (the catalog's explicit contract: "the contra
- * hits the same business_id"). The P&amp;L unwind negates the amount into the SAME accumulator the
- * approval added to (the labor-supersession {@code REVERSAL} idiom: {@code
- * PnlReadModelWriter#addExpense} with a negated {@link Money}).
+ * <p><strong>Same account, contra amount, the VOID's OWN period.</strong> The dimensional contra
+ * resolves the SAME expense account the original approval posted to — {@link
+ * GlAccountResolver#resolveExpense} evaluated at the ORIGINAL {@code approvedAt} (so it reverses
+ * the exact account even if the mapping has since changed) — and hits the SAME {@code business_id}
+ * (the catalog's explicit contract: "the contra hits the same business_id"). The P&amp;L unwind
+ * negates the amount into the {@code consolidated_pnl} row for the VOID's OWN period (not
+ * necessarily the approval's period — a cross-period void, e.g. approved in June and voided in
+ * July, unwinds into July's accumulator, exactly like {@code ReversalPostingWriter}/{@code
+ * SaleVoidedEvent} unwinds into the void's own {@code occurredAt}-derived period, not the original
+ * sale's — the two periods only coincide when the void lands in the same month as the approval).
  *
- * <p><strong>Settled-already defense-in-depth.</strong> The producer guards that a settled or
- * payroll-linked claim can never void (ADR 0030 §5), but finance independently re-checks the
- * settle-once guard: a void arriving after a settlement is a LOUD logged skip (no amounts logged),
- * never a silent reversal of money that has already moved — a human follow-up case.
+ * <p><strong>Claim-ledger settled-check (ADR 0030 §7, review W1/S3).</strong> The settle-once guard
+ * now lives on the shared per-claim {@link EmployeeExpenseClaimLedger} row: a row with {@code
+ * settledAt} already stamped is a LOUD logged skip (no amounts logged) — money already moved, never
+ * silently reversed. A void with NO row at all (the claim's approval is missing or has not arrived
+ * yet — an out-of-order/lost-approval case, ADR 0030 §7) is the same loud-WARN pattern but still
+ * posts the contra, exactly as before finding no guard row did; there is simply nothing to stamp.
+ * On success the row (if one exists) is stamped with {@code voidedAt}/{@code voidEntryId}.
  */
 @Component
 public class ExpenseClaimVoidWriter {
@@ -60,7 +68,7 @@ public class ExpenseClaimVoidWriter {
   private final JournalPostingService journalPostingService;
   private final JournalEntryRepository journalEntryRepository;
   private final JournalLineRepository journalLineRepository;
-  private final EmployeeExpenseSettlementRepository settlementRepository;
+  private final EmployeeExpenseClaimLedgerRepository claimLedgerRepository;
 
   @SuppressWarnings("checkstyle:ParameterNumber")
   public ExpenseClaimVoidWriter(
@@ -71,7 +79,7 @@ public class ExpenseClaimVoidWriter {
       JournalPostingService journalPostingService,
       JournalEntryRepository journalEntryRepository,
       JournalLineRepository journalLineRepository,
-      EmployeeExpenseSettlementRepository settlementRepository) {
+      EmployeeExpenseClaimLedgerRepository claimLedgerRepository) {
     this.ledgerRepository = ledgerRepository;
     this.processedEvents = processedEvents;
     this.glAccountResolver = glAccountResolver;
@@ -79,7 +87,7 @@ public class ExpenseClaimVoidWriter {
     this.journalPostingService = journalPostingService;
     this.journalEntryRepository = journalEntryRepository;
     this.journalLineRepository = journalLineRepository;
-    this.settlementRepository = settlementRepository;
+    this.claimLedgerRepository = claimLedgerRepository;
   }
 
   /**
@@ -88,8 +96,8 @@ public class ExpenseClaimVoidWriter {
    * company_id}.
    *
    * @return {@code true} if this delivery ran (first delivery — which may still be a no-op contra
-   *     when the settle-once guard already has a row for the claim, see below), {@code false} if
-   *     skipped as a duplicate (re-delivery of the same event id)
+   *     when the claim-ledger row is already settled, see below), {@code false} if skipped as a
+   *     duplicate (re-delivery of the same event id)
    */
   @Transactional
   public boolean postVoided(ExpenseClaimVoidedEvent event) {
@@ -101,15 +109,26 @@ public class ExpenseClaimVoidWriter {
     String companyId = tenant.companyId();
     String actor = tenant.actor();
 
+    Optional<EmployeeExpenseClaimLedger> existing =
+        claimLedgerRepository.findByClaimId(event.claimId());
+
     // Defense-in-depth: money already moved via a settlement must never be silently touched again.
     // No amounts are logged (rule 6 discipline extended to a defensive log line).
-    if (settlementRepository.existsByClaimId(event.claimId())) {
+    if (existing.isPresent() && existing.get().isSettled()) {
       log.warn(
           "ExpenseClaimVoided arrived for an ALREADY-SETTLED claim claimId={} (eventId={});"
               + " skipping — money has already moved, this requires human follow-up",
           event.claimId(),
           event.eventId());
       return;
+    }
+
+    if (existing.isEmpty()) {
+      log.warn(
+          "ExpenseClaimVoided for an UNRECOGNIZED claim claimId={} (eventId={}) — approval missing"
+              + " or late; posting the contra without a claim-ledger row to reconcile against",
+          event.claimId(),
+          event.eventId());
     }
 
     Money amount = event.amount();
@@ -135,8 +154,9 @@ public class ExpenseClaimVoidWriter {
     posting.setCompanyId(companyId);
     ledgerRepository.save(posting);
 
-    // 2) Unwind the P&L EXPENSE leg — negate into the SAME accumulator the approval added to (the
-    //    labor-supersession REVERSAL idiom: PnlReadModelWriter#addExpense with a negated amount).
+    // 2) Unwind the P&L EXPENSE leg — into the VOID's OWN period bucket (see the class javadoc: a
+    //    cross-period void unwinds where the void lands, not where the approval did; the
+    //    SaleVoided/ReversalPostingWriter precedent).
     pnlReadModel.addExpense(period, amount.negate(), companyId, actor);
 
     // 3) Double-entry GL contra — Dr EMPLOYEE_EXPENSE_PAYABLE / Cr EXPENSE (V39 illustrative
@@ -159,5 +179,13 @@ public class ExpenseClaimVoidWriter {
               line.setCompanyId(companyId);
               journalLineRepository.save(line);
             });
+
+    // 4) Stamp the claim-ledger row, if one exists (ADR 0030 §4 drill-down). No row to stamp in the
+    //    unrecognized-claim case above — the WARN already flagged it.
+    existing.ifPresent(
+        row -> {
+          row.applyVoid(event.voidedAt(), glEntry.getId());
+          claimLedgerRepository.save(row);
+        });
   }
 }

@@ -14,9 +14,13 @@
 -- this codebase. EXPENSE_CLAIM_SETTLED reuses CASH_CLEARING (-> 1900, V13). The 2600 account code and
 -- the VOID/SETTLED template shapes are ILLUSTRATIVE — an accountant swaps them via higher-version rows.
 --
--- Also creates employee_expense_settlement: the settle-once guard row (ADR 0030 SS7) a per-claim
--- UNIQUE(company_id, claim_id) makes any second ExpenseReimbursementSettled for a claim — a Kafka
--- re-delivery or a payroll-supersession re-emission — a logged no-op instead of a double-post.
+-- Also creates employee_expense_claim_ledger: ONE row per claim (UNIQUE(company_id, claim_id))
+-- carrying the recognition / void / settlement facts as they land, in ANY arrival order. It is BOTH
+-- the settle-once guard (ADR 0030 SS7 — a second ExpenseReimbursementSettled for a claim, a Kafka
+-- re-delivery or a payroll-supersession re-emission, is a logged no-op) AND the ADR 0030 SS4
+-- employee-payable drill-down source: an out-of-order or lost approval is now DETECTABLE (a
+-- settlement with no matching recognition self-heals the row with a loud WARN instead of silently
+-- having nothing to reconcile against).
 -- ============================================================================================================================
 
 -- ---------------------------------------------------------------------------
@@ -94,44 +98,87 @@ SELECT gen_random_uuid(), pt.id, 2, 'CASH_CLEARING',             'CREDIT', 'GROS
   FROM posting_template pt WHERE pt.event_kind = 'EXPENSE_CLAIM_SETTLED' AND pt.version = 1;
 
 -- ---------------------------------------------------------------------------
--- 5. employee_expense_settlement — the settle-once guard (ADR 0030 SS7). Auditable + FORCE RLS
---    (tenant-scoped, unlike the global-reference tables above).
+-- 5. employee_expense_claim_ledger — ONE row per claim, the settle-once guard AND the ADR 0030 SS4
+--    employee-payable drill-down source (review W1/S3). Auditable + FORCE RLS (tenant-scoped,
+--    unlike the global-reference tables above).
 -- ---------------------------------------------------------------------------
-CREATE TABLE employee_expense_settlement (
-    id                UUID         NOT NULL PRIMARY KEY,
-    claim_id          UUID         NOT NULL,
-    settlement_kind   VARCHAR(16)  NOT NULL,
-    payroll_run_id    UUID,        -- set only when settlement_kind = PAYROLL
-    run_seq           INTEGER,     -- set only when settlement_kind = PAYROLL
-    journal_entry_id  UUID         NOT NULL,
-    settled_at        TIMESTAMPTZ  NOT NULL,
+-- Column groups (each landed by a different consumer, in ANY arrival order):
+--   identity     — claim_id / employee_id / org_unit_id / amount_minor / amount_currency: set ONCE
+--                  by whichever consumer creates the row first (APPROVAL in the normal in-order
+--                  case; SETTLEMENT when it arrives before the approval — see below); immutable
+--                  thereafter (both events describe the SAME claim, so they always agree).
+--   recognition  — recognized_at / recognition_entry_id: stamped by the APPROVAL consumer.
+--   void         — voided_at / void_entry_id: stamped by the VOID consumer.
+--   settlement   — settled_at / settlement_kind / payroll_run_id / run_seq / settlement_entry_id:
+--                  stamped by the SETTLEMENT consumer.
+-- *_entry_id columns point at journal_entry.id (no FK — journal_entry is a same-service table but
+-- this column intentionally stays a plain UUID reference, mirroring bill.journal_entry_id/
+-- invoice.journal_entry_id elsewhere in this schema, so a reference can be recorded before the
+-- entry — never the case here — without an ordering constraint).
+--
+-- Reconciliation semantics (ADR 0030 SS7, the settle-once guard, generalized):
+--   * APPROVAL lands first (the normal order): INSERT with recognition fields; NULL void/settlement.
+--   * SETTLEMENT lands on an existing, unsettled row: UPDATE the settlement fields onto it.
+--   * SETTLEMENT lands with NO row (settlement before approval, or a lost approval): INSERT a row
+--     with ONLY settlement fields (recognition NULL) — a LOUD WARN logged (claim id only, no
+--     amounts) flags account 2600 as unbacked by a recognition entry until the approval arrives.
+--   * SETTLEMENT lands on an already-settled row (settled_at NOT NULL): the settle-once no-op — a
+--     Kafka re-delivery or a payroll-supersession re-emission, logged INFO, never a double post.
+--   * A late APPROVAL lands on a row a settlement already self-healed: UPDATE the recognition
+--     fields onto it — logged INFO ("approval arrived after settlement, reconciled").
+--   * VOID checks settled_at on this row exactly as the old settle-once guard did (an
+--     already-settled claim is a loud logged skip — money already moved); a VOID with NO row is
+--     the same loud-WARN pattern (approval missing or late) but still posts the contra.
+CREATE TABLE employee_expense_claim_ledger (
+    id                     UUID         NOT NULL PRIMARY KEY,
+    claim_id               UUID         NOT NULL,
+    employee_id            UUID         NOT NULL,
+    org_unit_id            UUID         NOT NULL,
+    amount_minor           BIGINT       NOT NULL,
+    amount_currency        CHAR(3)      NOT NULL,
+
+    recognized_at          TIMESTAMPTZ,
+    recognition_entry_id   UUID,
+
+    voided_at              TIMESTAMPTZ,
+    void_entry_id          UUID,
+
+    settled_at             TIMESTAMPTZ,
+    settlement_kind        VARCHAR(16),
+    payroll_run_id         UUID,        -- set only when settlement_kind = PAYROLL
+    run_seq                INTEGER,     -- set only when settlement_kind = PAYROLL
+    settlement_entry_id    UUID,
 
     -- Auditable (libs/tenant): 6 cols on every Native table (rule 4).
-    created_at        TIMESTAMPTZ  NOT NULL,
-    created_by        VARCHAR(255) NOT NULL,
-    updated_at        TIMESTAMPTZ  NOT NULL,
-    updated_by        VARCHAR(255) NOT NULL,
-    version           BIGINT       NOT NULL,
-    company_id        VARCHAR(64)  NOT NULL,
+    created_at             TIMESTAMPTZ  NOT NULL,
+    created_by             VARCHAR(255) NOT NULL,
+    updated_at             TIMESTAMPTZ  NOT NULL,
+    updated_by             VARCHAR(255) NOT NULL,
+    version                BIGINT       NOT NULL,
+    company_id             VARCHAR(64)  NOT NULL,
 
-    CONSTRAINT ck_employee_expense_settlement_kind
-        CHECK (settlement_kind IN ('DIRECT', 'PAYROLL'))
+    CONSTRAINT ck_employee_expense_claim_ledger_settlement_kind
+        CHECK (settlement_kind IS NULL OR settlement_kind IN ('DIRECT', 'PAYROLL'))
 );
 
-ALTER TABLE employee_expense_settlement ENABLE ROW LEVEL SECURITY;
-ALTER TABLE employee_expense_settlement FORCE ROW LEVEL SECURITY;
+ALTER TABLE employee_expense_claim_ledger ENABLE ROW LEVEL SECURITY;
+ALTER TABLE employee_expense_claim_ledger FORCE ROW LEVEL SECURITY;
 
-CREATE POLICY employee_expense_settlement_tenant_isolation ON employee_expense_settlement
+CREATE POLICY employee_expense_claim_ledger_tenant_isolation ON employee_expense_claim_ledger
     USING      (company_id = current_setting('app.current_tenant', true))
     WITH CHECK (company_id = current_setting('app.current_tenant', true));
 
--- The settle-once guard itself: at most one settlement row per (tenant, claim). A concurrent racer
--- (a different event id settling the SAME claim — the payroll-supersession re-emission race, ADR 0030
--- SS7) trips this constraint; the writer's transaction aborts and the caller recovers with a
+-- The settle-once guard itself (unchanged mechanism, now on this table): at most one row per
+-- (tenant, claim). A concurrent racer inserting a FRESH row for the SAME claim — two settlements
+-- racing before any approval has landed, e.g. the payroll-supersession re-emission race, ADR 0030
+-- SS7 — trips this constraint; the writer's transaction aborts and the caller recovers with a
 -- separate-transaction re-read (the SaleWriter/AssignmentWriter/GiftCardSaleWriter conflict-recovery
--- idiom), never a double post.
-CREATE UNIQUE INDEX uq_employee_expense_settlement_claim
-    ON employee_expense_settlement (company_id, claim_id);
+-- idiom), never a double post. A settlement landing on an ALREADY-EXISTING unsettled row is a plain
+-- UPDATE, not an insert, so it is not this constraint's concern (best-effort protected by the
+-- inherited Auditable @Version optimistic lock instead — a residual, not exercised by this phase's
+-- tests).
+CREATE UNIQUE INDEX uq_employee_expense_claim_ledger_claim
+    ON employee_expense_claim_ledger (company_id, claim_id);
 
 -- ---------------------------------------------------------------------------
 -- SME CONFIRMATION REQUIRED (do not remove until confirmed):

@@ -15,7 +15,7 @@ import org.apache.avro.generic.GenericRecord;
  * classpath ({@code avro/ExpenseReimbursementSettled.avsc}, single-sourced from libs/contracts —
  * ADR 0003). Consumed to settle the employee-expense payable: Dr {@code 2600} / Cr CASH_CLEARING —
  * a balance-sheet move only. SETTLE-ONCE: a per-claim guard row ({@code
- * employee_expense_settlement}, UNIQUE company_id+claim_id) makes any second settlement — Kafka
+ * employee_expense_claim_ledger}, UNIQUE company_id+claim_id) makes any second settlement — Kafka
  * re-delivery or a payroll-supersession re-emission — a logged no-op (ADR 0030).
  */
 public final class ExpenseReimbursementSettledSchema {

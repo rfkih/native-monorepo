@@ -13,7 +13,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import id.co.nativeapp.events.ProcessedEventStore;
+import id.co.nativeapp.finance.empexpense.domain.EmployeeExpenseClaimLedger;
 import id.co.nativeapp.finance.empexpense.messaging.ExpenseClaimApprovedEvent;
+import id.co.nativeapp.finance.empexpense.repository.EmployeeExpenseClaimLedgerRepository;
 import id.co.nativeapp.finance.gl.domain.EventKind;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.domain.JournalLine;
@@ -33,6 +35,7 @@ import id.co.nativeapp.tenant.TenantContext;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -64,6 +67,7 @@ class ExpenseClaimPostingWriterTest {
   @Mock private JournalPostingService journalPostingService;
   @Mock private JournalEntryRepository journalEntryRepository;
   @Mock private JournalLineRepository journalLineRepository;
+  @Mock private EmployeeExpenseClaimLedgerRepository claimLedgerRepository;
 
   private ExpenseClaimPostingWriter writer;
 
@@ -77,7 +81,8 @@ class ExpenseClaimPostingWriterTest {
             pnlReadModel,
             journalPostingService,
             journalEntryRepository,
-            journalLineRepository);
+            journalLineRepository,
+            claimLedgerRepository);
   }
 
   private static ExpenseClaimApprovedEvent event(UUID eventId, long amountMinor, String glHint) {
@@ -111,6 +116,7 @@ class ExpenseClaimPostingWriterTest {
     firstDelivery(processedEvents);
     when(glAccountResolver.resolveExpense("supplies", event.approvedAt()))
         .thenReturn(new GlAccountResolution("5200", true));
+    when(claimLedgerRepository.findByClaimId(CLAIM_ID)).thenReturn(Optional.empty());
 
     UUID entryId = UUID.randomUUID();
     JournalEntry realEntry =
@@ -155,6 +161,19 @@ class ExpenseClaimPostingWriterTest {
 
     // The persisted entry is genuinely balanced (built via the real JournalEntry.balanced factory).
     assertThat(realEntry.totalDebit()).isEqualTo(Money.ofMinor(250_000L, "IDR"));
+
+    // The claim-ledger row was INSERTED with the recognition fields (no prior row existed).
+    ArgumentCaptor<EmployeeExpenseClaimLedger> ledgerCaptor =
+        ArgumentCaptor.forClass(EmployeeExpenseClaimLedger.class);
+    verify(claimLedgerRepository).saveAndFlush(ledgerCaptor.capture());
+    EmployeeExpenseClaimLedger ledgerRow = ledgerCaptor.getValue();
+    assertThat(ledgerRow.getClaimId()).isEqualTo(CLAIM_ID);
+    assertThat(ledgerRow.getEmployeeId()).isEqualTo(EMPLOYEE_ID);
+    assertThat(ledgerRow.getOrgUnitId()).isEqualTo(ORG_UNIT_ID);
+    assertThat(ledgerRow.getAmount()).isEqualTo(Money.ofMinor(250_000L, "IDR"));
+    assertThat(ledgerRow.getRecognizedAt()).isEqualTo(event.approvedAt());
+    assertThat(ledgerRow.getRecognitionEntryId()).isEqualTo(entryId);
+    assertThat(ledgerRow.isSettled()).isFalse();
   }
 
   @Test
@@ -166,6 +185,7 @@ class ExpenseClaimPostingWriterTest {
         .thenReturn(new GlAccountResolution("9999", false));
     when(journalPostingService.buildEntry(any(), any(), any(), any(), any(), any(), eq(false)))
         .thenReturn(suspenseEntry(eventId, 99_000L));
+    when(claimLedgerRepository.findByClaimId(CLAIM_ID)).thenReturn(Optional.empty());
 
     boolean posted = TenantContext.callAs(TENANT, ACTOR, () -> writer.postApproved(event));
 
@@ -173,6 +193,63 @@ class ExpenseClaimPostingWriterTest {
     ArgumentCaptor<LedgerPosting> postingCaptor = ArgumentCaptor.forClass(LedgerPosting.class);
     verify(ledgerRepository).save(postingCaptor.capture());
     assertThat(postingCaptor.getValue().getGlAccountCode()).isEqualTo("9999");
+  }
+
+  @Test
+  void anApprovalArrivingAfterAnOutOfOrderSettlementReconcilesTheExistingRow() throws Exception {
+    UUID eventId = UUID.randomUUID();
+    ExpenseClaimApprovedEvent event = event(eventId, 250_000L, "supplies");
+    firstDelivery(processedEvents);
+    when(glAccountResolver.resolveExpense("supplies", event.approvedAt()))
+        .thenReturn(new GlAccountResolution("5200", true));
+
+    UUID entryId = UUID.randomUUID();
+    JournalEntry realEntry =
+        JournalEntry.balanced(
+            entryId,
+            "2026-08",
+            event.approvedAt(),
+            "ExpenseClaimApproved",
+            "IDR",
+            eventId,
+            false,
+            List.of(
+                JournalLine.debit(entryId, 1, "5000", Money.ofMinor(250_000L, "IDR")),
+                JournalLine.credit(entryId, 2, "2600", Money.ofMinor(250_000L, "IDR"))));
+    when(journalPostingService.buildEntry(any(), any(), any(), any(), any(), any(), eq(false)))
+        .thenReturn(realEntry);
+
+    // A settlement already self-healed a row for this claim (unrecognized until now).
+    UUID settlementEntryId = UUID.randomUUID();
+    EmployeeExpenseClaimLedger existingRow =
+        EmployeeExpenseClaimLedger.unrecognizedSettlement(
+            CLAIM_ID,
+            EMPLOYEE_ID,
+            ORG_UNIT_ID,
+            Money.ofMinor(250_000L, "IDR"),
+            Instant.parse("2026-08-01T09:00:00Z"),
+            "DIRECT",
+            null,
+            null,
+            settlementEntryId);
+    when(claimLedgerRepository.findByClaimId(CLAIM_ID)).thenReturn(Optional.of(existingRow));
+
+    boolean posted = TenantContext.callAs(TENANT, ACTOR, () -> writer.postApproved(event));
+
+    assertThat(posted).isTrue();
+
+    ArgumentCaptor<EmployeeExpenseClaimLedger> ledgerCaptor =
+        ArgumentCaptor.forClass(EmployeeExpenseClaimLedger.class);
+    verify(claimLedgerRepository).save(ledgerCaptor.capture());
+    EmployeeExpenseClaimLedger saved = ledgerCaptor.getValue();
+    assertThat(saved).isSameAs(existingRow);
+    assertThat(saved.isRecognized()).isTrue();
+    assertThat(saved.getRecognizedAt()).isEqualTo(event.approvedAt());
+    assertThat(saved.getRecognitionEntryId()).isEqualTo(entryId);
+    // Already-settled facts untouched by the reconciliation.
+    assertThat(saved.isSettled()).isTrue();
+    assertThat(saved.getSettlementEntryId()).isEqualTo(settlementEntryId);
+    verify(claimLedgerRepository, never()).saveAndFlush(any());
   }
 
   @Test

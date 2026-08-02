@@ -22,14 +22,14 @@ import org.springframework.stereotype.Service;
  * that tenant.
  *
  * <p><strong>Settle-once conflict recovery ({@link #handleSettled}).</strong> A concurrent racer
- * for the SAME claim (a payroll-supersession re-emission arriving under a different event id) can
- * win the {@code employee_expense_settlement} guard's UNIQUE constraint after {@link
- * ExpenseSettlementWriter#settle}'s own fast pre-check passed, aborting that writer's transaction
- * with a {@link DataIntegrityViolationException}. This method catches it and re-checks the guard in
- * a FRESH transaction ({@link ExpenseSettlementWriter#existsByClaimIdForReplay}) — mirrors {@code
- * GiftCardSaleService}/{@code SaleService}'s conflict-recovery idiom, but resolves to a logged
- * no-op (never a double post) rather than a translated conflict, since a re-settlement is always
- * financially identical (ADR 0030 §7).
+ * for the SAME claim (a payroll-supersession re-emission arriving under a different event id, both
+ * finding no {@code employee_expense_claim_ledger} row yet) can win the guard's UNIQUE constraint
+ * after {@link ExpenseSettlementWriter#settle}'s own fast pre-check passed, aborting that writer's
+ * transaction with a {@link DataIntegrityViolationException}. This method catches it and re-checks
+ * the guard in a FRESH transaction ({@link ExpenseSettlementWriter#isSettledForReplay}) — mirrors
+ * {@code GiftCardSaleService}/{@code SaleService}'s conflict-recovery idiom, but resolves to a
+ * logged no-op (never a double post) rather than a translated conflict, since a re-settlement is
+ * always financially identical (ADR 0030 §7).
  */
 @Service
 public class ExpenseClaimPostingService {
@@ -88,7 +88,7 @@ public class ExpenseClaimPostingService {
           try {
             return settlementWriter.settle(event);
           } catch (DataIntegrityViolationException race) {
-            boolean alreadySettled = settlementWriter.existsByClaimIdForReplay(event.claimId());
+            boolean alreadySettled = settlementWriter.isSettledForReplay(event.claimId());
             if (alreadySettled) {
               log.info(
                   "ExpenseReimbursementSettled: lost the settle-once race for claimId={};"

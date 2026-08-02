@@ -54,11 +54,17 @@ storage, no human approve/reject state machine, and `/api/v1/me/**` has never ha
      settlements — safe because of (7).
    - The two paths race-guard each other: pay requires `reimbursement_run_id IS NULL` under the
      optimistic version; the linker's conditional UPDATE loses cleanly to a concurrent pay.
-7. **Finance settles once per claim.** A `employee_expense_settlement` guard row with
+7. **Finance settles once per claim.** A `employee_expense_claim_ledger` row with
    `UNIQUE (company_id, claim_id)`: any second settlement for a claim — re-delivery or
    supersession re-emission — is a logged no-op. This single invariant collapses every
    double-pay window; claim amounts are immutable after approval, so any re-settlement is
-   financially identical.
+   financially identical. The row is also the §4 employee-payable drill-down source: it carries
+   the recognition, void, and settlement facts as they land, in any arrival order, so it doubles as
+   the reconciliation signal for an out-of-order or lost approval — a settlement landing with no
+   matching recognition self-heals the row and logs a loud WARN, and a late-arriving approval
+   reconciles onto that same row. The residual: a permanently-lost approval (never replayed) leaves
+   that claim's account 2600 debit unbacked by a recognition entry indefinitely — until an operator
+   replays it from the `ExpenseClaimApproved.DLT` (or its source), there is no automatic recovery.
 8. **Receipts are `bytea` in the employee-service database** (`expense_receipt`, separate table;
    list projections never select the blob). No object store for v1: RLS, Auditable, backups and
    tenant deletion come free; Debezium is unaffected (outbox-only include list). Server caps

@@ -19,7 +19,7 @@ import java.util.UUID;
  * @param eventId the source event UUID (idempotency key — deduped via {@code processed_event}; NOT
  *     the settle-once key, which is {@code claimId})
  * @param claimId the expense-claim aggregate id — the settle-once key ({@code
- *     employee_expense_settlement} UNIQUE {@code (company_id, claim_id)})
+ *     employee_expense_claim_ledger} UNIQUE {@code (company_id, claim_id)})
  * @param companyId the owning tenant the consumer binds the handler to (from the event)
  * @param orgUnitId the claim's dimension (all-zeros sentinel when unassigned)
  * @param employeeId the reimbursed employee (a UUID reference, not PII)

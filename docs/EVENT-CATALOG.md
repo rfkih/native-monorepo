@@ -543,7 +543,7 @@ payable — Dr `2600 Employee Expense Payable` / Cr CASH_CLEARING — a balance-
 the expense was recognised at approval.
 
 **Settle-once (the supersession invariant).** Finance keeps a per-claim guard row
-(`employee_expense_settlement`, `UNIQUE (company_id, claim_id)`): any second settlement for a
+(`employee_expense_claim_ledger`, `UNIQUE (company_id, claim_id)` — also the per-claim reconciliation row: recognition, void, and settlement stamps): any second settlement for a
 claim — a Kafka re-delivery OR a re-emission after payroll supersession released and re-linked
 the claim to a corrective run — is a **logged no-op**. Claim amounts are immutable after
 approval, so any re-settlement is financially identical; this single rule collapses every

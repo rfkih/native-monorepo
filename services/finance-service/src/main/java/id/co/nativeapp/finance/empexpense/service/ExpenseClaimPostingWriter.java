@@ -1,7 +1,9 @@
 package id.co.nativeapp.finance.empexpense.service;
 
 import id.co.nativeapp.events.ProcessedEventStore;
+import id.co.nativeapp.finance.empexpense.domain.EmployeeExpenseClaimLedger;
 import id.co.nativeapp.finance.empexpense.messaging.ExpenseClaimApprovedEvent;
+import id.co.nativeapp.finance.empexpense.repository.EmployeeExpenseClaimLedgerRepository;
 import id.co.nativeapp.finance.gl.domain.EventKind;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
@@ -15,6 +17,7 @@ import id.co.nativeapp.finance.revenue.domain.PostingType;
 import id.co.nativeapp.finance.revenue.repository.LedgerPostingRepository;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.TenantContext;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -47,6 +50,18 @@ import org.springframework.transaction.annotation.Transactional;
  * DOUBLE-ENTRY GL leg stays on the generic EXPENSE role (5000) for every category, exactly like the
  * existing {@code ExpenseRecorded} path — only the dimensional posting is category-specific (see
  * the V39 migration header).
+ *
+ * <p><strong>Claim-ledger upsert (ADR 0030 §4/§7, review W1/S3).</strong> After posting, this
+ * writer upserts the per-claim {@link EmployeeExpenseClaimLedger} row (the settle-once guard AND
+ * the employee-payable drill-down source): the NORMAL, in-order case INSERTS a fresh row with the
+ * recognition fields; if a row ALREADY exists — an out-of-order settlement self-healed an
+ * unrecognized-claim row before this approval arrived — the recognition fields are UPDATED onto it
+ * and the reconciliation is logged INFO. This insert is not wrapped in the settle-once
+ * UNIQUE-race-recovery (unlike {@code ExpenseSettlementWriter}): approval happens exactly once per
+ * claim in the employee-service state machine, so a concurrent INSERT-vs-INSERT race here is not a
+ * realistic production scenario; a genuinely unlucky race would surface as an unhandled {@code
+ * DataIntegrityViolationException} which the Kafka consumer's bounded-retry error handler retries —
+ * the retry re-reads and takes the UPDATE branch, self-healing.
  */
 @Component
 public class ExpenseClaimPostingWriter {
@@ -60,6 +75,7 @@ public class ExpenseClaimPostingWriter {
   private final JournalPostingService journalPostingService;
   private final JournalEntryRepository journalEntryRepository;
   private final JournalLineRepository journalLineRepository;
+  private final EmployeeExpenseClaimLedgerRepository claimLedgerRepository;
 
   @SuppressWarnings("checkstyle:ParameterNumber")
   public ExpenseClaimPostingWriter(
@@ -69,7 +85,8 @@ public class ExpenseClaimPostingWriter {
       PnlReadModelWriter pnlReadModel,
       JournalPostingService journalPostingService,
       JournalEntryRepository journalEntryRepository,
-      JournalLineRepository journalLineRepository) {
+      JournalLineRepository journalLineRepository,
+      EmployeeExpenseClaimLedgerRepository claimLedgerRepository) {
     this.ledgerRepository = ledgerRepository;
     this.processedEvents = processedEvents;
     this.glAccountResolver = glAccountResolver;
@@ -77,6 +94,7 @@ public class ExpenseClaimPostingWriter {
     this.journalPostingService = journalPostingService;
     this.journalEntryRepository = journalEntryRepository;
     this.journalLineRepository = journalLineRepository;
+    this.claimLedgerRepository = claimLedgerRepository;
   }
 
   /**
@@ -156,5 +174,32 @@ public class ExpenseClaimPostingWriter {
               line.setCompanyId(companyId);
               journalLineRepository.save(line);
             });
+
+    // 5) Upsert the claim-ledger row (ADR 0030 §4 drill-down + §7 reconciliation signal, review
+    //    W1/S3): normal in-order case INSERTS a fresh recognition-only row; if a row already
+    //    exists — an out-of-order settlement self-healed it first — UPDATE the recognition fields
+    //    onto it and log the reconciliation.
+    Optional<EmployeeExpenseClaimLedger> existing =
+        claimLedgerRepository.findByClaimId(event.claimId());
+    if (existing.isPresent()) {
+      EmployeeExpenseClaimLedger row = existing.get();
+      row.reconcileRecognition(event.approvedAt(), glEntry.getId());
+      claimLedgerRepository.save(row);
+      log.info(
+          "ExpenseClaimApproved: claimId={} reconciled — approval arrived after settlement"
+              + " (out-of-order delivery), no amounts logged",
+          event.claimId());
+    } else {
+      EmployeeExpenseClaimLedger row =
+          EmployeeExpenseClaimLedger.recognized(
+              event.claimId(),
+              event.employeeId(),
+              event.orgUnitId(),
+              amount,
+              event.approvedAt(),
+              glEntry.getId());
+      row.setCompanyId(companyId);
+      claimLedgerRepository.saveAndFlush(row);
+    }
   }
 }

@@ -4,13 +4,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import id.co.nativeapp.events.ProcessedEventStore;
+import id.co.nativeapp.finance.empexpense.domain.EmployeeExpenseClaimLedger;
 import id.co.nativeapp.finance.empexpense.messaging.ExpenseClaimVoidedEvent;
-import id.co.nativeapp.finance.empexpense.repository.EmployeeExpenseSettlementRepository;
+import id.co.nativeapp.finance.empexpense.repository.EmployeeExpenseClaimLedgerRepository;
 import id.co.nativeapp.finance.gl.domain.EventKind;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.domain.JournalLine;
@@ -28,6 +30,7 @@ import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -58,7 +61,7 @@ class ExpenseClaimVoidWriterTest {
   @Mock private JournalPostingService journalPostingService;
   @Mock private JournalEntryRepository journalEntryRepository;
   @Mock private JournalLineRepository journalLineRepository;
-  @Mock private EmployeeExpenseSettlementRepository settlementRepository;
+  @Mock private EmployeeExpenseClaimLedgerRepository claimLedgerRepository;
 
   private ExpenseClaimVoidWriter writer;
 
@@ -73,7 +76,7 @@ class ExpenseClaimVoidWriterTest {
             journalPostingService,
             journalEntryRepository,
             journalLineRepository,
-            settlementRepository);
+            claimLedgerRepository);
   }
 
   private static ExpenseClaimVoidedEvent event(UUID eventId, long amountMinor) {
@@ -99,12 +102,23 @@ class ExpenseClaimVoidWriterTest {
         .processOnce(any(), any());
   }
 
+  private static EmployeeExpenseClaimLedger recognizedRow(long amountMinor) {
+    return EmployeeExpenseClaimLedger.recognized(
+        CLAIM_ID,
+        EMPLOYEE_ID,
+        ORG_UNIT_ID,
+        Money.ofMinor(amountMinor, "IDR"),
+        APPROVED_AT,
+        UUID.randomUUID());
+  }
+
   @Test
-  void postsTheExactContraUnderTheSameAccountAndDimension() throws Exception {
+  void postsTheExactContraUnderTheSameAccountAndDimensionAndStampsTheRow() throws Exception {
     UUID eventId = UUID.randomUUID();
     ExpenseClaimVoidedEvent event = event(eventId, 250_000L);
     firstDelivery(processedEvents);
-    when(settlementRepository.existsByClaimId(CLAIM_ID)).thenReturn(false);
+    EmployeeExpenseClaimLedger row = recognizedRow(250_000L);
+    when(claimLedgerRepository.findByClaimId(CLAIM_ID)).thenReturn(Optional.of(row));
     when(glAccountResolver.resolveExpense("supplies", APPROVED_AT))
         .thenReturn(new GlAccountResolution("5200", true));
 
@@ -147,6 +161,11 @@ class ExpenseClaimVoidWriterTest {
     verify(pnlReadModel).addExpense("2026-08", Money.ofMinor(-250_000L, "IDR"), TENANT, ACTOR);
     verify(journalEntryRepository).saveAndFlush(realEntry);
     assertThat(realEntry.totalDebit()).isEqualTo(Money.ofMinor(250_000L, "IDR"));
+
+    // The claim-ledger row was stamped with the void facts.
+    verify(claimLedgerRepository).save(row);
+    assertThat(row.getVoidedAt()).isEqualTo(VOIDED_AT);
+    assertThat(row.getVoidEntryId()).isEqualTo(entryId);
   }
 
   @Test
@@ -154,13 +173,61 @@ class ExpenseClaimVoidWriterTest {
     UUID eventId = UUID.randomUUID();
     ExpenseClaimVoidedEvent event = event(eventId, 250_000L);
     firstDelivery(processedEvents);
-    when(settlementRepository.existsByClaimId(CLAIM_ID)).thenReturn(true);
+    EmployeeExpenseClaimLedger settledRow =
+        EmployeeExpenseClaimLedger.unrecognizedSettlement(
+            CLAIM_ID,
+            EMPLOYEE_ID,
+            ORG_UNIT_ID,
+            Money.ofMinor(250_000L, "IDR"),
+            Instant.parse("2026-08-01T12:00:00Z"),
+            "DIRECT",
+            null,
+            null,
+            UUID.randomUUID());
+    when(claimLedgerRepository.findByClaimId(CLAIM_ID)).thenReturn(Optional.of(settledRow));
 
     boolean ran = TenantContext.callAs(TENANT, ACTOR, () -> writer.postVoided(event));
 
     // The handler ran (first delivery of THIS event id) but performed no posting — a loud skip.
     assertThat(ran).isTrue();
     verifyNoInteractions(ledgerRepository, glAccountResolver, pnlReadModel, journalPostingService);
+    verify(claimLedgerRepository, never()).save(any());
+  }
+
+  @Test
+  void aVoidForAnUnrecognizedClaimIsALoudWarnButStillPostsTheContra() throws Exception {
+    UUID eventId = UUID.randomUUID();
+    ExpenseClaimVoidedEvent event = event(eventId, 250_000L);
+    firstDelivery(processedEvents);
+    when(claimLedgerRepository.findByClaimId(CLAIM_ID)).thenReturn(Optional.empty());
+    when(glAccountResolver.resolveExpense("supplies", APPROVED_AT))
+        .thenReturn(new GlAccountResolution("5200", true));
+
+    UUID entryId = UUID.randomUUID();
+    JournalEntry contraEntry =
+        JournalEntry.balanced(
+            entryId,
+            "2026-08",
+            VOIDED_AT,
+            "ExpenseClaimVoided",
+            "IDR",
+            eventId,
+            false,
+            List.of(
+                JournalLine.debit(entryId, 1, "2600", Money.ofMinor(250_000L, "IDR")),
+                JournalLine.credit(entryId, 2, "5000", Money.ofMinor(250_000L, "IDR"))));
+    when(journalPostingService.buildEntry(any(), any(), any(), any(), any(), any(), eq(false)))
+        .thenReturn(contraEntry);
+
+    boolean ran = TenantContext.callAs(TENANT, ACTOR, () -> writer.postVoided(event));
+
+    assertThat(ran).isTrue();
+    // The contra IS posted despite no claim-ledger row to reconcile against.
+    verify(ledgerRepository).save(any(LedgerPosting.class));
+    verify(pnlReadModel).addExpense("2026-08", Money.ofMinor(-250_000L, "IDR"), TENANT, ACTOR);
+    verify(journalEntryRepository).saveAndFlush(any(JournalEntry.class));
+    // Nothing to stamp — no row exists.
+    verify(claimLedgerRepository, never()).save(any());
   }
 
   @Test
@@ -177,6 +244,6 @@ class ExpenseClaimVoidWriterTest {
         glAccountResolver,
         pnlReadModel,
         journalPostingService,
-        settlementRepository);
+        claimLedgerRepository);
   }
 }

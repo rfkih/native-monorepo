@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * The {@code ExpenseReimbursementSettled} CONSUMER contract test (rule-7 triad, no Spring context;
- * ADR 0030 E0). Finance settles ONCE per claim (the {@code employee_expense_settlement} guard) —
+ * ADR 0030 E0). Finance settles ONCE per claim (the {@code employee_expense_claim_ledger} guard) —
  * this test locks the wire shape both settlement kinds arrive in.
  */
 class ExpenseReimbursementSettledContractTest {

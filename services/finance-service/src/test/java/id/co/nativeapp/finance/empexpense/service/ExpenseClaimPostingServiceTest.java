@@ -119,14 +119,14 @@ class ExpenseClaimPostingServiceTest {
     UUID eventId = UUID.randomUUID();
     ExpenseReimbursementSettledEvent event = settledEvent(eventId);
     when(settlementWriter.settle(event))
-        .thenThrow(new DataIntegrityViolationException("uq_employee_expense_settlement_claim"));
-    when(settlementWriter.existsByClaimIdForReplay(CLAIM_ID)).thenReturn(true);
+        .thenThrow(new DataIntegrityViolationException("uq_employee_expense_claim_ledger_claim"));
+    when(settlementWriter.isSettledForReplay(CLAIM_ID)).thenReturn(true);
 
     boolean ran = service.handleSettled(event);
 
     // Recovered as a no-op — never a double post, never a propagated exception.
     assertThat(ran).isTrue();
-    verify(settlementWriter).existsByClaimIdForReplay(CLAIM_ID);
+    verify(settlementWriter).isSettledForReplay(CLAIM_ID);
   }
 
   @Test
@@ -136,7 +136,7 @@ class ExpenseClaimPostingServiceTest {
     DataIntegrityViolationException conflict =
         new DataIntegrityViolationException("unrelated constraint");
     when(settlementWriter.settle(event)).thenThrow(conflict);
-    when(settlementWriter.existsByClaimIdForReplay(CLAIM_ID)).thenReturn(false);
+    when(settlementWriter.isSettledForReplay(CLAIM_ID)).thenReturn(false);
 
     assertThatThrownBy(() -> service.handleSettled(event))
         .isInstanceOf(DataIntegrityViolationException.class)

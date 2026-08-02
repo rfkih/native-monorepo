@@ -10,9 +10,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import id.co.nativeapp.events.ProcessedEventStore;
-import id.co.nativeapp.finance.empexpense.domain.EmployeeExpenseSettlement;
+import id.co.nativeapp.finance.empexpense.domain.EmployeeExpenseClaimLedger;
 import id.co.nativeapp.finance.empexpense.messaging.ExpenseReimbursementSettledEvent;
-import id.co.nativeapp.finance.empexpense.repository.EmployeeExpenseSettlementRepository;
+import id.co.nativeapp.finance.empexpense.repository.EmployeeExpenseClaimLedgerRepository;
 import id.co.nativeapp.finance.gl.domain.EventKind;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.domain.JournalLine;
@@ -23,6 +23,7 @@ import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,8 +34,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 /**
  * Pure-unit proofs for {@link ExpenseSettlementWriter} (no Spring / no Testcontainers — mirrors
- * {@code TrialBalanceReaderTest}'s mocked-collaborator style). Locks the settle-once invariant (ADR
- * 0030 §7): a claim already carrying a guard row is a logged no-op, never a second posting.
+ * {@code TrialBalanceReaderTest}'s mocked-collaborator style). Locks the three-branch settle-once
+ * invariant (ADR 0030 §7, review W1/S3): INSERT when no claim-ledger row exists (self-heal, loud
+ * WARN), UPDATE when an unsettled row already exists (the normal in-order case), and a logged no-op
+ * when the row is already settled — never a second posting.
  */
 @ExtendWith(MockitoExtension.class)
 class ExpenseSettlementWriterTest {
@@ -44,10 +47,11 @@ class ExpenseSettlementWriterTest {
   private static final UUID CLAIM_ID = UUID.fromString("aaaaaaaa-0000-0000-0000-00000000000a");
   private static final UUID ORG_UNIT_ID = UUID.fromString("bbbbbbbb-0000-0000-0000-00000000000b");
   private static final UUID EMPLOYEE_ID = UUID.fromString("cccccccc-0000-0000-0000-00000000000c");
+  private static final Instant APPROVED_AT = Instant.parse("2026-08-01T09:00:00Z");
   private static final Instant SETTLED_AT = Instant.parse("2026-08-03T09:00:00Z");
 
   @Mock private ProcessedEventStore processedEvents;
-  @Mock private EmployeeExpenseSettlementRepository settlementRepository;
+  @Mock private EmployeeExpenseClaimLedgerRepository claimLedgerRepository;
   @Mock private JournalPostingService journalPostingService;
   @Mock private JournalEntryRepository journalEntryRepository;
   @Mock private JournalLineRepository journalLineRepository;
@@ -59,7 +63,7 @@ class ExpenseSettlementWriterTest {
     writer =
         new ExpenseSettlementWriter(
             processedEvents,
-            settlementRepository,
+            claimLedgerRepository,
             journalPostingService,
             journalEntryRepository,
             journalLineRepository);
@@ -89,12 +93,27 @@ class ExpenseSettlementWriterTest {
         .processOnce(any(), any());
   }
 
+  private JournalEntry settlementEntry(UUID eventId, long amountMinor) {
+    UUID entryId = UUID.randomUUID();
+    return JournalEntry.balanced(
+        entryId,
+        "2026-08",
+        SETTLED_AT,
+        "ExpenseReimbursementSettled",
+        "IDR",
+        eventId,
+        false,
+        List.of(
+            JournalLine.debit(entryId, 1, "2600", Money.ofMinor(amountMinor, "IDR")),
+            JournalLine.credit(entryId, 2, "1900", Money.ofMinor(amountMinor, "IDR"))));
+  }
+
   @Test
-  void settlesOnceInsertingTheGuardRowAndTheJournalEntry() throws Exception {
+  void settlesAnUnrecognizedClaimByInsertingASelfHealedRow() throws Exception {
     UUID eventId = UUID.randomUUID();
     ExpenseReimbursementSettledEvent event = directEvent(eventId, 250_000L);
     firstDelivery(processedEvents);
-    when(settlementRepository.existsByClaimId(CLAIM_ID)).thenReturn(false);
+    when(claimLedgerRepository.findByClaimId(CLAIM_ID)).thenReturn(Optional.empty());
 
     UUID entryId = UUID.randomUUID();
     JournalEntry realEntry =
@@ -123,35 +142,80 @@ class ExpenseSettlementWriterTest {
 
     assertThat(ran).isTrue();
 
-    ArgumentCaptor<EmployeeExpenseSettlement> guardCaptor =
-        ArgumentCaptor.forClass(EmployeeExpenseSettlement.class);
-    verify(settlementRepository).saveAndFlush(guardCaptor.capture());
-    EmployeeExpenseSettlement guard = guardCaptor.getValue();
-    assertThat(guard.getClaimId()).isEqualTo(CLAIM_ID);
-    assertThat(guard.getSettlementKind()).isEqualTo("DIRECT");
-    assertThat(guard.getPayrollRunId()).isNull();
-    assertThat(guard.getRunSeq()).isNull();
-    assertThat(guard.getJournalEntryId()).isEqualTo(entryId);
-    assertThat(guard.getSettledAt()).isEqualTo(SETTLED_AT);
+    ArgumentCaptor<EmployeeExpenseClaimLedger> insertCaptor =
+        ArgumentCaptor.forClass(EmployeeExpenseClaimLedger.class);
+    verify(claimLedgerRepository).saveAndFlush(insertCaptor.capture());
+    EmployeeExpenseClaimLedger row = insertCaptor.getValue();
+    assertThat(row.getClaimId()).isEqualTo(CLAIM_ID);
+    assertThat(row.getEmployeeId()).isEqualTo(EMPLOYEE_ID);
+    assertThat(row.getOrgUnitId()).isEqualTo(ORG_UNIT_ID);
+    assertThat(row.getAmount()).isEqualTo(Money.ofMinor(250_000L, "IDR"));
+    assertThat(row.isRecognized()).isFalse();
+    assertThat(row.isSettled()).isTrue();
+    assertThat(row.getSettlementKind()).isEqualTo("DIRECT");
+    assertThat(row.getPayrollRunId()).isNull();
+    assertThat(row.getRunSeq()).isNull();
+    assertThat(row.getSettlementEntryId()).isEqualTo(entryId);
+    assertThat(row.getSettledAt()).isEqualTo(SETTLED_AT);
 
+    verify(claimLedgerRepository, never()).save(any());
     verify(journalEntryRepository).saveAndFlush(realEntry);
     assertThat(realEntry.totalDebit()).isEqualTo(Money.ofMinor(250_000L, "IDR"));
   }
 
   @Test
-  void aClaimAlreadyCarryingTheGuardRowIsALoggedNoOpAcrossDistinctEventIds() throws Exception {
+  void settlesARecognizedUnsettledClaimByUpdatingTheExistingRow() throws Exception {
+    UUID eventId = UUID.randomUUID();
+    ExpenseReimbursementSettledEvent event = directEvent(eventId, 250_000L);
+    firstDelivery(processedEvents);
+    EmployeeExpenseClaimLedger existingRow =
+        EmployeeExpenseClaimLedger.recognized(
+            CLAIM_ID,
+            EMPLOYEE_ID,
+            ORG_UNIT_ID,
+            Money.ofMinor(250_000L, "IDR"),
+            APPROVED_AT,
+            UUID.randomUUID());
+    when(claimLedgerRepository.findByClaimId(CLAIM_ID)).thenReturn(Optional.of(existingRow));
+    when(journalPostingService.buildEntry(any(), any(), any(), any(), any(), any(), eq(false)))
+        .thenReturn(settlementEntry(eventId, 250_000L));
+
+    boolean ran = TenantContext.callAs(TENANT, ACTOR, () -> writer.settle(event));
+
+    assertThat(ran).isTrue();
+    verify(claimLedgerRepository).save(existingRow);
+    verify(claimLedgerRepository, never()).saveAndFlush(any());
+    assertThat(existingRow.isSettled()).isTrue();
+    assertThat(existingRow.isRecognized()).isTrue(); // unaffected by settlement
+    assertThat(existingRow.getSettlementKind()).isEqualTo("DIRECT");
+  }
+
+  @Test
+  void aClaimAlreadySettledIsALoggedNoOpAcrossDistinctEventIds() throws Exception {
     // Simulates the payroll-supersession re-emission: a DIFFERENT event id for the SAME claim,
     // arriving after another event id already settled it.
     UUID secondEventId = UUID.randomUUID();
     ExpenseReimbursementSettledEvent event = directEvent(secondEventId, 250_000L);
     firstDelivery(processedEvents);
-    when(settlementRepository.existsByClaimId(CLAIM_ID)).thenReturn(true);
+    EmployeeExpenseClaimLedger settledRow =
+        EmployeeExpenseClaimLedger.unrecognizedSettlement(
+            CLAIM_ID,
+            EMPLOYEE_ID,
+            ORG_UNIT_ID,
+            Money.ofMinor(250_000L, "IDR"),
+            SETTLED_AT,
+            "DIRECT",
+            null,
+            null,
+            UUID.randomUUID());
+    when(claimLedgerRepository.findByClaimId(CLAIM_ID)).thenReturn(Optional.of(settledRow));
 
     boolean ran = TenantContext.callAs(TENANT, ACTOR, () -> writer.settle(event));
 
     // The handler ran for this (new) event id, but performed no posting — a no-op.
     assertThat(ran).isTrue();
-    verify(settlementRepository, never()).saveAndFlush(any());
+    verify(claimLedgerRepository, never()).save(any());
+    verify(claimLedgerRepository, never()).saveAndFlush(any());
     verifyNoInteractions(journalPostingService, journalEntryRepository, journalLineRepository);
   }
 
@@ -164,13 +228,31 @@ class ExpenseSettlementWriterTest {
     boolean ran = TenantContext.callAs(TENANT, ACTOR, () -> writer.settle(event));
 
     assertThat(ran).isFalse();
-    verifyNoInteractions(settlementRepository, journalPostingService, journalEntryRepository);
+    verifyNoInteractions(claimLedgerRepository, journalPostingService, journalEntryRepository);
   }
 
   @Test
-  void existsByClaimIdForReplayDelegatesToTheRepository() {
-    when(settlementRepository.existsByClaimId(CLAIM_ID)).thenReturn(true);
+  void isSettledForReplayDelegatesToTheRepository() {
+    EmployeeExpenseClaimLedger settledRow =
+        EmployeeExpenseClaimLedger.unrecognizedSettlement(
+            CLAIM_ID,
+            EMPLOYEE_ID,
+            ORG_UNIT_ID,
+            Money.ofMinor(250_000L, "IDR"),
+            SETTLED_AT,
+            "DIRECT",
+            null,
+            null,
+            UUID.randomUUID());
+    when(claimLedgerRepository.findByClaimId(CLAIM_ID)).thenReturn(Optional.of(settledRow));
 
-    assertThat(writer.existsByClaimIdForReplay(CLAIM_ID)).isTrue();
+    assertThat(writer.isSettledForReplay(CLAIM_ID)).isTrue();
+  }
+
+  @Test
+  void isSettledForReplayIsFalseWhenNoRowExists() {
+    when(claimLedgerRepository.findByClaimId(CLAIM_ID)).thenReturn(Optional.empty());
+
+    assertThat(writer.isSettledForReplay(CLAIM_ID)).isFalse();
   }
 }
