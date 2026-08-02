@@ -1,6 +1,7 @@
 package id.co.nativeapp.employee.timeoff.repository;
 
 import id.co.nativeapp.employee.timeoff.domain.OvertimeEntry;
+import id.co.nativeapp.employee.timeoff.projection.ApprovedOvertimeView;
 import id.co.nativeapp.employee.timeoff.projection.MyOvertimeEntryView;
 import id.co.nativeapp.employee.timeoff.projection.OvertimeEntrySummaryView;
 import java.util.List;
@@ -69,4 +70,40 @@ public interface OvertimeEntryRepository extends JpaRepository<OvertimeEntry, UU
               + " WHERE (CAST(:status AS text) IS NULL OR status = CAST(:status AS text))",
       nativeQuery = true)
   long countForManager(@Param("status") String status);
+
+  /**
+   * The ids of every SUBMITTED (undecided) overtime entry among {@code employeeIds} whose {@code
+   * work_date} falls in {@code period} (Track P Phase P7's pending-work-entries gate — the caller
+   * chunks {@code employeeIds} at ≤1000, CLAUDE.md).
+   */
+  @Query(
+      value =
+          """
+          SELECT id
+            FROM overtime_entry
+           WHERE employee_id IN (:employeeIds)
+             AND status = 'SUBMITTED'
+             AND to_char(work_date, 'YYYY-MM') = :period
+          """,
+      nativeQuery = true)
+  List<UUID> findSubmittedIdsForPeriod(
+      @Param("employeeIds") List<UUID> employeeIds, @Param("period") String period);
+
+  /**
+   * Every APPROVED overtime entry among {@code employeeIds} whose {@code work_date} falls in {@code
+   * period} (Track P Phase P7's overtime earning resolution) — the caller chunks {@code
+   * employeeIds} at ≤1000.
+   */
+  @Query(
+      value =
+          """
+          SELECT id, employee_id, minutes, day_kind
+            FROM overtime_entry
+           WHERE employee_id IN (:employeeIds)
+             AND status = 'APPROVED'
+             AND to_char(work_date, 'YYYY-MM') = :period
+          """,
+      nativeQuery = true)
+  List<ApprovedOvertimeView> findApprovedForPeriod(
+      @Param("employeeIds") List<UUID> employeeIds, @Param("period") String period);
 }

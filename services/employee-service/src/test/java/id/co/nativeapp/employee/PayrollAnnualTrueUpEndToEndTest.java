@@ -1,6 +1,7 @@
 package id.co.nativeapp.employee;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import id.co.nativeapp.employee.assignment.dto.AddAssignmentCommand;
 import id.co.nativeapp.employee.assignment.service.AssignmentService;
@@ -143,6 +144,62 @@ class PayrollAnnualTrueUpEndToEndTest extends PostgresRlsTestBase {
     // above): the branch genuinely switched.
     assertThat(pph21.amountMinor()).isEqualTo(0L);
     assertThat(run.netTotalMinor()).isEqualTo(9_600_000L); // 10,000,000 - (100k+200k+100k+0)
+  }
+
+  // ---------------------------------------------------------------------
+  // Fail-loud carry-in (P3/P4 review, wired in Track P Phase P7): a December run that resolves
+  // ANNUAL_PROGRESSIVE but ends up swapping ZERO components onto it (a catalog miswiring — here,
+  // PPH21 deliberately un-wired from any monthly income-tax family) must throw loudly rather than
+  // silently post a December run with NO income-tax line at all.
+  // ---------------------------------------------------------------------
+
+  @Test
+  void aDecemberRunThatWouldSwapZeroComponentsFailsLoudlyInsteadOfSilentlyPostingNoIncomeTaxLine()
+      throws Exception {
+    UUID employeeId =
+        TenantContext.callAs(
+            TENANT_A,
+            ACTOR_A,
+            () -> {
+              illustrativeSeeder.seed(IDR);
+              officialSeeder.seed(DATASET_VERSION);
+              UUID outlet = openOutlet();
+              return tenMillionTk0NpwpEmployee(outlet, "3209000000000099");
+            });
+    // Deliberately break the catalog wiring: PPH21 no longer references ANY statutory rule, so
+    // December's swap finds nothing to swap onto the resolved ANNUAL_PROGRESSIVE rule. A bare
+    // JdbcTemplate call is NOT routed through RlsAutoApplyAspect (it only binds the tenant GUC on
+    // @Transactional Spring-proxy beans), so a normal app_user UPDATE here would silently match
+    // ZERO rows under FORCE RLS — the admin/BYPASSRLS connection is required (the
+    // PostgresRlsTestBase#resetTables idiom).
+    try (java.sql.Connection admin =
+            java.sql.DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        java.sql.Statement st = admin.createStatement()) {
+      int updated =
+          st.executeUpdate(
+              "UPDATE pay_component SET statutory_rule_key = NULL WHERE component_key = 'PPH21'");
+      assertThat(updated).isEqualTo(1);
+    }
+
+    assertThatThrownBy(
+            () ->
+                TenantContext.callAs(
+                    TENANT_A,
+                    ACTOR_A,
+                    () ->
+                        payrollRunService.calculate(
+                            new RunPayrollCommand("2026-12", List.of(employeeId), List.of()), IDR)))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("swapped ZERO statutory components");
+
+    // No CALCULATED/POSTED run resulted — only the uniform FAILED audit row PayrollRunService
+    // records for every calculate() exception.
+    assertThat(
+            countAsTenant(
+                TENANT_A,
+                "SELECT count(*) FROM payroll_run WHERE period = '2026-12' AND status <> 'FAILED'"))
+        .isZero();
   }
 
   // ---------------------------------------------------------------------

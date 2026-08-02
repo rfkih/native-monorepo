@@ -318,6 +318,7 @@ export function OrgUnitDetail() {
           actor={company.actor}
           baseCurrency={company.baseCurrency}
           locale={locale}
+          onNavigateToAttendance={() => setTab('attendance')}
         />
       ) : null}
 

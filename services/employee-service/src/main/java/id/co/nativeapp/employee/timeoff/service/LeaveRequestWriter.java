@@ -10,6 +10,7 @@ import id.co.nativeapp.employee.timeoff.domain.LeaveRequest;
 import id.co.nativeapp.employee.timeoff.domain.LeaveRequestNotFoundException;
 import id.co.nativeapp.employee.timeoff.domain.LeaveType;
 import id.co.nativeapp.employee.timeoff.domain.RequestKind;
+import id.co.nativeapp.employee.timeoff.domain.TimeoffIdempotencyKeyConflictException;
 import id.co.nativeapp.employee.timeoff.domain.TimeoffRequestEvent;
 import id.co.nativeapp.employee.timeoff.domain.TimeoffStatus;
 import id.co.nativeapp.employee.timeoff.repository.LeaveBalanceRepository;
@@ -88,8 +89,13 @@ public class LeaveRequestWriter {
    *
    * @throws EmployeeNotLinkedException if the caller has no employee link (→ 404)
    * @throws IllegalArgumentException if the date range/day count is invalid (→ 400)
+   * @throws id.co.nativeapp.employee.timeoff.domain.CrossMonthLeaveRequestException if the range
+   *     spans more than one calendar month (→ 422, P7 review W2)
    * @throws LeaveOverlapException if the range overlaps an existing SUBMITTED/APPROVED request (→
    *     409)
+   * @throws TimeoffIdempotencyKeyConflictException if {@code idempotencyKey} was already used by a
+   *     DIFFERENT employee (→ 409, P7 review S1 — a genuine key collision is never silently
+   *     returned as if it were the caller's own replay)
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public LeaveRequest create(
@@ -104,6 +110,9 @@ public class LeaveRequestWriter {
 
     Optional<LeaveRequest> replay = requestRepository.findByIdempotencyKey(idempotencyKey);
     if (replay.isPresent()) {
+      if (!replay.get().getEmployeeId().equals(me.getId())) {
+        throw new TimeoffIdempotencyKeyConflictException("leave request");
+      }
       return replay.get();
     }
 

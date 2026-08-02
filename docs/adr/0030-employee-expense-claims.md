@@ -153,3 +153,19 @@ storage, no human approve/reject state machine, and `/api/v1/me/**` has never ha
   pins the tenant's expense-claim currency for good, with no admin "reset" path in v1; in practice
   the console always sends the company's base currency on every claim, so this residual only bites
   a non-console API caller.
+
+## §10 — Track P Phase P7 addendum: the reimbursement line is live
+
+Point 6's E5-transitional gate (`ExpenseClaimPayrollLinker#markReimbursedAndEmit` checking for an
+actual `EXPENSE_REIMBURSEMENT` payslip line before flipping a claim to REIMBURSED) is no longer
+always closed: Track P Phase P7 (ADR 0031's P7 update) adds the payslip line itself, gated on the
+tenant having activated a dataset that carries the `EXPENSE_REIMBURSEMENT` catalog component
+(`ID-2026.2`+). For such a tenant, a linked claim now genuinely rides the payslip, settles, and the
+E5 gate's own no-op branch simply never fires. For a tenant that has NOT activated that dataset, the
+gate's original fallback behaviour is UNCHANGED — a linked claim stays `APPROVED`, recoverable by the
+next `calculate()`'s release/relink pass, exactly as designed in point 6.
+
+The reimbursement's LIABILITY-side accounting (why `NET_WAGES_PAYABLE` is `net − reimbursementTotal`,
+never the full net, and why `LaborCostAllocated` excludes it entirely) is recorded in ADR 0032's own
+P7 addendum, not repeated here — that ADR owns the liability/allocation side of the books; this one
+owns the claim lifecycle and the `2600`/`2600`-settlement side, both unchanged by P7.

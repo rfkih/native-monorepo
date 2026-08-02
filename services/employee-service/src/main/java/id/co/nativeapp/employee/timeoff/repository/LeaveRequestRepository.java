@@ -1,6 +1,7 @@
 package id.co.nativeapp.employee.timeoff.repository;
 
 import id.co.nativeapp.employee.timeoff.domain.LeaveRequest;
+import id.co.nativeapp.employee.timeoff.projection.ApprovedUnpaidLeaveView;
 import id.co.nativeapp.employee.timeoff.projection.LeaveRequestSummaryView;
 import id.co.nativeapp.employee.timeoff.projection.MyLeaveRequestView;
 import java.time.LocalDate;
@@ -131,4 +132,44 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, UUID
    */
   @Query(value = "SELECT pg_advisory_xact_lock(hashtext(:key)::bigint) IS NULL", nativeQuery = true)
   boolean lockEmployeeTimeoff(@Param("key") String key);
+
+  /**
+   * The ids of every SUBMITTED (undecided) leave request among {@code employeeIds} whose {@code
+   * start_date} falls in {@code period} (Track P Phase P7's pending-work-entries gate — the caller
+   * chunks {@code employeeIds} at ≤1000, CLAUDE.md). A request is now constrained to a single
+   * calendar month at creation (P7 review W2), so an exact {@code start_date} month match IS the
+   * intersection test — no date-range overlap logic is needed. A non-empty result means payroll
+   * cannot run yet: an undecided request must never be silently ignored.
+   */
+  @Query(
+      value =
+          """
+          SELECT id
+            FROM leave_request
+           WHERE employee_id IN (:employeeIds)
+             AND status = 'SUBMITTED'
+             AND to_char(start_date, 'YYYY-MM') = :period
+          """,
+      nativeQuery = true)
+  List<UUID> findSubmittedIdsForPeriod(
+      @Param("employeeIds") List<UUID> employeeIds, @Param("period") String period);
+
+  /**
+   * Every APPROVED {@code UNPAID} leave request among {@code employeeIds} whose {@code start_date}
+   * falls in {@code period} (Track P Phase P7's unpaid-leave earning resolution) — the caller
+   * chunks {@code employeeIds} at ≤1000.
+   */
+  @Query(
+      value =
+          """
+          SELECT id, employee_id, days
+            FROM leave_request
+           WHERE employee_id IN (:employeeIds)
+             AND status = 'APPROVED'
+             AND leave_type = 'UNPAID'
+             AND to_char(start_date, 'YYYY-MM') = :period
+          """,
+      nativeQuery = true)
+  List<ApprovedUnpaidLeaveView> findApprovedUnpaidForPeriod(
+      @Param("employeeIds") List<UUID> employeeIds, @Param("period") String period);
 }

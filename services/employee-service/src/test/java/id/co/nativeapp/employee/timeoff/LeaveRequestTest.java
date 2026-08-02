@@ -3,6 +3,7 @@ package id.co.nativeapp.employee.timeoff;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import id.co.nativeapp.employee.timeoff.domain.CrossMonthLeaveRequestException;
 import id.co.nativeapp.employee.timeoff.domain.DecisionCommentRequiredException;
 import id.co.nativeapp.employee.timeoff.domain.LeaveRequest;
 import id.co.nativeapp.employee.timeoff.domain.LeaveType;
@@ -70,6 +71,51 @@ class LeaveRequestTest {
   void daysWithinTheSpanIsAccepted() {
     LeaveRequest request = new LeaveRequest(EMPLOYEE, LeaveType.ANNUAL, START, END, 2, "k");
     assertThat(request.getDays()).isEqualTo(2);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Single-calendar-month constraint (Track P Phase P7 review W2)
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void aRangeSpanningTwoCalendarMonthsIsRejected() {
+    // Dec 28 -> Jan 5: a genuine month-boundary span, the exact scenario W2 flags.
+    assertThatThrownBy(
+            () ->
+                new LeaveRequest(
+                    EMPLOYEE,
+                    LeaveType.UNPAID,
+                    LocalDate.of(2026, 12, 28),
+                    LocalDate.of(2027, 1, 5),
+                    7,
+                    "k"))
+        .isInstanceOf(CrossMonthLeaveRequestException.class);
+  }
+
+  @Test
+  void aRangeEntirelyWithinOneCalendarMonthIsAccepted() {
+    LeaveRequest request =
+        new LeaveRequest(
+            EMPLOYEE,
+            LeaveType.UNPAID,
+            LocalDate.of(2026, 8, 1),
+            LocalDate.of(2026, 8, 31),
+            21,
+            "k");
+    assertThat(request.getDays()).isEqualTo(21);
+  }
+
+  @Test
+  void aSingleDayRequestIsTriviallyWithinOneMonth() {
+    LeaveRequest request =
+        new LeaveRequest(
+            EMPLOYEE,
+            LeaveType.UNPAID,
+            LocalDate.of(2026, 8, 31),
+            LocalDate.of(2026, 8, 31),
+            1,
+            "k");
+    assertThat(request.getDays()).isEqualTo(1);
   }
 
   // ---------------------------------------------------------------------------

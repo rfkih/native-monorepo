@@ -37,6 +37,9 @@ public class LeaveBalanceReader {
   /** The maximum page size a caller may request. */
   public static final int MAX_PAGE_SIZE = 200;
 
+  /** No manager adjustment on file — the default {@code adjustment_days} (P7 review S4). */
+  private static final int NO_ADJUSTMENT = 0;
+
   private final LeaveBalanceRepository balanceRepository;
   private final LeaveRequestRepository requestRepository;
   private final EmployeeRepository employeeRepository;
@@ -104,16 +107,13 @@ public class LeaveBalanceReader {
   }
 
   private LeaveBalanceResponse balanceFor(java.util.UUID employeeId, int year) {
+    // ONE lookup reused for both fields (P7 review S4 — this previously queried
+    // findByEmployeeIdAndYear twice for the same (employeeId, year), a redundant round trip).
+    java.util.Optional<LeaveBalance> balance =
+        balanceRepository.findByEmployeeIdAndYear(employeeId, year);
     int granted =
-        balanceRepository
-            .findByEmployeeIdAndYear(employeeId, year)
-            .map(LeaveBalance::getGrantedDays)
-            .orElse(LeaveBalance.DEFAULT_GRANTED_DAYS);
-    int adjustment =
-        balanceRepository
-            .findByEmployeeIdAndYear(employeeId, year)
-            .map(LeaveBalance::getAdjustmentDays)
-            .orElse(0);
+        balance.map(LeaveBalance::getGrantedDays).orElse(LeaveBalance.DEFAULT_GRANTED_DAYS);
+    int adjustment = balance.map(LeaveBalance::getAdjustmentDays).orElse(NO_ADJUSTMENT);
     int used = requestRepository.sumApprovedAnnualDaysForYear(employeeId, year);
     return LeaveBalanceResponse.of(year, granted, adjustment, used);
   }

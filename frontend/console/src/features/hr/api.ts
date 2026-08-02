@@ -137,6 +137,25 @@ export interface PayrollRunSummary {
   netTotalMinor: number
   usesIllustrativeRules: boolean
   postedAt: string | null
+  /** Track P Phase P7 — the FROZEN per-employee work-input breakdown, raw JSON text ("{}" if none). */
+  workInputsJson: string
+}
+
+/** One employee's parsed {@code workInputsJson} entry (Track P Phase P7). */
+export interface WorkInputsEmployeeBreakdown {
+  unpaidLeave?: { days: number; requestIds: string[] }
+  overtime?: { weekdayMinutes: number; restDayMinutes: number; entryIds: string[] }
+  reimbursement?: { amountMinor: number; currency: string }
+}
+
+/** Parses a run's raw {@code workInputsJson} into a typed per-employee map; never throws. */
+export function parseWorkInputs(json: string): Record<string, WorkInputsEmployeeBreakdown> {
+  try {
+    const parsed = JSON.parse(json) as Record<string, WorkInputsEmployeeBreakdown>
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
 }
 
 export interface AllocationSummaryRow {

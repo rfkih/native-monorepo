@@ -30,7 +30,10 @@ import { currentPeriod, shiftPeriod } from '@/lib/period'
 import { PayrollSetupTab } from './PayrollSetupTab'
 import {
   downloadPayrollBankFile,
+  parseWorkInputs,
   useEmployees,
+  useLeaveRequests,
+  useOvertimeEntries,
   usePayrollLiabilities,
   usePayrollRuns,
   usePayrollSetup,
@@ -53,12 +56,14 @@ export function PayrollTab({
   actor,
   baseCurrency,
   locale,
+  onNavigateToAttendance,
 }: {
   units: OrgUnit[]
   companyId: string
   actor: string
   baseCurrency: string
   locale: string
+  onNavigateToAttendance?: () => void
 }) {
   const { t } = useTranslation()
   const [period, setPeriod] = useState(currentPeriod())
@@ -68,6 +73,19 @@ export function PayrollTab({
 
   const setup = usePayrollSetup({ companyId, actor, enabled: true })
   const seed = useSeedIllustrative({ companyId, actor })
+
+  // Track P Phase P7 — the pre-run checklist: pending (undecided) leave/overtime requests block
+  // Run entirely (the server enforces this too, 409 PendingWorkEntriesException; this is the
+  // pre-emptive UI signal so a manager sees it BEFORE attempting to run).
+  const pendingLeave = useLeaveRequests({ companyId, actor, status: 'SUBMITTED', size: 1, enabled: true })
+  const pendingOvertime = useOvertimeEntries({
+    companyId,
+    actor,
+    status: 'SUBMITTED',
+    size: 1,
+    enabled: true,
+  })
+  const pendingCount = (pendingLeave.data?.totalElements ?? 0) + (pendingOvertime.data?.totalElements ?? 0)
 
   // COMPANY-WIDE scope (see the file javadoc: a partial run would supersede-and-erase the other
   // units' labor cost in finance). ACTIVE employees only; only those WITH compensation are payable
@@ -176,7 +194,7 @@ export function PayrollTab({
                   <Button
                     type="button"
                     onClick={() => setRunDialog(true)}
-                    disabled={payableIds.length === 0}
+                    disabled={payableIds.length === 0 || pendingCount > 0}
                   >
                     <Play className="size-4" />
                     {t('hr.payroll.run.cta')}
@@ -189,6 +207,27 @@ export function PayrollTab({
                   title={t('hr.payroll.scope.noneWithComp')}
                   hint={t('hr.payroll.scope.noneHint')}
                 />
+              ) : null}
+
+              {/* Track P Phase P7 — the pre-run checklist: pending leave/overtime requests block
+                  Run entirely until a manager decides them (server-enforced too, 409). */}
+              {pendingCount > 0 ? (
+                <Card className="flex items-start gap-3 border-amber/40 bg-amber-tint p-4">
+                  <TriangleAlert className="mt-0.5 size-5 shrink-0 text-amber" aria-hidden="true" />
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-amber">
+                      {t('hr.payroll.pending.title', { count: pendingCount })}
+                    </p>
+                    <p className="mt-0.5 text-xs leading-relaxed text-amber/90">
+                      {t('hr.payroll.pending.body')}
+                    </p>
+                  </div>
+                  {onNavigateToAttendance ? (
+                    <Button type="button" variant="outline" onClick={onNavigateToAttendance}>
+                      {t('hr.payroll.pending.cta')}
+                    </Button>
+                  ) : null}
+                </Card>
               ) : null}
 
               {/* Run history */}
@@ -486,6 +525,10 @@ function RunDetail({
         </div>
       </Card>
 
+      {/* Work inputs — per-employee unpaid days / overtime hours / reimbursement, from the run's
+          FROZEN work_inputs_json (Track P Phase P7 reproducibility record). */}
+      <WorkInputsPanel run={run} payslipIndex={payslips.data ?? []} locale={locale} />
+
       {/* Liabilities — five settleable buckets recognised when the run posted (ADR 0032, P5). */}
       <LiabilitiesPanel
         companyId={companyId}
@@ -495,6 +538,71 @@ function RunDetail({
         locale={locale}
       />
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Work inputs panel — per-employee breakdown from work_inputs_json (Track P Phase P7)
+// ---------------------------------------------------------------------------
+
+function WorkInputsPanel({
+  run,
+  payslipIndex,
+  locale,
+}: {
+  run: PayrollRunSummary
+  payslipIndex: { employeeId: string; fullName: string }[]
+  locale: string
+}) {
+  const { t } = useTranslation()
+  const breakdown = parseWorkInputs(run.workInputsJson)
+  const employeeIds = Object.keys(breakdown)
+  if (employeeIds.length === 0) {
+    return null
+  }
+  const nameById = new Map(payslipIndex.map((row) => [row.employeeId, row.fullName]))
+
+  return (
+    <Card className="p-4">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+        {t('hr.payroll.workInputs.title')}
+      </p>
+      <div className="mt-2 divide-y divide-line">
+        {employeeIds.map((employeeId) => {
+          const entry = breakdown[employeeId]
+          return (
+            <div key={employeeId} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2 text-sm">
+              <span className="min-w-[10rem] font-semibold text-ink">
+                {nameById.get(employeeId) ?? employeeId}
+              </span>
+              {entry.unpaidLeave ? (
+                <span className="text-ink-2">
+                  {t('hr.payroll.workInputs.unpaidLeave', { days: entry.unpaidLeave.days })}
+                </span>
+              ) : null}
+              {entry.overtime ? (
+                <span className="text-ink-2">
+                  {t('hr.payroll.workInputs.overtime', {
+                    minutes: entry.overtime.weekdayMinutes + entry.overtime.restDayMinutes,
+                  })}
+                </span>
+              ) : null}
+              {entry.reimbursement ? (
+                <span className="text-ink-2">
+                  {t('hr.payroll.workInputs.reimbursement', {
+                    amount: formatMoney(
+                      entry.reimbursement.amountMinor,
+                      entry.reimbursement.currency,
+                      locale,
+                    ),
+                  })}
+                </span>
+              ) : null}
+            </div>
+          )
+        })}
+      </div>
+    </Card>
   )
 }
 

@@ -9,6 +9,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import java.util.UUID;
@@ -26,6 +27,17 @@ import java.util.UUID;
  * against the inclusive {@code [startDate, endDate]} span only as an upper bound (a caller may
  * request fewer days than the calendar span, e.g. to skip a weekend inside it); the derived {@link
  * LeaveBalance} usage sums this column directly, never re-deriving it from the date range.
+ *
+ * <p><strong>Single-calendar-month constraint (Track P Phase P7 review W2).</strong> {@code
+ * startDate} and {@code endDate} must fall in the SAME {@code YearMonth}. This closes a real
+ * correctness gap: {@code days} is one client-supplied total for the WHOLE request, so a request
+ * spanning a month boundary (e.g. Dec 28 - Jan 5) could not be split per-month from stored data
+ * alone — Track P Phase P7's unpaid-leave payroll proration needs an EXACT day count per period,
+ * and guessing a split (e.g. by counting workdays per side) would invent a number the
+ * employee/manager never actually agreed to. No cross-month row can exist in production yet (this
+ * constraint lands before any tenant reaches P7), so this is a forward-only guard, not a backfill
+ * concern. A leave spanning a real month boundary today is two requests, one per month — Odoo's own
+ * default posture for month-bounded accounting periods.
  *
  * <p>Extends {@link Auditable} (rule 4); under the {@code leave_request} RLS policy (rule 5, V12).
  */
@@ -84,6 +96,8 @@ public class LeaveRequest extends Auditable {
    * @throws IllegalArgumentException if {@code endDate} precedes {@code startDate}, or {@code days}
    *     is not strictly positive, or {@code days} exceeds the inclusive span of the date range (→
    *     400)
+   * @throws CrossMonthLeaveRequestException if {@code startDate} and {@code endDate} fall in
+   *     different calendar months (→ 422, Track P Phase P7 review W2)
    */
   public LeaveRequest(
       UUID employeeId,
@@ -99,6 +113,9 @@ public class LeaveRequest extends Auditable {
     this.endDate = Objects.requireNonNull(endDate, "endDate");
     if (endDate.isBefore(startDate)) {
       throw new IllegalArgumentException("endDate " + endDate + " precedes startDate " + startDate);
+    }
+    if (!YearMonth.from(startDate).equals(YearMonth.from(endDate))) {
+      throw new CrossMonthLeaveRequestException(startDate, endDate);
     }
     if (days <= 0) {
       throw new IllegalArgumentException("days must be strictly positive: " + days);

@@ -32,4 +32,7 @@ public interface PayrollRunView {
   Boolean getUsesIllustrativeRules();
 
   Instant getPostedAt();
+
+  /** The FROZEN per-employee work-input breakdown (Track P Phase P7), {@code "{}"} if none. */
+  String getWorkInputsJson();
 }

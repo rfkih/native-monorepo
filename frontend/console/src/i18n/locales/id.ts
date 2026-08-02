@@ -67,6 +67,7 @@ export const id = {
       workDate: 'Tanggal kerja',
       minutes: 'Menit',
       dayKind: 'Jenis hari',
+      crossMonthError: 'Pengajuan cuti harus berada dalam satu bulan kalender — ajukan dua permintaan terpisah jika rentangnya melewati batas bulan.',
     },
   },
   app: {
@@ -853,7 +854,7 @@ export const id = {
     },
     calendar: {
       title: 'Kalender kerja',
-      body: 'Menentukan pembagi gaji cuti tanpa gaji setelah penggajian menggunakan data ini.',
+      body: 'Menentukan pembagi gaji cuti tanpa bayar yang digunakan setiap kali penggajian dijalankan.',
       edit: 'Ubah',
       editTitle: 'Ubah kalender kerja',
       daysPerWeek: 'Hari kerja per minggu',
@@ -1105,6 +1106,17 @@ export const id = {
         label: 'Tampilan penggajian',
         runs: 'Proses',
         setup: 'Pengaturan',
+      },
+      pending: {
+        title: '{{count}} pengajuan tertunda menghalangi proses ini',
+        body: 'Pengajuan cuti atau lembur yang menunggu keputusan Anda harus disetujui atau ditolak sebelum penggajian periode ini bisa dijalankan.',
+        cta: 'Tinjau pengajuan tertunda',
+      },
+      workInputs: {
+        title: 'Input kerja pada proses ini',
+        unpaidLeave: '{{days}} hari tanpa bayar',
+        overtime: '{{minutes}} menit lembur',
+        reimbursement: '{{amount}} diganti',
       },
     },
   },

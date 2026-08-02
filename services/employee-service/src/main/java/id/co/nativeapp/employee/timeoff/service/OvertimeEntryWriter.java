@@ -7,6 +7,7 @@ import id.co.nativeapp.employee.timeoff.domain.DayKind;
 import id.co.nativeapp.employee.timeoff.domain.OvertimeEntry;
 import id.co.nativeapp.employee.timeoff.domain.OvertimeEntryNotFoundException;
 import id.co.nativeapp.employee.timeoff.domain.RequestKind;
+import id.co.nativeapp.employee.timeoff.domain.TimeoffIdempotencyKeyConflictException;
 import id.co.nativeapp.employee.timeoff.domain.TimeoffRequestEvent;
 import id.co.nativeapp.employee.timeoff.domain.TimeoffStatus;
 import id.co.nativeapp.employee.timeoff.repository.OvertimeEntryRepository;
@@ -66,6 +67,9 @@ public class OvertimeEntryWriter {
    *
    * @throws EmployeeNotLinkedException if the caller has no employee link (→ 404)
    * @throws IllegalArgumentException if {@code minutes} is out of range (→ 400)
+   * @throws TimeoffIdempotencyKeyConflictException if {@code idempotencyKey} was already used by a
+   *     DIFFERENT employee (→ 409, P7 review S1 — see {@code LeaveRequestWriter#create}'s identical
+   *     rationale)
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public OvertimeEntry create(
@@ -76,6 +80,9 @@ public class OvertimeEntryWriter {
 
     Optional<OvertimeEntry> replay = entryRepository.findByIdempotencyKey(idempotencyKey);
     if (replay.isPresent()) {
+      if (!replay.get().getEmployeeId().equals(me.getId())) {
+        throw new TimeoffIdempotencyKeyConflictException("overtime entry");
+      }
       return replay.get();
     }
 

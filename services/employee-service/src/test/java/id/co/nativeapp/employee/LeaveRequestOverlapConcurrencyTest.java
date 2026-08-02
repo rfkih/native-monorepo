@@ -116,4 +116,137 @@ class LeaveRequestOverlapConcurrencyTest extends PostgresRlsTestBase {
                 "SELECT count(*) FROM leave_request WHERE idempotency_key LIKE 'overlap-race-%'"))
         .isEqualTo(1L);
   }
+
+  // ---------------------------------------------------------------------
+  // Sequential (non-race) overlap-guard proofs against real Postgres (Track P Phase P7 review W1).
+  // ---------------------------------------------------------------------
+
+  /**
+   * A CANCELLED request's dates must NOT block a later overlapping submission — {@code
+   * existsOverlapping} filters {@code status IN ('SUBMITTED', 'APPROVED')} only.
+   */
+  @Test
+  void aCancelledRequestDoesNotBlockAnOverlappingResubmission() throws Exception {
+    var employeeId = createEmployeeWithLogin("3211111111111111", "1111000011110000");
+
+    var first =
+        TenantContext.callAs(
+            TENANT_A,
+            CLAIMANT_ACTOR,
+            () ->
+                leaveRequestService.create(
+                    LeaveType.ANNUAL,
+                    LocalDate.of(2026, 8, 3),
+                    LocalDate.of(2026, 8, 5),
+                    3,
+                    "w1-cancel-first"));
+    TenantContext.callAs(
+        TENANT_A, CLAIMANT_ACTOR, () -> leaveRequestService.cancel(first.getId(), "w1-cancel-key"));
+
+    // Same exact range, a genuinely different request — must succeed, not throw
+    // LeaveOverlapException.
+    var second =
+        TenantContext.callAs(
+            TENANT_A,
+            CLAIMANT_ACTOR,
+            () ->
+                leaveRequestService.create(
+                    LeaveType.ANNUAL,
+                    LocalDate.of(2026, 8, 3),
+                    LocalDate.of(2026, 8, 5),
+                    3,
+                    "w1-cancel-second"));
+
+    assertThat(second.getId()).isNotEqualTo(first.getId());
+    assertThat(employeeId).isNotNull();
+  }
+
+  /**
+   * A REJECTED request's dates must NOT block a later overlapping submission — same {@code status
+   * IN (...)} filter reasoning as the CANCELLED case above.
+   */
+  @Test
+  void aRejectedRequestDoesNotBlockAnOverlappingResubmission() throws Exception {
+    createEmployeeWithLogin("3212222222222222", "2222000022220000");
+
+    var first =
+        TenantContext.callAs(
+            TENANT_A,
+            CLAIMANT_ACTOR,
+            () ->
+                leaveRequestService.create(
+                    LeaveType.ANNUAL,
+                    LocalDate.of(2026, 9, 3),
+                    LocalDate.of(2026, 9, 5),
+                    3,
+                    "w1-reject-first"));
+    TenantContext.callAs(
+        TENANT_A,
+        CLAIMANT_ACTOR,
+        () -> leaveRequestService.reject(first.getId(), "not needed", "w1-reject-decision"));
+
+    var second =
+        TenantContext.callAs(
+            TENANT_A,
+            CLAIMANT_ACTOR,
+            () ->
+                leaveRequestService.create(
+                    LeaveType.ANNUAL,
+                    LocalDate.of(2026, 9, 3),
+                    LocalDate.of(2026, 9, 5),
+                    3,
+                    "w1-reject-second"));
+
+    assertThat(second.getId()).isNotEqualTo(first.getId());
+  }
+
+  /**
+   * Back-to-back ranges SHARING an endpoint day (Mon-Wed vs Wed-Fri, both include Wednesday) ARE an
+   * overlap — the inclusive {@code start_date <= :endDate AND end_date >= :startDate} predicate
+   * correctly treats a shared boundary day as a genuine conflict (an employee cannot be on leave
+   * AND back at work the same calendar day under two different requests).
+   */
+  @Test
+  void backToBackRangesSharingAnEndpointDayConflict() throws Exception {
+    createEmployeeWithLogin("3213333333333333", "3333000033330000");
+
+    TenantContext.callAs(
+        TENANT_A,
+        CLAIMANT_ACTOR,
+        () ->
+            leaveRequestService.create(
+                LeaveType.ANNUAL,
+                LocalDate.of(2026, 10, 5), // Monday
+                LocalDate.of(2026, 10, 7), // Wednesday
+                3,
+                "w1-backtoback-first"));
+
+    org.assertj.core.api.Assertions.assertThatThrownBy(
+            () ->
+                TenantContext.callAs(
+                    TENANT_A,
+                    CLAIMANT_ACTOR,
+                    () ->
+                        leaveRequestService.create(
+                            LeaveType.ANNUAL,
+                            LocalDate.of(2026, 10, 7), // Wednesday — shared with the first request
+                            LocalDate.of(2026, 10, 9), // Friday
+                            3,
+                            "w1-backtoback-second")))
+        .isInstanceOf(LeaveOverlapException.class);
+  }
+
+  private String createEmployeeWithLogin(String nik, String bankAccount) throws Exception {
+    return TenantContext.callAs(
+        TENANT_A,
+        CLAIMANT_ACTOR,
+        () -> {
+          var employeeId =
+              employeeService
+                  .create(new CreateEmployeeCommand("Budi", "TK0", nik, bankAccount))
+                  .getId();
+          employeeService.linkUser(employeeId, CLAIMANT_ACTOR, null);
+          return employeeId.toString();
+        });
+  }
 }

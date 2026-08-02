@@ -102,3 +102,33 @@ approve leave/overtime and correct balances before a single payslip line reads a
   already flagged as out of v1 scope.
 - Track P Phase P7 depends on this landing first (the program's hard merge-order constraint); this
   phase's tables/reads are additive and require no changes here when P7 wires them into a run.
+
+## P7 review addendum (2026-08-02) — one correction to this phase's own design + hardening
+
+**W2 (correction to §1's `LeaveRequest.days` design) — a leave request is now constrained to a
+SINGLE calendar month at creation.** `days` is one client-supplied total for the WHOLE request;
+Track P Phase P7's unpaid-leave payroll proration needs an EXACT day count per PERIOD, and a request
+spanning a month boundary (e.g. Dec 28 – Jan 5) could not be split per-month from stored data without
+inventing a number nobody actually agreed to. `LeaveRequest`'s constructor now rejects a cross-month
+range (`CrossMonthLeaveRequestException`, 422) — a forward-only guard (no cross-month row exists in
+production yet). A leave spanning a real month boundary is now two requests, one per month.
+
+**W1 — two real-Postgres regression tests added** to `LeaveRequestOverlapConcurrencyTest` proving the
+overlap guard's boundary cases hold beyond the original concurrency proof: a CANCELLED/REJECTED
+request's dates do NOT block a resubmission over the same range (the guard's `status IN (SUBMITTED,
+APPROVED)` filter, exercised sequentially this time, not just under a race), and back-to-back ranges
+SHARING an endpoint day (Mon–Wed vs Wed–Fri) DO conflict (the inclusive overlap predicate correctly
+treats a shared boundary day as a genuine conflict).
+
+**S1 — the create-time Idempotency-Key replay probe is now scoped to the caller's OWN employee id.**
+`LeaveRequestWriter#create`/`OvertimeEntryWriter#create` previously returned WHATEVER row
+`findByIdempotencyKey` found, regardless of whose employee it belonged to — a genuine key collision
+across two different employees (a client bug, or two callers reusing a low-entropy generated key)
+would have silently handed one employee's request back to a different caller as if it were their own
+"replay". Both writers now throw `TimeoffIdempotencyKeyConflictException` (409) when the found row's
+`employee_id` does not match the caller's own.
+
+**S3/S4 — minor hardening.** `LeaveBalanceWriter#adjust` now documents, in its own Javadoc, the
+accepted (unserialized) race against a concurrent `LeaveRequestWriter#approve`'s balance check (ADR
+0033 §4 already accepted this; the class Javadoc did not say so explicitly). `LeaveBalanceReader
+#balanceFor` now issues ONE `leave_balance` lookup instead of two for the same `(employeeId, year)`.

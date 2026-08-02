@@ -41,7 +41,8 @@ public interface PayrollRunRepository extends JpaRepository<PayrollRun, UUID> {
                  pr.employer_contribution_total_minor AS employer_contribution_total_minor,
                  pr.net_total_minor                   AS net_total_minor,
                  pr.uses_illustrative_rules           AS uses_illustrative_rules,
-                 pr.posted_at                         AS posted_at
+                 pr.posted_at                         AS posted_at,
+                 pr.work_inputs_json::text            AS work_inputs_json
             FROM payroll_run pr
            WHERE pr.period = :period
            ORDER BY pr.run_seq DESC

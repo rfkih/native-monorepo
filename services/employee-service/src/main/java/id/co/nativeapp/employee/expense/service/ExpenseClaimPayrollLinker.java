@@ -88,6 +88,19 @@ import org.springframework.transaction.annotation.Transactional;
  * released unconditionally, so the NEXT {@code calculate()} for the SAME period (a re-run, e.g.
  * once P7 lands and an operator forces a correction) frees them for re-linking. This is a
  * deliberate, documented transitional design — not a bug — and is mirrored in ADR 0030 §6.
+ *
+ * <p><strong>Concurrent {@code calculate()} for two DIFFERENT periods (Track P Phase P7 review
+ * S2).</strong> {@link #linkForRun}'s UPDATE is a single conditional statement (row-locked by
+ * Postgres), so two overlapping {@code calculate()} transactions racing for the SAME employee's
+ * SAME still-{@code APPROVED} claim (e.g. one calculating May, one calculating June, both before
+ * either has committed) cannot both win it: whichever transaction's UPDATE acquires the row lock
+ * first proceeds; the second BLOCKS until the first commits, then re-evaluates its {@code
+ * reimbursement_run_id IS NULL} predicate under READ COMMITTED — now false — and matches zero rows.
+ * The claim ends up linked to EXACTLY ONE of the two runs, never both and never neither. A claim
+ * MAY therefore "migrate" between two UN-POSTED runs across separate, sequential {@code
+ * calculate()} calls (the {@code releaseForPeriod} release/relink dance documented above) — this is
+ * expected, not a race bug; the race-safety property is that at most one calculating run holds the
+ * link AT ANY INSTANT, proven by {@code ExpenseClaimPayrollLinkerConcurrentPeriodsTest}.
  */
 @Component
 public class ExpenseClaimPayrollLinker {
@@ -95,9 +108,13 @@ public class ExpenseClaimPayrollLinker {
   private static final Logger log = LoggerFactory.getLogger(ExpenseClaimPayrollLinker.class);
 
   /**
-   * The {@code pay_component.component_key} Track P Phase P7 seeds as the non-taxable earning that
-   * carries a linked claim's reimbursement on the payslip (ADR 0030 §6). Pre-P7 this key is never
-   * produced on any {@code payslip_line}, so {@link #markReimbursedAndEmit}'s gate always no-ops.
+   * The {@code pay_component.component_key} Track P Phase P7 seeds (the {@code ID-2026.2} dataset
+   * top-up) as the non-taxable earning that carries a linked claim's reimbursement on the payslip
+   * (ADR 0030 §6). P7 IS LIVE: {@code PayrollRunWriter#appendWorkInputs} produces this line
+   * whenever the tenant has that catalog component AND a nonzero linked-claim total; for a tenant
+   * that has NOT activated the dataset, this key is never produced on any {@code payslip_line}, so
+   * {@link #markReimbursedAndEmit}'s gate correctly stays a no-op (the E5-transitional fallback,
+   * still load-bearing for that case).
    */
   public static final String COMPONENT_KEY_EXPENSE_REIMBURSEMENT = "EXPENSE_REIMBURSEMENT";
 

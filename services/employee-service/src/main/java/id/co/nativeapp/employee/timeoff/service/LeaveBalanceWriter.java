@@ -33,6 +33,14 @@ public class LeaveBalanceWriter {
    * Replaces the {@code adjustment_days} for {@code (employeeId, year)}, creating the row (with the
    * default grant) if it does not exist yet.
    *
+   * <p><strong>Accepted race (P7 review S3).</strong> This method takes NO advisory lock, unlike
+   * {@code LeaveRequestWriter#approve}'s balance-sufficiency check (ADR 0033 §4). A manager
+   * concurrently approving an ANNUAL request while another manager adjusts this same employee's
+   * balance could interleave: the approve's "is there enough balance" read and this write are not
+   * serialized against each other. This is an ACCEPTED residual (ADR 0033) — both actions are rare,
+   * manager-only, and human-paced; a wrongly-approved request in that narrow window is corrected
+   * the same way any other bad value is (a manual balance adjustment), not automatically.
+   *
    * @throws EmployeeNotFoundException if {@code employeeId} is not visible in the bound tenant (→
    *     404)
    */

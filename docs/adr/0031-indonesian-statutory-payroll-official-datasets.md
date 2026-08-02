@@ -232,3 +232,79 @@ statutory specification already excluded).
 termination-month final true-up (an employee who leaves mid-year needs their OWN Art-17 reconciliation
 at their last paid month, not only ever in December — this needs employment end dates the run does not
 yet consume) — both remain tracked follow-ups, not silently claimed complete by this phase.
+
+## P7 update (2026-08-02) — the run consumes work entries; the dataset top-up + skip-if-identical
+
+Track P phase P7 wires the two DORMANT calc families this ADR shipped early (`HOURLY_RATE_TABLE` /
+`OVERTIME_HOURLY`, P1/P2) into a real payslip line, and adds the non-taxable expense-claim
+reimbursement line (ADR 0030 §6's E5 seam, live at last). `PayrollRunWriter` gates on a
+pending-work-entries check first (any SUBMITTED leave/overtime for the run's employees this period →
+409, HR-3 — pay never silently ignores an undecided request), then per employee synthesizes:
+`UNPAID_LEAVE` (signed-negative, taxable — base × approved unpaid days ÷ the tenant `work_calendar`
+divisor), `OVERTIME` (PP 35/2021 tiers via the new pure `WorkInputCalculator`, mirroring
+`GrossToNetCalculator`/`LaborCostAllocator`'s "algorithms only, HR-9" shape), and
+`EXPENSE_REIMBURSEMENT` (non-taxable, the linked claim total). Each is independently gated on its own
+`pay_component` catalog row existing — a tenant that has not activated the dataset top-up below sees
+NOTHING different, byte-identical to a pre-P7 run, with a loud WARN naming the gap when there is real
+work that could not be applied. See ADR 0032's P7 addendum for the liability/allocation side (the
+NET_WAGES_PAYABLE split, the crux of this phase).
+
+**The `ID-2026.2` dataset top-up — self-contained, skip-if-identical (no seeder code change).**
+`OfficialStatutorySeedWriter.seed` already deduplicates on the EXACT pair `(rule_key, rule_version)`
+before inserting a rule row. `ID-2026.2.json` re-ships all nine `ID-2026.1` rules UNCHANGED — same
+`rule_key` AND the SAME `rule_version` string `"ID-2026.1"` (the figures have not changed) — so the
+existing exact-match lookup naturally SKIPS re-inserting them (`rulesSkipped++`, zero history churn),
+while the dataset still satisfies "self-contained" (a fresh tenant activating `ID-2026.2` directly,
+never having seen `ID-2026.1`, gets the full rule set in one call). Only the pay-component catalog
+upsert actually changes anything: three NEW rows (`OVERTIME`, `UNPAID_LEAVE`, `EXPENSE_REIMBURSEMENT`)
+alongside the seven unchanged ones (which `applyCatalog` also no-ops on, the idempotent-reseed proof).
+This is the DECIDED simplest-correct design from the phase brief's own options list: a genuine
+figure-changing revision would still need a real `rule_version` bump (the seeder's exact-match key IS
+the content-identity key in this codebase — a new version string is only minted when a regulation's
+numbers actually change, exactly as `ID-2026.1`'s uniform version string already demonstrated); no
+new "skip-if-same-params" comparison logic was needed or added.
+
+**Overtime — minute pro-ration convention.** PP 35/2021's tiers are defined in whole hours; an
+`overtime_entry` carries minutes, which may not land on an hour boundary. `WorkInputCalculator`
+pro-rates a PARTIAL hour WITHIN its tier by the exact minute fraction (`tierPay = hourlyRate ×
+tierMultiplier × minutesInTier/60`, one `Money.mulDiv` per tier, HALF_EVEN) — e.g. 90 minutes weekday
+overtime is 1.0h at 1.5× plus 0.5h at 2.0×, never rounded to a single whole-hour tier. A
+regulation-cited worked example (3h weekday = 1.5×h1 + 2×h2-3) is pinned in
+`WorkInputCalculatorTest` and re-verified against the actual shipped dataset params (not hand-rolled
+figures) in the same test class.
+
+**Unpaid leave — the single-calendar-month leave-request constraint (P7 review W2).**
+`leave_request.days` is one client-supplied total for the WHOLE request; a request spanning a month
+boundary could not be split per-month from stored data without inventing a number nobody agreed to.
+`LeaveRequest`'s constructor now REJECTS (`CrossMonthLeaveRequestException`, 422) a range spanning two
+calendar months — a forward-only guard (no cross-month row could exist in production yet). This makes
+`PayrollRunWriter`'s month-attribution exact and trivial: sum `days` directly across every APPROVED
+`UNPAID` request whose `start_date` falls in the run's period, no date-range clipping/workday-counting
+needed. A manager splits a genuine month-spanning leave into two requests, one per month (Odoo's own
+default posture for month-bounded accounting periods).
+
+**Two carry-in hardening fixes, from the P3/P4 review queue.** (1) `swapForAnnualTrueUp` now FAILS
+LOUDLY (`IllegalStateException`) if a December run resolves an `ANNUAL_PROGRESSIVE` rule but ends up
+swapping ZERO statutory components onto it — a catalog miswiring that would otherwise silently produce
+a December run with NO income-tax line at all, while still logging "this is the true-up" as if it
+worked. (2) `PayrollRunWriter` now WARNs once per December run when any currently-resolved rule's
+`effective_from` falls AFTER January 1st of the fiscal year (a mid-year PATCH override) — a signal
+that `buildAnnualContext`'s CURRENT-catalog historical-reconstruction approximation (documented above,
+P3) is weaker for that run's history and should be spot-checked by hand.
+
+**Reproducibility.** Every consumed leave/overtime/claim id and the derived per-employee
+days/minutes/reimbursement total is FROZEN onto `payroll_run.work_inputs_json` (JSONB, V13) — the
+`sealed_sources_json` precedent applied to work inputs. A re-run after a new approval lands produces a
+DIFFERENT `work_inputs_json` explaining both runs; the ORIGINAL run's own frozen record never changes
+(immutable history) — proven end-to-end in `PayrollWorkInputsEndToEndTest`.
+
+**Deliberately out of scope for P7 (tracked, documented, not silently claimed handled):** the
+non-permanent/daily-employee 422 scope gate the statutory specification calls for (`EmploymentType !=
+PERMANENT` should reject the run) was NOT wired this phase — `PayFrequency` still carries only
+`MONTHLY` today (so the analogous non-monthly-compensation gate IS wired, defensively, since it costs
+nothing) but adding the employment-type gate touches every existing payroll fixture across the test
+suite and needs its own scoped pass to avoid a wide, risky blast radius in a single change. Overtime's
+hourly-rate base is `basePay` only (`base × 1/173`), not `pokok + tunjangan tetap` (fixed allowances)
+as the full regulation text allows — the task's own literal formula; folding fixed allowances in is a
+tracked follow-up. The PP 35/2021 4h/day regulatory cap is still only the 10h/entry DB `CHECK` (P6
+residual, unchanged).

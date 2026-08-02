@@ -19,17 +19,21 @@ import id.co.nativeapp.employee.payroll.domain.CompensationAlreadyEndedException
 import id.co.nativeapp.employee.payroll.domain.CompensationNotFoundException;
 import id.co.nativeapp.employee.payroll.domain.DuplicateCommissionException;
 import id.co.nativeapp.employee.payroll.domain.IncompletePeriodException;
+import id.co.nativeapp.employee.payroll.domain.NonMonthlyCompensationException;
 import id.co.nativeapp.employee.payroll.domain.OverlappingCompensationException;
 import id.co.nativeapp.employee.payroll.domain.PayrollRunNotFoundException;
 import id.co.nativeapp.employee.payroll.domain.PayrollRunNotPostedException;
 import id.co.nativeapp.employee.payroll.domain.PayrollSetupNotSeededException;
+import id.co.nativeapp.employee.payroll.domain.PendingWorkEntriesException;
 import id.co.nativeapp.employee.payroll.domain.UnknownDatasetVersionException;
 import id.co.nativeapp.employee.payroll.domain.UnknownStatutoryRuleException;
+import id.co.nativeapp.employee.timeoff.domain.CrossMonthLeaveRequestException;
 import id.co.nativeapp.employee.timeoff.domain.DecisionCommentRequiredException;
 import id.co.nativeapp.employee.timeoff.domain.InsufficientLeaveBalanceException;
 import id.co.nativeapp.employee.timeoff.domain.LeaveOverlapException;
 import id.co.nativeapp.employee.timeoff.domain.LeaveRequestNotFoundException;
 import id.co.nativeapp.employee.timeoff.domain.OvertimeEntryNotFoundException;
+import id.co.nativeapp.employee.timeoff.domain.TimeoffIdempotencyKeyConflictException;
 import id.co.nativeapp.employee.timeoff.domain.TimeoffStateException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolation;
@@ -98,6 +102,31 @@ public class EmployeeApiAdvice {
     ProblemDetail problem = problem(HttpStatus.CONFLICT, "incomplete-period", request);
     problem.setTitle("Period not complete");
     // The message names only business-unit ids (UUIDs), never PII (rule 6).
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /**
+   * A payroll run's period carries an undecided (SUBMITTED) leave/overtime request → 409 Conflict
+   * (Track P Phase P7).
+   */
+  @ExceptionHandler(PendingWorkEntriesException.class)
+  public ProblemDetail handlePendingWorkEntries(
+      PendingWorkEntriesException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.CONFLICT, "pending-work-entries", request);
+    problem.setTitle("Pending work entries");
+    // The message names only request/entry ids (UUIDs), never PII (rule 6).
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /** A compensation package covering the run's period is not MONTHLY → 422 (Track P Phase P7). */
+  @ExceptionHandler(NonMonthlyCompensationException.class)
+  public ProblemDetail handleNonMonthlyCompensation(
+      NonMonthlyCompensationException ex, HttpServletRequest request) {
+    ProblemDetail problem =
+        problem(HttpStatus.UNPROCESSABLE_ENTITY, "non-monthly-compensation", request);
+    problem.setTitle("Unsupported compensation cadence");
     problem.setDetail(ex.getMessage());
     return problem;
   }
@@ -471,6 +500,31 @@ public class EmployeeApiAdvice {
       InsufficientLeaveBalanceException ex, HttpServletRequest request) {
     ProblemDetail problem = problem(HttpStatus.CONFLICT, "insufficient-leave-balance", request);
     problem.setTitle("Insufficient leave balance");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /** A leave request spans more than one calendar month → 422 (Track P Phase P7 review W2). */
+  @ExceptionHandler(CrossMonthLeaveRequestException.class)
+  public ProblemDetail handleCrossMonthLeaveRequest(
+      CrossMonthLeaveRequestException ex, HttpServletRequest request) {
+    ProblemDetail problem =
+        problem(HttpStatus.UNPROCESSABLE_ENTITY, "cross-month-leave-request", request);
+    problem.setTitle("Leave request spans more than one calendar month");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /**
+   * A create-time Idempotency-Key was already used by a DIFFERENT employee → 409 (Track P Phase P7
+   * review S1) — never silently returned as if it were the caller's own replay.
+   */
+  @ExceptionHandler(TimeoffIdempotencyKeyConflictException.class)
+  public ProblemDetail handleTimeoffIdempotencyKeyConflict(
+      TimeoffIdempotencyKeyConflictException ex, HttpServletRequest request) {
+    ProblemDetail problem =
+        problem(HttpStatus.CONFLICT, "timeoff-idempotency-key-conflict", request);
+    problem.setTitle("Idempotency-Key conflict");
     problem.setDetail(ex.getMessage());
     return problem;
   }

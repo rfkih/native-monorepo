@@ -308,3 +308,63 @@ event — `docs/EVENT-CATALOG.md` is unchanged):
   as `credit_minor - credit_minor` (should read `credit_minor - debit_minor`); `PayrollRunLedgerRepository`'s
   class javadoc called its queries "Derived/JPQL" (this codebase has no JPQL anywhere — corrected to
   "Derived-query methods plus NATIVE `@Query` methods").
+
+## P7 addendum (2026-08-02) — the NET_WAGES_PAYABLE / employer-cost split for reimbursement
+
+Track P phase P7 (ADR 0031's P7 update) puts a real `EXPENSE_REIMBURSEMENT` payslip line into the
+run for the first time (ADR 0030 §6's E5 seam, previously wired but never actually fed). This is the
+crux this addendum records: reimbursement lifts the employee's NET pay (real cash in the SAME
+transfer) but is NOT labor cost — the claim's expense was already recognised, Dr expense / Cr `2600
+Employee Expense Payable`, at manager APPROVAL time (ADR 0030). Crediting the FULL `net_total` to
+`NET_WAGES_PAYABLE (2640)` would double-book the reimbursed portion: once as the `2600` payable
+(settled separately when `ExpenseClaimPayrollLinker#markReimbursedAndEmit` emits
+`ExpenseReimbursementSettled(PAYROLL)`, which finance's `empexpense` consumer clears Dr 2600 / Cr
+CASH_CLEARING) and again as `2640`.
+
+**Resolution — split at the SOURCE of the two totals, not with a new liability bucket.**
+`PayrollLiabilityWriter`'s bucket set is UNCHANGED (still the same five roles); no new
+`liability_role`, no schema/event change. Instead, `PayrollRunWriter` computes BOTH numbers net of
+the SAME `reimbursementTotal` (freshly decrypted-and-summed from the run's `EXPENSE_REIMBURSEMENT`
+EARNING lines, in the SAME single pass `computeLiabilityBuckets` already makes over the run's payslip
+lines — see `LiabilityComputation`, a new small record carrying the buckets AND that total together
+so they can never be derived from two different reads):
+
+- `NET_WAGES_PAYABLE = net_total − reimbursementTotal` — the LABOR-ONLY portion of net pay finance
+  owes via the payroll liability account; the reimbursed portion is owed (and settled) via the
+  SEPARATE `2600` payable instead, never through `2640`.
+- `employer_cost_total = gross_total − reimbursementTotal + employer_contribution_total` — the SAME
+  subtraction, so the accounting identity from ADR 0032's original design (`net_total + Σ(the other
+  four buckets) = employer_cost_total`) holds ALGEBRAICALLY unchanged on these LABOR-ONLY figures:
+  `(net_total − reimbursementTotal) + Σ(other 4 buckets) = (gross_total − employeeDeductionTotal) −
+  reimbursementTotal + (employeeDeductionTotal + employerContributionTotal) = gross_total −
+  reimbursementTotal + employerContributionTotal = employer_cost_total`. `assertLiabilityIdentity`
+  is otherwise UNCHANGED — it still throws rather than ever emit an unbalanced event; it simply now
+  checks against the reimbursement-adjusted `employer_cost_total`.
+- `LaborCostAllocated`/`LaborCostAllocation` rows EXCLUDE `EXPENSE_REIMBURSEMENT` entirely (a new
+  `PayrollRunWriter#laborCostByGlAccount` per-person grouping filters the component key out before
+  summing into gl-account buckets) — the SAME `employer_cost_total` figure is what the allocation
+  buckets sum to, proven by a dedicated assertion in `PayrollWorkInputsEndToEndTest` (the allocated
+  sum equals `grossTotal − reimbursementTotal + employerContributionTotal` exactly).
+- The PAYSLIP itself, and the P5 net-pay BANK FILE (`BankFileReader`, unchanged), still show/pay the
+  FULL net INCLUDING the reimbursement — the employee receives ONE transfer for both. Only the GL
+  split between `2640` and the `2600` settlement differs; the employee-facing figure is unaffected.
+
+**The gl-hint bucket split (reconciliation #4 — allocation engine change only, no schema change).**
+Independent of the reimbursement exclusion above, `LaborCostAllocated` buckets now split per
+COMPONENT gl account (5100 salary / 5130 overtime / 5200 BPJS-ER / ...) instead of collapsing the
+person's entire labor cost onto BASE's single gl account — `PayrollRunWriter#allocateForPerson` now
+calls the pure `LaborCostAllocator` ONCE PER non-zero gl-account group (sharing the SAME per-outlet
+earnings-share ratios across groups, since the share is about WHERE the person worked, not WHICH
+component the cost belongs to), rather than once per person. `OVERTIME` lines carry a NEW gl hint,
+`5130-OVERTIME`; finance-service gained a matching V42 migration (`6110 Overtime Expense` chart-of-
+account row + one `mapping_rule` row, mirroring V3's exact labor-cost-postings idiom) — pure data, no
+Java change, since `GlAccountResolver`/`LaborCostPostingWriter` already resolve a labor gl hint
+data-driven via `mapping_rule`. The UNALLOCATED suspense path is UNCHANGED — it still collapses a
+no-outlet-assignment person's entire (reimbursement-excluded) labor cost into ONE `9999-UNALLOCATED-
+LABOR` bucket, deliberately not split, so an operator sees one clearly-marked suspense figure to
+investigate rather than a fragmented one.
+
+**Regression note.** This bucket split changed `PayrollRunEndToEndTest`'s pre-existing single-bucket
+assertion (an illustrative-dataset employee with BASE + BPJS-Kes-ER now emits TWO `LaborCostAllocated`
+events, not one) — updated to sum across however many buckets land, an intentional, reviewed behaviour
+change, not a regression.

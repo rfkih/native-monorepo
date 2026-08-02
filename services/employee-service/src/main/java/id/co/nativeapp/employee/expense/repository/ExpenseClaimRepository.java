@@ -23,6 +23,15 @@ import org.springframework.data.repository.query.Param;
 public interface ExpenseClaimRepository extends JpaRepository<ExpenseClaim, UUID> {
 
   /**
+   * The system actor literal both {@link #releaseForPeriod} and {@link #linkForRunChunk} stamp onto
+   * {@code updated_by} (P7 review S4 — extracted to ONE constant so the two native
+   * {@code @Modifying} UPDATEs can never drift apart on the exact string; a Java annotation
+   * attribute must be a compile-time constant, and concatenating a {@code static final String} into
+   * a {@code @Query} text block satisfies that while keeping a single source of truth).
+   */
+  String SYSTEM_ACTOR_PAYROLL_LINKER = "system:payroll-linker";
+
+  /**
    * One page of the caller's own claims, newest-updated first (ENGINEERING-STANDARDS §1.3 — an
    * envelope, never a bare unbounded list). {@code size}/{@code offset} are pre-bounded by {@code
    * ExpenseClaimReader} (size capped, page floored at 0) before reaching here.
@@ -221,7 +230,10 @@ public interface ExpenseClaimRepository extends JpaRepository<ExpenseClaim, UUID
                  status               = 'APPROVED',
                  settled_at           = NULL,
                  updated_at           = NOW(),
-                 updated_by           = 'system:payroll-linker',
+                 updated_by           = '"""
+              + SYSTEM_ACTOR_PAYROLL_LINKER
+              + """
+                 ',
                  version              = c.version + 1
             FROM payroll_run pr
            WHERE c.reimbursement_run_id = pr.id
@@ -271,7 +283,10 @@ public interface ExpenseClaimRepository extends JpaRepository<ExpenseClaim, UUID
           UPDATE expense_claim
              SET reimbursement_run_id = :runId,
                  updated_at           = NOW(),
-                 updated_by           = 'system:payroll-linker',
+                 updated_by           = '"""
+              + SYSTEM_ACTOR_PAYROLL_LINKER
+              + """
+                 ',
                  version              = version + 1
            WHERE status                = 'APPROVED'
              AND reimbursement_method  = 'PAYROLL'

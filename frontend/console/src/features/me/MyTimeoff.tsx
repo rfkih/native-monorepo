@@ -242,6 +242,9 @@ function RequestLeaveDialog({
   const [endDate, setEndDate] = useState('')
   const [days, setDays] = useState('1')
   const create = useCreateLeaveRequest({ companyId, actor })
+  // Track P Phase P7 review W2: a range spanning two calendar months is rejected 422 — surfaced
+  // distinctly from the generic error so the employee understands WHY (split into two requests).
+  const crossMonth = (create.error as { status?: number } | null)?.status === 422
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -306,7 +309,11 @@ function RequestLeaveDialog({
             required
           />
         </Field>
-        {create.isError ? <p className="text-sm text-loss">{t('attendance.decide.error')}</p> : null}
+        {create.isError ? (
+          <p className="text-sm text-loss">
+            {crossMonth ? t('me.timeoff.crossMonthError') : t('attendance.decide.error')}
+          </p>
+        ) : null}
         <div className="flex justify-end gap-3">
           <Button type="button" variant="outline" onClick={onClose}>
             {t('common.cancel')}

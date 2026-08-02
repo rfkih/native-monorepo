@@ -63,7 +63,8 @@ public class PayrollRunReader {
                     v.getEmployerContributionTotalMinor(),
                     v.getNetTotalMinor(),
                     Boolean.TRUE.equals(v.getUsesIllustrativeRules()),
-                    v.getPostedAt()))
+                    v.getPostedAt(),
+                    v.getWorkInputsJson()))
         .toList();
   }
 

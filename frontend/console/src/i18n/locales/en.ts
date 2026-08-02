@@ -69,6 +69,7 @@ export const en = {
       workDate: 'Work date',
       minutes: 'Minutes',
       dayKind: 'Day kind',
+      crossMonthError: 'A leave request must stay within one calendar month — submit two requests if it spans a month boundary.',
     },
   },
   landing: {
@@ -857,7 +858,7 @@ export const en = {
     },
     calendar: {
       title: 'Work calendar',
-      body: 'Drives the unpaid-leave pay divisor once payroll consumes this data.',
+      body: 'Drives the unpaid-leave pay divisor every payroll run applies to approved unpaid days.',
       edit: 'Edit',
       editTitle: 'Edit work calendar',
       daysPerWeek: 'Days per week',
@@ -1108,6 +1109,17 @@ export const en = {
         label: 'Payroll view',
         runs: 'Runs',
         setup: 'Setup',
+      },
+      pending: {
+        title: '{{count}} pending request(s) block this run',
+        body: 'A leave or overtime request awaiting your decision must be approved or rejected before payroll can run for this period.',
+        cta: 'Review pending requests',
+      },
+      workInputs: {
+        title: 'Work inputs this run',
+        unpaidLeave: '{{days}} unpaid day(s)',
+        overtime: '{{minutes}} min overtime',
+        reimbursement: '{{amount}} reimbursed',
       },
     },
   },

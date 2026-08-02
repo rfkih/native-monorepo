@@ -1,0 +1,18 @@
+-- Phase P7 (Track P — payroll consumes work entries + the expense-claim reimbursement line) — a
+-- single additive column on payroll_run: the FROZEN record of every leave/overtime/expense-claim
+-- input this run actually consumed to build its work-input payslip lines.
+--
+-- Mirrors the sealed_sources_json precedent (V2, PayrollRun.recordSealedSources): a run must be
+-- REPRODUCIBLE (HR-7) — re-reading a POSTED run must be able to explain EXACTLY which leave_request
+-- / overtime_entry / expense_claim rows it consumed and the per-employee totals it derived from
+-- them, without re-querying tables whose CONTENT may have changed since (a leave request cannot be
+-- edited after decision, but a re-run's own workings must still be independently auditable without
+-- assuming the underlying rows never move). NOT NULL DEFAULT '{}'::jsonb keeps every pre-P7 run
+-- (and every run a tenant computes before any leave/overtime/claim activity exists) byte-identical —
+-- an empty object is written by PayrollRunWriter#calculate for a run that consumed nothing.
+--
+-- Shape (per employee_id key): {"<employeeId>": {"unpaidLeave": {"days": N, "requestIds": [...]},
+-- "overtime": {"weekdayMinutes": N, "restDayMinutes": N, "entryIds": [...]},
+-- "reimbursement": {"amountMinor": N, "currency": "...", "claimCount": N}}, ...} — see
+-- PayrollRunWriter's work-input javadoc for the authoritative shape.
+ALTER TABLE payroll_run ADD COLUMN work_inputs_json JSONB NOT NULL DEFAULT '{}'::jsonb;

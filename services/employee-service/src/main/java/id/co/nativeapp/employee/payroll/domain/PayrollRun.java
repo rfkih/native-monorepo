@@ -118,6 +118,16 @@ public class PayrollRun extends Auditable {
   @Column(name = "sealed_sources_json", nullable = false, columnDefinition = "jsonb")
   private String sealedSourcesJson;
 
+  /**
+   * Track P Phase P7 — the FROZEN, per-employee record of every leave/overtime/expense-claim work
+   * input this run actually consumed (entry/request/claim ids + the derived days/minutes/amount) —
+   * the {@code sealed_sources_json} reproducibility precedent applied to work inputs (V13). {@code
+   * '{}'} for every pre-P7 run and every run that consumed nothing. JSON.
+   */
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "work_inputs_json", nullable = false, columnDefinition = "jsonb")
+  private String workInputsJson;
+
   @Column(name = "posted_at")
   private Instant postedAt;
 
@@ -135,6 +145,7 @@ public class PayrollRun extends Auditable {
     this.ruleVersionSetJson = "{}";
     this.usesIllustrativeRules = false;
     this.sealedSourcesJson = "[]";
+    this.workInputsJson = "{}";
     Money zero = Money.ofMinor(0L, baseCurrency);
     this.grossTotal = MoneyEmbeddable.of(zero);
     this.employeeDeductionTotal = MoneyEmbeddable.of(zero);
@@ -150,6 +161,11 @@ public class PayrollRun extends Auditable {
 
   public void recordSealedSources(String sealedSourcesJson) {
     this.sealedSourcesJson = Objects.requireNonNull(sealedSourcesJson, "sealedSourcesJson");
+  }
+
+  /** Records the FROZEN per-employee work-input breakdown consumed this run (Track P Phase P7). */
+  public void recordWorkInputs(String workInputsJson) {
+    this.workInputsJson = Objects.requireNonNull(workInputsJson, "workInputsJson");
   }
 
   /** Sets the four company-level totals (computed in-memory by the engine). */
@@ -229,6 +245,10 @@ public class PayrollRun extends Auditable {
 
   public String getSealedSourcesJson() {
     return sealedSourcesJson;
+  }
+
+  public String getWorkInputsJson() {
+    return workInputsJson;
   }
 
   public Instant getPostedAt() {

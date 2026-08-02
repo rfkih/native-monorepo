@@ -526,6 +526,79 @@ class ExpenseClaimPayrollLinkerIntegrationTest extends PostgresRlsTestBase {
   }
 
   // ---------------------------------------------------------------------
+  // (e) Concurrent calculate() for TWO DIFFERENT periods, same employee, same claim (Track P Phase
+  // P7 review S2) — the claim ends up linked to EXACTLY ONE of the two runs, proven by real
+  // concurrent threads (not just reasoned about), and neither calculate() call itself fails.
+  // ---------------------------------------------------------------------
+
+  @Test
+  void concurrentCalculateForTwoDifferentPeriodsLinksTheSharedClaimToExactlyOneRun()
+      throws Exception {
+    ClaimSetup setup = setUpEmployeeWithApprovedClaim("3208888888888888", "8888999900001111");
+
+    java.util.concurrent.CyclicBarrier barrier = new java.util.concurrent.CyclicBarrier(2);
+    java.util.concurrent.Callable<UUID> calculateMay =
+        () ->
+            TenantContext.callAs(
+                TENANT_A,
+                ACTOR_A,
+                () -> {
+                  barrier.await();
+                  return payrollRunService
+                      .calculate(runCommand("2026-05", setup.employeeId()), IDR)
+                      .getId();
+                });
+    java.util.concurrent.Callable<UUID> calculateJune =
+        () ->
+            TenantContext.callAs(
+                TENANT_A,
+                ACTOR_A,
+                () -> {
+                  barrier.await();
+                  return payrollRunService
+                      .calculate(runCommand("2026-06", setup.employeeId()), IDR)
+                      .getId();
+                });
+
+    java.util.concurrent.ExecutorService pool =
+        java.util.concurrent.Executors.newFixedThreadPool(2);
+    UUID mayRunId;
+    UUID juneRunId;
+    try {
+      java.util.concurrent.Future<UUID> mayFuture = pool.submit(calculateMay);
+      java.util.concurrent.Future<UUID> juneFuture = pool.submit(calculateJune);
+      mayRunId = mayFuture.get();
+      juneRunId = juneFuture.get();
+    } finally {
+      pool.shutdownNow();
+    }
+
+    assertThat(mayRunId).isNotEqualTo(juneRunId);
+
+    long linkedToMay =
+        countAsTenant(
+            TENANT_A,
+            "SELECT count(*) FROM expense_claim WHERE id = ? AND reimbursement_run_id = ?",
+            setup.claimId(),
+            mayRunId);
+    long linkedToJune =
+        countAsTenant(
+            TENANT_A,
+            "SELECT count(*) FROM expense_claim WHERE id = ? AND reimbursement_run_id = ?",
+            setup.claimId(),
+            juneRunId);
+    // Exactly one of the two — never both (a double-link would double-settle later), never
+    // neither (the claim must not vanish from both runs' linking attempts).
+    assertThat(linkedToMay + linkedToJune).isEqualTo(1L);
+    assertThat(
+            countAsTenant(
+                TENANT_A,
+                "SELECT count(*) FROM expense_claim WHERE id = ? AND status = 'APPROVED'",
+                setup.claimId()))
+        .isEqualTo(1L);
+  }
+
+  // ---------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------
 

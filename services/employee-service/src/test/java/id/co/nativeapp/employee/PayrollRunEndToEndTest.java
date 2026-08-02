@@ -104,17 +104,23 @@ class PayrollRunEndToEndTest extends PostgresRlsTestBase {
     assertThat(postedRecord.get("run_seq")).isEqualTo(1);
     assertThat(((List<?>) postedRecord.get("rule_versions"))).isNotEmpty();
 
+    // Track P Phase P7 (reconciliation #4): LaborCostAllocated buckets SPLIT per component GL
+    // account instead of collapsing onto BASE's — this illustrative-dataset employee has BASE
+    // (5100-SALARY, 20,000,000) and the employer BPJS leg (5200-BPJS-ER, 400,000) in TWO buckets.
     List<Map<String, Object>> allocated =
         jdbcTemplate.queryForList(
             "SELECT payload FROM outbox WHERE event_type = 'LaborCostAllocated'");
-    assertThat(allocated).hasSize(1);
-    GenericRecord allocRecord =
-        AvroSerde.deserialize(
-            (byte[]) allocated.get(0).get("payload"), LaborCostAllocatedSchema.schema());
-    assertThat(allocRecord.get("amount_minor")).isEqualTo(20_400_000L);
-    assertThat(allocRecord.get("uses_illustrative_rules")).isEqualTo(true);
-    // run_seq is populated from payroll_run.run_seq on the producer wire: the first run is 1.
-    assertThat(allocRecord.get("run_seq")).isEqualTo(1);
+    assertThat(allocated).hasSize(2);
+    long allocatedSum = 0L;
+    for (Map<String, Object> ev : allocated) {
+      GenericRecord allocRecord =
+          AvroSerde.deserialize((byte[]) ev.get("payload"), LaborCostAllocatedSchema.schema());
+      allocatedSum += (long) allocRecord.get("amount_minor");
+      assertThat(allocRecord.get("uses_illustrative_rules")).isEqualTo(true);
+      // run_seq is populated from payroll_run.run_seq on the producer wire: the first run is 1.
+      assertThat(allocRecord.get("run_seq")).isEqualTo(1);
+    }
+    assertThat(allocatedSum).isEqualTo(20_400_000L);
 
     // HR-6: the individual NET salary figure must not appear in any event payload.
     assertThat(new String(postedBytes, StandardCharsets.UTF_8))
