@@ -467,7 +467,7 @@ class LoyaltyGiftCardCheckoutIntegrationTest extends PostgresRlsTestBase {
 
     PayParkedRequest payRequest =
         new PayParkedRequest(
-            new PaymentRequest(TenderType.CASH, 18_500L), null, memberId, 1_500L, null, null);
+            new PaymentRequest(TenderType.CASH, 18_500L), null, memberId, 1_500L, null, null, null);
     OrderResponse paid =
         TenantContext.callAs(TENANT, ACTOR, () -> orderService.payParked(orderId, payRequest));
 

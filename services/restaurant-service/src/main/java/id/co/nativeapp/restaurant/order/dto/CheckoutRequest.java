@@ -55,6 +55,12 @@ import java.util.UUID;
  *     order's {@code occurredAt} (and the {@code SaleRecorded} event's {@code occurred_at}) so the
  *     GL period reflects the day the sale actually happened, not the day it synced. {@code null}
  *     with {@code offlineReplay=true} is allowed and falls back to {@code now()}.
+ * @param channelCode Phase B2 (ADR 0036): the company-managed {@code sales_channel.code} this sale
+ *     rings through — REQUIRED when {@code payment.tenderType() == ONLINE} (a platform-collected
+ *     order, e.g. GoFood/GrabFood), validated to exist and be active for the tenant; ignored/must
+ *     be omitted for every other tender. An ONLINE-tender order also forbids a gift-card
+ *     redemption and a positive {@code loyaltyRedeemPoints} (the platform settles wholly through
+ *     itself) — see {@code OrderWriter.validateOnlineTender}.
  */
 public record CheckoutRequest(
     @NotNull UUID businessId,
@@ -70,7 +76,8 @@ public record CheckoutRequest(
     UUID giftCardId,
     @Min(0) Long giftCardRedeemMinor,
     Boolean offlineReplay,
-    Instant clientOccurredAt) {
+    Instant clientOccurredAt,
+    String channelCode) {
 
   /** Convenience for a checkout with no payment and no discount (the original three-arg shape). */
   public CheckoutRequest(UUID businessId, String idempotencyKey, List<OrderLineRequest> lines) {
@@ -78,6 +85,7 @@ public record CheckoutRequest(
         businessId,
         idempotencyKey,
         lines,
+        null,
         null,
         null,
         null,
@@ -114,6 +122,7 @@ public record CheckoutRequest(
         null,
         null,
         null,
+        null,
         null);
   }
 
@@ -133,6 +142,7 @@ public record CheckoutRequest(
         lines,
         payment,
         discountMinor,
+        null,
         null,
         null,
         null,
@@ -161,6 +171,7 @@ public record CheckoutRequest(
         discountMinor,
         orderType,
         tableId,
+        null,
         null,
         null,
         null,
@@ -201,6 +212,7 @@ public record CheckoutRequest(
         giftCardId,
         giftCardRedeemMinor,
         null,
+        null,
         null);
   }
 
@@ -226,6 +238,7 @@ public record CheckoutRequest(
         orderType,
         tableId,
         couponCode,
+        null,
         null,
         null,
         null,

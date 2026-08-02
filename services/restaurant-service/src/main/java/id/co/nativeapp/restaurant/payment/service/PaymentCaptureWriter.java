@@ -187,7 +187,11 @@ public class PaymentCaptureWriter {
                 loyaltyRedeemedMinor,
                 loyaltyRedeemedMinor,
                 order.getGiftCardId(),
-                order.getGiftCardRedeemedMinor())
+                order.getGiftCardRedeemedMinor(),
+                // ADR 0036 Phase B2: this path is the flagged-pending digital (QRIS/CARD)
+                // capture — ONLINE never goes through it (it captures synchronously, see
+                // PaymentWriter), so no channel ever rides here.
+                null)
             : new RecordSaleCommand(
                 payment.getBusinessId(),
                 grandTotal.amountMinor(),

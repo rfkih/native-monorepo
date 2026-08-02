@@ -29,9 +29,9 @@ import org.apache.avro.generic.GenericRecord;
  *   <li>Phase 2 / pricing: {@code subtotal_minor}, {@code discount_minor}, {@code
  *       service_charge_minor}, {@code tax_minor}, {@code tax_rule_version} (all nullable — null for
  *       legacy/carwash producers), {@code uses_illustrative_rules} (nullable boolean)
- *   <li>Phase B / ADR 0036: {@code channel} (nullable string) — the sales-channel code for an
- *       ONLINE-tender sale. This wave always puts an explicit {@code null}; the real value is
- *       threaded in Phase B2 once {@code RecordSaleCommand} carries a channel.
+ *   <li>Phase B2 / ADR 0036: {@code channel} (nullable string) — the sales-channel code for an
+ *       ONLINE-tender sale, threaded from {@code RecordSaleCommand.channel()}; {@code null} for
+ *       every non-ONLINE tender and for legacy producers.
  * </ul>
  *
  * <p>Backward compatibility: legacy producers (carwash) set all Phase 2 fields to {@code null};
@@ -73,7 +73,7 @@ public final class SaleRecordedSchema {
    */
   public static GenericRecord toRecord(
       Sale sale, String companyId, String tenderType, PriceBreakdown breakdown) {
-    return toRecord(sale, companyId, tenderType, breakdown, null, null, null, null, null);
+    return toRecord(sale, companyId, tenderType, breakdown, null, null, null, null, null, null);
   }
 
   /**
@@ -99,6 +99,8 @@ public final class SaleRecordedSchema {
    * @param giftCardId the gift card redeemed as a tender, or {@code null}
    * @param giftCardRedeemedMinor the ACTUAL amount redeemed from the gift card, minor units, or
    *     {@code null}/0
+   * @param channel Phase B2 (ADR 0036): the sales-channel code for an ONLINE-tender sale (e.g.
+   *     {@code GOFOOD}), or {@code null} for every non-ONLINE tender / legacy producer
    */
   @SuppressWarnings("checkstyle:ParameterNumber")
   public static GenericRecord toRecord(
@@ -110,7 +112,8 @@ public final class SaleRecordedSchema {
       Long loyaltyRedeemedPoints,
       Long loyaltyRedeemedMinor,
       UUID giftCardId,
-      Long giftCardRedeemedMinor) {
+      Long giftCardRedeemedMinor,
+      String channel) {
     Money amount = sale.getAmount();
     GenericRecord record = new GenericData.Record(SCHEMA);
     record.put("sale_id", sale.getId().toString());
@@ -146,8 +149,8 @@ public final class SaleRecordedSchema {
     record.put("loyalty_redeemed_minor", loyaltyRedeemedMinor);
     record.put("gift_card_id", giftCardId == null ? null : giftCardId.toString());
     record.put("gift_card_redeemed_minor", giftCardRedeemedMinor);
-    // Phase B2 threads the real channel; explicit null until then (ADR 0036).
-    record.put("channel", null);
+    // ADR 0036 Phase B2: the real channel, threaded from RecordSaleCommand.
+    record.put("channel", channel);
     return record;
   }
 

@@ -110,6 +110,15 @@ public class Payment extends Auditable {
   @Column(name = "idempotency_key", nullable = false, updatable = false)
   private String idempotencyKey;
 
+  /**
+   * The sales-channel code this tender rang through (V24, ADR 0036 Phase B2) — set ONLY by {@link
+   * #capturedOnline}; every other factory leaves it {@code null}. A snapshot, not a foreign key
+   * (see {@code sales_channel.code}'s deactivation semantics) — {@code updatable = false} because
+   * a payment never changes which channel it settled through after capture.
+   */
+  @Column(name = "channel_code", updatable = false, length = 32)
+  private String channelCode;
+
   protected Payment() {
     // for JPA
   }
@@ -127,7 +136,8 @@ public class Payment extends Auditable {
       UUID saleId,
       Instant capturedAt,
       Instant occurredAt,
-      String idempotencyKey) {
+      String idempotencyKey,
+      String channelCode) {
     this.id = UUID.randomUUID();
     this.orderId = Objects.requireNonNull(orderId, "orderId");
     this.businessId = Objects.requireNonNull(businessId, "businessId");
@@ -143,6 +153,7 @@ public class Payment extends Auditable {
     this.capturedAt = capturedAt;
     this.occurredAt = Objects.requireNonNull(occurredAt, "occurredAt");
     this.idempotencyKey = Objects.requireNonNull(idempotencyKey, "idempotencyKey");
+    this.channelCode = channelCode;
   }
 
   /**
@@ -178,7 +189,49 @@ public class Payment extends Auditable {
         saleId,
         occurredAt,
         occurredAt,
-        idempotencyKey);
+        idempotencyKey,
+        null);
+  }
+
+  /**
+   * A live ONLINE (platform-collected) tender, already captured against {@code saleId} (ADR 0036
+   * Phase B2) — the platform already holds the customer's money at acceptance, so it settles
+   * SYNCHRONOUSLY like cash. Unlike {@link #capturedCash}, there is no separate tendered amount
+   * to validate: the platform remitted exactly {@code amount}, so {@code tendered == amount} and
+   * {@code change == 0} always (never client-supplied).
+   *
+   * @param channelCode the company-managed {@code sales_channel.code} this sale rang through
+   *     (REQUIRED — the {@code ck_payment_online_requires_channel} CHECK backs this up at the DB)
+   */
+  public static Payment capturedOnline(
+      UUID orderId,
+      UUID businessId,
+      Money amount,
+      String channelCode,
+      UUID saleId,
+      Instant capturedAt,
+      String idempotencyKey) {
+    Objects.requireNonNull(amount, "amount");
+    Objects.requireNonNull(channelCode, "channelCode");
+    if (channelCode.isBlank()) {
+      throw new IllegalArgumentException("channelCode must not be blank");
+    }
+    Objects.requireNonNull(saleId, "saleId");
+    return new Payment(
+        orderId,
+        businessId,
+        TenderType.ONLINE,
+        Status.CAPTURED,
+        amount,
+        amount.amountMinor(),
+        0L,
+        false,
+        null,
+        saleId,
+        capturedAt,
+        capturedAt,
+        idempotencyKey,
+        channelCode);
   }
 
   /**
@@ -209,7 +262,8 @@ public class Payment extends Auditable {
         null,
         null,
         occurredAt,
-        idempotencyKey);
+        idempotencyKey,
+        null);
   }
 
   /** Captures a pending tender against a recorded sale ({@link Status#PENDING} → CAPTURED). */
@@ -319,5 +373,13 @@ public class Payment extends Auditable {
 
   public String getIdempotencyKey() {
     return idempotencyKey;
+  }
+
+  /**
+   * The sales-channel code this tender rang through (ADR 0036 Phase B2) — set ONLY for an {@code
+   * ONLINE} tender captured via {@link #capturedOnline}; {@code null} for every other tender.
+   */
+  public String getChannelCode() {
+    return channelCode;
   }
 }

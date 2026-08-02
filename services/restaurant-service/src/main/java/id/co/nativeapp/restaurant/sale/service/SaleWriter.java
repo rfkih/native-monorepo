@@ -108,7 +108,8 @@ public class SaleWriter {
             command.occurredAt(),
             command.idempotencyKey(),
             command.tenderType(),
-            cashCollectedOf(command));
+            cashCollectedOf(command),
+            command.channel());
     sale.setCompanyId(companyId);
     Sale saved = repository.saveAndFlush(sale);
 
@@ -126,7 +127,8 @@ public class SaleWriter {
             command.loyaltyRedeemedPoints(),
             command.loyaltyRedeemedMinor(),
             command.giftCardId(),
-            command.giftCardRedeemedMinor());
+            command.giftCardRedeemedMinor(),
+            command.channel());
     byte[] payload = AvroSerde.serialize(event);
 
     // The outbox INSERT runs on this transaction's connection (rule 3): it commits
@@ -184,7 +186,8 @@ public class SaleWriter {
             command.occurredAt(),
             command.idempotencyKey(),
             command.tenderType(),
-            cashCollectedOf(command));
+            cashCollectedOf(command),
+            command.channel());
     sale.setCompanyId(companyId);
     Sale saved = repository.saveAndFlush(sale);
 
@@ -198,7 +201,8 @@ public class SaleWriter {
             command.loyaltyRedeemedPoints(),
             command.loyaltyRedeemedMinor(),
             command.giftCardId(),
-            command.giftCardRedeemedMinor());
+            command.giftCardRedeemedMinor(),
+            command.channel());
     byte[] payload = AvroSerde.serialize(event);
     outboxWriter.write(
         SaleRecordedSchema.AGGREGATE_TYPE,

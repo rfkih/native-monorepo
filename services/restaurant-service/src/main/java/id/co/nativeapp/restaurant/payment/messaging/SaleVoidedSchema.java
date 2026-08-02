@@ -54,8 +54,11 @@ public final class SaleVoidedSchema {
    * @param businessId the originating business unit
    * @param amount the voided amount (integer minor units + ISO-4217; never a float)
    * @param occurredAt when the void occurred
-   * @param tenderType the original tender ({@code "CASH"}, {@code "QRIS"}, {@code "CARD"}, or
-   *     {@code null} for legacy)
+   * @param tenderType the original tender ({@code "CASH"}, {@code "QRIS"}, {@code "CARD"}, {@code
+   *     "ONLINE"}, or {@code null} for legacy)
+   * @param channel the original sale's sales-channel code (ADR 0036 Phase B2) when {@code
+   *     tenderType} was {@code "ONLINE"}, so finance can claw back the right per-channel platform
+   *     receivable; {@code null} for every other tender
    */
   @SuppressWarnings("checkstyle:ParameterNumber")
   public static GenericRecord toRecord(
@@ -66,7 +69,8 @@ public final class SaleVoidedSchema {
       UUID businessId,
       Money amount,
       Instant occurredAt,
-      String tenderType) {
+      String tenderType,
+      String channel) {
     GenericRecord record = new GenericData.Record(SCHEMA);
     record.put("void_id", voidId.toString());
     record.put("sale_id", saleId.toString());
@@ -77,8 +81,8 @@ public final class SaleVoidedSchema {
     record.put("currency", amount.currency().getCurrencyCode());
     record.put("occurred_at", occurredAt.toEpochMilli());
     record.put("tender_type", tenderType);
-    // Phase B2 threads the real channel for ONLINE tenders; explicit null until then (ADR 0036).
-    record.put("channel", null);
+    // ADR 0036 Phase B2: the original sale's channel, threaded from the voided payment.
+    record.put("channel", channel);
     return record;
   }
 

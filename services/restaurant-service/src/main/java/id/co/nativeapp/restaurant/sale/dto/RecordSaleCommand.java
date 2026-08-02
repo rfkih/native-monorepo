@@ -47,6 +47,11 @@ import java.util.UUID;
  * @param giftCardId Phase 4 (ADR 0027): the gift card redeemed as a tender, or {@code null}
  * @param giftCardRedeemedMinor Phase 4 (ADR 0027): the ACTUAL amount redeemed from the gift card,
  *     minor units, or {@code null}
+ * @param channel Phase B2 (ADR 0036): the sales-channel code this sale rang through, or {@code
+ *     null}. Set ONLY when {@code tenderType} is {@code "ONLINE"} — the calling writer
+ *     (OrderWriter/BillWriter) validates the channel exists and is active BEFORE assembling this
+ *     command. Threaded straight to {@code SaleRecorded}'s wire {@code channel} field (appended
+ *     LAST here too, mirroring the event's positional-decode-safety discipline)
  */
 @SuppressWarnings("checkstyle:ParameterNumber")
 public record RecordSaleCommand(
@@ -61,11 +66,12 @@ public record RecordSaleCommand(
     Long loyaltyRedeemedPoints,
     Long loyaltyRedeemedMinor,
     UUID giftCardId,
-    Long giftCardRedeemedMinor) {
+    Long giftCardRedeemedMinor,
+    String channel) {
 
   /**
    * Convenience constructor preserving the original five-argument shape (no-tender / legacy
-   * callers). Sets {@code tenderType} and {@code breakdown} to {@code null}, and every Phase 4
+   * callers). Sets {@code tenderType} and {@code breakdown} to {@code null}, and every Phase 4/B2
    * field to {@code null}.
    */
   public RecordSaleCommand(
@@ -86,12 +92,13 @@ public record RecordSaleCommand(
         null,
         null,
         null,
+        null,
         null);
   }
 
   /**
    * Convenience constructor for callers with a tender type but no breakdown (Phase 1 / no-pricing
-   * path). Sets {@code breakdown} and every Phase 4 field to {@code null}.
+   * path). Sets {@code breakdown} and every Phase 4/B2 field to {@code null}.
    */
   public RecordSaleCommand(
       UUID businessId,
@@ -112,12 +119,13 @@ public record RecordSaleCommand(
         null,
         null,
         null,
+        null,
         null);
   }
 
   /**
    * Convenience constructor for pre-Phase-4 callers with a tender type AND a breakdown. Sets every
-   * Phase 4 (ADR 0027) field to {@code null}.
+   * Phase 4 (ADR 0027) field and {@code channel} (Phase B2) to {@code null}.
    */
   public RecordSaleCommand(
       UUID businessId,
@@ -139,6 +147,37 @@ public record RecordSaleCommand(
         null,
         null,
         null,
+        null,
         null);
+  }
+
+  /**
+   * Convenience constructor for a tender type + breakdown + channel but no Phase 4 (ADR 0027)
+   * loyalty/gift-card fields — the shape {@code BillWriter} uses (bills do not yet support
+   * loyalty/gift-card redemption).
+   */
+  public RecordSaleCommand(
+      UUID businessId,
+      Long amountMinor,
+      String currency,
+      Instant occurredAt,
+      String idempotencyKey,
+      String tenderType,
+      PriceBreakdown breakdown,
+      String channel) {
+    this(
+        businessId,
+        amountMinor,
+        currency,
+        occurredAt,
+        idempotencyKey,
+        tenderType,
+        breakdown,
+        null,
+        null,
+        null,
+        null,
+        null,
+        channel);
   }
 }

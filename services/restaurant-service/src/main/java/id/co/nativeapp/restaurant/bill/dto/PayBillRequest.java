@@ -22,25 +22,31 @@ import java.util.UUID;
  * retries are safe. For the full-bill path the key defaults to {@code billId + ":bill-sale"} (same
  * as before).
  *
- * @param payment optional payment instruction (cash / digital)
+ * @param payment optional payment instruction (cash / digital / ONLINE, ADR 0036 Phase B2)
  * @param discountMinor optional fixed discount in minor units (&ge; 0); applied to this check's
  *     subtotal only
  * @param lineIds optional set of line ids to include in this check; null/empty = all unpaid lines
  * @param idempotencyKey optional caller-supplied idempotency key for the check sale
+ * @param channelCode Phase B2 (ADR 0036): the company-managed {@code sales_channel.code} this
+ *     check rings through — REQUIRED when {@code payment.tenderType() == ONLINE} (a
+ *     platform-collected order, e.g. GoFood/GrabFood), validated to exist and be active for the
+ *     tenant; ignored/must be omitted for every other tender. See {@code
+ *     BillWriter.validateOnlineTender}.
  */
 public record PayBillRequest(
     @Valid PaymentRequest payment,
     @Min(0) Long discountMinor,
     List<UUID> lineIds,
-    String idempotencyKey) {
+    String idempotencyKey,
+    String channelCode) {
 
   /** Convenience: pay all remaining lines with no tender and no discount. */
   public PayBillRequest() {
-    this(null, null, null, null);
+    this(null, null, null, null, null);
   }
 
   /** Convenience: pay all remaining lines with no tender. */
   public PayBillRequest(@Valid PaymentRequest payment, @Min(0) Long discountMinor) {
-    this(payment, discountMinor, null, null);
+    this(payment, discountMinor, null, null, null);
   }
 }

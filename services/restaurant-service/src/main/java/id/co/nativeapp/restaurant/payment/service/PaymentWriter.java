@@ -127,6 +127,40 @@ public class PaymentWriter {
   }
 
   /**
+   * Records a synchronously-captured ONLINE (platform-collected) tender against a just-recorded
+   * sale, joining the caller's transaction (ADR 0036 Phase B2). Mirrors {@link
+   * #captureCashInCurrentTx} but with NO tendered requirement: the platform already remitted the
+   * exact {@code amount} at acceptance, so {@code Payment.capturedOnline} stores {@code tendered ==
+   * amount} and {@code change == 0} unconditionally — there is nothing to authorize via a {@link
+   * PaymentProvider} (no provider call, mirroring {@link #captureZeroResidualInCurrentTx}).
+   *
+   * @param channelCode the company-managed {@code sales_channel.code} this sale rang through
+   *     (REQUIRED — the calling writer validates it exists and is active before calling this)
+   * @throws IllegalArgumentException if the tender is not ONLINE
+   */
+  @Transactional(propagation = Propagation.MANDATORY)
+  public PaymentResponse captureOnlineInCurrentTx(
+      PaymentInstruction instruction, String channelCode, UUID saleId, Instant capturedAt) {
+    if (instruction.tenderType() != TenderType.ONLINE) {
+      throw new IllegalArgumentException(
+          "captureOnlineInCurrentTx requires the ONLINE tender; got " + instruction.tenderType());
+    }
+    String companyId = TenantContext.require().companyId();
+
+    Payment payment =
+        Payment.capturedOnline(
+            instruction.orderId(),
+            instruction.businessId(),
+            instruction.amount(),
+            channelCode,
+            saleId,
+            capturedAt,
+            instruction.idempotencyKey());
+    payment.setCompanyId(companyId);
+    return PaymentResponse.from(repository.saveAndFlush(payment));
+  }
+
+  /**
    * Phase 4 (ADR 0027): persists a ZERO-amount CAPTURED payment when a gift-card redemption fully
    * covers the sale (residual == 0) — the "fully-gift-card-paid" contract. NO {@link
    * PaymentProviderRegistry} call is made (there is nothing left to authorize); the row is built

@@ -55,8 +55,11 @@ public final class SaleRefundedSchema {
    * @param refundAmount the refunded amount for this event (integer minor units; never a float)
    * @param totalRefundedMinor the cumulative total refunded (including this refund) in minor units
    * @param occurredAt when the refund occurred
-   * @param tenderType the original tender ({@code "CASH"}, {@code "QRIS"}, {@code "CARD"}, or
-   *     {@code null})
+   * @param tenderType the original tender ({@code "CASH"}, {@code "QRIS"}, {@code "CARD"}, {@code
+   *     "ONLINE"}, or {@code null})
+   * @param channel the original sale's sales-channel code (ADR 0036 Phase B2) when {@code
+   *     tenderType} was {@code "ONLINE"}, so finance can claw back the right per-channel platform
+   *     receivable; {@code null} for every other tender
    */
   @SuppressWarnings("checkstyle:ParameterNumber")
   public static GenericRecord toRecord(
@@ -68,7 +71,8 @@ public final class SaleRefundedSchema {
       Money refundAmount,
       long totalRefundedMinor,
       Instant occurredAt,
-      String tenderType) {
+      String tenderType,
+      String channel) {
     GenericRecord record = new GenericData.Record(SCHEMA);
     record.put("refund_id", refundId.toString());
     record.put("sale_id", saleId.toString());
@@ -80,8 +84,8 @@ public final class SaleRefundedSchema {
     record.put("total_refunded_minor", totalRefundedMinor);
     record.put("occurred_at", occurredAt.toEpochMilli());
     record.put("tender_type", tenderType);
-    // Phase B2 threads the real channel for ONLINE tenders; explicit null until then (ADR 0036).
-    record.put("channel", null);
+    // ADR 0036 Phase B2: the original sale's channel, threaded from the refunded payment.
+    record.put("channel", channel);
     return record;
   }
 

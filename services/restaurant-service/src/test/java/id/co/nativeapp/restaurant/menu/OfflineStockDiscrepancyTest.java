@@ -142,7 +142,8 @@ class OfflineStockDiscrepancyTest extends PostgresRlsTestBase {
         null,
         null,
         true,
-        clientOccurredAt);
+        clientOccurredAt,
+        null);
   }
 
   private Integer stockQuantityAsAdmin(UUID itemId) throws Exception {

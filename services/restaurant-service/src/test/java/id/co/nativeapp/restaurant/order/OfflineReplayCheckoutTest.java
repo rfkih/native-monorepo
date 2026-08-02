@@ -157,7 +157,8 @@ class OfflineReplayCheckoutTest extends PostgresRlsTestBase {
             null,
             null,
             null, // offlineReplay = null (false)
-            Instant.now().minus(Duration.ofHours(1))); // clientOccurredAt supplied anyway
+            Instant.now().minus(Duration.ofHours(1)), // clientOccurredAt supplied anyway
+            null);
 
     assertThatThrownBy(() -> TenantContext.callAs(TENANT, ACTOR, () -> orderService.checkout(req)))
         .isInstanceOf(OfflineReplayValidationException.class)
@@ -264,7 +265,8 @@ class OfflineReplayCheckoutTest extends PostgresRlsTestBase {
             null,
             null,
             true,
-            Instant.now().minus(Duration.ofHours(1)));
+            Instant.now().minus(Duration.ofHours(1)),
+            null);
 
     assertThatThrownBy(() -> TenantContext.callAs(TENANT, ACTOR, () -> orderService.checkout(req)))
         .isInstanceOf(OfflineReplayValidationException.class)
@@ -334,7 +336,8 @@ class OfflineReplayCheckoutTest extends PostgresRlsTestBase {
             null,
             null,
             true,
-            Instant.now().minus(Duration.ofHours(1)));
+            Instant.now().minus(Duration.ofHours(1)),
+            null);
 
     CheckoutResult result = TenantContext.callAs(TENANT, ACTOR, () -> orderService.checkout(req));
 
@@ -411,7 +414,8 @@ class OfflineReplayCheckoutTest extends PostgresRlsTestBase {
         null,
         null,
         true,
-        clientOccurredAt);
+        clientOccurredAt,
+        null);
   }
 
   /** Full-shape offline checkout request for the forbidden-field matrix. */
@@ -439,7 +443,8 @@ class OfflineReplayCheckoutTest extends PostgresRlsTestBase {
         giftCardId,
         giftCardRedeemMinor,
         true,
-        Instant.now().minus(Duration.ofHours(1)));
+        Instant.now().minus(Duration.ofHours(1)),
+        null);
   }
 
   private long rowCountAsAdmin(String table) throws Exception {

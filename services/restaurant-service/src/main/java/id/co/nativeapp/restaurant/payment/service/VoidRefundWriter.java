@@ -94,7 +94,8 @@ public class VoidRefundWriter {
             payment.getBusinessId(),
             payment.getAmount(),
             occurredAt,
-            payment.getTenderType().name());
+            payment.getTenderType().name(),
+            payment.getChannelCode());
     byte[] payload = AvroSerde.serialize(event);
     outboxWriter.write(
         SaleVoidedSchema.AGGREGATE_TYPE,
@@ -162,7 +163,8 @@ public class VoidRefundWriter {
             refundAmount,
             newTotal.amountMinor(),
             occurredAt,
-            payment.getTenderType().name());
+            payment.getTenderType().name(),
+            payment.getChannelCode());
     byte[] payload = AvroSerde.serialize(event);
     outboxWriter.write(
         SaleRefundedSchema.AGGREGATE_TYPE,

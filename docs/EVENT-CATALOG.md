@@ -55,9 +55,9 @@ has landed yet — the status names the phases that will land them.
 | **`AssignmentChanged`** | **employee-service** | **verticals, finance** | **employee_id, org_unit_id, reporting_to, effective_from/to** | **LIVE (#19)** |
 | **`MetricPublished`** | **carwash-service, restaurant-service** (verticals) | **employee** | **metric_key, period, grain, subject_id, value, source_business_id** | **LIVE (#20; restaurant own-sales commission)** |
 | **`PeriodSealed`** | **verticals** | **employee, finance** | **company_id, business_id, period** | **LIVE (employee consumer #23)** |
-| **`SaleRecorded`** | **restaurant-service + carwash-service + barbershop-service** (verticals) | **finance** | **sale_id, company_id, business_id, amount_minor, currency, occurred_at; Phase 2: subtotal_minor, discount_minor, service_charge_minor, tax_minor, tax_rule_version, uses_illustrative_rules (all nullable); Phase 4 (ADR 0027): loyalty_member_id, loyalty_redeemed_points, loyalty_redeemed_minor, gift_card_id, gift_card_redeemed_minor (all nullable); Phase B (ADR 0036): channel (nullable)** | **LIVE (M1.4 / #20 / Phase 2 breakdown / Phase 4 loyalty+gift-card schema); Phase B channel schema-first — every producer sends explicit null until Phase B2** |
-| **`SaleVoided`** | **restaurant-service** | **finance** | **void_id, sale_id, payment_id, company_id, business_id, amount_minor, currency, occurred_at, tender_type** | **LIVE (ADR 0006, slice 4)** |
-| **`SaleRefunded`** | **restaurant-service** | **finance** | **refund_id, sale_id, payment_id, company_id, business_id, refund_amount_minor, currency, total_refunded_minor, occurred_at, tender_type** | **LIVE (ADR 0006, slice 4)** |
+| **`SaleRecorded`** | **restaurant-service + carwash-service + barbershop-service** (verticals) | **finance** | **sale_id, company_id, business_id, amount_minor, currency, occurred_at; Phase 2: subtotal_minor, discount_minor, service_charge_minor, tax_minor, tax_rule_version, uses_illustrative_rules (all nullable); Phase 4 (ADR 0027): loyalty_member_id, loyalty_redeemed_points, loyalty_redeemed_minor, gift_card_id, gift_card_redeemed_minor (all nullable); Phase B (ADR 0036): channel (nullable)** | **LIVE (M1.4 / #20 / Phase 2 breakdown / Phase 4 loyalty+gift-card schema); Phase B2 LIVE for restaurant-service (real channel + ONLINE tender threaded); carwash/barbershop still send explicit null** |
+| **`SaleVoided`** | **restaurant-service** | **finance** | **void_id, sale_id, payment_id, company_id, business_id, amount_minor, currency, occurred_at, tender_type, channel** | **LIVE (ADR 0006, slice 4); channel threaded Phase B2 (ADR 0036)** |
+| **`SaleRefunded`** | **restaurant-service** | **finance** | **refund_id, sale_id, payment_id, company_id, business_id, refund_amount_minor, currency, total_refunded_minor, occurred_at, tender_type, channel** | **LIVE (ADR 0006, slice 4); channel threaded Phase B2 (ADR 0036)** |
 | **`GiftCardSold`** | **restaurant-service + carwash-service + barbershop-service** (verticals) | **finance-service, loyalty-service** | **gift_card_sale_id, gift_card_id, company_id, business_id, amount_minor, currency, tender_type, occurred_at** | **LIVE (ADR 0027, Phase 4): vertical producers (gift-card sell endpoints) + finance liability-posting consumer + loyalty-service card-materialising consumer all built** |
 | **`LoyaltyBalanceChanged`** | **loyalty-service** | **the verticals** | **member_id, company_id, points_balance (absolute), balance_seq (monotonic), reason, occurred_at** | **LIVE (ADR 0027, Phase 4): loyalty-service producer + vertical consumers built** |
 | **`GiftCardStateChanged`** | **loyalty-service** | **the verticals** | **gift_card_id, company_id, state, balance_minor (absolute), currency, balance_seq (monotonic), occurred_at** | **LIVE (ADR 0027, Phase 4): loyalty-service producer + vertical consumers built** |
@@ -386,10 +386,16 @@ before any machinery, by design.
 (the sales-channel code for an ONLINE-tender sale) is appended LAST, `["null","string"]` with
 `default: null`, the identical additive discipline the Phase 4 fields follow; finance routes the
 ONLINE clearing debit to `PLATFORM_RECEIVABLE` and a null channel on an ONLINE sale accumulates
-under `UNKNOWN` rather than dropping money. This wave lands ONLY the schema, catalog entry, and
-producer/consumer decode plumbing — every producer (restaurant, carwash, barbershop) puts an
-EXPLICIT `null` for `channel`; the `ONLINE` tender value itself, and the real per-channel code,
-ship in Phase B2 once `RecordSaleCommand` and its vertical equivalents carry a channel.
+under `UNKNOWN` rather than dropping money. The initial wave landed ONLY the schema, catalog
+entry, and producer/consumer decode plumbing — every producer put an EXPLICIT `null` for
+`channel`. **Phase B2 (restaurant-service) is now LIVE**: `restaurant-service` gained the
+company-managed `sales_channel` catalog (`POST`/`PATCH`/`GET /api/v1/sales-channels`) and the
+`ONLINE` tender through `OrderWriter`/`BillWriter`/`PaymentWriter` — a checkout/pay-bill ONLINE
+tender now validates the channel (exists, active, no gift-card/loyalty-points redemption
+alongside it) and threads the real code onto `SaleRecorded`/`SaleVoided`/`SaleRefunded`'s
+`channel` field. `carwash-service` and `barbershop-service` are unchanged by this wave — they
+still send an explicit `null` for every sale (they carry no `ONLINE` tender / channel catalog of
+their own yet).
 
 ### `ExpenseRecorded`
 

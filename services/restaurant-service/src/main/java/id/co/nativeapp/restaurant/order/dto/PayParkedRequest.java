@@ -29,6 +29,8 @@ import java.util.UUID;
  *     CheckoutRequest#giftCardId()}.
  * @param giftCardRedeemMinor Phase 4 (ADR 0027): optional amount to redeem; see {@link
  *     CheckoutRequest#giftCardRedeemMinor()}.
+ * @param channelCode Phase B2 (ADR 0036): optional sales-channel code; see {@link
+ *     CheckoutRequest#channelCode()}. REQUIRED when {@code payment.tenderType() == ONLINE}.
  */
 public record PayParkedRequest(
     @Valid PaymentRequest payment,
@@ -36,20 +38,21 @@ public record PayParkedRequest(
     UUID loyaltyMemberId,
     @Min(0) Long loyaltyRedeemPoints,
     UUID giftCardId,
-    @Min(0) Long giftCardRedeemMinor) {
+    @Min(0) Long giftCardRedeemMinor,
+    String channelCode) {
 
   /** Convenience for paying with no tender and no coupon (order completes without a capture). */
   public PayParkedRequest() {
-    this(null, null, null, null, null, null);
+    this(null, null, null, null, null, null, null);
   }
 
   /** Convenience for paying with a tender but no coupon (pre-Phase-3 one-arg shape). */
   public PayParkedRequest(@Valid PaymentRequest payment) {
-    this(payment, null, null, null, null, null);
+    this(payment, null, null, null, null, null, null);
   }
 
   /** Convenience for paying with a tender + coupon but no Phase 4 fields (pre-Phase-4 shape). */
   public PayParkedRequest(@Valid PaymentRequest payment, String couponCode) {
-    this(payment, couponCode, null, null, null, null);
+    this(payment, couponCode, null, null, null, null, null);
   }
 }

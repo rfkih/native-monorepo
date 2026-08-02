@@ -17,6 +17,7 @@ import id.co.nativeapp.restaurant.bill.projection.BillLineView;
 import id.co.nativeapp.restaurant.bill.repository.BillLineModifierRepository;
 import id.co.nativeapp.restaurant.bill.repository.BillLineRepository;
 import id.co.nativeapp.restaurant.bill.repository.BillRepository;
+import id.co.nativeapp.restaurant.channel.repository.SalesChannelRepository;
 import id.co.nativeapp.restaurant.menu.domain.InsufficientStockException;
 import id.co.nativeapp.restaurant.menu.projection.MenuItemView;
 import id.co.nativeapp.restaurant.menu.projection.ModifierOptionView;
@@ -27,6 +28,8 @@ import id.co.nativeapp.restaurant.order.dto.OrderLineRequest;
 import id.co.nativeapp.restaurant.order.dto.PriceBreakdownResponse;
 import id.co.nativeapp.restaurant.order.service.ModifierValidationReader;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
+import id.co.nativeapp.restaurant.payment.domain.TenderType;
+import id.co.nativeapp.restaurant.payment.dto.PaymentRequest;
 import id.co.nativeapp.restaurant.pricing.domain.PriceBreakdown;
 import id.co.nativeapp.restaurant.pricing.service.TaxChargeService;
 import id.co.nativeapp.restaurant.promotion.domain.AppliedPromotion;
@@ -52,6 +55,7 @@ import java.util.Currency;
 import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -98,6 +102,7 @@ public class BillWriter {
   private final PromotionEngineService promotionEngine;
   private final AppliedPromotionRepository appliedPromotionRepository;
   private final ManualDiscountGuard manualDiscountGuard;
+  private final SalesChannelRepository salesChannelRepository;
 
   @SuppressWarnings("checkstyle:ParameterNumber")
   public BillWriter(
@@ -113,7 +118,8 @@ public class BillWriter {
       OutletAccessGuard outletAccessGuard,
       PromotionEngineService promotionEngine,
       AppliedPromotionRepository appliedPromotionRepository,
-      ManualDiscountGuard manualDiscountGuard) {
+      ManualDiscountGuard manualDiscountGuard,
+      SalesChannelRepository salesChannelRepository) {
     this.billRepository = billRepository;
     this.lineRepository = lineRepository;
     this.modifierRepository = modifierRepository;
@@ -127,6 +133,7 @@ public class BillWriter {
     this.promotionEngine = promotionEngine;
     this.appliedPromotionRepository = appliedPromotionRepository;
     this.manualDiscountGuard = manualDiscountGuard;
+    this.salesChannelRepository = salesChannelRepository;
   }
 
   // -------------------------------------------------------------------------
@@ -431,6 +438,13 @@ public class BillWriter {
     manualDiscountGuard.enforce(request.discountMinor());
 
     // -----------------------------------------------------------------------
+    // ADR 0036 Phase B2: an ONLINE tender requires a known+active channel. Checked here — after
+    // every idempotent-replay short-circuit above — so a safe replay never re-triggers the guard.
+    // -----------------------------------------------------------------------
+    String onlineChannel =
+        validateOnlineTenderAndNormalize(request.payment(), request.channelCode());
+
+    // -----------------------------------------------------------------------
     // Evaluate the promotions engine for THIS check's subtotal (ADR 0026 — automatics + the manual
     // discount only; coupons are NOT supported on bills this phase — follow-up). The collapsed
     // discount feeds TaxChargeService as the fixed discount, replacing the raw request discount.
@@ -474,7 +488,10 @@ public class BillWriter {
             now,
             saleIdempotencyKey,
             tenderTypeName,
-            breakdown);
+            breakdown,
+            // ADR 0036 Phase B2: the channel rides the sale ONLY for an ONLINE tender (validated
+            // above); null for every other tender.
+            isOnline(tenderTypeName) ? onlineChannel : null);
     RecordSaleResult saleResult = saleWriter.recordInCurrentTx(saleCommand);
     UUID checkSaleId = saleResult.sale().id();
 
@@ -855,4 +872,44 @@ public class BillWriter {
       String currencyCode,
       Map<UUID, MenuItemView> itemMap,
       List<List<ModifierOptionView>> resolvedModifiersByLine) {}
+
+  // -------------------------------------------------------------------------
+  // ADR 0036 Phase B2: ONLINE tender (company-managed sales channels)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Validates an ONLINE-tender payment request BEFORE any DB write and returns the normalized
+   * channel code (or {@code null} for every other tender / no payment at all). {@code
+   * PayBillRequest} carries no loyalty/gift-card fields (bills do not support that redemption
+   * yet), so the ONLY checks here are (a) {@code channelCode} required and (b) the channel must
+   * exist AND be active for the tenant — mirrors {@code OrderWriter.validateOnlineTender}'s (a)/(b)
+   * checks exactly; its (c)/(d) gift-card/loyalty checks are vacuously satisfied on this path.
+   *
+   * @throws IllegalArgumentException if {@code payment} tenders ONLINE and (a) {@code channelCode}
+   *     is missing/blank, or (b) the (normalized) channel is unknown or inactive for the tenant
+   */
+  private String validateOnlineTenderAndNormalize(PaymentRequest payment, String channelCode) {
+    if (payment == null || payment.tenderType() != TenderType.ONLINE) {
+      return null;
+    }
+    String normalized = normalizeChannelCode(channelCode);
+    if (normalized == null || normalized.isBlank()) {
+      throw new IllegalArgumentException("channelCode is required when tenderType is ONLINE");
+    }
+    if (!salesChannelRepository.existsActiveByCode(normalized)) {
+      throw new IllegalArgumentException(
+          "Unknown or inactive sales channel for tenderType ONLINE: " + channelCode);
+    }
+    return normalized;
+  }
+
+  /** {@code true} when the (nullable) wire tender-type name is exactly {@code "ONLINE"}. */
+  private static boolean isOnline(String tenderTypeName) {
+    return TenderType.ONLINE.name().equals(tenderTypeName);
+  }
+
+  /** Uppercase/trim normalization, matching {@code SalesChannelWriter.create}'s convention. */
+  private static String normalizeChannelCode(String channelCode) {
+    return channelCode == null ? null : channelCode.strip().toUpperCase(Locale.ROOT);
+  }
 }

@@ -65,6 +65,16 @@ public class Sale extends Auditable {
   @Column(name = "cash_collected_minor", updatable = false)
   private Long cashCollectedMinor;
 
+  /**
+   * The sales-channel code this sale rang through (V24, ADR 0036 Phase B2) — set ONLY when {@link
+   * #tenderType} is {@code "ONLINE"} (the writer enforces the pairing; no CHECK constraint, mirrors
+   * {@link #tenderType}/{@link #cashCollectedMinor}'s rationale). A SNAPSHOT, not a foreign key —
+   * survives the channel later being deactivated (or renamed) without retroactively invalidating
+   * historical sales. Null for every other tender and for legacy pre-V24 rows.
+   */
+  @Column(name = "channel_code", updatable = false)
+  private String channelCode;
+
   protected Sale() {
     // for JPA
   }
@@ -93,7 +103,7 @@ public class Sale extends Auditable {
   }
 
   /**
-   * Full constructor incl. the drawer-cash figure (review C1).
+   * Constructor incl. the drawer-cash figure (review C1), no channel (pre-Phase-B2 callers).
    *
    * @param cashCollectedMinor the cash physically collected (grand total − gift-card portion) for a
    *     CASH sale; null for non-cash/legacy
@@ -105,6 +115,26 @@ public class Sale extends Auditable {
       String idempotencyKey,
       String tenderType,
       Long cashCollectedMinor) {
+    this(businessId, amount, occurredAt, idempotencyKey, tenderType, cashCollectedMinor, null);
+  }
+
+  /**
+   * Full constructor incl. the drawer-cash figure (review C1) and the sales channel (V24, ADR 0036
+   * Phase B2).
+   *
+   * @param cashCollectedMinor the cash physically collected (grand total − gift-card portion) for a
+   *     CASH sale; null for non-cash/legacy
+   * @param channelCode the sales-channel code this sale rang through; set ONLY for an {@code
+   *     ONLINE}-tender sale, null otherwise
+   */
+  public Sale(
+      UUID businessId,
+      Money amount,
+      Instant occurredAt,
+      String idempotencyKey,
+      String tenderType,
+      Long cashCollectedMinor,
+      String channelCode) {
     this.id = UUID.randomUUID();
     this.businessId = Objects.requireNonNull(businessId, "businessId");
     this.amount = MoneyEmbeddable.of(amount);
@@ -112,6 +142,7 @@ public class Sale extends Auditable {
     this.idempotencyKey = Objects.requireNonNull(idempotencyKey, "idempotencyKey");
     this.tenderType = tenderType;
     this.cashCollectedMinor = cashCollectedMinor;
+    this.channelCode = channelCode;
   }
 
   public UUID getId() {
@@ -143,5 +174,13 @@ public class Sale extends Auditable {
   /** Drawer cash collected for a CASH sale (grand total − gift-card portion), or null. */
   public Long getCashCollectedMinor() {
     return cashCollectedMinor;
+  }
+
+  /**
+   * The sales-channel code this sale rang through (ADR 0036 Phase B2) — set ONLY for an {@code
+   * ONLINE}-tender sale, null otherwise.
+   */
+  public String getChannelCode() {
+    return channelCode;
   }
 }

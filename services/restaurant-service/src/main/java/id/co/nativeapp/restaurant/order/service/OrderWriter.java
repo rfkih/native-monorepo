@@ -24,7 +24,10 @@ import id.co.nativeapp.restaurant.order.projection.OrderView;
 import id.co.nativeapp.restaurant.order.repository.OrderLineModifierRepository;
 import id.co.nativeapp.restaurant.order.repository.OrderLineRepository;
 import id.co.nativeapp.restaurant.order.repository.OrderRepository;
+import id.co.nativeapp.restaurant.channel.repository.SalesChannelRepository;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
+import id.co.nativeapp.restaurant.payment.domain.TenderType;
+import id.co.nativeapp.restaurant.payment.dto.PaymentRequest;
 import id.co.nativeapp.restaurant.payment.dto.PaymentResponse;
 import id.co.nativeapp.restaurant.payment.service.PaymentInstruction;
 import id.co.nativeapp.restaurant.payment.service.PaymentWriter;
@@ -54,6 +57,7 @@ import java.util.ArrayList;
 import java.util.Currency;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -131,6 +135,7 @@ public class OrderWriter {
   private final LoyaltyRedemptionGuard loyaltyRedemptionGuard;
   private final OfflineReplayGuard offlineReplayGuard;
   private final SelfOrderProperties selfOrderProperties;
+  private final SalesChannelRepository salesChannelRepository;
 
   @SuppressWarnings("checkstyle:ParameterNumber")
   public OrderWriter(
@@ -151,7 +156,8 @@ public class OrderWriter {
       ManualDiscountGuard manualDiscountGuard,
       LoyaltyRedemptionGuard loyaltyRedemptionGuard,
       OfflineReplayGuard offlineReplayGuard,
-      SelfOrderProperties selfOrderProperties) {
+      SelfOrderProperties selfOrderProperties,
+      SalesChannelRepository salesChannelRepository) {
     this.orderRepository = orderRepository;
     this.lineRepository = lineRepository;
     this.modifierRepository = modifierRepository;
@@ -170,6 +176,7 @@ public class OrderWriter {
     this.loyaltyRedemptionGuard = loyaltyRedemptionGuard;
     this.offlineReplayGuard = offlineReplayGuard;
     this.selfOrderProperties = selfOrderProperties;
+    this.salesChannelRepository = salesChannelRepository;
   }
 
   /**
@@ -205,6 +212,16 @@ public class OrderWriter {
 
     // Phase 3 (ADR 0026): a positive manual discount requires owner/manager.
     manualDiscountGuard.enforce(request.discountMinor());
+
+    // ADR 0036 Phase B2: an ONLINE tender requires a known+active channel and forbids a gift-card
+    // / loyalty-points redemption (the platform settles the sale wholly). Checked BEFORE any DB
+    // write so a rejected request never touches stock/promotions/coupon redemption.
+    validateOnlineTender(
+        request.payment(),
+        request.channelCode(),
+        request.giftCardId(),
+        request.giftCardRedeemMinor(),
+        request.loyaltyRedeemPoints());
 
     String orderType = resolveOrderType(request.orderType());
     UUID tableId = request.tableId();
@@ -297,6 +314,9 @@ public class OrderWriter {
           (request.payment() != null && !residual.giftCardFullyCovers())
               ? request.payment().tenderType().name()
               : null;
+      // ADR 0036 Phase B2: the channel rides the sale ONLY for an ONLINE tender (validated above).
+      String onlineChannel =
+          isOnline(tenderTypeName) ? normalizeChannelCode(request.channelCode()) : null;
       RecordSaleCommand saleCommand =
           recordSaleCommand(
               request.businessId(),
@@ -308,7 +328,8 @@ public class OrderWriter {
               cart.breakdown(),
               request.loyaltyMemberId(),
               request.giftCardId(),
-              cart);
+              cart,
+              onlineChannel);
       RecordSaleResult saleResult = saleWriter.recordInCurrentTx(saleCommand);
 
       // Link the sale id back to the order → status COMPLETED.
@@ -333,24 +354,17 @@ public class OrderWriter {
           tenderedMinor = residual.residualMinor();
         }
         PaymentResponse paymentResponse =
-            residual.giftCardFullyCovers()
-                ? paymentWriter.captureZeroResidualInCurrentTx(
-                    saved.getId(),
-                    request.businessId(),
-                    cart.currencyCode(),
-                    saleResult.sale().id(),
-                    now,
-                    request.idempotencyKey() + ":pay")
-                : paymentWriter.captureCashInCurrentTx(
-                    new PaymentInstruction(
-                        saved.getId(),
-                        request.businessId(),
-                        request.payment().tenderType(),
-                        Money.ofMinor(residual.residualMinor(), cart.currencyCode()),
-                        tenderedMinor,
-                        request.idempotencyKey() + ":pay"),
-                    saleResult.sale().id(),
-                    now);
+            capturePayment(
+                saved.getId(),
+                request.businessId(),
+                residual,
+                cart.currencyCode(),
+                request.payment().tenderType(),
+                tenderedMinor,
+                onlineChannel,
+                saleResult.sale().id(),
+                now,
+                request.idempotencyKey() + ":pay");
         response = response.withPayment(paymentResponse);
       }
     } else {
@@ -572,6 +586,15 @@ public class OrderWriter {
     // moment it actually charges the customer.
     manualDiscountGuard.enforce(order.getDiscountMinor());
 
+    // ADR 0036 Phase B2: same ONLINE-tender validation as checkout — checked HERE (pay time), not
+    // at park time (a parked cart carries no payment/channel selection yet).
+    validateOnlineTender(
+        request.payment(),
+        request.channelCode(),
+        request.giftCardId(),
+        request.giftCardRedeemMinor(),
+        request.loyaltyRedeemPoints());
+
     Instant now = Instant.now();
     String currencyCode = order.getTotal().currency().getCurrencyCode();
     String saleIdempotencyKey = orderId + ":park-sale";
@@ -622,6 +645,9 @@ public class OrderWriter {
           (request.payment() != null && !residual.giftCardFullyCovers())
               ? request.payment().tenderType().name()
               : null;
+      // ADR 0036 Phase B2: the channel rides the sale ONLY for an ONLINE tender (validated above).
+      String onlineChannel =
+          isOnline(tenderTypeName) ? normalizeChannelCode(request.channelCode()) : null;
       RecordSaleCommand saleCommand =
           recordSaleCommand(
               order.getBusinessId(),
@@ -633,7 +659,8 @@ public class OrderWriter {
               breakdown,
               request.loyaltyMemberId(),
               request.giftCardId(),
-              er);
+              er,
+              onlineChannel);
       RecordSaleResult saleResult = saleWriter.recordInCurrentTx(saleCommand);
 
       order.linkSale(saleResult.sale().id()); // PARKED → COMPLETED
@@ -644,24 +671,17 @@ public class OrderWriter {
       OrderResponse response = OrderResponse.from(order, breakdown);
       if (request.payment() != null) {
         PaymentResponse paymentResponse =
-            residual.giftCardFullyCovers()
-                ? paymentWriter.captureZeroResidualInCurrentTx(
-                    order.getId(),
-                    order.getBusinessId(),
-                    currencyCode,
-                    saleResult.sale().id(),
-                    now,
-                    saleIdempotencyKey + ":pay")
-                : paymentWriter.captureCashInCurrentTx(
-                    new PaymentInstruction(
-                        order.getId(),
-                        order.getBusinessId(),
-                        request.payment().tenderType(),
-                        Money.ofMinor(residual.residualMinor(), currencyCode),
-                        request.payment().tenderedMinor(),
-                        saleIdempotencyKey + ":pay"),
-                    saleResult.sale().id(),
-                    now);
+            capturePayment(
+                order.getId(),
+                order.getBusinessId(),
+                residual,
+                currencyCode,
+                request.payment().tenderType(),
+                request.payment().tenderedMinor(),
+                onlineChannel,
+                saleResult.sale().id(),
+                now,
+                saleIdempotencyKey + ":pay");
         response = response.withPayment(paymentResponse);
       }
       return response;
@@ -1300,9 +1320,10 @@ public class OrderWriter {
   }
 
   /**
-   * Builds the {@link RecordSaleCommand} carrying the Phase 4 (ADR 0027) loyalty/gift-card fields,
-   * shared by {@link #checkout} and {@link #payParked} so the two revenue-recognition call sites
-   * cannot diverge on the wire-field derivation.
+   * Builds the {@link RecordSaleCommand} carrying the Phase 4 (ADR 0027) loyalty/gift-card fields
+   * PLUS the Phase B2 (ADR 0036) {@code channel}, shared by {@link #checkout} and {@link
+   * #payParked} so the two revenue-recognition call sites cannot diverge on the wire-field
+   * derivation.
    */
   @SuppressWarnings("checkstyle:ParameterNumber")
   private static RecordSaleCommand recordSaleCommand(
@@ -1315,7 +1336,8 @@ public class OrderWriter {
       PriceBreakdown breakdown,
       UUID loyaltyMemberId,
       UUID giftCardId,
-      CartContext cart) {
+      CartContext cart,
+      String channel) {
     return recordSaleCommand(
         businessId,
         amountMinor,
@@ -1327,7 +1349,8 @@ public class OrderWriter {
         loyaltyMemberId,
         giftCardId,
         cart.loyaltyRedeemedMinor(),
-        cart.giftCardRedeemedMinor());
+        cart.giftCardRedeemedMinor(),
+        channel);
   }
 
   @SuppressWarnings("checkstyle:ParameterNumber")
@@ -1341,7 +1364,8 @@ public class OrderWriter {
       PriceBreakdown breakdown,
       UUID loyaltyMemberId,
       UUID giftCardId,
-      EngineRecompute er) {
+      EngineRecompute er,
+      String channel) {
     return recordSaleCommand(
         businessId,
         amountMinor,
@@ -1353,7 +1377,8 @@ public class OrderWriter {
         loyaltyMemberId,
         giftCardId,
         er.loyaltyRedeemedMinor(),
-        er.giftCardRedeemedMinor());
+        er.giftCardRedeemedMinor(),
+        channel);
   }
 
   @SuppressWarnings("checkstyle:ParameterNumber")
@@ -1368,7 +1393,8 @@ public class OrderWriter {
       UUID loyaltyMemberId,
       UUID giftCardId,
       long loyaltyRedeemedMinor,
-      long giftCardRedeemedMinor) {
+      long giftCardRedeemedMinor,
+      String channel) {
     return new RecordSaleCommand(
         businessId,
         amountMinor,
@@ -1381,6 +1407,110 @@ public class OrderWriter {
         loyaltyRedeemedMinor > 0L ? loyaltyRedeemedMinor : null,
         loyaltyRedeemedMinor > 0L ? loyaltyRedeemedMinor : null,
         giftCardRedeemedMinor > 0L ? giftCardId : null,
-        giftCardRedeemedMinor > 0L ? giftCardRedeemedMinor : null);
+        giftCardRedeemedMinor > 0L ? giftCardRedeemedMinor : null,
+        channel);
+  }
+
+  // -------------------------------------------------------------------------
+  // ADR 0036 Phase B2: ONLINE tender (company-managed sales channels)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Validates an ONLINE-tender payment request BEFORE any DB write. Checked at BOTH
+   * revenue-recognizing entry points in this writer ({@link #checkout}, {@link #payParked}) —
+   * never bypassable via one path while enforced on the other (the {@code OutletAccessGuard}/
+   * {@code ManualDiscountGuard} sharing pattern). A no-op for every other tender (including no
+   * payment at all).
+   *
+   * @throws IllegalArgumentException if {@code payment} tenders ONLINE and (a) {@code channelCode}
+   *     is missing/blank, (b) the (normalized) channel is unknown or inactive for the tenant, (c) a
+   *     gift card is also requested, or (d) a positive loyalty-points redemption is also requested
+   *     — platform orders settle wholly through the platform, so no store-side tender may ride
+   *     alongside ONLINE. Loyalty EARN/accrual (a bare {@code loyaltyMemberId}) and promotions are
+   *     unaffected — only a REDEMPTION is forbidden.
+   */
+  private void validateOnlineTender(
+      PaymentRequest payment,
+      String channelCode,
+      UUID giftCardId,
+      Long giftCardRedeemMinor,
+      Long loyaltyRedeemPoints) {
+    if (payment == null || payment.tenderType() != TenderType.ONLINE) {
+      return;
+    }
+    String normalized = normalizeChannelCode(channelCode);
+    if (normalized == null || normalized.isBlank()) {
+      throw new IllegalArgumentException("channelCode is required when tenderType is ONLINE");
+    }
+    if (!salesChannelRepository.existsActiveByCode(normalized)) {
+      throw new IllegalArgumentException(
+          "Unknown or inactive sales channel for tenderType ONLINE: " + channelCode);
+    }
+    if (giftCardId != null || (giftCardRedeemMinor != null && giftCardRedeemMinor > 0L)) {
+      throw new IllegalArgumentException(
+          "An ONLINE-tender order cannot also redeem a gift card — the platform settles the sale"
+              + " wholly through itself");
+    }
+    if (loyaltyRedeemPoints != null && loyaltyRedeemPoints > 0L) {
+      throw new IllegalArgumentException(
+          "An ONLINE-tender order cannot also redeem loyalty points — the platform settles the"
+              + " sale wholly through itself");
+    }
+  }
+
+  /** {@code true} when the (nullable) wire tender-type name is exactly {@code "ONLINE"}. */
+  private static boolean isOnline(String tenderTypeName) {
+    return TenderType.ONLINE.name().equals(tenderTypeName);
+  }
+
+  /** Uppercase/trim normalization, matching {@code SalesChannelWriter.create}'s convention. */
+  private static String normalizeChannelCode(String channelCode) {
+    return channelCode == null ? null : channelCode.strip().toUpperCase(Locale.ROOT);
+  }
+
+  /**
+   * Captures the non-digital-provider residual payment for a checkout/pay-parked call — the CASH,
+   * gift-card-fully-covers, and (ADR 0036 Phase B2) ONLINE branches all funnel through here so
+   * {@link #checkout} and {@link #payParked} cannot diverge on the dispatch. {@code
+   * captureCashInCurrentTx} stays strictly CASH-only (its own guard rejects anything else); ONLINE
+   * routes to {@code captureOnlineInCurrentTx} instead — synchronous capture, no tendered/change
+   * negotiation (the platform already remitted the exact amount).
+   */
+  @SuppressWarnings("checkstyle:ParameterNumber")
+  private PaymentResponse capturePayment(
+      UUID orderId,
+      UUID businessId,
+      ResidualTender residual,
+      String currencyCode,
+      TenderType tenderType,
+      Long tenderedMinor,
+      String onlineChannel,
+      UUID saleId,
+      Instant capturedAt,
+      String idempotencyKey) {
+    if (residual.giftCardFullyCovers()) {
+      return paymentWriter.captureZeroResidualInCurrentTx(
+          orderId, businessId, currencyCode, saleId, capturedAt, idempotencyKey);
+    }
+    if (tenderType == TenderType.ONLINE) {
+      PaymentInstruction instruction =
+          new PaymentInstruction(
+              orderId,
+              businessId,
+              TenderType.ONLINE,
+              Money.ofMinor(residual.residualMinor(), currencyCode),
+              null,
+              idempotencyKey);
+      return paymentWriter.captureOnlineInCurrentTx(instruction, onlineChannel, saleId, capturedAt);
+    }
+    PaymentInstruction instruction =
+        new PaymentInstruction(
+            orderId,
+            businessId,
+            tenderType,
+            Money.ofMinor(residual.residualMinor(), currencyCode),
+            tenderedMinor,
+            idempotencyKey);
+    return paymentWriter.captureCashInCurrentTx(instruction, saleId, capturedAt);
   }
 }
