@@ -54,7 +54,12 @@ public class PlatformReceivableAccumulator {
    * clawback) to the channel's outstanding balance. A {@code null}/blank channel accumulates under
    * {@link #UNKNOWN_CHANNEL} with a warning — an ONLINE amount must never be dropped just because
    * the producer omitted the channel code.
+   *
+   * <p>{@code @Transactional(REQUIRED)}: joins the calling writer's transaction (the normal path —
+   * atomic with the GL posting) and, when invoked standalone, opens its own so the RLS aspect
+   * binds the tenant GUC — a raw unadvised write would fail the {@code WITH CHECK} closed.
    */
+  @org.springframework.transaction.annotation.Transactional
   public void accumulate(
       String companyId, String channel, String currency, long deltaMinor, String actor) {
     String channelCode = channel == null || channel.isBlank() ? UNKNOWN_CHANNEL : channel;

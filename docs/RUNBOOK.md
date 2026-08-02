@@ -147,6 +147,39 @@ that already ran them.
 7. Rejection drill: queue a sale, keep the tab closed >48h (or fake `clientOccurredAt`), replay →
    422 REJECTED, kept visible in the sync center; nothing silently re-dated.
 
+## Closing kasir + platform settlements manual drill (ADR 0036)
+
+Header-trust curls direct to restaurant :8086 / finance :8085 (`X-Company-Id: <uuid>`,
+`X-Actor: drill`, `X-Roles: owner`); through the gateway use OIDC + `Idempotency-Key` the same way.
+
+1. **Open the drawer**: `POST /api/v1/register-sessions` `{businessId, openingFloatMinor,
+   currency}` + a fresh `Idempotency-Key` → 201. Same key + same body replays 200; same key +
+   different body → 409 `register-session-idempotency-key-conflict`; a second open at the outlet →
+   409 `register-session-already-open`.
+2. Ring CASH sales (order checkout), sell a gift card for CASH, ring a gift-card+cash split sale,
+   partially refund a cash payment (`POST /api/v1/payments/{id}/refund`).
+3. **Close**: `POST /api/v1/register-sessions/{id}/close` `{countedCashMinor}` + key `close:<id>`.
+   Verify `cashSalesMinor` = Σ cash-collected sale portions **+ cash gift-card sales**,
+   `cashRefundsMinor` = Σ `payment_refund` deltas in the window, `expectedCashMinor = float +
+   sales − refunds`, `overShortMinor = counted − expected` (SIGNED). Missing `countedCashMinor` →
+   400 with a field error, never a silent 0.
+4. Verify the finance variance JE (psql superuser, RUNBOOK gotcha 5): short → `Dr 5700 / Cr 1900`;
+   over → `Dr 1900 / Cr 4300`; zero → processed, no entry.
+5. **ONLINE sale** (Phase B): checkout with `payment.tenderType=ONLINE` + `channelCode` (channel
+   must exist + be active via `/api/v1/sales-channels`) → finance JE debits **1250** (not 1900) and
+   `platform_receivable` accrues the gross under the channel. ONLINE + gift-card/loyalty-redeem →
+   400. ONLINE cash never enters the register-close window (not CASH tender).
+6. **Platform settlement** (Phase C): `GET /api/v1/platform-settlements/outstanding`, then
+   `POST /api/v1/platform-settlements` `{channelCode, grossMinor, netMinor, currency}` +
+   `Idempotency-Key` → 201 posting `Dr 1900 (net) + Dr 5710 (fee) / Cr 1250 (gross)` and
+   decrementing the accumulator. Same-key replay 200; gross > outstanding → 422
+   `platform-settlement-over-settlement`; net > gross → 422; the payout's bank-statement line then
+   reconciles via the ADR-0016 CLEARING sweep.
+
+NOTE: loyalty-service is NOT in `scripts/start-dev-services.ps1` — the gift-card mirror
+(`GiftCardSold` → loyalty → `GiftCardStateChanged` → restaurant `gift_card_ref`) is inert without
+it. Launch its jar manually (any free port, e.g. 8093) with the same dev env vars the script sets.
+
 ## Tear down
 ```bash
 docker compose -f docker/compose.dev.yml down       # keep the Postgres volume (data persists)

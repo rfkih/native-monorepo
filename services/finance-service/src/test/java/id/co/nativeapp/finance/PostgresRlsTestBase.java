@@ -73,6 +73,7 @@ abstract class PostgresRlsTestBase {
               + " budget_line, budget,"
               + " amortization_run_line, amortization_run, deferral, fixed_asset,"
               + " employee_expense_claim_ledger,"
+              + " platform_receivable, platform_settlement,"
               + " journal_line, journal_entry CASCADE");
     } catch (SQLException ignored) {
       // Tables not created yet (pre-Flyway) — nothing to reset.
