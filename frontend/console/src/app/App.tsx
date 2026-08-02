@@ -67,6 +67,9 @@ const Landing = lazy(() =>
   import('@/features/landing/Landing').then((m) => ({ default: m.Landing })),
 )
 const Me = lazy(() => import('@/features/me/Me').then((m) => ({ default: m.Me })))
+const MyExpenses = lazy(() =>
+  import('@/features/expenses/MyExpenses').then((m) => ({ default: m.MyExpenses })),
+)
 const Customers = lazy(() =>
   import('@/features/ar/Customers').then((m) => ({ default: m.Customers })),
 )
@@ -344,6 +347,9 @@ export function App() {
   
           {/* The employee self-service surface — full-screen, any business role may open it. */}
           <Route path="/me" element={<Me />} />
+          {/* My expenses (ADR 0030, Phase E6) — same gate as /me itself: never page-restricted, so
+              a login can never be locked out of submitting its own reimbursement claims. */}
+          <Route path="/me/expenses" element={<MyExpenses />} />
 
           {/* Onboarding picks its chrome ONCE, on entry (see OnboardingRoute): first company →
               full-page standalone wizard (no shell to wander off into); adding another company →

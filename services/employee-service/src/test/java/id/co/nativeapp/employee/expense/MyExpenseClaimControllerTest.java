@@ -17,12 +17,15 @@ import id.co.nativeapp.employee.expense.controller.MyExpenseClaimController;
 import id.co.nativeapp.employee.expense.domain.ClaimNotFoundException;
 import id.co.nativeapp.employee.expense.domain.ClaimStateException;
 import id.co.nativeapp.employee.expense.domain.ClaimStatus;
+import id.co.nativeapp.employee.expense.domain.ExpenseCategory;
 import id.co.nativeapp.employee.expense.domain.ExpenseClaim;
 import id.co.nativeapp.employee.expense.domain.ExpenseReceipt;
 import id.co.nativeapp.employee.expense.domain.InvalidReceiptContentTypeException;
 import id.co.nativeapp.employee.expense.domain.ReceiptNotFoundException;
+import id.co.nativeapp.employee.expense.dto.ExpenseCategoryResponse;
 import id.co.nativeapp.employee.expense.dto.ExpenseClaimResponse;
 import id.co.nativeapp.employee.expense.dto.PageResponse;
+import id.co.nativeapp.employee.expense.service.ExpenseCategoryReader;
 import id.co.nativeapp.employee.expense.service.ExpenseClaimReader;
 import id.co.nativeapp.employee.expense.service.ExpenseClaimService;
 import id.co.nativeapp.employee.expense.service.ReceiptReader;
@@ -67,6 +70,7 @@ class MyExpenseClaimControllerTest {
   @MockitoBean private ExpenseClaimReader claimReader;
   @MockitoBean private ReceiptWriter receiptWriter;
   @MockitoBean private ReceiptReader receiptReader;
+  @MockitoBean private ExpenseCategoryReader categoryReader;
 
   private static final byte[] JPEG_BYTES = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 0x01, 0x02};
 
@@ -84,6 +88,22 @@ class MyExpenseClaimControllerTest {
         "Warung Makan",
         "lunch",
         null);
+  }
+
+  // ---------------------------------------------------------------------
+  // Category picklist (ADR 0030, Phase E6)
+  // ---------------------------------------------------------------------
+
+  @Test
+  void categoriesReturns200WithTheActiveList() throws Exception {
+    ExpenseCategory category = new ExpenseCategory("Transport", "", false);
+    when(categoryReader.list()).thenReturn(List.of(ExpenseCategoryResponse.from(category)));
+
+    mockMvc
+        .perform(get("/api/v1/me/expense-claims/categories"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].name").value("Transport"))
+        .andExpect(jsonPath("$[0].active").value(true));
   }
 
   @Test

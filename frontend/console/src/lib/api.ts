@@ -252,6 +252,32 @@ export async function apiUpload<T>(
 }
 
 /**
+ * Fetches a non-JSON response (e.g. the expense-claim receipt photo, ADR 0030 Phase E6) as a raw
+ * {@link Blob} — same auth/tenant headers and error path as {@link apiFetch} (a typed {@link
+ * ApiError} with AI-native diagnostics on failure via the shared {@link handleResponse}), but
+ * resolves the Blob directly on success instead of decoding JSON. Intended for a client-side
+ * preview: the caller turns the Blob into an object URL (`URL.createObjectURL`) and MUST revoke it
+ * (`URL.revokeObjectURL`) once done — this function does not manage that lifetime.
+ */
+export async function apiFetchBlob(path: string, opts: RequestOptions = {}): Promise<Blob | null> {
+  const headers: Record<string, string> = {}
+  Object.assign(headers, authHeaders(opts.tenant, opts.actor))
+  if (opts.headers) Object.assign(headers, opts.headers)
+
+  const res = await fetch(API_BASE_URL + path + buildQuery(opts.query), {
+    method: opts.method ?? 'GET',
+    headers,
+  })
+
+  if (!res.ok) {
+    await handleResponse(res, opts.method ?? 'GET', path, opts.tenant?.companyId)
+    return null
+  }
+  if (res.status === 204) return null
+  return res.blob()
+}
+
+/**
  * Downloads a non-JSON response (e.g. the payroll bank-file CSV) as a browser file save, reusing
  * the same auth/tenant headers as {@link apiFetch}. On a non-2xx response it decodes the
  * `problem+json` body through the SAME {@link handleResponse} error path as every other call (a

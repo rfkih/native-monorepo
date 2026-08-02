@@ -5,11 +5,13 @@ import id.co.nativeapp.employee.expense.domain.ExpenseReceipt;
 import id.co.nativeapp.employee.expense.domain.ReimbursementMethod;
 import id.co.nativeapp.employee.expense.dto.CreateClaimCommand;
 import id.co.nativeapp.employee.expense.dto.CreateClaimRequest;
+import id.co.nativeapp.employee.expense.dto.ExpenseCategoryResponse;
 import id.co.nativeapp.employee.expense.dto.ExpenseClaimResponse;
 import id.co.nativeapp.employee.expense.dto.MyExpenseClaimResponse;
 import id.co.nativeapp.employee.expense.dto.PageResponse;
 import id.co.nativeapp.employee.expense.dto.ReceiptContentResponse;
 import id.co.nativeapp.employee.expense.dto.ReceiptMetaResponse;
+import id.co.nativeapp.employee.expense.service.ExpenseCategoryReader;
 import id.co.nativeapp.employee.expense.service.ExpenseClaimReader;
 import id.co.nativeapp.employee.expense.service.ExpenseClaimService;
 import id.co.nativeapp.employee.expense.service.ReceiptReader;
@@ -19,6 +21,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.io.IOException;
 import java.net.URI;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -38,9 +41,9 @@ import org.springframework.web.multipart.MultipartFile;
 /**
  * {@code /api/v1/me/expense-claims} — the employee self-service surface (ADR 0030): draft, edit,
  * submit, cancel, and read back one's own claims, plus (Phase E3) uploading/serving the claim's
- * receipt photo. The caller is resolved EXCLUSIVELY from the bound tenant/actor (the {@code /me}
- * idiom, rule 5) — there is no employee-id parameter anywhere, so a caller can only ever touch
- * their own rows.
+ * receipt photo and (Phase E6) the active category picklist a new claim is raised against. The
+ * caller is resolved EXCLUSIVELY from the bound tenant/actor (the {@code /me} idiom, rule 5) —
+ * there is no employee-id parameter anywhere, so a caller can only ever touch their own rows.
  *
  * <p>The create/update bodies are shared with the create shape ({@link CreateClaimRequest}); only
  * {@code submit}/{@code cancel} are guarded state transitions and require an {@code
@@ -58,16 +61,25 @@ public class MyExpenseClaimController {
   private final ExpenseClaimReader claimReader;
   private final ReceiptWriter receiptWriter;
   private final ReceiptReader receiptReader;
+  private final ExpenseCategoryReader categoryReader;
 
   public MyExpenseClaimController(
       ExpenseClaimService claimService,
       ExpenseClaimReader claimReader,
       ReceiptWriter receiptWriter,
-      ReceiptReader receiptReader) {
+      ReceiptReader receiptReader,
+      ExpenseCategoryReader categoryReader) {
     this.claimService = claimService;
     this.claimReader = claimReader;
     this.receiptWriter = receiptWriter;
     this.receiptReader = receiptReader;
+    this.categoryReader = categoryReader;
+  }
+
+  @Operation(summary = "List active expense categories a claim may be raised against")
+  @GetMapping("/categories")
+  public List<ExpenseCategoryResponse> categories() {
+    return categoryReader.list();
   }
 
   @Operation(summary = "Create a draft expense claim for the caller")

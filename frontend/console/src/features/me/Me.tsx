@@ -8,14 +8,16 @@
 
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link } from 'react-router-dom'
-import { ChevronDown, ChevronRight, LogOut, TriangleAlert, UserRound } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { ChevronDown, ChevronRight, LogOut, Receipt, TriangleAlert, UserRound } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { Wordmark } from '@/components/Wordmark'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { EmptyState, KpiTile } from '@/features/_shared/financeUi'
+import { useMyClaims } from '@/features/expenses/api'
 import { hasAnyRole, useAuth } from '@/lib/authContext'
 import { AUTH_MODE } from '@/lib/config'
 import { formatMoney } from '@/lib/money'
@@ -154,6 +156,9 @@ export function Me() {
             {/* Sales + commission */}
             <SalesSection companyId={companyId} actor={actor} locale={locale} />
 
+            {/* My expenses (ADR 0030, Phase E6) */}
+            <ExpensesCard companyId={companyId} actor={actor} />
+
             {/* My time off (ADR 0033, Track P Phase P6) */}
             <MyTimeoff companyId={companyId} actor={actor} />
 
@@ -235,6 +240,45 @@ function SalesSection({
       {commissionBasisPoints !== null ? (
         <p className="mt-1.5 text-xs text-ink-3">{t('me.sales.estimateHint')}</p>
       ) : null}
+    </section>
+  )
+}
+
+/**
+ * "My expenses" summary card (ADR 0030, Phase E6) — a count of the caller's own draft/pending
+ * claims from the first page of {@link useMyClaims} (an approximation beyond the first page, which
+ * is fine for a preview badge) and a link through to the full `/me/expenses` surface.
+ */
+function ExpensesCard({ companyId, actor }: { companyId: string; actor: string }) {
+  const { t } = useTranslation()
+  const navigate = useNavigate()
+  const claims = useMyClaims({ companyId, actor, page: 0, enabled: true })
+  const pendingCount = (claims.data?.content ?? []).filter(
+    (c) => c.status === 'DRAFT' || c.status === 'SUBMITTED',
+  ).length
+
+  return (
+    <section>
+      <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+        {t('me.expenses.card.title')}
+      </h2>
+      <Card className="mt-2 flex items-center gap-3 p-5">
+        <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-emerald-tint text-emerald-2">
+          <Receipt className="size-5" aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm text-ink-2">
+            {claims.isLoading
+              ? '…'
+              : pendingCount > 0
+                ? t('me.expenses.card.pending', { count: pendingCount })
+                : t('me.expenses.card.empty')}
+          </p>
+        </div>
+        <Button type="button" variant="outline" onClick={() => navigate('/me/expenses')}>
+          {t('me.expenses.card.cta')}
+        </Button>
+      </Card>
     </section>
   )
 }
