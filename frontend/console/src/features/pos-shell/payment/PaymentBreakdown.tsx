@@ -12,7 +12,23 @@ import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/Badge'
 import { AppliedPromotionChips } from '@/components/AppliedPromotionChips'
 import { formatMoney } from '@/lib/money'
-import type { PriceBreakdownResponse } from '@/features/pos/api'
+import type { AppliedPromotionResponse } from '@/features/pos/api'
+
+/**
+ * Structural slice of a price breakdown — deliberately NOT a vertical's PriceBreakdownResponse
+ * (review W1: pos-shell is vertical-agnostic; both verticals' response types satisfy this shape
+ * and either can evolve without silently breaking the other through this shared component).
+ */
+export interface PaymentBreakdownLike {
+  subtotalMinor: number
+  discountMinor: number
+  loyaltyRedeemedMinor: number
+  serviceChargeMinor: number
+  taxMinor: number
+  grandTotalMinor: number
+  usesIllustrativeRules?: boolean
+  appliedPromotions: AppliedPromotionResponse[]
+}
 
 export function PaymentBreakdown({
   breakdown,
@@ -21,7 +37,7 @@ export function PaymentBreakdown({
   locale,
   variant = 'full',
 }: {
-  breakdown: PriceBreakdownResponse | null
+  breakdown: PaymentBreakdownLike | null
   grandTotalMinor: number
   currency: string
   locale: string

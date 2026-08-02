@@ -8,8 +8,7 @@
  * Money rule (rule 8): all amounts are integer minor units, rendered via formatMoney().
  * Strings rule (rule 9): every user-facing string is an i18n key.
  */
-import { useState,
-} from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ArrowLeft,
