@@ -209,24 +209,6 @@ export function BillDetail({
   // hooks than during the previous render") and blanks the whole POS on every freshly opened bill.
   const isTablet = useMediaQuery('(min-width: 640px)')
 
-  // P4 dock verbs: consume each token once, as soon as the bill has loaded and is OPEN. A token
-  // arriving while the bill is still loading waits for the next effect run (isLoading in deps).
-  const consumedKotToken = useRef(0)
-  const consumedPayToken = useRef(0)
-  const billReady = !billQuery.isLoading && !!bill && bill.status === 'OPEN'
-  useEffect(() => {
-    if (!autoKotToken || autoKotToken === consumedKotToken.current || !billReady) return
-    consumedKotToken.current = autoKotToken
-    setShowKot(true)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoKotToken, billReady])
-  useEffect(() => {
-    if (!autoPayToken || autoPayToken === consumedPayToken.current || !billReady) return
-    consumedPayToken.current = autoPayToken
-    openPayModal()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoPayToken, billReady])
-
   function openPayModal() {
     if (splitMode) {
       setPendingPay({
@@ -268,6 +250,25 @@ export function BillDetail({
       onPaid()
     }
   }
+
+  // P4 dock verbs: consume each token once, as soon as the bill has loaded and is OPEN. A token
+  // arriving while the bill is still loading waits for the next effect run (billReady in deps).
+  // These hooks sit ABOVE the early returns (the hook-count rule) and BELOW openPayModal so the
+  // effect never references a binding before its declaration.
+  const consumedKotToken = useRef(0)
+  const consumedPayToken = useRef(0)
+  const billReady = !billQuery.isLoading && !!bill && bill.status === 'OPEN'
+  useEffect(() => {
+    if (!autoKotToken || autoKotToken === consumedKotToken.current || !billReady) return
+    consumedKotToken.current = autoKotToken
+    setShowKot(true)
+  }, [autoKotToken, billReady])
+  useEffect(() => {
+    if (!autoPayToken || autoPayToken === consumedPayToken.current || !billReady) return
+    consumedPayToken.current = autoPayToken
+    openPayModal()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- openPayModal reads render-scope state
+  }, [autoPayToken, billReady])
 
   // ---------------------------------------------------------------------------
   // Loading / non-OPEN states

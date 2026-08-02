@@ -5,6 +5,41 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-02 — POS redesign (P0–P5): shared shell, one-tap flows, 2 latent bugs fixed
+
+Full-program UI/UX redesign of the POS across all three verticals (plan: functional-popping-gizmo;
+ADR 0034 "verticals are adapters, not clones"). Phased extract-in-place, each phase gated by a
+30-shot screenshot matrix (`frontend/console/scripts/pos-matrix.mjs` — vertical × viewport × theme
+incl. print-emulated receipt/KOT shots; OIDC mode against the live stack) + vitest + tsc:
+
+- **P0 harness caught two REAL production bugs**: (1) BillDetail called useMediaQuery below its
+  early returns → every freshly opened bill crashed the POS blank (since 6ef2137); (2) the print
+  isolation's `body:has(#id) *` outranked the `#id` un-hide rules → every thermal receipt / KOT /
+  QR sheet printed a BLANK page (since the audit-16 :has() scoping). Fixed (`:where()` zeroes the
+  specificity) + print-emulated shots are now a permanent tripwire.
+- **P1/P2**: pure logic (categories/lineKey/discount/quick-chips/error-keys/display payloads)
+  extracted into tested modules (38 new vitest cases; display builders validated against
+  `isDisplayMessage`); the 3 POS monoliths (2013/1153/1146 lines) split into `components/` files.
+  BillDetail's category fork (case-SENSITIVE, missed f050be1) deduped onto the shared source.
+- **P3**: the ~2,500-line triplicated payment modals collapsed into `pos-shell/payment/` views +
+  3 thin behavioral adapters. Money review: **PASS** (wire payloads, per-attempt idempotency,
+  enqueue-before-success-UI all verified field-for-field; live drills: retry reuses the key,
+  cancel/reopen mints fresh, offline QUEUED→SYNCED). Fixed a stale dev gateway masking the
+  `/api/v1/pricing/**` route (offline provisional pricing needs it).
+- **P4/P5**: the redesign — 56px ink-band terminal chrome (PosStatusBar: connection pill, ≤3
+  pinned actions, till-menu overflow), pinned **Walk-in tab** (the hidden cart-vs-bill mode is
+  now navigation), ticket dock with destination pill → order switcher, honest verbs (**Send
+  fires the KOT directly; Pay opens payment directly; exact-tendered pre-filled** — walk-in cash
+  n+4→n+3 taps, bill send n+5→n+3, bill pay 7→5), shadow-layered tiles, 3px-indicator rail,
+  search moved into the catalog. Carwash/barbershop share the same chrome; their ticket panel
+  caps at 45dvh on portrait (no more Charge-below-the-fold). `posShell.*` i18n (en+id).
+
+**Residuals** (next passes): service requirement-chip dock + pinned Charge (the
+`VerticalPosConfig.shell` block, ADR 0034); restaurant ≥lg right-rail ticket panel; BillDetail
+dead modifier/props pruning (review S2); jsdom key-stability test (S3); FRONTEND-STRUCTURE.md
+still describes the retired emerald system; `emerald*` alias naming debt in index.css (the
+aliases are theme-aware — do NOT bulk-rename to brand-*, dark maps to different ramp stops).
+
 ## Current status (update me)
 **Backend: complete, hardened, and proven end-to-end.** All of Phase 0–3 backend is built, every
 milestone team-built → adversarially reviewed (code + security + domain-correctness) → fix-rounds →
