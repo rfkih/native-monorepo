@@ -292,10 +292,13 @@
      visible child DOES override a hidden ancestor. Then pull the target to the page origin.
      Scoped with :has() so it only bites while a receipt/KOT/QR sheet is actually mounted — the
      statements print as ordinary pages (audit finding 16); each print surface injects its own
-     @page rule. */
-  body:has(#native-thermal-receipt-paper) *,
-  body:has(#native-kot-print) *,
-  body:has(#native-selforder-qr-print) * {
+     @page rule.
+     The :has() MUST sit inside :where(): bare `body:has(#id) *` carries the ID's specificity
+     (1,0,1) and beats the un-hide rules below (1,0,0) — every print target rendered a blank
+     page. :where() zeroes that out so the id-based un-hide wins. */
+  body:where(:has(#native-thermal-receipt-paper)) *,
+  body:where(:has(#native-kot-print)) *,
+  body:where(:has(#native-selforder-qr-print)) * {
     visibility: hidden !important;
   }
   #native-thermal-receipt-paper,
