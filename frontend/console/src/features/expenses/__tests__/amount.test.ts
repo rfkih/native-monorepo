@@ -11,6 +11,14 @@ describe('parseAmountInputToMinor', () => {
     expect(parseAmountInputToMinor('45000', 'IDR')).toBe(45_000)
   })
 
+  it('rejects a grouping-separator on a zero-exponent currency instead of mis-scaling (E6/E7 W2)', () => {
+    // "45.000" / "45,000" is the Indonesian habit for forty-five thousand — never fractional rupiah.
+    // Must be null (invalid), NOT 45. The user retypes "45000".
+    expect(parseAmountInputToMinor('45.000', 'IDR')).toBeNull()
+    expect(parseAmountInputToMinor('45,000', 'IDR')).toBeNull()
+    expect(parseAmountInputToMinor('1.5', 'IDR')).toBeNull()
+  })
+
   it('converts a decimal USD amount to cents', () => {
     expect(parseAmountInputToMinor('12.5', 'USD')).toBe(1_250)
   })

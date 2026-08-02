@@ -1770,6 +1770,7 @@ export const id = {
       org: 'Organisasi',
       groups: 'Grup konsolidasi',
       close: 'Tutup periode',
+      expenses: 'Pengeluaran',
       team: 'Tim & akses',
     },
     editPagesDialog: {

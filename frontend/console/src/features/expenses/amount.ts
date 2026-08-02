@@ -17,9 +17,15 @@ import { isoMinorExponent, minorToMajor } from '@/lib/money'
 export function parseAmountInputToMinor(value: string, currency: string): number | null {
   const trimmed = value.trim()
   if (trimmed === '') return null
+  const exponent = isoMinorExponent(currency)
+  // E6/E7 review W2: for a ZERO-exponent currency (IDR) a decimal point can only be the Indonesian
+  // grouping-separator habit — Number("45.000") === 45 would silently record Rp 45 instead of
+  // Rp 45.000. There are no legitimate fractional rupiah, so any '.' or ',' is rejected loudly
+  // (the caller shows the invalid-amount message) rather than mis-scaled 1000x.
+  if (exponent === 0 && /[.,]/.test(trimmed)) return null
   const major = Number(trimmed)
   if (!Number.isFinite(major) || major <= 0) return null
-  return Math.round(major * 10 ** isoMinorExponent(currency))
+  return Math.round(major * 10 ** exponent)
 }
 
 /** The inverse of {@link parseAmountInputToMinor} — pre-fills an amount input from a stored claim

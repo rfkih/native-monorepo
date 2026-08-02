@@ -1773,6 +1773,7 @@ export const en = {
       org: 'Organization',
       groups: 'Consolidation groups',
       close: 'Period close',
+      expenses: 'Expenses',
       team: 'Team & access',
     },
     editPagesDialog: {
