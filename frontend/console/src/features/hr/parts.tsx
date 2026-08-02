@@ -510,7 +510,16 @@ export function AssignExistingDialog({
         </h2>
         <p className="text-sm text-ink-3">{t('hr.assignExisting.subtitle')}</p>
 
-        {employeesQuery.isLoading ? (
+        {employeesQuery.isError ? (
+          // A dead/erroring employee-service must read as a failure with a way out — never as
+          // endless loading, and never as the misleading "no employees" empty state.
+          <div className="space-y-3">
+            <p className="text-sm text-loss">{t('hr.list.error')}</p>
+            <Button type="button" variant="outline" onClick={() => employeesQuery.refetch()}>
+              {t('common.retry')}
+            </Button>
+          </div>
+        ) : employeesQuery.isLoading ? (
           <p className="text-sm text-ink-3">{t('common.loading')}</p>
         ) : pool.length === 0 ? (
           <p className="text-sm text-ink-3">{t('hr.assignExisting.empty')}</p>
