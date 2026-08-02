@@ -10,6 +10,7 @@ import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Plus, TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
+import { ErrorDetails } from '@/components/ErrorDetails'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
@@ -117,9 +118,10 @@ export function EmployeesTab({
       </div>
 
       {query.isError ? (
-        <Card className="p-8 text-center text-sm text-loss">
-          <TriangleAlert className="mx-auto mb-2 size-5" />
+        <Card className="space-y-3 p-8 text-center text-sm text-loss">
+          <TriangleAlert className="mx-auto size-5" />
           {t('hr.list.error')}
+          <ErrorDetails error={query.error} className="mx-auto max-w-md" />
         </Card>
       ) : query.isLoading ? (
         <Card className="p-10 text-center">

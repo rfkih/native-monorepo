@@ -153,6 +153,8 @@ export const en = {
   common: {
     loading: 'Loading…',
     retry: 'Retry',
+    copyDetails: 'Copy details',
+    traceId: 'Trace ID',
     back: 'Back',
     continue: 'Continue',
     cancel: 'Cancel',

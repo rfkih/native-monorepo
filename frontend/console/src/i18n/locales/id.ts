@@ -146,6 +146,8 @@ export const id = {
   common: {
     loading: 'Memuat…',
     retry: 'Coba lagi',
+    copyDetails: 'Salin detail',
+    traceId: 'ID pelacakan',
     back: 'Kembali',
     continue: 'Lanjut',
     cancel: 'Batal',

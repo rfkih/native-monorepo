@@ -10,6 +10,7 @@ import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/Button'
 import { Field, TextInput } from '@/components/ui/Field'
+import { ErrorDetails } from '@/components/ErrorDetails'
 import { DialogOverlay } from '@/features/org/parts'
 import type { OrgUnit } from '@/features/org/api'
 import { isoMinorExponent } from '@/lib/money'
@@ -515,6 +516,7 @@ export function AssignExistingDialog({
           // endless loading, and never as the misleading "no employees" empty state.
           <div className="space-y-3">
             <p className="text-sm text-loss">{t('hr.list.error')}</p>
+            <ErrorDetails error={employeesQuery.error} />
             <Button type="button" variant="outline" onClick={() => employeesQuery.refetch()}>
               {t('common.retry')}
             </Button>

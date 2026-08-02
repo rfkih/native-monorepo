@@ -24,6 +24,7 @@ import { countryName, countryOptions, derivedCurrency } from '@/lib/countries'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
 import { BrandMark } from '@/components/Wordmark'
+import { ErrorDetails } from '@/components/ErrorDetails'
 import { cn } from '@/lib/cn'
 import { AUTH_MODE } from '@/lib/config'
 import { useAuth } from '@/lib/authContext'
@@ -928,11 +929,14 @@ export function Signup() {
                 />
               )}
 
-              {/* API error */}
+              {/* API error — localized headline + the technical root cause (copyable) */}
               {mutation.isError && (
-                <p className="mt-4 rounded-xl border border-loss/30 bg-tint-loss px-3.5 py-2.5 text-sm text-loss">
-                  {apiErrorMessage()}
-                </p>
+                <div className="mt-4 space-y-2">
+                  <p className="rounded-xl border border-loss/30 bg-tint-loss px-3.5 py-2.5 text-sm text-loss">
+                    {apiErrorMessage()}
+                  </p>
+                  <ErrorDetails error={mutation.error} />
+                </div>
               )}
             </div>
 

@@ -9,6 +9,7 @@ import { Field, TextInput } from '@/components/ui/Field'
 import { ChoiceCards } from '@/components/ui/ChoiceCards'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
+import { ErrorDetails } from '@/components/ErrorDetails'
 import { useSession } from '@/lib/session'
 import { useAuth } from '@/lib/authContext'
 import { AUTH_MODE } from '@/lib/config'
@@ -253,9 +254,13 @@ export function OnboardingWizard() {
           )}
 
           {mutation.isError && (
-            <p className="mt-4 rounded-xl border border-loss/30 bg-tint-loss px-3.5 py-2.5 text-sm text-loss">
-              {(mutation.error as Error).message}
-            </p>
+            <div className="mt-4 space-y-2">
+              <p className="rounded-xl border border-loss/30 bg-tint-loss px-3.5 py-2.5 text-sm text-loss">
+                {(mutation.error as Error).message}
+              </p>
+              {/* Root cause (endpoint, status, problem type, traceId) + copy-for-bug-report. */}
+              <ErrorDetails error={mutation.error} />
+            </div>
           )}
         </div>
 

@@ -42,11 +42,28 @@ export interface ProblemDetail {
 export class ApiError extends Error {
   status: number
   problem: ProblemDetail | null
-  constructor(status: number, problem: ProblemDetail | null, message: string) {
+  /** Request identity + server trace id — carried so an error UI can show/copy the ROOT CAUSE
+   *  (see components/ErrorDetails) instead of a bare "Request failed (nnn)". */
+  method: string
+  path: string
+  traceId: string | null
+  // The request-identity params are OPTIONAL: tests (and the offline queue) construct synthetic
+  // ApiErrors without them; ErrorDetails simply omits what is absent.
+  constructor(
+    status: number,
+    problem: ProblemDetail | null,
+    message: string,
+    method = '',
+    path = '',
+    traceId: string | null = null,
+  ) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.problem = problem
+    this.method = method
+    this.path = path
+    this.traceId = traceId
   }
 }
 
@@ -142,6 +159,10 @@ async function handleResponse<T>(
 
   if (!res.ok) {
     const problem = (data as ProblemDetail | null) ?? null
+    const traceId =
+      typeof (problem as Record<string, unknown> | null)?.traceId === 'string'
+        ? ((problem as Record<string, unknown>).traceId as string)
+        : null
     // AI-native diagnostics: every failure is recorded with the non-secret facts an assistant
     // needs to diagnose it in one hop (status, problem type, server traceId, the company
     // SELECTION, and the token's derived state — never the token itself, never the body).
@@ -152,10 +173,7 @@ async function handleResponse<T>(
       status: res.status,
       problemType: problem?.type ?? null,
       problemDetail: problem?.detail ?? problem?.title ?? null,
-      traceId:
-        typeof (problem as Record<string, unknown> | null)?.traceId === 'string'
-          ? ((problem as Record<string, unknown>).traceId as string)
-          : null,
+      traceId,
       companyId: companyId ?? null,
       authMode: AUTH_MODE,
       tokenState: AUTH_MODE === 'oidc' ? deriveTokenState(accessToken, companyId) : null,
@@ -171,6 +189,9 @@ async function handleResponse<T>(
       res.status,
       problem,
       problem?.detail || problem?.title || `Request failed (${res.status})`,
+      method,
+      path,
+      traceId,
     )
   }
   return data as T
