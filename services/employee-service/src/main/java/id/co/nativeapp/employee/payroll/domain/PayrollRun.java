@@ -35,7 +35,7 @@ public class PayrollRun extends Auditable {
   /**
    * The default/legacy run type name, kept as a plain constant for call sites that still want the
    * literal string (e.g. test fixtures) — the column itself is real as of Track P Phase P8 (ADR
-   * 0034); see {@link #runType}.
+   * 0035); see {@link #runType}.
    */
   public static final String RUN_TYPE_REGULAR = "REGULAR";
 

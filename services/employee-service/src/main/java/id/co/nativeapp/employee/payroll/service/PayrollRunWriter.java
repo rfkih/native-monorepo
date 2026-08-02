@@ -164,11 +164,18 @@ import org.springframework.transaction.annotation.Transactional;
  * SiblingPeriodContext} branch) — this holds regardless of which order the two runs execute in
  * (verified both orders, Track P Phase P8 tests) and is a byte- identical no-op when no sibling run
  * is active (every pre-P8 run, and the overwhelming majority of runs even after THR is activated).
- * <strong>Documented residual:</strong> this composes with the ORDINARY monthly TER branch only — a
- * December REGULAR run's Art-17 true-up does NOT yet fold in a same-period THR sibling's
- * gross/withheld (the true-up's own annual-context assembly is a separate, whole-fiscal-year
- * mechanism); {@link #calculate} WARNs loudly when it detects this composition rather than silently
- * mis-reconciling it.
+ * <strong>Documented residual (SYMMETRIC, P8 review C1):</strong> this composes with the ORDINARY
+ * monthly TER branch only — a December Art-17 true-up and a same-period THR sibling do NOT compose,
+ * in EITHER order. A December REGULAR run's true-up does NOT fold in a same-period POSTED THR
+ * sibling's gross/withheld (the true-up's own annual-context assembly is a separate,
+ * whole-fiscal-year mechanism); conversely, a THR run whose same-period REGULAR sibling is ALREADY
+ * POSTED as the December true-up does NOT fold that sibling's gross/withheld either — its PPh21
+ * line is an annual reconciliation delta (often a large refund), not an ordinary monthly TER
+ * withholding, and cannot be told apart from one via {@link #classifyPayslipLine} (the true-up swap
+ * is in-memory only; the persisted line still resolves against the CURRENT, monthly-family catalog
+ * rule) — so the THR run instead computes its PPh21 STANDALONE on its own gross. {@link #calculate}
+ * WARNs loudly on BOTH sides when it detects this composition rather than silently mis-reconciling
+ * it.
  */
 @Component
 public class PayrollRunWriter {
@@ -457,6 +464,55 @@ public class PayrollRunWriter {
           annualTrueUpRuleKey);
     }
 
+    // Track P Phase P8 review C1 (CRITICAL) — the symmetric case: THIS run is THR and a same-
+    // period REGULAR sibling is ALREADY POSTED as the December Art-17 true-up. The true-up's PPh21
+    // line cannot be told apart from an ordinary monthly line via classifyPayslipLine: the true-up
+    // swap (see PayComponent#asAnnualTrueUpVariant) is purely IN-MEMORY and never persisted, so the
+    // line still stamps component_key PPH21, whose CURRENT catalog statutory_rule_key resolves to
+    // the MONTHLY family — classifyPayslipLine (and therefore siblingPeriodContext) reports it
+    // TER_TABLE, never ANNUAL_PROGRESSIVE, and would fold its PPh21 delta (an ANNUAL reconciliation
+    // figure, frequently a large refund) into this THR's combined-gross TER as if it were an
+    // ordinary monthly withholding. Detected instead via a RUN-LEVEL heuristic mirroring the
+    // December-guard above (December + a resolved ANNUAL_PROGRESSIVE rule + a POSTED REGULAR
+    // sibling this period): when true, the fold is SKIPPED entirely for every employee in this run
+    // — THR PPh21 computes STANDALONE on its own gross — and the run WARNs loudly, symmetric with
+    // the REGULAR-path WARN above (see the class javadoc's now-symmetric documented residual).
+    boolean regularSiblingIsAnnualTrueUp =
+        runType == RunType.THR
+            && YearMonth.parse(command.period()).getMonthValue() == 12
+            && annualProgressiveRuleKey(resolvedRules) != null
+            && runRepository.existsByPeriodAndRunTypeAndStatus(
+                command.period(), RunType.REGULAR, RunStatus.POSTED);
+    if (regularSiblingIsAnnualTrueUp) {
+      log.warn(
+          "payroll_run {} period {} THR run: same-period REGULAR sibling is a December Art-17"
+              + " true-up — NOT folding its PPh21 (annual reconciliation delta, not monthly TER)"
+              + " into this THR's combined-gross TER; THR PPh21 computed STANDALONE; P8 residual —"
+              + " true-up + same-period THR do NOT compose; verify by hand",
+          run.getId(),
+          run.getPeriod());
+    }
+
+    // Track P Phase P8 review W1 — a same-period sibling run that only reached CALCULATED (not yet
+    // POSTED) is invisible to siblingPeriodContext (only POSTED siblings are folded — a CALCULATED
+    // run can still be discarded or recalculated), so THIS run's TER computes on its own gross
+    // alone
+    // even though a sibling masa-pajak gross already exists. That self-corrects once the sibling
+    // eventually posts and this run is recalculated, but an operator who posts THIS run first (or
+    // never recalculates) ends up with an UNDER-withheld masa-pajak with no signal. WARN loudly
+    // rather than leaving that silent.
+    RunType calculatedSiblingRunType = runType == RunType.REGULAR ? RunType.THR : RunType.REGULAR;
+    if (runRepository.existsByPeriodAndRunTypeAndStatus(
+        command.period(), calculatedSiblingRunType, RunStatus.CALCULATED)) {
+      log.warn(
+          "payroll_run {} period {} a same-period {} run is CALCULATED but not POSTED — its gross"
+              + " is NOT folded (only POSTED siblings are), masa-pajak may be UNDER-withheld; post"
+              + " the sibling before calculating this run, or recalculate after it posts",
+          run.getId(),
+          run.getPeriod(),
+          calculatedSiblingRunType);
+    }
+
     Money zero = Money.ofMinor(0L, baseCurrency);
     Money grossTotal = zero;
     Money employeeDeductionTotal = zero;
@@ -489,14 +545,20 @@ public class PayrollRunWriter {
       // Track P Phase P8 — the THR-month combined-gross TER interplay: fold an already-ACTIVE
       // sibling run's (the OTHER run_type, SAME period) gross bruto/withheld into this employee's
       // TER computation (see the class javadoc + GrossToNetCalculator's TER_TABLE branch).
+      // Review C1 (CRITICAL): SKIP the fold entirely when the sibling is a December Art-17
+      // true-up (regularSiblingIsAnnualTrueUp, computed once above) — null makes
+      // GrossToNetCalculator see combinedGrossBruto == grossBruto and siblingWithheld == zero, i.e.
+      // this THR run's PPh21 computes STANDALONE on its own gross.
       SiblingPeriodContext siblingContext =
-          siblingPeriodContext(
-              employee.getId(),
-              command.period(),
-              runType,
-              catalogByKey,
-              resolvedRules,
-              baseCurrency);
+          regularSiblingIsAnnualTrueUp
+              ? null
+              : siblingPeriodContext(
+                  employee.getId(),
+                  command.period(),
+                  runType,
+                  catalogByKey,
+                  resolvedRules,
+                  baseCurrency);
 
       PersonInput personInput =
           isRegular
@@ -1387,12 +1449,13 @@ public class PayrollRunWriter {
   /**
    * The THR run's catalog integrity guard (Track P Phase P8, ADR 0035): the {@code THR} component
    * MUST be seeded (activate the {@code ID-2026.3} dataset top-up) AND {@code BASE}'s {@code
-   * run_scope} MUST NOT be {@code ALL} — an {@code ALL}-scoped BASE would resolve INTO a THR run
-   * too (via {@code activeStatutoryComponents/appliesTo} filtering only {@code
-   * statutoryComponents}, never {@code BASE} itself, which {@link #resolvePersonInput} would have
-   * to independently respect) and double-pay a FULL month's base salary on top of the THR earning
-   * in the SAME run — the single highest-stakes THR money-safety guard. Fail-loud, never a silent
-   * double-pay.
+   * run_scope} MUST NOT be {@code ALL}. {@code BASE} is not itself a statutory component, so it
+   * cannot structurally leak into a THR run through {@code activeStatutoryComponents}'s {@code
+   * appliesTo} filtering (that only governs {@code statutoryComponents}); this is instead a
+   * fail-safe CONFIG gate — it catches the case where the {@code ID-2026.3} dataset top-up was
+   * never seeded, or {@code BASE}'s {@code run_scope} was otherwise left/reset to {@code ALL} —
+   * before {@link #resolveThrPersonInput}/{@link #resolvePersonInput} would have to independently
+   * account for it. Fail-loud rather than silently running a misconfigured THR.
    *
    * @return the THR earning {@link PayComponent}
    */
@@ -1400,9 +1463,9 @@ public class PayrollRunWriter {
     PayComponent base = requireComponent(COMPONENT_KEY_BASE);
     if (base.getRunScope() == RunScope.ALL) {
       throw new ThrRunMisconfiguredException(
-          "pay_component 'BASE' has run_scope=ALL — it would resolve into this THR run and"
-              + " double-pay a full month's base salary; activate the ID-2026.3 dataset top-up"
-              + " (or otherwise set BASE's run_scope to REGULAR) before running THR");
+          "pay_component 'BASE' has run_scope=ALL — a THR run expects BASE to be REGULAR-scoped"
+              + " (config gate, not a structural leak); activate the ID-2026.3 dataset top-up (or"
+              + " otherwise set BASE's run_scope to REGULAR) before running THR");
     }
     return payComponentRepository
         .findByComponentKey(COMPONENT_KEY_THR)

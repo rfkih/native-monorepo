@@ -18,7 +18,7 @@ import java.util.UUID;
  * @param expectedSourceBusinessIds the business units that must have sealed the period (the gate's
  *     expected set); may be empty if no completeness gate applies
  * @param runType {@code REGULAR} (default when omitted/null) or {@code THR} (Track P Phase P8, ADR
- *     0034)
+ *     0035)
  * @param holidayDate the informational H-7 payment date for a THR run; {@code null} for REGULAR
  */
 public record RunPayrollRequest(

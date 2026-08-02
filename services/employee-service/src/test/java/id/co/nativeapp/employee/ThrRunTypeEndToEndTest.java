@@ -662,6 +662,205 @@ class ThrRunTypeEndToEndTest extends PostgresRlsTestBase {
   }
 
   // -----------------------------------------------------------------------
+  // C1 (CRITICAL, P8 review): the SYMMETRIC case — a THR run's own PPh21 must compute STANDALONE
+  // when its same-period REGULAR sibling is itself the December Art-17 true-up. A naive fold
+  // (classifyPayslipLine cannot tell the true-up's PPh21 line apart from an ordinary monthly one —
+  // the swap is in-memory only, the persisted line still resolves against the CURRENT, monthly-
+  // family catalog rule) would fold the true-up's ANNUAL reconciliation delta into THR's
+  // combined-gross TER. Two-employee standalone-equality: Employee X (December REGULAR true-up
+  // sibling POSTED first) and Employee Y (THR-only this period, no REGULAR sibling at all — the
+  // standalone reference) must land on the IDENTICAL THR PPh21 figure.
+  // -----------------------------------------------------------------------
+
+  @Test
+  void aDecemberThrRunComputesStandaloneWhenTheRegularSiblingIsTheAnnualTrueUp() throws Exception {
+    long highBaseMinor = 300_000_000L;
+    long decBaseMinor = 10_000_000L;
+
+    // Employee X: Oct+Nov REGULAR posted at 300,000,000/mo (mirrors
+    // PayrollAnnualTrueUpEndToEndTest#aNegativeDecemberPphLineSurvivesTheFullPathAndRoundTripsThroughEncryption,
+    // L473) so the December REGULAR run's Art-17 true-up posts a large NEGATIVE refund PPh21 line;
+    // December base package 10,000,000, full tenure (hired 2024-01-01). Dec REGULAR posts FIRST,
+    // Dec THR (gross bruto 10,000,000, no ER legs) is calculated below, AFTER the appender
+    // attaches.
+    UUID employeeX =
+        TenantContext.callAs(
+            TENANT_A,
+            ACTOR_A,
+            () -> {
+              illustrativeSeeder.seed(IDR);
+              officialSeeder.seed("ID-2026.1");
+              officialSeeder.seed("ID-2026.2");
+              officialSeeder.seed("ID-2026.3");
+              UUID outlet = openOutlet();
+              UUID id =
+                  employeeService
+                      .create(
+                          new CreateEmployeeCommand(
+                              "Made", "TK0", "3209000000000112", "3209000000000112"))
+                      .getId();
+              employeeService.update(
+                  new UpdateEmployeeCommand(
+                      id,
+                      null,
+                      null,
+                      null,
+                      null,
+                      "9209000000000112",
+                      null,
+                      LocalDate.of(2024, 1, 1)));
+              EmploymentContract contract = addPermanentContract(id);
+              var highPkg =
+                  compensationWriter.createPackage(
+                      id,
+                      contract.getId(),
+                      Money.ofMinor(highBaseMinor, IDR),
+                      LocalDate.of(2026, 1, 1),
+                      LocalDate.of(9999, 12, 31));
+              assignmentService.add(
+                  new AddAssignmentCommand(
+                      id,
+                      outlet,
+                      null,
+                      "cashier",
+                      LocalDate.of(2024, 1, 1),
+                      LocalDate.of(9999, 12, 31)));
+
+              payrollRunService.calculateAndPost(
+                  new RunPayrollCommand("2026-10", List.of(id), List.of()), IDR);
+              payrollRunService.calculateAndPost(
+                  new RunPayrollCommand("2026-11", List.of(id), List.of()), IDR);
+
+              compensationWriter.endPackage(id, highPkg.getId(), LocalDate.of(2026, 11, 30));
+              compensationWriter.createPackage(
+                  id,
+                  contract.getId(),
+                  Money.ofMinor(decBaseMinor, IDR),
+                  LocalDate.of(2026, 12, 1),
+                  LocalDate.of(9999, 12, 31));
+
+              // The December REGULAR Art-17 true-up — POSTED first, a large negative refund line.
+              payrollRunService.calculateAndPost(
+                  new RunPayrollCommand("2026-12", List.of(id), List.of()), IDR);
+              return id;
+            });
+
+    // Employee Y: identical December base 10,000,000, full tenure, THR ONLY this period (no
+    // REGULAR sibling at all) — the standalone reference.
+    UUID employeeY =
+        TenantContext.callAs(
+            TENANT_A,
+            ACTOR_A,
+            () ->
+                setUpThrEmployee(
+                    "Nyoman", "3209000000000113", decBaseMinor, LocalDate.of(2024, 1, 1)));
+
+    Logger employeeLogger = (Logger) LoggerFactory.getLogger("id.co.nativeapp.employee");
+    ListAppender<ILoggingEvent> appender = new ListAppender<>();
+    appender.start();
+    employeeLogger.addAppender(appender);
+    employeeLogger.setLevel(Level.WARN);
+    UUID thrRunX;
+    UUID thrRunY;
+    try {
+      thrRunX =
+          TenantContext.callAs(
+              TENANT_A,
+              ACTOR_A,
+              () ->
+                  payrollRunService
+                      .calculateAndPost(
+                          new RunPayrollCommand(
+                              "2026-12", List.of(employeeX), List.of(), RunType.THR, null),
+                          IDR)
+                      .getId());
+      thrRunY =
+          TenantContext.callAs(
+              TENANT_A,
+              ACTOR_A,
+              () ->
+                  payrollRunService
+                      .calculateAndPost(
+                          new RunPayrollCommand(
+                              "2026-12", List.of(employeeY), List.of(), RunType.THR, null),
+                          IDR)
+                      .getId());
+    } finally {
+      employeeLogger.detachAppender(appender);
+    }
+
+    // TER cat A, 200bp on <=10,050,000 — the SAME thrAloneWithheld figure
+    // combinedGrossTerReachesTheSameTotalWithheldRegardlessOfExecutionOrder derives for a THR run
+    // with no REGULAR sibling.
+    long thrAloneWithheld = 200_000L;
+    // The combinedTax a fold would give (pre-fix this run computed ~3,843,560 — WAY over this
+    // bound, since the true-up's own gross bruto AND its large negative "withheld" delta would be
+    // folded in); post-fix, employee X's standalone figure must stay comfortably under it.
+    long combinedTaxIfFolded = 1_843_560L;
+
+    assertThat(pph21Line(thrRunX, employeeX).amountMinor()).isEqualTo(thrAloneWithheld);
+    assertThat(pph21Line(thrRunY, employeeY).amountMinor()).isEqualTo(thrAloneWithheld);
+    assertThat(pph21Line(thrRunX, employeeX).amountMinor()).isLessThan(combinedTaxIfFolded);
+
+    boolean warned =
+        appender.list.stream()
+            .anyMatch(
+                e ->
+                    e.getFormattedMessage().contains("STANDALONE")
+                        && e.getFormattedMessage().contains("do NOT compose"));
+    assertThat(warned).as("the C1 symmetric WARN fires").isTrue();
+  }
+
+  // -----------------------------------------------------------------------
+  // W1 (P8 review): a same-period sibling run that only reached CALCULATED (not POSTED) is
+  // invisible to the sibling fold (only POSTED siblings are folded) — WARN loudly rather than
+  // silently risking an UNDER-withheld masa-pajak.
+  // -----------------------------------------------------------------------
+
+  @Test
+  void aCalculatedButNotPostedSiblingWarnsOfPossibleUnderWithholding() throws Exception {
+    long baseMinor = 10_000_000L;
+    UUID employeeId =
+        TenantContext.callAs(
+            TENANT_A,
+            ACTOR_A,
+            () -> setUpThrEmployee("Oka", "3209000000000114", baseMinor, LocalDate.of(2024, 1, 1)));
+
+    // REGULAR calculates but is deliberately left CALCULATED (never posted).
+    TenantContext.runAs(
+        TENANT_A,
+        ACTOR_A,
+        () ->
+            payrollRunService.calculate(
+                new RunPayrollCommand(PERIOD, List.of(employeeId), List.of()), IDR));
+
+    Logger employeeLogger = (Logger) LoggerFactory.getLogger("id.co.nativeapp.employee");
+    ListAppender<ILoggingEvent> appender = new ListAppender<>();
+    appender.start();
+    employeeLogger.addAppender(appender);
+    employeeLogger.setLevel(Level.WARN);
+    try {
+      TenantContext.runAs(
+          TENANT_A,
+          ACTOR_A,
+          () ->
+              payrollRunService.calculate(
+                  new RunPayrollCommand(PERIOD, List.of(employeeId), List.of(), RunType.THR, null),
+                  IDR));
+    } finally {
+      employeeLogger.detachAppender(appender);
+    }
+
+    boolean warned =
+        appender.list.stream()
+            .anyMatch(
+                e ->
+                    e.getFormattedMessage().contains("CALCULATED but not POSTED")
+                        && e.getFormattedMessage().contains("UNDER-withheld"));
+    assertThat(warned).as("the W1 CALCULATED-sibling WARN fires").isTrue();
+  }
+
+  // -----------------------------------------------------------------------
   // Fixtures
   // -----------------------------------------------------------------------
 

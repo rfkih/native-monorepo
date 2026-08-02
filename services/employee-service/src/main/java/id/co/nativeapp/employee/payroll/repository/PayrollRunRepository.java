@@ -5,7 +5,6 @@ import id.co.nativeapp.employee.payroll.domain.RunStatus;
 import id.co.nativeapp.employee.payroll.domain.RunType;
 import id.co.nativeapp.employee.payroll.projection.PayrollRunView;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -33,9 +32,6 @@ public interface PayrollRunRepository extends JpaRepository<PayrollRun, UUID> {
    * for the same period must never share a run_seq counter).
    */
   List<PayrollRun> findByPeriodAndRunTypeOrderByRunSeqDesc(String period, RunType runType);
-
-  /** A specific (period, run_seq) within the bound tenant. */
-  Optional<PayrollRun> findByPeriodAndRunSeq(String period, int runSeq);
 
   /**
    * Whether a run of {@code runType} reached {@code status} for {@code period} (within the bound
