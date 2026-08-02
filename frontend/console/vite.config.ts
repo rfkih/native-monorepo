@@ -59,8 +59,13 @@ const pwa = VitePWA({
   devOptions: { enabled: false },
   workbox: {
     // Navigating to an API path (should never happen, defensive only) must not fall back to the
-    // cached index.html the way a normal SPA route does.
-    navigateFallbackDenylist: [/^\/api\//],
+    // cached index.html the way a normal SPA route does. `/auth/` is the IdP when Keycloak is
+    // co-hosted on the console origin (the UAT single-origin layout): without the denylist entry
+    // the SW serves the cached shell INSTEAD of the Keycloak login form on every sign-in
+    // navigation once it controls the page — login becomes an instant bounce back to the landing.
+    // (`/auth/callback` still reaches the SPA via the server's history fallback — network, not
+    // SW cache — and a callback is meaningless offline, so denylisting all of /auth/ is safe.)
+    navigateFallbackDenylist: [/^\/api\//, /^\/auth\//],
     runtimeCaching: [
       {
         urlPattern: /^\/api\//,
