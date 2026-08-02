@@ -106,8 +106,7 @@ class BillSplitAcceptanceTest extends PostgresRlsTestBase {
     return TenantContext.callAs(
         TENANT_A,
         ACTOR,
-        () ->
-            billService.payBill(billId, new PayBillRequest(null, null, lineIds, idemKey, null)));
+        () -> billService.payBill(billId, new PayBillRequest(null, null, lineIds, idemKey, null)));
   }
 
   private List<Map<String, Object>> saleRecordedRows() {

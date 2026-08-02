@@ -113,8 +113,8 @@ public class Payment extends Auditable {
   /**
    * The sales-channel code this tender rang through (V24, ADR 0036 Phase B2) — set ONLY by {@link
    * #capturedOnline}; every other factory leaves it {@code null}. A snapshot, not a foreign key
-   * (see {@code sales_channel.code}'s deactivation semantics) — {@code updatable = false} because
-   * a payment never changes which channel it settled through after capture.
+   * (see {@code sales_channel.code}'s deactivation semantics) — {@code updatable = false} because a
+   * payment never changes which channel it settled through after capture.
    */
   @Column(name = "channel_code", updatable = false, length = 32)
   private String channelCode;
@@ -196,8 +196,8 @@ public class Payment extends Auditable {
   /**
    * A live ONLINE (platform-collected) tender, already captured against {@code saleId} (ADR 0036
    * Phase B2) — the platform already holds the customer's money at acceptance, so it settles
-   * SYNCHRONOUSLY like cash. Unlike {@link #capturedCash}, there is no separate tendered amount
-   * to validate: the platform remitted exactly {@code amount}, so {@code tendered == amount} and
+   * SYNCHRONOUSLY like cash. Unlike {@link #capturedCash}, there is no separate tendered amount to
+   * validate: the platform remitted exactly {@code amount}, so {@code tendered == amount} and
    * {@code change == 0} always (never client-supplied).
    *
    * @param channelCode the company-managed {@code sales_channel.code} this sale rang through

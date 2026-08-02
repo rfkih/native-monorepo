@@ -16,8 +16,8 @@ import org.hibernate.type.SqlTypes;
  * A {@code platform_settlement} row (ADR 0036 Phase C) — the append-only record of one platform
  * payout: "the channel settled {@code grossMinor} of its receivable; we received {@code netMinor};
  * the {@code feeMinor} difference is the commission", posted as {@link #journalEntryId} ({@code Dr
- * CASH_CLEARING net + Dr PLATFORM_FEE_EXPENSE fee / Cr PLATFORM_RECEIVABLE gross}). Settlements
- * are genuinely repeatable per channel (a platform pays out weekly), so uniqueness is per {@code
+ * CASH_CLEARING net + Dr PLATFORM_FEE_EXPENSE fee / Cr PLATFORM_RECEIVABLE gross}). Settlements are
+ * genuinely repeatable per channel (a platform pays out weekly), so uniqueness is per {@code
  * (company_id, idempotency_key)} (V45), not per channel.
  *
  * <p>{@code feeMinor} is derived ({@code gross − net}) but persisted for the immutable audit trail

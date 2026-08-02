@@ -22,13 +22,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 /**
- * The {@code PlatformSettlementWriter} matrix (ADR 0036 Phase C): one-shot settle posting the
- * exact {@code Dr CASH_CLEARING (net) + Dr PLATFORM_FEE_EXPENSE (fee) / Cr PLATFORM_RECEIVABLE
- * (gross)} legs and decrementing the channel accumulator; fee-free payout omits the fee leg;
- * same-key replay returns the original without posting again; replayed key with a different
- * payload → 409; over-settlement (outstanding &lt; gross) → 422 with NOTHING touched; net &gt;
- * gross → 422. The accumulator is seeded through {@link PlatformReceivableAccumulator} — the same
- * component the revenue/reversal writers use in production.
+ * The {@code PlatformSettlementWriter} matrix (ADR 0036 Phase C): one-shot settle posting the exact
+ * {@code Dr CASH_CLEARING (net) + Dr PLATFORM_FEE_EXPENSE (fee) / Cr PLATFORM_RECEIVABLE (gross)}
+ * legs and decrementing the channel accumulator; fee-free payout omits the fee leg; same-key replay
+ * returns the original without posting again; replayed key with a different payload → 409;
+ * over-settlement (outstanding &lt; gross) → 422 with NOTHING touched; net &gt; gross → 422. The
+ * accumulator is seeded through {@link PlatformReceivableAccumulator} — the same component the
+ * revenue/reversal writers use in production.
  */
 @SpringBootTest
 class PlatformSettlementWriterTest extends PostgresRlsTestBase {

@@ -23,12 +23,12 @@ import org.springframework.stereotype.Component;
  * negative — the next settlement nets it. Money rule 8: integer minor units + ISO-4217.
  */
 @Component
-public class PlatformReceivableAccumulator {
+public class PlatformReceivableWriter {
 
   /** Sub-ledger bucket for an ONLINE sale that arrived with a null channel — never drop money. */
   public static final String UNKNOWN_CHANNEL = "UNKNOWN";
 
-  private static final Logger log = LoggerFactory.getLogger(PlatformReceivableAccumulator.class);
+  private static final Logger log = LoggerFactory.getLogger(PlatformReceivableWriter.class);
 
   private static final String UPSERT_SQL =
       """
@@ -45,7 +45,7 @@ public class PlatformReceivableAccumulator {
 
   private final JdbcTemplate jdbcTemplate;
 
-  public PlatformReceivableAccumulator(JdbcTemplate jdbcTemplate) {
+  public PlatformReceivableWriter(JdbcTemplate jdbcTemplate) {
     this.jdbcTemplate = jdbcTemplate;
   }
 
@@ -56,8 +56,8 @@ public class PlatformReceivableAccumulator {
    * the producer omitted the channel code.
    *
    * <p>{@code @Transactional(REQUIRED)}: joins the calling writer's transaction (the normal path —
-   * atomic with the GL posting) and, when invoked standalone, opens its own so the RLS aspect binds
-   * the tenant GUC — a raw unadvised write would fail the {@code WITH CHECK} closed.
+   * atomic with the GL posting) and, when invoked standalone, opens its own so the RLS aspect
+   * binds the tenant GUC — a raw unadvised write would fail the {@code WITH CHECK} closed.
    */
   @org.springframework.transaction.annotation.Transactional
   public void accumulate(

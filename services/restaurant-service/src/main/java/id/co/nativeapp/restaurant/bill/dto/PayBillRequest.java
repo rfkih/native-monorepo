@@ -27,11 +27,10 @@ import java.util.UUID;
  *     subtotal only
  * @param lineIds optional set of line ids to include in this check; null/empty = all unpaid lines
  * @param idempotencyKey optional caller-supplied idempotency key for the check sale
- * @param channelCode Phase B2 (ADR 0036): the company-managed {@code sales_channel.code} this
- *     check rings through — REQUIRED when {@code payment.tenderType() == ONLINE} (a
- *     platform-collected order, e.g. GoFood/GrabFood), validated to exist and be active for the
- *     tenant; ignored/must be omitted for every other tender. See {@code
- *     BillWriter.validateOnlineTender}.
+ * @param channelCode Phase B2 (ADR 0036): the company-managed {@code sales_channel.code} this check
+ *     rings through — REQUIRED when {@code payment.tenderType() == ONLINE} (a platform-collected
+ *     order, e.g. GoFood/GrabFood), validated to exist and be active for the tenant; ignored/must
+ *     be omitted for every other tender. See {@code BillWriter.validateOnlineTender}.
  */
 public record PayBillRequest(
     @Valid PaymentRequest payment,

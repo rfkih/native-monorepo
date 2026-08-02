@@ -1,6 +1,7 @@
 package id.co.nativeapp.restaurant.order.service;
 
 import id.co.nativeapp.money.Money;
+import id.co.nativeapp.restaurant.channel.repository.SalesChannelRepository;
 import id.co.nativeapp.restaurant.config.SelfOrderProperties;
 import id.co.nativeapp.restaurant.loyaltyref.service.LoyaltyRedemptionGuard;
 import id.co.nativeapp.restaurant.menu.projection.MenuItemView;
@@ -24,7 +25,6 @@ import id.co.nativeapp.restaurant.order.projection.OrderView;
 import id.co.nativeapp.restaurant.order.repository.OrderLineModifierRepository;
 import id.co.nativeapp.restaurant.order.repository.OrderLineRepository;
 import id.co.nativeapp.restaurant.order.repository.OrderRepository;
-import id.co.nativeapp.restaurant.channel.repository.SalesChannelRepository;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
 import id.co.nativeapp.restaurant.payment.domain.TenderType;
 import id.co.nativeapp.restaurant.payment.dto.PaymentRequest;
@@ -1417,10 +1417,10 @@ public class OrderWriter {
 
   /**
    * Validates an ONLINE-tender payment request BEFORE any DB write. Checked at BOTH
-   * revenue-recognizing entry points in this writer ({@link #checkout}, {@link #payParked}) —
-   * never bypassable via one path while enforced on the other (the {@code OutletAccessGuard}/
-   * {@code ManualDiscountGuard} sharing pattern). A no-op for every other tender (including no
-   * payment at all).
+   * revenue-recognizing entry points in this writer ({@link #checkout}, {@link #payParked}) — never
+   * bypassable via one path while enforced on the other (the {@code OutletAccessGuard}/ {@code
+   * ManualDiscountGuard} sharing pattern). A no-op for every other tender (including no payment at
+   * all).
    *
    * @throws IllegalArgumentException if {@code payment} tenders ONLINE and (a) {@code channelCode}
    *     is missing/blank, (b) the (normalized) channel is unknown or inactive for the tenant, (c) a

@@ -880,10 +880,10 @@ public class BillWriter {
   /**
    * Validates an ONLINE-tender payment request BEFORE any DB write and returns the normalized
    * channel code (or {@code null} for every other tender / no payment at all). {@code
-   * PayBillRequest} carries no loyalty/gift-card fields (bills do not support that redemption
-   * yet), so the ONLY checks here are (a) {@code channelCode} required and (b) the channel must
-   * exist AND be active for the tenant — mirrors {@code OrderWriter.validateOnlineTender}'s (a)/(b)
-   * checks exactly; its (c)/(d) gift-card/loyalty checks are vacuously satisfied on this path.
+   * PayBillRequest} carries no loyalty/gift-card fields (bills do not support that redemption yet),
+   * so the ONLY checks here are (a) {@code channelCode} required and (b) the channel must exist AND
+   * be active for the tenant — mirrors {@code OrderWriter.validateOnlineTender}'s (a)/(b) checks
+   * exactly; its (c)/(d) gift-card/loyalty checks are vacuously satisfied on this path.
    *
    * @throws IllegalArgumentException if {@code payment} tenders ONLINE and (a) {@code channelCode}
    *     is missing/blank, or (b) the (normalized) channel is unknown or inactive for the tenant

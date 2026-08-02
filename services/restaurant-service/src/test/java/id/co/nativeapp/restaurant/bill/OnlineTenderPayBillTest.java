@@ -30,14 +30,14 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 /**
  * ADR 0036 Phase B2 — the {@code ONLINE} tender threaded through {@code BillWriter.payBill}.
- * Mirrors {@link id.co.nativeapp.restaurant.order.OnlineTenderCheckoutTest}'s coverage for the
- * bill flow: the (a) missing-channel and (b) unknown/inactive-channel rejections, and the happy
- * path threading the channel onto {@code sale.channel_code}. {@code PayBillRequest} carries no
+ * Mirrors {@link id.co.nativeapp.restaurant.order.OnlineTenderCheckoutTest}'s coverage for the bill
+ * flow: the (a) missing-channel and (b) unknown/inactive-channel rejections, and the happy path
+ * threading the channel onto {@code sale.channel_code}. {@code PayBillRequest} carries no
  * loyalty/gift-card fields (bills do not support that redemption), so rules (c)/(d) are vacuously
  * satisfied on this path — see {@code BillWriter.validateOnlineTenderAndNormalize}'s javadoc.
  *
- * <p>Unlike the order checkout path, {@code BillWriter.payBill} never creates a {@code payment}
- * row for ANY tender (CASH included) — only the {@code sale.tender_type}/{@code channel_code} are
+ * <p>Unlike the order checkout path, {@code BillWriter.payBill} never creates a {@code payment} row
+ * for ANY tender (CASH included) — only the {@code sale.tender_type}/{@code channel_code} are
  * stamped. ONLINE stays consistent with that existing behaviour (no new payment-row creation
  * introduced here).
  */
@@ -69,8 +69,7 @@ class OnlineTenderPayBillTest extends PostgresRlsTestBase {
             TENANT,
             ACTOR,
             () ->
-                salesChannelWriter.create(
-                    new CreateSalesChannelRequest(code, code + " Delivery")));
+                salesChannelWriter.create(new CreateSalesChannelRequest(code, code + " Delivery")));
     return response.code();
   }
 

@@ -18,15 +18,15 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Owns the {@code @Transactional} units of work for the company-managed sales-channel catalog
- * (ADR 0036 Phase B2) — the source of the {@code channelCode} a POS checkout stamps on an {@code
- * ONLINE} tender.
+ * Owns the {@code @Transactional} units of work for the company-managed sales-channel catalog (ADR
+ * 0036 Phase B2) — the source of the {@code channelCode} a POS checkout stamps on an {@code ONLINE}
+ * tender.
  *
  * <p>A distinct {@code @Component} bean (not inline in the controller) so the Spring proxy applies
  * the transaction + {@code RlsAutoApplyAspect} tenant-GUC advice (the {@code RegisterSessionWriter}
- * pattern). {@code SalesChannelController} calls this bean directly — mirroring how a
- * single-writer feature (e.g. {@code register}) skips an intermediate {@code *Service} facade when
- * there is no cross-transaction orchestration to coordinate.
+ * pattern). {@code SalesChannelController} calls this bean directly — mirroring how a single-writer
+ * feature (e.g. {@code register}) skips an intermediate {@code *Service} facade when there is no
+ * cross-transaction orchestration to coordinate.
  *
  * <p><strong>Role gate.</strong> A channel is money-routing configuration (it decides how an {@code
  * ONLINE} sale's platform receivable is bucketed at finance) — CREATE/PATCH require {@code
@@ -52,8 +52,8 @@ public class SalesChannelWriter {
    * pre-check and the insert (mirrors {@code PromotionAdminWriter.createCoupon}'s coupon-code
    * normalization).
    *
-   * @throws SalesChannelForbiddenException if the caller's role set is non-empty and neither
-   *     {@code owner} nor {@code manager}
+   * @throws SalesChannelForbiddenException if the caller's role set is non-empty and neither {@code
+   *     owner} nor {@code manager}
    * @throws SalesChannelCodeConflictException if a channel with this (normalized) code already
    *     exists for the tenant
    */
@@ -76,8 +76,8 @@ public class SalesChannelWriter {
    * Updates a sales channel's name and/or active flag. {@code code} is never accepted here — it is
    * immutable once created (see {@code SalesChannel}).
    *
-   * @throws SalesChannelForbiddenException if the caller's role set is non-empty and neither
-   *     {@code owner} nor {@code manager}
+   * @throws SalesChannelForbiddenException if the caller's role set is non-empty and neither {@code
+   *     owner} nor {@code manager}
    * @throws SalesChannelNotFoundException if the id is unknown/cross-tenant
    */
   @Transactional

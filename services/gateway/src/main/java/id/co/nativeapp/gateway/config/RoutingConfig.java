@@ -419,8 +419,8 @@ public class RoutingConfig {
    * Company-managed sales channels + the ONLINE tender (ADR 0036 Phase B2): a cashier LISTs the
    * channel picker at checkout (GET), while CREATE/PATCH are further gated to owner/manager
    * SERVICE-SIDE by {@code SalesChannelWriter} — the route itself carries POS_ROLES (owner,
-   * manager, cashier), like every till surface, since a cashier legitimately needs to read the
-   * list even though it cannot mutate it.
+   * manager, cashier), like every till surface, since a cashier legitimately needs to read the list
+   * even though it cannot mutate it.
    */
   @Bean
   RouterFunction<ServerResponse> salesChannelsRoute(
@@ -1027,8 +1027,8 @@ public class RoutingConfig {
   }
 
   /**
-   * Platform channel settlements (ADR 0036 Phase C) — owner/manager only: recording a payout
-   * posts money (Dr cash-clearing + Dr platform-fee / Cr platform-receivable) and decrements the
+   * Platform channel settlements (ADR 0036 Phase C) — owner/manager only: recording a payout posts
+   * money (Dr cash-clearing + Dr platform-fee / Cr platform-receivable) and decrements the
    * per-channel outstanding balance, a back-office finance action with no cashier surface.
    */
   @Bean

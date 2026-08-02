@@ -7,11 +7,11 @@ package id.co.nativeapp.restaurant.payment.domain;
  * {@link #CARD} go through the flagged-pending {@code DigitalProvider} (ADR 0006): the persistence,
  * capture flow, GL routing, and events are real, but no money actually moves until a real
  * payment-service-provider adapter lands (ADR 0007). {@link #ONLINE} (ADR 0036 Phase B) is a
- * platform-collected order (GoFood/GrabFood style): the platform already holds the customer's
- * money at acceptance, so it captures SYNCHRONOUSLY like cash (never the pending-digital path) and
- * finance routes its clearing debit to PLATFORM_RECEIVABLE instead of drawer cash. Stored as
- * {@code EnumType.STRING} so the {@code payment.tender_type} column is human-readable and stable
- * against reordering.
+ * platform-collected order (GoFood/GrabFood style): the platform already holds the customer's money
+ * at acceptance, so it captures SYNCHRONOUSLY like cash (never the pending-digital path) and
+ * finance routes its clearing debit to PLATFORM_RECEIVABLE instead of drawer cash. Stored as {@code
+ * EnumType.STRING} so the {@code payment.tender_type} column is human-readable and stable against
+ * reordering.
  */
 public enum TenderType {
   /** Physical cash — settles instantly, carries a tendered amount and change. */

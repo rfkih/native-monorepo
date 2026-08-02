@@ -58,9 +58,9 @@ import java.util.UUID;
  * @param channelCode Phase B2 (ADR 0036): the company-managed {@code sales_channel.code} this sale
  *     rings through — REQUIRED when {@code payment.tenderType() == ONLINE} (a platform-collected
  *     order, e.g. GoFood/GrabFood), validated to exist and be active for the tenant; ignored/must
- *     be omitted for every other tender. An ONLINE-tender order also forbids a gift-card
- *     redemption and a positive {@code loyaltyRedeemPoints} (the platform settles wholly through
- *     itself) — see {@code OrderWriter.validateOnlineTender}.
+ *     be omitted for every other tender. An ONLINE-tender order also forbids a gift-card redemption
+ *     and a positive {@code loyaltyRedeemPoints} (the platform settles wholly through itself) — see
+ *     {@code OrderWriter.validateOnlineTender}.
  */
 public record CheckoutRequest(
     @NotNull UUID businessId,

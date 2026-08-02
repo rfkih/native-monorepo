@@ -66,7 +66,8 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
             .body(String.class);
 
     assertThat(response).isEqualTo("ok");
-    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/register-sessions/current");
+    assertThat(theForwardedRequest().getPath())
+        .isEqualTo("/api/v1/register-sessions/current?businessId=x");
   }
 
   @Test

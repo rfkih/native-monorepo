@@ -49,8 +49,8 @@ public interface SalesChannelRepository extends JpaRepository<SalesChannel, UUID
 
   /**
    * Checkout/pay-time validation (ADR 0036 Phase B2, ONLINE tender): {@code true} only when a
-   * channel with this exact (already-normalized) code exists AND is active for the bound tenant —
-   * a deactivated or unknown code is rejected the same way by the calling writer ({@code
+   * channel with this exact (already-normalized) code exists AND is active for the bound tenant — a
+   * deactivated or unknown code is rejected the same way by the calling writer ({@code
    * IllegalArgumentException} → {@code 400 invalid-argument}).
    */
   @Query(

@@ -12,7 +12,7 @@ import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
 import id.co.nativeapp.finance.gl.service.JournalPostingService;
 import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
 import id.co.nativeapp.finance.mapping.service.GlAccountResolver;
-import id.co.nativeapp.finance.platform.service.PlatformReceivableAccumulator;
+import id.co.nativeapp.finance.platform.service.PlatformReceivableWriter;
 import id.co.nativeapp.finance.pnl.service.PnlReadModelWriter;
 import id.co.nativeapp.finance.revenue.domain.LedgerPosting;
 import id.co.nativeapp.finance.revenue.domain.PostingType;
@@ -115,7 +115,7 @@ public class ReversalPostingWriter {
   private final JournalEntryRepository journalEntryRepository;
   private final JournalLineRepository journalLineRepository;
   private final RoleAccountResolver roleAccountResolver;
-  private final PlatformReceivableAccumulator platformReceivable;
+  private final PlatformReceivableWriter platformReceivable;
 
   @SuppressWarnings("checkstyle:ParameterNumber")
   public ReversalPostingWriter(
@@ -128,7 +128,7 @@ public class ReversalPostingWriter {
       JournalEntryRepository journalEntryRepository,
       JournalLineRepository journalLineRepository,
       RoleAccountResolver roleAccountResolver,
-      PlatformReceivableAccumulator platformReceivable) {
+      PlatformReceivableWriter platformReceivable) {
     this.ledgerRepository = ledgerRepository;
     this.processedEvents = processedEvents;
     this.jdbcTemplate = jdbcTemplate;

@@ -25,9 +25,8 @@ import org.springframework.web.bind.annotation.RestController;
  * company_id}) and actor come from the bound {@link id.co.nativeapp.tenant.TenantContext
  * TenantContext}, never the request body (rule 5).
  *
- * <p>LIST is open to every POS role (the checkout channel picker); CREATE/PATCH are gated to
- * {@code owner}/{@code manager} by {@link SalesChannelWriter} (a channel is money-routing
- * configuration).
+ * <p>LIST is open to every POS role (the checkout channel picker); CREATE/PATCH are gated to {@code
+ * owner}/{@code manager} by {@link SalesChannelWriter} (a channel is money-routing configuration).
  */
 @Tag(
     name = "Sales channels",

@@ -112,8 +112,7 @@ class SalesChannelWriterTest {
 
     assertThatThrownBy(
             () ->
-                asTenant(
-                    () -> writer.update(id, new UpdateSalesChannelRequest("New name", null))))
+                asTenant(() -> writer.update(id, new UpdateSalesChannelRequest("New name", null))))
         .isInstanceOf(SalesChannelForbiddenException.class);
   }
 
@@ -131,8 +130,7 @@ class SalesChannelWriterTest {
     SalesChannelResponse response =
         asTenant(
             () ->
-                writer.update(
-                    channel.getId(), new UpdateSalesChannelRequest("GoFood v2", false)));
+                writer.update(channel.getId(), new UpdateSalesChannelRequest("GoFood v2", false)));
 
     assertThat(response.name()).isEqualTo("GoFood v2");
     assertThat(response.active()).isFalse();
@@ -149,8 +147,7 @@ class SalesChannelWriterTest {
 
     assertThatThrownBy(
             () ->
-                asTenant(
-                    () -> writer.update(unknownId, new UpdateSalesChannelRequest("x", null))))
+                asTenant(() -> writer.update(unknownId, new UpdateSalesChannelRequest("x", null))))
         .isInstanceOf(SalesChannelNotFoundException.class);
   }
 

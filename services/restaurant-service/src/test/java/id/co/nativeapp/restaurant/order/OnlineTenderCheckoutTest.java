@@ -33,8 +33,8 @@ import org.springframework.boot.test.context.SpringBootTest;
  * ADR 0036 Phase B2 — the {@code ONLINE} tender threaded through {@code OrderWriter}
  * (checkout/pay-parked). Proves the four rejection rules ((a) missing channel, (b) unknown/
  * inactive channel, (c) gift-card pairing forbidden, (d) loyalty-points redemption forbidden) and
- * the happy path: synchronous capture (unlike QRIS/CARD, never PENDING), the channel snapshot
- * lands on both {@code sale.channel_code} and {@code payment.channel_code}, and {@code
+ * the happy path: synchronous capture (unlike QRIS/CARD, never PENDING), the channel snapshot lands
+ * on both {@code sale.channel_code} and {@code payment.channel_code}, and {@code
  * cash_collected_minor} stays {@code NULL} (ONLINE is not cash — the register-close cash window
  * must never include it).
  */
@@ -67,8 +67,7 @@ class OnlineTenderCheckoutTest extends PostgresRlsTestBase {
             TENANT,
             ACTOR,
             () ->
-                salesChannelWriter.create(
-                    new CreateSalesChannelRequest(code, code + " Delivery")));
+                salesChannelWriter.create(new CreateSalesChannelRequest(code, code + " Delivery")));
     return response.code();
   }
 
@@ -81,9 +80,7 @@ class OnlineTenderCheckoutTest extends PostgresRlsTestBase {
     TenantContext.callAs(
         TENANT,
         ACTOR,
-        () ->
-            salesChannelWriter.update(
-                existing.id(), new UpdateSalesChannelRequest(null, false)));
+        () -> salesChannelWriter.update(existing.id(), new UpdateSalesChannelRequest(null, false)));
   }
 
   private CheckoutRequest onlineCheckout(

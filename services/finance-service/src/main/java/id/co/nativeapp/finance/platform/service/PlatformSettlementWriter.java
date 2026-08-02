@@ -34,8 +34,8 @@ import org.springframework.transaction.annotation.Transactional;
  * the PayrollSettlementWriter idiom applied to the per-channel platform receivable: a REQUIRED
  * {@code Idempotency-Key} with replay-by-key-first and payload-verification 409, an advisory lock
  * serializing concurrent settlements of the same channel, a GUARDED single-statement decrement of
- * the {@code platform_receivable} accumulator (over-settlement loses atomically), and a pure
- * {@link #buildSettlementEntry} so a unit test can assert the exact legs:
+ * the {@code platform_receivable} accumulator (over-settlement loses atomically), and a pure {@link
+ * #buildSettlementEntry} so a unit test can assert the exact legs:
  *
  * <pre>Dr CASH_CLEARING (net) + Dr PLATFORM_FEE_EXPENSE (fee = gross − net) / Cr
  * PLATFORM_RECEIVABLE (gross)</pre>
