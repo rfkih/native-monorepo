@@ -124,6 +124,11 @@ const EarnRulesPage = lazy(() =>
 const Channels = lazy(() =>
   import('@/features/channels/Channels').then((m) => ({ default: m.Channels })),
 )
+const PlatformSettlements = lazy(() =>
+  import('@/features/platform/PlatformSettlements').then((m) => ({
+    default: m.PlatformSettlements,
+  })),
+)
 const CustomerDisplay = lazy(() =>
   import('@/features/pos/display/CustomerDisplay').then((m) => ({ default: m.CustomerDisplay })),
 )
@@ -440,6 +445,12 @@ export function App() {
               <Route
                 path="/channels"
                 element={company ? <Channels /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {canDashboard && (
+              <Route
+                path="/platform-settlements"
+                element={company ? <PlatformSettlements /> : <Navigate to="/onboarding" replace />}
               />
             )}
             {expensesAllowed && (
