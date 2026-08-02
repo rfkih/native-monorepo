@@ -135,8 +135,7 @@ public class RegisterSessionWriter {
     // expected = float + sales − refunds; overShort = counted − expected. Overflow-safe (the
     // AssetDisposalWriter precedent) — a poisoned sum must throw, never wrap.
     long expected =
-        Math.subtractExact(
-            Math.addExact(session.getOpeningFloatMinor(), cashSales), cashRefunds);
+        Math.subtractExact(Math.addExact(session.getOpeningFloatMinor(), cashSales), cashRefunds);
     long overShort = Math.subtractExact(request.countedCashMinor(), expected);
 
     session.close(
@@ -178,7 +177,9 @@ public class RegisterSessionWriter {
   /** Open-replay re-read used by the service's double-open race recovery. */
   @Transactional(readOnly = true)
   public Optional<RegisterSessionResponse> findByOpenKey(String idempotencyKey) {
-    return repository.findViewByOpenIdempotencyKey(idempotencyKey).map(RegisterSessionWriter::toResponse);
+    return repository
+        .findViewByOpenIdempotencyKey(idempotencyKey)
+        .map(RegisterSessionWriter::toResponse);
   }
 
   /** The outlet's current OPEN session, if any. */
@@ -196,8 +197,8 @@ public class RegisterSessionWriter {
   }
 
   /**
-   * Maps the native read projection to the response shape (CHAR(3) currency stripped). Lives in
-   * the SERVICE layer — the dto boundary must not reach into projections (ArchUnit).
+   * Maps the native read projection to the response shape (CHAR(3) currency stripped). Lives in the
+   * SERVICE layer — the dto boundary must not reach into projections (ArchUnit).
    */
   private static RegisterSessionResponse toResponse(RegisterSessionView v) {
     return new RegisterSessionResponse(

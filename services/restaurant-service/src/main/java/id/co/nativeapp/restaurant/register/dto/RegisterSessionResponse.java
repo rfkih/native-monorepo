@@ -6,8 +6,8 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 /**
- * A register session as returned to the POS (ADR 0036). Close-only figures are null while OPEN.
- * All money is integer minor units in {@code currency} (rule 8) — formatting is the client's job.
+ * A register session as returned to the POS (ADR 0036). Close-only figures are null while OPEN. All
+ * money is integer minor units in {@code currency} (rule 8) — formatting is the client's job.
  */
 public record RegisterSessionResponse(
     UUID id,

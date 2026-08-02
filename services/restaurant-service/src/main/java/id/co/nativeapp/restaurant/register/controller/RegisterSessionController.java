@@ -51,8 +51,7 @@ public class RegisterSessionController {
     requireKey(idempotencyKey);
     OpenSessionResult result = service.open(request, idempotencyKey);
     return result.created()
-        ? ResponseEntity.created(
-                URI.create("/api/v1/register-sessions/" + result.session().id()))
+        ? ResponseEntity.created(URI.create("/api/v1/register-sessions/" + result.session().id()))
             .body(result.session())
         : ResponseEntity.ok(result.session());
   }

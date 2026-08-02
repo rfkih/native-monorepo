@@ -77,6 +77,14 @@ export function PayrollTab({
   const [view, setView] = useState<PayrollView>('runs')
   // Track P Phase P8 — a client-side run_type filter over the already-fetched period's runs.
   const [runTypeFilter, setRunTypeFilter] = useState<'ALL' | 'REGULAR' | 'THR'>('ALL')
+  // Track P Phase P10 (review W2) — the period a run-detail "View reports" shortcut should seed
+  // Reports with. Deliberately SEPARATE from `period` (the top nav's state): the two happen to be
+  // equal today (runs are always fetched scoped to `period`), but the shortcut's contract is "open
+  // Reports on the run you were LOOKING AT", not "whatever the top nav currently shows" — those are
+  // only coincidentally the same value, and passing `period` directly would silently drift the day
+  // that stops being true. Null = the ordinary "Reports" segmented click, which still falls back to
+  // the top nav period.
+  const [reportsSeedPeriod, setReportsSeedPeriod] = useState<string | null>(null)
 
   const setup = usePayrollSetup({ companyId, actor, enabled: true })
   const seed = useSeedIllustrative({ companyId, actor })
@@ -177,7 +185,13 @@ export function PayrollTab({
               { value: 'reports', label: t('hr.payroll.view.reports') },
             ]}
             value={view}
-            onChange={setView}
+            onChange={(next) => {
+              // A direct segmented click always means "Reports for the top nav's period" — only the
+              // RunDetail "View reports" shortcut below sets `reportsSeedPeriod`, and only for the
+              // ONE navigation it triggers (P10 review W2).
+              setReportsSeedPeriod(null)
+              setView(next)
+            }}
             ariaLabel={t('hr.payroll.view.label')}
           />
 
@@ -188,7 +202,7 @@ export function PayrollTab({
               companyId={companyId}
               actor={actor}
               locale={locale}
-              initialPeriod={period}
+              initialPeriod={reportsSeedPeriod ?? period}
             />
           ) : (
             <>
@@ -328,7 +342,10 @@ export function PayrollTab({
                       companyId={companyId}
                       actor={actor}
                       locale={locale}
-                      onViewReports={() => setView('reports')}
+                      onViewReports={(runPeriod) => {
+                        setReportsSeedPeriod(runPeriod)
+                        setView('reports')
+                      }}
                     />
                   ) : null}
                 </>
@@ -378,8 +395,9 @@ function RunDetail({
   companyId: string
   actor: string
   locale: string
-  /** Track P Phase P10 — switches the parent Segmented view to Reports (a unified-view shortcut). */
-  onViewReports: () => void
+  /** Track P Phase P10 (review W2) — switches the parent Segmented view to Reports, seeded with
+   * THIS run's period (not whatever the top nav happens to show) — a unified-view shortcut. */
+  onViewReports: (period: string) => void
 }) {
   const { t } = useTranslation()
   const auth = useAuth()
@@ -461,7 +479,7 @@ function RunDetail({
               type="button"
               variant="outline"
               className="h-8 px-3 text-xs"
-              onClick={onViewReports}
+              onClick={() => onViewReports(run.period)}
             >
               {t('hr.payroll.actions.viewReports')}
             </Button>
@@ -744,15 +762,14 @@ function RunStatusTimeline({ status }: { status: string }) {
             className={cn(
               'rounded-full px-2.5 py-1 text-[11px] font-semibold',
               // Reaching POSTED is the only truly "done" state — green (profit) is reserved for
-              // it, matching the design system rule; every earlier/current step reads as brand
-              // (emerald) or neutral, never green.
+              // it, matching the design system rule; every earlier-or-current step reads as brand
+              // (emerald), never green (P10 review S1: both used to be the same emerald tokens
+              // spelled out as two separate branches).
               step === 'POSTED' && i === currentIndex
                 ? 'bg-tint-profit text-profit-ink'
-                : i < currentIndex
+                : i <= currentIndex
                   ? 'bg-emerald-tint text-emerald-2'
-                  : i === currentIndex
-                    ? 'bg-emerald-tint text-emerald-2'
-                    : 'bg-ink-50 text-ink-3',
+                  : 'bg-ink-50 text-ink-3',
             )}
           >
             {t(`hr.payroll.timeline.step.${step}`)}

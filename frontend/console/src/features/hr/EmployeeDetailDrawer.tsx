@@ -269,7 +269,12 @@ export function EmployeeDetailDrawer({
                   type="button"
                   variant="outline"
                   className="h-8 px-3 text-xs"
-                  onClick={() => setEditingNpwp(false)}
+                  onClick={() => {
+                    // P10 review S2 — clear the plaintext draft on cancel too (in-memory only, but
+                    // matches the masked-everywhere posture the rest of this drawer holds to).
+                    setNpwpDraft('')
+                    setEditingNpwp(false)
+                  }}
                   disabled={updateEmployee.isPending}
                 >
                   {t('hr.detail.hireDateCancel')}

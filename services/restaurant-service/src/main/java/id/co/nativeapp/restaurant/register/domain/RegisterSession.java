@@ -4,12 +4,12 @@ import id.co.nativeapp.tenant.Auditable;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Objects;
 import java.util.UUID;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * The {@code cash_register_session} aggregate (ADR 0036, closing kasir) — one cash drawer at one
@@ -17,10 +17,10 @@ import java.util.UUID;
  * per outlet at a time ({@code uq_crs_one_open_per_outlet} partial unique is the invariant; the
  * service-layer check is best-effort).
  *
- * <p>The close figures are SERVER-computed (never client-supplied, except {@code
- * countedCashMinor} which IS the client's physical count): {@code expectedCash = openingFloat +
- * cashSales − cashRefunds}; {@code overShort = counted − expected} (signed: negative = short,
- * positive = over). All money is integer minor units in one {@code currency} (rule 8).
+ * <p>The close figures are SERVER-computed (never client-supplied, except {@code countedCashMinor}
+ * which IS the client's physical count): {@code expectedCash = openingFloat + cashSales −
+ * cashRefunds}; {@code overShort = counted − expected} (signed: negative = short, positive = over).
+ * All money is integer minor units in one {@code currency} (rule 8).
  *
  * <p>Extends {@link Auditable} — mandatory audit + tenancy columns, covered by the V21 RLS policy
  * (rules 4 + 5).

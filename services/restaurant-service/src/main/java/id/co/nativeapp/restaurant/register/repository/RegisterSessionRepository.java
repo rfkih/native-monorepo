@@ -46,7 +46,8 @@ public interface RegisterSessionRepository extends JpaRepository<RegisterSession
       """;
 
   /** The outlet's OPEN session, if any (at most one — partial unique). */
-  @Query(value = VIEW_COLUMNS + " WHERE s.business_id = :businessId AND s.status = 'OPEN'",
+  @Query(
+      value = VIEW_COLUMNS + " WHERE s.business_id = :businessId AND s.status = 'OPEN'",
       nativeQuery = true)
   Optional<RegisterSessionView> findOpenViewByBusinessId(@Param("businessId") UUID businessId);
 
