@@ -61,7 +61,7 @@ class SaleRefundedReversalTest extends PostgresRlsTestBase {
             Money.ofMinor(amount, "IDR"), // full refund
             amount, // totalRefundedMinor
             OCCURRED,
-            "CARD"));
+            "CARD", null));
 
     assertThat(consolidatedRevenueMinorAsAdmin())
         .as("full refund must bring revenue to 0")
@@ -91,7 +91,7 @@ class SaleRefundedReversalTest extends PostgresRlsTestBase {
             Money.ofMinor(refundAmount, "IDR"),
             refundAmount, // totalRefundedMinor
             OCCURRED,
-            "QRIS"));
+            "QRIS", null));
 
     long netRevenue = consolidatedRevenueMinorAsAdmin();
     assertThat(netRevenue)
@@ -119,7 +119,7 @@ class SaleRefundedReversalTest extends PostgresRlsTestBase {
             Money.ofMinor(refundAmount, "IDR"),
             refundAmount,
             OCCURRED,
-            null));
+            null, null));
 
     assertRefundJournalIsBalanced(refundId);
   }
@@ -143,7 +143,7 @@ class SaleRefundedReversalTest extends PostgresRlsTestBase {
             Money.ofMinor(amount, "IDR"),
             amount,
             OCCURRED,
-            "CASH");
+            "CASH", null);
 
     boolean first = reversalPostingService.handleRefund(refundEvent);
     boolean second = reversalPostingService.handleRefund(refundEvent); // re-delivery

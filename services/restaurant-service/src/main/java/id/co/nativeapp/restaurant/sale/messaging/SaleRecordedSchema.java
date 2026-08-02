@@ -29,6 +29,9 @@ import org.apache.avro.generic.GenericRecord;
  *   <li>Phase 2 / pricing: {@code subtotal_minor}, {@code discount_minor}, {@code
  *       service_charge_minor}, {@code tax_minor}, {@code tax_rule_version} (all nullable — null for
  *       legacy/carwash producers), {@code uses_illustrative_rules} (nullable boolean)
+ *   <li>Phase B / ADR 0036: {@code channel} (nullable string) — the sales-channel code for an
+ *       ONLINE-tender sale. This wave always puts an explicit {@code null}; the real value is
+ *       threaded in Phase B2 once {@code RecordSaleCommand} carries a channel.
  * </ul>
  *
  * <p>Backward compatibility: legacy producers (carwash) set all Phase 2 fields to {@code null};
@@ -143,6 +146,8 @@ public final class SaleRecordedSchema {
     record.put("loyalty_redeemed_minor", loyaltyRedeemedMinor);
     record.put("gift_card_id", giftCardId == null ? null : giftCardId.toString());
     record.put("gift_card_redeemed_minor", giftCardRedeemedMinor);
+    // Phase B2 threads the real channel; explicit null until then (ADR 0036).
+    record.put("channel", null);
     return record;
   }
 

@@ -55,7 +55,7 @@ has landed yet — the status names the phases that will land them.
 | **`AssignmentChanged`** | **employee-service** | **verticals, finance** | **employee_id, org_unit_id, reporting_to, effective_from/to** | **LIVE (#19)** |
 | **`MetricPublished`** | **carwash-service, restaurant-service** (verticals) | **employee** | **metric_key, period, grain, subject_id, value, source_business_id** | **LIVE (#20; restaurant own-sales commission)** |
 | **`PeriodSealed`** | **verticals** | **employee, finance** | **company_id, business_id, period** | **LIVE (employee consumer #23)** |
-| **`SaleRecorded`** | **restaurant-service + carwash-service + barbershop-service** (verticals) | **finance** | **sale_id, company_id, business_id, amount_minor, currency, occurred_at; Phase 2: subtotal_minor, discount_minor, service_charge_minor, tax_minor, tax_rule_version, uses_illustrative_rules (all nullable); Phase 4 (ADR 0027): loyalty_member_id, loyalty_redeemed_points, loyalty_redeemed_minor, gift_card_id, gift_card_redeemed_minor (all nullable)** | **LIVE (M1.4 / #20 / Phase 2 breakdown / Phase 4 loyalty+gift-card schema)** |
+| **`SaleRecorded`** | **restaurant-service + carwash-service + barbershop-service** (verticals) | **finance** | **sale_id, company_id, business_id, amount_minor, currency, occurred_at; Phase 2: subtotal_minor, discount_minor, service_charge_minor, tax_minor, tax_rule_version, uses_illustrative_rules (all nullable); Phase 4 (ADR 0027): loyalty_member_id, loyalty_redeemed_points, loyalty_redeemed_minor, gift_card_id, gift_card_redeemed_minor (all nullable); Phase B (ADR 0036): channel (nullable)** | **LIVE (M1.4 / #20 / Phase 2 breakdown / Phase 4 loyalty+gift-card schema); Phase B channel schema-first — every producer sends explicit null until Phase B2** |
 | **`SaleVoided`** | **restaurant-service** | **finance** | **void_id, sale_id, payment_id, company_id, business_id, amount_minor, currency, occurred_at, tender_type** | **LIVE (ADR 0006, slice 4)** |
 | **`SaleRefunded`** | **restaurant-service** | **finance** | **refund_id, sale_id, payment_id, company_id, business_id, refund_amount_minor, currency, total_refunded_minor, occurred_at, tender_type** | **LIVE (ADR 0006, slice 4)** |
 | **`GiftCardSold`** | **restaurant-service + carwash-service + barbershop-service** (verticals) | **finance-service, loyalty-service** | **gift_card_sale_id, gift_card_id, company_id, business_id, amount_minor, currency, tender_type, occurred_at** | **LIVE (ADR 0027, Phase 4): vertical producers (gift-card sell endpoints) + finance liability-posting consumer + loyalty-service card-materialising consumer all built** |
@@ -308,6 +308,7 @@ whole rupiah for IDR); `currency` is the ISO-4217 code. `occurred_at` is epoch m
 | `loyalty_redeemed_minor` | `["null","long"]` (default `null`) | Phase 4: the currency value of redeemed loyalty points, in minor units. A **contra-revenue deduction**, exactly like `discount_minor` — it EXTENDS the reconciliation identity (below). `null` (treated as 0) when no points were redeemed |
 | `gift_card_id` | `["null","string"]` (default `null`) | Phase 4: the gift card (UUID as string) redeemed against this sale as a **tender**, or `null` when no gift card was used. Distinct from `loyalty_member_id` — a gift-card redemption is a liability settlement, not a discount |
 | `gift_card_redeemed_minor` | `["null","long"]` (default `null`) | Phase 4: the amount of stored value redeemed from the gift card, in minor units — a **tender-settlement** amount (like `tender_type`), NOT a deduction from revenue. Must be `<= amount_minor`. Finance splits the clearing debit: Dr `GIFT_CARD_LIABILITY` for this amount, Dr the tender-clearing account (resolved from `tender_type`) for the residual (`amount_minor - gift_card_redeemed_minor`). `null` (treated as 0) when no gift card was used |
+| `channel` | `["null","string"]` (default `null`) | Phase B (ADR 0036): the sales-channel code for an ONLINE-tender sale (e.g. `GOFOOD`, `GRABFOOD`) — a company-managed `sales_channel.code`, immutable once created. `null` for every non-ONLINE tender and for every producer in this wave (no producer threads a real channel yet — that lands in Phase B2); finance routes the ONLINE clearing debit to `PLATFORM_RECEIVABLE` and accumulates a per-channel receivable sub-ledger under this code, with a null channel on an ONLINE sale accumulating under `UNKNOWN` (with a warning) rather than dropping money |
 
 **Reconciliation identity (Phase 2).** When all four breakdown fields are non-null, finance asserts:
 `subtotal_minor - discount_minor + service_charge_minor + tax_minor == amount_minor`. A violated
@@ -348,7 +349,8 @@ amount_minor`. This SUPERSEDES the Phase 2 identity above (Phase 2 is the specia
     {"name": "loyalty_redeemed_points", "type": ["null", "long"], "default": null, "doc": "Phase 4 (ADR 0027): the number of loyalty points spent on this sale, in loyalty-service's ledger units. Finance IGNORES this field (it is not money); carried for traceability only. Null when no points were redeemed."},
     {"name": "loyalty_redeemed_minor", "type": ["null", "long"], "default": null, "doc": "Phase 4 (ADR 0027): the currency value of redeemed loyalty points, in the sale currency's minor units. A CONTRA-REVENUE deduction, exactly like discount_minor -- it EXTENDS the reconciliation identity to: subtotal - discount - loyalty_redeemed + service_charge + tax == amount. Null (treated as 0 by finance) when no points were redeemed."},
     {"name": "gift_card_id", "type": ["null", "string"], "default": null, "doc": "Phase 4 (ADR 0027): the gift card (UUID as string) redeemed against this sale as a TENDER, or null when no gift card was used. Distinct from loyalty_member_id -- a gift card redemption is a liability settlement, not a discount."},
-    {"name": "gift_card_redeemed_minor", "type": ["null", "long"], "default": null, "doc": "Phase 4 (ADR 0027): the amount of stored value redeemed from the gift card, in the sale currency's minor units. A TENDER-SETTLEMENT amount (like tender_type), NOT a deduction from revenue -- it must be <= amount_minor. Finance splits the clearing debit: Dr GIFT_CARD_LIABILITY for this amount, Dr the tender-clearing account (resolved from tender_type) for the residual (amount_minor - gift_card_redeemed_minor). Null (treated as 0) when no gift card was used."}
+    {"name": "gift_card_redeemed_minor", "type": ["null", "long"], "default": null, "doc": "Phase 4 (ADR 0027): the amount of stored value redeemed from the gift card, in the sale currency's minor units. A TENDER-SETTLEMENT amount (like tender_type), NOT a deduction from revenue -- it must be <= amount_minor. Finance splits the clearing debit: Dr GIFT_CARD_LIABILITY for this amount, Dr the tender-clearing account (resolved from tender_type) for the residual (amount_minor - gift_card_redeemed_minor). Null (treated as 0) when no gift card was used."},
+    {"name": "channel", "type": ["null", "string"], "default": null, "doc": "Phase B (ADR 0036): the sales-channel code for an ONLINE-tender sale (e.g. GOFOOD, GRABFOOD) -- a company-managed sales_channel.code, IMMUTABLE once created. Null for every non-ONLINE tender (and for producers older than this field). Finance routes the ONLINE clearing debit to PLATFORM_RECEIVABLE and accumulates a per-channel receivable sub-ledger under this code; an ONLINE sale with a null channel accumulates under UNKNOWN (with a warning) rather than dropping money. Additive backward-compatible field -- appended LAST with default null (rule 7)."}
   ]
 }
 ```
@@ -379,6 +381,15 @@ EARN attribution) shipped in the later Phase-4 waves: every vertical write path 
 these fields, finance posts against them (SALE v3 template), and loyalty-service applies
 earn/redeem off this event — the schema-first wave landed the contracts and evolution tests
 before any machinery, by design.
+
+**Phase B (ADR 0036, channel) — schema-first, same discipline.** The trailing `channel` field
+(the sales-channel code for an ONLINE-tender sale) is appended LAST, `["null","string"]` with
+`default: null`, the identical additive discipline the Phase 4 fields follow; finance routes the
+ONLINE clearing debit to `PLATFORM_RECEIVABLE` and a null channel on an ONLINE sale accumulates
+under `UNKNOWN` rather than dropping money. This wave lands ONLY the schema, catalog entry, and
+producer/consumer decode plumbing — every producer (restaurant, carwash, barbershop) puts an
+EXPLICIT `null` for `channel`; the `ONLINE` tender value itself, and the real per-channel code,
+ship in Phase B2 once `RecordSaleCommand` and its vertical equivalents carry a channel.
 
 ### `ExpenseRecorded`
 
@@ -1817,7 +1828,8 @@ template). An idempotent consumer uses the `void_id` as the dedup key via
     {"name": "amount_minor", "type": "long", "doc": "The voided amount in the currency's minor units. Never a float."},
     {"name": "currency", "type": "string", "doc": "ISO-4217 currency code, e.g. IDR or USD."},
     {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the void occurred, epoch millis (UTC)."},
-    {"name": "tender_type", "type": ["null", "string"], "default": null, "doc": "The original payment tender type (CASH | QRIS | CARD, or null for legacy). Finance uses this to reverse the correct clearing account."}
+    {"name": "tender_type", "type": ["null", "string"], "default": null, "doc": "The original payment tender type (CASH | QRIS | CARD, or null for legacy). Finance uses this to reverse the correct clearing account."},
+    {"name": "channel", "type": ["null", "string"], "default": null, "doc": "Phase B (ADR 0036): the original sale's sales-channel code when the tender was ONLINE (finance claws back the per-channel platform receivable sub-ledger). Null for non-ONLINE tenders and for producers older than this field. Additive backward-compatible field -- appended LAST with default null (rule 7)."}
   ]
 }
 ```
@@ -1871,7 +1883,8 @@ consumer uses the `refund_id` as the dedup key via `ProcessedEventStore`.
     {"name": "currency", "type": "string", "doc": "ISO-4217 currency code, e.g. IDR or USD."},
     {"name": "total_refunded_minor", "type": "long", "doc": "Cumulative total refunded (including this refund) in minor units. Never a float."},
     {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the refund occurred, epoch millis (UTC)."},
-    {"name": "tender_type", "type": ["null", "string"], "default": null, "doc": "The original payment tender type (CASH | QRIS | CARD, or null for legacy). Finance uses this to reverse the correct clearing account."}
+    {"name": "tender_type", "type": ["null", "string"], "default": null, "doc": "The original payment tender type (CASH | QRIS | CARD, or null for legacy). Finance uses this to reverse the correct clearing account."},
+    {"name": "channel", "type": ["null", "string"], "default": null, "doc": "Phase B (ADR 0036): the original sale's sales-channel code when the tender was ONLINE (finance claws back the per-channel platform receivable sub-ledger). Null for non-ONLINE tenders and for producers older than this field. Additive backward-compatible field -- appended LAST with default null (rule 7)."}
   ]
 }
 ```

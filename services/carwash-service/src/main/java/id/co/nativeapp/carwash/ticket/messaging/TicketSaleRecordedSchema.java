@@ -144,6 +144,8 @@ public final class TicketSaleRecordedSchema {
     record.put("loyalty_redeemed_minor", loyaltyRedeemedMinor);
     record.put("gift_card_id", giftCardId == null ? null : giftCardId.toString());
     record.put("gift_card_redeemed_minor", giftCardRedeemedMinor);
+    // Phase B2 threads the real channel; explicit null until then (ADR 0036).
+    record.put("channel", null);
     return record;
   }
 

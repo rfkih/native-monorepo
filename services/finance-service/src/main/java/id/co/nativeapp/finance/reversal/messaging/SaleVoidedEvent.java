@@ -19,8 +19,10 @@ import java.util.UUID;
  * @param paymentId the payment aggregate being voided
  * @param amount the voided amount (integer minor units + ISO-4217; never a float)
  * @param occurredAt when the void occurred (UTC)
- * @param tenderType the original tender ({@code "CASH"}, {@code "QRIS"}, {@code "CARD"}, or {@code
- *     null} for legacy — finance routes the GL clearing account by this value)
+ * @param tenderType the original tender ({@code "CASH"}, {@code "QRIS"}, {@code "CARD"}, {@code
+ *     "ONLINE"}, or {@code null} for legacy — finance routes the GL clearing account by this value)
+ * @param channel Phase B (ADR 0036): the original sale's sales-channel code when the tender was
+ *     ONLINE (the per-channel receivable clawback key); null otherwise / for older producers
  */
 public record SaleVoidedEvent(
     UUID voidId,
@@ -30,4 +32,5 @@ public record SaleVoidedEvent(
     UUID paymentId,
     Money amount,
     Instant occurredAt,
-    String tenderType) {}
+    String tenderType,
+    String channel) {}

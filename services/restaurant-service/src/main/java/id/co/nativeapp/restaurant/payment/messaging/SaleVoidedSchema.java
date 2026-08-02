@@ -77,6 +77,8 @@ public final class SaleVoidedSchema {
     record.put("currency", amount.currency().getCurrencyCode());
     record.put("occurred_at", occurredAt.toEpochMilli());
     record.put("tender_type", tenderType);
+    // Phase B2 threads the real channel for ONLINE tenders; explicit null until then (ADR 0036).
+    record.put("channel", null);
     return record;
   }
 

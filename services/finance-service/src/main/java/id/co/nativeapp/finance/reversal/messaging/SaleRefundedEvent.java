@@ -33,4 +33,5 @@ public record SaleRefundedEvent(
     Money refundAmount,
     long totalRefundedMinor,
     Instant occurredAt,
-    String tenderType) {}
+    String tenderType,
+    String channel) {}

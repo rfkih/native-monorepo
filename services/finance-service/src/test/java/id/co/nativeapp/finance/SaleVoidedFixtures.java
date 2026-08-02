@@ -47,6 +47,8 @@ final class SaleVoidedFixtures {
     record.put("currency", currency);
     record.put("occurred_at", occurredAt.toEpochMilli());
     record.put("tender_type", tenderType);
+    // Phase B (ADR 0036): explicit null channel (a GenericData.Record must put every field).
+    record.put("channel", null);
     return record;
   }
 

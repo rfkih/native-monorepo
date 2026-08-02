@@ -262,6 +262,122 @@ class SaleRecordedContractTest {
     assertThat(decoded.getSchema().getField("gift_card_id")).isNull();
   }
 
+  /**
+   * The PRE-Phase-B producer/consumer shape (18 fields, through {@code
+   * gift_card_redeemed_minor}) — the schema every service ran before ADR 0036 (Phase B) appended
+   * the trailing {@code channel} field. Mirrors {@link #PRE_PHASE4_SCHEMA_JSON}'s role for the
+   * Phase 4 fields.
+   */
+  private static final String PRE_CHANNEL_SCHEMA_JSON =
+      """
+      {
+        "type": "record",
+        "name": "SaleRecorded",
+        "namespace": "id.co.nativeapp.events.restaurant",
+        "fields": [
+          {"name": "sale_id", "type": "string"},
+          {"name": "company_id", "type": "string"},
+          {"name": "business_id", "type": "string"},
+          {"name": "amount_minor", "type": "long"},
+          {"name": "currency", "type": "string"},
+          {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+          {"name": "tender_type", "type": ["null", "string"], "default": null},
+          {"name": "subtotal_minor", "type": ["null", "long"], "default": null},
+          {"name": "discount_minor", "type": ["null", "long"], "default": null},
+          {"name": "service_charge_minor", "type": ["null", "long"], "default": null},
+          {"name": "tax_minor", "type": ["null", "long"], "default": null},
+          {"name": "tax_rule_version", "type": ["null", "string"], "default": null},
+          {"name": "uses_illustrative_rules", "type": ["null", "boolean"], "default": null},
+          {"name": "loyalty_member_id", "type": ["null", "string"], "default": null},
+          {"name": "loyalty_redeemed_points", "type": ["null", "long"], "default": null},
+          {"name": "loyalty_redeemed_minor", "type": ["null", "long"], "default": null},
+          {"name": "gift_card_id", "type": ["null", "string"], "default": null},
+          {"name": "gift_card_redeemed_minor", "type": ["null", "long"], "default": null}
+        ]
+      }
+      """;
+
+  @Test
+  void schemaCarriesTheChannelField() {
+    // ADR 0036 (Phase B): channel — ["null","string"] with default null, appended LAST.
+    Schema schema = SaleRecordedSchema.schema();
+    assertThat(schema.getField("channel")).isNotNull();
+    assertThat(schema.getField("channel").hasDefaultValue()).isTrue();
+  }
+
+  @Test
+  void consumerCopyIsBackwardCompatibleWithThePreChannelProducerSchema() {
+    // OLD-WRITER / NEW-READER: finance on the current (Phase B) schema must be able to read bytes
+    // written by an already-deployed pre-Phase-B vertical producer.
+    Schema producer = new Schema.Parser().parse(PRE_CHANNEL_SCHEMA_JSON);
+    Schema consumer = SaleRecordedSchema.schema();
+    assertThat(AvroSerde.isBackwardCompatible(producer, consumer)).isTrue();
+  }
+
+  @Test
+  void bytesWrittenWithPreChannelProducerSchemaDecodeUnderCurrentConsumerWithNullChannel() {
+    // Backward-compat proof, mirroring the Phase 4 gift-card-fields pattern above: a record
+    // written against the PRE-Phase-B schema (channel absent entirely) must decode with
+    // channel == null under the current consumer schema.
+    Schema producer = new Schema.Parser().parse(PRE_CHANNEL_SCHEMA_JSON);
+    Schema consumer = SaleRecordedSchema.schema();
+
+    GenericRecord produced = new GenericData.Record(producer);
+    produced.put("sale_id", "33333333-3333-3333-3333-333333333333");
+    produced.put("company_id", "11111111-1111-1111-1111-111111111111");
+    produced.put("business_id", "22222222-2222-2222-2222-222222222222");
+    produced.put("amount_minor", 2_000_000L);
+    produced.put("currency", "IDR");
+    produced.put("occurred_at", 1_750_000_000_000L);
+    produced.put("tender_type", "CASH");
+
+    byte[] wireBytes = AvroSerde.serialize(produced);
+    GenericRecord decoded = AvroSerde.deserialize(wireBytes, producer, consumer);
+
+    assertThat(decoded.get("amount_minor")).isEqualTo(2_000_000L);
+    // channel defaults to null when absent from the old producer bytes.
+    assertThat(decoded.get("channel")).isNull();
+  }
+
+  @Test
+  void newProducerBytesWithChannelDecodeUnderAnOldPreChannelReaderSchema() {
+    // NEW-WRITER / OLD-READER: an already-deployed pre-Phase-B finance consumer (not yet upgraded)
+    // must still be able to project bytes written by an upgraded (Phase B) vertical producer — the
+    // channel field is simply dropped by Avro schema resolution, not an error.
+    Schema newProducer = SaleRecordedSchema.schema();
+    Schema oldConsumer = new Schema.Parser().parse(PRE_CHANNEL_SCHEMA_JSON);
+
+    GenericRecord produced = new GenericData.Record(newProducer);
+    produced.put("sale_id", "33333333-3333-3333-3333-333333333333");
+    produced.put("company_id", "11111111-1111-1111-1111-111111111111");
+    produced.put("business_id", "22222222-2222-2222-2222-222222222222");
+    produced.put("amount_minor", 88_800_00L);
+    produced.put("currency", "IDR");
+    produced.put("occurred_at", 1_750_000_000_000L);
+    produced.put("tender_type", "QRIS");
+    produced.put("subtotal_minor", 88_800_00L);
+    produced.put("discount_minor", 0L);
+    produced.put("service_charge_minor", 0L);
+    produced.put("tax_minor", 0L);
+    produced.put("tax_rule_version", null);
+    produced.put("uses_illustrative_rules", false);
+    produced.put("loyalty_member_id", null);
+    produced.put("loyalty_redeemed_points", null);
+    produced.put("loyalty_redeemed_minor", null);
+    produced.put("gift_card_id", null);
+    produced.put("gift_card_redeemed_minor", null);
+    // A future ONLINE-tender producer (Phase B2) would set a real channel here; this wave always
+    // sends explicit null, but the schema round-trips a real value too (proves the wire is ready).
+    produced.put("channel", "GOFOOD");
+
+    byte[] wireBytes = AvroSerde.serialize(produced);
+    GenericRecord decoded = AvroSerde.deserialize(wireBytes, newProducer, oldConsumer);
+
+    assertThat(decoded.get("amount_minor")).isEqualTo(88_800_00L);
+    // The old reader schema simply has no such field.
+    assertThat(decoded.getSchema().getField("channel")).isNull();
+  }
+
   @Test
   void addingARequiredFieldWithoutDefaultBreaksBackwardCompatibility() {
     Schema producer = new Schema.Parser().parse(ORIGINAL_PRODUCER_SCHEMA_JSON);

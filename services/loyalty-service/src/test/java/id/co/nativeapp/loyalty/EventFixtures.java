@@ -65,6 +65,9 @@ final class EventFixtures {
     record.put("loyalty_redeemed_minor", loyaltyRedeemedMinor);
     record.put("gift_card_id", giftCardId == null ? null : giftCardId.toString());
     record.put("gift_card_redeemed_minor", giftCardRedeemedMinor);
+    // ADR 0036 (Phase B): no producer threads a real channel yet; explicit null (loyalty-service
+    // does not read this field, so it stays absent from this fixture's parameter list).
+    record.put("channel", null);
     return record;
   }
 

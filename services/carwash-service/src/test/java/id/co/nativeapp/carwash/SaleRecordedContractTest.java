@@ -197,6 +197,9 @@ class SaleRecordedContractTest {
     assertThat(decoded.get("tax_minor")).isEqualTo(7_700_00L);
     assertThat(decoded.get("tax_rule_version").toString()).isEqualTo("ILLUSTRATIVE-2026.1");
     assertThat(decoded.get("uses_illustrative_rules")).isEqualTo(true);
+    // ADR 0036 (Phase B): the ticket producer explicitly nulls channel too (this wave never
+    // threads a real channel).
+    assertThat(decoded.get("channel")).isNull();
 
     // Still mutually backward-compatible with the restaurant producer schema — same shared
     // contract.
@@ -256,6 +259,16 @@ class SaleRecordedContractTest {
   }
 
   @Test
+  void schemaCarriesTheChannelField() {
+    // ADR 0036 (Phase B): channel — ["null","string"] with default null, appended LAST.
+    Schema schema = SaleRecordedSchema.schema();
+    assertThat(schema.getField("channel")).isNotNull();
+    assertThat(schema.getField("channel").hasDefaultValue()).isTrue();
+    // Both carwash producers (legacy wash, full-breakdown ticket) share the identical schema.
+    assertThat(TicketSaleRecordedSchema.schema().getField("channel")).isNotNull();
+  }
+
+  @Test
   void newReaderIsBackwardCompatibleWithThePrePhase4Schema() {
     // OLD-WRITER / NEW-READER: a reader on the current (Phase 4) schema must be able to read bytes
     // written by carwash's own already-deployed pre-Phase-4 wash/ticket producers.
@@ -281,6 +294,9 @@ class SaleRecordedContractTest {
     assertThat(decoded.get("loyalty_redeemed_minor")).isNull();
     assertThat(decoded.get("gift_card_id")).isNull();
     assertThat(decoded.get("gift_card_redeemed_minor")).isNull();
+    // ADR 0036 (Phase B): the legacy wash producer explicitly nulls channel too (this wave never
+    // threads a real channel — SaleRecordedSchema.toRecord puts an explicit null).
+    assertThat(decoded.get("channel")).isNull();
   }
 
   private static Wash wash() {

@@ -157,7 +157,7 @@ class Phase4LoyaltyGiftCardIntegrationTest extends PostgresRlsTestBase {
             UUID.randomUUID(),
             Money.ofMinor(45_000L, "IDR"),
             OCCURRED,
-            "CASH"));
+            "CASH", null));
 
     // The per-leg contra entry mechanism replays EVERY stored line of the original SALE entry
     // (ReversalPostingWriter#buildAndSavePerLegReversalEntryFromLines) — it must therefore
@@ -245,7 +245,8 @@ class Phase4LoyaltyGiftCardIntegrationTest extends PostgresRlsTestBase {
         null,
         loyaltyRedeemedMinor,
         giftCardId,
-        giftCardRedeemedMinor);
+        giftCardRedeemedMinor,
+        null); // channel (Phase B, ADR 0036) — not exercised by this test
   }
 
   // -----------------------------------------------------------------------

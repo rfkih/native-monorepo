@@ -314,6 +314,95 @@ class SaleRecordedContractTest {
     assertThat(decoded.getSchema().getField("gift_card_id")).isNull();
   }
 
+  /**
+   * The PRE-Phase-B producer/consumer shape (18 fields, through {@code
+   * gift_card_redeemed_minor}) — the schema every service ran before ADR 0036 (Phase B) appended
+   * the trailing {@code channel} field. Mirrors {@link #PRE_PHASE4_SCHEMA_JSON}'s role for the
+   * Phase 4 fields.
+   */
+  private static final String PRE_CHANNEL_SCHEMA_JSON =
+      """
+      {
+        "type": "record",
+        "name": "SaleRecorded",
+        "namespace": "id.co.nativeapp.events.restaurant",
+        "fields": [
+          {"name": "sale_id", "type": "string"},
+          {"name": "company_id", "type": "string"},
+          {"name": "business_id", "type": "string"},
+          {"name": "amount_minor", "type": "long"},
+          {"name": "currency", "type": "string"},
+          {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+          {"name": "tender_type", "type": ["null", "string"], "default": null},
+          {"name": "subtotal_minor", "type": ["null", "long"], "default": null},
+          {"name": "discount_minor", "type": ["null", "long"], "default": null},
+          {"name": "service_charge_minor", "type": ["null", "long"], "default": null},
+          {"name": "tax_minor", "type": ["null", "long"], "default": null},
+          {"name": "tax_rule_version", "type": ["null", "string"], "default": null},
+          {"name": "uses_illustrative_rules", "type": ["null", "boolean"], "default": null},
+          {"name": "loyalty_member_id", "type": ["null", "string"], "default": null},
+          {"name": "loyalty_redeemed_points", "type": ["null", "long"], "default": null},
+          {"name": "loyalty_redeemed_minor", "type": ["null", "long"], "default": null},
+          {"name": "gift_card_id", "type": ["null", "string"], "default": null},
+          {"name": "gift_card_redeemed_minor", "type": ["null", "long"], "default": null}
+        ]
+      }
+      """;
+
+  @Test
+  void schemaCarriesTheChannelField() {
+    // ADR 0036 (Phase B): channel — ["null","string"] with default null, appended LAST.
+    Schema schema = SaleRecordedSchema.schema();
+    assertThat(schema.getField("channel")).isNotNull();
+    assertThat(schema.getField("channel").schema().getType()).isEqualTo(Schema.Type.UNION);
+    assertThat(schema.getField("channel").hasDefaultValue()).isTrue();
+  }
+
+  @Test
+  void newReaderIsBackwardCompatibleWithThePreChannelSchema() {
+    // OLD-WRITER / NEW-READER: a reader on the current (Phase B) schema must be able to read bytes
+    // written by an already-deployed pre-Phase-B producer (the rolling-deploy window before every
+    // vertical picks up ADR 0036).
+    Schema oldWriter = new Schema.Parser().parse(PRE_CHANNEL_SCHEMA_JSON);
+    Schema newReader = SaleRecordedSchema.schema();
+    assertThat(AvroSerde.isBackwardCompatible(oldWriter, newReader)).isTrue();
+  }
+
+  @Test
+  void channelAbsentFromAnOldSchemaPayloadDecodesToNull() {
+    // Backward-compat proof (mirrors the gift_card_id pattern above): bytes written against the
+    // PRE-Phase-B schema (no channel field at all) must decode with channel == null under the
+    // current consumer schema.
+    Schema oldWriter = new Schema.Parser().parse(PRE_CHANNEL_SCHEMA_JSON);
+    Schema newReader = SaleRecordedSchema.schema();
+
+    GenericRecord produced = new GenericData.Record(oldWriter);
+    produced.put("sale_id", "33333333-3333-3333-3333-333333333333");
+    produced.put("company_id", "11111111-1111-1111-1111-111111111111");
+    produced.put("business_id", "22222222-2222-2222-2222-222222222222");
+    produced.put("amount_minor", 77_700_00L);
+    produced.put("currency", "IDR");
+    produced.put("occurred_at", 1_750_000_000_000L);
+    produced.put("tender_type", "CASH");
+    produced.put("subtotal_minor", 70_000_00L);
+    produced.put("discount_minor", 0L);
+    produced.put("service_charge_minor", 0L);
+    produced.put("tax_minor", 7_700_00L);
+    produced.put("tax_rule_version", "ILLUSTRATIVE-2026.1");
+    produced.put("uses_illustrative_rules", true);
+    produced.put("loyalty_member_id", null);
+    produced.put("loyalty_redeemed_points", null);
+    produced.put("loyalty_redeemed_minor", null);
+    produced.put("gift_card_id", null);
+    produced.put("gift_card_redeemed_minor", null);
+
+    byte[] wireBytes = AvroSerde.serialize(produced);
+    GenericRecord decoded = AvroSerde.deserialize(wireBytes, oldWriter, newReader);
+
+    assertThat(decoded.get("amount_minor")).isEqualTo(77_700_00L);
+    assertThat(decoded.get("channel")).isNull();
+  }
+
   @Test
   void newSchemaIsBackwardCompatibleWithOldSchema() {
     // Proves that the schema WITH tender_type is backward-compatible with the original 6-field

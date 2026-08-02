@@ -52,6 +52,10 @@ class SaleVoidedContractTest {
     assertThat(schema.getField("tender_type")).isNotNull();
     assertThat(schema.getField("tender_type").schema().getType()).isEqualTo(Schema.Type.UNION);
     assertThat(schema.getField("tender_type").hasDefaultValue()).isTrue();
+    // Phase B (ADR 0036): channel is additive — nullable union with a default (rule 7).
+    assertThat(schema.getField("channel")).isNotNull();
+    assertThat(schema.getField("channel").schema().getType()).isEqualTo(Schema.Type.UNION);
+    assertThat(schema.getField("channel").hasDefaultValue()).isTrue();
   }
 
   @Test
@@ -67,6 +71,7 @@ class SaleVoidedContractTest {
     record.put("currency", "IDR");
     record.put("occurred_at", 1_750_000_000_000L);
     record.put("tender_type", "QRIS");
+    record.put("channel", null);
 
     byte[] bytes = AvroSerde.serialize(record);
     GenericRecord decoded = AvroSerde.deserialize(bytes, schema);
@@ -89,6 +94,7 @@ class SaleVoidedContractTest {
     record.put("currency", "IDR");
     record.put("occurred_at", 1_750_000_000_000L);
     record.put("tender_type", null);
+    record.put("channel", null);
 
     byte[] bytes = AvroSerde.serialize(record);
     GenericRecord decoded = AvroSerde.deserialize(bytes, schema);

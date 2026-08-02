@@ -50,7 +50,8 @@ class SaleRecordedConsumerContractTest {
                   {"name": "loyalty_redeemed_points", "type": ["null", "long"], "default": null},
                   {"name": "loyalty_redeemed_minor", "type": ["null", "long"], "default": null},
                   {"name": "gift_card_id", "type": ["null", "string"], "default": null},
-                  {"name": "gift_card_redeemed_minor", "type": ["null", "long"], "default": null}
+                  {"name": "gift_card_redeemed_minor", "type": ["null", "long"], "default": null},
+                  {"name": "channel", "type": ["null", "string"], "default": null}
                 ]
               }
               """);
@@ -96,6 +97,8 @@ class SaleRecordedConsumerContractTest {
     record.put("loyalty_redeemed_minor", 1_000L);
     record.put("gift_card_id", giftCardId.toString());
     record.put("gift_card_redeemed_minor", 2_000L);
+    // ADR 0036 (Phase B): no producer threads a real channel yet; explicit null.
+    record.put("channel", null);
 
     byte[] bytes = AvroSerde.serialize(record);
     SaleRecordedFact fact = SaleRecordedConsumerSchema.decode(eventId, bytes);

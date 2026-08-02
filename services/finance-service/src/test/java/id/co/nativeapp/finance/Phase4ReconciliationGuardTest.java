@@ -148,7 +148,8 @@ class Phase4ReconciliationGuardTest {
             null,
             null,
             UUID.randomUUID().toString(),
-            20_000L); // exceeds amount_minor(10_000)
+            20_000L, // exceeds amount_minor(10_000)
+            null); // channel (Phase B, ADR 0036) — not exercised by this test
 
     assertThatThrownBy(legacyShapedWithBadGiftCard::assertReconciliationIdentity)
         .isInstanceOf(IllegalStateException.class)
@@ -224,6 +225,7 @@ class Phase4ReconciliationGuardTest {
         loyaltyRedeemedPoints,
         loyaltyRedeemedMinor,
         giftCardId,
-        giftCardRedeemedMinor);
+        giftCardRedeemedMinor,
+        null); // channel (Phase B, ADR 0036) — not exercised by this test
   }
 }

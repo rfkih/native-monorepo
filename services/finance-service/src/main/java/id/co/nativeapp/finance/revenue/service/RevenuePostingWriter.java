@@ -9,6 +9,7 @@ import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
 import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
 import id.co.nativeapp.finance.gl.service.JournalPostingService;
 import id.co.nativeapp.finance.mapping.service.GlAccountResolver;
+import id.co.nativeapp.finance.platform.service.PlatformReceivableAccumulator;
 import id.co.nativeapp.finance.pnl.service.PnlReadModelWriter;
 import id.co.nativeapp.finance.revenue.domain.LedgerPosting;
 import id.co.nativeapp.finance.revenue.messaging.SaleRecordedEvent;
@@ -103,6 +104,7 @@ public class RevenuePostingWriter {
   private final JournalEntryRepository journalEntryRepository;
   private final JournalLineRepository journalLineRepository;
   private final ErrorInboxWriter errorInbox;
+  private final PlatformReceivableAccumulator platformReceivable;
 
   private static final org.slf4j.Logger log =
       org.slf4j.LoggerFactory.getLogger(RevenuePostingWriter.class);
@@ -117,7 +119,8 @@ public class RevenuePostingWriter {
       JournalPostingService journalPostingService,
       JournalEntryRepository journalEntryRepository,
       JournalLineRepository journalLineRepository,
-      ErrorInboxWriter errorInbox) {
+      ErrorInboxWriter errorInbox,
+      PlatformReceivableAccumulator platformReceivable) {
     this.ledgerRepository = ledgerRepository;
     this.processedEvents = processedEvents;
     this.jdbcTemplate = jdbcTemplate;
@@ -127,6 +130,7 @@ public class RevenuePostingWriter {
     this.journalEntryRepository = journalEntryRepository;
     this.journalLineRepository = journalLineRepository;
     this.errorInbox = errorInbox;
+    this.platformReceivable = platformReceivable;
   }
 
   /**
@@ -295,14 +299,27 @@ public class RevenuePostingWriter {
               line.setCompanyId(companyId);
               journalLineRepository.save(line);
             });
+
+    // ADR 0036 Phase B: an ONLINE sale accrues the per-channel receivable sub-ledger by the GROSS
+    // amount (ONLINE carries no gift-card legs — the producer rejects the combination), atomically
+    // with the GL posting above. Null channel → UNKNOWN bucket + warn, never dropped.
+    if ("ONLINE".equals(event.tenderType())) {
+      platformReceivable.accumulate(
+          companyId, event.channel(), amount.currency().getCurrencyCode(), amount.amountMinor(),
+          actor);
+    }
   }
 
   /**
    * Resolves the GL clearing {@link AccountRole} from a {@code tender_type} wire value (ADR 0006
-   * slice 2). Returns {@link AccountRole#CASH_CLEARING} for {@code null} (legacy / no-tender sales,
-   * carwash) and for {@code "CASH"}; {@link AccountRole#QRIS_CLEARING} for {@code "QRIS"}; {@link
-   * AccountRole#CARD_CLEARING} for {@code "CARD"}. Any unrecognised value falls back to {@link
-   * AccountRole#CASH_CLEARING} (safe default — money is never dropped).
+   * slice 2; ADR 0036 Phase B adds ONLINE). Returns {@link AccountRole#CASH_CLEARING} for {@code
+   * null} (legacy / no-tender sales, carwash) and for {@code "CASH"}; {@link
+   * AccountRole#QRIS_CLEARING} for {@code "QRIS"}; {@link AccountRole#CARD_CLEARING} for {@code
+   * "CARD"}; {@link AccountRole#PLATFORM_RECEIVABLE} for {@code "ONLINE"} (the platform owes the
+   * merchant — this branch MUST be deployed before any producer emits ONLINE, else platform money
+   * mis-books as drawer cash). Any unrecognised value falls back to {@link
+   * AccountRole#CASH_CLEARING} with a WARN (safe default — money is never dropped, but an unknown
+   * tender is a producer/consumer version skew worth surfacing).
    */
   static AccountRole resolveClearingRole(String tenderType) {
     if (tenderType == null) {
@@ -312,7 +329,13 @@ public class RevenuePostingWriter {
       case "CASH" -> AccountRole.CASH_CLEARING;
       case "QRIS" -> AccountRole.QRIS_CLEARING;
       case "CARD" -> AccountRole.CARD_CLEARING;
-      default -> AccountRole.CASH_CLEARING;
+      case "ONLINE" -> AccountRole.PLATFORM_RECEIVABLE;
+      default -> {
+        log.warn(
+            "Unknown tender_type '{}' — defaulting clearing to CASH_CLEARING (version skew?)",
+            tenderType);
+        yield AccountRole.CASH_CLEARING;
+      }
     };
   }
 }

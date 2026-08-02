@@ -39,6 +39,15 @@ import java.util.UUID;
  * pre-Phase-4 event (all five fields null) evaluates byte-identically to before Phase 4 — every
  * {@code effective*} accessor below treats null as its Phase 1/2 default.
  *
+ * <p><strong>{@code channel} field</strong> (Phase B, ADR 0036) is nullable, appended LAST after
+ * the Phase 4 fields (positional decode safety). It carries the sales-channel code for an
+ * ONLINE-tender sale; finance routes the ONLINE clearing debit to PLATFORM_RECEIVABLE and
+ * accumulates a per-channel receivable sub-ledger under this code (a null channel on an ONLINE
+ * sale accumulates under UNKNOWN rather than dropping money) — that routing lands with the tender
+ * value itself in a LATER phase. In THIS wave every producer emits an explicit null, so finance
+ * never actually observes a non-null channel yet; this record component and the decode path are
+ * schema-first, exactly as the Phase 4 fields were.
+ *
  * @param eventId the source event UUID (idempotency key — the outbox row UUID)
  * @param saleId the sale aggregate UUID from restaurant-service (the {@code sale_id} Avro field);
  *     used by the reversal writer to look up the original GL entry for per-leg unwind (Phase 2)
@@ -65,6 +74,10 @@ import java.util.UUID;
  * @param giftCardRedeemedMinor the stored-value amount redeemed from the gift card in minor units,
  *     or null (treated as 0) — a TENDER-SETTLEMENT amount, never a revenue deduction; must be
  *     {@code <= amount_minor} when present
+ * @param channel the sales-channel code for an ONLINE-tender sale (e.g. {@code GOFOOD}, {@code
+ *     GRABFOOD}), or null (Phase B, ADR 0036) — null for every non-ONLINE tender and for every
+ *     producer in this wave (no producer threads a real channel yet; that lands in Phase B2).
+ *     Appended LAST (positional decode safety, the same discipline the Phase 4 fields follow).
  */
 public record SaleRecordedEvent(
     UUID eventId,
@@ -84,12 +97,14 @@ public record SaleRecordedEvent(
     Long loyaltyRedeemedPoints,
     Long loyaltyRedeemedMinor,
     String giftCardId,
-    Long giftCardRedeemedMinor) {
+    Long giftCardRedeemedMinor,
+    String channel) {
 
   /**
    * Backward-compatible constructor for callers that pre-date the Phase 2 breakdown fields (e.g.
    * tests written before Phase 2, or legacy producers). Sets saleId to null, all breakdown fields
-   * to null, tender type to null, and all Phase 4 loyalty/gift-card fields to null.
+   * to null, tender type to null, all Phase 4 loyalty/gift-card fields to null, and {@code channel}
+   * (Phase B, ADR 0036) to null.
    */
   public SaleRecordedEvent(
       UUID eventId, String companyId, UUID businessId, Money amount, Instant occurredAt) {
@@ -111,12 +126,14 @@ public record SaleRecordedEvent(
         null,
         null,
         null,
+        null,
         null);
   }
 
   /**
    * Backward-compatible constructor for callers that have a tender type but no breakdown (Phase 1).
-   * Sets saleId, all Phase 2 breakdown fields, and all Phase 4 loyalty/gift-card fields to null.
+   * Sets saleId, all Phase 2 breakdown fields, all Phase 4 loyalty/gift-card fields, and {@code
+   * channel} (Phase B, ADR 0036) to null.
    */
   public SaleRecordedEvent(
       UUID eventId,
@@ -143,16 +160,17 @@ public record SaleRecordedEvent(
         null,
         null,
         null,
+        null,
         null);
   }
 
   /**
    * Backward-compatible constructor for callers built against the Phase 2 shape (before Phase 4,
-   * ADR 0027, added the five trailing loyalty/gift-card fields). Sets all five Phase 4 fields to
-   * null — a Phase 2 caller (or a pre-Phase-4 producer's decoded record) is therefore
-   * byte-identical in behaviour to before Phase 4: {@link #effectiveLoyaltyRedeemed()} and {@link
-   * #effectiveGiftCardRedeemed()} both resolve to zero, and {@link #assertReconciliationIdentity()}
-   * reduces to exactly the Phase 2 identity.
+   * ADR 0027, added the five trailing loyalty/gift-card fields). Sets all five Phase 4 fields AND
+   * {@code channel} (Phase B, ADR 0036) to null — a Phase 2 caller (or a pre-Phase-4 producer's
+   * decoded record) is therefore byte-identical in behaviour to before Phase 4: {@link
+   * #effectiveLoyaltyRedeemed()} and {@link #effectiveGiftCardRedeemed()} both resolve to zero, and
+   * {@link #assertReconciliationIdentity()} reduces to exactly the Phase 2 identity.
    */
   @SuppressWarnings("checkstyle:ParameterNumber")
   public SaleRecordedEvent(
@@ -183,6 +201,7 @@ public record SaleRecordedEvent(
         taxMinor,
         taxRuleVersion,
         usesIllustrativeRules,
+        null,
         null,
         null,
         null,

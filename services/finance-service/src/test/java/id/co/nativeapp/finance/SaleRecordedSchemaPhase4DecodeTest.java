@@ -48,6 +48,10 @@ class SaleRecordedSchemaPhase4DecodeTest {
     record.put("loyalty_redeemed_minor", 5_000L);
     record.put("gift_card_id", giftCardId.toString());
     record.put("gift_card_redeemed_minor", 20_000L);
+    // ADR 0036 (Phase B): no producer threads a real channel yet, but the decode plumbing must
+    // wire a present value to the right accessor just like the five Phase 4 fields above — proven
+    // here with a real (non-null) value even though production only ever sends explicit null.
+    record.put("channel", "GOFOOD");
 
     byte[] bytes = AvroSerde.serialize(record);
     UUID eventId = UUID.randomUUID();
@@ -60,6 +64,7 @@ class SaleRecordedSchemaPhase4DecodeTest {
     assertThat(event.loyaltyRedeemedMinor()).isEqualTo(5_000L);
     assertThat(event.giftCardId()).isEqualTo(giftCardId.toString());
     assertThat(event.giftCardRedeemedMinor()).isEqualTo(20_000L);
+    assertThat(event.channel()).isEqualTo("GOFOOD");
 
     // The effective* accessors resolve to the SAME values (sanity — not swapped/mismapped).
     assertThat(event.effectiveLoyaltyRedeemed()).isEqualTo(Money.ofMinor(5_000L, "IDR"));
@@ -99,6 +104,7 @@ class SaleRecordedSchemaPhase4DecodeTest {
     record.put("loyalty_redeemed_minor", null);
     record.put("gift_card_id", null);
     record.put("gift_card_redeemed_minor", null);
+    record.put("channel", null); // ADR 0036 (Phase B): every producer in this wave nulls it.
 
     byte[] bytes = AvroSerde.serialize(record);
     SaleRecordedEvent event = SaleRecordedSchema.decode(UUID.randomUUID(), bytes);
@@ -108,6 +114,7 @@ class SaleRecordedSchemaPhase4DecodeTest {
     assertThat(event.loyaltyRedeemedMinor()).isNull();
     assertThat(event.giftCardId()).isNull();
     assertThat(event.giftCardRedeemedMinor()).isNull();
+    assertThat(event.channel()).isNull();
     assertThat(event.effectiveLoyaltyRedeemed().isZero()).isTrue();
     assertThat(event.effectiveGiftCardRedeemed().isZero()).isTrue();
     event.assertReconciliationIdentity(); // legacy shape: never throws

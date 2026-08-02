@@ -141,7 +141,8 @@ class Phase4SaleGlEntryAssemblyTest {
         null,
         loyaltyRedeemedMinor,
         null,
-        giftCardRedeemedMinor);
+        giftCardRedeemedMinor,
+        null); // channel (Phase B, ADR 0036) — not exercised by this test
   }
 
   // -----------------------------------------------------------------------

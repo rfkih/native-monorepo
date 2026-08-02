@@ -56,6 +56,10 @@ public final class SaleVoidedSchema {
         Money.ofMinor((long) record.get("amount_minor"), record.get("currency").toString());
     Object tenderTypeRaw = record.get("tender_type");
     String tenderType = (tenderTypeRaw != null) ? tenderTypeRaw.toString() : null;
+    // Phase B (ADR 0036): additive nullable channel — the reader schema's default fills null for
+    // payloads written before the field existed (rule 7).
+    Object channelRaw = record.get("channel");
+    String channel = (channelRaw != null) ? channelRaw.toString() : null;
     return new SaleVoidedEvent(
         UUID.fromString(record.get("void_id").toString()),
         record.get("company_id").toString(),
@@ -64,7 +68,8 @@ public final class SaleVoidedSchema {
         UUID.fromString(record.get("payment_id").toString()),
         amount,
         Instant.ofEpochMilli((long) record.get("occurred_at")),
-        tenderType);
+        tenderType,
+        channel);
   }
 
   private static Schema parse() {

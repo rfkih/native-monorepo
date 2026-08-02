@@ -12,6 +12,7 @@
     {"name": "amount_minor", "type": "long", "doc": "The voided amount in the currency's minor units. Never a float."},
     {"name": "currency", "type": "string", "doc": "ISO-4217 currency code, e.g. IDR or USD."},
     {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the void occurred, epoch millis (UTC)."},
-    {"name": "tender_type", "type": ["null", "string"], "default": null, "doc": "The original payment tender type (CASH | QRIS | CARD, or null for legacy). Finance uses this to reverse the correct clearing account."}
+    {"name": "tender_type", "type": ["null", "string"], "default": null, "doc": "The original payment tender type (CASH | QRIS | CARD, or null for legacy). Finance uses this to reverse the correct clearing account."},
+    {"name": "channel", "type": ["null", "string"], "default": null, "doc": "Phase B (ADR 0036): the original sale's sales-channel code when the tender was ONLINE (finance claws back the per-channel platform receivable sub-ledger). Null for non-ONLINE tenders and for producers older than this field. Additive backward-compatible field -- appended LAST with default null (rule 7)."}
   ]
 }

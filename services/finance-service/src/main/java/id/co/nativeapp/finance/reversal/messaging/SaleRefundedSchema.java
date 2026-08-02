@@ -54,6 +54,10 @@ public final class SaleRefundedSchema {
     long totalRefundedMinor = (long) record.get("total_refunded_minor");
     Object tenderTypeRaw = record.get("tender_type");
     String tenderType = (tenderTypeRaw != null) ? tenderTypeRaw.toString() : null;
+    // Phase B (ADR 0036): additive nullable channel — the reader schema's default fills null for
+    // payloads written before the field existed (rule 7).
+    Object channelRaw = record.get("channel");
+    String channel = (channelRaw != null) ? channelRaw.toString() : null;
     return new SaleRefundedEvent(
         UUID.fromString(record.get("refund_id").toString()),
         record.get("company_id").toString(),
@@ -63,7 +67,8 @@ public final class SaleRefundedSchema {
         refundAmount,
         totalRefundedMinor,
         Instant.ofEpochMilli((long) record.get("occurred_at")),
-        tenderType);
+        tenderType,
+        channel);
   }
 
   private static Schema parse() {

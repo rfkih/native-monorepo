@@ -242,5 +242,22 @@ public enum AccountRole {
    * CASH_CLEARING / Cr this when the counted drawer EXCEEDS expected. Illustrative seed 4300 (V43);
    * SME-gated.
    */
-  CASH_OVER_INCOME
+  CASH_OVER_INCOME,
+
+  /**
+   * Phase B (ADR 0036) — the asset control account for money an ONLINE platform (GoFood/GrabFood
+   * style) owes the merchant: the ONLINE-tender sale's clearing debit lands here GROSS (PSAK 72 —
+   * the merchant is principal, the platform an agent), and the platform settlement credits it. One
+   * shared GL account across channels; per-channel granularity lives in the {@code
+   * platform_receivable} accumulator sub-ledger. Illustrative seed 1250 (V44); SME-gated.
+   */
+  PLATFORM_RECEIVABLE,
+
+  /**
+   * Phase B (ADR 0036) — the selling-expense side of a platform settlement's commission: Dr this
+   * (fee = gross − net) + Dr CASH_CLEARING (net) / Cr PLATFORM_RECEIVABLE (gross). v1 books the
+   * WHOLE fee to expense — not valid for a PKP claiming input VAT on the commission (the VAT_INPUT
+   * split is an additive follow-up). Illustrative seed 5710 (V44); SME-gated.
+   */
+  PLATFORM_FEE_EXPENSE
 }

@@ -66,6 +66,11 @@ public final class SaleRecordedSchema {
    * pre-Phase-4 event decodes into a {@link SaleRecordedEvent} with all five fields {@code null},
    * byte-identical to before Phase 4.
    *
+   * <p><strong>Phase B (ADR 0036) {@code channel} field.</strong> The trailing optional {@code
+   * channel} field (the sales-channel code for an ONLINE-tender sale) is decoded the same way —
+   * {@code null} for every producer in this wave (no producer threads a real channel yet; that
+   * lands in Phase B2) and for any pre-Phase-B producer (old-writer/new-reader).
+   *
    * @param eventId the event's UUID (the outbox row / Debezium message id) — the idempotency key
    * @param payload the raw Avro bytes off the topic
    */
@@ -96,6 +101,10 @@ public final class SaleRecordedSchema {
     Object giftCardIdRaw = record.get("gift_card_id");
     String giftCardId = (giftCardIdRaw != null) ? giftCardIdRaw.toString() : null;
     Long giftCardRedeemedMinor = (Long) record.get("gift_card_redeemed_minor");
+    // Phase B (ADR 0036): ["null","string"] with default null; absent from pre-Phase-B producer
+    // bytes decodes as null (old-writer/new-reader), and no producer in this wave sets it.
+    Object channelRaw = record.get("channel");
+    String channel = (channelRaw != null) ? channelRaw.toString() : null;
     return new SaleRecordedEvent(
         eventId,
         saleId,
@@ -114,7 +123,8 @@ public final class SaleRecordedSchema {
         loyaltyRedeemedPoints,
         loyaltyRedeemedMinor,
         giftCardId,
-        giftCardRedeemedMinor);
+        giftCardRedeemedMinor,
+        channel);
   }
 
   private static Schema parse() {

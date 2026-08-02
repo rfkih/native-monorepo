@@ -192,6 +192,9 @@ class SaleRecordedContractTest {
     assertThat(decoded.get("tax_minor")).isEqualTo(7_700_00L);
     assertThat(decoded.get("tax_rule_version").toString()).isEqualTo("ILLUSTRATIVE-2026.1");
     assertThat(decoded.get("uses_illustrative_rules")).isEqualTo(true);
+    // ADR 0036 (Phase B): the ticket producer explicitly nulls channel too (this wave never
+    // threads a real channel — TicketSaleRecordedSchema.toRecord puts an explicit null).
+    assertThat(decoded.get("channel")).isNull();
 
     // Still mutually backward-compatible with the restaurant producer schema — same shared
     // contract.
@@ -238,6 +241,14 @@ class SaleRecordedContractTest {
     assertThat(schema.getField("loyalty_redeemed_minor").hasDefaultValue()).isTrue();
     assertThat(schema.getField("gift_card_id").hasDefaultValue()).isTrue();
     assertThat(schema.getField("gift_card_redeemed_minor").hasDefaultValue()).isTrue();
+  }
+
+  @Test
+  void schemaCarriesTheChannelField() {
+    // ADR 0036 (Phase B): channel — ["null","string"] with default null, appended LAST.
+    Schema schema = TicketSaleRecordedSchema.schema();
+    assertThat(schema.getField("channel")).isNotNull();
+    assertThat(schema.getField("channel").hasDefaultValue()).isTrue();
   }
 
   @Test
@@ -293,5 +304,55 @@ class SaleRecordedContractTest {
     assertThat(decoded.get("gift_card_id").toString())
         .isEqualTo("55555555-5555-5555-5555-555555555555");
     assertThat(decoded.get("gift_card_redeemed_minor")).isEqualTo(10_000_00L);
+    // ADR 0036 (Phase B): the ticket producer explicitly nulls channel in this wave.
+    assertThat(decoded.get("channel")).isNull();
+  }
+
+  @Test
+  void ticketProducerChannelDefaultsToNullInThisWaveButTheWireCarriesARealValue() {
+    // No producer threads a real channel yet (that lands in Phase B2) — the ticket producer
+    // always puts an explicit null. This proves both halves: the producer's own null, AND that
+    // the shared schema round-trips a real channel value (the wire is ready for it now), mirroring
+    // ticketProducerPhase4FieldsRoundTripWhenPopulated's proof for the Phase 4 fields.
+    Schema schema = TicketSaleRecordedSchema.schema();
+    PriceBreakdown breakdown =
+        new PriceBreakdown(
+            Money.ofMinor(70_000_00L, "IDR"),
+            Money.ofMinor(0L, "IDR"),
+            Money.ofMinor(70_000_00L, "IDR"),
+            Money.ofMinor(0L, "IDR"),
+            Money.ofMinor(7_700_00L, "IDR"),
+            Money.ofMinor(77_700_00L, "IDR"),
+            "ILLUSTRATIVE-2026.1",
+            true);
+    UUID saleId = UUID.randomUUID();
+    UUID businessId = UUID.fromString("22222222-2222-2222-2222-222222222222");
+
+    GenericRecord producedByRealProducer =
+        TicketSaleRecordedSchema.toRecord(
+            saleId,
+            "11111111-1111-1111-1111-111111111111",
+            businessId,
+            breakdown.grandTotal(),
+            Instant.parse("2026-06-14T08:30:00Z"),
+            "CASH",
+            breakdown);
+    byte[] realProducerBytes = AvroSerde.serialize(producedByRealProducer);
+    assertThat(AvroSerde.deserialize(realProducerBytes, schema).get("channel")).isNull();
+
+    // Independently, the WIRE format can carry a real channel value once Phase B2 ships.
+    GenericRecord withChannel =
+        TicketSaleRecordedSchema.toRecord(
+            saleId,
+            "11111111-1111-1111-1111-111111111111",
+            businessId,
+            breakdown.grandTotal(),
+            Instant.parse("2026-06-14T08:30:00Z"),
+            "CASH",
+            breakdown);
+    withChannel.put("channel", "GOFOOD");
+    byte[] bytes = AvroSerde.serialize(withChannel);
+    assertThat(AvroSerde.deserialize(bytes, schema).get("channel").toString())
+        .isEqualTo("GOFOOD");
   }
 }

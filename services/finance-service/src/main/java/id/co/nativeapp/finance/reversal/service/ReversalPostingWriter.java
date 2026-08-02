@@ -12,6 +12,7 @@ import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
 import id.co.nativeapp.finance.gl.service.JournalPostingService;
 import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
 import id.co.nativeapp.finance.mapping.service.GlAccountResolver;
+import id.co.nativeapp.finance.platform.service.PlatformReceivableAccumulator;
 import id.co.nativeapp.finance.pnl.service.PnlReadModelWriter;
 import id.co.nativeapp.finance.revenue.domain.LedgerPosting;
 import id.co.nativeapp.finance.revenue.domain.PostingType;
@@ -114,6 +115,7 @@ public class ReversalPostingWriter {
   private final JournalEntryRepository journalEntryRepository;
   private final JournalLineRepository journalLineRepository;
   private final RoleAccountResolver roleAccountResolver;
+  private final PlatformReceivableAccumulator platformReceivable;
 
   @SuppressWarnings("checkstyle:ParameterNumber")
   public ReversalPostingWriter(
@@ -125,7 +127,8 @@ public class ReversalPostingWriter {
       JournalPostingService journalPostingService,
       JournalEntryRepository journalEntryRepository,
       JournalLineRepository journalLineRepository,
-      RoleAccountResolver roleAccountResolver) {
+      RoleAccountResolver roleAccountResolver,
+      PlatformReceivableAccumulator platformReceivable) {
     this.ledgerRepository = ledgerRepository;
     this.processedEvents = processedEvents;
     this.jdbcTemplate = jdbcTemplate;
@@ -135,6 +138,7 @@ public class ReversalPostingWriter {
     this.journalEntryRepository = journalEntryRepository;
     this.journalLineRepository = journalLineRepository;
     this.roleAccountResolver = roleAccountResolver;
+    this.platformReceivable = platformReceivable;
   }
 
   /**
@@ -300,6 +304,13 @@ public class ReversalPostingWriter {
               clearingRole == AccountRole.CASH_CLEARING ? null : clearingRole);
       saveEntryAndLines(glEntry, companyId);
     }
+
+    // ADR 0036 Phase B: an ONLINE void claws back the per-channel receivable sub-ledger by the
+    // grand total (negative delta; the bucket tolerates going negative by design).
+    if ("ONLINE".equals(event.tenderType())) {
+      platformReceivable.accumulate(
+          companyId, event.channel(), currencyCode, negatedGross.amountMinor(), actor);
+    }
   }
 
   private void postRefundReversal(SaleRefundedEvent event) {
@@ -456,6 +467,17 @@ public class ReversalPostingWriter {
               false,
               clearingRole == AccountRole.CASH_CLEARING ? null : clearingRole);
       saveEntryAndLines(glEntry, companyId);
+    }
+
+    // ADR 0036 Phase B: an ONLINE refund claws back the per-channel receivable sub-ledger by the
+    // refunded amount (negative delta; negative bucket balances are tolerated by design).
+    if ("ONLINE".equals(event.tenderType())) {
+      platformReceivable.accumulate(
+          companyId,
+          event.channel(),
+          refundAmount.currency().getCurrencyCode(),
+          negatedRefund.amountMinor(),
+          actor);
     }
   }
 
@@ -625,7 +647,13 @@ public class ReversalPostingWriter {
       case "CASH" -> AccountRole.CASH_CLEARING;
       case "QRIS" -> AccountRole.QRIS_CLEARING;
       case "CARD" -> AccountRole.CARD_CLEARING;
-      default -> AccountRole.CASH_CLEARING;
+      case "ONLINE" -> AccountRole.PLATFORM_RECEIVABLE;
+      default -> {
+        log.warn(
+            "Unknown tender_type '{}' — defaulting clearing to CASH_CLEARING (version skew?)",
+            tenderType);
+        yield AccountRole.CASH_CLEARING;
+      }
     };
   }
 }
