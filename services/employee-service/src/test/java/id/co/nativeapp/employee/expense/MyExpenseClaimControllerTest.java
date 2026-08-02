@@ -4,8 +4,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -16,10 +18,15 @@ import id.co.nativeapp.employee.expense.domain.ClaimNotFoundException;
 import id.co.nativeapp.employee.expense.domain.ClaimStateException;
 import id.co.nativeapp.employee.expense.domain.ClaimStatus;
 import id.co.nativeapp.employee.expense.domain.ExpenseClaim;
+import id.co.nativeapp.employee.expense.domain.ExpenseReceipt;
+import id.co.nativeapp.employee.expense.domain.InvalidReceiptContentTypeException;
+import id.co.nativeapp.employee.expense.domain.ReceiptNotFoundException;
 import id.co.nativeapp.employee.expense.dto.ExpenseClaimResponse;
 import id.co.nativeapp.employee.expense.dto.PageResponse;
 import id.co.nativeapp.employee.expense.service.ExpenseClaimReader;
 import id.co.nativeapp.employee.expense.service.ExpenseClaimService;
+import id.co.nativeapp.employee.expense.service.ReceiptReader;
+import id.co.nativeapp.employee.expense.service.ReceiptWriter;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.security.ApiExceptionHandler;
 import java.time.LocalDate;
@@ -30,8 +37,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 /**
  * Web-slice test for {@link MyExpenseClaimController}: validation 400s, missing {@code
@@ -56,6 +65,14 @@ class MyExpenseClaimControllerTest {
 
   @MockitoBean private ExpenseClaimService claimService;
   @MockitoBean private ExpenseClaimReader claimReader;
+  @MockitoBean private ReceiptWriter receiptWriter;
+  @MockitoBean private ReceiptReader receiptReader;
+
+  private static final byte[] JPEG_BYTES = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 0x01, 0x02};
+
+  private static ExpenseReceipt sampleReceipt() {
+    return new ExpenseReceipt(CLAIM, "image/jpeg", JPEG_BYTES.clone(), "a".repeat(64));
+  }
 
   private static ExpenseClaim sampleDraft() {
     return new ExpenseClaim(
@@ -244,5 +261,102 @@ class MyExpenseClaimControllerTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.page").value(2))
         .andExpect(jsonPath("$.size").value(10));
+  }
+
+  // ---------------------------------------------------------------------
+  // Receipt upload/serve (ADR 0030 §8, Phase E3)
+  // ---------------------------------------------------------------------
+
+  @Test
+  void uploadReceiptReturns201WithMeta() throws Exception {
+    when(receiptWriter.upload(eq(CLAIM), eq("image/jpeg"), any())).thenReturn(sampleReceipt());
+    MockMultipartFile file =
+        new MockMultipartFile("file", "receipt.jpg", "image/jpeg", JPEG_BYTES.clone());
+
+    mockMvc
+        .perform(multipart("/api/v1/me/expense-claims/" + CLAIM + "/receipt").file(file))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.claimId").value(CLAIM.toString()))
+        .andExpect(jsonPath("$.contentType").value("image/jpeg"))
+        .andExpect(jsonPath("$.byteSize").value(JPEG_BYTES.length));
+  }
+
+  @Test
+  void uploadReceiptOversizeIs413() throws Exception {
+    when(receiptWriter.upload(eq(CLAIM), any(), any()))
+        .thenThrow(new MaxUploadSizeExceededException(ExpenseReceipt.MAX_BYTES));
+    MockMultipartFile file =
+        new MockMultipartFile("file", "receipt.jpg", "image/jpeg", JPEG_BYTES.clone());
+
+    mockMvc
+        .perform(multipart("/api/v1/me/expense-claims/" + CLAIM + "/receipt").file(file))
+        .andExpect(status().isPayloadTooLarge())
+        .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/receipt-too-large"));
+  }
+
+  @Test
+  void uploadReceiptWithASpoofedContentTypeIs422() throws Exception {
+    when(receiptWriter.upload(eq(CLAIM), any(), any()))
+        .thenThrow(new InvalidReceiptContentTypeException("image/jpeg", "image/png"));
+    MockMultipartFile file =
+        new MockMultipartFile("file", "receipt.jpg", "image/jpeg", JPEG_BYTES.clone());
+
+    mockMvc
+        .perform(multipart("/api/v1/me/expense-claims/" + CLAIM + "/receipt").file(file))
+        .andExpect(status().isUnprocessableEntity())
+        .andExpect(
+            jsonPath("$.type").value("https://errors.nativeapp.id/invalid-receipt-content-type"));
+  }
+
+  @Test
+  void uploadReceiptToANonDraftClaimIs409() throws Exception {
+    when(receiptWriter.upload(eq(CLAIM), any(), any()))
+        .thenThrow(new ClaimStateException(ClaimStatus.SUBMITTED, "attach a receipt to"));
+    MockMultipartFile file =
+        new MockMultipartFile("file", "receipt.jpg", "image/jpeg", JPEG_BYTES.clone());
+
+    mockMvc
+        .perform(multipart("/api/v1/me/expense-claims/" + CLAIM + "/receipt").file(file))
+        .andExpect(status().isConflict())
+        .andExpect(
+            jsonPath("$.type").value("https://errors.nativeapp.id/expense-claim-state-conflict"));
+  }
+
+  @Test
+  void uploadReceiptToSomeoneElsesClaimIs404() throws Exception {
+    // Anti-enumeration: an unknown id and "not mine" both collapse to 404 (ExpenseClaimReader's
+    // idiom applied to receipts too).
+    when(receiptWriter.upload(eq(CLAIM), any(), any()))
+        .thenThrow(new ClaimNotFoundException(CLAIM));
+    MockMultipartFile file =
+        new MockMultipartFile("file", "receipt.jpg", "image/jpeg", JPEG_BYTES.clone());
+
+    mockMvc
+        .perform(multipart("/api/v1/me/expense-claims/" + CLAIM + "/receipt").file(file))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/expense-claim-not-found"));
+  }
+
+  @Test
+  void getReceiptReturns200WithTheBytesAndCorrectHeaders() throws Exception {
+    when(receiptReader.myReceipt(CLAIM)).thenReturn(sampleReceipt());
+
+    mockMvc
+        .perform(get("/api/v1/me/expense-claims/" + CLAIM + "/receipt"))
+        .andExpect(status().isOk())
+        .andExpect(header().string("Content-Type", "image/jpeg"))
+        .andExpect(header().longValue("Content-Length", JPEG_BYTES.length))
+        .andExpect(content().bytes(JPEG_BYTES));
+  }
+
+  @Test
+  void getReceiptWhenNoneOnFileIs404() throws Exception {
+    when(receiptReader.myReceipt(CLAIM)).thenThrow(new ReceiptNotFoundException(CLAIM));
+
+    mockMvc
+        .perform(get("/api/v1/me/expense-claims/" + CLAIM + "/receipt"))
+        .andExpect(status().isNotFound())
+        .andExpect(
+            jsonPath("$.type").value("https://errors.nativeapp.id/expense-receipt-not-found"));
   }
 }

@@ -10,6 +10,8 @@ import id.co.nativeapp.employee.expense.domain.ClaimNotFoundException;
 import id.co.nativeapp.employee.expense.domain.ClaimStateException;
 import id.co.nativeapp.employee.expense.domain.DuplicateCategoryNameException;
 import id.co.nativeapp.employee.expense.domain.InvalidGlHintException;
+import id.co.nativeapp.employee.expense.domain.InvalidReceiptContentTypeException;
+import id.co.nativeapp.employee.expense.domain.ReceiptNotFoundException;
 import id.co.nativeapp.employee.expense.domain.SelfApprovalException;
 import id.co.nativeapp.employee.me.domain.EmployeeNotLinkedException;
 import id.co.nativeapp.employee.payroll.domain.CommissionNotFoundException;
@@ -35,6 +37,7 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 /**
  * The employee-service-SPECIFIC RFC 7807 {@link ProblemDetail} advice — the fault shapes unique to
@@ -331,6 +334,46 @@ public class EmployeeApiAdvice {
     ProblemDetail problem =
         problem(HttpStatus.CONFLICT, "duplicate-expense-category-name", request);
     problem.setTitle("Duplicate expense category name");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Expense receipts (ADR 0030 §8, Phase E3)
+  // -------------------------------------------------------------------------------------------
+
+  /**
+   * A receipt upload exceeded the size cap (5 MB/file, 6 MB/request — {@code application.yml}) →
+   * 413. Thrown either by Spring's own multipart resolver (the part itself is too large) or by
+   * {@code ReceiptWriter}'s server-side re-check (defense in depth) — same exception type, same
+   * mapping, either way.
+   */
+  @ExceptionHandler(MaxUploadSizeExceededException.class)
+  public ProblemDetail handleMaxUploadSizeExceeded(
+      MaxUploadSizeExceededException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.PAYLOAD_TOO_LARGE, "receipt-too-large", request);
+    problem.setTitle("Receipt too large");
+    problem.setDetail("The uploaded file exceeds the maximum receipt size.");
+    return problem;
+  }
+
+  /** A receipt's actual bytes disagree with its declared content-type (magic-byte check) → 422. */
+  @ExceptionHandler(InvalidReceiptContentTypeException.class)
+  public ProblemDetail handleInvalidReceiptContentType(
+      InvalidReceiptContentTypeException ex, HttpServletRequest request) {
+    ProblemDetail problem =
+        problem(HttpStatus.UNPROCESSABLE_ENTITY, "invalid-receipt-content-type", request);
+    problem.setTitle("Invalid receipt content-type");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /** No receipt is on file for a claim (or it is not visible to the caller) → 404. */
+  @ExceptionHandler(ReceiptNotFoundException.class)
+  public ProblemDetail handleReceiptNotFound(
+      ReceiptNotFoundException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.NOT_FOUND, "expense-receipt-not-found", request);
+    problem.setTitle("Expense receipt not found");
     problem.setDetail(ex.getMessage());
     return problem;
   }

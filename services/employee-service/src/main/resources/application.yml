@@ -27,6 +27,18 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: false
 
+  # Receipt photo upload (ADR 0030 §8, Phase E3) — the first multipart endpoint in the repo.
+  # max-file-size bounds the single receipt part (mirrors ExpenseReceipt.MAX_BYTES / the DB CHECK
+  # constraint); max-request-size adds headroom for the rest of the multipart envelope (boundary +
+  # other form fields) without effectively doubling the allowance. A real Tomcat servlet container
+  # enforces these via the standard StandardServletMultipartResolver here (unlike the gateway,
+  # which proxies multipart WITHOUT ever resolving it — see the gateway's
+  # MultipartUploadStreamingSpikeTest for why these two properties have no effect there).
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
+
   kafka:
     # The OrgUnitCreated / OrgUnitChanged topic values are the org-service outbox Avro payload
     # (shipped by Debezium), base64-encoded on the wire: Debezium decodes the bytea payload as a

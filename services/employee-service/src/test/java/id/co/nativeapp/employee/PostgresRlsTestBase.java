@@ -56,7 +56,7 @@ abstract class PostgresRlsTestBase {
           "TRUNCATE TABLE employee, employment_contract, assignment, org_unit_projection,"
               + " comp_package, pay_component, earning_rule, statutory_rule, payroll_run,"
               + " payslip_line, labor_cost_allocation, metric_input, period_seal,"
-              + " expense_category, expense_claim, expense_claim_event,"
+              + " expense_category, expense_claim, expense_claim_event, expense_receipt,"
               + " outbox, processed_event");
     } catch (SQLException ignored) {
       // Tables not created yet (pre-Flyway) — nothing to reset.

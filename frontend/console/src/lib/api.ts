@@ -105,9 +105,9 @@ function buildQuery(query?: Record<string, string | undefined>): string {
   return s ? `?${s}` : ''
 }
 
-export async function apiFetch<T>(path: string, opts: RequestOptions = {}): Promise<T | null> {
-  const headers: Record<string, string> = { Accept: 'application/json' }
-  if (opts.body !== undefined) headers['Content-Type'] = 'application/json'
+/** The tenant/actor headers shared by {@link apiFetch} and {@link apiUpload} — see each's docs. */
+function authHeaders(tenant?: { companyId: string; actor: string }, actor?: string): Record<string, string> {
+  const headers: Record<string, string> = {}
   if (AUTH_MODE === 'oidc') {
     // Actor/roles come from the verified token. X-Company-Id is the ACTIVE-COMPANY SELECTION
     // (multi-company ownership, ADR 0021): the gateway and each service validate it against the
@@ -115,21 +115,27 @@ export async function apiFetch<T>(path: string, opts: RequestOptions = {}): Prom
     // selection, never a trusted tenant. Omitted (bootstrap calls), the token's first company is
     // the default.
     if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`
-    if (opts.tenant) headers['X-Company-Id'] = opts.tenant.companyId
-  } else if (opts.tenant) {
-    headers['X-Company-Id'] = opts.tenant.companyId
-    headers['X-Actor'] = opts.tenant.actor
-  } else if (opts.actor) {
-    headers['X-Actor'] = opts.actor
+    if (tenant) headers['X-Company-Id'] = tenant.companyId
+  } else if (tenant) {
+    headers['X-Company-Id'] = tenant.companyId
+    headers['X-Actor'] = tenant.actor
+  } else if (actor) {
+    headers['X-Actor'] = actor
   }
-  if (opts.headers) Object.assign(headers, opts.headers)
+  return headers
+}
 
-  const res = await fetch(API_BASE_URL + path + buildQuery(opts.query), {
-    method: opts.method ?? 'GET',
-    headers,
-    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
-  })
-
+/**
+ * Shared response handling for {@link apiFetch} and {@link apiUpload}: 204 → null, parse the
+ * problem+json body on failure, record AI-native diagnostics, trigger the 401 recovery hook, and
+ * throw a typed {@link ApiError} — never a bare fetch rejection or an unparsed body.
+ */
+async function handleResponse<T>(
+  res: Response,
+  method: string,
+  path: string,
+  companyId: string | undefined,
+): Promise<T | null> {
   if (res.status === 204) return null
   const text = await res.text()
   const data: unknown = text ? JSON.parse(text) : null
@@ -141,7 +147,7 @@ export async function apiFetch<T>(path: string, opts: RequestOptions = {}): Prom
     // SELECTION, and the token's derived state — never the token itself, never the body).
     recordFailure({
       at: new Date().toISOString(),
-      method: opts.method ?? 'GET',
+      method,
       path,
       status: res.status,
       problemType: problem?.type ?? null,
@@ -150,10 +156,9 @@ export async function apiFetch<T>(path: string, opts: RequestOptions = {}): Prom
         typeof (problem as Record<string, unknown> | null)?.traceId === 'string'
           ? ((problem as Record<string, unknown>).traceId as string)
           : null,
-      companyId: opts.tenant?.companyId ?? null,
+      companyId: companyId ?? null,
       authMode: AUTH_MODE,
-      tokenState:
-        AUTH_MODE === 'oidc' ? deriveTokenState(accessToken, opts.tenant?.companyId) : null,
+      tokenState: AUTH_MODE === 'oidc' ? deriveTokenState(accessToken, companyId) : null,
     })
     // 401 in oidc mode = the gateway rejected the bearer (expired/invalid). Signal the auth layer
     // to recover-or-logout so the session can't just keep silently failing. Still throw so the
@@ -169,4 +174,58 @@ export async function apiFetch<T>(path: string, opts: RequestOptions = {}): Prom
     )
   }
   return data as T
+}
+
+export async function apiFetch<T>(path: string, opts: RequestOptions = {}): Promise<T | null> {
+  const headers: Record<string, string> = { Accept: 'application/json' }
+  if (opts.body !== undefined) headers['Content-Type'] = 'application/json'
+  Object.assign(headers, authHeaders(opts.tenant, opts.actor))
+  if (opts.headers) Object.assign(headers, opts.headers)
+
+  const res = await fetch(API_BASE_URL + path + buildQuery(opts.query), {
+    method: opts.method ?? 'GET',
+    headers,
+    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+  })
+
+  return handleResponse<T>(res, opts.method ?? 'GET', path, opts.tenant?.companyId)
+}
+
+export interface UploadOptions {
+  /** Tenant-scoped call: sends X-Company-Id + X-Actor. */
+  tenant?: { companyId: string; actor: string }
+  /** Bootstrap call: sends X-Actor only. */
+  actor?: string
+  /** Extra headers merged in after the auth/tenant headers (callers win on conflict). */
+  headers?: Record<string, string>
+}
+
+/**
+ * Uploads a {@link FormData} body (multipart/form-data) — the receipt-photo upload endpoint's
+ * client (ADR 0030 §8, Phase E3; the first multipart upload in the console). Always POSTs.
+ *
+ * Deliberately sets NO `Content-Type` header: the browser computes
+ * `multipart/form-data; boundary=...` itself from the `FormData` body, and setting it manually
+ * (even to the same-looking string) drops the boundary parameter and breaks server-side parsing.
+ * Auth/tenant headers are identical to {@link apiFetch} (bearer + company selection in oidc mode,
+ * header-trust X-Company-Id/X-Actor in dev mode); no `Idempotency-Key` is added here — a receipt
+ * upload is replace-idempotent by nature (see the server-side `ReceiptWriter` Javadoc), so callers
+ * that need one for a DIFFERENT reason may still pass it via `opts.headers`.
+ */
+export async function apiUpload<T>(
+  path: string,
+  formData: FormData,
+  opts: UploadOptions = {},
+): Promise<T | null> {
+  const headers: Record<string, string> = { Accept: 'application/json' }
+  Object.assign(headers, authHeaders(opts.tenant, opts.actor))
+  if (opts.headers) Object.assign(headers, opts.headers)
+
+  const res = await fetch(API_BASE_URL + path, {
+    method: 'POST',
+    headers,
+    body: formData,
+  })
+
+  return handleResponse<T>(res, 'POST', path, opts.tenant?.companyId)
 }

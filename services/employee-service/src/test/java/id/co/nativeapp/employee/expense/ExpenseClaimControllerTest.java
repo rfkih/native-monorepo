@@ -6,6 +6,8 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -14,11 +16,14 @@ import id.co.nativeapp.employee.expense.controller.ExpenseClaimController;
 import id.co.nativeapp.employee.expense.domain.ClaimNotFoundException;
 import id.co.nativeapp.employee.expense.domain.ClaimStatus;
 import id.co.nativeapp.employee.expense.domain.ExpenseClaim;
+import id.co.nativeapp.employee.expense.domain.ExpenseReceipt;
+import id.co.nativeapp.employee.expense.domain.ReceiptNotFoundException;
 import id.co.nativeapp.employee.expense.domain.SelfApprovalException;
 import id.co.nativeapp.employee.expense.dto.ExpenseClaimResponse;
 import id.co.nativeapp.employee.expense.dto.PageResponse;
 import id.co.nativeapp.employee.expense.service.ExpenseClaimReader;
 import id.co.nativeapp.employee.expense.service.ExpenseClaimService;
+import id.co.nativeapp.employee.expense.service.ReceiptReader;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.security.ApiExceptionHandler;
 import java.time.Instant;
@@ -51,6 +56,9 @@ class ExpenseClaimControllerTest {
 
   @MockitoBean private ExpenseClaimService claimService;
   @MockitoBean private ExpenseClaimReader claimReader;
+  @MockitoBean private ReceiptReader receiptReader;
+
+  private static final byte[] JPEG_BYTES = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 0x01, 0x02};
 
   private static ExpenseClaim submittedClaim() {
     ExpenseClaim claim =
@@ -207,5 +215,44 @@ class ExpenseClaimControllerTest {
         .andExpect(status().isConflict())
         .andExpect(
             jsonPath("$.type").value("https://errors.nativeapp.id/expense-concurrent-conflict"));
+  }
+
+  // ---------------------------------------------------------------------
+  // Receipt serve (manager surface — ADR 0030 §8, Phase E3)
+  // ---------------------------------------------------------------------
+
+  @Test
+  void getReceiptReturns200WithTheBytesAndCorrectHeaders() throws Exception {
+    ExpenseReceipt receipt =
+        new ExpenseReceipt(CLAIM, "image/jpeg", JPEG_BYTES.clone(), "a".repeat(64));
+    when(receiptReader.receiptForManager(CLAIM)).thenReturn(receipt);
+
+    mockMvc
+        .perform(get("/api/v1/expense-claims/" + CLAIM + "/receipt"))
+        .andExpect(status().isOk())
+        .andExpect(header().string("Content-Type", "image/jpeg"))
+        .andExpect(header().longValue("Content-Length", JPEG_BYTES.length))
+        .andExpect(content().bytes(JPEG_BYTES));
+  }
+
+  @Test
+  void getReceiptOfAnUnknownClaimIs404() throws Exception {
+    when(receiptReader.receiptForManager(CLAIM)).thenThrow(new ClaimNotFoundException(CLAIM));
+
+    mockMvc
+        .perform(get("/api/v1/expense-claims/" + CLAIM + "/receipt"))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/expense-claim-not-found"));
+  }
+
+  @Test
+  void getReceiptWhenNoneOnFileIs404() throws Exception {
+    when(receiptReader.receiptForManager(CLAIM)).thenThrow(new ReceiptNotFoundException(CLAIM));
+
+    mockMvc
+        .perform(get("/api/v1/expense-claims/" + CLAIM + "/receipt"))
+        .andExpect(status().isNotFound())
+        .andExpect(
+            jsonPath("$.type").value("https://errors.nativeapp.id/expense-receipt-not-found"));
   }
 }
