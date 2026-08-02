@@ -15,6 +15,7 @@ import java.util.UUID;
  * @param runId the payroll run
  * @param period the run's YYYY-MM period
  * @param runSeq the run sequence within the period
+ * @param runType REGULAR | THR (Track P phase P9, the printable payslip's run-type badge)
  * @param currency the ISO-4217 currency of every amount
  * @param grossMinor the caller's gross earnings in minor units
  * @param deductionMinor the caller's total deductions in minor units
@@ -26,6 +27,7 @@ public record MyPayslipDetailResponse(
     UUID runId,
     String period,
     int runSeq,
+    String runType,
     String currency,
     long grossMinor,
     long deductionMinor,

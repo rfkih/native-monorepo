@@ -11,6 +11,8 @@ package id.co.nativeapp.employee.me.dto;
  * @param amountMinor the amount in minor units
  * @param currency the ISO-4217 currency
  * @param illustrative whether the line was computed from illustrative placeholder rules
+ * @param ruleVersion the statutory rule version that produced this line (null for a non-statutory
+ *     line) — Track P phase P9, the printable payslip's provenance footer (HR-7 reproducibility)
  */
 public record MyPayslipLineResponse(
     String componentKey,
@@ -18,4 +20,5 @@ public record MyPayslipLineResponse(
     String bearer,
     long amountMinor,
     String currency,
-    boolean illustrative) {}
+    boolean illustrative,
+    String ruleVersion) {}

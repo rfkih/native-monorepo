@@ -9,7 +9,15 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router-dom'
-import { ChevronDown, ChevronRight, LogOut, Receipt, TriangleAlert, UserRound } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronRight,
+  LogOut,
+  Printer,
+  Receipt,
+  TriangleAlert,
+  UserRound,
+} from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -17,11 +25,13 @@ import { Spinner } from '@/components/ui/Spinner'
 import { Wordmark } from '@/components/Wordmark'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { EmptyState, KpiTile } from '@/features/_shared/financeUi'
+import { PayslipPrint } from '@/features/_shared/PayslipPrint'
 import { useMyClaims } from '@/features/expenses/api'
 import { hasAnyRole, useAuth } from '@/lib/authContext'
 import { AUTH_MODE } from '@/lib/config'
 import { formatMoney } from '@/lib/money'
 import { cn } from '@/lib/cn'
+import { useSession } from '@/lib/session'
 import { localeOf } from '@/i18n'
 import {
   isNotLinked,
@@ -163,7 +173,12 @@ export function Me() {
             <MyTimeoff companyId={companyId} actor={actor} />
 
             {/* Payslips */}
-            <PayslipsSection companyId={companyId} actor={actor} locale={locale} />
+            <PayslipsSection
+              companyId={companyId}
+              actor={actor}
+              locale={locale}
+              employeeName={profile.data.fullName}
+            />
           </div>
         )}
       </main>
@@ -287,10 +302,12 @@ function PayslipsSection({
   companyId,
   actor,
   locale,
+  employeeName,
 }: {
   companyId: string
   actor: string
   locale: string
+  employeeName: string
 }) {
   const { t } = useTranslation()
   const payslips = useMyPayslips({ companyId, actor, enabled: true })
@@ -320,6 +337,7 @@ function PayslipsSection({
               companyId={companyId}
               actor={actor}
               locale={locale}
+              employeeName={employeeName}
             />
           ))}
         </Card>
@@ -335,6 +353,7 @@ function PayslipRow({
   companyId,
   actor,
   locale,
+  employeeName,
 }: {
   slip: MyPayslipHeader
   open: boolean
@@ -342,8 +361,11 @@ function PayslipRow({
   companyId: string
   actor: string
   locale: string
+  employeeName: string
 }) {
   const { t } = useTranslation()
+  const { company } = useSession()
+  const [showPrint, setShowPrint] = useState(false)
   const detail = useMyPayslip({ companyId, actor, runId: open ? slip.runId : null, enabled: open })
 
   return (
@@ -381,7 +403,13 @@ function PayslipRow({
             <p className="text-sm text-loss">{t('me.error')}</p>
           ) : (
             <>
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="flex justify-end">
+                <Button type="button" variant="outline" onClick={() => setShowPrint(true)}>
+                  <Printer className="size-4" />
+                  {t('payslip.print.cta')}
+                </Button>
+              </div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-3">
                 <KpiTile
                   label={t('me.payslips.gross')}
                   minor={detail.data.grossMinor}
@@ -432,7 +460,11 @@ function PayslipRow({
                       const isCredit = line.kind === 'DEDUCTION' && displayMinor > 0
                       return (
                         <tr key={`${line.componentKey}-${i}`} className="text-ink-2">
-                          <td className="py-1.5 pr-4 font-mono text-xs">{line.componentKey}</td>
+                          <td className="py-1.5 pr-4 text-xs">
+                            {t(`payslip.components.${line.componentKey}` as Parameters<typeof t>[0], {
+                              defaultValue: line.componentKey,
+                            })}
+                          </td>
                           <td className="py-1.5 pr-4 text-xs">
                             {t(
                               line.kind === 'EARNING'
@@ -471,6 +503,24 @@ function PayslipRow({
             </>
           )}
         </div>
+      ) : null}
+
+      {showPrint && detail.data ? (
+        <PayslipPrint
+          companyName={company?.name ?? ''}
+          employeeName={employeeName}
+          period={detail.data.period}
+          runSeq={detail.data.runSeq}
+          runType={detail.data.runType}
+          currency={detail.data.currency}
+          grossMinor={detail.data.grossMinor}
+          deductionMinor={detail.data.deductionMinor}
+          netMinor={detail.data.netMinor}
+          illustrative={detail.data.illustrative}
+          lines={detail.data.lines}
+          locale={locale}
+          onClose={() => setShowPrint(false)}
+        />
       ) : null}
     </div>
   )

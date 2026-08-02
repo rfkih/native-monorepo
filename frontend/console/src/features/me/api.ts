@@ -50,12 +50,16 @@ export interface MyPayslipLine {
   amountMinor: number
   currency: string
   illustrative: boolean
+  /** The statutory rule version that produced this line, or null for a non-statutory line. */
+  ruleVersion: string | null
 }
 
 export interface MyPayslipDetail {
   runId: string
   period: string
   runSeq: number
+  /** REGULAR or THR (Track P Phase P8/P9). */
+  runType: string
   currency: string
   grossMinor: number
   deductionMinor: number

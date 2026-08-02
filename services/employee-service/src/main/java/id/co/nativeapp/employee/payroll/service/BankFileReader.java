@@ -126,15 +126,15 @@ public class BankFileReader {
     StringBuilder csv = new StringBuilder();
     csv.append(CSV_HEADER).append('\n');
     for (BankFileRow row : rows) {
-      csv.append(csvField(row.employeeName()))
+      csv.append(CsvFieldSupport.field(row.employeeName()))
           .append(',')
-          .append(csvField(row.bankAccount()))
+          .append(CsvFieldSupport.field(row.bankAccount()))
           .append(',')
           .append(row.netAmountMinor())
           .append(',')
           .append(run.getBaseCurrency())
           .append(',')
-          .append(csvField(reference))
+          .append(CsvFieldSupport.field(reference))
           .append('\n');
     }
     csv.append("# row_count=").append(rows.size()).append('\n');
@@ -144,20 +144,6 @@ public class BankFileReader {
     log.info("bank file generated runId={} rows={}", runId, rows.size());
 
     return new BankFileResult(csv.toString(), run.getPeriod(), run.getRunSeq());
-  }
-
-  /** RFC 4180-ish CSV field escaping: quote a field containing a comma/quote/newline. */
-  private static String csvField(String value) {
-    if (value == null) {
-      return "";
-    }
-    if (value.contains(",")
-        || value.contains("\"")
-        || value.contains("\n")
-        || value.contains("\r")) {
-      return "\"" + value.replace("\"", "\"\"") + "\"";
-    }
-    return value;
   }
 
   private record BankFileRow(String employeeName, String bankAccount, long netAmountMinor) {}

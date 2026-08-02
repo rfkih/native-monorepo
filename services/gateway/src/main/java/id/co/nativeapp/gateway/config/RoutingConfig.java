@@ -70,9 +70,11 @@ public class RoutingConfig {
 
   /**
    * Roles allowed on the OWNER-ONLY surface — narrower than {@link #DASHBOARD_ROLES} (which also
-   * admits {@code manager}). Reserved for the highest-sensitivity PII exports (the payroll net-pay
-   * bank file with decrypted bank accounts, Track P phase P5; the future {@code 1721-A1}/{@code
-   * bpjs-summary} statutory reports, Track P phase P9).
+   * admits {@code manager}). Reserved for the highest-sensitivity PII exports: the payroll net-pay
+   * bank file with decrypted bank accounts (Track P phase P5); the {@code 1721-A1} statutory export
+   * (NIK/NPWP) and the printable-payslip authorized read (decrypted salary) (Track P phase P9); and
+   * {@code bpjs-summary} (per-employee wage — a P9 judgment call, see {@code
+   * payrollReportBpjsSummaryRoute}'s javadoc).
    */
   private static final String[] OWNER_ROLES = {"owner"};
 
@@ -700,6 +702,34 @@ public class RoutingConfig {
         .build();
   }
 
+  /**
+   * {@code GET /api/v1/payroll-runs/{runId}/payslips/{employeeId}/authorized} — the payslip with
+   * REAL (decrypted) amounts, for printing (Track P phase P9). OWNER-ONLY, the same bank-file
+   * precedent as {@link #payrollRunBankFileRoute}: salary is PII, so only the narrower owner role
+   * gets the decrypted read — a manager still lands on the masked {@code
+   * /payroll-runs/*&#47;payslips/*} route below via {@link #payrollRunsRoute}.
+   *
+   * <p>{@code @Order(HIGHEST_PRECEDENCE)} for the same reason as every other exact-path carve-out
+   * here: the general {@code /api/v1/payroll-runs/**} route (DASHBOARD_ROLES) would otherwise match
+   * first and let a manager token through. Two path-segment wildcards ({@code *}, never {@code **})
+   * match only this exact sub-path, so it cannot shadow the masked payslip route, the bank-file
+   * route, or any other {@code /payroll-runs/**} path.
+   */
+  @Bean
+  @Order(Ordered.HIGHEST_PRECEDENCE)
+  RouterFunction<ServerResponse> payrollRunPayslipAuthorizedRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("employee-service-payroll-run-payslip-authorized")
+        .route(path("/api/v1/payroll-runs/*/payslips/*/authorized"), http())
+        .before(uri(routes.employeeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(OWNER_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
   /** Payroll runs (execute + read summaries/payslips/allocations) — owner/manager only. */
   @Bean
   RouterFunction<ServerResponse> payrollRunsRoute(
@@ -723,6 +753,73 @@ public class RoutingConfig {
       TenantContextHeaderFilter tenantFilter) {
     return GatewayRouterFunctions.route("employee-service-payroll-setup")
         .route(path("/api/v1/payroll-setup/**"), http())
+        .before(uri(routes.employeeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
+   * {@code GET /api/v1/payroll-reports/1721a1} — the annual per-employee Bukti Potong 1721-A1 CSV
+   * (Track P phase P9). OWNER-ONLY: NIK/NPWP PII, the exact bank-file precedent {@link
+   * #payrollRunBankFileRoute}'s javadoc already anticipated this route for.
+   *
+   * <p>{@code @Order(HIGHEST_PRECEDENCE)} so this exact path is checked before the general {@code
+   * /api/v1/payroll-reports/**} DASHBOARD_ROLES route below — the same first-match-wins pattern as
+   * every other narrow-owner-only carve-out in this class.
+   */
+  @Bean
+  @Order(Ordered.HIGHEST_PRECEDENCE)
+  RouterFunction<ServerResponse> payrollReportBukti1721A1Route(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("employee-service-payroll-report-1721a1")
+        .route(path("/api/v1/payroll-reports/1721a1"), http())
+        .before(uri(routes.employeeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(OWNER_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
+   * {@code GET /api/v1/payroll-reports/bpjs-summary} — the per-employee, per-program BPJS
+   * contribution CSV (Track P phase P9). OWNER-ONLY by judgment call: it is not the NIK/NPWP class
+   * of PII {@code 1721a1} carries, but a named employee's BPJS wage is, in practice, close to their
+   * base pay — salary-revealing in the same spirit as rule 6 (see {@code PayrollReportReader}'s
+   * class javadoc for the full reasoning), so it is gated exactly like {@code 1721a1} rather than
+   * the plain owner/manager {@code pph21-monthly} aggregate below.
+   */
+  @Bean
+  @Order(Ordered.HIGHEST_PRECEDENCE)
+  RouterFunction<ServerResponse> payrollReportBpjsSummaryRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("employee-service-payroll-report-bpjs-summary")
+        .route(path("/api/v1/payroll-reports/bpjs-summary"), http())
+        .before(uri(routes.employeeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(OWNER_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
+   * The remaining statutory report(s) under {@code /api/v1/payroll-reports/**} — today just {@code
+   * GET /api/v1/payroll-reports/pph21-monthly} (Track P phase P9), the AGGREGATE-only SPT Masa
+   * summary (no per-employee figure) — owner/manager DASHBOARD_ROLES, same as every other payroll
+   * read. The two narrower OWNER_ROLES carve-outs above are checked first.
+   */
+  @Bean
+  RouterFunction<ServerResponse> payrollReportsRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("employee-service-payroll-reports")
+        .route(path("/api/v1/payroll-reports/**"), http())
         .before(uri(routes.employeeService()))
         .filter(new RateLimitFilter(limiter))
         .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))

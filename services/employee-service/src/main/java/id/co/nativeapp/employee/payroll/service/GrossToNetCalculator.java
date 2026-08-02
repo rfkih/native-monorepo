@@ -52,8 +52,13 @@ public class GrossToNetCalculator {
 
   private static final long BP_DENOMINATOR = 10_000L;
 
-  /** PKP (taxable income) is floored to the nearest 1000 minor units (UU HPP 7/2021 convention). */
-  private static final long PKP_FLOOR_UNIT = 1_000L;
+  /**
+   * PKP (taxable income) is floored to the nearest 1000 minor units (UU HPP 7/2021 convention).
+   * Package-private (not {@code private}) so {@link PayrollReportReader}'s 1721-A1 export can reuse
+   * the SAME rounding unit as the December Art-17 true-up — one source of truth for the tax math,
+   * never a second hand-copied constant.
+   */
+  static final long PKP_FLOOR_UNIT = 1_000L;
 
   /** Computes the full per-person result deterministically. */
   public PersonResult compute(PersonInput input) {
@@ -314,9 +319,14 @@ public class GrossToNetCalculator {
    * Walks the sorted brackets accumulating tax: for each {@code [floor, cap, rate_bp]} while {@code
    * income > floor}, {@code tax += round((min(income,cap) - floor) * rate_bp / 10000)}. The
    * multiply-then-divide rounds once (HALF_EVEN) per bracket.
+   *
+   * <p>Package-private (not {@code private}): {@link PayrollReportReader}'s 1721-A1 export reuses
+   * this EXACT bracket walk (an injected {@link GrossToNetCalculator} instance) to compute the
+   * annual PPh21 liability from a reconstructed annual PKP — the same reasoning as {@code
+   * PayrollRunWriter#classifyPayslipLine} being shared rather than re-derived: one bracket-walking
+   * implementation, never two that could silently drift apart on this sensitive tax math.
    */
-  private Money walkBrackets(
-      Money income, List<StatutoryParams.Bracket> brackets, Currency currency) {
+  Money walkBrackets(Money income, List<StatutoryParams.Bracket> brackets, Currency currency) {
     Money tax = Money.ofMinor(0L, currency);
     long incomeMinor = income.amountMinor();
     if (incomeMinor <= 0L) {
@@ -351,16 +361,17 @@ public class GrossToNetCalculator {
   /**
    * Applies the UU PPh Art 21(5a) no-NPWP surcharge (typically {@code 12000} bp = 120%) to a
    * computed tax amount when the employee has no NPWP on file; returns the amount unchanged when
-   * they do.
+   * they do. Package-private — see {@link #walkBrackets} for why this is shared, not re-derived.
    */
-  private Money applyNoNpwpSurcharge(Money amount, int surchargeBp, boolean hasNpwp) {
+  Money applyNoNpwpSurcharge(Money amount, int surchargeBp, boolean hasNpwp) {
     return hasNpwp ? amount : amount.mulDiv(surchargeBp, BP_DENOMINATOR);
   }
 
   /**
    * Floors a non-negative minor-unit amount to the nearest multiple of {@code unit} (PKP rounding).
+   * Package-private — see {@link #walkBrackets} for why this is shared, not re-derived.
    */
-  private long floorToNearest(long amountMinor, long unit) {
+  long floorToNearest(long amountMinor, long unit) {
     return (amountMinor / unit) * unit;
   }
 

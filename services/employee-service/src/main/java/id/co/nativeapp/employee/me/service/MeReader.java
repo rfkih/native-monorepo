@@ -262,13 +262,15 @@ public class MeReader {
               line.getBearer().name(),
               amountMinor,
               lineCurrency,
-              line.isIllustrative()));
+              line.isIllustrative(),
+              line.getRuleVersion()));
     }
     return Optional.of(
         new MyPayslipDetailResponse(
             runId,
             run.getPeriod(),
             run.getRunSeq(),
+            run.getRunType().name(),
             currency,
             gross,
             deductions,

@@ -278,27 +278,29 @@
 
 /*
  * Print isolation — the customer receipt (#native-thermal-receipt-paper), the
- * kitchen ticket (#native-kot-print), and the self-order QR sheet
- * (#native-selforder-qr-print, Phase 6 ADR 0029) each inject their own <style> with a rule
+ * kitchen ticket (#native-kot-print), the self-order QR sheet
+ * (#native-selforder-qr-print, Phase 6 ADR 0029), and the printable payslip
+ * (#native-payslip-print, Track P phase P9) each inject their own <style> with a rule
  * that hides all OTHER body children when printing. At most one of these IDs is
  * present in the DOM at a time, so only the active print target is visible.
  * This block is the safety net: ensure the app chrome is always hidden.
  */
 @media print {
-  /* Reliable print isolation. The print target (receipt paper, KOT, or QR sheet) is nested deep
-     inside #root, so hiding the app with `display:none` on body children ALSO hid the target (a
-     display:none ancestor can't be undone by a descendant) → blank pages. Use `visibility`
-     instead: hide everything, then re-show ONLY the active target + its descendants — a
-     visible child DOES override a hidden ancestor. Then pull the target to the page origin.
-     Scoped with :has() so it only bites while a receipt/KOT/QR sheet is actually mounted — the
-     statements print as ordinary pages (audit finding 16); each print surface injects its own
+  /* Reliable print isolation. The print target (receipt paper, KOT, QR sheet, or payslip) is
+     nested deep inside #root, so hiding the app with `display:none` on body children ALSO hid the
+     target (a display:none ancestor can't be undone by a descendant) → blank pages. Use
+     `visibility` instead: hide everything, then re-show ONLY the active target + its descendants —
+     a visible child DOES override a hidden ancestor. Then pull the target to the page origin.
+     Scoped with :has() so it only bites while a receipt/KOT/QR sheet/payslip is actually mounted —
+     the statements print as ordinary pages (audit finding 16); each print surface injects its own
      @page rule.
      The :has() MUST sit inside :where(): bare `body:has(#id) *` carries the ID's specificity
      (1,0,1) and beats the un-hide rules below (1,0,0) — every print target rendered a blank
      page. :where() zeroes that out so the id-based un-hide wins. */
   body:where(:has(#native-thermal-receipt-paper)) *,
   body:where(:has(#native-kot-print)) *,
-  body:where(:has(#native-selforder-qr-print)) * {
+  body:where(:has(#native-selforder-qr-print)) *,
+  body:where(:has(#native-payslip-print)) * {
     visibility: hidden !important;
   }
   #native-thermal-receipt-paper,
@@ -306,12 +308,15 @@
   #native-kot-print,
   #native-kot-print *,
   #native-selforder-qr-print,
-  #native-selforder-qr-print * {
+  #native-selforder-qr-print *,
+  #native-payslip-print,
+  #native-payslip-print * {
     visibility: visible !important;
   }
   #native-thermal-receipt-paper,
   #native-kot-print,
-  #native-selforder-qr-print {
+  #native-selforder-qr-print,
+  #native-payslip-print {
     position: absolute !important;
     left: 0 !important;
     top: 0 !important;

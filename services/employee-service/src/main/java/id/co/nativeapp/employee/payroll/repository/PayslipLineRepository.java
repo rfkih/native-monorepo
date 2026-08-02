@@ -177,6 +177,75 @@ public interface PayslipLineRepository extends JpaRepository<PayslipLine, UUID> 
       @Param("runType") String runType);
 
   /**
+   * Every ACTIVE (see {@link #ACTIVE_RUN_PREDICATE}) payslip line for one employee across a WHOLE
+   * fiscal year — {@code yearPrefix} matches every {@code "YYYY-MM"} period in that year, nothing
+   * excluded. A convenience default method over {@link #findActiveLinesForEmployeeYear(UUID,
+   * String, String)} passing {@code excludePeriod = ""}: no real {@code payroll_run.period} is ever
+   * the empty string (it is always {@code "YYYY-MM"}), so the {@code pr.period <> :excludePeriod}
+   * predicate excludes nothing — reusing the SAME native query rather than a second hand-copied
+   * one. Track P phase P9's {@code PayrollReportReader} (the 1721-A1 annual export) is the first
+   * caller that wants the full year, not "every month before this one".
+   */
+  default List<PayslipLine> findActiveLinesForEmployeeYear(UUID employeeId, String yearPrefix) {
+    return findActiveLinesForEmployeeYear(employeeId, yearPrefix, "");
+  }
+
+  /**
+   * The DISTINCT ACTIVE periods (see {@link #ACTIVE_RUN_PREDICATE}) one employee has payslip lines
+   * in for a WHOLE fiscal year — the {@code findActiveLinesForEmployeeYear(UUID, String)}
+   * companion, same {@code excludePeriod = ""} reuse trick. Track P phase P9's 1721-A1 export uses
+   * {@code .size()} directly as {@code monthsInYear} (no "+1": nothing was excluded, unlike {@link
+   * id.co.nativeapp.employee.payroll.service.PayrollRunWriter#buildAnnualContext}, which excludes
+   * the run's OWN about-to-be-produced period).
+   */
+  default List<String> findActivePeriodsForEmployeeYear(UUID employeeId, String yearPrefix) {
+    return findActivePriorPeriodsForEmployeeYear(employeeId, yearPrefix, "");
+  }
+
+  /**
+   * Every ACTIVE (see {@link #ACTIVE_RUN_PREDICATE}) payslip line for the WHOLE company for one
+   * {@code period}, across every employee and every {@link
+   * id.co.nativeapp.employee.payroll.domain.RunType} (a REGULAR and a THR run for the same period
+   * are BOTH active — see the predicate's own javadoc) — Track P phase P9's company-wide statutory
+   * reports ({@code pph21-monthly}, {@code bpjs-summary}). Deliberately a FULL-ENTITY query, not a
+   * projection — identical rationale to {@link #findActiveLinesForEmployeeYear(UUID, String,
+   * String)}'s javadoc (PII-ciphertext columns, decrypted only through the managed entity's
+   * {@code @Convert}; the only callers are {@code PayrollRunWriter} and {@code
+   * PayrollReportReader}, never a controller).
+   */
+  @Query(
+      value =
+          """
+          SELECT pl.*
+            FROM payslip_line pl
+            JOIN payroll_run pr ON pr.id = pl.payroll_run_id
+           WHERE pr.period = :period
+             AND \s"""
+              + ACTIVE_RUN_PREDICATE
+              + """
+           ORDER BY pl.employee_id ASC, pl.component_key ASC
+          """,
+      nativeQuery = true)
+  List<PayslipLine> findActiveLinesForPeriod(@Param("period") String period);
+
+  /**
+   * The DISTINCT employee ids with at least one ACTIVE (see {@link #ACTIVE_RUN_PREDICATE}) payslip
+   * line anywhere in a fiscal year — Track P phase P9's 1721-A1 export's employee roster for the
+   * year (every employee who was actually paid at least once, across every run type).
+   */
+  @Query(
+      value =
+          """
+          SELECT DISTINCT pl.employee_id
+            FROM payslip_line pl
+            JOIN payroll_run pr ON pr.id = pl.payroll_run_id
+           WHERE pr.period LIKE (:yearPrefix || '-%')
+             AND \s"""
+              + ACTIVE_RUN_PREDICATE,
+      nativeQuery = true)
+  List<UUID> findDistinctEmployeeIdsForYear(@Param("yearPrefix") String yearPrefix);
+
+  /**
    * A run's payslip index — one row per employee (joined for the display name), counts only. The
    * amount ciphertext columns are never selected on this path (rule 6). RLS applies to both tables.
    */

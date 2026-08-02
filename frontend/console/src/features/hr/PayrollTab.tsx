@@ -14,7 +14,7 @@
 
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronDown, ChevronRight, Download, Play, TriangleAlert } from 'lucide-react'
+import { ChevronDown, ChevronRight, Download, Play, Printer, TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -22,12 +22,15 @@ import { Spinner } from '@/components/ui/Spinner'
 import { Segmented } from '@/components/ui/Segmented'
 import { Field, TextInput } from '@/components/ui/Field'
 import { EmptyState, KpiTile, PeriodNav } from '@/features/_shared/financeUi'
+import { PayslipPrint } from '@/features/_shared/PayslipPrint'
 import { DialogOverlay } from '@/features/org/parts'
 import type { OrgUnit } from '@/features/org/api'
 import { hasAnyRole, useAuth } from '@/lib/authContext'
 import { cn } from '@/lib/cn'
 import { formatMoney } from '@/lib/money'
 import { currentPeriod, shiftPeriod } from '@/lib/period'
+import { useSession } from '@/lib/session'
+import { PayrollReportsTab } from './PayrollReportsTab'
 import { PayrollSetupTab } from './PayrollSetupTab'
 import {
   downloadPayrollBankFile,
@@ -39,6 +42,7 @@ import {
   usePayrollRuns,
   usePayrollSetup,
   usePayslip,
+  usePayslipAuthorized,
   usePayslipIndex,
   useRunAllocations,
   useRunPayroll,
@@ -49,7 +53,7 @@ import {
   type SettlementKind,
 } from './api'
 
-type PayrollView = 'runs' | 'setup'
+type PayrollView = 'runs' | 'setup' | 'reports'
 
 export function PayrollTab({
   units,
@@ -163,12 +167,14 @@ export function PayrollTab({
         </Card>
       ) : (
         <>
-          {/* Runs / Setup sub-view — statutory-rule administration lives beside the run history
-              (Track P phase P2, ADR 0031), not as a separate org-hub tab. */}
+          {/* Runs / Setup / Reports sub-view — statutory-rule administration lives beside the run
+              history (Track P phase P2, ADR 0031), and the statutory CSV exports beside both
+              (Track P phase P9), not as separate org-hub tabs. */}
           <Segmented<PayrollView>
             options={[
               { value: 'runs', label: t('hr.payroll.view.runs') },
               { value: 'setup', label: t('hr.payroll.view.setup') },
+              { value: 'reports', label: t('hr.payroll.view.reports') },
             ]}
             value={view}
             onChange={setView}
@@ -177,6 +183,8 @@ export function PayrollTab({
 
           {view === 'setup' ? (
             <PayrollSetupTab companyId={companyId} actor={actor} locale={locale} />
+          ) : view === 'reports' ? (
+            <PayrollReportsTab companyId={companyId} actor={actor} locale={locale} />
           ) : (
             <>
               {/* Period + scope + run */}
@@ -366,10 +374,13 @@ function RunDetail({
 }) {
   const { t } = useTranslation()
   const auth = useAuth()
+  const { company } = useSession()
   const isOwner = hasAnyRole(auth.roles, 'owner')
   const [openEmployee, setOpenEmployee] = useState<string | null>(null)
   const [downloadingBankFile, setDownloadingBankFile] = useState(false)
   const [bankFileError, setBankFileError] = useState(false)
+  // Track P Phase P9 — the employee currently open in the print dialog (owner-only, REAL amounts).
+  const [printEmployee, setPrintEmployee] = useState<{ id: string; name: string } | null>(null)
   const allocations = useRunAllocations({ companyId, actor, runId: run.id, enabled: true })
   const payslips = usePayslipIndex({ companyId, actor, runId: run.id, enabled: true })
   const lines = usePayslip({
@@ -378,6 +389,13 @@ function RunDetail({
     runId: run.id,
     employeeId: openEmployee,
     enabled: !!openEmployee,
+  })
+  const printLines = usePayslipAuthorized({
+    companyId,
+    actor,
+    runId: run.id,
+    employeeId: printEmployee?.id ?? null,
+    enabled: isOwner && !!printEmployee,
   })
 
   const unitName = (id: string) => units.find((u) => u.id === id)?.name
@@ -465,23 +483,38 @@ function RunDetail({
         <div className="mt-2">
           {(payslips.data ?? []).map((row) => (
             <div key={row.employeeId}>
-              <button
-                type="button"
-                onClick={() =>
-                  setOpenEmployee((cur) => (cur === row.employeeId ? null : row.employeeId))
-                }
-                className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-hover"
-              >
-                {openEmployee === row.employeeId ? (
-                  <ChevronDown className="size-3.5 text-ink-3" aria-hidden="true" />
-                ) : (
-                  <ChevronRight className="size-3.5 text-ink-3" aria-hidden="true" />
-                )}
-                <span className="text-sm font-semibold text-ink">{row.fullName}</span>
-                <span className="text-xs text-ink-3">
-                  {t('hr.payroll.payslips.lines', { count: row.lineCount })}
-                </span>
-              </button>
+              <div className="flex w-full items-center gap-2 rounded-lg px-2 py-2 hover:bg-hover">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setOpenEmployee((cur) => (cur === row.employeeId ? null : row.employeeId))
+                  }
+                  className="flex flex-1 items-center gap-2 text-left"
+                >
+                  {openEmployee === row.employeeId ? (
+                    <ChevronDown className="size-3.5 text-ink-3" aria-hidden="true" />
+                  ) : (
+                    <ChevronRight className="size-3.5 text-ink-3" aria-hidden="true" />
+                  )}
+                  <span className="text-sm font-semibold text-ink">{row.fullName}</span>
+                  <span className="text-xs text-ink-3">
+                    {t('hr.payroll.payslips.lines', { count: row.lineCount })}
+                  </span>
+                </button>
+                {/* Owner-only REAL-amount print (Track P phase P9) — a manager still sees only the
+                    masked table below. */}
+                {isOwner ? (
+                  <button
+                    type="button"
+                    onClick={() => setPrintEmployee({ id: row.employeeId, name: row.fullName })}
+                    aria-label={t('payslip.print.cta')}
+                    title={t('payslip.print.cta')}
+                    className="grid size-8 shrink-0 place-items-center rounded-lg text-ink-3 hover:bg-hover hover:text-ink"
+                  >
+                    <Printer className="size-4" aria-hidden="true" />
+                  </button>
+                ) : null}
+              </div>
               {openEmployee === row.employeeId ? (
                 <div className="mb-2 ml-7 overflow-x-auto">
                   {lines.isLoading ? (
@@ -504,7 +537,11 @@ function RunDetail({
                       <tbody>
                         {(lines.data ?? []).map((line, i) => (
                           <tr key={`${line.componentKey}-${i}`} className="text-ink-2">
-                            <td className="py-1 pr-4 font-mono text-xs">{line.componentKey}</td>
+                            <td className="py-1 pr-4 text-xs">
+                              {t(`payslip.components.${line.componentKey}` as Parameters<typeof t>[0], {
+                                defaultValue: line.componentKey,
+                              })}
+                            </td>
                             <td className="py-1 pr-4 text-xs">{line.kind}</td>
                             {/* Salary PII — always the mask, never an amount. */}
                             <td className="tnum py-1 font-mono text-xs">
@@ -567,8 +604,50 @@ function RunDetail({
         payrollRunId={run.id}
         locale={locale}
       />
+
+      {/* Printable payslip (Track P phase P9) — REAL amounts, owner-only. */}
+      {printEmployee && printLines.data ? (
+        <PayslipPrint
+          companyName={company?.name ?? ''}
+          employeeName={printEmployee.name}
+          period={run.period}
+          runSeq={run.runSeq}
+          runType={run.runType}
+          currency={run.baseCurrency}
+          grossMinor={sumByBearerAndKind(printLines.data, 'EMPLOYEE', 'EARNING')}
+          deductionMinor={sumByBearerAndKind(printLines.data, 'EMPLOYEE', 'DEDUCTION')}
+          netMinor={
+            sumByBearerAndKind(printLines.data, 'EMPLOYEE', 'EARNING') -
+            sumByBearerAndKind(printLines.data, 'EMPLOYEE', 'DEDUCTION')
+          }
+          illustrative={run.usesIllustrativeRules}
+          lines={printLines.data.map((line) => ({
+            componentKey: line.componentKey,
+            kind: line.kind,
+            bearer: line.bearer,
+            amountMinor: line.amountMinor ?? 0,
+            currency: line.currency ?? run.baseCurrency,
+            illustrative: line.illustrative,
+            ruleVersion: line.ruleVersion,
+          }))}
+          locale={locale}
+          onClose={() => setPrintEmployee(null)}
+        />
+      ) : null}
     </div>
   )
+}
+
+/** Sums authorized payslip lines by (bearer, kind) — the same formula MeReader#payslipDetail and
+ * BankFileReader document for net pay: Σ EMPLOYEE-borne EARNING − Σ EMPLOYEE-borne DEDUCTION. */
+function sumByBearerAndKind(
+  lines: { bearer: string; kind: string; amountMinor: number | null }[],
+  bearer: string,
+  kind: string,
+): number {
+  return lines
+    .filter((l) => l.bearer === bearer && l.kind === kind)
+    .reduce((sum, l) => sum + (l.amountMinor ?? 0), 0)
 }
 
 // ---------------------------------------------------------------------------

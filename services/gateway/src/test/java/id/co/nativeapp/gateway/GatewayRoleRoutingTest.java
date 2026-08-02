@@ -954,6 +954,196 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
   }
 
   // ---------------------------------------------------------------------------
+  // /api/v1/payroll-runs/{runId}/payslips/{employeeId}/authorized — REAL payslip amounts for
+  // printing, OWNER-ONLY (Track P phase P9)
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void aCashierIsDeniedThePayslipAuthorizedRouteWith403() throws Exception {
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/payroll-runs/some-run-id/payslips/some-employee-id/authorized")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void anOwnerCanReachThePayslipAuthorizedRoute() throws Exception {
+    // The HIGHEST_PRECEDENCE-ordered specific route must be checked BEFORE the general
+    // /api/v1/payroll-runs/** (DASHBOARD_ROLES) route, so an owner token reaches it.
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/payroll-runs/some-run-id/payslips/some-employee-id/authorized")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath())
+        .isEqualTo("/api/v1/payroll-runs/some-run-id/payslips/some-employee-id/authorized");
+  }
+
+  @Test
+  void thePayslipAuthorizedRouteDoesNotShadowTheMaskedPayslipSubPath() throws Exception {
+    // Regression guard (the other direction): the narrow .../authorized wildcard must not swallow
+    // the masked .../payslips/{employeeId} path — that still falls through to payrollRunsRoute.
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/payroll-runs/some-run-id/payslips/some-employee-id")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath())
+        .isEqualTo("/api/v1/payroll-runs/some-run-id/payslips/some-employee-id");
+  }
+
+  // ---------------------------------------------------------------------------
+  // /api/v1/payroll-reports/** — statutory CSV exports (Track P phase P9): 1721a1 + bpjs-summary
+  // are OWNER-ONLY, pph21-monthly is the ordinary owner/manager DASHBOARD_ROLES aggregate
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void aCashierIsDeniedThe1721A1ReportRouteWith403() throws Exception {
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/payroll-reports/1721a1?year=2026")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void anOwnerCanReachThe1721A1ReportRoute() throws Exception {
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/payroll-reports/1721a1?year=2026")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath())
+        .isEqualTo("/api/v1/payroll-reports/1721a1?year=2026");
+  }
+
+  @Test
+  void aCashierIsDeniedTheBpjsSummaryReportRouteWith403() throws Exception {
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/payroll-reports/bpjs-summary?period=2026-07")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void anOwnerCanReachTheBpjsSummaryReportRoute() throws Exception {
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/payroll-reports/bpjs-summary?period=2026-07")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath())
+        .isEqualTo("/api/v1/payroll-reports/bpjs-summary?period=2026-07");
+  }
+
+  @Test
+  void aCashierIsDeniedThePph21MonthlyReportRouteWith403() throws Exception {
+    // pph21-monthly is a DASHBOARD_ROLES route (owner/manager) — still not the cashier POS surface.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/payroll-reports/pph21-monthly?period=2026-07")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void anOwnerCanReachThePph21MonthlyReportRoute() throws Exception {
+    // The general DASHBOARD_ROLES /api/v1/payroll-reports/** route serves this — not one of the
+    // two HIGHEST_PRECEDENCE owner-only carve-outs above.
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/payroll-reports/pph21-monthly?period=2026-07")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath())
+        .isEqualTo("/api/v1/payroll-reports/pph21-monthly?period=2026-07");
+  }
+
+  // ---------------------------------------------------------------------------
   // /api/v1/expense-claims/** + /api/v1/expense-categories/** — expense claims (ADR 0030, E1)
   // owner/manager dashboard surface only; the employee self-service half rides /api/v1/me/**
   // ---------------------------------------------------------------------------

@@ -145,4 +145,17 @@ public class PayrollRunController {
       @PathVariable UUID runId, @PathVariable UUID employeeId) {
     return ResponseEntity.ok(payrollRunReader.findPayslipMasked(runId, employeeId));
   }
+
+  @Operation(
+      summary = "Get an employee's payslip with REAL amounts, for printing (owner-only)",
+      description =
+          "Returns the same payslip lines as the masked endpoint, but with the DECRYPTED amount —"
+              + " OWNER-ONLY at the gateway (the bank-file PII precedent, Track P phase P9): the"
+              + " owner needs the real figures to print/hand out a payslip. A manager still sees"
+              + " only the masked endpoint above.")
+  @GetMapping("/{runId}/payslips/{employeeId}/authorized")
+  public ResponseEntity<List<PayslipLineResponse>> getPayslipAuthorized(
+      @PathVariable UUID runId, @PathVariable UUID employeeId) {
+    return ResponseEntity.ok(payrollRunReader.findPayslipAuthorized(runId, employeeId));
+  }
 }

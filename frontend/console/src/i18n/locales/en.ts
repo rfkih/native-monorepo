@@ -1375,6 +1375,7 @@ export const en = {
         label: 'Payroll view',
         runs: 'Runs',
         setup: 'Setup',
+        reports: 'Reports',
       },
       pending: {
         title: '{{count}} pending request(s) block this run',
@@ -1386,6 +1387,31 @@ export const en = {
         unpaidLeave: '{{days}} unpaid day(s)',
         overtime: '{{minutes}} min overtime',
         reimbursement: '{{amount}} reimbursed',
+      },
+      // Track P Phase P9 — statutory CSV exports. These EXCEED Odoo's parity bar (Odoo l10n_id
+      // ships none of this), but the column layout is illustrative, not a certified DJP/BPJS
+      // schema — every card says so.
+      reports: {
+        subtitle:
+          'Statutory exports built from posted payroll runs. These go beyond what Odoo’s Indonesian localisation ships — but the column layout is illustrative, not a certified government schema. Verify every figure before filing.',
+        illustrativeLayoutNote: 'Illustrative layout — verify every figure before filing.',
+        ownerOnly: 'Owner-only — this export carries salary-revealing figures.',
+        yearLabel: 'Year',
+        download: 'Download CSV',
+        downloading: 'Preparing…',
+        error: 'Could not download this report — try again.',
+        bukti1721a1: {
+          title: 'Bukti Potong 1721-A1 (annual)',
+          body: 'One row per employee for the whole year: NIK/NPWP, annual gross, biaya jabatan, PTKP, PKP, and annual PPh 21 — the DJP annual withholding-tax slip.',
+        },
+        pph21Monthly: {
+          title: 'SPT Masa PPh 21 (monthly summary)',
+          body: 'Company-wide totals for one month: gross bruto, PPh 21 withheld, headcount, and employees with no NPWP on file. Aggregate only — no employee names.',
+        },
+        bpjsSummary: {
+          title: 'BPJS contribution summary (monthly)',
+          body: 'Per employee, per program (Kesehatan, JHT, JP, JKK, JKM): wage, employee contribution, employer contribution.',
+        },
       },
     },
   },
@@ -1440,6 +1466,55 @@ export const en = {
       submit: 'Save override',
       saving: 'Saving…',
       error: 'Could not save the override — check the effective date and JSON shape.',
+    },
+  },
+  // Track P Phase P9 — the printable payslip (the real Odoo-parity item) shared by PayrollTab
+  // (owner-only, REAL amounts via the /authorized read) and Me (the caller's own payslip, already
+  // decrypted). `components` maps a payslip componentKey to its statutory line label — shared by
+  // the print document and the on-screen payslip-line tables in PayrollTab/Me, so a key never
+  // renders two different labels in the app; a component key with no entry falls back to the raw
+  // key, so a future/custom component never renders blank.
+  payslip: {
+    print: {
+      cta: 'Print',
+      title: 'Payslip',
+      runLabel: 'Run #{{seq}}',
+      runType: {
+        REGULAR: 'Regular',
+        THR: 'THR (holiday allowance)',
+      },
+      provenanceOfficial: 'Official rates',
+      provenanceIllustrative: 'Illustrative placeholder rates — do not use for real payroll',
+      earnings: 'Earnings',
+      deductions: 'Deductions',
+      employerBorne: 'employer-borne',
+      gross: 'Gross',
+      totalDeductions: 'Total deductions',
+      net: 'Net pay',
+      ruleVersions: 'Rule version(s)',
+      generatedAt: 'Generated {{date}}',
+      noLines: 'No lines on this payslip.',
+    },
+    components: {
+      BASE: 'Basic salary',
+      MEAL_ALLOWANCE: 'Meal allowance',
+      FIXED_ALLOWANCE: 'Fixed allowance',
+      TAXABLE_ALLOWANCE: 'Taxable allowance',
+      COMMISSION: 'Commission',
+      OVERTIME: 'Overtime',
+      THR: 'THR (holiday allowance)',
+      BONUS: 'Bonus',
+      UNPAID_LEAVE: 'Unpaid leave deduction',
+      EXPENSE_REIMBURSEMENT: 'Expense reimbursement',
+      PPH21: 'PPh 21 (income tax)',
+      BPJS_KES_EE: 'BPJS Kesehatan contribution (employee)',
+      BPJS_KES_ER: 'BPJS Kesehatan contribution (employer)',
+      JHT_EE: 'BPJS JHT contribution (employee)',
+      JHT_ER: 'BPJS JHT contribution (employer)',
+      JP_EE: 'BPJS JP contribution (employee)',
+      JP_ER: 'BPJS JP contribution (employer)',
+      JKK_ER: 'BPJS JKK contribution (employer)',
+      JKM_ER: 'BPJS JKM contribution (employer)',
     },
   },
   posVertical: {

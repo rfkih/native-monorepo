@@ -362,6 +362,26 @@ public class Employee extends Auditable {
   }
 
   /**
+   * The raw decrypted NIK, for the {@code payroll.service.PayrollReportReader} 1721-A1 (Bukti
+   * Potong) statutory export ONLY (Track P phase P9) — a DJP annual withholding-tax slip
+   * legitimately carries the employee's national id, so this is a second deliberate, minimal
+   * PII-boundary widening beside {@link #bankAccountForBankFile()}, gated identically: OWNER-ONLY
+   * at the gateway, and the decrypted value goes straight into the CSV response body, NEVER logged
+   * (rule 6).
+   */
+  public String nikForStatutoryFile() {
+    return nik;
+  }
+
+  /**
+   * The raw decrypted NPWP, or null if none is on file, for the same 1721-A1 export boundary as
+   * {@link #nikForStatutoryFile()}.
+   */
+  public String npwpForStatutoryFile() {
+    return npwp;
+  }
+
+  /**
    * A PII-safe representation: id / status only, NEVER the name, NIK, or bank account (rule 6 — PII
    * never logged). An accidental {@code log.info("emp={}", employee)} cannot leak PII.
    */

@@ -826,6 +826,30 @@ export function usePayslip(
   })
 }
 
+/**
+ * GET /api/v1/payroll-runs/{runId}/payslips/{employeeId}/authorized — REAL (decrypted) amounts,
+ * for the printable payslip (Track P phase P9). Owner-only at the gateway (bank-file precedent);
+ * the caller must also gate the trigger client-side (`hasAnyRole(auth.roles, 'owner')`, as
+ * `PayrollTab` does for the bank-file download) — this hook itself sends no role information, the
+ * gateway is the enforcement point.
+ */
+export function usePayslipAuthorized(
+  params: TenantParams & { runId: string | null; employeeId: string | null; enabled: boolean },
+) {
+  const { companyId, actor, runId, employeeId, enabled } = params
+  return useQuery({
+    enabled: enabled && !!runId && !!employeeId,
+    queryKey: ['payslipAuthorized', companyId, runId, employeeId],
+    queryFn: async () => {
+      const result = await apiFetch<PayslipLine[]>(
+        `/api/v1/payroll-runs/${runId}/payslips/${employeeId}/authorized`,
+        { tenant: { companyId, actor } },
+      )
+      return result ?? []
+    },
+  })
+}
+
 // ---------------------------------------------------------------------------
 // Payroll liabilities + settlement (finance-service, ADR 0032, Track P phase P5)
 // ---------------------------------------------------------------------------
@@ -930,6 +954,46 @@ export function downloadPayrollBankFile(
     `/api/v1/payroll-runs/${runId}/bank-file`,
     { tenant: { companyId, actor } },
     `payroll-${period}-seq${runSeq}.csv`,
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Statutory CSV reports (Track P Phase P9) — illustrative-LAYOUT, EXCEED Odoo's parity bar
+// (Odoo l10n_id ships none of these). 1721a1 + bpjs-summary are OWNER-ONLY (PII/salary-revealing,
+// gateway-gated); pph21-monthly is the ordinary owner/manager DASHBOARD_ROLES aggregate.
+// ---------------------------------------------------------------------------
+
+/** GET /api/v1/payroll-reports/1721a1?year= — annual per-employee Bukti Potong CSV (owner-only). */
+export function downloadBukti1721A1Report(params: TenantParams & { year: string }): Promise<void> {
+  const { companyId, actor, year } = params
+  return apiDownload(
+    `/api/v1/payroll-reports/1721a1?year=${encodeURIComponent(year)}`,
+    { tenant: { companyId, actor } },
+    `1721-A1_${year}.csv`,
+  )
+}
+
+/** GET /api/v1/payroll-reports/pph21-monthly?period= — aggregate SPT Masa summary CSV. */
+export function downloadPph21MonthlyReport(
+  params: TenantParams & { period: string },
+): Promise<void> {
+  const { companyId, actor, period } = params
+  return apiDownload(
+    `/api/v1/payroll-reports/pph21-monthly?period=${encodeURIComponent(period)}`,
+    { tenant: { companyId, actor } },
+    `pph21-monthly-${period}.csv`,
+  )
+}
+
+/** GET /api/v1/payroll-reports/bpjs-summary?period= — per-employee BPJS summary CSV (owner-only). */
+export function downloadBpjsSummaryReport(
+  params: TenantParams & { period: string },
+): Promise<void> {
+  const { companyId, actor, period } = params
+  return apiDownload(
+    `/api/v1/payroll-reports/bpjs-summary?period=${encodeURIComponent(period)}`,
+    { tenant: { companyId, actor } },
+    `bpjs-summary-${period}.csv`,
   )
 }
 
