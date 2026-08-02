@@ -49,7 +49,32 @@ import org.springframework.transaction.annotation.Transactional;
  * here that sets or clears {@code reimbursement_run_id} ({@link ExpenseClaimRepository
  * #releaseForPeriod}, {@link ExpenseClaimRepository#linkForRunChunk}) bumps {@code version} in the
  * SAME statement — see their Javadoc for why a skipped bump lets a stale {@code
- * ExpenseClaimWriter#payDirect} flush clobber the link (a double payment).
+ * ExpenseClaimWriter#payDirect} flush clobber the link (a double payment). The same two UPDATEs
+ * also stamp {@code updated_by = 'system:payroll-linker'} explicitly (S1, E5 review) — a native
+ * {@code @Modifying} UPDATE never runs through JPA's {@code @LastModifiedBy} auditing listener, so
+ * without this the CDC audit trail would show a system-driven release/link with a stale or blank
+ * actor.
+ *
+ * <p><strong>Supersession is SAME-CYCLE, not lagged (W3, E5 review — corrects the original E5
+ * design).</strong> {@link #releaseForPeriod} takes the calculating run's OWN {@code run_seq}
+ * ({@code currentRunSeq}); its "POSTED but superseded" branch matches a linked run whose {@code
+ * run_seq < currentRunSeq} for the same period. Since {@code nextRunSeq} is always {@code max + 1},
+ * every PRIOR POSTED run for a period necessarily has a lower run_seq than the run about to be
+ * assigned — so "linked to a POSTED run of this period with a lower run_seq" IS exactly "linked to
+ * the run I, the calculating run, am about to supersede." The corrective run therefore releases AND
+ * re-links a superseded claim to ITSELF, in its own {@code calculate()} cycle — never a third run
+ * later. (The original E5 predicate only matched a STRICTLY HIGHER POSTED run_seq, which cannot
+ * exist yet at the superseding run's OWN calculate() — it always lagged one cycle. That check is
+ * KEPT alongside the new one as an idempotent overlap safety net, never a narrowing.)
+ *
+ * <p><strong>The non-POSTED release branch is period-agnostic (W2, E5 review — corrects the
+ * original E5 design).</strong> {@link #linkForRun} links a claim to a run irrespective of the
+ * claim's own {@code expense_date} — an outstanding APPROVED+PAYROLL claim rides ANY future run for
+ * that employee. So a claim stranded on an abandoned (CALCULATED-but-never-POSTED) run of period P
+ * must be released by ANY later {@code calculate()} for ANY period, not only a re-run of period P —
+ * an operator has no reason to ever recalculate an abandoned period on its own. Only the
+ * "superseded"/"E5-transitional" branches stay scoped to {@code :period}; the "run not POSTED"
+ * branch does not.
  *
  * <p><strong>E5-transitional gating ({@link #markReimbursedAndEmit}).</strong> P7 (a LATER phase)
  * adds the non-taxable {@code EXPENSE_REIMBURSEMENT} payslip line a linked claim rides to actually
@@ -97,23 +122,28 @@ public class ExpenseClaimPayrollLinker {
   }
 
   /**
-   * Releases every claim linked to a stale/superseded run of {@code period} back to {@code
-   * APPROVED} + unlinked — see {@link ExpenseClaimRepository#releaseForPeriod} for the exact
-   * predicate. Called at the TOP of {@code PayrollRunWriter#calculate}, before {@link #linkForRun},
-   * so a freshly-released claim can be re-linked to the run being calculated in the SAME
-   * transaction.
+   * Releases every claim linked to a stale/superseded run back to {@code APPROVED} + unlinked — see
+   * {@link ExpenseClaimRepository#releaseForPeriod} for the exact predicate (incl. the W2
+   * period-agnostic non-POSTED branch and the W3 same-cycle supersession fix, both E5 review).
+   * Called at the TOP of {@code PayrollRunWriter#calculate}, before {@link #linkForRun}, so a
+   * freshly-released claim can be re-linked to the run being calculated in the SAME transaction.
    *
+   * @param period the period of the run now calculating
+   * @param currentRunSeq the {@code run_seq} about to be assigned to the run now calculating (W3) —
+   *     the caller passes its OWN run_seq, so the corrective run's OWN {@code calculate()} is what
+   *     releases and re-links a prior POSTED run's claim, not a later third run
    * @return the number of claims released
    */
   @Transactional(propagation = Propagation.MANDATORY)
-  public int releaseForPeriod(String period) {
-    int released = claimRepository.releaseForPeriod(period);
+  public int releaseForPeriod(String period, int currentRunSeq) {
+    int released = claimRepository.releaseForPeriod(period, currentRunSeq);
     if (released > 0) {
       log.info(
-          "expense_claim payroll-linker released {} claim(s) for period {} (stale/superseded"
-              + " link)",
+          "expense_claim payroll-linker released {} claim(s) for period {} (run_seq {}"
+              + " superseding/stale link)",
           released,
-          period);
+          period,
+          currentRunSeq);
     }
     return released;
   }
@@ -222,10 +252,11 @@ public class ExpenseClaimPayrollLinker {
   }
 
   /**
-   * One row per (employee, currency) among the claims currently linked to {@code runId} — Track P
-   * Phase P7 will read this to build the non-taxable {@code EXPENSE_REIMBURSEMENT} payslip line per
-   * employee. See {@link ExpenseClaimRepository#findLinkedClaimTotalsByEmployee} for the
-   * currency-grouping rationale.
+   * One row per (employee, currency) among the claims currently linked to {@code runId} AND STILL
+   * {@code APPROVED} (W1, E5 review) — Track P Phase P7 will read this to build the non-taxable
+   * {@code EXPENSE_REIMBURSEMENT} payslip line per employee. See {@link ExpenseClaimRepository
+   * #findLinkedClaimTotalsByEmployee} for the {@code APPROVED}-only guard and the currency-grouping
+   * rationale.
    */
   @Transactional(propagation = Propagation.MANDATORY, readOnly = true)
   public List<LinkedClaimTotalView> findLinkedClaimTotalsByEmployee(UUID runId) {

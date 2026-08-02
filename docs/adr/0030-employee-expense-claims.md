@@ -70,13 +70,37 @@ storage, no human approve/reject state machine, and `/api/v1/me/**` has never ha
      employee's payslip actually carries the reimbursement line would book money the employee never
      received via that run — wrong books, the exact failure mode (7) exists to prevent. A claim
      linked in this window stays `APPROVED` + linked indefinitely. To recover it,
-     `releaseForPeriod`'s predicate carries a THIRD branch alongside "run not POSTED" and "a higher
-     POSTED run_seq exists": **linked to a POSTED run whose claim is still `APPROVED` (never flipped)
-     is released unconditionally**, so the next `calculate()` for that period (any re-run — a
-     correction, or simply an operator forcing one once P7 lands) frees it for re-linking. P7's own
+     `releaseForPeriod`'s predicate carries a THIRD branch alongside "run not POSTED" and "a
+     superseded POSTED run": **linked to a POSTED run whose claim is still `APPROVED` (never
+     flipped) is released unconditionally**, so the next `calculate()` for that period (any re-run —
+     a correction, or simply an operator forcing one once P7 lands) frees it for re-linking. P7's own
      work is therefore additive: wire the earning line, and the very next re-run for a period with
      stranded claims picks them up with no further change to the linker. No claim is ever silently
      stuck forever, and none is ever falsely settled early.
+   - **E5 review findings (fixed before P7 lands).** **W3 (the important one)** — supersession
+     release+relink is SAME-CYCLE, not lagged: `releaseForPeriod(period, currentRunSeq)` takes the
+     calculating run's OWN `run_seq`, and its "superseded" branch matches a linked POSTED run of the
+     same period whose `run_seq < currentRunSeq`. Since a period's `next run_seq` is always
+     `max + 1`, every PRIOR POSTED run necessarily satisfies that — so "linked to a POSTED run with
+     a lower run_seq" IS exactly "linked to the run I, the corrective run, am about to supersede":
+     the corrective run's OWN `calculate()` releases and re-links the claim to ITSELF, in the same
+     cycle it does the superseding — not a third run later, as the original E5 predicate (which only
+     matched a run_seq STRICTLY HIGHER than the one calculating — impossible during that very
+     run's own `calculate()`) required. That original check is KEPT alongside the fix as an
+     idempotent overlap safety net (widens, never narrows, the release condition). **W2** — the
+     "run not POSTED" branch is now PERIOD-AGNOSTIC: `linkForRun` links a claim to a run regardless
+     of the claim's own `expense_date`/period, so a claim stranded on an abandoned
+     (CALCULATED-but-never-POSTED) run of period P must be released by ANY later `calculate()` for
+     ANY period, not only a re-run of period P — an operator has no reason to ever recalculate an
+     abandoned period on its own; only the "superseded" and "E5-transitional" branches stay
+     period-scoped. **W1** — `findLinkedClaimTotalsByEmployee` filters `status = 'APPROVED'`: an
+     already-REIMBURSED claim stays linked to its settling run forever (only `releaseForPeriod` ever
+     clears the link), so without the filter an already-settled claim could fold into a totals read
+     taken after its own settlement. **S1** — both bulk conditional UPDATEs stamp
+     `updated_by = 'system:payroll-linker'` explicitly, since a native `@Modifying` UPDATE never
+     runs through JPA's `@LastModifiedBy` auditing listener; no prior native `@Modifying` UPDATE in
+     the codebase stamped `updated_by` at all, so this establishes the convention (CDC audit
+     fidelity) for a system-triggered bulk write with no bound human actor.
 7. **Finance settles once per claim.** A `employee_expense_claim_ledger` row with
    `UNIQUE (company_id, claim_id)`: any second settlement for a claim — re-delivery or
    supersession re-emission — is a logged no-op. This single invariant collapses every

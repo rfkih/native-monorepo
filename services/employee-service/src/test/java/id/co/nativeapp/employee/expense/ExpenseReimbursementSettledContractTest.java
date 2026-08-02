@@ -2,12 +2,19 @@ package id.co.nativeapp.employee.expense;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import id.co.nativeapp.employee.expense.domain.ExpenseClaim;
+import id.co.nativeapp.employee.expense.domain.ReimbursementMethod;
 import id.co.nativeapp.employee.expense.messaging.ExpenseReimbursementSettledSchema;
 import id.co.nativeapp.events.AvroSerde;
+import id.co.nativeapp.money.Money;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.UUID;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericRecord;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 /**
  * The {@code ExpenseReimbursementSettled} PRODUCER contract test (rule-7 triad, no Spring context;
@@ -73,6 +80,50 @@ class ExpenseReimbursementSettledContractTest {
     assertThat(decoded.get("payroll_run_id").toString())
         .isEqualTo("44444444-4444-4444-4444-444444444444");
     assertThat(decoded.get("run_seq")).isEqualTo(2);
+  }
+
+  @Test
+  void toRecordPayrollBuildsAGenuinePayrollKindRecordThatRoundTrips() {
+    // S3 (E5 review): exercises the REAL producer method (ExpenseReimbursementSettledSchema
+    // #toRecordPayroll), not a hand-built GenericRecord — payrollSettlementRoundTripsWithRunFields
+    // above only proves the SCHEMA shape accepts PAYROLL fields; this proves the actual builder
+    // wires them correctly from a real (settled) ExpenseClaim.
+    ExpenseClaim claim =
+        new ExpenseClaim(
+            UUID.fromString("33333333-3333-3333-3333-333333333333"),
+            UUID.fromString("66666666-6666-6666-6666-666666666666"),
+            UUID.fromString("22222222-2222-2222-2222-222222222222"),
+            Money.ofMinor(250_000L, "IDR"),
+            LocalDate.of(2026, 7, 15),
+            null,
+            null,
+            ReimbursementMethod.PAYROLL);
+    claim.setCompanyId("11111111-1111-1111-1111-111111111111");
+    claim.submit();
+    claim.approve("manager-sub", "ok", Instant.parse("2026-07-19T09:00:00Z"));
+    UUID payrollRunId = UUID.fromString("44444444-4444-4444-4444-444444444444");
+    ReflectionTestUtils.setField(claim, "reimbursementRunId", payrollRunId);
+    Instant settledAt = Instant.parse("2026-07-25T09:00:00Z");
+    claim.settleByPayrollRun(settledAt);
+
+    GenericRecord record =
+        ExpenseReimbursementSettledSchema.toRecordPayroll(claim, payrollRunId, 2, settledAt);
+    GenericRecord decoded =
+        AvroSerde.deserialize(
+            AvroSerde.serialize(record), ExpenseReimbursementSettledSchema.schema());
+
+    assertThat(decoded.get("claim_id").toString()).isEqualTo(claim.getId().toString());
+    assertThat(decoded.get("company_id").toString())
+        .isEqualTo("11111111-1111-1111-1111-111111111111");
+    assertThat(decoded.get("employee_id").toString())
+        .isEqualTo("33333333-3333-3333-3333-333333333333");
+    assertThat(decoded.get("amount_minor")).isEqualTo(250_000L);
+    assertThat(decoded.get("currency").toString()).isEqualTo("IDR");
+    assertThat(decoded.get("settlement_kind").toString())
+        .isEqualTo(ExpenseReimbursementSettledSchema.KIND_PAYROLL);
+    assertThat(decoded.get("payroll_run_id").toString()).isEqualTo(payrollRunId.toString());
+    assertThat(decoded.get("run_seq")).isEqualTo(2);
+    assertThat(decoded.get("settled_at")).isEqualTo(settledAt.toEpochMilli());
   }
 
   @Test

@@ -95,13 +95,14 @@ import org.springframework.transaction.annotation.Transactional;
  * only company totals / outlet-GL buckets (rule 6).
  *
  * <p><strong>Expense-claim seam (ADR 0030 §6, Track E phase E5).</strong> {@code calculate} opens
- * by calling {@link ExpenseClaimPayrollLinker#releaseForPeriod} then {@link
- * ExpenseClaimPayrollLinker#linkForRun} — both {@code propagation = MANDATORY}, joining THIS
- * method's own transaction — so a stale/superseded claim link is freed and every eligible claim is
- * atomically linked to the run being calculated. {@code post} closes by calling {@link
- * ExpenseClaimPayrollLinker#markReimbursedAndEmit}, which is E5-TRANSITIONALLY gated: it no-ops
- * until Track P Phase P7 adds the {@code EXPENSE_REIMBURSEMENT} payslip line a linked claim needs
- * to actually ride the payslip (see that method's Javadoc).
+ * by calling {@link ExpenseClaimPayrollLinker#releaseForPeriod}, passing its OWN {@code runSeq}
+ * (W3, E5 review — the corrective run releases/re-links a superseded claim in its OWN cycle, never
+ * a run later), then {@link ExpenseClaimPayrollLinker#linkForRun} — both {@code propagation =
+ * MANDATORY}, joining THIS method's own transaction — so a stale/superseded claim link is freed and
+ * every eligible claim is atomically linked to the run being calculated. {@code post} closes by
+ * calling {@link ExpenseClaimPayrollLinker#markReimbursedAndEmit}, which is E5-TRANSITIONALLY
+ * gated: it no-ops until Track P Phase P7 adds the {@code EXPENSE_REIMBURSEMENT} payslip line a
+ * linked claim needs to actually ride the payslip (see that method's Javadoc).
  */
 @Component
 public class PayrollRunWriter {
@@ -196,16 +197,19 @@ public class PayrollRunWriter {
     recordSealedLedger(run, command.period());
     run.markCalculating();
 
-    // ADR 0030 §6 (Track E phase E5) — the payroll<->expense-claim seam, joined to THIS
-    // transaction (ExpenseClaimPayrollLinker is propagation MANDATORY). release FIRST: frees
-    // claims stuck on a stale/superseded run of this SAME period so they are eligible below. link
-    // SECOND: atomically claims every un-linked APPROVED+PAYROLL claim for this run's employees.
+    // ADR 0030 §6 (Track E phase E5, W3 fix — E5 review) — the payroll<->expense-claim seam,
+    // joined to THIS transaction (ExpenseClaimPayrollLinker is propagation MANDATORY). release
+    // FIRST, passing THIS run's own runSeq: a prior POSTED run of this SAME period with a lower
+    // run_seq is, by construction, superseded by the run now calculating, so its claims are
+    // released AND re-linked to THIS run in the SAME cycle — no lagged third run needed (see the
+    // linker's class Javadoc). link SECOND: atomically claims every un-linked APPROVED+PAYROLL
+    // claim for this run's employees.
     // NOTE (E5-transitional, see ExpenseClaimPayrollLinker's class Javadoc): a claim linked here
     // does NOT yet ride a payslip line — Track P Phase P7 adds the EXPENSE_REIMBURSEMENT earning.
     // Until then, post()'s markReimbursedAndEmit call intentionally leaves these claims
     // APPROVED+linked (never flips/settles them) rather than settling money the employee never
     // actually received via this run.
-    expenseClaimPayrollLinker.releaseForPeriod(command.period());
+    expenseClaimPayrollLinker.releaseForPeriod(command.period(), runSeq);
     expenseClaimPayrollLinker.linkForRun(run.getId(), command.period(), command.employeeIds());
 
     if (ungated) {

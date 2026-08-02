@@ -152,9 +152,9 @@ public interface ExpenseClaimRepository extends JpaRepository<ExpenseClaim, UUID
   // ---------------------------------------------------------------------
 
   /**
-   * Releases every claim linked to a {@code payroll_run} of {@code period} whose link is now STALE,
-   * resetting {@code reimbursement_run_id}/{@code settled_at} to {@code NULL} and {@code status}
-   * back to {@code APPROVED} so {@link #linkForRunChunk} can re-link the claim to a corrective run.
+   * Releases every claim linked to a stale/superseded {@code payroll_run} back to {@code APPROVED}
+   * + unlinked, resetting {@code reimbursement_run_id}/{@code settled_at} to {@code NULL} so {@link
+   * #linkForRunChunk} can re-link the claim to a corrective run.
    *
    * <p><strong>BINDING (ADR 0030 §6, E4 review W1).</strong> Bumps {@code version} in the SAME
    * statement as every other column: {@code ExpenseClaimWriter#payDirect} flushes a full-column
@@ -165,28 +165,51 @@ public interface ExpenseClaimRepository extends JpaRepository<ExpenseClaim, UUID
    * race with {@link org.springframework.orm.ObjectOptimisticLockingFailureException} (→ 409)
    * instead.
    *
+   * <p><strong>{@code updated_by} (S1, E5 review).</strong> A native {@code @Modifying} UPDATE
+   * bypasses JPA's {@code @LastModifiedBy} auditing listener entirely (it never fires for a
+   * statement-level write), so this stamps the literal {@code 'system:payroll-linker'} explicitly —
+   * a stable, greppable CDC-audit marker distinguishing this system-driven release from a human
+   * actor's edit. No other native {@code @Modifying} UPDATE in this codebase stamped {@code
+   * updated_by} before this fix (several {@code INSERT ... ON CONFLICT} upserts thread an explicit
+   * caller-supplied actor instead, e.g. {@code MemberBalanceRefRepository}); this establishes the
+   * convention for a system-triggered bulk UPDATE with no bound human actor to attribute.
+   *
    * <p>Released when the linked run is:
    *
    * <ul>
-   *   <li>NOT POSTED — a failed/stale/abandoned {@code CALCULATING}/{@code CALCULATED}/{@code
-   *       FAILED} run for this period never reached POSTED, so no reimbursement it "carries" ever
-   *       actually happened; or
-   *   <li>POSTED but a STRICTLY HIGHER {@code run_seq} POSTED run for the SAME period already
-   *       exists — this run is superseded. This necessarily lags ONE {@code calculate()} cycle
-   *       behind the actual supersession (the higher run does not exist yet at the moment its OWN
-   *       {@code calculate()} runs), mirroring finance's own {@code LaborCostAllocated}/{@code
-   *       PayrollPosted} reversal timing, which likewise reverses a run only once the NEXT run
-   *       POSTS — see {@code ExpenseClaimPayrollLinker}'s class Javadoc for the full trace; or
-   *   <li>POSTED (this run itself, not superseded) but the claim is STILL {@code APPROVED} — the
-   *       <strong>E5-transitional</strong> case: {@code markReimbursedAndEmit} found no {@code
-   *       EXPENSE_REIMBURSEMENT} payslip line for this run (pre-Track-P-Phase-P7) and skipped it,
-   *       leaving the claim linked+APPROVED indefinitely unless a later re-run releases and
-   *       re-links it.
+   *   <li><strong>NOT POSTED — PERIOD-AGNOSTIC (W2, E5 review).</strong> A failed/stale/abandoned
+   *       {@code CALCULATED}/{@code FAILED} run never reached POSTED, so no reimbursement it
+   *       "carries" ever actually happened. Unlike the other two branches, this one is NOT scoped
+   *       to {@code :period}: {@link #linkForRunChunk} links a claim to a run regardless of the
+   *       claim's own {@code expense_date} (an outstanding claim rides ANY future run for that
+   *       employee), so a claim stranded on an abandoned non-POSTED run of a DIFFERENT period must
+   *       be released by ANY later {@code calculate()} — not only a re-run of that SAME stale
+   *       period, which an operator has no reason to ever trigger again; or
+   *   <li><strong>POSTED, of THIS {@code :period}, and superseded — SAME-CYCLE (W3, E5
+   *       review).</strong> Either (a) its {@code run_seq} is STRICTLY LESS THAN the calculating
+   *       run's own {@code :currentRunSeq} — every prior POSTED run for a period necessarily has a
+   *       lower run_seq than the one about to be assigned ({@code nextRunSeq} is always {@code max
+   *       + 1}), so "linked to a POSTED run of this period with a lower run_seq" IS exactly "linked
+   *       to a run the CALCULATING run itself supersedes" — the corrective run releases and
+   *       re-links the claim in the SAME {@code calculate()} cycle that supersedes it, never a
+   *       cycle later — or (b) a STRICTLY HIGHER POSTED {@code run_seq} already exists — kept
+   *       alongside (a) as an idempotent overlap safety net (widens, never narrows, the release
+   *       condition); or
+   *   <li><strong>POSTED (of THIS {@code :period}, the run itself, not superseded) but the claim is
+   *       STILL {@code APPROVED}</strong> — the E5-transitional case: {@code markReimbursedAndEmit}
+   *       found no {@code EXPENSE_REIMBURSEMENT} payslip line for this run (pre-Track-P-Phase-P7)
+   *       and skipped it, leaving the claim linked+APPROVED indefinitely unless a later re-run
+   *       releases and re-links it.
    * </ul>
    *
-   * <p>A claim already REIMBURSED by the run that is CURRENT (POSTED, not superseded) for this
-   * period matches none of the three OR-branches and is left untouched.
+   * <p>A claim already REIMBURSED by the run that is CURRENT (POSTED, {@code run_seq >=
+   * currentRunSeq}, not superseded) for this period matches none of the three OR-branches and is
+   * left untouched.
    *
+   * @param period the period of the run now calculating — scopes branches 2/3 only; branch 1 is
+   *     deliberately period-agnostic (W2)
+   * @param currentRunSeq the {@code run_seq} about to be assigned to the run now calculating (W3) —
+   *     any POSTED run of {@code period} with a lower run_seq is, by construction, superseded by it
    * @return the number of claims released
    */
   @Modifying
@@ -198,25 +221,32 @@ public interface ExpenseClaimRepository extends JpaRepository<ExpenseClaim, UUID
                  status               = 'APPROVED',
                  settled_at           = NULL,
                  updated_at           = NOW(),
+                 updated_by           = 'system:payroll-linker',
                  version              = c.version + 1
             FROM payroll_run pr
            WHERE c.reimbursement_run_id = pr.id
-             AND pr.period              = :period
              AND c.status               IN ('APPROVED', 'REIMBURSED')
              AND (
                    pr.status <> 'POSTED'
-                   OR EXISTS (
-                        SELECT 1
-                          FROM payroll_run pr2
-                         WHERE pr2.period  = pr.period
-                           AND pr2.status  = 'POSTED'
-                           AND pr2.run_seq > pr.run_seq
+                   OR (
+                        pr.period = :period
+                        AND pr.status = 'POSTED'
+                        AND (
+                              pr.run_seq < :currentRunSeq
+                              OR EXISTS (
+                                   SELECT 1
+                                     FROM payroll_run pr2
+                                    WHERE pr2.period  = pr.period
+                                      AND pr2.status  = 'POSTED'
+                                      AND pr2.run_seq > pr.run_seq
+                                 )
+                            )
                       )
-                   OR (pr.status = 'POSTED' AND c.status = 'APPROVED')
+                   OR (pr.period = :period AND pr.status = 'POSTED' AND c.status = 'APPROVED')
                  )
           """,
       nativeQuery = true)
-  int releaseForPeriod(@Param("period") String period);
+  int releaseForPeriod(@Param("period") String period, @Param("currentRunSeq") int currentRunSeq);
 
   /**
    * Chunk-scoped conditional UPDATE (caller chunks {@code employeeIds} at ≤1000 — CLAUDE.md) —
@@ -228,6 +258,10 @@ public interface ExpenseClaimRepository extends JpaRepository<ExpenseClaim, UUID
    * payDirect} (which read the claim BEFORE this link landed) lose its optimistic-lock race instead
    * of silently clobbering the link back to {@code NULL}.
    *
+   * <p><strong>{@code updated_by} (S1, E5 review).</strong> Stamps the same {@code
+   * 'system:payroll-linker'} literal as {@link #releaseForPeriod} — see its Javadoc for why a
+   * native {@code @Modifying} UPDATE must set this explicitly (JPA auditing never fires for it).
+   *
    * @return the number of claims linked in this chunk
    */
   @Modifying
@@ -237,6 +271,7 @@ public interface ExpenseClaimRepository extends JpaRepository<ExpenseClaim, UUID
           UPDATE expense_claim
              SET reimbursement_run_id = :runId,
                  updated_at           = NOW(),
+                 updated_by           = 'system:payroll-linker',
                  version              = version + 1
            WHERE status                = 'APPROVED'
              AND reimbursement_method  = 'PAYROLL'
@@ -254,14 +289,18 @@ public interface ExpenseClaimRepository extends JpaRepository<ExpenseClaim, UUID
   List<ExpenseClaim> findByReimbursementRunId(UUID reimbursementRunId);
 
   /**
-   * One row per (employee, currency) among the claims currently linked to {@code runId} — the
-   * source Track P Phase P7 reads to build the non-taxable {@code EXPENSE_REIMBURSEMENT} payslip
-   * line per employee. GROUP BY {@code amount_currency} as well as {@code employee_id}: v1 claims
-   * are single-currency per tenant (see {@code ExpenseClaimWriter}'s currency-establishment
-   * Javadoc), so in practice this is exactly one row per employee — but grouping by currency too
-   * means a hypothetical future multi-currency tenant surfaces as MULTIPLE rows per employee (one
-   * per currency) instead of silently summing across currencies into one corrupted total (never mix
-   * currencies in one {@code Money} sum, rule 8).
+   * One row per (employee, currency) among the claims currently linked to {@code runId} AND STILL
+   * {@code APPROVED} (W1, E5 review) — the source Track P Phase P7 reads to build the non-taxable
+   * {@code EXPENSE_REIMBURSEMENT} payslip line per employee. The {@code status = 'APPROVED'} guard
+   * matters because an already-settled ({@code REIMBURSED}) claim stays linked to its settling run
+   * FOREVER (only {@link #releaseForPeriod} ever clears {@code reimbursement_run_id}); without the
+   * guard, a claim already paid by this same run's own settlement would fold into a totals read
+   * taken after that settlement, double-counting it. GROUP BY {@code amount_currency} as well as
+   * {@code employee_id}: v1 claims are single-currency per tenant (see {@code ExpenseClaimWriter}'s
+   * currency-establishment Javadoc), so in practice this is exactly one row per employee — but
+   * grouping by currency too means a hypothetical future multi-currency tenant surfaces as MULTIPLE
+   * rows per employee (one per currency) instead of silently summing across currencies into one
+   * corrupted total (never mix currencies in one {@code Money} sum, rule 8).
    */
   @Query(
       value =
@@ -272,6 +311,7 @@ public interface ExpenseClaimRepository extends JpaRepository<ExpenseClaim, UUID
                  COUNT(*)          AS claim_count
             FROM expense_claim
            WHERE reimbursement_run_id = :runId
+             AND status = 'APPROVED'
            GROUP BY employee_id, amount_currency
            ORDER BY employee_id
           """,

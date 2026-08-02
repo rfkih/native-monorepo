@@ -87,13 +87,16 @@ class ExpenseClaimPayrollLinkerTest {
   // ---------------------------------------------------------------------
 
   @Test
-  void releaseForPeriodDelegatesToTheRepositoryAndReturnsTheCount() throws Exception {
-    when(claimRepository.releaseForPeriod("2026-07")).thenReturn(3);
+  void releaseForPeriodDelegatesToTheRepositoryWithTheCallersRunSeqAndReturnsTheCount()
+      throws Exception {
+    // W3 (E5 review): the linker passes the CALLER's own run_seq straight through — this is what
+    // lets a corrective run's own calculate() supersede-and-relink in its own cycle.
+    when(claimRepository.releaseForPeriod("2026-07", 2)).thenReturn(3);
 
-    int released = TenantContext.callAs(TENANT, ACTOR, () -> linker.releaseForPeriod("2026-07"));
+    int released = TenantContext.callAs(TENANT, ACTOR, () -> linker.releaseForPeriod("2026-07", 2));
 
     assertThat(released).isEqualTo(3);
-    verify(claimRepository, times(1)).releaseForPeriod("2026-07");
+    verify(claimRepository, times(1)).releaseForPeriod("2026-07", 2);
   }
 
   // ---------------------------------------------------------------------

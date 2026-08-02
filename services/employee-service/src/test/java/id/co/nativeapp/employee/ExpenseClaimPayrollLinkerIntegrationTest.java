@@ -52,8 +52,12 @@ import org.springframework.transaction.annotation.Transactional;
  * Real-PostgreSQL proofs of the payroll↔expense-claim seam (ADR 0030 §6, Track E phase E5): the
  * version-bump race invariant BOTH directions (pay-vs-link and link-vs-pay), a genuine concurrent
  * DIRECT-pay race (E4 review W2, no dedicated Testcontainers proof existed before this phase), and
- * {@code releaseForPeriod}'s three release predicates — including the E5-transitional
- * "POSTED-but-still-APPROVED" case documented on {@code ExpenseClaimPayrollLinker}.
+ * {@code releaseForPeriod}'s release predicates — including the E5-transitional
+ * "POSTED-but-still-APPROVED" case, the W3 same-cycle supersession fix (the corrective run's OWN
+ * {@code calculate()} releases and re-links a superseded claim, never a run later), and the W2
+ * period-agnostic non-POSTED branch (a claim stranded on an abandoned run of one period is freed by
+ * a {@code calculate()} for ANY other period) — all documented on {@code ExpenseClaimPayrollLinker}
+ * (E5 review findings).
  */
 @SpringBootTest
 class ExpenseClaimPayrollLinkerIntegrationTest extends PostgresRlsTestBase {
@@ -149,11 +153,14 @@ class ExpenseClaimPayrollLinkerIntegrationTest extends PostgresRlsTestBase {
                 setup.claimId()))
         .isEqualTo(1L);
 
-    // The stale flush: replays the EXACT optimistic-locked UPDATE
-    // ExpenseClaimWriter#payDirect's claimRepository.save(claim) would issue —
-    // "WHERE id = ? AND version = ?" using the PRE-LINK version. Without the linker's version
-    // bump (ADR 0030 §6 BINDING) this WHERE clause would still match today and silently clobber
-    // the link back to NULL (a double payment); with the bump, it matches ZERO rows.
+    // The stale flush: replays the SHAPE of the optimistic-locked UPDATE
+    // ExpenseClaimWriter#payDirect's claimRepository.save(claim) issues on flush — "WHERE id = ?
+    // AND version = ?" using the PRE-LINK version (a deterministic simulation of what a real stale
+    // JPA save would attempt at the SQL level; see ExpenseClaimWriterTest for a mock-level proof
+    // that payDirect() itself never catches/swallows the resulting optimistic-lock exception).
+    // Without the linker's version bump (ADR 0030 §6 BINDING) this WHERE clause would still match
+    // today and silently clobber the link back to NULL (a double payment); with the bump, it
+    // matches ZERO rows.
     int staleUpdateRowsAffected =
         attemptStaleVersionedPayDirectUpdate(setup.claimId(), staleVersion);
     assertThat(staleUpdateRowsAffected).isZero();
@@ -289,7 +296,8 @@ class ExpenseClaimPayrollLinkerIntegrationTest extends PostgresRlsTestBase {
   }
 
   // ---------------------------------------------------------------------
-  // (d) releaseForPeriod's three predicates, incl. the E5-transitional case.
+  // (d) releaseForPeriod's release predicates: abandoned non-POSTED run (period-agnostic, W2),
+  // E5-transitional POSTED-but-still-APPROVED, and same-cycle supersession (W3).
   // ---------------------------------------------------------------------
 
   @Test
@@ -384,8 +392,12 @@ class ExpenseClaimPayrollLinkerIntegrationTest extends PostgresRlsTestBase {
   }
 
   @Test
-  void releaseForPeriodFreesAndReSettlesAReimbursedClaimFromASupersededPostedRun()
+  void theCorrectiveRunsOwnCalculateReleasesAndRelinksASupersededReimbursedClaimSameCycle()
       throws Exception {
+    // W3 (E5 review, the important fix): supersession release+relink happens in the CORRECTIVE
+    // run's OWN calculate() cycle — not a third run later, as the original E5 predicate required
+    // (it only matched a run_seq STRICTLY HIGHER than the calculating run's own, which cannot
+    // exist yet during that very run's calculate()).
     ClaimSetup setup = setUpEmployeeWithApprovedClaim("3206666666666666", "6666777788889999");
 
     // run1: simulate Track P Phase P7 by hand-inserting the EXPENSE_REIMBURSEMENT payslip line
@@ -415,39 +427,24 @@ class ExpenseClaimPayrollLinkerIntegrationTest extends PostgresRlsTestBase {
                 setup.claimId().toString()))
         .isEqualTo(1L);
 
-    // run2: a correction for the SAME period, posted — supersedes run1 (higher POSTED run_seq).
-    // The claim, already REIMBURSED+linked to run1, is untouched by run2's OWN link step.
+    // run2: a correction for the SAME period. Its OWN calculate() must release run1's claim
+    // (run1.run_seq=1 < run2's own run_seq=2 — W3) and re-link it to run2 IN THE SAME CYCLE,
+    // BEFORE run2 ever posts — assert this immediately after calculate(), before posting.
     UUID run2Id =
-        TenantContext.callAs(
-                TENANT_A,
-                ACTOR_A,
-                () ->
-                    payrollRunService.calculateAndPost(
-                        runCommand("2026-07", setup.employeeId()), IDR))
-            .getId();
-    assertThat(run2Id).isNotEqualTo(run1Id);
-
-    // run3: NOW run1 is POSTED + superseded (run2 is a higher POSTED run_seq) — released and
-    // re-linked to run3; with the P7-simulated line again present, it is RE-settled: a SECOND
-    // ExpenseReimbursementSettled(PAYROLL) event for the SAME claim_id (finance's per-claim
-    // settle-once guard treats the re-emission as a no-op, ADR 0030 §7 — not asserted here, that
-    // invariant lives in finance-service).
-    UUID run3Id =
         TenantContext.callAs(
                 TENANT_A,
                 ACTOR_A,
                 () -> payrollRunService.calculate(runCommand("2026-07", setup.employeeId()), IDR))
             .getId();
-    insertExpenseReimbursementPayslipLine(run3Id, setup.employeeId());
-    TenantContext.callAs(TENANT_A, ACTOR_A, () -> payrollRunService.post(run3Id));
+    assertThat(run2Id).isNotEqualTo(run1Id);
 
     assertThat(
             countAsTenant(
                 TENANT_A,
-                "SELECT count(*) FROM expense_claim WHERE id = ? AND status = 'REIMBURSED' AND"
+                "SELECT count(*) FROM expense_claim WHERE id = ? AND status = 'APPROVED' AND"
                     + " reimbursement_run_id = ?",
                 setup.claimId(),
-                run3Id))
+                run2Id))
         .isEqualTo(1L);
     assertThat(
             countAsTenant(
@@ -456,6 +453,22 @@ class ExpenseClaimPayrollLinkerIntegrationTest extends PostgresRlsTestBase {
                 setup.claimId(),
                 run1Id))
         .isZero();
+
+    // Posting run2 (with the P7-simulated line again present) RE-settles: a SECOND
+    // ExpenseReimbursementSettled(PAYROLL) event for the SAME claim_id (finance's per-claim
+    // settle-once guard treats the re-emission as a no-op, ADR 0030 §7 — not asserted here, that
+    // invariant lives in finance-service).
+    insertExpenseReimbursementPayslipLine(run2Id, setup.employeeId());
+    TenantContext.callAs(TENANT_A, ACTOR_A, () -> payrollRunService.post(run2Id));
+
+    assertThat(
+            countAsTenant(
+                TENANT_A,
+                "SELECT count(*) FROM expense_claim WHERE id = ? AND status = 'REIMBURSED' AND"
+                    + " reimbursement_run_id = ?",
+                setup.claimId(),
+                run2Id))
+        .isEqualTo(1L);
     assertThat(
             countAsTenant(
                 TENANT_A,
@@ -463,6 +476,53 @@ class ExpenseClaimPayrollLinkerIntegrationTest extends PostgresRlsTestBase {
                     + " aggregate_id = ?",
                 setup.claimId().toString()))
         .isEqualTo(2L);
+  }
+
+  @Test
+  void releaseForPeriodFreesAClaimStrandedOnAnAbandonedRunOfADifferentPeriod() throws Exception {
+    // W2 (E5 review): the "run not POSTED" release branch is PERIOD-AGNOSTIC. A claim stranded on
+    // an abandoned (CALCULATED-but-never-POSTED) run of one period must be freed by a calculate()
+    // for ANY OTHER period, not only a re-run of that same stale period.
+    ClaimSetup setup = setUpEmployeeWithApprovedClaim("3207777777777777", "7777888899990000");
+
+    UUID mayRunId =
+        TenantContext.callAs(
+                TENANT_A,
+                ACTOR_A,
+                () -> payrollRunService.calculate(runCommand("2026-05", setup.employeeId()), IDR))
+            .getId();
+    assertThat(
+            countAsTenant(
+                TENANT_A,
+                "SELECT count(*) FROM expense_claim WHERE id = ? AND reimbursement_run_id = ?",
+                setup.claimId(),
+                mayRunId))
+        .isEqualTo(1L);
+
+    // The May run is abandoned — never posted. A calculate() for a DIFFERENT period (June) must
+    // still release+relink the claim.
+    UUID juneRunId =
+        TenantContext.callAs(
+                TENANT_A,
+                ACTOR_A,
+                () -> payrollRunService.calculate(runCommand("2026-06", setup.employeeId()), IDR))
+            .getId();
+
+    assertThat(
+            countAsTenant(
+                TENANT_A,
+                "SELECT count(*) FROM expense_claim WHERE id = ? AND status = 'APPROVED' AND"
+                    + " reimbursement_run_id = ?",
+                setup.claimId(),
+                juneRunId))
+        .isEqualTo(1L);
+    assertThat(
+            countAsTenant(
+                TENANT_A,
+                "SELECT count(*) FROM expense_claim WHERE id = ? AND reimbursement_run_id = ?",
+                setup.claimId(),
+                mayRunId))
+        .isZero();
   }
 
   // ---------------------------------------------------------------------
@@ -584,13 +644,18 @@ class ExpenseClaimPayrollLinkerIntegrationTest extends PostgresRlsTestBase {
   }
 
   /**
-   * Replays the EXACT optimistic-locked UPDATE {@code ExpenseClaimWriter#payDirect}'s {@code
-   * claimRepository.save(claim)} issues (mirrors {@code Auditable}'s JPA {@code @Version}
-   * behaviour) against a caller-supplied, possibly-STALE {@code version} — the deterministic
-   * simulation of "a payDirect flush built from a pre-link snapshot" (ADR 0030 §6 BINDING). Runs as
-   * the unprivileged {@code app_user} (RLS-scoped, {@link PostgresRlsTestBase#countAsTenant}'s
-   * connection idiom) so a genuinely tenant-mismatched or version-mismatched attempt is
-   * indistinguishable from what the real optimistic-locked JPA UPDATE would do.
+   * Replays, at the raw-SQL level, the SHAPE of the optimistic-locked UPDATE {@code
+   * ExpenseClaimWriter#payDirect}'s {@code claimRepository.save(claim)} issues on flush (mirrors
+   * {@code Auditable}'s JPA {@code @Version} behaviour: {@code WHERE id = ? AND version = ?})
+   * against a caller-supplied, possibly-STALE {@code version} — a deterministic simulation of "a
+   * payDirect flush built from a pre-link snapshot" (ADR 0030 §6 BINDING), not a literal capture of
+   * Hibernate's generated SQL (column list/ordering may differ). Runs as the unprivileged {@code
+   * app_user} (RLS-scoped, {@link PostgresRlsTestBase#countAsTenant}'s connection idiom) so a
+   * genuinely version-mismatched attempt behaves the same way the real optimistic-locked JPA UPDATE
+   * would: {@code ExpenseClaimWriterTest} (expense package) separately proves, at the mock level,
+   * that {@code payDirect()} never catches/swallows the resulting {@code
+   * ObjectOptimisticLockingFailureException} — the two tests together cover both the SQL-shape and
+   * the exception-propagation halves of the same invariant.
    *
    * @return the number of rows the UPDATE affected — {@code 0} means the version no longer matches
    *     (the race was lost), {@code 1} means it would have succeeded

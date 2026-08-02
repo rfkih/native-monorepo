@@ -38,6 +38,7 @@ import java.util.UUID;
 import org.apache.avro.generic.GenericRecord;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
 /**
  * Writer unit tests with mocked repositories — no Spring context, no database. Proves the
@@ -233,6 +234,38 @@ class ExpenseClaimWriterTest {
     verify(outboxWriter, never()).write(any(), any(), any(), any(), any(), any(), any());
     verify(eventRepository, never()).saveAndFlush(any());
     verify(claimRepository, never()).save(any());
+  }
+
+  @Test
+  void aStaleVersionedSaveDuringPayDirectPropagatesTheOptimisticLockConflictUncaught()
+      throws Exception {
+    // S2 (E5 review): payDirect() has no try/catch around claimRepository.save(claim) — a
+    // stale-version flush (raced by ExpenseClaimPayrollLinker#linkForRun bumping the row's
+    // version concurrently, see ExpenseClaimPayrollLinkerIntegrationTest's SQL-shape proof) must
+    // surface as ObjectOptimisticLockingFailureException (-> 409 via EmployeeApiAdvice), never be
+    // silently swallowed or masked as a successful pay.
+    UUID otherEmployee = UUID.randomUUID();
+    ExpenseClaim claim = approvedClaim(otherEmployee);
+
+    when(eventRepository.findIdByClaimIdAndIdempotencyKey(
+            claim.getId(), "k-stale", ExpenseClaimWriter.ACTION_PAY_DIRECT))
+        .thenReturn(Optional.empty());
+    when(claimRepository.findById(claim.getId())).thenReturn(Optional.of(claim));
+    when(claimRepository.save(eq(claim)))
+        .thenThrow(new ObjectOptimisticLockingFailureException(ExpenseClaim.class, claim.getId()));
+
+    assertThatThrownBy(
+            () ->
+                TenantContext.callAs(
+                    TENANT, ACTOR, () -> writer.payDirect(claim.getId(), "k-stale")))
+        .isInstanceOf(ObjectOptimisticLockingFailureException.class);
+
+    // The domain guard already flipped the in-memory claim (exactly what a real failed Hibernate
+    // flush would leave behind — the DB transaction rolls back, the Java object does not), but
+    // nothing downstream of the failed save ever fired.
+    assertThat(claim.getStatus()).isEqualTo(ClaimStatus.REIMBURSED);
+    verify(outboxWriter, never()).write(any(), any(), any(), any(), any(), any(), any());
+    verify(eventRepository, never()).saveAndFlush(any());
   }
 
   @Test
