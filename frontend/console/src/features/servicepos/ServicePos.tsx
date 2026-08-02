@@ -15,8 +15,11 @@
  */
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Gift, LogOut, Moon, Settings, Sun } from 'lucide-react'
 import { useSession, type CompanySession } from '@/lib/session'
 import { useAuth, hasAnyRole } from '@/lib/authContext'
+import { useTheme } from '@/lib/theme'
+import { OutletPicker } from '@/components/OutletPicker'
 import { localeOf } from '@/i18n'
 import { OutletGate } from '@/components/OutletGate'
 import { GiftCardSellModal } from '@/components/GiftCardSellModal'
@@ -45,7 +48,8 @@ import {
 } from './api'
 import { ServicePaymentModal } from './ServicePaymentModal'
 import { ServiceReceipt } from './ServiceReceipt'
-import { HeaderBar } from './components/HeaderBar'
+import { PosStatusBar } from '@/features/pos-shell/layout/PosStatusBar'
+import { TillMenuSheet } from '@/features/pos-shell/layout/TillMenuSheet'
 import { PackageCard } from './components/PackageCard'
 import { AddonChip } from './components/AddonChip'
 import { SummaryPanel, type AddonLine } from './components/SummaryPanel'
@@ -81,6 +85,8 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
   // The manual discount is owner/manager-only (ADR 0026 §5; the server 403s anyway — this hides the
   // input for a cashier so it never sees an affordance it cannot use).
   const canManualDiscount = hasAnyRole(auth.roles, 'owner', 'manager')
+  const canDashboard = hasAnyRole(auth.roles, 'owner', 'manager')
+  const { theme, toggle } = useTheme()
 
   const packagesQuery = useCatalogPackages(config, session)
   const addonsQuery = useCatalogAddons(config, session)
@@ -90,6 +96,7 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
   // Phase 5 offline mode (ADR 0028) — see features/pos/Pos.tsx's twin doc for the fallback strategy.
   const { offline, queuedCount, rejectedCount } = useOffline()
   const [showSyncCenter, setShowSyncCenter] = useState(false)
+  const [showTillMenu, setShowTillMenu] = useState(false)
   const cachedPackages = useCachedCatalogFallback<CatalogItemResponse[]>(
     session.companyId,
     config.vertical,
@@ -316,15 +323,57 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
 
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-paper">
-      <HeaderBar
-        config={config}
-        session={session}
+      {/* P5: the shared terminal chrome — same band as the restaurant POS. */}
+      <PosStatusBar
+        businessName={session.name}
+        outletPicker={<OutletPicker />}
+        showBack={canDashboard}
         offline={offline}
-        queuedCount={queuedCount}
-        rejectedCount={rejectedCount}
-        onOpenGiftCardSell={() => setShowGiftCardSell(true)}
-        onOpenSyncCenter={() => setShowSyncCenter(true)}
+        queuedCount={queuedCount + rejectedCount}
+        onConnectionClick={() => setShowSyncCenter(true)}
+        pinned={[]}
+        onOverflowClick={() => setShowTillMenu((v) => !v)}
+        overflowOpen={showTillMenu}
       />
+
+      {showTillMenu ? (
+        <TillMenuSheet
+          onClose={() => setShowTillMenu(false)}
+          items={[
+            {
+              key: 'giftcard',
+              icon: <Gift className="size-4" aria-hidden="true" />,
+              label: t('pos.loyalty.giftCard.sellTitle'),
+              onSelect: () => setShowGiftCardSell(true),
+              disabled: offline,
+              disabledTitle: t('offline.disabled.giftCard'),
+            },
+            ...(canDashboard
+              ? [
+                  {
+                    key: 'catalog',
+                    icon: <Settings className="size-4" aria-hidden="true" />,
+                    label: t(`${config.i18nNs}.manageCatalog`),
+                    to: '/catalog',
+                  },
+                ]
+              : []),
+            {
+              key: 'theme',
+              icon: theme === 'dark' ? <Sun className="size-4" aria-hidden="true" /> : <Moon className="size-4" aria-hidden="true" />,
+              label: t('a11y.toggleTheme'),
+              onSelect: toggle,
+            },
+            {
+              key: 'logout',
+              icon: <LogOut className="size-4" aria-hidden="true" />,
+              label: t('nav.logout'),
+              onSelect: auth.logout,
+              danger: true,
+            },
+          ]}
+        />
+      ) : null}
 
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
         {/* Catalog — packages + add-ons */}
@@ -382,7 +431,7 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
         </div>
 
         {/* Summary panel */}
-        <aside className="w-full shrink-0 overflow-y-auto border-t border-line bg-surface lg:w-[400px] lg:border-l lg:border-t-0">
+        <aside className="max-h-[45dvh] w-full shrink-0 overflow-y-auto border-t border-line bg-surface lg:max-h-none lg:w-[400px] lg:border-l lg:border-t-0">
           <SummaryPanel
             config={config}
             currency={currency}

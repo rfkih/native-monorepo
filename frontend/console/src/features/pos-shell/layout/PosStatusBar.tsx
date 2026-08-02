@@ -31,6 +31,7 @@ export interface StatusBarAction {
 export function PosStatusBar({
   businessName,
   outletPicker,
+  showBack = true,
   offline,
   queuedCount,
   onConnectionClick,
@@ -41,6 +42,8 @@ export function PosStatusBar({
   businessName: string
   /** The OutletPicker element (a stateful cross-feature component — slotted in, not imported). */
   outletPicker: React.ReactNode
+  /** Service cashiers have no dashboard access — their band hides the back link (role gate). */
+  showBack?: boolean
   offline: boolean
   /** Queued + rejected offline sales — shown inside the connection pill. */
   queuedCount: number
@@ -59,14 +62,16 @@ export function PosStatusBar({
         'bg-ink-900 text-white dark:border-b dark:border-line dark:bg-surface dark:text-ink',
       )}
     >
-      {/* Back to dashboard */}
-      <Link
-        to="/"
-        aria-label={t('a11y.backToDashboard')}
-        className="grid size-9 shrink-0 place-items-center rounded-xl text-white/60 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300 dark:text-ink-3 dark:hover:bg-hover dark:hover:text-ink"
-      >
-        <ArrowLeft className="size-4" />
-      </Link>
+      {/* Back to dashboard (role-gated for service cashiers) */}
+      {showBack ? (
+        <Link
+          to="/"
+          aria-label={t('a11y.backToDashboard')}
+          className="grid size-9 shrink-0 place-items-center rounded-xl text-white/60 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300 dark:text-ink-3 dark:hover:bg-hover dark:hover:text-ink"
+        >
+          <ArrowLeft className="size-4" />
+        </Link>
+      ) : null}
 
       {/* Identity (md+) */}
       <span className="hidden items-center gap-2 md:flex">
