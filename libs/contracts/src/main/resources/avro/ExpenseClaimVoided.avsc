@@ -1,0 +1,17 @@
+{
+  "type": "record",
+  "name": "ExpenseClaimVoided",
+  "namespace": "id.co.nativeapp.events.employee",
+  "doc": "Emitted by employee-service when an APPROVED (posted, un-settled, un-linked) expense claim is VOIDED by a manager (ADR 0030) — the correction path; refuse-after-approve is not allowed because the money is on the books. finance-service consumes this to post the exact contra (Dr Employee Expense Payable 2600 / Cr the same category expense) and subtract the P&L expense leg. The producer guards that a settled or payroll-linked claim can never be voided; the consumer treats a void arriving after a settlement as a loud logged skip. Money is integer minor units + ISO-4217, never a float (rule 8).",
+  "fields": [
+    {"name": "claim_id", "type": "string", "doc": "The expense_claim aggregate id (UUID as string); also the Kafka partition key."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string)."},
+    {"name": "org_unit_id", "type": "string", "doc": "The dimension the original approval posted under (UUID as string; all-zeros sentinel when unassigned) — the contra must hit the same business_id."},
+    {"name": "employee_id", "type": "string", "doc": "The claiming employee (UUID as string). A reference, not PII."},
+    {"name": "amount_minor", "type": "long", "doc": "The exact approved amount being contra'd, in minor units. Never a float."},
+    {"name": "currency", "type": "string", "doc": "ISO-4217 currency code; matches the approval."},
+    {"name": "gl_hint", "type": "string", "doc": "The same category hint the approval carried — the contra resolves the same expense account."},
+    {"name": "approved_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "The ORIGINAL approval instant, epoch millis (UTC): the contra resolves the mapping_rule effective AT APPROVAL so it reverses the exact account the approval posted to, even if the mapping changed since."},
+    {"name": "voided_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the void happened, epoch millis (UTC). Drives the accounting period the contra posts into (current open period, the reversal precedent)."}
+  ]
+}

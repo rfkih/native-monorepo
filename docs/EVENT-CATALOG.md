@@ -62,6 +62,9 @@ schema. Until then a row here is documentation of intent, not a shippable contra
 | **`ExpenseRecorded`** | **verticals** | **finance** | **expense_id, company_id, business_id, amount_minor, currency, gl_hint, occurred_at** | **LIVE (finance consumer #21)** |
 | **`PayrollPosted`** | **employee-service** | **finance** | **payroll_run_id, run_seq, company_id, period, base_currency, totals, rule_versions, uses_illustrative_rules, posted_at** | **LIVE (#23); finance consumer #23** |
 | **`LaborCostAllocated`** | **employee-service** | **finance** | **payroll_run_id, run_seq, company_id, period, outlet_id, gl_account, amount_minor, currency, uses_illustrative_rules, unallocated** | **LIVE (#23); finance consumer #23** |
+| **`ExpenseClaimApproved`** | **employee-service** | **finance** | **claim_id, company_id, org_unit_id, employee_id, amount_minor, currency, gl_hint, expense_date, approved_at** | **SCHEMA REGISTERED (ADR 0030, E0); producer E1, finance consumer E2** |
+| **`ExpenseClaimVoided`** | **employee-service** | **finance** | **claim_id, company_id, org_unit_id, employee_id, amount_minor, currency, gl_hint, approved_at, voided_at** | **SCHEMA REGISTERED (ADR 0030, E0); producer E7, finance consumer E2** |
+| **`ExpenseReimbursementSettled`** | **employee-service** | **finance** | **claim_id, company_id, org_unit_id, employee_id, amount_minor, currency, settlement_kind, payroll_run_id?, run_seq?, settled_at** | **SCHEMA REGISTERED (ADR 0030, E0); producers E4/E5, finance consumer E2** |
 | **`UserOutletAssignmentChanged`** | **org-service** | **restaurant-service** (Phase 5 outlet-scoping), **carwash-service** (outlet-scoping foundation) | **assignment_id, user_id, company_id, org_unit_id, change_kind, effective_from, effective_to** | **LIVE (Phase 5); carwash-service consumer added ahead of its ticket/checkout POS-parity work** |
 | **`GroupDefined`** | **org-service** | **finance** | **group_id, lead_company_id, reporting_currency, name** | **LIVE (P3d SEAM 1); finance consumer P3d SEAM 1** |
 | **`GroupMembershipChanged`** | **org-service** | **finance** | **group_id, member_company_id, change_kind, effective_from, effective_to** | **LIVE (P3d SEAM 1); finance consumer P3d SEAM 1** |
@@ -441,6 +444,133 @@ required field without a default, never remove or rename a field, never change a
 The contract test (`ExpenseRecordedContractTest`) enforces this — it asserts the consumer copy
 parses, round-trips a `GenericRecord` through `AvroSerde`, stays backward-compatible with the
 producer schema, and rejects a new required field without a default (the triad).
+
+### `ExpenseClaimApproved`
+
+Emitted by employee-service when a manager APPROVES an employee expense claim (ADR 0030 —
+the expense-claims program). **Expense recognition happens at approval**: finance-service
+consumes this to resolve the category expense account from `gl_hint` via the effective
+`mapping_rule` (suspense fail-safe), post Dr expense / **Cr `2600 Employee Expense Payable`**
+(`AccountRole EMPLOYEE_EXPENSE_PAYABLE`), append the dimensional EXPENSE `ledger_posting`
+under `business_id = org_unit_id`, and accumulate the consolidated P&L expense leg.
+
+This is a NEW contract, deliberately **not** an evolution of `ExpenseRecorded`: that event's
+consumer credits CASH_CLEARING, and overloading it would make an already-deployed finance post
+claims as cash expenses during a rolling-deploy window (semantically wrong books with a
+compatible schema). New event type = new topic = no mixed-semantics window.
+
+- **Producer:** `employee-service` (the approve transition writes the outbox row in the same
+  transaction as the SUBMITTED→APPROVED state change — rule 3).
+- **Consumers:** `finance-service` (`empexpense` package: payable posting + P&L + GL journal).
+- **Aggregate type / partition key:** `expense_claim` / `claim_id`
+- **Outbox `event_type`:** `ExpenseClaimApproved`
+- **Schema:** `libs/contracts/src/main/resources/avro/ExpenseClaimApproved.avsc` (single source,
+  ADR 0003); read off the wire as raw Avro bytes via `libs/events AvroSerde`, deduped by the
+  event UUID (`ProcessedEventStore`).
+- **Full name:** `id.co.nativeapp.events.employee.ExpenseClaimApproved`
+
+**`employee_id` is a UUID reference, not PII** (contrast `LaborCostAllocated`, which drops it
+because per-employee labor cost ≈ salary): a claim amount derives nothing about compensation
+and is manager-visible operational data; finance needs it for the payable drill-down. Merchant,
+note and the receipt image never cross an event. `org_unit_id` is the all-zeros UUID sentinel
+when the employee had no active assignment at `expense_date`. v1 claims are always in the
+company base currency. `approved_at` drives both the accounting period and the effective
+`mapping_rule` version; `expense_date` (Avro `date`, epoch days) is informational.
+
+**Key fields**
+
+| Field | Avro type | Meaning |
+|---|---|---|
+| `claim_id` | `string` | Expense-claim aggregate id (UUID as string); the partition key |
+| `company_id` | `string` | Owning tenant (UUID as string) |
+| `org_unit_id` | `string` | BU/outlet dimension → `ledger_posting.business_id`; all-zeros sentinel when unassigned |
+| `employee_id` | `string` | Claiming employee (UUID reference, not PII) |
+| `amount_minor` | `long` | Claim amount in minor units — never a float |
+| `currency` | `string` | ISO-4217; v1 = company base currency |
+| `gl_hint` | `string` | Category hint (`''`, `cogs`, `supplies`, `utilities`) → expense account via `mapping_rule`; unknown → suspense |
+| `expense_date` | `int` (`date`) | Date incurred (epoch days); informational |
+| `approved_at` | `long` (`timestamp-millis`) | Approval instant; drives period + mapping version |
+
+**Compatibility.** Backward-compatible evolution only (add fields with defaults). The contract
+triads (`ExpenseClaimApprovedContractTest` in employee-service AND finance-service) assert the
+schema parses, round-trips through `AvroSerde`, remains readable across producer/consumer
+copies, and that a required no-default field is rejected.
+
+### `ExpenseClaimVoided`
+
+Emitted by employee-service when an APPROVED, **un-settled, un-linked** claim is VOIDED by a
+manager — the correction path (refuse-after-approve is not allowed once money is on the books;
+ADR 0030). finance-service posts the exact contra: Dr `2600 Employee Expense Payable` / Cr the
+same category expense, and subtracts the P&L expense leg. The contra resolves the
+`mapping_rule` effective at the ORIGINAL `approved_at` (so it reverses the exact account the
+approval hit) but posts into the period of `voided_at` (the reversal precedent). The producer
+guards that a settled or payroll-linked claim can never void; a void arriving after a
+settlement at the consumer is a loud logged skip (money already moved — human follow-up).
+
+- **Producer:** `employee-service` (void transition, outbox in-tx).
+- **Consumers:** `finance-service` (`empexpense`).
+- **Aggregate type / partition key:** `expense_claim` / `claim_id`
+- **Outbox `event_type`:** `ExpenseClaimVoided`
+- **Schema:** `libs/contracts/src/main/resources/avro/ExpenseClaimVoided.avsc`
+- **Full name:** `id.co.nativeapp.events.employee.ExpenseClaimVoided`
+
+**Key fields**
+
+| Field | Avro type | Meaning |
+|---|---|---|
+| `claim_id` | `string` | Expense-claim aggregate id; the partition key |
+| `company_id` | `string` | Owning tenant |
+| `org_unit_id` | `string` | The dimension the approval posted under — the contra hits the same `business_id` |
+| `employee_id` | `string` | Claiming employee (UUID reference) |
+| `amount_minor` | `long` | The exact approved amount being contra'd |
+| `currency` | `string` | ISO-4217; matches the approval |
+| `gl_hint` | `string` | The approval's category hint — same account resolution |
+| `approved_at` | `long` (`timestamp-millis`) | ORIGINAL approval instant — mapping resolved as-of here |
+| `voided_at` | `long` (`timestamp-millis`) | Void instant — the contra posts into this period |
+
+**Compatibility.** As `ExpenseClaimApproved` (triads both sides).
+
+### `ExpenseReimbursementSettled`
+
+Emitted by employee-service when an APPROVED claim is reimbursed (ADR 0030), by either path:
+**DIRECT** (a manager pays now — `POST /{id}/pay`, AP-payment style) or **PAYROLL** (the claim
+rode a payroll run's payslip as the non-taxable `EXPENSE_REIMBURSEMENT` line and the run
+POSTED; one event per claim in the CALCULATED→POSTED transaction). finance-service settles the
+payable — Dr `2600 Employee Expense Payable` / Cr CASH_CLEARING — a balance-sheet move only;
+the expense was recognised at approval.
+
+**Settle-once (the supersession invariant).** Finance keeps a per-claim guard row
+(`employee_expense_settlement`, `UNIQUE (company_id, claim_id)`): any second settlement for a
+claim — a Kafka re-delivery OR a re-emission after payroll supersession released and re-linked
+the claim to a corrective run — is a **logged no-op**. Claim amounts are immutable after
+approval, so any re-settlement is financially identical; this single rule collapses every
+double-pay window.
+
+- **Producers:** `employee-service` — DIRECT pay (E4) and the payroll run post via
+  `ExpenseClaimPayrollLinker` (E5).
+- **Consumers:** `finance-service` (`empexpense`).
+- **Aggregate type / partition key:** `expense_claim` / `claim_id`
+- **Outbox `event_type`:** `ExpenseReimbursementSettled`
+- **Schema:** `libs/contracts/src/main/resources/avro/ExpenseReimbursementSettled.avsc`
+- **Full name:** `id.co.nativeapp.events.employee.ExpenseReimbursementSettled`
+
+**Key fields**
+
+| Field | Avro type | Meaning |
+|---|---|---|
+| `claim_id` | `string` | Expense-claim aggregate id; the partition key |
+| `company_id` | `string` | Owning tenant |
+| `org_unit_id` | `string` | Claim dimension (all-zeros sentinel when unassigned) |
+| `employee_id` | `string` | Reimbursed employee (UUID reference) |
+| `amount_minor` | `long` | Settled amount = the full approved claim amount |
+| `currency` | `string` | ISO-4217; matches the approval |
+| `settlement_kind` | `string` | `DIRECT` or `PAYROLL` |
+| `payroll_run_id` | `["null","string"]`, default `null` | Settling run when PAYROLL; null for DIRECT |
+| `run_seq` | `["null","int"]`, default `null` | Settling run's supersession seq when PAYROLL |
+| `settled_at` | `long` (`timestamp-millis`) | Settlement instant; drives the settlement entry's period |
+
+**Compatibility.** As `ExpenseClaimApproved` (triads both sides). The two nullable fields are
+the union-with-default idiom — old readers ignore them, old writers omit them.
 
 ### `MetricPublished`
 

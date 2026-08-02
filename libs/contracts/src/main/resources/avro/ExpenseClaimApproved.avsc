@@ -1,0 +1,17 @@
+{
+  "type": "record",
+  "name": "ExpenseClaimApproved",
+  "namespace": "id.co.nativeapp.events.employee",
+  "doc": "Emitted by employee-service when a manager APPROVES an employee expense claim (ADR 0030). Expense recognition happens at approval: finance-service consumes this to post Dr <category expense via gl_hint/mapping_rule> / Cr Employee Expense Payable (2600) and accumulate the consolidated P&L expense leg. This is a NEW contract, deliberately NOT an evolution of ExpenseRecorded, whose consumer credits CASH_CLEARING — reusing it would post claims as cash expenses during a rolling deploy. Money is an integer minor-units amount plus an ISO-4217 currency code, never a float (rule 8). employee_id is a UUID reference, not PII: a claim amount is manager-visible operational data and derives nothing about compensation (contrast LaborCostAllocated, which deliberately drops employee_id because per-employee labor cost ~= salary). Merchant, note and the receipt image never cross an event (data minimization).",
+  "fields": [
+    {"name": "claim_id", "type": "string", "doc": "The expense_claim aggregate id (UUID as string); also the Kafka partition key."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string)."},
+    {"name": "org_unit_id", "type": "string", "doc": "The claim's business-unit/outlet dimension (UUID as string) -> ledger_posting.business_id; the all-zeros UUID sentinel when the employee had no active assignment at expense_date (mirrors LaborCostAllocator.UNALLOCATED_OUTLET)."},
+    {"name": "employee_id", "type": "string", "doc": "The claiming employee (UUID as string). A reference, not PII — see the record doc."},
+    {"name": "amount_minor", "type": "long", "doc": "Claim amount in the currency's minor units. Never a float."},
+    {"name": "currency", "type": "string", "doc": "ISO-4217 currency code; v1 always the company base currency (ADR 0030)."},
+    {"name": "gl_hint", "type": "string", "doc": "The claim category's expense hint ('' general, cogs, supplies, utilities); finance resolves it to a chart_of_account expense account via the effective mapping_rule. An unrecognised hint fails safe to the suspense account (money never dropped)."},
+    {"name": "expense_date", "type": {"type": "int", "logicalType": "date"}, "doc": "The date the expense was incurred (epoch days, the AssignmentChanged idiom). Informational; the accounting period derives from approved_at."},
+    {"name": "approved_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the claim was approved, epoch millis (UTC). Drives the accounting period AND the effective mapping_rule version (recognition at approval)."}
+  ]
+}

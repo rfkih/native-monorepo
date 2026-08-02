@@ -60,6 +60,32 @@ events:
       - { name: company_id, type: "string" }
       - { name: module_key, type: "string" }
       - { name: revoked_at, type: "timestamp-millis" }
+  - name: ExpenseClaimApproved
+    namespace: id.co.nativeapp.events.employee
+    schema: libs/contracts/src/main/resources/avro/ExpenseClaimApproved.avsc
+    fields:
+      - { name: claim_id, type: "string" }
+      - { name: company_id, type: "string" }
+      - { name: org_unit_id, type: "string" }
+      - { name: employee_id, type: "string" }
+      - { name: amount_minor, type: "long" }
+      - { name: currency, type: "string" }
+      - { name: gl_hint, type: "string" }
+      - { name: expense_date, type: "date" }
+      - { name: approved_at, type: "timestamp-millis" }
+  - name: ExpenseClaimVoided
+    namespace: id.co.nativeapp.events.employee
+    schema: libs/contracts/src/main/resources/avro/ExpenseClaimVoided.avsc
+    fields:
+      - { name: claim_id, type: "string" }
+      - { name: company_id, type: "string" }
+      - { name: org_unit_id, type: "string" }
+      - { name: employee_id, type: "string" }
+      - { name: amount_minor, type: "long" }
+      - { name: currency, type: "string" }
+      - { name: gl_hint, type: "string" }
+      - { name: approved_at, type: "timestamp-millis" }
+      - { name: voided_at, type: "timestamp-millis" }
   - name: ExpenseRecorded
     namespace: id.co.nativeapp.events.restaurant
     schema: libs/contracts/src/main/resources/avro/ExpenseRecorded.avsc
@@ -70,6 +96,43 @@ events:
       - { name: amount_minor, type: "long" }
       - { name: currency, type: "string" }
       - { name: gl_hint, type: "string" }
+      - { name: occurred_at, type: "timestamp-millis" }
+  - name: ExpenseReimbursementSettled
+    namespace: id.co.nativeapp.events.employee
+    schema: libs/contracts/src/main/resources/avro/ExpenseReimbursementSettled.avsc
+    fields:
+      - { name: claim_id, type: "string" }
+      - { name: company_id, type: "string" }
+      - { name: org_unit_id, type: "string" }
+      - { name: employee_id, type: "string" }
+      - { name: amount_minor, type: "long" }
+      - { name: currency, type: "string" }
+      - { name: settlement_kind, type: "string" }
+      - { name: payroll_run_id, type: "null|string" }
+      - { name: run_seq, type: "null|int" }
+      - { name: settled_at, type: "timestamp-millis" }
+  - name: GiftCardSold
+    namespace: id.co.nativeapp.events.restaurant
+    schema: libs/contracts/src/main/resources/avro/GiftCardSold.avsc
+    fields:
+      - { name: gift_card_sale_id, type: "string" }
+      - { name: gift_card_id, type: "string" }
+      - { name: company_id, type: "string" }
+      - { name: business_id, type: "string" }
+      - { name: amount_minor, type: "long" }
+      - { name: currency, type: "string" }
+      - { name: tender_type, type: "null|string" }
+      - { name: occurred_at, type: "timestamp-millis" }
+  - name: GiftCardStateChanged
+    namespace: id.co.nativeapp.events.loyalty
+    schema: libs/contracts/src/main/resources/avro/GiftCardStateChanged.avsc
+    fields:
+      - { name: gift_card_id, type: "string" }
+      - { name: company_id, type: "string" }
+      - { name: state, type: "string" }
+      - { name: balance_minor, type: "long" }
+      - { name: currency, type: "string" }
+      - { name: balance_seq, type: "long" }
       - { name: occurred_at, type: "timestamp-millis" }
   - name: GroupDefined
     namespace: id.co.nativeapp.events.org
@@ -102,6 +165,29 @@ events:
       - { name: run_seq, type: "int" }
       - { name: uses_illustrative_rules, type: "boolean" }
       - { name: unallocated, type: "boolean" }
+      - { name: occurred_at, type: "timestamp-millis" }
+  - name: LoyaltyBalanceChanged
+    namespace: id.co.nativeapp.events.loyalty
+    schema: libs/contracts/src/main/resources/avro/LoyaltyBalanceChanged.avsc
+    fields:
+      - { name: member_id, type: "string" }
+      - { name: company_id, type: "string" }
+      - { name: points_balance, type: "long" }
+      - { name: balance_seq, type: "long" }
+      - { name: reason, type: "string" }
+      - { name: occurred_at, type: "timestamp-millis" }
+  - name: LoyaltyRedemptionFlagged
+    namespace: id.co.nativeapp.events.loyalty
+    schema: libs/contracts/src/main/resources/avro/LoyaltyRedemptionFlagged.avsc
+    fields:
+      - { name: flag_id, type: "string" }
+      - { name: company_id, type: "string" }
+      - { name: business_id, type: "string" }
+      - { name: sale_id, type: "string" }
+      - { name: member_id, type: "null|string" }
+      - { name: gift_card_id, type: "null|string" }
+      - { name: shortfall_minor, type: "null|long" }
+      - { name: shortfall_points, type: "null|long" }
       - { name: occurred_at, type: "timestamp-millis" }
   - name: MetricPublished
     namespace: id.co.nativeapp.events.carwash
@@ -177,6 +263,11 @@ events:
       - { name: tax_minor, type: "null|long" }
       - { name: tax_rule_version, type: "null|string" }
       - { name: uses_illustrative_rules, type: "null|boolean" }
+      - { name: loyalty_member_id, type: "null|string" }
+      - { name: loyalty_redeemed_points, type: "null|long" }
+      - { name: loyalty_redeemed_minor, type: "null|long" }
+      - { name: gift_card_id, type: "null|string" }
+      - { name: gift_card_redeemed_minor, type: "null|long" }
   - name: SaleRefunded
     namespace: id.co.nativeapp.events.restaurant
     schema: libs/contracts/src/main/resources/avro/SaleRefunded.avsc

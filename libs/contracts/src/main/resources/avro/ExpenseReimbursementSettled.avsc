@@ -1,0 +1,18 @@
+{
+  "type": "record",
+  "name": "ExpenseReimbursementSettled",
+  "namespace": "id.co.nativeapp.events.employee",
+  "doc": "Emitted by employee-service when an APPROVED expense claim is reimbursed (ADR 0030) — either DIRECT (a manager pays it now) or PAYROLL (it rode a payroll run's payslip as the non-taxable EXPENSE_REIMBURSEMENT line and the run POSTED). finance-service consumes this to settle the payable: Dr Employee Expense Payable (2600) / Cr CASH_CLEARING — a balance-sheet move only; the expense was recognised at approval. Finance keeps a per-claim settle-once guard row (UNIQUE company_id+claim_id): a re-delivered OR re-emitted settlement (payroll supersession re-runs re-emit for relinked claims) NO-OPS, which collapses every supersession double-pay window. Money is integer minor units + ISO-4217, never a float (rule 8).",
+  "fields": [
+    {"name": "claim_id", "type": "string", "doc": "The expense_claim aggregate id (UUID as string); also the Kafka partition key."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string)."},
+    {"name": "org_unit_id", "type": "string", "doc": "The claim's dimension (UUID as string; all-zeros sentinel when unassigned)."},
+    {"name": "employee_id", "type": "string", "doc": "The reimbursed employee (UUID as string). A reference, not PII."},
+    {"name": "amount_minor", "type": "long", "doc": "The settled amount in minor units — always the full approved claim amount. Never a float."},
+    {"name": "currency", "type": "string", "doc": "ISO-4217 currency code; matches the approval."},
+    {"name": "settlement_kind", "type": "string", "doc": "DIRECT (paid immediately, AP-payment style) or PAYROLL (settled by a posted payroll run)."},
+    {"name": "payroll_run_id", "type": ["null", "string"], "default": null, "doc": "The settling payroll run (UUID as string) when settlement_kind=PAYROLL; null for DIRECT."},
+    {"name": "run_seq", "type": ["null", "int"], "default": null, "doc": "The settling run's supersession sequence when settlement_kind=PAYROLL; null for DIRECT."},
+    {"name": "settled_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the settlement happened, epoch millis (UTC). Drives the accounting period of the settlement entry."}
+  ]
+}

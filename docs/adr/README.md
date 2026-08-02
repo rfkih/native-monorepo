@@ -31,6 +31,7 @@ boundary, a security posture. Routine, local choices do not need one — use a c
 | [0010](0010-distributed-tracing-otel.md) | Wire distributed tracing (Micrometer Tracing + OpenTelemetry) fleet-wide | Accepted |
 | [0011](0011-keycloak-admin-via-spring-restclient.md) | Use Spring RestClient for Keycloak Admin API calls (no keycloak-admin-client library) | Accepted |
 | [0012](0012-flatten-org-tree-remove-branch.md) | Flatten the org tree: remove BRANCH and seed a default outlet per business unit | Accepted |
+| [0013](0013-per-login-page-grants-subtractive-ui.md) | Per-login page grants are subtractive UI gating; roles remain the API authz boundary | Accepted |
 | [0014](0014-accounts-receivable-subledger.md) | Accounts Receivable sub-ledger + the customer/party dimension in finance-service | Accepted |
 | [0015](0015-accounts-payable-subledger.md) | Accounts Payable sub-ledger — the vendor-facing mirror of AR | Accepted |
 | [0016](0016-bank-reconciliation.md) | Bank accounts & reconciliation — settling the clearing account | Accepted |
@@ -40,3 +41,11 @@ boundary, a security posture. Routine, local choices do not need one — use a c
 | [0020](0020-fixed-assets-and-deferrals.md) | Fixed assets & deferrals — the monthly amortization run | Accepted |
 | [0021](0021-multi-company-ownership.md) | Multi-company ownership — one login, 1..N businesses (multivalued claim + validated selection) | Accepted |
 | [0022](0022-fixed-asset-disposal.md) | Fixed-asset disposal — gain/loss on disposal as other income | Accepted |
+| [0023](0023-carwash-vertical-pos.md) | Carwash vertical POS — the ticket flow, vertical path prefixing, PII-free staff attribution | Accepted |
+| [0024](0024-barbershop-vertical-and-module-rollout.md) | Barbershop vertical — cloning the carwash POS shape; how a new module rolls out | Accepted |
+| [0025](0025-country-driven-company-defaults.md) | Country-driven company defaults — Odoo-style signup, derived base currency, funnel fields | Accepted |
+| [0026](0026-promotions-single-discount-collapse.md) | Promotions — per-vertical rules and coupons that collapse into one discount | Accepted |
+| [0027](0027-loyalty-service-and-eventual-consistency-redemption.md) | Loyalty and gift cards — a new bounded context; redemption under eventual consistency | Accepted |
+| [0028](0028-offline-mode-cash-only-queue.md) | Offline mode — cash-only client queue replayed through the online checkout | Accepted |
+| [0029](0029-self-order-qr-and-customer-display.md) | Self-order QR — an anonymous surface whose blast radius is a parked row | Accepted |
+| [0030](0030-employee-expense-claims.md) | Employee expense claims — recognition at approval, a new event family, settle-once payable | Accepted |
