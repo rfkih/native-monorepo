@@ -194,7 +194,8 @@ class MeEndpointTest extends PostgresRlsTestBase {
   // ---------------------------------------------------------------------------------------------
   // P10 review C1 — findMyPayslipHeaders had NEITHER the POSTED filter NOR the run_seq-supersession
   // filter, so a superseded correction re-run's stale lines summed ALONGSIDE the active run's (the
-  // console payslip list AND the YTD card, which sums every listed header's detail, double-counted),
+  // console payslip list AND the YTD card, which sums every listed header's detail,
+  // double-counted),
   // and a CALCULATED-but-never-POSTED run's already-persisted lines appeared as if final. The fix
   // filters with the SAME ACTIVE_RUN_PREDICATE the December true-up query family already uses.
   // ---------------------------------------------------------------------------------------------
@@ -239,13 +240,15 @@ class MeEndpointTest extends PostgresRlsTestBase {
 
               // Two runs of the SAME period: run_seq=1, then run_seq=2 SUPERSEDES it (both POSTED —
               // nothing about the employee changed, only the run_seq differs; the recipe only needs
-              // to prove the SET of runs the header list returns, not a materially different figure).
+              // to prove the SET of runs the header list returns, not a materially different
+              // figure).
               payrollRunService.calculateAndPost(
                   new RunPayrollCommand("2026-06", List.of(employeeId), List.of()), "IDR");
               payrollRunService.calculateAndPost(
                   new RunPayrollCommand("2026-06", List.of(employeeId), List.of()), "IDR");
 
-              // A DIFFERENT period, calculated but deliberately never posted (PayrollRunService#post
+              // A DIFFERENT period, calculated but deliberately never posted
+              // (PayrollRunService#post
               // is never called) — CALCULATED forever, with persisted payslip lines.
               PayrollRun neverPosted =
                   payrollRunService.calculate(
@@ -283,8 +286,7 @@ class MeEndpointTest extends PostgresRlsTestBase {
         .andExpect(jsonPath("$.length()").value(0));
 
     // The unscoped (every-period) list also carries exactly ONE header — June's active run only.
-    mvc.perform(
-            get("/api/v1/me/payslips").header("X-Company-Id", TENANT).header("X-Actor", subA))
+    mvc.perform(get("/api/v1/me/payslips").header("X-Company-Id", TENANT).header("X-Actor", subA))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.length()").value(1))
         .andExpect(jsonPath("$[0].period").value("2026-06"))
@@ -347,7 +349,8 @@ class MeEndpointTest extends PostgresRlsTestBase {
               payrollRunService.calculateAndPost(
                   new RunPayrollCommand("2026-11", List.of(employeeId), List.of()), "IDR");
 
-              compensationWriter.endPackage(employeeId, highPkg.getId(), LocalDate.of(2026, 11, 30));
+              compensationWriter.endPackage(
+                  employeeId, highPkg.getId(), LocalDate.of(2026, 11, 30));
               compensationWriter.createPackage(
                   employeeId,
                   contract.getId(),
