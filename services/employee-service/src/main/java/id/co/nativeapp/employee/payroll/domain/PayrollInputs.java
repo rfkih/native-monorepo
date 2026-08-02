@@ -87,21 +87,50 @@ public final class PayrollInputs {
   }
 
   /**
+   * The Track P Phase P8 (ADR 0035) THR-month TER interplay context: this employee's ALREADY-
+   * ACTIVE gross bruto / withheld PPh21 for the SAME period from the OTHER {@link RunType} (the
+   * "sibling" run) — {@code null} when no such sibling run is currently active for this period. The
+   * PMK 168/2023 masa-pajak mandate is that TER applies to the MONTH's TOTAL gross bruto, so
+   * whichever of a THR/REGULAR pair for the same period computes SECOND must fold the sibling's
+   * already-withheld figure into its own TER computation (see {@code GrossToNetCalculator}'s
+   * TER_TABLE branch and {@code PayrollRunWriter#siblingPeriodContext}'s javadoc for the full
+   * order-invariance proof). Mirrors {@link AnnualContext}'s writer-injects- history shape but
+   * scoped to ONE sibling run in the SAME period rather than a whole fiscal year.
+   *
+   * @param grossBrutoMinor the sibling run's gross bruto (taxable cash earnings + taxable employer
+   *     premiums) for this employee, minor units of the run's base currency
+   * @param withheldMinor the sibling run's PPh21 already withheld for this employee, minor units
+   */
+  public record SiblingPeriodContext(long grossBrutoMinor, long withheldMinor) {}
+
+  /**
    * Everything the calculator needs for one person, on the run's base currency.
    *
    * @param employeeId the person
    * @param ptkpStatus the PTKP relief status (drives the income-tax relief lookup)
-   * @param baseComponent the BASE pay component (catalog config for the base earning line)
-   * @param basePay the person's aggregated base pay (decrypted)
-   * @param earnings the non-base earning inputs (allowances, commission, etc.)
+   * @param baseComponent the BASE pay component (catalog config for the base earning line) — for a
+   *     THR run this is instead the THR earning component (Track P Phase P8): {@code
+   *     GrossToNetCalculator} always emits exactly one unconditional line for {@code
+   *     (baseComponent, basePay)}, so a THR run's writer substitutes the THR component/prorated
+   *     amount here rather than BASE, with no calculator change needed
+   * @param basePay the person's aggregated base pay (decrypted), or the prorated THR earning for a
+   *     THR run
+   * @param earnings the non-base earning inputs (allowances, commission, etc.) — always empty for a
+   *     THR run (statutory spec: THR carries ONLY the THR earning + PPh21)
    * @param statutoryComponents the statutory pay-components (BPJS-shaped + PPh21-shaped) in display
-   *     order; each links to a {@link StatutoryRule} via its {@code statutory_rule_key}
+   *     order, ALREADY FILTERED by {@link PayComponent#appliesTo(RunType)} for this run's type
+   *     (Track P Phase P8 — BPJS legs are filtered out of a THR run); each links to a {@link
+   *     StatutoryRule} via its {@code statutory_rule_key}
    * @param otherDeductions non-statutory deductions
    * @param resolvedRules the FROZEN resolved statutory rules (rule_key -> rule)
    * @param hasNpwp whether the employee has an NPWP on file — drives the {@code TER_TABLE}/{@code
    *     ANNUAL_PROGRESSIVE} no-NPWP x120% surcharge (UU PPh Art 21(5a))
    * @param annualContext the December/final-month true-up context, or {@code null} for every other
-   *     month (see {@link AnnualContext})
+   *     month AND for every THR run (Track P Phase P8 documented residual — the December true-up
+   *     does not yet compose with a same-period THR sibling; see {@code PayrollRunWriter}'s class
+   *     javadoc)
+   * @param siblingContext the THR-month TER interplay context (Track P Phase P8), or {@code null}
+   *     when no sibling run is currently active for this period
    */
   public record PersonInput(
       UUID employeeId,
@@ -113,5 +142,36 @@ public final class PayrollInputs {
       List<DeductionInput> otherDeductions,
       Map<String, StatutoryRule> resolvedRules,
       boolean hasNpwp,
-      AnnualContext annualContext) {}
+      AnnualContext annualContext,
+      SiblingPeriodContext siblingContext) {
+
+    /**
+     * Backward-compatible constructor defaulting {@link #siblingContext} to {@code null} (Track P
+     * Phase P8, additive) — every pre-P8 call site keeps compiling/behaving unchanged.
+     */
+    public PersonInput(
+        UUID employeeId,
+        PtkpStatus ptkpStatus,
+        PayComponent baseComponent,
+        Money basePay,
+        List<EarningInput> earnings,
+        List<PayComponent> statutoryComponents,
+        List<DeductionInput> otherDeductions,
+        Map<String, StatutoryRule> resolvedRules,
+        boolean hasNpwp,
+        AnnualContext annualContext) {
+      this(
+          employeeId,
+          ptkpStatus,
+          baseComponent,
+          basePay,
+          earnings,
+          statutoryComponents,
+          otherDeductions,
+          resolvedRules,
+          hasNpwp,
+          annualContext,
+          null);
+    }
+  }
 }

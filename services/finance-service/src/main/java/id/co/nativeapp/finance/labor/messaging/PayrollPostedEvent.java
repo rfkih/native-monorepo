@@ -21,7 +21,7 @@ import java.util.UUID;
  * @param payrollRunId the owning payroll run
  * @param runSeq the run sequence (the supersession signal, scoped within runType)
  * @param runType the payroll run type ({@code REGULAR} today; {@code THR} lands at Track P phase
- *     P8, ADR 0034 — added backward-compatibly with a {@code REGULAR} default, ADR 0032 Track P
+ *     P8, ADR 0035 — added backward-compatibly with a {@code REGULAR} default, ADR 0032 Track P
  *     phase P4)
  * @param period the run's accounting period {@code YYYY-MM}
  * @param baseCurrency the ISO-4217 base currency the totals are denominated in

@@ -159,7 +159,8 @@ public class OfficialStatutorySeedWriter {
                 component.glAccount(),
                 component.taxable(),
                 component.statutoryRuleKey(),
-                component.displayOrder());
+                component.displayOrder(),
+                component.runScope());
         if (changed) {
           payComponentRepository.save(found);
           componentsUpdated++;
@@ -174,7 +175,8 @@ public class OfficialStatutorySeedWriter {
                 component.glAccount(),
                 component.taxable(),
                 component.statutoryRuleKey(),
-                component.displayOrder());
+                component.displayOrder(),
+                component.runScope());
         fresh.setCompanyId(tenant);
         payComponentRepository.save(fresh);
         componentsInserted++;

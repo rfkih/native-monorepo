@@ -40,6 +40,8 @@ export interface EmployeeDetail {
     maskedNik: string
     maskedBankAccount: string
     userId: string | null
+    /** Track P Phase P8 — feeds THR proration. Not PII. */
+    hireDate: string | null
   }
   assignments: AssignmentRow[]
   contracts: ContractRow[]
@@ -129,6 +131,8 @@ export interface PayrollRunSummary {
   id: string
   period: string
   runSeq: number
+  /** REGULAR or THR (Track P Phase P8). */
+  runType: string
   status: string
   baseCurrency: string
   grossTotalMinor: number
@@ -305,7 +309,7 @@ export function useUpdateEmployee(params: TenantParams) {
       body,
     }: {
       employeeId: string
-      body: { fullName?: string; ptkpStatus?: string; status?: string }
+      body: { fullName?: string; ptkpStatus?: string; status?: string; hireDate?: string }
     }) =>
       apiFetch<EmployeeDetail['employee']>(`/api/v1/employees/${employeeId}`, {
         method: 'PATCH',
@@ -756,6 +760,10 @@ export function useRunPayroll(params: TenantParams) {
       employeeIds: string[]
       expectedSourceBusinessIds: string[]
       baseCurrency: string
+      /** REGULAR (default when omitted) or THR (Track P Phase P8). */
+      runType?: 'REGULAR' | 'THR'
+      /** The informational H-7 payment date for a THR run; not persisted, not sent for REGULAR. */
+      holidayDate?: string
     }) =>
       apiFetch<PayrollRunSummary>('/api/v1/payroll-runs', {
         method: 'POST',

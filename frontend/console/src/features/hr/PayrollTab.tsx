@@ -20,6 +20,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { Segmented } from '@/components/ui/Segmented'
+import { Field, TextInput } from '@/components/ui/Field'
 import { EmptyState, KpiTile, PeriodNav } from '@/features/_shared/financeUi'
 import { DialogOverlay } from '@/features/org/parts'
 import type { OrgUnit } from '@/features/org/api'
@@ -67,9 +68,11 @@ export function PayrollTab({
 }) {
   const { t } = useTranslation()
   const [period, setPeriod] = useState(currentPeriod())
-  const [runDialog, setRunDialog] = useState(false)
+  const [runDialogType, setRunDialogType] = useState<'REGULAR' | 'THR' | null>(null)
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
   const [view, setView] = useState<PayrollView>('runs')
+  // Track P Phase P8 — a client-side run_type filter over the already-fetched period's runs.
+  const [runTypeFilter, setRunTypeFilter] = useState<'ALL' | 'REGULAR' | 'THR'>('ALL')
 
   const setup = usePayrollSetup({ companyId, actor, enabled: true })
   const seed = useSeedIllustrative({ companyId, actor })
@@ -111,7 +114,9 @@ export function PayrollTab({
     () => units.filter((u) => u.type === 'BUSINESS_UNIT' && u.active).map((u) => u.id),
     [units],
   )
-  const runs = runsQuery.data ?? []
+  const allRuns = runsQuery.data ?? []
+  const runs =
+    runTypeFilter === 'ALL' ? allRuns : allRuns.filter((r) => r.runType === runTypeFilter)
   const selectedRun = runs.find((r) => r.id === selectedRunId) ?? runs[0] ?? null
 
   const showIllustrativeBanner = !!setup.data && setup.data.provenance !== 'OFFICIAL'
@@ -193,7 +198,16 @@ export function PayrollTab({
                   </span>
                   <Button
                     type="button"
-                    onClick={() => setRunDialog(true)}
+                    variant="outline"
+                    onClick={() => setRunDialogType('THR')}
+                    disabled={payableIds.length === 0 || pendingCount > 0}
+                  >
+                    <Play className="size-4" />
+                    {t('hr.payroll.run.ctaThr')}
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => setRunDialogType('REGULAR')}
                     disabled={payableIds.length === 0 || pendingCount > 0}
                   >
                     <Play className="size-4" />
@@ -235,13 +249,25 @@ export function PayrollTab({
                 <Card className="p-10 text-center">
                   <Spinner className="mx-auto text-brand-500" />
                 </Card>
-              ) : runs.length === 0 ? (
+              ) : allRuns.length === 0 ? (
                 <EmptyState
                   title={t('hr.payroll.history.empty')}
                   hint={t('hr.payroll.history.emptyHint')}
                 />
               ) : (
                 <>
+                  {allRuns.some((r) => r.runType === 'THR') ? (
+                    <Segmented<'ALL' | 'REGULAR' | 'THR'>
+                      options={[
+                        { value: 'ALL', label: t('hr.payroll.history.filterAll') },
+                        { value: 'REGULAR', label: t('hr.payroll.history.filterRegular') },
+                        { value: 'THR', label: t('hr.payroll.history.filterThr') },
+                      ]}
+                      value={runTypeFilter}
+                      onChange={setRunTypeFilter}
+                      ariaLabel={t('hr.payroll.history.filterLabel')}
+                    />
+                  ) : null}
                   <Card className="rounded-[20px] p-2.5">
                     {runs.map((run) => (
                       <button
@@ -256,6 +282,9 @@ export function PayrollTab({
                         <span className="text-[14px] font-semibold text-ink">
                           {t('hr.payroll.history.runLabel', { seq: run.runSeq })}
                         </span>
+                        {run.runType === 'THR' ? (
+                          <Badge tone="info">{t('hr.payroll.history.thrBadge')}</Badge>
+                        ) : null}
                         {run.period.endsWith('-12') && !run.usesIllustrativeRules ? (
                           <Badge tone="info">{t('hr.payroll.history.trueUpBadge')}</Badge>
                         ) : null}
@@ -302,15 +331,16 @@ export function PayrollTab({
         </>
       )}
 
-      {runDialog ? (
+      {runDialogType ? (
         <RunPayrollDialog
           period={period}
+          runType={runDialogType}
           employeeIds={payableIds}
           buIds={buIds}
           baseCurrency={baseCurrency}
           companyId={companyId}
           actor={actor}
-          onClose={() => setRunDialog(false)}
+          onClose={() => setRunDialogType(null)}
         />
       ) : null}
     </div>
@@ -734,6 +764,7 @@ function LiabilityRow({
 
 function RunPayrollDialog({
   period,
+  runType,
   employeeIds,
   buIds,
   baseCurrency,
@@ -742,6 +773,7 @@ function RunPayrollDialog({
   onClose,
 }: {
   period: string
+  runType: 'REGULAR' | 'THR'
   employeeIds: string[]
   buIds: string[]
   baseCurrency: string
@@ -751,11 +783,22 @@ function RunPayrollDialog({
 }) {
   const { t } = useTranslation()
   const [gateFailed, setGateFailed] = useState(false)
+  // Track P Phase P8 — the H-7 payment date for a THR run: informational only (not persisted, does
+  // not drive proration), required before Run is enabled so the owner records when THR was paid.
+  const [holidayDate, setHolidayDate] = useState('')
+  const isThr = runType === 'THR'
   const mutation = useRunPayroll({ companyId, actor })
 
   function run(expectedSourceBusinessIds: string[]) {
     mutation.mutate(
-      { period, employeeIds, expectedSourceBusinessIds, baseCurrency },
+      {
+        period,
+        employeeIds,
+        expectedSourceBusinessIds,
+        baseCurrency,
+        runType,
+        holidayDate: isThr ? holidayDate : undefined,
+      },
       {
         onSuccess: onClose,
         onError: (err) => {
@@ -771,7 +814,7 @@ function RunPayrollDialog({
     <DialogOverlay onClose={onClose}>
       <div className="space-y-4">
         <h2 className="font-display text-lg font-semibold text-ink">
-          {t('hr.payroll.run.confirmTitle')}
+          {isThr ? t('hr.payroll.run.confirmTitleThr') : t('hr.payroll.run.confirmTitle')}
         </h2>
 
         {gateFailed ? (
@@ -796,8 +839,21 @@ function RunPayrollDialog({
         ) : (
           <>
             <p className="text-sm text-ink-2">
-              {t('hr.payroll.run.confirmBody', { period, count: employeeIds.length })}
+              {isThr
+                ? t('hr.payroll.run.confirmBodyThr', { period, count: employeeIds.length })
+                : t('hr.payroll.run.confirmBody', { period, count: employeeIds.length })}
             </p>
+            {isThr ? (
+              <Field label={t('hr.payroll.run.holidayDateLabel')} htmlFor="thr-holiday-date">
+                <TextInput
+                  id="thr-holiday-date"
+                  type="date"
+                  value={holidayDate}
+                  onChange={(e) => setHolidayDate(e.target.value)}
+                  required
+                />
+              </Field>
+            ) : null}
             {mutation.isError ? (
               <p className="text-sm text-loss">{t('hr.assign.error')}</p>
             ) : null}
@@ -805,8 +861,16 @@ function RunPayrollDialog({
               <Button type="button" variant="outline" onClick={onClose}>
                 {t('common.cancel')}
               </Button>
-              <Button type="button" onClick={() => run(buIds)} disabled={mutation.isPending}>
-                {mutation.isPending ? t('hr.payroll.run.running') : t('hr.payroll.run.cta')}
+              <Button
+                type="button"
+                onClick={() => run(buIds)}
+                disabled={mutation.isPending || (isThr && !holidayDate)}
+              >
+                {mutation.isPending
+                  ? t('hr.payroll.run.running')
+                  : isThr
+                    ? t('hr.payroll.run.ctaThr')
+                    : t('hr.payroll.run.cta')}
               </Button>
             </div>
           </>

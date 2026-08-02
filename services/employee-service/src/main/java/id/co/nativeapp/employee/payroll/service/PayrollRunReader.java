@@ -56,6 +56,7 @@ public class PayrollRunReader {
                     v.getId(),
                     v.getPeriod(),
                     v.getRunSeq(),
+                    v.getRunType(),
                     v.getStatus(),
                     v.getBaseCurrency(),
                     v.getGrossTotalMinor(),

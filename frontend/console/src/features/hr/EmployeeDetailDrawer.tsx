@@ -11,10 +11,11 @@
 
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Check, Copy, KeyRound, Trash2, UserPlus } from 'lucide-react'
+import { Check, Copy, KeyRound, Pencil, Trash2, UserPlus } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
+import { Field, TextInput } from '@/components/ui/Field'
 import { DialogOverlay } from '@/features/org/parts'
 import { useTeam } from '@/features/team/api'
 import { cn } from '@/lib/cn'
@@ -24,6 +25,7 @@ import {
   useLinkLogin,
   useResetPassword,
   useUnlinkLogin,
+  useUpdateEmployee,
   type EmployeeListRow,
 } from './api'
 
@@ -50,10 +52,24 @@ export function EmployeeDetailDrawer({
   const reset = useResetPassword({ companyId, actor })
   const relink = useLinkLogin({ companyId, actor })
   const unlink = useUnlinkLogin({ companyId, actor })
+  const updateEmployee = useUpdateEmployee({ companyId, actor })
   const [busy, setBusy] = useState(false)
   // The freshly reset password, shown IMMEDIATELY from the reset result — so even if the follow-up
   // re-hold call fails, the owner still has the working credential in front of them (review Finding 5).
   const [revealedTemp, setRevealedTemp] = useState<string | null>(null)
+  // Track P Phase P8 — the hire_date inline editor (feeds THR proration).
+  const [editingHireDate, setEditingHireDate] = useState(false)
+  const [hireDateDraft, setHireDateDraft] = useState('')
+
+  async function handleSaveHireDate() {
+    if (!hireDateDraft) return
+    try {
+      await updateEmployee.mutateAsync({ employeeId, body: { hireDate: hireDateDraft } })
+      setEditingHireDate(false)
+    } catch {
+      // surfaced by updateEmployee.isError below
+    }
+  }
 
   const userId = login.data?.userId ?? employee.userId
   const username = team.data?.find((m) => m.id === userId)?.username ?? null
@@ -119,6 +135,69 @@ export function EmployeeDetailDrawer({
           <Detail label={t('hr.detail.nik')} value={emp?.maskedNik ?? '—'} />
           <Detail label={t('hr.detail.bank')} value={emp?.maskedBankAccount ?? '—'} />
         </div>
+
+        {/* hire_date (Track P Phase P8, ADR 0035) — NOT PII, feeds THR proration. */}
+        <section className="rounded-2xl border border-line bg-surface p-4">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-semibold text-ink">{t('hr.detail.hireDate')}</h3>
+              <p className="mt-0.5 text-xs text-ink-3">{t('hr.detail.hireDateHint')}</p>
+            </div>
+            {!editingHireDate ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-8 px-3 text-xs"
+                onClick={() => {
+                  setHireDateDraft(emp?.hireDate ?? '')
+                  setEditingHireDate(true)
+                }}
+              >
+                <Pencil className="size-3.5" />
+                {t('hr.detail.hireDateEdit')}
+              </Button>
+            ) : null}
+          </div>
+
+          {editingHireDate ? (
+            <div className="mt-3 space-y-2">
+              <Field label={t('hr.detail.hireDate')} htmlFor="hr-hire-date">
+                <TextInput
+                  id="hr-hire-date"
+                  type="date"
+                  value={hireDateDraft}
+                  onChange={(e) => setHireDateDraft(e.target.value)}
+                />
+              </Field>
+              {updateEmployee.isError ? (
+                <p className="text-sm text-loss">{t('hr.detail.hireDateError')}</p>
+              ) : null}
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  className="h-8 px-3 text-xs"
+                  onClick={handleSaveHireDate}
+                  disabled={!hireDateDraft || updateEmployee.isPending}
+                >
+                  {updateEmployee.isPending
+                    ? t('hr.detail.hireDateSaving')
+                    : t('hr.detail.hireDateSave')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-8 px-3 text-xs"
+                  onClick={() => setEditingHireDate(false)}
+                  disabled={updateEmployee.isPending}
+                >
+                  {t('hr.detail.hireDateCancel')}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-ink">{emp?.hireDate ?? t('hr.detail.hireDateNone')}</p>
+          )}
+        </section>
 
         {/* Login card — the point of this view */}
         <section className="rounded-2xl border border-line bg-surface p-4">

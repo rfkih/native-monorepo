@@ -18,35 +18,41 @@ public interface PayslipLineRepository extends JpaRepository<PayslipLine, UUID> 
   /**
    * The ACTIVE-run predicate shared by every December true-up query below (Track P phase P3):
    * {@code status = 'POSTED'} AND the run carries the MAX {@code run_seq} among POSTED runs for its
-   * own period. This is a correlated subselect, not a join against a separate "superseded" flag —
-   * {@code payroll_run} carries no such column (unlike finance's {@code payroll_run_ledger.state})
-   * — so "active" is defined structurally: a higher {@code run_seq} that reached POSTED supersedes
-   * every lower {@code run_seq} for the same period; a run that never reached POSTED (still
-   * CALCULATED, or FAILED) never supersedes anything and is itself excluded by the outer {@code
-   * status = 'POSTED'}. This MUST exactly mirror finance's supersession semantics ({@code
-   * PayrollRunLedgerRepository#findActivePriorRuns}/{@code existsActiveHigherRun}: a higher run_seq
-   * supersedes lower ones; a superseded run's postings are DEAD) so the December true-up sums the
-   * SAME set of runs finance's books already reflect. A single {@code interface}-constant (a
-   * compile-time constant expression) so the two queries below can never drift apart from each
+   * own {@code (period, run_type)} — Track P Phase P8 (ADR 0035) SCOPED BY {@code run_type} (the
+   * fix for the landmine this constant used to carry, see below). This is a correlated subselect,
+   * not a join against a separate "superseded" flag — {@code payroll_run} carries no such column
+   * (unlike finance's {@code payroll_run_ledger.state}) — so "active" is defined structurally: a
+   * higher {@code run_seq} of the SAME {@code run_type} that reached POSTED supersedes every lower
+   * {@code run_seq} of that SAME {@code run_type} for the same period; a run that never reached
+   * POSTED (still CALCULATED, or FAILED) never supersedes anything and is itself excluded by the
+   * outer {@code status = 'POSTED'}. This MUST exactly mirror finance's supersession semantics
+   * ({@code PayrollRunLedgerRepository#findActivePriorRuns}/{@code existsActiveHigherRun}, which
+   * scope on {@code (period, run_type)} too, ADR 0032 Track P phase P4) so the December true-up
+   * sums the SAME set of runs finance's books already reflect. A single {@code interface}-constant
+   * (a compile-time constant expression) so the queries below can never drift apart from each
    * other.
    *
-   * <p><strong>⚠ P8 LANDMINE — MUST add {@code run_type} scoping here before THR ships (ADR
-   * 0034).</strong> {@code payroll_run} is currently keyed {@code (company_id, period, run_seq)}
-   * only; Track P phase P8 lands per-{@code (period, run_type)} sequences (a THR off-cycle run and
-   * the REGULAR run for the same period each get their OWN {@code run_seq} series). The moment that
-   * lands, this predicate's {@code MAX(pr2.run_seq) WHERE pr2.period = pr.period} — with NO {@code
-   * run_type} in the WHERE — would let a THR run's {@code run_seq} supersede a REGULAR run's (or
-   * vice versa) for the SAME period, and would leak THR payslip lines (a different, non-monthly
-   * income shape) into the December Art-17 annual base. P8 MUST add {@code AND pr.run_type =
-   * pr2.run_type} (or equivalent) to both the outer join predicate and the correlated subselect the
-   * moment {@code run_type} exists on this table — tracked on the P8 task, not just here.
+   * <p><strong>The P8 landmine this fixes (ADR 0035).</strong> Before this fix, {@code payroll_run}
+   * was keyed {@code (company_id, period, run_seq)} only, and this predicate's {@code
+   * MAX(pr2.run_seq) WHERE pr2.period = pr.period} carried NO {@code run_type} — so once a THR run
+   * and a REGULAR run for the SAME period each got their OWN {@code run_seq} series (P8), a THR
+   * run's {@code run_seq} could supersede a REGULAR run's (or vice versa) purely by numeric
+   * coincidence (e.g. REGULAR reaches run_seq=2 via an unrelated correction while THR is still at
+   * run_seq=1 — the old predicate would treat REGULAR's run_seq=2 as the sole "active" run for the
+   * period, WRONGLY dropping the THR run's lines out of the December Art-17 annual base, or vice
+   * versa). Scoping the correlated subselect AND the outer join predicate on {@code pr.run_type =
+   * pr2.run_type} makes BOTH a run's own-type-only supersession hold AND lets a REGULAR run and a
+   * THR run for the same period coexist as two SEPARATE active rows — both correctly contribute to
+   * the annual base, since together they represent that month's ACTUAL combined income (the
+   * combined-gross TER interplay already reconciles their withholding at compute time, {@code
+   * GrossToNetCalculator}'s {@code SiblingPeriodContext} branch).
    */
   String ACTIVE_RUN_PREDICATE =
       """
       pr.status = 'POSTED'
         AND pr.run_seq = (
               SELECT MAX(pr2.run_seq) FROM payroll_run pr2
-               WHERE pr2.period = pr.period AND pr2.status = 'POSTED'
+               WHERE pr2.period = pr.period AND pr2.run_type = pr.run_type AND pr2.status = 'POSTED'
             )
       """;
 
@@ -138,6 +144,37 @@ public interface PayslipLineRepository extends JpaRepository<PayslipLine, UUID> 
       @Param("employeeId") UUID employeeId,
       @Param("yearPrefix") String yearPrefix,
       @Param("excludePeriod") String excludePeriod);
+
+  /**
+   * The ACTIVE (see {@link #ACTIVE_RUN_PREDICATE}) payslip lines for one employee, ONE {@code
+   * period}, from the run of the given {@code runType} ONLY — Track P Phase P8 (ADR 0035), the
+   * THR-month TER interplay's "sibling" lookup: {@code PayrollRunWriter#siblingPeriodContext} calls
+   * this with the OTHER {@link id.co.nativeapp.employee.payroll.domain.RunType} from the run
+   * currently calculating, to fold an already-POSTED sibling run's gross bruto / withheld PPh21 for
+   * the SAME period into the combined-gross TER computation ({@code GrossToNetCalculator}'s {@code
+   * SiblingPeriodContext} branch). Empty when no sibling run is active for this period — the
+   * overwhelming common case, and every run before a company ever activates THR.
+   *
+   * <p>Deliberately a FULL-ENTITY query, not a projection — see {@link
+   * #findActiveLinesForEmployeeYear}'s javadoc for the identical rationale (PII ciphertext columns,
+   * an internal compute path only {@code PayrollRunWriter} calls, never a controller).
+   */
+  @Query(
+      value =
+          """
+          SELECT pl.*
+            FROM payslip_line pl
+            JOIN payroll_run pr ON pr.id = pl.payroll_run_id
+           WHERE pl.employee_id = :employeeId
+             AND pr.period = :period
+             AND pr.run_type = :runType
+             AND \s"""
+              + ACTIVE_RUN_PREDICATE,
+      nativeQuery = true)
+  List<PayslipLine> findActiveLinesForEmployeePeriodAndRunType(
+      @Param("employeeId") UUID employeeId,
+      @Param("period") String period,
+      @Param("runType") String runType);
 
   /**
    * A run's payslip index — one row per employee (joined for the display name), counts only. The

@@ -63,11 +63,23 @@ public class PayComponent extends Auditable {
   @Column(name = "active", nullable = false)
   private boolean active;
 
+  /**
+   * Track P Phase P8 (ADR 0035): which {@link RunType}(s) this component participates in — {@code
+   * ALL} (default, every pre-P8 component), {@code REGULAR}, or {@code THR}. See {@link RunScope}.
+   */
+  @Enumerated(EnumType.STRING)
+  @Column(name = "run_scope", nullable = false, length = 16)
+  private RunScope runScope;
+
   protected PayComponent() {
     // for JPA
   }
 
-  /** Creates a pay-component catalog entry with a freshly generated id. */
+  /**
+   * Creates a pay-component catalog entry with a freshly generated id, defaulting {@link #runScope}
+   * to {@link RunScope#ALL} (the pre-P8 shape — every existing call site keeps compiling/behaving
+   * unchanged).
+   */
   public PayComponent(
       String componentKey,
       PayComponentKind kind,
@@ -77,6 +89,29 @@ public class PayComponent extends Auditable {
       boolean taxable,
       String statutoryRuleKey,
       int displayOrder) {
+    this(
+        componentKey,
+        kind,
+        calcType,
+        bearer,
+        glAccount,
+        taxable,
+        statutoryRuleKey,
+        displayOrder,
+        RunScope.ALL);
+  }
+
+  /** Creates a pay-component catalog entry with an explicit {@link RunScope} (Track P Phase P8). */
+  public PayComponent(
+      String componentKey,
+      PayComponentKind kind,
+      CalcType calcType,
+      PayComponentBearer bearer,
+      String glAccount,
+      boolean taxable,
+      String statutoryRuleKey,
+      int displayOrder,
+      RunScope runScope) {
     this.id = UUID.randomUUID();
     this.componentKey = Objects.requireNonNull(componentKey, "componentKey");
     this.kind = Objects.requireNonNull(kind, "kind");
@@ -87,6 +122,7 @@ public class PayComponent extends Auditable {
     this.statutoryRuleKey = statutoryRuleKey;
     this.displayOrder = displayOrder;
     this.active = true;
+    this.runScope = Objects.requireNonNull(runScope, "runScope");
   }
 
   /** Copy constructor for {@link #asAnnualTrueUpVariant} — preserves the SAME {@code id}. */
@@ -100,7 +136,8 @@ public class PayComponent extends Auditable {
       boolean taxable,
       String statutoryRuleKey,
       int displayOrder,
-      boolean active) {
+      boolean active,
+      RunScope runScope) {
     this.id = id;
     this.componentKey = componentKey;
     this.kind = kind;
@@ -111,6 +148,7 @@ public class PayComponent extends Auditable {
     this.statutoryRuleKey = statutoryRuleKey;
     this.displayOrder = displayOrder;
     this.active = active;
+    this.runScope = runScope;
   }
 
   /**
@@ -143,7 +181,8 @@ public class PayComponent extends Auditable {
         this.taxable,
         annualRuleKey,
         this.displayOrder,
-        this.active);
+        this.active,
+        this.runScope);
   }
 
   /**
@@ -162,7 +201,8 @@ public class PayComponent extends Auditable {
       String newGlAccount,
       boolean newTaxable,
       String newStatutoryRuleKey,
-      int newDisplayOrder) {
+      int newDisplayOrder,
+      RunScope newRunScope) {
     boolean changed = false;
     if (this.kind != newKind) {
       this.kind = newKind;
@@ -190,6 +230,10 @@ public class PayComponent extends Auditable {
     }
     if (this.displayOrder != newDisplayOrder) {
       this.displayOrder = newDisplayOrder;
+      changed = true;
+    }
+    if (this.runScope != newRunScope) {
+      this.runScope = newRunScope;
       changed = true;
     }
     return changed;
@@ -233,6 +277,15 @@ public class PayComponent extends Auditable {
 
   public boolean isActive() {
     return active;
+  }
+
+  public RunScope getRunScope() {
+    return runScope;
+  }
+
+  /** Whether this component resolves on a run of {@code runType} (Track P Phase P8). */
+  public boolean appliesTo(RunType runType) {
+    return runScope.appliesTo(runType);
   }
 
   @Override

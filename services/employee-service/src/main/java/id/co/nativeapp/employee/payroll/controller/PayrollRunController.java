@@ -1,6 +1,7 @@
 package id.co.nativeapp.employee.payroll.controller;
 
 import id.co.nativeapp.employee.payroll.domain.PayrollRun;
+import id.co.nativeapp.employee.payroll.domain.RunType;
 import id.co.nativeapp.employee.payroll.dto.AllocationSummaryResponse;
 import id.co.nativeapp.employee.payroll.dto.PayrollRunResponse;
 import id.co.nativeapp.employee.payroll.dto.PayslipIndexRowResponse;
@@ -76,7 +77,9 @@ public class PayrollRunController {
             request.employeeIds(),
             request.expectedSourceBusinessIds() == null
                 ? List.of()
-                : request.expectedSourceBusinessIds());
+                : request.expectedSourceBusinessIds(),
+            request.runType() == null ? RunType.REGULAR : RunType.valueOf(request.runType()),
+            request.holidayDate());
     PayrollRun run = payrollRunService.calculateAndPost(command, request.baseCurrency());
     PayrollRunResponse body = PayrollRunResponse.from(run);
     return ResponseEntity.created(URI.create("/api/v1/payroll-runs/" + body.id())).body(body);

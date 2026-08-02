@@ -61,7 +61,7 @@ Design (2) is the decision.
    posts it as a Dr leg for its absolute value — the opposite side. This keeps the entry balanced by
    construction: `Dr(6900 + Σ|negative buckets|) = net + Σ(positive buckets) = Cr total`.
 4. **Additive `run_type` (string, default `"REGULAR"`) lands on `PayrollPosted` AND
-   `LaborCostAllocated` in this SAME phase**, ahead of Track P phase P8 (THR, ADR 0034) — so finance
+   `LaborCostAllocated` in this SAME phase**, ahead of Track P phase P8 (THR, ADR 0035) — so finance
    is run-type-aware before any THR run exists, rather than needing a second migration later.
    `PayrollRunLedgerRepository`'s supersession scans (`findActivePriorRuns`/`existsActiveHigherRun`)
    and the per-run advisory lock key are re-keyed onto `(company, period, run_type, run_seq)`; the

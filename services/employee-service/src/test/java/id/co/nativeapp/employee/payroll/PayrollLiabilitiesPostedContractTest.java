@@ -74,8 +74,7 @@ class PayrollLiabilitiesPostedContractTest {
     assertThat(decoded.get("payroll_run_id").toString()).isEqualTo(run.getId().toString());
     assertThat(decoded.get("period").toString()).isEqualTo("2026-06");
     assertThat(decoded.get("run_seq")).isEqualTo(2);
-    // toRecord() stamps run_type REGULAR unconditionally (ADR 0032; THR lands at Track P phase
-    // P8).
+    // The 3-arg PayrollRun constructor defaults to REGULAR (Track P Phase P8, ADR 0035).
     assertThat(decoded.get("run_type").toString()).isEqualTo("REGULAR");
     assertThat(decoded.get("employer_cost_total_minor")).isEqualTo(20_400_000L);
     @SuppressWarnings("unchecked")
@@ -87,6 +86,25 @@ class PayrollLiabilitiesPostedContractTest {
     assertThat(decodedBuckets.get(1).get("liability_role").toString()).isEqualTo("PPH21_PAYABLE");
     assertThat(decodedBuckets.get(1).get("amount_minor")).isEqualTo(2_101_667L);
     assertThat(decoded.get("uses_illustrative_rules")).isEqualTo(false);
+  }
+
+  @Test
+  void toRecordStampsRunTypeThrWhenTheRunIsThr() {
+    // Track P Phase P8 (ADR 0035): toRecord() carries the run's REAL run_type off payroll_run.
+    PayrollRun run =
+        new PayrollRun("2026-06", 1, "IDR", id.co.nativeapp.employee.payroll.domain.RunType.THR);
+    run.setCompanyId("11111111-1111-1111-1111-111111111111");
+    run.markPosted(Instant.parse("2026-06-30T12:00:00Z"));
+    List<PayrollLiabilitiesPostedSchema.LiabilityBucket> buckets =
+        List.of(
+            new PayrollLiabilitiesPostedSchema.LiabilityBucket(
+                "NET_WAGES_PAYABLE", Money.ofMinor(1_000_000L, "IDR")));
+
+    GenericRecord record =
+        PayrollLiabilitiesPostedSchema.toRecord(run, Money.ofMinor(1_000_000L, "IDR"), buckets);
+    GenericRecord decoded =
+        AvroSerde.deserialize(AvroSerde.serialize(record), PayrollLiabilitiesPostedSchema.schema());
+    assertThat(decoded.get("run_type").toString()).isEqualTo("THR");
   }
 
   @Test

@@ -57,8 +57,8 @@ public final class PayrollLiabilitiesPostedSchema {
 
   /**
    * Builds a {@code PayrollLiabilitiesPosted} record from a posted run, its total employer-borne
-   * labor cost, and its non-zero liability buckets. {@code run_type} is stamped as the constant
-   * {@link PayrollRun#RUN_TYPE_REGULAR} ahead of Track P phase P8 (THR).
+   * labor cost, and its non-zero liability buckets. {@code run_type} is {@code run.getRunType()} —
+   * REGULAR or THR (Track P Phase P8, ADR 0035).
    *
    * @param employerCostTotal {@code gross_total_minor + employer_contribution_total_minor} — the
    *     SAME sum {@code LaborCostAllocated}'s buckets total to; the Dr leg of finance's liability
@@ -73,7 +73,7 @@ public final class PayrollLiabilitiesPostedSchema {
     record.put("company_id", run.getCompanyId());
     record.put("period", run.getPeriod());
     record.put("run_seq", run.getRunSeq());
-    record.put("run_type", PayrollRun.RUN_TYPE_REGULAR);
+    record.put("run_type", run.getRunType().name());
     record.put("base_currency", run.getBaseCurrency());
     record.put("employer_cost_total_minor", employerCostTotal.amountMinor());
 

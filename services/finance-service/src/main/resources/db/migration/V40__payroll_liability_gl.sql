@@ -18,7 +18,7 @@
 -- columns, and re-keys its UNIQUE constraint + supersession-scan index onto
 -- (company_id, period, run_type, run_seq) — the DEFAULT 'REGULAR' keeps every existing row (and
 -- every existing LaborCostPostingWriter/PayrollReconciliationWriter behaviour) byte-identical; a
--- future THR run (Track P phase P8, ADR 0034) coexists un-superseded with a REGULAR run of the
+-- future THR run (Track P phase P8, ADR 0035) coexists un-superseded with a REGULAR run of the
 -- same run_seq because it carries a different run_type.
 -- ============================================================================================================================
 

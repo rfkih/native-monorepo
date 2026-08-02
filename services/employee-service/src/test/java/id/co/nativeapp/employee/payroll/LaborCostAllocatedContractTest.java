@@ -52,6 +52,7 @@ class LaborCostAllocatedContractTest {
             "9999-UNALLOCATED-LABOR",
             Money.ofMinor(5_000_000L, "IDR"),
             1,
+            "REGULAR",
             false,
             true,
             Instant.ofEpochMilli(1_750_000_000_000L));
@@ -73,6 +74,7 @@ class LaborCostAllocatedContractTest {
             "5100-SALARY",
             Money.ofMinor(20_400_000L, "IDR"),
             2, // a corrected re-run carries run_seq=2 on the wire
+            "THR", // Track P Phase P8 (ADR 0035) — toRecord() carries a real run_type now
             true,
             false,
             Instant.ofEpochMilli(1_750_000_000_000L));
@@ -83,8 +85,8 @@ class LaborCostAllocatedContractTest {
     assertThat(decoded.get("gl_account").toString()).isEqualTo("5100-SALARY");
     // run_seq=2 round-trips as 2 (not the default 1) so finance can supersede the prior run.
     assertThat(decoded.get("run_seq")).isEqualTo(2);
-    // toRecord() stamps run_type REGULAR unconditionally (ADR 0032; THR lands at Track P phase P8).
-    assertThat(decoded.get("run_type").toString()).isEqualTo("REGULAR");
+    // run_type=THR round-trips as THR (Track P Phase P8, ADR 0035) — no longer hardcoded REGULAR.
+    assertThat(decoded.get("run_type").toString()).isEqualTo("THR");
     assertThat(decoded.get("uses_illustrative_rules")).isEqualTo(true);
     assertThat(decoded.get("unallocated")).isEqualTo(false);
   }

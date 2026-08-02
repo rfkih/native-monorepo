@@ -20,6 +20,7 @@ import id.co.nativeapp.employee.payroll.domain.EarningRule;
 import id.co.nativeapp.employee.payroll.domain.IncompletePeriodException;
 import id.co.nativeapp.employee.payroll.domain.LaborCostAllocation;
 import id.co.nativeapp.employee.payroll.domain.MetricInput;
+import id.co.nativeapp.employee.payroll.domain.MissingHireDateException;
 import id.co.nativeapp.employee.payroll.domain.NonMonthlyCompensationException;
 import id.co.nativeapp.employee.payroll.domain.PayComponent;
 import id.co.nativeapp.employee.payroll.domain.PayComponentBearer;
@@ -29,14 +30,18 @@ import id.co.nativeapp.employee.payroll.domain.PayrollInputs.AnnualContext;
 import id.co.nativeapp.employee.payroll.domain.PayrollInputs.DeductionInput;
 import id.co.nativeapp.employee.payroll.domain.PayrollInputs.EarningInput;
 import id.co.nativeapp.employee.payroll.domain.PayrollInputs.PersonInput;
+import id.co.nativeapp.employee.payroll.domain.PayrollInputs.SiblingPeriodContext;
 import id.co.nativeapp.employee.payroll.domain.PayrollRun;
 import id.co.nativeapp.employee.payroll.domain.PayslipLine;
 import id.co.nativeapp.employee.payroll.domain.PendingWorkEntriesException;
+import id.co.nativeapp.employee.payroll.domain.RunScope;
 import id.co.nativeapp.employee.payroll.domain.RunStatus;
+import id.co.nativeapp.employee.payroll.domain.RunType;
 import id.co.nativeapp.employee.payroll.domain.StatutoryCalcType;
 import id.co.nativeapp.employee.payroll.domain.StatutoryParams;
 import id.co.nativeapp.employee.payroll.domain.StatutoryRule;
 import id.co.nativeapp.employee.payroll.domain.TaxableReimbursementComponentException;
+import id.co.nativeapp.employee.payroll.domain.ThrRunMisconfiguredException;
 import id.co.nativeapp.employee.payroll.dto.PayrollResult.ComputedLine;
 import id.co.nativeapp.employee.payroll.dto.PayrollResult.PersonResult;
 import id.co.nativeapp.employee.payroll.dto.RunPayrollCommand;
@@ -67,6 +72,7 @@ import id.co.nativeapp.tenant.TenantContext;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -137,6 +143,32 @@ import org.springframework.transaction.annotation.Transactional;
  * also SPLITS the {@code LaborCostAllocated} buckets per component GL account (5100/5130/5200/...)
  * instead of collapsing everything onto BASE's — an allocation-engine change only, no schema/event
  * change.
+ *
+ * <p><strong>THR run type (Track P Phase P8, ADR 0035).</strong> {@code calculate} branches early
+ * on {@link RunPayrollCommand#runType()}: a THR run resolves ONLY {@code run_scope}-matching
+ * catalog components ({@link PayComponent#appliesTo(RunType)}) — BASE, allowances, overtime, unpaid
+ * leave, expense reimbursement, and EVERY BPJS leg are {@code REGULAR}-scoped and never apply; the
+ * THR earning ({@link #resolveThrPersonInput}) substitutes for BASE in the calculator's single
+ * unconditional base-slot line, prorated {@code base x min(serviceMonths, 12) / 12} (Permenaker
+ * 6/2016) off {@link Employee#getHireDate()} (falling back to the earliest {@link
+ * Assignment#getEffectiveFrom()} — see {@link #serviceMonths}); the December Art-17 true-up branch
+ * is REGULAR-only (a THR run never triggers it, see {@link #calculate}'s December-guard). {@link
+ * #nextRunSeq} and every supersession query are keyed per {@code (period, run_type)} so a THR run
+ * and a REGULAR run for the SAME period coexist without superseding each other (the {@code
+ * ACTIVE_RUN_PREDICATE} fix, {@link PayslipLineRepository}).
+ *
+ * <p><strong>The THR-month combined-gross TER interplay.</strong> PMK 168/2023 applies TER to the
+ * masa-pajak's TOTAL gross bruto — when a THR run and a REGULAR run both execute for the same
+ * period, {@link #siblingPeriodContext} folds whichever ran FIRST's already-POSTED gross
+ * bruto/withheld PPh21 into the SECOND run's TER computation ({@link GrossToNetCalculator}'s {@code
+ * SiblingPeriodContext} branch) — this holds regardless of which order the two runs execute in
+ * (verified both orders, Track P Phase P8 tests) and is a byte- identical no-op when no sibling run
+ * is active (every pre-P8 run, and the overwhelming majority of runs even after THR is activated).
+ * <strong>Documented residual:</strong> this composes with the ORDINARY monthly TER branch only — a
+ * December REGULAR run's Art-17 true-up does NOT yet fold in a same-period THR sibling's
+ * gross/withheld (the true-up's own annual-context assembly is a separate, whole-fiscal-year
+ * mechanism); {@link #calculate} WARNs loudly when it detects this composition rather than silently
+ * mis-reconciling it.
  */
 @Component
 public class PayrollRunWriter {
@@ -229,6 +261,12 @@ public class PayrollRunWriter {
   /** {@code pay_component.component_key} for the UNPAID_LEAVE earning (Track P Phase P7). */
   static final String COMPONENT_KEY_UNPAID_LEAVE = "UNPAID_LEAVE";
 
+  /** {@code pay_component.component_key} for the THR earning (Track P Phase P8, ADR 0035). */
+  static final String COMPONENT_KEY_THR = "THR";
+
+  /** {@code pay_component.component_key} for the always-REGULAR BASE earning. */
+  static final String COMPONENT_KEY_BASE = "BASE";
+
   /**
    * IN-clause chunk size (CLAUDE.md: chunk at ≤1000) — mirrors {@code ExpenseClaimPayrollLinker}.
    */
@@ -243,18 +281,36 @@ public class PayrollRunWriter {
   public PayrollRun calculate(RunPayrollCommand command, String baseCurrency) {
     String tenant = TenantContext.require().companyId();
     LocalDate asOf = YearMonth.parse(command.period()).atEndOfMonth();
+    RunType runType = command.runType() == null ? RunType.REGULAR : command.runType();
+    boolean isRegular = runType == RunType.REGULAR;
+    if (runType == RunType.THR && command.holidayDate() != null) {
+      // Informational only (Track P Phase P8) — the H-7 payment date is NOT persisted (no schema
+      // column allocated; work_inputs_json's per-employee shape doesn't fit a run-level date) and
+      // does NOT drive proration. Logged for the audit trail only, no PII.
+      log.info(
+          "payroll_run period {} run_type THR — informational holiday_date {}",
+          command.period(),
+          command.holidayDate());
+    }
 
     // Track P Phase P7 — the pending-work-entries gate, FIRST: any SUBMITTED (undecided)
     // leave_request/overtime_entry for one of this run's employees in this period blocks the WHOLE
     // run before any other work happens — pay must never silently ignore a request nobody has
-    // decided yet.
-    requireNoPendingWorkEntries(command.employeeIds(), command.period());
+    // decided yet. THR-scoped OUT (Track P Phase P8): a THR run never consumes work inputs at all
+    // (statutory spec — THR carries ONLY the THR earning + PPh21), so this gate is irrelevant to
+    // it.
+    if (isRegular) {
+      requireNoPendingWorkEntries(command.employeeIds(), command.period());
+    }
 
     // Completeness gate (ARCHITECTURE.md §4): every expected source must have sealed the period.
     boolean ungated = enforceCompleteness(command);
 
-    int runSeq = nextRunSeq(command.period());
-    PayrollRun run = new PayrollRun(command.period(), runSeq, baseCurrency);
+    // Track P Phase P8 (ADR 0035) — run_seq is keyed PER (period, run_type): a THR run and a
+    // REGULAR run for the same period get their OWN independent counters and coexist without
+    // superseding each other.
+    int runSeq = nextRunSeq(command.period(), runType);
+    PayrollRun run = new PayrollRun(command.period(), runSeq, baseCurrency, runType);
     run.setCompanyId(tenant);
     run.markGatePending();
     recordSealedLedger(run, command.period());
@@ -274,22 +330,29 @@ public class PayrollRunWriter {
     // such payslip line and leaves these claims APPROVED+linked (the E5-transitional fallback,
     // still load-bearing for that case — see ExpenseClaimPayrollLinker's class Javadoc) rather than
     // settling money the employee never actually received via this run.
-    expenseClaimPayrollLinker.releaseForPeriod(command.period(), runSeq);
-    expenseClaimPayrollLinker.linkForRun(run.getId(), command.period(), command.employeeIds());
+    // Track P Phase P8: THR-scoped OUT — a THR run never links/settles expense claims (they ride
+    // ONLY a REGULAR run's payslip, EXPENSE_REIMBURSEMENT is run_scope=REGULAR in the catalog).
+    if (isRegular) {
+      expenseClaimPayrollLinker.releaseForPeriod(command.period(), runSeq);
+      expenseClaimPayrollLinker.linkForRun(run.getId(), command.period(), command.employeeIds());
+    }
 
     // Track P Phase P7 — resolve the run's work inputs: the linked expense-claim reimbursement
     // totals (read AFTER linking, in THIS SAME transaction, so this run's own just-linked claims
     // are visible — READ COMMITTED sees a prior statement's own uncommitted writes), the tenant's
     // work calendar (seeded on first use if missing — the P6 lazy-seed precedent, called explicitly
     // here rather than assumed already seeded), and every APPROVED unpaid-leave/overtime row for
-    // this run's employees in this period.
+    // this run's employees in this period. THR-scoped OUT (Track P Phase P8): empty maps/null
+    // calendar, never queried — a THR run applies none of these.
     Map<UUID, ReimbursementInfo> reimbursementByEmployee =
-        reimbursementInfoByEmployee(run.getId(), baseCurrency);
-    WorkCalendar calendar = workCalendarWriter.seedDefaultIfMissing();
+        isRegular ? reimbursementInfoByEmployee(run.getId(), baseCurrency) : Map.of();
+    WorkCalendar calendar = isRegular ? workCalendarWriter.seedDefaultIfMissing() : null;
     Map<UUID, List<ApprovedUnpaidLeaveView>> unpaidByEmployee =
-        approvedUnpaidLeaveByEmployee(command.employeeIds(), command.period());
+        isRegular
+            ? approvedUnpaidLeaveByEmployee(command.employeeIds(), command.period())
+            : Map.of();
     Map<UUID, List<ApprovedOvertimeView>> overtimeByEmployee =
-        approvedOvertimeByEmployee(command.employeeIds(), command.period());
+        isRegular ? approvedOvertimeByEmployee(command.employeeIds(), command.period()) : Map.of();
 
     if (ungated) {
       // An ungated run must NEVER be silent (no expected-source set means the completeness gate
@@ -314,8 +377,13 @@ public class PayrollRunWriter {
           run.getPeriod());
     }
 
-    List<PayComponent> statutoryComponents = activeStatutoryComponents();
-    PayComponent baseComponent = requireComponent("BASE");
+    // Track P Phase P8 (ADR 0035) — the run resolves ONLY run_scope-matching components: BASE/
+    // allowances/overtime/unpaid-leave/expense-reimbursement AND every BPJS leg are REGULAR-scoped
+    // (never apply to a THR run); PPH21 is ALL-scoped (applies to every run type).
+    List<PayComponent> statutoryComponents =
+        activeStatutoryComponents().stream().filter(c -> c.appliesTo(runType)).toList();
+    PayComponent baseComponent = isRegular ? requireComponent(COMPONENT_KEY_BASE) : null;
+    PayComponent thrComponent = isRegular ? null : requireThrRunComponents();
 
     // Track P Phase P7 — the three work-input catalog components are OPTIONAL: a tenant that has
     // not yet activated the ID-2026.2 dataset top-up simply has none of them, and this run must
@@ -326,7 +394,8 @@ public class PayrollRunWriter {
     // — never silently dropped forever: the linked claim / approved leave / approved overtime stays
     // exactly where it is (unlinked-nothing-lost for leave/overtime; APPROVED+linked for a claim,
     // recoverable by ExpenseClaimPayrollLinker's E5-transitional release path) for a LATER re-run
-    // once the dataset is seeded.
+    // once the dataset is seeded. THR-scoped OUT (Track P Phase P8): none of this applies to a THR
+    // run (its maps above are already empty, so every lookup below is naturally inert for it).
     Optional<PayComponent> overtimeComponent =
         payComponentRepository.findByComponentKey(COMPONENT_KEY_OVERTIME);
     Optional<PayComponent> unpaidLeaveComponent =
@@ -349,21 +418,37 @@ public class PayrollRunWriter {
         reimbursementComponent,
         !reimbursementByEmployee.isEmpty());
 
-    // December / final-month Art-17 true-up (Track P phase P3): wire ONLY when (a) this run's
-    // period is December AND (b) the frozen rule set actually resolves an ANNUAL_PROGRESSIVE rule
-    // (PPH21_ARTICLE17) — a tenant still on the illustrative-only catalog (no such rule) simply
-    // stays on its ordinary monthly branch, byte-identical to a pre-P3 run. When both hold, the
-    // monthly income-tax component (PPH21, normally TER_TABLE/PROGRESSIVE_BRACKET) is swapped
-    // in-memory onto the annual rule for every person in this run — never persisted, the catalog
-    // itself is untouched (see PayComponent#asAnnualTrueUpVariant).
-    boolean isFinalMonth = YearMonth.parse(command.period()).getMonthValue() == 12;
+    // December / final-month Art-17 true-up (Track P phase P3): wire ONLY when (a) this run is
+    // REGULAR (Track P Phase P8 — a THR run never triggers the annual true-up, see the class
+    // javadoc's documented residual), (b) this run's period is December, AND (c) the frozen rule
+    // set actually resolves an ANNUAL_PROGRESSIVE rule (PPH21_ARTICLE17) — a tenant still on the
+    // illustrative-only catalog (no such rule) simply stays on its ordinary monthly branch, byte-
+    // identical to a pre-P3 run. When all hold, the monthly income-tax component (PPH21, normally
+    // TER_TABLE/PROGRESSIVE_BRACKET) is swapped in-memory onto the annual rule for every person in
+    // this run — never persisted, the catalog itself is untouched (see
+    // PayComponent#asAnnualTrueUpVariant).
+    boolean isFinalMonth = isRegular && YearMonth.parse(command.period()).getMonthValue() == 12;
     String annualTrueUpRuleKey = isFinalMonth ? annualProgressiveRuleKey(resolvedRules) : null;
-    Map<String, PayComponent> catalogByKey = null;
+    // Track P Phase P8 — the component catalog is now needed EVERY run (not just December), for
+    // the sibling-period-context lookup (see below); computed ONCE, shared across every employee.
+    Map<String, PayComponent> catalogByKey = catalogByComponentKey();
     if (annualTrueUpRuleKey != null) {
       statutoryComponents =
           swapForAnnualTrueUp(run, statutoryComponents, resolvedRules, annualTrueUpRuleKey);
-      catalogByKey = catalogByComponentKey();
       warnIfAnyRuleEffectiveFromFallsInsideFiscalYear(run, resolvedRules, command.period());
+      // Track P Phase P8 documented residual: the December true-up's annual-context assembly does
+      // NOT yet fold in a same-period THR sibling's gross/withheld — WARN loudly rather than
+      // silently under/over-reconcile.
+      if (runRepository.existsByPeriodAndRunTypeAndStatus(
+          command.period(), RunType.THR, RunStatus.POSTED)) {
+        log.warn(
+            "payroll_run {} period {} December Art-17 true-up: an ACTIVE THR run also exists for"
+                + " this period — the true-up's annual context does NOT yet incorporate a"
+                + " same-period THR sibling run's gross/withheld (Track P Phase P8 documented"
+                + " residual); verify the annual figure by hand",
+            run.getId(),
+            run.getPeriod());
+      }
       log.info(
           "payroll_run {} period {} is the December/final-month Art-17 true-up — resolved rule"
               + " {}",
@@ -401,19 +486,42 @@ public class PayrollRunWriter {
               ? buildAnnualContext(
                   employee.getId(), command.period(), baseCurrency, resolvedRules, catalogByKey)
               : null;
-      PersonInput personInput =
-          resolvePersonInput(
-              employee,
-              baseComponent,
-              statutoryComponents,
+      // Track P Phase P8 — the THR-month combined-gross TER interplay: fold an already-ACTIVE
+      // sibling run's (the OTHER run_type, SAME period) gross bruto/withheld into this employee's
+      // TER computation (see the class javadoc + GrossToNetCalculator's TER_TABLE branch).
+      SiblingPeriodContext siblingContext =
+          siblingPeriodContext(
+              employee.getId(),
+              command.period(),
+              runType,
+              catalogByKey,
               resolvedRules,
-              asOf,
-              baseCurrency,
-              annualContext);
+              baseCurrency);
+
+      PersonInput personInput =
+          isRegular
+              ? resolvePersonInput(
+                  employee,
+                  baseComponent,
+                  statutoryComponents,
+                  resolvedRules,
+                  asOf,
+                  baseCurrency,
+                  annualContext,
+                  siblingContext)
+              : resolveThrPersonInput(
+                  employee,
+                  thrComponent,
+                  statutoryComponents,
+                  resolvedRules,
+                  asOf,
+                  baseCurrency,
+                  siblingContext);
 
       // Track P Phase P7 — append the work-input earnings (unpaid leave / overtime / expense-claim
       // reimbursement) this employee actually has this period, each gated on its catalog component
-      // existing (see the warnIfWorkInputComponentMissing call above).
+      // existing (see the warnIfWorkInputComponentMissing call above). THR-scoped OUT (Track P
+      // Phase P8): every by-employee map is empty for a THR run, so this is a safe no-op.
       WorkInputAppendResult appended =
           appendWorkInputs(
               run,
@@ -484,15 +592,20 @@ public class PayrollRunWriter {
    * proxy (from {@link PayrollRunService}) so its {@code REQUIRES_NEW} engages.
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
-  public void recordFailedAttempt(String period, String baseCurrency) {
+  public void recordFailedAttempt(String period, String baseCurrency, RunType runType) {
     try {
       String tenant = TenantContext.require().companyId();
-      int runSeq = nextRunSeq(period);
-      PayrollRun failed = new PayrollRun(period, runSeq, baseCurrency);
+      RunType effectiveRunType = runType == null ? RunType.REGULAR : runType;
+      int runSeq = nextRunSeq(period, effectiveRunType);
+      PayrollRun failed = new PayrollRun(period, runSeq, baseCurrency, effectiveRunType);
       failed.setCompanyId(tenant);
       failed.markFailed();
       runRepository.save(failed);
-      log.warn("payroll_run {} period {} recorded as FAILED (calculate aborted)", runSeq, period);
+      log.warn(
+          "payroll_run {} period {} run_type {} recorded as FAILED (calculate aborted)",
+          runSeq,
+          period,
+          effectiveRunType);
     } catch (RuntimeException auditFailure) {
       // Never let the audit write mask the real cause.
       log.warn(
@@ -555,6 +668,7 @@ public class PayrollRunWriter {
                   bucket.getKey().glAccount(),
                   bucket.getValue(),
                   run.getRunSeq(),
+                  run.getRunType().name(),
                   run.usesIllustrativeRules(),
                   unallocated,
                   clock.instant())),
@@ -1059,6 +1173,9 @@ public class PayrollRunWriter {
       hasAnyWorkInput = true;
     }
 
+    // Track P Phase P8 — carry base.siblingContext() through: this reconstruction must NOT silently
+    // drop the combined-gross TER sibling context resolvePersonInput/resolveThrPersonInput already
+    // resolved (the 10-arg PersonInput constructor's default-null would otherwise lose it).
     PersonInput extended =
         new PersonInput(
             base.employeeId(),
@@ -1070,7 +1187,8 @@ public class PayrollRunWriter {
             base.otherDeductions(),
             base.resolvedRules(),
             base.hasNpwp(),
-            base.annualContext());
+            base.annualContext(),
+            base.siblingContext());
     return new WorkInputAppendResult(extended, reimbursementApplied, node, hasAnyWorkInput);
   }
 
@@ -1159,7 +1277,8 @@ public class PayrollRunWriter {
       Map<String, StatutoryRule> resolvedRules,
       LocalDate asOf,
       String baseCurrency,
-      AnnualContext annualContext) {
+      AnnualContext annualContext,
+      SiblingPeriodContext siblingContext) {
     Money base = Money.ofMinor(0L, baseCurrency);
     List<EarningInput> earnings = new ArrayList<>();
     List<DeductionInput> deductions = new ArrayList<>();
@@ -1203,7 +1322,154 @@ public class PayrollRunWriter {
         // Null on every run except the December/final-month Art-17 true-up (Track P phase P3),
         // where the caller has already decrypt-and-summed this employee's active prior-period
         // payslip lines into the year-to-date figures the ANNUAL_PROGRESSIVE branch needs.
-        annualContext);
+        annualContext,
+        siblingContext);
+  }
+
+  /**
+   * The THR run's {@link PersonInput} (Track P Phase P8, ADR 0035): the THR earning SUBSTITUTES for
+   * BASE in the calculator's single unconditional base-slot line (see this class's javadoc) —
+   * {@code base x min(serviceMonths, 12) / 12} (Permenaker 6/2016), no other earnings, no other
+   * deductions, and ONLY the run_scope-filtered {@code statutoryComponents} the caller already
+   * resolved (PPH21 — BPJS legs never apply to THR). {@code annualContext} is always {@code null}
+   * (the December true-up is REGULAR-only, see the class javadoc's documented residual).
+   */
+  private PersonInput resolveThrPersonInput(
+      Employee employee,
+      PayComponent thrComponent,
+      List<PayComponent> statutoryComponents,
+      Map<String, StatutoryRule> resolvedRules,
+      LocalDate asOf,
+      String baseCurrency,
+      SiblingPeriodContext siblingContext) {
+    Money monthlyBase = aggregateMonthlyBasePay(employee.getId(), asOf, baseCurrency);
+    long months = serviceMonths(employee, asOf);
+    long cappedMonths = Math.min(months, 12L);
+    Money thrAmount = monthlyBase.mulDiv(cappedMonths, 12L);
+
+    return new PersonInput(
+        employee.getId(),
+        employee.getPtkpStatus(),
+        thrComponent,
+        thrAmount,
+        List.of(),
+        List.copyOf(statutoryComponents),
+        List.of(),
+        resolvedRules,
+        employee.hasNpwp(),
+        null,
+        siblingContext);
+  }
+
+  /**
+   * The employee's aggregated MONTHLY base pay as-of {@code asOf} — the same figure {@link
+   * #resolvePersonInput}'s loop accumulates, factored out for {@link #resolveThrPersonInput}'s THR
+   * proration (Track P Phase P8): the THR earning is base pay x service-months/12, computed from
+   * the SAME comp-package base figure a REGULAR run would pay, never allowances/commission (the
+   * statutory spec: THR is 1x WAGE, not 1x total earnings).
+   */
+  private Money aggregateMonthlyBasePay(UUID employeeId, LocalDate asOf, String baseCurrency) {
+    Money base = Money.ofMinor(0L, baseCurrency);
+    for (CompensationPackage pkg : compPackageRepository.findByEmployeeId(employeeId)) {
+      if (!pkg.coversAsOf(asOf)) {
+        continue;
+      }
+      if (pkg.getPayFrequency() != PayFrequency.MONTHLY) {
+        throw new NonMonthlyCompensationException(employeeId, pkg.getId());
+      }
+      Money pkgBase = pkg.getBasePay();
+      pkgBase.requireSameCurrencyAs(base);
+      base = base.plus(pkgBase);
+    }
+    return base;
+  }
+
+  /**
+   * The THR run's catalog integrity guard (Track P Phase P8, ADR 0035): the {@code THR} component
+   * MUST be seeded (activate the {@code ID-2026.3} dataset top-up) AND {@code BASE}'s {@code
+   * run_scope} MUST NOT be {@code ALL} — an {@code ALL}-scoped BASE would resolve INTO a THR run
+   * too (via {@code activeStatutoryComponents/appliesTo} filtering only {@code
+   * statutoryComponents}, never {@code BASE} itself, which {@link #resolvePersonInput} would have
+   * to independently respect) and double-pay a FULL month's base salary on top of the THR earning
+   * in the SAME run — the single highest-stakes THR money-safety guard. Fail-loud, never a silent
+   * double-pay.
+   *
+   * @return the THR earning {@link PayComponent}
+   */
+  private PayComponent requireThrRunComponents() {
+    PayComponent base = requireComponent(COMPONENT_KEY_BASE);
+    if (base.getRunScope() == RunScope.ALL) {
+      throw new ThrRunMisconfiguredException(
+          "pay_component 'BASE' has run_scope=ALL — it would resolve into this THR run and"
+              + " double-pay a full month's base salary; activate the ID-2026.3 dataset top-up"
+              + " (or otherwise set BASE's run_scope to REGULAR) before running THR");
+    }
+    return payComponentRepository
+        .findByComponentKey(COMPONENT_KEY_THR)
+        .orElseThrow(
+            () ->
+                new ThrRunMisconfiguredException(
+                    "no 'THR' pay_component is seeded — activate the ID-2026.3 dataset top-up"
+                        + " before running THR"));
+  }
+
+  /**
+   * The THR proration's service-months tenure (Track P Phase P8, ADR 0035, Permenaker 6/2016):
+   * complete months between the employee's hire date and the run period's END date, floored at zero
+   * (a negative/zero span — hired this month or later — is 0 months, i.e. excluded from THR; never
+   * negative). {@code hire_date} falls back to the employee's EARLIEST assignment {@code
+   * effective_from} when not on file; if NEITHER exists, tenure genuinely cannot be determined and
+   * the run fails loudly ({@link MissingHireDateException}) rather than silently defaulting to zero
+   * — which would silently DENY a genuinely-tenured employee their statutory THR.
+   */
+  private long serviceMonths(Employee employee, LocalDate periodEnd) {
+    LocalDate hireDate = employee.getHireDate();
+    if (hireDate == null) {
+      hireDate =
+          earliestAssignmentEffectiveFrom(employee.getId())
+              .orElseThrow(() -> new MissingHireDateException(employee.getId()));
+    }
+    long months = ChronoUnit.MONTHS.between(hireDate, periodEnd);
+    return Math.max(0L, months);
+  }
+
+  private Optional<LocalDate> earliestAssignmentEffectiveFrom(UUID employeeId) {
+    return assignmentRepository.findByEmployeeId(employeeId).stream()
+        .map(Assignment::getEffectiveFrom)
+        .min(LocalDate::compareTo);
+  }
+
+  /**
+   * The THR-month combined-gross TER interplay's sibling lookup (Track P Phase P8, ADR 0035): the
+   * employee's gross bruto + withheld PPh21 from the ALREADY-ACTIVE run of the OTHER {@link
+   * RunType} for the SAME {@code period}, or {@code null} when no such sibling run is active (the
+   * overwhelming common case — every pre-P8 run, and every run before a company has ever activated
+   * THR). See this class's javadoc for the full order-invariance mandate/proof; {@link
+   * GrossToNetCalculator}'s TER_TABLE branch is the sole consumer.
+   */
+  private SiblingPeriodContext siblingPeriodContext(
+      UUID employeeId,
+      String period,
+      RunType thisRunType,
+      Map<String, PayComponent> catalogByKey,
+      Map<String, StatutoryRule> resolvedRules,
+      String baseCurrency) {
+    RunType otherRunType = thisRunType == RunType.REGULAR ? RunType.THR : RunType.REGULAR;
+    List<PayslipLine> siblingLines =
+        payslipLineRepository.findActiveLinesForEmployeePeriodAndRunType(
+            employeeId, period, otherRunType.name());
+    if (siblingLines.isEmpty()) {
+      return null;
+    }
+    Money grossBruto = Money.ofMinor(0L, baseCurrency);
+    Money withheld = Money.ofMinor(0L, baseCurrency);
+    for (PayslipLine line : siblingLines) {
+      LineClassificationDelta delta =
+          classifyPayslipLine(line, catalogByKey, resolvedRules, baseCurrency);
+      grossBruto = grossBruto.plus(delta.grossDelta());
+      withheld = withheld.plus(delta.withheldDelta());
+    }
+    return new SiblingPeriodContext(grossBruto.amountMinor(), withheld.amountMinor());
   }
 
   private void resolveEarningRule(
@@ -1537,36 +1803,11 @@ public class PayrollRunWriter {
     Money withheld = Money.ofMinor(0L, baseCurrency);
 
     for (PayslipLine line : priorLines) {
-      Money amount = line.getAmount();
-      PayComponent current = catalogByKey.get(line.getComponentKey());
-
-      if (line.getKind() == PayComponentKind.EARNING) {
-        if (current != null && current.isTaxable()) {
-          grossBruto = grossBruto.plus(amount);
-        }
-        continue;
-      }
-
-      // DEDUCTION line: classify by the CURRENT catalog component's rule family (see javadoc).
-      String ruleKey = current != null ? current.getStatutoryRuleKey() : null;
-      StatutoryRule rule = ruleKey != null ? resolvedRules.get(ruleKey) : null;
-      if (rule == null) {
-        continue; // non-statutory deduction (e.g. a loan) — no tax-base effect either way
-      }
-
-      if (isMonthlyIncomeTaxFamily(rule.getCalcType())
-          || rule.getCalcType() == StatutoryCalcType.ANNUAL_PROGRESSIVE) {
-        withheld = withheld.plus(amount);
-      } else if (rule.getCalcType() == StatutoryCalcType.PERCENTAGE_CEILING) {
-        StatutoryParams.CeilingParams params = StatutoryParams.ceiling(rule.getParamsJson());
-        if (line.getBearer() == PayComponentBearer.EMPLOYER) {
-          if (params.employerAddsToTaxBase()) {
-            grossBruto = grossBruto.plus(amount);
-          }
-        } else if (params.reducesTaxBase()) {
-          deductibleSocial = deductibleSocial.plus(amount);
-        }
-      }
+      LineClassificationDelta delta =
+          classifyPayslipLine(line, catalogByKey, resolvedRules, baseCurrency);
+      grossBruto = grossBruto.plus(delta.grossDelta());
+      deductibleSocial = deductibleSocial.plus(delta.deductibleSocialDelta());
+      withheld = withheld.plus(delta.withheldDelta());
     }
 
     int monthsInYear = priorPeriods.size() + 1;
@@ -1575,6 +1816,57 @@ public class PayrollRunWriter {
         deductibleSocial.amountMinor(),
         withheld.amountMinor(),
         monthsInYear);
+  }
+
+  /**
+   * One {@link PayslipLine}'s classification into the three running sums {@link
+   * #buildAnnualContext} (a whole fiscal year) and {@link #siblingPeriodContext} (Track P Phase P8,
+   * one sibling run) each accumulate — extracted so the TWO callers can never classify a line
+   * differently (a single source of truth for "what does this historical/sibling line contribute to
+   * gross bruto / deductible social / withheld PPh21", using the CURRENT catalog/resolved-rules
+   * exactly as {@link #buildAnnualContext}'s class-level javadoc documents the
+   * historical-reconstruction approximation for).
+   */
+  private record LineClassificationDelta(
+      Money grossDelta, Money deductibleSocialDelta, Money withheldDelta) {}
+
+  private LineClassificationDelta classifyPayslipLine(
+      PayslipLine line,
+      Map<String, PayComponent> catalogByKey,
+      Map<String, StatutoryRule> resolvedRules,
+      String baseCurrency) {
+    Money zero = Money.ofMinor(0L, baseCurrency);
+    Money amount = line.getAmount();
+    PayComponent current = catalogByKey.get(line.getComponentKey());
+
+    if (line.getKind() == PayComponentKind.EARNING) {
+      boolean taxable = current != null && current.isTaxable();
+      return new LineClassificationDelta(taxable ? amount : zero, zero, zero);
+    }
+
+    // DEDUCTION line: classify by the CURRENT catalog component's rule family.
+    String ruleKey = current != null ? current.getStatutoryRuleKey() : null;
+    StatutoryRule rule = ruleKey != null ? resolvedRules.get(ruleKey) : null;
+    if (rule == null) {
+      return new LineClassificationDelta(zero, zero, zero); // non-statutory (e.g. a loan)
+    }
+
+    if (isMonthlyIncomeTaxFamily(rule.getCalcType())
+        || rule.getCalcType() == StatutoryCalcType.ANNUAL_PROGRESSIVE) {
+      return new LineClassificationDelta(zero, zero, amount);
+    }
+    if (rule.getCalcType() == StatutoryCalcType.PERCENTAGE_CEILING) {
+      StatutoryParams.CeilingParams params = StatutoryParams.ceiling(rule.getParamsJson());
+      if (line.getBearer() == PayComponentBearer.EMPLOYER) {
+        return params.employerAddsToTaxBase()
+            ? new LineClassificationDelta(amount, zero, zero)
+            : new LineClassificationDelta(zero, zero, zero);
+      }
+      return params.reducesTaxBase()
+          ? new LineClassificationDelta(zero, amount, zero)
+          : new LineClassificationDelta(zero, zero, zero);
+    }
+    return new LineClassificationDelta(zero, zero, zero);
   }
 
   // ---------------------------------------------------------------------
@@ -1784,8 +2076,12 @@ public class PayrollRunWriter {
     }
   }
 
-  private int nextRunSeq(String period) {
-    return runRepository.findByPeriodOrderByRunSeqDesc(period).stream()
+  /**
+   * The next {@code run_seq} for {@code (period, runType)} — Track P Phase P8 (ADR 0035): keyed per
+   * run type so a THR run and a REGULAR run for the same period get their OWN independent counters.
+   */
+  private int nextRunSeq(String period, RunType runType) {
+    return runRepository.findByPeriodAndRunTypeOrderByRunSeqDesc(period, runType).stream()
         .findFirst()
         .map(r -> r.getRunSeq() + 1)
         .orElse(1);

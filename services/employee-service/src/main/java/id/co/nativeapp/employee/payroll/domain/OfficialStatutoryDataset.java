@@ -48,7 +48,12 @@ public final class OfficialStatutoryDataset {
       LocalDate effectiveFrom,
       String paramsJson) {}
 
-  /** One dataset pay-component-catalog row to upsert (insert-if-absent, else align fields). */
+  /**
+   * One dataset pay-component-catalog row to upsert (insert-if-absent, else align fields). {@code
+   * runScope} (Track P Phase P8, ADR 0035) defaults to {@link RunScope#ALL} when the dataset JSON
+   * omits the {@code run_scope} key — every pre-P8 dataset file (ID-2026.1, ID-2026.2) stays valid
+   * unchanged.
+   */
   public record DatasetComponent(
       String componentKey,
       PayComponentKind kind,
@@ -57,7 +62,8 @@ public final class OfficialStatutoryDataset {
       String glAccount,
       boolean taxable,
       String statutoryRuleKey,
-      int displayOrder) {}
+      int displayOrder,
+      RunScope runScope) {}
 
   /** A fully-parsed, load-time-validated dataset. */
   public record Dataset(
@@ -117,6 +123,11 @@ public final class OfficialStatutoryDataset {
     JsonNode ruleKeyNode = node.get("statutory_rule_key");
     String statutoryRuleKey =
         (ruleKeyNode == null || ruleKeyNode.isNull()) ? null : ruleKeyNode.asText();
+    JsonNode runScopeNode = node.get("run_scope");
+    RunScope runScope =
+        (runScopeNode == null || runScopeNode.isNull())
+            ? RunScope.ALL
+            : RunScope.valueOf(runScopeNode.asText().toUpperCase(Locale.ROOT));
     return new DatasetComponent(
         node.get("component_key").asText(),
         PayComponentKind.valueOf(node.get("kind").asText().toUpperCase(Locale.ROOT)),
@@ -125,6 +136,7 @@ public final class OfficialStatutoryDataset {
         node.get("gl_account").asText(),
         node.get("taxable").asBoolean(),
         statutoryRuleKey,
-        node.get("display_order").asInt());
+        node.get("display_order").asInt(),
+        runScope);
   }
 }

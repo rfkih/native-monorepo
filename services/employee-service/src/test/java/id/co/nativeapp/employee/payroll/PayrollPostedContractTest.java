@@ -76,14 +76,24 @@ class PayrollPostedContractTest {
   }
 
   @Test
-  void toRecordStampsRunTypeRegular() {
-    // ADR 0032 (Track P phase P4): both existing producers stamp run_type REGULAR as a constant
-    // until Track P phase P8 (THR, ADR 0034).
+  void toRecordStampsRunTypeRegularByDefault() {
+    // The 3-arg PayrollRun constructor defaults to REGULAR (Track P Phase P8, ADR 0035).
     id.co.nativeapp.employee.payroll.domain.PayrollRun run =
         new id.co.nativeapp.employee.payroll.domain.PayrollRun("2026-06", 1, "IDR");
     run.markPosted(java.time.Instant.parse("2026-06-30T12:00:00Z"));
     GenericRecord record = PayrollPostedSchema.toRecord(run, List.of());
     assertThat(record.get("run_type").toString()).isEqualTo("REGULAR");
+  }
+
+  @Test
+  void toRecordStampsRunTypeThrWhenTheRunIsThr() {
+    // Track P Phase P8 (ADR 0035): toRecord() carries the run's REAL run_type off payroll_run.
+    id.co.nativeapp.employee.payroll.domain.PayrollRun run =
+        new id.co.nativeapp.employee.payroll.domain.PayrollRun(
+            "2026-06", 1, "IDR", id.co.nativeapp.employee.payroll.domain.RunType.THR);
+    run.markPosted(java.time.Instant.parse("2026-06-30T12:00:00Z"));
+    GenericRecord record = PayrollPostedSchema.toRecord(run, List.of());
+    assertThat(record.get("run_type").toString()).isEqualTo("THR");
   }
 
   @Test

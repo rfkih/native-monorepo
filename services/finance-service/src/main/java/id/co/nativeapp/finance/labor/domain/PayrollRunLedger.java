@@ -53,7 +53,7 @@ public class PayrollRunLedger extends Auditable {
   private int runSeq;
 
   /**
-   * The payroll run type ({@code REGULAR} today; {@code THR} lands at Track P phase P8, ADR 0034).
+   * The payroll run type ({@code REGULAR} today; {@code THR} lands at Track P phase P8, ADR 0035).
    * Supersession is scoped to {@code (company_id, period, run_type, run_seq)} — ADR 0032, Track P
    * phase P4 — so a future THR run never supersedes a REGULAR run for the same period.
    */

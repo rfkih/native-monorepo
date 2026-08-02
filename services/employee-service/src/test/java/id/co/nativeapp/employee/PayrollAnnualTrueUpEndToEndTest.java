@@ -779,7 +779,7 @@ class PayrollAnnualTrueUpEndToEndTest extends PostgresRlsTestBase {
     UUID employeeId =
         employeeService.create(new CreateEmployeeCommand(fullName, ptkpStatus, nik, nik)).getId();
     employeeService.update(
-        new UpdateEmployeeCommand(employeeId, null, null, null, null, npwpFor(nik), null));
+        new UpdateEmployeeCommand(employeeId, null, null, null, null, npwpFor(nik), null, null));
     return employeeId;
   }
 

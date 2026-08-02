@@ -41,7 +41,7 @@ public class PayrollRunService {
     try {
       return writer.calculate(command, baseCurrency);
     } catch (RuntimeException failure) {
-      writer.recordFailedAttempt(command.period(), baseCurrency);
+      writer.recordFailedAttempt(command.period(), baseCurrency, command.runType());
       throw failure;
     }
   }

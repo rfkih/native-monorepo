@@ -10,6 +10,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -94,6 +95,16 @@ public class Employee extends Auditable {
   @Column(name = "login_temp_password_set_at")
   private Instant loginTempPasswordSetAt;
 
+  /**
+   * The employee's hire date (Track P Phase P8, ADR 0035) — feeds the THR proration (Permenaker
+   * 6/2016: months of service / 12, capped at 1x for &gt;=12 months). NOT PII (a start date, not
+   * sensitive data), plain column, nullable (a pre-P8 employee, or one HR hasn't recorded it for
+   * yet, simply has none on file — {@code PayrollRunWriter} falls back to the employee's earliest
+   * assignment {@code effective_from}).
+   */
+  @Column(name = "hire_date")
+  private LocalDate hireDate;
+
   protected Employee() {
     // for JPA
   }
@@ -128,7 +139,8 @@ public class Employee extends Auditable {
       String newNik,
       String newBankAccount,
       String newNpwp,
-      EmployeeStatus newStatus) {
+      EmployeeStatus newStatus,
+      LocalDate newHireDate) {
     boolean changed = false;
     if (newFullName != null) {
       String trimmed = requireNonBlank(newFullName, "fullName");
@@ -164,6 +176,10 @@ public class Employee extends Auditable {
     }
     if (newStatus != null && newStatus != this.status) {
       this.status = newStatus;
+      changed = true;
+    }
+    if (newHireDate != null && !newHireDate.equals(this.hireDate)) {
+      this.hireDate = newHireDate;
       changed = true;
     }
     return changed;
@@ -270,6 +286,11 @@ public class Employee extends Auditable {
   /** The linked login's Keycloak subject id, or null when the employee has no login. */
   public String getUserId() {
     return userId;
+  }
+
+  /** The hire date (Track P Phase P8), or {@code null} when not on file. NOT PII. */
+  public LocalDate getHireDate() {
+    return hireDate;
   }
 
   /**

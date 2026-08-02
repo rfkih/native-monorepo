@@ -17,6 +17,9 @@ public interface PayrollRunView {
 
   Integer getRunSeq();
 
+  /** {@code REGULAR} or {@code THR} (Track P Phase P8, ADR 0035). */
+  String getRunType();
+
   String getStatus();
 
   String getBaseCurrency();

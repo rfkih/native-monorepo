@@ -174,6 +174,19 @@ public class GrossToNetCalculator {
 
     // 3b. TER_TABLE — PMK 168/2023 monthly effective-rate-on-WHOLE-gross lookup. No annualization,
     // no PTKP subtraction, no biaya jabatan.
+    //
+    // Track P Phase P8 (ADR 0035) — the THR-month TER interplay: PMK 168/2023's masa-pajak mandate
+    // applies TER to the MONTH's TOTAL gross bruto, not just THIS run's own. When a sibling run
+    // (the OTHER RunType, SAME period) is already ACTIVE, `input.siblingContext()` carries its
+    // gross bruto + already-withheld PPh21 (PayrollRunWriter#siblingPeriodContext); the effective
+    // rate is looked up on the COMBINED gross, the combined tax computed on the COMBINED gross, and
+    // the sibling's already-withheld amount subtracted to yield THIS run's own withholding delta
+    // (which MAY be negative, mirroring the December true-up's refund-line precedent). When no
+    // sibling is active (the overwhelming common case, and every pre-P8 run), `siblingContext()` is
+    // null and combinedGrossBruto == grossBruto / siblingWithheld == zero — byte-identical to the
+    // pre-P8 branch. This is ORDER-INVARIANT: whichever of a THR/REGULAR pair for a period computes
+    // SECOND nets out to total withheld = TER_rate(combinedGrossBruto) x combinedGrossBruto
+    // regardless of which one ran first (verified both orders, Track P Phase P8 tests).
     for (PayComponent component : statutoryByCalc(input, StatutoryCalcType.TER_TABLE)) {
       StatutoryRule rule = input.resolvedRules().get(component.getStatutoryRuleKey());
       if (rule == null) {
@@ -182,13 +195,23 @@ public class GrossToNetCalculator {
       usesIllustrative |= rule.isIllustrative();
       StatutoryParams.TerTableParams params = StatutoryParams.terTable(rule.getParamsJson());
       StatutoryParams.TerCategoryTable category = params.categoryFor(input.ptkpStatus());
-      int rateBp = category.rateBpFor(grossBruto.amountMinor());
-      Money tax = grossBruto.applyBasisPoints(rateBp);
-      tax = applyNoNpwpSurcharge(tax, params.noNpwpSurchargeBp(), input.hasNpwp());
+
+      Money siblingGrossBruto = zero;
+      Money siblingWithheld = zero;
+      if (input.siblingContext() != null) {
+        siblingGrossBruto = Money.ofMinor(input.siblingContext().grossBrutoMinor(), currency);
+        siblingWithheld = Money.ofMinor(input.siblingContext().withheldMinor(), currency);
+      }
+      Money combinedGrossBruto = grossBruto.plus(siblingGrossBruto);
+
+      int rateBp = category.rateBpFor(combinedGrossBruto.amountMinor());
+      Money combinedTax = combinedGrossBruto.applyBasisPoints(rateBp);
+      combinedTax = applyNoNpwpSurcharge(combinedTax, params.noNpwpSurchargeBp(), input.hasNpwp());
+      Money tax = combinedTax.minus(siblingWithheld);
 
       lines.add(
           new ComputedLine(
-              component, tax, grossBruto, rule.getRuleVersion(), rule.isIllustrative()));
+              component, tax, combinedGrossBruto, rule.getRuleVersion(), rule.isIllustrative()));
       employeeDeductions = employeeDeductions.plus(tax);
     }
 

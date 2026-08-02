@@ -19,6 +19,7 @@ import id.co.nativeapp.employee.payroll.domain.CompensationAlreadyEndedException
 import id.co.nativeapp.employee.payroll.domain.CompensationNotFoundException;
 import id.co.nativeapp.employee.payroll.domain.DuplicateCommissionException;
 import id.co.nativeapp.employee.payroll.domain.IncompletePeriodException;
+import id.co.nativeapp.employee.payroll.domain.MissingHireDateException;
 import id.co.nativeapp.employee.payroll.domain.NonMonthlyCompensationException;
 import id.co.nativeapp.employee.payroll.domain.OverlappingCompensationException;
 import id.co.nativeapp.employee.payroll.domain.PayrollRunNotFoundException;
@@ -26,6 +27,7 @@ import id.co.nativeapp.employee.payroll.domain.PayrollRunNotPostedException;
 import id.co.nativeapp.employee.payroll.domain.PayrollSetupNotSeededException;
 import id.co.nativeapp.employee.payroll.domain.PendingWorkEntriesException;
 import id.co.nativeapp.employee.payroll.domain.TaxableReimbursementComponentException;
+import id.co.nativeapp.employee.payroll.domain.ThrRunMisconfiguredException;
 import id.co.nativeapp.employee.payroll.domain.UnknownDatasetVersionException;
 import id.co.nativeapp.employee.payroll.domain.UnknownStatutoryRuleException;
 import id.co.nativeapp.employee.timeoff.domain.CrossMonthLeaveRequestException;
@@ -142,6 +144,33 @@ public class EmployeeApiAdvice {
     ProblemDetail problem =
         problem(HttpStatus.UNPROCESSABLE_ENTITY, "taxable-reimbursement-component", request);
     problem.setTitle("Reimbursement component misconfigured taxable");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /**
+   * A THR run cannot determine an employee's tenure (no hire_date, no assignment to fall back to) →
+   * 422 (Track P Phase P8).
+   */
+  @ExceptionHandler(MissingHireDateException.class)
+  public ProblemDetail handleMissingHireDate(
+      MissingHireDateException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.UNPROCESSABLE_ENTITY, "missing-hire-date", request);
+    problem.setTitle("Missing hire date");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /**
+   * A THR run's catalog is misconfigured (THR component missing, or BASE not scoped away from THR)
+   * → 422 (Track P Phase P8).
+   */
+  @ExceptionHandler(ThrRunMisconfiguredException.class)
+  public ProblemDetail handleThrRunMisconfigured(
+      ThrRunMisconfiguredException ex, HttpServletRequest request) {
+    ProblemDetail problem =
+        problem(HttpStatus.UNPROCESSABLE_ENTITY, "thr-run-misconfigured", request);
+    problem.setTitle("THR run misconfigured");
     problem.setDetail(ex.getMessage());
     return problem;
   }

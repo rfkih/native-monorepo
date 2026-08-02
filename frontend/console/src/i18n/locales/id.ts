@@ -1158,6 +1158,15 @@ export const id = {
       active: 'Aktif',
       nik: 'NIK',
       bank: 'Rekening bank',
+      // Track P Phase P8 (ADR 0035) — untuk proporsi THR (Tunjangan Hari Raya).
+      hireDate: 'Tanggal mulai kerja',
+      hireDateHint: 'Untuk proporsi THR (Tunjangan Hari Raya) — masa kerja bulan / 12.',
+      hireDateNone: 'Belum diatur',
+      hireDateEdit: 'Ubah',
+      hireDateSave: 'Simpan',
+      hireDateSaving: 'Menyimpan…',
+      hireDateCancel: 'Batal',
+      hireDateError: 'Tanggal mulai kerja gagal disimpan. Coba lagi.',
       loginTitle: 'Login',
       noLogin: 'Belum ada login. Buat satu agar karyawan ini bisa masuk.',
       username: 'Nama pengguna',
@@ -1297,6 +1306,12 @@ export const id = {
           'Pembukuan {{period}} belum ditutup, jadi pemeriksaan kelengkapan menghentikan proses ini. Tutup periode dulu — atau proses tanpa pemeriksaan (proses ditandai tanpa gerbang).',
         runUngated: 'Proses tanpa pemeriksaan kelengkapan',
         running: 'Memproses…',
+        // Track P Phase P8 (THR — Tunjangan Hari Raya).
+        ctaThr: 'Proses THR',
+        confirmTitleThr: 'Proses THR?',
+        confirmBodyThr:
+          'Proses THR adalah tunjangan hari raya di luar siklus untuk periode {{period}}, dihitung dan dibukukan untuk semua {{count}} karyawan siap dibayar — berjalan berdampingan dengan proses gaji reguler periode ini, tidak menggantikannya.',
+        holidayDateLabel: 'Tanggal hari raya (pembayaran H-7 — informasi saja)',
       },
       history: {
         runLabel: 'Proses #{{seq}}',
@@ -1304,6 +1319,12 @@ export const id = {
         empty: 'Belum ada proses gaji periode ini',
         emptyHint: 'Proses gaji untuk melihat total, slip gaji, dan biaya tenaga kerja per gerai.',
         failedLabel: 'Gagal — tidak ada yang dibukukan',
+        // Track P Phase P8.
+        thrBadge: 'THR',
+        filterLabel: 'Saring berdasarkan jenis proses',
+        filterAll: 'Semua',
+        filterRegular: 'Reguler',
+        filterThr: 'THR',
       },
       kpi: {
         gross: 'Bruto',

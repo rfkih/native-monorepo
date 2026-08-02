@@ -1161,6 +1161,15 @@ export const en = {
       active: 'Active',
       nik: 'NIK',
       bank: 'Bank account',
+      // Track P Phase P8 (ADR 0035) — feeds THR (Tunjangan Hari Raya) proration.
+      hireDate: 'Hire date',
+      hireDateHint: 'Feeds THR (Tunjangan Hari Raya) proration — months of service / 12.',
+      hireDateNone: 'Not set',
+      hireDateEdit: 'Edit',
+      hireDateSave: 'Save',
+      hireDateSaving: 'Saving…',
+      hireDateCancel: 'Cancel',
+      hireDateError: 'Could not save the hire date. Try again.',
       loginTitle: 'Login',
       noLogin: 'No login yet. Create one so this employee can sign in.',
       username: 'Username',
@@ -1300,6 +1309,12 @@ export const en = {
           'The {{period}} books are not closed yet, so the completeness gate stopped this run. Close the period first — or run without the gate (the run is marked as ungated).',
         runUngated: 'Run without completeness gate',
         running: 'Running…',
+        // Track P Phase P8 (THR — Tunjangan Hari Raya).
+        ctaThr: 'Run THR',
+        confirmTitleThr: 'Run THR?',
+        confirmBodyThr:
+          'A THR run is an off-cycle religious-holiday allowance for {{period}}, calculated and posted for all {{count}} payable employees — it coexists with the regular run for this period and never replaces it.',
+        holidayDateLabel: 'Holiday date (H-7 payment — informational)',
       },
       history: {
         runLabel: 'Run #{{seq}}',
@@ -1307,6 +1322,12 @@ export const en = {
         empty: 'No payroll runs for this period',
         emptyHint: 'Run payroll to see totals, payslips, and labor cost by outlet here.',
         failedLabel: 'Failed — nothing posted',
+        // Track P Phase P8.
+        thrBadge: 'THR',
+        filterLabel: 'Filter by run type',
+        filterAll: 'All',
+        filterRegular: 'Regular',
+        filterThr: 'THR',
       },
       kpi: {
         gross: 'Gross',

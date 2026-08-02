@@ -63,9 +63,9 @@ has landed yet — the status names the phases that will land them.
 | **`GiftCardStateChanged`** | **loyalty-service** | **the verticals** | **gift_card_id, company_id, state, balance_minor (absolute), currency, balance_seq (monotonic), occurred_at** | **LIVE (ADR 0027, Phase 4): loyalty-service producer + vertical consumers built** |
 | **`LoyaltyRedemptionFlagged`** | **loyalty-service** | **notification-service** | **flag_id, company_id, business_id, sale_id, member_id, gift_card_id, shortfall_minor, shortfall_points, occurred_at** | **LIVE (ADR 0027, Phase 4): loyalty-service producer + vertical consumers built** |
 | **`ExpenseRecorded`** | **verticals** | **finance** | **expense_id, company_id, business_id, amount_minor, currency, gl_hint, occurred_at** | **LIVE (finance consumer #21)** |
-| **`PayrollPosted`** | **employee-service** | **finance** | **payroll_run_id, run_seq, run_type, company_id, period, base_currency, totals, rule_versions, uses_illustrative_rules, posted_at** | **LIVE (#23); finance consumer #23; run_type added ADR 0032 P4** |
-| **`LaborCostAllocated`** | **employee-service** | **finance** | **payroll_run_id, run_seq, run_type, company_id, period, outlet_id, gl_account, amount_minor, currency, uses_illustrative_rules, unallocated** | **LIVE (#23); finance consumer #23; run_type added ADR 0032 P4** |
-| **`PayrollLiabilitiesPosted`** | **employee-service** | **finance** | **payroll_run_id, company_id, period, run_seq, run_type, base_currency, employer_cost_total_minor, liabilities[], uses_illustrative_rules, posted_at** | **LIVE (ADR 0032, Track P phase P4); finance consumer P4** |
+| **`PayrollPosted`** | **employee-service** | **finance** | **payroll_run_id, run_seq, run_type, company_id, period, base_currency, totals, rule_versions, uses_illustrative_rules, posted_at** | **LIVE (#23); finance consumer #23; run_type added ADR 0032 P4, real REGULAR/THR values ADR 0035 P8** |
+| **`LaborCostAllocated`** | **employee-service** | **finance** | **payroll_run_id, run_seq, run_type, company_id, period, outlet_id, gl_account, amount_minor, currency, uses_illustrative_rules, unallocated** | **LIVE (#23); finance consumer #23; run_type added ADR 0032 P4, real REGULAR/THR values ADR 0035 P8** |
+| **`PayrollLiabilitiesPosted`** | **employee-service** | **finance** | **payroll_run_id, company_id, period, run_seq, run_type, base_currency, employer_cost_total_minor, liabilities[], uses_illustrative_rules, posted_at** | **LIVE (ADR 0032, Track P phase P4); finance consumer P4; real REGULAR/THR run_type values ADR 0035 P8** |
 | **`ExpenseClaimApproved`** | **employee-service** | **finance** | **claim_id, company_id, org_unit_id, employee_id, amount_minor, currency, gl_hint, expense_date, approved_at** | **SCHEMA REGISTERED (ADR 0030, E0); producer E1, finance consumer E2** |
 | **`ExpenseClaimVoided`** | **employee-service** | **finance** | **claim_id, company_id, org_unit_id, employee_id, amount_minor, currency, gl_hint, approved_at, voided_at** | **SCHEMA REGISTERED (ADR 0030, E0); producer E7, finance consumer E2** |
 | **`ExpenseReimbursementSettled`** | **employee-service** | **finance** | **claim_id, company_id, org_unit_id, employee_id, amount_minor, currency, settlement_kind, payroll_run_id?, run_seq?, settled_at** | **SCHEMA REGISTERED (ADR 0030, E0); producers E4/E5, finance consumer E2** |
@@ -1119,13 +1119,13 @@ handles supersession, not double-counting two runs for one period).
 reads as the first run); `run_type` is added **backward-compatibly** (`default: "REGULAR"`, ADR 0032,
 Track P phase P4 — an old-producer record with no `run_type` reads as `REGULAR`); future fields are
 added as a union-with-default. The producer **populates `run_seq` from `payroll_run.run_seq`** on the
-wire (a corrected re-run carries `run_seq=2`) and **stamps `run_type` as the constant `REGULAR`**
-until Track P phase P8 (THR, ADR 0034) gives `payroll_run` a real `run_type` column — so finance reads
-the real sequence, not the default 1, and supersession actually fires, now scoped to `(company_id,
-period, run_type, run_seq)`. The contract test (`PayrollPostedContractTest`, both services) enforces
-the triad (parse + `AvroSerde` round-trip + add-optional compatible / new-required broken), that a
-`run_seq=2` record round-trips as `2`, and that a pre-ADR-0032 record with no `run_type` reads as
-`REGULAR`.
+wire (a corrected re-run carries `run_seq=2`) — so finance reads the real sequence, not the default
+1, and supersession actually fires, now scoped to `(company_id, period, run_type, run_seq)`.
+`run_type` rides `payroll_run.run_type` (a REAL column as of Track P phase P8, THR, ADR 0035 —
+`REGULAR` or `THR`; a THR run and a REGULAR run for the same period each carry their OWN `run_seq`
+sequence). The contract test (`PayrollPostedContractTest`, both services) enforces the triad (parse
++ `AvroSerde` round-trip + add-optional compatible / new-required broken), that a `run_seq=2` record
+round-trips as `2`, and that a pre-ADR-0032 record with no `run_type` reads as `REGULAR`.
 
 **Finance CONSUMER view (#23; ADR 0032 P4 for `run_type`).** finance-service consumes `PayrollPosted`
 as the run-level **control/announcement** — it **produces NO ledger posting**. It is used only for: (a)
@@ -1197,11 +1197,12 @@ field was added **backward-compatibly** with a `default: false`, so an old reade
 **Compatibility.** Backward-compatible evolution only (the `unallocated`, `run_seq`, and `run_type`
 fields all carry defaults — `run_seq` `default: 1`, `run_type` `default: "REGULAR"`, ADR 0032 Track P
 phase P4). The producer **populates `run_seq` from `payroll_run.run_seq`** on the wire (a corrected
-re-run carries `run_seq=2`) and **stamps `run_type` as the constant `REGULAR`** until Track P phase P8
-(THR, ADR 0034), so finance reads the real sequence — not the default 1 — and supersession actually
-fires, now scoped to `(company_id, period, run_type, run_seq)`. The contract test
-(`LaborCostAllocatedContractTest`, both services) enforces the triad, that a `run_seq=2` record
-round-trips as `2`, and that a pre-ADR-0032 record with no `run_type` reads as `REGULAR`.
+re-run carries `run_seq=2`) and `run_type` rides `payroll_run.run_type` (a REAL column as of Track P
+phase P8, THR, ADR 0035 — `REGULAR` or `THR`), so finance reads the real sequence — not the default
+1 — and supersession actually fires, now scoped to `(company_id, period, run_type, run_seq)`. The
+contract test (`LaborCostAllocatedContractTest`, both services) enforces the triad, that a
+`run_seq=2` record round-trips as `2`, and that a pre-ADR-0032 record with no `run_type` reads as
+`REGULAR`.
 
 **Finance CONSUMER view (#23).** finance-service consumes each `LaborCostAllocated` bucket as exactly
 one **EXPENSE `ledger_posting`** (the labor cost is genuinely an expense). The posting's

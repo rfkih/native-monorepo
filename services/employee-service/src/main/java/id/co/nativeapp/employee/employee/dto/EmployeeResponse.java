@@ -1,6 +1,7 @@
 package id.co.nativeapp.employee.employee.dto;
 
 import id.co.nativeapp.employee.employee.domain.Employee;
+import java.time.LocalDate;
 import java.util.UUID;
 
 /**
@@ -19,6 +20,8 @@ import java.util.UUID;
  * @param maskedNpwp the NPWP, fully redacted ({@code "***REDACTED***"}), or null when none is on
  *     file
  * @param userId the linked console login's Keycloak subject id (non-PII), or null when unlinked
+ * @param hireDate the hire date (Track P Phase P8, ADR 0035 — feeds THR proration), NOT PII, or
+ *     null when not on file
  */
 public record EmployeeResponse(
     UUID id,
@@ -29,7 +32,8 @@ public record EmployeeResponse(
     String maskedBankAccount,
     boolean hasNpwp,
     String maskedNpwp,
-    String userId) {
+    String userId,
+    LocalDate hireDate) {
 
   /** Builds a masked response from an employee aggregate (never the raw PII — rule 6). */
   public static EmployeeResponse from(Employee employee) {
@@ -42,6 +46,7 @@ public record EmployeeResponse(
         employee.maskedBankAccount(),
         employee.hasNpwp(),
         employee.maskedNpwp(),
-        employee.getUserId());
+        employee.getUserId(),
+        employee.getHireDate());
   }
 }

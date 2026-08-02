@@ -33,12 +33,9 @@ import org.hibernate.type.SqlTypes;
 public class PayrollRun extends Auditable {
 
   /**
-   * The only run type that exists before Track P phase P8 (THR, ADR 0034). Stamped as a constant
-   * onto the {@code run_type} field of {@code PayrollPosted}, {@code LaborCostAllocated}, and
-   * {@code PayrollLiabilitiesPosted} (ADR 0032, Track P phase P4) until the {@code payroll_run}
-   * table itself grows a real {@code run_type} column at P8 — no schema/behaviour change here, only
-   * the wire events become run-type-aware ahead of time so finance is ready before any THR run
-   * exists.
+   * The default/legacy run type name, kept as a plain constant for call sites that still want the
+   * literal string (e.g. test fixtures) — the column itself is real as of Track P Phase P8 (ADR
+   * 0034); see {@link #runType}.
    */
   public static final String RUN_TYPE_REGULAR = "REGULAR";
 
@@ -51,6 +48,16 @@ public class PayrollRun extends Auditable {
 
   @Column(name = "run_seq", nullable = false)
   private int runSeq;
+
+  /**
+   * Track P Phase P8 (ADR 0035): REGULAR (the ordinary monthly cadence, default) or THR (the
+   * off-cycle H-7 allowance run). Each run type owns its OWN {@code run_seq} sequence per period
+   * ({@code uq_payroll_run_company_period_type_seq}) so a THR run and a REGULAR run for the SAME
+   * period coexist without superseding each other.
+   */
+  @Enumerated(EnumType.STRING)
+  @Column(name = "run_type", nullable = false, length = 16, updatable = false)
+  private RunType runType;
 
   @Enumerated(EnumType.STRING)
   @Column(name = "status", nullable = false, length = 32)
@@ -135,11 +142,20 @@ public class PayrollRun extends Auditable {
     // for JPA
   }
 
-  /** Creates a DRAFT run with zeroed totals in the base currency. */
+  /** Creates a DRAFT REGULAR run with zeroed totals in the base currency. */
   public PayrollRun(String period, int runSeq, String baseCurrency) {
+    this(period, runSeq, baseCurrency, RunType.REGULAR);
+  }
+
+  /**
+   * Creates a DRAFT run of the given {@link RunType} with zeroed totals in the base currency (Track
+   * P Phase P8, ADR 0035).
+   */
+  public PayrollRun(String period, int runSeq, String baseCurrency, RunType runType) {
     this.id = UUID.randomUUID();
     this.period = Objects.requireNonNull(period, "period");
     this.runSeq = runSeq;
+    this.runType = Objects.requireNonNull(runType, "runType");
     this.baseCurrency = Objects.requireNonNull(baseCurrency, "baseCurrency");
     this.status = RunStatus.DRAFT;
     this.ruleVersionSetJson = "{}";
@@ -209,6 +225,10 @@ public class PayrollRun extends Auditable {
 
   public int getRunSeq() {
     return runSeq;
+  }
+
+  public RunType getRunType() {
+    return runType;
   }
 
   public RunStatus getStatus() {

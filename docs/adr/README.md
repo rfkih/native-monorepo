@@ -52,3 +52,5 @@ boundary, a security posture. Routine, local choices do not need one — use a c
 | [0031](0031-indonesian-statutory-payroll-official-datasets.md) | Indonesian statutory payroll — OFFICIAL canned datasets, the TER-transcription activation checklist, PATCH-creates-new-row overrides | Accepted |
 | [0032](0032-payroll-liability-recognition.md) | Payroll liability recognition — a third event, a clearing re-class, and run-type-aware supersession | Accepted |
 | [0033](0033-attendance-and-timeoff-foundation.md) | Attendance & time-off foundation — leave requests, overtime entries, and a derived balance | Accepted |
+| [0034](0034-pos-shell-verticals-are-adapters.md) | POS shell + shared payment surface — verticals are adapters, not clones | Accepted |
+| [0035](0035-thr-run-type.md) | THR run type — the off-cycle Tunjangan Hari Raya allowance | Accepted |

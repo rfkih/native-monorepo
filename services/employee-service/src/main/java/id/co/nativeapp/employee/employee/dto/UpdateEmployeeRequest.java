@@ -2,6 +2,7 @@ package id.co.nativeapp.employee.employee.dto;
 
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import java.time.LocalDate;
 
 /**
  * The update-employee request body — a partial update. Every field is optional: a {@code null}
@@ -10,7 +11,8 @@ import jakarta.validation.constraints.Size;
  *
  * <p>{@code nik}, {@code bankAccount} and {@code npwp} are PII (rule 6) — supplied in plaintext
  * only when changing them (format-validated before encryption), column-encrypted at rest, never
- * echoed back in plaintext.
+ * echoed back in plaintext. {@code hireDate} is NOT PII (Track P Phase P8, ADR 0035 — feeds THR
+ * proration).
  *
  * @param fullName the new full name, or {@code null} to leave unchanged
  * @param ptkpStatus the new PTKP status code (TK0–TK3 / K0–K3), or {@code null} to leave unchanged
@@ -20,6 +22,7 @@ import jakarta.validation.constraints.Size;
  *     leave unchanged
  * @param status the new status ({@code ACTIVE}/{@code INACTIVE}), or {@code null} to leave
  *     unchanged
+ * @param hireDate the new hire date, or {@code null} to leave unchanged
  */
 public record UpdateEmployeeRequest(
     @Size(max = 255) String fullName,
@@ -27,4 +30,5 @@ public record UpdateEmployeeRequest(
     @Pattern(regexp = "\\d{16}") String nik,
     @Pattern(regexp = "\\d{6,32}") String bankAccount,
     @Pattern(regexp = "\\d{15,16}") String npwp,
-    @Pattern(regexp = "ACTIVE|INACTIVE") String status) {}
+    @Pattern(regexp = "ACTIVE|INACTIVE") String status,
+    LocalDate hireDate) {}

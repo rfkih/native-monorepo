@@ -106,7 +106,8 @@ public class EmployeeController {
             request.nik(),
             request.bankAccount(),
             request.npwp(),
-            request.status());
+            request.status(),
+            request.hireDate());
     Employee updated = employeeService.update(command);
     return ResponseEntity.ok(EmployeeResponse.from(updated));
   }

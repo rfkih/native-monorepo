@@ -11,7 +11,7 @@ services:
     events: true
   - name: employee-service
     module: ":services:employee-service"
-    migrations: { count: 11, range: "V1..V11" }
+    migrations: { count: 14, range: "V1..V14" }
     events: true
   - name: entitlement-service
     module: ":services:entitlement-service"
@@ -19,7 +19,7 @@ services:
     events: true
   - name: finance-service
     module: ":services:finance-service"
-    migrations: { count: 41, range: "V1..V41" }
+    migrations: { count: 42, range: "V1..V42" }
     events: true
   - name: gateway
     module: ":services:gateway"

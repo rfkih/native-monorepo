@@ -100,7 +100,8 @@ public class EmployeeWriter {
             command.nik(),
             command.bankAccount(),
             command.npwp(),
-            command.status() == null ? null : EmployeeStatus.from(command.status()));
+            command.status() == null ? null : EmployeeStatus.from(command.status()),
+            command.hireDate());
 
     if (changed) {
       employeeRepository.flush();
