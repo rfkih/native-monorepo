@@ -8,12 +8,10 @@ import id.co.nativeapp.employee.employee.service.EmployeeService;
 import id.co.nativeapp.employee.expense.domain.ClaimNotFoundException;
 import id.co.nativeapp.employee.expense.domain.ExpenseCategory;
 import id.co.nativeapp.employee.expense.dto.CreateClaimCommand;
-import id.co.nativeapp.employee.expense.repository.ExpenseClaimEventRepository;
 import id.co.nativeapp.employee.expense.service.ExpenseCategoryReader;
 import id.co.nativeapp.employee.expense.service.ExpenseCategoryWriter;
 import id.co.nativeapp.employee.expense.service.ExpenseClaimReader;
 import id.co.nativeapp.employee.expense.service.ExpenseClaimService;
-import id.co.nativeapp.employee.expense.service.ExpenseClaimWriter;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.LocalDate;
 import java.util.List;
@@ -46,7 +44,6 @@ class ExpenseClaimRlsIsolationTest extends PostgresRlsTestBase {
   @Autowired private ExpenseCategoryReader categoryReader;
   @Autowired private ExpenseClaimService claimService;
   @Autowired private ExpenseClaimReader claimReader;
-  @Autowired private ExpenseClaimEventRepository claimEventRepository;
 
   @Test
   void tenantBCannotSeeTenantAsExpenseCategoryClaimOrClaimEvent() throws Exception {
@@ -93,13 +90,13 @@ class ExpenseClaimRlsIsolationTest extends PostgresRlsTestBase {
                 .content())
         .hasSize(1);
     assertThat(
-            TenantContext.callAs(
+            countAsTenant(
                 TENANT_A,
-                ACTOR_A,
-                () ->
-                    claimEventRepository.findIdByClaimIdAndIdempotencyKey(
-                        claimId, SUBMIT_IDEMPOTENCY_KEY, ExpenseClaimWriter.ACTION_SUBMIT)))
-        .isPresent();
+                "SELECT count(*) FROM expense_claim_event WHERE claim_id = ? AND"
+                    + " idempotency_key = ? AND action = 'SUBMIT'",
+                claimId,
+                SUBMIT_IDEMPOTENCY_KEY))
+        .isEqualTo(1L);
 
     // B, in its own scope, sees NONE of it (RLS fail-closed).
     List<?> categoriesForB = TenantContext.callAs(TENANT_B, ACTOR_B, categoryReader::list);
@@ -113,12 +110,12 @@ class ExpenseClaimRlsIsolationTest extends PostgresRlsTestBase {
             () -> TenantContext.callAs(TENANT_B, ACTOR_B, () -> claimReader.one(claimId)))
         .isInstanceOf(ClaimNotFoundException.class);
     assertThat(
-            TenantContext.callAs(
+            countAsTenant(
                 TENANT_B,
-                ACTOR_B,
-                () ->
-                    claimEventRepository.findIdByClaimIdAndIdempotencyKey(
-                        claimId, SUBMIT_IDEMPOTENCY_KEY, ExpenseClaimWriter.ACTION_SUBMIT)))
-        .isEmpty();
+                "SELECT count(*) FROM expense_claim_event WHERE claim_id = ? AND"
+                    + " idempotency_key = ? AND action = 'SUBMIT'",
+                claimId,
+                SUBMIT_IDEMPOTENCY_KEY))
+        .isZero();
   }
 }

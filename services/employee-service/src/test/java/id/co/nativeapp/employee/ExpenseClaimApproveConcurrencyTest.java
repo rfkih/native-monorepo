@@ -21,7 +21,6 @@ import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
  * The headline CONCURRENCY + ATOMICITY proof: two threads approve the SAME SUBMITTED claim with the
@@ -52,7 +51,6 @@ class ExpenseClaimApproveConcurrencyTest extends PostgresRlsTestBase {
   @Autowired private EmployeeService employeeService;
   @Autowired private ExpenseCategoryWriter categoryWriter;
   @Autowired private ExpenseClaimService claimService;
-  @Autowired private JdbcTemplate jdbcTemplate;
 
   @Test
   void concurrentApproveWithSameKeyYieldsOneWinnerAndAtomicStateFlipPlusOutbox() throws Exception {
@@ -112,21 +110,23 @@ class ExpenseClaimApproveConcurrencyTest extends PostgresRlsTestBase {
       pool.shutdownNow();
     }
 
-    // Exactly ONE APPROVE audit row for this claim.
-    Long eventCount =
-        jdbcTemplate.queryForObject(
-            "SELECT count(*) FROM expense_claim_event WHERE claim_id = ? AND action = 'APPROVE'",
-            Long.class,
-            claimId);
-    assertThat(eventCount).isEqualTo(1L);
+    // Exactly ONE APPROVE audit row for this claim (counted under tenant A's RLS scope — a bare
+    // JdbcTemplate carries no GUC and FORCE RLS would hide every row).
+    assertThat(
+            countAsTenant(
+                TENANT_A,
+                "SELECT count(*) FROM expense_claim_event WHERE claim_id = ? AND action ="
+                    + " 'APPROVE'",
+                claimId))
+        .isEqualTo(1L);
 
     // Exactly ONE ExpenseClaimApproved outbox row — the loser's transaction rolled back whole.
-    Long outboxCount =
-        jdbcTemplate.queryForObject(
-            "SELECT count(*) FROM outbox WHERE event_type = 'ExpenseClaimApproved'"
-                + " AND aggregate_id = ?",
-            Long.class,
-            claimId.toString());
-    assertThat(outboxCount).isEqualTo(1L);
+    assertThat(
+            countAsTenant(
+                TENANT_A,
+                "SELECT count(*) FROM outbox WHERE event_type = 'ExpenseClaimApproved'"
+                    + " AND aggregate_id = ?",
+                claimId.toString()))
+        .isEqualTo(1L);
   }
 }

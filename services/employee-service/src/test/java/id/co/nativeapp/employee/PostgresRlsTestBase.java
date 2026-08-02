@@ -64,6 +64,37 @@ abstract class PostgresRlsTestBase {
   }
 
   /**
+   * Runs a scalar count as the unprivileged {@code app_user} under the given tenant's RLS scope.
+   * Raw test-side JDBC carries no tenant GUC (the {@code RlsAutoApplyAspect} binds only
+   * {@code @Transactional} beans — see the rls-guc-transactional-only gotcha), so FORCE RLS
+   * correctly hides every row from a bare connection or {@code JdbcTemplate}. This helper is how a
+   * test asserts row-level truth without weakening anything: a FRESH {@code app_user} session,
+   * {@code set_config('app.current_tenant', tenant)}, one query, connection closed — the GUC dies
+   * with the session, so nothing leaks across tests or pooled connections.
+   */
+  static long countAsTenant(String tenant, String sql, Object... args) {
+    try (Connection con =
+        java.sql.DriverManager.getConnection(POSTGRES.getJdbcUrl(), APP_USER, APP_PASSWORD)) {
+      try (java.sql.PreparedStatement set =
+          con.prepareStatement("SELECT set_config('app.current_tenant', ?, false)")) {
+        set.setString(1, tenant);
+        set.execute();
+      }
+      try (java.sql.PreparedStatement ps = con.prepareStatement(sql)) {
+        for (int i = 0; i < args.length; i++) {
+          ps.setObject(i + 1, args[i]);
+        }
+        try (java.sql.ResultSet rs = ps.executeQuery()) {
+          rs.next();
+          return rs.getLong(1);
+        }
+      }
+    } catch (SQLException e) {
+      throw new IllegalStateException("countAsTenant failed for tenant " + tenant, e);
+    }
+  }
+
+  /**
    * Wire Spring's datasource to the unprivileged app role (Flyway runs as it, owning the tables).
    */
   @DynamicPropertySource
