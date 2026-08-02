@@ -100,7 +100,9 @@ class OnlineSaleFlowTest extends PostgresRlsTestBase {
   }
 
   private long debitOnAccountAsAdmin(String accountCode) throws Exception {
-    return sumAsAdmin("SELECT COALESCE(SUM(debit_minor), 0) FROM journal_line WHERE account_code = ?", accountCode);
+    return sumAsAdmin(
+        "SELECT COALESCE(SUM(debit_minor), 0) FROM journal_line WHERE account_code = ?",
+        accountCode);
   }
 
   private long creditOnAccountAsAdmin(String accountCode) throws Exception {

@@ -32,9 +32,13 @@ class PlatformTenancyIsolationTest extends PostgresRlsTestBase {
   void tenantBSeesNothingAndCannotSettleTenantAsBalance() throws Exception {
     // Tenant A accrues 100k and settles 40k of it.
     TenantContext.runAs(
-        TENANT_A, ACTOR, () -> receivableWriter.accumulate(TENANT_A, CHANNEL, "IDR", 100_000L, ACTOR));
+        TENANT_A,
+        ACTOR,
+        () -> receivableWriter.accumulate(TENANT_A, CHANNEL, "IDR", 100_000L, ACTOR));
     TenantContext.callAs(
-        TENANT_A, ACTOR, () -> settlementWriter.settle(CHANNEL, 40_000L, 36_000L, "IDR", "iso-a-1"));
+        TENANT_A,
+        ACTOR,
+        () -> settlementWriter.settle(CHANNEL, 40_000L, 36_000L, "IDR", "iso-a-1"));
 
     // Tenant B: no outstanding rows, no history — RLS-scoped reads return empty, not A's rows.
     assertThat(TenantContext.callAs(TENANT_B, ACTOR, settlementWriter::outstanding)).isEmpty();
@@ -64,18 +68,26 @@ class PlatformTenancyIsolationTest extends PostgresRlsTestBase {
   @Test
   void sameIdempotencyKeyStringIsIndependentPerTenant() throws Exception {
     TenantContext.runAs(
-        TENANT_A, ACTOR, () -> receivableWriter.accumulate(TENANT_A, CHANNEL, "IDR", 50_000L, ACTOR));
+        TENANT_A,
+        ACTOR,
+        () -> receivableWriter.accumulate(TENANT_A, CHANNEL, "IDR", 50_000L, ACTOR));
     TenantContext.runAs(
-        TENANT_B, ACTOR, () -> receivableWriter.accumulate(TENANT_B, CHANNEL, "IDR", 50_000L, ACTOR));
+        TENANT_B,
+        ACTOR,
+        () -> receivableWriter.accumulate(TENANT_B, CHANNEL, "IDR", 50_000L, ACTOR));
 
     // The SAME key string settles independently under each tenant (uq is (company_id, key)) —
     // and neither replay-probes into the other's settlement.
     var a =
         TenantContext.callAs(
-            TENANT_A, ACTOR, () -> settlementWriter.settle(CHANNEL, 20_000L, 18_000L, "IDR", "iso-shared"));
+            TENANT_A,
+            ACTOR,
+            () -> settlementWriter.settle(CHANNEL, 20_000L, 18_000L, "IDR", "iso-shared"));
     var b =
         TenantContext.callAs(
-            TENANT_B, ACTOR, () -> settlementWriter.settle(CHANNEL, 30_000L, 27_000L, "IDR", "iso-shared"));
+            TENANT_B,
+            ACTOR,
+            () -> settlementWriter.settle(CHANNEL, 30_000L, 27_000L, "IDR", "iso-shared"));
 
     assertThat(a.created()).isTrue();
     assertThat(b.created()).isTrue();
