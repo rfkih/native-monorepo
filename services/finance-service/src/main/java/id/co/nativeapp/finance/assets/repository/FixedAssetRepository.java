@@ -51,13 +51,13 @@ public interface FixedAssetRepository extends JpaRepository<FixedAsset, UUID> {
                  fa.status                          AS status,
                  fa.disposal_date                   AS disposal_date,
                  fa.proceeds_minor                  AS proceeds_minor,
-                 COALESCE(SUM(arl.amount_minor), 0) AS accumulated_minor
+                 COALESCE(SUM(arl.amount_minor), 0) + fa.opening_accumulated_minor AS accumulated_minor
             FROM fixed_asset fa
             LEFT JOIN amortization_run_line arl
                    ON arl.item_type = 'ASSET' AND arl.item_id = fa.id
            GROUP BY fa.id, fa.name, fa.acquisition_date, fa.start_period, fa.cost_minor,
                     fa.salvage_minor, fa.useful_life_months, fa.currency, fa.status,
-                    fa.disposal_date, fa.proceeds_minor
+                    fa.disposal_date, fa.proceeds_minor, fa.opening_accumulated_minor
            ORDER BY fa.acquisition_date DESC, fa.name
            LIMIT 500
           """,
@@ -79,14 +79,14 @@ public interface FixedAssetRepository extends JpaRepository<FixedAsset, UUID> {
                  fa.status                          AS status,
                  fa.disposal_date                   AS disposal_date,
                  fa.proceeds_minor                  AS proceeds_minor,
-                 COALESCE(SUM(arl.amount_minor), 0) AS accumulated_minor
+                 COALESCE(SUM(arl.amount_minor), 0) + fa.opening_accumulated_minor AS accumulated_minor
             FROM fixed_asset fa
             LEFT JOIN amortization_run_line arl
                    ON arl.item_type = 'ASSET' AND arl.item_id = fa.id
            WHERE fa.id = :id
            GROUP BY fa.id, fa.name, fa.acquisition_date, fa.start_period, fa.cost_minor,
                     fa.salvage_minor, fa.useful_life_months, fa.currency, fa.status,
-                    fa.disposal_date, fa.proceeds_minor
+                    fa.disposal_date, fa.proceeds_minor, fa.opening_accumulated_minor
           """,
       nativeQuery = true)
   Optional<AssetView> findRegisterRow(@Param("id") UUID id);

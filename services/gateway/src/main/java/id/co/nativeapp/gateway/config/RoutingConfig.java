@@ -1045,6 +1045,25 @@ public class RoutingConfig {
         .build();
   }
 
+  /**
+   * Opening balances & business migration (ADR 0037) — owner/manager only: recording a company's
+   * opening balance sheet posts money (Dr assets / Cr liabilities + equity), a back-office finance
+   * action with no cashier surface.
+   */
+  @Bean
+  RouterFunction<ServerResponse> openingBalancesRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("finance-service-opening-balances")
+        .route(path("/api/v1/opening-balances/**"), http())
+        .before(uri(routes.financeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
   @Bean
   RouterFunction<ServerResponse> groupsRoute(
       GatewayRouteProperties routes,

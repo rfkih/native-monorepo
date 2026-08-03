@@ -159,7 +159,12 @@ public class AssetDisposalWriter {
     requireDepreciationInStep(asset, postingPeriod);
 
     Money cost = Money.ofMinor(asset.getCostMinor(), currency);
-    Money accumulated = Money.ofMinor(accumulatedFor(assetId), currency);
+    // Total accumulated derecognized = the depreciation-to-date carried at registration (0 for an
+    // ACQUIRED asset) + the Σ posted run lines since (ADR 0037). The brought-forward entry credited
+    // 1590 the opening portion, so the disposal Dr 1590 must reverse both.
+    Money accumulated =
+        Money.ofMinor(
+            Math.addExact(asset.getOpeningAccumulatedMinor(), accumulatedFor(assetId)), currency);
 
     UUID entryId = UUID.randomUUID();
     UUID sourceEventId = disposalEventId(assetId);

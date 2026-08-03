@@ -16,6 +16,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.ZoneOffset;
 import java.util.Currency;
 import java.util.List;
 import java.util.Objects;
@@ -136,6 +137,87 @@ public class FixedAssetWriter {
   }
 
   /**
+   * Registers a pre-owned (brought-forward) asset during business migration (ADR 0037) — the
+   * cash-free counterpart to {@link #acquire}. Posts {@code Dr FIXED_ASSET_COST gross / Cr
+   * ACCUMULATED_DEPRECIATION opening / Cr OPENING_BALANCE_EQUITY net} (never crediting cash: the
+   * asset was bought before go-live), and registers it with its remaining life +
+   * depreciation-to-date so future runs depreciate only the remaining base. Idempotent per {@code
+   * (company, Idempotency-Key)} like {@link #acquire}.
+   *
+   * @param asOfDate the go-live / as-of date — the opening entry's period and the depreciation
+   *     start
+   * @param openingAccumulatedMinor depreciation already taken (0 = a newly bought asset never yet
+   *     run)
+   * @param remainingLifeMonths the depreciation months still to run
+   * @return the asset id + whether this call freshly registered it
+   * @throws IllegalArgumentException on invalid bounds — 400
+   * @throws MismatchedPostingCurrencyException if the currency diverges from the period's GL — 422
+   */
+  @SuppressWarnings("checkstyle:ParameterNumber")
+  @Transactional
+  public AcquireAssetResult registerBroughtForward(
+      String name,
+      LocalDate asOfDate,
+      long costMinor,
+      long salvageMinor,
+      long openingAccumulatedMinor,
+      int remainingLifeMonths,
+      String currencyCode,
+      String idempotencyKey) {
+    Objects.requireNonNull(currencyCode, "currencyCode");
+    Objects.requireNonNull(idempotencyKey, "idempotencyKey");
+    Objects.requireNonNull(asOfDate, "asOfDate");
+
+    Optional<FixedAsset> replayed = assetRepository.findByIdempotencyKey(idempotencyKey);
+    if (replayed.isPresent()) {
+      return new AcquireAssetResult(replayed.get().getId(), false);
+    }
+
+    if (asOfDate.getYear() < 1900 || asOfDate.getYear() > 9999) {
+      throw new IllegalArgumentException(
+          "asOfDate year must be between 1900 and 9999: " + asOfDate);
+    }
+
+    // Depreciation starts the month AFTER go-live (the full-month convention, mirroring acquire).
+    String startPeriod = YearMonth.from(asOfDate).plusMonths(1).toString();
+    requireStartAfterLastRun(startPeriod);
+
+    Currency currency = Currency.getInstance(currencyCode); // validates ISO-4217 (→ 400)
+    Money cost = Money.ofMinor(costMinor, currency);
+    Money salvage = Money.ofMinor(salvageMinor, currency);
+    Money openingAccumulated = Money.ofMinor(openingAccumulatedMinor, currency);
+
+    String companyId = TenantContext.require().companyId();
+    // The opening entry posts into the AS-OF month (a real YYYY-MM), consistent with the opening
+    // balance sheet it is part of; occurred_at is the as-of instant so periodOf agrees.
+    Instant now = asOfDate.atStartOfDay(ZoneOffset.UTC).toInstant();
+    String period = LedgerPosting.periodOf(now);
+    requireConsistentGlCurrency(period, cost);
+
+    UUID assetId = UUID.randomUUID();
+    UUID entryId = UUID.randomUUID();
+    JournalEntry entry =
+        buildBroughtForwardEntry(period, now, entryId, assetId, cost, openingAccumulated);
+    persistEntry(entry, companyId);
+
+    FixedAsset asset =
+        FixedAsset.acquireBroughtForward(
+            assetId,
+            name,
+            asOfDate,
+            startPeriod,
+            cost,
+            salvage,
+            openingAccumulated,
+            remainingLifeMonths,
+            entryId,
+            idempotencyKey);
+    asset.setCompanyId(companyId);
+    assetRepository.save(asset);
+    return new AcquireAssetResult(assetId, true);
+  }
+
+  /**
    * Rejects a schedule {@code startPeriod} at or before the tenant's latest amortization run: those
    * months are sealed and will never re-run, so the item would be under-amortized forever (W-1).
    * Runs under RLS on the {@code @Transactional} connection.
@@ -172,6 +254,52 @@ public class FixedAssetWriter {
         period,
         now,
         "Fixed asset acquired",
+        cost.currency().getCurrencyCode(),
+        sourceEventId,
+        true,
+        lines);
+  }
+
+  /**
+   * Builds (but does not persist) the balanced, CASH-FREE brought-forward entry (ADR 0037): {@code
+   * Dr FIXED_ASSET_COST gross / Cr ACCUMULATED_DEPRECIATION opening (omitted if 0) / Cr
+   * OPENING_BALANCE_EQUITY net book value (omitted if 0)}. Net = gross − opening ≥ salvage ≥ 0, so
+   * the OBE leg is omitted only for a fully-depreciated zero-salvage asset (then the accumulated
+   * leg balances the cost). Public + pure (mocked resolver, no DB) for the posting unit tests.
+   */
+  public JournalEntry buildBroughtForwardEntry(
+      String period,
+      Instant now,
+      UUID entryId,
+      UUID sourceEventId,
+      Money cost,
+      Money openingAccumulated) {
+    Money net =
+        Money.ofMinor(
+            Math.subtractExact(cost.amountMinor(), openingAccumulated.amountMinor()),
+            cost.currency());
+    List<JournalLine> lines = new java.util.ArrayList<>();
+    lines.add(
+        JournalLine.debit(entryId, 1, requireMapped(AccountRole.FIXED_ASSET_COST, now), cost));
+    int lineNo = 2;
+    if (openingAccumulated.isPositive()) {
+      lines.add(
+          JournalLine.credit(
+              entryId,
+              lineNo++,
+              requireMapped(AccountRole.ACCUMULATED_DEPRECIATION, now),
+              openingAccumulated));
+    }
+    if (net.isPositive()) {
+      lines.add(
+          JournalLine.credit(
+              entryId, lineNo, requireMapped(AccountRole.OPENING_BALANCE_EQUITY, now), net));
+    }
+    return JournalEntry.balanced(
+        entryId,
+        period,
+        now,
+        "Fixed asset brought forward",
         cost.currency().getCurrencyCode(),
         sourceEventId,
         true,

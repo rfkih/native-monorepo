@@ -54,3 +54,5 @@ boundary, a security posture. Routine, local choices do not need one — use a c
 | [0033](0033-attendance-and-timeoff-foundation.md) | Attendance & time-off foundation — leave requests, overtime entries, and a derived balance | Accepted |
 | [0034](0034-pos-shell-verticals-are-adapters.md) | POS shell + shared payment surface — verticals are adapters, not clones | Accepted |
 | [0035](0035-thr-run-type.md) | THR run type — the off-cycle Tunjangan Hari Raya allowance | Accepted |
+| [0036](0036-register-sessions-and-platform-channel-settlements.md) | Register sessions (closing kasir) + online-channel platform settlements | Accepted |
+| [0037](0037-opening-balances-and-business-migration.md) | Opening balances & business migration — the opening balance sheet + brought-forward assets | Accepted |

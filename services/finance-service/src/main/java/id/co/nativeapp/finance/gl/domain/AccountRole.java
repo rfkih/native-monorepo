@@ -259,5 +259,29 @@ public enum AccountRole {
    * WHOLE fee to expense — not valid for a PKP claiming input VAT on the commission (the VAT_INPUT
    * split is an additive follow-up). Illustrative seed 5710 (V44); SME-gated.
    */
-  PLATFORM_FEE_EXPENSE
+  PLATFORM_FEE_EXPENSE,
+
+  /**
+   * Opening balances (ADR 0037) — the paid-in / share capital an owner contributes: credited by the
+   * opening balance-sheet entry for the portion of equity the user classifies as capital. Maps to
+   * account 3000 (ILLUSTRATIVE — SME-gated, V46).
+   */
+  OWNER_CAPITAL,
+
+  /**
+   * Opening balances (ADR 0037) — accumulated profit from BEFORE go-live (prior years), credited by
+   * the opening entry. Distinct from the balance sheet's synthetic current-year retained-earnings
+   * line (computed on read from the P&amp;L under the literal code {@code
+   * "3000-RETAINED-EARNINGS"}). Maps to account 3100 (ILLUSTRATIVE — SME-gated, V46).
+   */
+  RETAINED_EARNINGS,
+
+  /**
+   * Opening balances (ADR 0037) — the balancing clearing account (QuickBooks/Xero "Opening Balance
+   * Equity"; Odoo "Undistributed Profits/Losses"). The opening entry auto-plugs its residual here
+   * so it always balances, and each brought-forward asset credits it the asset's net book value. An
+   * SME later reclassifies its balance into real capital/retained accounts. Maps to account 3900
+   * (ILLUSTRATIVE — SME-gated, V46).
+   */
+  OPENING_BALANCE_EQUITY
 }

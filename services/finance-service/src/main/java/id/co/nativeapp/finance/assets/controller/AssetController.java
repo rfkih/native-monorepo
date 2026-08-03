@@ -4,6 +4,7 @@ import id.co.nativeapp.finance.assets.dto.AcquireAssetRequest;
 import id.co.nativeapp.finance.assets.dto.AssetDetailResponse;
 import id.co.nativeapp.finance.assets.dto.AssetResponse;
 import id.co.nativeapp.finance.assets.dto.DisposeAssetRequest;
+import id.co.nativeapp.finance.assets.dto.RegisterBroughtForwardAssetRequest;
 import id.co.nativeapp.finance.assets.dto.RunAmortizationRequest;
 import id.co.nativeapp.finance.assets.dto.RunResponse;
 import id.co.nativeapp.finance.assets.service.AcquireAssetResult;
@@ -88,6 +89,39 @@ public class AssetController {
             idempotencyKey);
     AssetDetailResponse detail = assetReader.detail(result.assetId());
     // Idempotent-POST contract: a fresh acquire → 201 + Location; a replay → 200 with the original.
+    if (!result.created()) {
+      return ResponseEntity.ok(detail);
+    }
+    return ResponseEntity.created(URI.create("/api/v1/assets/" + result.assetId())).body(detail);
+  }
+
+  @Operation(
+      summary =
+          "Register a pre-owned (brought-forward) fixed asset for business migration — posts Dr asset"
+              + " cost / Cr accumulated depreciation / Cr opening balance equity (NO cash), and"
+              + " continues depreciation on the remaining base over the remaining life")
+  @PostMapping("/opening")
+  public ResponseEntity<AssetDetailResponse> registerBroughtForward(
+      @Valid @RequestBody RegisterBroughtForwardAssetRequest request,
+      @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+    // The key is REQUIRED (the acquire rationale): registering posts money, so a keyless request —
+    // which could double-post the opening entry on a retry — is rejected with 400.
+    if (idempotencyKey == null || idempotencyKey.isBlank()) {
+      throw new IllegalArgumentException(
+          "the Idempotency-Key header is required to register a brought-forward asset");
+    }
+    AcquireAssetResult result =
+        fixedAssetWriter.registerBroughtForward(
+            request.name(),
+            request.asOfDate(),
+            request.costMinor(),
+            request.salvageMinor(),
+            request.openingAccumulatedMinor(),
+            request.remainingLifeMonths(),
+            request.currency(),
+            idempotencyKey);
+    AssetDetailResponse detail = assetReader.detail(result.assetId());
+    // Idempotent-POST contract: a fresh registration → 201 + Location; a replay → 200.
     if (!result.created()) {
       return ResponseEntity.ok(detail);
     }

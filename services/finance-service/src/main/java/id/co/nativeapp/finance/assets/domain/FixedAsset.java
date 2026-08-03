@@ -43,6 +43,18 @@ public class FixedAsset extends Auditable {
     DISPOSED
   }
 
+  /**
+   * How the asset entered the books (ADR 0037, V47). {@code ACQUIRED} — the capex-to-cash path (Dr
+   * FIXED_ASSET_COST / Cr CASH_CLEARING). {@code BROUGHT_FORWARD} — a pre-owned asset registered
+   * during business migration, cash-free (Dr FIXED_ASSET_COST / Cr ACCUMULATED_DEPRECIATION opening
+   * / Cr OPENING_BALANCE_EQUITY net), carrying its depreciation-to-date in {@code
+   * opening_accumulated_minor}.
+   */
+  public enum Origin {
+    ACQUIRED,
+    BROUGHT_FORWARD
+  }
+
   @Id
   @Column(name = "id", nullable = false, updatable = false)
   private UUID id;
@@ -65,6 +77,19 @@ public class FixedAsset extends Auditable {
 
   @Column(name = "useful_life_months", nullable = false, updatable = false)
   private int usefulLifeMonths;
+
+  /**
+   * Depreciation already taken BEFORE registration (ADR 0037) — 0 for an {@code ACQUIRED} asset,
+   * the pre-go-live accumulated for a {@code BROUGHT_FORWARD} one. Reduces {@link
+   * #depreciableBase()} so the run depreciates only the remaining base; added to the summed run
+   * lines by the register and the disposal.
+   */
+  @Column(name = "opening_accumulated_minor", nullable = false, updatable = false)
+  private long openingAccumulatedMinor;
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = "origin", nullable = false, updatable = false, length = 16)
+  private Origin origin;
 
   @JdbcTypeCode(SqlTypes.CHAR)
   @Column(name = "currency", nullable = false, updatable = false, length = 3)
@@ -158,9 +183,78 @@ public class FixedAsset extends Auditable {
     asset.costMinor = cost.amountMinor();
     asset.salvageMinor = salvage.amountMinor();
     asset.usefulLifeMonths = usefulLifeMonths;
+    asset.openingAccumulatedMinor = 0L;
+    asset.origin = Origin.ACQUIRED;
     asset.currency = cost.currency().getCurrencyCode();
     asset.status = Status.ACTIVE;
     asset.acquisitionEntryId = Objects.requireNonNull(acquisitionEntryId, "acquisitionEntryId");
+    asset.idempotencyKey = Objects.requireNonNull(idempotencyKey, "idempotencyKey");
+    return asset;
+  }
+
+  /**
+   * Registers a pre-owned (brought-forward) asset during business migration (ADR 0037). The caller
+   * has already posted the cash-free opening entry keyed on {@code openingEntryId} (Dr
+   * FIXED_ASSET_COST gross / Cr ACCUMULATED_DEPRECIATION opening / Cr OPENING_BALANCE_EQUITY net).
+   * {@code startPeriod} is the first OPEN depreciation month (computed by the writer), {@code
+   * usefulLifeMonths} is the REMAINING life, and {@code openingAccumulated} the depreciation
+   * already taken; the run then depreciates {@code cost − salvage − openingAccumulated} over the
+   * remaining life from {@code startPeriod}.
+   *
+   * @throws IllegalArgumentException if a bound is violated (incl. {@code openingAccumulated}
+   *     outside {@code [0, cost − salvage]})
+   */
+  @SuppressWarnings("checkstyle:ParameterNumber")
+  public static FixedAsset acquireBroughtForward(
+      UUID id,
+      String name,
+      LocalDate asOfDate,
+      String startPeriod,
+      Money cost,
+      Money salvage,
+      Money openingAccumulated,
+      int remainingLifeMonths,
+      UUID openingEntryId,
+      String idempotencyKey) {
+    Objects.requireNonNull(asOfDate, "asOfDate");
+    Objects.requireNonNull(cost, "cost");
+    Objects.requireNonNull(salvage, "salvage");
+    Objects.requireNonNull(openingAccumulated, "openingAccumulated");
+    cost.requireSameCurrencyAs(salvage);
+    cost.requireSameCurrencyAs(openingAccumulated);
+    if (!cost.isPositive()) {
+      throw new IllegalArgumentException("asset cost must be strictly positive: " + cost);
+    }
+    if (salvage.isNegative() || salvage.compareTo(cost) >= 0) {
+      throw new IllegalArgumentException(
+          "salvage must be non-negative and less than cost: salvage=" + salvage + " cost=" + cost);
+    }
+    if (remainingLifeMonths <= 0) {
+      throw new IllegalArgumentException(
+          "remaining life must be strictly positive months: " + remainingLifeMonths);
+    }
+    long depreciableBaseMinor = Math.subtractExact(cost.amountMinor(), salvage.amountMinor());
+    if (openingAccumulated.isNegative()
+        || openingAccumulated.amountMinor() > depreciableBaseMinor) {
+      throw new IllegalArgumentException(
+          "opening accumulated depreciation must be within [0, cost − salvage="
+              + depreciableBaseMinor
+              + "]: "
+              + openingAccumulated);
+    }
+    FixedAsset asset = new FixedAsset();
+    asset.id = Objects.requireNonNull(id, "id");
+    asset.name = requireName(name);
+    asset.acquisitionDate = asOfDate;
+    asset.startPeriod = Objects.requireNonNull(startPeriod, "startPeriod");
+    asset.costMinor = cost.amountMinor();
+    asset.salvageMinor = salvage.amountMinor();
+    asset.usefulLifeMonths = remainingLifeMonths;
+    asset.openingAccumulatedMinor = openingAccumulated.amountMinor();
+    asset.origin = Origin.BROUGHT_FORWARD;
+    asset.currency = cost.currency().getCurrencyCode();
+    asset.status = Status.ACTIVE;
+    asset.acquisitionEntryId = Objects.requireNonNull(openingEntryId, "openingEntryId");
     asset.idempotencyKey = Objects.requireNonNull(idempotencyKey, "idempotencyKey");
     return asset;
   }
@@ -174,9 +268,16 @@ public class FixedAsset extends Auditable {
     return trimmed;
   }
 
-  /** The depreciable base = cost − salvage (strictly positive by the factory bounds). */
+  /**
+   * The remaining depreciable base = cost − salvage − opening-accumulated (ADR 0037). For an {@code
+   * ACQUIRED} asset {@code openingAccumulatedMinor} is 0, so this is the classic {@code cost −
+   * salvage}; for a {@code BROUGHT_FORWARD} asset the run spreads only what is left over the
+   * remaining life. Non-negative by the factory bounds.
+   */
   public Money depreciableBase() {
-    return Money.ofMinor(Math.subtractExact(costMinor, salvageMinor), getCurrency());
+    return Money.ofMinor(
+        Math.subtractExact(Math.subtractExact(costMinor, salvageMinor), openingAccumulatedMinor),
+        getCurrency());
   }
 
   public UUID getId() {
@@ -205,6 +306,18 @@ public class FixedAsset extends Auditable {
 
   public int getUsefulLifeMonths() {
     return usefulLifeMonths;
+  }
+
+  /**
+   * Depreciation taken before registration (0 for ACQUIRED; the pre-go-live sum for
+   * BROUGHT_FORWARD).
+   */
+  public long getOpeningAccumulatedMinor() {
+    return openingAccumulatedMinor;
+  }
+
+  public Origin getOrigin() {
+    return origin;
   }
 
   /** The asset currency (ISO-4217, stripped of any {@code CHAR} padding). */

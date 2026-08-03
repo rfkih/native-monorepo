@@ -5,6 +5,52 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-03 — Opening balances & business migration (ADR 0037)
+
+Onboard an EXISTING business (or record a new one's initial capital) — the gap that blocked real
+adoption: before this, adding an owned asset drove cash negative (acquire always `Cr CASH_CLEARING`)
+and there was nowhere to record capital (no equity account/role, no manual journal path). Now a
+one-time **opening balance sheet** posts as ONE balanced `JournalEntry` (Dr assets / Cr liabilities +
+equity) — the ad-hoc-entry idiom (disposal/tax/settlement pattern, no Kafka) — auto-plugged to a new
+**Opening Balance Equity (3900)** clearing account so it always balances (the QuickBooks/Xero/Odoo
+"Undistributed Profits" pattern; plug = Σuserdebit − Σusercredit). **Balance-sheet accounts only**
+(REVENUE/EXPENSE → 422; prior profit is a Retained-Earnings credit, never a re-posted P&L).
+Once-only per company (`company_opening_balance`, `UNIQUE(company_id)`, FORCE RLS); Idempotency-Key
+required (same-key+same-payload replay 200; different-payload 409 by **SHA-256 fingerprint of the
+sorted lines**, not just the total; different-key-when-recorded 409). Posts into
+`periodOf(asOfDate)` — a REAL `YYYY-MM`, NEVER a sentinel: statements filter `period <= asOf`
+lexicographically, so `"OPENING"` would sort past every month and vanish from the balance sheet.
+
+**Brought-forward (pre-owned) fixed assets** register cash-free (`POST /api/v1/assets/opening`):
+`Dr FIXED_ASSET_COST gross / Cr ACCUMULATED_DEPRECIATION opening / Cr OPENING_BALANCE_EQUITY net` —
+no cash. New `fixed_asset.opening_accumulated_minor` + `origin` (V47; `ADD COLUMN … DEFAULT`
+back-fills every row without an UPDATE, so the FORCE-RLS backfill gotcha doesn't apply).
+`depreciableBase()` subtracts opening accumulated so the monthly run depreciates only the REMAINING
+base over the REMAINING life; the register roll-up and disposal derecognition add it back. ACQUIRED
+assets are byte-for-byte unchanged (opening = 0).
+
+Global illustrative seed (V46): equity accounts 3000 capital / 3100 retained-earnings / 3900 OBE +
+1100 inventory / 2700 loans, role maps OWNER_CAPITAL/RETAINED_EARNINGS/OPENING_BALANCE_EQUITY.
+**No reader changed**: `BalanceSheetReader` already classifies EQUITY credit-normal, and
+`CashFlowReader` already buckets EQUITY as financing — so opening entries + brought-forward assets
+reconcile EXACTLY (Dr 1500 investing-out + Cr 3900 financing-in net to zero cash; verified). Gateway
+`/api/v1/opening-balances/**` DASHBOARD_ROLES. Console: standalone `/opening-balances` Finance page
+(owner/manager, en/id, Intl money, live plug readout) + a non-blocking onboarding-wizard CTA.
+
+**Money code-review: FAIL→fixed.** Backend money/tenancy/idempotency/migrations passed clean; two
+HIGH console data-loss bugs in the once-only submit were fixed: (H1) per-asset Idempotency-Key was
+loop-index-keyed → after a partial-failure row edit a retry could reuse another asset's key and
+silently drop one → now keyed on the row's stable UUID; (H2) the main POST's success swapped the
+page while the per-asset loop still ran → assets now register FIRST and the once-only main entry
+posts LAST, so a mid-batch failure keeps the form and is retryable. Also M1 (fingerprint total→
+SHA-256 lines + test), L1 (`asOfDate` ≥ 2000 → clean 400), L3 (`@NotBlank` currency), L2 (cash-flow
+go-live-month presentation nuance documented). Gates: finance test+spotless+checkstyle green (incl.
+`OpeningBalanceWriterTest` 9, `BroughtForwardAssetTest` 2); gateway 97/97 (+2 route-gating);
+console tsc + 177 vitest. Residuals (ADR 0037): opening AR/AP/inventory are GL CONTROL balances only
+(no per-invoice/per-SKU open items — aging won't itemize); OBE reclassification, FX-denominated
+opening, and amend-after-record deferred; a fully-migrated company can't reopen the once-only form
+to add a further brought-forward asset (backend-enforced).
+
 ## 2026-08-03 — Online channels + platform settlements, Phases B+C (ADR 0036) — settlement program COMPLETE
 
 **B1 (finance deployed FIRST)**: additive `channel` on SaleRecorded/SaleVoided/SaleRefunded (LAST,
