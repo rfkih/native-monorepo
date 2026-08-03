@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import {
   ArrowLeftRight,
   ArrowRight,
+  BookOpen,
   Building2,
   CalendarCheck,
   CalendarClock,
@@ -95,6 +96,11 @@ export function Shell({ children }: { children: ReactNode }) {
             { to: '/budgets', label: t('nav.budget'), icon: Target },
             { to: '/assets', label: t('nav.assets'), icon: Laptop },
             { to: '/deferrals', label: t('nav.deferrals'), icon: CalendarClock },
+            {
+              to: '/opening-balances',
+              label: t('nav.openingBalances'),
+              icon: BookOpen,
+            },
           ],
         },
         {

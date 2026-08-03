@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useMutation } from '@tanstack/react-query'
-import { ArrowLeft, ArrowRight, Check, Lock } from 'lucide-react'
+import { ArrowLeft, ArrowRight, BookOpen, Check, Lock } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Field, TextInput } from '@/components/ui/Field'
@@ -405,6 +405,26 @@ function SuccessPanel({
         <Button className="mt-7 w-full max-w-xs" onClick={onContinue}>
           {t('onboarding.goToDashboard')} <ArrowRight className="size-4" />
         </Button>
+
+        {/* Non-blocking prompt (ADR 0037): a suggestion, never a gate — "Go to dashboard" above
+            already completes the wizard regardless of whether this is followed. */}
+        <div className="mx-auto mt-6 flex max-w-xs items-start gap-3 rounded-xl border border-line bg-paper p-4 text-left">
+          <BookOpen className="mt-0.5 size-4 shrink-0 text-brand-600" aria-hidden />
+          <div>
+            <p className="text-sm font-semibold text-ink">
+              {t('onboarding.openingBalancesCta.title')}
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-ink-3">
+              {t('onboarding.openingBalancesCta.body')}
+            </p>
+            <Link
+              to="/opening-balances"
+              className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-brand-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+            >
+              {t('onboarding.openingBalancesCta.action')} <ArrowRight className="size-3.5" />
+            </Link>
+          </div>
+        </div>
       </Card>
     </div>
   )

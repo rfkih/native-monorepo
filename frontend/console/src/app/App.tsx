@@ -132,6 +132,11 @@ const PlatformSettlements = lazy(() =>
 const CustomerDisplay = lazy(() =>
   import('@/features/pos/display/CustomerDisplay').then((m) => ({ default: m.CustomerDisplay })),
 )
+const OpeningBalances = lazy(() =>
+  import('@/features/openingBalances/OpeningBalances').then((m) => ({
+    default: m.OpeningBalances,
+  })),
+)
 
 function CenteredSpinner() {
   return (
@@ -451,6 +456,12 @@ export function App() {
               <Route
                 path="/platform-settlements"
                 element={company ? <PlatformSettlements /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {canDashboard && (
+              <Route
+                path="/opening-balances"
+                element={company ? <OpeningBalances /> : <Navigate to="/onboarding" replace />}
               />
             )}
             {expensesAllowed && (
