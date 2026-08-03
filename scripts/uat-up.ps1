@@ -13,7 +13,12 @@
 param(
     [switch]$SkipBuild,
     # Build jars in a different checkout (worktree escape hatch, mirrors start-dev-services.ps1).
-    [string]$JarRoot
+    [string]$JarRoot,
+    # STABLE public URL mode (Tailscale Funnel / named tunnel). When set, the script skips
+    # cloudflared + quick-tunnel discovery entirely and wires Keycloak/services to this fixed
+    # URL. The URL survives reboots, so this only needs re-running after an image rebuild.
+    # e.g. -PublicUrl https://a8.tailbf9662.ts.net:8443
+    [string]$PublicUrl
 )
 
 $ErrorActionPreference = 'Stop'
@@ -111,27 +116,37 @@ if (-not (Test-Path $envFile)) {
     [IO.File]::WriteAllLines($envFile, $lines)   # UTF-8 no BOM
 }
 
-# ---------------------------------------------------------------- 5. tunnel first
-Write-Host '== Starting edge + cloudflared, discovering the tunnel URL ==' -ForegroundColor Cyan
-Invoke-Compose @('up', '-d', 'edge', 'cloudflared')
+# ---------------------------------------------------------------- 5. public URL
+if ($PublicUrl) {
+    # STABLE mode (Tailscale Funnel / named tunnel): no cloudflared, URL is fixed. The
+    # funnel/tunnel proxies the public URL to edge (127.0.0.1:8088 -> edge:8080), so we
+    # only need edge up here — the full stack comes up at step 7.
+    Write-Host "== Stable public-URL mode: $PublicUrl (cloudflared skipped) ==" -ForegroundColor Cyan
+    Invoke-Compose @('up', '-d', 'edge')
+    $publicUrl = $PublicUrl
+} else {
+    Write-Host '== Starting edge + cloudflared, discovering the tunnel URL ==' -ForegroundColor Cyan
+    # cloudflared is behind the 'quicktunnel' profile — name it AND activate the profile.
+    Invoke-Compose @('--profile', 'quicktunnel', 'up', '-d', 'edge', 'cloudflared')
 
-$hostname = $null
-for ($i = 0; $i -lt 30 -and -not $hostname; $i++) {
-    Start-Sleep -Seconds 2
-    try {
-        $qt = Invoke-RestMethod -Uri 'http://127.0.0.1:12000/quicktunnel' -TimeoutSec 3
-        if ($qt.hostname) { $hostname = $qt.hostname }
-    } catch {}
+    $hostname = $null
+    for ($i = 0; $i -lt 30 -and -not $hostname; $i++) {
+        Start-Sleep -Seconds 2
+        try {
+            $qt = Invoke-RestMethod -Uri 'http://127.0.0.1:12000/quicktunnel' -TimeoutSec 3
+            if ($qt.hostname) { $hostname = $qt.hostname }
+        } catch {}
+    }
+    if (-not $hostname) {
+        # Fallback: scrape the container log (cloudflared logs to stderr; merge via cmd).
+        $log = & cmd /c 'docker logs native-uat-cloudflared 2>&1'
+        $m = [regex]::Match(($log -join "`n"), 'https://[a-z0-9-]+\.trycloudflare\.com')
+        if ($m.Success) { $hostname = $m.Value -replace '^https://', '' }
+    }
+    if (-not $hostname) { throw 'Could not discover the quick-tunnel URL (metrics endpoint and log scrape both failed).' }
+    $publicUrl = "https://$hostname"
+    Write-Host "   public URL: $publicUrl" -ForegroundColor Green
 }
-if (-not $hostname) {
-    # Fallback: scrape the container log (cloudflared logs to stderr; merge via cmd).
-    $log = & cmd /c 'docker logs native-uat-cloudflared 2>&1'
-    $m = [regex]::Match(($log -join "`n"), 'https://[a-z0-9-]+\.trycloudflare\.com')
-    if ($m.Success) { $hostname = $m.Value -replace '^https://', '' }
-}
-if (-not $hostname) { throw 'Could not discover the quick-tunnel URL (metrics endpoint and log scrape both failed).' }
-$publicUrl = "https://$hostname"
-Write-Host "   public URL: $publicUrl" -ForegroundColor Green
 
 # ---------------------------------------------------------------- 6. rewrite uat.env
 $envLines = [IO.File]::ReadAllLines($envFile)
@@ -280,4 +295,9 @@ Write-Host '====================================================================
 Write-Host ' Testers : open the URL, Sign up to create a tenant (signup-only UAT).'
 Write-Host " Operator: KC admin  http://localhost:18090/auth/admin/ (admin / see docker/uat.env)"
 Write-Host '           Connect   http://127.0.0.1:18093/connectors'
-Write-Host '           Tunnel died? Re-run: .\scripts\uat-up.ps1 -SkipBuild (URL will change)'
+if ($PublicUrl) {
+    Write-Host '           Stable Funnel URL — survives reboots. After an image rebuild, re-run:'
+    Write-Host "           .\scripts\uat-up.ps1 -SkipBuild -PublicUrl $publicUrl"
+} else {
+    Write-Host '           Quick tunnel died? Re-run: .\scripts\uat-up.ps1 -SkipBuild (URL will change)'
+}

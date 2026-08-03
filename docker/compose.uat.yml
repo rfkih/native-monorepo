@@ -1,11 +1,14 @@
 # Native — UAT stack: the full platform (10 services + console) containerized on one
-# machine, exposed to the public internet through a cloudflared QUICK tunnel.
+# machine, exposed to the public internet through a STABLE Tailscale Funnel (default) or
+# a cloudflared QUICK tunnel (fallback, profile: quicktunnel).
 #
-#   Internet ──https──> xxx.trycloudflare.com ──tunnel──> cloudflared ──> edge (nginx)
+#   Internet ─https─> a8.<tailnet>.ts.net:8443 ─funnel─> 127.0.0.1:8088 ─> edge (nginx)
 #     edge: / -> console · /auth/ -> keycloak · /api/ -> gateway   (single public origin)
+#   Fallback: Internet ─https─> xxx.trycloudflare.com ─tunnel─> cloudflared ─> edge:8080
 #
-# Operate it ONLY via scripts/uat-up.ps1 / uat-down.ps1 — the quick-tunnel URL changes
-# on every tunnel restart and the script re-wires Keycloak + services to the new URL.
+# Operate it ONLY via scripts/uat-up.ps1 / uat-down.ps1. The Funnel URL is FIXED and
+# survives reboots (pass -PublicUrl https://a8.<tailnet>.ts.net:8443); the quick-tunnel
+# URL changes every restart and the script re-wires Keycloak + services to the new URL.
 # Interpolation comes from the gitignored docker/uat.env (PUBLIC_URL + generated
 # secrets): docker compose --env-file docker/uat.env -f docker/compose.uat.yml ...
 #
@@ -385,12 +388,22 @@ services:
     container_name: native-uat-edge
     restart: unless-stopped
     mem_limit: 64m
+    # Host entry point for a STABLE public URL (Tailscale Funnel / named tunnel): funnel
+    # 8443 -> 127.0.0.1:8088 -> edge:8080. Loopback-only; the funnel is the public edge.
+    # The quicktunnel profile reaches edge over the compose network instead (edge:8080).
+    ports:
+      - "127.0.0.1:8088:8080"
     volumes:
       - ./uat/edge.conf:/etc/nginx/conf.d/default.conf:ro
 
+  # Quick-tunnel FALLBACK only (profile: quicktunnel). The default bring-up now uses a
+  # STABLE Tailscale Funnel URL (scripts/uat-up.ps1 -PublicUrl ...), which survives reboots
+  # and needs no re-wiring. cloudflared is started only when you explicitly opt into the
+  # ephemeral quick tunnel (scripts/uat-up.ps1 with no -PublicUrl).
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: native-uat-cloudflared
+    profiles: ["quicktunnel"]
     # restart: "no" ON PURPOSE — an auto-restarted quick tunnel would mint a NEW public
     # URL while Keycloak + all services still validate the old issuer. Fail loud;
     # re-run scripts/uat-up.ps1 -SkipBuild to re-wire.
