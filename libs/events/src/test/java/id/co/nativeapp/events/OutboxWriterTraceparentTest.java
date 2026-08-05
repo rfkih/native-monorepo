@@ -12,10 +12,10 @@ import org.junit.jupiter.api.Test;
  *
  * <ul>
  *   <li>(a) When a {@link TraceparentSupplier} returns a non-null value, {@link OutboxWriter}
- *       stores that value in the {@code traceparent} column and the {@link StubRelay} reads it
- *       back unchanged.
- *   <li>(b) When the supplier returns {@code null} (no active span / NOOP), the column is stored
- *       as SQL NULL and the relay reads back {@code null} — so a consumer that receives no header
+ *       stores that value in the {@code traceparent} column and the {@link StubRelay} reads it back
+ *       unchanged.
+ *   <li>(b) When the supplier returns {@code null} (no active span / NOOP), the column is stored as
+ *       SQL NULL and the relay reads back {@code null} — so a consumer that receives no header
  *       simply starts a new root span rather than failing.
  * </ul>
  *
@@ -32,8 +32,7 @@ class OutboxWriterTraceparentTest extends JdbcTestSupport {
   @Test
   void traceparentStoredWhenSupplierReturnsValue() {
     // A supplier that returns a fixed traceparent (simulates a span in scope).
-    OutboxWriter writerWithTrace =
-        new OutboxWriter(jdbcTemplate, () -> SAMPLE_TRACEPARENT);
+    OutboxWriter writerWithTrace = new OutboxWriter(jdbcTemplate, () -> SAMPLE_TRACEPARENT);
 
     transactionTemplate.executeWithoutResult(
         status ->
@@ -58,8 +57,7 @@ class OutboxWriterTraceparentTest extends JdbcTestSupport {
                 "sale", "sale-tp-2", "SaleRecorded", new byte[] {2}, null, COMPANY, Instant.now()));
 
     OutboxRecord record = stubRelay.poll().get(0);
-    assertNull(
-        record.traceparent(), "traceparent must be SQL NULL when the supplier returns null");
+    assertNull(record.traceparent(), "traceparent must be SQL NULL when the supplier returns null");
   }
 
   @Test

@@ -13,7 +13,9 @@ plugins {
 spotless {
     java {
         target("src/**/*.java")
-        googleJavaFormat("1.25.2")
+        // 1.36+ runs on JDK 25 daemons (1.25.x crashes on javac internals removed in 25 —
+        // CI runs the daemon ON 25 via setup-java, local dev typically hosts it on 21).
+        googleJavaFormat("1.36.1")
         removeUnusedImports()
         formatAnnotations()
         trimTrailingWhitespace()

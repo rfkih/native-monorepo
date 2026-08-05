@@ -40,8 +40,10 @@ public class OutboxLagMetrics {
    * Creates and immediately registers the gauge against the given {@link MeterRegistry}.
    *
    * @param jdbcTemplate the JDBC template wired to the service's own datasource
-   * @param meterRegistry the Micrometer registry (provided by Spring Boot actuator autoconfiguration)
-   * @param serviceName the value of {@code spring.application.name}; used as the {@code service} tag
+   * @param meterRegistry the Micrometer registry (provided by Spring Boot actuator
+   *     autoconfiguration)
+   * @param serviceName the value of {@code spring.application.name}; used as the {@code service}
+   *     tag
    */
   public OutboxLagMetrics(
       JdbcTemplate jdbcTemplate, MeterRegistry meterRegistry, String serviceName) {

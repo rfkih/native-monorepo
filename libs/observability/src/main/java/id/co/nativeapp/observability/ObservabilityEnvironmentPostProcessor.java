@@ -17,13 +17,14 @@ import org.springframework.core.env.MapPropertySource;
  * disables the OTLP metrics push registry (no collector wired yet).
  *
  * <p><strong>Why {@code management.tracing.export.enabled} is intentionally NOT set here:</strong>
- * Spring Boot 4.1 uses {@code @ConditionalOnEnabledTracingExport} to gate the W3C
- * {@code TextMapPropagator} bean. Setting that flag to {@code false} suppresses the propagator,
- * making every Kafka listener start a new root span instead of continuing the producer's trace.
- * OTLP span export is safely off anyway because no {@code management.opentelemetry.tracing.export.otlp.endpoint}
- * is configured, so the {@code OtlpTracingConnectionDetails} bean never materialises and the OTLP
- * exporter is never created — no collector is contacted. W3C propagation must remain active so
- * the outbox→CDC→Kafka→listener trace hop works end-to-end (ADR 0010 #13).
+ * Spring Boot 4.1 uses {@code @ConditionalOnEnabledTracingExport} to gate the W3C {@code
+ * TextMapPropagator} bean. Setting that flag to {@code false} suppresses the propagator, making
+ * every Kafka listener start a new root span instead of continuing the producer's trace. OTLP span
+ * export is safely off anyway because no {@code
+ * management.opentelemetry.tracing.export.otlp.endpoint} is configured, so the {@code
+ * OtlpTracingConnectionDetails} bean never materialises and the OTLP exporter is never created — no
+ * collector is contacted. W3C propagation must remain active so the outbox→CDC→Kafka→listener trace
+ * hop works end-to-end (ADR 0010 #13).
  *
  * <p>Registered in {@code META-INF/spring.factories}; added with {@code addLast} (lowest
  * precedence) and run last so it only fills a gap the application config left — never an override.

@@ -28,7 +28,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *   <li>{@link ProcessedEventStore} — the idempotent-consumer dedupe store: its {@code processOnce}
  *       claim runs in the same transaction as the create + deliver + receipt + outbox writes, so a
  *       re-delivered {@code ConsolidationClosed} never creates a duplicate notification/receipt.
- *   <li>{@link OutboxLagMetrics} — Micrometer gauge {@code native.outbox.unpublished} (ADR 0010 #13).
+ *   <li>{@link OutboxLagMetrics} — Micrometer gauge {@code native.outbox.unpublished} (ADR 0010
+ *       #13).
  * </ul>
  */
 @Configuration

@@ -159,7 +159,8 @@ class MultiCompanyMembershipAcceptanceTest {
     //    attribute search (q=company_id:{value}) matches a MULTI-VALUED attribute (the risk item).
     JsonNode team = getJson(tokenThree, "/api/v1/users", secondId);
     List<String> usernames = new ArrayList<>();
-    team.forEach(u -> usernames.add(u.path("username").asString() + "|" + u.path("email").asString()));
+    team.forEach(
+        u -> usernames.add(u.path("username").asString() + "|" + u.path("email").asString()));
     assertThat(usernames)
         .as("team of the second company (raw rows: %s)", team.toString())
         .anySatisfy(row -> assertThat(row).startsWith(OWNER_A_USERNAME));
@@ -193,8 +194,7 @@ class MultiCompanyMembershipAcceptanceTest {
   }
 
   private JsonNode getJson(String token, String path, String selectedCompanyId) throws IOException {
-    var spec =
-        appClient().get().uri(path).header(HttpHeaders.AUTHORIZATION, "Bearer " + token);
+    var spec = appClient().get().uri(path).header(HttpHeaders.AUTHORIZATION, "Bearer " + token);
     if (selectedCompanyId != null) {
       spec = spec.header("X-Company-Id", selectedCompanyId);
     }
@@ -213,11 +213,7 @@ class MultiCompanyMembershipAcceptanceTest {
     Request request =
         new Request.Builder()
             .url(
-                KEYCLOAK.getAuthServerUrl()
-                    + "/admin/realms/"
-                    + REALM
-                    + "/users/"
-                    + keycloakUserId)
+                KEYCLOAK.getAuthServerUrl() + "/admin/realms/" + REALM + "/users/" + keycloakUserId)
             .header("Authorization", "Bearer " + adminToken)
             .get()
             .build();
@@ -279,7 +275,11 @@ class MultiCompanyMembershipAcceptanceTest {
               + java.net.URLEncoder.encode(email, java.nio.charset.StandardCharsets.UTF_8)
               + "&exact=true";
       Request request =
-          new Request.Builder().url(url).header("Authorization", "Bearer " + adminToken).get().build();
+          new Request.Builder()
+              .url(url)
+              .header("Authorization", "Bearer " + adminToken)
+              .get()
+              .build();
       try (Response response = HTTP.newCall(request).execute()) {
         JsonNode users = JSON.readValue(response.body().string(), JsonNode.class);
         return users.get(0).get("id").asString();

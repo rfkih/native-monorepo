@@ -54,8 +54,7 @@ public class OutboxWriter {
    */
   public OutboxWriter(JdbcTemplate jdbcTemplate, TraceparentSupplier traceparentSupplier) {
     this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate, "jdbcTemplate");
-    this.traceparentSupplier =
-        Objects.requireNonNull(traceparentSupplier, "traceparentSupplier");
+    this.traceparentSupplier = Objects.requireNonNull(traceparentSupplier, "traceparentSupplier");
   }
 
   /**

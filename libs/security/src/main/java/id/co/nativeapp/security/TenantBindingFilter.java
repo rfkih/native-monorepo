@@ -35,12 +35,11 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * app.current_tenant} on every {@code @Transactional} unit of work, so row-level security keys on
  * the verified tenant.
  *
- * <p><strong>An inbound {@code X-Company-Id} is honoured only as a TOKEN-VALIDATED selection,
- * never trusted verbatim.</strong> A forged {@code X-Company-Id} sent straight to a service port
- * naming a company outside the token's set is rejected {@code 403} ({@code
- * invalid-company-selection}) — it can never bind an arbitrary tenant. This keeps the gap closed
- * that the gateway alone could not (defense in depth), while letting a multi-company login switch
- * its active company per request.
+ * <p><strong>An inbound {@code X-Company-Id} is honoured only as a TOKEN-VALIDATED selection, never
+ * trusted verbatim.</strong> A forged {@code X-Company-Id} sent straight to a service port naming a
+ * company outside the token's set is rejected {@code 403} ({@code invalid-company-selection}) — it
+ * can never bind an arbitrary tenant. This keeps the gap closed that the gateway alone could not
+ * (defense in depth), while letting a multi-company login switch its active company per request.
  *
  * <p>A valid token that carries no {@code company_id} claim is authenticated but not authorized to
  * reach a tenant-scoped service: it is rejected with {@code 403} as an RFC-7807 {@link
@@ -86,7 +85,9 @@ public final class TenantBindingFilter extends OncePerRequestFilter implements O
    */
   static final String COMPANY_ID_CLAIM = "company_id";
 
-  /** The client's active-company selection header (validated against the claim set, never trusted). */
+  /**
+   * The client's active-company selection header (validated against the claim set, never trusted).
+   */
   static final String COMPANY_HEADER = "X-Company-Id";
 
   /**

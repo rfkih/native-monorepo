@@ -12,8 +12,8 @@ import java.util.UUID;
  * headers} is an optional text/JSON blob for transport metadata — it must NEVER carry PII or
  * secrets. {@code traceparent} is the W3C {@code traceparent} string captured at write time so
  * Debezium can map it to a Kafka header and the consumer can restore the trace context (ADR 0010
- * #13 — outbox→Kafka trace continuity). {@code companyId} keeps every event tenant-scoped (CLAUDE.md
- * rule 5).
+ * #13 — outbox→Kafka trace continuity). {@code companyId} keeps every event tenant-scoped
+ * (CLAUDE.md rule 5).
  *
  * @param id outbox row primary key; also serves as the event id for idempotency
  * @param aggregateType the kind of aggregate that produced the event (e.g. {@code "sale"})
@@ -21,8 +21,8 @@ import java.util.UUID;
  * @param eventType the event name (e.g. {@code "SaleRecorded"})
  * @param payload the serialized event body; defensively copied
  * @param headers optional transport metadata as text/JSON; may be {@code null}
- * @param traceparent optional W3C traceparent string ({@code 00-<traceId>-<spanId>-<flags>}) of
- *     the span active when the event was written; {@code null} when no span was in scope or when
+ * @param traceparent optional W3C traceparent string ({@code 00-<traceId>-<spanId>-<flags>}) of the
+ *     span active when the event was written; {@code null} when no span was in scope or when
  *     tracing is not wired (DB-only test modules)
  * @param companyId the owning tenant
  * @param occurredAt when the event occurred (stored as {@code timestamptz})

@@ -8,16 +8,16 @@ import java.util.Objects;
 /**
  * A {@link TraceparentSupplier} backed by the Micrometer {@link Tracer}.
  *
- * <p>Formats the current span as a W3C {@code traceparent} header value:
- * {@code 00-<32-hex-traceId>-<16-hex-spanId>-<01|00>} (sampled flag from the context). Returns
- * {@code null} when there is no current span or the context has no trace id (e.g. a no-op tracer).
+ * <p>Formats the current span as a W3C {@code traceparent} header value: {@code
+ * 00-<32-hex-traceId>-<16-hex-spanId>-<01|00>} (sampled flag from the context). Returns {@code
+ * null} when there is no current span or the context has no trace id (e.g. a no-op tracer).
  *
- * <p>This class lives in {@code libs/events} but declares {@code io.micrometer.tracing.Tracer}
- * only as a {@code compileOnly} dependency — so the class compiles but is never forced onto
- * runtime classpaths that don't already carry Micrometer Tracing (e.g. DB-only test modules).
- * The gateway depends on {@code libs/observability} (which declares the tracing starter as
- * {@code api}) but does NOT depend on {@code libs/events}, so this file never leaks
- * tracing/JDBC concerns into the gateway's dependency graph.
+ * <p>This class lives in {@code libs/events} but declares {@code io.micrometer.tracing.Tracer} only
+ * as a {@code compileOnly} dependency — so the class compiles but is never forced onto runtime
+ * classpaths that don't already carry Micrometer Tracing (e.g. DB-only test modules). The gateway
+ * depends on {@code libs/observability} (which declares the tracing starter as {@code api}) but
+ * does NOT depend on {@code libs/events}, so this file never leaks tracing/JDBC concerns into the
+ * gateway's dependency graph.
  */
 public class MicrometerTraceparentSupplier implements TraceparentSupplier {
 

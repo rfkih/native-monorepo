@@ -267,7 +267,7 @@ dependencies { implementation("com.diffplug.spotless:spotless-plugin-gradle:7.0.
 
 // build-logic/src/main/kotlin/native.quality.gradle.kts — applied to EVERY module via native.java-conventions:
 plugins { jacoco; checkstyle; id("com.diffplug.spotless") }    // no version here — it comes from the classpath
-spotless { java { googleJavaFormat("1.25.2"); target("src/**/*.java"); removeUnusedImports() } }
+spotless { java { googleJavaFormat("1.36.1"); target("src/**/*.java"); removeUnusedImports() } }  // 1.36+: runs on JDK 25 daemons (CI)
 checkstyle { configFile = rootProject.file("config/checkstyle/checkstyle.xml"); maxWarnings = 0 }
 tasks.withType<Test>().configureEach { finalizedBy("jacocoTestReport") }  // coverage report today
 tasks.named("check") { dependsOn("spotlessCheck") }                       // Spotless + Checkstyle block
