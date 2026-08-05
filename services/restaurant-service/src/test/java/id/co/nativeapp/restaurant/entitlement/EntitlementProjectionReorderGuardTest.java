@@ -2,7 +2,7 @@ package id.co.nativeapp.restaurant.entitlement;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import id.co.nativeapp.restaurant.PostgresRlsTestBase;
+import id.co.nativeapp.restaurant.PostgresRedisTestBase;
 import id.co.nativeapp.restaurant.entitlement.dto.EntitlementProjectedEvent;
 import id.co.nativeapp.restaurant.entitlement.service.EntitlementProjectionReader;
 import id.co.nativeapp.restaurant.entitlement.service.EntitlementProjectionService;
@@ -21,9 +21,13 @@ import org.springframework.boot.test.context.SpringBootTest;
  * re-delivery of one already seen, so it sails straight past the dedupe check; only the {@code
  * event_occurred_at} comparison in {@code EntitlementProjectionRepository#upsertSetIfNewer} stops
  * it from regressing the projection.
+ *
+ * <p>Extends {@link PostgresRedisTestBase} (not the bare RLS base): {@code reader.isEntitled} goes
+ * through the Redis entitlement-check cache on every call, so the test needs a real Redis — an
+ * ambient localhost:6379 (the dev docker stack) masked this until the first CI runner run.
  */
 @SpringBootTest
-class EntitlementProjectionReorderGuardTest extends PostgresRlsTestBase {
+class EntitlementProjectionReorderGuardTest extends PostgresRedisTestBase {
 
   private static final String TENANT = "11111111-1111-1111-1111-111111111111";
   private static final String MODULE = "self_order";
