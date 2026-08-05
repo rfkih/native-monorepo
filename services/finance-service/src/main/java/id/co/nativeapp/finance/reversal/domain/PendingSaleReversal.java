@@ -111,7 +111,9 @@ public class PendingSaleReversal extends Auditable {
   }
 
   public String getCurrency() {
-    return currency;
+    // Defensive strip (the EmployeeExpenseClaimLedger.getAmount convention): a CHAR(3) column is
+    // never padded for a 3-char ISO code, but the read path must not depend on that.
+    return currency == null ? null : currency.strip();
   }
 
   public Long getTotalRefundedMinor() {
@@ -139,7 +141,7 @@ public class PendingSaleReversal extends Auditable {
   }
 
   public void markApplied(Instant at, Outcome resolution) {
-    this.appliedAt = at;
-    this.outcome = resolution.name();
+    this.appliedAt = java.util.Objects.requireNonNull(at, "at");
+    this.outcome = java.util.Objects.requireNonNull(resolution, "resolution").name();
   }
 }
