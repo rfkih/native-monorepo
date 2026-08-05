@@ -10,7 +10,8 @@ import { localeOf } from '@/i18n'
 import { formatMoney, formatAmount, formatPercent } from '@/lib/money'
 import { currentPeriod, shiftPeriod } from '@/lib/period'
 import { useIncomeStatement } from './api'
-import { downloadCsv, EntityScope, LineSection, PeriodNav, StatementEmptyState, SummaryCard } from './parts'
+import { downloadCsv } from '@/lib/csv'
+import { EntityScope, LineSection, PeriodNav, StatementEmptyState, SummaryCard } from './parts'
 
 /**
  * Income Statement (Laba Rugi) — design 2b: the parchment palette retired.

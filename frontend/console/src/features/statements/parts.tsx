@@ -124,20 +124,3 @@ export function LineSection({
     </div>
   )
 }
-
-/**
- * Client-side CSV download for a loaded statement — the export path the statements never had
- * (audit finding 16). Quotes every cell; Excel/Sheets open it directly.
- */
-export function downloadCsv(filename: string, rows: (string | number)[][]) {
-  const csv = rows
-    .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(','))
-    .join('\r\n')
-  const blob = new Blob([`﻿${csv}`], { type: 'text/csv;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.click()
-  URL.revokeObjectURL(url)
-}

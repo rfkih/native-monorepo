@@ -10,7 +10,8 @@ import { localeOf } from '@/i18n'
 import { formatMoney, formatAmount } from '@/lib/money'
 import { currentPeriod, shiftPeriod } from '@/lib/period'
 import { useCashFlow } from './api'
-import { downloadCsv, EntityScope, LineSection, PeriodNav, StatementEmptyState, SummaryCard } from './parts'
+import { downloadCsv } from '@/lib/csv'
+import { EntityScope, LineSection, PeriodNav, StatementEmptyState, SummaryCard } from './parts'
 
 /**
  * Cash Flow Statement (Arus Kas) — the indirect method, derived from the GL. Net income + the

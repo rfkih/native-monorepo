@@ -6,7 +6,7 @@ import './index.css'
 import './i18n'
 import { queryClient } from '@/lib/queryClient'
 import { AuthProvider } from '@/lib/auth'
-import { SessionProvider } from '@/lib/session'
+import { SessionProvider } from '@/lib/SessionProvider'
 import { App } from '@/app/App'
 
 createRoot(document.getElementById('root')!).render(

@@ -3,8 +3,8 @@
  *
  * Every image is a licensed Unsplash photo (credits + license in src/assets/landing/SOURCES.md),
  * pre-sized to its slot and committed as a hashed Vite asset — nothing is fetched from a third
- * party at runtime. `<Photo>` is the single `<img>` wrapper so the hygiene rules (intrinsic
- * dimensions against CLS, async decode, lazy below the fold, priority hero) live in one place.
+ * party at runtime. Render through `<Photo>` (Photo.tsx) — kept in its own file so this data
+ * module and that component file each satisfy react-refresh/only-export-components.
  */
 import heroW768 from '@/assets/landing/hero-w768.webp'
 import heroW1280 from '@/assets/landing/hero-w1280.webp'
@@ -42,36 +42,3 @@ export const portraitPhoto: PhotoSource = { src: portraitW192, width: 192, heigh
 
 /** CTA band texture — carwash detail under the brand overlay. */
 export const ctaPhoto: PhotoSource = { src: ctaW1280, width: 1280, height: 640 }
-
-export function Photo({
-  photo,
-  alt,
-  className,
-  sizes,
-  priority = false,
-}: {
-  photo: PhotoSource
-  /** Empty string marks the image decorative (hidden from assistive tech). */
-  alt: string
-  className?: string
-  /** Required when the source has a srcSet, so the browser picks the right width. */
-  sizes?: string
-  /** Above-the-fold images only: eager load + high fetch priority. */
-  priority?: boolean
-}) {
-  return (
-    <img
-      src={photo.src}
-      srcSet={photo.srcSet}
-      sizes={photo.srcSet ? sizes : undefined}
-      width={photo.width}
-      height={photo.height}
-      alt={alt}
-      aria-hidden={alt === '' || undefined}
-      decoding="async"
-      loading={priority ? 'eager' : 'lazy'}
-      fetchPriority={priority ? 'high' : 'auto'}
-      className={className}
-    />
-  )
-}

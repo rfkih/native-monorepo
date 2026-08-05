@@ -1,35 +1,15 @@
-import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
+import { useCallback, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api'
 import { AUTH_MODE } from '@/lib/config'
 import { useAuth } from '@/lib/authContext'
+import { SessionContext, type CompanySession } from '@/lib/session'
 
 /**
- * The company the console is currently acting as, plus the login's full company list (multi-company
- * ownership, ADR 0021 — one login can hold 1..N companies; the switcher changes the ACTIVE one).
- *
- * - **oidc mode**: identity drives the tenant. The login's companies come from
- *   `GET /api/v1/companies/mine` (backed by the verified token's `company_id` claim set); the
- *   active company is a per-login localStorage pointer validated against that list, and every API
- *   call sends it as `X-Company-Id` — which the gateway and each service validate against the
- *   token before binding. localStorage is NOT trusted for identity, only for the (validated)
- *   selection.
- * - **dev mode**: companies accumulate at onboarding and persist to localStorage (a list + an
- *   active pointer) so a refresh keeps them — the multi-company extension of the original single
- *   dev session.
- *
- * Base currency + default language are fixed at company creation (org-service) — the console reads
- * them, it never offers to change them.
+ * Fills the session context — see session.ts for the model (oidc vs dev company resolution,
+ * what is and is not trusted from storage). Split from session.ts so this file exports only a
+ * component (react-refresh/only-export-components).
  */
-export interface CompanySession {
-  companyId: string
-  name: string
-  baseCurrency: string
-  defaultLanguage: string
-  /** The company's first business (org unit) — the POS records sales/orders against it. */
-  businessId: string
-  actor: string
-}
 
 /** Shape returned by org-service for the create / current / mine endpoints. */
 interface CompanyDto {
@@ -40,26 +20,6 @@ interface CompanyDto {
   firstBusinessId: string
 }
 
-interface SessionContextValue {
-  company: CompanySession | null
-  /** Every company this login can act as — the switcher list (active included). */
-  companies: CompanySession[]
-  /** True while the signed-in user's companies are still being loaded (oidc mode). */
-  loading: boolean
-  setCompany: (company: CompanySession | null) => void
-  /** Switches the active company (an id from `companies`); every query re-fetches under it. */
-  setActiveCompany: (companyId: string) => void
-  /**
-   * The outlet the POS terminal is currently ringing for (Phase 3 outlet-scoping).
-   * Null when no outlet has been selected yet, or when the tenant has no OUTLET org units.
-   * Persisted per-TAB in sessionStorage under `native.console.outlet`.
-   */
-  activeOutletId: string | null
-  /** Set the active outlet and persist it to sessionStorage for this tab. */
-  setActiveOutlet: (id: string | null) => void
-}
-
-const SessionContext = createContext<SessionContextValue | null>(null)
 const LEGACY_STORAGE_KEY = 'native.console.session'
 const SESSIONS_KEY = 'native.console.sessions'
 const ACTIVE_KEY = 'native.console.activeCompany'
@@ -143,12 +103,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [activeCompanyId, setActiveCompanyId] = useState<string | null>(() =>
     loadActiveCompanyId(AUTH_MODE === 'oidc' ? 'anonymous' : 'dev'),
   )
-  // Re-read the pointer once the oidc sub resolves (the initial state used 'anonymous').
-  useEffect(() => {
-    if (AUTH_MODE === 'oidc' && auth.sub) {
-      setActiveCompanyId(loadActiveCompanyId(auth.sub))
-    }
-  }, [auth.sub])
+  // Re-read the pointer when the storage scope resolves or changes (oidc: 'anonymous' → sub).
+  // Adjusted during render — never in an effect — so no frame pairs the new scope with the old
+  // scope's pointer.
+  const [loadedScope, setLoadedScope] = useState(AUTH_MODE === 'oidc' ? 'anonymous' : 'dev')
+  if (loadedScope !== activeScope) {
+    setLoadedScope(activeScope)
+    setActiveCompanyId(loadActiveCompanyId(activeScope))
+  }
 
   // Active outlet — persisted per-tab in sessionStorage, NOT localStorage.
   const [activeOutletId, setActiveOutletState] = useState<string | null>(
@@ -196,26 +158,21 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       companies.find((c) => c.companyId === activeCompanyId) ?? companies[0] ?? null
   }
 
-  // Clear the active outlet whenever the company changes — both on logout (null) and on a
-  // genuine A→B company switch (both non-null but different ids).
-  const prevCompanyIdRef = useRef<string | undefined>(undefined)
-  useEffect(() => {
-    const prev = prevCompanyIdRef.current
-    const current = company?.companyId
-    prevCompanyIdRef.current = current
-
-    if (prev === current) return // same company, nothing to do
-
-    if (!current) {
-      // Company cleared (logout / no session) — clear outlet too.
-      setActiveOutletState(null)
-      saveOutletToSessionStorage(null)
-    } else if (prev !== undefined && prev !== null) {
-      // Genuine company switch A→B — stale outlet belongs to a different tenant.
+  // Clear the active outlet whenever the company changes — logout (X→none) and genuine A→B
+  // switches (a stale outlet belongs to a different tenant). Adjusted during render, NOT in an
+  // effect: the old effect let children render one frame of company B paired with company A's
+  // outlet before it fired. `undefined` = first render (nothing seen yet — a reload keeps the
+  // restored per-tab outlet, and the initial none→company transition must not clear it either).
+  // The idempotent sessionStorage remove rides along; StrictMode's double render is harmless.
+  const currentCompanyId = company?.companyId ?? null
+  const [seenCompanyId, setSeenCompanyId] = useState<string | null | undefined>(undefined)
+  if (seenCompanyId !== currentCompanyId) {
+    setSeenCompanyId(currentCompanyId)
+    if (seenCompanyId != null) {
       setActiveOutletState(null)
       saveOutletToSessionStorage(null)
     }
-  })
+  }
 
   /**
    * Registers a company as current — the onboarding/add-business hand-off. In dev it UPSERTS into
@@ -283,10 +240,4 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       {children}
     </SessionContext.Provider>
   )
-}
-
-export function useSession(): SessionContextValue {
-  const ctx = useContext(SessionContext)
-  if (!ctx) throw new Error('useSession must be used within a SessionProvider')
-  return ctx
 }

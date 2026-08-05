@@ -10,7 +10,8 @@ import { localeOf } from '@/i18n'
 import { formatMoney, formatAmount, formatPercent } from '@/lib/money'
 import { currentPeriod, shiftPeriod } from '@/lib/period'
 import { useBalanceSheet, type BalanceLine } from './api'
-import { downloadCsv, EntityScope, LineSection, PeriodNav, StatementEmptyState, SummaryCard } from './parts'
+import { downloadCsv } from '@/lib/csv'
+import { EntityScope, LineSection, PeriodNav, StatementEmptyState, SummaryCard } from './parts'
 
 /** The synthetic retained-earnings account code finance-service appends to every balance sheet. */
 const RETAINED_EARNINGS_ACCOUNT = '3000-RETAINED-EARNINGS'

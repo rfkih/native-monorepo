@@ -29,7 +29,8 @@ import {
   SaleToast,
   VerticalStrip,
 } from './art'
-import { ctaPhoto, heroPhoto, Photo, portraitPhoto, posPhoto } from './photos'
+import { Photo } from './Photo'
+import { ctaPhoto, heroPhoto, portraitPhoto, posPhoto } from './photos'
 
 // ── Scroll-reveal (flash-free, reduced-motion-safe) ──────────────────────────────────────────────
 

@@ -58,7 +58,7 @@ const INTEREST_KEYS: Record<(typeof INTERESTS)[number], string> = {
 const PASSWORD_MIN_LENGTH = 8
 // UI copy of the server's lenient phone check (SignupRequest @Pattern) — advisory only.
 // Digit-terminated and ≤ 32 chars total (the company.phone column width).
-const PHONE_RE = /^\+?[0-9][0-9 ()\-]{3,29}[0-9]$/
+const PHONE_RE = /^\+?[0-9][0-9 ()-]{3,29}[0-9]$/
 
 // Step indexes — the Review rows link back to these.
 const STEP_COMPANY = 0

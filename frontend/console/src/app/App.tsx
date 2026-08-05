@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useRef } from 'react'
+import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { LogOut } from 'lucide-react'
@@ -187,13 +187,13 @@ function LoginLauncher() {
  * The /onboarding route decides its chrome ONCE, when it mounts: a first-ever company (no company
  * in the session yet) gets the standalone full-page wizard; adding another company keeps the shell.
  *
- * The decision is captured in a ref, NOT re-derived per render: creating the first company sets the
- * session company MID-FLOW (before the wizard's success panel), and a live condition would remount
- * the wizard at that instant — wiping the success state the user is looking at.
+ * The decision is captured in one-shot state, NOT re-derived per render: creating the first company
+ * sets the session company MID-FLOW (before the wizard's success panel), and a live condition would
+ * remount the wizard at that instant — wiping the success state the user is looking at.
  */
 function OnboardingRoute() {
   const { company } = useSession()
-  const firstRun = useRef(company == null).current
+  const [firstRun] = useState(() => company == null)
   if (firstRun) {
     return <OnboardingStandalone />
   }
