@@ -3,6 +3,7 @@ package id.co.nativeapp.restaurant.register.controller;
 import id.co.nativeapp.restaurant.register.dto.CloseSessionRequest;
 import id.co.nativeapp.restaurant.register.dto.OpenSessionRequest;
 import id.co.nativeapp.restaurant.register.dto.OpenSessionResult;
+import id.co.nativeapp.restaurant.register.dto.RegisterExpectedResponse;
 import id.co.nativeapp.restaurant.register.dto.RegisterSessionResponse;
 import id.co.nativeapp.restaurant.register.service.RegisterSessionService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -87,6 +88,21 @@ public class RegisterSessionController {
         .current(businessId)
         .map(ResponseEntity::ok)
         .orElseGet(() -> ResponseEntity.noContent().build());
+  }
+
+  /**
+   * The OPEN session's live per-tender EXPECTED breakdown (cash/card/QRIS/online), for the close
+   * screen (ADR 0038). 404 for an unknown session, 409 when it is not OPEN.
+   */
+  @Operation(
+      summary = "Register session expected breakdown",
+      description =
+          "The live per-tender expected amounts (cash/card/QRIS/online) for the OPEN session, so the"
+              + " close screen can show what to count/verify per tender. A preview; the close"
+              + " snapshots the authoritative figures.")
+  @GetMapping("/{id}/expected")
+  public ResponseEntity<RegisterExpectedResponse> expected(@PathVariable("id") UUID id) {
+    return ResponseEntity.ok(service.expectedBreakdown(id));
   }
 
   /** The outlet's session history, most recent first (capped at 50). */

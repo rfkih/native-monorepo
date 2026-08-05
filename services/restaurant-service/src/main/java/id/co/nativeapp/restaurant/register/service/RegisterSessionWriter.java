@@ -4,14 +4,18 @@ import id.co.nativeapp.events.AvroSerde;
 import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
+import id.co.nativeapp.restaurant.payment.domain.TenderType;
 import id.co.nativeapp.restaurant.register.domain.RegisterSession;
+import id.co.nativeapp.restaurant.register.domain.RegisterSessionDayClosedException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionIdempotencyKeyConflictException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionNotFoundException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionNotOpenException;
 import id.co.nativeapp.restaurant.register.dto.CloseSessionRequest;
 import id.co.nativeapp.restaurant.register.dto.OpenSessionRequest;
 import id.co.nativeapp.restaurant.register.dto.OpenSessionResult;
+import id.co.nativeapp.restaurant.register.dto.RegisterExpectedResponse;
 import id.co.nativeapp.restaurant.register.dto.RegisterSessionResponse;
+import id.co.nativeapp.restaurant.register.dto.TenderExpected;
 import id.co.nativeapp.restaurant.register.messaging.RegisterSessionClosedSchema;
 import id.co.nativeapp.restaurant.register.projection.RegisterSessionView;
 import id.co.nativeapp.restaurant.register.repository.RegisterSessionRepository;
@@ -127,7 +131,8 @@ public class RegisterSessionWriter {
 
     // CashWindowLock — EXCLUSIVE, FIRST lock-acquiring statement, before the openedAt timestamp
     // (defensive symmetry with close(); see class javadoc). Nothing above takes a DB lock (plain
-    // reads / in-memory validation only).
+    // reads / in-memory validation only). Holding it also serializes concurrent opens for this
+    // outlet, so the day-final probe below is race-free against another open.
     cashWindowLock.acquireForClose(request.businessId());
 
     Instant now = Instant.now();
@@ -135,6 +140,16 @@ public class RegisterSessionWriter {
         request.businessDate() != null
             ? request.businessDate()
             : LocalDate.ofInstant(now, DEFAULT_BUSINESS_ZONE);
+
+    // Day-final (ADR 0038): at most one session per outlet per business day, OPEN or CLOSED. A
+    // clean
+    // 409 for the common case; uq_crs_one_session_per_outlet_day is the ultimate backstop (the
+    // service maps its DataIntegrityViolationException to a 409).
+    if (repository
+        .findViewByBusinessIdAndBusinessDate(request.businessId(), businessDate)
+        .isPresent()) {
+      throw new RegisterSessionDayClosedException(request.businessId(), businessDate);
+    }
 
     RegisterSession session =
         RegisterSession.open(
@@ -240,6 +255,68 @@ public class RegisterSessionWriter {
         closeInstant);
 
     return RegisterSessionResponse.from(session);
+  }
+
+  /**
+   * The live per-tender EXPECTED breakdown for an OPEN session (ADR 0038, phase 1) — a preview over
+   * {@code [openedAt, now)} so the close screen can show, per tender, what the ledger says should
+   * be there. Read-only, outlet-gated (review W1); NO {@link CashWindowLock} — this is an estimate,
+   * not the authoritative close snapshot, so it must not serialize against live sales. Cash reuses
+   * the drawer-accurate terms; card/QRIS/online use the per-tender net charged amount (sales −
+   * refunds).
+   */
+  @Transactional(readOnly = true)
+  public RegisterExpectedResponse expectedBreakdown(UUID sessionId) {
+    RegisterSessionView session =
+        repository
+            .findViewById(sessionId)
+            .orElseThrow(() -> new RegisterSessionNotFoundException(sessionId));
+    outletAccessGuard.enforce(session.getBusinessId());
+    if (!RegisterSession.STATUS_OPEN.equals(session.getStatus())) {
+      throw new RegisterSessionNotOpenException(sessionId, session.getStatus());
+    }
+
+    UUID businessId = session.getBusinessId();
+    Instant from = session.getOpenedAt();
+    Instant asOf = Instant.now();
+
+    // Cash INTO the drawer = float + cash-collected sales + cash gift-card sales − cash refunds
+    // (mirrors the close formula, ADR 0036 §3). Overflow-safe (Math.*Exact) like the close.
+    long cashExpected =
+        Math.subtractExact(
+            Math.addExact(
+                session.getOpeningFloatMinor(),
+                Math.addExact(
+                    repository.sumCashSales(businessId, from, asOf),
+                    repository.sumCashGiftCardSales(businessId, from, asOf))),
+            repository.sumCashRefunds(businessId, from, asOf));
+
+    List<TenderExpected> tenders =
+        List.of(
+            new TenderExpected(TenderType.CASH.name(), cashExpected),
+            new TenderExpected(
+                TenderType.CARD.name(), expectedForTender(businessId, TenderType.CARD, from, asOf)),
+            new TenderExpected(
+                TenderType.QRIS.name(), expectedForTender(businessId, TenderType.QRIS, from, asOf)),
+            new TenderExpected(
+                TenderType.ONLINE.name(),
+                expectedForTender(businessId, TenderType.ONLINE, from, asOf)));
+
+    return new RegisterExpectedResponse(
+        sessionId,
+        businessId,
+        session.getCurrency() == null ? null : session.getCurrency().strip(),
+        asOf,
+        tenders);
+  }
+
+  /**
+   * Net charged amount for a non-cash tender in the window: Σ sales − Σ refunds (overflow-safe).
+   */
+  private long expectedForTender(UUID businessId, TenderType tender, Instant from, Instant to) {
+    return Math.subtractExact(
+        repository.sumSalesByTender(businessId, tender.name(), from, to),
+        repository.sumRefundsByTender(businessId, tender.name(), from, to));
   }
 
   /** Open-replay re-read used by the service's double-open race recovery. */

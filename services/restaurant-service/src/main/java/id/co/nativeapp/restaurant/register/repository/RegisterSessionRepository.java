@@ -51,6 +51,22 @@ public interface RegisterSessionRepository extends JpaRepository<RegisterSession
       nativeQuery = true)
   Optional<RegisterSessionView> findOpenViewByBusinessId(@Param("businessId") UUID businessId);
 
+  /**
+   * The outlet's session for a business day, OPEN or CLOSED (at most one — {@code
+   * uq_crs_one_session_per_outlet_day}). Backs the day-final open probe (ADR 0038).
+   */
+  @Query(
+      value =
+          VIEW_COLUMNS + " WHERE s.business_id = :businessId AND s.business_date = :businessDate",
+      nativeQuery = true)
+  Optional<RegisterSessionView> findViewByBusinessIdAndBusinessDate(
+      @Param("businessId") UUID businessId,
+      @Param("businessDate") java.time.LocalDate businessDate);
+
+  /** A session by id (projection, read path) — backs the expected-breakdown preview (ADR 0038). */
+  @Query(value = VIEW_COLUMNS + " WHERE s.id = :id", nativeQuery = true)
+  Optional<RegisterSessionView> findViewById(@Param("id") UUID id);
+
   /** Open-replay probe: the session previously opened under this idempotency key. */
   @Query(value = VIEW_COLUMNS + " WHERE s.open_idempotency_key = :key", nativeQuery = true)
   Optional<RegisterSessionView> findViewByOpenIdempotencyKey(@Param("key") String key);
@@ -124,4 +140,47 @@ public interface RegisterSessionRepository extends JpaRepository<RegisterSession
       nativeQuery = true)
   long sumCashGiftCardSales(
       @Param("businessId") UUID businessId, @Param("from") Instant from, @Param("to") Instant to);
+
+  /**
+   * Σ {@code sale.amount_minor} for a NON-cash tender (CARD/QRIS/ONLINE) in the window — the
+   * charged amount that accrued in that tender's clearing account, the per-tender expected before
+   * refunds (ADR 0038). Cash keeps its drawer-accurate {@link #sumCashSales} path (gift-card split
+   * etc.); this gross-amount sum is a v1 preview approximation for the non-cash tenders (a
+   * gift-card split on a card sale would overstate — refined when the counted variance posts in
+   * phase 2).
+   */
+  @Query(
+      value =
+          """
+          SELECT COALESCE(SUM(s.amount_minor), 0)
+            FROM sale s
+           WHERE s.business_id = :businessId
+             AND s.tender_type = :tender
+             AND s.occurred_at >= :from
+             AND s.occurred_at < :to
+          """,
+      nativeQuery = true)
+  long sumSalesByTender(
+      @Param("businessId") UUID businessId,
+      @Param("tender") String tender,
+      @Param("from") Instant from,
+      @Param("to") Instant to);
+
+  /** Σ refund DELTAS for a NON-cash tender in the window (append-only {@code payment_refund}). */
+  @Query(
+      value =
+          """
+          SELECT COALESCE(SUM(r.amount_minor), 0)
+            FROM payment_refund r
+           WHERE r.business_id = :businessId
+             AND r.tender_type = :tender
+             AND r.refunded_at >= :from
+             AND r.refunded_at < :to
+          """,
+      nativeQuery = true)
+  long sumRefundsByTender(
+      @Param("businessId") UUID businessId,
+      @Param("tender") String tender,
+      @Param("from") Instant from,
+      @Param("to") Instant to);
 }

@@ -14,6 +14,7 @@ import { useTranslation } from 'react-i18next'
 import { Banknote, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
+import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { formatMoney } from '@/lib/money'
 import type { CompanySession } from '@/lib/session'
@@ -22,8 +23,36 @@ import {
   useCloseRegisterSession,
   useCurrentRegisterSession,
   useOpenRegisterSession,
+  useRegisterExpected,
   type RegisterSessionResponse,
 } from './registerApi'
+
+// Per-tender label keys (ADR 0038 daily close v2) — i18n only (rule 9).
+const TENDER_LABEL_KEY: Record<string, string> = {
+  CASH: 'register.tenderCash',
+  CARD: 'register.tenderCard',
+  QRIS: 'register.tenderQris',
+  ONLINE: 'register.tenderOnline',
+}
+
+// Map the register fault `type` slugs (RegisterAdvice) to friendly i18n keys — the day-final 409 is
+// a routine end-of-day event, not a raw English diagnostic with an internal id (rule 9). Returns the
+// key, or null to fall back to the server's detail message.
+const REGISTER_ERROR_KEY: Record<string, string> = {
+  'register-session-day-closed': 'register.errorDayClosed',
+  'register-session-already-open': 'register.errorAlreadyOpen',
+  'register-session-not-open': 'register.errorNotOpen',
+  'register-session-idempotency-key-conflict': 'register.errorKeyConflict',
+}
+
+function registerErrorKey(err: unknown): string | null {
+  if (err instanceof ApiError && typeof err.problem?.type === 'string') {
+    for (const slug of Object.keys(REGISTER_ERROR_KEY)) {
+      if (err.problem.type.includes(slug)) return REGISTER_ERROR_KEY[slug]
+    }
+  }
+  return null
+}
 
 export function RegisterSheet({
   session,
@@ -40,6 +69,9 @@ export function RegisterSheet({
   const currentQuery = useCurrentRegisterSession(session)
   const openSession = useOpenRegisterSession(session)
   const closeSession = useCloseRegisterSession(session)
+  const currentId = currentQuery.data?.id ?? null
+  // Live per-tender expected for the OPEN session (ADR 0038) — shown on the close form.
+  const expectedQuery = useRegisterExpected(session, currentId, !!currentId)
 
   const [floatInput, setFloatInput] = useState('')
   const [countedInput, setCountedInput] = useState('')
@@ -48,6 +80,13 @@ export function RegisterSheet({
 
   const current = currentQuery.data ?? null
   const busy = openSession.isPending || closeSession.isPending
+
+  // Friendly copy for a known register fault, else the server's detail message (rule 9).
+  const faultMessage = (err: unknown): string => {
+    const key = registerErrorKey(err)
+    if (key) return t(key as Parameters<typeof t>[0])
+    return err instanceof Error ? err.message : ''
+  }
 
   function handleOpen() {
     openSession.mutate(
@@ -154,6 +193,33 @@ export function RegisterSheet({
                 </span>
               </div>
             </div>
+            {expectedQuery.data && expectedQuery.data.tenders.length > 0 ? (
+              <div
+                className="rounded-xl border border-line bg-surface px-4 py-3"
+                data-testid="register-expected-breakdown"
+              >
+                <div className="mb-2 text-[12px] font-semibold uppercase tracking-[.06em] text-ink-3">
+                  {t('register.expectedByTender')}
+                </div>
+                <dl className="space-y-1.5">
+                  {expectedQuery.data.tenders.map((td) => (
+                    <div key={td.tenderType} className="flex items-baseline justify-between text-sm">
+                      <dt className="text-ink-3">
+                        {TENDER_LABEL_KEY[td.tenderType]
+                          ? t(TENDER_LABEL_KEY[td.tenderType] as Parameters<typeof t>[0])
+                          : td.tenderType}
+                      </dt>
+                      <dd className="tnum font-mono text-ink-2">
+                        {formatMoney(td.expectedMinor, currency, locale)}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+                <p className="mt-2 text-xs leading-relaxed text-ink-3">
+                  {t('register.expectedByTenderHint')}
+                </p>
+              </div>
+            ) : null}
             <div>
               <label htmlFor="register-counted" className="mb-1.5 block text-sm font-medium text-ink">
                 {t('register.countedLabel')}
@@ -173,7 +239,7 @@ export function RegisterSheet({
             </div>
             {closeSession.isError ? (
               <p className="text-xs text-loss" role="alert">
-                {(closeSession.error as Error).message}
+                {faultMessage(closeSession.error)}
               </p>
             ) : null}
             <Button
@@ -207,7 +273,7 @@ export function RegisterSheet({
             </div>
             {openSession.isError ? (
               <p className="text-xs text-loss" role="alert">
-                {(openSession.error as Error).message}
+                {faultMessage(openSession.error)}
               </p>
             ) : null}
             <Button

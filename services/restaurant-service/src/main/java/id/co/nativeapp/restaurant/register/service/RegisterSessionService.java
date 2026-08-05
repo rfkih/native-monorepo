@@ -4,6 +4,7 @@ import id.co.nativeapp.restaurant.register.domain.RegisterSessionAlreadyOpenExce
 import id.co.nativeapp.restaurant.register.dto.CloseSessionRequest;
 import id.co.nativeapp.restaurant.register.dto.OpenSessionRequest;
 import id.co.nativeapp.restaurant.register.dto.OpenSessionResult;
+import id.co.nativeapp.restaurant.register.dto.RegisterExpectedResponse;
 import id.co.nativeapp.restaurant.register.dto.RegisterSessionResponse;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
@@ -37,7 +38,13 @@ public class RegisterSessionService {
     } catch (DataIntegrityViolationException conflict) {
       // Either the open-key unique (same-key race → replay) or the one-open-per-outlet partial
       // unique (second drawer → 409) fired. The re-read runs in a FRESH transaction — the aborted
-      // insert transaction is poisoned.
+      // insert transaction is poisoned. NOTE: the day-final unique
+      // (uq_crs_one_session_per_outlet_day,
+      // ADR 0038) is NOT expected here — the writer's in-transaction day probe under the exclusive
+      // CashWindowLock catches that case first as a clean RegisterSessionDayClosedException; this
+      // branch remains the backstop and still yields a 409 (the status is right even if the slug
+      // says
+      // "already-open" for a day that was CLOSED).
       return writer
           .findByOpenKey(idempotencyKey)
           .map(existing -> new OpenSessionResult(existing, false))
@@ -55,6 +62,12 @@ public class RegisterSessionService {
   public Optional<RegisterSessionResponse> current(UUID businessId) {
     TenantContext.require();
     return writer.findCurrent(businessId);
+  }
+
+  /** The live per-tender expected breakdown for an OPEN session (ADR 0038, phase 1). */
+  public RegisterExpectedResponse expectedBreakdown(UUID sessionId) {
+    TenantContext.require();
+    return writer.expectedBreakdown(sessionId);
   }
 
   public List<RegisterSessionResponse> history(UUID businessId) {

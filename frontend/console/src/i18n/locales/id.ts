@@ -800,6 +800,20 @@ export const id = {
     resultBalanced: 'Seimbang — tidak ada selisih',
     done: 'Selesai',
     disabledOffline: 'Closing membutuhkan koneksi dan antrean penjualan yang sudah tersinkron.',
+    /** ADR 0038 daily close v2 — rincian seharusnya per metode bayar di layar tutup kasir. */
+    expectedByTender: 'Seharusnya per metode bayar',
+    expectedByTenderHint:
+      'Perkiraan jumlah di tiap metode bayar sejauh ini, dari penjualan hari ini — untuk dibandingkan dengan laci, batch kartu, serta laporan QRIS / platform.',
+    tenderCash: 'Tunai',
+    tenderCard: 'Kartu',
+    tenderQris: 'QRIS',
+    tenderOnline: 'Online',
+    errorDayClosed:
+      'Outlet ini sudah ditutup untuk hari ini. Closing dilakukan sekali sehari — buat entri koreksi bila ada yang perlu diperbaiki.',
+    errorAlreadyOpen: 'Sesi kasir sudah terbuka di outlet ini. Muat ulang untuk melihatnya.',
+    errorNotOpen: 'Sesi kasir ini sudah tidak terbuka. Muat ulang untuk melihat kondisi terkini.',
+    errorKeyConflict:
+      'Penutupan itu sudah tercatat dengan jumlah berbeda. Muat ulang untuk melihat kondisi terkini.',
   },
   posShell: {
     /** Redesign P4 — kerangka POS bersama (bilah status, menu kasir, dok tiket). */

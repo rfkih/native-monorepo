@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -12,11 +13,13 @@ import static org.mockito.Mockito.when;
 import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
 import id.co.nativeapp.restaurant.register.domain.RegisterSession;
+import id.co.nativeapp.restaurant.register.domain.RegisterSessionDayClosedException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionIdempotencyKeyConflictException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionNotOpenException;
 import id.co.nativeapp.restaurant.register.dto.CloseSessionRequest;
 import id.co.nativeapp.restaurant.register.dto.OpenSessionRequest;
 import id.co.nativeapp.restaurant.register.dto.OpenSessionResult;
+import id.co.nativeapp.restaurant.register.dto.RegisterExpectedResponse;
 import id.co.nativeapp.restaurant.register.dto.RegisterSessionResponse;
 import id.co.nativeapp.restaurant.register.projection.RegisterSessionView;
 import id.co.nativeapp.restaurant.register.repository.RegisterSessionRepository;
@@ -171,6 +174,69 @@ class RegisterSessionWriterTest {
     // doc.
     verify(cashWindowLock).acquireForClose(OUTLET);
     verify(guard).enforce(OUTLET);
+  }
+
+  // ── day-final (ADR 0038): one session per outlet per business day ─────────
+
+  @Test
+  void openIsRejectedWhenTheOutletAlreadyHasASessionForThatBusinessDay() {
+    when(repository.findViewByOpenIdempotencyKey("fresh-open-key")).thenReturn(Optional.empty());
+    // A session (open or closed) already exists for the requested business day.
+    when(repository.findViewByBusinessIdAndBusinessDate(eq(OUTLET), any(LocalDate.class)))
+        .thenReturn(Optional.of(mock(RegisterSessionView.class)));
+
+    assertThatThrownBy(
+            () ->
+                asTenant(
+                    () ->
+                        writer.open(
+                            new OpenSessionRequest(
+                                OUTLET, 100_000L, "IDR", LocalDate.of(2026, 8, 6)),
+                            "fresh-open-key")))
+        .isInstanceOf(RegisterSessionDayClosedException.class);
+    verify(repository, never()).saveAndFlush(any());
+  }
+
+  // ── per-tender expected preview (ADR 0038) ───────────────────────────────
+
+  @Test
+  void expectedBreakdownComputesPerTenderExpectedForTheOpenSession() {
+    UUID sessionId = UUID.randomUUID();
+    RegisterSessionView view = mock(RegisterSessionView.class);
+    when(view.getBusinessId()).thenReturn(OUTLET);
+    when(view.getStatus()).thenReturn(RegisterSession.STATUS_OPEN);
+    when(view.getOpeningFloatMinor()).thenReturn(100_000L);
+    when(view.getCurrency()).thenReturn("IDR");
+    when(view.getOpenedAt()).thenReturn(Instant.now().minusSeconds(3600));
+    when(repository.findViewById(sessionId)).thenReturn(Optional.of(view));
+    // Cash drawer terms (float + sales + gift-card cash − refunds).
+    when(repository.sumCashSales(any(), any(), any())).thenReturn(70_000L);
+    when(repository.sumCashGiftCardSales(any(), any(), any())).thenReturn(30_000L);
+    when(repository.sumCashRefunds(any(), any(), any())).thenReturn(10_000L);
+    // Non-cash per tender: net = sales − refunds.
+    when(repository.sumSalesByTender(eq(OUTLET), eq("CARD"), any(), any())).thenReturn(800_000L);
+    when(repository.sumSalesByTender(eq(OUTLET), eq("QRIS"), any(), any())).thenReturn(430_000L);
+    when(repository.sumRefundsByTender(eq(OUTLET), eq("QRIS"), any(), any())).thenReturn(30_000L);
+    when(repository.sumSalesByTender(eq(OUTLET), eq("ONLINE"), any(), any())).thenReturn(615_000L);
+
+    RegisterExpectedResponse resp = asTenant(() -> writer.expectedBreakdown(sessionId));
+
+    assertThat(resp.currency()).isEqualTo("IDR");
+    assertThat(resp.sessionId()).isEqualTo(sessionId);
+    // cash = 100k float + (70k sales + 30k gift-card) − 10k refunds = 190k
+    assertThat(expectedOf(resp, "CASH")).isEqualTo(190_000L);
+    assertThat(expectedOf(resp, "CARD")).isEqualTo(800_000L);
+    assertThat(expectedOf(resp, "QRIS")).isEqualTo(400_000L); // 430k − 30k refund
+    assertThat(expectedOf(resp, "ONLINE")).isEqualTo(615_000L);
+    verify(guard).enforce(OUTLET);
+  }
+
+  private static long expectedOf(RegisterExpectedResponse response, String tender) {
+    return response.tenders().stream()
+        .filter(t -> t.tenderType().equals(tender))
+        .findFirst()
+        .orElseThrow()
+        .expectedMinor();
   }
 
   @Test

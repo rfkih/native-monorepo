@@ -807,6 +807,20 @@ export const en = {
     resultBalanced: 'Balanced — no difference',
     done: 'Done',
     disabledOffline: 'Closing needs a connection and a fully synced sale queue.',
+    /** ADR 0038 daily close v2 — per-tender expected breakdown on the close screen. */
+    expectedByTender: 'Expected by tender',
+    expectedByTenderHint:
+      'An estimate of what each tender should hold so far, from today’s sales — to check the drawer, card batch, and QRIS / platform reports against.',
+    tenderCash: 'Cash',
+    tenderCard: 'Card',
+    tenderQris: 'QRIS',
+    tenderOnline: 'Online',
+    errorDayClosed:
+      'This outlet is already closed for today. The daily close happens once a day — make a correction entry if something needs fixing.',
+    errorAlreadyOpen: 'A register session is already open at this outlet. Refresh to see it.',
+    errorNotOpen: 'This register session is no longer open. Refresh to see the current state.',
+    errorKeyConflict:
+      'That close was already recorded with a different amount. Refresh to see the current state.',
   },
   posShell: {
     /** Redesign P4 — the shared POS shell chrome (status bar, till menu, ticket dock). */
