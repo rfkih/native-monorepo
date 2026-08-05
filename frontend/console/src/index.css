@@ -96,7 +96,10 @@
   --animate-float: float 7s ease-in-out infinite;
 }
 
-/* Dark theme — reassign the same variables; var()-based utilities follow automatically. */
+/* Dark theme — reassign the same variables; var()-based utilities follow automatically.
+   SCREEN ONLY: paper is always light. Without this scope, printing under the dark theme put the
+   near-white dark-mode ink tokens on a white page — unreadable statements (UAT 2026-08-06). */
+@media screen {
 :root[data-theme='dark'] {
   color-scheme: dark;
 
@@ -143,6 +146,7 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.35);
   --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.55), 0 3px 10px rgba(0, 0, 0, 0.4);
+}
 }
 
 @layer base {
@@ -327,5 +331,23 @@
   .reveal,
   .floaty {
     animation: none !important;
+  }
+
+  /* ---- Ordinary-page printing (the statements — audit finding 16; UAT 2026-08-06) ----
+     The receipt/KOT/QR/payslip surfaces above inject their own @page; every OTHER page prints
+     as a normal report: A4 with classic report margins, white paper, the shell chrome hidden
+     (the sidebar/topbar carry print:hidden), and the content column at full page width instead
+     of the 1200px screen shell. Row-level break control lives on the components
+     (print:break-inside-avoid) so a statement line or summary tile never splits across pages. */
+  @page {
+    size: A4;
+    margin: 14mm 12mm;
+  }
+  body {
+    background: #fff !important;
+  }
+  main {
+    max-width: none !important;
+    padding: 0 !important;
   }
 }

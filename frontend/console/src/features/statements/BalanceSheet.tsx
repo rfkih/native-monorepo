@@ -177,7 +177,7 @@ export function BalanceSheet() {
           </div>
 
           {/* Summary cards — liabilities in ink: they aren't a loss */}
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-3 print:grid-cols-3 print:gap-3">
             <SummaryCard
               chipClass="bg-emerald"
               label={t('statements.assets')}

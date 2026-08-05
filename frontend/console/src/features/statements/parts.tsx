@@ -38,11 +38,11 @@ export function SummaryCard({
 }) {
   return (
     <Card
-      className={
+      className={`print:break-inside-avoid ${
         emphatic
-          ? 'border-transparent p-5 shadow-md outline outline-2 -outline-offset-2 outline-brand-100'
+          ? 'border-transparent p-5 shadow-md outline outline-2 -outline-offset-2 outline-brand-100 print:outline-0'
           : 'p-5'
-      }
+      }`}
     >
       <div className="flex items-center gap-2">
         <span className={`size-2.5 rounded-[3px] ${chipClass}`} aria-hidden />
@@ -51,7 +51,7 @@ export function SummaryCard({
         </span>
       </div>
       <div
-        className={`tnum mt-2.5 font-mono text-[26px] leading-tight ${
+        className={`tnum mt-2.5 font-mono text-[26px] leading-tight print:text-xl ${
           emphatic ? 'font-bold' : 'font-semibold'
         } ${valueClass ?? 'text-ink'}`}
       >
@@ -94,7 +94,9 @@ export function LineSection({
 }) {
   return (
     <div>
-      <div className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+      {/* Print pagination: the heading keeps its first rows, each row stays whole, and the
+          footer total never strands alone on a fresh page (UAT 2026-08-06). */}
+      <div className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3 print:break-after-avoid">
         {heading}
       </div>
       {lines.length === 0 ? (
@@ -103,7 +105,7 @@ export function LineSection({
         lines.map((line) => (
           <div
             key={line.accountCode}
-            className="flex items-center border-b border-ink-50 py-[9px] last:border-0"
+            className="flex items-center border-b border-ink-50 py-[9px] last:border-0 print:break-inside-avoid"
           >
             <span className="w-24 shrink-0 font-mono text-xs text-ink-3">{line.accountCode}</span>
             <span className="flex-1 truncate text-sm text-ink-2">
@@ -115,7 +117,7 @@ export function LineSection({
           </div>
         ))
       )}
-      <div className="mt-1 flex items-center border-t-[1.5px] border-line-strong pt-3">
+      <div className="mt-1 flex items-center border-t-[1.5px] border-line-strong pt-3 print:break-inside-avoid">
         <span className="flex-1 text-sm font-semibold text-ink">{totalLabel}</span>
         <span className="tnum font-mono text-sm font-semibold text-ink">
           {format(totalMinor, currency, locale)}

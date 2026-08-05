@@ -125,7 +125,7 @@ export function CashFlow() {
         </Card>
       ) : data ? (
         <>
-          <div className="grid gap-4 sm:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-4 print:grid-cols-2 print:gap-3">
             <SummaryCard
               chipClass="bg-brand-500"
               label={t('statements.cashFlow.fromOperating')}
