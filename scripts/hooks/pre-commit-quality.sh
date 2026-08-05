@@ -41,6 +41,16 @@ if [ -n "$modules" ]; then
   rm -f "$log"
 fi
 
+# --- Generated docs: a staged migration/schema change makes docs/generated/*.yaml stale unless
+# --- regenerated (bit CI twice on 2026-08-05: V48 then V49). verifyProjectDocs costs seconds. ---
+if printf '%s\n' "$staged" | grep -qE 'db/migration/|libs/contracts/src/main/resources/avro/'; then
+  if ! ./gradlew -q verifyProjectDocs >/dev/null 2>&1; then
+    echo "BLOCKED: docs/generated/*.yaml is stale for the staged migration/schema change." >&2
+    echo "Run: ./gradlew generateProjectDocs — then stage docs/generated/ and commit again." >&2
+    exit 2
+  fi
+fi
+
 # --- Console: ESLint, scoped to the staged console sources (errors block; warnings pass) ---
 console_files=$(printf '%s\n' "$staged" | grep -E '^frontend/console/.*\.(ts|tsx)$' | sed 's#^frontend/console/##')
 if [ -n "$console_files" ]; then
