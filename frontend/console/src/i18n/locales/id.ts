@@ -342,6 +342,10 @@ export const id = {
     companyNamePlaceholder: 'mis. Nusantara Holdings',
     baseCurrency: 'Mata uang dasar (fungsional)',
     baseCurrencyHint: 'Mata uang pembukuan. Tidak dapat diubah setelah ada transaksi.',
+    country: 'Negara',
+    countryHint: 'Tempat perusahaan beroperasi. Menentukan mata uang dasar Anda.',
+    derivedCurrencyNote:
+      'Pembukuan Anda memakai {{currency}} — ditentukan oleh negara Anda dan dikunci saat pembuatan.',
     defaultLanguage: 'Bahasa bawaan',
     defaultLanguageHint: 'Bawaan untuk anggota tim baru. Tiap pengguna bisa menggantinya sendiri.',
     firstBusinessName: 'Nama divisi',

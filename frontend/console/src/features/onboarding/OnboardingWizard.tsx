@@ -6,6 +6,7 @@ import { ArrowLeft, ArrowRight, BookOpen, Check, Lock } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Field, TextInput } from '@/components/ui/Field'
+import { Select } from '@/components/ui/Select'
 import { ChoiceCards } from '@/components/ui/ChoiceCards'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
@@ -15,9 +16,9 @@ import { useAuth } from '@/lib/authContext'
 import { AUTH_MODE } from '@/lib/config'
 import { DEV_ACTOR } from '@/lib/devIdentity'
 import { cn } from '@/lib/cn'
+import { countryName, countryOptions, derivedCurrency } from '@/lib/countries'
 import { createCompany, type CompanyResponse } from './api'
 
-const CURRENCIES = ['IDR', 'USD'] as const
 const LANGS = ['en', 'id'] as const
 const VERTICALS = ['restaurant', 'carwash', 'barbershop'] as const
 
@@ -38,7 +39,10 @@ export function OnboardingWizard() {
 
   const [step, setStep] = useState(0)
   const [name, setName] = useState('')
-  const [baseCurrency, setBaseCurrency] = useState<string>('IDR')
+  const [country, setCountry] = useState<string>('ID')
+  // Derived, never chosen (ADR 0025): the country decides the base currency; the server re-derives
+  // it authoritatively (an API caller cannot pick a currency either), so the wizard only previews it.
+  const baseCurrency = derivedCurrency(country)
   const [defaultLanguage, setDefaultLanguage] = useState<string>(
     i18n.language === 'id' ? 'id' : 'en',
   )
@@ -51,6 +55,7 @@ export function OnboardingWizard() {
       createCompany(
         {
           name: name.trim(),
+          country,
           baseCurrency,
           defaultLanguage,
           firstBusiness: { name: bizName.trim(), vertical },
@@ -171,19 +176,24 @@ export function OnboardingWizard() {
 
           {step === 1 && (
             <div className="space-y-6">
-              <Field label={t('onboarding.baseCurrency')} hint={t('onboarding.baseCurrencyHint')}>
-                <ChoiceCards
-                  name="currency"
-                  value={baseCurrency}
-                  onChange={setBaseCurrency}
-                  options={CURRENCIES.map((c) => ({
-                    value: c,
-                    title: c,
-                    subtitle: t(`currency.${c}`),
-                    aside: <span className="font-mono text-xs text-ink-3">{symbolOf(c, i18n.language)}</span>,
-                  }))}
-                />
+              <Field label={t('onboarding.country')} htmlFor="country" hint={t('onboarding.countryHint')}>
+                <Select id="country" value={country} onChange={(e) => setCountry(e.target.value)}>
+                  {countryOptions(i18n.language).map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </Select>
               </Field>
+              {/* The derived, immutable currency — shown, never chosen (ADR 0025). */}
+              <div className="flex items-start gap-2.5 rounded-xl border border-line bg-paper px-3.5 py-3">
+                <Lock className="mt-0.5 size-3.5 shrink-0 text-ink-3" aria-hidden />
+                <p className="text-xs leading-relaxed text-ink-2">
+                  {t('onboarding.derivedCurrencyNote', {
+                    currency: `${baseCurrency} (${symbolOf(baseCurrency, i18n.language)})`,
+                  })}
+                </p>
+              </div>
               <Field
                 label={t('onboarding.defaultLanguage')}
                 hint={t('onboarding.defaultLanguageHint')}
@@ -234,6 +244,11 @@ export function OnboardingWizard() {
               hint={t('onboarding.reviewHint')}
               rows={[
                 { label: t('onboarding.companyName'), value: name },
+                {
+                  label: t('onboarding.country'),
+                  value: countryName(country, i18n.language),
+                  fixed: true,
+                },
                 {
                   label: t('onboarding.baseCurrency'),
                   value: `${baseCurrency} · ${t(`currency.${baseCurrency}`)}`,

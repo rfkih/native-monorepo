@@ -2,6 +2,13 @@ import { apiFetch } from '@/lib/api'
 
 export interface CreateCompanyRequest {
   name: string
+  /** ISO 3166-1 alpha-2 country code — the server DERIVES the base currency from this (ADR 0025). */
+  country: string
+  /**
+   * The base currency, derived client-side from {@link country} for preview only. The server
+   * re-derives it authoritatively and ignores this value (an API caller cannot pick a currency);
+   * sent for backward compatibility with the older request shape.
+   */
   baseCurrency: string
   defaultLanguage: string
   firstBusiness: { name: string; vertical: string }

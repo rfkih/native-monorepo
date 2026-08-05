@@ -66,3 +66,26 @@ compensating delete stays — no activation-link rework).
   not signup), SMS verification.
 - The 6-arg `CreateCompanyCommand` / 5-arg `Company` convenience constructors preserve ~25
   pre-existing call sites; new call sites should use the canonical constructors.
+
+## Update (2026-08-05) — the in-app path now derives too
+
+Decision point 5's carve-out (the in-app `POST /api/v1/companies` keeping an EXPLICIT `baseCurrency`)
+and the matching "OnboardingWizard still asks currency explicitly" follow-up are **superseded**:
+currency is now derived from country on that path too, so the "currency is never chosen, an API
+caller cannot pick one" invariant holds fleet-wide.
+
+- **Backend** — `CompanyController.createCompany` derives `baseCurrency` from `country` via
+  `CountryDefaults.baseCurrencyFor` (validating the country, default `"ID"`) and IGNORES any
+  `baseCurrency` in the body. `CreateCompanyRequest.baseCurrency` is relaxed from `@NotBlank` to an
+  optional, discarded field (kept only so older clients don't fail validation).
+- **Console** — the OnboardingWizard's IDR/USD choice cards are replaced by the same country
+  `<select>` + locked derived-currency callout the signup uses (shared `lib/countries.ts`); the
+  request carries `country`, and the review shows Country + its derived currency as `Fixed at
+  creation` rows.
+- No wire event changes (rule 7 untouched); `CompanyCreated` still carries `company_id` only.
+
+*Consequence:* `country` stays optional on this in-app path and defaults to `"ID"`, so a raw API
+caller that omits `country` now gets IDR books regardless of any `baseCurrency` it sent — and the
+base currency is immutable. Within the product this is controlled (the console `<select>` always
+sends an explicit country); it is a deliberate behavioral change only for other direct consumers of
+the authenticated endpoint, consistent with "currency is never chosen".

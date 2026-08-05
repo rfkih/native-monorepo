@@ -1,5 +1,6 @@
 package id.co.nativeapp.org.company.controller;
 
+import id.co.nativeapp.org.company.domain.CountryDefaults;
 import id.co.nativeapp.org.company.domain.OrgUnit;
 import id.co.nativeapp.org.company.dto.CompanyResponse;
 import id.co.nativeapp.org.company.dto.CreateBusinessCommand;
@@ -81,15 +82,20 @@ public class CompanyController {
       @RequestHeader(value = DevTenantFilter.ACTOR_HEADER, required = false) String actor,
       @Valid @RequestBody CreateCompanyRequest request) {
 
-    // country is optional on this in-app path (ADR 0025): null → "ID" (every in-app-created
-    // company predates or follows the Indonesian default); baseCurrency stays EXPLICIT here —
-    // derivation from country applies only to the public signup.
+    // Currency is DERIVED from country, never chosen — the same rule as the public signup
+    // (ADR 0025): the country decides the base currency and the server re-derives it
+    // authoritatively, so any baseCurrency supplied in the body is IGNORED (an API caller cannot
+    // pick a currency either). country is optional on this in-app path: null → "ID" (the historical
+    // Indonesian default); when present it must be a valid ISO 3166-1 alpha-2 code (→ 400).
+    String country =
+        CountryDefaults.requireValidCountry(request.country() != null ? request.country() : "ID");
+    String baseCurrency = CountryDefaults.baseCurrencyFor(country);
     CreateCompanyCommand command =
         new CreateCompanyCommand(
             request.name(),
-            request.baseCurrency(),
+            baseCurrency,
             request.defaultLanguage(),
-            request.country() != null ? request.country() : "ID",
+            country,
             null,
             null,
             null,

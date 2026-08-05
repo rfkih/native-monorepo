@@ -13,25 +13,31 @@ import jakarta.validation.constraints.Pattern;
  * company.
  *
  * <p>The bean-validation constraints are checked by {@code @Valid} on the handler param: a
- * missing/blank field fails fast with a {@code 400} from {@link ApiExceptionHandler}. The ISO-4217
- * validity of {@code baseCurrency} is enforced by the domain ({@link Company}), also mapped to
- * {@code 400}.
+ * missing/blank field fails fast with a {@code 400} from {@link ApiExceptionHandler}.
+ *
+ * <p><strong>Currency is derived from country, not chosen (ADR 0025).</strong> The controller
+ * derives {@code baseCurrency} from {@code country} via {@link
+ * id.co.nativeapp.org.company.domain.CountryDefaults} and re-derives it authoritatively — any
+ * {@code baseCurrency} sent in the body is IGNORED (kept only for backward compatibility with older
+ * clients), so an API caller cannot pick a currency either. The same rule already governs the
+ * public signup.
  *
  * <p>{@code company_id} and the actor are intentionally absent — creating a company bootstraps a
  * NEW tenant whose id is generated server-side, and the actor comes from the request edge (the
  * {@code X-Actor} header / JWT {@code sub}), never trusted from the body (rule 5).
  *
  * @param name the company name
- * @param baseCurrency the ISO-4217 base currency code (immutable once set)
+ * @param baseCurrency IGNORED — the base currency is derived from {@code country} server-side (ADR
+ *     0025). Retained as an optional field so pre-derivation clients don't fail validation; any
+ *     value is discarded.
  * @param defaultLanguage the company default language (e.g. {@code "en"}/{@code "id"})
  * @param country optional ISO 3166-1 alpha-2 country code (ADR 0025); {@code null} defaults to
- *     {@code "ID"} at the controller — this in-app path keeps its EXPLICIT {@code baseCurrency} (no
- *     derivation), unlike the public signup
+ *     {@code "ID"} at the controller and DERIVES the base currency (ID → IDR, else USD)
  * @param firstBusiness the first business (a top-level org unit) to create with the company
  */
 public record CreateCompanyRequest(
     @NotBlank String name,
-    @NotBlank String baseCurrency,
+    String baseCurrency,
     @NotBlank String defaultLanguage,
     @Pattern(regexp = "[A-Z]{2}", message = "must be an ISO 3166-1 alpha-2 code") String country,
     @NotNull @Valid BusinessRequest firstBusiness) {

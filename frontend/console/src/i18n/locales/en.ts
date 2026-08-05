@@ -351,6 +351,10 @@ export const en = {
     companyNamePlaceholder: 'e.g. Nusantara Holdings',
     baseCurrency: 'Base (functional) currency',
     baseCurrencyHint: 'The currency the books are kept in. Immutable once transactions exist.',
+    country: 'Country',
+    countryHint: 'Where the company operates. This sets your base currency.',
+    derivedCurrencyNote:
+      'Your books will be kept in {{currency}} — set by your country and fixed at creation.',
     defaultLanguage: 'Default language',
     defaultLanguageHint: 'The default for new teammates. Each user can override their own.',
     firstBusinessName: 'Division name',
