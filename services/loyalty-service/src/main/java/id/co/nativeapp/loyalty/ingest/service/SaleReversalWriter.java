@@ -3,7 +3,9 @@ package id.co.nativeapp.loyalty.ingest.service;
 import id.co.nativeapp.events.ProcessedEventStore;
 import id.co.nativeapp.loyalty.giftcard.domain.GiftCard;
 import id.co.nativeapp.loyalty.giftcard.repository.GiftCardRepository;
+import id.co.nativeapp.loyalty.ingest.domain.PendingSaleReversal;
 import id.co.nativeapp.loyalty.ingest.dto.SaleReversalFact;
+import id.co.nativeapp.loyalty.ingest.repository.PendingSaleReversalRepository;
 import id.co.nativeapp.loyalty.ledger.domain.GiftCardLedgerEntry;
 import id.co.nativeapp.loyalty.ledger.domain.GiftCardLedgerEntryType;
 import id.co.nativeapp.loyalty.ledger.domain.LoyaltyLedgerEntry;
@@ -13,8 +15,12 @@ import id.co.nativeapp.loyalty.ledger.repository.LoyaltyLedgerEntryRepository;
 import id.co.nativeapp.loyalty.ledger.service.LoyaltyEventEmitter;
 import id.co.nativeapp.loyalty.member.domain.LoyaltyMember;
 import id.co.nativeapp.loyalty.member.repository.LoyaltyMemberRepository;
+import id.co.nativeapp.tenant.TenantContext;
+import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -34,6 +40,15 @@ import org.springframework.transaction.annotation.Transactional;
  * REVERSE} row per ledger table. The reversed row's {@code points_delta}/{@code amount_minor} is
  * the NEGATION of that sum — applying it to the member/card balance exactly cancels the sale's
  * original net effect, whether that effect came from one entry or several.
+ *
+ * <p><strong>Cross-topic reorder (QA sweep 2026-08-05, CRITICAL fix).</strong> {@code
+ * SaleVoided}/{@code SaleRefunded} and {@code SaleRecorded} travel on SEPARATE topics, so a
+ * reversal can be consumed BEFORE its sale was ingested. When NEITHER ledger has any trace of the
+ * sale, this writer no longer returns silently (which lost the reversal forever — the event id was
+ * still claimed): it PARKS one durable {@link PendingSaleReversal} row and completes; {@link
+ * SaleIngestWriter} applies the parked reversal in the same transaction that ingests the sale.
+ * Parking (not throwing) is deliberate: throwing would block the whole partition behind one missing
+ * sale, and a DLT would need manual replay.
  */
 @Component
 public class SaleReversalWriter {
@@ -48,6 +63,7 @@ public class SaleReversalWriter {
   private final GiftCardRepository giftCardRepository;
   private final LoyaltyLedgerEntryRepository ledgerRepository;
   private final GiftCardLedgerEntryRepository giftCardLedgerRepository;
+  private final PendingSaleReversalRepository pendingReversalRepository;
   private final LoyaltyEventEmitter eventEmitter;
   private final ProcessedEventStore processedEvents;
 
@@ -57,12 +73,14 @@ public class SaleReversalWriter {
       GiftCardRepository giftCardRepository,
       LoyaltyLedgerEntryRepository ledgerRepository,
       GiftCardLedgerEntryRepository giftCardLedgerRepository,
+      PendingSaleReversalRepository pendingReversalRepository,
       LoyaltyEventEmitter eventEmitter,
       ProcessedEventStore processedEvents) {
     this.memberRepository = memberRepository;
     this.giftCardRepository = giftCardRepository;
     this.ledgerRepository = ledgerRepository;
     this.giftCardLedgerRepository = giftCardLedgerRepository;
+    this.pendingReversalRepository = pendingReversalRepository;
     this.eventEmitter = eventEmitter;
     this.processedEvents = processedEvents;
   }
@@ -81,30 +99,69 @@ public class SaleReversalWriter {
   }
 
   private void reverse(SaleReversalFact fact) {
-    reverseLoyaltyLedger(fact);
-    reverseGiftCardLedger(fact);
+    boolean loyaltySeen =
+        reverseLoyaltyLedger(fact.saleId(), fact.eventId(), fact.companyId(), fact.occurredAt());
+    boolean giftCardSeen =
+        reverseGiftCardLedger(fact.saleId(), fact.eventId(), fact.companyId(), fact.occurredAt());
+    if (loyaltySeen || giftCardSeen) {
+      return;
+    }
+    // NEITHER ledger has any trace of this sale: either it carried no loyalty facts, or its
+    // SaleRecorded has not been consumed yet (cross-topic reorder) — indistinguishable right now.
+    // Park durably (first reversal event wins — review S2); SaleIngestWriter applies it if/when
+    // the sale arrives. Never silently drop: this event id is claimed in this same transaction.
+    pendingReversalRepository.parkIfAbsent(
+        UUID.randomUUID(),
+        fact.saleId(),
+        fact.eventId(),
+        fact.occurredAt(),
+        TenantContext.require().actor(),
+        fact.companyId());
   }
 
-  private void reverseLoyaltyLedger(SaleReversalFact fact) {
+  /**
+   * Applies a parked reversal inside the CALLER's (ingest) transaction — the parked event id was
+   * already claimed when the row was parked, so this deliberately bypasses {@code processOnce}.
+   */
+  @Transactional(propagation = Propagation.MANDATORY)
+  public void applyParked(PendingSaleReversal parked) {
+    reverseLoyaltyLedger(
+        parked.getSaleId(),
+        parked.getReversalEventId(),
+        parked.getCompanyId(),
+        parked.getReversalOccurredAt());
+    reverseGiftCardLedger(
+        parked.getSaleId(),
+        parked.getReversalEventId(),
+        parked.getCompanyId(),
+        parked.getReversalOccurredAt());
+  }
+
+  /**
+   * @return {@code true} when the sale left ANY trace in this ledger (reversible entries, or an
+   *     existing REVERSE row) — i.e. the sale has definitely been ingested; {@code false} when the
+   *     ledger has never seen it (the caller decides whether to park)
+   */
+  private boolean reverseLoyaltyLedger(
+      UUID saleId, UUID sourceEventId, String companyId, Instant occurredAt) {
     // Self-enforcing full-reversal-only invariant (review S2): two DISTINCT reversal events for
     // one sale (a SaleVoided followed by a SaleRefunded) must not each re-reverse the originals
     // and double-credit — processOnce dedupes only a REDELIVERY of the same event.
-    if (ledgerRepository.existsBySaleIdAndEntryType(
-        fact.saleId(), LoyaltyLedgerEntryType.REVERSE)) {
-      return;
+    if (ledgerRepository.existsBySaleIdAndEntryType(saleId, LoyaltyLedgerEntryType.REVERSE)) {
+      return true;
     }
     List<LoyaltyLedgerEntry> entries =
-        ledgerRepository.findBySaleIdAndEntryTypeIn(fact.saleId(), REVERSIBLE_LOYALTY_TYPES);
+        ledgerRepository.findBySaleIdAndEntryTypeIn(saleId, REVERSIBLE_LOYALTY_TYPES);
     if (entries.isEmpty()) {
-      return;
+      return false;
     }
     long netPointsDelta = entries.stream().mapToLong(LoyaltyLedgerEntry::getPointsDelta).sum();
     if (netPointsDelta == 0L) {
-      return;
+      return true;
     }
     LoyaltyMember member = memberRepository.findById(entries.get(0).getMemberId()).orElse(null);
     if (member == null) {
-      return;
+      return true;
     }
 
     // value_minor/currency are left null on the REVERSE row: EARN's value_minor (the taxable base)
@@ -117,41 +174,45 @@ public class SaleReversalWriter {
             -netPointsDelta,
             null,
             null,
-            fact.saleId(),
-            fact.eventId());
-    reversal.setCompanyId(fact.companyId());
+            saleId,
+            sourceEventId);
+    reversal.setCompanyId(companyId);
     ledgerRepository.save(reversal);
 
     long resultingBalance = member.applyPointsDelta(-netPointsDelta);
     memberRepository.save(member);
     eventEmitter.emitBalanceChanged(
         member.getId(),
-        fact.companyId(),
+        companyId,
         resultingBalance,
         member.getBalanceSeq(),
         "REVERSED",
-        fact.occurredAt());
+        occurredAt);
+    return true;
   }
 
-  private void reverseGiftCardLedger(SaleReversalFact fact) {
+  /**
+   * @return {@code true} when the sale left ANY trace in this ledger — see the loyalty twin
+   */
+  private boolean reverseGiftCardLedger(
+      UUID saleId, UUID sourceEventId, String companyId, Instant occurredAt) {
     // Same self-enforcing already-reversed guard as the loyalty twin (review S2).
     if (giftCardLedgerRepository.existsBySaleIdAndEntryType(
-        fact.saleId(), GiftCardLedgerEntryType.REVERSE)) {
-      return;
+        saleId, GiftCardLedgerEntryType.REVERSE)) {
+      return true;
     }
     List<GiftCardLedgerEntry> entries =
-        giftCardLedgerRepository.findBySaleIdAndEntryTypeIn(
-            fact.saleId(), REVERSIBLE_GIFT_CARD_TYPES);
+        giftCardLedgerRepository.findBySaleIdAndEntryTypeIn(saleId, REVERSIBLE_GIFT_CARD_TYPES);
     if (entries.isEmpty()) {
-      return;
+      return false;
     }
     long netAmountMinor = entries.stream().mapToLong(GiftCardLedgerEntry::getAmountMinor).sum();
     if (netAmountMinor == 0L) {
-      return;
+      return true;
     }
     GiftCard card = giftCardRepository.findById(entries.get(0).getGiftCardId()).orElse(null);
     if (card == null) {
-      return;
+      return true;
     }
 
     GiftCardLedgerEntry reversal =
@@ -160,20 +221,21 @@ public class SaleReversalWriter {
             GiftCardLedgerEntryType.REVERSE,
             -netAmountMinor,
             card.getCurrency(),
-            fact.saleId(),
-            fact.eventId());
-    reversal.setCompanyId(fact.companyId());
+            saleId,
+            sourceEventId);
+    reversal.setCompanyId(companyId);
     giftCardLedgerRepository.save(reversal);
 
     long resultingBalance = card.applyBalanceDelta(-netAmountMinor);
     giftCardRepository.save(card);
     eventEmitter.emitGiftCardStateChanged(
         card.getId(),
-        fact.companyId(),
+        companyId,
         card.getState().name(),
         resultingBalance,
         card.getCurrency(),
         card.getBalanceSeq(),
-        fact.occurredAt());
+        occurredAt);
+    return true;
   }
 }

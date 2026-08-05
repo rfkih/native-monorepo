@@ -60,6 +60,7 @@ abstract class PostgresRlsTestBase {
           "TRUNCATE TABLE outbox, processed_event,"
               + " loyalty_ledger_entry, loyalty_member,"
               + " gift_card_ledger_entry, gift_card,"
+              + " pending_sale_reversal,"
               + " earn_rule CASCADE");
     } catch (SQLException ignored) {
       // Tables not created yet (pre-Flyway) — nothing to reset.

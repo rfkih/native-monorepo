@@ -6,6 +6,7 @@ import id.co.nativeapp.loyalty.earnrule.repository.EarnRuleRepository;
 import id.co.nativeapp.loyalty.giftcard.domain.GiftCard;
 import id.co.nativeapp.loyalty.giftcard.repository.GiftCardRepository;
 import id.co.nativeapp.loyalty.ingest.dto.SaleRecordedFact;
+import id.co.nativeapp.loyalty.ingest.repository.PendingSaleReversalRepository;
 import id.co.nativeapp.loyalty.ledger.domain.GiftCardLedgerEntry;
 import id.co.nativeapp.loyalty.ledger.domain.GiftCardLedgerEntryType;
 import id.co.nativeapp.loyalty.ledger.domain.LoyaltyLedgerEntry;
@@ -15,6 +16,7 @@ import id.co.nativeapp.loyalty.ledger.repository.LoyaltyLedgerEntryRepository;
 import id.co.nativeapp.loyalty.ledger.service.LoyaltyEventEmitter;
 import id.co.nativeapp.loyalty.member.domain.LoyaltyMember;
 import id.co.nativeapp.loyalty.member.repository.LoyaltyMemberRepository;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.Optional;
@@ -67,6 +69,8 @@ public class SaleIngestWriter {
   private final EarnRuleRepository earnRuleRepository;
   private final LoyaltyLedgerEntryRepository ledgerRepository;
   private final GiftCardLedgerEntryRepository giftCardLedgerRepository;
+  private final PendingSaleReversalRepository pendingReversalRepository;
+  private final SaleReversalWriter reversalWriter;
   private final LoyaltyEventEmitter eventEmitter;
   private final ProcessedEventStore processedEvents;
 
@@ -77,6 +81,8 @@ public class SaleIngestWriter {
       EarnRuleRepository earnRuleRepository,
       LoyaltyLedgerEntryRepository ledgerRepository,
       GiftCardLedgerEntryRepository giftCardLedgerRepository,
+      PendingSaleReversalRepository pendingReversalRepository,
+      SaleReversalWriter reversalWriter,
       LoyaltyEventEmitter eventEmitter,
       ProcessedEventStore processedEvents) {
     this.memberRepository = memberRepository;
@@ -84,6 +90,8 @@ public class SaleIngestWriter {
     this.earnRuleRepository = earnRuleRepository;
     this.ledgerRepository = ledgerRepository;
     this.giftCardLedgerRepository = giftCardLedgerRepository;
+    this.pendingReversalRepository = pendingReversalRepository;
+    this.reversalWriter = reversalWriter;
     this.eventEmitter = eventEmitter;
     this.processedEvents = processedEvents;
   }
@@ -118,6 +126,21 @@ public class SaleIngestWriter {
     if (member != null) {
       earnPoints(member, fact);
     }
+
+    // Cross-topic reorder (QA sweep 2026-08-05): a SaleVoided/SaleRefunded consumed BEFORE this
+    // sale parked itself in pending_sale_reversal instead of being lost. Apply it NOW, in this
+    // same transaction, so the earn/redeem entries written above are net-cancelled atomically —
+    // no window ever exposes a voided sale's credit. Also resolves (stamps) a parked reversal for
+    // a sale that turns out to carry no loyalty facts at all.
+    pendingReversalRepository
+        .findBySaleId(fact.saleId())
+        .filter(parked -> !parked.isApplied())
+        .ifPresent(
+            parked -> {
+              reversalWriter.applyParked(parked);
+              parked.markApplied(Instant.now());
+              pendingReversalRepository.save(parked);
+            });
   }
 
   private void redeemPoints(LoyaltyMember member, SaleRecordedFact fact) {
