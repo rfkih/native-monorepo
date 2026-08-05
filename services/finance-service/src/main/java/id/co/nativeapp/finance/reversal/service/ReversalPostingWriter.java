@@ -17,8 +17,10 @@ import id.co.nativeapp.finance.pnl.service.PnlReadModelWriter;
 import id.co.nativeapp.finance.revenue.domain.LedgerPosting;
 import id.co.nativeapp.finance.revenue.domain.PostingType;
 import id.co.nativeapp.finance.revenue.repository.LedgerPostingRepository;
+import id.co.nativeapp.finance.reversal.domain.PendingSaleReversal;
 import id.co.nativeapp.finance.reversal.messaging.SaleRefundedEvent;
 import id.co.nativeapp.finance.reversal.messaging.SaleVoidedEvent;
+import id.co.nativeapp.finance.reversal.repository.PendingSaleReversalRepository;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Instant;
@@ -32,6 +34,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -116,6 +119,7 @@ public class ReversalPostingWriter {
   private final JournalLineRepository journalLineRepository;
   private final RoleAccountResolver roleAccountResolver;
   private final PlatformReceivableWriter platformReceivable;
+  private final PendingSaleReversalRepository pendingReversalRepository;
 
   @SuppressWarnings("checkstyle:ParameterNumber")
   public ReversalPostingWriter(
@@ -128,7 +132,8 @@ public class ReversalPostingWriter {
       JournalEntryRepository journalEntryRepository,
       JournalLineRepository journalLineRepository,
       RoleAccountResolver roleAccountResolver,
-      PlatformReceivableWriter platformReceivable) {
+      PlatformReceivableWriter platformReceivable,
+      PendingSaleReversalRepository pendingReversalRepository) {
     this.ledgerRepository = ledgerRepository;
     this.processedEvents = processedEvents;
     this.jdbcTemplate = jdbcTemplate;
@@ -139,6 +144,7 @@ public class ReversalPostingWriter {
     this.journalLineRepository = journalLineRepository;
     this.roleAccountResolver = roleAccountResolver;
     this.platformReceivable = platformReceivable;
+    this.pendingReversalRepository = pendingReversalRepository;
   }
 
   /**
@@ -185,6 +191,32 @@ public class ReversalPostingWriter {
         (event.saleId() != null)
             ? journalEntryRepository.findBySaleAggregateId(event.saleId())
             : Optional.empty();
+
+    // Cross-topic reorder (QA sweep 2026-08-05): a saleId-carrying void with NO posted SALE entry
+    // means the sale has not been consumed YET (every current producer posts through
+    // RevenuePostingWriter) — NOT "legacy". Posting the GROSS fall-back here would misbook any
+    // sale with tax/service-charge/discount/gift-card legs, and SaleVoided.amount is only the
+    // payment residual for a gift-card-settled sale. Park instead — nothing posts now;
+    // RevenuePostingWriter applies this row per-leg in the same transaction the sale posts in.
+    // Only a saleId-less event (a genuinely id-less legacy producer) still takes the fall-back.
+    if (event.saleId() != null && originalEntry.isEmpty()) {
+      park(
+          PendingSaleReversal.Kind.VOIDED,
+          event.voidId(),
+          event.saleId(),
+          event.paymentId(),
+          amount.amountMinor(),
+          currencyCode,
+          null,
+          event.occurredAt(),
+          event.tenderType(),
+          event.channel(),
+          event.businessId(),
+          companyId,
+          actor);
+      return;
+    }
+
     List<JournalLineReversalView> originalLines =
         originalEntry.isPresent()
             ? journalLineRepository.findLinesByEntryId(originalEntry.get().getId())
@@ -322,6 +354,37 @@ public class ReversalPostingWriter {
 
     String glAccountCode = glAccountResolver.resolveRevenue(event.occurredAt());
 
+    // Look up the original SALE entry FIRST — the park decision must precede ANY write.
+    //      FULL refund: reverse per-leg (same as void), unwind read models by the original NET.
+    //      PARTIAL refund: integer proration cannot be guaranteed to produce a balanced GL entry,
+    //      so partial refunds are rejected with PartialRefundNotSupportedException (HTTP 400).
+    //      Legacy (sale_id NULL): fall back to the 2-line GROSS template.
+    Optional<JournalEntrySaleView> originalEntry =
+        (event.saleId() != null)
+            ? journalEntryRepository.findBySaleAggregateId(event.saleId())
+            : Optional.empty();
+
+    // Cross-topic reorder (QA sweep 2026-08-05): saleId set but no SALE entry = sale not posted
+    // YET, not legacy — park and let RevenuePostingWriter apply per-leg after the sale posts
+    // (see the void twin above for the full rationale).
+    if (event.saleId() != null && originalEntry.isEmpty()) {
+      park(
+          PendingSaleReversal.Kind.REFUNDED,
+          event.refundId(),
+          event.saleId(),
+          event.paymentId(),
+          refundAmount.amountMinor(),
+          refundAmount.currency().getCurrencyCode(),
+          event.totalRefundedMinor(),
+          event.occurredAt(),
+          event.tenderType(),
+          event.channel(),
+          event.businessId(),
+          companyId,
+          actor);
+      return;
+    }
+
     // 1) Contra dimensional ledger posting (negated refund amount, REVENUE type, REVERSAL role).
     Money negatedRefund = refundAmount.negate();
     LedgerPosting posting =
@@ -335,16 +398,6 @@ public class ReversalPostingWriter {
     posting.markAsReversal();
     posting.setCompanyId(companyId);
     ledgerRepository.save(posting);
-
-    // 2+3) Full vs partial refund: look up the original SALE entry by sale_aggregate_id.
-    //      FULL refund: reverse per-leg (same as void), unwind read models by the original NET.
-    //      PARTIAL refund: integer proration cannot be guaranteed to produce a balanced GL entry,
-    //      so partial refunds are rejected with PartialRefundNotSupportedException (HTTP 400).
-    //      Legacy (no original SALE entry): fall back to the 2-line GROSS template.
-    Optional<JournalEntrySaleView> originalEntry =
-        (event.saleId() != null)
-            ? journalEntryRepository.findBySaleAggregateId(event.saleId())
-            : Optional.empty();
 
     if (originalEntry.isPresent()) {
       JournalEntrySaleView origEntryView = originalEntry.get();
@@ -655,5 +708,111 @@ public class ReversalPostingWriter {
         yield AccountRole.CASH_CLEARING;
       }
     };
+  }
+
+  /** Parks a reorder-stranded reversal — nothing posts; the sale-posting hook applies it later. */
+  @SuppressWarnings("checkstyle:ParameterNumber")
+  private void park(
+      PendingSaleReversal.Kind kind,
+      UUID reversalEventId,
+      UUID saleId,
+      UUID paymentId,
+      long amountMinor,
+      String currency,
+      Long totalRefundedMinor,
+      Instant occurredAt,
+      String tenderType,
+      String channel,
+      UUID businessId,
+      String companyId,
+      String actor) {
+    pendingReversalRepository.parkIfAbsent(
+        UUID.randomUUID(),
+        saleId,
+        kind.name(),
+        reversalEventId,
+        paymentId,
+        amountMinor,
+        currency,
+        totalRefundedMinor,
+        occurredAt,
+        tenderType,
+        channel,
+        businessId,
+        actor,
+        companyId);
+    log.info(
+        "Parked {} for saleId={} (sale not posted yet — cross-topic reorder); will apply when the"
+            + " sale posts",
+        kind,
+        saleId);
+  }
+
+  /**
+   * Applies a parked reversal inside the CALLER's (sale-posting) transaction — the parked event id
+   * was already claimed by {@code processOnce} when the row was parked, so this deliberately
+   * bypasses the claim. Called by {@code RevenuePostingWriter} AFTER the SALE entry (and its {@code
+   * sale_aggregate_id}) is flushed, so the per-leg lookup always finds it.
+   *
+   * <p>A parked refund that turns out PARTIAL is resolved as {@link
+   * PendingSaleReversal.Outcome#REJECTED_PARTIAL} with a WARN — the live path's 400-equivalent —
+   * WITHOUT throwing: an exception here would roll back the sale posting itself.
+   *
+   * @return how the row was resolved
+   */
+  @Transactional(propagation = Propagation.MANDATORY)
+  public PendingSaleReversal.Outcome applyParked(PendingSaleReversal parked) {
+    if (parked.getKind() == PendingSaleReversal.Kind.VOIDED) {
+      postVoidReversal(
+          new SaleVoidedEvent(
+              parked.getReversalEventId(),
+              parked.getCompanyId(),
+              parked.getBusinessId(),
+              parked.getSaleId(),
+              parked.getPaymentId(),
+              Money.ofMinor(parked.getAmountMinor(), parked.getCurrency()),
+              parked.getOccurredAt(),
+              parked.getTenderType(),
+              parked.getChannel()));
+      return PendingSaleReversal.Outcome.APPLIED;
+    }
+
+    SaleRefundedEvent event =
+        new SaleRefundedEvent(
+            parked.getReversalEventId(),
+            parked.getCompanyId(),
+            parked.getBusinessId(),
+            parked.getSaleId(),
+            parked.getPaymentId(),
+            Money.ofMinor(parked.getAmountMinor(), parked.getCurrency()),
+            parked.getTotalRefundedMinor() == null ? 0L : parked.getTotalRefundedMinor(),
+            parked.getOccurredAt(),
+            parked.getTenderType(),
+            parked.getChannel());
+
+    // Pre-check partiality WITHOUT posting anything: postRefundReversal's own partial check
+    // throws after its first write, which is fine on the live path (the throw rolls the
+    // reversal's OWN transaction back) but would poison the sale-posting transaction here.
+    Optional<JournalEntrySaleView> entry =
+        journalEntryRepository.findBySaleAggregateId(event.saleId());
+    if (entry.isPresent()) {
+      List<JournalLineReversalView> lines =
+          journalLineRepository.findLinesByEntryId(entry.get().getId());
+      String currencyCode = event.refundAmount().currency().getCurrencyCode();
+      long grandTotal =
+          resolveGrandTotal(entry.get(), lines, event.occurredAt(), currencyCode).amountMinor();
+      if (event.refundAmount().amountMinor() < grandTotal) {
+        log.warn(
+            "Parked SaleRefunded refundId={} for saleId={} is PARTIAL (refund={} < grand={}) —"
+                + " resolved REJECTED_PARTIAL (the live path's 400-equivalent); no contra posted",
+            event.refundId(),
+            event.saleId(),
+            event.refundAmount().amountMinor(),
+            grandTotal);
+        return PendingSaleReversal.Outcome.REJECTED_PARTIAL;
+      }
+    }
+    postRefundReversal(event);
+    return PendingSaleReversal.Outcome.APPLIED;
   }
 }

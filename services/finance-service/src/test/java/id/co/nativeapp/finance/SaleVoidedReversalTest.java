@@ -55,7 +55,10 @@ class SaleVoidedReversalTest extends PostgresRlsTestBase {
 
     // Post the void.
     UUID voidId = UUID.randomUUID();
-    UUID saleId = UUID.randomUUID(); // the sale aggregate id (from restaurant-service)
+    // saleId NULL = a genuinely id-less legacy event, which keeps this test on the GROSS
+    // fall-back path it asserts. A NON-null saleId with no posted SALE entry now PARKS instead
+    // (cross-topic reorder fix, QA sweep 2026-08-05) — see ReversalReorderParkingTest.
+    UUID saleId = null;
     reversalPostingService.handleVoid(
         new SaleVoidedEvent(
             voidId,
@@ -95,7 +98,7 @@ class SaleVoidedReversalTest extends PostgresRlsTestBase {
             voidId,
             TENANT,
             BUSINESS,
-            UUID.randomUUID(),
+            null, // saleId: legacy id-less event — stays on the GROSS fall-back this test asserts
             UUID.randomUUID(),
             Money.ofMinor(20_000L, "IDR"),
             OCCURRED,
@@ -122,7 +125,7 @@ class SaleVoidedReversalTest extends PostgresRlsTestBase {
             voidId,
             TENANT,
             BUSINESS,
-            UUID.randomUUID(),
+            null, // saleId: legacy id-less event — stays on the GROSS fall-back this test asserts
             UUID.randomUUID(),
             Money.ofMinor(15_000L, "IDR"),
             OCCURRED,

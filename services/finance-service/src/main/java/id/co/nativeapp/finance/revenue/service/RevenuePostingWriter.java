@@ -14,8 +14,13 @@ import id.co.nativeapp.finance.pnl.service.PnlReadModelWriter;
 import id.co.nativeapp.finance.revenue.domain.LedgerPosting;
 import id.co.nativeapp.finance.revenue.messaging.SaleRecordedEvent;
 import id.co.nativeapp.finance.revenue.repository.LedgerPostingRepository;
+import id.co.nativeapp.finance.reversal.domain.PendingSaleReversal;
+import id.co.nativeapp.finance.reversal.repository.PendingSaleReversalRepository;
+import id.co.nativeapp.finance.reversal.service.ReversalPostingWriter;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.TenantContext;
+import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -105,6 +110,8 @@ public class RevenuePostingWriter {
   private final JournalLineRepository journalLineRepository;
   private final ErrorInboxWriter errorInbox;
   private final PlatformReceivableWriter platformReceivable;
+  private final PendingSaleReversalRepository pendingReversals;
+  private final ReversalPostingWriter reversalWriter;
 
   private static final org.slf4j.Logger log =
       org.slf4j.LoggerFactory.getLogger(RevenuePostingWriter.class);
@@ -120,7 +127,9 @@ public class RevenuePostingWriter {
       JournalEntryRepository journalEntryRepository,
       JournalLineRepository journalLineRepository,
       ErrorInboxWriter errorInbox,
-      PlatformReceivableWriter platformReceivable) {
+      PlatformReceivableWriter platformReceivable,
+      PendingSaleReversalRepository pendingReversals,
+      ReversalPostingWriter reversalWriter) {
     this.ledgerRepository = ledgerRepository;
     this.processedEvents = processedEvents;
     this.jdbcTemplate = jdbcTemplate;
@@ -131,6 +140,8 @@ public class RevenuePostingWriter {
     this.journalLineRepository = journalLineRepository;
     this.errorInbox = errorInbox;
     this.platformReceivable = platformReceivable;
+    this.pendingReversals = pendingReversals;
+    this.reversalWriter = reversalWriter;
   }
 
   /**
@@ -310,6 +321,21 @@ public class RevenuePostingWriter {
           amount.currency().getCurrencyCode(),
           amount.amountMinor(),
           actor);
+    }
+
+    // Cross-topic reorder (QA sweep 2026-08-05): a SaleVoided/SaleRefunded consumed BEFORE this
+    // sale parked itself in pending_sale_reversal instead of taking the misbooking GROSS
+    // fall-back. Apply it NOW, per-leg, in this same transaction — the SALE entry above is
+    // already flushed, so the reversal's sale_aggregate_id lookup finds it. Oldest first,
+    // mirroring live consumption order.
+    if (event.saleId() != null) {
+      List<PendingSaleReversal> parked =
+          pendingReversals.findBySaleIdAndAppliedAtIsNullOrderByOccurredAtAsc(event.saleId());
+      for (PendingSaleReversal row : parked) {
+        PendingSaleReversal.Outcome outcome = reversalWriter.applyParked(row);
+        row.markApplied(Instant.now(), outcome);
+        pendingReversals.save(row);
+      }
     }
   }
 

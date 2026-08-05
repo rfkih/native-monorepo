@@ -65,7 +65,7 @@ class OutletRevenueReversalTest extends PostgresRlsTestBase {
             voidId,
             TENANT,
             OUTLET,
-            UUID.randomUUID(), // saleId
+            null, // saleId: legacy id-less event — stays on the GROSS fall-back this test asserts
             UUID.randomUUID(), // paymentId
             Money.ofMinor(amount, "IDR"),
             OCCURRED,
@@ -100,7 +100,7 @@ class OutletRevenueReversalTest extends PostgresRlsTestBase {
             refundId,
             TENANT,
             OUTLET,
-            UUID.randomUUID(), // saleId
+            null, // saleId: legacy id-less event — stays on the GROSS fall-back this test asserts
             UUID.randomUUID(), // paymentId
             Money.ofMinor(amount, "IDR"), // full refund
             amount, // totalRefundedMinor
@@ -140,7 +140,7 @@ class OutletRevenueReversalTest extends PostgresRlsTestBase {
             UUID.randomUUID(),
             TENANT,
             outletA,
-            UUID.randomUUID(),
+            null, // saleId: legacy id-less event — stays on the GROSS fall-back this test asserts
             UUID.randomUUID(),
             Money.ofMinor(amountA, "IDR"),
             OCCURRED,
