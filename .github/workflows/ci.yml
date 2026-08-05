@@ -207,11 +207,23 @@ jobs:
       # build (`tsc -b && vite build`) is the gate. Add `npm test` when tests land.
       - run: npm run build
 
+  # Fast, always-on: the agent-orientation docs must track the code (event catalog ↔
+  # Avro schemas, PROJECT-MAP ↔ service modules). Costs seconds, no toolchain.
+  doc_drift:
+    name: doc drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Check docs against code
+        run: bash scripts/check-doc-drift.sh
+
   # The ONLY check branch protection should require. Skipped upstream jobs (path
   # filtering) count as success; any failure or cancellation turns the gate red.
   gate:
     name: gate
-    needs: [changes, backend, console, self_order]
+    needs: [changes, backend, console, self_order, doc_drift]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -219,7 +231,7 @@ jobs:
       - name: Fail if any upstream job failed or was cancelled
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: |
-          echo "upstream results: changes=${{ needs.changes.result }} backend=${{ needs.backend.result }} console=${{ needs.console.result }} self_order=${{ needs.self_order.result }}"
+          echo "upstream results: changes=${{ needs.changes.result }} backend=${{ needs.backend.result }} console=${{ needs.console.result }} self_order=${{ needs.self_order.result }} doc_drift=${{ needs.doc_drift.result }}"
           exit 1
       - name: All required jobs passed
         run: echo "gate green"
