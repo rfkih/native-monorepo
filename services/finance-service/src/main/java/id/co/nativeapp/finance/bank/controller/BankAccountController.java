@@ -66,7 +66,8 @@ public class BankAccountController {
   public ResponseEntity<BankAccountResponse> create(
       @Valid @RequestBody CreateBankAccountRequest request) {
     BankAccountResponse created =
-        bankAccountWriter.create(request.name(), request.accountNumber(), request.currency());
+        bankAccountWriter.create(
+            request.name(), request.bankName(), request.accountNumber(), request.currency());
     return ResponseEntity.created(URI.create("/api/v1/bank-accounts/" + created.id()))
         .body(created);
   }
@@ -87,7 +88,8 @@ public class BankAccountController {
   @PatchMapping("/{id}")
   public BankAccountResponse update(
       @PathVariable UUID id, @Valid @RequestBody UpdateBankAccountRequest request) {
-    return bankAccountWriter.update(id, request.name(), request.accountNumber(), request.active());
+    return bankAccountWriter.update(
+        id, request.name(), request.bankName(), request.accountNumber(), request.active());
   }
 
   @Operation(summary = "Import statement lines for a bank account (saved UNRECONCILED)")

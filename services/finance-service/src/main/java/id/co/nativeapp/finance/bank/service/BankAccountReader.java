@@ -47,6 +47,7 @@ public class BankAccountReader {
     return new BankAccountResponse(
         view.getId(),
         view.getName(),
+        view.getBankName(),
         view.getAccountNumber(),
         view.getCurrency(),
         view.getActive());

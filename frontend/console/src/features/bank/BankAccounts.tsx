@@ -10,7 +10,8 @@ import { Field, TextInput } from '@/components/ui/Field'
 import { EmptyState } from '@/features/_shared/financeUi'
 import { useSession } from '@/lib/session'
 import { useBankAccounts, useCreateBankAccount } from './api'
-import { DialogOverlay } from './parts'
+import { INDONESIAN_BANKS, OTHER_BANK } from './banks'
+import { DialogOverlay, SELECT_CLASSES } from './parts'
 
 /**
  * Bank accounts — the roster of company bank accounts: a Card table (name/account number/
@@ -66,6 +67,7 @@ export function BankAccounts() {
             <thead>
               <tr className="border-b border-line bg-paper text-left text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
                 <th className="px-4 py-3">{t('bank.accounts.colName')}</th>
+                <th className="px-4 py-3">{t('bank.accounts.colBank')}</th>
                 <th className="px-4 py-3">{t('bank.accounts.colAccountNumber')}</th>
                 <th className="px-4 py-3">{t('bank.accounts.colCurrency')}</th>
                 <th className="px-4 py-3">{t('bank.accounts.colStatus')}</th>
@@ -81,6 +83,9 @@ export function BankAccounts() {
                     >
                       {a.name}
                     </Link>
+                  </td>
+                  <td className="px-4 py-3 text-ink-2">
+                    {a.bankName ?? t('bank.accounts.noValue')}
                   </td>
                   <td className="px-4 py-3 font-mono text-ink-2">
                     {a.accountNumber ?? t('bank.accounts.noValue')}
@@ -123,12 +128,18 @@ function NewBankAccountDialog({
 }) {
   const { t } = useTranslation()
   const [name, setName] = useState('')
+  const [bankChoice, setBankChoice] = useState('')
+  const [customBank, setCustomBank] = useState('')
   const [accountNumber, setAccountNumber] = useState('')
   const [currency, setCurrency] = useState(defaultCurrency)
   const mutation = useCreateBankAccount({ companyId, actor })
 
   const trimmedCurrency = currency.trim().toUpperCase()
-  const canSubmit = !!name.trim() && /^[A-Z]{3}$/.test(trimmedCurrency) && !mutation.isPending
+  // The dropdown is optional, but choosing "Other" commits to naming the bank.
+  const bankName = bankChoice === OTHER_BANK ? customBank.trim() : bankChoice
+  const bankValid = bankChoice !== OTHER_BANK || !!customBank.trim()
+  const canSubmit =
+    !!name.trim() && bankValid && /^[A-Z]{3}$/.test(trimmedCurrency) && !mutation.isPending
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -136,6 +147,7 @@ function NewBankAccountDialog({
     mutation.mutate(
       {
         name: name.trim(),
+        bankName: bankName || undefined,
         accountNumber: accountNumber.trim() || undefined,
         currency: trimmedCurrency,
       },
@@ -159,6 +171,38 @@ function NewBankAccountDialog({
             autoFocus
           />
         </Field>
+
+        <Field label={t('bank.accounts.createDialog.bankNameLabel')} htmlFor="bank-acct-bank">
+          <select
+            id="bank-acct-bank"
+            value={bankChoice}
+            onChange={(e) => setBankChoice(e.target.value)}
+            className={SELECT_CLASSES}
+          >
+            <option value="">{t('bank.accounts.createDialog.bankNamePlaceholder')}</option>
+            {INDONESIAN_BANKS.map((bank) => (
+              <option key={bank} value={bank}>
+                {bank}
+              </option>
+            ))}
+            <option value={OTHER_BANK}>{t('bank.accounts.createDialog.bankNameOther')}</option>
+          </select>
+        </Field>
+
+        {bankChoice === OTHER_BANK ? (
+          <Field
+            label={t('bank.accounts.createDialog.bankNameOtherLabel')}
+            htmlFor="bank-acct-bank-other"
+          >
+            <TextInput
+              id="bank-acct-bank-other"
+              value={customBank}
+              onChange={(e) => setCustomBank(e.target.value)}
+              maxLength={64}
+              required
+            />
+          </Field>
+        ) : null}
 
         <Field
           label={t('bank.accounts.createDialog.accountNumberLabel')}

@@ -23,16 +23,16 @@ public interface BankAccountRepository extends JpaRepository<BankAccount, UUID> 
    */
   @Query(
       value =
-          "SELECT id, name, account_number AS account_number, currency, active"
-              + " FROM bank_account ORDER BY name LIMIT 500",
+          "SELECT id, name, bank_name AS bank_name, account_number AS account_number, currency,"
+              + " active FROM bank_account ORDER BY name LIMIT 500",
       nativeQuery = true)
   List<BankAccountView> findAllView();
 
   /** One bank account by id in the bound tenant (RLS-scoped) — the bank-account detail read. */
   @Query(
       value =
-          "SELECT id, name, account_number AS account_number, currency, active"
-              + " FROM bank_account WHERE id = :id",
+          "SELECT id, name, bank_name AS bank_name, account_number AS account_number, currency,"
+              + " active FROM bank_account WHERE id = :id",
       nativeQuery = true)
   Optional<BankAccountView> findViewById(UUID id);
 }

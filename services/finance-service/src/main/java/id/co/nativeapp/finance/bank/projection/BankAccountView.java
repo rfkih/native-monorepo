@@ -14,6 +14,8 @@ public interface BankAccountView {
 
   String getName();
 
+  String getBankName();
+
   String getAccountNumber();
 
   String getCurrency();

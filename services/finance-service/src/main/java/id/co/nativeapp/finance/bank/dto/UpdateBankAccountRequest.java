@@ -9,4 +9,7 @@ import jakarta.validation.constraints.Size;
  * currency} is immutable and not settable here.
  */
 public record UpdateBankAccountRequest(
-    @NotBlank @Size(max = 255) String name, @Size(max = 64) String accountNumber, Boolean active) {}
+    @NotBlank @Size(max = 255) String name,
+    @Size(max = 64) String bankName,
+    @Size(max = 64) String accountNumber,
+    Boolean active) {}

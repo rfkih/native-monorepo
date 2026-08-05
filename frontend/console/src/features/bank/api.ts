@@ -18,6 +18,7 @@ import { apiFetch } from '@/lib/api'
 export interface BankAccount {
   id: string
   name: string
+  bankName: string | null
   accountNumber: string | null
   currency: string
   active: boolean
@@ -26,6 +27,7 @@ export interface BankAccount {
 /** POST /api/v1/bank-accounts body. */
 export interface CreateBankAccountBody {
   name: string
+  bankName?: string
   accountNumber?: string
   currency: string
 }

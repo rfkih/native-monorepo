@@ -48,20 +48,22 @@ class BankAccountControllerTest {
 
   @Test
   void createReturns201() throws Exception {
-    when(bankAccountWriter.create(any(), any(), any()))
+    when(bankAccountWriter.create(any(), any(), any(), any()))
         .thenReturn(
-            new BankAccountResponse(BANK_ACCOUNT, "BCA Operating", "1234567890", "IDR", true));
+            new BankAccountResponse(
+                BANK_ACCOUNT, "BCA Operating", "BCA", "1234567890", "IDR", true));
 
     mockMvc
         .perform(
             post("/api/v1/bank-accounts")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
-                    "{\"name\":\"BCA Operating\",\"accountNumber\":\"1234567890\","
-                        + "\"currency\":\"IDR\"}"))
+                    "{\"name\":\"BCA Operating\",\"bankName\":\"BCA\","
+                        + "\"accountNumber\":\"1234567890\",\"currency\":\"IDR\"}"))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.id").value(BANK_ACCOUNT.toString()))
         .andExpect(jsonPath("$.name").value("BCA Operating"))
+        .andExpect(jsonPath("$.bankName").value("BCA"))
         .andExpect(jsonPath("$.currency").value("IDR"))
         .andExpect(jsonPath("$.active").value(true));
   }

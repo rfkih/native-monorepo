@@ -57,7 +57,7 @@ class BankTenancyIsolationTest extends PostgresRlsTestBase {
             ACTOR_A,
             () -> {
               BankAccountResponse account =
-                  bankAccountWriter.create("BCA Operating", "1234567890", "IDR");
+                  bankAccountWriter.create("BCA Operating", "BCA", "1234567890", "IDR");
 
               List<StatementLineResponse> deposit =
                   statementLineWriter.importLines(

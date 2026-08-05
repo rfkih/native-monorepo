@@ -33,8 +33,9 @@ public class BankAccountWriter {
    * entity).
    */
   @Transactional
-  public BankAccountResponse create(String name, String accountNumber, String currency) {
-    BankAccount account = BankAccount.create(name, accountNumber, currency);
+  public BankAccountResponse create(
+      String name, String bankName, String accountNumber, String currency) {
+    BankAccount account = BankAccount.create(name, bankName, accountNumber, currency);
     account.setCompanyId(TenantContext.require().companyId());
     return toResponse(bankAccountRepository.save(account));
   }
@@ -47,12 +48,12 @@ public class BankAccountWriter {
    */
   @Transactional
   public BankAccountResponse update(
-      UUID bankAccountId, String name, String accountNumber, Boolean active) {
+      UUID bankAccountId, String name, String bankName, String accountNumber, Boolean active) {
     BankAccount account =
         bankAccountRepository
             .findById(bankAccountId)
             .orElseThrow(() -> new BankAccountNotFoundException(bankAccountId));
-    account.updateDetails(name, accountNumber);
+    account.updateDetails(name, bankName, accountNumber);
     if (active != null) {
       account.setActive(active);
     }
@@ -63,6 +64,7 @@ public class BankAccountWriter {
     return new BankAccountResponse(
         account.getId(),
         account.getName(),
+        account.getBankName(),
         account.getAccountNumber(),
         account.getCurrency(),
         account.isActive());

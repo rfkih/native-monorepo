@@ -43,6 +43,10 @@ public class BankAccount extends Auditable {
   @Column(name = "name", nullable = false, length = 255)
   private String name;
 
+  /** The bank INSTITUTION (console dropdown; "Other" = free text). Nullable — V49, not PII. */
+  @Column(name = "bank_name", length = 64)
+  private String bankName;
+
   @Column(name = "account_number", length = 20)
   private String accountNumber;
 
@@ -64,11 +68,13 @@ public class BankAccount extends Auditable {
    *
    * @throws IllegalArgumentException if {@code currencyCode} is not a valid ISO-4217 code
    */
-  public static BankAccount create(String name, String accountNumber, String currencyCode) {
+  public static BankAccount create(
+      String name, String bankName, String accountNumber, String currencyCode) {
     Objects.requireNonNull(currencyCode, "currencyCode");
     BankAccount account = new BankAccount();
     account.id = UUID.randomUUID();
     account.name = requireName(name);
+    account.bankName = normalizeBankName(bankName);
     account.accountNumber = maskAccountNumber(accountNumber);
     account.currency = Currency.getInstance(currencyCode).getCurrencyCode();
     account.active = true;
@@ -76,12 +82,22 @@ public class BankAccount extends Auditable {
   }
 
   /**
-   * Updates the mutable details (name required; account number optional + masked; currency
-   * immutable).
+   * Updates the mutable details (name required; bank name + account number optional, number masked;
+   * currency immutable).
    */
-  public void updateDetails(String name, String accountNumber) {
+  public void updateDetails(String name, String bankName, String accountNumber) {
     this.name = requireName(name);
+    this.bankName = normalizeBankName(bankName);
     this.accountNumber = maskAccountNumber(accountNumber);
+  }
+
+  /** Blank-to-null normalization — an empty dropdown/free-text submission stores NULL, not "". */
+  private static String normalizeBankName(String bankName) {
+    if (bankName == null) {
+      return null;
+    }
+    String trimmed = bankName.strip();
+    return trimmed.isEmpty() ? null : trimmed;
   }
 
   /** Sets the active flag (a deactivated account is hidden from the default list but retained). */
@@ -121,6 +137,10 @@ public class BankAccount extends Auditable {
 
   public String getName() {
     return name;
+  }
+
+  public String getBankName() {
+    return bankName;
   }
 
   public String getAccountNumber() {
