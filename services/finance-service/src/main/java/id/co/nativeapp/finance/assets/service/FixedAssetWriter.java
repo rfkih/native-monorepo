@@ -1,5 +1,6 @@
 package id.co.nativeapp.finance.assets.service;
 
+import id.co.nativeapp.finance.assets.domain.AssetSealedPeriodException;
 import id.co.nativeapp.finance.assets.domain.FixedAsset;
 import id.co.nativeapp.finance.assets.repository.FixedAssetRepository;
 import id.co.nativeapp.finance.gl.domain.AccountRole;
@@ -151,6 +152,7 @@ public class FixedAssetWriter {
    * @param remainingLifeMonths the depreciation months still to run
    * @return the asset id + whether this call freshly registered it
    * @throws IllegalArgumentException on invalid bounds — 400
+   * @throws AssetSealedPeriodException if the as-of period is tax-sealed — 422
    * @throws MismatchedPostingCurrencyException if the currency diverges from the period's GL — 422
    */
   @SuppressWarnings("checkstyle:ParameterNumber")
@@ -192,6 +194,12 @@ public class FixedAssetWriter {
     // balance sheet it is part of; occurred_at is the as-of instant so periodOf agrees.
     Instant now = asOfDate.atStartOfDay(ZoneOffset.UTC).toInstant();
     String period = LedgerPosting.periodOf(now);
+    // Console posts brought-forward assets BEFORE the main opening entry (ADR 0037); without this
+    // guard a sealed as-of date would silently restate a tax-filed month and then the main opening
+    // entry would 422, stranding a half-completed migration. Checked AFTER the idempotency replay
+    // (a replay of a previously-successful registration must still return 200) and BEFORE any
+    // persistence — mirrors OpeningBalanceWriter#requireNotSealed.
+    requireNotSealed(period);
     requireConsistentGlCurrency(period, cost);
 
     UUID assetId = UUID.randomUUID();
@@ -322,6 +330,23 @@ public class FixedAssetWriter {
     for (var line : entry.getLines()) {
       line.setCompanyId(companyId);
       journalLineRepository.save(line);
+    }
+  }
+
+  /**
+   * Rejects a brought-forward registration whose opening period is sealed — a {@code tax_filing}
+   * row already exists for it. Mirrors {@code OpeningBalanceWriter#requireNotSealed} exactly (same
+   * query shape). Runs under RLS on the {@code @Transactional} connection.
+   */
+  private void requireNotSealed(String period) {
+    Boolean sealed =
+        jdbcTemplate.queryForObject(
+            "SELECT EXISTS(SELECT 1 FROM tax_filing WHERE period = ?)", Boolean.class, period);
+    if (Boolean.TRUE.equals(sealed)) {
+      throw new AssetSealedPeriodException(
+          "period "
+              + period
+              + " is sealed (a tax filing exists) — a brought-forward asset cannot post into it");
     }
   }
 

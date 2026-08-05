@@ -1,8 +1,11 @@
 package id.co.nativeapp.finance;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import id.co.nativeapp.finance.assets.domain.AssetSealedPeriodException;
 import id.co.nativeapp.finance.assets.dto.AssetResponse;
+import id.co.nativeapp.finance.assets.service.AcquireAssetResult;
 import id.co.nativeapp.finance.assets.service.AmortizationRunWriter;
 import id.co.nativeapp.finance.assets.service.AssetDisposalWriter;
 import id.co.nativeapp.finance.assets.service.AssetReader;
@@ -131,6 +134,83 @@ class BroughtForwardAssetTest extends PostgresRlsTestBase {
     assertThat(legs.get("4200")[1]).isEqualTo(3_000_000L); // Cr gain on disposal
   }
 
+  @Test
+  void registerBroughtForwardRejectsATaxSealedPeriod() throws Exception {
+    // The as-of month already has a tax_filing row (sealed), mirroring OpeningBalanceWriter's
+    // requireNotSealed guard. Console posts brought-forward assets BEFORE the main opening entry
+    // (ADR 0037): without this guard a sealed as-of date would silently restate the sealed month.
+    LocalDate asOfDate = LocalDate.of(2024, 3, 15);
+    String period = LedgerPosting.periodOf(asOfDate.atStartOfDay(ZoneOffset.UTC).toInstant());
+    seedSealedPeriod(tenant, period);
+
+    assertThatThrownBy(
+            () ->
+                TenantContext.callAs(
+                    tenant,
+                    ACTOR,
+                    () ->
+                        fixedAssetWriter.registerBroughtForward(
+                            "Sealed oven",
+                            asOfDate,
+                            20_000_000L,
+                            0L,
+                            8_000_000L,
+                            24,
+                            "IDR",
+                            "bf-sealed")))
+        .isInstanceOf(AssetSealedPeriodException.class);
+
+    assertThat(journalEntryCountAsAdmin(tenant))
+        .as("no journal entry may post into a tax-sealed period")
+        .isZero();
+    assertThat(fixedAssetCountAsAdmin(tenant))
+        .as("no fixed_asset row may be registered against a rejected, sealed posting")
+        .isZero();
+  }
+
+  @Test
+  void sealedRejectionDoesNotBurnTheIdempotencyKeyAndARetryWithAnOpenPeriodSucceeds()
+      throws Exception {
+    LocalDate sealedAsOfDate = LocalDate.of(2024, 3, 15);
+    String sealedPeriod =
+        LedgerPosting.periodOf(sealedAsOfDate.atStartOfDay(ZoneOffset.UTC).toInstant());
+    seedSealedPeriod(tenant, sealedPeriod);
+    String key = "bf-sealed-retry";
+
+    assertThatThrownBy(
+            () ->
+                TenantContext.callAs(
+                    tenant,
+                    ACTOR,
+                    () ->
+                        fixedAssetWriter.registerBroughtForward(
+                            "Retry oven",
+                            sealedAsOfDate,
+                            20_000_000L,
+                            0L,
+                            8_000_000L,
+                            24,
+                            "IDR",
+                            key)))
+        .isInstanceOf(AssetSealedPeriodException.class);
+
+    // The rejected attempt never persisted a fixed_asset row under this key, so retrying the SAME
+    // key with a LATER, open (unsealed) as-of date is a genuine fresh registration — NOT a replay
+    // of the failed attempt — and must succeed.
+    LocalDate openAsOfDate = LocalDate.of(2024, 6, 15);
+    AcquireAssetResult result =
+        TenantContext.callAs(
+            tenant,
+            ACTOR,
+            () ->
+                fixedAssetWriter.registerBroughtForward(
+                    "Retry oven", openAsOfDate, 20_000_000L, 0L, 8_000_000L, 24, "IDR", key));
+
+    assertThat(result.created()).isTrue();
+    assertThat(journalEntryCountAsAdmin(tenant)).isEqualTo(1L);
+    assertThat(fixedAssetCountAsAdmin(tenant)).isEqualTo(1L);
+  }
+
   /** The debit-net ({@code Σdebit − Σcredit}) of {@code accountCode} in {@code period}'s GL. */
   private long debitNet(String period, String accountCode) {
     return glTrialBalanceReader.read(period).stream()
@@ -138,6 +218,64 @@ class BroughtForwardAssetTest extends PostgresRlsTestBase {
         .findFirst()
         .map(l -> l.getTotalDebitMinor() - l.getTotalCreditMinor())
         .orElse(0L);
+  }
+
+  /**
+   * Seeds a {@code tax_filing} row directly (BYPASSRLS admin connection, the same idiom {@link
+   * PostgresRlsTestBase}'s own admin helpers use) so {@code period} reads as sealed for {@code
+   * tenant} — the minimal valid row shape per the {@code tax_filing} CHECK constraints; the
+   * FIXED_ASSET guard only probes existence, not these values.
+   */
+  private void seedSealedPeriod(String tenant, String period) throws Exception {
+    try (Connection admin =
+            DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        PreparedStatement ps =
+            admin.prepareStatement(
+                "INSERT INTO tax_filing (id, period, tax_type, status, currency,"
+                    + " output_vat_minor, input_vat_minor, net_minor, net_direction,"
+                    + " filing_entry_id, filed_at, created_at, created_by, updated_at, updated_by,"
+                    + " version, company_id)"
+                    + " VALUES (?, ?, 'PPN', 'FILED', 'IDR', 0, 0, 0, 'CREDITABLE', ?, now(),"
+                    + " now(), ?, now(), ?, 0, ?)")) {
+      ps.setObject(1, UUID.randomUUID());
+      ps.setString(2, period);
+      ps.setObject(3, UUID.randomUUID());
+      ps.setString(4, ACTOR);
+      ps.setString(5, ACTOR);
+      ps.setString(6, tenant);
+      ps.executeUpdate();
+    }
+  }
+
+  /** The total {@code journal_entry} row count for {@code tenant}, over the BYPASSRLS admin. */
+  private long journalEntryCountAsAdmin(String tenant) throws Exception {
+    try (Connection admin =
+            DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        PreparedStatement ps =
+            admin.prepareStatement("SELECT count(*) FROM journal_entry WHERE company_id = ?")) {
+      ps.setString(1, tenant);
+      try (ResultSet rs = ps.executeQuery()) {
+        rs.next();
+        return rs.getLong(1);
+      }
+    }
+  }
+
+  /** The total {@code fixed_asset} row count for {@code tenant}, over the BYPASSRLS admin. */
+  private long fixedAssetCountAsAdmin(String tenant) throws Exception {
+    try (Connection admin =
+            DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        PreparedStatement ps =
+            admin.prepareStatement("SELECT count(*) FROM fixed_asset WHERE company_id = ?")) {
+      ps.setString(1, tenant);
+      try (ResultSet rs = ps.executeQuery()) {
+        rs.next();
+        return rs.getLong(1);
+      }
+    }
   }
 
   private UUID entryIdBySourceAsAdmin(UUID sourceEventId) throws Exception {

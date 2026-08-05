@@ -3,6 +3,7 @@ package id.co.nativeapp.finance.assets.controller;
 import id.co.nativeapp.finance.assets.domain.AssetAlreadyDisposedException;
 import id.co.nativeapp.finance.assets.domain.AssetDepreciationBehindException;
 import id.co.nativeapp.finance.assets.domain.AssetNotFoundException;
+import id.co.nativeapp.finance.assets.domain.AssetSealedPeriodException;
 import id.co.nativeapp.finance.assets.domain.IdempotencyKeyConflictException;
 import id.co.nativeapp.finance.pnl.domain.MismatchedPostingCurrencyException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -28,6 +29,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  *       uq_amortization_run} behind the advisory lock).
  *   <li>{@link MismatchedPostingCurrencyException} → {@code 422} (a posting currency diverging from
  *       the period's GL — the whole transaction rolls back, no partial posting).
+ *   <li>{@link AssetSealedPeriodException} → {@code 422} (the opening period is tax-sealed —
+ *       brought-forward registration only, mirrors {@code OpeningBalanceSealedPeriodException}).
  * </ul>
  */
 @RestControllerAdvice(basePackages = "id.co.nativeapp.finance.assets.controller")
@@ -110,6 +113,17 @@ public class AssetAdvice {
     problem.setTitle("Unprocessable Entity");
     problem.setDetail(
         "The posting currency must match the company's base currency for the period.");
+    return decorate(problem, request);
+  }
+
+  /** A brought-forward registration's opening period is tax-sealed → 422 (ADR 0037). */
+  @ExceptionHandler(AssetSealedPeriodException.class)
+  public ProblemDetail handleSealedPeriod(
+      AssetSealedPeriodException ex, HttpServletRequest request) {
+    ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.UNPROCESSABLE_ENTITY);
+    problem.setType(URI.create(TYPE_BASE + "asset-sealed-period"));
+    problem.setTitle("Unprocessable Entity");
+    problem.setDetail(ex.getMessage());
     return decorate(problem, request);
   }
 
