@@ -13,15 +13,14 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, ArrowRight, Check, Eye, EyeOff, Lock, Pencil } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Eye, EyeOff } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Field, TextInput } from '@/components/ui/Field'
 import { ChoiceCards } from '@/components/ui/ChoiceCards'
 import { Segmented } from '@/components/ui/Segmented'
-import { Select } from '@/components/ui/Select'
-import { countryName, countryOptions, derivedCurrency } from '@/lib/countries'
-import { Badge } from '@/components/ui/Badge'
+import { CompanyFields, CompanyReview, RegionFields } from '@/features/companyForm/fields'
+import { COMPANY_STEP, REGION_STEP, invalidCompanyFields } from '@/features/companyForm/companyForm'
 import { Spinner } from '@/components/ui/Spinner'
 import { BrandMark } from '@/components/Wordmark'
 import { ErrorDetails } from '@/components/ErrorDetails'
@@ -32,11 +31,8 @@ import { useSignup, type SignupRequest, type SignupResponse } from './api'
 // Barbershop scene for the brand panel (licensed — see src/assets/landing/SOURCES.md).
 import brandPanelPhoto from '@/assets/landing/signup-w1024.webp'
 
-// Mirrors onboarding — the same supported languages/verticals. The server enforces the same
-// whitelists authoritatively (SignupRequest @Pattern) — these lists are the UI copy of them.
-// There is NO currency list any more: the base currency is DERIVED from the country (ADR 0025).
-const LANGS = ['en', 'id'] as const
-const VERTICALS = ['restaurant', 'carwash', 'barbershop'] as const
+// The owner-funnel whitelists (UI copy of the server's SignupRequest @Pattern). The company/
+// region whitelists (languages, verticals) live with the shared steps in features/companyForm.
 const COMPANY_SIZES = ['1-5', '6-20', '21-50', '51-250', '250+'] as const
 const INTERESTS = ['own-company', 'client-services', 'student', 'teacher'] as const
 
@@ -61,8 +57,10 @@ const PASSWORD_MIN_LENGTH = 8
 const PHONE_RE = /^\+?[0-9][0-9 ()-]{3,29}[0-9]$/
 
 // Step indexes — the Review rows link back to these.
-const STEP_COMPANY = 0
-const STEP_REGION = 1
+// Company and Region are the SAME step indexes as the in-app add-company wizard (shared source),
+// so the review's edit pencils and CompanyReview's hardcoded row steps stay in sync across flows.
+const STEP_COMPANY = COMPANY_STEP
+const STEP_REGION = REGION_STEP
 const STEP_YOU = 2
 const STEP_SECURITY = 3
 const STEP_REVIEW = 4
@@ -207,76 +205,6 @@ function BrandPanel() {
   )
 }
 
-// ── Review panel ──────────────────────────────────────────────────────────────
-
-function ReviewPanel({
-  rows,
-  hint,
-  fixedLabel,
-  editLabel,
-  onEdit,
-}: {
-  rows: { label: string; value: string; step: number; fixed?: boolean; secret?: boolean }[]
-  hint: string
-  fixedLabel: string
-  editLabel: string
-  onEdit: (step: number) => void
-}) {
-  return (
-    <div>
-      <dl>
-        {rows.map((row) => (
-          <div
-            key={row.label}
-            className="flex items-center justify-between gap-4 border-b border-line py-2.5"
-          >
-            <dt className="text-sm text-ink-3">{row.label}</dt>
-            <dd className="flex items-center gap-2 text-right text-sm font-medium text-ink">
-              {row.secret ? (
-                <span className="font-mono tracking-widest text-ink-3">{'•'.repeat(8)}</span>
-              ) : (
-                row.value || '—'
-              )}
-              {row.fixed ? (
-                <Badge tone="amber">
-                  <Lock className="size-3" /> {fixedLabel}
-                </Badge>
-              ) : null}
-              <button
-                type="button"
-                aria-label={`${editLabel}: ${row.label}`}
-                onClick={() => onEdit(row.step)}
-                className={cn(
-                  'rounded p-1 text-ink-3 transition-colors',
-                  'hover:text-brand-600 focus-visible:outline-2 focus-visible:outline-brand-500',
-                )}
-              >
-                <Pencil className="size-3.5" />
-              </button>
-            </dd>
-          </div>
-        ))}
-      </dl>
-      <p className="mt-4 text-xs leading-relaxed text-ink-3">{hint}</p>
-    </div>
-  )
-}
-
-// ── Currency symbol helper (mirrors onboarding) ───────────────────────────────
-
-function symbolOf(currency: string, locale: string): string {
-  try {
-    const parts = new Intl.NumberFormat(locale, {
-      style: 'currency',
-      currency,
-      currencyDisplay: 'narrowSymbol',
-    }).formatToParts(0)
-    return parts.find((p) => p.type === 'currency')?.value ?? currency
-  } catch {
-    return currency
-  }
-}
-
 // ── Success panel ─────────────────────────────────────────────────────────────
 
 function SuccessPanel({
@@ -417,10 +345,6 @@ export function Signup() {
   const [errors, setErrors] = useState<FormErrors>({})
   const [success, setSuccess] = useState<SignupResponse | null>(null)
 
-  // Derived, never chosen (ADR 0025): the country decides the base currency; the server
-  // re-derives authoritatively (an API caller cannot pick a currency either).
-  const baseCurrency = derivedCurrency(country)
-
   const steps = [
     t('signup.stepCompany'),
     t('signup.stepRegion'),
@@ -434,8 +358,10 @@ export function Signup() {
   function validateStep(s: number): FormErrors {
     const errs: FormErrors = {}
     if (s === STEP_COMPANY) {
-      if (!companyName.trim()) errs.companyName = t('signup.fieldRequired')
-      if (!firstBusinessName.trim()) errs.firstBusinessName = t('signup.fieldRequired')
+      // The shared required-rule (same as the in-app add-company wizard).
+      for (const field of invalidCompanyFields({ companyName, firstBusinessName })) {
+        errs[field] = t('signup.fieldRequired')
+      }
     }
     if (s === STEP_YOU) {
       if (!ownerFirstName.trim()) errs.ownerFirstName = t('signup.fieldRequired')
@@ -602,102 +528,33 @@ export function Signup() {
             <div className="reveal">
               {/* Step 0 — Company + first business */}
               {step === STEP_COMPANY && (
-                <div className="space-y-6">
-                  <Field
-                    label={t('signup.companyName')}
-                    htmlFor="companyName"
-                    hint={t('signup.companyNameHint')}
-                    error={errors.companyName}
-                  >
-                    <TextInput
-                      id="companyName"
-                      autoFocus
-                      autoComplete="organization"
-                      value={companyName}
-                      onChange={(e) => {
-                        setCompanyName(e.target.value)
-                        if (errors.companyName) setErrors((p) => ({ ...p, companyName: undefined }))
-                      }}
-                      placeholder={t('signup.companyNamePlaceholder')}
-                    />
-                  </Field>
-                  <Field
-                    label={t('signup.firstBusinessName')}
-                    htmlFor="bizName"
-                    error={errors.firstBusinessName}
-                  >
-                    <TextInput
-                      id="bizName"
-                      value={firstBusinessName}
-                      onChange={(e) => {
-                        setFirstBusinessName(e.target.value)
-                        if (errors.firstBusinessName)
-                          setErrors((p) => ({ ...p, firstBusinessName: undefined }))
-                      }}
-                      placeholder={t('signup.firstBusinessNamePlaceholder')}
-                    />
-                  </Field>
-                  <Field label={t('signup.vertical')} hint={t('signup.verticalHint')}>
-                    <ChoiceCards
-                      name="vertical"
-                      columns={1}
-                      value={vertical}
-                      onChange={setVertical}
-                      options={VERTICALS.map((v) => ({
-                        value: v,
-                        title: t(`vertical.${v}` as Parameters<typeof t>[0]),
-                      }))}
-                    />
-                  </Field>
-                </div>
+                <CompanyFields
+                  companyName={companyName}
+                  firstBusinessName={firstBusinessName}
+                  vertical={vertical}
+                  onCompanyName={(v) => {
+                    setCompanyName(v)
+                    if (errors.companyName) setErrors((p) => ({ ...p, companyName: undefined }))
+                  }}
+                  onFirstBusinessName={(v) => {
+                    setFirstBusinessName(v)
+                    if (errors.firstBusinessName)
+                      setErrors((p) => ({ ...p, firstBusinessName: undefined }))
+                  }}
+                  onVertical={setVertical}
+                  companyNameError={errors.companyName}
+                  firstBusinessNameError={errors.firstBusinessName}
+                />
               )}
 
               {/* Step 1 — Region: country decides the (locked) base currency; language */}
               {step === STEP_REGION && (
-                <div className="space-y-6">
-                  <Field label={t('signup.country')} htmlFor="country" hint={t('signup.countryHint')}>
-                    <Select
-                      id="country"
-                      autoFocus
-                      value={country}
-                      onChange={(e) => setCountry(e.target.value)}
-                    >
-                      {countryOptions(i18n.language).map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                  {/* The derived, immutable currency — shown, never chosen (ADR 0025) */}
-                  <div className="flex items-start gap-2.5 rounded-xl border border-line bg-paper px-3.5 py-3">
-                    <Lock className="mt-0.5 size-3.5 shrink-0 text-ink-3" aria-hidden />
-                    <p className="text-xs leading-relaxed text-ink-2">
-                      {t('signup.derivedCurrencyNote', {
-                        currency: `${baseCurrency} (${symbolOf(baseCurrency, i18n.language)})`,
-                      })}
-                    </p>
-                  </div>
-                  <Field
-                    label={t('signup.defaultLanguage')}
-                    hint={t('signup.defaultLanguageHint')}
-                  >
-                    <ChoiceCards
-                      name="lang"
-                      value={defaultLanguage}
-                      onChange={setDefaultLanguage}
-                      options={LANGS.map((l) => ({
-                        value: l,
-                        title: t(`lang.${l}`),
-                        subtitle: l.toUpperCase(),
-                      }))}
-                    />
-                  </Field>
-                  {/* Permanent-settings notice */}
-                  <p className="rounded-xl border border-amber/30 bg-amber-tint px-3.5 py-2.5 text-xs leading-relaxed text-amber">
-                    {t('signup.permanentNote')}
-                  </p>
-                </div>
+                <RegionFields
+                  country={country}
+                  defaultLanguage={defaultLanguage}
+                  onCountry={setCountry}
+                  onDefaultLanguage={setDefaultLanguage}
+                />
               )}
 
               {/* Step 2 — About you: name, contact and the Odoo-style funnel questions */}
@@ -860,45 +717,14 @@ export function Signup() {
 
               {/* Step 4 — Review */}
               {step === STEP_REVIEW && (
-                <ReviewPanel
-                  fixedLabel={t('signup.fixedNote')}
-                  editLabel={t('signup.edit')}
+                <CompanyReview
+                  basics={{ companyName, firstBusinessName, vertical, country, defaultLanguage }}
                   hint={t('signup.reviewHint')}
                   onEdit={(s) => {
                     setErrors({})
                     setStep(s)
                   }}
-                  rows={[
-                    { label: t('signup.companyName'), value: companyName, step: STEP_COMPANY },
-                    {
-                      label: t('signup.firstBusinessName'),
-                      value: firstBusinessName,
-                      step: STEP_COMPANY,
-                    },
-                    {
-                      label: t('signup.vertical'),
-                      value: t(`vertical.${vertical}` as Parameters<typeof t>[0]),
-                      step: STEP_COMPANY,
-                    },
-                    {
-                      label: t('signup.country'),
-                      value: countryName(country, i18n.language),
-                      step: STEP_REGION,
-                    },
-                    {
-                      // Derived from the country — the pencil jumps to Region, because changing
-                      // the country IS how the currency changes (ADR 0025).
-                      label: t('signup.baseCurrency'),
-                      value: `${baseCurrency} · ${t(`currency.${baseCurrency}`)}`,
-                      step: STEP_REGION,
-                      fixed: true,
-                    },
-                    {
-                      label: t('signup.defaultLanguage'),
-                      value: t(`lang.${defaultLanguage}`),
-                      step: STEP_REGION,
-                      fixed: true,
-                    },
+                  extraRows={[
                     {
                       label: t('signup.ownerName'),
                       value: [ownerFirstName, ownerLastName].filter(Boolean).join(' '),

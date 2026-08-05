@@ -2,25 +2,29 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useMutation } from '@tanstack/react-query'
-import { ArrowLeft, ArrowRight, BookOpen, Check, Lock } from 'lucide-react'
+import { ArrowLeft, ArrowRight, BookOpen, Check } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { Field, TextInput } from '@/components/ui/Field'
-import { Select } from '@/components/ui/Select'
 import { ChoiceCards } from '@/components/ui/ChoiceCards'
-import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
 import { ErrorDetails } from '@/components/ErrorDetails'
+import { CompanyFields, CompanyReview, RegionFields } from '@/features/companyForm/fields'
+import { COMPANY_STEP, REGION_STEP, invalidCompanyFields } from '@/features/companyForm/companyForm'
 import { useSession } from '@/lib/session'
 import { useAuth } from '@/lib/authContext'
 import { AUTH_MODE } from '@/lib/config'
 import { DEV_ACTOR } from '@/lib/devIdentity'
 import { cn } from '@/lib/cn'
-import { countryName, countryOptions, derivedCurrency } from '@/lib/countries'
+import { derivedCurrency } from '@/lib/countries'
 import { createCompany, type CompanyResponse } from './api'
 
-const LANGS = ['en', 'id'] as const
-const VERTICALS = ['restaurant', 'carwash', 'barbershop'] as const
+// The in-app "add a company" wizard walks the SAME Company → Region → Review steps as the public
+// sign-up (shared components in features/companyForm), so creating your first company and creating
+// your next one are the same flow — minus the owner-account steps (you are already signed in). It
+// keeps the in-console frame (centered card + Stepper), not sign-up's standalone brand page.
+const REVIEW_STEP = REGION_STEP + 1
+
+type StepErrors = { companyName?: string; firstBusinessName?: string }
 
 export function OnboardingWizard() {
   const { t, i18n } = useTranslation()
@@ -37,18 +41,20 @@ export function OnboardingWizard() {
   // divisions and vice versa.
   const [entityConfirmed, setEntityConfirmed] = useState(false)
 
-  const [step, setStep] = useState(0)
+  const [step, setStep] = useState(COMPANY_STEP)
   const [name, setName] = useState('')
+  const [bizName, setBizName] = useState('')
+  const [vertical, setVertical] = useState<string>('restaurant')
   const [country, setCountry] = useState<string>('ID')
-  // Derived, never chosen (ADR 0025): the country decides the base currency; the server re-derives
-  // it authoritatively (an API caller cannot pick a currency either), so the wizard only previews it.
-  const baseCurrency = derivedCurrency(country)
   const [defaultLanguage, setDefaultLanguage] = useState<string>(
     i18n.language === 'id' ? 'id' : 'en',
   )
-  const [bizName, setBizName] = useState('')
-  const [vertical, setVertical] = useState<string>('restaurant')
+  const [errors, setErrors] = useState<StepErrors>({})
   const [created, setCreated] = useState<CompanyResponse | null>(null)
+
+  // Derived, never chosen (ADR 0025): the country decides the base currency; the server re-derives
+  // it authoritatively (an API caller cannot pick a currency either), so this is a preview only.
+  const baseCurrency = derivedCurrency(country)
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -86,14 +92,23 @@ export function OnboardingWizard() {
     },
   })
 
-  const steps = [
-    t('onboarding.stepCompany'),
-    t('onboarding.stepSettings'),
-    t('onboarding.stepBusiness'),
-    t('onboarding.stepReview'),
-  ]
-  const canAdvance =
-    step === 0 ? name.trim().length > 0 : step === 2 ? bizName.trim().length > 0 : true
+  // Step names mirror sign-up's so the two flows read identically.
+  const steps = [t('signup.stepCompany'), t('signup.stepRegion'), t('signup.stepReview')]
+
+  // Validate the Company step (the same required rule as sign-up) before advancing.
+  function advance() {
+    if (step === COMPANY_STEP) {
+      const missing = invalidCompanyFields({ companyName: name, firstBusinessName: bizName })
+      if (missing.length > 0) {
+        const next: StepErrors = {}
+        for (const field of missing) next[field] = t('signup.fieldRequired')
+        setErrors(next)
+        return
+      }
+    }
+    setErrors({})
+    setStep((s) => s + 1)
+  }
 
   if (created) {
     return <SuccessPanel company={created} onContinue={() => navigate('/')} />
@@ -158,113 +173,43 @@ export function OnboardingWizard() {
       {/* Step card */}
       <Card className="mt-6 rounded-[20px] p-7" key={step}>
         <div className="reveal">
-          {step === 0 && (
-            <Field
-              label={t('onboarding.companyName')}
-              htmlFor="companyName"
-              hint={t('onboarding.companyNamePlaceholder')}
-            >
-              <TextInput
-                id="companyName"
-                autoFocus
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder={t('onboarding.companyNamePlaceholder')}
-              />
-            </Field>
+          {step === COMPANY_STEP && (
+            <CompanyFields
+              companyName={name}
+              firstBusinessName={bizName}
+              vertical={vertical}
+              onCompanyName={(v) => {
+                setName(v)
+                if (errors.companyName) setErrors((p) => ({ ...p, companyName: undefined }))
+              }}
+              onFirstBusinessName={(v) => {
+                setBizName(v)
+                if (errors.firstBusinessName)
+                  setErrors((p) => ({ ...p, firstBusinessName: undefined }))
+              }}
+              onVertical={setVertical}
+              companyNameError={errors.companyName}
+              firstBusinessNameError={errors.firstBusinessName}
+            />
           )}
 
-          {step === 1 && (
-            <div className="space-y-6">
-              <Field label={t('onboarding.country')} htmlFor="country" hint={t('onboarding.countryHint')}>
-                <Select id="country" value={country} onChange={(e) => setCountry(e.target.value)}>
-                  {countryOptions(i18n.language).map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              {/* The derived, immutable currency — shown, never chosen (ADR 0025). */}
-              <div className="flex items-start gap-2.5 rounded-xl border border-line bg-paper px-3.5 py-3">
-                <Lock className="mt-0.5 size-3.5 shrink-0 text-ink-3" aria-hidden />
-                <p className="text-xs leading-relaxed text-ink-2">
-                  {t('onboarding.derivedCurrencyNote', {
-                    currency: `${baseCurrency} (${symbolOf(baseCurrency, i18n.language)})`,
-                  })}
-                </p>
-              </div>
-              <Field
-                label={t('onboarding.defaultLanguage')}
-                hint={t('onboarding.defaultLanguageHint')}
-              >
-                <ChoiceCards
-                  name="lang"
-                  value={defaultLanguage}
-                  onChange={setDefaultLanguage}
-                  options={LANGS.map((l) => ({
-                    value: l,
-                    title: t(`lang.${l}`),
-                    subtitle: l.toUpperCase(),
-                  }))}
-                />
-              </Field>
-            </div>
+          {step === REGION_STEP && (
+            <RegionFields
+              country={country}
+              defaultLanguage={defaultLanguage}
+              onCountry={setCountry}
+              onDefaultLanguage={setDefaultLanguage}
+            />
           )}
 
-          {step === 2 && (
-            <div className="space-y-6">
-              <Field label={t('onboarding.firstBusinessName')} htmlFor="bizName">
-                <TextInput
-                  id="bizName"
-                  autoFocus
-                  value={bizName}
-                  onChange={(e) => setBizName(e.target.value)}
-                  placeholder={t('onboarding.firstBusinessNamePlaceholder')}
-                />
-              </Field>
-              <Field label={t('onboarding.vertical')} hint={t('onboarding.verticalHint')}>
-                <ChoiceCards
-                  name="vertical"
-                  columns={1}
-                  value={vertical}
-                  onChange={setVertical}
-                  options={VERTICALS.map((v) => ({
-                    value: v,
-                    title: t(`vertical.${v}` as Parameters<typeof t>[0]),
-                  }))}
-                />
-              </Field>
-            </div>
-          )}
-
-          {step === 3 && (
-            <ReviewPanel
-              fixedLabel={t('onboarding.fixedNote')}
+          {step === REVIEW_STEP && (
+            <CompanyReview
+              basics={{ companyName: name, firstBusinessName: bizName, vertical, country, defaultLanguage }}
               hint={t('onboarding.reviewHint')}
-              rows={[
-                { label: t('onboarding.companyName'), value: name },
-                {
-                  label: t('onboarding.country'),
-                  value: countryName(country, i18n.language),
-                  fixed: true,
-                },
-                {
-                  label: t('onboarding.baseCurrency'),
-                  value: `${baseCurrency} · ${t(`currency.${baseCurrency}`)}`,
-                  fixed: true,
-                },
-                {
-                  label: t('onboarding.defaultLanguage'),
-                  value: t(`lang.${defaultLanguage}`),
-                  fixed: true,
-                },
-                { label: t('onboarding.firstBusinessName'), value: bizName },
-                {
-                  label: t('onboarding.vertical'),
-                  value: t(`vertical.${vertical}` as Parameters<typeof t>[0]),
-                },
-              ]}
+              onEdit={(s) => {
+                setErrors({})
+                setStep(s)
+              }}
             />
           )}
 
@@ -284,15 +229,15 @@ export function OnboardingWizard() {
           <Button
             variant="outline"
             onClick={() => setStep((s) => Math.max(0, s - 1))}
-            disabled={step === 0 || mutation.isPending}
-            className={cn(step === 0 && 'invisible')}
-            aria-hidden={step === 0}
+            disabled={step === COMPANY_STEP || mutation.isPending}
+            className={cn(step === COMPANY_STEP && 'invisible')}
+            aria-hidden={step === COMPANY_STEP}
           >
             <ArrowLeft className="size-4" /> {t('common.back')}
           </Button>
           <span className="flex-1" />
-          {step < 3 ? (
-            <Button onClick={() => setStep((s) => s + 1)} disabled={!canAdvance}>
+          {step < REVIEW_STEP ? (
+            <Button onClick={advance}>
               {t('common.continue')} <ArrowRight className="size-4" />
             </Button>
           ) : (
@@ -354,40 +299,6 @@ function Stepper({ steps, current }: { steps: string[]; current: number }) {
   )
 }
 
-function ReviewPanel({
-  rows,
-  hint,
-  fixedLabel,
-}: {
-  rows: { label: string; value: string; fixed?: boolean }[]
-  hint: string
-  fixedLabel: string
-}) {
-  return (
-    <div>
-      <dl>
-        {rows.map((row) => (
-          <div
-            key={row.label}
-            className="flex items-center justify-between gap-4 border-b border-line py-2.5"
-          >
-            <dt className="text-sm text-ink-3">{row.label}</dt>
-            <dd className="flex items-center gap-2 text-right text-sm font-medium text-ink">
-              {row.value || '—'}
-              {row.fixed ? (
-                <Badge tone="amber">
-                  <Lock className="size-3" /> {fixedLabel}
-                </Badge>
-              ) : null}
-            </dd>
-          </div>
-        ))}
-      </dl>
-      <p className="mt-4 text-xs leading-relaxed text-ink-3">{hint}</p>
-    </div>
-  )
-}
-
 function SuccessPanel({
   company,
   onContinue,
@@ -443,17 +354,4 @@ function SuccessPanel({
       </Card>
     </div>
   )
-}
-
-function symbolOf(currency: string, locale: string): string {
-  try {
-    const parts = new Intl.NumberFormat(locale, {
-      style: 'currency',
-      currency,
-      currencyDisplay: 'narrowSymbol',
-    }).formatToParts(0)
-    return parts.find((p) => p.type === 'currency')?.value ?? currency
-  } catch {
-    return currency
-  }
 }
