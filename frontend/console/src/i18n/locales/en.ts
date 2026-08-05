@@ -1339,7 +1339,7 @@ export const en = {
     },
     commission: {
       title: 'Own-sales commission',
-      current: 'Earns {{percent}}% of their own sales',
+      current: 'Earns {{pct}} of their own sales',
       set: 'Set',
       clear: 'Remove',
       placeholder: '% of sales (e.g. 5)',

@@ -1333,7 +1333,7 @@ export const id = {
     },
     commission: {
       title: 'Komisi penjualan sendiri',
-      current: 'Mendapat {{percent}}% dari penjualannya sendiri',
+      current: 'Mendapat {{pct}} dari penjualannya sendiri',
       set: 'Tetapkan',
       clear: 'Hapus',
       placeholder: '% penjualan (mis. 5)',

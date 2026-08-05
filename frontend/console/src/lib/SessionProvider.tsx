@@ -148,10 +148,32 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     if (manual && !companies.some((c) => c.companyId === manual.companyId)) {
       companies = [...companies, manual]
     }
+    loading = oidcEnabled && companiesQuery.isLoading && !manual
+
+    // Membership can be revoked server-side while the active pointer is still sitting in storage
+    // from a previous login. Falling back to companies[0] for THIS render is not enough — without
+    // persisting the correction, every future load would silently re-resolve to companies[0] again
+    // (the stale pointer is never overwritten). Adjusted during render, NOT in an effect, so no
+    // frame renders the now-invalid company. Gated on the query having genuinely settled (success,
+    // not the first-load `loading` window) and a non-empty list, so a transient/partial state never
+    // evicts a still-valid pointer; a just-onboarded `manual` company is already folded into
+    // `companies` above, so it is never seen as "missing" here. Self-limiting: once corrected,
+    // activeCompanyId equals companies[0].companyId, so this condition is false next render.
+    if (
+      companiesQuery.isSuccess &&
+      !loading &&
+      companies.length > 0 &&
+      activeCompanyId != null &&
+      !companies.some((c) => c.companyId === activeCompanyId)
+    ) {
+      const fallbackId = companies[0].companyId
+      setActiveCompanyId(fallbackId)
+      saveActiveCompanyId(activeScope, fallbackId)
+    }
+
     const active =
       companies.find((c) => c.companyId === activeCompanyId) ?? companies[0] ?? null
     company = active
-    loading = oidcEnabled && companiesQuery.isLoading && !manual
   } else {
     companies = devSessions
     company =

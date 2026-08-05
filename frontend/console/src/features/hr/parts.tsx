@@ -13,7 +13,8 @@ import { Field, TextInput } from '@/components/ui/Field'
 import { ErrorDetails } from '@/components/ErrorDetails'
 import { DialogOverlay } from '@/features/org/parts'
 import type { OrgUnit } from '@/features/org/api'
-import { isoMinorExponent } from '@/lib/money'
+import { localeOf } from '@/i18n'
+import { formatPercent, isoMinorExponent } from '@/lib/money'
 import {
   OPEN_ENDED,
   ROLE_PRESETS,
@@ -847,7 +848,8 @@ function CommissionControl({
   companyId: string
   actor: string
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const locale = localeOf(i18n.language)
   const commissions = useCommissions({ companyId, actor, employeeId, packageId, enabled: true })
   const setCommission = useSetCommission({ companyId, actor })
   const endCommission = useEndCommission({ companyId, actor })
@@ -872,7 +874,9 @@ function CommissionControl({
       {open ? (
         <div className="mt-2 flex items-center justify-between gap-3">
           <span className="text-sm text-ink">
-            {t('hr.commission.current', { percent: (open.percentBasisPoints / 100).toString() })}
+            {t('hr.commission.current', {
+              pct: formatPercent(open.percentBasisPoints / 10000, locale),
+            })}
           </span>
           <button
             type="button"
