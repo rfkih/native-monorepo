@@ -19,7 +19,7 @@ services:
     events: true
   - name: finance-service
     module: ":services:finance-service"
-    migrations: { count: 47, range: "V1..V47" }
+    migrations: { count: 48, range: "V1..V48" }
     events: true
   - name: gateway
     module: ":services:gateway"
@@ -27,7 +27,7 @@ services:
     events: false
   - name: loyalty-service
     module: ":services:loyalty-service"
-    migrations: { count: 2, range: "V1..V2" }
+    migrations: { count: 3, range: "V1..V3" }
     events: true
   - name: notification-service
     module: ":services:notification-service"
