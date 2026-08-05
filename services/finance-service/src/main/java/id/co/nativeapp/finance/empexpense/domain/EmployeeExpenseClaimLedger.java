@@ -158,6 +158,26 @@ public class EmployeeExpenseClaimLedger extends Auditable {
   }
 
   /**
+   * Creates the row via the OUT-OF-ORDER path: the VOID consumer finds no row for the claim (the
+   * approval has not arrived yet — cross-topic reorder, QA sweep 2026-08-05) and self-heals one
+   * carrying ONLY the void facts. A late-arriving approval then calls {@link
+   * #reconcileRecognition}, which touches only the recognition columns — {@code voided_at} stays
+   * stamped, so the drill-down never shows an actually-voided claim as outstanding.
+   */
+  public static EmployeeExpenseClaimLedger unrecognizedVoid(
+      UUID claimId,
+      UUID employeeId,
+      UUID orgUnitId,
+      Money amount,
+      Instant voidedAt,
+      UUID voidEntryId) {
+    EmployeeExpenseClaimLedger row =
+        new EmployeeExpenseClaimLedger(claimId, employeeId, orgUnitId, amount);
+    row.applyVoid(voidedAt, voidEntryId);
+    return row;
+  }
+
+  /**
    * Reconciles a late-arriving APPROVAL onto a row an out-of-order settlement already created. Only
    * the recognition columns are touched — the identity columns were already stamped correctly by
    * the settlement's insert (both events describe the same claim).

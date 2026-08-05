@@ -7,6 +7,7 @@ import id.co.nativeapp.finance.opening.domain.OpeningBalanceAlreadyRecordedExcep
 import id.co.nativeapp.finance.opening.domain.OpeningBalanceIdempotencyKeyConflictException;
 import id.co.nativeapp.finance.opening.domain.OpeningBalancePnlAccountException;
 import id.co.nativeapp.finance.opening.domain.OpeningBalanceSide;
+import id.co.nativeapp.finance.opening.domain.OpeningBalanceVatAccountException;
 import id.co.nativeapp.finance.opening.dto.OpeningBalanceLine;
 import id.co.nativeapp.finance.opening.dto.OpeningBalanceResult;
 import id.co.nativeapp.finance.opening.service.OpeningBalanceWriter;
@@ -56,6 +57,34 @@ class OpeningBalanceWriterTest extends PostgresRlsTestBase {
 
   private OpeningBalanceResult record(List<OpeningBalanceLine> lines, String key) throws Exception {
     return TenantContext.callAs(tenant, ACTOR, () -> writer.record(today(), "IDR", lines, key));
+  }
+
+  @Test
+  void vatControlAccountLinesAreRejectedAndDoNotConsumeTheOnceOnly() throws Exception {
+    // 2200 (VAT_OUTPUT) and 1300 (VAT_INPUT) are GL-derived PPN return inputs — an opening
+    // control balance there would count as period VAT activity (QA sweep 2026-08-05). Migrated
+    // VAT positions belong on generic liability/asset lines.
+    assertThatThrownBy(
+            () ->
+                record(
+                    List.of(
+                        new OpeningBalanceLine("1900", 5_000_000L, OpeningBalanceSide.DEBIT),
+                        new OpeningBalanceLine("2200", 1_000_000L, OpeningBalanceSide.CREDIT)),
+                    "ob-vat-out"))
+        .isInstanceOf(OpeningBalanceVatAccountException.class);
+    assertThatThrownBy(
+            () ->
+                record(
+                    List.of(new OpeningBalanceLine("1300", 400_000L, OpeningBalanceSide.DEBIT)),
+                    "ob-vat-in"))
+        .isInstanceOf(OpeningBalanceVatAccountException.class);
+
+    // Nothing persisted — the once-only slot is still free and a clean submission succeeds.
+    OpeningBalanceResult ok =
+        record(
+            List.of(new OpeningBalanceLine("1900", 1_000_000L, OpeningBalanceSide.DEBIT)),
+            "ob-vat-clean");
+    assertThat(ok.created()).isTrue();
   }
 
   @Test

@@ -12,6 +12,7 @@ import id.co.nativeapp.finance.opening.domain.OpeningBalanceIdempotencyKeyConfli
 import id.co.nativeapp.finance.opening.domain.OpeningBalancePnlAccountException;
 import id.co.nativeapp.finance.opening.domain.OpeningBalanceSealedPeriodException;
 import id.co.nativeapp.finance.opening.domain.OpeningBalanceSide;
+import id.co.nativeapp.finance.opening.domain.OpeningBalanceVatAccountException;
 import id.co.nativeapp.finance.opening.dto.OpeningBalanceLine;
 import id.co.nativeapp.finance.opening.dto.OpeningBalanceResult;
 import id.co.nativeapp.finance.opening.repository.CompanyOpeningBalanceRepository;
@@ -144,6 +145,7 @@ public class OpeningBalanceWriter {
     requireNotSealed(period);
     requireConsistentGlCurrency(period, Money.ofMinor(total, currency));
     requireBalanceSheetAccounts(lines);
+    requireNoVatControlAccounts(lines, occurredAt);
 
     UUID entryId = UUID.randomUUID();
     JournalEntry entry = buildOpeningEntry(lines, currency, plug, period, occurredAt, entryId);
@@ -249,6 +251,26 @@ public class OpeningBalanceWriter {
       String type = types.getFirst();
       if ("REVENUE".equals(type) || "EXPENSE".equals(type)) {
         throw new OpeningBalancePnlAccountException(code, type);
+      }
+    }
+  }
+
+  /**
+   * No opening line may target a VAT CONTROL account (QA sweep 2026-08-05): the PPN return is
+   * GL-derived (output 2200 credit-net − input 1300 debit-net) with no manual-adjustment layer, so
+   * an opening balance there would be counted as period VAT activity — and after filing, the
+   * netting entry would strand it on the control account. Resolved via the SAME role mapping the
+   * VAT return itself uses, so an SME remapping 2200/1300 keeps this guard aligned.
+   */
+  private void requireNoVatControlAccounts(List<OpeningBalanceLine> lines, Instant occurredAt) {
+    String outputCode = roleAccountResolver.resolve(AccountRole.VAT_OUTPUT, occurredAt);
+    String inputCode = roleAccountResolver.resolve(AccountRole.VAT_INPUT, occurredAt);
+    for (OpeningBalanceLine line : lines) {
+      if (line.accountCode().equals(outputCode)) {
+        throw new OpeningBalanceVatAccountException(line.accountCode(), "VAT_OUTPUT");
+      }
+      if (line.accountCode().equals(inputCode)) {
+        throw new OpeningBalanceVatAccountException(line.accountCode(), "VAT_INPUT");
       }
     }
   }

@@ -4,6 +4,7 @@ import id.co.nativeapp.finance.opening.domain.OpeningBalanceAlreadyRecordedExcep
 import id.co.nativeapp.finance.opening.domain.OpeningBalanceIdempotencyKeyConflictException;
 import id.co.nativeapp.finance.opening.domain.OpeningBalancePnlAccountException;
 import id.co.nativeapp.finance.opening.domain.OpeningBalanceSealedPeriodException;
+import id.co.nativeapp.finance.opening.domain.OpeningBalanceVatAccountException;
 import id.co.nativeapp.finance.pnl.domain.MismatchedPostingCurrencyException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
@@ -58,6 +59,16 @@ public class OpeningBalanceAdvice {
       OpeningBalancePnlAccountException ex, HttpServletRequest request) {
     ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.UNPROCESSABLE_ENTITY);
     problem.setType(URI.create(TYPE_BASE + "opening-balance-pnl-account"));
+    problem.setTitle("Unprocessable Entity");
+    problem.setDetail(ex.getMessage());
+    return decorate(problem, request);
+  }
+
+  @ExceptionHandler(OpeningBalanceVatAccountException.class)
+  public ProblemDetail handleVatAccount(
+      OpeningBalanceVatAccountException ex, HttpServletRequest request) {
+    ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.UNPROCESSABLE_ENTITY);
+    problem.setType(URI.create(TYPE_BASE + "opening-balance-vat-account"));
     problem.setTitle("Unprocessable Entity");
     problem.setDetail(ex.getMessage());
     return decorate(problem, request);

@@ -126,7 +126,8 @@ public class ExpenseClaimVoidWriter {
     if (existing.isEmpty()) {
       log.warn(
           "ExpenseClaimVoided for an UNRECOGNIZED claim claimId={} (eventId={}) — approval missing"
-              + " or late; posting the contra without a claim-ledger row to reconcile against",
+              + " or late; posting the contra and self-healing a VOIDED claim-ledger row the late"
+              + " approval will reconcile onto",
           event.claimId(),
           event.eventId());
     }
@@ -180,12 +181,26 @@ public class ExpenseClaimVoidWriter {
               journalLineRepository.save(line);
             });
 
-    // 4) Stamp the claim-ledger row, if one exists (ADR 0030 §4 drill-down). No row to stamp in the
-    //    unrecognized-claim case above — the WARN already flagged it.
-    existing.ifPresent(
-        row -> {
-          row.applyVoid(event.voidedAt(), glEntry.getId());
-          claimLedgerRepository.save(row);
-        });
+    // 4) Stamp the claim-ledger row (ADR 0030 §4 drill-down). When NO row exists (void arrived
+    //    before the approval — cross-topic reorder, QA sweep 2026-08-05), SELF-HEAL one carrying
+    //    only the void facts (the unrecognizedSettlement precedent): the late approval then
+    //    reconciles its recognition columns onto it while voided_at stays stamped, so the
+    //    drill-down never shows an actually-voided claim as outstanding.
+    if (existing.isPresent()) {
+      EmployeeExpenseClaimLedger row = existing.get();
+      row.applyVoid(event.voidedAt(), glEntry.getId());
+      claimLedgerRepository.save(row);
+    } else {
+      EmployeeExpenseClaimLedger row =
+          EmployeeExpenseClaimLedger.unrecognizedVoid(
+              event.claimId(),
+              event.employeeId(),
+              event.orgUnitId(),
+              amount,
+              event.voidedAt(),
+              glEntry.getId());
+      row.setCompanyId(companyId);
+      claimLedgerRepository.saveAndFlush(row);
+    }
   }
 }

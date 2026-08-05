@@ -3,6 +3,7 @@ package id.co.nativeapp.finance;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import id.co.nativeapp.finance.empexpense.messaging.ExpenseClaimApprovedEvent;
+import id.co.nativeapp.finance.empexpense.messaging.ExpenseClaimVoidedEvent;
 import id.co.nativeapp.finance.empexpense.messaging.ExpenseReimbursementSettledEvent;
 import id.co.nativeapp.finance.empexpense.service.ExpenseClaimPostingService;
 import id.co.nativeapp.money.Money;
@@ -254,6 +255,57 @@ class EmpExpenseClaimLedgerIntegrationTest extends PostgresRlsTestBase {
 
   // -------------------------------------------------------------------------------------- helpers
 
+  // --------------------------------------------------------------------------------------------
+  // Void-before-approval reorder (QA sweep 2026-08-05): the void self-heals a VOIDED row; the late
+  // approval reconciles recognition ONTO it — voided_at survives, one row, GL 2600 nets to zero.
+  // --------------------------------------------------------------------------------------------
+
+  @Test
+  void voidBeforeApprovalSelfHealsAVoidedRowTheLateApprovalReconcilesOnto() throws Exception {
+    UUID claimId = UUID.randomUUID();
+    UUID orgUnitId = UUID.randomUUID();
+    UUID employeeId = UUID.randomUUID();
+    Instant approvedAt = Instant.parse("2026-08-01T09:00:00Z");
+    Instant voidedAt = Instant.parse("2026-08-02T09:00:00Z");
+
+    // T1: the VOID arrives first (cross-topic reorder). It must post its contra AND self-heal a
+    // claim-ledger row carrying the void facts — not skip the stamp.
+    boolean voided =
+        TenantContext.callAs(
+            TENANT_A,
+            ACTOR_A,
+            () ->
+                postingService.handleVoided(
+                    new ExpenseClaimVoidedEvent(
+                        UUID.randomUUID(),
+                        claimId,
+                        TENANT_A,
+                        orgUnitId,
+                        employeeId,
+                        Money.ofMinor(250_000L, "IDR"),
+                        "supplies",
+                        approvedAt,
+                        voidedAt)));
+    assertThat(voided).isTrue();
+    assertThat(claimLedgerRowCountAsAdmin(claimId)).isEqualTo(1L);
+    assertThat(isVoidedAsAdmin(claimId)).isTrue();
+    assertThat(isRecognizedAsAdmin(claimId)).isFalse();
+
+    // T2: the approval finally arrives. It must reconcile recognition ONTO the voided row (one
+    // row, voided_at intact) — the old bug inserted a fresh RECOGNIZED row that showed an
+    // actually-voided claim as outstanding forever.
+    approve(claimId, orgUnitId, employeeId, approvedAt);
+
+    assertThat(claimLedgerRowCountAsAdmin(claimId))
+        .as("the approval must reconcile onto the voided row, never insert a second one")
+        .isEqualTo(1L);
+    assertThat(isVoidedAsAdmin(claimId)).as("voided_at must survive the reconciliation").isTrue();
+    assertThat(isRecognizedAsAdmin(claimId)).isTrue();
+    assertThat(net2600BalanceAsAdmin())
+        .as("recognition credit + void debit on 2600 must net to zero")
+        .isZero();
+  }
+
   private void approve(UUID claimId, UUID orgUnitId, UUID employeeId, Instant approvedAt)
       throws Exception {
     boolean posted =
@@ -355,6 +407,10 @@ class EmpExpenseClaimLedgerIntegrationTest extends PostgresRlsTestBase {
 
   private boolean isSettledAsAdmin(UUID claimId) throws Exception {
     return booleanColumnAsAdmin(claimId, "settled_at IS NOT NULL");
+  }
+
+  private boolean isVoidedAsAdmin(UUID claimId) throws Exception {
+    return booleanColumnAsAdmin(claimId, "voided_at IS NOT NULL");
   }
 
   private boolean booleanColumnAsAdmin(UUID claimId, String predicateExpression) throws Exception {
