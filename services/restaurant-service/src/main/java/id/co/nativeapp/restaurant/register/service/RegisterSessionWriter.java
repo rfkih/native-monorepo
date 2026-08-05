@@ -36,6 +36,30 @@ import org.springframework.transaction.annotation.Transactional;
  * refunds in the window}), derives the SIGNED variance with overflow-safe arithmetic, transitions
  * OPEN→CLOSED one-shot, and writes the {@code RegisterSessionClosed} outbox row IN THE SAME
  * transaction (rule 3) — finance posts only that variance.
+ *
+ * <p><strong>The {@code CashWindowLock} contract (verified HIGH race fix).</strong> {@link #close}
+ * previously computed {@code closeInstant = Instant.now()} and summed {@code sale} / {@code
+ * payment_refund} / {@code gift_card_sale} rows in {@code [openedAt, closeInstant)} with no
+ * serialization against concurrent sale/refund commits — a not-yet-committed row with {@code
+ * occurred_at < closeInstant} was invisible to the SUM, and (since the NEXT session's window starts
+ * only at its own {@code openedAt >= closeInstant}) could never be counted by any session again.
+ * The fix is a per-business READERS-WRITER {@link CashWindowLock}, not a plain mutex (a plain mutex
+ * was tried first and rejected — it also serialized two UNRELATED concurrent sales against EACH
+ * OTHER, which broke a loyalty/gift-card balance-decrement race test that requires genuine
+ * concurrency): {@link #close} (and {@link #open}, defensively, for the analogous open-boundary
+ * case) acquire the EXCLUSIVE mode ({@link CashWindowLock#acquireForClose}); EVERY
+ * sale/refund-committing transaction ({@code SaleWriter.create}, {@code OrderWriter.checkout},
+ * {@code OrderWriter.payParked}, {@code BillWriter.payBill}, {@code PaymentCaptureWriter.capture},
+ * {@code VoidRefundWriter.refund}) acquires the SHARED mode ({@link
+ * CashWindowLock#acquireForCommit}) — SHARED holders never block each other, only EXCLUSIVE. Both
+ * modes are acquired as the FIRST lock-acquiring statement in their transaction, strictly BEFORE
+ * capturing the timestamp that will become {@code closeInstant} (here) or the row's {@code
+ * occurred_at} (there). Ordering is deadlock-safe: {@link #close} takes the pessimistic {@code
+ * findWithLockById} row lock BEFORE the advisory lock, but no OTHER transaction ever acquires that
+ * same row lock (only {@code close} does, and the idempotency/status checks reject a second
+ * concurrent close on the same session before it would reach either lock), so the two locks never
+ * form a cross-transaction cycle. See {@link CashWindowLock} class javadoc for the full
+ * before/after reasoning.
  */
 @Component
 public class RegisterSessionWriter {
@@ -49,14 +73,17 @@ public class RegisterSessionWriter {
   private final RegisterSessionRepository repository;
   private final OutboxWriter outboxWriter;
   private final OutletAccessGuard outletAccessGuard;
+  private final CashWindowLock cashWindowLock;
 
   public RegisterSessionWriter(
       RegisterSessionRepository repository,
       OutboxWriter outboxWriter,
-      OutletAccessGuard outletAccessGuard) {
+      OutletAccessGuard outletAccessGuard,
+      CashWindowLock cashWindowLock) {
     this.repository = repository;
     this.outboxWriter = outboxWriter;
     this.outletAccessGuard = outletAccessGuard;
+    this.cashWindowLock = cashWindowLock;
   }
 
   /**
@@ -97,6 +124,11 @@ public class RegisterSessionWriter {
     if (floatMinor < 0) {
       throw new IllegalArgumentException("openingFloatMinor must be >= 0");
     }
+
+    // CashWindowLock — EXCLUSIVE, FIRST lock-acquiring statement, before the openedAt timestamp
+    // (defensive symmetry with close(); see class javadoc). Nothing above takes a DB lock (plain
+    // reads / in-memory validation only).
+    cashWindowLock.acquireForClose(request.businessId());
 
     Instant now = Instant.now();
     LocalDate businessDate =
@@ -155,6 +187,14 @@ public class RegisterSessionWriter {
       throw new RegisterSessionNotOpenException(sessionId, session.getStatus());
     }
     long countedCash = request.countedCashMinor(); // @NotNull @PositiveOrZero at the edge
+
+    // CashWindowLock — EXCLUSIVE, BEFORE closeInstant is captured and the cash sums run (verified
+    // HIGH race fix; see class javadoc + CashWindowLock javadoc). This is the second lock this
+    // transaction takes (after the findWithLockById row lock above) but the FIRST advisory/
+    // business-scoped lock; no other transaction ever takes findWithLockById on
+    // cash_register_session, so the two never form a cross-transaction cycle (documented ordering
+    // — see class javadoc). Waits for every in-flight sale/refund's SHARED lock to release.
+    cashWindowLock.acquireForClose(session.getBusinessId());
 
     Instant closeInstant = Instant.now();
     // Cash INTO the drawer = cash-collected sale portions + cash gift-card sales (a gift card

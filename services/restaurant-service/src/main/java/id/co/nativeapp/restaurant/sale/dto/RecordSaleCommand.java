@@ -25,7 +25,11 @@ import java.util.UUID;
  * @param amountMinor the GRAND TOTAL in the currency's minor units (never a float); must be
  *     positive — this is the customer-pays amount after discount, service charge, and tax
  * @param currency the ISO-4217 currency code
- * @param occurredAt when the sale occurred; the caller defaults a missing value to now
+ * @param occurredAt when the sale occurred; {@code null} means "happening right now" — {@link
+ *     id.co.nativeapp.restaurant.sale.service.SaleWriter#create} resolves that default to {@code
+ *     Instant.now()} itself, AFTER acquiring the per-business {@code CashWindowLock} (verified HIGH
+ *     race fix), never before the transaction starts. A non-null value is explicit (possibly
+ *     backdated) caller data, used as-is regardless of lock timing
  * @param idempotencyKey the client's request id, the producer-idempotency dedupe key
  * @param tenderType the payment tender type ({@code CASH}, {@code QRIS}, {@code CARD}), or {@code
  *     null} for legacy/no-payment sales; threaded to the {@code SaleRecorded} event wire field so

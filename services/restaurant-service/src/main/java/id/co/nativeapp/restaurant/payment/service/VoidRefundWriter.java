@@ -11,6 +11,7 @@ import id.co.nativeapp.restaurant.payment.messaging.SaleRefundedSchema;
 import id.co.nativeapp.restaurant.payment.messaging.SaleVoidedSchema;
 import id.co.nativeapp.restaurant.payment.repository.PaymentRefundRepository;
 import id.co.nativeapp.restaurant.payment.repository.PaymentRepository;
+import id.co.nativeapp.restaurant.register.service.CashWindowLock;
 import id.co.nativeapp.tenant.TenantContext;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -39,6 +40,16 @@ import org.springframework.transaction.annotation.Transactional;
  * same id. The payment state-transition guards ({@link Payment#voidPayment()} / {@link
  * Payment#refund(Money)}) also enforce domain-level invariants: only CAPTURED payments can be
  * voided/refunded.
+ *
+ * <p><strong>CashWindowLock (verified HIGH race fix).</strong> {@link #refund} acquires the
+ * per-business {@link CashWindowLock} SHARED ({@link CashWindowLock#acquireForCommit}) as the FIRST
+ * lock-acquiring statement — strictly BEFORE it captures {@code occurredAt}, which becomes the
+ * append-only {@code payment_refund} row's timestamp (the exact column the register close sums).
+ * {@code occurredAt} is captured HERE (inside the lock), no longer passed in from {@link
+ * VoidRefundService}, precisely so a refund forced to wait behind a concurrent register close
+ * (EXCLUSIVE mode) gets a FRESH post-commit timestamp instead of a stale pre-lock one. {@link
+ * #voidPayment} does NOT take this lock — it writes no {@code sale}/{@code payment_refund} row the
+ * register close reads. See {@code RegisterSessionWriter} class javadoc for the full contract.
  */
 @Component
 public class VoidRefundWriter {
@@ -46,14 +57,17 @@ public class VoidRefundWriter {
   private final PaymentRepository paymentRepository;
   private final PaymentRefundRepository paymentRefundRepository;
   private final OutboxWriter outboxWriter;
+  private final CashWindowLock cashWindowLock;
 
   public VoidRefundWriter(
       PaymentRepository paymentRepository,
       PaymentRefundRepository paymentRefundRepository,
-      OutboxWriter outboxWriter) {
+      OutboxWriter outboxWriter,
+      CashWindowLock cashWindowLock) {
     this.paymentRepository = paymentRepository;
     this.paymentRefundRepository = paymentRefundRepository;
     this.outboxWriter = outboxWriter;
+    this.cashWindowLock = cashWindowLock;
   }
 
   /**
@@ -119,13 +133,12 @@ public class VoidRefundWriter {
    * @param paymentId the payment to refund (must be CAPTURED or PARTIALLY_REFUNDED)
    * @param refundAmount the amount to refund (must be positive and must not exceed the remaining
    *     refundable amount)
-   * @param occurredAt the moment of the refund (server-side clock)
    * @return the updated payment response
    * @throws IllegalArgumentException if the payment is not found or the refund amount is invalid
    * @throws IllegalStateException if the payment state machine rejects the transition
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
-  public PaymentResponse refund(UUID paymentId, Money refundAmount, Instant occurredAt) {
+  public PaymentResponse refund(UUID paymentId, Money refundAmount) {
     String companyId = TenantContext.require().companyId();
 
     Payment payment =
@@ -144,6 +157,13 @@ public class VoidRefundWriter {
               + payment.getAmount().amountMinor()
               + " minor units) — partial platform refunds are not supported");
     }
+
+    // CashWindowLock (verified HIGH race fix) — SHARED, FIRST lock-acquiring statement, strictly
+    // BEFORE occurredAt is captured below (which becomes the payment_refund row's timestamp, the
+    // exact column the register close sums). See RegisterSessionWriter class javadoc for the
+    // contract.
+    cashWindowLock.acquireForCommit(payment.getBusinessId());
+    Instant occurredAt = Instant.now();
 
     // Domain guard: accumulates refund, transitions CAPTURED→PARTIALLY_REFUNDED or REFUNDED.
     Money newTotal = payment.refund(refundAmount);

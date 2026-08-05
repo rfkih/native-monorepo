@@ -50,6 +50,8 @@ public class VoidRefundService {
    */
   public PaymentResponse refund(UUID paymentId, Money refundAmount) {
     TenantContext.require();
-    return writer.refund(paymentId, refundAmount, Instant.now());
+    // occurredAt is captured INSIDE the writer, after the CashWindowLock (verified HIGH race fix)
+    // — see VoidRefundWriter class javadoc.
+    return writer.refund(paymentId, refundAmount);
   }
 }

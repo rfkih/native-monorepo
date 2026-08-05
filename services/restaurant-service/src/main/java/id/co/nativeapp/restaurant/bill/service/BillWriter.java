@@ -40,6 +40,7 @@ import id.co.nativeapp.restaurant.promotion.dto.EvalResult;
 import id.co.nativeapp.restaurant.promotion.repository.AppliedPromotionRepository;
 import id.co.nativeapp.restaurant.promotion.service.ManualDiscountGuard;
 import id.co.nativeapp.restaurant.promotion.service.PromotionEngineService;
+import id.co.nativeapp.restaurant.register.service.CashWindowLock;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
 import id.co.nativeapp.restaurant.sale.service.SaleWriter;
@@ -85,6 +86,13 @@ import org.springframework.transaction.annotation.Transactional;
  * <p><strong>Cart building.</strong> {@link #buildCart} mirrors {@code OrderWriter.buildCart}
  * exactly, sharing the same {@link ModifierValidationReader} and {@link TaxChargeService} beans so
  * the two paths cannot silently diverge.
+ *
+ * <p><strong>CashWindowLock (verified HIGH race fix).</strong> {@link #payBill} acquires the
+ * per-business {@link CashWindowLock} SHARED ({@link CashWindowLock#acquireForCommit}) as the FIRST
+ * lock-acquiring statement — strictly BEFORE the {@code Instant now} that becomes the check's sale
+ * {@code occurred_at} is captured — mirroring {@code OrderWriter.checkout}/{@code payParked}.
+ * SHARED holders never block each other, only a concurrent register close's EXCLUSIVE mode. See
+ * {@code RegisterSessionWriter} class javadoc for the full contract.
  */
 @Component
 public class BillWriter {
@@ -103,6 +111,7 @@ public class BillWriter {
   private final AppliedPromotionRepository appliedPromotionRepository;
   private final ManualDiscountGuard manualDiscountGuard;
   private final SalesChannelRepository salesChannelRepository;
+  private final CashWindowLock cashWindowLock;
 
   @SuppressWarnings("checkstyle:ParameterNumber")
   public BillWriter(
@@ -119,7 +128,8 @@ public class BillWriter {
       PromotionEngineService promotionEngine,
       AppliedPromotionRepository appliedPromotionRepository,
       ManualDiscountGuard manualDiscountGuard,
-      SalesChannelRepository salesChannelRepository) {
+      SalesChannelRepository salesChannelRepository,
+      CashWindowLock cashWindowLock) {
     this.billRepository = billRepository;
     this.lineRepository = lineRepository;
     this.modifierRepository = modifierRepository;
@@ -134,6 +144,7 @@ public class BillWriter {
     this.appliedPromotionRepository = appliedPromotionRepository;
     this.manualDiscountGuard = manualDiscountGuard;
     this.salesChannelRepository = salesChannelRepository;
+    this.cashWindowLock = cashWindowLock;
   }
 
   // -------------------------------------------------------------------------
@@ -443,6 +454,14 @@ public class BillWriter {
     // -----------------------------------------------------------------------
     String onlineChannel =
         validateOnlineTenderAndNormalize(request.payment(), request.channelCode());
+
+    // -----------------------------------------------------------------------
+    // CashWindowLock (verified HIGH race fix) — SHARED, FIRST lock-acquiring statement in this
+    // transaction, BEFORE the now capture below (same contract as OrderWriter.checkout/
+    // payParked; see RegisterSessionWriter class javadoc). Everything above this point is a plain
+    // read or an idempotent-replay short-circuit — no DB lock taken yet.
+    // -----------------------------------------------------------------------
+    cashWindowLock.acquireForCommit(bill.getBusinessId());
 
     // -----------------------------------------------------------------------
     // Evaluate the promotions engine for THIS check's subtotal (ADR 0026 — automatics + the manual

@@ -6,6 +6,7 @@ import id.co.nativeapp.money.Money;
 import id.co.nativeapp.restaurant.metric.domain.RestaurantMetricContract;
 import id.co.nativeapp.restaurant.metric.messaging.MetricPublishedSchema;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
+import id.co.nativeapp.restaurant.register.service.CashWindowLock;
 import id.co.nativeapp.restaurant.sale.domain.Sale;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
@@ -15,6 +16,7 @@ import id.co.nativeapp.restaurant.sale.projection.SaleView;
 import id.co.nativeapp.restaurant.sale.repository.SaleRepository;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
+import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
@@ -35,6 +37,15 @@ import org.springframework.transaction.annotation.Transactional;
  * SaleService} calls {@link #create} and, only on a concurrent-collision conflict, {@link
  * #findExistingByKey} in a <em>separate</em> transaction (a PostgreSQL transaction is poisoned once
  * a constraint fires).
+ *
+ * <p><strong>CashWindowLock (verified HIGH race fix).</strong> {@link #create} acquires the
+ * per-business {@link CashWindowLock} SHARED ({@link CashWindowLock#acquireForCommit}) as the FIRST
+ * lock-acquiring statement, strictly BEFORE the "happening right now" default for {@code
+ * occurredAt} is resolved — mirroring {@code OrderWriter.checkout}. {@link #recordInCurrentTx} does
+ * NOT take the lock itself: it runs {@code MANDATORY} inside a caller's transaction
+ * (checkout/payParked/payBill/capture) that has ALREADY acquired the SHARED lock earlier in that
+ * same transaction — re-acquiring is unnecessary (a PostgreSQL advisory xact lock is re-entrant
+ * within one transaction). See {@code RegisterSessionWriter} class javadoc for the full contract.
  */
 @Component
 public class SaleWriter {
@@ -45,16 +56,19 @@ public class SaleWriter {
   private final OutboxWriter outboxWriter;
   private final PostOutboxHook postOutboxHook;
   private final OutletAccessGuard outletAccessGuard;
+  private final CashWindowLock cashWindowLock;
 
   public SaleWriter(
       SaleRepository repository,
       OutboxWriter outboxWriter,
       PostOutboxHook postOutboxHook,
-      OutletAccessGuard outletAccessGuard) {
+      OutletAccessGuard outletAccessGuard,
+      CashWindowLock cashWindowLock) {
     this.repository = repository;
     this.outboxWriter = outboxWriter;
     this.postOutboxHook = postOutboxHook;
     this.outletAccessGuard = outletAccessGuard;
+    this.cashWindowLock = cashWindowLock;
   }
 
   /**
@@ -91,6 +105,16 @@ public class SaleWriter {
     // only a genuinely new sale at an unassigned outlet is rejected.
     outletAccessGuard.enforce(command.businessId());
 
+    // CashWindowLock (verified HIGH race fix) — SHARED, FIRST lock-acquiring statement, strictly
+    // BEFORE occurredAt is resolved below (see RegisterSessionWriter class javadoc for the
+    // contract).
+    // command.occurredAt() may be a caller-supplied backdated instant (legacy POST /api/v1/sales
+    // allows an explicit occurredAt) — that is deliberate historical data, independent of lock
+    // timing, and is used as-is. Only the "happening right now" default (null) is captured HERE,
+    // inside the lock, instead of by the controller before the transaction even started.
+    cashWindowLock.acquireForCommit(command.businessId());
+    Instant occurredAt = command.occurredAt() != null ? command.occurredAt() : Instant.now();
+
     // Validate the amount through libs/money Money (ISO-4217; integer minor units,
     // never a float). Money.ofMinor rejects an unknown currency code with
     // IllegalArgumentException -> mapped to 400 by ApiExceptionHandler.
@@ -105,7 +129,7 @@ public class SaleWriter {
         new Sale(
             command.businessId(),
             amount,
-            command.occurredAt(),
+            occurredAt,
             command.idempotencyKey(),
             command.tenderType(),
             cashCollectedOf(command),

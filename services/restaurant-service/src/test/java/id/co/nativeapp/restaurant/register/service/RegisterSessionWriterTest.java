@@ -42,8 +42,9 @@ class RegisterSessionWriterTest {
   private final RegisterSessionRepository repository = mock(RegisterSessionRepository.class);
   private final OutboxWriter outboxWriter = mock(OutboxWriter.class);
   private final OutletAccessGuard guard = mock(OutletAccessGuard.class);
+  private final CashWindowLock cashWindowLock = mock(CashWindowLock.class);
   private final RegisterSessionWriter writer =
-      new RegisterSessionWriter(repository, outboxWriter, guard);
+      new RegisterSessionWriter(repository, outboxWriter, guard, cashWindowLock);
 
   private static RegisterSession openSession(long floatMinor) {
     RegisterSession session =
@@ -90,6 +91,9 @@ class RegisterSessionWriterTest {
     verify(outboxWriter)
         .write(anyString(), anyString(), anyString(), any(), any(), any(), any(Instant.class));
     verify(guard).enforce(OUTLET);
+    // CashWindowLock (verified HIGH race fix): the per-business advisory lock is taken exactly
+    // once, before closeInstant/the cash sums are computed — see RegisterSessionWriter class doc.
+    verify(cashWindowLock).acquireForClose(OUTLET);
   }
 
   @Test
@@ -126,6 +130,9 @@ class RegisterSessionWriterTest {
                     () -> writer.close(sessionId, new CloseSessionRequest(60_000L), "close-key")))
         .isInstanceOf(RegisterSessionIdempotencyKeyConflictException.class);
     verify(repository, never()).findWithLockById(any());
+    // A close-key conflict short-circuits BEFORE the CashWindowLock is ever reached — an idempotent
+    // replay probe never contends the business's advisory lock.
+    verify(cashWindowLock, never()).acquireForClose(any());
   }
 
   @Test
@@ -142,6 +149,28 @@ class RegisterSessionWriterTest {
                             new OpenSessionRequest(OUTLET, 100_000L, "IDR", null), "open-key")))
         .isInstanceOf(RegisterSessionIdempotencyKeyConflictException.class);
     verify(repository, never()).saveAndFlush(any());
+    // A conflicting-payload replay short-circuits BEFORE the CashWindowLock is ever reached.
+    verify(cashWindowLock, never()).acquireForClose(any());
+  }
+
+  @Test
+  void openAcquiresTheCashWindowLockBeforeStampingOpenedAt() {
+    when(repository.findViewByOpenIdempotencyKey("fresh-open-key")).thenReturn(Optional.empty());
+    when(repository.saveAndFlush(any(RegisterSession.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    OpenSessionResult result =
+        asTenant(
+            () ->
+                writer.open(
+                    new OpenSessionRequest(OUTLET, 100_000L, "IDR", null), "fresh-open-key"));
+
+    assertThat(result.created()).isTrue();
+    // CashWindowLock (verified HIGH race fix, defensive open-boundary symmetry with close()): taken
+    // exactly once, before the openedAt timestamp is captured — see RegisterSessionWriter class
+    // doc.
+    verify(cashWindowLock).acquireForClose(OUTLET);
+    verify(guard).enforce(OUTLET);
   }
 
   @Test
@@ -162,5 +191,7 @@ class RegisterSessionWriterTest {
     // the replay still passes the outlet-assignment gate (review W1)
     verify(guard).enforce(OUTLET);
     verify(repository, never()).saveAndFlush(any());
+    // A same-payload replay is a no-op read — it never contends the business's advisory lock.
+    verify(cashWindowLock, never()).acquireForClose(any());
   }
 }

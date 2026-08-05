@@ -13,6 +13,7 @@ import id.co.nativeapp.restaurant.giftcard.messaging.GiftCardSoldSchema;
 import id.co.nativeapp.restaurant.giftcard.projection.GiftCardSaleView;
 import id.co.nativeapp.restaurant.giftcard.repository.GiftCardSaleRepository;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
+import id.co.nativeapp.restaurant.register.service.CashWindowLock;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Instant;
@@ -56,18 +57,21 @@ public class GiftCardSaleWriter {
   private final OutletAccessGuard outletAccessGuard;
   private final GiftCardCodeGenerator giftCardCodeGenerator;
   private final GiftCardProperties giftCardProperties;
+  private final CashWindowLock cashWindowLock;
 
   public GiftCardSaleWriter(
       GiftCardSaleRepository repository,
       OutboxWriter outboxWriter,
       OutletAccessGuard outletAccessGuard,
       GiftCardCodeGenerator giftCardCodeGenerator,
-      GiftCardProperties giftCardProperties) {
+      GiftCardProperties giftCardProperties,
+      CashWindowLock cashWindowLock) {
     this.repository = repository;
     this.outboxWriter = outboxWriter;
     this.outletAccessGuard = outletAccessGuard;
     this.giftCardCodeGenerator = giftCardCodeGenerator;
     this.giftCardProperties = giftCardProperties;
+    this.cashWindowLock = cashWindowLock;
   }
 
   /**
@@ -101,6 +105,13 @@ public class GiftCardSaleWriter {
       throw new GiftCardMintLimitExceededException(
           request.amountMinor(), giftCardProperties.maxMintMinor());
     }
+
+    // A cash gift-card sale is drawer money the register close SUMS (sumCashGiftCardSales) — it
+    // must take the same shared cash-window lock as every sale/refund-committing transaction, so
+    // an in-flight mint cannot slip invisibly under a concurrent close's snapshot (the QA-sweep
+    // register-close race; the CashWindowLock javadoc has the full contract). Acquired BEFORE the
+    // timestamp below so a mint that waited behind a close lands in the NEXT session's window.
+    cashWindowLock.acquireForCommit(request.businessId());
 
     Money amount = Money.ofMinor(request.amountMinor(), request.currency());
     UUID giftCardId = UUID.randomUUID();

@@ -10,7 +10,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
-import java.time.Instant;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -53,12 +52,16 @@ public class SaleController {
               + " the pre-existing sale (no second SaleRecorded event emitted).")
   @PostMapping
   public ResponseEntity<SaleResponse> recordSale(@Valid @RequestBody SaleRequest request) {
+    // occurredAt is passed through AS-IS (possibly null): SaleWriter.create resolves a missing
+    // value to Instant.now() itself, INSIDE its transaction, after acquiring the per-business
+    // CashWindowLock (verified HIGH race fix) — resolving it here, before the transaction/lock,
+    // would let a stale pre-lock instant land on a sale that had to wait behind a register close.
     RecordSaleCommand command =
         new RecordSaleCommand(
             request.businessId(),
             request.amountMinor(),
             request.currency(),
-            request.occurredAt() != null ? request.occurredAt() : Instant.now(),
+            request.occurredAt(),
             request.idempotencyKey());
 
     RecordSaleResult result = saleService.recordSale(command);

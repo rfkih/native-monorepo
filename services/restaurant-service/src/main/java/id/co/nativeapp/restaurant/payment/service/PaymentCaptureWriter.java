@@ -16,6 +16,7 @@ import id.co.nativeapp.restaurant.pricing.domain.PriceBreakdown;
 import id.co.nativeapp.restaurant.pricing.service.TaxChargeService;
 import id.co.nativeapp.restaurant.promotion.projection.AppliedPromotionView;
 import id.co.nativeapp.restaurant.promotion.repository.AppliedPromotionRepository;
+import id.co.nativeapp.restaurant.register.service.CashWindowLock;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
 import id.co.nativeapp.restaurant.sale.service.SaleWriter;
@@ -64,6 +65,15 @@ import org.springframework.transaction.annotation.Transactional;
  * #reconstructBreakdown}) so the emitted {@code SaleRecorded} carries the real subtotal/discount/
  * tax/service-charge legs instead of leaving them {@code null} (which made finance fall back to
  * {@code subtotal == amount_minor}, silently dropping the discount AND tax/SC legs).
+ *
+ * <p><strong>CashWindowLock (verified HIGH race fix).</strong> {@link #capture} acquires the
+ * per-business {@link CashWindowLock} SHARED ({@link CashWindowLock#acquireForCommit}) as the FIRST
+ * lock-acquiring statement — strictly BEFORE it captures {@code capturedAt}, which becomes the
+ * recorded sale's {@code occurred_at} — mirroring {@code OrderWriter.checkout}. {@code capturedAt}
+ * is captured HERE (inside the lock), no longer passed in from {@link PaymentCaptureService},
+ * precisely so a capture forced to wait behind a concurrent register close (EXCLUSIVE mode) gets a
+ * FRESH post-commit timestamp instead of a stale pre-lock one. See {@code RegisterSessionWriter}
+ * class javadoc for the full contract.
  */
 @Component
 public class PaymentCaptureWriter {
@@ -78,6 +88,7 @@ public class PaymentCaptureWriter {
   private final SaleWriter saleWriter;
   private final AppliedPromotionRepository appliedPromotionRepository;
   private final TaxChargeService taxChargeService;
+  private final CashWindowLock cashWindowLock;
 
   @SuppressWarnings("checkstyle:ParameterNumber")
   public PaymentCaptureWriter(
@@ -88,7 +99,8 @@ public class PaymentCaptureWriter {
       StockDeductionWriter stockDeductionWriter,
       SaleWriter saleWriter,
       AppliedPromotionRepository appliedPromotionRepository,
-      TaxChargeService taxChargeService) {
+      TaxChargeService taxChargeService,
+      CashWindowLock cashWindowLock) {
     this.paymentRepository = paymentRepository;
     this.orderRepository = orderRepository;
     this.orderLineRepository = orderLineRepository;
@@ -97,6 +109,7 @@ public class PaymentCaptureWriter {
     this.saleWriter = saleWriter;
     this.appliedPromotionRepository = appliedPromotionRepository;
     this.taxChargeService = taxChargeService;
+    this.cashWindowLock = cashWindowLock;
   }
 
   /**
@@ -106,13 +119,12 @@ public class PaymentCaptureWriter {
    * SaleWriter#create}).
    *
    * @param paymentId the payment to capture (must be PENDING and belong to the current tenant)
-   * @param capturedAt the moment of capture (server-side clock)
    * @return the captured payment response
    * @throws IllegalArgumentException if the payment is not found, not PENDING, or is not a digital
    *     tender
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
-  public PaymentResponse capture(UUID paymentId, Instant capturedAt) {
+  public PaymentResponse capture(UUID paymentId) {
     TenantContext.Tenant tenant = TenantContext.require();
     String companyId = tenant.companyId();
 
@@ -129,9 +141,16 @@ public class PaymentCaptureWriter {
     }
 
     if (payment.getStatus() == Payment.Status.CAPTURED) {
-      // Idempotent re-delivery: return the existing state without side effects.
+      // Idempotent re-delivery: return the existing state without side effects. No lock needed —
+      // nothing is written.
       return PaymentResponse.from(payment);
     }
+
+    // CashWindowLock (verified HIGH race fix) — SHARED, FIRST lock-acquiring statement from this
+    // point on, strictly BEFORE capturedAt is captured below (see class javadoc). Everything above
+    // is a plain read or the no-write idempotent-redelivery short-circuit.
+    cashWindowLock.acquireForCommit(payment.getBusinessId());
+    Instant capturedAt = Instant.now();
 
     // Payment.capture() enforces the PENDING guard — throws if already VOIDED/REFUNDED/etc.
     // The sale idempotency key is derived from the immutable payment id (a UUID), not the

@@ -45,6 +45,7 @@ import id.co.nativeapp.restaurant.promotion.repository.AppliedPromotionRepositor
 import id.co.nativeapp.restaurant.promotion.repository.CouponRepository;
 import id.co.nativeapp.restaurant.promotion.service.ManualDiscountGuard;
 import id.co.nativeapp.restaurant.promotion.service.PromotionEngineService;
+import id.co.nativeapp.restaurant.register.service.CashWindowLock;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
 import id.co.nativeapp.restaurant.sale.service.SaleWriter;
@@ -101,6 +102,17 @@ import org.springframework.transaction.annotation.Transactional;
  *       row and its {@code SaleRecorded} outbox row join this same transaction (rule 3, C1 fix).
  * </ol>
  *
+ * <p><strong>CashWindowLock (verified HIGH race fix).</strong> Both {@link #checkout} and {@link
+ * #payParked} acquire the per-business {@link CashWindowLock} SHARED ({@link
+ * CashWindowLock#acquireForCommit}) as the FIRST lock-acquiring statement — strictly BEFORE the
+ * {@code Instant now}/{@code occurredAt} that becomes the sale's {@code occurred_at} is captured —
+ * so a register close (which holds the EXCLUSIVE mode) that is mid-window for this business is
+ * either fully committed already (its sums see this sale) or forces this checkout to block until
+ * the close commits, in which case {@code now} is captured fresh AFTER that commit and lands the
+ * sale in a later session's window instead of neither. SHARED holders never block each other, so
+ * two unrelated concurrent checkouts on the same outlet stay fully concurrent. See {@code
+ * RegisterSessionWriter} class javadoc for the full contract.
+ *
  * <p><strong>Park = saved cart, no revenue, no promotions yet.</strong> {@link #park} persists an
  * order in {@code PARKED} status — identical item/table validation to checkout, but writes NO sale,
  * NO payment, NO outbox row, and does NOT run the promotions engine (composition rule — ADR 0026:
@@ -136,6 +148,7 @@ public class OrderWriter {
   private final OfflineReplayGuard offlineReplayGuard;
   private final SelfOrderProperties selfOrderProperties;
   private final SalesChannelRepository salesChannelRepository;
+  private final CashWindowLock cashWindowLock;
 
   @SuppressWarnings("checkstyle:ParameterNumber")
   public OrderWriter(
@@ -157,7 +170,8 @@ public class OrderWriter {
       LoyaltyRedemptionGuard loyaltyRedemptionGuard,
       OfflineReplayGuard offlineReplayGuard,
       SelfOrderProperties selfOrderProperties,
-      SalesChannelRepository salesChannelRepository) {
+      SalesChannelRepository salesChannelRepository,
+      CashWindowLock cashWindowLock) {
     this.orderRepository = orderRepository;
     this.lineRepository = lineRepository;
     this.modifierRepository = modifierRepository;
@@ -177,6 +191,7 @@ public class OrderWriter {
     this.offlineReplayGuard = offlineReplayGuard;
     this.selfOrderProperties = selfOrderProperties;
     this.salesChannelRepository = salesChannelRepository;
+    this.cashWindowLock = cashWindowLock;
   }
 
   /**
@@ -226,11 +241,20 @@ public class OrderWriter {
     String orderType = resolveOrderType(request.orderType());
     UUID tableId = request.tableId();
 
+    // CashWindowLock (verified HIGH race fix) — SHARED, FIRST lock-acquiring statement in this
+    // transaction, BEFORE the occurredAt/now capture below. Nothing above takes a DB lock (plain
+    // reads / in-memory validation only). See RegisterSessionWriter class javadoc for the full
+    // contract; this is what guarantees a checkout forced to wait behind a concurrent register
+    // close captures a FRESH now() after that close commits, instead of a stale pre-lock instant.
+    cashWindowLock.acquireForCommit(request.businessId());
+
     // Phase 5 (ADR 0028): validates the offlineReplay/clientOccurredAt contract (bounds,
     // CASH-only/quick-sale-only forbidden-field matrix) and resolves the effective occurredAt —
     // request.clientOccurredAt() when offline replay accepted one, else now(). This instant drives
     // BOTH TaxChargeService's effective-rule resolution below AND the SaleRecorded occurred_at
-    // (GL period), so a replayed offline sale posts into the day it actually happened.
+    // (GL period), so a replayed offline sale posts into the day it actually happened. NOTE: an
+    // offline-replayed (client-backdated) occurredAt is explicit historical data, independent of
+    // lock timing — the CashWindowLock protects the live/"now" case, not deliberate backdating.
     Instant now = offlineReplayGuard.resolveOccurredAt(request, Instant.now());
     boolean offlineReplay = Boolean.TRUE.equals(request.offlineReplay());
 
@@ -594,6 +618,11 @@ public class OrderWriter {
         request.giftCardId(),
         request.giftCardRedeemMinor(),
         request.loyaltyRedeemPoints());
+
+    // CashWindowLock (verified HIGH race fix) — SHARED, FIRST lock-acquiring statement in this
+    // transaction, BEFORE the now capture below (same contract as checkout(); see
+    // RegisterSessionWriter class javadoc). Nothing above takes a DB lock.
+    cashWindowLock.acquireForCommit(order.getBusinessId());
 
     Instant now = Instant.now();
     String currencyCode = order.getTotal().currency().getCurrencyCode();

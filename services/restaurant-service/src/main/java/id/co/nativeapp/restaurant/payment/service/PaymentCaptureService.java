@@ -4,7 +4,6 @@ import id.co.nativeapp.restaurant.payment.dto.PaymentResponse;
 import id.co.nativeapp.restaurant.payment.projection.PaymentView;
 import id.co.nativeapp.restaurant.payment.repository.PaymentRepository;
 import id.co.nativeapp.tenant.TenantContext;
-import java.time.Instant;
 import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -47,9 +46,10 @@ public class PaymentCaptureService {
    */
   public PaymentResponse capture(UUID paymentId) {
     TenantContext.require();
-    Instant capturedAt = Instant.now();
     try {
-      return writer.capture(paymentId, capturedAt);
+      // capturedAt is captured INSIDE the writer, after the CashWindowLock (verified HIGH race
+      // fix) — see PaymentCaptureWriter class javadoc.
+      return writer.capture(paymentId);
     } catch (DataIntegrityViolationException conflict) {
       // A concurrent racer won the sale (company_id, idempotency_key) unique constraint.
       // The create transaction is aborted; re-read the result from a fresh transaction.
