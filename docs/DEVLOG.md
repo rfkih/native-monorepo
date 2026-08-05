@@ -5,6 +5,38 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-05 (later) — QA sweep: 9 verified findings found and fixed the same day
+
+A 4-hunter adversarial QA sweep (money / tenancy / concurrency / frontend lenses, every finding
+re-verified at the code site before reporting) found 9 bugs; all fixed, money-reviewed (PASS), and
+CI-green the same day (commits 682d3bce..8b06fbc0). The headline root cause — **cross-topic
+consume-order**: SaleVoided/SaleRefunded and SaleRecorded ride separate topics, so a reversal can
+be consumed before its sale exists locally. Three consumers mishandled that; the fix is one
+pattern, **"park, don't drop"**: a reversal that finds no local trace of its sale parks ONE durable
+`pending_sale_reversal` row (loyalty V3, finance V48 — RLS FORCE, parked in the same tx as the
+processOnce claim) and the sale's own ingest/posting applies it in the SAME transaction the sale
+lands in. Parking beats throwing (a throw stalls the whole partition behind one missing sale) and
+beats DLT (manual replay). Loyalty was CRITICAL (a voided sale permanently earned full
+points/gift-card credit, zero trace); finance's gross-template fallback misbooked per-leg sales
+(and used the payment-residual amount for gift-card voids); expense-claim voids now self-heal an
+`unrecognizedVoid` ledger row the late approval reconciles onto. saleId-less legacy events keep
+the old fallback — the Phase-1 tests now pin that contract explicitly.
+
+Also fixed: **register-close cash race** (a concurrent uncommitted sale escaped the close's SUM,
+posting a phantom OVER to real GL and falling into no session's window forever) via
+`CashWindowLock` — a per-business shared/exclusive advisory pair (shared in every cash-committing
+writer BEFORE occurred_at is stamped; exclusive in open/close before closeInstant; a plain mutex
+was tried and rejected — it broke a genuine-concurrency test); **brought-forward assets** now
+refuse tax-sealed periods (the one money writer missing the guard — the console posts assets
+before the once-only opening entry, so a sealed as-of stranded a half-migration);
+**opening-balance lines on the VAT control accounts** are rejected 422 (the GL-derived PPN return
+would count them as period activity and the filing's netting entry would strand them); console:
+commission % now locale-formatted (rule 9), the companies[0] fallback persists its pointer
+correction, and SessionProvider got its first tests. Residuals tracked in the session memory:
+carwash/barbershop entitlement-mirror ordering guard, no toast/banner infra for the fallback
+notice, opening-balance currency vs base currency (needs a base-currency read model — ADR
+candidate).
+
 ## 2026-08-05 — CI activated & verified on real runners; enforcement moved to commit time
 
 The AI-driven-development gap-closing round: the pipeline (authored 2026-08-02, never green) is now
