@@ -5,6 +5,33 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-05 — CI activated & verified on real runners; enforcement moved to commit time
+
+The AI-driven-development gap-closing round: the pipeline (authored 2026-08-02, never green) is now
+**live and verified** — full-fleet backend + console + new doc-drift job all green on GitHub
+runners, master `gate` green, gate-only **branch protection ON** (admins exempt for solo direct
+pushes), master Gradle cache seeded. Four failures only real runners could expose, all fixed:
+(1) google-java-format 1.25.2 → **1.36.1** — setup-java hosts the Gradle daemon ON Temurin 25 where
+1.25.2 crashes on removed javac internals; local daemons run on JDK 21 so it never reproduced
+locally (mechanical rewrap of 8 files came with the bump); (2) **11 console ESLint errors** — local
+gates never ran `npm run lint`; fixed properly (session.tsx split into session.ts +
+SessionProvider.tsx with the two sync-setState effects converted to render-phase adjustments —
+also closes a 1-frame window where company B could render with company A's outlet; photos/csv
+splits; fresh-context review PASS); (3) `libs:observability` failed the jacoco branch ratchet —
+libs' own check tasks never run in scoped builds, new post-processor test pins the ADR 0010
+defaults; (4) restaurant's reorder-guard test silently depended on the dev machine's **ambient
+Redis** — moved to `PostgresRedisTestBase` (lesson: a locally-green `@SpringBootTest` may be riding
+the dev docker stack).
+
+Enforcement now happens at commit time, not review time: a **PreToolUse hook**
+(`scripts/hooks/pre-commit-quality.sh`, wired in `.claude/settings.json`) blocks any `git commit`
+whose staged files fail spotlessCheck (scoped to their modules) or ESLint — drilled live. A new
+always-on **doc-drift CI job** (`scripts/check-doc-drift.sh`) fails when an Avro schema is missing
+from EVENT-CATALOG.md or a service from PROJECT-MAP.md; its first run caught PROJECT-MAP missing
+barbershop-service and loyalty-service entirely (both added, table now "the 10 deployables").
+Remaining manual step: GHCR package visibility (packages are born private; needs a
+`read:packages`-scoped token to inspect/flip — only matters for anonymous image pulls).
+
 ## 2026-08-03 — Opening balances & business migration (ADR 0037)
 
 Onboard an EXISTING business (or record a new one's initial capital) — the gap that blocked real
