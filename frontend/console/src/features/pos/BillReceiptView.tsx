@@ -115,6 +115,7 @@ export function BillReceiptView({
 
   return (
     <ThermalReceipt
+      autoPrint
       businessName={businessName ?? 'Native POS'}
       title={t('pos.receipt.title')}
       reference={reference}

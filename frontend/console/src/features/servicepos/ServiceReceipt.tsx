@@ -188,6 +188,7 @@ export function ServiceReceipt({
 
   return (
     <ThermalReceipt
+      autoPrint
       businessName={businessName}
       title={t('servicePos.receipt.title')}
       reference={reference}

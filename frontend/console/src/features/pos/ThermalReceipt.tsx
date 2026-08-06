@@ -25,7 +25,7 @@
  * Money rule: all amounts come in as pre-formatted label strings (callers use formatMoney).
  */
 
-import { useId, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Printer } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
@@ -98,6 +98,14 @@ export interface ThermalProps {
   isProvisional?: boolean
   /** Provisional marker text (shown when isProvisional is true). */
   provisionalNote?: string
+  /**
+   * Set by surfaces that mount right after a successful payment (ReceiptView, ServiceReceipt,
+   * BillReceiptView): when the operator has enabled auto-print in printer settings AND a device
+   * is connected, the receipt is sent to it once on appearance — no Print tap. Never auto-falls
+   * back to window.print() (an OS dialog popping unprompted after every sale would be worse than
+   * no auto-print); on a device failure the Print button remains the manual recovery.
+   */
+  autoPrint?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -324,11 +332,67 @@ export function ThermalReceipt({
   pendingNote,
   isProvisional,
   provisionalNote,
+  autoPrint,
 }: ThermalProps) {
   const { t } = useTranslation()
   const headingId = useId()
   const printer = usePrinter()
   const [deviceBusy, setDeviceBusy] = useState(false)
+
+  const escposData = useCallback(
+    () =>
+      toEscposReceiptData({
+        businessName,
+        title,
+        reference,
+        tagline,
+        dateTime,
+        metaRows,
+        lineItems,
+        totalRows,
+        grandTotalLabel,
+        grandTotalCaption: t('pos.receipt.total'),
+        paymentRows,
+        footerNote,
+        provisionalNote: isProvisional ? provisionalNote : undefined,
+      }),
+    [
+      businessName,
+      title,
+      reference,
+      tagline,
+      dateTime,
+      metaRows,
+      lineItems,
+      totalRows,
+      grandTotalLabel,
+      t,
+      paymentRows,
+      footerNote,
+      isProvisional,
+      provisionalNote,
+    ],
+  )
+
+  // Auto-print exactly once per receipt appearance (see the autoPrint prop doc). The ref guard —
+  // not the dep list — is what enforces "once": the printer context value is a fresh object every
+  // provider render, so the effect re-runs; every rerun after the first is a no-op. The timer
+  // defers the dispatch (and its setState) out of the effect body per react-hooks rules.
+  // RawBT caveat: its write navigates to an intent: URL, which Chrome gates on transient user
+  // activation (~5 s from the confirm tap) — a slow online capture can outlive the window, the
+  // blocked navigation is silent, and autoPrinted stays latched; the Print button is the recovery.
+  const autoPrinted = useRef(false)
+  useEffect(() => {
+    if (!autoPrint || autoPrinted.current) return
+    if (!printer.connected || !printer.config?.autoPrint) return
+    const timer = setTimeout(() => {
+      if (autoPrinted.current) return
+      autoPrinted.current = true
+      setDeviceBusy(true)
+      void printer.printReceipt(escposData()).finally(() => setDeviceBusy(false))
+    }, 0)
+    return () => clearTimeout(timer)
+  }, [autoPrint, printer, escposData])
 
   /**
    * Print handler (ADR 0039): when a thermal printer is connected, send raw ESC/POS bytes to it
@@ -337,25 +401,10 @@ export function ThermalReceipt({
    * IS that browser path (callers pass window.print), so it doubles as the fallback.
    */
   const handlePrint = async () => {
+    autoPrinted.current = true // a manual tap also cancels a not-yet-fired auto-print
     if (printer.connected) {
       setDeviceBusy(true)
-      const ok = await printer.printReceipt(
-        toEscposReceiptData({
-          businessName,
-          title,
-          reference,
-          tagline,
-          dateTime,
-          metaRows,
-          lineItems,
-          totalRows,
-          grandTotalLabel,
-          grandTotalCaption: t('pos.receipt.total'),
-          paymentRows,
-          footerNote,
-          provisionalNote: isProvisional ? provisionalNote : undefined,
-        }),
-      )
+      const ok = await printer.printReceipt(escposData())
       setDeviceBusy(false)
       if (ok) return
     }

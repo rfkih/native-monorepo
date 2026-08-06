@@ -17,6 +17,7 @@ export interface PrinterContextValue {
   connect: (kind: TransportKind, paper: PaperWidth, drawerKick: boolean) => Promise<void>
   disconnect: () => Promise<void>
   setDrawerKick: (on: boolean) => void
+  setAutoPrint: (on: boolean) => void
   /**
    * Prints the receipt to the connected device. Returns true on success, false if there is no
    * device or the write failed (the caller then falls back to window.print()).

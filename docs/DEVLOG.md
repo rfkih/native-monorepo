@@ -5,6 +5,22 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-06 (later) — Auto-print the receipt on payment (per-device toggle)
+
+Follow-up to the RawBT bridge, from live UAT use: the receipt now prints automatically the moment
+a sale is paid — no Print tap — behind a per-device toggle on `/settings/printer` (stored in the
+same localStorage `PrinterConfig`; older configs default off). `ThermalReceipt` gained an
+`autoPrint` prop set by exactly the three surfaces that mount right after a successful payment
+(`ReceiptView`, `ServiceReceipt`, `BillReceiptView` — gift-card print stays manual, it's already
+behind an explicit tap); the effect fires ONCE per receipt appearance (ref-guarded; surfaces fully
+unmount between sales, verified in review), goes to the device only — never auto-pops the
+`window.print()` dialog — and a manual Print tap cancels a pending auto-print. The settings card
+also finally exposes the drawer-kick toggle (`setDrawerKick` existed with no UI). Caveat, in-code:
+RawBT's `intent:` navigation needs transient user activation (~5 s from the confirm tap), so a
+slow online capture can silently swallow an auto-print — the Print button is the recovery. Review
+PASS; known gap: no DOM test env in the console (vitest `node`, no testing-library), so the
+effect's once-semantics are review-verified, not test-locked.
+
 ## 2026-08-06 — RawBT bridge transport: Bluetooth-Classic printers print from the POS (ADR 0041)
 
 Field report from UAT: a Bluetooth thermal printer that prints fine through the RawBT Android app

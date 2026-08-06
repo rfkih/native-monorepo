@@ -14,6 +14,8 @@ export interface PrinterConfig {
   paper: PaperWidth
   /** Pulse the cash drawer on each cash receipt. */
   drawerKick: boolean
+  /** Print the receipt automatically as soon as a sale is paid (optional — older configs lack it). */
+  autoPrint?: boolean
   /** Last-known device label, for the settings UI (informational only). */
   label?: string
 }

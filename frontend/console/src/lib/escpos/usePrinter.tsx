@@ -75,7 +75,14 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
                 ? await requestSerialPrinter()
                 : createRawbtTransport() // no chooser — RawBT owns the printer link
         transportRef.current = transport
-        const next: PrinterConfig = { transport: kind, paper, drawerKick, label: transport.label }
+        const next: PrinterConfig = {
+          transport: kind,
+          paper,
+          drawerKick,
+          // Fresh localStorage read, not the state closure (connect is a stable callback).
+          autoPrint: loadPrinterConfig()?.autoPrint ?? false,
+          label: transport.label,
+        }
         savePrinterConfig(next)
         setConfig(next)
         setConnected(true)
@@ -98,6 +105,15 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
     setConfig((prev) => {
       if (!prev) return prev
       const next = { ...prev, drawerKick: on }
+      savePrinterConfig(next)
+      return next
+    })
+  }, [])
+
+  const setAutoPrint = useCallback((on: boolean) => {
+    setConfig((prev) => {
+      if (!prev) return prev
+      const next = { ...prev, autoPrint: on }
       savePrinterConfig(next)
       return next
     })
@@ -136,6 +152,7 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
         connect,
         disconnect,
         setDrawerKick,
+        setAutoPrint,
         printReceipt,
       }}
     >

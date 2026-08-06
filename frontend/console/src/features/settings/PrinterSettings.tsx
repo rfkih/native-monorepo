@@ -118,6 +118,20 @@ export function PrinterSettings() {
               {t('settings.printer.disconnect')}
             </Button>
           </div>
+          <div className="flex basis-full flex-col gap-3 border-t border-line pt-4">
+            <ToggleRow
+              label={t('settings.printer.autoPrint')}
+              hint={t('settings.printer.autoPrintHint')}
+              checked={printer.config?.autoPrint ?? false}
+              onToggle={() => printer.setAutoPrint(!(printer.config?.autoPrint ?? false))}
+            />
+            <ToggleRow
+              label={t('settings.printer.drawerKick')}
+              hint={t('settings.printer.drawerKickHint')}
+              checked={printer.config?.drawerKick ?? false}
+              onToggle={() => printer.setDrawerKick(!(printer.config?.drawerKick ?? false))}
+            />
+          </div>
         </Card>
       ) : (
         <Card className="p-5">
@@ -182,5 +196,44 @@ export function PrinterSettings() {
 
       <p className="text-xs text-ink-3">{t('settings.printer.compatNote')}</p>
     </div>
+  )
+}
+
+function ToggleRow({
+  label,
+  hint,
+  checked,
+  onToggle,
+}: {
+  label: string
+  hint: string
+  checked: boolean
+  onToggle: () => void
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={onToggle}
+      className="flex items-center justify-between gap-3 text-left"
+    >
+      <span>
+        <span className="block text-sm font-semibold text-ink">{label}</span>
+        <span className="block text-xs text-ink-3">{hint}</span>
+      </span>
+      <span
+        aria-hidden
+        className={`relative h-6 w-10 shrink-0 rounded-full transition-colors ${
+          checked ? 'bg-brand-500' : 'bg-line'
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 size-5 rounded-full bg-white shadow transition-all ${
+            checked ? 'left-[18px]' : 'left-0.5'
+          }`}
+        />
+      </span>
+    </button>
   )
 }

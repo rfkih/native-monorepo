@@ -339,6 +339,11 @@ export const id = {
       connecting: 'Menghubungkan…',
       connected: 'Printer terhubung',
       disconnect: 'Putuskan',
+      autoPrint: 'Cetak otomatis setelah pembayaran',
+      autoPrintHint:
+        'Kirim struk ke printer begitu penjualan dibayar — tanpa menekan tombol Cetak.',
+      drawerKick: 'Buka laci kas',
+      drawerKickHint: 'Memicu port laci (RJ11) pada setiap struk yang dicetak.',
       unsupported: 'Tidak didukung di peramban ini',
       error: {
         blocked:

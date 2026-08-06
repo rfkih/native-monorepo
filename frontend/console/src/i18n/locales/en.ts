@@ -348,6 +348,11 @@ export const en = {
       connecting: 'Connecting…',
       connected: 'Printer connected',
       disconnect: 'Disconnect',
+      autoPrint: 'Auto-print after payment',
+      autoPrintHint:
+        'Send the receipt to the printer the moment a sale is paid — no Print tap needed.',
+      drawerKick: 'Open the cash drawer',
+      drawerKickHint: 'Pulse the drawer port (RJ11) with every printed receipt.',
       unsupported: 'Not supported on this browser',
       error: {
         blocked:
