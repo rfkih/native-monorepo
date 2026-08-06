@@ -53,6 +53,7 @@ public class CompanyReader {
         view.getBaseCurrency().strip(),
         view.getDefaultLanguage(),
         view.getLegalEmployerId(),
-        view.getFirstBusinessId());
+        view.getFirstBusinessId(),
+        view.getPlanTier());
   }
 }

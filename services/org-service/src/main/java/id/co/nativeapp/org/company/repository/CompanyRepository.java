@@ -21,10 +21,10 @@ import org.springframework.data.jpa.repository.Query;
  *
  * <p><strong>Read paths use a native query + projection (CLAUDE.md convention — "native-query
  * aliases snake_case; map via projection interfaces").</strong> {@link #findAllViews()} fetches
- * only the five business columns a {@link id.co.nativeapp.org.company.dto.CompanyResponse} needs
- * ({@link CompanyView}) rather than {@code SELECT *} of the full {@code Auditable} row — narrower
- * I/O, and the entity is loaded only on the write path (the inherited {@code save}/{@code
- * saveAndFlush}, which legitimately needs the whole aggregate).
+ * only the business columns a {@link id.co.nativeapp.org.company.dto.CompanyResponse} needs ({@link
+ * CompanyView}) rather than {@code SELECT *} of the full {@code Auditable} row — narrower I/O, and
+ * the entity is loaded only on the write path (the inherited {@code save}/{@code saveAndFlush},
+ * which legitimately needs the whole aggregate).
  *
  * <p>Native queries run on the same RLS-scoped connection as all other JPA operations — projecting
  * columns by hand does NOT weaken tenant isolation (rule 5).
@@ -44,7 +44,8 @@ public interface CompanyRepository extends JpaRepository<Company, UUID> {
                  c.name              AS name,
                  c.base_currency     AS base_currency,
                  c.default_language  AS default_language,
-                 c.legal_employer_id AS legal_employer_id
+                 c.legal_employer_id AS legal_employer_id,
+                 c.plan_tier         AS plan_tier
             FROM company c
            ORDER BY c.name, c.id
           """,
@@ -73,6 +74,7 @@ public interface CompanyRepository extends JpaRepository<Company, UUID> {
                  c.base_currency     AS base_currency,
                  c.default_language  AS default_language,
                  c.legal_employer_id AS legal_employer_id,
+                 c.plan_tier         AS plan_tier,
                  fb.id               AS first_business_id
             FROM company c
             JOIN (

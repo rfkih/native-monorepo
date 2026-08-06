@@ -291,6 +291,7 @@ export const en = {
     openPos: 'Open point of sale',
     onboarding: 'New company',
     printer: 'Printer',
+    features: 'Features',
     switchCompany: 'Switch company',
     language: 'Language',
     actingAs: 'Acting as',
@@ -381,6 +382,12 @@ export const en = {
       testModifier: 'Extra shot',
       testTender: 'Cash',
       testFooter: 'Printer connected successfully.',
+    },
+    tier: {
+      title: 'Features',
+      switchLabel: 'Show extended features',
+      help: 'Simple mode shows only what a small business needs: point-of-sale, products, receipts, and a sales summary. Turn on extended features for accounting, HR, promotions, and more.',
+      error: 'Could not update the features setting. Try again.',
     },
   },
   onboarding: {
@@ -3349,6 +3356,17 @@ export const en = {
       hint: 'Please pay at the counter.',
       thankYou: 'Thank you!',
       changeLabel: 'Your change',
+    },
+  },
+  // P1 tier-mode reserves these keys for P2's <ExtendedFeatureLocked> screen (a deep link / bookmark
+  // to a FULL-only page while the company is on FREE) so copy reviews once, even though no P1 code
+  // renders them yet — see `~/.claude/plans/umkm-tier-mode.md` D6.
+  tier: {
+    locked: {
+      title: 'Extended feature',
+      body: 'This page is part of the extended toolkit — accounting, HR, promotions, and more. Turn on extended features to open it.',
+      cta: 'Enable extended features',
+      managerBody: 'Ask the business owner to turn on extended features to open this page.',
     },
   },
 }

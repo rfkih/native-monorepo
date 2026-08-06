@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api'
 import { AUTH_MODE } from '@/lib/config'
 import { useAuth } from '@/lib/authContext'
+import { toPlanTier } from '@/lib/featureTier'
 import { SessionContext, type CompanySession } from '@/lib/session'
 
 /**
@@ -18,6 +19,12 @@ interface CompanyDto {
   baseCurrency: string
   defaultLanguage: string
   firstBusinessId: string
+  /**
+   * Optional — an older server (pre P1 tier-mode) omits this column. `toSession` below runs it
+   * through `toPlanTier`, which fails OPEN to `'FULL'` on anything but the literal `'FREE'`, so a
+   * read gap never HIDES a feature.
+   */
+  planTier?: string
 }
 
 const LEGACY_STORAGE_KEY = 'native.console.session'
@@ -134,6 +141,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       defaultLanguage: dto.defaultLanguage,
       businessId: dto.firstBusinessId,
       actor: auth.actor,
+      planTier: toPlanTier(dto.planTier),
     }),
     [auth.actor],
   )

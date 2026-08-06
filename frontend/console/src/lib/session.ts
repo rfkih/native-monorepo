@@ -1,4 +1,5 @@
 import { createContext, useContext } from 'react'
+import type { PlanTier } from '@/lib/featureTier'
 
 /**
  * The company the console is currently acting as, plus the login's full company list (multi-company
@@ -25,6 +26,14 @@ export interface CompanySession {
   /** The company's first business (org unit) — the POS records sales/orders against it. */
   businessId: string
   actor: string
+  /**
+   * The company's plan tier (P1 tier-mode, `~/.claude/plans/umkm-tier-mode.md`) — FREE shows a
+   * lean UMKM console until an owner flips "show extended features"; FULL is the historical full
+   * back-office. Always resolved by `toSession` (SessionProvider.tsx) via `toPlanTier`: an
+   * absent/unrecognized server value fails OPEN to FULL so a read gap can never HIDE a feature
+   * (see lib/featureTier.ts, plan Risk 5).
+   */
+  planTier: PlanTier
 }
 
 export interface SessionContextValue {

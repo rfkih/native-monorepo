@@ -29,6 +29,9 @@ public interface CompanyCurrentView {
 
   UUID getLegalEmployerId();
 
+  /** The company's plan tier ({@code FREE} | {@code FULL}) — ADR 0044. */
+  String getPlanTier();
+
   /**
    * The id of the first business: the earliest-created {@code BUSINESS_UNIT} org unit with {@code
    * parent_id IS NULL} for this company, matching the selection the create-company flow inserts.

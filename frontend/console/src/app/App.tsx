@@ -70,6 +70,9 @@ const Me = lazy(() => import('@/features/me/Me').then((m) => ({ default: m.Me })
 const PrinterSettings = lazy(() =>
   import('@/features/settings/PrinterSettings').then((m) => ({ default: m.PrinterSettings })),
 )
+const FeaturesSettings = lazy(() =>
+  import('@/features/settings/FeaturesSettings').then((m) => ({ default: m.FeaturesSettings })),
+)
 const MyExpenses = lazy(() =>
   import('@/features/expenses/MyExpenses').then((m) => ({ default: m.MyExpenses })),
 )
@@ -304,6 +307,9 @@ export function App() {
   const canDashboard = hasAnyRole(auth.roles, 'owner', 'manager')
   const canPos = hasAnyRole(auth.roles, 'owner', 'manager', 'cashier')
   const canEmployee = hasAnyRole(auth.roles, 'employee')
+  // The /settings/features escape hatch (P1 tier-mode) — owner-only, server-enforced too (the
+  // org-service PUT independently re-checks the role); a manager token never sees the route mount.
+  const isOwner = hasAnyRole(auth.roles, 'owner')
 
   if (!canDashboard && !canPos && !canEmployee) {
     return (
@@ -379,6 +385,12 @@ export function App() {
           {/* Printer settings (ADR 0039) — a per-DEVICE thermal-printer pairing, so it is NOT
               page-gated: whoever sets up a till (cashier or manager) must be able to connect it. */}
           <Route path="/settings/printer" element={<PrinterSettings />} />
+
+          {/* Features toggle (P1 tier-mode, `~/.claude/plans/umkm-tier-mode.md`) — a sibling of
+              /settings/printer, but OWNER-ONLY (flipping a company-wide setting is a real authz
+              decision, unlike a per-device pairing): the route itself never mounts for a
+              non-owner, mirroring the nav item's owner-only visibility in Shell.tsx. */}
+          {isOwner && <Route path="/settings/features" element={<FeaturesSettings />} />}
 
           {/* Onboarding picks its chrome ONCE, on entry (see OnboardingRoute): first company →
               full-page standalone wizard (no shell to wander off into); adding another company →

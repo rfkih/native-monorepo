@@ -31,6 +31,7 @@ import {
   Radio,
   Receipt,
   Scale,
+  SlidersHorizontal,
   Store,
   Sun,
   Tag,
@@ -45,13 +46,24 @@ import { Wordmark } from '@/components/Wordmark'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { hasAnyRole, useAuth } from '@/lib/authContext'
 import { usePageAccess, type PageKey } from '@/lib/pageAccess'
+import { useTierAccess, type FeatureKey } from '@/lib/featureTier'
 import { AUTH_MODE } from '@/lib/config'
 import { useSession } from '@/lib/session'
 import { useTheme } from '@/lib/theme'
 import { cn } from '@/lib/cn'
 
 type Icon = ComponentType<LucideProps>
-type NavItem = { to: string; label: string; icon: Icon; end?: boolean; page?: PageKey }
+type NavItem = {
+  to: string
+  label: string
+  icon: Icon
+  end?: boolean
+  page?: PageKey
+  /** P1 tier-mode: hidden in FREE unless the feature's minimum tier is FREE (lib/featureTier.ts).
+   *  Composes with `page` as an independent AND — see the drop-step below. Omit for an item that
+   *  is never tier-gated (e.g. the always-visible `/settings/features` escape hatch). */
+  feature?: FeatureKey
+}
 type NavGroup = { heading: string; items: NavItem[] }
 
 export function Shell({ children }: { children: ReactNode }) {
@@ -64,65 +76,131 @@ export function Shell({ children }: { children: ReactNode }) {
 
   const canDashboard = hasAnyRole(auth.roles, 'owner', 'manager')
   const canPos = hasAnyRole(auth.roles, 'owner', 'manager', 'cashier')
+  const isOwner = hasAnyRole(auth.roles, 'owner')
   const pageAccess = usePageAccess()
+  const tierAccess = useTierAccess()
 
   // Grouped nav — the whole sidebar is dashboard-only; a cashier never mounts the Shell. Each item
   // that maps to a grantable page is hidden when the login's grants exclude it (owner bypasses).
+  // Each item tagged with a `feature` is additionally hidden when the company's tier does not
+  // unlock it (P1 tier-mode) — the two gates compose as an independent AND, see the drop-step
+  // below. `dashboard` is FREE, so it is tagged but never actually hidden by tier (plan Risk 2).
   const rawGroups: NavGroup[] = canDashboard
     ? [
         {
           heading: t('nav.groupFinance'),
           items: [
-            { to: '/', label: t('nav.dashboard'), icon: LayoutDashboard, end: true, page: 'dashboard' },
-            { to: '/statements/income', label: t('nav.income'), icon: LineChart, page: 'reports' },
-            { to: '/statements/balance-sheet', label: t('nav.balanceSheet'), icon: Scale, page: 'reports' },
-            { to: '/statements/cash-flow', label: t('nav.cashFlow'), icon: ArrowLeftRight, page: 'reports' },
-            { to: '/expenses', label: t('nav.expenses'), icon: Wallet, page: 'expenses' },
-            { to: '/invoices', label: t('nav.invoices'), icon: Receipt },
-            { to: '/customers', label: t('nav.customers'), icon: Users },
-            { to: '/ar/aging', label: t('nav.arAging'), icon: Clock },
-            { to: '/bills', label: t('nav.bills'), icon: FileText },
-            { to: '/vendors', label: t('nav.vendors'), icon: Truck },
-            { to: '/ap/aging', label: t('nav.apAging'), icon: History },
-            { to: '/bank', label: t('nav.bank'), icon: Landmark },
-            { to: '/tax', label: t('nav.tax'), icon: Percent },
-            { to: '/promotions', label: t('nav.promotions'), icon: Tag },
-            { to: '/loyalty', label: t('nav.loyalty'), icon: Gift },
-            { to: '/channels', label: t('nav.channels'), icon: Radio },
+            {
+              to: '/',
+              label: t('nav.dashboard'),
+              icon: LayoutDashboard,
+              end: true,
+              page: 'dashboard',
+              feature: 'dashboard',
+            },
+            {
+              to: '/statements/income',
+              label: t('nav.income'),
+              icon: LineChart,
+              page: 'reports',
+              feature: 'statements',
+            },
+            {
+              to: '/statements/balance-sheet',
+              label: t('nav.balanceSheet'),
+              icon: Scale,
+              page: 'reports',
+              feature: 'statements',
+            },
+            {
+              to: '/statements/cash-flow',
+              label: t('nav.cashFlow'),
+              icon: ArrowLeftRight,
+              page: 'reports',
+              feature: 'statements',
+            },
+            {
+              to: '/expenses',
+              label: t('nav.expenses'),
+              icon: Wallet,
+              page: 'expenses',
+              feature: 'expenses',
+            },
+            { to: '/invoices', label: t('nav.invoices'), icon: Receipt, feature: 'accounting' },
+            { to: '/customers', label: t('nav.customers'), icon: Users, feature: 'accounting' },
+            { to: '/ar/aging', label: t('nav.arAging'), icon: Clock, feature: 'accounting' },
+            { to: '/bills', label: t('nav.bills'), icon: FileText, feature: 'accounting' },
+            { to: '/vendors', label: t('nav.vendors'), icon: Truck, feature: 'accounting' },
+            { to: '/ap/aging', label: t('nav.apAging'), icon: History, feature: 'accounting' },
+            { to: '/bank', label: t('nav.bank'), icon: Landmark, feature: 'accounting' },
+            { to: '/tax', label: t('nav.tax'), icon: Percent, feature: 'accounting' },
+            { to: '/promotions', label: t('nav.promotions'), icon: Tag, feature: 'promotions' },
+            { to: '/loyalty', label: t('nav.loyalty'), icon: Gift, feature: 'promotions' },
+            { to: '/channels', label: t('nav.channels'), icon: Radio, feature: 'channels' },
             {
               to: '/platform-settlements',
               label: t('nav.platformSettlements'),
               icon: HandCoins,
+              feature: 'channels',
             },
-            { to: '/budgets', label: t('nav.budget'), icon: Target },
-            { to: '/assets', label: t('nav.assets'), icon: Laptop },
-            { to: '/deferrals', label: t('nav.deferrals'), icon: CalendarClock },
+            { to: '/budgets', label: t('nav.budget'), icon: Target, feature: 'accounting' },
+            { to: '/assets', label: t('nav.assets'), icon: Laptop, feature: 'accounting' },
+            {
+              to: '/deferrals',
+              label: t('nav.deferrals'),
+              icon: CalendarClock,
+              feature: 'accounting',
+            },
             {
               to: '/opening-balances',
               label: t('nav.openingBalances'),
               icon: BookOpen,
+              feature: 'accounting',
             },
           ],
         },
         {
           heading: t('nav.groupStructure'),
           items: [
-            { to: '/org', label: t('nav.org'), icon: Network, page: 'org' },
-            { to: '/groups', label: t('nav.groups'), icon: Layers, page: 'groups' },
-            { to: '/close', label: t('nav.close'), icon: CalendarCheck, page: 'close' },
-            { to: '/team', label: t('nav.team'), icon: UsersRound, page: 'team' },
+            { to: '/org', label: t('nav.org'), icon: Network, page: 'org', feature: 'orgStructure' },
+            {
+              to: '/groups',
+              label: t('nav.groups'),
+              icon: Layers,
+              page: 'groups',
+              feature: 'orgStructure',
+            },
+            {
+              to: '/close',
+              label: t('nav.close'),
+              icon: CalendarCheck,
+              page: 'close',
+              feature: 'orgStructure',
+            },
+            { to: '/team', label: t('nav.team'), icon: UsersRound, page: 'team', feature: 'team' },
             { to: '/onboarding', label: t('nav.onboarding'), icon: Building2 },
-            { to: '/settings/printer', label: t('nav.printer'), icon: Printer },
+            { to: '/settings/printer', label: t('nav.printer'), icon: Printer, feature: 'printer' },
+            // The escape hatch (plan Risk 1): owner-only, and deliberately UNTAGGED (no `page`, no
+            // `feature`) so it is never hidden by the grant or tier filters below — a FREE-tier
+            // owner must always be able to find the toggle back to FULL.
+            ...(isOwner
+              ? [{ to: '/settings/features', label: t('nav.features'), icon: SlidersHorizontal }]
+              : []),
           ],
         },
       ]
     : []
 
-  // Drop items whose page is not granted, then drop any group left empty.
+  // Drop items whose page is not granted OR whose tier is not unlocked, then drop any group left
+  // empty. `visible = grant ∧ tier` here (role already gates the whole rawGroups tree above).
   const groups: NavGroup[] = rawGroups
     .map((g) => ({
       ...g,
-      items: g.items.filter((it) => !it.page || pageAccess.isAllowed(it.page)),
+      items: g.items.filter(
+        (it) =>
+          (!it.page || pageAccess.isAllowed(it.page)) &&
+          (!it.feature || tierAccess.allows(it.feature)),
+      ),
     }))
     .filter((g) => g.items.length > 0)
 

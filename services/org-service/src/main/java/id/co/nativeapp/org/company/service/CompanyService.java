@@ -48,10 +48,12 @@ public class CompanyService {
 
   private final CompanyWriter writer;
   private final CompanyReader reader;
+  private final PlanTierWriter planTierWriter;
 
-  public CompanyService(CompanyWriter writer, CompanyReader reader) {
+  public CompanyService(CompanyWriter writer, CompanyReader reader, PlanTierWriter planTierWriter) {
     this.writer = writer;
     this.reader = reader;
+    this.planTierWriter = planTierWriter;
   }
 
   /**
@@ -142,6 +144,24 @@ public class CompanyService {
    */
   public CompanyResponse getCurrentCompany() {
     TenantContext.require();
+    return reader.findCurrentCompany();
+  }
+
+  /**
+   * Changes the bound tenant's plan tier (ADR 0044 — "Simple mode" for UMKM), owner-only. Delegates
+   * the mutation to {@link PlanTierWriter} (role check, whitelist validation, the transactional
+   * update) and then re-reads the company via {@link CompanyReader} so the response carries the
+   * post-change state, including {@code firstBusinessId} (which {@link PlanTierWriter} does not
+   * resolve).
+   *
+   * @param planTier the requested tier ({@code FREE} or {@code FULL}, any case, trimmed)
+   * @return the updated company response for the bound tenant
+   * @throws PlanTierForbiddenException if the caller is not an owner (→ 403)
+   * @throws InvalidPlanTierException if {@code planTier} is not whitelisted (→ 422)
+   */
+  public CompanyResponse changePlanTier(String planTier) {
+    TenantContext.require();
+    planTierWriter.changePlanTier(planTier);
     return reader.findCurrentCompany();
   }
 

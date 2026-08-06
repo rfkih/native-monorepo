@@ -6,7 +6,9 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.util.Currency;
+import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
@@ -73,6 +75,29 @@ public class Company extends Auditable {
   @JdbcTypeCode(SqlTypes.CHAR)
   @Column(name = "country", nullable = false, updatable = false, length = 2)
   private String country;
+
+  /**
+   * The whitelisted plan tiers (ADR 0044, "Simple mode" for UMKM): {@code FREE} shows a curated
+   * console (POS, products, receipts, register close, a simple sales summary, basic expenses, team
+   * + printer settings); {@code FULL} shows the whole back-office. A TIER, not a boolean, so a real
+   * paid tier (e.g. {@code PRO}/{@code ENTERPRISE}) ranks in later without a migration — same
+   * whitelist-in-the-aggregate pattern as {@code country} (V9) / {@code OrgUnit.vertical} (V6): no
+   * {@code CHECK} constraint, the invariant lives here.
+   */
+  public static final Set<String> PLAN_TIERS = Set.of("FREE", "FULL");
+
+  /**
+   * The company's plan tier — UI curation only (ADR 0044 D7: NOT a security boundary; API
+   * authorization stays with the gateway/service role checks). Unlike {@code base_currency} /
+   * {@code country}, this column is MUTABLE: an owner flips it via {@link
+   * id.co.nativeapp.org.company.service.PlanTierWriter}. Defaults to {@code "FULL"} so a company
+   * built through the all-args constructor (which does not yet accept a caller-supplied tier — P1
+   * scope) matches the {@code V10} column's grandfather default; every existing/newly-bootstrapped
+   * company reads as {@code FULL} until an owner explicitly opts into {@code FREE} (or a future
+   * create-path default, P2).
+   */
+  @Column(name = "plan_tier", nullable = false, length = 16)
+  private String planTier = "FULL";
 
   /** Optional contact phone captured at signup — format-checked at the request edge only. */
   @Column(name = "phone", length = 32)
@@ -204,6 +229,34 @@ public class Company extends Auditable {
   /** Optional signup interest; {@code null} on the in-app create path. */
   public String getPrimaryInterest() {
     return primaryInterest;
+  }
+
+  /** The company's plan tier ({@code FREE} | {@code FULL}) — see {@link #PLAN_TIERS}. */
+  public String getPlanTier() {
+    return planTier;
+  }
+
+  /**
+   * Changes the plan tier — the ONE mutable settings-like field on this otherwise write-once-heavy
+   * aggregate (D2: "a tier, not a boolean"). Validates against {@link #PLAN_TIERS}, normalizing
+   * (strip + upper-case) exactly like {@link CountryDefaults#requireValidCountry(String)} / {@link
+   * Vertical#fromKey(String)}.
+   *
+   * @param planTier the requested tier ({@code FREE} or {@code FULL}, any case, trimmed)
+   * @throws IllegalArgumentException if {@code planTier} is null or not in {@link #PLAN_TIERS} —
+   *     the same validation-exception type the aggregate already uses for a bad country/vertical
+   *     value. {@link id.co.nativeapp.org.company.service.PlanTierWriter} is the only caller and
+   *     catches this to report a stable {@code 422} at the API edge (via {@link
+   *     id.co.nativeapp.org.company.service.InvalidPlanTierException}) rather than the generic
+   *     {@code 400} the shared advice maps a bare {@code IllegalArgumentException} to.
+   */
+  public void changePlanTier(String planTier) {
+    Objects.requireNonNull(planTier, "planTier");
+    String normalized = planTier.strip().toUpperCase(Locale.ROOT);
+    if (!PLAN_TIERS.contains(normalized)) {
+      throw new IllegalArgumentException("Unsupported plan tier: " + planTier);
+    }
+    this.planTier = normalized;
   }
 
   // NOTE: there is deliberately NO setBaseCurrency(...) and NO setId(...)/setLegalEmployerId(...).

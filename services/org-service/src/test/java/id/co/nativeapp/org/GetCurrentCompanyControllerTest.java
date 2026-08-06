@@ -62,7 +62,7 @@ class GetCurrentCompanyControllerTest {
   void withABoundTenantAndAnExistingCompanyReturns200WithCompanyBody() throws Exception {
     CompanyResponse stubResponse =
         new CompanyResponse(
-            COMPANY_ID, "Acme Corp", "IDR", "id", LEGAL_EMPLOYER_ID, FIRST_BUSINESS_ID);
+            COMPANY_ID, "Acme Corp", "IDR", "id", LEGAL_EMPLOYER_ID, FIRST_BUSINESS_ID, "FULL");
     when(companyService.getCurrentCompany()).thenReturn(stubResponse);
 
     TenantContext.callAs(
@@ -77,7 +77,8 @@ class GetCurrentCompanyControllerTest {
                 .andExpect(jsonPath("$.baseCurrency").value("IDR"))
                 .andExpect(jsonPath("$.defaultLanguage").value("id"))
                 .andExpect(jsonPath("$.legalEmployerId").value(LEGAL_EMPLOYER_ID.toString()))
-                .andExpect(jsonPath("$.firstBusinessId").value(FIRST_BUSINESS_ID.toString())));
+                .andExpect(jsonPath("$.firstBusinessId").value(FIRST_BUSINESS_ID.toString()))
+                .andExpect(jsonPath("$.planTier").value("FULL")));
   }
 
   @Test

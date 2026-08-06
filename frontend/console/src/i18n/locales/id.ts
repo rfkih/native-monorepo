@@ -282,6 +282,7 @@ export const id = {
     openPos: 'Buka kasir',
     onboarding: 'Perusahaan baru',
     printer: 'Printer',
+    features: 'Fitur',
     switchCompany: 'Ganti perusahaan',
     language: 'Bahasa',
     actingAs: 'Bertindak sebagai',
@@ -372,6 +373,12 @@ export const id = {
       testModifier: 'Tambah shot',
       testTender: 'Tunai',
       testFooter: 'Printer berhasil terhubung.',
+    },
+    tier: {
+      title: 'Fitur',
+      switchLabel: 'Tampilkan fitur lengkap',
+      help: 'Mode sederhana menampilkan hanya fitur yang dibutuhkan usaha kecil: kasir, produk, struk, dan ringkasan penjualan. Aktifkan fitur lengkap untuk akuntansi, HR, promosi, dan lainnya.',
+      error: 'Tidak dapat memperbarui pengaturan fitur. Coba lagi.',
     },
   },
   onboarding: {
@@ -3330,6 +3337,17 @@ export const id = {
       hint: 'Silakan bayar di kasir.',
       thankYou: 'Terima kasih!',
       changeLabel: 'Uang kembalian Anda',
+    },
+  },
+  // Mode tier P1 menyediakan kunci ini untuk layar <ExtendedFeatureLocked> di P2 (tautan langsung /
+  // bookmark ke halaman FULL-only saat perusahaan masih FREE) agar tinjauan salinan cukup sekali,
+  // meski belum ada kode P1 yang menampilkannya — lihat `~/.claude/plans/umkm-tier-mode.md` D6.
+  tier: {
+    locked: {
+      title: 'Fitur lengkap',
+      body: 'Halaman ini bagian dari perangkat lengkap — akuntansi, HR, promosi, dan lainnya. Aktifkan fitur lengkap untuk membukanya.',
+      cta: 'Aktifkan fitur lengkap',
+      managerBody: 'Minta pemilik usaha mengaktifkan fitur lengkap untuk membuka halaman ini.',
     },
   },
 } satisfies typeof en

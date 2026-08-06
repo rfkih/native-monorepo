@@ -9,6 +9,7 @@ import id.co.nativeapp.org.company.dto.CreateCompanyCommand;
 import id.co.nativeapp.org.company.dto.CreateCompanyRequest;
 import id.co.nativeapp.org.company.dto.CreateCompanyResult;
 import id.co.nativeapp.org.company.dto.OrgUnitResponse;
+import id.co.nativeapp.org.company.dto.PlanTierRequest;
 import id.co.nativeapp.org.company.service.CompanyService;
 import id.co.nativeapp.org.config.DevTenantFilter;
 import id.co.nativeapp.org.config.TenantAccessDeniedException;
@@ -29,6 +30,7 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -173,6 +175,28 @@ public class CompanyController {
   @GetMapping("/current")
   public ResponseEntity<CompanyResponse> getCurrentCompany() {
     CompanyResponse body = companyService.getCurrentCompany();
+    return ResponseEntity.ok(body);
+  }
+
+  /**
+   * Changes the bound tenant's plan tier (ADR 0044 — "Simple mode" for UMKM), owner-only.
+   *
+   * <p>The gateway's route for {@code /api/v1/companies/**} lets both {@code owner} and {@code
+   * manager} reach this endpoint; the service layer ({@code PlanTierWriter}) enforces the narrower
+   * {@code owner}-only rule and rejects a non-owner with {@code 403}. An unwhitelisted {@code
+   * planTier} value ({@code FREE} | {@code FULL} are the only valid tiers today) returns {@code
+   * 422}. Returns {@code 200} with the updated {@link CompanyResponse} on success.
+   */
+  @Operation(
+      summary = "Change the company's plan tier (owner-only)",
+      description =
+          "Flips the bound tenant's plan tier between FREE (Simple mode) and FULL. Owner-only —"
+              + " a non-owner caller gets 403 even though the gateway route allows owner/manager."
+              + " An unwhitelisted tier value returns 422. Returns 200 with the updated company.")
+  @PutMapping("/current/plan-tier")
+  public ResponseEntity<CompanyResponse> changePlanTier(
+      @Valid @RequestBody PlanTierRequest request) {
+    CompanyResponse body = companyService.changePlanTier(request.planTier());
     return ResponseEntity.ok(body);
   }
 

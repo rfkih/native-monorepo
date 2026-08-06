@@ -30,4 +30,7 @@ public interface CompanyView {
   String getDefaultLanguage();
 
   UUID getLegalEmployerId();
+
+  /** The company's plan tier ({@code FREE} | {@code FULL}) — ADR 0044. */
+  String getPlanTier();
 }

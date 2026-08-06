@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Segmented } from '@/components/ui/Segmented'
 import { ErrorDiagnostics } from '@/components/ErrorDiagnostics'
 import { useSession } from '@/lib/session'
+import { useTierAccess } from '@/lib/featureTier'
 import { cn } from '@/lib/cn'
 import { localeOf } from '@/i18n'
 import { formatMoney, formatPercent } from '@/lib/money'
@@ -21,14 +22,20 @@ const TREND_MONTHS = 8
 export function Dashboard() {
   const { t, i18n } = useTranslation()
   const { company } = useSession()
+  const { isExtended } = useTierAccess()
   const locale = localeOf(i18n.language)
 
   const [period, setPeriod] = useState(currentPeriod())
   const [view, setView] = useState<'overview' | 'analytics'>('overview')
   const [lens, setLens] = useState('native')
 
+  // FREE (P1 tier-mode) simplifies the dashboard: never the Analytics view, never a converted
+  // presentation currency. Dashboard itself is NEVER tier-hidden (plan Risk 2) — only these two
+  // extended conveniences fold away; the FULL rendering below is byte-identical to before this
+  // change (both derive to the exact original expressions when `isExtended`).
+  const effectiveView = isExtended ? view : 'overview'
   const otherCurrency = company?.baseCurrency === 'IDR' ? 'USD' : 'IDR'
-  const presentation = lens === 'native' ? undefined : lens
+  const presentation = isExtended && lens !== 'native' ? lens : undefined
 
   const query = usePnl({
     companyId: company?.companyId ?? '',
@@ -101,12 +108,13 @@ export function Dashboard() {
 
   // Business-unit rollup of the outlet revenue rows. The BU panel only appears for a company with
   // 2+ business units — with one BU it would duplicate the outlet panel; the scope line in the
-  // header already says what the figures cover.
+  // header already says what the figures cover. FREE (P1 tier-mode) hides it outright — a
+  // multi-company/multi-BU concern that does not belong in the lean UMKM summary.
   const units = unitsQuery.data ?? []
   const unitById = new Map(units.map((u) => [u.id, u]))
   const businessUnitCount = units.filter((u) => u.type === 'BUSINESS_UNIT').length
   const buRows = groupByBusinessUnit(outletQuery.data?.outlets ?? null, unitById)
-  const showBuPanel = businessUnitCount >= 2 && buRows !== null && buRows.length > 0
+  const showBuPanel = isExtended && businessUnitCount >= 2 && buRows !== null && buRows.length > 0
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -147,29 +155,34 @@ export function Dashboard() {
             </Badge>
           ) : null}
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <Segmented
-            ariaLabel={t('dashboard.title')}
-            value={view}
-            onChange={setView}
-            options={[
-              { value: 'overview', label: t('dashboard.overview') },
-              { value: 'analytics', label: t('dashboard.analytics') },
-            ]}
-          />
-          <label className="flex items-center gap-2.5">
-            <span className="text-xs text-ink-3">{t('dashboard.viewIn')}</span>
+        {/* FREE (P1 tier-mode) hides both the Analytics view toggle and the presentation-currency
+            lens — extended conveniences the lean UMKM summary does not need. FULL renders this
+            block exactly as before. */}
+        {isExtended ? (
+          <div className="flex flex-wrap items-center gap-3">
             <Segmented
-              ariaLabel={t('dashboard.viewIn')}
-              value={lens}
-              onChange={setLens}
+              ariaLabel={t('dashboard.title')}
+              value={view}
+              onChange={setView}
               options={[
-                { value: 'native', label: company.baseCurrency },
-                { value: otherCurrency, label: otherCurrency },
+                { value: 'overview', label: t('dashboard.overview') },
+                { value: 'analytics', label: t('dashboard.analytics') },
               ]}
             />
-          </label>
-        </div>
+            <label className="flex items-center gap-2.5">
+              <span className="text-xs text-ink-3">{t('dashboard.viewIn')}</span>
+              <Segmented
+                ariaLabel={t('dashboard.viewIn')}
+                value={lens}
+                onChange={setLens}
+                options={[
+                  { value: 'native', label: company.baseCurrency },
+                  { value: otherCurrency, label: otherCurrency },
+                ]}
+              />
+            </label>
+          </div>
+        ) : null}
       </div>
 
       {query.isError ? (
@@ -178,7 +191,7 @@ export function Dashboard() {
           pathPrefix="/api/v1/pnl"
           onRecovered={() => query.refetch()}
         />
-      ) : view === 'overview' ? (
+      ) : effectiveView === 'overview' ? (
         <div className="flex flex-col gap-[18px]">
           {/* Hero: net + sparkline */}
           <Card className="grid items-center gap-8 rounded-[28px] p-7 lg:grid-cols-2 lg:p-9">

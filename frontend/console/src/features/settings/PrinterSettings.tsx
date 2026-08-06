@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Bluetooth, Cable, Check, Printer, Smartphone, TriangleAlert, Usb } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
+import { ToggleRow } from '@/components/ui/ToggleRow'
 import { usePrinter } from '@/lib/escpos/printerContext'
 import type { PaperWidth } from '@/lib/escpos/receipt'
 import { classifyConnectError, type TransportKind } from '@/lib/escpos/transport'
@@ -223,44 +224,5 @@ export function PrinterSettings() {
       <p className="text-xs text-ink-3">{t('settings.printer.compatNote')}</p>
       <p className="text-xs text-ink-3">{t('settings.printer.buyNote')}</p>
     </div>
-  )
-}
-
-function ToggleRow({
-  label,
-  hint,
-  checked,
-  onToggle,
-}: {
-  label: string
-  hint: string
-  checked: boolean
-  onToggle: () => void
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={onToggle}
-      className="flex items-center justify-between gap-3 text-left"
-    >
-      <span>
-        <span className="block text-sm font-semibold text-ink">{label}</span>
-        <span className="block text-xs text-ink-3">{hint}</span>
-      </span>
-      <span
-        aria-hidden
-        className={`relative h-6 w-10 shrink-0 rounded-full transition-colors ${
-          checked ? 'bg-brand-500' : 'bg-line'
-        }`}
-      >
-        <span
-          className={`absolute top-0.5 size-5 rounded-full bg-white shadow transition-all ${
-            checked ? 'left-[18px]' : 'left-0.5'
-          }`}
-        />
-      </span>
-    </button>
   )
 }

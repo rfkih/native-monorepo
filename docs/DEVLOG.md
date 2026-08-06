@@ -5,6 +5,25 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-07 — Simple mode for UMKM: per-company plan tier, P1 (ADR 0044)
+
+The console now has a **per-company plan tier** (`company.plan_tier`, org V10, `FREE | FULL`) so a
+small UMKM sees only the essentials — POS + register close, products, kitchen, printer, a simplified
+dashboard, expenses, team — while the whole back-office (accounting suite, HR, promotions, channels,
+org tree, customer display) stays hidden until the **owner** flips "Tampilkan fitur lengkap" at
+`/settings/features` (owner-only `PUT /api/v1/companies/current/plan-tier`; 422 whitelist / 403
+non-owner, RFC-7807). Design properties (plan: `~/.claude/plans/umkm-tier-mode.md`): a tier not a
+boolean (PRO/ENTERPRISE rank in later; billing later replaces the *setter*, the reader never moves);
+tier rides the existing `/companies/mine` session read (zero new round-trips, no event — mirrors ADR
+0013); gating is one console map (`lib/featureTier.ts`) composed with page grants as
+`visible = role ∧ grant ∧ tier` (owner bypasses grants but NOT tier — the always-visible owner-only
+Features toggle is the escape hatch); Dashboard is never tier-hidden (home-redirect-loop guard), it
+just simplifies in FREE; missing tier **fails open to FULL**. Existing companies grandfather to FULL
+via the column default (single ALTER, no UPDATE — the FORCE-RLS zero-row trap); new-signups-default-
+FREE + per-page friendly locked screens are P2. UI-only enforcement is deliberate and documented in
+the ADR (roles at the gateway remain the only API authz). This deliberately lands BEFORE the Android
+till app (ADR 0043 reserved) so the app's first impression is the simple surface.
+
 ## 2026-08-06 (later still) — Silent RawBT printing via the "Server for RawBT" WebSocket
 
 Live-use follow-up: the intent hand-off flashes the RawBT app on every print. The rawbt transport

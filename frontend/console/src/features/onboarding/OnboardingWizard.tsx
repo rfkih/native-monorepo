@@ -14,6 +14,7 @@ import { useSession } from '@/lib/session'
 import { useAuth } from '@/lib/authContext'
 import { AUTH_MODE } from '@/lib/config'
 import { DEV_ACTOR } from '@/lib/devIdentity'
+import { toPlanTier } from '@/lib/featureTier'
 import { cn } from '@/lib/cn'
 import { derivedCurrency } from '@/lib/countries'
 import { createCompany, type CompanyResponse } from './api'
@@ -88,6 +89,7 @@ export function OnboardingWizard() {
         defaultLanguage: res.defaultLanguage,
         businessId: res.firstBusinessId,
         actor: AUTH_MODE === 'oidc' ? auth.actor : DEV_ACTOR,
+        planTier: toPlanTier(res.planTier),
       })
     },
   })

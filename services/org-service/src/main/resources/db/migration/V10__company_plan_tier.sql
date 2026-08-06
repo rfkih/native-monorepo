@@ -1,0 +1,33 @@
+-- org-service V10 — company.plan_tier (P1 of the UMKM tier-mode plan, ADR 0044,
+-- console feature curation by plan tier).
+--
+-- `plan_tier` is a company-wide UI-curation setting, not a security boundary
+-- (roles at the gateway remain the sole API authorization — see ADR 0044):
+-- FREE shows a simplified "Simple mode" console for a UMKM (POS, products,
+-- receipts, register close, a simple sales summary, basic expenses, team +
+-- printer settings); FULL shows the whole back-office. Unlike base_currency
+-- and country, this column is mutable — an owner flips it via
+-- PUT /api/v1/companies/current/plan-tier.
+--
+-- Whitelist enforced in the Company aggregate (FREE|FULL) — no CHECK
+-- constraint here, same pattern as country in V9 and org_unit.vertical in V6;
+-- widening the tier set later (e.g. PRO/ENTERPRISE) needs no migration.
+--
+-- ADD COLUMN ... NOT NULL DEFAULT rewrites the column in-place from the
+-- supplied literal default with no separate UPDATE statement, which
+-- deliberately avoids the FORCE-RLS zero-row UPDATE trap documented from V7
+-- (a bare UPDATE on a FORCE ROW LEVEL SECURITY table silently matches 0 rows
+-- outside a bound tenant session). 'FULL' is not a placeholder backfill:
+-- every pre-existing company row is a genuine full-console user today, so
+-- 'FULL' is the correct grandfather value on those rows (new signups will
+-- default to 'FREE' at the create-company path in P2, not via this column
+-- default).
+--
+-- No RLS policy change: company already has ENABLE + FORCE ROW LEVEL
+-- SECURITY and the company_tenant_isolation policy from V1. That policy
+-- predicate (company_id = current_setting('app.current_tenant', true)) is
+-- row-scoped, not column-scoped, so it applies unchanged to this new column
+-- without any ALTER POLICY.
+--
+-- No new index: no query path filters on plan_tier.
+ALTER TABLE company ADD COLUMN plan_tier VARCHAR(16) NOT NULL DEFAULT 'FULL';
