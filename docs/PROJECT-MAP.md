@@ -94,6 +94,8 @@ Transport: outbox table → Debezium (one connector per service DB) → Kafka to
 | the POS offline queue / provisional pricing / sync | `frontend/console/src/features/pos/offline/` (ADR 0028; parity fixture `pricing-parity.fixture.json` asserted by BOTH restaurant `ProvisionalPricingFixtureTest` and the vitest suite) |
 | self-order QR (anonymous surface) | restaurant `selforder/` + `selforderaccess/` (token filter, mint/rotate), gateway `selfOrderRoute` + `AnonymousTenantHeaderStripFilter`, mini app `frontend/self-order/`, ADR 0029 |
 | the customer display | `frontend/console/src/features/pos/display/` (BroadcastChannel `pos-display:{outlet}`, zero backend) |
+| thermal printing (ESC/POS, transports) | `frontend/console/src/lib/escpos/` (encoder/receipt/transport/usePrinter; ADRs 0039, 0041, 0043) |
+| the Android till app (native shell + print bridge) | `frontend/native-till/` — Capacitor thin-client over the live console + `NativePrintPlugin.kt` (SPP byte pipe); OWN Android/Gradle build, never in root `./gradlew` (ADR 0043) |
 | offline-replay server guards / effective-rules endpoints | each vertical's `…/order|ticket/service/OfflineReplayGuard.java` + `…/pricing/controller/PricingController.java` |
 | how to run / debug locally + gotchas | `docs/RUNBOOK.md` |
 | what was built / why / current status | `docs/DEVLOG.md` |

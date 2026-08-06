@@ -5,6 +5,24 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-07 — Android till app P0: Capacitor shell + NativePrint SPP spike (ADR 0043 Proposed)
+
+The Bluetooth-Classic printing gap (ADR 0041: Web Bluetooth is BLE-only, the cheap 58 mm printers
+are SPP-only, RawBT = popup-or-companion-app) gets its real fix: a **native Android till app**.
+P0 spike landed at `frontend/native-till/` — a **Capacitor 8 thin-client** (`server.url` → the live
+UAT console origin, so web deploys reach the app with zero app updates; PWA offline queue works
+unchanged in the WebView) plus the first slice of the **`NativePrint` bridge**: `NativePrintPlugin.kt`
+(list bonded Classic devices + one-shot SPP test print, reject codes already on the D4
+`ConnectFailureReason` mapping) over `SppTestPrinter.kt` (RFCOMM socket, dumb byte pipe — ESC/POS
+stays 100% web-side). Debug builds get a native **🖨 TEST** overlay button (the console has no
+native wiring until P1) that prints fixed ESC/POS bytes to a chosen bonded printer — the hardware
+drill that proves the ADR 0041 gap closed. `BLUETOOTH_CONNECT` runtime permission only (no SCAN —
+bonded devices only, pairing stays in Android Settings). The Android build is fully isolated from
+the root Gradle build (own AGP 8.13/JDK 21/Gradle 8.14 toolchain; CI path filters don't match it —
+Android CI job is P2). Next: owner drill on real hardware, then P1 = `'native'` as the 5th
+`TransportKind` in the console + silent auto-print + sideload distribution. ADR 0043 (Proposed),
+full plan at `~/.claude/plans/android-till-app.md`.
+
 ## 2026-08-07 — Simple mode for UMKM: per-company plan tier, P1 (ADR 0044)
 
 The console now has a **per-company plan tier** (`company.plan_tier`, org V10, `FREE | FULL`) so a
