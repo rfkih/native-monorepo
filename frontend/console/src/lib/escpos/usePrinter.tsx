@@ -119,6 +119,15 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
+  const setPaper = useCallback((paper: PaperWidth) => {
+    setConfig((prev) => {
+      if (!prev) return prev
+      const next = { ...prev, paper }
+      savePrinterConfig(next)
+      return next
+    })
+  }, [])
+
   const printReceipt = useCallback(
     async (data: EscposReceiptData): Promise<boolean> => {
       const transport = transportRef.current
@@ -153,6 +162,7 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
         disconnect,
         setDrawerKick,
         setAutoPrint,
+        setPaper,
         printReceipt,
       }}
     >

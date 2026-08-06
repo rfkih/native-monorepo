@@ -119,6 +119,32 @@ export function PrinterSettings() {
             </Button>
           </div>
           <div className="flex basis-full flex-col gap-3 border-t border-line pt-4">
+            {/* Live paper-width switch — the #1 "receipt prints as garbage" cause is an 80mm
+                layout on a 58mm roll, so this must be changeable without disconnecting. */}
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-semibold text-ink">
+                {t('settings.printer.paperWidth')}
+              </span>
+              <div className="flex gap-2">
+                {([58, 80] as const).map((w) => (
+                  <button
+                    key={w}
+                    type="button"
+                    onClick={() => {
+                      setPaper(w)
+                      printer.setPaper(w)
+                    }}
+                    className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition-colors ${
+                      (printer.config?.paper ?? paper) === w
+                        ? 'border-brand-500 bg-brand-50 text-brand-700'
+                        : 'border-line text-ink-2 hover:bg-hover'
+                    }`}
+                  >
+                    {w}mm
+                  </button>
+                ))}
+              </div>
+            </div>
             <ToggleRow
               label={t('settings.printer.autoPrint')}
               hint={t('settings.printer.autoPrintHint')}
@@ -195,6 +221,7 @@ export function PrinterSettings() {
       ) : null}
 
       <p className="text-xs text-ink-3">{t('settings.printer.compatNote')}</p>
+      <p className="text-xs text-ink-3">{t('settings.printer.buyNote')}</p>
     </div>
   )
 }

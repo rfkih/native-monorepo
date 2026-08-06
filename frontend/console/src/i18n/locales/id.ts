@@ -356,6 +356,8 @@ export const id = {
           'Perangkat itu sepertinya bukan printer struk (koneksi printer tidak ditemukan). Pilih printer termal dari daftar.',
         unknown: 'Tidak dapat terhubung ke printer. Periksa kabel/pemasangan lalu coba lagi.',
       },
+      buyNote:
+        'Membeli printer untuk kasir Anda? Utamakan model USB atau Bluetooth LE (dual-mode) — tersambung langsung dari peramban tanpa aplikasi tambahan. Printer khusus Bluetooth Classic tetap bisa lewat aplikasi RawBT.',
       testPrint: 'Cetak uji',
       testPrinting: 'Mencetak…',
       testOk: 'Tercetak ✓',

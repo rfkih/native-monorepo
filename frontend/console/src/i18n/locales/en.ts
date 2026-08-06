@@ -371,6 +371,8 @@ export const en = {
       testFail: 'Print failed',
       compatNote:
         'Works with most Epson-compatible ESC/POS printers (Xprinter, EPPOS, Goojprt and similar). Requires Chrome or Edge. When no printer is connected, receipts fall back to the browser print dialog.',
+      buyNote:
+        'Buying printers for your tills? Prefer USB or Bluetooth LE (dual-mode) models — they connect straight from the browser with nothing extra to install. Bluetooth Classic–only printers still work via the RawBT app.',
       testBusiness: 'Native Test Store',
       testTitle: 'Test receipt',
       testRow: 'Terminal',

@@ -164,6 +164,7 @@ export function renderReceipt(
   e.line(toAscii(data.reference))
   e.align('left')
 
-  e.feed(4).cut()
+  // 3 lines clears the tear bar/cutter on the common mechanisms; more just wastes paper.
+  e.feed(3).cut()
   return e.build()
 }

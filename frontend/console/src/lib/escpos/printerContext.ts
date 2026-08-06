@@ -18,6 +18,8 @@ export interface PrinterContextValue {
   disconnect: () => Promise<void>
   setDrawerKick: (on: boolean) => void
   setAutoPrint: (on: boolean) => void
+  /** Live paper-width change for the CONNECTED printer — next print renders at the new width. */
+  setPaper: (paper: PaperWidth) => void
   /**
    * Prints the receipt to the connected device. Returns true on success, false if there is no
    * device or the write failed (the caller then falls back to window.print()).
