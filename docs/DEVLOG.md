@@ -5,6 +5,22 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-06 — RawBT bridge transport: Bluetooth-Classic printers print from the POS (ADR 0041)
+
+Field report from UAT: a Bluetooth thermal printer that prints fine through the RawBT Android app
+got "printer is busy" from our connect flow. Root cause is a Chromium platform limit ADR 0039
+documented but couldn't cross: **Web Bluetooth speaks BLE GATT only**, and many cheap 58 mm clones
+are Bluetooth **Classic (SPP) only** — Chrome lists them in the chooser, then `gatt.connect()`
+fails with `NetworkError`, which `classifyConnectError` mislabeled as "busy" (a retry loop that can
+never succeed). Two changes (ADR 0041): (1) a fourth `rawbt` transport — each print navigates to
+RawBT's `intent:base64,<escpos>` URL (package-pinned, Play-Store fallback), so the app drives the
+Classic printer with our unchanged ESC/POS bytes; Android-only, nothing to pair, fire-and-forget by
+design. (2) BLE `NetworkError` is now its own `bleUnreachable` reason whose copy names both real
+causes (another app holding the printer's single Bluetooth socket — e.g. RawBT's background
+service — or a Classic-only printer) and points at USB or the RawBT tile. `inUse` unchanged for
+USB/serial. New byte-level tests for the intent-URL round-trip + classifier
+(`lib/escpos/__tests__/transport.test.ts`).
+
 ## 2026-08-05 (later) — QA sweep: 9 verified findings found and fixed the same day
 
 A 4-hunter adversarial QA sweep (money / tenancy / concurrency / frontend lenses, every finding

@@ -341,6 +341,9 @@ export const en = {
       bluetoothHint: 'A wireless BLE receipt printer. Pair it fresh each session.',
       serial: 'Serial',
       serialHint: 'An RS-232 / virtual-COM printer on a desktop till.',
+      rawbt: 'RawBT app',
+      rawbtHint:
+        'Prints through the free RawBT Android app — the way to reach Bluetooth Classic printers Chrome cannot pair. Install RawBT and set your printer as its default first.',
       connect: 'Connect',
       connecting: 'Connecting…',
       connected: 'Printer connected',
@@ -351,6 +354,8 @@ export const en = {
           'The browser blocked access to the printer. Make sure the site is opened over HTTPS and allow the device when prompted.',
         inUse:
           'The printer is busy or already in use — close any other app or OS print queue using it, then try again.',
+        bleUnreachable:
+          'Could not reach the printer over Bluetooth LE. Either another app is holding it (e.g. RawBT — close it fully and retry), or it is a Bluetooth Classic printer this browser cannot pair — connect it by USB or through the RawBT app instead.',
         noEndpoint:
           'That device does not look like a receipt printer (no printer connection found). Pick the thermal printer from the list.',
         unknown: 'Could not connect to the printer. Check the cable/pairing and try again.',

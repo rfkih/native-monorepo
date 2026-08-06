@@ -1,5 +1,5 @@
 /**
- * Printer transports (ADR 0039): three Chromium capabilities carry the same ESC/POS bytes.
+ * Printer transports (ADR 0039, RawBT bridge ADR 0041): four ways to carry the same ESC/POS bytes.
  *
  *  - WebUSB    — USB thermal printers (interface class 0x07). Desktop Chrome + Android Chrome
  *                (OTG tablets — the common Indonesian till). Permission survives reloads via
@@ -7,10 +7,13 @@
  *  - Bluetooth — BLE printers (the 58 mm battery clip printers). Web Bluetooth speaks BLE GATT
  *                only — CLASSIC-SPP-only printers cannot pair here (the settings UI says so).
  *  - Serial    — RS-232/virtual-COM printers on desktops via WebSerial.
+ *  - RawBT     — Android only: hands the bytes to the RawBT app via its `rawbt:` intent URL,
+ *                and RawBT drives the printer over Bluetooth CLASSIC (SPP) — the transport for
+ *                the many cheap printers Chrome's BLE-only Web Bluetooth can never reach.
  *
- * All are HTTPS-gated (the UAT funnel and prod both qualify) and need one user-gesture pairing;
- * after that printing is silent — no print dialog. Browsers without these APIs keep the
- * window.print() fallback path.
+ * The browser APIs are HTTPS-gated (the UAT funnel and prod both qualify) and need one
+ * user-gesture pairing; after that printing is silent — no print dialog. Browsers without these
+ * APIs keep the window.print() fallback path.
  *
  * The ambient declarations below are the narrow structural slices of the WebUSB/WebBluetooth/
  * WebSerial specs we call — typed locally instead of pulling three @types packages for a page of
@@ -19,7 +22,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-export type TransportKind = 'usb' | 'ble' | 'serial'
+export type TransportKind = 'usb' | 'ble' | 'serial' | 'rawbt'
 
 export interface PrinterTransport {
   readonly kind: TransportKind
@@ -35,6 +38,8 @@ export function transportSupport(): Record<TransportKind, boolean> {
     usb: !!nav.usb,
     ble: !!nav.bluetooth,
     serial: !!nav.serial,
+    // intent: URLs are an Android-Chrome mechanism — RawBT itself is an Android app.
+    rawbt: /android/i.test(nav.userAgent ?? ''),
   }
 }
 
@@ -180,14 +185,26 @@ export async function requestBlePrinter(): Promise<PrinterTransport> {
  * Classifies a pairing/connect failure into a stable reason code the UI maps to copy. The browser
  * throws DOMExceptions with well-known names; a user cancelling the chooser is NOT an error worth
  * shouting about (it's `NotFoundError`/`NotAllowedError` depending on the API).
+ *
+ * BLE gets its own `NetworkError` bucket: `gatt.connect()` failing usually means the printer is
+ * either held by another app (RawBT's background service keeps the one Bluetooth socket these
+ * boards have) or is Bluetooth CLASSIC-only — which Web Bluetooth can NEVER reach. Calling that
+ * "busy" sends the operator into a retry loop; the copy must point at USB or the RawBT bridge.
  */
-export type ConnectFailureReason = 'cancelled' | 'blocked' | 'inUse' | 'noEndpoint' | 'unknown'
+export type ConnectFailureReason =
+  | 'cancelled'
+  | 'blocked'
+  | 'inUse'
+  | 'bleUnreachable'
+  | 'noEndpoint'
+  | 'unknown'
 
-export function classifyConnectError(err: unknown): ConnectFailureReason {
+export function classifyConnectError(err: unknown, kind?: TransportKind): ConnectFailureReason {
   const name = err instanceof Error ? err.name : ''
   const message = err instanceof Error ? err.message : String(err)
   if (name === 'NotFoundError') return 'cancelled' // chooser dismissed / no device picked
   if (name === 'SecurityError' || name === 'NotAllowedError') return 'blocked'
+  if (name === 'NetworkError' && kind === 'ble') return 'bleUnreachable'
   if (name === 'InvalidStateError' || name === 'NetworkError') return 'inUse'
   if (/no bulk OUT endpoint|no writable characteristic/i.test(message)) return 'noEndpoint'
   return 'unknown'
@@ -235,5 +252,51 @@ export async function reattachSerialPrinter(): Promise<PrinterTransport | null> 
     return await openSerialPort(ports[0])
   } catch {
     return null
+  }
+}
+
+// ---------------------------------------------------------------------------
+// RawBT bridge (ADR 0041)
+// ---------------------------------------------------------------------------
+
+const RAWBT_PACKAGE = 'ru.a402d.rawbtprinter'
+const RAWBT_PLAY_URL = `https://play.google.com/store/apps/details?id=${RAWBT_PACKAGE}`
+
+/**
+ * The Android intent URL RawBT registers for: `rawbt:base64,<bytes>` prints the decoded bytes
+ * verbatim (our ESC/POS stream, drawer kick and all). The `intent:` wrapper pins the package and
+ * falls back to the Play Store listing when RawBT isn't installed — the standard Android-Chrome
+ * pattern, and the shape RawBT's own web examples use (encodeURI, which leaves base64 intact).
+ */
+export function rawbtIntentUrl(bytes: Uint8Array): string {
+  let bin = ''
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+  }
+  return (
+    'intent:' +
+    encodeURI(`base64,${btoa(bin)}`) +
+    `#Intent;scheme=rawbt;package=${RAWBT_PACKAGE};` +
+    `S.browser_fallback_url=${encodeURIComponent(RAWBT_PLAY_URL)};end;`
+  )
+}
+
+/**
+ * Not a device connection at all: each write NAVIGATES to a rawbt: intent URL and Android hands
+ * the bytes to the RawBT app, which owns the actual (Bluetooth Classic / whatever it's configured
+ * for) printer link. Fire-and-forget — RawBT gives no success signal back, and the page stays
+ * loaded (Chrome only flashes an "opening app" affordance). There is nothing to pair, so
+ * "connect" is just selecting it; the settings test print is the real end-to-end check.
+ */
+export function createRawbtTransport(): PrinterTransport {
+  return {
+    kind: 'rawbt',
+    label: 'RawBT',
+    async write(bytes: Uint8Array) {
+      window.location.href = rawbtIntentUrl(bytes)
+    },
+    async disconnect() {
+      /* nothing held */
+    },
   }
 }

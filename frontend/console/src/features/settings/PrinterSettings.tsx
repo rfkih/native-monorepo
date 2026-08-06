@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Bluetooth, Cable, Check, Printer, TriangleAlert, Usb } from 'lucide-react'
+import { Bluetooth, Cable, Check, Printer, Smartphone, TriangleAlert, Usb } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { usePrinter } from '@/lib/escpos/printerContext'
@@ -34,6 +34,12 @@ export function PrinterSettings() {
         labelKey: 'settings.printer.serial',
         hintKey: 'settings.printer.serialHint',
       },
+      {
+        kind: 'rawbt',
+        icon: Smartphone,
+        labelKey: 'settings.printer.rawbt',
+        hintKey: 'settings.printer.rawbtHint',
+      },
     ]
 
   const connect = async (kind: TransportKind) => {
@@ -43,7 +49,7 @@ export function PrinterSettings() {
     } catch (err) {
       // Map the browser's DOMException to a specific reason. A cancelled chooser is not worth an
       // alarming banner — just clear the connecting state silently.
-      const reason = classifyConnectError(err)
+      const reason = classifyConnectError(err, kind)
       if (reason === 'cancelled') return
       setError(t(`settings.printer.error.${reason}`))
     }
@@ -138,7 +144,7 @@ export function PrinterSettings() {
       )}
 
       {!printer.connected ? (
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {transports.map(({ kind, icon: Icon, labelKey, hintKey }) => {
             const supported = printer.support[kind]
             return (

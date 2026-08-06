@@ -332,6 +332,9 @@ export const id = {
       bluetoothHint: 'Printer struk nirkabel BLE. Pasangkan ulang setiap sesi.',
       serial: 'Serial',
       serialHint: 'Printer RS-232 / COM virtual pada kasir desktop.',
+      rawbt: 'Aplikasi RawBT',
+      rawbtHint:
+        'Mencetak lewat aplikasi Android gratis RawBT — cara menjangkau printer Bluetooth Classic yang tidak bisa dipasangkan Chrome. Pasang RawBT dan atur printer Anda sebagai default-nya dulu.',
       connect: 'Hubungkan',
       connecting: 'Menghubungkan…',
       connected: 'Printer terhubung',
@@ -342,6 +345,8 @@ export const id = {
           'Peramban memblokir akses ke printer. Pastikan situs dibuka lewat HTTPS dan izinkan perangkat saat diminta.',
         inUse:
           'Printer sedang sibuk atau dipakai aplikasi lain — tutup aplikasi atau antrean cetak lain yang memakainya, lalu coba lagi.',
+        bleUnreachable:
+          'Tidak dapat menjangkau printer lewat Bluetooth LE. Bisa jadi aplikasi lain sedang memegangnya (mis. RawBT — tutup sepenuhnya lalu coba lagi), atau printer ini Bluetooth Classic yang tidak bisa dipasangkan peramban — hubungkan lewat USB atau lewat aplikasi RawBT.',
         noEndpoint:
           'Perangkat itu sepertinya bukan printer struk (koneksi printer tidak ditemukan). Pilih printer termal dari daftar.',
         unknown: 'Tidak dapat terhubung ke printer. Periksa kabel/pemasangan lalu coba lagi.',

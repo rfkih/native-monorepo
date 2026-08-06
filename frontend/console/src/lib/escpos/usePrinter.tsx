@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { renderReceipt, type EscposReceiptData, type PaperWidth } from './receipt'
 import { loadPrinterConfig, savePrinterConfig, clearPrinterConfig, type PrinterConfig } from './printerStore'
 import {
+  createRawbtTransport,
   reattachUsbPrinter,
   reattachSerialPrinter,
   requestUsbPrinter,
@@ -32,6 +33,7 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
   const support = transportSupport()
 
   // Silent re-attach of a persisted USB/serial grant on load (BLE cannot persist — skip it).
+  // RawBT holds no device grant at all, so it re-attaches unconditionally from the saved config.
   useEffect(() => {
     const saved = loadPrinterConfig()
     if (!saved) return
@@ -42,7 +44,9 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
           ? await reattachUsbPrinter()
           : saved.transport === 'serial'
             ? await reattachSerialPrinter()
-            : null
+            : saved.transport === 'rawbt' && transportSupport().rawbt
+              ? createRawbtTransport()
+              : null
       if (cancelled) {
         await transport?.disconnect()
         return
@@ -67,7 +71,9 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
             ? await requestUsbPrinter()
             : kind === 'ble'
               ? await requestBlePrinter()
-              : await requestSerialPrinter()
+              : kind === 'serial'
+                ? await requestSerialPrinter()
+                : createRawbtTransport() // no chooser — RawBT owns the printer link
         transportRef.current = transport
         const next: PrinterConfig = { transport: kind, paper, drawerKick, label: transport.label }
         savePrinterConfig(next)
