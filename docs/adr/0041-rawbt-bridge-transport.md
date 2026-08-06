@@ -37,6 +37,20 @@ verbatim — i.e. it accepts our existing ESC/POS stream untouched.
    service) holding the printer's single Bluetooth socket, or a Classic-only printer — and points
    at USB or the RawBT tile. `inUse` is unchanged for USB/serial.
 
+## Amendment (2026-08-06): silent path via "Server for RawBT"
+
+The intent hand-off necessarily foregrounds RawBT for a moment on every print — reported as
+disruptive in live use. The same developer's companion app **"Server for RawBT"** (`rawbt.server`)
+keeps RawBT in the background and exposes its queue on a local WebSocket, `ws://127.0.0.1:40213/`
+(raw ESC/POS bytes as one binary message, then `close(1000)` — 402d's reference client shape).
+Localhost is exempt from mixed-content blocking, so our HTTPS page may use it, and WebSockets need
+no user activation. The rawbt transport now tries this first on every write and falls back to the
+intent URL when the connect is refused (milliseconds when nothing listens; a short timeout guards a
+hung connect). With the server app installed: no popup, and the auto-print transient-activation
+caveat below disappears. Without it: exactly the prior behavior. Watch-item: Chrome's Private
+Network Access rollout may someday gate public-HTTPS → loopback sockets behind a permission; the
+intent fallback keeps printing working if that lands.
+
 ## Consequences
 
 - Classic-SPP printers — the common cheap clone — now print from the POS on Android, closing the

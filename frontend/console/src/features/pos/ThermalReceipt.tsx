@@ -378,7 +378,8 @@ export function ThermalReceipt({
   // not the dep list — is what enforces "once": the printer context value is a fresh object every
   // provider render, so the effect re-runs; every rerun after the first is a no-op. The timer
   // defers the dispatch (and its setState) out of the effect body per react-hooks rules.
-  // RawBT caveat: its write navigates to an intent: URL, which Chrome gates on transient user
+  // RawBT caveat: with the "Server for RawBT" companion app its write goes over a local WebSocket
+  // (silent, no activation needed); WITHOUT it the intent:-URL fallback is gated on transient user
   // activation (~5 s from the confirm tap) — a slow online capture can outlive the window, the
   // blocked navigation is silent, and autoPrinted stays latched; the Print button is the recovery.
   const autoPrinted = useRef(false)

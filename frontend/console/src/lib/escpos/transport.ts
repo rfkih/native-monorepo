@@ -282,17 +282,75 @@ export function rawbtIntentUrl(bytes: Uint8Array): string {
 }
 
 /**
- * Not a device connection at all: each write NAVIGATES to a rawbt: intent URL and Android hands
- * the bytes to the RawBT app, which owns the actual (Bluetooth Classic / whatever it's configured
- * for) printer link. Fire-and-forget — RawBT gives no success signal back, and the page stays
- * loaded (Chrome only flashes an "opening app" affordance). There is nothing to pair, so
- * "connect" is just selecting it; the settings test print is the real end-to-end check.
+ * The silent path: the companion "Server for RawBT" app (same developer, package `rawbt.server`)
+ * keeps RawBT running in the background and exposes its print queue on a local WebSocket —
+ * ws://127.0.0.1:40213/, raw ESC/POS bytes as one binary message then close(1000), per 402d's own
+ * reference client. Reachable from our HTTPS page (localhost is exempt from mixed-content in
+ * Chrome) and needs NO user activation — so it prints with no app switch, no RawBT popup, and no
+ * transient-activation window for auto-print. Resolves false (never throws) when the server app
+ * isn't installed/running: a refused localhost connect errors in milliseconds; the timeout only
+ * guards a hung connect.
+ */
+const RAWBT_WS_URL = 'ws://127.0.0.1:40213/'
+
+export function sendViaRawbtWs(bytes: Uint8Array, timeoutMs = 600): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (typeof WebSocket === 'undefined') {
+      resolve(false)
+      return
+    }
+    let ws: WebSocket
+    try {
+      ws = new WebSocket(RAWBT_WS_URL)
+    } catch {
+      resolve(false)
+      return
+    }
+    let settled = false
+    const done = (ok: boolean) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      try {
+        ws.close(1000)
+      } catch {
+        /* already closed */
+      }
+      resolve(ok)
+    }
+    const timer = setTimeout(() => done(false), timeoutMs)
+    ws.binaryType = 'arraybuffer'
+    ws.onopen = () => {
+      // A connect completing after the timeout already fell back to the intent URL — sending here
+      // too would print the receipt twice. (Browsers abort a CONNECTING socket on close(), but
+      // don't lean on that.)
+      if (settled) return
+      try {
+        // .slice() detaches from any larger backing buffer and satisfies send()'s ArrayBuffer type.
+        ws.send(bytes.slice().buffer)
+        done(true) // close(1000) flushes the queued message before the closing handshake
+      } catch {
+        done(false)
+      }
+    }
+    ws.onerror = () => done(false)
+  })
+}
+
+/**
+ * Not a device connection at all: each write hands the bytes to the RawBT app, which owns the
+ * actual (Bluetooth Classic / whatever it's configured for) printer link. Silent WebSocket path
+ * first (see above); otherwise NAVIGATE to a rawbt: intent URL — Android foregrounds RawBT
+ * briefly (the "popup"), and the page stays loaded. Fire-and-forget either way — RawBT gives no
+ * per-job success signal back. There is nothing to pair, so "connect" is just selecting it; the
+ * settings test print is the real end-to-end check.
  */
 export function createRawbtTransport(): PrinterTransport {
   return {
     kind: 'rawbt',
     label: 'RawBT',
     async write(bytes: Uint8Array) {
+      if (await sendViaRawbtWs(bytes)) return
       window.location.href = rawbtIntentUrl(bytes)
     },
     async disconnect() {

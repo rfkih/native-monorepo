@@ -5,6 +5,16 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-06 (later still) — Silent RawBT printing via the "Server for RawBT" WebSocket
+
+Live-use follow-up: the intent hand-off flashes the RawBT app on every print. The rawbt transport
+now tries the companion "Server for RawBT" app's local WebSocket first (`ws://127.0.0.1:40213/`,
+raw ESC/POS binary then close(1000); localhost is mixed-content-exempt so the HTTPS page may use
+it, and no user activation is needed — which also erases the auto-print ~5 s activation caveat
+when the server app is present). Connection refused falls back to the intent URL in milliseconds —
+prior behavior exactly. ADR 0041 amended; unit tests fake the WebSocket (send/refuse/hang/absent)
+and pin the fallback decision.
+
 ## 2026-08-06 (later) — Auto-print the receipt on payment (per-device toggle)
 
 Follow-up to the RawBT bridge, from live UAT use: the receipt now prints automatically the moment

@@ -343,7 +343,7 @@ export const en = {
       serialHint: 'An RS-232 / virtual-COM printer on a desktop till.',
       rawbt: 'RawBT app',
       rawbtHint:
-        'Prints through the free RawBT Android app — the way to reach Bluetooth Classic printers Chrome cannot pair. Install RawBT and set your printer as its default first.',
+        'Prints through the free RawBT Android app — the way to reach Bluetooth Classic printers Chrome cannot pair. Install RawBT and set your printer as its default first. Tip: also install its companion "Server for RawBT" app and prints go silently in the background — no RawBT screen flashing up.',
       connect: 'Connect',
       connecting: 'Connecting…',
       connected: 'Printer connected',
