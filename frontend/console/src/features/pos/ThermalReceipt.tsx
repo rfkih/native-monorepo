@@ -25,10 +25,12 @@
  * Money rule: all amounts come in as pre-formatted label strings (callers use formatMoney).
  */
 
-import { useId } from 'react'
+import { useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Printer } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { usePrinter } from '@/lib/escpos/printerContext'
+import { toEscposReceiptData } from '@/lib/escpos/fromThermalProps'
 
 // ---------------------------------------------------------------------------
 // Prop types — normalised data model
@@ -325,6 +327,40 @@ export function ThermalReceipt({
 }: ThermalProps) {
   const { t } = useTranslation()
   const headingId = useId()
+  const printer = usePrinter()
+  const [deviceBusy, setDeviceBusy] = useState(false)
+
+  /**
+   * Print handler (ADR 0039): when a thermal printer is connected, send raw ESC/POS bytes to it
+   * (silent, no OS dialog). Otherwise — or if the device write fails — fall back to the browser's
+   * window.print() (the WYSIWYG paper), which is exactly the previous behavior. The `onPrint` prop
+   * IS that browser path (callers pass window.print), so it doubles as the fallback.
+   */
+  const handlePrint = async () => {
+    if (printer.connected) {
+      setDeviceBusy(true)
+      const ok = await printer.printReceipt(
+        toEscposReceiptData({
+          businessName,
+          title,
+          reference,
+          tagline,
+          dateTime,
+          metaRows,
+          lineItems,
+          totalRows,
+          grandTotalLabel,
+          grandTotalCaption: t('pos.receipt.total'),
+          paymentRows,
+          footerNote,
+          provisionalNote: isProvisional ? provisionalNote : undefined,
+        }),
+      )
+      setDeviceBusy(false)
+      if (ok) return
+    }
+    onPrint()
+  }
 
   return (
     <>
@@ -523,10 +559,15 @@ export function ThermalReceipt({
           <Button
             variant="outline"
             className="flex-1 border-white/20 bg-white/10 text-white hover:bg-white/20"
-            onClick={onPrint}
+            onClick={handlePrint}
+            disabled={deviceBusy}
           >
             <Printer className="size-4" />
-            {t('pos.receipt.print')}
+            {deviceBusy
+              ? t('pos.receipt.printing')
+              : printer.connected
+                ? t('pos.receipt.printDevice')
+                : t('pos.receipt.print')}
           </Button>
           <Button className="flex-1" onClick={onAction}>
             {actionLabel}

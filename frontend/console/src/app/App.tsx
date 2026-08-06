@@ -67,6 +67,9 @@ const Landing = lazy(() =>
   import('@/features/landing/Landing').then((m) => ({ default: m.Landing })),
 )
 const Me = lazy(() => import('@/features/me/Me').then((m) => ({ default: m.Me })))
+const PrinterSettings = lazy(() =>
+  import('@/features/settings/PrinterSettings').then((m) => ({ default: m.PrinterSettings })),
+)
 const MyExpenses = lazy(() =>
   import('@/features/expenses/MyExpenses').then((m) => ({ default: m.MyExpenses })),
 )
@@ -372,6 +375,10 @@ export function App() {
           {/* My expenses (ADR 0030, Phase E6) — same gate as /me itself: never page-restricted, so
               a login can never be locked out of submitting its own reimbursement claims. */}
           <Route path="/me/expenses" element={<MyExpenses />} />
+
+          {/* Printer settings (ADR 0039) — a per-DEVICE thermal-printer pairing, so it is NOT
+              page-gated: whoever sets up a till (cashier or manager) must be able to connect it. */}
+          <Route path="/settings/printer" element={<PrinterSettings />} />
 
           {/* Onboarding picks its chrome ONCE, on entry (see OnboardingRoute): first company →
               full-page standalone wizard (no shell to wander off into); adding another company →

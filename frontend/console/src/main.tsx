@@ -7,6 +7,7 @@ import './i18n'
 import { queryClient } from '@/lib/queryClient'
 import { AuthProvider } from '@/lib/auth'
 import { SessionProvider } from '@/lib/SessionProvider'
+import { PrinterProvider } from '@/lib/escpos/usePrinter'
 import { App } from '@/app/App'
 
 createRoot(document.getElementById('root')!).render(
@@ -14,9 +15,11 @@ createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <SessionProvider>
-          <BrowserRouter>
-            <App />
-          </BrowserRouter>
+          <PrinterProvider>
+            <BrowserRouter>
+              <App />
+            </BrowserRouter>
+          </PrinterProvider>
         </SessionProvider>
       </AuthProvider>
     </QueryClientProvider>

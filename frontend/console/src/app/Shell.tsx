@@ -6,6 +6,7 @@ import {
   ArrowRight,
   BookOpen,
   Building2,
+  Printer,
   CalendarCheck,
   CalendarClock,
   Check,
@@ -111,6 +112,7 @@ export function Shell({ children }: { children: ReactNode }) {
             { to: '/close', label: t('nav.close'), icon: CalendarCheck, page: 'close' },
             { to: '/team', label: t('nav.team'), icon: UsersRound, page: 'team' },
             { to: '/onboarding', label: t('nav.onboarding'), icon: Building2 },
+            { to: '/settings/printer', label: t('nav.printer'), icon: Printer },
           ],
         },
       ]
