@@ -94,6 +94,14 @@ public class MenuItem extends Auditable {
   @Column(name = "image_url", nullable = true)
   @Nullable private String imageUrl;
 
+  /**
+   * The item's unit cost in minor units (same currency as {@link #price}), used to value a
+   * stocktake variance (ADR 0038 phase 3). {@code null} = no cost recorded: the item is still
+   * counted at stocktake (its stock is adjusted) but its variance posts no ledger entry.
+   */
+  @Column(name = "unit_cost_minor")
+  @Nullable private Long unitCostMinor;
+
   protected MenuItem() {
     // for JPA
   }
@@ -129,6 +137,29 @@ public class MenuItem extends Auditable {
       UUID businessId, String name, String category, Money price, @Nullable String imageUrl) {
     this(businessId, name, category, price);
     this.imageUrl = imageUrl;
+  }
+
+  /**
+   * Creates a new active, available menu item with an image URL and an optional unit cost (ADR 0038
+   * phase 3 — menu unit-cost plumbing).
+   *
+   * @param businessId the owning business unit
+   * @param name display name (non-blank)
+   * @param category item category (non-blank)
+   * @param price the price as {@link Money} (never a float, rule 8)
+   * @param imageUrl optional image data URL or external URL; {@code null} = no image
+   * @param unitCostMinor optional unit cost in minor units (same currency as {@code price}), or
+   *     {@code null} when no cost is recorded; must be &ge; 0
+   */
+  public MenuItem(
+      UUID businessId,
+      String name,
+      String category,
+      Money price,
+      @Nullable String imageUrl,
+      @Nullable Long unitCostMinor) {
+    this(businessId, name, category, price, imageUrl);
+    setUnitCostMinor(unitCostMinor);
   }
 
   public UUID getId() {
@@ -194,12 +225,14 @@ public class MenuItem extends Auditable {
    * @param category new category (non-blank); {@code null} = leave unchanged
    * @param price new price; {@code null} = leave unchanged (currency cannot be changed)
    * @param imageUrl new image URL, or empty string to clear; {@code null} = leave unchanged
+   * @param unitCostMinor new unit cost in minor units (&ge; 0); {@code null} = leave unchanged
    */
   public void update(
       @Nullable String name,
       @Nullable String category,
       @Nullable Money price,
-      @Nullable String imageUrl) {
+      @Nullable String imageUrl,
+      @Nullable Long unitCostMinor) {
     if (name != null) {
       this.name = name;
     }
@@ -212,6 +245,9 @@ public class MenuItem extends Auditable {
     if (imageUrl != null) {
       // empty string = clear the image; any other value = set
       this.imageUrl = imageUrl.isEmpty() ? null : imageUrl;
+    }
+    if (unitCostMinor != null) {
+      setUnitCostMinor(unitCostMinor);
     }
   }
 
@@ -228,6 +264,27 @@ public class MenuItem extends Auditable {
   /** Marks the item as available for ordering again (un-86). */
   public void markAvailable() {
     this.available = true;
+  }
+
+  /**
+   * The item's unit cost in minor units (same currency as {@link #getPrice()}); {@code null} when
+   * no cost has been recorded (ADR 0038 phase 3 — stocktake variance valuation).
+   */
+  @Nullable public Long getUnitCostMinor() {
+    return unitCostMinor;
+  }
+
+  /**
+   * Sets (or clears) the unit cost. Pass {@code null} to clear.
+   *
+   * @param unitCostMinor new unit cost in minor units, or {@code null} to clear
+   * @throws IllegalArgumentException if {@code unitCostMinor} is non-null and negative
+   */
+  public void setUnitCostMinor(@Nullable Long unitCostMinor) {
+    if (unitCostMinor != null && unitCostMinor < 0) {
+      throw new IllegalArgumentException("unitCostMinor must be >= 0, got: " + unitCostMinor);
+    }
+    this.unitCostMinor = unitCostMinor;
   }
 
   // ---------------------------------------------------------------------------

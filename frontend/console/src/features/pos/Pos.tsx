@@ -23,6 +23,7 @@ import {
   Banknote,
   BookOpen,
   ChefHat,
+  ClipboardCheck,
   ClipboardList,
   Gift,
   LogOut,
@@ -87,6 +88,7 @@ import { NoCompany } from './components/NoCompany'
 import { RegisterSheet } from './RegisterSheet'
 import { PosStatusBar } from '@/features/pos-shell/layout/PosStatusBar'
 import { TillMenuSheet } from '@/features/pos-shell/layout/TillMenuSheet'
+import { StocktakeSheet } from '@/features/stocktake/StocktakeSheet'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -147,6 +149,7 @@ function PosInner({ session }: { session: CompanySession }) {
   const [showSyncCenter, setShowSyncCenter] = useState(false)
   const [showTillMenu, setShowTillMenu] = useState(false)
   const [showRegisterSheet, setShowRegisterSheet] = useState(false)
+  const [showStocktakeSheet, setShowStocktakeSheet] = useState(false)
   // P4: the dock's Send/Pay reach INTO the bill sheet — each ++ asks BillDetail to fire the
   // kitchen ticket / the pay modal as soon as the bill is loaded (no manual sheet detour).
   const [autoKotToken, setAutoKotToken] = useState(0)
@@ -888,6 +891,16 @@ function PosInner({ session }: { session: CompanySession }) {
               disabledTitle: t('register.disabledOffline'),
             },
             {
+              key: 'stocktake',
+              icon: <ClipboardCheck className="size-4" aria-hidden="true" />,
+              label: t('stocktake.tillMenuLabel'),
+              onSelect: () => setShowStocktakeSheet(true),
+              // ADR 0038 phase 3: the stocktake submits directly to the server (no offline queue
+              // support) — same posture as the register close.
+              disabled: offline,
+              disabledTitle: t('offline.disabled.stocktake'),
+            },
+            {
               key: 'display',
               icon: <Monitor className="size-4" aria-hidden="true" />,
               label: t('pos.customerDisplay.button'),
@@ -932,6 +945,15 @@ function PosInner({ session }: { session: CompanySession }) {
           currency={currency}
           locale={locale}
           onClose={() => setShowRegisterSheet(false)}
+        />
+      ) : null}
+
+      {showStocktakeSheet ? (
+        <StocktakeSheet
+          session={session}
+          currency={currency}
+          locale={locale}
+          onClose={() => setShowStocktakeSheet(false)}
         />
       ) : null}
 

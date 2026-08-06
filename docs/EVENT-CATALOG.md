@@ -1975,6 +1975,58 @@ consumers may decode positionally).
 
 ---
 
+### `StocktakeCompleted`
+
+Emitted by restaurant-service when a physical inventory stocktake is submitted at the daily
+close (ADR 0038 phase 3, daily close v2). The count adjusts each tracked menu item's stock to
+the counted quantity; this event carries the NET valued shrinkage so finance-service posts a
+single inventory adjustment. `shrinkage_minor` is SERVER-computed by the producer as `Σ over
+cost-bearing lines of (system_qty − counted_qty) × unit_cost_minor` — the valued LOSS — and is
+SIGNED: positive = a net loss/shrinkage (`Dr INVENTORY_SHRINKAGE / Cr INVENTORY`), negative = a
+net gain/found stock (`Dr INVENTORY / Cr INVENTORY_SHRINKAGE`), zero = no journal entry (the
+event is still marked processed). Only lines whose item carries a unit cost contribute; items
+without a cost are counted operationally (stock adjusted) but never post to the ledger.
+Revenue/COGS-on-sale is NOT touched — this is a periodic stocktake, not perpetual inventory.
+
+- **Producer:** `restaurant-service`
+- **Consumers:** `finance-service` (post the inventory-adjustment journal entry)
+- **Aggregate type / partition key:** `stocktake` / `stocktake_id`
+- **Outbox `event_type`:** `StocktakeCompleted`
+- **Schema:** `libs/contracts/src/main/resources/avro/StocktakeCompleted.avsc`
+- **Full name:** `id.co.nativeapp.events.restaurant.StocktakeCompleted`
+
+**Key fields**
+
+| Field | Avro type | Meaning |
+|---|---|---|
+| `stocktake_id` | `string` | The stocktake aggregate id (UUID as string); also the Kafka partition key and the finance idempotency source id |
+| `company_id` | `string` | The owning tenant (UUID as string) |
+| `business_id` | `string` | The outlet/business the count was taken at (UUID as string) |
+| `counted_at` | `timestamp-millis` | When the stocktake was submitted, epoch millis UTC; finance posts into `periodOf(counted_at)` (a sealed period quarantines to the error inbox, mirroring the register-close consumer) |
+| `shrinkage_minor` | `long` | SIGNED net valued shrinkage: `Σ (system_qty − counted_qty) × unit_cost_minor` over cost-bearing lines. Positive = net loss (shrinkage), negative = net gain (found stock), zero = no entry. The ONLY amount finance posts |
+| `currency` | `string` | ISO-4217 currency code of `shrinkage_minor` (the company base currency) |
+
+**Avro schema** (single source of truth in `libs/contracts/src/main/resources/avro/StocktakeCompleted.avsc`)
+
+```json
+{
+  "type": "record",
+  "name": "StocktakeCompleted",
+  "namespace": "id.co.nativeapp.events.restaurant",
+  "doc": "Emitted by restaurant-service when a physical inventory stocktake is submitted at the daily close (ADR 0038 phase 3). The count adjusts each tracked menu item's stock to the counted quantity; this event carries the NET valued shrinkage so finance-service posts a single inventory adjustment. Money is integer minor units + an ISO-4217 currency code, never a float (CLAUDE.md rule 8). shrinkage_minor is SERVER-computed by the producer as Σ over cost-bearing lines of (system_qty − counted_qty) × unit_cost_minor — the valued LOSS — and is SIGNED: positive = a net loss/shrinkage (Dr INVENTORY_SHRINKAGE / Cr INVENTORY), negative = a net gain/found stock (Dr INVENTORY / Cr INVENTORY_SHRINKAGE), zero = no journal entry (the event is still marked processed). Only lines whose item carries a unit cost contribute; items without a cost are counted operationally (stock adjusted) but never post to the ledger. Revenue/COGS-on-sale is NOT touched — this is a periodic stocktake, not perpetual inventory.",
+  "fields": [
+    {"name": "stocktake_id", "type": "string", "doc": "The stocktake aggregate id (UUID as string); also the Kafka partition key and the finance idempotency source id."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string)."},
+    {"name": "business_id", "type": "string", "doc": "The outlet/business the count was taken at (UUID as string)."},
+    {"name": "counted_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the stocktake was submitted, epoch millis (UTC). Finance posts into periodOf(counted_at); a sealed period quarantines to the error inbox (no posting), mirroring the register-close consumer."},
+    {"name": "shrinkage_minor", "type": "long", "doc": "SIGNED net valued shrinkage: Σ (system_qty − counted_qty) × unit_cost_minor over cost-bearing lines. Positive = net loss (shrinkage), negative = net gain (found stock), zero = no entry. The ONLY amount finance posts."},
+    {"name": "currency", "type": "string", "doc": "ISO-4217 currency code of shrinkage_minor (the company base currency)."}
+  ]
+}
+```
+
+---
+
 ## Phase 4 (ADR 0027) — loyalty + gift cards: schema foundation
 
 The four events below are the **event-contract foundation** of Phase 4 of the POS-parity program

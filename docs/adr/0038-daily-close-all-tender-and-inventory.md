@@ -84,7 +84,15 @@ revenue. Delivered in three independently shippable, money-reviewed phases.
   entry). Mirrors the ADR-0036 ONLINE consumer-first rule.
 - **Phase 3 — inventory stocktake + shrinkage.** `menu_item.unit_cost_minor`; a stocktake submitted
   with the close (counts → variance → stock adjust → event); new finance `INVENTORY` +
-  `INVENTORY_SHRINKAGE` roles + the shrinkage journal; console stocktake UI.
+  `INVENTORY_SHRINKAGE` roles + the shrinkage journal; console stocktake UI. The finance consumer
+  posts shrinkage as a genuine expense on **all three surfaces** — the GL journal *and* both P&L
+  read models (a dimensional `LedgerPosting(EXPENSE, businessId, 5800)` + the `consolidated_pnl`
+  expense leg via `PnlReadModelWriter.addExpense`), exactly like `ExpensePostingWriter` — so a net
+  loss reduces the profit an owner sees on the dashboard, not only the raw trial balance. The signed
+  `shrinkage_minor` is taken verbatim (positive loss = a positive expense; a negative overage = a
+  contra-expense that lifts profit back up — the labor-`REVERSAL` negative precedent); the
+  dimensional posting is always keyed to `5800` (the sign lives in the amount) and the `1100` asset
+  leg stays GL-journal-only.
 
 Each phase: failing acceptance test first → tests + sonar green → mandatory money/tenancy code-
 review → commit. As throughout, **all account codes are ILLUSTRATIVE**; an SME remaps via
@@ -103,3 +111,11 @@ review → commit. As throughout, **all account codes are ILLUSTRATIVE**; an SME
   evolution, not built here.
 - Inventory enters the ledger only at stocktake (periodic), so between counts the books still don't
   reflect COGS-on-sale; perpetual inventory + recipe/BOM is a separate future program.
+- **Known limitation — cash over/short (selisih kas) stays GL-journal-only.** The Phase-2
+  `RegisterCloseWriter` posts cash variance to real P&L accounts (`5700` short / `4300` over) but,
+  unlike Phase-3 shrinkage, does *not* write the P&L read models, so a till over/short shows only in
+  the trial balance, not the dashboard P&L. It is defensible to defer on **materiality** (a till
+  variance is a small reconciliation residual whose primary job is truing the `1900` cash-clearing
+  suspense for the ADR-0016 bank sweep; shrinkage is a first-order, potentially large operating
+  cost) — but it is the *same* read-model gap and is tracked here to be closed when register-close is
+  next revisited, not treated as evidence that GL-only is correct.

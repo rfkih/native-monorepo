@@ -3,6 +3,7 @@ package id.co.nativeapp.restaurant.menu.dto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import java.util.UUID;
 import org.springframework.lang.Nullable;
@@ -16,6 +17,11 @@ import org.springframework.lang.Nullable;
  * <p>{@code imageUrl} is optional. It holds either a compact base64 data URL (the frontend
  * downsizes the photo before submitting) or an external HTTP(S) URL. The 3 MB cap prevents
  * accidental full-resolution uploads; TEXT at the DB layer is unconstrained.
+ *
+ * <p>{@code unitCostMinor} is optional (ADR 0038 phase 3 — menu unit-cost plumbing): the item's
+ * cost in minor units, in the same currency as {@code priceMinor}, used to value an inventory
+ * stocktake's variance. {@code null} = no cost recorded (the item can still be counted at
+ * stocktake; its variance simply posts no ledger entry).
  */
 public record CreateMenuItemRequest(
     @NotNull UUID businessId,
@@ -23,14 +29,29 @@ public record CreateMenuItemRequest(
     @NotBlank String category,
     @NotNull @Positive Long priceMinor,
     @NotBlank String currency,
-    @Nullable @Size(max = 3_000_000) String imageUrl) {
+    @Nullable @Size(max = 3_000_000) String imageUrl,
+    @Nullable @PositiveOrZero Long unitCostMinor) {
 
   /**
-   * Convenience constructor for callers that do not supply an image (imageUrl defaults to {@code
-   * null}). Used by existing tests and non-image create flows.
+   * Back-compat constructor for callers that supply an image but no unit cost (unitCostMinor
+   * defaults to {@code null}).
+   */
+  public CreateMenuItemRequest(
+      UUID businessId,
+      String name,
+      String category,
+      Long priceMinor,
+      String currency,
+      @Nullable String imageUrl) {
+    this(businessId, name, category, priceMinor, currency, imageUrl, null);
+  }
+
+  /**
+   * Convenience constructor for callers that do not supply an image or a unit cost (both default to
+   * {@code null}). Used by existing tests and non-image create flows.
    */
   public CreateMenuItemRequest(
       UUID businessId, String name, String category, Long priceMinor, String currency) {
-    this(businessId, name, category, priceMinor, currency, null);
+    this(businessId, name, category, priceMinor, currency, null, null);
   }
 }

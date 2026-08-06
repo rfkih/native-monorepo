@@ -416,6 +416,24 @@ public class RoutingConfig {
   }
 
   /**
+   * Inventory stocktake at the daily close (ADR 0038 phase 3): the operator counts stock at the
+   * outlet, so the route carries POS_ROLES (owner, manager, cashier), like every till surface.
+   */
+  @Bean
+  RouterFunction<ServerResponse> stocktakesRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("restaurant-service-stocktakes")
+        .route(path("/api/v1/stocktakes/**"), http())
+        .before(uri(routes.restaurantService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(POS_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
    * Company-managed sales channels + the ONLINE tender (ADR 0036 Phase B2): a cashier LISTs the
    * channel picker at checkout (GET), while CREATE/PATCH are further gated to owner/manager
    * SERVICE-SIDE by {@code SalesChannelWriter} — the route itself carries POS_ROLES (owner,

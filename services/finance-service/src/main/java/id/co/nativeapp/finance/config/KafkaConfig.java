@@ -150,6 +150,9 @@ public class KafkaConfig {
         id.co.nativeapp.finance.giftcard.messaging.GiftCardSoldDecodeException.class,
         // ADR 0036 (register close) — the same fail-closed decode + identity-poison contract.
         id.co.nativeapp.finance.register.messaging.RegisterSessionClosedDecodeException.class,
+        // ADR 0038 phase 3 (inventory stocktake) — the same fail-closed decode + validation-poison
+        // contract.
+        id.co.nativeapp.finance.stocktake.messaging.StocktakeCompletedDecodeException.class,
         id.co.nativeapp.finance.orgref.messaging.OrgUnitRefDecodeException.class,
         id.co.nativeapp.finance.orgref.messaging.OrgUnitRefMissingEventIdException.class,
         id.co.nativeapp.finance.revenue.messaging.MissingEventIdException.class,

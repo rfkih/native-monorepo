@@ -29,17 +29,18 @@ public interface MenuItemRepository extends JpaRepository<MenuItem, UUID> {
   @Query(
       value =
           """
-          SELECT m.id             AS id,
-                 m.business_id    AS business_id,
-                 m.name           AS name,
-                 m.category       AS category,
-                 m.category_id    AS category_id,
-                 m.price_minor    AS price_minor,
-                 m.currency       AS currency,
-                 m.active         AS active,
-                 m.available      AS available,
-                 m.stock_quantity AS stock_quantity,
-                 m.image_url      AS image_url
+          SELECT m.id              AS id,
+                 m.business_id     AS business_id,
+                 m.name            AS name,
+                 m.category        AS category,
+                 m.category_id     AS category_id,
+                 m.price_minor     AS price_minor,
+                 m.currency        AS currency,
+                 m.active          AS active,
+                 m.available       AS available,
+                 m.stock_quantity  AS stock_quantity,
+                 m.image_url       AS image_url,
+                 m.unit_cost_minor AS unit_cost_minor
             FROM menu_item m
             LEFT JOIN menu_category mc ON mc.id = m.category_id
            WHERE m.business_id = :businessId
@@ -60,17 +61,18 @@ public interface MenuItemRepository extends JpaRepository<MenuItem, UUID> {
   @Query(
       value =
           """
-          SELECT m.id             AS id,
-                 m.business_id    AS business_id,
-                 m.name           AS name,
-                 m.category       AS category,
-                 m.category_id    AS category_id,
-                 m.price_minor    AS price_minor,
-                 m.currency       AS currency,
-                 m.active         AS active,
-                 m.available      AS available,
-                 m.stock_quantity AS stock_quantity,
-                 m.image_url      AS image_url
+          SELECT m.id              AS id,
+                 m.business_id     AS business_id,
+                 m.name            AS name,
+                 m.category        AS category,
+                 m.category_id     AS category_id,
+                 m.price_minor     AS price_minor,
+                 m.currency        AS currency,
+                 m.active          AS active,
+                 m.available       AS available,
+                 m.stock_quantity  AS stock_quantity,
+                 m.image_url       AS image_url,
+                 m.unit_cost_minor AS unit_cost_minor
             FROM menu_item m
            WHERE m.id IN (:ids)
           """,

@@ -143,6 +143,7 @@ public class MenuReader {
         view.isAvailable(),
         view.getStockQuantity(),
         view.getImageUrl(),
+        view.getUnitCostMinor(),
         groups);
   }
 }

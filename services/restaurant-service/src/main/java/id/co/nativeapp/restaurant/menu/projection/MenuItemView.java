@@ -41,4 +41,10 @@ public interface MenuItemView {
    * been set.
    */
   @Nullable String getImageUrl();
+
+  /**
+   * The item's unit cost in minor units (same currency as {@link #getCurrency()}); {@code null}
+   * when no cost has been recorded (ADR 0038 phase 3 — stocktake variance valuation).
+   */
+  @Nullable Long getUnitCostMinor();
 }

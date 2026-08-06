@@ -331,6 +331,16 @@ events:
       - { name: occurred_at, type: "timestamp-millis" }
       - { name: tender_type, type: "null|string" }
       - { name: channel, type: "null|string" }
+  - name: StocktakeCompleted
+    namespace: id.co.nativeapp.events.restaurant
+    schema: libs/contracts/src/main/resources/avro/StocktakeCompleted.avsc
+    fields:
+      - { name: stocktake_id, type: "string" }
+      - { name: company_id, type: "string" }
+      - { name: business_id, type: "string" }
+      - { name: counted_at, type: "timestamp-millis" }
+      - { name: shrinkage_minor, type: "long" }
+      - { name: currency, type: "string" }
   - name: TrialBalancePublished
     namespace: id.co.nativeapp.events.finance
     schema: libs/contracts/src/main/resources/avro/TrialBalancePublished.avsc

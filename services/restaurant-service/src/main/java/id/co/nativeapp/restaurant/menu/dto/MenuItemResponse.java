@@ -26,6 +26,9 @@ import org.springframework.lang.Nullable;
  * {@code null} when no image has been set. The value is returned inline so a standard {@code GET
  * /api/v1/menu} carries it — an {@code <img>} cannot send a bearer token, so a separate image
  * endpoint is intentionally not provided.
+ *
+ * <p>{@code unitCostMinor} (ADR 0038 phase 3): the item's unit cost in minor units (same currency
+ * as {@code priceMinor}); {@code null} when no cost has been recorded.
  */
 public record MenuItemResponse(
     UUID id,
@@ -39,6 +42,7 @@ public record MenuItemResponse(
     boolean available,
     @Nullable Integer stockQuantity,
     @Nullable String imageUrl,
+    @Nullable Long unitCostMinor,
     List<ModifierGroupResponse> modifierGroups) {
 
   /** Maps the write-path aggregate to the response shape (no modifier groups). */
@@ -55,6 +59,7 @@ public record MenuItemResponse(
         item.isAvailable(),
         item.getStockQuantity(),
         item.getImageUrl(),
+        item.getUnitCostMinor(),
         List.of());
   }
 }

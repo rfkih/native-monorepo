@@ -99,12 +99,14 @@ export interface CreateMenuItemInput {
   currency: string
   /** Optional photo stored as a data URL. */
   imageUrl?: string | null
+  /** Optional cost per unit in minor units (ADR 0038 phase 3) — feeds valued stocktake shrinkage. */
+  unitCostMinor?: number | null
 }
 
 export function useCreateMenuItem(session: CompanySession) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ name, category, priceMinor, currency, imageUrl }: CreateMenuItemInput) =>
+    mutationFn: ({ name, category, priceMinor, currency, imageUrl, unitCostMinor }: CreateMenuItemInput) =>
       apiFetch<MenuItem>('/api/v1/menu', {
         method: 'POST',
         tenant: tenantOf(session),
@@ -115,6 +117,7 @@ export function useCreateMenuItem(session: CompanySession) {
           priceMinor,
           currency,
           imageUrl: imageUrl ?? null,
+          unitCostMinor: unitCostMinor ?? null,
         },
       }),
     onSuccess: () => {
@@ -136,12 +139,14 @@ export interface UpdateMenuItemInput {
   priceMinor?: number
   /** Pass a data URL to set/replace, empty string to clear, undefined to leave unchanged. */
   imageUrl?: string
+  /** Cost per unit in minor units; pass null to clear, undefined to leave unchanged (ADR 0038 phase 3). */
+  unitCostMinor?: number | null
 }
 
 export function useUpdateMenuItem(session: CompanySession) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ itemId, name, category, priceMinor, imageUrl }: UpdateMenuItemInput) =>
+    mutationFn: ({ itemId, name, category, priceMinor, imageUrl, unitCostMinor }: UpdateMenuItemInput) =>
       apiFetch<MenuItem>(`/api/v1/menu/${itemId}`, {
         method: 'PATCH',
         tenant: tenantOf(session),
@@ -150,6 +155,7 @@ export function useUpdateMenuItem(session: CompanySession) {
           ...(category !== undefined ? { category } : {}),
           ...(priceMinor !== undefined ? { priceMinor } : {}),
           ...(imageUrl !== undefined ? { imageUrl } : {}),
+          ...(unitCostMinor !== undefined ? { unitCostMinor } : {}),
         },
       }),
     onSuccess: () => {

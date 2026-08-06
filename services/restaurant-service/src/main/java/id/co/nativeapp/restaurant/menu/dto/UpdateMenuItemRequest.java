@@ -1,6 +1,7 @@
 package id.co.nativeapp.restaurant.menu.dto;
 
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import org.springframework.lang.Nullable;
 
@@ -26,9 +27,23 @@ import org.springframework.lang.Nullable;
  * <p>This means a client that wants to clear the image sends {@code "imageUrl": ""}, and a client
  * that wants to leave it untouched omits the field entirely. The domain method {@link
  * id.co.nativeapp.restaurant.menu.domain.MenuItem#update} enforces the same rule.
+ *
+ * <p>{@code unitCostMinor} (ADR 0038 phase 3): {@code null} = leave unchanged; a non-null value
+ * (&ge; 0) sets the item's unit cost. There is no "clear the cost" affordance on this endpoint.
  */
 public record UpdateMenuItemRequest(
     @Nullable String name,
     @Nullable String category,
     @Nullable @Positive Long priceMinor,
-    @Nullable @Size(max = 3_000_000) String imageUrl) {}
+    @Nullable @Size(max = 3_000_000) String imageUrl,
+    @Nullable @PositiveOrZero Long unitCostMinor) {
+
+  /** Back-compat constructor for callers that do not touch {@code unitCostMinor}. */
+  public UpdateMenuItemRequest(
+      @Nullable String name,
+      @Nullable String category,
+      @Nullable Long priceMinor,
+      @Nullable String imageUrl) {
+    this(name, category, priceMinor, imageUrl, null);
+  }
+}

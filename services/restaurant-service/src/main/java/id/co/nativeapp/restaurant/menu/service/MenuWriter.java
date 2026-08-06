@@ -45,7 +45,12 @@ public class MenuWriter {
 
     MenuItem item =
         new MenuItem(
-            request.businessId(), request.name(), request.category(), price, request.imageUrl());
+            request.businessId(),
+            request.name(),
+            request.category(),
+            price,
+            request.imageUrl(),
+            request.unitCostMinor());
     item.setCompanyId(companyId);
     MenuItem saved = repository.saveAndFlush(item);
     return MenuItemResponse.from(saved);
@@ -85,7 +90,8 @@ public class MenuWriter {
       newPrice = Money.ofMinor(request.priceMinor(), existingCurrency);
     }
 
-    item.update(request.name(), request.category(), newPrice, request.imageUrl());
+    item.update(
+        request.name(), request.category(), newPrice, request.imageUrl(), request.unitCostMinor());
     MenuItem saved = repository.saveAndFlush(item);
     return MenuItemResponse.from(saved);
   }

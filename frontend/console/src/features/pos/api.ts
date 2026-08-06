@@ -92,6 +92,12 @@ export interface MenuItem {
    * a number ≥ 0 = tracked (auto-deducts on sale; 0 means sold out).
    */
   stockQuantity: number | null
+  /**
+   * Cost per unit in minor units (ADR 0038 phase 3 — inventory stocktake) — null when the item
+   * has no cost on file. Only items with BOTH a tracked stockQuantity and a unitCostMinor produce
+   * a valued shrinkage line at stocktake; untracked/uncosted items are informational only.
+   */
+  unitCostMinor: number | null
   /** Populated on the cashier read path (GET /api/v1/menu). */
   modifierGroups: ModifierGroupResponse[]
   /**

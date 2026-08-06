@@ -430,6 +430,19 @@ function CategoryManagerDialog({
   )
 }
 
+/**
+ * Optional unit-cost parsing shared by the create/edit item dialogs (ADR 0038 phase 3 — inventory
+ * stocktake). Blank clears the cost (null — the item is counted at stocktake but posts no valued
+ * shrinkage journal); a supplied value must be >= 0. Mirrors the price field's major→minor
+ * conversion (rule 8) but is never required.
+ */
+function parseUnitCostInput(raw: string, exp: number): { minor: number | null; invalid: boolean } {
+  if (raw.trim() === '') return { minor: null, invalid: false }
+  const val = Number(raw)
+  if (isNaN(val) || val < 0) return { minor: null, invalid: true }
+  return { minor: Math.round(val * 10 ** exp), invalid: false }
+}
+
 function CreateItemDialog({
   session,
   onClose,
@@ -443,6 +456,8 @@ function CreateItemDialog({
   const [category, setCategory] = useState('')
   const [priceInput, setPriceInput] = useState('')
   const [priceError, setPriceError] = useState<string | null>(null)
+  const [unitCostInput, setUnitCostInput] = useState('')
+  const [unitCostError, setUnitCostError] = useState<string | null>(null)
   const [imageUrl, setImageUrl] = useState<string | null>(null)
 
   const exp = isoMinorExponent(session.baseCurrency)
@@ -457,11 +472,18 @@ function CreateItemDialog({
     }
   }
 
+  function handleUnitCostChange(raw: string) {
+    setUnitCostInput(raw)
+    setUnitCostError(parseUnitCostInput(raw, exp).invalid ? t('menu.createItem.unitCostInvalid') : null)
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const val = Number(priceInput)
     if (isNaN(val) || val <= 0) return
     const priceMinor = Math.round(val * 10 ** exp)
+    const unitCost = parseUnitCostInput(unitCostInput, exp)
+    if (unitCost.invalid) return
     mutation.mutate(
       {
         name: name.trim(),
@@ -469,13 +491,14 @@ function CreateItemDialog({
         priceMinor,
         currency: session.baseCurrency,
         imageUrl: imageUrl ?? null,
+        unitCostMinor: unitCost.minor,
       },
       { onSuccess: () => onClose() },
     )
   }
 
   const canSubmit = name.trim().length > 0 && category.trim().length > 0 &&
-    priceInput.length > 0 && !priceError && !mutation.isPending
+    priceInput.length > 0 && !priceError && !unitCostError && !mutation.isPending
 
   return (
     <DialogOverlay onClose={onClose}>
@@ -524,6 +547,25 @@ function CreateItemDialog({
           />
         </Field>
 
+        <Field
+          label={t('menu.createItem.unitCostLabel', { currency: session.baseCurrency })}
+          htmlFor="menu-item-unit-cost"
+          hint={t('menu.createItem.unitCostHint')}
+          error={unitCostError ?? undefined}
+        >
+          <TextInput
+            id="menu-item-unit-cost"
+            type="number"
+            inputMode="decimal"
+            min="0"
+            step={exp === 0 ? '1' : '0.01'}
+            value={unitCostInput}
+            onChange={(e) => handleUnitCostChange(e.target.value)}
+            placeholder="0"
+            className="tnum font-mono"
+          />
+        </Field>
+
         <ImagePicker value={imageUrl} onChange={setImageUrl} itemName={name.trim() || undefined} />
 
         {mutation.isError ? (
@@ -566,6 +608,10 @@ function EditItemDialog({
   const [category, setCategory] = useState(item.category)
   const [priceInput, setPriceInput] = useState(String(item.priceMinor / 10 ** exp))
   const [priceError, setPriceError] = useState<string | null>(null)
+  const [unitCostInput, setUnitCostInput] = useState(
+    item.unitCostMinor != null ? String(item.unitCostMinor / 10 ** exp) : '',
+  )
+  const [unitCostError, setUnitCostError] = useState<string | null>(null)
   // Initialise with existing imageUrl, or null if none.
   const [imageUrl, setImageUrl] = useState<string | null>(item.imageUrl ?? null)
 
@@ -579,11 +625,18 @@ function EditItemDialog({
     }
   }
 
+  function handleUnitCostChange(raw: string) {
+    setUnitCostInput(raw)
+    setUnitCostError(parseUnitCostInput(raw, exp).invalid ? t('menu.createItem.unitCostInvalid') : null)
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const val = Number(priceInput)
     if (isNaN(val) || val <= 0) return
     const priceMinor = Math.round(val * 10 ** exp)
+    const unitCost = parseUnitCostInput(unitCostInput, exp)
+    if (unitCost.invalid) return
     mutation.mutate(
       {
         itemId: item.id,
@@ -592,6 +645,7 @@ function EditItemDialog({
         priceMinor,
         // imageUrl === null means "clear"; a string means "set/replace".
         imageUrl: imageUrl ?? '',
+        unitCostMinor: unitCost.minor,
       },
       { onSuccess: () => onClose() },
     )
@@ -602,6 +656,7 @@ function EditItemDialog({
     category.trim().length > 0 &&
     priceInput.length > 0 &&
     !priceError &&
+    !unitCostError &&
     !mutation.isPending
 
   return (
@@ -647,6 +702,25 @@ function EditItemDialog({
             onChange={(e) => handlePriceChange(e.target.value)}
             placeholder="0"
             required
+            className="tnum font-mono"
+          />
+        </Field>
+
+        <Field
+          label={t('menu.createItem.unitCostLabel', { currency: session.baseCurrency })}
+          htmlFor="edit-item-unit-cost"
+          hint={t('menu.createItem.unitCostHint')}
+          error={unitCostError ?? undefined}
+        >
+          <TextInput
+            id="edit-item-unit-cost"
+            type="number"
+            inputMode="decimal"
+            min="0"
+            step={exp === 0 ? '1' : '0.01'}
+            value={unitCostInput}
+            onChange={(e) => handleUnitCostChange(e.target.value)}
+            placeholder="0"
             className="tnum font-mono"
           />
         </Field>
@@ -2049,6 +2123,11 @@ function ItemRow({
           </div>
           <div className="tnum mt-0.5 font-mono text-xs text-brand-700">
             {formatMoney(item.priceMinor, item.currency, locale)}
+            {item.unitCostMinor != null ? (
+              <span className="ml-2 text-ink-3">
+                {t('menu.item.unitCost', { cost: formatMoney(item.unitCostMinor, item.currency, locale) })}
+              </span>
+            ) : null}
           </div>
         </div>
 

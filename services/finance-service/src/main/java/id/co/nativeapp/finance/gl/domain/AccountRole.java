@@ -283,7 +283,25 @@ public enum AccountRole {
    * SME later reclassifies its balance into real capital/retained accounts. Maps to account 3900
    * (ILLUSTRATIVE — SME-gated, V46).
    */
-  OPENING_BALANCE_EQUITY;
+  OPENING_BALANCE_EQUITY,
+
+  /**
+   * Inventory stocktake (ADR 0038 phase 3, ILLUSTRATIVE — SME-gated): the inventory asset control
+   * account. A completed stocktake's signed net valued shrinkage debits/credits this against {@link
+   * #INVENTORY_SHRINKAGE}: a net LOSS credits this (stock is worth less than the books show), a net
+   * GAIN (found stock) debits this. Maps to account 1100 (ILLUSTRATIVE — SME-gated, V50) — the SAME
+   * code the opening-balances placeholder (V46) already seeds for brought-forward inventory; a
+   * fresh company has one inventory account either way.
+   */
+  INVENTORY,
+
+  /**
+   * Inventory stocktake (ADR 0038 phase 3, ILLUSTRATIVE — SME-gated): the shrinkage expense/income
+   * account — debited by a net LOSS ({@code shrinkage_minor > 0}, {@code Dr this / Cr INVENTORY}),
+   * credited by a net GAIN / found stock ({@code shrinkage_minor < 0}, {@code Dr INVENTORY / Cr
+   * this}). Maps to account 5800 (ILLUSTRATIVE — SME-gated, V50).
+   */
+  INVENTORY_SHRINKAGE;
 
   /**
    * The GL clearing {@link AccountRole} a POS tender settles through — the single source shared by
