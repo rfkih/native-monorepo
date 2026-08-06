@@ -2,6 +2,7 @@ package id.co.nativeapp.employee.timeoff.service;
 
 import id.co.nativeapp.employee.timeoff.domain.DayKind;
 import id.co.nativeapp.employee.timeoff.domain.OvertimeEntry;
+import id.co.nativeapp.employee.timeoff.domain.TimeoffStateException;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -28,7 +29,7 @@ public class OvertimeEntryService {
     TenantContext.require();
     try {
       return writer.create(workDate, minutes, dayKind, idempotencyKey);
-    } catch (DataIntegrityViolationException conflict) {
+    } catch (DataIntegrityViolationException | TimeoffStateException conflict) {
       return writer.findByIdempotencyKeyForReplay(idempotencyKey).orElseThrow(() -> conflict);
     }
   }
@@ -38,7 +39,7 @@ public class OvertimeEntryService {
     TenantContext.require();
     try {
       return writer.cancel(entryId, idempotencyKey);
-    } catch (DataIntegrityViolationException conflict) {
+    } catch (DataIntegrityViolationException | TimeoffStateException conflict) {
       return recoverReplay(entryId, idempotencyKey, OvertimeEntryWriter.ACTION_CANCEL, conflict);
     }
   }
@@ -48,7 +49,7 @@ public class OvertimeEntryService {
     TenantContext.require();
     try {
       return writer.approve(entryId, note, idempotencyKey);
-    } catch (DataIntegrityViolationException conflict) {
+    } catch (DataIntegrityViolationException | TimeoffStateException conflict) {
       return recoverReplay(entryId, idempotencyKey, OvertimeEntryWriter.ACTION_APPROVE, conflict);
     }
   }
@@ -58,16 +59,13 @@ public class OvertimeEntryService {
     TenantContext.require();
     try {
       return writer.reject(entryId, note, idempotencyKey);
-    } catch (DataIntegrityViolationException conflict) {
+    } catch (DataIntegrityViolationException | TimeoffStateException conflict) {
       return recoverReplay(entryId, idempotencyKey, OvertimeEntryWriter.ACTION_REJECT, conflict);
     }
   }
 
   private OvertimeEntry recoverReplay(
-      UUID entryId,
-      String idempotencyKey,
-      String action,
-      DataIntegrityViolationException conflict) {
+      UUID entryId, String idempotencyKey, String action, RuntimeException conflict) {
     if (!writer.isReplayedEvent(entryId, idempotencyKey, action)) {
       throw conflict;
     }

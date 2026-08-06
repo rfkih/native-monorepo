@@ -2,6 +2,7 @@ package id.co.nativeapp.employee.timeoff.service;
 
 import id.co.nativeapp.employee.timeoff.domain.LeaveRequest;
 import id.co.nativeapp.employee.timeoff.domain.LeaveType;
+import id.co.nativeapp.employee.timeoff.domain.TimeoffStateException;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -39,7 +40,7 @@ public class LeaveRequestService {
     TenantContext.require();
     try {
       return writer.create(leaveType, startDate, endDate, days, idempotencyKey);
-    } catch (DataIntegrityViolationException conflict) {
+    } catch (DataIntegrityViolationException | TimeoffStateException conflict) {
       return writer.findByIdempotencyKeyForReplay(idempotencyKey).orElseThrow(() -> conflict);
     }
   }
@@ -49,7 +50,7 @@ public class LeaveRequestService {
     TenantContext.require();
     try {
       return writer.cancel(requestId, idempotencyKey);
-    } catch (DataIntegrityViolationException conflict) {
+    } catch (DataIntegrityViolationException | TimeoffStateException conflict) {
       return recoverReplay(requestId, idempotencyKey, LeaveRequestWriter.ACTION_CANCEL, conflict);
     }
   }
@@ -59,7 +60,7 @@ public class LeaveRequestService {
     TenantContext.require();
     try {
       return writer.approve(requestId, note, idempotencyKey);
-    } catch (DataIntegrityViolationException conflict) {
+    } catch (DataIntegrityViolationException | TimeoffStateException conflict) {
       return recoverReplay(requestId, idempotencyKey, LeaveRequestWriter.ACTION_APPROVE, conflict);
     }
   }
@@ -71,7 +72,7 @@ public class LeaveRequestService {
     TenantContext.require();
     try {
       return writer.reject(requestId, note, idempotencyKey);
-    } catch (DataIntegrityViolationException conflict) {
+    } catch (DataIntegrityViolationException | TimeoffStateException conflict) {
       return recoverReplay(requestId, idempotencyKey, LeaveRequestWriter.ACTION_REJECT, conflict);
     }
   }
@@ -82,10 +83,7 @@ public class LeaveRequestService {
    * S1/S2 idiom).
    */
   private LeaveRequest recoverReplay(
-      UUID requestId,
-      String idempotencyKey,
-      String action,
-      DataIntegrityViolationException conflict) {
+      UUID requestId, String idempotencyKey, String action, RuntimeException conflict) {
     if (!writer.isReplayedEvent(requestId, idempotencyKey, action)) {
       throw conflict;
     }

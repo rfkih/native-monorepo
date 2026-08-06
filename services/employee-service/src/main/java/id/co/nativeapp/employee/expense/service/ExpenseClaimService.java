@@ -1,5 +1,6 @@
 package id.co.nativeapp.employee.expense.service;
 
+import id.co.nativeapp.employee.expense.domain.ClaimStateException;
 import id.co.nativeapp.employee.expense.domain.ExpenseClaim;
 import id.co.nativeapp.employee.expense.dto.CreateClaimCommand;
 import id.co.nativeapp.tenant.TenantContext;
@@ -9,14 +10,19 @@ import org.springframework.stereotype.Service;
 
 /**
  * Orchestrates {@link ExpenseClaimWriter}'s transactional units of work and owns the
- * concurrency-safe idempotency contract for the four guarded transitions (submit/cancel/approve/
- * refuse): when two concurrent callers race the SAME {@code (claim, idempotency-key)} insert, the
- * loser's {@link ExpenseClaimWriter} transaction aborts with a {@link
- * DataIntegrityViolationException} (a PostgreSQL transaction is poisoned once a constraint fires),
- * so this (non-transactional) service catches it and recovers with a separate-transaction re-read
- * ({@link ExpenseClaimWriter#findByIdForReplay}) — mirroring {@code SaleService}/{@code
- * AssignmentWriter}'s conflict-recovery idiom. No second mutation, no second outbox write is ever
- * attempted on the recovery path.
+ * concurrency-safe idempotency contract for the six guarded transitions (submit/cancel/approve/
+ * refuse/payDirect/voidClaim): when two concurrent callers race the SAME {@code (claim,
+ * idempotency-key)} transition, the loser's {@link ExpenseClaimWriter} transaction aborts and this
+ * (non-transactional) service catches it and recovers with a separate-transaction re-read ({@link
+ * ExpenseClaimWriter#findByIdForReplay}) — mirroring {@code SaleService}/{@code AssignmentWriter}'s
+ * conflict-recovery idiom. No second mutation, no second outbox write is ever attempted on the
+ * recovery path.
+ *
+ * <p>The loser can abort in either of two ways depending on the interleaving — a {@link
+ * DataIntegrityViolationException} on the {@code UNIQUE (company_id, claim_id, idempotency_key)}
+ * audit insert, or a {@link ClaimStateException} from the domain state guard when it loaded the
+ * aggregate after the winner had already flipped its state. Both are recovered identically; see
+ * {@link #recoverReplay}.
  *
  * <p><strong>The recovery is action-guarded (S1/S2, code review).</strong> The DB {@code UNIQUE
  * (company_id, claim_id, idempotency_key)} does not include {@code action}, so a client that reuses
@@ -54,7 +60,7 @@ public class ExpenseClaimService {
     TenantContext.require();
     try {
       return writer.submit(claimId, idempotencyKey);
-    } catch (DataIntegrityViolationException conflict) {
+    } catch (DataIntegrityViolationException | ClaimStateException conflict) {
       return recoverReplay(claimId, idempotencyKey, ExpenseClaimWriter.ACTION_SUBMIT, conflict);
     }
   }
@@ -64,7 +70,7 @@ public class ExpenseClaimService {
     TenantContext.require();
     try {
       return writer.cancel(claimId, idempotencyKey);
-    } catch (DataIntegrityViolationException conflict) {
+    } catch (DataIntegrityViolationException | ClaimStateException conflict) {
       return recoverReplay(claimId, idempotencyKey, ExpenseClaimWriter.ACTION_CANCEL, conflict);
     }
   }
@@ -74,7 +80,7 @@ public class ExpenseClaimService {
     TenantContext.require();
     try {
       return writer.approve(claimId, comment, idempotencyKey);
-    } catch (DataIntegrityViolationException conflict) {
+    } catch (DataIntegrityViolationException | ClaimStateException conflict) {
       return recoverReplay(claimId, idempotencyKey, ExpenseClaimWriter.ACTION_APPROVE, conflict);
     }
   }
@@ -86,7 +92,7 @@ public class ExpenseClaimService {
     TenantContext.require();
     try {
       return writer.refuse(claimId, comment, idempotencyKey);
-    } catch (DataIntegrityViolationException conflict) {
+    } catch (DataIntegrityViolationException | ClaimStateException conflict) {
       return recoverReplay(claimId, idempotencyKey, ExpenseClaimWriter.ACTION_REFUSE, conflict);
     }
   }
@@ -98,7 +104,7 @@ public class ExpenseClaimService {
     TenantContext.require();
     try {
       return writer.payDirect(claimId, idempotencyKey);
-    } catch (DataIntegrityViolationException conflict) {
+    } catch (DataIntegrityViolationException | ClaimStateException conflict) {
       return recoverReplay(claimId, idempotencyKey, ExpenseClaimWriter.ACTION_PAY_DIRECT, conflict);
     }
   }
@@ -111,21 +117,39 @@ public class ExpenseClaimService {
     TenantContext.require();
     try {
       return writer.voidClaim(claimId, comment, idempotencyKey);
-    } catch (DataIntegrityViolationException conflict) {
+    } catch (DataIntegrityViolationException | ClaimStateException conflict) {
       return recoverReplay(claimId, idempotencyKey, ExpenseClaimWriter.ACTION_VOID, conflict);
     }
   }
 
   /**
-   * Recovers a {@link DataIntegrityViolationException} ONLY when it is a genuine replay of THIS
-   * (claim, key, action) triple; otherwise rethrows {@code conflict} unchanged (S1/S2, code
-   * review).
+   * Recovers a losing-racer exception ONLY when it is a genuine replay of THIS (claim, key, action)
+   * triple; otherwise rethrows {@code conflict} unchanged (S1/S2, code review).
+   *
+   * <p>Two exceptions can surface on the losing racer, depending on the interleaving of the two
+   * concurrent same-key transitions (both are handled identically — dedup iff a matching audit row
+   * now exists):
+   *
+   * <ul>
+   *   <li>{@link DataIntegrityViolationException} — the loser reached the {@code UNIQUE
+   *       (company_id, claim_id, idempotency_key)} audit insert while the winner's row was already
+   *       committed (the loser saw the aggregate still in the pre-transition state when it loaded
+   *       it); and
+   *   <li>{@link ClaimStateException} — the loser loaded the aggregate AFTER the winner committed
+   *       the transition, so the domain state guard rejected it BEFORE it reached the audit insert.
+   *       This is the timing the concurrency test exposes on a loaded CI runner. Left uncaught it
+   *       would leak a spurious 409 to one of two identical, intended-idempotent callers.
+   * </ul>
+   *
+   * The {@link ExpenseClaimWriter#isReplayedEvent} guard is what keeps this safe for the {@code
+   * ClaimStateException} case too: a genuine wrong-state transition (a FRESH key against an
+   * already-transitioned claim — e.g. approving a CANCELLED claim) finds NO matching audit row and
+   * is rethrown as the 409 it should be; only a same-(claim, key, action) row — which the winner
+   * commits atomically with the state flip, so it is visible once the loser sees the flipped state
+   * — is treated as a replay.
    */
   private ExpenseClaim recoverReplay(
-      UUID claimId,
-      String idempotencyKey,
-      String action,
-      DataIntegrityViolationException conflict) {
+      UUID claimId, String idempotencyKey, String action, RuntimeException conflict) {
     if (!writer.isReplayedEvent(claimId, idempotencyKey, action)) {
       throw conflict;
     }
