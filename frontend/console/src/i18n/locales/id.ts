@@ -1434,9 +1434,9 @@ export const id = {
       },
       setup: {
         title: 'Penggajian butuh penyiapan sekali',
-        body: 'Muat komponen gaji bawaan dan aturan ilustratif untuk perusahaan ini. Setiap proses di atasnya ditandai jelas sampai tarif resmi menggantikannya.',
-        seed: 'Pakai penyiapan ilustratif',
-        seeding: 'Memuat…',
+        body: 'Aktifkan dataset resmi ketentuan Indonesia (ID-2026.1 — PPh 21 TER, PTKP, dan BPJS) beserta komponen gaji bawaan untuk perusahaan ini.',
+        seed: 'Aktifkan penyiapan resmi',
+        seeding: 'Mengaktifkan…',
       },
       scope: {
         count: 'Seluruh perusahaan: {{withComp}} dari {{total}} karyawan siap digaji',

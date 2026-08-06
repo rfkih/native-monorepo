@@ -663,6 +663,27 @@ export function useSeedIllustrative(params: TenantParams) {
   })
 }
 
+/** POST /api/v1/payroll-setup/seed-official-bootstrap — the go-live default (ADR 0042): seeds a
+ * FRESH tenant straight to the OFFICIAL statutory dataset in one call (no illustrative-placeholder
+ * stop). This is what the Payroll tab's one-time setup gate calls now; seed-illustrative above
+ * stays available for the sandbox flow. */
+export function useSeedOfficialBootstrap(params: TenantParams) {
+  const { companyId, actor } = params
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: { baseCurrency: string; datasetVersion: string }) =>
+      apiFetch<SeedOfficialSummary>('/api/v1/payroll-setup/seed-official-bootstrap', {
+        method: 'POST',
+        tenant: { companyId, actor },
+        body,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['payrollSetup', companyId] })
+      void queryClient.invalidateQueries({ queryKey: ['statutoryRules', companyId] })
+    },
+  })
+}
+
 // ---------------------------------------------------------------------------
 // Statutory rules administration (Track P phase P2, ADR 0031)
 // ---------------------------------------------------------------------------

@@ -6,6 +6,7 @@ import id.co.nativeapp.employee.payroll.dto.SeedOfficialResponse;
 import id.co.nativeapp.employee.payroll.dto.StatutoryRuleDetailResponse;
 import id.co.nativeapp.tenant.TenantContext;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Orchestrates the console's payroll bootstrap + statutory-rule administration (Track P phases
@@ -13,8 +14,11 @@ import org.springframework.stereotype.Service;
  * the tx + RLS GUC and warns loudly — the V3 banner and the drift test remain the source of truth
  * for the figures), the new {@link OfficialStatutorySeedWriter} (ADR 0031's canned OFFICIAL dataset
  * activation), and the new {@link StatutoryRuleOverrideWriter} (the human-verification override /
- * TER-activation path) — each a separate {@code *Writer} bean so the tx proxy + RLS aspect engage
- * (this class itself carries no {@code @Transactional}).
+ * TER-activation path) — each a separate {@code *Writer} bean so the tx proxy + RLS aspect engage.
+ * {@link #seedOfficialBootstrap} (ADR 0042's go-live default) is the one method on this class that
+ * itself carries {@code @Transactional}: it composes two writer calls that must commit or roll back
+ * together, so the orchestration itself needs a transaction boundary (still delegating the actual
+ * writes to the same two writer beans, never duplicating their logic).
  */
 @Service
 public class PayrollSetupService {
@@ -45,6 +49,25 @@ public class PayrollSetupService {
   /** Activates a canned OFFICIAL statutory dataset for the bound tenant (idempotent). */
   public SeedOfficialResponse seedOfficial(String datasetVersion) {
     TenantContext.require();
+    return officialSeedWriter.seed(datasetVersion);
+  }
+
+  /**
+   * Bootstraps a FRESH tenant straight to a fully OFFICIAL statutory setup (ADR 0042 go-live
+   * default) — one call, one transaction. First runs {@link IllustrativeStatutorySeedWriter#seed}
+   * to bootstrap the tenant's base pay-component catalog in {@code baseCurrency} (idempotent — it
+   * is also the ONLY writer that creates that catalog, so this step is not optional), then
+   * immediately {@link OfficialStatutorySeedWriter#seed activates} {@code datasetVersion} over it,
+   * which supersedes every illustrative rule sharing a {@code rule_key} and deactivates the orphan
+   * {@code PPH21_PROGRESSIVE} rule (its class javadoc). Net DB state: fully OFFICIAL, no active
+   * illustrative rule — a subsequent payroll run resolves {@code uses_illustrative_rules = false}.
+   * Both writer calls run inside this single transaction, so a failure partway through leaves no
+   * half-seeded tenant.
+   */
+  @Transactional
+  public SeedOfficialResponse seedOfficialBootstrap(String baseCurrency, String datasetVersion) {
+    TenantContext.require();
+    seedWriter.seed(baseCurrency);
     return officialSeedWriter.seed(datasetVersion);
   }
 

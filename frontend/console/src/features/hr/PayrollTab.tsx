@@ -46,7 +46,7 @@ import {
   usePayslipIndex,
   useRunAllocations,
   useRunPayroll,
-  useSeedIllustrative,
+  useSeedOfficialBootstrap,
   useSettlePayrollLiability,
   type PayrollLiabilityBucket,
   type PayrollRunSummary,
@@ -54,6 +54,11 @@ import {
 } from './api'
 
 type PayrollView = 'runs' | 'setup' | 'reports'
+
+/** The dataset the one-time setup gate activates by default (ADR 0042 go-live default) — kept in
+ * sync with PayrollSetupController's server-side default and PayrollSetupTab's own copy of the
+ * same literal (the "Activate official dataset" control there stays separate, for upgrades). */
+const DEFAULT_OFFICIAL_DATASET_VERSION = 'ID-2026.1'
 
 export function PayrollTab({
   units,
@@ -87,7 +92,7 @@ export function PayrollTab({
   const [reportsSeedPeriod, setReportsSeedPeriod] = useState<string | null>(null)
 
   const setup = usePayrollSetup({ companyId, actor, enabled: true })
-  const seed = useSeedIllustrative({ companyId, actor })
+  const seed = useSeedOfficialBootstrap({ companyId, actor })
 
   // Track P Phase P7 — the pre-run checklist: pending (undecided) leave/overtime requests block
   // Run entirely (the server enforces this too, 409 PendingWorkEntriesException; this is the
@@ -164,7 +169,9 @@ export function PayrollTab({
           <Button
             type="button"
             className="mt-5"
-            onClick={() => seed.mutate(baseCurrency)}
+            onClick={() =>
+              seed.mutate({ baseCurrency, datasetVersion: DEFAULT_OFFICIAL_DATASET_VERSION })
+            }
             disabled={seed.isPending}
           >
             {seed.isPending ? t('hr.payroll.setup.seeding') : t('hr.payroll.setup.seed')}

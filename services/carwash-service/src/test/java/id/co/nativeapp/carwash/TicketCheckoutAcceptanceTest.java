@@ -34,11 +34,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * Acceptance tests for the carwash POS ticket checkout (ADR 0023) — the money path.
  *
  * <ol>
- *   <li>CASH checkout: breakdown math reconciles against the V5 seed (11% VAT on subtotal −
- *       discount, zero service charge), the ticket + lines + payment persist, {@code sale_id} is
- *       set, exactly ONE {@code SaleRecorded} with the FULL breakdown + tender CASH + {@code
- *       uses_illustrative_rules=true}, and {@code wash_count} + {@code upsell_amount} + (linked
- *       washer) {@code sales_amount} metrics are emitted — all atomically.
+ *   <li>CASH checkout: breakdown math reconciles against the V11 official seed (ADR 0042, 11% VAT
+ *       on subtotal − discount, zero service charge), the ticket + lines + payment persist, {@code
+ *       sale_id} is set, exactly ONE {@code SaleRecorded} with the FULL breakdown + tender CASH +
+ *       {@code uses_illustrative_rules=false}, and {@code wash_count} + {@code upsell_amount} +
+ *       (linked washer) {@code sales_amount} metrics are emitted — all atomically.
  *   <li>An unlinked washer profile produces NO {@code sales_amount} metric.
  *   <li>Digital (QRIS) checkout persists a PENDING payment with {@code sale_id} NULL and ZERO
  *       outbox rows; {@code capture} then records the sale + metrics; a capture retry is idempotent
@@ -87,14 +87,14 @@ class TicketCheckoutAcceptanceTest extends KafkaPostgresRedisTestBase {
     assertThat(first.created()).isTrue();
     TicketResponse ticket = first.ticket();
 
-    // subtotal = 50_000_00 + 20_000_00 = 70_000_00; VAT 11% (V5 seed) -> 7_700_00; total =
-    // 77_700_00.
+    // subtotal = 50_000_00 + 20_000_00 = 70_000_00; VAT 11% (V11 official seed, ADR 0042) ->
+    // 7_700_00; total = 77_700_00.
     assertThat(ticket.breakdown().subtotalMinor()).isEqualTo(70_000_00L);
     assertThat(ticket.breakdown().discountMinor()).isEqualTo(0L);
     assertThat(ticket.breakdown().serviceChargeMinor()).isEqualTo(0L);
     assertThat(ticket.breakdown().taxMinor()).isEqualTo(7_700_00L);
     assertThat(ticket.breakdown().grandTotalMinor()).isEqualTo(77_700_00L);
-    assertThat(ticket.breakdown().usesIllustrativeRules()).isTrue();
+    assertThat(ticket.breakdown().usesIllustrativeRules()).isFalse();
     assertThat(ticket.saleId()).isEqualTo(ticket.ticketId());
     assertThat(ticket.staffLabel()).isEqualTo("Budi");
     assertThat(ticket.lines()).hasSize(2);
@@ -118,7 +118,7 @@ class TicketCheckoutAcceptanceTest extends KafkaPostgresRedisTestBase {
     assertThat(sale.get("tender_type").toString()).isEqualTo("CASH");
     assertThat(sale.get("subtotal_minor")).isEqualTo(70_000_00L);
     assertThat(sale.get("tax_minor")).isEqualTo(7_700_00L);
-    assertThat(sale.get("uses_illustrative_rules")).isEqualTo(true);
+    assertThat(sale.get("uses_illustrative_rules")).isEqualTo(false);
 
     // wash_count(1)@outlet + upsell_amount(addon total)@outlet + sales_amount(grand
     // total)@employee.

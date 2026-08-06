@@ -56,12 +56,13 @@ import org.springframework.transaction.annotation.Transactional;
 public class BillWriter {
 
   /**
-   * ILLUSTRATIVE PLACEHOLDER — SME-GATED. Input VAT (PPN, recoverable) applied to a taxable bill's
-   * subtotal, in basis points (1100 bp = 11%). The regime + rate are placeholders; the bill carries
-   * {@code uses_illustrative_rules=true} and the UI badges it "Estimated". A tax SME confirms the
-   * real rate; a data-driven per-jurisdiction rate table is a later enhancement (see V28 SME note).
+   * Input VAT (PPN, recoverable) applied to a taxable bill's subtotal, in basis points (1100 bp =
+   * 11%, the Indonesian standard PPN rate confirmed for production — ADR 0042). A future
+   * data-driven per-jurisdiction rate table is a later enhancement (see V28 note); until then this
+   * single official rate applies, and a taxable bill no longer carries {@code
+   * uses_illustrative_rules}.
    */
-  static final long ILLUSTRATIVE_INPUT_VAT_BP = 1_100L;
+  static final long INPUT_VAT_BP = 1_100L;
 
   /** Default payment term (net days) when the caller does not supply one. */
   static final int DEFAULT_PAYMENT_TERM_DAYS = 30;
@@ -125,10 +126,10 @@ public class BillWriter {
       Money unitPrice = Money.ofMinor(input.unitPriceMinor(), currency);
       subtotal = subtotal.plus(unitPrice.multiply(input.quantity()));
     }
-    Money tax =
-        taxable ? subtotal.applyBasisPoints(ILLUSTRATIVE_INPUT_VAT_BP) : Money.zero(currency);
+    Money tax = taxable ? subtotal.applyBasisPoints(INPUT_VAT_BP) : Money.zero(currency);
 
-    Bill bill = Bill.draft(vendor.getId(), subtotal, tax, taxable);
+    // VAT is now the official 11% PPN (ADR 0042): a taxable bill is no longer illustrative.
+    Bill bill = Bill.draft(vendor.getId(), subtotal, tax, false);
     bill.setCompanyId(companyId);
     billRepository.save(bill);
 

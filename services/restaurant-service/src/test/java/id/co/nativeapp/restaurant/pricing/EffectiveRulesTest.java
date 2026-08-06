@@ -16,11 +16,12 @@ import org.springframework.boot.test.context.SpringBootTest;
  * through, same convention as {@code CheckoutAcceptanceTest} testing {@code OrderService}
  * directly).
  *
- * <p>{@code TENANT_A} is the demo tenant ({@code 11111111-...}) seeded with the V5 illustrative
- * {@code PB1_RESTAURANT}/{@code SERVICE_CHARGE} rules — reused here rather than re-seeding, exactly
- * like {@code CheckoutAcceptanceTest}/{@code StockTrackingTest}. {@code TENANT_B} is a fresh tenant
- * with no seeded rule at all, proving both the no-rule fall-through AND that tenant A's rules never
- * leak across the RLS boundary.
+ * <p>{@code TENANT_A} is the demo tenant ({@code 11111111-...}) seeded with the V29 official {@code
+ * PB1_RESTAURANT}/{@code SERVICE_CHARGE} rules (ADR 0042, superseding the V5 illustrative rows by
+ * higher {@code rule_version}) — reused here rather than re-seeding, exactly like {@code
+ * CheckoutAcceptanceTest}/{@code StockTrackingTest}. {@code TENANT_B} is a fresh tenant with no
+ * seeded rule at all, proving both the no-rule fall-through AND that tenant A's rules never leak
+ * across the RLS boundary.
  */
 @SpringBootTest
 class EffectiveRulesTest extends PostgresRlsTestBase {
@@ -33,19 +34,19 @@ class EffectiveRulesTest extends PostgresRlsTestBase {
   @Autowired private TaxChargeService taxChargeService;
 
   @Test
-  void demoTenantResolvesTheSeededIllustrativeRules() throws Exception {
+  void demoTenantResolvesTheSeededOfficialRules() throws Exception {
     EffectiveRulesResponse response =
         TenantContext.callAs(TENANT_A, ACTOR_A, taxChargeService::resolveEffectiveRules);
 
     assertThat(response.currency()).isEqualTo("IDR");
     assertThat(response.asOf()).isNotNull();
-    assertThat(response.taxBp()).isEqualTo(1000L); // V5: PB1_RESTAURANT illustrative 10%
-    assertThat(response.taxRuleVersion()).isEqualTo("ILLUSTRATIVE-2026.1");
-    assertThat(response.taxProvenance()).isEqualTo("ILLUSTRATIVE_PLACEHOLDER");
-    assertThat(response.serviceChargeBp()).isEqualTo(500L); // V5: SERVICE_CHARGE illustrative 5%
+    assertThat(response.taxBp()).isEqualTo(1000L); // V29: PB1_RESTAURANT official 10% (ADR 0042)
+    assertThat(response.taxRuleVersion()).isEqualTo("OFFICIAL-2026.1");
+    assertThat(response.taxProvenance()).isEqualTo("OFFICIAL");
+    assertThat(response.serviceChargeBp()).isEqualTo(500L); // V29: SERVICE_CHARGE official 5%
     assertThat(response.serviceChargeInTaxBase()).isTrue();
-    assertThat(response.serviceChargeRuleVersion()).isEqualTo("ILLUSTRATIVE-2026.1");
-    assertThat(response.serviceChargeProvenance()).isEqualTo("ILLUSTRATIVE_PLACEHOLDER");
+    assertThat(response.serviceChargeRuleVersion()).isEqualTo("OFFICIAL-2026.1");
+    assertThat(response.serviceChargeProvenance()).isEqualTo("OFFICIAL");
   }
 
   @Test

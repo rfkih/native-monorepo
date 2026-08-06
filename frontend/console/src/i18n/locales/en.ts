@@ -1440,9 +1440,9 @@ export const en = {
       },
       setup: {
         title: 'Payroll needs a one-time setup',
-        body: 'Seed the default pay components and illustrative statutory rules for this company. Every run over them is loudly flagged until official rates replace them.',
-        seed: 'Use illustrative setup',
-        seeding: 'Seeding…',
+        body: 'Activate the official Indonesian statutory dataset (ID-2026.1 — PPh 21 TER, PTKP, and BPJS) and the default pay components for this company.',
+        seed: 'Activate official payroll setup',
+        seeding: 'Activating…',
       },
       scope: {
         count: 'Company-wide: {{withComp}} of {{total}} employees payable',

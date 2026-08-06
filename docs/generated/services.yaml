@@ -3,11 +3,11 @@
 services:
   - name: barbershop-service
     module: ":services:barbershop-service"
-    migrations: { count: 5, range: "V1..V5" }
+    migrations: { count: 6, range: "V1..V6" }
     events: true
   - name: carwash-service
     module: ":services:carwash-service"
-    migrations: { count: 10, range: "V1..V10" }
+    migrations: { count: 11, range: "V1..V11" }
     events: true
   - name: employee-service
     module: ":services:employee-service"
@@ -19,7 +19,7 @@ services:
     events: true
   - name: finance-service
     module: ":services:finance-service"
-    migrations: { count: 50, range: "V1..V50" }
+    migrations: { count: 51, range: "V1..V51" }
     events: true
   - name: gateway
     module: ":services:gateway"
@@ -39,5 +39,5 @@ services:
     events: true
   - name: restaurant-service
     module: ":services:restaurant-service"
-    migrations: { count: 28, range: "V1..V28" }
+    migrations: { count: 29, range: "V1..V29" }
     events: true

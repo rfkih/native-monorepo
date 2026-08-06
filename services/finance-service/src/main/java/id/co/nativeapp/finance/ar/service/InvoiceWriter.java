@@ -55,12 +55,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class InvoiceWriter {
 
   /**
-   * ILLUSTRATIVE PLACEHOLDER — SME-GATED. Output VAT (PPN) applied to a taxable invoice's subtotal,
-   * in basis points (1100 bp = 11%). The regime + rate are placeholders; the invoice carries {@code
-   * uses_illustrative_rules=true} and the UI badges it "Estimated". A tax SME confirms the real
-   * rate; a data-driven per-jurisdiction rate table is a later enhancement (see V25 SME note).
+   * Output VAT (PPN) applied to a taxable invoice's subtotal, in basis points (1100 bp = 11%, the
+   * Indonesian standard PPN rate confirmed for production — ADR 0042). A future data-driven
+   * per-jurisdiction rate table is a later enhancement (see V25 note); until then this single
+   * official rate applies, and a taxable invoice no longer carries {@code uses_illustrative_rules}.
    */
-  static final long ILLUSTRATIVE_OUTPUT_VAT_BP = 1_100L;
+  static final long OUTPUT_VAT_BP = 1_100L;
 
   /** Default payment term (net days) when the caller does not supply one. */
   static final int DEFAULT_PAYMENT_TERM_DAYS = 30;
@@ -124,10 +124,10 @@ public class InvoiceWriter {
       Money unitPrice = Money.ofMinor(input.unitPriceMinor(), currency);
       subtotal = subtotal.plus(unitPrice.multiply(input.quantity()));
     }
-    Money tax =
-        taxable ? subtotal.applyBasisPoints(ILLUSTRATIVE_OUTPUT_VAT_BP) : Money.zero(currency);
+    Money tax = taxable ? subtotal.applyBasisPoints(OUTPUT_VAT_BP) : Money.zero(currency);
 
-    Invoice invoice = Invoice.draft(customer.getId(), subtotal, tax, taxable);
+    // VAT is now the official 11% PPN (ADR 0042): a taxable invoice is no longer illustrative.
+    Invoice invoice = Invoice.draft(customer.getId(), subtotal, tax, false);
     invoice.setCompanyId(companyId);
     invoiceRepository.save(invoice);
 

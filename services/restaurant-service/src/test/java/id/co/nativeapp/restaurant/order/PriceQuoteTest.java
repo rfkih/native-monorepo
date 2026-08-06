@@ -37,7 +37,8 @@ import org.springframework.boot.test.context.SpringBootTest;
  * </ol>
  *
  * <p>Full {@code @SpringBootTest} context + Testcontainers PostgreSQL 16 (via {@link
- * PostgresRlsTestBase}). The illustrative SC (5%) and PB1 tax (10%) rules are seeded by Flyway.
+ * PostgresRlsTestBase}). The official SC (5%) and PB1 tax (10%) rules (ADR 0042) are seeded by
+ * Flyway.
  */
 @SpringBootTest
 class PriceQuoteTest extends PostgresRlsTestBase {
@@ -57,8 +58,8 @@ class PriceQuoteTest extends PostgresRlsTestBase {
   // -----------------------------------------------------------------------
 
   /**
-   * Quote for 2 × IDR 15,000 (subtotal 30,000) with illustrative rules: SC 5% on taxableBase, tax
-   * 10% on (taxableBase + SC):
+   * Quote for 2 × IDR 15,000 (subtotal 30,000) with official rules (ADR 0042): SC 5% on
+   * taxableBase, tax 10% on (taxableBase + SC):
    *
    * <ul>
    *   <li>subtotal = 30,000
@@ -85,7 +86,7 @@ class PriceQuoteTest extends PostgresRlsTestBase {
     assertThat(breakdown.taxMinor()).isEqualTo(3_150L);
     assertThat(breakdown.grandTotalMinor()).isEqualTo(34_650L);
     assertThat(breakdown.currency()).isEqualTo("IDR");
-    assertThat(breakdown.usesIllustrativeRules()).isTrue();
+    assertThat(breakdown.usesIllustrativeRules()).isFalse();
   }
 
   /**

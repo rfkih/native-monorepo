@@ -330,7 +330,7 @@ class PayrollSettlementWriterTest extends PostgresRlsTestBase {
     insertRoleAccountMapAsAdmin(
         "NET_WAGES_PAYABLE",
         "2699",
-        2,
+        3, // V51 (ADR 0042) now occupies version 2 with the OFFICIAL supersede; remap sits above it
         LocalDate.parse("2026-02-01"),
         LocalDate.parse("9999-12-31"));
     try {
@@ -346,7 +346,7 @@ class PayrollSettlementWriterTest extends PostgresRlsTestBase {
           lines.stream().filter(l -> l.accountCode.equals("2640")).findFirst().orElseThrow();
       assertThat(bucketLine.debitMinor).isEqualTo(10_000_000L);
     } finally {
-      deleteRoleAccountMapAsAdmin("NET_WAGES_PAYABLE", 2);
+      deleteRoleAccountMapAsAdmin("NET_WAGES_PAYABLE", 3);
       deleteChartOfAccountAsAdmin("2699");
     }
   }
@@ -417,7 +417,10 @@ class PayrollSettlementWriterTest extends PostgresRlsTestBase {
     // anUnrecognisedLiabilityRoleFailsSafeToSuspenseNeverDropped in PayrollLiabilityWriterTest.
     // Settling a suspense-parked bucket must be rejected — it would neither clear the intended
     // payable nor be distinguishable from another suspense-parked bucket by account code alone.
+    // Unmap the role ENTIRELY: remove the V40 version-1 row AND the V51 (ADR 0042) version-2
+    // OFFICIAL supersede — otherwise the accrual still resolves 2690 and never routes to SUSPENSE.
     deleteRoleAccountMapAsAdmin("OTHER_DEDUCTIONS_PAYABLE", 1);
+    deleteRoleAccountMapAsAdmin("OTHER_DEDUCTIONS_PAYABLE", 2);
     try {
       UUID runId = UUID.randomUUID();
       UUID runLedgerId =
@@ -432,10 +435,18 @@ class PayrollSettlementWriterTest extends PostgresRlsTestBase {
       assertThatThrownBy(() -> settle(runLedgerId, SettlementKind.OTHER, "suspense-key"))
           .isInstanceOf(PayrollLiabilitySuspenseBucketException.class);
     } finally {
+      // Restore both migrated rows (the resolver reads gl_account_code only, so the flag value on
+      // the restored rows is immaterial to any assertion).
       insertRoleAccountMapAsAdmin(
           "OTHER_DEDUCTIONS_PAYABLE",
           "2690",
           1,
+          LocalDate.parse("2000-01-01"),
+          LocalDate.parse("9999-12-31"));
+      insertRoleAccountMapAsAdmin(
+          "OTHER_DEDUCTIONS_PAYABLE",
+          "2690",
+          2,
           LocalDate.parse("2000-01-01"),
           LocalDate.parse("9999-12-31"));
     }

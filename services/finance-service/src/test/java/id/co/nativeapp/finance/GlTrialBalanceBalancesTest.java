@@ -22,7 +22,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 /**
  * Testcontainers test: after posting a {@code SaleRecorded} and an {@code ExpenseRecorded}, the GL
  * trial balance for the period must satisfy Σdebits == Σcredits AND carry {@code
- * usesIllustrativeRules=true} (the illustrative seeds are active).
+ * usesIllustrativeRules=false} — the go-live V51 OFFICIAL role maps + templates are active (ADR
+ * 0042), so a clean posting is no longer flagged illustrative.
  */
 @SpringBootTest
 class GlTrialBalanceBalancesTest extends PostgresRlsTestBase {
@@ -36,7 +37,7 @@ class GlTrialBalanceBalancesTest extends PostgresRlsTestBase {
   @Autowired private GlTrialBalanceReader glTrialBalanceReader;
 
   @Test
-  void glTrialBalanceIsSigmaBalancedAndFlaggedIllustrative() throws Exception {
+  void glTrialBalanceIsSigmaBalancedAndNoLongerIllustrative() throws Exception {
     Instant occurredAt = Instant.parse("2026-06-14T10:00:00Z");
 
     revenuePostingService.handle(
@@ -67,8 +68,8 @@ class GlTrialBalanceBalancesTest extends PostgresRlsTestBase {
     boolean anyIllustrative =
         lines.stream().anyMatch(GlTrialBalanceLineView::getUsesIllustrativeRules);
     assertThat(anyIllustrative)
-        .as("at least one line must carry uses_illustrative_rules=true (illustrative seeds active)")
-        .isTrue();
+        .as("no line may be illustrative — the go-live OFFICIAL seeds are active (ADR 0042)")
+        .isFalse();
   }
 
   @Override

@@ -50,7 +50,7 @@ class OrderControllerValidationTest {
 
   private static OrderResponse stubOrder(UUID orderId) {
     PriceBreakdownResponse breakdown =
-        new PriceBreakdownResponse(30_000L, 0L, 1_500L, 3_150L, 34_650L, "IDR", true);
+        new PriceBreakdownResponse(30_000L, 0L, 1_500L, 3_150L, 34_650L, "IDR", false);
     return new OrderResponse(
         orderId,
         UUID.fromString("22222222-2222-2222-2222-222222222222"),
@@ -69,7 +69,7 @@ class OrderControllerValidationTest {
   }
 
   private static PriceBreakdownResponse stubBreakdown() {
-    return new PriceBreakdownResponse(30_000L, 0L, 1_500L, 3_150L, 34_650L, "IDR", true);
+    return new PriceBreakdownResponse(30_000L, 0L, 1_500L, 3_150L, 34_650L, "IDR", false);
   }
 
   @Test
@@ -98,7 +98,7 @@ class OrderControllerValidationTest {
         .andExpect(jsonPath("$.breakdown.taxMinor").value(3_150))
         .andExpect(jsonPath("$.breakdown.grandTotalMinor").value(34_650))
         .andExpect(jsonPath("$.breakdown.currency").value("IDR"))
-        .andExpect(jsonPath("$.breakdown.usesIllustrativeRules").value(true));
+        .andExpect(jsonPath("$.breakdown.usesIllustrativeRules").value(false));
   }
 
   @Test
@@ -239,7 +239,7 @@ class OrderControllerValidationTest {
         .andExpect(jsonPath("$.taxMinor").value(3_150))
         .andExpect(jsonPath("$.grandTotalMinor").value(34_650))
         .andExpect(jsonPath("$.currency").value("IDR"))
-        .andExpect(jsonPath("$.usesIllustrativeRules").value(true));
+        .andExpect(jsonPath("$.usesIllustrativeRules").value(false));
   }
 
   @Test

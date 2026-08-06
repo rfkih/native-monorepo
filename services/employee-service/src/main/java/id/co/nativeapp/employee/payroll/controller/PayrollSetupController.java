@@ -3,6 +3,7 @@ package id.co.nativeapp.employee.payroll.controller;
 import id.co.nativeapp.employee.payroll.dto.OverrideStatutoryRuleRequest;
 import id.co.nativeapp.employee.payroll.dto.PayrollSetupResponse;
 import id.co.nativeapp.employee.payroll.dto.SeedIllustrativeRequest;
+import id.co.nativeapp.employee.payroll.dto.SeedOfficialBootstrapRequest;
 import id.co.nativeapp.employee.payroll.dto.SeedOfficialRequest;
 import id.co.nativeapp.employee.payroll.dto.SeedOfficialResponse;
 import id.co.nativeapp.employee.payroll.dto.StatutoryRuleDetailResponse;
@@ -29,19 +30,27 @@ import org.springframework.web.bind.annotation.RestController;
  *   <li>{@code GET} — whether the tenant's pay-component catalog + statutory rules exist and their
  *       provenance (the console gates the Payroll tab on it and banners any non-OFFICIAL
  *       provenance).
+ *   <li>{@code POST /seed-official-bootstrap} — the go-live default (ADR 0042): seeds a FRESH
+ *       tenant straight to an OFFICIAL statutory dataset in one call (the console's Payroll
+ *       setup-gate button calls this).
  *   <li>{@code POST /seed-illustrative} — seed the ILLUSTRATIVE PLACEHOLDER catalog + rules in the
  *       tenant's base currency (idempotent; NOT verified DJP/BPJS figures — every run over them is
- *       flagged {@code usesIllustrativeRules} and the console shows a loud banner).
+ *       flagged {@code usesIllustrativeRules} and the console shows a loud banner). Kept for the
+ *       illustrative-sandbox flow and existing tests; no longer the console's default.
  * </ul>
  */
 @Tag(
     name = "Payroll setup",
     description =
-        "Bootstrap and inspect the tenant's pay-component catalog + statutory rules (illustrative"
-            + " placeholder figures until OFFICIAL rows are seeded)")
+        "Bootstrap and inspect the tenant's pay-component catalog + statutory rules (OFFICIAL by"
+            + " default since ADR 0042; illustrative placeholder figures remain available for the"
+            + " sandbox flow)")
 @RestController
 @RequestMapping("/api/v1/payroll-setup")
 public class PayrollSetupController {
+
+  /** The OFFICIAL dataset a fresh tenant's setup-gate activates by default (ADR 0042 go-live). */
+  private static final String DEFAULT_DATASET_VERSION = "ID-2026.1";
 
   private final PayrollSetupReader reader;
   private final PayrollSetupService service;
@@ -71,6 +80,24 @@ public class PayrollSetupController {
   public PayrollSetupResponse seedIllustrative(
       @Valid @RequestBody SeedIllustrativeRequest request) {
     return service.seedIllustrative(request.baseCurrency());
+  }
+
+  @Operation(
+      summary = "Bootstrap a fresh tenant straight to an OFFICIAL statutory dataset",
+      description =
+          "The go-live default (ADR 0042): seeds the tenant's base pay-component catalog in its"
+              + " base currency THEN immediately activates the OFFICIAL dataset over it — one"
+              + " call, one transaction, no illustrative-placeholder stop. datasetVersion defaults"
+              + " to ID-2026.1 when blank/omitted. Idempotent, same as seed-official. This is what"
+              + " the console's Payroll setup-gate button calls.")
+  @PostMapping("/seed-official-bootstrap")
+  public SeedOfficialResponse seedOfficialBootstrap(
+      @Valid @RequestBody SeedOfficialBootstrapRequest request) {
+    String datasetVersion =
+        (request.datasetVersion() == null || request.datasetVersion().isBlank())
+            ? DEFAULT_DATASET_VERSION
+            : request.datasetVersion();
+    return service.seedOfficialBootstrap(request.baseCurrency(), datasetVersion);
   }
 
   @Operation(

@@ -72,11 +72,11 @@ class ApTenancyIsolationTest extends PostgresRlsTestBase {
         TenantContext.callAs(TENANT_A, ACTOR_A, () -> billReader.detail(billId));
     assertThat(aView.status()).isEqualTo("PARTIALLY_PAID");
     assertThat(aView.subtotalMinor()).isEqualTo(1_000_000L);
-    assertThat(aView.taxMinor()).isEqualTo(110_000L); // 11% illustrative input VAT
+    assertThat(aView.taxMinor()).isEqualTo(110_000L); // 11% official input VAT (PPN)
     assertThat(aView.totalMinor()).isEqualTo(1_110_000L);
     assertThat(aView.paidMinor()).isEqualTo(300_000L);
     assertThat(aView.outstandingMinor()).isEqualTo(810_000L);
-    assertThat(aView.usesIllustrativeRules()).isTrue();
+    assertThat(aView.usesIllustrativeRules()).isFalse(); // VAT is now official 11% (ADR 0042)
     assertThat(aView.billNumber()).isEqualTo("BILL-00001");
 
     // Tenant A's aging shows the outstanding balance in the current bucket (due date is 30 days

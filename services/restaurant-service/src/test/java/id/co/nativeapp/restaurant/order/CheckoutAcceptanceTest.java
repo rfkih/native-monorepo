@@ -80,7 +80,8 @@ class CheckoutAcceptanceTest extends PostgresRlsTestBase {
     assertThat(first.created()).isTrue();
     UUID orderId = first.order().orderId();
     // Phase 2 pricing: 2 × IDR 15,000 = subtotal 30,000 + SC 5% (1,500) + tax 10% of 31,500 (3,150)
-    // grandTotal = 30,000 + 1,500 + 3,150 = 34,650. The demo tenant has illustrative rules seeded.
+    // grandTotal = 30,000 + 1,500 + 3,150 = 34,650. The demo tenant has official rules seeded
+    // (ADR 0042) — same rates as the superseded illustrative rules.
     assertThat(first.order().totalMinor()).isEqualTo(34_650L);
     assertThat(first.order().currency()).isEqualTo("IDR");
     assertThat(first.order().saleId()).isNotNull();
@@ -97,7 +98,7 @@ class CheckoutAcceptanceTest extends PostgresRlsTestBase {
     assertThat(first.order().breakdown().taxMinor()).isEqualTo(3_150L);
     assertThat(first.order().breakdown().grandTotalMinor()).isEqualTo(34_650L);
     assertThat(first.order().breakdown().currency()).isEqualTo("IDR");
-    assertThat(first.order().breakdown().usesIllustrativeRules()).isTrue();
+    assertThat(first.order().breakdown().usesIllustrativeRules()).isFalse();
 
     // Assert: exactly one SaleRecorded in the outbox.
     List<Map<String, Object>> outboxRows = saleRecordedRows();
@@ -115,7 +116,8 @@ class CheckoutAcceptanceTest extends PostgresRlsTestBase {
     assertThat(decoded.get("service_charge_minor")).isEqualTo(1_500L);
     assertThat(decoded.get("tax_minor")).isEqualTo(3_150L);
     assertThat(decoded.get("discount_minor")).isEqualTo(0L); // zero discount (no promo applied)
-    assertThat((Boolean) decoded.get("uses_illustrative_rules")).isTrue(); // illustrative rules
+    assertThat((Boolean) decoded.get("uses_illustrative_rules"))
+        .isFalse(); // official rules (ADR 0042)
     assertThat(decoded.get("currency").toString()).isEqualTo("IDR");
     assertThat(decoded.get("business_id").toString()).isEqualTo(BUSINESS_ID.toString());
     assertThat(decoded.get("company_id").toString()).isEqualTo(TENANT_A);
