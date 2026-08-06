@@ -219,11 +219,23 @@ jobs:
       - name: Check docs against code
         run: bash scripts/check-doc-drift.sh
 
+  # Fast, always-on: no production query may `SELECT *` (CLAUDE.md "Never" — projections only).
+  # Catches @Query AND raw JdbcTemplate SQL, which the ArchUnit @Query rule cannot. Costs seconds.
+  no_select_star:
+    name: no select star
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Forbid SELECT * in production queries
+        run: bash scripts/check-no-select-star.sh
+
   # The ONLY check branch protection should require. Skipped upstream jobs (path
   # filtering) count as success; any failure or cancellation turns the gate red.
   gate:
     name: gate
-    needs: [changes, backend, console, self_order, doc_drift]
+    needs: [changes, backend, console, self_order, doc_drift, no_select_star]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -231,7 +243,7 @@ jobs:
       - name: Fail if any upstream job failed or was cancelled
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: |
-          echo "upstream results: changes=${{ needs.changes.result }} backend=${{ needs.backend.result }} console=${{ needs.console.result }} self_order=${{ needs.self_order.result }} doc_drift=${{ needs.doc_drift.result }}"
+          echo "upstream results: changes=${{ needs.changes.result }} backend=${{ needs.backend.result }} console=${{ needs.console.result }} self_order=${{ needs.self_order.result }} doc_drift=${{ needs.doc_drift.result }} no_select_star=${{ needs.no_select_star.result }}"
           exit 1
       - name: All required jobs passed
         run: echo "gate green"

@@ -51,6 +51,16 @@ if printf '%s\n' "$staged" | grep -qE 'db/migration/|libs/contracts/src/main/res
   fi
 fi
 
+# --- No SELECT * in production queries: run when a staged main-code .java/.sql could hold one.
+# --- The script scans the whole tree (fast), so a staged violation anywhere is caught. ---
+if printf '%s\n' "$staged" | grep -qE '/src/main/.*\.(java|sql)$'; then
+  if ! bash scripts/check-no-select-star.sh >/dev/null 2>&1; then
+    echo "BLOCKED: a production query uses SELECT * — select explicit columns / a projection." >&2
+    bash scripts/check-no-select-star.sh 2>&1 | grep -iE "forbidden|:.*select" >&2
+    exit 2
+  fi
+fi
+
 # --- Console: ESLint, scoped to the staged console sources (errors block; warnings pass) ---
 console_files=$(printf '%s\n' "$staged" | grep -E '^frontend/console/.*\.(ts|tsx)$' | sed 's#^frontend/console/##')
 if [ -n "$console_files" ]; then

@@ -162,7 +162,12 @@ or accepting an `@Entity`. `SaleController` already models this — keep it that
   `projection` sub-package (e.g. `sale.projection.SaleView`), not nested in the repository or mixed
   into `dto`. The full `@Entity` is loaded only on the **write** path (the inherited
   `findById`/`save`, which needs the whole aggregate to mutate it) and for `count`/`exists`
-  scalars — those legitimately are not projections.
+  scalars — those legitimately are not projections. **`SELECT *` is forbidden in ANY production
+  query** — a read projection, a full-entity write-path load, or a JdbcTemplate SQL string all name
+  their columns explicitly. `scripts/check-no-select-star.sh` (CI `no select star` job + the
+  pre-commit hook) fails the build on a `SELECT * … FROM` in `services|libs|service-template`
+  `src/main` (`.java`/`.sql`); it does NOT flag `count(*)`/`exists(select 1 …)`. Test-only whole-row
+  snapshots are exempt (the guard scans `src/main` only).
 
 ### 3.4 domain — owns its invariants, framework-light
 

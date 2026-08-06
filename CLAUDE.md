@@ -64,6 +64,6 @@ Build `./gradlew build` · Test `./gradlew test` · Integration `./gradlew integ
 - Touch another service's DB or call a business service synchronously.
 - Introduce an event without adding it to `docs/EVENT-CATALOG.md` + a registered Avro schema.
 - **Store money as a float. Hardcode a user-facing string.** Log PII. Bypass RLS. Publish outside the outbox.
-- **Write a JPQL `@Query` (must be native), or `SELECT *` / return a full entity on a read path (must be a `projection`).**
+- **Write a JPQL `@Query` (must be native), or `SELECT *` on ANY production query (read OR full-entity write-path load — name the columns; enforced fleet-wide by `scripts/check-no-select-star.sh` in CI + the pre-commit hook, which catches `@Query` and raw JdbcTemplate SQL alike). A read path returns a `projection`, not the full entity.**
 - **Add a currency or language toggle to the dashboard** — those are set at company creation.
 - Build the full platform stack before the first usable slice ships.
