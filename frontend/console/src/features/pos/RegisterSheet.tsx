@@ -75,6 +75,8 @@ export function RegisterSheet({
 
   const [floatInput, setFloatInput] = useState('')
   const [countedInput, setCountedInput] = useState('')
+  // Per non-cash tender counted/settled amounts (ADR 0038 phase 2), keyed by tender type.
+  const [tenderCounts, setTenderCounts] = useState<Record<string, string>>({})
   // Held after a successful close so the verdict stays visible (the query flips to 204/null).
   const [closed, setClosed] = useState<RegisterSessionResponse | null>(null)
 
@@ -97,12 +99,24 @@ export function RegisterSheet({
 
   function handleClose() {
     if (!current) return
+    // Only tenders the cashier actually entered are settled (ADR 0038); the rest are left unsettled.
+    const nonCash = Object.entries(tenderCounts)
+      .filter(([, raw]) => raw.trim() !== '')
+      .map(([tenderType, raw]) => ({
+        tenderType: tenderType as 'CARD' | 'QRIS' | 'ONLINE',
+        countedMinor: parseDiscountInput(raw, currency),
+      }))
     closeSession.mutate(
-      { sessionId: current.id, countedCashMinor: parseDiscountInput(countedInput, currency) },
+      {
+        sessionId: current.id,
+        countedCashMinor: parseDiscountInput(countedInput, currency),
+        tenderCounts: nonCash.length > 0 ? nonCash : undefined,
+      },
       {
         onSuccess: (res) => {
           if (res) setClosed(res)
           setCountedInput('')
+          setTenderCounts({})
         },
       },
     )
@@ -201,19 +215,45 @@ export function RegisterSheet({
                 <div className="mb-2 text-[12px] font-semibold uppercase tracking-[.06em] text-ink-3">
                   {t('register.expectedByTender')}
                 </div>
-                <dl className="space-y-1.5">
-                  {expectedQuery.data.tenders.map((td) => (
-                    <div key={td.tenderType} className="flex items-baseline justify-between text-sm">
-                      <dt className="text-ink-3">
-                        {TENDER_LABEL_KEY[td.tenderType]
-                          ? t(TENDER_LABEL_KEY[td.tenderType] as Parameters<typeof t>[0])
-                          : td.tenderType}
-                      </dt>
-                      <dd className="tnum font-mono text-ink-2">
-                        {formatMoney(td.expectedMinor, currency, locale)}
-                      </dd>
-                    </div>
-                  ))}
+                <dl className="space-y-2">
+                  {expectedQuery.data.tenders.map((td) => {
+                    const label = TENDER_LABEL_KEY[td.tenderType]
+                      ? t(TENDER_LABEL_KEY[td.tenderType] as Parameters<typeof t>[0])
+                      : td.tenderType
+                    const isCash = td.tenderType === 'CASH'
+                    return (
+                      <div
+                        key={td.tenderType}
+                        className="flex items-center justify-between gap-3 text-sm"
+                      >
+                        <dt className="text-ink-3">{label}</dt>
+                        <dd className="flex items-center gap-2.5">
+                          <span className="tnum w-24 text-right font-mono text-ink-2">
+                            {formatMoney(td.expectedMinor, currency, locale)}
+                          </span>
+                          {/* Non-cash tenders take an optional counted/settled amount (cash is the
+                              drawer count below). Left blank → that tender isn't settled at close. */}
+                          {isCash ? (
+                            <span className="w-24" aria-hidden />
+                          ) : (
+                            <input
+                              aria-label={t('register.countedForTender', { tender: label })}
+                              data-testid={`register-counted-${td.tenderType}`}
+                              type="number"
+                              min="0"
+                              inputMode="numeric"
+                              value={tenderCounts[td.tenderType] ?? ''}
+                              onChange={(e) =>
+                                setTenderCounts((p) => ({ ...p, [td.tenderType]: e.target.value }))
+                              }
+                              placeholder={t('register.countedPlaceholder')}
+                              className="h-9 w-24 rounded-lg border border-line bg-surface px-2 text-right font-mono text-sm tnum text-ink placeholder:text-ink-3/50 focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/10"
+                            />
+                          )}
+                        </dd>
+                      </div>
+                    )
+                  })}
                 </dl>
                 <p className="mt-2 text-xs leading-relaxed text-ink-3">
                   {t('register.expectedByTenderHint')}

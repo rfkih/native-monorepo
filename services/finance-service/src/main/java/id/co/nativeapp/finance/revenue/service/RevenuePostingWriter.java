@@ -351,20 +351,16 @@ public class RevenuePostingWriter {
    * tender is a producer/consumer version skew worth surfacing).
    */
   static AccountRole resolveClearingRole(String tenderType) {
-    if (tenderType == null) {
+    // Single-sourced on the domain enum (shared with the ADR-0038 register close); the revenue path
+    // keeps its safe fallback — an unknown tender defaults to CASH_CLEARING with a WARN so money is
+    // never dropped, only flagged as a producer/consumer version skew.
+    AccountRole role = AccountRole.clearingRoleForTender(tenderType);
+    if (role == null) {
+      log.warn(
+          "Unknown tender_type '{}' — defaulting clearing to CASH_CLEARING (version skew?)",
+          tenderType);
       return AccountRole.CASH_CLEARING;
     }
-    return switch (tenderType) {
-      case "CASH" -> AccountRole.CASH_CLEARING;
-      case "QRIS" -> AccountRole.QRIS_CLEARING;
-      case "CARD" -> AccountRole.CARD_CLEARING;
-      case "ONLINE" -> AccountRole.PLATFORM_RECEIVABLE;
-      default -> {
-        log.warn(
-            "Unknown tender_type '{}' — defaulting clearing to CASH_CLEARING (version skew?)",
-            tenderType);
-        yield AccountRole.CASH_CLEARING;
-      }
-    };
+    return role;
   }
 }

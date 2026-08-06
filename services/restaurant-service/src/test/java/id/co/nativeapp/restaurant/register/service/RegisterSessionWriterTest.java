@@ -16,19 +16,24 @@ import id.co.nativeapp.restaurant.register.domain.RegisterSession;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionDayClosedException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionIdempotencyKeyConflictException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionNotOpenException;
+import id.co.nativeapp.restaurant.register.domain.RegisterSessionTender;
 import id.co.nativeapp.restaurant.register.dto.CloseSessionRequest;
 import id.co.nativeapp.restaurant.register.dto.OpenSessionRequest;
 import id.co.nativeapp.restaurant.register.dto.OpenSessionResult;
 import id.co.nativeapp.restaurant.register.dto.RegisterExpectedResponse;
 import id.co.nativeapp.restaurant.register.dto.RegisterSessionResponse;
+import id.co.nativeapp.restaurant.register.dto.TenderCount;
 import id.co.nativeapp.restaurant.register.projection.RegisterSessionView;
 import id.co.nativeapp.restaurant.register.repository.RegisterSessionRepository;
+import id.co.nativeapp.restaurant.register.repository.RegisterSessionTenderRepository;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 /**
  * Unit pins for the {@link RegisterSessionWriter} money path (ADR 0036) — the exact behaviors the
@@ -43,11 +48,13 @@ class RegisterSessionWriterTest {
   private static final UUID OUTLET = UUID.fromString("5f5e0167-ee70-45b8-8afe-019e8129e659");
 
   private final RegisterSessionRepository repository = mock(RegisterSessionRepository.class);
+  private final RegisterSessionTenderRepository tenderRepository =
+      mock(RegisterSessionTenderRepository.class);
   private final OutboxWriter outboxWriter = mock(OutboxWriter.class);
   private final OutletAccessGuard guard = mock(OutletAccessGuard.class);
   private final CashWindowLock cashWindowLock = mock(CashWindowLock.class);
   private final RegisterSessionWriter writer =
-      new RegisterSessionWriter(repository, outboxWriter, guard, cashWindowLock);
+      new RegisterSessionWriter(repository, tenderRepository, outboxWriter, guard, cashWindowLock);
 
   private static RegisterSession openSession(long floatMinor) {
     RegisterSession session =
@@ -174,6 +181,51 @@ class RegisterSessionWriterTest {
     // doc.
     verify(cashWindowLock).acquireForClose(OUTLET);
     verify(guard).enforce(OUTLET);
+  }
+
+  // ── per-tender reconciliation at close (ADR 0038 phase 2) ────────────────
+
+  @Test
+  void closeWithNonCashTenderCountsPersistsAndSignsEachTenderVariance() {
+    RegisterSession session = openSession(0L);
+    when(repository.findViewByCloseIdempotencyKey("k")).thenReturn(Optional.empty());
+    when(repository.findWithLockById(session.getId())).thenReturn(Optional.of(session));
+    when(repository.sumCashSales(any(), any(), any())).thenReturn(0L);
+    when(repository.sumCashGiftCardSales(any(), any(), any())).thenReturn(0L);
+    when(repository.sumCashRefunds(any(), any(), any())).thenReturn(0L);
+    // CARD expected = 800k sales − 0 refunds.
+    when(repository.sumSalesByTender(any(), eq("CARD"), any(), any())).thenReturn(800_000L);
+    when(repository.saveAndFlush(session)).thenReturn(session);
+
+    CloseSessionRequest request =
+        new CloseSessionRequest(0L, List.of(new TenderCount("CARD", 790_000L)));
+    asTenant(() -> writer.close(session.getId(), request, "k"));
+
+    ArgumentCaptor<RegisterSessionTender> captor =
+        ArgumentCaptor.forClass(RegisterSessionTender.class);
+    verify(tenderRepository).save(captor.capture());
+    RegisterSessionTender saved = captor.getValue();
+    assertThat(saved.getTenderType()).isEqualTo("CARD");
+    assertThat(saved.getExpectedMinor()).isEqualTo(800_000L);
+    assertThat(saved.getCountedMinor()).isEqualTo(790_000L);
+    // counted 790k − expected 800k → SIGNED −10k (short)
+    assertThat(saved.getOverShortMinor()).isEqualTo(-10_000L);
+    assertThat(saved.getSessionId()).isEqualTo(session.getId());
+  }
+
+  @Test
+  void closeWithoutTenderCountsPersistsNoTenderLines() {
+    RegisterSession session = openSession(100_000L);
+    when(repository.findViewByCloseIdempotencyKey("k")).thenReturn(Optional.empty());
+    when(repository.findWithLockById(session.getId())).thenReturn(Optional.of(session));
+    when(repository.sumCashSales(any(), any(), any())).thenReturn(0L);
+    when(repository.sumCashGiftCardSales(any(), any(), any())).thenReturn(0L);
+    when(repository.sumCashRefunds(any(), any(), any())).thenReturn(0L);
+    when(repository.saveAndFlush(session)).thenReturn(session);
+
+    asTenant(() -> writer.close(session.getId(), new CloseSessionRequest(100_000L), "k"));
+
+    verify(tenderRepository, never()).save(any());
   }
 
   // ── day-final (ADR 0038): one session per outlet per business day ─────────

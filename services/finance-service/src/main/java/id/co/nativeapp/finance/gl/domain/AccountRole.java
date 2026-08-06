@@ -283,5 +283,27 @@ public enum AccountRole {
    * SME later reclassifies its balance into real capital/retained accounts. Maps to account 3900
    * (ILLUSTRATIVE — SME-gated, V46).
    */
-  OPENING_BALANCE_EQUITY
+  OPENING_BALANCE_EQUITY;
+
+  /**
+   * The GL clearing {@link AccountRole} a POS tender settles through — the single source shared by
+   * the revenue-posting path ({@code RevenuePostingWriter.resolveClearingRole}) and the ADR-0038
+   * daily-close reconciliation ({@code RegisterCloseWriter}): {@code CASH}/{@code null} → {@link
+   * #CASH_CLEARING}; {@code QRIS} → {@link #QRIS_CLEARING}; {@code CARD} → {@link #CARD_CLEARING};
+   * {@code ONLINE} → {@link #PLATFORM_RECEIVABLE}. Returns {@code null} for an unrecognised tender
+   * so each caller picks its own fallback — the revenue path WARNs and defaults to cash (money is
+   * never dropped), the register close treats an unknown non-cash tender as a poison event.
+   */
+  public static AccountRole clearingRoleForTender(String tenderType) {
+    if (tenderType == null) {
+      return CASH_CLEARING;
+    }
+    return switch (tenderType) {
+      case "CASH" -> CASH_CLEARING;
+      case "QRIS" -> QRIS_CLEARING;
+      case "CARD" -> CARD_CLEARING;
+      case "ONLINE" -> PLATFORM_RECEIVABLE;
+      default -> null;
+    };
+  }
 }

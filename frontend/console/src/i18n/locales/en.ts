@@ -846,7 +846,9 @@ export const en = {
     /** ADR 0038 daily close v2 — per-tender expected breakdown on the close screen. */
     expectedByTender: 'Expected by tender',
     expectedByTenderHint:
-      'An estimate of what each tender should hold so far, from today’s sales — to check the drawer, card batch, and QRIS / platform reports against.',
+      'Expected from today’s sales. Count the drawer below; enter the card, QRIS and online actuals to settle those too (leave blank to skip).',
+    countedForTender: 'Counted {{tender}}',
+    countedPlaceholder: 'Actual',
     tenderCash: 'Cash',
     tenderCard: 'Card',
     tenderQris: 'QRIS',

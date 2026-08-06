@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
@@ -39,6 +40,20 @@ public final class RegisterSessionClosedSchema {
     // static holder
   }
 
+  /**
+   * One non-cash tender's reconciliation carried on the event (ADR 0038 phase 2) — the assembled
+   * form the writer passes to {@link #toRecord}, mapped 1:1 to the Avro {@code
+   * TenderReconciliation} array element. {@code overShortMinor} is SIGNED {@code counted −
+   * expected}.
+   *
+   * @param tenderType {@code CARD} | {@code QRIS} | {@code ONLINE} (never CASH)
+   * @param expectedMinor Σ sales − Σ refunds for the tender in the window, minor units
+   * @param countedMinor the cashier's counted/settled figure, minor units (≥ 0)
+   * @param overShortMinor SIGNED {@code counted − expected}
+   */
+  public record TenderLine(
+      String tenderType, long expectedMinor, long countedMinor, long overShortMinor) {}
+
   /** The parsed reader/writer schema for {@code RegisterSessionClosed}. */
   public static Schema schema() {
     return SCHEMA;
@@ -59,6 +74,8 @@ public final class RegisterSessionClosedSchema {
    * @param countedCashMinor the cashier's physical whole-drawer count (≥ 0)
    * @param overShortMinor SIGNED {@code counted − expected} (negative = short, positive = over)
    * @param currency ISO-4217 code shared by every amount
+   * @param tenders the non-cash per-tender reconciliation lines (CARD/QRIS/ONLINE) counted at close
+   *     — empty on a cash-only close (ADR 0038 phase 2)
    */
   @SuppressWarnings("checkstyle:ParameterNumber")
   public static GenericRecord toRecord(
@@ -73,7 +90,8 @@ public final class RegisterSessionClosedSchema {
       long expectedCashMinor,
       long countedCashMinor,
       long overShortMinor,
-      String currency) {
+      String currency,
+      List<TenderLine> tenders) {
     GenericRecord record = new GenericData.Record(SCHEMA);
     record.put("session_id", sessionId.toString());
     record.put("company_id", companyId);
@@ -87,6 +105,20 @@ public final class RegisterSessionClosedSchema {
     record.put("counted_cash_minor", countedCashMinor);
     record.put("over_short_minor", overShortMinor);
     record.put("currency", currency);
+
+    Schema tendersSchema = SCHEMA.getField("tenders").schema();
+    Schema itemSchema = tendersSchema.getElementType();
+    GenericData.Array<GenericRecord> tenderArray =
+        new GenericData.Array<>(tenders.size(), tendersSchema);
+    for (TenderLine line : tenders) {
+      GenericRecord item = new GenericData.Record(itemSchema);
+      item.put("tender_type", line.tenderType());
+      item.put("expected_minor", line.expectedMinor());
+      item.put("counted_minor", line.countedMinor());
+      item.put("over_short_minor", line.overShortMinor());
+      tenderArray.add(item);
+    }
+    record.put("tenders", tenderArray);
     return record;
   }
 

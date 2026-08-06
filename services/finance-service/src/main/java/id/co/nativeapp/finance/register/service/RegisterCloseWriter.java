@@ -112,24 +112,22 @@ public class RegisterCloseWriter {
       return;
     }
 
-    long overShort = event.overShortMinor();
-    if (overShort == 0) {
+    // Collect every tender with a non-zero variance: cash (top-level) + each non-cash line
+    // (ADR 0038). Zero across all → no entry (the event stays claimed by processOnce).
+    List<TenderVariance> variances = collectVariances(event);
+    if (variances.isEmpty()) {
       log.info(
-          "RegisterSessionClosed {}: zero variance for session {} — no entry",
+          "RegisterSessionClosed {}: zero variance across all tenders for session {} — no entry",
           event.eventId(),
           event.sessionId());
       return;
     }
-    if (overShort == Long.MIN_VALUE) {
-      // Math.abs(Long.MIN_VALUE) stays negative — an impossible drawer figure; poison.
-      throw new IllegalStateException("over_short_minor out of range: " + overShort);
-    }
 
-    Money magnitude = Money.ofMinor(Math.abs(overShort), event.currency());
-    requireConsistentGlCurrency(period, magnitude);
+    // rule 8: validate the ISO code + the single-base-currency guard, once for the event.
+    requireConsistentGlCurrency(period, Money.ofMinor(0L, event.currency()));
 
     UUID entryId = UUID.randomUUID();
-    JournalEntry entry = buildEntry(event, entryId, magnitude, period);
+    JournalEntry entry = buildEntry(event, entryId, period);
     entry.setCompanyId(companyId);
     journalEntryRepository.saveAndFlush(entry);
     for (JournalLine line : entry.getLines()) {
@@ -137,42 +135,83 @@ public class RegisterCloseWriter {
       journalLineRepository.save(line);
     }
     log.info(
-        "Posted register variance {} {} for session {} (entry {})",
-        overShort,
-        event.currency(),
+        "Posted register close variance for session {} across {} tender(s) (entry {})",
         event.sessionId(),
+        variances.size(),
         entryId);
   }
 
   /**
-   * Builds (but does not persist) the balanced 2-line variance entry — public and pure besides the
-   * resolver lookups, so a unit test can assert the exact legs per sign with a mocked resolver (the
-   * ReconciliationWriter#buildEntry pattern).
+   * The tenders with a non-zero variance to post: cash (from the top-level {@code over_short}) plus
+   * each non-cash reconciliation line. A non-cash line that does not resolve to a NON-cash clearing
+   * role (cash-in-tenders, or an unknown tender) is a poison event → DLT.
    */
-  public JournalEntry buildEntry(
-      RegisterSessionClosedEvent event, UUID entryId, Money magnitude, String period) {
-    Instant occurredAt = event.closedAt();
-    boolean isShort = event.overShortMinor() < 0;
-    String clearingCode = requireMapped(AccountRole.CASH_CLEARING, occurredAt);
-    String varianceCode =
-        requireMapped(
-            isShort ? AccountRole.CASH_SHORT_EXPENSE : AccountRole.CASH_OVER_INCOME, occurredAt);
+  private List<TenderVariance> collectVariances(RegisterSessionClosedEvent event) {
+    List<TenderVariance> variances = new ArrayList<>();
+    if (event.overShortMinor() != 0) {
+      variances.add(new TenderVariance("CASH", AccountRole.CASH_CLEARING, event.overShortMinor()));
+    }
+    for (RegisterSessionClosedEvent.TenderReconciliation tender : event.tenders()) {
+      if (tender.overShortMinor() == 0) {
+        continue;
+      }
+      AccountRole clearing = AccountRole.clearingRoleForTender(tender.tenderType());
+      if (clearing == null || clearing == AccountRole.CASH_CLEARING) {
+        throw new IllegalStateException(
+            "RegisterSessionClosed tender '"
+                + tender.tenderType()
+                + "' has no non-cash clearing role — poison event, routing to DLT");
+      }
+      variances.add(new TenderVariance(tender.tenderType(), clearing, tender.overShortMinor()));
+    }
+    return variances;
+  }
 
-    List<JournalLine> lines = new ArrayList<>(2);
-    if (isShort) {
-      lines.add(JournalLine.debit(entryId, 1, varianceCode, magnitude));
-      lines.add(JournalLine.credit(entryId, 2, clearingCode, magnitude));
-    } else {
-      lines.add(JournalLine.debit(entryId, 1, clearingCode, magnitude));
-      lines.add(JournalLine.credit(entryId, 2, varianceCode, magnitude));
+  /** One tender's signed variance to post: its clearing account + the SIGNED over/short. */
+  private record TenderVariance(String tenderType, AccountRole clearingRole, long overShortMinor) {}
+
+  /**
+   * Builds (but does not persist) the balanced variance entry — one debit/credit pair per tender
+   * with a non-zero variance, all in the event currency. Public + pure besides the resolver lookups
+   * so a unit test can assert the exact legs (the ReconciliationWriter#buildEntry pattern). SHORT
+   * ({@code over_short < 0}) → {@code Dr SHORT_EXPENSE / Cr <clearing>}; OVER → {@code Dr
+   * <clearing> / Cr OVER_INCOME}. Cash and every non-cash tender share the SHORT/OVER accounts (ADR
+   * 0038); each uses its own clearing account (cash 1900, card 1902, QRIS 1901, online 1250).
+   */
+  public JournalEntry buildEntry(RegisterSessionClosedEvent event, UUID entryId, String period) {
+    Instant occurredAt = event.closedAt();
+    String currencyCode = event.currency();
+    List<TenderVariance> variances = collectVariances(event);
+    List<JournalLine> lines = new ArrayList<>(variances.size() * 2);
+    int lineNo = 1;
+    for (TenderVariance variance : variances) {
+      long overShort = variance.overShortMinor();
+      if (overShort == Long.MIN_VALUE) {
+        // Math.abs(Long.MIN_VALUE) stays negative — an impossible figure; poison.
+        throw new IllegalStateException(
+            "over_short_minor out of range for " + variance.tenderType() + ": " + overShort);
+      }
+      boolean isShort = overShort < 0;
+      Money magnitude = Money.ofMinor(Math.abs(overShort), currencyCode);
+      String clearingCode = requireMapped(variance.clearingRole(), occurredAt);
+      String varianceCode =
+          requireMapped(
+              isShort ? AccountRole.CASH_SHORT_EXPENSE : AccountRole.CASH_OVER_INCOME, occurredAt);
+      if (isShort) {
+        lines.add(JournalLine.debit(entryId, lineNo++, varianceCode, magnitude));
+        lines.add(JournalLine.credit(entryId, lineNo++, clearingCode, magnitude));
+      } else {
+        lines.add(JournalLine.debit(entryId, lineNo++, clearingCode, magnitude));
+        lines.add(JournalLine.credit(entryId, lineNo++, varianceCode, magnitude));
+      }
     }
 
     return JournalEntry.balanced(
         entryId,
         period,
         occurredAt,
-        "Register close variance (selisih kas " + (isShort ? "kurang" : "lebih") + ")",
-        magnitude.currency().getCurrencyCode(),
+        "Register close variance (selisih kas — per tender)",
+        currencyCode,
         event.eventId(),
         true,
         lines);

@@ -1,6 +1,8 @@
 package id.co.nativeapp.finance.register.messaging;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import org.apache.avro.generic.GenericRecord;
 
@@ -29,8 +31,11 @@ import org.apache.avro.generic.GenericRecord;
  * @param cashRefundsMinor Σ CASH refunds paid from the drawer in the window, minor units (≥ 0)
  * @param expectedCashMinor producer-computed {@code float + sales − refunds}
  * @param countedCashMinor the cashier's physical whole-drawer count, minor units (≥ 0)
- * @param overShortMinor SIGNED {@code counted − expected}; the ONLY amount finance posts
+ * @param overShortMinor SIGNED {@code counted − expected} cash variance
  * @param currency ISO-4217 code shared by every amount on this event
+ * @param tenders non-cash per-tender reconciliation lines (CARD/QRIS/ONLINE) counted at close (ADR
+ *     0038 phase 2); empty on a cash-only / pre-phase-2 close. Finance posts each element's
+ *     variance truing that tender's clearing account, alongside the cash variance above
  */
 public record RegisterSessionClosedEvent(
     UUID eventId,
@@ -45,10 +50,31 @@ public record RegisterSessionClosedEvent(
     long expectedCashMinor,
     long countedCashMinor,
     long overShortMinor,
-    String currency) {
+    String currency,
+    List<TenderReconciliation> tenders) {
+
+  /**
+   * One non-cash tender's expected-vs-counted at close (ADR 0038 phase 2). {@code overShortMinor}
+   * is SIGNED {@code counted − expected}; finance posts it truing the tender's clearing account.
+   */
+  public record TenderReconciliation(
+      String tenderType, long expectedMinor, long countedMinor, long overShortMinor) {}
 
   /** Decodes the Avro {@link GenericRecord} into the typed event. */
   public static RegisterSessionClosedEvent from(UUID eventId, GenericRecord record) {
+    List<TenderReconciliation> tenders = new ArrayList<>();
+    Object raw = record.get("tenders");
+    if (raw instanceof List<?> list) {
+      for (Object element : list) {
+        GenericRecord line = (GenericRecord) element;
+        tenders.add(
+            new TenderReconciliation(
+                line.get("tender_type").toString(),
+                (long) line.get("expected_minor"),
+                (long) line.get("counted_minor"),
+                (long) line.get("over_short_minor")));
+      }
+    }
     return new RegisterSessionClosedEvent(
         eventId,
         UUID.fromString(record.get("session_id").toString()),
@@ -62,7 +88,8 @@ public record RegisterSessionClosedEvent(
         (long) record.get("expected_cash_minor"),
         (long) record.get("counted_cash_minor"),
         (long) record.get("over_short_minor"),
-        record.get("currency").toString());
+        record.get("currency").toString(),
+        tenders);
   }
 
   /**
@@ -125,6 +152,53 @@ public record RegisterSessionClosedEvent(
               + " must be after opened_at "
               + openedAt
               + " — poison event, routing to DLT");
+    }
+    // Per-tender (non-cash) reconciliation identities (ADR 0038 phase 2): counted >= 0 and
+    // over_short == counted − expected, mirroring the cash guards. A violation is poison → DLT.
+    for (TenderReconciliation tender : tenders) {
+      // Only the non-cash tenders belong here (cash is the top-level fields). An unknown or CASH
+      // tender in the array is version skew / corruption — reject at DECODE time so it DLTs
+      // immediately (non-retryable) rather than burning the retry budget at posting time.
+      if (!"CARD".equals(tender.tenderType())
+          && !"QRIS".equals(tender.tenderType())
+          && !"ONLINE".equals(tender.tenderType())) {
+        throw new IllegalStateException(
+            "RegisterSessionClosed unknown non-cash tender_type '"
+                + tender.tenderType()
+                + "' — poison event, routing to DLT");
+      }
+      if (tender.countedMinor() < 0) {
+        throw new IllegalStateException(
+            "RegisterSessionClosed tender sign guard violated: "
+                + tender.tenderType()
+                + " counted("
+                + tender.countedMinor()
+                + ") must be >= 0 — poison event, routing to DLT");
+      }
+      long tenderOverShort;
+      try {
+        tenderOverShort = Math.subtractExact(tender.countedMinor(), tender.expectedMinor());
+      } catch (ArithmeticException overflow) {
+        throw new IllegalStateException(
+            "RegisterSessionClosed tender identity overflow ("
+                + tender.tenderType()
+                + ") — poison event, routing to DLT",
+            overflow);
+      }
+      if (tenderOverShort != tender.overShortMinor()) {
+        throw new IllegalStateException(
+            "RegisterSessionClosed tender variance identity violated: "
+                + tender.tenderType()
+                + " counted("
+                + tender.countedMinor()
+                + ") - expected("
+                + tender.expectedMinor()
+                + ") = "
+                + tenderOverShort
+                + " != overShort("
+                + tender.overShortMinor()
+                + ") — poison event, routing to DLT");
+      }
     }
   }
 }

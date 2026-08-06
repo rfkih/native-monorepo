@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import id.co.nativeapp.events.AvroSerde;
 import id.co.nativeapp.restaurant.register.messaging.RegisterSessionClosedSchema;
+import id.co.nativeapp.restaurant.register.messaging.RegisterSessionClosedSchema.TenderLine;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericRecord;
@@ -45,6 +47,11 @@ class RegisterSessionClosedContractTest {
       assertThat(schema.getField(moneyField).schema().getType()).isEqualTo(Schema.Type.LONG);
     }
     assertThat(schema.getField("currency")).isNotNull();
+    // Daily close v2 (ADR 0038 phase 2): additive non-cash per-tender array.
+    Schema tenders = schema.getField("tenders").schema();
+    assertThat(tenders.getType()).isEqualTo(Schema.Type.ARRAY);
+    assertThat(tenders.getElementType().getField("over_short_minor").schema().getType())
+        .isEqualTo(Schema.Type.LONG);
   }
 
   @Test
@@ -65,7 +72,8 @@ class RegisterSessionClosedContractTest {
             1_650_000L,
             1_600_000L,
             -50_000L,
-            "IDR");
+            "IDR",
+            List.of());
 
     byte[] bytes = AvroSerde.serialize(record);
     GenericRecord decoded = AvroSerde.deserialize(bytes, RegisterSessionClosedSchema.schema());
@@ -90,6 +98,43 @@ class RegisterSessionClosedContractTest {
     long overShort =
         (long) decoded.get("counted_cash_minor") - (long) decoded.get("expected_cash_minor");
     assertThat(decoded.get("over_short_minor")).isEqualTo(overShort);
+    // A cash-only close carries an empty non-cash tender array.
+    assertThat((java.util.Collection<?>) decoded.get("tenders")).isEmpty();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void recordCarriesPerTenderReconciliationLines() {
+    // A close that reconciled CARD (short 10k) and QRIS (balanced) — ADR 0038 phase 2.
+    GenericRecord record =
+        RegisterSessionClosedSchema.toRecord(
+            UUID.fromString("aaaaaaaa-1111-2222-3333-444444444444"),
+            "11111111-1111-1111-1111-111111111111",
+            UUID.fromString("22222222-2222-2222-2222-222222222222"),
+            Instant.ofEpochMilli(1_750_000_000_000L),
+            Instant.ofEpochMilli(1_750_030_000_000L),
+            0L,
+            0L,
+            0L,
+            0L,
+            0L,
+            0L,
+            "IDR",
+            List.of(
+                new TenderLine("CARD", 800_000L, 790_000L, -10_000L),
+                new TenderLine("QRIS", 430_000L, 430_000L, 0L)));
+
+    GenericRecord decoded =
+        AvroSerde.deserialize(AvroSerde.serialize(record), RegisterSessionClosedSchema.schema());
+
+    var tenders = (List<GenericRecord>) decoded.get("tenders");
+    assertThat(tenders).hasSize(2);
+    assertThat(tenders.get(0).get("tender_type").toString()).isEqualTo("CARD");
+    assertThat(tenders.get(0).get("expected_minor")).isEqualTo(800_000L);
+    assertThat(tenders.get(0).get("counted_minor")).isEqualTo(790_000L);
+    assertThat(tenders.get(0).get("over_short_minor")).isEqualTo(-10_000L);
+    assertThat(tenders.get(1).get("tender_type").toString()).isEqualTo("QRIS");
+    assertThat(tenders.get(1).get("over_short_minor")).isEqualTo(0L);
   }
 
   @Test

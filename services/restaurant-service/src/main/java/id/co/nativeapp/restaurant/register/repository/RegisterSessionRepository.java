@@ -142,17 +142,17 @@ public interface RegisterSessionRepository extends JpaRepository<RegisterSession
       @Param("businessId") UUID businessId, @Param("from") Instant from, @Param("to") Instant to);
 
   /**
-   * Σ {@code sale.amount_minor} for a NON-cash tender (CARD/QRIS/ONLINE) in the window — the
-   * charged amount that accrued in that tender's clearing account, the per-tender expected before
-   * refunds (ADR 0038). Cash keeps its drawer-accurate {@link #sumCashSales} path (gift-card split
-   * etc.); this gross-amount sum is a v1 preview approximation for the non-cash tenders (a
-   * gift-card split on a card sale would overstate — refined when the counted variance posts in
-   * phase 2).
+   * Σ the CHARGED amount for a NON-cash tender (CARD/QRIS/ONLINE) in the window — {@code
+   * amount_minor − gift_card_redeemed_minor}, i.e. EXACTLY the net-tender leg that accrued in that
+   * tender's clearing account (finance debits the clearing with {@code amount − giftCardRedeemed},
+   * and cash nets the same via {@code cash_collected_minor}). Summing the gross grand total would
+   * overstate a card/QRIS sale that carried a gift-card split and post a phantom short at close
+   * (ADR 0038 phase 2, code-review C1). Per-tender expected = this − {@link #sumRefundsByTender}.
    */
   @Query(
       value =
           """
-          SELECT COALESCE(SUM(s.amount_minor), 0)
+          SELECT COALESCE(SUM(s.amount_minor - s.gift_card_redeemed_minor), 0)
             FROM sale s
            WHERE s.business_id = :businessId
              AND s.tender_type = :tender

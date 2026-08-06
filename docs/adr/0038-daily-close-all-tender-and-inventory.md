@@ -74,7 +74,14 @@ revenue. Delivered in three independently shippable, money-reviewed phases.
   persists counted/variance in a `register_session_tender` child table (extensible to per-channel
   online); `RegisterSessionClosed` gains an **additive** per-tender `tenders[]` array (rule 7,
   default empty — old consumers still read cash); the finance consumer posts each tender's variance
-  truing its clearing account.
+  truing its clearing account. Per-tender `expected` is the NET-tender clearing leg (`amount −
+  gift_card_redeemed`), matching how cash nets via `cash_collected_minor` and how finance debits the
+  clearing — summing the gross grand total would post a phantom short on a card/QRIS sale with a
+  gift-card split. **Deploy order: finance BEFORE restaurant emits `tenders`** — Avro silently drops
+  a writer field the reader's schema lacks, so an un-upgraded finance would ignore the non-cash
+  variances (cash still posts correctly; the non-cash reconciliation just doesn't happen until
+  finance upgrades — graceful, but a day-final close won't reopen, so it needs a manual adjusting
+  entry). Mirrors the ADR-0036 ONLINE consumer-first rule.
 - **Phase 3 — inventory stocktake + shrinkage.** `menu_item.unit_cost_minor`; a stocktake submitted
   with the close (counts → variance → stock adjust → event); new finance `INVENTORY` +
   `INVENTORY_SHRINKAGE` roles + the shrinkage journal; console stocktake UI.

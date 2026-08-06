@@ -10,21 +10,29 @@ import id.co.nativeapp.restaurant.register.domain.RegisterSessionDayClosedExcept
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionIdempotencyKeyConflictException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionNotFoundException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionNotOpenException;
+import id.co.nativeapp.restaurant.register.domain.RegisterSessionTender;
 import id.co.nativeapp.restaurant.register.dto.CloseSessionRequest;
 import id.co.nativeapp.restaurant.register.dto.OpenSessionRequest;
 import id.co.nativeapp.restaurant.register.dto.OpenSessionResult;
 import id.co.nativeapp.restaurant.register.dto.RegisterExpectedResponse;
 import id.co.nativeapp.restaurant.register.dto.RegisterSessionResponse;
+import id.co.nativeapp.restaurant.register.dto.TenderCount;
 import id.co.nativeapp.restaurant.register.dto.TenderExpected;
 import id.co.nativeapp.restaurant.register.messaging.RegisterSessionClosedSchema;
 import id.co.nativeapp.restaurant.register.projection.RegisterSessionView;
 import id.co.nativeapp.restaurant.register.repository.RegisterSessionRepository;
+import id.co.nativeapp.restaurant.register.repository.RegisterSessionTenderRepository;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.apache.avro.generic.GenericRecord;
 import org.springframework.stereotype.Component;
@@ -75,16 +83,19 @@ public class RegisterSessionWriter {
   private static final ZoneId DEFAULT_BUSINESS_ZONE = ZoneId.of("Asia/Jakarta");
 
   private final RegisterSessionRepository repository;
+  private final RegisterSessionTenderRepository tenderRepository;
   private final OutboxWriter outboxWriter;
   private final OutletAccessGuard outletAccessGuard;
   private final CashWindowLock cashWindowLock;
 
   public RegisterSessionWriter(
       RegisterSessionRepository repository,
+      RegisterSessionTenderRepository tenderRepository,
       OutboxWriter outboxWriter,
       OutletAccessGuard outletAccessGuard,
       CashWindowLock cashWindowLock) {
     this.repository = repository;
+    this.tenderRepository = tenderRepository;
     this.outboxWriter = outboxWriter;
     this.outletAccessGuard = outletAccessGuard;
     this.cashWindowLock = cashWindowLock;
@@ -178,11 +189,14 @@ public class RegisterSessionWriter {
     Optional<RegisterSessionView> replay = repository.findViewByCloseIdempotencyKey(idempotencyKey);
     if (replay.isPresent()) {
       RegisterSessionView existing = replay.get();
-      // Review W3: same key must mean the same logical close (same session, same count).
+      // Review W3: same key must mean the same logical close (same session, same cash count) — AND
+      // the same non-cash tender counts (ADR 0038 phase 2, review W2), so a reused key with a
+      // different payload is a 409, never a silent 200 with the original reconciliation.
       Long replayCounted = existing.getCountedCashMinor();
       if (!existing.getId().equals(sessionId)
           || replayCounted == null
-          || !replayCounted.equals(request.countedCashMinor())) {
+          || !replayCounted.equals(request.countedCashMinor())
+          || !sameTenderCounts(existing.getId(), request.tenderCounts())) {
         throw new RegisterSessionIdempotencyKeyConflictException(
             "Idempotency-Key was already used to close with a different request");
       }
@@ -231,6 +245,11 @@ public class RegisterSessionWriter {
         closeInstant, cashSales, cashRefunds, expected, countedCash, overShort, idempotencyKey);
     repository.saveAndFlush(session);
 
+    // Non-cash per-tender reconciliation (ADR 0038 phase 2): for each tender the cashier counted,
+    // persist a line and carry it on the event so finance trues that tender's clearing account.
+    List<RegisterSessionClosedSchema.TenderLine> tenderLines =
+        reconcileTenders(session, companyId, closeInstant, request.tenderCounts());
+
     GenericRecord event =
         RegisterSessionClosedSchema.toRecord(
             session.getId(),
@@ -244,7 +263,8 @@ public class RegisterSessionWriter {
             expected,
             countedCash,
             overShort,
-            session.getCurrency());
+            session.getCurrency(),
+            tenderLines);
     outboxWriter.write(
         RegisterSessionClosedSchema.AGGREGATE_TYPE,
         session.getId().toString(),
@@ -255,6 +275,70 @@ public class RegisterSessionWriter {
         closeInstant);
 
     return RegisterSessionResponse.from(session);
+  }
+
+  /**
+   * True when the persisted non-cash tender counts for a session match the request's — the
+   * close-replay payload check (ADR 0038 phase 2, review W2). Maps built by last-wins so a
+   * malformed duplicate-tender request never throws here (the live path rejects duplicates
+   * separately).
+   */
+  private boolean sameTenderCounts(UUID sessionId, List<TenderCount> requested) {
+    Map<String, Long> persisted = new HashMap<>();
+    for (RegisterSessionTender tender : tenderRepository.findBySessionId(sessionId)) {
+      persisted.put(tender.getTenderType(), tender.getCountedMinor());
+    }
+    Map<String, Long> asked = new HashMap<>();
+    for (TenderCount count : requested) {
+      asked.put(count.tenderType(), count.countedMinor());
+    }
+    return persisted.equals(asked);
+  }
+
+  /**
+   * Computes + persists the NON-cash per-tender reconciliation for a close (ADR 0038 phase 2) and
+   * returns the lines to carry on the event. For each counted tender, {@code expected = Σ sales − Σ
+   * refunds} over the SAME closed window {@code [openedAt, closeInstant)} — so it matches what
+   * accrued in that tender's clearing account — and {@code overShort = counted − expected}
+   * (overflow-safe). A duplicate tender in the request is a client bug (→ 400).
+   */
+  private List<RegisterSessionClosedSchema.TenderLine> reconcileTenders(
+      RegisterSession session, String companyId, Instant closeInstant, List<TenderCount> counts) {
+    List<RegisterSessionClosedSchema.TenderLine> lines = new ArrayList<>(counts.size());
+    Set<String> seen = new LinkedHashSet<>();
+    for (TenderCount count : counts) {
+      if (!seen.add(count.tenderType())) {
+        throw new IllegalArgumentException(
+            "duplicate tender in close request: " + count.tenderType());
+      }
+      long tenderExpected =
+          Math.subtractExact(
+              repository.sumSalesByTender(
+                  session.getBusinessId(), count.tenderType(), session.getOpenedAt(), closeInstant),
+              repository.sumRefundsByTender(
+                  session.getBusinessId(),
+                  count.tenderType(),
+                  session.getOpenedAt(),
+                  closeInstant));
+      long counted = count.countedMinor();
+      long tenderOverShort = Math.subtractExact(counted, tenderExpected);
+      RegisterSessionTender line =
+          RegisterSessionTender.of(
+              session.getId(),
+              session.getBusinessId(),
+              count.tenderType(),
+              tenderExpected,
+              counted,
+              tenderOverShort,
+              session.getCurrency());
+      // Tenant column set explicitly, as the session is — the FORCE-RLS WITH CHECK requires it.
+      line.setCompanyId(companyId);
+      tenderRepository.save(line);
+      lines.add(
+          new RegisterSessionClosedSchema.TenderLine(
+              count.tenderType(), tenderExpected, counted, tenderOverShort));
+    }
+    return lines;
   }
 
   /**

@@ -1930,9 +1930,12 @@ treats a violation as poison (DLT).
 | `counted_cash_minor` | `long` | The cashier's physical whole-drawer count (≥ 0, includes float) |
 | `over_short_minor` | `long` | SIGNED `counted − expected`: negative = short (expense), positive = over (other income), zero = no entry |
 | `currency` | `string` | ISO-4217 code for every amount on the event |
+| `tenders` | `array<record>` | ADR 0038 phase 2 — non-cash per-tender reconciliation: `{tender_type (CARD/QRIS/ONLINE), expected_minor, counted_minor, over_short_minor}`. Empty on cash-only / pre-phase-2 closes. Finance trues each tender's clearing account (card 1902, QRIS 1901, online 1250), reusing the cash SHORT/OVER accounts |
 
-**Compatibility:** new event, all fields required. Evolve additively only — append new fields as
-`["null", ...]` with `default: null` (never reorder; consumers may decode positionally).
+**Compatibility:** the original fields are required; `tenders` was appended additively (ADR 0038
+phase 2) with `default: []`, so old producers' bytes decode with an empty array and the cash
+posting is unchanged. Evolve additively only — append new fields with a default (never reorder;
+consumers may decode positionally).
 
 **Avro schema** (single source of truth in `libs/contracts/src/main/resources/avro/RegisterSessionClosed.avsc`)
 
@@ -1941,7 +1944,7 @@ treats a violation as poison (DLT).
   "type": "record",
   "name": "RegisterSessionClosed",
   "namespace": "id.co.nativeapp.events.restaurant",
-  "doc": "Emitted by restaurant-service when a cash-register session (closing kasir, one per outlet per day) is CLOSED with a drawer count; consumed by finance-service to post ONLY the cash variance (selisih kas) that trues CASH_CLEARING to physical drawer cash — revenue was already recognized at sale time by SaleRecorded, and the register close never re-posts it. Money is an integer minor-units amount plus an ISO-4217 currency code, never a float (CLAUDE.md rule 8). expected_cash_minor is SERVER-computed by the producer (opening_float + CASH-tender sales in the session window − CASH refunds in the window) and never client-supplied. The consumer asserts BOTH reconciliation identities — expected_cash == opening_float + cash_sales − cash_refunds AND over_short == counted_cash − expected_cash — and treats a violation as a poison message (DLT), mirroring SaleRecorded's reconciliation-identity guard. over_short_minor is SIGNED: negative = short (Dr CASH_SHORT_EXPENSE / Cr CASH_CLEARING), positive = over (Dr CASH_CLEARING / Cr CASH_OVER_INCOME), zero = no journal entry (the event is still marked processed).",
+  "doc": "Emitted by restaurant-service when a cash-register session (closing kasir, one per outlet per day, ADR 0038 day-final) is CLOSED with a drawer count; consumed by finance-service to post the cash variance (selisih kas) that trues CASH_CLEARING to physical drawer cash, PLUS — from ADR 0038 phase 2 — each counted non-cash tender's variance (see the `tenders` field) truing that tender's clearing account. Revenue was already recognized at sale time by SaleRecorded, and the register close never re-posts it. Money is an integer minor-units amount plus an ISO-4217 currency code, never a float (CLAUDE.md rule 8). expected_cash_minor is SERVER-computed by the producer (opening_float + CASH-tender sales in the session window − CASH refunds in the window) and never client-supplied. The consumer asserts BOTH reconciliation identities — expected_cash == opening_float + cash_sales − cash_refunds AND over_short == counted_cash − expected_cash — and treats a violation as a poison message (DLT), mirroring SaleRecorded's reconciliation-identity guard. over_short_minor is SIGNED: negative = short (Dr CASH_SHORT_EXPENSE / Cr CASH_CLEARING), positive = over (Dr CASH_CLEARING / Cr CASH_OVER_INCOME), zero = no journal entry (the event is still marked processed).",
   "fields": [
     {"name": "session_id", "type": "string", "doc": "The cash_register_session aggregate id (UUID as string); also the Kafka partition key."},
     {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string)."},
@@ -1954,7 +1957,18 @@ treats a violation as poison (DLT).
     {"name": "expected_cash_minor", "type": "long", "doc": "The server-computed expected whole-drawer count: opening_float_minor + cash_sales_minor − cash_refunds_minor. The consumer re-asserts this identity and DLTs on violation."},
     {"name": "counted_cash_minor", "type": "long", "doc": "The physical whole-drawer count entered by the cashier at close, minor units (>= 0; includes the float)."},
     {"name": "over_short_minor", "type": "long", "doc": "SIGNED variance: counted_cash_minor − expected_cash_minor. Negative = short (missing cash, expense), positive = over (excess cash, other income), zero = no entry. The float cancels out of this difference by construction, so the variance is exactly the CASH_CLEARING adjustment."},
-    {"name": "currency", "type": "string", "doc": "ISO-4217 currency code of every amount on this event, e.g. IDR or USD."}
+    {"name": "currency", "type": "string", "doc": "ISO-4217 currency code of every amount on this event, e.g. IDR or USD."},
+    {"name": "tenders", "default": [], "doc": "Daily close v2 (ADR 0038, phase 2): per-tender reconciliation for the NON-CASH tenders (CARD/QRIS/ONLINE) the cashier counted at close. Cash stays in the top-level cash_*/over_short fields above (this array is cash-free). Empty on pre-phase-2 events and whenever only cash was counted, so the consumer's cash posting is unaffected (additive, rule 7). over_short_minor is SIGNED counted − expected; finance posts each element's variance truing that tender's clearing account (CARD → CARD_CLEARING 1902, QRIS → QRIS_CLEARING 1901, ONLINE → PLATFORM_RECEIVABLE 1250), reusing the same SHORT/OVER accounts as cash. The consumer re-asserts over_short == counted − expected per element and DLTs on violation.", "type": {"type": "array", "items": {
+      "type": "record",
+      "name": "TenderReconciliation",
+      "doc": "One non-cash tender's expected-vs-counted at close.",
+      "fields": [
+        {"name": "tender_type", "type": "string", "doc": "CARD | QRIS | ONLINE (never CASH — cash is the top-level fields)."},
+        {"name": "expected_minor", "type": "long", "doc": "Producer-computed net charged amount in the session window for this tender: Σ sales − Σ refunds, minor units."},
+        {"name": "counted_minor", "type": "long", "doc": "The actual settled/batch amount the cashier entered for this tender at close, minor units (≥ 0)."},
+        {"name": "over_short_minor", "type": "long", "doc": "SIGNED counted_minor − expected_minor. Negative = short, positive = over, zero = no entry for this tender."}
+      ]
+    }}}
   ]
 }
 ```

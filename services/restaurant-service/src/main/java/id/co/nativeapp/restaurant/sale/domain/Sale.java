@@ -66,6 +66,16 @@ public class Sale extends Auditable {
   private Long cashCollectedMinor;
 
   /**
+   * The gift-card-redeemed portion of this sale (V27, ADR 0038 phase 2) — the NET amount that
+   * accrued in a NON-cash tender's clearing account is {@code amount_minor − this} (finance debits
+   * the clearing with the net tender). Recording it lets the register close reconcile a card/QRIS
+   * sale that carried a gift-card split without a phantom short. 0 when no gift card (and for
+   * legacy pre-V27 rows via the metadata default).
+   */
+  @Column(name = "gift_card_redeemed_minor", nullable = false, updatable = false)
+  private long giftCardRedeemedMinor;
+
+  /**
    * The sales-channel code this sale rang through (V24, ADR 0036 Phase B2) — set ONLY when {@link
    * #tenderType} is {@code "ONLINE"} (the writer enforces the pairing; no CHECK constraint, mirrors
    * {@link #tenderType}/{@link #cashCollectedMinor}'s rationale). A SNAPSHOT, not a foreign key —
@@ -115,7 +125,7 @@ public class Sale extends Auditable {
       String idempotencyKey,
       String tenderType,
       Long cashCollectedMinor) {
-    this(businessId, amount, occurredAt, idempotencyKey, tenderType, cashCollectedMinor, null);
+    this(businessId, amount, occurredAt, idempotencyKey, tenderType, cashCollectedMinor, null, 0L);
   }
 
   /**
@@ -126,6 +136,8 @@ public class Sale extends Auditable {
    *     CASH sale; null for non-cash/legacy
    * @param channelCode the sales-channel code this sale rang through; set ONLY for an {@code
    *     ONLINE}-tender sale, null otherwise
+   * @param giftCardRedeemedMinor the gift-card-redeemed portion of the sale (≥ 0; 0 when none) —
+   *     the non-cash clearing leg is {@code amount − this} (V27, ADR 0038 phase 2)
    */
   public Sale(
       UUID businessId,
@@ -134,7 +146,8 @@ public class Sale extends Auditable {
       String idempotencyKey,
       String tenderType,
       Long cashCollectedMinor,
-      String channelCode) {
+      String channelCode,
+      long giftCardRedeemedMinor) {
     this.id = UUID.randomUUID();
     this.businessId = Objects.requireNonNull(businessId, "businessId");
     this.amount = MoneyEmbeddable.of(amount);
@@ -143,6 +156,10 @@ public class Sale extends Auditable {
     this.tenderType = tenderType;
     this.cashCollectedMinor = cashCollectedMinor;
     this.channelCode = channelCode;
+    if (giftCardRedeemedMinor < 0) {
+      throw new IllegalArgumentException("giftCardRedeemedMinor must be >= 0");
+    }
+    this.giftCardRedeemedMinor = giftCardRedeemedMinor;
   }
 
   public UUID getId() {
@@ -174,6 +191,11 @@ public class Sale extends Auditable {
   /** Drawer cash collected for a CASH sale (grand total − gift-card portion), or null. */
   public Long getCashCollectedMinor() {
     return cashCollectedMinor;
+  }
+
+  /** The gift-card-redeemed portion of this sale (≥ 0; 0 when none) — V27, ADR 0038 phase 2. */
+  public long getGiftCardRedeemedMinor() {
+    return giftCardRedeemedMinor;
   }
 
   /**

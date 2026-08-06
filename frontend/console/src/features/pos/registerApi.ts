@@ -97,15 +97,29 @@ export function useOpenRegisterSession(session: CompanySession) {
   })
 }
 
+/** A cashier's counted/settled amount for one non-cash tender at close (ADR 0038 phase 2). */
+export interface TenderCountInput {
+  tenderType: 'CARD' | 'QRIS' | 'ONLINE'
+  countedMinor: number
+}
+
 export function useCloseRegisterSession(session: CompanySession) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ sessionId, countedCashMinor }: { sessionId: string; countedCashMinor: number }) =>
+    mutationFn: ({
+      sessionId,
+      countedCashMinor,
+      tenderCounts,
+    }: {
+      sessionId: string
+      countedCashMinor: number
+      tenderCounts?: TenderCountInput[]
+    }) =>
       apiFetch<RegisterSessionResponse>(`/api/v1/register-sessions/${sessionId}/close`, {
         method: 'POST',
         tenant: tenantOf(session),
         headers: { 'Idempotency-Key': `close:${sessionId}` },
-        body: { countedCashMinor },
+        body: { countedCashMinor, tenderCounts },
       }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: currentKey(session) }),
     onError: (err) => {

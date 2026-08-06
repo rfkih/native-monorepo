@@ -38,7 +38,21 @@ class RegisterSessionClosedContractTest {
     record.put("counted_cash_minor", counted);
     record.put("over_short_minor", overShort);
     record.put("currency", "IDR");
+    record.put("tenders", java.util.List.of());
     return record;
+  }
+
+  /** A non-cash tender reconciliation element (ADR 0038 phase 2) for the {@code tenders} array. */
+  private static GenericRecord tenderRecord(
+      String type, long expected, long counted, long overShort) {
+    Schema item =
+        RegisterSessionClosedSchema.schema().getField("tenders").schema().getElementType();
+    GenericRecord line = new GenericData.Record(item);
+    line.put("tender_type", type);
+    line.put("expected_minor", expected);
+    line.put("counted_minor", counted);
+    line.put("over_short_minor", overShort);
+    return line;
   }
 
   @Test
@@ -94,6 +108,42 @@ class RegisterSessionClosedContractTest {
     assertThatThrownBy(event::assertReconciliationIdentity)
         .isInstanceOf(IllegalStateException.class)
         .hasMessageContaining("sign guard violated");
+  }
+
+  @Test
+  void perTenderReconciliationDecodesAndConsistentIdentityPasses() {
+    // Cash balanced; CARD short 10k (expected 800k, counted 790k), QRIS balanced (ADR 0038 phase
+    // 2).
+    GenericRecord record = producerRecord(0L, 0L, 0L, 0L, 0L, 0L);
+    record.put(
+        "tenders",
+        java.util.List.of(
+            tenderRecord("CARD", 800_000L, 790_000L, -10_000L),
+            tenderRecord("QRIS", 430_000L, 430_000L, 0L)));
+
+    GenericRecord decoded =
+        AvroSerde.deserialize(AvroSerde.serialize(record), RegisterSessionClosedSchema.schema());
+    RegisterSessionClosedEvent event = RegisterSessionClosedEvent.from(EVENT_ID, decoded);
+
+    event.assertReconciliationIdentity(); // must not throw
+    assertThat(event.tenders()).hasSize(2);
+    assertThat(event.tenders().get(0).tenderType()).isEqualTo("CARD");
+    assertThat(event.tenders().get(0).overShortMinor()).isEqualTo(-10_000L);
+  }
+
+  @Test
+  void violatedTenderVarianceIdentityIsPoison() {
+    // CARD counted − expected = −10k but over_short claims −20k → poison.
+    GenericRecord record = producerRecord(0L, 0L, 0L, 0L, 0L, 0L);
+    record.put("tenders", java.util.List.of(tenderRecord("CARD", 800_000L, 790_000L, -20_000L)));
+    RegisterSessionClosedEvent event =
+        RegisterSessionClosedEvent.from(
+            EVENT_ID,
+            AvroSerde.deserialize(
+                AvroSerde.serialize(record), RegisterSessionClosedSchema.schema()));
+    assertThatThrownBy(event::assertReconciliationIdentity)
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("tender variance identity violated");
   }
 
   @Test

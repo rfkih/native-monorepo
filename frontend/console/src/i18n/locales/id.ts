@@ -839,7 +839,9 @@ export const id = {
     /** ADR 0038 daily close v2 — rincian seharusnya per metode bayar di layar tutup kasir. */
     expectedByTender: 'Seharusnya per metode bayar',
     expectedByTenderHint:
-      'Perkiraan jumlah di tiap metode bayar sejauh ini, dari penjualan hari ini — untuk dibandingkan dengan laci, batch kartu, serta laporan QRIS / platform.',
+      'Berdasarkan penjualan hari ini. Hitung laci di bawah; isikan angka aktual kartu, QRIS, dan online untuk menyelesaikannya juga (kosongkan untuk melewati).',
+    countedForTender: 'Terhitung {{tender}}',
+    countedPlaceholder: 'Aktual',
     tenderCash: 'Tunai',
     tenderCard: 'Kartu',
     tenderQris: 'QRIS',

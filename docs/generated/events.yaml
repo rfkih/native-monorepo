@@ -278,6 +278,7 @@ events:
       - { name: counted_cash_minor, type: "long" }
       - { name: over_short_minor, type: "long" }
       - { name: currency, type: "string" }
+      - { name: tenders, type: "array<record:TenderReconciliation>" }
   - name: SaleRecorded
     namespace: id.co.nativeapp.events.restaurant
     schema: libs/contracts/src/main/resources/avro/SaleRecorded.avsc

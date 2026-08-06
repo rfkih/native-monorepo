@@ -133,7 +133,8 @@ public class SaleWriter {
             command.idempotencyKey(),
             command.tenderType(),
             cashCollectedOf(command),
-            command.channel());
+            command.channel(),
+            giftCardRedeemedOf(command));
     sale.setCompanyId(companyId);
     Sale saved = repository.saveAndFlush(sale);
 
@@ -211,7 +212,8 @@ public class SaleWriter {
             command.idempotencyKey(),
             command.tenderType(),
             cashCollectedOf(command),
-            command.channel());
+            command.channel(),
+            giftCardRedeemedOf(command));
     sale.setCompanyId(companyId);
     Sale saved = repository.saveAndFlush(sale);
 
@@ -253,8 +255,16 @@ public class SaleWriter {
     if (!"CASH".equals(command.tenderType())) {
       return null;
     }
-    long giftCard = command.giftCardRedeemedMinor() != null ? command.giftCardRedeemedMinor() : 0L;
-    return Math.subtractExact(command.amountMinor(), giftCard);
+    return Math.subtractExact(command.amountMinor(), giftCardRedeemedOf(command));
+  }
+
+  /**
+   * The gift-card-redeemed portion of a sale, minor units (0 when none) — V27, ADR 0038 phase 2.
+   * The NET amount that hits a NON-cash tender's clearing account is {@code amount − this}; the
+   * register close reconciles each non-cash tender against that net.
+   */
+  private static long giftCardRedeemedOf(RecordSaleCommand command) {
+    return command.giftCardRedeemedMinor() != null ? command.giftCardRedeemedMinor() : 0L;
   }
 
   /**
