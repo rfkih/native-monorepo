@@ -41,6 +41,16 @@ public class ErrorInboxWriter {
   // it pairs with the bumped last_seen — two messages sharing a fingerprint (digits normalised) can
   // differ in non-digit text, and the most recent occurrence is the more useful diagnostic.
   // first_seen is set on INSERT and never updated, so the first-occurrence time is still preserved.
+  //
+  // trace_id is ALSO last-write-wins, for the same reason and to serve the
+  // traceable-error-reference
+  // feature (ApiExceptionHandler#handleUnexpected): a freshly quoted reference must be findable via
+  // `SELECT * FROM error_log WHERE trace_id = '<reference>'` even when a row already exists for an
+  // older occurrence of the same fingerprint. LIMITATION: this means an OLDER occurrence's trace_id
+  // is overwritten and no longer resolvable this way once a newer occurrence lands — error_log's
+  // trace_id only ever reflects the MOST RECENT occurrence of a fingerprint; the per-occurrence
+  // logs
+  // remain the precise tool for tracing one specific past request.
   private static final String UPSERT_SQL =
       "INSERT INTO error_log"
           + " (id, fingerprint, exception_class, redacted_message, source,"
@@ -49,7 +59,8 @@ public class ErrorInboxWriter {
           + " ON CONFLICT (fingerprint) DO UPDATE"
           + " SET occurrence_count = error_log.occurrence_count + 1,"
           + "     last_seen = excluded.last_seen,"
-          + "     redacted_message = excluded.redacted_message"
+          + "     redacted_message = excluded.redacted_message,"
+          + "     trace_id = excluded.trace_id"
           + " RETURNING occurrence_count";
 
   private final ErrorMessageRedactor redactor;

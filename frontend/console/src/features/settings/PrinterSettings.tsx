@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { usePrinter } from '@/lib/escpos/printerContext'
 import type { PaperWidth } from '@/lib/escpos/receipt'
-import type { TransportKind } from '@/lib/escpos/transport'
+import { classifyConnectError, type TransportKind } from '@/lib/escpos/transport'
 
 /**
  * Printer settings (ADR 0039) — connect a thermal ESC/POS printer over USB / Bluetooth / Serial
@@ -41,8 +41,11 @@ export function PrinterSettings() {
     try {
       await printer.connect(kind, paper, printer.config?.drawerKick ?? false)
     } catch (err) {
-      // A user-cancelled picker throws too — treat any failure as "not connected", show a hint.
-      setError(err instanceof Error ? err.message : String(err))
+      // Map the browser's DOMException to a specific reason. A cancelled chooser is not worth an
+      // alarming banner — just clear the connecting state silently.
+      const reason = classifyConnectError(err)
+      if (reason === 'cancelled') return
+      setError(t(`settings.printer.error.${reason}`))
     }
   }
 
@@ -167,7 +170,7 @@ export function PrinterSettings() {
       {error ? (
         <Card className="flex items-start gap-2 p-4 text-sm text-loss">
           <TriangleAlert className="mt-0.5 size-4 shrink-0" />
-          <span>{t('settings.printer.connectFailed')}</span>
+          <span>{error}</span>
         </Card>
       ) : null}
 

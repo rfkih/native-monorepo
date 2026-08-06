@@ -37,6 +37,16 @@ dependencies {
     // RlsAutoApplyAspect each service already wires sets app.current_tenant on the transaction.
     api(project(":libs:tenant"))
 
+    // The traceable-error-reference feature: the shared catch-all 500 handler persists to the
+    // error_log ops table via ErrorInboxWriter (ADR 0005/0009), gated by
+    // native.error-inbox.persist-http-errors. error-inbox has NO project() dependencies of its own
+    // (it depends only on spring-jdbc/spring-tx/spring-context + slf4j, with kafka-clients/jackson
+    // compileOnly), so this introduces no dependency cycle. Every consumer of libs/security already
+    // runs on spring-boot-starter-web with a JPA/Postgres stack of its own (see the module's
+    // dependents), so pulling in spring-jdbc here adds nothing new to their classpath; the
+    // stateless gateway does NOT depend on libs/security at all, so it is unaffected.
+    implementation(project(":libs:error-inbox"))
+
     // The single sync security edge replicated INSIDE each service: validate the inbound RS256
     // token against Keycloak's JWKS (spring.security.oauth2.resourceserver.jwt.*). Exposed as
     // `api` so a consuming service inherits Spring Security + the resource-server types without

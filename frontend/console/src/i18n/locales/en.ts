@@ -270,6 +270,7 @@ export const en = {
     retry: 'Retry',
     copyDetails: 'Copy details',
     traceId: 'Trace ID',
+    errorReference: 'Reference',
     back: 'Back',
     continue: 'Continue',
     cancel: 'Cancel',
@@ -345,7 +346,15 @@ export const en = {
       connected: 'Printer connected',
       disconnect: 'Disconnect',
       unsupported: 'Not supported on this browser',
-      connectFailed: 'Could not connect. Check the cable/pairing and try again.',
+      error: {
+        blocked:
+          'The browser blocked access to the printer. Make sure the site is opened over HTTPS and allow the device when prompted.',
+        inUse:
+          'The printer is busy or already in use — close any other app or OS print queue using it, then try again.',
+        noEndpoint:
+          'That device does not look like a receipt printer (no printer connection found). Pick the thermal printer from the list.',
+        unknown: 'Could not connect to the printer. Check the cable/pairing and try again.',
+      },
       testPrint: 'Test print',
       testPrinting: 'Printing…',
       testOk: 'Printed ✓',
@@ -859,6 +868,27 @@ export const en = {
     errorNotOpen: 'This register session is no longer open. Refresh to see the current state.',
     errorKeyConflict:
       'That close was already recorded with a different amount. Refresh to see the current state.',
+  },
+  stocktake: {
+    /** ADR 0038 phase 3 — inventory stocktake / stock count. */
+    title: 'Stock count',
+    tillMenuLabel: 'Stock count',
+    entryHint:
+      'Counts start pre-filled with the system quantity — only change items that differ from what you physically count.',
+    systemQty: 'System: {{qty}}',
+    countedForItem: 'Counted quantity for {{name}}',
+    notCounted: 'Not counted',
+    submitAction: 'Submit stock count',
+    errorGeneric: 'Could not submit the stock count. Please try again.',
+    loadError: 'Could not load the menu.',
+    emptyHint: 'No tracked items at this outlet yet — turn on stock tracking for an item in Menu management first.',
+    countedAt: 'Counted',
+    resultBalanced: 'Balanced — no shrinkage',
+    resultLoss: 'Net shrinkage (loss)',
+    resultGain: 'Net gain',
+    done: 'Done',
+    varianceLinesTitle: 'Items with a variance',
+    lineCounts: 'System {{system}} → counted {{counted}}',
   },
   posShell: {
     /** Redesign P4 — the shared POS shell chrome (status bar, till menu, ticket dock). */
@@ -2050,6 +2080,8 @@ export const en = {
       markAvailable: 'Mark {{name}} as available',
       options: 'Options',
       manageOptions: 'Manage options for {{name}}',
+      /** ADR 0038 phase 3 — shown next to price when the item carries a unit cost. */
+      unitCost: '· cost {{cost}}',
     },
     option: {
       available: 'Available',
@@ -2078,6 +2110,10 @@ export const en = {
       categoryPlaceholder: 'Select a category…',
       priceLabel: 'Price ({{currency}})',
       priceInvalid: 'Price must be a positive number.',
+      /** ADR 0038 phase 3 — optional cost per unit, feeds valued stocktake shrinkage. */
+      unitCostLabel: 'Cost per unit ({{currency}}) — optional',
+      unitCostHint: 'Used to value shrinkage/gain when this item is counted in a stock count. Leave blank if unknown.',
+      unitCostInvalid: 'Cost must be zero or a positive number.',
       submit: 'Add item',
       submitting: 'Adding…',
     },
@@ -3280,6 +3316,7 @@ export const en = {
       openBills: 'Open bills need a connection — cash quick-sale only offline.',
       parked: 'Parked orders need a connection — cash quick-sale only offline.',
       tableFloor: 'The table floor needs a connection — cash quick-sale only offline.',
+      stocktake: 'Stock count needs a connection — unavailable offline.',
     },
   },
   posDisplay: {

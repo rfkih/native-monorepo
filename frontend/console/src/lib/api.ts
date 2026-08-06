@@ -37,6 +37,10 @@ export interface ProblemDetail {
   status?: number
   detail?: string
   errors?: { field: string; message: string }[]
+  /** Server trace id (present when a trace is in flight). */
+  traceId?: string
+  /** The user-quotable error reference the server persisted to error_log (500s). */
+  reference?: string
 }
 
 export class ApiError extends Error {
@@ -47,6 +51,8 @@ export class ApiError extends Error {
   method: string
   path: string
   traceId: string | null
+  /** The user-quotable reference the server persisted (500s); falls back to traceId. */
+  reference: string | null
   // The request-identity params are OPTIONAL: tests (and the offline queue) construct synthetic
   // ApiErrors without them; ErrorDetails simply omits what is absent.
   constructor(
@@ -56,6 +62,7 @@ export class ApiError extends Error {
     method = '',
     path = '',
     traceId: string | null = null,
+    reference: string | null = null,
   ) {
     super(message)
     this.name = 'ApiError'
@@ -64,6 +71,7 @@ export class ApiError extends Error {
     this.method = method
     this.path = path
     this.traceId = traceId
+    this.reference = reference
   }
 }
 
@@ -159,10 +167,11 @@ async function handleResponse<T>(
 
   if (!res.ok) {
     const problem = (data as ProblemDetail | null) ?? null
-    const traceId =
-      typeof (problem as Record<string, unknown> | null)?.traceId === 'string'
-        ? ((problem as Record<string, unknown>).traceId as string)
-        : null
+    const prop = problem as Record<string, unknown> | null
+    const traceId = typeof prop?.traceId === 'string' ? (prop.traceId as string) : null
+    // The server sets `reference` on persisted 500s; fall back to the traceId when absent.
+    const reference =
+      typeof prop?.reference === 'string' ? (prop.reference as string) : traceId
     // AI-native diagnostics: every failure is recorded with the non-secret facts an assistant
     // needs to diagnose it in one hop (status, problem type, server traceId, the company
     // SELECTION, and the token's derived state — never the token itself, never the body).
@@ -192,6 +201,7 @@ async function handleResponse<T>(
       method,
       path,
       traceId,
+      reference,
     )
   }
   return data as T

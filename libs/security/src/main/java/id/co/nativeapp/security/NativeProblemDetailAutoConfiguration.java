@@ -1,5 +1,8 @@
 package id.co.nativeapp.security;
 
+import id.co.nativeapp.errorinbox.ErrorInboxWriter;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -21,6 +24,12 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * own exception type (org-service's {@code TenantAccessDeniedException}, finance-service's {@code
  * ConstraintViolationException}) simply declares an additional {@code @RestControllerAdvice} — it
  * does not replace this one, and Spring resolves the most specific handler across both.
+ *
+ * <p>Also wires the traceable-error-reference feature: an {@link ObjectProvider} for the (possibly
+ * absent, e.g. no {@link ErrorInboxWriter} bean on a service that doesn't consume Kafka/JDBC)
+ * {@link ErrorInboxWriter}, and the {@code native.error-inbox.persist-http-errors} toggle (default
+ * {@code true}) that gates whether {@link ApiExceptionHandler#handleUnexpected} persists a 500 to
+ * the {@code error_log} ops table.
  */
 @AutoConfiguration
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
@@ -29,7 +38,9 @@ public class NativeProblemDetailAutoConfiguration {
 
   @Bean
   @ConditionalOnMissingBean
-  public ApiExceptionHandler nativeApiExceptionHandler() {
-    return new ApiExceptionHandler();
+  public ApiExceptionHandler nativeApiExceptionHandler(
+      ObjectProvider<ErrorInboxWriter> errorInbox,
+      @Value("${native.error-inbox.persist-http-errors:true}") boolean persistHttpErrors) {
+    return new ApiExceptionHandler(errorInbox, persistHttpErrors);
   }
 }

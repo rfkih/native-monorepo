@@ -47,6 +47,16 @@ export function ErrorDetails({ error, className }: { error: unknown; className?:
         className,
       )}
     >
+      {/* The user-quotable reference (persisted 500s) — prominent so a cashier can read it to
+          support. The mono technical block below stays for engineers/AI. */}
+      {error.reference ? (
+        <div className="mb-2 flex items-center gap-2 border-b border-line pb-2 text-xs text-ink-2">
+          <span className="font-semibold">{t('common.errorReference')}:</span>
+          <code className="select-all rounded bg-surface px-1.5 py-0.5 font-mono text-ink">
+            {error.reference}
+          </code>
+        </div>
+      ) : null}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 font-mono text-[11px] leading-relaxed text-ink-3">
           <div className="truncate font-semibold text-ink-2">
@@ -54,7 +64,7 @@ export function ErrorDetails({ error, className }: { error: unknown; className?:
           </div>
           {error.problem?.type ? <div className="truncate">{error.problem.type}</div> : null}
           {error.problem?.detail ? <div className="break-words">{error.problem.detail}</div> : null}
-          {error.traceId ? (
+          {error.traceId && error.traceId !== error.reference ? (
             <div className="truncate">
               {t('common.traceId')}: {error.traceId}
             </div>

@@ -83,12 +83,15 @@ async function openUsbDevice(device: any): Promise<PrinterTransport> {
   }
 }
 
-/** User-gesture pairing: shows the browser device picker filtered to printer-class devices. */
+/**
+ * User-gesture pairing: shows the browser device picker. We DON'T filter by printer class —
+ * cheap thermal clones commonly declare class 0x07 only on the interface descriptor (device class
+ * 0), so a class filter hides them and the chooser comes up empty ("nothing to connect to"). We
+ * show all USB devices and find the printer's bulk endpoint after the user picks (openUsbDevice).
+ */
 export async function requestUsbPrinter(): Promise<PrinterTransport> {
   const usb = (navigator as any).usb
-  const device = await usb.requestDevice({
-    filters: [{ classCode: USB_PRINTER_CLASS }],
-  })
+  const device = await usb.requestDevice({ filters: [] })
   return openUsbDevice(device)
 }
 
@@ -162,11 +165,32 @@ async function openBleDevice(device: any): Promise<PrinterTransport> {
 
 export async function requestBlePrinter(): Promise<PrinterTransport> {
   const bluetooth = (navigator as any).bluetooth
+  // acceptAllDevices, NOT a services filter: most BLE receipt printers advertise only a name, not
+  // their print-service UUID, so a filter leaves the chooser empty. We list every BLE device, let
+  // the operator pick the printer, then hunt for a writable characteristic across the optional
+  // services (openBleDevice) — which must still be declared so we're allowed to access them.
   const device = await bluetooth.requestDevice({
-    filters: BLE_PRINT_SERVICES.map((s) => ({ services: [s] })),
+    acceptAllDevices: true,
     optionalServices: BLE_PRINT_SERVICES,
   })
   return openBleDevice(device)
+}
+
+/**
+ * Classifies a pairing/connect failure into a stable reason code the UI maps to copy. The browser
+ * throws DOMExceptions with well-known names; a user cancelling the chooser is NOT an error worth
+ * shouting about (it's `NotFoundError`/`NotAllowedError` depending on the API).
+ */
+export type ConnectFailureReason = 'cancelled' | 'blocked' | 'inUse' | 'noEndpoint' | 'unknown'
+
+export function classifyConnectError(err: unknown): ConnectFailureReason {
+  const name = err instanceof Error ? err.name : ''
+  const message = err instanceof Error ? err.message : String(err)
+  if (name === 'NotFoundError') return 'cancelled' // chooser dismissed / no device picked
+  if (name === 'SecurityError' || name === 'NotAllowedError') return 'blocked'
+  if (name === 'InvalidStateError' || name === 'NetworkError') return 'inUse'
+  if (/no bulk OUT endpoint|no writable characteristic/i.test(message)) return 'noEndpoint'
+  return 'unknown'
 }
 
 // ---------------------------------------------------------------------------

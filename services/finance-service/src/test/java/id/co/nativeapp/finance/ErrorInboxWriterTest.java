@@ -28,6 +28,10 @@ import org.springframework.boot.test.context.SpringBootTest;
  *   <li>A message containing a NIK / bank account is stored redacted.
  *   <li>Two messages differing only in embedded numbers deduplicate to one row (the fingerprint
  *       normalises digit runs).
+ *   <li>On a repeat of the same fingerprint, {@code trace_id} is overwritten to the LATEST
+ *       occurrence's value (last-write-wins, matching {@code redacted_message}) — the
+ *       traceable-error-reference feature's basis for {@code SELECT * FROM error_log WHERE trace_id
+ *       = '<reference>'}.
  * </ul>
  */
 @SpringBootTest
@@ -60,6 +64,21 @@ class ErrorInboxWriterTest extends PostgresRlsTestBase {
 
     assertThat(errorLogRowCount()).isEqualTo(1L);
     assertThat(errorLogOccurrenceCount(source)).isEqualTo(2L);
+  }
+
+  // ------------------------------------------------------------------ trace-id last-write-wins
+
+  @Test
+  void traceIdIsUpdatedToTheLatestOccurrenceOnConflict() throws Exception {
+    // Same (ex, source) so both calls upsert the same fingerprint row.
+    RuntimeException ex = new RuntimeException("connection refused");
+    String source = "kafka:SaleRecorded";
+
+    errorInboxWriter.record(ex, source, null, "trace-first");
+    errorInboxWriter.record(ex, source, null, "trace-second");
+
+    assertThat(errorLogRowCount()).isEqualTo(1L);
+    assertThat(traceIdAsAdmin(source)).isEqualTo("trace-second");
   }
 
   // ------------------------------------------------------------------ PII redaction
@@ -135,6 +154,22 @@ class ErrorInboxWriterTest extends PostgresRlsTestBase {
           return rs.getLong(1);
         }
         return 0L;
+      }
+    }
+  }
+
+  private String traceIdAsAdmin(String source) throws Exception {
+    try (Connection admin =
+            java.sql.DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        PreparedStatement ps =
+            admin.prepareStatement("SELECT trace_id FROM error_log WHERE source = ?")) {
+      ps.setString(1, source);
+      try (ResultSet rs = ps.executeQuery()) {
+        if (rs.next()) {
+          return rs.getString(1);
+        }
+        return null;
       }
     }
   }

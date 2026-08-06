@@ -261,6 +261,7 @@ export const id = {
     retry: 'Coba lagi',
     copyDetails: 'Salin detail',
     traceId: 'ID pelacakan',
+    errorReference: 'Referensi',
     back: 'Kembali',
     continue: 'Lanjut',
     cancel: 'Batal',
@@ -336,7 +337,15 @@ export const id = {
       connected: 'Printer terhubung',
       disconnect: 'Putuskan',
       unsupported: 'Tidak didukung di peramban ini',
-      connectFailed: 'Tidak dapat terhubung. Periksa kabel/pemasangan lalu coba lagi.',
+      error: {
+        blocked:
+          'Peramban memblokir akses ke printer. Pastikan situs dibuka lewat HTTPS dan izinkan perangkat saat diminta.',
+        inUse:
+          'Printer sedang sibuk atau dipakai aplikasi lain — tutup aplikasi atau antrean cetak lain yang memakainya, lalu coba lagi.',
+        noEndpoint:
+          'Perangkat itu sepertinya bukan printer struk (koneksi printer tidak ditemukan). Pilih printer termal dari daftar.',
+        unknown: 'Tidak dapat terhubung ke printer. Periksa kabel/pemasangan lalu coba lagi.',
+      },
       testPrint: 'Cetak uji',
       testPrinting: 'Mencetak…',
       testOk: 'Tercetak ✓',
@@ -852,6 +861,27 @@ export const id = {
     errorNotOpen: 'Sesi kasir ini sudah tidak terbuka. Muat ulang untuk melihat kondisi terkini.',
     errorKeyConflict:
       'Penutupan itu sudah tercatat dengan jumlah berbeda. Muat ulang untuk melihat kondisi terkini.',
+  },
+  stocktake: {
+    /** ADR 0038 fase 3 — stok opname / hitung stok. */
+    title: 'Hitung stok',
+    tillMenuLabel: 'Hitung stok',
+    entryHint:
+      'Jumlah terisi otomatis dengan kuantitas sistem — ubah hanya item yang berbeda dari hasil hitung fisik Anda.',
+    systemQty: 'Sistem: {{qty}}',
+    countedForItem: 'Jumlah terhitung untuk {{name}}',
+    notCounted: 'Belum dihitung',
+    submitAction: 'Kirim hitung stok',
+    errorGeneric: 'Tidak dapat mengirim hitung stok. Silakan coba lagi.',
+    loadError: 'Tidak dapat memuat menu.',
+    emptyHint: 'Belum ada item yang dilacak stoknya di outlet ini — aktifkan pelacakan stok untuk item di Manajemen menu terlebih dahulu.',
+    countedAt: 'Dihitung',
+    resultBalanced: 'Seimbang — tidak ada penyusutan',
+    resultLoss: 'Penyusutan bersih (rugi)',
+    resultGain: 'Kelebihan bersih',
+    done: 'Selesai',
+    varianceLinesTitle: 'Item dengan selisih',
+    lineCounts: 'Sistem {{system}} → terhitung {{counted}}',
   },
   posShell: {
     /** Redesign P4 — kerangka POS bersama (bilah status, menu kasir, dok tiket). */
@@ -2033,6 +2063,8 @@ export const id = {
       markAvailable: 'Tandai {{name}} sebagai tersedia',
       options: 'Opsi',
       manageOptions: 'Kelola opsi untuk {{name}}',
+      /** ADR 0038 fase 3 — tampil di sebelah harga bila item memiliki biaya per unit. */
+      unitCost: '· biaya {{cost}}',
     },
     option: {
       available: 'Tersedia',
@@ -2061,6 +2093,10 @@ export const id = {
       categoryPlaceholder: 'Pilih kategori…',
       priceLabel: 'Harga ({{currency}})',
       priceInvalid: 'Harga harus berupa angka positif.',
+      /** ADR 0038 fase 3 — biaya per unit opsional, digunakan untuk menilai penyusutan stok opname. */
+      unitCostLabel: 'Biaya per unit ({{currency}}) — opsional',
+      unitCostHint: 'Digunakan untuk menilai penyusutan/kelebihan saat item ini dihitung dalam stok opname. Kosongkan jika tidak diketahui.',
+      unitCostInvalid: 'Biaya harus nol atau angka positif.',
       submit: 'Tambah item',
       submitting: 'Menambahkan…',
     },
@@ -3261,6 +3297,7 @@ export const id = {
       openBills: 'Tagihan terbuka memerlukan koneksi — hanya penjualan tunai cepat saat offline.',
       parked: 'Pesanan ditahan memerlukan koneksi — hanya penjualan tunai cepat saat offline.',
       tableFloor: 'Denah meja memerlukan koneksi — hanya penjualan tunai cepat saat offline.',
+      stocktake: 'Hitung stok memerlukan koneksi — tidak tersedia saat offline.',
     },
   },
   posDisplay: {
