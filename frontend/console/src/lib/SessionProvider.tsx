@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api'
 import { AUTH_MODE } from '@/lib/config'
 import { useAuth } from '@/lib/authContext'
+import { isNativeShell } from '@/lib/escpos/transport'
 import { toPlanTier } from '@/lib/featureTier'
 import { SessionContext, type CompanySession } from '@/lib/session'
 
@@ -75,9 +76,19 @@ function saveActiveCompanyId(scope: string, companyId: string | null): void {
   }
 }
 
+/**
+ * Browsers: per-TAB outlet (sessionStorage) — two tabs can serve two outlets. Native Till shell
+ * (ADR 0043): there is exactly one "tab" and the process dies with the app, so localStorage keeps
+ * the till on its outlet across restarts (a cold-started till should reopen straight into its POS,
+ * not re-ask which outlet it is).
+ */
+function outletStorage(): Storage {
+  return isNativeShell() ? localStorage : sessionStorage
+}
+
 function loadOutletFromSessionStorage(): string | null {
   try {
-    return sessionStorage.getItem(OUTLET_SESSION_KEY)
+    return outletStorage().getItem(OUTLET_SESSION_KEY)
   } catch {
     return null
   }
@@ -86,12 +97,12 @@ function loadOutletFromSessionStorage(): string | null {
 function saveOutletToSessionStorage(id: string | null): void {
   try {
     if (id) {
-      sessionStorage.setItem(OUTLET_SESSION_KEY, id)
+      outletStorage().setItem(OUTLET_SESSION_KEY, id)
     } else {
-      sessionStorage.removeItem(OUTLET_SESSION_KEY)
+      outletStorage().removeItem(OUTLET_SESSION_KEY)
     }
   } catch {
-    /* sessionStorage unavailable — in-memory only */
+    /* storage unavailable — in-memory only */
   }
 }
 

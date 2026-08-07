@@ -19,6 +19,20 @@
 /* Manual dark variant: driven by data-theme on <html>, NOT prefers-color-scheme (we toggle it). */
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
+/*
+ * Native Till shell only (ADR 0043): Android 15+ forces edge-to-edge, and Capacitor injects the
+ * real inset values as --safe-area-inset-* CSS variables INSIDE the app WebView. Browsers never
+ * define them, so the var() fallbacks resolve to 0 and this is a no-op outside the app. Keeps the
+ * header/actions clear of the status bar clock and the gesture pill. (position:fixed overlays
+ * anchor to the viewport and bypass body padding — audit per-surface if one clips.)
+ */
+body {
+  padding-top: var(--safe-area-inset-top, 0px);
+  padding-right: var(--safe-area-inset-right, 0px);
+  padding-bottom: var(--safe-area-inset-bottom, 0px);
+  padding-left: var(--safe-area-inset-left, 0px);
+}
+
 @theme {
   --font-display: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
   --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;

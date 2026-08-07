@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { UserManager, WebStorageStateStore, type User } from 'oidc-client-ts'
+import { isNativeShell } from '@/lib/escpos/transport'
 import { setAccessToken, setUnauthorizedHandler } from '@/lib/api'
 import { AUTH_MODE, KEYCLOAK_CLIENT_ID, KEYCLOAK_REALM, KEYCLOAK_URL } from '@/lib/config'
 import { DEV_ACTOR } from '@/lib/devIdentity'
@@ -63,7 +64,13 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
         response_type: 'code',
         scope: 'openid profile email',
         automaticSilentRenew: true,
-        userStore: new WebStorageStateStore({ store: window.sessionStorage }),
+        // Native Till shell (ADR 0043): the WebView process dies with the app, and
+        // sessionStorage with it — every cold start dumped the operator on the logged-out
+        // landing page. localStorage keeps the till signed in across restarts (Keycloak
+        // token lifetimes still govern expiry). Browsers keep the per-tab default.
+        userStore: new WebStorageStateStore({
+          store: isNativeShell() ? window.localStorage : window.sessionStorage,
+        }),
       }),
   )
 
