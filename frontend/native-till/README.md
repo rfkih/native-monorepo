@@ -29,6 +29,25 @@ $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 The WebView origin defaults to the UAT console; override per build with
 `NATIVE_TILL_URL=https://... npx cap sync android`.
 
+## Release (production) build
+
+```powershell
+cd frontend/native-till/android
+$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
+.\gradlew.bat assembleRelease
+# → app\build\outputs\apk\release\app-release.apk (SIGNED when keystore.properties exists)
+```
+
+Signing: `android/keystore.properties` (gitignored, BOM-free — PS5.1 `Set-Content` writes a BOM
+that breaks Java's Properties parser) points at the keystore OUTSIDE the repo:
+`C:\Users\rifki\native-till-signing\` (keystore + CREDENTIALS.txt + archived builds).
+**Back that folder up** — the key is the app's permanent identity: updates must be signed with the
+same key, and losing it means installed tills can only uninstall/reinstall. Without
+keystore.properties, `assembleRelease` produces an unsigned APK (CI/fresh clones still compile).
+Release builds drop the debug 🖨 TEST button automatically (BuildConfig.DEBUG). A release-signed
+app can NOT install over a debug-signed one — uninstall first, once. Play Store later: use this
+key as the upload key with Play App Signing (P2 owner decision).
+
 ## P1 hardware drill (acceptance)
 
 > The printer tile lives in the console, so the **deployed** console (UAT origin) must include the

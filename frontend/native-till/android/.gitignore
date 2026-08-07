@@ -55,6 +55,8 @@ captures/
 # Keystore files — release signing keys must NEVER be committed (owner/Play custody, ADR 0043 D7)
 *.jks
 *.keystore
+# Machine-local signing wiring (paths + passwords for the external keystore)
+keystore.properties
 
 # External native build folder generated in Android Studio 2.2 and later
 .externalNativeBuild

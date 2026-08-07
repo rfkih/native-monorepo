@@ -1,6 +1,15 @@
 apply plugin: 'com.android.application'
 apply plugin: 'org.jetbrains.kotlin.android'
 
+// Release signing (ADR 0043 D7): the keystore lives OUTSIDE the repo and is referenced by the
+// gitignored android/keystore.properties (see README). Without that file, release builds are
+// simply unsigned — debug builds are unaffected — so CI/fresh clones still compile.
+def keystorePropsFile = rootProject.file('keystore.properties')
+def keystoreProps = new Properties()
+if (keystorePropsFile.exists()) {
+    keystorePropsFile.withInputStream { keystoreProps.load(it) }
+}
+
 android {
     namespace = "id.co.nativeapp.till"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -9,7 +18,9 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         // Bumps ONLY on native changes (ADR 0043 D7) — web features ship without an app release.
-        versionCode 3
+        // 4 = release signing introduced (a signature change forces one uninstall/reinstall of
+        // the debug-signed installs anyway).
+        versionCode 4
         versionName "1.2"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
@@ -18,10 +29,25 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (keystoreProps.getProperty('storeFile')) {
+                storeFile file(keystoreProps.getProperty('storeFile'))
+                storePassword keystoreProps.getProperty('storePassword')
+                keyAlias keystoreProps.getProperty('keyAlias')
+                keyPassword keystoreProps.getProperty('keyPassword')
+            }
+        }
+    }
     buildTypes {
         release {
+            // Deliberately NOT minified: the shell is ~4 MB of Capacitor + one plugin; R8's
+            // saving isn't worth the reflection risk on the JS bridge without a device matrix.
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (keystoreProps.getProperty('storeFile')) {
+                signingConfig signingConfigs.release
+            }
         }
     }
     buildFeatures {
