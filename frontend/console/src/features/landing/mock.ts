@@ -21,3 +21,16 @@ export function money(minor: number, locale: string, compact = false): string {
     return String(minor)
   }
 }
+
+/** Format a fraction as a percentage, locale-aware (12,4 % vs 12.4%). */
+export function pct(frac: number, locale: string, digits = 1): string {
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: 'percent',
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    }).format(frac)
+  } catch {
+    return String(frac)
+  }
+}

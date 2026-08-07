@@ -11,7 +11,6 @@ import heroW1280 from '@/assets/landing/hero-w1280.webp'
 import heroW1920 from '@/assets/landing/hero-w1920.webp'
 import posW640 from '@/assets/landing/pos-w640.webp'
 import posW960 from '@/assets/landing/pos-w960.webp'
-import portraitW192 from '@/assets/landing/portrait-w192.webp'
 import ctaW1280 from '@/assets/landing/cta-w1280.webp'
 
 export interface PhotoSource {
@@ -36,9 +35,6 @@ export const posPhoto: PhotoSource = {
   width: 960,
   height: 720,
 }
-
-/** Testimonial avatar. */
-export const portraitPhoto: PhotoSource = { src: portraitW192, width: 192, height: 192 }
 
 /** CTA band texture — carwash detail under the brand overlay. */
 export const ctaPhoto: PhotoSource = { src: ctaW1280, width: 1280, height: 640 }

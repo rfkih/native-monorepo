@@ -21,7 +21,7 @@ import {
 } from 'lucide-react'
 import { localeOf } from '@/i18n'
 import { cn } from '@/lib/cn'
-import { MOCK_EXPENSE, MOCK_NET, MOCK_REVENUE, money } from './mock'
+import { MOCK_EXPENSE, MOCK_NET, MOCK_REVENUE, money, pct } from './mock'
 
 // ── Atmospheric backdrop ─────────────────────────────────────────────────────────────────────────
 // A fixed, layered background: two soft brand glows + a fine masked grid. Sits behind everything.
@@ -89,7 +89,7 @@ export function DashboardMock() {
         <div className="flex items-center justify-between">
           <div>
             <div className="font-display text-[15px] font-bold text-ink">
-              {t('dashboard.title')}
+              {t('nav.dashboard')}
             </div>
             <div className="text-[11.5px] text-ink-3">{t('landing.mockPeriod')}</div>
           </div>
@@ -101,9 +101,9 @@ export function DashboardMock() {
 
         {/* KPI row */}
         <div className="mt-4 grid grid-cols-3 gap-2.5">
-          <Kpi label={t('landing.mockRevenue')} value={money(MOCK_REVENUE, locale, true)} delta="+12.4%" tone="profit" />
-          <Kpi label={t('landing.mockExpense')} value={money(MOCK_EXPENSE, locale, true)} delta="+4.1%" tone="ink" />
-          <Kpi label={t('landing.mockNet')} value={money(MOCK_NET, locale, true)} delta="+28.9%" tone="profit" />
+          <Kpi label={t('landing.mockRevenue')} value={money(MOCK_REVENUE, locale, true)} delta={pct(0.124, locale)} tone="profit" />
+          <Kpi label={t('landing.mockExpense')} value={money(MOCK_EXPENSE, locale, true)} delta={pct(0.041, locale)} tone="ink" />
+          <Kpi label={t('landing.mockNet')} value={money(MOCK_NET, locale, true)} delta={pct(0.289, locale)} tone="profit" />
         </div>
 
         {/* area chart */}
@@ -133,8 +133,8 @@ export function DashboardMock() {
                   style={{ width: `${(frac as number) * 100}%` }}
                 />
               </span>
-              <span className="tnum w-9 shrink-0 text-right text-[11px] font-semibold text-ink-3">
-                {Math.round((frac as number) * 100)}%
+              <span className="tnum w-9 shrink-0 text-right font-mono text-[11px] font-semibold text-ink-3">
+                {pct(frac as number, locale, 0)}
               </span>
             </div>
           ))}
@@ -160,10 +160,10 @@ function Kpi({
       <div className="truncate text-[9.5px] font-semibold uppercase tracking-wide text-ink-3">
         {label}
       </div>
-      <div className="tnum mt-1 text-[13px] font-bold text-ink">{value}</div>
+      <div className="tnum mt-1 font-mono text-[13px] font-bold text-ink">{value}</div>
       <div
         className={cn(
-          'tnum mt-0.5 text-[10px] font-bold',
+          'tnum mt-0.5 font-mono text-[10px] font-bold',
           tone === 'profit' ? 'text-profit' : 'text-ink-3',
         )}
       >
@@ -221,11 +221,11 @@ export function SaleToast({ className }: { className?: string }) {
       <span className="grid size-9 shrink-0 place-items-center rounded-full bg-tint-profit text-profit">
         <Check className="size-4.5" />
       </span>
-      <div className="leading-tight">
-        <div className="text-[12.5px] font-bold text-ink">{t('landing.toastTitle')}</div>
-        <div className="text-[11px] text-ink-3">{t('landing.toastMeta')}</div>
+      <div className="min-w-0 flex-1 leading-tight">
+        <div className="truncate text-[12.5px] font-bold text-ink">{t('landing.toastTitle')}</div>
+        <div className="truncate text-[11px] text-ink-3">{t('landing.toastMeta')}</div>
       </div>
-      <div className="tnum ml-1 text-[12.5px] font-bold text-profit">
+      <div className="tnum ml-1 shrink-0 whitespace-nowrap font-mono text-[12.5px] font-bold text-profit">
         +{money(150_000, locale, true)}
       </div>
     </div>
@@ -244,7 +244,7 @@ export function FxChip({ className }: { className?: string }) {
       <span className="grid size-6 place-items-center rounded-full bg-brand-50 text-brand-600">
         <ArrowLeftRight className="size-3.5" />
       </span>
-      <span className="tnum text-[12px] font-bold text-ink">IDR → USD</span>
+      <span className="tnum font-mono text-[12px] font-bold text-ink">IDR → USD</span>
       <span className="text-[11px] text-ink-3">{t('landing.fxChip')}</span>
     </div>
   )
@@ -280,69 +280,17 @@ export function PosReceiptMock({ className }: { className?: string }) {
       <div className="space-y-2 py-3">
         {items.map(([name, qty, price]) => (
           <div key={name} className="flex items-center gap-2 text-[12.5px]">
-            <span className="tnum w-5 text-ink-3">{qty}×</span>
+            <span className="tnum w-5 font-mono text-ink-3">{qty}×</span>
             <span className="flex-1 truncate text-ink-2">{name}</span>
-            <span className="tnum font-medium text-ink">{money(qty * price, locale, true)}</span>
+            <span className="tnum font-mono font-medium text-ink">{money(qty * price, locale, true)}</span>
           </div>
         ))}
       </div>
       <div className="flex items-center justify-between border-t border-dashed border-line pt-3">
         <span className="text-[12px] font-semibold text-ink-3">{t('pos.total')}</span>
-        <span className="tnum font-display text-[16px] font-extrabold text-ink">
+        <span className="tnum font-mono text-[16px] font-extrabold text-ink">
           {money(subtotal, locale, true)}
         </span>
-      </div>
-    </div>
-  )
-}
-
-// ── Multi-currency consolidation diagram (feature row) ──────────────────────────────────────────
-
-export function ConsolidationDiagram() {
-  const { t } = useTranslation()
-  const entities: [string, string][] = [
-    [t('landing.entity1'), 'IDR'],
-    [t('landing.entity2'), 'USD'],
-    [t('landing.entity3'), 'IDR'],
-  ]
-  return (
-    <div className="relative mx-auto w-full max-w-[400px] px-2 py-4">
-      {/* connectors */}
-      <svg
-        viewBox="0 0 400 220"
-        className="absolute inset-0 h-full w-full text-brand-300"
-        preserveAspectRatio="none"
-        aria-hidden
-      >
-        <path d="M70,58 C70,130 200,120 200,168" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 4" />
-        <path d="M200,58 C200,120 200,120 200,168" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 4" />
-        <path d="M330,58 C330,130 200,120 200,168" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 4" />
-      </svg>
-
-      {/* entity chips */}
-      <div className="relative flex justify-between">
-        {entities.map(([name, ccy]) => (
-          <div
-            key={name}
-            className="w-[30%] rounded-xl border border-line bg-surface p-2.5 text-center shadow-sm"
-          >
-            <div className="grid place-items-center">
-              <span className="grid size-7 place-items-center rounded-lg bg-brand-50 text-brand-600">
-                <Building2 className="size-4" />
-              </span>
-            </div>
-            <div className="mt-1.5 truncate text-[11px] font-semibold text-ink">{name}</div>
-            <div className="tnum text-[10px] font-bold text-ink-3">{ccy}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* group node */}
-      <div className="relative mx-auto mt-[54px] w-[54%] rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-600 to-brand-800 p-3 text-center shadow-md">
-        <div className="text-[11px] font-bold uppercase tracking-wide text-white/80">
-          {t('landing.groupLabel')}
-        </div>
-        <div className="tnum font-display text-[15px] font-extrabold text-white">USD · IFRS</div>
       </div>
     </div>
   )

@@ -2,35 +2,52 @@
  * Public marketing landing page — the product's front door at `/`.
  *
  * Rendered for UNAUTHENTICATED visitors (the OidcAuthProvider no longer force-redirects to Keycloak;
- * login is explicit). "Get started" → /signup; "Sign in" → auth.login() (Keycloak PKCE redirect).
+ * login is explicit). "Masuk" → auth.login() (Keycloak PKCE redirect); demo CTAs anchor to the #demo
+ * band whose primary opens a demo-request mail draft; "Coba gratis" → /signup.
  *
- * World-class, self-contained: real photography (bundled Unsplash assets, see ./photos and
- * src/assets/landing/SOURCES.md) under theme-aware brand scrims, with the in-product "screenshot"
- * mocks floating over it, alternating feature rows, scroll-reveal motion, light/dark theme toggle.
- * Fully localized (react-i18next) and locale-aware `Intl` for money. Product mockups stay inline
- * SVG/DOM (see ./art); photos are hashed local assets — still no external calls at runtime.
+ * Layout from the Landing.dc.html redesign (DesignSync project, 2026-08): hero over the warung photo
+ * with the dashboard mock, verticals strip, proof band with LABELLED unfilled slots, "Produk" section
+ * around the offline-POS card, dark "Kepatuhan" panel, testimonial + outcome SLOTS (deliberately
+ * unfilled — never pair an invented quote with a real person's photo; see github.md in the design
+ * project), photo CTA band, and a sitemap footer. Fully localized (react-i18next), locale-aware
+ * `Intl` for money/percentages, theme-aware via tokens; photos are hashed local assets — no external
+ * calls at runtime.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ArrowRight, Check, GitBranch, Moon, Quote, Sun, Users, Zap, type LucideIcon } from 'lucide-react'
+import {
+  AlertTriangle,
+  ArrowRight,
+  BarChart3,
+  Check,
+  Clock,
+  DollarSign,
+  Download,
+  Lock,
+  Moon,
+  Network,
+  Quote,
+  Store,
+  Sun,
+  User,
+  Users,
+  type LucideIcon,
+} from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Wordmark } from '@/components/Wordmark'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { useAuth } from '@/lib/authContext'
 import { useTheme } from '@/lib/theme'
+import { localeOf } from '@/i18n'
 import { cn } from '@/lib/cn'
-import {
-  Backdrop,
-  ConsolidationDiagram,
-  DashboardMock,
-  FxChip,
-  PosReceiptMock,
-  SaleToast,
-  VerticalStrip,
-} from './art'
+import { Backdrop, DashboardMock, FxChip, PosReceiptMock, SaleToast, VerticalStrip } from './art'
 import { Photo } from './Photo'
-import { ctaPhoto, heroPhoto, portraitPhoto, posPhoto } from './photos'
+import { ctaPhoto, heroPhoto, posPhoto } from './photos'
+import { MOCK_REVENUE, money } from './mock'
+
+/** Demo-request mail target — the product's contact address (demonstration build). */
+const CONTACT_EMAIL = 'halo@native.id'
 
 // ── Scroll-reveal (flash-free, reduced-motion-safe) ──────────────────────────────────────────────
 
@@ -106,59 +123,95 @@ function ThemeToggle() {
   )
 }
 
+/** Anchor styled as the primary/outline Button recipe — for in-page and mailto CTAs. */
+function CtaLink({
+  href,
+  variant = 'primary',
+  size = 'sm',
+  className,
+  children,
+}: {
+  href: string
+  variant?: 'primary' | 'outline'
+  size?: 'sm' | 'xl'
+  className?: string
+  children: ReactNode
+}) {
+  return (
+    <a
+      href={href}
+      className={cn(
+        'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl transition-colors duration-150',
+        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
+        size === 'xl' ? 'h-[54px] px-6 text-[15px]' : 'h-10 px-4 text-[13px]',
+        variant === 'primary'
+          ? 'bg-emerald font-bold text-on-emerald shadow-sm hover:bg-emerald-2'
+          : 'border border-line bg-surface font-semibold text-ink hover:bg-hover',
+        className,
+      )}
+    >
+      {children}
+    </a>
+  )
+}
+
 function Bullet({ children }: { children: ReactNode }) {
   return (
-    <li className="flex items-start gap-2.5 text-[14.5px] leading-relaxed text-ink-2">
-      <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-tint-profit text-profit">
-        <Check className="size-3" />
-      </span>
+    <li className="flex items-start gap-2.5 text-[14.5px] leading-normal font-medium text-ink-2">
+      <Check className="mt-[3px] size-4 shrink-0 text-profit-ink" strokeWidth={2.2} />
       {children}
     </li>
   )
 }
 
-function Kicker({ children }: { children: ReactNode }) {
-  return <div className="text-xs font-bold uppercase tracking-[0.16em] text-brand-600">{children}</div>
+function IconTile({ icon: Icon }: { icon: LucideIcon }) {
+  return (
+    <span className="grid size-10 place-items-center rounded-[13px] bg-brand-50 text-brand-700 dark:bg-emerald-tint dark:text-emerald-2">
+      <Icon className="size-5" strokeWidth={1.8} />
+    </span>
+  )
 }
 
 // ── Header ───────────────────────────────────────────────────────────────────────────────────────
 
-function Header({ onSignIn, onGetStarted }: { onSignIn: () => void; onGetStarted: () => void }) {
+function Header({ onSignIn }: { onSignIn: () => void }) {
   const { t } = useTranslation()
+  const navLink =
+    'flex h-9 items-center rounded-[10px] px-3.5 text-sm font-semibold text-ink-2 transition-colors hover:bg-hover hover:text-ink'
   return (
-    <header className="sticky top-0 z-30 border-b border-line/70 bg-paper/70 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-4 px-5">
+    <header className="sticky top-0 z-30 border-b border-line/70 bg-paper/90 backdrop-blur-xl">
+      <div className="mx-auto flex h-[72px] w-full max-w-6xl items-center gap-3 px-5">
         <Link to="/" aria-label={t('app.name')} className="shrink-0">
           <Wordmark />
         </Link>
-        <nav className="ml-6 hidden items-center gap-7 md:flex">
-          <a href="#features" className="text-sm font-semibold text-ink-2 transition-colors hover:text-ink">
-            {t('landing.navFeatures')}
+        <nav className="ml-5 hidden items-center gap-1 md:flex">
+          <a href="#produk" className={navLink}>
+            {t('landing.navProduct')}
           </a>
-          <a href="#how" className="text-sm font-semibold text-ink-2 transition-colors hover:text-ink">
-            {t('landing.navHow')}
+          <a href="#kepatuhan" className={navLink}>
+            {t('landing.navCompliance')}
           </a>
         </nav>
-        <div className="ml-auto flex items-center gap-2.5">
+        <div className="ml-auto flex items-center gap-1.5 sm:gap-2.5">
           <div className="hidden sm:block">
             <LanguageSwitcher />
           </div>
           <ThemeToggle />
-          <Button variant="ghost" onClick={onSignIn} className="hidden sm:inline-flex">
+          <Button variant="ghost" onClick={onSignIn} className="px-2.5 sm:px-4">
             {t('landing.signIn')}
           </Button>
-          <Button onClick={onGetStarted}>
-            {t('landing.getStarted')} <ArrowRight className="size-4" />
-          </Button>
+          <CtaLink href="#demo" className="px-3 sm:px-4">
+            {t('landing.navDemo')}
+          </CtaLink>
         </div>
       </div>
     </header>
   )
 }
 
-// ── Hero ───────────────────────────────────────────────────────────────────────────────────────
+// ── Hero ─────────────────────────────────────────────────────────────────────────────────────────
 
-function Hero({ onSignIn, onGetStarted }: { onSignIn: () => void; onGetStarted: () => void }) {
+function Hero() {
   const { t } = useTranslation()
   return (
     <section className="relative isolate overflow-hidden">
@@ -188,24 +241,22 @@ function Hero({ onSignIn, onGetStarted }: { onSignIn: () => void; onGetStarted: 
         {/* Left — copy + CTAs, staggered entrance */}
         <div>
           <span
-            className="reveal inline-flex items-center gap-2 rounded-full border border-brand-100 bg-brand-50 px-3.5 py-1.5 text-xs font-bold tracking-wide text-brand-700"
+            className="reveal inline-flex items-center gap-2 rounded-full border border-line bg-ink-50 py-1.5 pl-2 pr-3.5"
             style={{ animationDelay: '40ms' }}
           >
-            <span className="size-1.5 rounded-full bg-brand-500" />
-            {t('landing.heroBadge')}
+            <span className="rounded-full bg-surface px-2 py-[3px] text-[10.5px] font-bold tracking-wide text-ink shadow-sm">
+              {t('landing.heroBadgeCount')}
+            </span>
+            <span className="text-[12.5px] font-semibold text-ink-2">{t('landing.heroBadge')}</span>
           </span>
           <h1
-            className="reveal mt-5 font-display text-[42px] font-extrabold leading-[1.03] tracking-[-0.035em] text-ink sm:text-[58px]"
+            className="reveal mt-5 font-display text-[40px] font-extrabold leading-[1.05] tracking-[-0.03em] text-ink text-balance sm:text-[54px]"
             style={{ animationDelay: '110ms' }}
           >
-            {t('landing.heroTitleLead')}{' '}
-            <span className="relative whitespace-nowrap text-brand-600">
-              {t('landing.heroTitleAccent')}
-              <Underline />
-            </span>
+            {t('landing.heroTitle')}
           </h1>
           <p
-            className="reveal mt-6 max-w-xl text-[17.5px] leading-relaxed text-ink-2"
+            className="reveal mt-5 max-w-[520px] text-[17px] leading-relaxed text-ink-2 text-pretty"
             style={{ animationDelay: '180ms' }}
           >
             {t('landing.heroSubtitle')}
@@ -214,19 +265,18 @@ function Hero({ onSignIn, onGetStarted }: { onSignIn: () => void; onGetStarted: 
             className="reveal mt-8 flex flex-col gap-3 sm:flex-row sm:items-center"
             style={{ animationDelay: '250ms' }}
           >
-            <Button onClick={onGetStarted} size="xl" className="w-full sm:w-auto">
+            <CtaLink href="#demo" size="xl" className="w-full sm:w-auto">
               {t('landing.heroPrimary')} <ArrowRight className="size-4" />
-            </Button>
-            <Button
-              variant="outline"
-              onClick={onSignIn}
-              size="xl"
-              className="w-full sm:w-auto"
-            >
+            </CtaLink>
+            <CtaLink href="#produk" variant="outline" size="xl" className="w-full sm:w-auto">
               {t('landing.heroSecondary')}
-            </Button>
+            </CtaLink>
           </div>
-          <p className="reveal mt-4 text-[13px] text-ink-3" style={{ animationDelay: '320ms' }}>
+          <p
+            className="reveal mt-6 flex items-start gap-2.5 text-[13px] font-medium text-ink-3"
+            style={{ animationDelay: '320ms' }}
+          >
+            <Check className="mt-0.5 size-4 shrink-0 text-profit-ink" strokeWidth={2.1} />
             {t('landing.heroNote')}
           </p>
         </div>
@@ -234,43 +284,15 @@ function Hero({ onSignIn, onGetStarted }: { onSignIn: () => void; onGetStarted: 
         {/* Right — the product screenshot + floating accent cards */}
         <div className="reveal relative mx-auto lg:justify-self-end" style={{ animationDelay: '280ms' }}>
           <DashboardMock />
-          <SaleToast className="floaty absolute -bottom-6 -left-6 hidden w-[248px] md:flex" />
+          <SaleToast className="floaty absolute -bottom-6 -left-6 hidden w-[284px] md:flex" />
           <div className="floaty absolute -right-5 top-10 hidden md:block [animation-delay:1.4s]">
             <FxChip />
           </div>
         </div>
       </div>
-    </section>
-  )
-}
 
-/** A hand-drawn brand underline flourish beneath the hero accent word. */
-function Underline() {
-  return (
-    <svg
-      className="absolute -bottom-1.5 left-0 h-2.5 w-full text-brand-300"
-      viewBox="0 0 200 12"
-      fill="none"
-      preserveAspectRatio="none"
-      aria-hidden
-    >
-      <path
-        d="M2 8C40 3 80 3 118 6C150 8.5 180 8 198 4"
-        stroke="currentColor"
-        strokeWidth="3.5"
-        strokeLinecap="round"
-      />
-    </svg>
-  )
-}
-
-// ── Verticals strip ──────────────────────────────────────────────────────────────────────────────
-
-function TrustStrip() {
-  const { t } = useTranslation()
-  return (
-    <section className="border-y border-line bg-canvas/60 py-10">
-      <div className="mx-auto w-full max-w-6xl px-5">
+      {/* Verticals strip — inside the hero so it sits on the photo's bottom fade */}
+      <div className="mx-auto w-full max-w-6xl px-5 pb-[76px]">
         <p className="text-center text-xs font-semibold uppercase tracking-[0.16em] text-ink-3">
           {t('landing.trustLabel')}
         </p>
@@ -282,72 +304,99 @@ function TrustStrip() {
   )
 }
 
-// ── Feature row (alternating text + product mock) ────────────────────────────────────────────────
+// ── Proof band — only claims the repo can back; unfilled figures stay labelled slots ─────────────
 
-function FeatureRow({
-  kicker,
-  title,
-  body,
-  points,
-  media,
-  reverse,
-}: {
-  kicker: string
-  title: string
-  body: string
-  points: string[]
-  media: ReactNode
-  reverse?: boolean
-}) {
+function ProofBar() {
+  const { t, i18n } = useTranslation()
+  const locale = localeOf(i18n.language)
+  const stats: [string, string][] = [
+    [money(MOCK_REVENUE, locale, true), t('landing.proofRevenueLabel')],
+    [t('landing.proofVarianceValue'), t('landing.proofVarianceLabel')],
+    [t('landing.proofUptimeValue'), t('landing.proofUptimeLabel')],
+    [t('landing.proofCloseValue'), t('landing.proofCloseLabel')],
+  ]
   return (
-    <Reveal className="mx-auto grid w-full max-w-6xl grid-cols-1 items-center gap-12 px-5 py-20 lg:grid-cols-2 lg:gap-16">
-      <div className={cn(reverse && 'lg:order-2')}>
-        <Kicker>{kicker}</Kicker>
-        <h3 className="mt-3 font-display text-[28px] font-extrabold tracking-[-0.02em] text-ink sm:text-[34px]">
-          {title}
-        </h3>
-        <p className="mt-4 max-w-lg text-[16px] leading-relaxed text-ink-2">{body}</p>
-        <ul className="mt-6 space-y-3">
-          {points.map((p) => (
-            <Bullet key={p}>{p}</Bullet>
+    <section className="px-5 pt-3.5">
+      <Reveal className="mx-auto w-full max-w-6xl">
+        {/* gap-px over a line-colored base = hairline dividers on both axes at every breakpoint */}
+        <div className="grid grid-cols-1 gap-px overflow-hidden rounded-card border border-line bg-line shadow-sm sm:grid-cols-2 lg:grid-cols-4">
+          {stats.map(([value, label]) => (
+            <div key={label} className="bg-surface px-6 py-7">
+              <div className="tnum font-mono text-[28px] font-bold tracking-[-0.02em] text-ink">
+                {value}
+              </div>
+              <div className="mt-2 text-[13px] font-medium leading-relaxed text-ink-3">{label}</div>
+            </div>
           ))}
-        </ul>
-      </div>
-      <div className={cn('relative', reverse && 'lg:order-1')}>{media}</div>
-    </Reveal>
+        </div>
+      </Reveal>
+    </section>
   )
 }
 
-// ── Feature grid (3-up) ──────────────────────────────────────────────────────────────────────────
+// ── "Produk" — one set of books, the offline POS card + four feature cards ───────────────────────
 
-function FeatureGrid() {
+function ProductSection() {
   const { t } = useTranslation()
-  const cards: { icon: LucideIcon; title: string; body: string }[] = [
-    { icon: Zap, title: t('landing.g1Title'), body: t('landing.g1Body') },
-    { icon: Users, title: t('landing.g2Title'), body: t('landing.g2Body') },
-    { icon: GitBranch, title: t('landing.g3Title'), body: t('landing.g3Body') },
+  const features: { icon: LucideIcon; title: string; body: string }[] = [
+    { icon: Users, title: t('landing.f1Title'), body: t('landing.f1Body') },
+    { icon: BarChart3, title: t('landing.f2Title'), body: t('landing.f2Body') },
+    { icon: DollarSign, title: t('landing.f3Title'), body: t('landing.f3Body') },
+    { icon: Network, title: t('landing.f4Title'), body: t('landing.f4Body') },
   ]
   return (
-    <section id="features" className="border-t border-line bg-canvas py-20">
-      <div className="mx-auto w-full max-w-6xl px-5">
-        <Reveal className="mx-auto max-w-2xl text-center">
-          <Kicker>{t('landing.gridKicker')}</Kicker>
-          <h2 className="mt-3 font-display text-[30px] font-extrabold tracking-[-0.02em] text-ink sm:text-[36px]">
-            {t('landing.gridTitle')}
+    <section id="produk" className="scroll-mt-20 px-5 pt-24">
+      <div className="mx-auto w-full max-w-6xl">
+        <Reveal className="max-w-2xl">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.09em] text-brand-700 dark:text-emerald-2">
+            {t('landing.productKicker')}
+          </div>
+          <h2 className="mt-3 font-display text-[30px] font-extrabold leading-[1.12] tracking-[-0.025em] text-ink text-balance sm:text-[38px]">
+            {t('landing.productTitle')}
           </h2>
-          <p className="mt-3 text-[16px] leading-relaxed text-ink-2">{t('landing.gridSubtitle')}</p>
+          <p className="mt-3.5 text-[16px] leading-relaxed text-ink-2 text-pretty">
+            {t('landing.productLede')}
+          </p>
         </Reveal>
-        <div className="mt-12 grid grid-cols-1 gap-5 md:grid-cols-3">
-          {cards.map((c, i) => (
-            <Reveal key={c.title} delay={i * 90}>
-              <div className="h-full rounded-card border border-line bg-surface p-6 shadow-sm transition-shadow hover:shadow-md">
-                <span className="grid size-11 place-items-center rounded-xl bg-brand-50 text-brand-600">
-                  <c.icon className="size-5" />
-                </span>
-                <h3 className="mt-4 font-display text-[18px] font-bold tracking-[-0.01em] text-ink">
-                  {c.title}
+
+        <div className="mt-10 grid grid-cols-1 gap-5 lg:grid-cols-2">
+          {/* Offline-POS hero card — copy column + photo with the receipt mock floating over it */}
+          <Reveal className="lg:col-span-2">
+            <div className="grid overflow-hidden rounded-card border border-line bg-surface shadow-sm lg:grid-cols-[1.05fr_1fr]">
+              <div className="p-8 sm:p-10">
+                <IconTile icon={Store} />
+                <h3 className="mt-4.5 font-display text-[22px] font-bold leading-[1.25] tracking-[-0.015em] text-ink">
+                  {t('landing.posCardTitle')}
                 </h3>
-                <p className="mt-1.5 text-sm leading-relaxed text-ink-2">{c.body}</p>
+                <p className="mt-3 text-[15px] leading-relaxed text-ink-2 text-pretty">
+                  {t('landing.posCardBody')}
+                </p>
+                <ul className="mt-5 space-y-2.5">
+                  <Bullet>{t('landing.posPoint1')}</Bullet>
+                  <Bullet>{t('landing.posPoint2')}</Bullet>
+                  <Bullet>{t('landing.posPoint3')}</Bullet>
+                </ul>
+              </div>
+              <div className="relative aspect-[4/3] lg:aspect-auto">
+                <Photo
+                  photo={posPhoto}
+                  alt={t('landing.posPhotoAlt')}
+                  sizes="(min-width: 1024px) 560px, 92vw"
+                  className="absolute inset-0 h-full w-full object-cover"
+                />
+                <PosReceiptMock className="absolute bottom-4 right-4 w-[240px] p-4 shadow-lg sm:w-[264px]" />
+              </div>
+            </div>
+          </Reveal>
+
+          {features.map((f, i) => (
+            <Reveal key={f.title} delay={(i % 2) * 90}>
+              <div className="h-full rounded-card border border-line bg-surface p-8 shadow-sm">
+                <IconTile icon={f.icon} />
+                <h3 className="mt-4 font-display text-[19px] font-bold tracking-[-0.01em] text-ink">
+                  {f.title}
+                </h3>
+                <p className="mt-2 text-[14.5px] leading-relaxed text-ink-2 text-pretty">{f.body}</p>
               </div>
             </Reveal>
           ))}
@@ -357,63 +406,43 @@ function FeatureGrid() {
   )
 }
 
-// ── How it works ─────────────────────────────────────────────────────────────────────────────────
+// ── "Kepatuhan" — the dark compliance panel ──────────────────────────────────────────────────────
 
-function Steps() {
+function ComplianceSection() {
   const { t } = useTranslation()
-  const steps = [
-    { title: t('landing.s1Title'), body: t('landing.s1Body') },
-    { title: t('landing.s2Title'), body: t('landing.s2Body') },
-    { title: t('landing.s3Title'), body: t('landing.s3Body') },
+  const cards: { icon: LucideIcon; title: string; body: string }[] = [
+    { icon: Clock, title: t('landing.t1Title'), body: t('landing.t1Body') },
+    { icon: Lock, title: t('landing.t2Title'), body: t('landing.t2Body') },
+    { icon: AlertTriangle, title: t('landing.t3Title'), body: t('landing.t3Body') },
+    { icon: Download, title: t('landing.t4Title'), body: t('landing.t4Body') },
   ]
   return (
-    <section id="how" className="py-20">
-      <div className="mx-auto w-full max-w-6xl px-5">
-        <Reveal className="mx-auto max-w-2xl text-center">
-          <Kicker>{t('landing.stepsKicker')}</Kicker>
-          <h2 className="mt-3 font-display text-[30px] font-extrabold tracking-[-0.02em] text-ink sm:text-[36px]">
-            {t('landing.stepsTitle')}
-          </h2>
-        </Reveal>
-        <ol className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-3">
-          {steps.map((s, i) => (
-            <Reveal key={s.title} delay={i * 90}>
-              <li className="relative h-full rounded-card border border-line bg-surface p-6 shadow-sm">
-                <span className="tnum grid size-10 place-items-center rounded-full bg-gradient-to-br from-brand-600 to-brand-800 text-[16px] font-extrabold text-white shadow-sm">
-                  {i + 1}
-                </span>
-                <h3 className="mt-4 font-display text-[18px] font-bold text-ink">{s.title}</h3>
-                <p className="mt-1.5 text-sm leading-relaxed text-ink-2">{s.body}</p>
-              </li>
-            </Reveal>
-          ))}
-        </ol>
-      </div>
-    </section>
-  )
-}
-
-// ── Testimonial ──────────────────────────────────────────────────────────────────────────────────
-
-function Testimonial() {
-  const { t } = useTranslation()
-  const author = t('landing.quoteAuthor')
-  return (
-    <section className="border-t border-line px-5 py-24">
-      <Reveal className="mx-auto max-w-3xl text-center">
-        <Quote className="mx-auto size-8 text-brand-300" />
-        <blockquote className="mt-5 font-display text-[24px] font-bold leading-snug tracking-[-0.01em] text-ink sm:text-[30px]">
-          {t('landing.quoteText')}
-        </blockquote>
-        <div className="mt-7 flex items-center justify-center gap-3">
-          <Photo
-            photo={portraitPhoto}
-            alt={author}
-            className="size-11 rounded-full object-cover ring-2 ring-brand-100 dark:ring-brand-300/30"
-          />
-          <div className="text-left">
-            <div className="text-sm font-bold text-ink">{author}</div>
-            <div className="text-[12.5px] text-ink-3">{t('landing.quoteRole')}</div>
+    <section id="kepatuhan" className="scroll-mt-20 px-5 pt-24">
+      {/* The panel is dark in BOTH themes (fixed ink #0e1116, green accent #5fcb8b = the dark-mode
+          profit ink) — token-flipping colors would break it in one theme or the other. */}
+      <Reveal className="mx-auto w-full max-w-6xl">
+        <div className="rounded-[24px] border border-transparent bg-[#0e1116] p-8 text-white sm:p-12 dark:border-white/10">
+          <div className="grid grid-cols-1 items-start gap-10 lg:grid-cols-[1fr_1.15fr] lg:gap-14">
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.09em] text-[#5fcb8b]">
+                {t('landing.complianceKicker')}
+              </div>
+              <h2 className="mt-3 font-display text-[28px] font-extrabold leading-[1.15] tracking-[-0.025em] text-white text-balance sm:text-[34px]">
+                {t('landing.complianceTitle')}
+              </h2>
+              <p className="mt-3.5 text-[15.5px] leading-relaxed text-white/70 text-pretty">
+                {t('landing.complianceLede')}
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+              {cards.map((c) => (
+                <div key={c.title} className="rounded-2xl border border-white/10 bg-white/[0.06] p-5">
+                  <c.icon className="size-5 text-[#5fcb8b]" strokeWidth={1.8} />
+                  <div className="mt-3 text-[14.5px] font-bold text-white">{c.title}</div>
+                  <div className="mt-1.5 text-[13px] leading-normal text-white/60">{c.body}</div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </Reveal>
@@ -421,51 +450,106 @@ function Testimonial() {
   )
 }
 
+// ── Testimonial + outcomes — labelled slots, deliberately unfilled (see module docblock) ─────────
+
+function SocialProofSection() {
+  const { t } = useTranslation()
+  const outcomes: [string, string][] = [
+    [t('landing.outcome1Value'), t('landing.outcome1Label')],
+    [t('landing.outcome2Value'), t('landing.outcome2Label')],
+    [t('landing.outcome3Value'), t('landing.outcome3Label')],
+  ]
+  return (
+    <section className="px-5 pt-24">
+      <div className="mx-auto grid w-full max-w-6xl grid-cols-1 items-center gap-10 lg:grid-cols-[1.15fr_1fr]">
+        <Reveal>
+          <div className="rounded-[24px] border border-line bg-ink-50/60 p-8 sm:p-10">
+            <Quote className="size-[30px] text-brand-100" fill="currentColor" strokeWidth={0} />
+            <blockquote className="mt-5 text-[19px] font-medium leading-[1.5] tracking-[-0.01em] text-ink-3 text-pretty sm:text-[22px]">
+              {t('landing.quoteSlotText')}
+            </blockquote>
+            <div className="mt-6 flex items-center gap-3.5">
+              <span className="grid size-[52px] shrink-0 place-items-center rounded-full border border-dashed border-line-strong text-ink-3">
+                <User className="size-[22px]" strokeWidth={1.7} />
+              </span>
+              <div>
+                <div className="text-[15px] font-bold text-ink-3">{t('landing.quoteSlotName')}</div>
+                <div className="mt-0.5 text-[13px] font-medium text-ink-3">
+                  {t('landing.quoteSlotCompany')}
+                </div>
+              </div>
+            </div>
+            <div className="mt-5 rounded-xl border border-warning/30 bg-amber-tint px-3.5 py-3 text-[12.5px] font-medium leading-normal text-amber-2">
+              {t('landing.quoteSlotWarning')}
+            </div>
+          </div>
+        </Reveal>
+        <Reveal delay={90}>
+          <div className="flex flex-col gap-3.5">
+            {outcomes.map(([value, label]) => (
+              <div
+                key={label}
+                className="flex items-center gap-4 rounded-card border border-line bg-surface px-6 py-5 shadow-sm"
+              >
+                <span className="tnum min-w-[76px] shrink-0 whitespace-nowrap font-mono text-[24px] font-bold tracking-[-0.02em] text-brand-700 dark:text-emerald-2 sm:text-[26px]">
+                  {value}
+                </span>
+                <span className="text-[14px] font-medium leading-normal text-ink-2">{label}</span>
+              </div>
+            ))}
+            <p className="mx-1 mt-0.5 text-[12px] leading-normal text-ink-3">
+              {t('landing.outcomesNote')}
+            </p>
+          </div>
+        </Reveal>
+      </div>
+    </section>
+  )
+}
+
 // ── Final CTA band ───────────────────────────────────────────────────────────────────────────────
 
-function CtaBand({ onSignIn, onGetStarted }: { onSignIn: () => void; onGetStarted: () => void }) {
+function CtaBand() {
   const { t } = useTranslation()
+  const mailto = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(t('landing.demoMailSubject'))}`
   return (
-    <section className="px-5 py-20">
-      <Reveal className="relative mx-auto w-full max-w-5xl overflow-hidden rounded-[32px] bg-gradient-to-br from-brand-600 to-brand-800 px-6 py-16 text-center shadow-lg">
-        {/* photo texture as a low-opacity luminosity layer — the gradient supplies hue (true brand
-            duotone), the carwash supplies light and shadow; white copy keeps AA regardless of image */}
+    <section id="demo" className="scroll-mt-20 px-5 pt-24">
+      <Reveal className="relative mx-auto w-full max-w-6xl overflow-hidden rounded-[24px]">
         <Photo
           photo={ctaPhoto}
           alt=""
-          sizes="(min-width: 1100px) 1024px, 96vw"
-          className="absolute inset-0 h-full w-full object-cover opacity-30 mix-blend-luminosity"
+          sizes="(min-width: 1200px) 1152px, 96vw"
+          className="h-[420px] w-full object-cover sm:h-[340px]"
         />
-        {/* decorative grid inside the band */}
-        <svg className="pointer-events-none absolute inset-0 h-full w-full text-white/10" aria-hidden>
-          <defs>
-            <pattern id="ctagrid" width="32" height="32" patternUnits="userSpaceOnUse">
-              <path d="M32 0H0V32" fill="none" stroke="currentColor" strokeWidth="1" />
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#ctagrid)" />
-        </svg>
-        <div className="relative">
-          <h2 className="font-display text-[32px] font-extrabold tracking-[-0.02em] text-white sm:text-[40px]">
+        {/* Brand duotone over the carwash — the brand ramp is theme-invariant, so fixed vars are safe */}
+        <div
+          aria-hidden
+          className="absolute inset-0"
+          style={{
+            background:
+              'linear-gradient(105deg, color-mix(in srgb, var(--color-brand-900) 96%, transparent) 0%, color-mix(in srgb, var(--color-brand-800) 90%, transparent) 52%, color-mix(in srgb, var(--color-brand-600) 72%, transparent) 100%)',
+          }}
+        />
+        <div className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center sm:px-14">
+          <h2 className="max-w-[660px] font-display text-[28px] font-extrabold leading-[1.15] tracking-[-0.025em] text-white text-balance sm:text-[36px]">
             {t('landing.ctaTitle')}
           </h2>
-          <p className="mx-auto mt-3 max-w-xl text-[16px] leading-relaxed text-white/85">
+          <p className="mt-3.5 max-w-[540px] text-[15px] leading-relaxed text-white/80 sm:text-[16px]">
             {t('landing.ctaSubtitle')}
           </p>
-          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Button
-              onClick={onGetStarted}
-              size="xl"
-              className="w-full bg-white text-brand-700 shadow-sm hover:bg-white/90 sm:w-auto"
+          <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+            <a
+              href={mailto}
+              className="inline-flex h-[54px] items-center justify-center rounded-xl bg-white px-6 text-[15px] font-bold text-brand-800 transition-colors hover:bg-brand-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
             >
-              {t('landing.ctaButton')} <ArrowRight className="size-4" />
-            </Button>
-            <button
-              onClick={onSignIn}
-              className="text-sm font-semibold text-white/90 underline-offset-4 hover:underline"
+              {t('landing.ctaPrimary')}
+            </a>
+            <Link
+              to="/signup"
+              className="inline-flex h-[54px] items-center justify-center rounded-xl border border-white/35 px-6 text-[15px] font-semibold text-white transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
             >
-              {t('landing.ctaSignIn')}
-            </button>
+              {t('landing.ctaSecondary')}
+            </Link>
           </div>
         </div>
       </Reveal>
@@ -478,27 +562,70 @@ function CtaBand({ onSignIn, onGetStarted }: { onSignIn: () => void; onGetStarte
 function Footer() {
   const { t } = useTranslation()
   const year = new Date().getFullYear()
+  const salesMailto = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(t('landing.demoMailSubject'))}`
+  const columns: { heading: string; links: { label: string; href: string }[] }[] = [
+    {
+      heading: t('landing.fProductHeading'),
+      links: [
+        { label: t('landing.fPos'), href: '#produk' },
+        { label: t('landing.fPayroll'), href: '#produk' },
+        { label: t('landing.fStatements'), href: '#produk' },
+        { label: t('landing.fArAp'), href: '#produk' },
+      ],
+    },
+    {
+      heading: t('landing.fCompanyHeading'),
+      links: [
+        { label: t('landing.fAbout'), href: '#' },
+        { label: t('landing.fCompliance'), href: '#kepatuhan' },
+        { label: t('landing.fSecurity'), href: '#kepatuhan' },
+        { label: t('landing.fContact'), href: `mailto:${CONTACT_EMAIL}` },
+      ],
+    },
+    {
+      heading: t('landing.fSupportHeading'),
+      links: [
+        { label: t('landing.fDocs'), href: '#' },
+        { label: t('landing.fStatus'), href: '#' },
+        { label: t('landing.fSales'), href: salesMailto },
+      ],
+    },
+  ]
   return (
-    <footer className="border-t border-line bg-canvas">
-      <div className="mx-auto flex w-full max-w-6xl flex-col items-center gap-5 px-5 py-10 sm:flex-row">
-        <Wordmark />
-        <p className="text-sm text-ink-3 sm:ml-4">{t('landing.footerTagline')}</p>
-        <div className="flex items-center gap-2.5 sm:ml-auto">
-          <a href="#features" className="text-sm font-semibold text-ink-2 hover:text-ink">
-            {t('landing.navFeatures')}
-          </a>
-          <span className="text-ink-200">·</span>
-          <a href="#how" className="text-sm font-semibold text-ink-2 hover:text-ink">
-            {t('landing.navHow')}
-          </a>
-          <span className="ml-1">
-            <LanguageSwitcher />
-          </span>
-          <ThemeToggle />
+    <footer className="mt-[88px] border-t border-line">
+      <div className="mx-auto flex w-full max-w-6xl flex-col justify-between gap-10 px-5 pb-13 pt-11 md:flex-row">
+        <div className="max-w-[300px]">
+          <Wordmark />
+          <p className="mt-4 text-[13.5px] leading-relaxed text-ink-3">
+            {t('landing.footerCompany')}
+            <br />
+            {t('landing.footerAddress')}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-10 lg:gap-14">
+          {columns.map((col) => (
+            <div key={col.heading}>
+              <div className="text-xs font-bold text-ink">{col.heading}</div>
+              <div className="mt-3 flex flex-col gap-2.5">
+                {col.links.map((l) => (
+                  <a
+                    key={l.label}
+                    href={l.href}
+                    className="text-[13.5px] font-medium text-ink-3 transition-colors hover:text-ink"
+                  >
+                    {l.label}
+                  </a>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
-      <div className="border-t border-line py-4 text-center text-xs text-ink-3">
-        {t('landing.footerRights', { year })}
+      <div className="border-t border-line">
+        <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-3 px-5 py-5 text-[12.5px] text-ink-3 sm:flex-row">
+          <span>{t('landing.footerRights', { year })}</span>
+          <span>{t('landing.footerPhotoCredit')}</span>
+        </div>
       </div>
     </footer>
   )
@@ -507,11 +634,8 @@ function Footer() {
 // ── Page ─────────────────────────────────────────────────────────────────────────────────────────
 
 export function Landing() {
-  const { t } = useTranslation()
   const auth = useAuth()
-  const navigate = useNavigate()
   const onSignIn = () => auth.login()
-  const onGetStarted = () => navigate('/signup')
 
   useEffect(() => {
     if (!window.location.hash) window.scrollTo(0, 0)
@@ -520,44 +644,14 @@ export function Landing() {
   return (
     <div className="relative min-h-screen overflow-x-clip text-ink">
       <Backdrop />
-      <Header onSignIn={onSignIn} onGetStarted={onGetStarted} />
+      <Header onSignIn={onSignIn} />
       <main>
-        <Hero onSignIn={onSignIn} onGetStarted={onGetStarted} />
-        <TrustStrip />
-        <FeatureRow
-          kicker={t('landing.r1Kicker')}
-          title={t('landing.r1Title')}
-          body={t('landing.r1Body')}
-          points={[t('landing.r1Point1'), t('landing.r1Point2'), t('landing.r1Point3')]}
-          media={<ConsolidationDiagram />}
-          reverse
-        />
-        <FeatureRow
-          kicker={t('landing.r2Kicker')}
-          title={t('landing.r2Title')}
-          body={t('landing.r2Body')}
-          points={[t('landing.r2Point1'), t('landing.r2Point2'), t('landing.r2Point3')]}
-          media={
-            // Collage: real counter scene with the product receipt floating over it. The wrapper's
-            // bottom padding reserves the receipt's overhang so it never bleeds into the next section.
-            <div className="relative mx-auto w-full max-w-[500px] pb-14">
-              <div className="relative overflow-hidden rounded-card shadow-lg">
-                <Photo
-                  photo={posPhoto}
-                  alt={t('landing.r2PhotoAlt')}
-                  sizes="(min-width: 1024px) 500px, 92vw"
-                  className="aspect-[4/3] w-full object-cover"
-                />
-                <div aria-hidden className="absolute inset-0 bg-brand-900/25 mix-blend-multiply" />
-              </div>
-              <PosReceiptMock className="absolute bottom-0 right-0 w-[264px] sm:-right-4" />
-            </div>
-          }
-        />
-        <FeatureGrid />
-        <Steps />
-        <Testimonial />
-        <CtaBand onSignIn={onSignIn} onGetStarted={onGetStarted} />
+        <Hero />
+        <ProofBar />
+        <ProductSection />
+        <ComplianceSection />
+        <SocialProofSection />
+        <CtaBand />
       </main>
       <Footer />
     </div>
