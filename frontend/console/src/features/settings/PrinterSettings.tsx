@@ -8,6 +8,7 @@ import { usePrinter } from '@/lib/escpos/printerContext'
 import type { PaperWidth } from '@/lib/escpos/receipt'
 import {
   classifyConnectError,
+  isNativeShell,
   listNativeDevices,
   type NativeDevice,
   type TransportKind,
@@ -29,20 +30,27 @@ export function PrinterSettings() {
   const [nativeDevices, setNativeDevices] = useState<NativeDevice[] | null>(null)
   const [nativeLoading, setNativeLoading] = useState(false)
 
-  const transports: { kind: TransportKind; icon: typeof Usb; labelKey: string; hintKey: string }[] =
-    [
-      // In the Native Till app the bridge is the ONE real device path (the WebView has no
-      // WebUSB/WebBluetooth) — put it first. Feature-detected: never present in a browser.
-      ...(printer.support.native
-        ? [
-            {
-              kind: 'native' as TransportKind,
-              icon: Printer,
-              labelKey: 'settings.printer.native',
-              hintKey: 'settings.printer.nativeHint',
-            },
-          ]
-        : []),
+  // Inside the Native Till app the bridge is the ONLY real device path (the WebView has no
+  // WebUSB/WebBluetooth/WebSerial, and RawBT is pointless there) — show JUST the native tile,
+  // even when the bridge failed to inject (a visibly unsupported tile beats an empty page).
+  // In a browser the four web transports render exactly as before.
+  const inNativeShell = isNativeShell()
+
+  const nativeTransports: {
+    kind: TransportKind
+    icon: typeof Usb
+    labelKey: string
+    hintKey: string
+  }[] = [
+    {
+      kind: 'native',
+      icon: Printer,
+      labelKey: 'settings.printer.native',
+      hintKey: 'settings.printer.nativeHint',
+    },
+  ]
+
+  const browserTransports: typeof nativeTransports = [
       { kind: 'usb', icon: Usb, labelKey: 'settings.printer.usb', hintKey: 'settings.printer.usbHint' },
       {
         kind: 'ble',
@@ -63,6 +71,8 @@ export function PrinterSettings() {
         hintKey: 'settings.printer.rawbtHint',
       },
     ]
+
+  const transports = inNativeShell ? nativeTransports : browserTransports
 
   const connect = async (kind: TransportKind) => {
     setError(null)
@@ -315,8 +325,14 @@ export function PrinterSettings() {
         </Card>
       ) : null}
 
-      <p className="text-xs text-ink-3">{t('settings.printer.compatNote')}</p>
-      <p className="text-xs text-ink-3">{t('settings.printer.buyNote')}</p>
+      {/* Browser-only guidance (Chrome requirement, RawBT for Classic printers) — inside the
+          app the native bridge reaches every printer type, so this advice would mislead. */}
+      {!inNativeShell ? (
+        <>
+          <p className="text-xs text-ink-3">{t('settings.printer.compatNote')}</p>
+          <p className="text-xs text-ink-3">{t('settings.printer.buyNote')}</p>
+        </>
+      ) : null}
     </div>
   )
 }

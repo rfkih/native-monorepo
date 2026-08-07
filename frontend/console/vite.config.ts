@@ -56,6 +56,10 @@ const proxy: Record<string, ProxyOptions> = GATEWAY
 // service worker out of `npm run dev` entirely — it only activates in a production build/preview.
 const pwa = VitePWA({
   registerType: 'autoUpdate',
+  // Registration is hand-rolled in src/lib/pwa.ts (not auto-injected): inside the Native Till
+  // Android shell the SW must NOT register at all — a SW-served document can't receive the
+  // Capacitor bridge injection (ADR 0043), which silently kills in-app printing.
+  injectRegister: null,
   devOptions: { enabled: false },
   workbox: {
     // Navigating to an API path (should never happen, defensive only) must not fall back to the

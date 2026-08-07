@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
   classifyConnectError,
   createRawbtTransport,
+  isNativeShell,
   listNativeDevices,
   rawbtIntentUrl,
   requestNativePrinter,
@@ -203,6 +204,20 @@ describe('native app bridge (ADR 0043)', () => {
     expect(transportSupport().native).toBe(true)
     vi.stubGlobal('window', { Capacitor: { Plugins: { NativePrint: fakeNativeBridge() } } })
     expect(transportSupport().native).toBe(true)
+  })
+
+  it('isNativeShell spots the WebView even when the injected bridge is MISSING (SW-served page)', () => {
+    // Not in the shell: node, plain browsers.
+    expect(isNativeShell()).toBe(false)
+    vi.stubGlobal('window', {})
+    expect(isNativeShell()).toBe(false)
+    // The addJavascriptInterface object exists in EVERY page of the Capacitor WebView — even one
+    // a service worker served, where window.Capacitor (network-layer injection) is absent.
+    vi.stubGlobal('window', { androidBridge: {} })
+    expect(isNativeShell()).toBe(true)
+    // And the healthy in-app case / future non-Android shells.
+    vi.stubGlobal('window', { Capacitor: { isNativePlatform: () => true } })
+    expect(isNativeShell()).toBe(true)
   })
 
   it('lists the bonded/attached devices for the settings picker', async () => {

@@ -422,6 +422,21 @@ function getNativePrintBridge(): NativePrintBridge | null {
   return (w.NativePrint ?? w.Capacitor?.Plugins?.NativePrint ?? null) as NativePrintBridge | null
 }
 
+/**
+ * True when this page runs inside the Native Till Android shell (ADR 0043) — even when the full
+ * Capacitor bridge is MISSING. Detection rides `window.androidBridge`, the addJavascriptInterface
+ * object Capacitor exposes to every page of its WebView regardless of how the document was served;
+ * `window.Capacitor` by contrast is spliced into the HTML at the network layer, so a
+ * service-worker-served document lacks it (the field failure that motivated this: in-app printer
+ * settings showed four dead browser tiles and no native tile). Callers use this to adapt the UI
+ * and to keep the service worker out of the shell (see lib/pwa.ts).
+ */
+export function isNativeShell(): boolean {
+  if (typeof window === 'undefined') return false
+  const w = window as any
+  return !!(w.androidBridge || w.Capacitor?.isNativePlatform?.() || w.NativePrint)
+}
+
 /** The bonded/attached printers the app can reach, for the settings device picker. */
 export async function listNativeDevices(): Promise<NativeDevice[]> {
   const bridge = getNativePrintBridge()
