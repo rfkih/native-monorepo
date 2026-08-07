@@ -9,6 +9,7 @@ import { Spinner } from '@/components/ui/Spinner'
 import { BrandMark, Wordmark } from '@/components/Wordmark'
 import { OfflineBanner } from '@/features/pos/offline/OfflineBanner'
 import { hasAnyRole, useAuth } from '@/lib/authContext'
+import { isNativeShell } from '@/lib/escpos/transport'
 import { usePageAccess } from '@/lib/pageAccess'
 import { useSession } from '@/lib/session'
 
@@ -80,6 +81,9 @@ const Signup = lazy(() =>
 )
 const Landing = lazy(() =>
   import('@/features/landing/Landing').then((m) => ({ default: m.Landing })),
+)
+const AppWelcome = lazy(() =>
+  import('@/features/landing/AppWelcome').then((m) => ({ default: m.AppWelcome })),
 )
 const Me = lazy(() => import('@/features/me/Me').then((m) => ({ default: m.Me })))
 const PrinterSettings = lazy(() =>
@@ -315,7 +319,9 @@ export function App() {
     return (
       <Suspense fallback={<CenteredSpinner />}>
         <Routes>
-          <Route path="/" element={<Landing />} />
+          {/* Inside the Android shell the marketing site reads wrong — a logged-out app
+              opens on the branded welcome (sign in / create account), not a sales page. */}
+          <Route path="/" element={isNativeShell() ? <AppWelcome /> : <Landing />} />
           <Route path="/login" element={<LoginLauncher />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

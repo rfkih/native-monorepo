@@ -369,6 +369,11 @@ export const id = {
   dashboardPhone: {
     perOutlet: 'Per outlet',
   },
+  appWelcome: {
+    tagline: 'Kasir, pembukuan, dan tim — satu aplikasi.',
+    signIn: 'Masuk',
+    createAccount: 'Buat akun',
+  },
   mobile: {
     tabs: {
       aria: 'Navigasi bawah',

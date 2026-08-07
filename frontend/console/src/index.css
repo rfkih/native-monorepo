@@ -227,9 +227,18 @@ body {
   .sheet-up {
     animation: var(--animate-sheet-up);
   }
+  /* The in-app welcome's trend line drawing itself in (AppWelcome; pathLength=100). */
+  .draw-path {
+    stroke-dasharray: 100;
+    animation: draw-path 1s cubic-bezier(0.22, 0.7, 0.2, 1) 0.15s both;
+  }
   @media (prefers-reduced-motion: reduce) {
-    .sheet-up {
+    .sheet-up,
+    .draw-path {
       animation: none;
+    }
+    .draw-path {
+      stroke-dasharray: none;
     }
   }
   /* Continuous, gentle float for the hero's floating accent cards. */
@@ -295,6 +304,14 @@ body {
   }
   to {
     transform: translateY(0);
+  }
+}
+@keyframes draw-path {
+  from {
+    stroke-dashoffset: 100;
+  }
+  to {
+    stroke-dashoffset: 0;
   }
 }
 @keyframes drawer-in {

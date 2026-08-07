@@ -379,6 +379,11 @@ export const en = {
   dashboardPhone: {
     perOutlet: 'By outlet',
   },
+  appWelcome: {
+    tagline: 'The till, the books, and your team — one app.',
+    signIn: 'Sign in',
+    createAccount: 'Create an account',
+  },
   mobile: {
     tabs: {
       aria: 'Bottom navigation',
