@@ -3,6 +3,7 @@ import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { LogOut } from 'lucide-react'
 import { Shell } from '@/app/Shell'
+import { TransitionedRoutes } from '@/app/TransitionedRoutes'
 import { MobileTabBarGate } from '@/app/MobileTabBarGate'
 import { SettingsChrome } from '@/components/SettingsChrome'
 import { Spinner } from '@/components/ui/Spinner'
@@ -23,6 +24,40 @@ function PrefetchPosChunk() {
   useEffect(() => {
     void import('@/features/servicepos/PosSwitch')
   }, [])
+  return null
+}
+
+/**
+ * Warms the hot lazy route chunks once the first screen has painted and the main thread is
+ * idle — a route change then swaps instantly under the view transition instead of flashing
+ * the Suspense spinner mid-navigation (the "not smooth" complaint on the Android app).
+ * Employee self-service chunks always; the back-office set only for logins that can open it.
+ */
+function PrefetchRouteChunks({ canDashboard }: { canDashboard: boolean }) {
+  useEffect(() => {
+    const warm = () => {
+      void import('@/features/me/Me')
+      void import('@/features/expenses/MyExpenses')
+      void import('@/features/me/MePayslipsScreen')
+      void import('@/features/me/MeTimeoffScreen')
+      if (canDashboard) {
+        void import('@/features/dashboard/Dashboard')
+        void import('@/features/statements/IncomeStatement')
+        void import('@/features/expenses/ExpensesHub')
+        void import('@/features/team/Team')
+        void import('@/features/close/PeriodClose')
+      }
+    }
+    const w = window as Window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number
+    }
+    if (typeof w.requestIdleCallback === 'function') {
+      w.requestIdleCallback(warm, { timeout: 3000 })
+      return
+    }
+    const timer = setTimeout(warm, 1500)
+    return () => clearTimeout(timer)
+  }, [canDashboard])
   return null
 }
 
@@ -318,13 +353,13 @@ export function App() {
   if (!auth.authenticated) {
     return (
       <Suspense fallback={<CenteredSpinner />}>
-        <Routes>
+        <TransitionedRoutes>
           {/* Inside the Android shell the marketing site reads wrong — a logged-out app
               opens on the branded welcome (sign in / create account), not a sales page. */}
           <Route path="/" element={isNativeShell() ? <AppWelcome /> : <Landing />} />
           <Route path="/login" element={<LoginLauncher />} />
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        </TransitionedRoutes>
       </Suspense>
     )
   }
@@ -394,8 +429,9 @@ export function App() {
           (Phase 5 offline mode, ADR 0028). Renders nothing when there is nothing to say. */}
       <OfflineBanner />
       {posAllowed && <PrefetchPosChunk />}
+      <PrefetchRouteChunks canDashboard={canDashboard} />
       <Suspense fallback={<CenteredSpinner />}>
-        <Routes>
+        <TransitionedRoutes>
           {/* The POS is a full-screen "front office" — it renders OUTSIDE the sidebar/topbar shell.
               PosSwitch picks the per-vertical surface (restaurant Pos vs carwash ServicePos). */}
           {posAllowed && <Route path="/pos" element={<PosSwitch />} />}
@@ -654,7 +690,7 @@ export function App() {
             )}
             <Route path="*" element={<Navigate to={home} replace />} />
           </Route>
-        </Routes>
+        </TransitionedRoutes>
       </Suspense>
       {/* Phone bottom navigation (Native Console Android) — mounts below 640px on every
           authenticated non-till surface; persona and mount policy live inside the gate. */}

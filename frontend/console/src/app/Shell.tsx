@@ -43,7 +43,7 @@ export function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[240px_1fr]">
       {/* Desktop sidebar */}
-      <aside className="sticky top-0 hidden h-screen flex-col gap-[3px] overflow-y-auto border-r border-line bg-surface px-4 py-5 print:hidden lg:flex">
+      <aside className="sticky top-0 hidden h-screen flex-col gap-[3px] overflow-y-auto border-r border-line bg-surface px-4 py-5 print:hidden [view-transition-name:shell-sidebar] lg:flex">
         <Sidebar
           groups={groups}
           isActive={isActive}
@@ -82,7 +82,7 @@ export function Shell({ children }: { children: ReactNode }) {
 
       {/* Main column */}
       <div className="flex min-w-0 flex-col">
-        <header className="sticky top-0 z-20 flex h-16 items-center gap-4 border-b border-line bg-surface px-5 print:hidden lg:px-8">
+        <header className="sticky top-0 z-20 flex h-16 items-center gap-4 border-b border-line bg-surface px-5 print:hidden [view-transition-name:shell-topbar] lg:px-8">
           {/* mobile menu + logo */}
           <button
             type="button"
@@ -173,7 +173,7 @@ function Sidebar({
 
   return (
     <>
-      <Link to="/" aria-label="Native" onClick={onNavigate} className="px-2 pb-5 pt-1.5">
+      <Link to="/" viewTransition aria-label="Native" onClick={onNavigate} className="px-2 pb-5 pt-1.5">
         <Wordmark />
       </Link>
 
@@ -221,6 +221,7 @@ function Sidebar({
                     <Link
                       key={item.to}
                       to={item.to}
+                      viewTransition
                       onClick={onNavigate}
                       aria-current={activeItem ? 'page' : undefined}
                       className={cn(
@@ -243,6 +244,7 @@ function Sidebar({
         <div className="mt-auto pt-4">
           <Link
             to="/pos"
+            viewTransition
             onClick={onNavigate}
             className="flex h-14 items-center gap-[11px] rounded-[20px] border border-emerald-line bg-emerald-tint px-3.5 text-sm font-bold text-emerald-2 transition-colors hover:bg-brand-100/60"
           >

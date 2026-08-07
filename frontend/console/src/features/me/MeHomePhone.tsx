@@ -43,7 +43,7 @@ function StatCard({
   unit: string
 }) {
   return (
-    <Link to={to} className="block rounded-[18px] border border-line bg-surface p-4 shadow-sm">
+    <Link to={to} viewTransition className="block rounded-[18px] border border-line bg-surface p-4 shadow-sm">
       <MicroLabel>{label}</MicroLabel>
       <div className="mt-1.5 flex items-baseline gap-1.5">
         <span className="tnum font-mono text-[27px] font-bold leading-none text-ink">{value}</span>
@@ -93,11 +93,11 @@ export function MeHomePhone() {
         <Wordmark />
         <div className="flex-1" />
         {canDashboard ? (
-          <Link to="/" className="rounded-xl px-2 py-1.5 text-sm font-medium text-ink-3 hover:text-ink">
+          <Link to="/" viewTransition className="rounded-xl px-2 py-1.5 text-sm font-medium text-ink-3 hover:text-ink">
             {t('me.toDashboard')}
           </Link>
         ) : canPos ? (
-          <Link to="/pos" className="rounded-xl px-2 py-1.5 text-sm font-medium text-ink-3 hover:text-ink">
+          <Link to="/pos" viewTransition className="rounded-xl px-2 py-1.5 text-sm font-medium text-ink-3 hover:text-ink">
             {t('me.toPos')}
           </Link>
         ) : null}
@@ -211,6 +211,7 @@ export function MeHomePhone() {
                   <Link
                     key={a.key}
                     to={a.to}
+                    viewTransition
                     className="flex min-h-[60px] items-center gap-3 rounded-2xl border border-line bg-surface px-3.5 py-3 text-[13.5px] font-semibold leading-tight text-ink transition-colors hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2"
                   >
                     <ActionIcon className="size-5 shrink-0 text-emerald-2" strokeWidth={1.9} aria-hidden />

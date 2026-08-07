@@ -29,6 +29,7 @@ export function LedgerPhoneList({ rows, locale }: { rows: LedgerPhoneRow[]; loca
         <Link
           key={r.id}
           to={r.to}
+          viewTransition
           className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-emerald"
         >
           <div className="min-w-0 flex-1">

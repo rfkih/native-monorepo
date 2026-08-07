@@ -59,12 +59,14 @@ export function AppWelcome() {
       <div className="reveal flex flex-col gap-3 pb-10" style={{ animationDelay: '0.55s' }}>
         <Link
           to="/login"
+          viewTransition
           className="grid h-14 place-items-center rounded-2xl bg-white text-[15.5px] font-bold text-brand-800 transition-transform active:scale-[0.98]"
         >
           {t('appWelcome.signIn')}
         </Link>
         <Link
           to="/signup"
+          viewTransition
           className="grid h-14 place-items-center rounded-2xl border border-white/20 text-[15px] font-semibold text-white/90 transition-colors hover:bg-white/5"
         >
           {t('appWelcome.createAccount')}

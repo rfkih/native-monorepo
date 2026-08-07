@@ -37,7 +37,7 @@ export function ScreenHeader({
       )}
     >
       {backTo != null ? (
-        <Link to={backTo} aria-label={t('common.back')} className={backClass}>
+        <Link to={backTo} viewTransition aria-label={t('common.back')} className={backClass}>
           <ChevronLeft className="size-[22px]" aria-hidden />
         </Link>
       ) : onBack != null ? (

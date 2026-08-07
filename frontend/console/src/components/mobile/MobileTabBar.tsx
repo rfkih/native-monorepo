@@ -67,7 +67,7 @@ export function MobileTabBar({ tabs }: { tabs: MobileTab[] }) {
   return (
     <nav
       aria-label={t('mobile.tabs.aria')}
-      className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface print:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface print:hidden [view-transition-name:tab-bar]"
       style={{ paddingBottom: 'var(--safe-area-inset-bottom, 0px)' }}
     >
       <div className="grid h-20 auto-cols-fr grid-flow-col items-stretch pt-1.5 pb-3">
@@ -77,6 +77,7 @@ export function MobileTabBar({ tabs }: { tabs: MobileTab[] }) {
             <Link
               key={tab.key}
               to={tab.to}
+              viewTransition
               aria-current={active ? 'page' : undefined}
               className={tabClass}
               onClick={() => window.scrollTo(0, 0)}

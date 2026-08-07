@@ -37,6 +37,7 @@ function Tile({ to, icon: TileIcon, label, onClose }: { to: string; icon: Icon; 
   return (
     <Link
       to={to}
+      viewTransition
       onClick={onClose}
       className="flex min-h-[92px] flex-col items-center justify-center gap-2 rounded-2xl border border-line bg-surface px-1.5 py-3 text-center text-[12px] font-semibold text-ink-2 transition-colors hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2"
     >
@@ -138,7 +139,7 @@ export function MoreSheet({
             {group.items.map((item) => {
               const ItemIcon = item.icon
               return (
-                <Link key={item.to} to={item.to} onClick={onClose} className={ROW_CLASS}>
+                <Link key={item.to} to={item.to} viewTransition onClick={onClose} className={ROW_CLASS}>
                   <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-ink-50 text-ink-2">
                     <ItemIcon className="size-[17px]" strokeWidth={1.8} aria-hidden />
                   </span>

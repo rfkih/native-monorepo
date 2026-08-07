@@ -181,6 +181,7 @@ export function DashboardPhone() {
               </div>
               <Link
                 to="/pos"
+                viewTransition
                 className="rounded-xl bg-emerald px-4 py-2 text-sm font-bold text-on-emerald transition-colors hover:bg-emerald-2"
               >
                 {t('dashboard.openTill')}
@@ -229,6 +230,7 @@ export function DashboardPhone() {
                   <Link
                     key={tile.key}
                     to={tile.to}
+                    viewTransition
                     className="flex min-h-[88px] flex-col justify-between rounded-[18px] border border-line bg-surface p-3.5 transition-colors hover:border-emerald-line hover:bg-emerald-tint"
                   >
                     <TileIcon className="size-[21px] text-emerald-2" strokeWidth={1.8} aria-hidden />

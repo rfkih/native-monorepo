@@ -764,11 +764,13 @@ export function Team() {
             className="h-11 pl-10 pr-4 text-sm"
           />
         </div>
+        {/* Phone: the 5-pill filter is wider than 390px — it must scroll inside its own box,
+            never widen the page (a wider layout viewport also mis-positions the fixed tab bar). */}
         <Segmented
           ariaLabel={t('team.title')}
           value={roleFilter}
           onChange={setRoleFilter}
-          className="h-11"
+          className="h-11 max-sm:max-w-full max-sm:overflow-x-auto"
           options={[
             { value: 'all', label: t('team.filterAll') },
             ...ROLES.map((r) => ({ value: r, label: t(`team.role.${r}`) })),

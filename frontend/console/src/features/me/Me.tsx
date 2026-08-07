@@ -58,6 +58,7 @@ export function Me() {
         {canDashboard ? (
           <Link
             to="/"
+            viewTransition
             className="rounded-xl px-2.5 py-1.5 text-sm font-medium text-ink-3 hover:text-ink"
           >
             {t('me.toDashboard')}
@@ -65,6 +66,7 @@ export function Me() {
         ) : canPos ? (
           <Link
             to="/pos"
+            viewTransition
             className="rounded-xl px-2.5 py-1.5 text-sm font-medium text-ink-3 hover:text-ink"
           >
             {t('me.toPos')}
