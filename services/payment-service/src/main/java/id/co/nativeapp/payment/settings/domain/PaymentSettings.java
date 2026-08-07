@@ -15,8 +15,11 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 /**
- * The {@code payment_settings} aggregate (ADR 0045) — one row per scope: the company DEFAULT row
- * ({@code outletId == null}) or a per-outlet OVERRIDE row. Owns the QRIS {@link QrisMode mode}, the
+ * The {@code payment_settings} aggregate (ADR 0045, DIVISION-scope amendment) — one row per scope:
+ * the company DEFAULT row ({@code orgUnitId == null}) or a per-unit OVERRIDE row, where the unit is
+ * EITHER an outlet OR a division (business-unit) id from org-service's tree — payment-service holds
+ * no org read model, so it never distinguishes the two; resolution order (outlet -> division ->
+ * company) lives in the reader/charge-writer, not here. Owns the QRIS {@link QrisMode mode}, the
  * merchant's uploaded static QRIS image, and (company default row only) the merchant's own Midtrans
  * credentials.
  *
@@ -50,8 +53,8 @@ public class PaymentSettings extends Auditable {
   @Column(name = "id", nullable = false, updatable = false)
   private UUID id;
 
-  @Column(name = "outlet_id", updatable = false)
-  private UUID outletId;
+  @Column(name = "org_unit_id", updatable = false)
+  private UUID orgUnitId;
 
   @Enumerated(EnumType.STRING)
   @Column(name = "mode", nullable = false, length = 16)
@@ -99,12 +102,13 @@ public class PaymentSettings extends Auditable {
   /**
    * Creates a settings row for a scope.
    *
-   * @param outletId the outlet this row overrides, or {@code null} for the company default row
+   * @param orgUnitId the outlet or division this row overrides, or {@code null} for the company
+   *     default row
    * @param mode the initial mode; must be non-null
    */
-  public PaymentSettings(UUID outletId, QrisMode mode) {
+  public PaymentSettings(UUID orgUnitId, QrisMode mode) {
     this.id = UUID.randomUUID();
-    this.outletId = outletId;
+    this.orgUnitId = orgUnitId;
     this.mode = Objects.requireNonNull(mode, "mode");
   }
 
@@ -119,14 +123,14 @@ public class PaymentSettings extends Auditable {
    * console re-sends the form without it), a non-blank value replaces it and refreshes {@code
    * serverKeyLast4}.
    *
-   * @throws SettingsValidationException if this is an outlet override row (credentials are
-   *     company-level), or a key is provided without provider/environment
+   * @throws SettingsValidationException if this is a unit (outlet or division) override row
+   *     (credentials are company-level), or a key is provided without provider/environment
    */
   public void applyGatewayCredentials(
       PspProvider provider, ProviderEnvironment environment, String serverKey, String clientKey) {
-    if (outletId != null) {
+    if (orgUnitId != null) {
       throw new SettingsValidationException(
-          "Gateway credentials live on the company default settings, not an outlet override.");
+          "Gateway credentials live on the company default settings, not a unit override.");
     }
     this.provider = Objects.requireNonNull(provider, "provider");
     this.providerEnvironment = Objects.requireNonNull(environment, "environment");
@@ -198,8 +202,8 @@ public class PaymentSettings extends Auditable {
     return id;
   }
 
-  public UUID getOutletId() {
-    return outletId;
+  public UUID getOrgUnitId() {
+    return orgUnitId;
   }
 
   public QrisMode getMode() {
@@ -243,8 +247,8 @@ public class PaymentSettings extends Auditable {
   public String toString() {
     return "PaymentSettings[id="
         + id
-        + ", outletId="
-        + outletId
+        + ", orgUnitId="
+        + orgUnitId
         + ", mode="
         + mode
         + ", hasStaticQr="

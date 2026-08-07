@@ -5,6 +5,32 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-07 — Register cadence rework (ADR 0038 amendment): multi-session/day + POS open gate
+
+UAT drill findings drove three same-day register changes. (1) The "expected 0" mystery = sales
+rung OUTSIDE the session window (open+close in one motion at day end) — not a math bug. (2) The
+open-drawer float now PREFILLS from the last close's counted cash (console-only, history endpoint,
+derived-value pattern). (3) Owner-specified cadence: restaurant V30 drops the ADR-0038 day-final
+unique — several sessions per outlet per day are legal again (one OPEN at a time unchanged;
+cross-midnight legal; finance already safe per-session), and the till now auto-prompts the open
+sheet when no session is open and gates the PAY action on an open session while online (offline
+exempt — ADR 0028). Fail-open on session-read errors: a flaky read never blocks a sale.
+
+## 2026-08-07 — QRIS scope amendment: DIVISION-level QR (ADR 0045 amendment) + outlet-first UI
+
+Two same-day owner-driven iterations after the UAT deploy. (1) **Outlet-first settings UI**:
+/settings/payments leads with the outlet list (accordion editor per outlet; Inherit = override
+DELETE with a destructive confirm since the row drop removes the outlet's image); company default
++ credentials below as the fallback. (2) **Division scope**: `payment_settings.outlet_id` →
+`org_unit_id` (payment V4), resolution now **outlet → division → company** per facet (credentials
+stay company-only), unit endpoints at `/api/v1/payment-settings/units/{unitId}`, effective/image
+reads + charge creation take a client-supplied advisory `divisionId`, org-service `OutletResponse`
+gains the additive `divisionId` so the POS till knows its parent BU, and the settings page groups
+outlets under their division with a division-level editor. UAT deploy notes: the service-template
+clone needed the fleet's `!dev` JWT resource-server yml document (jwkSetUri-cannot-be-empty on
+prod-profile boot), and `payment_service` role/DB had to be created manually in the existing UAT
+postgres volume.
+
 ## 2026-08-07 — QRIS payment modes SHIPPED end-to-end (ADR 0045): 12 commits, all gates green
 
 The whole program landed the same day it was planned. Per-company **MANUAL / STATIC / GATEWAY**

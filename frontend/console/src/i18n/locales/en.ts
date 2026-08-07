@@ -441,24 +441,53 @@ export const en = {
       },
       static: {
         heading: 'Your QRIS code',
-        companyLabel: 'Shown at every outlet unless an outlet below has its own image.',
+        companyLabel: "The default QR image for every outlet that doesn't have its own.",
         upload: 'Upload image',
         replace: 'Replace image',
         remove: 'Remove',
         previewAlt: 'QRIS code preview',
         tooLarge: 'That image is too large — the limit is 2 MB.',
         uploadError: 'Could not upload the image. Try again.',
-        outletHeading: 'Per-outlet overrides',
-        outletHint:
-          'Each outlet uses the company mode and image by default. Override either one for a specific outlet below.',
         usingCompany: 'Using company image',
         overrideSet: 'Outlet image set',
       },
+      divisions: {
+        heading: 'Divisions',
+        hint:
+          'Each division can use its own QRIS mode and image, or follow the company default below. An outlet then follows its division automatically, unless it has its own setting.',
+        empty: 'No divisions yet.',
+      },
+      division: {
+        modeHeading: 'QRIS mode for {{division}}',
+        gatewayHint: "Charges for this division use the company's Midtrans connection:",
+        inheritConfirmMessage:
+          "Revert to the company default? This division's own QRIS image will be removed.",
+        imageOwnSet: 'Division image set',
+      },
+      outlets: {
+        heading: 'Outlets',
+        hint: 'Each outlet can use its own QRIS mode and image, or follow the company default below.',
+        empty: 'No outlets yet.',
+      },
       outlet: {
-        modeLabel: 'QRIS mode for {{outlet}}',
-        overridden: 'This outlet has its own QRIS mode.',
-        inherits: 'Inherits the company mode ({{mode}}).',
-        removeOverride: 'Remove override',
+        effectiveOwn: 'Own mode: {{mode}}',
+        effectiveInherits: 'Inherits company default ({{mode}})',
+        effectiveInheritsDivision: 'Inherits division default ({{mode}})',
+        modeHeading: 'QRIS mode for {{outlet}}',
+        inheritOption: 'Inherit company default',
+        inheritDesc: 'Follows the company default, currently {{mode}}.',
+        inheritOptionDivision: 'Inherit division default',
+        inheritDescDivision: 'Follows the division default, currently {{mode}}.',
+        inheritConfirmMessage:
+          "Revert to the company default? This outlet's own QRIS image will be removed.",
+        inheritConfirmYes: 'Yes, revert',
+        gatewayHint: "Charges for this outlet use the company's Midtrans connection:",
+        imageHeading: 'QRIS image',
+        imageInheritsDivision: 'Using division image',
+      },
+      company: {
+        heading: 'Company default',
+        subtitle: "Used by every outlet that doesn't have its own setting below.",
       },
       gateway: {
         heading: 'Payment gateway (Midtrans)',
@@ -961,7 +990,12 @@ export const en = {
     /** ADR 0036 — closing kasir (register sessions). */
     title: 'Register — closing kasir',
     openHint: 'Open the drawer to start the day: count the change fund (float) you are putting in.',
+    /** Owner request — "open the register first": shown when the pay button re-routes the cashier
+     * here because there's no open session yet. */
+    openBeforePay: 'Open the register before taking payment.',
     floatLabel: 'Opening float',
+    floatDefaultHint:
+      'Prefilled from the last close’s counted cash ({{when}}) — adjust if cash was taken out.',
     openAction: 'Open register',
     openedAt: 'Opened',
     float: 'Opening float',

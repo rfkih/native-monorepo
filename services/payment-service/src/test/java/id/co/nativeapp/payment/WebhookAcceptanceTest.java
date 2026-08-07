@@ -90,6 +90,7 @@ class WebhookAcceptanceTest extends PostgresRlsTestBase {
                   UUID.randomUUID(),
                   null,
                   OUTLET,
+                  null,
                   amountMinor,
                   "IDR",
                   "wh:" + UUID.randomUUID());

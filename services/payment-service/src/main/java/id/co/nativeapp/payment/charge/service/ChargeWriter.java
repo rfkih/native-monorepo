@@ -87,6 +87,7 @@ public class ChargeWriter {
       UUID paymentId,
       UUID referenceId,
       UUID businessId,
+      UUID divisionId,
       long amountMinor,
       String currency,
       String idempotencyKey) {
@@ -100,6 +101,7 @@ public class ChargeWriter {
     }
 
     // Replay-by-key first: same key + same payload → the existing charge; different payload → 409.
+    // divisionId is deliberately excluded from the payload match — it is advisory only.
     Optional<PaymentCharge> byKey = charges.findByIdempotencyKey(idempotencyKey);
     if (byKey.isPresent()) {
       PaymentCharge existing = byKey.get();
@@ -113,7 +115,7 @@ public class ChargeWriter {
       return new CreateOutcome(live.get(), false, null);
     }
 
-    QrisGatewayPort.GatewayCredentials credentials = requireGatewayReady(businessId);
+    QrisGatewayPort.GatewayCredentials credentials = requireGatewayReady(businessId, divisionId);
 
     PaymentCharge charge =
         new PaymentCharge(
@@ -236,7 +238,7 @@ public class ChargeWriter {
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public Optional<String> companyServerKey() {
     return settings
-        .findByOutletIdIsNull()
+        .findByOrgUnitIdIsNull()
         .filter(PaymentSettings::hasServerKey)
         .map(PaymentSettings::getServerKey);
   }
@@ -284,15 +286,19 @@ public class ChargeWriter {
   }
 
   /**
-   * The effective mode for the outlet must be GATEWAY and the COMPANY row must carry usable
-   * credentials (they are company-level, ADR 0045).
+   * The effective mode for {@code businessId ?? divisionId ?? company} must be GATEWAY and the
+   * COMPANY row must carry usable credentials (they are company-level, ADR 0045 amendment).
    */
-  private QrisGatewayPort.GatewayCredentials requireGatewayReady(UUID businessId) {
-    Optional<PaymentSettings> companyRow = settings.findByOutletIdIsNull();
-    Optional<PaymentSettings> outletRow = settings.findByOutletId(businessId);
+  private QrisGatewayPort.GatewayCredentials requireGatewayReady(UUID businessId, UUID divisionId) {
+    Optional<PaymentSettings> companyRow = settings.findByOrgUnitIdIsNull();
+    Optional<PaymentSettings> outletRow =
+        businessId == null ? Optional.empty() : settings.findByOrgUnitId(businessId);
+    Optional<PaymentSettings> divisionRow =
+        divisionId == null ? Optional.empty() : settings.findByOrgUnitId(divisionId);
     QrisMode mode =
         outletRow
             .map(PaymentSettings::getMode)
+            .or(() -> divisionRow.map(PaymentSettings::getMode))
             .or(() -> companyRow.map(PaymentSettings::getMode))
             .orElse(QrisMode.MANUAL);
     if (mode != QrisMode.GATEWAY) {
@@ -310,7 +316,7 @@ public class ChargeWriter {
 
   private QrisGatewayPort.GatewayCredentials requireCompanyCredentials() {
     return settings
-        .findByOutletIdIsNull()
+        .findByOrgUnitIdIsNull()
         .filter(PaymentSettings::hasServerKey)
         .map(this::toCredentials)
         .orElseThrow(

@@ -119,3 +119,18 @@ review → commit. As throughout, **all account codes are ILLUSTRATIVE**; an SME
   suspense for the ADR-0016 bank sweep; shrinkage is a first-order, potentially large operating
   cost) — but it is the *same* read-model gap and is tracked here to be closed when register-close is
   next revisited, not treated as evidence that GL-only is correct.
+
+## Amendment (2026-08-07) — multi-session per day restored; the POS gains an open-day gate
+
+Owner decision after the first real closing-kasir drill on UAT: the phase-1 "once per outlet per
+day" tightening is REVERTED to ADR 0036's original multi-session model. The desired cadence is:
+open the drawer before the first transaction, close at end of shift; SEVERAL sessions per outlet
+per day are legal (split shifts, a re-open after an early close); exactly ONE may be OPEN at a
+time (the V21 partial unique, unchanged); a session may span midnight (business_date stays the
+informational open-date). Restaurant V30 drops `uq_crs_one_session_per_outlet_day` and the
+writer's day-final 409. Finance is untouched by construction: its consumer is per-session-id and
+idempotent, so multiple closes per day post multiple independent variance entries. The console
+till now PROMPTS to open the drawer when no session is open and GATES the payment action on it
+while online (offline stays exempt — ADR 0028's queue must never be blocked by a session read),
+which addresses the root cause of the drill finding (sales rung outside any session window ->
+"expected 0").

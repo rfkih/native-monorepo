@@ -6,7 +6,6 @@ import id.co.nativeapp.money.Money;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
 import id.co.nativeapp.restaurant.payment.domain.TenderType;
 import id.co.nativeapp.restaurant.register.domain.RegisterSession;
-import id.co.nativeapp.restaurant.register.domain.RegisterSessionDayClosedException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionIdempotencyKeyConflictException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionNotFoundException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionNotOpenException;
@@ -142,8 +141,7 @@ public class RegisterSessionWriter {
 
     // CashWindowLock — EXCLUSIVE, FIRST lock-acquiring statement, before the openedAt timestamp
     // (defensive symmetry with close(); see class javadoc). Nothing above takes a DB lock (plain
-    // reads / in-memory validation only). Holding it also serializes concurrent opens for this
-    // outlet, so the day-final probe below is race-free against another open.
+    // reads / in-memory validation only).
     cashWindowLock.acquireForClose(request.businessId());
 
     Instant now = Instant.now();
@@ -151,16 +149,6 @@ public class RegisterSessionWriter {
         request.businessDate() != null
             ? request.businessDate()
             : LocalDate.ofInstant(now, DEFAULT_BUSINESS_ZONE);
-
-    // Day-final (ADR 0038): at most one session per outlet per business day, OPEN or CLOSED. A
-    // clean
-    // 409 for the common case; uq_crs_one_session_per_outlet_day is the ultimate backstop (the
-    // service maps its DataIntegrityViolationException to a 409).
-    if (repository
-        .findViewByBusinessIdAndBusinessDate(request.businessId(), businessDate)
-        .isPresent()) {
-      throw new RegisterSessionDayClosedException(request.businessId(), businessDate);
-    }
 
     RegisterSession session =
         RegisterSession.open(

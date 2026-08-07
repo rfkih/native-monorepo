@@ -28,6 +28,9 @@ export interface UseGatewayQrisParams {
   /** The ticket id for carwash/barbershop; omit/null for restaurant. */
   referenceId?: string | null
   businessId: string
+  /** ADR 0045 amendment: the outlet's parent business-unit id, when known — forwarded verbatim to
+   *  `createCharge` (advisory only). */
+  divisionId?: string | null
   /** The tender residual — integer minor units (rule 8); re-read on every create/retry call, so a
    * caller that recomputes it between renders always charges the CURRENT amount. */
   amountMinor: number
@@ -77,6 +80,7 @@ export function useGatewayQris(
         paymentId: params.paymentId,
         referenceId: params.referenceId ?? null,
         businessId: params.businessId,
+        divisionId: params.divisionId ?? null,
         amountMinor: params.amountMinor,
         currency: params.currency,
       })
@@ -95,6 +99,7 @@ export function useGatewayQris(
     params.paymentId,
     params.referenceId,
     params.businessId,
+    params.divisionId,
     params.amountMinor,
     params.currency,
     dispatch,

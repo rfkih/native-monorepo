@@ -432,24 +432,53 @@ export const id = {
       },
       static: {
         heading: 'Kode QRIS Anda',
-        companyLabel: 'Ditampilkan di setiap gerai kecuali gerai di bawah punya gambar sendiri.',
+        companyLabel: 'Gambar QR default untuk setiap gerai yang belum punya gambar sendiri.',
         upload: 'Unggah gambar',
         replace: 'Ganti gambar',
         remove: 'Hapus',
         previewAlt: 'Pratinjau kode QRIS',
         tooLarge: 'Gambar itu terlalu besar — batasnya 2 MB.',
         uploadError: 'Tidak dapat mengunggah gambar. Coba lagi.',
-        outletHeading: 'Ganti per gerai',
-        outletHint:
-          'Setiap gerai memakai mode dan gambar perusahaan secara bawaan. Ganti salah satunya untuk gerai tertentu di bawah.',
         usingCompany: 'Memakai gambar perusahaan',
         overrideSet: 'Gambar gerai diatur',
       },
+      divisions: {
+        heading: 'Divisi',
+        hint:
+          'Setiap divisi dapat memakai mode dan gambar QRIS sendiri, atau mengikuti default perusahaan di bawah. Gerai kemudian otomatis mengikuti divisinya, kecuali punya pengaturan sendiri.',
+        empty: 'Belum ada divisi.',
+      },
+      division: {
+        modeHeading: 'Mode QRIS untuk {{division}}',
+        gatewayHint: 'Transaksi divisi ini memakai koneksi Midtrans perusahaan:',
+        inheritConfirmMessage:
+          'Kembali ke default perusahaan? Gambar QRIS khusus divisi ini akan dihapus.',
+        imageOwnSet: 'Gambar divisi diatur',
+      },
+      outlets: {
+        heading: 'Gerai',
+        hint: 'Setiap gerai dapat memakai mode dan gambar QRIS sendiri, atau mengikuti default perusahaan di bawah.',
+        empty: 'Belum ada gerai.',
+      },
       outlet: {
-        modeLabel: 'Mode QRIS untuk {{outlet}}',
-        overridden: 'Gerai ini punya mode QRIS sendiri.',
-        inherits: 'Mengikuti mode perusahaan ({{mode}}).',
-        removeOverride: 'Hapus penggantian',
+        effectiveOwn: 'Mode sendiri: {{mode}}',
+        effectiveInherits: 'Mengikuti default perusahaan ({{mode}})',
+        effectiveInheritsDivision: 'Mengikuti default divisi ({{mode}})',
+        modeHeading: 'Mode QRIS untuk {{outlet}}',
+        inheritOption: 'Ikuti default perusahaan',
+        inheritDesc: 'Mengikuti default perusahaan, saat ini {{mode}}.',
+        inheritOptionDivision: 'Ikuti default divisi',
+        inheritDescDivision: 'Mengikuti default divisi, saat ini {{mode}}.',
+        inheritConfirmMessage:
+          'Kembali ke default perusahaan? Gambar QRIS khusus outlet ini akan dihapus.',
+        inheritConfirmYes: 'Ya, kembali ke default',
+        gatewayHint: 'Transaksi gerai ini memakai koneksi Midtrans perusahaan:',
+        imageHeading: 'Gambar QRIS',
+        imageInheritsDivision: 'Memakai gambar divisi',
+      },
+      company: {
+        heading: 'Default perusahaan',
+        subtitle: 'Dipakai oleh setiap gerai yang belum memiliki pengaturan sendiri di bawah.',
       },
       gateway: {
         heading: 'Payment gateway (Midtrans)',
@@ -954,7 +983,12 @@ export const id = {
     /** ADR 0036 — closing kasir (sesi kasir). */
     title: 'Kasir — closing kasir',
     openHint: 'Buka laci untuk memulai hari: hitung uang kembalian (modal awal) yang dimasukkan.',
+    /** Permintaan owner — "buka kasir dulu": muncul saat tombol bayar mengarahkan kasir ke sini
+     * karena belum ada sesi kasir yang terbuka. */
+    openBeforePay: 'Buka kasir dulu sebelum menerima pembayaran.',
     floatLabel: 'Modal awal',
+    floatDefaultHint:
+      'Terisi otomatis dari hitungan kas penutupan terakhir ({{when}}) — ubah jika ada uang yang diambil.',
     openAction: 'Buka kasir',
     openedAt: 'Dibuka',
     float: 'Modal awal',

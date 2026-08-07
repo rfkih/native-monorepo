@@ -64,13 +64,14 @@ export function BillPaymentModal({
   const currency = bill.currency
 
   // ADR 0045: the QRIS mode this outlet actually resolves to — bills have no offline mode, so
-  // always fetched while mounted (see PaymentModal's twin doc for the fetch/degrade rules).
-  const qrisEffectiveQuery = useQrisEffective(session, session.businessId)
+  // always fetched while mounted (see PaymentModal's twin doc for the fetch/degrade rules). ADR
+  // 0045 amendment: `divisionId` extends the resolution to outlet → division → company.
+  const qrisEffectiveQuery = useQrisEffective(session, session.businessId, { divisionId: session.divisionId })
   const qrisMode = effectiveQrisMode(qrisEffectiveQuery.data ?? undefined, qrisEffectiveQuery.isError, false, currency)
   // Bills are one-step (pay directly) — STATIC shows the merchant's QR above the Pay button so the
   // customer can scan BEFORE the cashier confirms, unlike the two-step surfaces' pending panel.
   const showStaticQr = tender === 'QRIS' && qrisMode === 'STATIC'
-  const staticQr = useStaticQrImageUrl(session, session.businessId, showStaticQr)
+  const staticQr = useStaticQrImageUrl(session, session.businessId, showStaticQr, 0, session.divisionId)
   const staticQrSlot = showStaticQr ? (
     staticQr.status === 'ready' && staticQr.url ? (
       <img

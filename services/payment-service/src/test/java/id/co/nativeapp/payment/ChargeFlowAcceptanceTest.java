@@ -35,11 +35,12 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 /**
- * The charge lifecycle end-to-end at the service layer against a stub Midtrans (ADR 0045): the
- * two-transaction create (INITIATED anchor → PSP call → QR_ISSUED), replay-by-key and
- * one-live-charge-per-payment, the IDR/mode/credential guards, FAILED on a dead PSP, the sync
- * fallback settling with EXACTLY ONE {@code PaymentChargeSucceeded} outbox row, the
- * cancel-races-settlement money guarantee, and RLS isolation.
+ * The charge lifecycle end-to-end at the service layer against a stub Midtrans (ADR 0045,
+ * DIVISION-scope amendment): the two-transaction create (INITIATED anchor → PSP call → QR_ISSUED),
+ * replay-by-key and one-live-charge-per-payment, the IDR/mode/credential guards (including the
+ * division-level GATEWAY fallback), FAILED on a dead PSP, the sync fallback settling with EXACTLY
+ * ONE {@code PaymentChargeSucceeded} outbox row, the cancel-races-settlement money guarantee, and
+ * RLS isolation.
  */
 @SpringBootTest
 class ChargeFlowAcceptanceTest extends PostgresRlsTestBase {
@@ -48,6 +49,7 @@ class ChargeFlowAcceptanceTest extends PostgresRlsTestBase {
   private static final String OTHER_TENANT = "88888888-8888-8888-8888-888888888888";
   private static final String ACTOR = "cashier@example.co.id";
   private static final UUID OUTLET = UUID.fromString("b555d5b8-e17b-4990-a7dd-2c4be199d7a6");
+  private static final UUID DIVISION = UUID.fromString("c666d5b8-e17b-4990-a7dd-2c4be199d7a6");
 
   /** The stub Midtrans the configurable base URL points at. */
   static final MockWebServer MIDTRANS = new MockWebServer();
@@ -151,7 +153,7 @@ class ChargeFlowAcceptanceTest extends PostgresRlsTestBase {
   }
 
   private static CreateChargeRequest request(UUID paymentId, long amount) {
-    return new CreateChargeRequest("restaurant", paymentId, null, OUTLET, amount, "IDR");
+    return new CreateChargeRequest("restaurant", paymentId, null, OUTLET, null, amount, "IDR");
   }
 
   @Test
@@ -217,14 +219,14 @@ class ChargeFlowAcceptanceTest extends PostgresRlsTestBase {
                   () ->
                       chargeService.create(
                           new CreateChargeRequest(
-                              "restaurant", paymentId, null, OUTLET, 10_000L, "USD"),
+                              "restaurant", paymentId, null, OUTLET, null, 10_000L, "USD"),
                           "k-usd"))
               .isInstanceOf(ChargeValidationException.class);
           assertThatThrownBy(
                   () ->
                       chargeService.create(
                           new CreateChargeRequest(
-                              "laundry", paymentId, null, OUTLET, 10_000L, "IDR"),
+                              "laundry", paymentId, null, OUTLET, null, 10_000L, "IDR"),
                           "k-vert"))
               .isInstanceOf(ChargeValidationException.class);
           return null;
@@ -246,6 +248,44 @@ class ChargeFlowAcceptanceTest extends PostgresRlsTestBase {
           assertThatThrownBy(
                   () -> chargeService.create(request(UUID.randomUUID(), 10_000L), "k-mode"))
               .isInstanceOf(ChargeConflictException.class);
+          return null;
+        });
+  }
+
+  @Test
+  void divisionGatewayModeAllowsChargeCreationWhenTheOutletHasNoRow() throws Exception {
+    // (d) Downgrade the company default's MODE to STATIC (credentials stay — mode and
+    // credentials are independent fields on the same row), then set the DIVISION override to
+    // GATEWAY. An outlet with no row of its own, under that division, must still resolve to
+    // GATEWAY and successfully create a charge.
+    setRoles("owner");
+    TenantContext.callAs(
+        TENANT,
+        ACTOR,
+        () ->
+            settingsService.upsertCompanyDefault(
+                new UpsertSettingsRequest("STATIC", null, null, null, null)));
+    TenantContext.callAs(
+        TENANT,
+        ACTOR,
+        () ->
+            settingsService.upsertUnitOverride(
+                DIVISION, new UpsertSettingsRequest("GATEWAY", null, null, null, null)));
+    setRoles("cashier");
+
+    UUID outletWithNoRow = UUID.randomUUID();
+    TenantContext.callAs(
+        TENANT,
+        ACTOR,
+        () -> {
+          UUID paymentId = UUID.randomUUID();
+          ChargeService.CreateResult result =
+              chargeService.create(
+                  new CreateChargeRequest(
+                      "restaurant", paymentId, null, outletWithNoRow, DIVISION, 77_000L, "IDR"),
+                  "charge:" + paymentId + ":1");
+          assertThat(result.fresh()).isTrue();
+          assertThat(result.response().status()).isEqualTo("QR_ISSUED");
           return null;
         });
   }

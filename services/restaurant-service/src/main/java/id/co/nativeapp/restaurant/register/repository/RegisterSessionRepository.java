@@ -51,18 +51,6 @@ public interface RegisterSessionRepository extends JpaRepository<RegisterSession
       nativeQuery = true)
   Optional<RegisterSessionView> findOpenViewByBusinessId(@Param("businessId") UUID businessId);
 
-  /**
-   * The outlet's session for a business day, OPEN or CLOSED (at most one — {@code
-   * uq_crs_one_session_per_outlet_day}). Backs the day-final open probe (ADR 0038).
-   */
-  @Query(
-      value =
-          VIEW_COLUMNS + " WHERE s.business_id = :businessId AND s.business_date = :businessDate",
-      nativeQuery = true)
-  Optional<RegisterSessionView> findViewByBusinessIdAndBusinessDate(
-      @Param("businessId") UUID businessId,
-      @Param("businessDate") java.time.LocalDate businessDate);
-
   /** A session by id (projection, read path) — backs the expected-breakdown preview (ADR 0038). */
   @Query(value = VIEW_COLUMNS + " WHERE s.id = :id", nativeQuery = true)
   Optional<RegisterSessionView> findViewById(@Param("id") UUID id);

@@ -93,6 +93,20 @@ programmatic QRIS refunds (acquirer-dependent at Midtrans; GL reversal already c
 money is manual); customer-display QR for the service verticals and bills; tier-gating GATEWAY
 behind ADR 0044 plan tiers; additional providers (Xendit et al. — new `QrisGatewayPort` adapters).
 
+## Amendment (2026-08-07, same day) — the DIVISION scope
+
+Owner decision after first UAT contact: the static QR (and mode) may also come from the
+**division** (business unit), not only the company or the outlet. This EXTENDS the original
+decision's resolution chain rather than reversing it, so it is recorded here, not in a superseding
+ADR: `payment_settings.outlet_id` is generalized to `org_unit_id` (V4 — an outlet OR a division
+id; NULL stays the company row), and every facet resolves **outlet → division → company →
+implicit MANUAL** (credentials remain company-row-only). payment-service still holds NO org read
+model: the division id is CLIENT-SUPPLIED on the read paths (`?businessId=&divisionId=`) and on
+charge creation — acceptable because it only selects intra-tenant availability/display data under
+RLS, and the money path's protections (consumer-side amount verification, signature-gated
+settlement) are untouched by it. The console resolves outlet→division parentage from the
+POS-visible `/api/v1/outlets` (which gains an additive `divisionId`).
+
 ## Consequences
 
 - Going live with digital tenders is now real: STATIC ships value with no PSP dependency at all,

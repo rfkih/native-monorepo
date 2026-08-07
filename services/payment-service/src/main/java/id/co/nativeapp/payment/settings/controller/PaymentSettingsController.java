@@ -27,10 +27,13 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
- * The payment-settings surface (ADR 0045). Route-level authorization lives at the gateway: {@code
- * /api/v1/payment-settings/**} is owner-only EXCEPT the two POS reads ({@code /effective} and
- * {@code /static-qr/image}), which ride their own POS_ROLES routes; the service layer re-checks the
- * owner guard on every admin operation (defense in depth).
+ * The payment-settings surface (ADR 0045, DIVISION-scope amendment). Route-level authorization
+ * lives at the gateway: {@code /api/v1/payment-settings/**} is owner-only EXCEPT the two POS reads
+ * ({@code /effective} and {@code /static-qr/image}), which ride their own POS_ROLES routes; the
+ * service layer re-checks the owner guard on every admin operation (defense in depth). {@code
+ * /units/{unitId}} covers BOTH an outlet and a division override — payment-service holds no org
+ * read model, so the caller (the console) is trusted to pass whichever org-unit id the owner
+ * picked.
  */
 @RestController
 @RequestMapping("/api/v1/payment-settings")
@@ -54,17 +57,17 @@ public class PaymentSettingsController {
     return service.upsertCompanyDefault(request);
   }
 
-  @Operation(summary = "Upsert an outlet's QRIS mode override (owner; mode only)")
-  @PutMapping("/outlets/{outletId}")
-  public PaymentSettingsResponse upsertOutletOverride(
-      @PathVariable UUID outletId, @RequestBody UpsertSettingsRequest request) {
-    return service.upsertOutletOverride(outletId, request);
+  @Operation(summary = "Upsert a unit's (outlet or division) QRIS mode override (owner; mode only)")
+  @PutMapping("/units/{unitId}")
+  public PaymentSettingsResponse upsertUnitOverride(
+      @PathVariable UUID unitId, @RequestBody UpsertSettingsRequest request) {
+    return service.upsertUnitOverride(unitId, request);
   }
 
-  @Operation(summary = "Delete an outlet's QRIS override (owner)")
-  @DeleteMapping("/outlets/{outletId}")
-  public ResponseEntity<Void> deleteOutletOverride(@PathVariable UUID outletId) {
-    service.deleteOutletOverride(outletId);
+  @Operation(summary = "Delete a unit's (outlet or division) QRIS override (owner)")
+  @DeleteMapping("/units/{unitId}")
+  public ResponseEntity<Void> deleteUnitOverride(@PathVariable UUID unitId) {
+    service.deleteUnitOverride(unitId);
     return ResponseEntity.noContent().build();
   }
 
@@ -74,13 +77,11 @@ public class PaymentSettingsController {
     return service.uploadStaticQr(null, file.getContentType(), bytesOf(file));
   }
 
-  @Operation(summary = "Upload/replace an outlet's static QRIS image (owner)")
-  @PostMapping(
-      path = "/outlets/{outletId}/static-qr",
-      consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-  public QrImageMetaResponse uploadOutletStaticQr(
-      @PathVariable UUID outletId, @RequestPart("file") MultipartFile file) {
-    return service.uploadStaticQr(outletId, file.getContentType(), bytesOf(file));
+  @Operation(summary = "Upload/replace a unit's (outlet or division) static QRIS image (owner)")
+  @PostMapping(path = "/units/{unitId}/static-qr", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  public QrImageMetaResponse uploadUnitStaticQr(
+      @PathVariable UUID unitId, @RequestPart("file") MultipartFile file) {
+    return service.uploadStaticQr(unitId, file.getContentType(), bytesOf(file));
   }
 
   @Operation(summary = "Remove the company-level static QRIS image (owner)")
@@ -90,25 +91,29 @@ public class PaymentSettingsController {
     return ResponseEntity.noContent().build();
   }
 
-  @Operation(summary = "Remove an outlet's static QRIS image (owner)")
-  @DeleteMapping("/outlets/{outletId}/static-qr")
-  public ResponseEntity<Void> removeOutletStaticQr(@PathVariable UUID outletId) {
-    service.removeStaticQr(outletId);
+  @Operation(summary = "Remove a unit's (outlet or division) static QRIS image (owner)")
+  @DeleteMapping("/units/{unitId}/static-qr")
+  public ResponseEntity<Void> removeUnitStaticQr(@PathVariable UUID unitId) {
+    service.removeStaticQr(unitId);
     return ResponseEntity.noContent().build();
   }
 
-  @Operation(summary = "Effective QRIS mode/availability for the till's outlet (POS roles)")
+  @Operation(
+      summary = "Effective QRIS mode/availability for the till's outlet/division (POS roles)")
   @GetMapping("/effective")
   public EffectiveSettingsResponse effective(
-      @RequestParam(name = "businessId", required = false) UUID businessId) {
-    return service.effective(businessId);
+      @RequestParam(name = "businessId", required = false) UUID businessId,
+      @RequestParam(name = "divisionId", required = false) UUID divisionId) {
+    return service.effective(businessId, divisionId);
   }
 
-  @Operation(summary = "Effective static QRIS image blob for the till's outlet (POS roles)")
+  @Operation(
+      summary = "Effective static QRIS image blob for the till's outlet/division (POS roles)")
   @GetMapping("/static-qr/image")
   public ResponseEntity<byte[]> effectiveImage(
-      @RequestParam(name = "businessId", required = false) UUID businessId) {
-    QrImageContentResponse image = service.effectiveImage(businessId);
+      @RequestParam(name = "businessId", required = false) UUID businessId,
+      @RequestParam(name = "divisionId", required = false) UUID divisionId) {
+    QrImageContentResponse image = service.effectiveImage(businessId, divisionId);
     return ResponseEntity.ok()
         // Private: an authenticated, tenant-scoped blob — never shared-cacheable. The sha256 ETag
         // lets the till revalidate cheaply after the 5-minute freshness window.

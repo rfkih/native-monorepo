@@ -53,6 +53,7 @@ public class ChargeService {
             request.paymentId(),
             request.referenceId(),
             request.businessId(),
+            request.divisionId(),
             request.amountMinor(),
             request.currency(),
             idempotencyKey);

@@ -1,7 +1,6 @@
 package id.co.nativeapp.restaurant.config;
 
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionAlreadyOpenException;
-import id.co.nativeapp.restaurant.register.domain.RegisterSessionDayClosedException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionIdempotencyKeyConflictException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionNotFoundException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionNotOpenException;
@@ -23,8 +22,6 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * <ul>
  *   <li>{@link RegisterSessionAlreadyOpenException} — a second drawer at the outlet → {@code 409}
  *       ({@code register-session-already-open})
- *   <li>{@link RegisterSessionDayClosedException} — a session already exists for this business day
- *       (day-final close, ADR 0038) → {@code 409} ({@code register-session-day-closed})
  *   <li>{@link RegisterSessionNotOpenException} — double-close with a NEW key → {@code 409} ({@code
  *       register-session-not-open})
  *   <li>{@link RegisterSessionIdempotencyKeyConflictException} — replayed key, different payload →
@@ -44,15 +41,6 @@ public class RegisterAdvice {
       RegisterSessionAlreadyOpenException ex, HttpServletRequest request) {
     ProblemDetail problem = problem(HttpStatus.CONFLICT, "register-session-already-open", request);
     problem.setTitle("A register session is already open at this outlet");
-    problem.setDetail(ex.getMessage());
-    return problem;
-  }
-
-  @ExceptionHandler(RegisterSessionDayClosedException.class)
-  public ProblemDetail handleDayClosed(
-      RegisterSessionDayClosedException ex, HttpServletRequest request) {
-    ProblemDetail problem = problem(HttpStatus.CONFLICT, "register-session-day-closed", request);
-    problem.setTitle("This outlet already has a register session for this business day");
     problem.setDetail(ex.getMessage());
     return problem;
   }
