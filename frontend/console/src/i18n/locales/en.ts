@@ -979,6 +979,9 @@ export const en = {
     /** ADR 0036 — closing kasir (register sessions). */
     title: 'Register — closing kasir',
     openHint: 'Open the drawer to start the day: count the change fund (float) you are putting in.',
+    /** Owner request — "open the register first": shown when the pay button re-routes the cashier
+     * here because there's no open session yet. */
+    openBeforePay: 'Open the register before taking payment.',
     floatLabel: 'Opening float',
     floatDefaultHint:
       'Prefilled from the last close’s counted cash ({{when}}) — adjust if cash was taken out.',

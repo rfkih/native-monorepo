@@ -17,7 +17,7 @@
  * All behaviour, hooks, mutations, and data flows are kept exactly as they were.
  * Only the presentation layer changes.
  */
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   Banknote,
@@ -86,6 +86,8 @@ import { BillSelectorOverlay } from './components/BillSelectorOverlay'
 import { OpenBillDialog } from './components/OpenBillDialog'
 import { NoCompany } from './components/NoCompany'
 import { RegisterSheet } from './RegisterSheet'
+import { useCurrentRegisterSession } from './registerApi'
+import { noConfirmedOpenSession, shouldAutoPromptRegister } from './lib/registerGate'
 import { PosStatusBar } from '@/features/pos-shell/layout/PosStatusBar'
 import { TillMenuSheet } from '@/features/pos-shell/layout/TillMenuSheet'
 import { StocktakeSheet } from '@/features/stocktake/StocktakeSheet'
@@ -140,6 +142,11 @@ function PosInner({ session }: { session: CompanySession }) {
   const appendLines = useAppendLines(session)
   const effectiveRulesQuery = useEffectiveRules(session)
   const popularityQuery = useItemPopularity(session)
+  // "Open the register first" (owner request): the outlet's current OPEN session, or null once
+  // the server has confirmed the drawer is closed (204). Shared by the entry auto-prompt and the
+  // payment gate below (registerGate.ts) — same query RegisterSheet itself reads, so opening it
+  // costs no extra round trip.
+  const registerSessionQuery = useCurrentRegisterSession(session)
 
   // Phase 5 offline mode (ADR 0028). When the live catalog/rules queries have no data at all (a
   // fresh page load while offline — the common case is a query that already succeeded THIS session
@@ -149,6 +156,13 @@ function PosInner({ session }: { session: CompanySession }) {
   const [showSyncCenter, setShowSyncCenter] = useState(false)
   const [showTillMenu, setShowTillMenu] = useState(false)
   const [showRegisterSheet, setShowRegisterSheet] = useState(false)
+  // True while the register sheet is showing BECAUSE the payment gate redirected the cashier here
+  // (vs. the entry auto-prompt or a manual till-menu open) — only then does the sheet show the
+  // explanatory reason line.
+  const [registerGateActive, setRegisterGateActive] = useState(false)
+  // Once-per-till-visit guard for the entry auto-prompt (shouldAutoPromptRegister) — a dismissed
+  // sheet must not re-pop; the payment gate below is the real enforcement.
+  const autoPromptedRegisterRef = useRef(false)
   const [showStocktakeSheet, setShowStocktakeSheet] = useState(false)
   // P4: the dock's Send/Pay reach INTO the bill sheet — each ++ asks BillDetail to fire the
   // kitchen ticket / the pay modal as soon as the bill is loaded (no manual sheet detour).
@@ -386,6 +400,27 @@ function PosInner({ session }: { session: CompanySession }) {
     publishCurrentDisplayState()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayPublisher, activeBill, lineCount, cart, items, breakdown, clientSubtotalMinor, grandTotalMinor, currency])
+
+  // "Open the register first" entry prompt (owner request): once per till visit, auto-show the
+  // RegisterSheet (float-prefilled open form) when the current-session query settles online with
+  // no open session. Dismissible — the cashier can still browse/build a cart; the payment gate
+  // below is what actually enforces this.
+  useEffect(() => {
+    if (
+      shouldAutoPromptRegister(
+        {
+          offline,
+          isLoading: registerSessionQuery.isLoading,
+          isError: registerSessionQuery.isError,
+          session: registerSessionQuery.data,
+        },
+        autoPromptedRegisterRef.current,
+      )
+    ) {
+      autoPromptedRegisterRef.current = true
+      setShowRegisterSheet(true)
+    }
+  }, [offline, registerSessionQuery.isLoading, registerSessionQuery.isError, registerSessionQuery.data])
 
   const discountInvalid =
     discountInput !== '' && (isNaN(Number(discountInput)) || Number(discountInput) < 0)
@@ -804,6 +839,22 @@ function PosInner({ session }: { session: CompanySession }) {
             setAutoKotToken((k) => k + 1)
           }}
           onPay={() => {
+            // Payment gate (owner request "open the register first"): online + no confirmed open
+            // session → redirect to the RegisterSheet instead of proceeding. Loading/error states
+            // fail OPEN (let the sale proceed) — see registerGate.ts. Covers BOTH pay entry points
+            // (walk-in cart and bill mode), since both call this same handler.
+            if (
+              noConfirmedOpenSession({
+                offline,
+                isLoading: registerSessionQuery.isLoading,
+                isError: registerSessionQuery.isError,
+                session: registerSessionQuery.data,
+              })
+            ) {
+              setRegisterGateActive(true)
+              setShowRegisterSheet(true)
+              return
+            }
             if (openBillId) {
               // P4: Pay pays — BillDetail opens its pay modal directly (full unpaid check).
               setAutoPayToken((k) => k + 1)
@@ -944,7 +995,13 @@ function PosInner({ session }: { session: CompanySession }) {
           session={session}
           currency={currency}
           locale={locale}
-          onClose={() => setShowRegisterSheet(false)}
+          reasonMessage={registerGateActive ? t('register.openBeforePay') : undefined}
+          onClose={() => {
+            setShowRegisterSheet(false)
+            setRegisterGateActive(false)
+            // After a successful open, land back where the cashier was — hit Pay again rather
+            // than auto-opening the payment modal (the pay button itself re-checks the gate).
+          }}
         />
       ) : null}
 

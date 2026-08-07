@@ -972,6 +972,9 @@ export const id = {
     /** ADR 0036 — closing kasir (sesi kasir). */
     title: 'Kasir — closing kasir',
     openHint: 'Buka laci untuk memulai hari: hitung uang kembalian (modal awal) yang dimasukkan.',
+    /** Permintaan owner — "buka kasir dulu": muncul saat tombol bayar mengarahkan kasir ke sini
+     * karena belum ada sesi kasir yang terbuka. */
+    openBeforePay: 'Buka kasir dulu sebelum menerima pembayaran.',
     floatLabel: 'Modal awal',
     floatDefaultHint:
       'Terisi otomatis dari hitungan kas penutupan terakhir ({{when}}) — ubah jika ada uang yang diambil.',

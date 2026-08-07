@@ -60,11 +60,16 @@ export function RegisterSheet({
   session,
   currency,
   locale,
+  reasonMessage,
   onClose,
 }: {
   session: CompanySession
   currency: string
   locale: string
+  /** An optional short explanatory line shown above the open form — e.g. why the sheet appeared
+   * unprompted (the "open the register first" payment gate, owner request). Only rendered while
+   * there's no open session to close. */
+  reasonMessage?: string
   onClose: () => void
 }) {
   const { t } = useTranslation()
@@ -315,6 +320,15 @@ export function RegisterSheet({
         ) : (
           /* ── No session → open form ─────────────────────────────────────── */
           <div className="space-y-4 px-5 py-5">
+            {reasonMessage ? (
+              <p
+                className="rounded-xl bg-tint-warning px-3.5 py-2.5 text-sm font-medium text-amber-2"
+                role="status"
+                data-testid="register-reason"
+              >
+                {reasonMessage}
+              </p>
+            ) : null}
             <p className="text-sm text-ink-3">{t('register.openHint')}</p>
             <div>
               <label htmlFor="register-float" className="mb-1.5 block text-sm font-medium text-ink">
