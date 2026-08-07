@@ -15,6 +15,7 @@ import android.view.WindowManager
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.getcapacitor.BridgeActivity
@@ -42,19 +43,32 @@ class MainActivity : BridgeActivity() {
         if (BuildConfig.DEBUG) {
             addDebugPrintButton()
         }
-    }
-
-    @Deprecated("Deprecated in Java")
-    @Suppress("DEPRECATION", "MissingSuperCall") // legacy back path is what Capacitor drives
-    override fun onBackPressed() {
-        val webView = bridge?.webView
-        if (webView != null && webView.canGoBack()) {
-            webView.goBack()
-        } else {
-            // At history root a stray back gesture must background the till, never exit it —
-            // an accidental exit mid-shift loses the operator's place (cart state is in-page).
-            moveTaskToBack(true)
-        }
+        // Back = previous in-app page, via the MODERN dispatcher. targetSdk 36 enables
+        // predictive back by default, and Android 16 stops calling the deprecated
+        // onBackPressed() entirely — the shell-v3 override silently became dead code and
+        // every back press closed the app (field report). The androidx callback rides both
+        // the legacy dispatch (old Androids) and OnBackInvoked (13+), one code path.
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                val webView = bridge?.webView
+                // Never step back INTO an IdP page (same-origin /auth/* = Keycloak): an
+                // authenticated session immediately re-redirects forward, so back would
+                // only bounce — from the post-login screen back means "leave the app".
+                val list = webView?.copyBackForwardList()
+                val prevUrl = list
+                    ?.takeIf { it.currentIndex > 0 }
+                    ?.getItemAtIndex(list.currentIndex - 1)
+                    ?.url
+                val backIntoAuth = prevUrl != null && prevUrl.contains("/auth/")
+                if (webView != null && webView.canGoBack() && !backIntoAuth) {
+                    webView.goBack()
+                } else {
+                    // At history root a stray back gesture must background the till, never
+                    // exit it — an accidental exit mid-shift loses the operator's place.
+                    moveTaskToBack(true)
+                }
+            }
+        })
     }
 
     private fun addDebugPrintButton() {
