@@ -108,7 +108,7 @@ function KitchenInner({ session }: { session: CompanySession }) {
     <div className="flex min-h-[100dvh] flex-col bg-paper">
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-10 border-b border-line bg-surface/95 backdrop-blur-sm">
-        <div className="flex items-center gap-x-3 gap-y-2 px-4 py-3 sm:px-6">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 sm:px-6">
           {/* Back to POS */}
           <Link
             to="/pos"

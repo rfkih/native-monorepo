@@ -65,7 +65,8 @@ export function VerticalBadge({ vertical }: { vertical: string | null }) {
   )
 }
 
-/** Simple modal overlay — closes on backdrop click or Escape. */
+/** Simple modal overlay — closes on backdrop click or Escape. Bottom-sheet feel on phone
+ *  (Native Console Android): bottom-anchored, full-width, rounded top corners. */
 export function DialogOverlay({
   children,
   onClose,
@@ -75,7 +76,7 @@ export function DialogOverlay({
 }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm sm:items-center"
       role="dialog"
       aria-modal="true"
       onClick={(e) => {
@@ -85,7 +86,9 @@ export function DialogOverlay({
         if (e.key === 'Escape') onClose()
       }}
     >
-      <Card className="w-full max-w-md p-6">{children}</Card>
+      <Card className="w-full max-w-md p-6 max-sm:sheet-up max-sm:max-h-[92dvh] max-sm:max-w-full max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:rounded-t-[26px]">
+        {children}
+      </Card>
     </div>
   )
 }
