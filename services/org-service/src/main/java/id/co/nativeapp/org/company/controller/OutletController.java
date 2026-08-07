@@ -14,9 +14,11 @@ import org.springframework.web.bind.annotation.RestController;
  * {@code /api/v1/outlets} — the POS outlet picker's data source.
  *
  * <p>Returns active {@code OUTLET}-type org units for the bound company, ordered by name, as a slim
- * {@code [{id, name}]} list. The POS uses this to populate the outlet picker before opening a sale.
- * An empty list is returned (not {@code 204}) so the POS can distinguish "no outlets configured"
- * from a network error.
+ * {@code [{id, name, vertical, divisionId}]} list — {@code divisionId} (additive) is the outlet's
+ * parent business-unit id, which the till uses to learn its division (e.g. for DIVISION-scoped
+ * payment-service QRIS settings, ADR 0045 amendment). The POS uses this to populate the outlet
+ * picker before opening a sale. An empty list is returned (not {@code 204}) so the POS can
+ * distinguish "no outlets configured" from a network error.
  *
  * <p>This endpoint is intentionally on a separate path from {@code /api/v1/org-units} so the
  * gateway can expose it to {@code cashier} (POS role surface) while keeping the full org-tree

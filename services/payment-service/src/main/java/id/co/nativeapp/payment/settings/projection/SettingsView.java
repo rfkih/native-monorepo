@@ -7,13 +7,14 @@ import java.util.UUID;
  * effective-mode resolution are served from this projection — it deliberately NEVER selects the
  * encrypted credential columns (rule 6); {@code gateway_connected} is derived as {@code
  * server_key_encrypted IS NOT NULL} in SQL so presence is knowable without the ciphertext ever
- * leaving the database. Snake_case aliases map to these camelCase getters.
+ * leaving the database. Snake_case aliases map to these camelCase getters. {@code orgUnitId} is
+ * {@code null} for the company row, or an outlet/division id (ADR 0045 amendment, V4) otherwise.
  */
 public interface SettingsView {
 
   UUID getId();
 
-  UUID getOutletId();
+  UUID getOrgUnitId();
 
   String getMode();
 

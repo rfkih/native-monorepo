@@ -48,43 +48,44 @@ public class SettingsService {
     return reader.list();
   }
 
-  /** Owner: upsert an outlet override (mode only). */
-  public PaymentSettingsResponse upsertOutletOverride(
-      UUID outletId, UpsertSettingsRequest request) {
+  /** Owner: upsert a unit (outlet or division) override (mode only). */
+  public PaymentSettingsResponse upsertUnitOverride(UUID unitId, UpsertSettingsRequest request) {
     requireOwner();
-    writer.upsertOutletOverride(outletId, request);
+    writer.upsertUnitOverride(unitId, request);
     return reader.list();
   }
 
-  /** Owner: delete an outlet override. */
-  public void deleteOutletOverride(UUID outletId) {
+  /** Owner: delete a unit (outlet or division) override. */
+  public void deleteUnitOverride(UUID unitId) {
     requireOwner();
-    writer.deleteOutletOverride(outletId);
+    writer.deleteUnitOverride(unitId);
   }
 
   /** Owner: upload/replace a scope's static QRIS image. */
-  public QrImageMetaResponse uploadStaticQr(
-      UUID outletId, String declaredContentType, byte[] data) {
+  public QrImageMetaResponse uploadStaticQr(UUID unitId, String declaredContentType, byte[] data) {
     requireOwner();
-    PaymentSettings row = writer.attachStaticQr(outletId, declaredContentType, data);
+    PaymentSettings row = writer.attachStaticQr(unitId, declaredContentType, data);
     return new QrImageMetaResponse(
         row.getStaticQrContentType(), row.getStaticQrByteSize(), row.getStaticQrSha256());
   }
 
   /** Owner: remove a scope's static QRIS image. */
-  public void removeStaticQr(UUID outletId) {
+  public void removeStaticQr(UUID unitId) {
     requireOwner();
-    writer.removeStaticQr(outletId);
+    writer.removeStaticQr(unitId);
   }
 
-  /** POS: the effective mode/availability for the till's outlet. NOT owner-gated. */
-  public EffectiveSettingsResponse effective(UUID businessId) {
-    return reader.effective(businessId);
+  /**
+   * POS: the effective mode/availability for the till's outlet ({@code businessId}) and division
+   * ({@code divisionId}, both nullable). NOT owner-gated.
+   */
+  public EffectiveSettingsResponse effective(UUID businessId, UUID divisionId) {
+    return reader.effective(businessId, divisionId);
   }
 
   /** POS: the effective static QRIS image blob, mapped to its dto. NOT owner-gated. */
-  public QrImageContentResponse effectiveImage(UUID businessId) {
-    QrImageView image = reader.effectiveImage(businessId);
+  public QrImageContentResponse effectiveImage(UUID businessId, UUID divisionId) {
+    QrImageView image = reader.effectiveImage(businessId, divisionId);
     return new QrImageContentResponse(
         image.getContentType(), image.getSha256().strip(), image.getData());
   }

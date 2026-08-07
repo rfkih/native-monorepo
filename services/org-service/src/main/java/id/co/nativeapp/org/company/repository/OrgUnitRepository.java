@@ -71,19 +71,21 @@ public interface OrgUnitRepository extends JpaRepository<OrgUnit, UUID> {
    * name. No {@code WHERE company_id} — the result set is constrained solely by the auto-applied
    * RLS policy (rule 5). Used by the POS outlet picker ({@code GET /api/v1/outlets}).
    *
-   * <p>Selects only the columns the picker needs ({@code id}, {@code name}, {@code vertical}) —
-   * never {@code SELECT *} of the entity (CLAUDE.md §3.3). {@code vertical} lives on the parent
-   * BUSINESS_UNIT row only (outlet rows store NULL), so it is inherited via a parent join. LEFT
-   * JOIN deliberately: a parentless or otherwise anomalous outlet must still list (null vertical —
-   * the console fails open) rather than silently vanish from the picker. RLS applies to both
-   * aliases, so the join never leaks a foreign company's row (rule 5).
+   * <p>Selects only the columns the picker needs ({@code id}, {@code name}, {@code vertical}, the
+   * parent's own {@code id} as {@code division_id}) — never {@code SELECT *} of the entity
+   * (CLAUDE.md §3.3). {@code vertical} lives on the parent BUSINESS_UNIT row only (outlet rows
+   * store NULL), so it — and the parent's id — are inherited via a parent join. LEFT JOIN
+   * deliberately: a parentless or otherwise anomalous outlet must still list (null vertical /
+   * divisionId — the console fails open) rather than silently vanish from the picker. RLS applies
+   * to both aliases, so the join never leaks a foreign company's row (rule 5).
    */
   @Query(
       value =
           """
           SELECT ou.id           AS id,
                  ou.name         AS name,
-                 parent.vertical AS vertical
+                 parent.vertical AS vertical,
+                 parent.id       AS division_id
             FROM org_unit ou
             LEFT JOIN org_unit parent ON parent.id = ou.parent_id
            WHERE ou.type = 'OUTLET'

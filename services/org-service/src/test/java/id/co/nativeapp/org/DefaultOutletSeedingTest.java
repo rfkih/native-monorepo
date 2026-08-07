@@ -77,6 +77,8 @@ class DefaultOutletSeedingTest extends PostgresRlsTestBase {
     assertThat(visible.get(0).name()).isEqualTo("Warung Seed");
     // The picker row inherits the parent BU's vertical (the outlet row itself stores NULL).
     assertThat(visible.get(0).vertical()).isEqualTo("restaurant");
+    // divisionId is the outlet's parent org-unit id — the root business unit here.
+    assertThat(visible.get(0).divisionId()).isEqualTo(rootId);
   }
 
   @Test
