@@ -13,7 +13,7 @@
  * Tabs that a grant or tier hides simply drop; the home tab always targets App's `home`
  * cascade, so a revoked landing page never yields a dead tab.
  */
-import { useState } from 'react'
+import { Suspense, lazy, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation } from 'react-router-dom'
 import { CalendarDays, House, ChartNoAxesColumn, Menu, ReceiptText, UsersRound, Wallet } from 'lucide-react'
@@ -24,6 +24,13 @@ import { usePageAccess } from '@/lib/pageAccess'
 import { useTierAccess } from '@/lib/featureTier'
 import { MoreSheet } from './MoreSheet'
 import { shouldMountTabBar } from './tabBarPolicy'
+
+// Lazy — keeps the stocktake + POS menu API code out of the main chunk until the tile is used.
+const StandaloneStocktake = lazy(() =>
+  import('@/features/stocktake/StandaloneStocktake').then((m) => ({
+    default: m.StandaloneStocktake,
+  })),
+)
 
 export function MobileTabBarGate({ home }: { home: string }) {
   const { t } = useTranslation()
@@ -36,6 +43,7 @@ export function MobileTabBarGate({ home }: { home: string }) {
   // navigation or a flip past the boundary closes it by derivation, no effects needed.
   const [moreAnchor, setMoreAnchor] = useState<string | null>(null)
   const moreOpen = isPhone && moreAnchor === pathname
+  const [stocktakeOpen, setStocktakeOpen] = useState(false)
 
   if (!isPhone || !shouldMountTabBar(pathname)) return null
 
@@ -73,12 +81,34 @@ export function MobileTabBarGate({ home }: { home: string }) {
     return null
   }
 
+  const posAllowed =
+    hasAnyRole(auth.roles, 'owner', 'manager', 'cashier') &&
+    pageAccess.isAllowed('pos') &&
+    tierAccess.allows('pos')
+
   return (
     <>
       {/* Normal-flow spacer so the last content clears the fixed 80px bar. */}
       <div aria-hidden className="h-20 print:hidden" />
       <MobileTabBar tabs={tabs} />
-      {moreOpen ? <MoreSheet onClose={() => setMoreAnchor(null)} /> : null}
+      {moreOpen ? (
+        <MoreSheet
+          onClose={() => setMoreAnchor(null)}
+          onOpenStocktake={
+            posAllowed
+              ? () => {
+                  setMoreAnchor(null)
+                  setStocktakeOpen(true)
+                }
+              : undefined
+          }
+        />
+      ) : null}
+      {stocktakeOpen && isPhone ? (
+        <Suspense fallback={null}>
+          <StandaloneStocktake onClose={() => setStocktakeOpen(false)} />
+        </Suspense>
+      ) : null}
     </>
   )
 }

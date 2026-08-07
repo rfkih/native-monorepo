@@ -12,6 +12,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import {
   CalendarCheck,
   Check,
+  ClipboardCheck,
   CookingPot,
   Inbox,
   LogOut,
@@ -55,7 +56,14 @@ function MicroHeading({ children }: { children: React.ReactNode }) {
   )
 }
 
-export function MoreSheet({ onClose }: { onClose: () => void }) {
+export function MoreSheet({
+  onClose,
+  onOpenStocktake,
+}: {
+  onClose: () => void
+  /** When provided (POS-capable login), the Opname stok tile renders and opens the overlay. */
+  onOpenStocktake?: () => void
+}) {
   const { t } = useTranslation()
   const auth = useAuth()
   const pageAccess = usePageAccess()
@@ -91,11 +99,21 @@ export function MoreSheet({ onClose }: { onClose: () => void }) {
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-7">
         <div className="px-1 pb-3 pt-1 text-[17px] font-bold text-ink">{t('mobile.more.title')}</div>
 
-        {tiles.length > 0 ? (
+        {tiles.length > 0 || onOpenStocktake != null ? (
           <div className="grid grid-cols-3 gap-2">
             {tiles.map((tile) => (
               <Tile key={tile.key} to={tile.to} icon={tile.icon} label={tile.label} onClose={onClose} />
             ))}
+            {onOpenStocktake != null ? (
+              <button
+                type="button"
+                onClick={onOpenStocktake}
+                className="flex min-h-[92px] flex-col items-center justify-center gap-2 rounded-2xl border border-line bg-surface px-1.5 py-3 text-center text-[12px] font-semibold text-ink-2 transition-colors hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2"
+              >
+                <ClipboardCheck className="size-[22px] text-emerald-2" strokeWidth={1.8} aria-hidden />
+                {t('mobile.more.stocktake')}
+              </button>
+            ) : null}
           </div>
         ) : null}
 
