@@ -6,6 +6,8 @@ import id.co.nativeapp.carwash.loyaltyref.messaging.GiftCardStateChangedConsumer
 import id.co.nativeapp.carwash.loyaltyref.messaging.GiftCardStateChangedListener;
 import id.co.nativeapp.carwash.loyaltyref.messaging.LoyaltyBalanceChangedConsumerSchema;
 import id.co.nativeapp.carwash.loyaltyref.messaging.LoyaltyBalanceChangedListener;
+import id.co.nativeapp.carwash.payment.messaging.PaymentChargeSucceededConsumerSchema;
+import id.co.nativeapp.carwash.payment.messaging.PaymentChargeSucceededListener;
 import id.co.nativeapp.carwash.staff.messaging.StaffEventListener;
 import id.co.nativeapp.carwash.staff.messaging.StaffEventSchemas;
 import id.co.nativeapp.events.AvroSerde;
@@ -174,6 +176,49 @@ final class EventFixtures {
         eventId,
         AvroSerde.serialize(event),
         GiftCardStateChangedListener.EVENT_ID_HEADER);
+  }
+
+  // ---- PaymentChargeSucceeded (ADR 0045, against the carwash consumer-copy schema) — published
+  // by payment-service in production; these fixtures publish the identical wire shape (raw Avro
+  // bytes + the durable "id" header) so the real @KafkaListener consumes them exactly as it would
+  // in production. ----
+
+  @SuppressWarnings("checkstyle:ParameterNumber")
+  static GenericRecord paymentChargeSucceeded(
+      UUID chargeId,
+      String companyId,
+      String vertical,
+      UUID paymentId,
+      UUID referenceId,
+      UUID businessId,
+      long amountMinor,
+      String currency,
+      String provider,
+      String providerTxnId) {
+    GenericRecord record = new GenericData.Record(PaymentChargeSucceededConsumerSchema.schema());
+    record.put("charge_id", chargeId.toString());
+    record.put("company_id", companyId);
+    record.put("vertical", vertical);
+    record.put("payment_id", paymentId.toString());
+    record.put("reference_id", referenceId == null ? null : referenceId.toString());
+    record.put("business_id", businessId.toString());
+    record.put("amount_minor", amountMinor);
+    record.put("currency", currency);
+    record.put("provider", provider);
+    record.put("provider_txn_id", providerTxnId);
+    record.put("succeeded_at", Instant.parse("2026-08-07T00:00:00Z").toEpochMilli());
+    return record;
+  }
+
+  static void publishPaymentChargeSucceeded(
+      String bootstrapServers, UUID chargeId, UUID eventId, GenericRecord event) {
+    publish(
+        bootstrapServers,
+        PaymentChargeSucceededConsumerSchema.TOPIC,
+        chargeId.toString(),
+        eventId,
+        AvroSerde.serialize(event),
+        PaymentChargeSucceededListener.EVENT_ID_HEADER);
   }
 
   private static void publish(
