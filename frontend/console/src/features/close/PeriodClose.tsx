@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
 import { EmptyState } from '@/features/_shared/financeUi'
+import { useIsPhone } from '@/components/mobile/useIsPhone'
 import { useSession } from '@/lib/session'
 import { localeOf } from '@/i18n'
 import { currentPeriod, formatPeriod } from '@/lib/period'
@@ -96,6 +97,7 @@ function ConfirmCloseDialog({
 export function PeriodClose() {
   const { t, i18n } = useTranslation()
   const { company } = useSession()
+  const isPhone = useIsPhone()
   const locale = localeOf(i18n.language)
   const [showConfirm, setShowConfirm] = useState(false)
   const [lastResult, setLastResult] = useState<CloseResponse | null>(null)
@@ -126,7 +128,7 @@ export function PeriodClose() {
       </div>
 
       {/* Open period banner */}
-      <Card className="bg-gradient-to-br from-surface to-brand-50 border-brand-100 flex flex-wrap items-center justify-between gap-4 rounded-[20px] border p-7">
+      <Card className="bg-gradient-to-br from-surface to-brand-50 border-brand-100 flex flex-wrap items-center justify-between gap-4 rounded-[20px] border p-7 max-sm:p-5">
         <div className="space-y-2">
           <span className="inline-flex rounded-full bg-emerald px-2.5 py-1 text-[11px] font-bold text-on-emerald">
             {t('close.openPeriod')}
@@ -136,7 +138,11 @@ export function PeriodClose() {
           </div>
           <p className="text-sm text-ink-3">{t('close.subtitle')}</p>
         </div>
-        <Button type="button" onClick={() => setShowConfirm(true)}>
+        <Button
+          type="button"
+          className="max-sm:h-[52px] max-sm:w-full max-sm:rounded-[15px]"
+          onClick={() => setShowConfirm(true)}
+        >
           {t('close.closePeriod')}
         </Button>
       </Card>
@@ -170,6 +176,43 @@ export function PeriodClose() {
         </Card>
       ) : items.length === 0 ? (
         <EmptyState title={t('close.empty')} hint={t('close.emptyHint')} />
+      ) : isPhone ? (
+        /* Phone (Native Console Android): the 4-column history grid becomes stacked cards —
+           period + currency on top, then a badge row (Closed / Reconciled / First close /
+           Illustrative) with the exact tone mapping of the desktop table. */
+        <div className="flex flex-col gap-2">
+          {items.map((item) => (
+            <Card key={item.closeId} className="p-3.5">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[14.5px] font-bold text-ink">
+                  {formatPeriod(item.period, locale)}
+                </span>
+                <span className="font-mono text-[12px] font-semibold text-ink-3">
+                  {item.baseCurrency}
+                </span>
+              </div>
+              <div className="mt-2.5 flex flex-wrap gap-1.5">
+                <span className="inline-flex items-center gap-1 rounded-full bg-tint-profit px-2.5 py-1 text-xs font-semibold text-profit-ink">
+                  <Check className="size-3" aria-hidden />
+                  {t('close.badge.closed')}
+                </span>
+                {item.reconciled ? (
+                  <Badge tone="profit">
+                    <Check className="size-3" /> {t('close.badge.reconciled')}
+                  </Badge>
+                ) : (
+                  <Badge tone="neutral">{t('close.badge.notReconciled')}</Badge>
+                )}
+                {item.firstClose ? <Badge tone="info">{t('close.badge.firstClose')}</Badge> : null}
+                {item.usesIllustrativeRules ? (
+                  <Badge tone="amber">
+                    <TriangleAlert className="size-3" /> {t('close.illustrative')}
+                  </Badge>
+                ) : null}
+              </div>
+            </Card>
+          ))}
+        </div>
       ) : (
         <Card className="overflow-hidden">
           {/* History table */}
