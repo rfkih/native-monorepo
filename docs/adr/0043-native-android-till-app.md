@@ -99,3 +99,18 @@ than GA). **P3** — cash drawer / barcode / customer display.
 - **Shell branding**: adaptive icon + splash derive from the console's one brand glyph
   (`Wordmark.tsx` trend line) on the brand-500→800 gradient; status bar matches the console paper
   background. Keep-screen-on active (D6 P1). `versionCode 2`.
+
+## Amendment (2026-08-07, later): the service worker must not run inside the shell
+
+Field-found on the first phone install, **correcting D3's "offline stack works unchanged" claim**:
+Capacitor injects `window.Capacitor` (and the NativePrint proxy) by intercepting the *document*
+request at the WebView network layer — a document served by the console's workbox service worker
+never reaches that interceptor, so after the SW's first activation every launch loses the bridge
+(printer settings degrade to dead browser tiles). Fix (`979dbe61`): SW registration is hand-rolled;
+inside the shell — detected via `window.androidBridge`, which Capacitor exposes to every WebView
+page regardless of how it was served — the SW never registers, existing registrations are torn
+down, and a bridge-less SW-served page reloads once. Consequences: **in-app offline cold-start is
+traded away** (the IndexedDB offline queue is unaffected; the D3 bundled-assets fallback becomes
+the committed path if offline cold-start is ever required); in-shell printer settings show only the
+native tile (the four web transports, RawBT included, are dead weight there). Browsers keep the SW
+and all four tiles exactly as before.
