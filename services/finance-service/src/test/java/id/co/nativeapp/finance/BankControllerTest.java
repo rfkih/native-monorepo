@@ -66,7 +66,7 @@ class BankControllerTest {
 
   @Test
   void reconcileReturns200WithTheReconciledLine() throws Exception {
-    when(reconciliationWriter.reconcile(eq(LINE), eq(ReconciliationCategory.CLEARING)))
+    when(reconciliationWriter.reconcile(eq(LINE), eq(ReconciliationCategory.CLEARING), any()))
         .thenReturn(LINE);
     when(statementLineReader.get(LINE)).thenReturn(sampleLine("RECONCILED", "CLEARING"));
 
@@ -82,7 +82,7 @@ class BankControllerTest {
 
   @Test
   void reconcileAnAlreadyReconciledLineIsAProblemDetail409() throws Exception {
-    when(reconciliationWriter.reconcile(eq(LINE), any()))
+    when(reconciliationWriter.reconcile(eq(LINE), any(), any()))
         .thenThrow(
             new ReconciliationStateException(
                 "only an UNRECONCILED line can be reconciled; current status=RECONCILED"));
@@ -98,7 +98,7 @@ class BankControllerTest {
 
   @Test
   void reconcileWithMismatchedCategoryIsAProblemDetail400() throws Exception {
-    when(reconciliationWriter.reconcile(eq(LINE), eq(ReconciliationCategory.BANK_FEE)))
+    when(reconciliationWriter.reconcile(eq(LINE), eq(ReconciliationCategory.BANK_FEE), any()))
         .thenThrow(new IllegalArgumentException("BANK_FEE can only reconcile a withdrawal"));
 
     mockMvc
@@ -112,7 +112,7 @@ class BankControllerTest {
 
   @Test
   void reconcileAnUnknownLineIsAProblemDetail404() throws Exception {
-    when(reconciliationWriter.reconcile(eq(LINE), any()))
+    when(reconciliationWriter.reconcile(eq(LINE), any(), any()))
         .thenThrow(new StatementLineNotFoundException(LINE));
 
     mockMvc

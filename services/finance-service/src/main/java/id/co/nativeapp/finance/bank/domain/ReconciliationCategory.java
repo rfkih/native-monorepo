@@ -13,10 +13,14 @@ package id.co.nativeapp.finance.bank.domain;
  *       deposit (a positive amount).
  *   <li>{@link #BANK_FEE} — a bank-charged fee ({@code BANK_CHARGES}, 5400). Valid ONLY for a
  *       withdrawal (a negative amount).
+ *   <li>{@link #QRIS_CLEARING} — settles a QRIS payout ({@code QRIS_CLEARING}, 1901) into the bank,
+ *       carrying an OPTIONAL acquirer MDR fee leg ({@code QRIS_FEE_EXPENSE}, 5720 — ADR 0045).
+ *       Valid ONLY for a deposit (a positive amount) — a QRIS settlement is always money coming IN.
  * </ul>
  */
 public enum ReconciliationCategory {
   CLEARING,
   BANK_FEE,
-  INTEREST
+  INTEREST,
+  QRIS_CLEARING
 }

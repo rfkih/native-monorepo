@@ -50,7 +50,7 @@ public class BankController {
   public StatementLineResponse reconcile(
       @PathVariable UUID lineId, @Valid @RequestBody ReconcileRequest request) {
     ReconciliationCategory category = ReconciliationCategory.valueOf(request.category());
-    UUID reconciledId = reconciliationWriter.reconcile(lineId, category);
+    UUID reconciledId = reconciliationWriter.reconcile(lineId, category, request.feeMinor());
     return statementLineReader.get(reconciledId);
   }
 

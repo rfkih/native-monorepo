@@ -48,6 +48,8 @@ class ReconcilePostingTest {
     when(roleResolver.resolve(eq(AccountRole.CASH_CLEARING), any())).thenReturn("1900");
     when(roleResolver.resolve(eq(AccountRole.INTEREST_INCOME), any())).thenReturn("4100");
     when(roleResolver.resolve(eq(AccountRole.BANK_CHARGES), any())).thenReturn("5400");
+    when(roleResolver.resolve(eq(AccountRole.QRIS_CLEARING), any())).thenReturn("1901");
+    when(roleResolver.resolve(eq(AccountRole.QRIS_FEE_EXPENSE), any())).thenReturn("5720");
 
     writer =
         new ReconciliationWriter(
@@ -128,6 +130,87 @@ class ReconcilePostingTest {
             () ->
                 writer.buildEntry(
                     line(1_000_000L), ReconciliationCategory.BANK_FEE, NOW, UUID.randomUUID()))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // ADR 0045 — QRIS_CLEARING + the optional MDR fee leg.
+  // -------------------------------------------------------------------------------------------
+
+  @Test
+  void depositQrisClearingWithFeeDebitsBankAndFeeCreditsGrossToQrisClearing() {
+    JournalEntry entry =
+        writer.buildEntry(
+            line(1_000_000L),
+            ReconciliationCategory.QRIS_CLEARING,
+            NOW,
+            UUID.randomUUID(),
+            20_000L);
+
+    List<JournalLine> lines = entry.getLines();
+    assertThat(lines).hasSize(3);
+    assertThat(totalDebit(lines)).isEqualTo(totalCredit(lines)).isEqualTo(1_020_000L);
+    assertThat(lineFor(lines, "1000").getDebitMinor()).isEqualTo(1_000_000L); // Dr BANK (net)
+    assertThat(lineFor(lines, "5720").getDebitMinor()).isEqualTo(20_000L); // Dr QRIS_FEE_EXPENSE
+    assertThat(lineFor(lines, "1901").getCreditMinor())
+        .isEqualTo(1_020_000L); // Cr QRIS_CLEARING (gross)
+  }
+
+  @Test
+  void depositQrisClearingWithNoFeePostsOnlyTwoLegs() {
+    JournalEntry entryNullFee =
+        writer.buildEntry(
+            line(1_000_000L), ReconciliationCategory.QRIS_CLEARING, NOW, UUID.randomUUID(), null);
+    JournalEntry entryZeroFee =
+        writer.buildEntry(
+            line(1_000_000L), ReconciliationCategory.QRIS_CLEARING, NOW, UUID.randomUUID(), 0L);
+
+    for (JournalEntry entry : List.of(entryNullFee, entryZeroFee)) {
+      List<JournalLine> lines = entry.getLines();
+      assertThat(lines).hasSize(2); // no zero-amount fee line ever written
+      assertThat(totalDebit(lines)).isEqualTo(totalCredit(lines)).isEqualTo(1_000_000L);
+      assertThat(lineFor(lines, "1000").getDebitMinor()).isEqualTo(1_000_000L); // Dr BANK
+      assertThat(lineFor(lines, "1901").getCreditMinor())
+          .isEqualTo(1_000_000L); // Cr QRIS_CLEARING (no fee -> gross == net)
+    }
+  }
+
+  @Test
+  void withdrawalQrisClearingIsRejected() {
+    assertThatThrownBy(
+            () ->
+                writer.buildEntry(
+                    line(-25_000L),
+                    ReconciliationCategory.QRIS_CLEARING,
+                    NOW,
+                    UUID.randomUUID(),
+                    null))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void feeMinorOnANonQrisCategoryIsRejected() {
+    assertThatThrownBy(
+            () ->
+                writer.buildEntry(
+                    line(1_000_000L),
+                    ReconciliationCategory.CLEARING,
+                    NOW,
+                    UUID.randomUUID(),
+                    10_000L))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void negativeFeeMinorIsRejected() {
+    assertThatThrownBy(
+            () ->
+                writer.buildEntry(
+                    line(1_000_000L),
+                    ReconciliationCategory.QRIS_CLEARING,
+                    NOW,
+                    UUID.randomUUID(),
+                    -1L))
         .isInstanceOf(IllegalArgumentException.class);
   }
 

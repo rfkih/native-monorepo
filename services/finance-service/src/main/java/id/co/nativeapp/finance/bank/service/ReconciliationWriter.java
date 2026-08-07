@@ -38,9 +38,16 @@ import org.springframework.transaction.annotation.Transactional;
  * account shares) always takes one leg; the contra takes the other, resolved from the {@link
  * ReconciliationCategory}: {@code CLEARING} → {@code CASH_CLEARING} (1900, the sweep from
  * cash-in-transit), {@code INTEREST} → {@code INTEREST_INCOME} (4100, deposit only), {@code
- * BANK_FEE} → {@code BANK_CHARGES} (5400, withdrawal only). A deposit (positive {@code
- * amount_minor}) debits BANK / credits the contra; a withdrawal (negative) debits the contra /
- * credits BANK.
+ * BANK_FEE} → {@code BANK_CHARGES} (5400, withdrawal only), {@code QRIS_CLEARING} → {@code
+ * QRIS_CLEARING} (1901, deposit only). A deposit (positive {@code amount_minor}) debits BANK /
+ * credits the contra; a withdrawal (negative) debits the contra / credits BANK.
+ *
+ * <p><strong>The optional QRIS MDR fee leg (ADR 0045).</strong> {@code QRIS_CLEARING} alone may
+ * carry an acquirer merchant-discount-rate fee ({@code feeMinor}, read off the settlement report by
+ * the operator): {@code Dr BANK (net) + Dr QRIS_FEE_EXPENSE (fee, 5720) / Cr QRIS_CLEARING (gross =
+ * net + fee)}. A zero/omitted fee posts the ordinary 2-leg transfer — a zero-amount journal line is
+ * never written (the {@code PlatformSettlementWriter} precedent, V44/V45). A non-null fee on any
+ * other category, or a negative fee, is rejected ({@link IllegalArgumentException} → 400).
  *
  * <p><strong>No double-reconcile.</strong> The transition guard lives in the domain mutator ({@link
  * BankStatementLine#reconcile}), invoked as the LAST step of this method — if the line is no longer
@@ -83,9 +90,9 @@ public class ReconciliationWriter {
   }
 
   /**
-   * Reconciles {@code lineId} against {@code category}: validates the category is a legal pairing
-   * for the line's direction, resolves the BANK + contra account codes, posts the balanced transfer
-   * entry, and links it back to the line.
+   * Reconciles {@code lineId} against {@code category} with no fee leg — the pre-ADR-0045 overload,
+   * kept for callers that never touch QRIS. Delegates to {@link #reconcile(UUID,
+   * ReconciliationCategory, Long)} with a {@code null} fee.
    *
    * @return {@code lineId} (the caller re-reads the fresh line detail)
    * @throws StatementLineNotFoundException if the line is not in the bound tenant (RLS-scoped)
@@ -96,6 +103,27 @@ public class ReconciliationWriter {
    */
   @Transactional
   public UUID reconcile(UUID lineId, ReconciliationCategory category) {
+    return reconcile(lineId, category, null);
+  }
+
+  /**
+   * Reconciles {@code lineId} against {@code category}: validates the category is a legal pairing
+   * for the line's direction, resolves the BANK + contra (+ optional QRIS fee, ADR 0045) account
+   * codes, posts the balanced transfer entry, and links it back to the line.
+   *
+   * @param feeMinor the optional QRIS MDR fee in minor units ({@code null} or {@code 0} = no fee);
+   *     valid ONLY when {@code category} is {@link ReconciliationCategory#QRIS_CLEARING}
+   * @return {@code lineId} (the caller re-reads the fresh line detail)
+   * @throws StatementLineNotFoundException if the line is not in the bound tenant (RLS-scoped)
+   * @throws ReconciliationStateException if the line is not UNRECONCILED (no double-reconcile)
+   * @throws IllegalArgumentException if {@code category} does not match the line's direction, if
+   *     {@code feeMinor} is non-null for a category other than {@code QRIS_CLEARING}, or if {@code
+   *     feeMinor} is negative
+   * @throws MismatchedPostingCurrencyException if the line's currency diverges from a currency
+   *     already posted in the period for this tenant
+   */
+  @Transactional
+  public UUID reconcile(UUID lineId, ReconciliationCategory category, Long feeMinor) {
     Objects.requireNonNull(category, "category");
     BankStatementLine line =
         statementLineRepository
@@ -116,7 +144,7 @@ public class ReconciliationWriter {
     requireConsistentGlCurrency(period, amount);
 
     UUID entryId = UUID.randomUUID();
-    JournalEntry entry = buildEntry(line, category, now, entryId);
+    JournalEntry entry = buildEntry(line, category, now, entryId, feeMinor);
 
     String companyId = TenantContext.require().companyId();
     persistEntry(entry, companyId);
@@ -128,6 +156,21 @@ public class ReconciliationWriter {
 
   /**
    * Builds (but does not persist) the balanced ad-hoc {@link JournalEntry} for reconciling {@code
+   * line} against {@code category} at {@code now} with no fee leg, keyed on {@code entryId} — the
+   * pre-ADR-0045 overload, kept for callers/tests that never touch QRIS. Delegates to {@link
+   * #buildEntry(BankStatementLine, ReconciliationCategory, Instant, UUID, Long)} with a {@code
+   * null} fee.
+   *
+   * @throws IllegalArgumentException if {@code category} is not a legal pairing for the line's
+   *     direction (deposit vs withdrawal)
+   */
+  public JournalEntry buildEntry(
+      BankStatementLine line, ReconciliationCategory category, Instant now, UUID entryId) {
+    return buildEntry(line, category, now, entryId, null);
+  }
+
+  /**
+   * Builds (but does not persist) the balanced ad-hoc {@link JournalEntry} for reconciling {@code
    * line} against {@code category} at {@code now}, keyed on {@code entryId}. Side-effect free
    * besides resolving account codes via {@link RoleAccountResolver} — public and pure so {@code
    * ReconcilePostingTest} can assert the exact debit/credit legs for every category/direction
@@ -135,13 +178,23 @@ public class ReconciliationWriter {
    * JournalPostingService#buildEntryFromBreakdown} is unit-tested.
    *
    * <p>A deposit (positive {@code amount_minor}) debits {@code BANK} / credits the contra; a
-   * withdrawal (negative) debits the contra / credits {@code BANK}.
+   * withdrawal (negative) debits the contra / credits {@code BANK}. When {@code feeMinor} resolves
+   * to a strictly positive amount (only legal for {@link ReconciliationCategory#QRIS_CLEARING}, ADR
+   * 0045), a third leg is added: {@code Dr BANK (net) + Dr QRIS_FEE_EXPENSE (fee) / Cr
+   * QRIS_CLEARING (gross = net + fee)} — mirroring {@code PlatformSettlementWriter}'s "zero-amount
+   * legs are omitted" rule, so a zero/null fee posts the ordinary 2-leg transfer.
    *
+   * @param feeMinor the optional QRIS MDR fee in minor units ({@code null} or {@code 0} = no fee)
    * @throws IllegalArgumentException if {@code category} is not a legal pairing for the line's
-   *     direction (deposit vs withdrawal)
+   *     direction (deposit vs withdrawal), if {@code feeMinor} is non-null for a category other
+   *     than {@code QRIS_CLEARING}, or if {@code feeMinor} is negative
    */
   public JournalEntry buildEntry(
-      BankStatementLine line, ReconciliationCategory category, Instant now, UUID entryId) {
+      BankStatementLine line,
+      ReconciliationCategory category,
+      Instant now,
+      UUID entryId,
+      Long feeMinor) {
     long amountMinor = line.getAmountMinor();
     // Guard the abs overflow (code-review S1): Math.abs(Long.MIN_VALUE) stays negative and would
     // otherwise reach JournalLine as a non-positive amount (a 500). Reject as bad input (→ 400).
@@ -150,13 +203,23 @@ public class ReconciliationWriter {
     }
     boolean isDeposit = amountMinor > 0;
     validateCategoryForDirection(category, isDeposit);
+    long fee = validateFee(category, feeMinor);
 
     Money amount = Money.ofMinor(Math.abs(amountMinor), line.getCurrency());
     String bankCode = requireMapped(AccountRole.BANK, now);
     String contraCode = requireMapped(contraRole(category), now);
 
-    List<JournalLine> lines = new ArrayList<>(2);
-    if (isDeposit) {
+    List<JournalLine> lines = new ArrayList<>(3);
+    if (fee > 0) {
+      // Only reachable for QRIS_CLEARING (validateFee) — deposit-only (validateCategoryForDirection
+      // already rejected a withdrawal above), so `amount` here is the net QRIS settlement deposit.
+      Money feeAmount = Money.ofMinor(fee, line.getCurrency());
+      String feeCode = requireMapped(AccountRole.QRIS_FEE_EXPENSE, now);
+      Money gross = amount.plus(feeAmount);
+      lines.add(JournalLine.debit(entryId, 1, bankCode, amount));
+      lines.add(JournalLine.debit(entryId, 2, feeCode, feeAmount));
+      lines.add(JournalLine.credit(entryId, 3, contraCode, gross));
+    } else if (isDeposit) {
       lines.add(JournalLine.debit(entryId, 1, bankCode, amount));
       lines.add(JournalLine.credit(entryId, 2, contraCode, amount));
     } else {
@@ -178,7 +241,8 @@ public class ReconciliationWriter {
 
   /**
    * Validates {@code category} against the line's direction: {@code CLEARING} is valid both ways;
-   * {@code INTEREST} only for a deposit; {@code BANK_FEE} only for a withdrawal.
+   * {@code INTEREST} and {@code QRIS_CLEARING} only for a deposit; {@code BANK_FEE} only for a
+   * withdrawal.
    */
   private static void validateCategoryForDirection(
       ReconciliationCategory category, boolean isDeposit) {
@@ -192,6 +256,12 @@ public class ReconciliationWriter {
               "INTEREST can only reconcile a deposit (a positive statement line amount)");
         }
       }
+      case QRIS_CLEARING -> {
+        if (!isDeposit) {
+          throw new IllegalArgumentException(
+              "QRIS_CLEARING can only reconcile a deposit (a positive statement line amount)");
+        }
+      }
       // BANK_FEE — the only remaining ReconciliationCategory value.
       default -> {
         if (isDeposit) {
@@ -202,11 +272,36 @@ public class ReconciliationWriter {
     }
   }
 
+  /**
+   * Validates the optional QRIS MDR fee leg (ADR 0045) and normalizes it to minor units: only
+   * {@link ReconciliationCategory#QRIS_CLEARING} may carry a fee, and a supplied fee must not be
+   * negative.
+   *
+   * @return {@code 0} when {@code feeMinor} is {@code null} (the "no fee" default), else {@code
+   *     feeMinor}
+   * @throws IllegalArgumentException if {@code feeMinor} is non-null for a category other than
+   *     {@code QRIS_CLEARING}, or if {@code feeMinor} is negative
+   */
+  private static long validateFee(ReconciliationCategory category, Long feeMinor) {
+    if (feeMinor == null) {
+      return 0L;
+    }
+    if (category != ReconciliationCategory.QRIS_CLEARING) {
+      throw new IllegalArgumentException(
+          "feeMinor is only valid for QRIS_CLEARING (category=" + category + ")");
+    }
+    if (feeMinor < 0L) {
+      throw new IllegalArgumentException("feeMinor must not be negative: " + feeMinor);
+    }
+    return feeMinor;
+  }
+
   private static AccountRole contraRole(ReconciliationCategory category) {
     return switch (category) {
       case CLEARING -> AccountRole.CASH_CLEARING;
       case INTEREST -> AccountRole.INTEREST_INCOME;
       case BANK_FEE -> AccountRole.BANK_CHARGES;
+      case QRIS_CLEARING -> AccountRole.QRIS_CLEARING;
     };
   }
 

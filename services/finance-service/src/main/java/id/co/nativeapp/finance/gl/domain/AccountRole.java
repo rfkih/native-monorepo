@@ -301,7 +301,18 @@ public enum AccountRole {
    * credited by a net GAIN / found stock ({@code shrinkage_minor < 0}, {@code Dr INVENTORY / Cr
    * this}). Maps to account 5800 (ILLUSTRATIVE — SME-gated, V50).
    */
-  INVENTORY_SHRINKAGE;
+  INVENTORY_SHRINKAGE,
+
+  /**
+   * QRIS payments (ADR 0045, ILLUSTRATIVE — SME-gated): the MDR (merchant discount rate) fee
+   * expense — the extra debit leg when a bank statement line is reconciled against {@link
+   * id.co.nativeapp.finance.bank.domain.ReconciliationCategory#QRIS_CLEARING} ({@code
+   * ReconciliationWriter}): {@code Dr BANK (net) + Dr this (MDR fee) / Cr QRIS_CLEARING (gross =
+   * net + fee)}. Omitted entirely when the fee is zero — a zero-amount journal line is never
+   * written (the {@code PlatformSettlementWriter} precedent). Maps to account 5720 (ILLUSTRATIVE —
+   * SME-gated, V52).
+   */
+  QRIS_FEE_EXPENSE;
 
   /**
    * The GL clearing {@link AccountRole} a POS tender settles through — the single source shared by
