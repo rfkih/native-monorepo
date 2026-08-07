@@ -19,7 +19,7 @@ import { usePageAccess } from '@/lib/pageAccess'
 import { useTierAccess } from '@/lib/featureTier'
 import { cn } from '@/lib/cn'
 import { localeOf } from '@/i18n'
-import { formatMoney, formatPercent } from '@/lib/money'
+import { formatAmount, formatMoney, formatPercent } from '@/lib/money'
 import { currentPeriod, formatPeriod, shiftPeriod } from '@/lib/period'
 import { PeriodNav } from '@/features/_shared/financeUi'
 import { usePnl, usePnlTrend, useOutletRevenue } from './api'
@@ -151,15 +151,17 @@ export function DashboardPhone() {
                 </span>
               </div>
             ) : null}
+            {/* Sub-stats are BARE grouped numbers (formatAmount) — the hero figure above already
+                names the currency, and a truncated money string would misreport the amount. */}
             <div className="mt-4 flex border-t border-paper/10 pt-4">
               {[
-                { key: 'revenue', label: t('dashboard.revenue'), value: formatMoney(figures.revenue, company.baseCurrency, locale) },
-                { key: 'expense', label: t('dashboard.expense'), value: formatMoney(figures.expense, company.baseCurrency, locale) },
+                { key: 'revenue', label: t('dashboard.revenue'), value: formatAmount(figures.revenue, company.baseCurrency, locale) },
+                { key: 'expense', label: t('dashboard.expense'), value: formatAmount(figures.expense, company.baseCurrency, locale) },
                 { key: 'margin', label: t('dashboard.margin'), value: marginLabel },
               ].map((s) => (
                 <div key={s.key} className="min-w-0 flex-1">
                   <div className="text-[11px] text-paper/50">{s.label}</div>
-                  <div className="tnum mt-0.5 truncate pr-2 font-mono text-[14px] font-bold text-paper">
+                  <div className="tnum mt-0.5 pr-2 font-mono text-[13.5px] font-bold text-paper">
                     {s.value}
                   </div>
                 </div>
