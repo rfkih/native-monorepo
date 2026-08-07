@@ -88,7 +88,7 @@ export function Shell({ children }: { children: ReactNode }) {
             type="button"
             onClick={() => setDrawerOpen(true)}
             aria-label={t('nav.menu')}
-            className="grid size-9 place-items-center rounded-xl border border-line text-ink-2 hover:bg-hover lg:hidden"
+            className="hidden size-9 place-items-center rounded-xl border border-line text-ink-2 hover:bg-hover sm:grid lg:hidden"
           >
             <Menu className="size-4.5" />
           </button>

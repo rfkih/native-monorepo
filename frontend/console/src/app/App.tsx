@@ -3,6 +3,7 @@ import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { LogOut } from 'lucide-react'
 import { Shell } from '@/app/Shell'
+import { MobileTabBarGate } from '@/app/MobileTabBarGate'
 import { SettingsChrome } from '@/components/SettingsChrome'
 import { Spinner } from '@/components/ui/Spinner'
 import { BrandMark, Wordmark } from '@/components/Wordmark'
@@ -639,6 +640,9 @@ export function App() {
           </Route>
         </Routes>
       </Suspense>
+      {/* Phone bottom navigation (Native Console Android) — mounts below 640px on every
+          authenticated non-till surface; persona and mount policy live inside the gate. */}
+      <MobileTabBarGate home={home} />
     </>
   )
 }
