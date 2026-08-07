@@ -8,15 +8,23 @@
  * fetching, no mutations. State and API calls stay in the vertical features (pos/, servicepos/).
  */
 
-// Quick-cash chip amounts in IDR minor units (= whole rupiah, exponent 0 — rule 8).
-// For non-IDR we build chips relative to the total (exact + round-up multiples).
-const IDR_QUICK_CHIPS = [50_000, 100_000] as const
+// IDR banknote steps (minor units = whole rupiah, exponent 0 — rule 8). Chips are the total
+// rounded UP to the next multiple of each step — the amounts a customer actually hands over
+// (UX audit: the old static 50k/100k presets left any bill above Rp100k with only "Exact").
+const IDR_NOTE_STEPS = [5_000, 10_000, 20_000, 50_000, 100_000] as const
 
-/** Build quick-cash chip options: [exact, ...preset-overs] all as minor units. */
+/** Build quick-cash chip options: [exact, ...round-ups] all as minor units. */
 export function quickChips(totalMinor: number, currency: string): number[] {
   if (currency === 'IDR') {
-    // Exact + preset IDR chips that exceed the total
-    return [totalMinor, ...IDR_QUICK_CHIPS.filter((v) => v > totalMinor)]
+    const ups = new Set<number>()
+    for (const step of IDR_NOTE_STEPS) {
+      // Small steps are noise on a big bill (Rp10k rounding on Rp3jt) — except 100k, the
+      // largest real banknote, which always yields the natural "stack of hundreds" amount.
+      if (step * 20 < totalMinor && step !== 100_000) continue
+      const up = Math.ceil(totalMinor / step) * step
+      if (up > totalMinor) ups.add(up)
+    }
+    return [totalMinor, ...[...ups].sort((a, b) => a - b).slice(0, 3)]
   }
   // For non-IDR: exact + a couple of round-up multiples of 500 minor units (e.g. USD cents)
   const round500 = Math.ceil(totalMinor / 500) * 500

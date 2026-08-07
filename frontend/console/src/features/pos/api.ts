@@ -293,9 +293,18 @@ export function useQuote(
     }
   }, [lines, discountMinor, couponCode, loyaltyMemberId, loyaltyRedeemPoints])
 
+  // Derived (no state): the debounce is still holding newer inputs than the query key sees.
+  // Reference-compare is sound — `lines` is the caller's memoized cartLines, the rest primitives.
+  const debouncePending =
+    lines !== debounced.lines ||
+    discountMinor !== debounced.discountMinor ||
+    couponCode !== debounced.couponCode ||
+    loyaltyMemberId !== debounced.loyaltyMemberId ||
+    loyaltyRedeemPoints !== debounced.loyaltyRedeemPoints
+
   const enabled = debounced.lines.length > 0 && enabledOverride
 
-  return useQuery({
+  const query = useQuery({
     queryKey: [
       'quote',
       session.companyId,
@@ -323,6 +332,16 @@ export function useQuote(
         },
       }),
   })
+
+  return {
+    ...query,
+    /**
+     * True while the shown total may still belong to the PREVIOUS cart state (debounce window +
+     * in-flight fetch under keepPreviousData) — the UI dims it (UX audit: a fresh item count next
+     * to a stale amount reads as a wrong bill).
+     */
+    refreshing: lines.length > 0 && enabledOverride && (debouncePending || query.isFetching),
+  }
 }
 
 /** One row of the best-seller ranking (GET /api/v1/orders/item-popularity). */

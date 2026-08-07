@@ -600,6 +600,9 @@ export const en = {
     noOutletData: 'No outlet has posted this period',
     noOutletDataHint:
       'When an outlet posts sales to the ledger, its contribution appears here — real figures only, never an estimate.',
+    noSalesYet: 'No sales yet',
+    noSalesYetHint: 'Ring your first sale and this chart starts moving.',
+    openTill: 'Open the till',
     atGlance: 'At a glance',
     netTrend: 'Net trend',
     bestMonth: 'Best month',

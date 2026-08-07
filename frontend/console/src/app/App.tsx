@@ -3,12 +3,26 @@ import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { LogOut } from 'lucide-react'
 import { Shell } from '@/app/Shell'
+import { SettingsChrome } from '@/components/SettingsChrome'
 import { Spinner } from '@/components/ui/Spinner'
 import { BrandMark, Wordmark } from '@/components/Wordmark'
 import { OfflineBanner } from '@/features/pos/offline/OfflineBanner'
 import { hasAnyRole, useAuth } from '@/lib/authContext'
 import { usePageAccess } from '@/lib/pageAccess'
 import { useSession } from '@/lib/session'
+
+/**
+ * Warms the POS route chunk as soon as a POS-capable login lands ANYWHERE — the lazy() split
+ * otherwise makes the till's very first open pay the full chunk download + parse behind a
+ * spinner (UX audit: >4.5 s cold first paint). Rendered conditionally (posAllowed), so a
+ * back-office-only login still never fetches the POS code.
+ */
+function PrefetchPosChunk() {
+  useEffect(() => {
+    void import('@/features/servicepos/PosSwitch')
+  }, [])
+  return null
+}
 
 // Route-level code splitting — keeps Recharts (dashboard) out of the POS path.
 const OnboardingWizard = lazy(() =>
@@ -366,6 +380,7 @@ export function App() {
           screen INCLUDING the full-screen POS surfaces, which render outside the dashboard shell
           (Phase 5 offline mode, ADR 0028). Renders nothing when there is nothing to say. */}
       <OfflineBanner />
+      {posAllowed && <PrefetchPosChunk />}
       <Suspense fallback={<CenteredSpinner />}>
         <Routes>
           {/* The POS is a full-screen "front office" — it renders OUTSIDE the sidebar/topbar shell.
@@ -386,8 +401,17 @@ export function App() {
           <Route path="/me/expenses" element={<MyExpenses />} />
 
           {/* Printer settings (ADR 0039) — a per-DEVICE thermal-printer pairing, so it is NOT
-              page-gated: whoever sets up a till (cashier or manager) must be able to connect it. */}
-          <Route path="/settings/printer" element={<PrinterSettings />} />
+              page-gated: whoever sets up a till (cashier or manager) must be able to connect it.
+              SettingsChrome: these pages render outside the Shell (cashiers never mount it), so
+              they carry their own minimal back bar (UX audit: they were navigation dead-ends). */}
+          <Route
+            path="/settings/printer"
+            element={
+              <SettingsChrome>
+                <PrinterSettings />
+              </SettingsChrome>
+            }
+          />
 
           {/* Features toggle (P1 tier-mode, `~/.claude/plans/umkm-tier-mode.md`) — a sibling of
               /settings/printer, but OWNER-ONLY (flipping a company-wide setting is a real authz

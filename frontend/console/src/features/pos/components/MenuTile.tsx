@@ -3,15 +3,23 @@
  * Markup and behavior unchanged; closures became props where needed.
  */
 import { useTranslation } from 'react-i18next'
-import {
-  ImageOff,
-} from 'lucide-react'
 import type { } from '@/lib/session'
 import { cn } from '@/lib/cn'
 import { formatMoney } from '@/lib/money'
 import type { MenuItem } from '../api'
 import type { } from '../lib/categories'
 import type { } from '@/features/loyalty/api'
+
+/**
+ * Image-less tiles show the item's initials, avatar-style — a deliberate placeholder. The old
+ * ImageOff glyph read as "picture failed to load" on every photo-less menu (UX audit).
+ */
+function itemInitials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean)
+  // Array.from = code-point-safe first char (an emoji-led name must not become a lone surrogate).
+  const letters = words.slice(0, 2).map((w) => (Array.from(w)[0] ?? '').toUpperCase())
+  return letters.join('') || '·'
+}
 
 
 // ---------------------------------------------------------------------------
@@ -91,8 +99,10 @@ export function MenuTile({
         </div>
       ) : (
         /* Compact text tile for image-less items (72px) */
-        <div className="relative flex h-[72px] w-full items-center justify-center bg-ink-50">
-          <ImageOff className="size-5 text-ink-200" aria-hidden="true" />
+        <div className="relative flex h-[72px] w-full items-center justify-center bg-brand-50">
+          <span aria-hidden="true" className="select-none text-xl font-extrabold tracking-wide text-brand-300">
+            {itemInitials(item.name)}
+          </span>
           {isLowStock && !unavailable ? (
             <span className="absolute right-2 top-2 flex h-6 items-center rounded-full bg-tint-warning px-2.5 text-[11px] font-bold text-amber-2">
               {t('menu.stock.lowStock', { count: item.stockQuantity })}

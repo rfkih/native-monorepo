@@ -593,6 +593,9 @@ export const id = {
     noOutletData: 'Belum ada gerai yang membukukan periode ini',
     noOutletDataHint:
       'Saat gerai membukukan penjualan ke buku besar, kontribusinya muncul di sini — hanya angka nyata, bukan perkiraan.',
+    noSalesYet: 'Belum ada penjualan',
+    noSalesYetHint: 'Catat penjualan pertama Anda dan grafik ini mulai bergerak.',
+    openTill: 'Buka kasir',
     atGlance: 'Sekilas',
     netTrend: 'Tren bersih',
     bestMonth: 'Bulan terbaik',

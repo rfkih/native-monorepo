@@ -814,6 +814,9 @@ function PosInner({ session }: { session: CompanySession }) {
           activeBill={activeBill ?? null}
           lineCount={lineCount}
           grandTotalMinor={grandTotalMinor}
+          // Walk-in only: bills carry their own server-side running total. Offline totals are
+          // provisional-computed locally and never lag the cart.
+          totalPending={!offline && !activeBill && quoteQuery.refreshing}
           currency={currency}
           locale={locale}
           discountInput={discountInput}

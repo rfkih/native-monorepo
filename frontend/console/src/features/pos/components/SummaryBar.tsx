@@ -54,6 +54,7 @@ export function SummaryBar({
   onDestinationClick,
   onSend,
   onPay,
+  totalPending = false,
 }: {
   activeBill: BillSummaryResponse | null
   lineCount: number
@@ -88,6 +89,12 @@ export function SummaryBar({
   /** Bill mode only: fires the kitchen ticket directly. */
   onSend: () => void
   onPay: () => void
+  /**
+   * True while the live quote is settling behind a cart change (debounce + fetch): the shown
+   * total may still be the PREVIOUS cart's — it renders dimmed until the quote lands. The button
+   * stays enabled; the payment modal always recomputes from the settled quote.
+   */
+  totalPending?: boolean
 }) {
   const { t } = useTranslation()
   const displayTotal = activeBill
@@ -194,9 +201,13 @@ export function SummaryBar({
           <ChevronsUpDown className="size-3.5 shrink-0 text-ink-3" aria-hidden="true" />
         </button>
 
-        {/* Dock total — the 20px mono tier of the money hierarchy */}
+        {/* Dock total — the 20px mono tier of the money hierarchy. Dimmed while the quote is
+            settling (totalPending): the figure on screen may still be the previous cart's. */}
         <div className="min-w-0 flex-1 text-right sm:pr-1">
-          <div className="tnum truncate font-mono text-[20px] font-bold leading-tight text-ink">
+          <div
+            aria-busy={totalPending}
+            className={`tnum truncate font-mono text-[20px] font-bold leading-tight text-ink transition-opacity ${totalPending ? 'animate-pulse opacity-50' : ''}`}
+          >
             {displayTotal}
           </div>
         </div>
@@ -233,7 +244,9 @@ export function SummaryBar({
               onClick={onPay}
               className="tnum h-14 shrink-0 rounded-xl bg-emerald px-5 font-mono text-[15px] font-bold text-on-emerald transition-all hover:bg-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
             >
-              {t('bills.payTotal', { total: displayTotal })}
+              <span className={totalPending ? 'animate-pulse opacity-70' : undefined}>
+                {t('bills.payTotal', { total: displayTotal })}
+              </span>
             </button>
           </>
         ) : (
@@ -244,7 +257,9 @@ export function SummaryBar({
             disabled={displayCount === 0}
             className="tnum h-14 shrink-0 rounded-xl bg-emerald px-5 font-mono text-[15px] font-bold text-on-emerald transition-all hover:bg-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald disabled:opacity-40"
           >
-            {t('posShell.chargeAmount', { amount: displayTotal })}
+            <span className={totalPending ? 'animate-pulse opacity-70' : undefined}>
+              {t('posShell.chargeAmount', { amount: displayTotal })}
+            </span>
           </button>
         )}
       </div>

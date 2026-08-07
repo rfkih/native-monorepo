@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { ArrowRight, Info, TriangleAlert } from 'lucide-react'
+import { ArrowRight, Info, Store, TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Segmented } from '@/components/ui/Segmented'
@@ -94,6 +94,14 @@ export function Dashboard() {
   })
   const netSeries = points.map((p) => p.fig.net)
   const spark = buildSparkPath(netSeries, 560, 200, 18)
+  // A brand-new company has nothing posted in the whole trailing window — a flatline sparkline
+  // over a 200px void reads as broken. Show a first-sale prompt instead (UX audit). Every trend
+  // point must have LOADED (review W1): an unresolved point reads as zeros and would flash the
+  // CTA at an established merchant — or pin it there if only the trend requests errored.
+  const trendEmpty =
+    !query.isLoading &&
+    points.every((p) => p.loaded) &&
+    points.every((p) => p.fig.net === 0 && p.fig.revenue === 0 && p.fig.expense === 0)
 
   const prev = points.length >= 2 ? points[points.length - 2] : null
   const revDelta = prev && prev.fig.revenue > 0 ? (figures.revenue - prev.fig.revenue) / prev.fig.revenue : 0
@@ -244,21 +252,41 @@ export function Dashboard() {
               </div>
             </div>
 
-            <div>
-              <Sparkline spark={spark} />
-              <div className="mt-2 flex justify-between px-1">
-                {points.map((p) => (
-                  <span key={p.period} className="font-mono text-[10px] text-ink-3">
-                    {monthShort(p.period, locale)}
-                  </span>
-                ))}
-              </div>
-              {converted ? (
-                <div className="mt-3 inline-flex items-center gap-1.5 text-xs text-ink-3">
-                  <Info className="size-3.5" /> {t('dashboard.presentationNote')}
+            {trendEmpty ? (
+              <div className="flex h-[232px] flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-line text-center">
+                <span className="grid size-11 place-items-center rounded-full bg-brand-50 text-brand-700">
+                  <Store className="size-5" aria-hidden="true" />
+                </span>
+                <div>
+                  <div className="text-sm font-semibold text-ink">{t('dashboard.noSalesYet')}</div>
+                  <div className="mt-1 px-6 text-[13px] text-ink-3">
+                    {t('dashboard.noSalesYetHint')}
+                  </div>
                 </div>
-              ) : null}
-            </div>
+                <Link
+                  to="/pos"
+                  className="rounded-xl bg-emerald px-4 py-2 text-sm font-bold text-on-emerald transition-colors hover:bg-emerald-2"
+                >
+                  {t('dashboard.openTill')}
+                </Link>
+              </div>
+            ) : (
+              <div>
+                <Sparkline spark={spark} />
+                <div className="mt-2 flex justify-between px-1">
+                  {points.map((p) => (
+                    <span key={p.period} className="font-mono text-[10px] text-ink-3">
+                      {monthShort(p.period, locale)}
+                    </span>
+                  ))}
+                </div>
+                {converted ? (
+                  <div className="mt-3 inline-flex items-center gap-1.5 text-xs text-ink-3">
+                    <Info className="size-3.5" /> {t('dashboard.presentationNote')}
+                  </div>
+                ) : null}
+              </div>
+            )}
           </Card>
 
           {/* Outlet contribution + at a glance / ready-to-close */}
