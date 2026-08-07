@@ -8,22 +8,25 @@
 
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router-dom'
-import { LogOut, Receipt, TriangleAlert, UserRound } from 'lucide-react'
+import { LogOut, TriangleAlert, UserRound } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { Wordmark } from '@/components/Wordmark'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
-import { EmptyState, KpiTile } from '@/features/_shared/financeUi'
+import { EmptyState } from '@/features/_shared/financeUi'
 import { useMyClaims } from '@/features/expenses/api'
+import { ClaimStatusBadge } from '@/features/expenses/parts'
+import { formatDate } from '@/features/expenses/format'
 import { hasAnyRole, useAuth } from '@/lib/authContext'
 import { AUTH_MODE } from '@/lib/config'
+import { formatMoney } from '@/lib/money'
 import { localeOf } from '@/i18n'
 import { useIsPhone } from '@/components/mobile/useIsPhone'
 import { isNotLinked, useMyProfile, useMySales } from './api'
 import { MeHomePhone } from './MeHomePhone'
-import { MyTimeoff } from './MyTimeoff'
+import { LeaveBalanceCard, MyTimeoff } from './MyTimeoff'
 import { PayslipsSection } from './PayslipsSection'
 
 export function Me() {
@@ -81,7 +84,7 @@ export function Me() {
         ) : null}
       </header>
 
-      <main className="mx-auto w-full max-w-[900px] px-5 py-8 lg:px-8">
+      <main className="mx-auto w-full max-w-[1080px] px-5 py-8 lg:px-8">
         {profile.isLoading ? (
           <Card className="p-10 text-center">
             <Spinner className="mx-auto text-brand-500" />
@@ -94,86 +97,103 @@ export function Me() {
             {t('me.error')}
           </Card>
         ) : (
-          <div className="flex flex-col gap-6">
-            {/* Profile */}
-            <div>
-              <div className="flex items-center gap-3">
-                <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-emerald-tint text-emerald-2">
-                  <UserRound className="size-6" aria-hidden="true" />
-                </span>
-                <div>
-                  <h1 className="font-display text-2xl font-bold tracking-[-0.02em] text-ink">
-                    {profile.data.fullName}
-                  </h1>
-                  <p className="text-sm text-ink-3">{t('me.subtitle')}</p>
-                </div>
+          <div>
+            {/* Page header */}
+            <div className="flex items-center gap-3">
+              <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-emerald-tint text-emerald-2">
+                <UserRound className="size-6" aria-hidden="true" />
+              </span>
+              <div>
+                <h1 className="font-display text-2xl font-bold tracking-[-0.02em] text-ink">
+                  {profile.data.fullName}
+                </h1>
+                <p className="text-sm text-ink-3">{t('me.subtitle')}</p>
               </div>
-
-              <Card className="mt-4 grid gap-x-8 gap-y-3 p-5 sm:grid-cols-2">
-                <Detail label={t('me.profile.status')}>
-                  <Badge tone={profile.data.status === 'ACTIVE' ? 'emerald' : 'amber'}>
-                    {t(
-                      profile.data.status === 'ACTIVE'
-                        ? 'me.profile.active'
-                        : 'me.profile.inactive',
-                    )}
-                  </Badge>
-                </Detail>
-                <Detail label={t('me.profile.ptkp')}>{profile.data.ptkpStatus}</Detail>
-                <Detail label={t('me.profile.nik')}>
-                  <span className="font-mono">{profile.data.maskedNik}</span>
-                </Detail>
-                <Detail label={t('me.profile.bank')}>
-                  <span className="font-mono">{profile.data.maskedBankAccount}</span>
-                </Detail>
-                <Detail label={t('me.profile.npwp')}>
-                  {profile.data.hasNpwp ? (
-                    <span className="font-mono">{profile.data.maskedNpwp}</span>
-                  ) : (
-                    <span className="text-amber">{t('me.profile.npwpNone')}</span>
-                  )}
-                </Detail>
-              </Card>
             </div>
 
-            {/* Assignments */}
-            <section>
-              <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
-                {t('me.assignments.title')}
-              </h2>
-              {profile.data.assignments.length === 0 ? (
-                <p className="mt-2 text-sm text-ink-3">{t('me.assignments.empty')}</p>
-              ) : (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {profile.data.assignments.map((a) => (
-                    <span
-                      key={a.id}
-                      className="rounded-full bg-surface px-3 py-1.5 text-sm text-ink-2 ring-1 ring-line"
-                    >
-                      <span className="font-semibold text-ink">{a.role}</span>
-                      <span className="text-ink-3"> · {a.effectiveFrom}</span>
-                    </span>
-                  ))}
+            {/* Native Console Web re-fit: a 300px rail (identity + balances) beside the content
+                column (payslips, requests, claims) instead of one long stack. */}
+            <div className="mt-6 grid grid-cols-1 items-start gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
+              {/* Rail */}
+              <div className="flex flex-col gap-4">
+                <Card className="p-5">
+                  <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+                    {t('me.home.personalData')}
+                  </h2>
+                  <div className="mt-3 flex flex-col gap-2.5">
+                    <ProfileRow label={t('me.profile.status')}>
+                      <Badge tone={profile.data.status === 'ACTIVE' ? 'emerald' : 'amber'}>
+                        {t(
+                          profile.data.status === 'ACTIVE'
+                            ? 'me.profile.active'
+                            : 'me.profile.inactive',
+                        )}
+                      </Badge>
+                    </ProfileRow>
+                    <ProfileRow label={t('me.profile.nik')}>
+                      <span className="font-mono">{profile.data.maskedNik}</span>
+                    </ProfileRow>
+                    <ProfileRow label={t('me.profile.bank')}>
+                      <span className="font-mono">{profile.data.maskedBankAccount}</span>
+                    </ProfileRow>
+                    <ProfileRow label={t('me.profile.npwp')}>
+                      {profile.data.hasNpwp ? (
+                        <span className="font-mono">{profile.data.maskedNpwp}</span>
+                      ) : (
+                        <span className="text-amber">{t('me.profile.npwpNone')}</span>
+                      )}
+                    </ProfileRow>
+                    <ProfileRow label={t('me.profile.ptkp')}>{profile.data.ptkpStatus}</ProfileRow>
+                  </div>
+                </Card>
+
+                <Card className="p-5">
+                  <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+                    {t('me.assignments.title')}
+                  </h2>
+                  {profile.data.assignments.length === 0 ? (
+                    <p className="mt-2.5 text-sm text-ink-3">{t('me.assignments.empty')}</p>
+                  ) : (
+                    <div className="mt-2.5 flex flex-wrap gap-2">
+                      {profile.data.assignments.map((a) => (
+                        <span
+                          key={a.id}
+                          className="rounded-full bg-surface px-3 py-1.5 text-sm text-ink-2 ring-1 ring-line"
+                        >
+                          <span className="font-semibold text-ink">{a.role}</span>
+                          <span className="text-ink-3"> · {a.effectiveFrom}</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+
+                {/* My time off balance (ADR 0033, Track P Phase P6) */}
+                <LeaveBalanceCard companyId={companyId} actor={actor} />
+
+                {/* Sales + commission */}
+                <SalesRailCard companyId={companyId} actor={actor} locale={locale} />
+              </div>
+
+              {/* Content column */}
+              <div className="flex min-w-0 flex-col gap-6">
+                {/* Payslips */}
+                <PayslipsSection
+                  companyId={companyId}
+                  actor={actor}
+                  locale={locale}
+                  employeeName={profile.data.fullName}
+                />
+
+                <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-2">
+                  {/* My time off requests (ADR 0033, Track P Phase P6) — balance lives in the rail */}
+                  <MyTimeoff companyId={companyId} actor={actor} hideBalance />
+
+                  {/* My expenses (ADR 0030, Phase E6) */}
+                  <ClaimsCard companyId={companyId} actor={actor} locale={locale} />
                 </div>
-              )}
-            </section>
-
-            {/* Sales + commission */}
-            <SalesSection companyId={companyId} actor={actor} locale={locale} />
-
-            {/* My expenses (ADR 0030, Phase E6) */}
-            <ExpensesCard companyId={companyId} actor={actor} />
-
-            {/* My time off (ADR 0033, Track P Phase P6) */}
-            <MyTimeoff companyId={companyId} actor={actor} />
-
-            {/* Payslips */}
-            <PayslipsSection
-              companyId={companyId}
-              actor={actor}
-              locale={locale}
-              employeeName={profile.data.fullName}
-            />
+              </div>
+            </div>
           </div>
         )}
       </main>
@@ -181,16 +201,20 @@ export function Me() {
   )
 }
 
-function Detail({ label, children }: { label: string; children: React.ReactNode }) {
+function ProfileRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-4 sm:block">
-      <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">{label}</span>
-      <span className="text-sm font-medium text-ink sm:mt-0.5 sm:block">{children}</span>
+    <div className="flex items-center justify-between gap-4">
+      <span className="text-xs font-medium text-ink-3">{label}</span>
+      <span className="text-right text-[12.5px] font-semibold text-ink">{children}</span>
     </div>
   )
 }
 
-function SalesSection({
+/**
+ * Sales + commission as a rail card (Native Console Web re-fit). Only renders for logins that
+ * actually rang sales this month or carry a commission — a back-office login gets nothing.
+ */
+function SalesRailCard({
   companyId,
   actor,
   locale,
@@ -202,88 +226,93 @@ function SalesSection({
   const { t } = useTranslation()
   const sales = useMySales({ companyId, actor, enabled: true })
 
-  // Only render for logins that actually rang sales this month or carry a commission — a
-  // back-office login (no sales, no commission) gets nothing.
   if (!sales.data) return null
   const { salesMinor, currency, commissionBasisPoints, commissionEstimateMinor } = sales.data
   if (salesMinor === 0 && commissionBasisPoints === null) return null
 
   return (
-    <section>
+    <Card className="p-5">
       <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
         {t('me.sales.title')}
       </h2>
-      <div className="mt-2 grid gap-3 sm:grid-cols-3">
-        <KpiTile
-          label={t('me.sales.mySales')}
-          minor={salesMinor}
-          currency={currency}
-          locale={locale}
-          loading={false}
-        />
-        {commissionBasisPoints !== null ? (
-          <>
-            <Card className="flex flex-col justify-center p-5">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
-                {t('me.sales.rate')}
-              </span>
-              <span className="tnum mt-1 font-mono text-2xl font-bold text-ink">
-                {(commissionBasisPoints / 100).toLocaleString(locale)}%
-              </span>
-            </Card>
-            <KpiTile
-              label={t('me.sales.estimate')}
-              minor={commissionEstimateMinor ?? 0}
-              currency={currency}
-              locale={locale}
-              loading={false}
-              emphatic
-            />
-          </>
-        ) : null}
-      </div>
+      <p className="tnum mt-2 font-mono text-[20px] font-bold text-ink">
+        {formatMoney(salesMinor, currency, locale)}
+      </p>
       {commissionBasisPoints !== null ? (
-        <p className="mt-1.5 text-xs text-ink-3">{t('me.sales.estimateHint')}</p>
+        <>
+          <div className="mt-3 flex items-baseline justify-between gap-3 border-t border-line pt-3">
+            <span className="text-xs text-ink-3">
+              {t('me.sales.estimate')} · {(commissionBasisPoints / 100).toLocaleString(locale)}%
+            </span>
+            <span className="tnum font-mono text-[13px] font-bold text-profit-ink">
+              {formatMoney(commissionEstimateMinor ?? 0, currency, locale)}
+            </span>
+          </div>
+          <p className="mt-1.5 text-[11px] leading-normal text-ink-3">
+            {t('me.sales.estimateHint')}
+          </p>
+        </>
       ) : null}
-    </section>
+    </Card>
   )
 }
 
 /**
- * "My expenses" summary card (ADR 0030, Phase E6) — a count of the caller's own draft/pending
- * claims from the first page of {@link useMyClaims} (an approximation beyond the first page, which
- * is fine for a preview badge) and a link through to the full `/me/expenses` surface.
+ * "My expenses" as a claims-list card (ADR 0030, Phase E6; Native Console Web re-fit) — the
+ * caller's most recent claims from the first page of {@link useMyClaims}, with the link through
+ * to the full `/me/expenses` surface.
  */
-function ExpensesCard({ companyId, actor }: { companyId: string; actor: string }) {
+function ClaimsCard({
+  companyId,
+  actor,
+  locale,
+}: {
+  companyId: string
+  actor: string
+  locale: string
+}) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const claims = useMyClaims({ companyId, actor, page: 0, enabled: true })
-  const pendingCount = (claims.data?.content ?? []).filter(
-    (c) => c.status === 'DRAFT' || c.status === 'SUBMITTED',
-  ).length
+  const rows = (claims.data?.content ?? []).slice(0, 4)
 
   return (
-    <section>
-      <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
-        {t('me.expenses.card.title')}
-      </h2>
-      <Card className="mt-2 flex items-center gap-3 p-5">
-        <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-emerald-tint text-emerald-2">
-          <Receipt className="size-5" aria-hidden="true" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm text-ink-2">
-            {claims.isLoading
-              ? '…'
-              : pendingCount > 0
-                ? t('me.expenses.card.pending', { count: pendingCount })
-                : t('me.expenses.card.empty')}
-          </p>
-        </div>
+    <section className="min-w-0">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+          {t('me.expenses.card.title')}
+        </h2>
         <Button type="button" variant="outline" onClick={() => navigate('/me/expenses')}>
           {t('me.expenses.card.cta')}
         </Button>
-      </Card>
+      </div>
+      {claims.isLoading ? (
+        <Card className="mt-2 p-6 text-center">
+          <Spinner className="mx-auto text-brand-500" />
+        </Card>
+      ) : rows.length === 0 ? (
+        <p className="mt-2 text-sm text-ink-3">{t('me.expenses.card.empty')}</p>
+      ) : (
+        <Card className="mt-2 rounded-[20px] p-2.5">
+          {rows.map((c) => (
+            <div key={c.id} className="flex flex-wrap items-center gap-3 rounded-xl px-3 py-2.5">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-semibold text-ink">{c.categoryName}</span>
+                  <ClaimStatusBadge status={c.status} />
+                </div>
+                <p className="mt-0.5 text-xs text-ink-3">
+                  {formatDate(c.expenseDate, locale)}
+                  {c.merchant ? ` · ${c.merchant}` : null}
+                </p>
+              </div>
+              <span className="tnum font-mono text-[13px] font-semibold text-ink">
+                {formatMoney(c.amountMinor, c.currency, locale)}
+              </span>
+            </div>
+          ))}
+        </Card>
+      )}
     </section>
   )
 }

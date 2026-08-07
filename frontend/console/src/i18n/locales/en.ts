@@ -62,13 +62,16 @@ export const en = {
     },
     sales: {
       title: 'Sales this month',
-      mySales: 'My sales',
       rate: 'Commission rate',
       estimate: 'Estimated commission',
       estimateHint: 'An estimate from your sales so far. Your payslip is the final figure.',
     },
     timeoff: {
       title: 'My time off',
+      // Desktop rail card (Native Console Web re-fit)
+      balanceTitle: 'Leave balance {{year}}',
+      daysLeft: 'days left',
+      usedOf: '{{used}} of {{total}} days used',
       requestLeave: 'Request leave',
       logOvertime: 'Log overtime',
       granted: 'Granted',
@@ -105,8 +108,7 @@ export const en = {
       },
       card: {
         title: 'My expenses',
-        pending: '{{count}} pending',
-        empty: 'No pending claims',
+        empty: 'No claims yet',
         cta: 'Open',
       },
       pagination: {

@@ -58,13 +58,15 @@ export const id = {
     },
     sales: {
       title: 'Penjualan bulan ini',
-      mySales: 'Penjualan saya',
       rate: 'Tarif komisi',
       estimate: 'Perkiraan komisi',
       estimateHint: 'Perkiraan dari penjualan Anda sejauh ini. Slip gaji adalah angka final.',
     },
     timeoff: {
       title: 'Cuti & lembur saya',
+      balanceTitle: 'Saldo cuti {{year}}',
+      daysLeft: 'hari tersisa',
+      usedOf: '{{used}} dari {{total}} hari terpakai',
       requestLeave: 'Ajukan cuti',
       logOvertime: 'Catat lembur',
       granted: 'Jatah',
@@ -101,8 +103,7 @@ export const id = {
       },
       card: {
         title: 'Klaim biaya saya',
-        pending: '{{count}} menunggu',
-        empty: 'Tidak ada klaim yang menunggu',
+        empty: 'Belum ada klaim',
         cta: 'Buka',
       },
       pagination: {

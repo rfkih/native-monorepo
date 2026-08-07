@@ -41,20 +41,29 @@ function StatusBadge({ status }: { status: TimeoffStatus }) {
   return <Badge tone={tone}>{t(`attendance.status.${status}`)}</Badge>
 }
 
-export function MyTimeoff({ companyId, actor }: { companyId: string; actor: string }) {
+export function MyTimeoff({
+  companyId,
+  actor,
+  hideBalance = false,
+}: {
+  companyId: string
+  actor: string
+  /** Desktop /me shows the balance as a rail card ({@link LeaveBalanceCard}) — skip it here. */
+  hideBalance?: boolean
+}) {
   const { t } = useTranslation()
   const [dialog, setDialog] = useState<DialogState | null>(null)
   const year = new Date().getFullYear()
 
-  const balance = useMyLeaveBalance({ companyId, actor, year, enabled: true })
+  const balance = useMyLeaveBalance({ companyId, actor, year, enabled: !hideBalance })
   const leaveRequests = useMyLeaveRequests({ companyId, actor, enabled: true })
   const overtimeEntries = useMyOvertimeEntries({ companyId, actor, enabled: true })
   const cancelLeave = useCancelLeaveRequest({ companyId, actor })
   const cancelOvertime = useCancelOvertimeEntry({ companyId, actor })
 
   return (
-    <section>
-      <div className="flex items-center justify-between gap-3 max-sm:flex-col max-sm:items-stretch">
+    <section className="min-w-0">
+      <div className="flex flex-wrap items-center justify-between gap-3 max-sm:flex-col max-sm:items-stretch">
         <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
           {t('me.timeoff.title')}
         </h2>
@@ -62,14 +71,14 @@ export function MyTimeoff({ companyId, actor }: { companyId: string; actor: stri
           <Button
             type="button"
             variant="outline"
-            className="max-sm:h-[52px] max-sm:flex-1 max-sm:rounded-[15px]"
+            className="whitespace-nowrap max-sm:h-[52px] max-sm:flex-1 max-sm:rounded-[15px]"
             onClick={() => setDialog({ kind: 'overtime' })}
           >
             {t('me.timeoff.logOvertime')}
           </Button>
           <Button
             type="button"
-            className="max-sm:h-[52px] max-sm:flex-1 max-sm:rounded-[15px]"
+            className="whitespace-nowrap max-sm:h-[52px] max-sm:flex-1 max-sm:rounded-[15px]"
             onClick={() => setDialog({ kind: 'leave' })}
           >
             {t('me.timeoff.requestLeave')}
@@ -77,21 +86,23 @@ export function MyTimeoff({ companyId, actor }: { companyId: string; actor: stri
         </div>
       </div>
 
-      <Card className="mt-2 grid gap-4 p-5 sm:grid-cols-4">
-        <BalanceTile label={t('me.timeoff.granted')} value={balance.data?.grantedDays} loading={balance.isLoading} />
-        <BalanceTile
-          label={t('me.timeoff.adjustment')}
-          value={balance.data?.adjustmentDays}
-          loading={balance.isLoading}
-        />
-        <BalanceTile label={t('me.timeoff.used')} value={balance.data?.usedDays} loading={balance.isLoading} />
-        <BalanceTile
-          label={t('me.timeoff.remaining')}
-          value={balance.data?.remaining}
-          loading={balance.isLoading}
-          emphatic
-        />
-      </Card>
+      {hideBalance ? null : (
+        <Card className="mt-2 grid gap-4 p-5 sm:grid-cols-4">
+          <BalanceTile label={t('me.timeoff.granted')} value={balance.data?.grantedDays} loading={balance.isLoading} />
+          <BalanceTile
+            label={t('me.timeoff.adjustment')}
+            value={balance.data?.adjustmentDays}
+            loading={balance.isLoading}
+          />
+          <BalanceTile label={t('me.timeoff.used')} value={balance.data?.usedDays} loading={balance.isLoading} />
+          <BalanceTile
+            label={t('me.timeoff.remaining')}
+            value={balance.data?.remaining}
+            loading={balance.isLoading}
+            emphatic
+          />
+        </Card>
+      )}
 
       {/* My leave requests */}
       <h3 className="mt-4 text-[11px] font-semibold uppercase tracking-wider text-ink-3">
@@ -150,6 +161,42 @@ export function MyTimeoff({ companyId, actor }: { companyId: string; actor: stri
         <LogOvertimeDialog companyId={companyId} actor={actor} onClose={() => setDialog(null)} />
       ) : null}
     </section>
+  )
+}
+
+/**
+ * The desktop rail's leave-balance card (Native Console Web design — /me two-column re-fit):
+ * remaining days as the headline, a used-fraction bar, and the used-of-total footnote. Same
+ * derived balance the {@link MyTimeoff} card shows on the phone; the query cache is shared.
+ */
+export function LeaveBalanceCard({ companyId, actor }: { companyId: string; actor: string }) {
+  const { t } = useTranslation()
+  const year = new Date().getFullYear()
+  const balance = useMyLeaveBalance({ companyId, actor, year, enabled: true })
+  const total = balance.data ? balance.data.grantedDays + balance.data.adjustmentDays : 0
+  const used = balance.data?.usedDays ?? 0
+  const usedFrac = total > 0 ? Math.min(1, used / total) : 0
+  return (
+    <Card className="p-5">
+      <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+        {t('me.timeoff.balanceTitle', { year })}
+      </h2>
+      <div className="mt-2 flex items-baseline gap-2">
+        <span className="tnum font-mono text-[32px] font-bold leading-none text-emerald-2">
+          {balance.isLoading ? '…' : (balance.data?.remaining ?? 0)}
+        </span>
+        <span className="text-[13px] font-medium text-ink-3">{t('me.timeoff.daysLeft')}</span>
+      </div>
+      <div className="mt-3.5 h-2 overflow-hidden rounded-full bg-ink-50">
+        <div
+          className="h-full rounded-full bg-emerald"
+          style={{ width: `${usedFrac * 100}%` }}
+        />
+      </div>
+      <p className="mt-2 text-xs text-ink-3">
+        {t('me.timeoff.usedOf', { used, total })}
+      </p>
+    </Card>
   )
 }
 
