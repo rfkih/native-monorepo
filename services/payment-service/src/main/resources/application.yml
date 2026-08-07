@@ -104,3 +104,23 @@ management:
 
 # Structured JSON logs are defined ONCE in libs/observability's shared logback-native-json.xml
 # (ENGINEERING-STANDARDS §5), included via this service's logback-spring.xml.
+
+---
+# Defense-in-depth local JWT validation (#16, libs/security) — NON-DEV ONLY (the fleet-standard
+# !dev document every service carries; the template omits it because it never ran non-dev, which
+# made the first UAT boot fail with "jwkSetUri cannot be empty"). In a non-dev profile the service
+# validates the inbound RS256 token against Keycloak's JWKS locally and binds the tenant from the
+# verified company_id claim. Scoped to !dev on purpose: in `dev` there is NO resource-server
+# config, so libs/security's permissive DevSecurityConfig governs and the header-trust
+# DevTenantFilter binds the tenant. The anonymous PSP webhook stays open in BOTH profiles via the
+# top-level native.security.public-paths declaration above.
+spring:
+  config:
+    activate:
+      on-profile: "!dev"
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/native}
+          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://localhost:8080/realms/native/protocol/openid-connect/certs}
