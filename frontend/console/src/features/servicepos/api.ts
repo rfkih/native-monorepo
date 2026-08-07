@@ -8,7 +8,7 @@
  * Every query key is scoped by [config.vertical, ..., session.companyId, session.businessId] so
  * two verticals (or two outlets) never share a cache entry.
  */
-import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, keepPreviousData, type UseQueryOptions } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { apiFetch, ApiError } from '@/lib/api'
 import type { CompanySession } from '@/lib/session'
@@ -451,14 +451,21 @@ export function useTicketCapture(config: VerticalPosConfig, session: CompanySess
   })
 }
 
+/**
+ * `options.refetchInterval` (ADR 0045): GATEWAY QRIS re-uses this SAME ticket read as its capture
+ * poll — see `features/pos/api.ts`'s `useReceipt` twin doc. `ticket.payment?.status` is what the
+ * caller watches for CAPTURED.
+ */
 export function useTicket(
   config: VerticalPosConfig,
   session: CompanySession,
   ticketId: string | null,
+  options: Pick<UseQueryOptions<TicketResponse | null>, 'refetchInterval'> = {},
 ) {
   return useQuery({
     queryKey: ['servicepos', config.vertical, 'ticket', session.companyId, ticketId],
     enabled: ticketId != null,
+    refetchInterval: options.refetchInterval,
     queryFn: () =>
       apiFetch<TicketResponse>(`${config.apiBase}/tickets/${ticketId}`, {
         tenant: tenantOf(session),

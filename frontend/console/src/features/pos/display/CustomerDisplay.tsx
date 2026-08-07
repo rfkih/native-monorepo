@@ -18,16 +18,26 @@
  *
  * Money rule (rule 8): every amount is formatted via formatMoney() from the currency carried on the
  * message itself — never a value the publisher pre-formatted (that would bake in the wrong locale).
+ *
+ * ADR 0045 exception to the "no API calls" claim above: `PaymentQrScreen`'s STATIC branch fetches
+ * the merchant's own QRIS image via `useStaticQrImageUrl` — this tab DOES carry a live, authenticated
+ * session (it is opened from within the signed-in console), and a multi-hundred-KB image is a poor
+ * `postMessage` payload, so the display fetches it directly rather than relaying the bytes over the
+ * channel. The GATEWAY branch stays true to the file's original claim: the `qrString` itself crosses
+ * the channel and is rendered client-side, no extra request.
  */
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
-import { Languages, Store, Wallet, CheckCircle2 } from 'lucide-react'
+import { Languages, Store, Wallet, CheckCircle2, QrCode } from 'lucide-react'
 import { useSession } from '@/lib/session'
 import { localeOf } from '@/i18n'
 import { formatMoney } from '@/lib/money'
+import { useStaticQrImageUrl } from '@/features/payments/api'
+import { QrCanvas } from '@/features/pos-shell/payment/QrisPanelViews'
+import { formatCountdown, isExpired, msLeft } from '@/features/pos-shell/payment/qrisTime'
 import { channelName, isDisplayMessage } from './displayChannel'
-import type { DisplayBreakdown, DisplayLine, DisplayMessage, DisplayMoney } from './displayChannel'
+import type { DisplayBreakdown, DisplayLine, DisplayMessage, DisplayMoney, PaymentQrKind } from './displayChannel'
 
 type DisplayLocale = 'id' | 'en'
 
@@ -145,6 +155,8 @@ function CustomerDisplayInner({ businessName, outletId }: { businessName: string
 
       {message.type === 'PAYMENT_STARTED' ? (
         <PaymentStartedScreen due={message.due} displayLocale={displayLocale} />
+      ) : message.type === 'PAYMENT_QR' ? (
+        <PaymentQrScreen due={message.due} qr={message.qr} outletId={outletId} displayLocale={displayLocale} />
       ) : message.type === 'PAYMENT_COMPLETED' ? (
         <PaymentCompletedScreen change={message.change} displayLocale={displayLocale} />
       ) : message.type === 'CART_UPDATED' && message.breakdown ? (
@@ -247,6 +259,77 @@ function PaymentStartedScreen({ due, displayLocale }: { due: DisplayMoney; displ
         <p className="max-w-sm text-white/50">{t('posDisplay.payment.hint', { lng: displayLocale })}</p>
       </div>
     </div>
+  )
+}
+
+/**
+ * PaymentQrScreen — ADR 0045: a QR is now on the till, mirrored here so the customer can scan the
+ * SECOND screen instead of leaning over the counter. STATIC fetches the merchant's own uploaded
+ * image itself (see the file-doc exception above); GATEWAY renders the `qrString` the till already
+ * received, client-side, via the same `QrCanvas` the till panel uses.
+ */
+function PaymentQrScreen({
+  due,
+  qr,
+  outletId,
+  displayLocale,
+}: {
+  due: DisplayMoney
+  qr: PaymentQrKind
+  outletId: string
+  displayLocale: DisplayLocale
+}) {
+  const { t } = useTranslation()
+  const { company } = useSession()
+  const locale = localeOf(displayLocale)
+  const scanLabel = t('posDisplay.qr.scanToPay', { lng: displayLocale })
+
+  // `company` is guaranteed non-null here: PaymentQrScreen only ever renders inside
+  // CustomerDisplayInner, which CustomerDisplay only mounts once `company` is set (see the guard
+  // at the top of this file).
+  const staticQr = useStaticQrImageUrl(company!, outletId, qr.kind === 'STATIC')
+
+  return (
+    <div className="grid flex-1 place-items-center px-8 text-center">
+      <div className="reveal flex flex-col items-center gap-5">
+        <p className="text-lg font-semibold text-white/70">{scanLabel}</p>
+        <div className="grid size-64 place-items-center overflow-hidden rounded-3xl bg-white p-4">
+          {qr.kind === 'GATEWAY' ? (
+            <QrCanvas value={qr.qrString} size={224} ariaLabel={scanLabel} />
+          ) : staticQr.status === 'ready' && staticQr.url ? (
+            <img src={staticQr.url} alt={scanLabel} className="size-full object-contain" />
+          ) : (
+            <QrCode className="size-16 text-slate-300" aria-hidden="true" />
+          )}
+        </div>
+        <p className="tnum font-mono text-4xl font-bold sm:text-5xl">
+          {formatMoney(due.amountMinor, due.currency, locale)}
+        </p>
+        {qr.kind === 'GATEWAY' ? (
+          <PaymentQrCountdown expiresAt={qr.expiresAt} displayLocale={displayLocale} />
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+/** Ticks once a second, purely presentational — the till's own `useGatewayQris` is the source of
+ *  truth for whether the charge is actually still live; this just mirrors the same deadline. */
+function PaymentQrCountdown({ expiresAt, displayLocale }: { expiresAt: string; displayLocale: DisplayLocale }) {
+  const { t } = useTranslation()
+  const [now, setNow] = useState(() => Date.now())
+  const expiresAtMs = new Date(expiresAt).getTime()
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  if (isExpired(expiresAtMs, now)) return null
+  return (
+    <p className="text-sm text-white/50">
+      {t('posDisplay.qr.expiresIn', { time: formatCountdown(msLeft(expiresAtMs, now)), lng: displayLocale })}
+    </p>
   )
 }
 

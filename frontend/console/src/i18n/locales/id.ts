@@ -732,6 +732,18 @@ export const id = {
         staticHint:
           'Minta pelanggan memindai kode QRIS ini, lalu ketuk "Tandai lunas" setelah aplikasi pelanggan menampilkan berhasil.',
         imageError: 'Gambar QRIS tidak dapat dimuat — Anda tetap bisa konfirmasi manual.',
+        gatewayInitiateHint:
+          'Minta pelanggan memindai QR ini dengan aplikasi apa pun yang mendukung QRIS. Pembayaran dikonfirmasi otomatis — Anda tetap bisa menandainya lunas secara manual bila perlu.',
+        gatewayWaiting: 'Membuat kode QR…',
+        gatewayAutoReceipt: 'Pembayaran terkonfirmasi otomatis — mencetak struk…',
+        expiresIn: 'Kedaluwarsa dalam {{time}}',
+        expired: 'Kode QR kedaluwarsa',
+        newQr: 'Kode QR baru',
+        paid: 'Lunas',
+        chargeError: 'Tidak dapat membuat kode QR. Coba lagi.',
+        pollDegraded: 'Sedang kesulitan menjangkau payment gateway — masih memeriksa…',
+        cancelError: 'Tidak dapat membatalkan kode QR. Coba lagi.',
+        checkStatus: 'Periksa status pembayaran',
       },
     },
     receipt: {
@@ -3420,6 +3432,10 @@ export const id = {
       hint: 'Silakan bayar di kasir.',
       thankYou: 'Terima kasih!',
       changeLabel: 'Uang kembalian Anda',
+    },
+    qr: {
+      scanToPay: 'Pindai kode QR untuk membayar',
+      expiresIn: 'Kedaluwarsa dalam {{time}}',
     },
   },
   // Mode tier P1 menyediakan kunci ini untuk layar <ExtendedFeatureLocked> di P2 (tautan langsung /

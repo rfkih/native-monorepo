@@ -11,7 +11,7 @@
  */
 import { useEffect, useMemo } from 'react'
 import { channelName } from './displayChannel'
-import type { DisplayBreakdown, DisplayLine, DisplayMessage, DisplayMoney } from './displayChannel'
+import type { DisplayBreakdown, DisplayLine, DisplayMessage, DisplayMoney, PaymentQrKind } from './displayChannel'
 
 const OPENED_KEY_PREFIX = 'native.console.posDisplay.opened.'
 
@@ -67,6 +67,12 @@ export class DisplayPublisher {
 
   publishPaymentStarted(due: DisplayMoney): void {
     this.post({ type: 'PAYMENT_STARTED', due })
+  }
+
+  /** ADR 0045: a QR just became visible at the till (STATIC or GATEWAY) — the caller reverts to
+   *  `publishPaymentStarted` on cancel/expiry (the QR is no longer scannable). */
+  publishPaymentQr(due: DisplayMoney, qr: PaymentQrKind): void {
+    this.post({ type: 'PAYMENT_QR', due, qr })
   }
 
   publishPaymentCompleted(change: DisplayMoney): void {

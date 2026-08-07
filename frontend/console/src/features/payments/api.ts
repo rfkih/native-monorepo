@@ -18,8 +18,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, apiFetch, apiFetchBlob, apiUpload } from '@/lib/api'
 import type { CompanySession } from '@/lib/session'
 import type { EffectiveSettings, QrisMode } from './effectiveMode'
+import type { ChargeStatus } from './chargePhase'
 
 export type { EffectiveSettings, QrisMode } from './effectiveMode'
+export type { ChargeStatus } from './chargePhase'
 
 function tenantOf(session: CompanySession) {
   return { companyId: session.companyId, actor: session.actor }
@@ -282,5 +284,99 @@ export function useQrisEffective(
         tenant: tenantOf(session),
         query: { businessId },
       }),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Till surface — dynamic-QRIS charges, POS roles (ADR 0045; payment-service /api/v1/payment-charges)
+//
+// Deliberately PLAIN async fetchers, not useQuery/useMutation hooks: the caller is
+// `useGatewayQris.ts`, which already owns its own lifecycle state (the `chargePhase.ts` reducer,
+// a 1s expiry ticker) and drives these imperatively (auto-create on a paymentId transition, a
+// user-initiated retry/new-QR/cancel/check-status tap) rather than on React Query's own
+// render-driven refetch model. Conventions mirror the rest of this file: `tenantOf(session)`,
+// `apiFetch<T>(path, { method, tenant, body })`, explicit `?? null` for optional wire fields.
+// ---------------------------------------------------------------------------
+
+/** Mirrors payment-service's `ChargeResponse` record verbatim — the till's view of a charge
+ *  (create/poll/sync/cancel all return this same shape). Never any credential material. */
+export interface ChargeResponse {
+  chargeId: string
+  status: ChargeStatus
+  vertical: string
+  paymentId: string
+  qrString: string
+  qrUrl: string
+  /** ISO instant. */
+  expiresAt: string
+  amountMinor: number
+  currency: string
+}
+
+export interface CreateChargeInput {
+  /**
+   * `charge:<paymentId>:<attempt>` — minted by `useGatewayQris.ts`, attempt starting at 1 and
+   * incrementing on every retry/new-QR tap after a terminal charge (a fresh attempt is a fresh
+   * Idempotency-Key, so it mints a NEW charge rather than replaying the expired/failed/canceled
+   * one — see `PaymentChargeController`/`ChargeService`).
+   */
+  idempotencyKey: string
+  vertical: 'restaurant' | 'carwash' | 'barbershop'
+  /** The vertical's own PENDING payment id this charge settles. */
+  paymentId: string
+  /** The ticket id for carwash/barbershop; omitted (→ null on the wire) for restaurant. */
+  referenceId?: string | null
+  businessId: string
+  /** The tender RESIDUAL the vertical checkout returned — integer minor units (rule 8). */
+  amountMinor: number
+  currency: string
+}
+
+/**
+ * POST /api/v1/payment-charges — 201 fresh / 200 replay (same live charge for the same payment
+ * regardless of which key asked); 409 on a payload mismatch for an already-used key, a non-GATEWAY
+ * effective mode, or no gateway credentials; 422 for a non-IDR currency; 502 (charge left FAILED)
+ * if the PSP itself is unreachable.
+ */
+export function createCharge(
+  session: CompanySession,
+  input: CreateChargeInput,
+): Promise<ChargeResponse | null> {
+  const { idempotencyKey, referenceId, ...rest } = input
+  return apiFetch<ChargeResponse>('/api/v1/payment-charges', {
+    method: 'POST',
+    tenant: tenantOf(session),
+    headers: { 'Idempotency-Key': idempotencyKey },
+    body: { ...rest, referenceId: referenceId ?? null },
+  })
+}
+
+/** GET /api/v1/payment-charges/{chargeId} — the poll view; also lazily expires a stale QR
+ *  server-side. Exported for completeness with the documented endpoint surface; `useGatewayQris`
+ *  itself relies on the client-side countdown ticker + the create/sync/cancel responses rather than
+ *  polling this endpoint on an interval — a future caller (e.g. a reattach-after-reload flow) can
+ *  use this directly. */
+export function getCharge(session: CompanySession, chargeId: string): Promise<ChargeResponse | null> {
+  return apiFetch<ChargeResponse>(`/api/v1/payment-charges/${chargeId}`, {
+    tenant: tenantOf(session),
+  })
+}
+
+/** POST /api/v1/payment-charges/{chargeId}/sync — the manual "customer says they paid" status
+ *  probe (a server-side Midtrans status poll); the till's "check status" affordance. */
+export function syncCharge(session: CompanySession, chargeId: string): Promise<ChargeResponse | null> {
+  return apiFetch<ChargeResponse>(`/api/v1/payment-charges/${chargeId}/sync`, {
+    method: 'POST',
+    tenant: tenantOf(session),
+  })
+}
+
+/** POST /api/v1/payment-charges/{chargeId}/cancel — cancels at Midtrans; if the customer ALREADY
+ *  paid, this SETTLES instead (the response comes back SUCCEEDED) — the caller must treat that as
+ *  a capture-in-flight, never a clean cancel (see `useGatewayQris.cancel()`'s doc). */
+export function cancelCharge(session: CompanySession, chargeId: string): Promise<ChargeResponse | null> {
+  return apiFetch<ChargeResponse>(`/api/v1/payment-charges/${chargeId}/cancel`, {
+    method: 'POST',
+    tenant: tenantOf(session),
   })
 }

@@ -38,9 +38,25 @@ export interface DisplayBreakdown {
   currency: string
 }
 
+/**
+ * The QR actually on screen at the till, mirrored to the customer display (ADR 0045):
+ *  - `STATIC` — the merchant's own uploaded QRIS image. The display fetches the image bytes
+ *    itself (see `CustomerDisplay.tsx`'s `PaymentQrScreen`) rather than carrying them over the
+ *    channel — a `postMessage` payload is a poor place for a multi-hundred-KB image blob, and the
+ *    display already has a live, authenticated session.
+ *  - `GATEWAY` — the dynamic Midtrans `qrString`, rendered client-side via the same `QrCanvas` the
+ *    till panel uses, plus its expiry so the display can run an identical countdown.
+ */
+export type PaymentQrKind =
+  | { kind: 'STATIC' }
+  | { kind: 'GATEWAY'; qrString: string; expiresAt: string }
+
 export type DisplayMessage =
   | { type: 'CART_UPDATED'; lines: DisplayLine[]; breakdown: DisplayBreakdown | null }
   | { type: 'PAYMENT_STARTED'; due: DisplayMoney }
+  /** ADR 0045: a QR is now visible on the till (STATIC or GATEWAY) — the customer scans THIS
+   *  screen instead of a printed/counter code. Reverts to PAYMENT_STARTED on cancel/expiry. */
+  | { type: 'PAYMENT_QR'; due: DisplayMoney; qr: PaymentQrKind }
   | { type: 'PAYMENT_COMPLETED'; change: DisplayMoney }
   | { type: 'IDLE' }
 
@@ -69,6 +85,8 @@ export function isDisplayMessage(value: unknown): value is DisplayMessage {
       )
     case 'PAYMENT_STARTED':
       return isDisplayMoney(v.due)
+    case 'PAYMENT_QR':
+      return isDisplayMoney(v.due) && isPaymentQrKind(v.qr)
     case 'PAYMENT_COMPLETED':
       return isDisplayMoney(v.change)
     case 'IDLE':
@@ -76,6 +94,14 @@ export function isDisplayMessage(value: unknown): value is DisplayMessage {
     default:
       return false
   }
+}
+
+function isPaymentQrKind(value: unknown): value is PaymentQrKind {
+  if (typeof value !== 'object' || value === null) return false
+  const v = value as Record<string, unknown>
+  if (v.kind === 'STATIC') return true
+  if (v.kind === 'GATEWAY') return typeof v.qrString === 'string' && typeof v.expiresAt === 'string'
+  return false
 }
 
 function isDisplayMoney(value: unknown): value is DisplayMoney {

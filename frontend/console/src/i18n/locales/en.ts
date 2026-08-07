@@ -739,6 +739,18 @@ export const en = {
         staticHint:
           'Ask the customer to scan this QRIS code, then tap "Mark as paid" once their app shows success.',
         imageError: "The QRIS image couldn't load — you can still confirm payment manually.",
+        gatewayInitiateHint:
+          'Ask the customer to scan this QR with any QRIS-enabled app. Payment is confirmed automatically — you can still mark it as paid by hand if needed.',
+        gatewayWaiting: 'Generating the QR code…',
+        gatewayAutoReceipt: 'Payment confirmed automatically — printing the receipt…',
+        expiresIn: 'Expires in {{time}}',
+        expired: 'QR code expired',
+        newQr: 'New QR code',
+        paid: 'Paid',
+        chargeError: 'Could not generate the QR code. Try again.',
+        pollDegraded: 'Having trouble reaching the payment gateway — still checking…',
+        cancelError: 'Could not cancel the QR code. Try again.',
+        checkStatus: 'Check payment status',
       },
     },
     receipt: {
@@ -3439,6 +3451,10 @@ export const en = {
       hint: 'Please pay at the counter.',
       thankYou: 'Thank you!',
       changeLabel: 'Your change',
+    },
+    qr: {
+      scanToPay: 'Scan the QR code to pay',
+      expiresIn: 'Expires in {{time}}',
     },
   },
   // P1 tier-mode reserves these keys for P2's <ExtendedFeatureLocked> screen (a deep link / bookmark

@@ -40,6 +40,42 @@ describe('displayChannel — isDisplayMessage', () => {
     expect(isDisplayMessage({ type: 'IDLE' })).toBe(true)
   })
 
+  it('accepts PAYMENT_QR with a STATIC or a GATEWAY qr (ADR 0045)', () => {
+    expect(
+      isDisplayMessage({
+        type: 'PAYMENT_QR',
+        due: { amountMinor: 60_500, currency: 'IDR' },
+        qr: { kind: 'STATIC' },
+      }),
+    ).toBe(true)
+    expect(
+      isDisplayMessage({
+        type: 'PAYMENT_QR',
+        due: { amountMinor: 60_500, currency: 'IDR' },
+        qr: {
+          kind: 'GATEWAY',
+          qrString: '00020101021226...',
+          expiresAt: '2026-08-07T10:15:00Z',
+        },
+      }),
+    ).toBe(true)
+  })
+
+  it('rejects PAYMENT_QR with a malformed due or an unrecognised/incomplete qr', () => {
+    expect(isDisplayMessage({ type: 'PAYMENT_QR', due: { amountMinor: '100', currency: 'IDR' }, qr: { kind: 'STATIC' } })).toBe(false)
+    expect(
+      isDisplayMessage({ type: 'PAYMENT_QR', due: { amountMinor: 100, currency: 'IDR' }, qr: { kind: 'DYNAMIC' } }),
+    ).toBe(false)
+    expect(
+      isDisplayMessage({
+        type: 'PAYMENT_QR',
+        due: { amountMinor: 100, currency: 'IDR' },
+        qr: { kind: 'GATEWAY', qrString: '00020101' }, // missing expiresAt
+      }),
+    ).toBe(false)
+    expect(isDisplayMessage({ type: 'PAYMENT_QR', due: { amountMinor: 100, currency: 'IDR' } })).toBe(false)
+  })
+
   it('rejects non-objects, unknown types, and missing fields', () => {
     expect(isDisplayMessage(null)).toBe(false)
     expect(isDisplayMessage(undefined)).toBe(false)

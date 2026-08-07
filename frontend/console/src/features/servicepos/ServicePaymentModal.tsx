@@ -12,8 +12,9 @@
  *
  * Money rule (rule 8): integer minor units; rendered via formatMoney().
  */
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useQueryClient } from '@tanstack/react-query'
 import { Gift } from 'lucide-react'
 import { GiftCardField } from '@/components/GiftCardField'
 import type { CompanySession } from '@/lib/session'
@@ -23,17 +24,21 @@ import { PaymentBreakdown } from '@/features/pos-shell/payment/PaymentBreakdown'
 import { TenderPickerRow } from '@/features/pos-shell/payment/TenderPickerRow'
 import { CashPanelView } from '@/features/pos-shell/payment/CashPanelView'
 import { DigitalInitiateView, DigitalPendingView } from '@/features/pos-shell/payment/DigitalPanelViews'
+import { GatewayQrisPendingView } from '@/features/pos-shell/payment/QrisPanelViews'
+import { pollIntervalFor } from '@/features/pos-shell/payment/pollIntervalFor'
 import { FullCoverageView } from '@/features/pos-shell/payment/FullCoverageView'
 import { CheckoutErrorText } from '@/features/pos-shell/payment/CheckoutErrorText'
 import { usePaymentAttempt } from '@/features/pos-shell/payment/usePaymentAttempt'
 import { Spinner } from '@/components/ui/Spinner'
 import { useQrisEffective, useStaticQrImageUrl, type QrisMode } from '@/features/payments/api'
 import { effectiveQrisMode } from '@/features/payments/effectiveMode'
+import { useGatewayQris } from '@/features/payments/useGatewayQris'
 import { OfflineHint } from '@/features/pos/offline/OfflineHint'
 import { enqueueSale } from '@/features/pos/offline/queue'
 import type { ProvisionalTotals, SaleQueueRow } from '@/features/pos/offline/db'
 import type { VerticalPosConfig } from './config'
 import {
+  useTicket,
   useTicketCapture,
   useTicketCheckout,
   type PriceBreakdownResponse,
@@ -123,6 +128,25 @@ export function ServicePaymentModal({
   const qrisEffectiveQuery = useQrisEffective(session, session.businessId, { enabled: !offline })
   const qrisMode = effectiveQrisMode(qrisEffectiveQuery.data ?? undefined, qrisEffectiveQuery.isError, offline, currency)
 
+  // ADR 0045: while a GATEWAY charge is live, `ServiceDigitalAttempt` registers its cancel function
+  // here so the FRAME's own X close button cancels the charge before closing — see PaymentModal's
+  // `handleFrameClose` twin doc (identical contract).
+  const gatewayCancelRef = useRef<(() => Promise<boolean>) | null>(null)
+  const registerGatewayCancel = useCallback((fn: (() => Promise<boolean>) | null) => {
+    gatewayCancelRef.current = fn
+  }, [])
+  function handleFrameClose() {
+    const cancelFn = gatewayCancelRef.current
+    if (!cancelFn) {
+      onClose()
+      return
+    }
+    gatewayCancelRef.current = null
+    void cancelFn().then((capturedInFlight) => {
+      if (!capturedInFlight) onClose()
+    })
+  }
+
   // Phase 4 (ADR 0027): gift-card redemption entered HERE — see PaymentModal's class doc for the
   // residual/full-coverage design (identical here).
   const [giftCard, setGiftCard] = useState<GiftCardResponse | null>(null)
@@ -161,7 +185,7 @@ export function ServicePaymentModal({
   }
 
   return (
-    <PaymentSurfaceFrame onClose={onClose}>
+    <PaymentSurfaceFrame onClose={handleFrameClose}>
       <PaymentBreakdown breakdown={breakdown} grandTotalMinor={grandTotalMinor} currency={currency} locale={locale} />
 
       {/* Gift-card redemption (Phase 4, ADR 0027) — unreachable offline (Phase 5, ADR 0028). */}
@@ -223,6 +247,7 @@ export function ServicePaymentModal({
               locale={locale}
               tenderType={tender}
               qrisMode={qrisMode}
+              registerGatewayCancel={registerGatewayCancel}
             />
           )}
         </>
@@ -356,6 +381,7 @@ function ServiceDigitalAttempt({
   locale,
   tenderType,
   qrisMode,
+  registerGatewayCancel,
 }: {
   attempt: TicketAttemptArgs
   chargeMinor: number
@@ -364,14 +390,23 @@ function ServiceDigitalAttempt({
   tenderType: 'QRIS' | 'CARD'
   /** ADR 0045: irrelevant for CARD — see PaymentModal's twin doc. */
   qrisMode: QrisMode
+  /** ADR 0045: lets this attempt register the live gateway-cancel function with the modal frame —
+   *  see ServicePaymentModal's `handleFrameClose` doc (identical contract to PaymentModal's). */
+  registerGatewayCancel?: (fn: (() => Promise<boolean>) | null) => void
 }) {
   const { t } = useTranslation()
   const { config, session, onSuccess, onClose } = attempt
+  const qc = useQueryClient()
   const checkout = useTicketCheckout(config, session)
   const capture = useTicketCapture(config, session)
 
   // ADR 0045: see PaymentModal's twin doc — fetched only once a PENDING ticket exists.
   const showStaticQr = tenderType === 'QRIS' && qrisMode === 'STATIC'
+  // ADR 0045: see PaymentModal's twin doc for the full GATEWAY/fallback/captured-beats-cancel design
+  // (identical contract here, over the ticket wire instead of the order wire).
+  const showGatewayQris = tenderType === 'QRIS' && qrisMode === 'GATEWAY'
+  const [gatewayFallback, setGatewayFallback] = useState(false)
+  const capturedRef = useRef(false)
 
   // One idempotency key per payment ATTEMPT (panel mount), reused across retries (review W1).
   const idempotencyKey = usePaymentAttempt()
@@ -391,7 +426,10 @@ function ServiceDigitalAttempt({
     if (!pendingTicket) return
     capture.mutate(pendingTicket.ticketId, {
       onSuccess: (captured) => {
-        if (captured) onSuccess(captured)
+        if (captured && !capturedRef.current) {
+          capturedRef.current = true
+          onSuccess(captured)
+        }
       },
     })
   }
@@ -414,6 +452,49 @@ function ServiceDigitalAttempt({
     )
   ) : undefined
 
+  // ADR 0045: the GATEWAY lifecycle — see PaymentModal's twin doc. `referenceId` carries the ticket
+  // id (CreateChargeRequest.referenceId — null for restaurant, required here).
+  const gatewayActive = showGatewayQris && !gatewayFallback
+  const pendingPayment = pendingTicket?.payment ?? null
+  const gateway = useGatewayQris(session, {
+    vertical: config.vertical,
+    paymentId: gatewayActive && pendingPayment ? pendingPayment.paymentId : null,
+    referenceId: pendingTicket?.ticketId ?? null,
+    businessId: session.businessId,
+    amountMinor: pendingPayment?.amountMinor ?? chargeMinor,
+    currency,
+  })
+
+  // ADR 0045: the vertical-read poll — polls the SAME ticket read "Mark as paid" would show,
+  // watching `payment.status` for CAPTURED (see PaymentModal's twin `useReceipt` doc).
+  const ticketQuery = useTicket(config, session, gatewayActive && pendingTicket ? pendingTicket.ticketId : null, {
+    refetchInterval: (query) =>
+      pollIntervalFor(query.state.data?.payment?.status ?? null, query.state.status === 'error'),
+  })
+
+  useEffect(() => {
+    if (!gatewayActive || capturedRef.current) return
+    const captured = ticketQuery.data
+    if (captured?.payment?.status === 'CAPTURED') {
+      capturedRef.current = true
+      void qc.invalidateQueries({ queryKey: ['pnl'] })
+      onSuccess(captured)
+    }
+  }, [gatewayActive, ticketQuery.data, onSuccess, qc])
+
+  const handleGatewayCancel = useCallback(async (): Promise<boolean> => {
+    const capturedInFlight = await gateway.cancel()
+    if (capturedInFlight || capturedRef.current) return true
+    setGatewayFallback(true)
+    return false
+  }, [gateway])
+
+  useEffect(() => {
+    if (!gatewayActive || !registerGatewayCancel) return undefined
+    registerGatewayCancel(handleGatewayCancel)
+    return () => registerGatewayCancel(null)
+  }, [gatewayActive, registerGatewayCancel, handleGatewayCancel])
+
   if (!pendingTicket) {
     return (
       <DigitalInitiateView
@@ -423,6 +504,31 @@ function ServiceDigitalAttempt({
         busy={checkout.isPending}
         errorSlot={checkout.isError ? <CheckoutErrorText error={checkout.error} /> : null}
         onInitiate={initiatePayment}
+      />
+    )
+  }
+
+  if (gatewayActive) {
+    return (
+      <GatewayQrisPendingView
+        amountMinor={pendingPayment?.amountMinor ?? chargeMinor}
+        currency={currency}
+        locale={locale}
+        qrString={gateway.charge?.qrString ?? null}
+        expiresAtMs={gateway.charge?.expiresAt ? new Date(gateway.charge.expiresAt).getTime() : null}
+        phase={gateway.phase}
+        errorSlot={
+          gateway.phase !== 'error' && ticketQuery.isError ? (
+            <p className="mb-3 text-xs text-loss" role="alert">
+              {t('pos.payment.qris.pollDegraded')}
+            </p>
+          ) : undefined
+        }
+        onCancel={() => void handleGatewayCancel()}
+        onNewQr={gateway.retryOrNewQr}
+        onCheckStatus={gateway.checkStatus}
+        onManualConfirm={confirmPayment}
+        manualConfirmBusy={capture.isPending}
       />
     )
   }

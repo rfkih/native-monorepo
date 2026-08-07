@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, keepPreviousData, type UseQueryOptions } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { apiFetch } from '@/lib/api'
 import type { CompanySession } from '@/lib/session'
@@ -712,11 +712,24 @@ export function useRefundPayment(session: CompanySession) {
   })
 }
 
-/** Read-path receipt for a payment (GET /api/v1/payments/{id}/receipt). */
-export function useReceipt(session: CompanySession, paymentId: string | null) {
+/**
+ * Read-path receipt for a payment (GET /api/v1/payments/{id}/receipt).
+ *
+ * `options.refetchInterval` (ADR 0045): GATEWAY QRIS re-uses this SAME read as its capture poll —
+ * the vertical never captures client-side, so `RestaurantDigitalAttempt` polls this endpoint (via
+ * `pollIntervalFor.ts`'s pure backoff/stop policy) until `status` turns CAPTURED, then hands off to
+ * the identical onSuccess/receipt path "Mark as paid" already uses. Passed straight through to
+ * `useQuery` — undefined (every pre-ADR-0045 caller) keeps today's one-shot behavior.
+ */
+export function useReceipt(
+  session: CompanySession,
+  paymentId: string | null,
+  options: Pick<UseQueryOptions<PaymentResponse | null>, 'refetchInterval'> = {},
+) {
   return useQuery({
     queryKey: ['receipt', session.companyId, paymentId],
     enabled: paymentId != null,
+    refetchInterval: options.refetchInterval,
     queryFn: () =>
       apiFetch<PaymentResponse>(`/api/v1/payments/${paymentId}/receipt`, {
         tenant: tenantOf(session),
