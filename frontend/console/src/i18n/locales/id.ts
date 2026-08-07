@@ -323,6 +323,28 @@ export const id = {
     yourBusinesses: 'Perusahaan Anda',
     addBusiness: 'Tambah perusahaan atau divisi',
   },
+  mobile: {
+    tabs: {
+      aria: 'Navigasi bawah',
+      home: 'Beranda',
+      reports: 'Laporan',
+      team: 'Tim',
+      more: 'Lainnya',
+      payslips: 'Slip gaji',
+      timeoff: 'Cuti',
+      claims: 'Klaim',
+    },
+    more: {
+      title: 'Lainnya',
+      closeBook: 'Tutup buku',
+      claimInbox: 'Inbox klaim',
+      stocktake: 'Opname stok',
+      menuPrices: 'Menu & harga',
+      kitchenDisplay: 'Layar dapur',
+      openPos: 'Buka kasir',
+      allPages: 'Semua halaman',
+    },
+  },
   settings: {
     printer: {
       title: 'Printer struk',

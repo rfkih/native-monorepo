@@ -332,6 +332,28 @@ export const en = {
     yourBusinesses: 'Your companies',
     addBusiness: 'Add company or division',
   },
+  mobile: {
+    tabs: {
+      aria: 'Bottom navigation',
+      home: 'Home',
+      reports: 'Reports',
+      team: 'Team',
+      more: 'More',
+      payslips: 'Payslips',
+      timeoff: 'Leave',
+      claims: 'Claims',
+    },
+    more: {
+      title: 'More',
+      closeBook: 'Period close',
+      claimInbox: 'Claims inbox',
+      stocktake: 'Stocktake',
+      menuPrices: 'Menu & prices',
+      kitchenDisplay: 'Kitchen display',
+      openPos: 'Open till',
+      allPages: 'All pages',
+    },
+  },
   settings: {
     printer: {
       title: 'Receipt printer',

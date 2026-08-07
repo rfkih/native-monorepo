@@ -108,6 +108,8 @@ body {
   --animate-pop: pop 0.3s cubic-bezier(0.2, 0.7, 0.2, 1) both;
   /* Continuous, gentle float for the landing's floating accent cards. */
   --animate-float: float 7s ease-in-out infinite;
+  /* Phone bottom-sheet entrance (Native Console Android design). */
+  --animate-sheet-up: sheet-up 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 /* Dark theme — reassign the same variables; var()-based utilities follow automatically.
@@ -219,6 +221,15 @@ body {
   .reveal {
     animation: var(--animate-fade-up);
   }
+  /* Phone bottom-sheet entrance (MobileSheet). */
+  .sheet-up {
+    animation: var(--animate-sheet-up);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .sheet-up {
+      animation: none;
+    }
+  }
   /* Continuous, gentle float for the hero's floating accent cards. */
   .floaty {
     animation: var(--animate-float);
@@ -274,6 +285,14 @@ body {
   }
   50% {
     transform: translateY(-9px);
+  }
+}
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
   }
 }
 @keyframes pulse-dot {
