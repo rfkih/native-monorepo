@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { ArrowRight, Info, Store, TriangleAlert } from 'lucide-react'
+import { ArrowRight, BookOpen, Info, Store, TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Segmented } from '@/components/ui/Segmented'
@@ -14,6 +14,7 @@ import { formatMoney, formatPercent } from '@/lib/money'
 import { currentPeriod, formatPeriod, shiftPeriod } from '@/lib/period'
 import { EmptyState, PeriodNav } from '@/features/_shared/financeUi'
 import { useOrgUnits, type OrgUnit } from '@/features/org/api'
+import { useOpeningBalance, isOpeningBalanceNotRecorded } from '@/features/openingBalances/api'
 import { usePnl, usePnlTrend, useOutletRevenue, type OutletRow } from './api'
 import { readFigures, monthShort } from './figures'
 import { DeltaPill } from './DeltaPill'
@@ -26,7 +27,8 @@ const TREND_MONTHS = 8
 export function Dashboard() {
   const { t, i18n } = useTranslation()
   const { company } = useSession()
-  const { isExtended } = useTierAccess()
+  const tierAccess = useTierAccess()
+  const { isExtended } = tierAccess
   const isPhone = useIsPhone()
   const locale = localeOf(i18n.language)
 
@@ -75,6 +77,15 @@ export function Dashboard() {
     enabled: !!company,
   })
 
+  // Whether an opening balance sheet was ever recorded — a settled 404 (not-recorded) on a
+  // fresh-books tenant surfaces the opening-balances shortcut inside the first-sale prompt:
+  // a migrating business must enter its opening position before day-one figures mean anything.
+  const openingQuery = useOpeningBalance({
+    companyId: company?.companyId ?? '',
+    actor: company?.actor ?? '',
+    enabled: !!company && tierAccess.allows('accounting'),
+  })
+
   if (!company) {
     return <EmptyState title={t('dashboard.noCompany')} hint={t('dashboard.noCompanyHint')} />
   }
@@ -112,6 +123,10 @@ export function Dashboard() {
     !query.isLoading &&
     points.every((p) => p.loaded) &&
     points.every((p) => p.fig.net === 0 && p.fig.revenue === 0 && p.fig.expense === 0)
+  // Only a SETTLED not-recorded 404 shows the shortcut — a recorded sheet (200), a pending
+  // load, or any other error keeps it hidden (never nag a tenant whose opening is done).
+  const showOpeningShortcut =
+    trendEmpty && tierAccess.allows('accounting') && isOpeningBalanceNotRecorded(openingQuery.error)
 
   const prev = points.length >= 2 ? points[points.length - 2] : null
   const revDelta = prev && prev.fig.revenue > 0 ? (figures.revenue - prev.fig.revenue) / prev.fig.revenue : 0
@@ -279,6 +294,15 @@ export function Dashboard() {
                 >
                   {t('dashboard.openTill')}
                 </Link>
+                {showOpeningShortcut ? (
+                  <Link
+                    to="/opening-balances"
+                    className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-brand-700 hover:underline"
+                  >
+                    <BookOpen className="size-4" aria-hidden="true" />
+                    {t('dashboard.openingShortcut')}
+                  </Link>
+                ) : null}
               </div>
             ) : (
               <div>

@@ -680,6 +680,7 @@ export const en = {
     noSalesYet: 'No sales yet',
     noSalesYetHint: 'Ring your first sale and this chart starts moving.',
     openTill: 'Open the POS',
+    openingShortcut: 'Moving an existing business? Set up opening balances',
     atGlance: 'At a glance',
     netTrend: 'Net trend',
     bestMonth: 'Best month',

@@ -630,6 +630,7 @@ export function Signup() {
                   </Field>
                   <Field label={t('signup.companySize')}>
                     <Segmented
+                      fluid
                       ariaLabel={t('signup.companySize')}
                       value={companySize}
                       onChange={setCompanySize}

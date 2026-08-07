@@ -670,6 +670,7 @@ export const id = {
       'Saat gerai membukukan penjualan ke buku besar, kontribusinya muncul di sini — hanya angka nyata, bukan perkiraan.',
     noSalesYet: 'Belum ada penjualan',
     noSalesYetHint: 'Catat penjualan pertama Anda dan grafik ini mulai bergerak.',
+    openingShortcut: 'Pindahan dari pembukuan lama? Siapkan saldo awal',
     openTill: 'Buka POS',
     atGlance: 'Sekilas',
     netTrend: 'Tren bersih',

@@ -6,6 +6,7 @@ export function Segmented<T extends string>({
   onChange,
   ariaLabel,
   className,
+  fluid = false,
 }: {
   options: {
     value: T
@@ -20,12 +21,21 @@ export function Segmented<T extends string>({
   onChange: (value: T) => void
   ariaLabel?: string
   className?: string
+  /** Fill the parent's width and let every segment shrink/grow equally. The default inline
+   * control is content-sized and CANNOT shrink, so 4+ options overflow a phone column (the
+   * signup company-size row poked past the card edge on an S23). Only for short labels —
+   * segments share the row evenly and never wrap. */
+  fluid?: boolean
 }) {
   return (
     <div
       role="tablist"
       aria-label={ariaLabel}
-      className={cn('inline-flex h-10 items-center gap-[3px] rounded-xl bg-ink-50 p-1', className)}
+      className={cn(
+        'inline-flex h-10 items-center gap-[3px] rounded-xl bg-ink-50 p-1',
+        fluid && 'flex w-full',
+        className,
+      )}
     >
       {options.map((option) => {
         const active = option.value === value
@@ -39,7 +49,8 @@ export function Segmented<T extends string>({
             title={option.disabled ? option.title : undefined}
             onClick={() => onChange(option.value)}
             className={cn(
-              'grid h-8 place-items-center rounded-lg px-4 text-[13px] transition-colors',
+              'grid h-8 place-items-center rounded-lg text-[13px] transition-colors',
+              fluid ? 'min-w-0 flex-1 px-1' : 'px-4',
               'disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-ink-3',
               active
                 ? 'bg-surface font-bold text-ink shadow-sm'

@@ -10,7 +10,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { CalendarCheck, Inbox, Store, TriangleAlert } from 'lucide-react'
+import { BookOpen, CalendarCheck, Inbox, Store, TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { ErrorDiagnostics } from '@/components/ErrorDiagnostics'
@@ -22,6 +22,7 @@ import { localeOf } from '@/i18n'
 import { formatAmount, formatMoney, formatPercent } from '@/lib/money'
 import { currentPeriod, formatPeriod, shiftPeriod } from '@/lib/period'
 import { PeriodNav } from '@/features/_shared/financeUi'
+import { useOpeningBalance, isOpeningBalanceNotRecorded } from '@/features/openingBalances/api'
 import { usePnl, usePnlTrend, useOutletRevenue } from './api'
 import { readFigures, monthShort } from './figures'
 import { DeltaPill } from './DeltaPill'
@@ -61,6 +62,14 @@ export function DashboardPhone() {
     enabled: !!company,
   })
 
+  // Opening-balances shortcut signal (same cache entry as the desktop dashboard) — see
+  // Dashboard.tsx: a settled not-recorded 404 on fresh books surfaces the shortcut.
+  const openingQuery = useOpeningBalance({
+    companyId: company?.companyId ?? '',
+    actor: company?.actor ?? '',
+    enabled: !!company && tierAccess.allows('accounting'),
+  })
+
   if (!company) return null
 
   const data = query.data ?? null
@@ -82,6 +91,8 @@ export function DashboardPhone() {
     !query.isLoading &&
     points.every((p) => p.loaded) &&
     points.every((p) => p.fig.net === 0 && p.fig.revenue === 0 && p.fig.expense === 0)
+  const showOpeningShortcut =
+    trendEmpty && tierAccess.allows('accounting') && isOpeningBalanceNotRecorded(openingQuery.error)
 
   const outlets = outletQuery.data?.outlets ?? []
   const outletCurrency = outletQuery.data?.currency ?? company.baseCurrency
@@ -186,6 +197,16 @@ export function DashboardPhone() {
               >
                 {t('dashboard.openTill')}
               </Link>
+              {showOpeningShortcut ? (
+                <Link
+                  to="/opening-balances"
+                  viewTransition
+                  className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-brand-700 hover:underline"
+                >
+                  <BookOpen className="size-4" aria-hidden="true" />
+                  {t('dashboard.openingShortcut')}
+                </Link>
+              ) : null}
             </Card>
           ) : null}
 
