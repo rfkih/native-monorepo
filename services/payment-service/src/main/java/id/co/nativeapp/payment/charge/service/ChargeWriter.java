@@ -227,6 +227,26 @@ public class ChargeWriter {
     return true;
   }
 
+  /**
+   * The company's decrypted server key, for webhook signature verification (rule 6: call-scoped
+   * only). Empty when no GATEWAY credentials exist — under a PROVISIONALLY bound (possibly forged)
+   * tenant, RLS makes the row invisible, so a forged {@code companyId} lands here and is rejected
+   * uniformly.
+   */
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public Optional<String> companyServerKey() {
+    return settings
+        .findByOutletIdIsNull()
+        .filter(PaymentSettings::hasServerKey)
+        .map(PaymentSettings::getServerKey);
+  }
+
+  /** The webhook's charge lookup by Midtrans order_id (RLS-scoped like everything else). */
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public Optional<PaymentCharge> chargeByProviderOrderId(String providerOrderId) {
+    return charges.findByProviderOrderId(providerOrderId);
+  }
+
   /** Loads a charge + the company's credentials for a remote (sync/cancel) operation. */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public RemoteOp loadForRemoteOp(UUID chargeId) {

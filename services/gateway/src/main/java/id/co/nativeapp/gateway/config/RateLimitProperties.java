@@ -38,7 +38,8 @@ public record RateLimitProperties(
     @Min(1) long refillTokens,
     @NotNull Duration refillPeriod,
     @NotNull @Valid AnonymousBucket signup,
-    @NotNull @Valid AnonymousBucket selfOrder) {
+    @NotNull @Valid AnonymousBucket selfOrder,
+    @NotNull @Valid AnonymousBucket pspWebhook) {
 
   /**
    * An anonymous, per-client-IP bucket shape shared by every unauthenticated route ({@code signup},

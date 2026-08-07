@@ -684,6 +684,32 @@ public class RoutingConfig {
   // ---------------------------------------------------------------------------
 
   /**
+   * The PUBLIC Midtrans settlement webhook ({@code /api/v1/psp-webhooks/**}) — the fleet's third
+   * ANONYMOUS route (after {@link #signupRoute} and {@link #selfOrderRoute}, whose recipe this
+   * copies exactly): Midtrans's notification servers carry no JWT, so there is no role check and no
+   * {@link TenantContextHeaderFilter}. payment-service owns ALL authentication once the request
+   * arrives (provisional tenant bind from the callback URL's {@code companyId} + RLS-scoped loads +
+   * a constant-time signature check against the merchant's own server key — ADR 0045).
+   *
+   * <p>{@link AnonymousRateLimitFilter} meters per client IP in its OWN Redis namespace ({@code
+   * anon:psp-webhook:}), fail-closed like every bucket; {@link AnonymousTenantHeaderStripFilter}
+   * unconditionally removes any client-supplied {@code X-Company-Id}/{@code X-Actor}/{@code
+   * X-Roles} so an anonymous caller can never inject a trusted tenant header.
+   */
+  @Bean
+  RouterFunction<ServerResponse> pspWebhookRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      RateLimitProperties rateLimits) {
+    return GatewayRouterFunctions.route("payment-service-psp-webhook")
+        .route(path("/api/v1/psp-webhooks/**"), http())
+        .before(uri(routes.paymentService()))
+        .filter(new AnonymousRateLimitFilter(limiter, rateLimits.pspWebhook(), "anon:psp-webhook:"))
+        .filter(new AnonymousTenantHeaderStripFilter())
+        .build();
+  }
+
+  /**
    * {@code GET /api/v1/payment-settings/effective} — the till reading its outlet's effective QRIS
    * mode/availability at tender time (ADR 0045). POS_ROLES: the cashier is the primary consumer.
    * The response is availability only (mode + booleans) — never key material.

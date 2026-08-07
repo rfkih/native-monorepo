@@ -81,6 +81,16 @@ native:
         refill-tokens: ${SELF_ORDER_RATE_LIMIT_REFILL_TOKENS:60}
         refill-period: ${SELF_ORDER_RATE_LIMIT_REFILL_PERIOD:1m}
         trust-forwarded-for: ${SELF_ORDER_RATE_LIMIT_TRUST_XFF:false}
+      # Anonymous per-client-IP bucket for the PUBLIC PSP webhook (ADR 0045) — its OWN namespace
+      # (anon:psp-webhook:), separate from signup/self-order. Legitimate traffic is Midtrans's
+      # notification servers (a handful of IPs, one call per payment + retries), so the bucket is
+      # modest; the signature check inside payment-service is the real gate — this only bounds
+      # anonymous junk before it reaches JSON parsing.
+      psp-webhook:
+        capacity: ${PSP_WEBHOOK_RATE_LIMIT_CAPACITY:120}
+        refill-tokens: ${PSP_WEBHOOK_RATE_LIMIT_REFILL_TOKENS:120}
+        refill-period: ${PSP_WEBHOOK_RATE_LIMIT_REFILL_PERIOD:1m}
+        trust-forwarded-for: ${PSP_WEBHOOK_RATE_LIMIT_TRUST_XFF:false}
 
 management:
   endpoints:

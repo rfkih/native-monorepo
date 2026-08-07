@@ -2219,4 +2219,48 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
     assertThat(response).isEqualTo("ok");
     assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/payment-settings");
   }
+
+  // ---------------------------------------------------------------------------
+  // /api/v1/psp-webhooks/** — the ANONYMOUS Midtrans settlement webhook (ADR 0045): no JWT, no
+  // role check; payment-service authenticates via the merchant-key signature. The gateway's job
+  // is the per-IP throttle + the tenant-header spoof-strip.
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void theAnonymousPspWebhookIsForwardedWithoutAnyToken() throws Exception {
+    String response =
+        gatewayClient()
+            .post()
+            .uri("/api/v1/psp-webhooks/midtrans/11111111-1111-1111-1111-111111111111")
+            .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+            .body("{\"order_id\":\"n-x\",\"status_code\":\"200\"}")
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath())
+        .isEqualTo("/api/v1/psp-webhooks/midtrans/11111111-1111-1111-1111-111111111111");
+  }
+
+  @Test
+  void thePspWebhookStripsClientSuppliedTenantHeaders() throws Exception {
+    // An anonymous caller must never be able to inject a trusted tenant/actor/roles header — the
+    // strip-only filter removes them unconditionally (the signup/self-order spoof defence).
+    gatewayClient()
+        .post()
+        .uri("/api/v1/psp-webhooks/midtrans/11111111-1111-1111-1111-111111111111")
+        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+        .header("X-Company-Id", "spoofed-tenant")
+        .header("X-Actor", "spoofed-actor")
+        .header("X-Roles", "owner")
+        .body("{\"order_id\":\"n-x\",\"status_code\":\"200\"}")
+        .retrieve()
+        .body(String.class);
+
+    assertThat(receivedRequests).hasSize(1);
+    RecordedRequest forwarded = theForwardedRequest();
+    assertThat(forwarded.getHeader("X-Company-Id")).isNull();
+    assertThat(forwarded.getHeader("X-Actor")).isNull();
+    assertThat(forwarded.getHeader("X-Roles")).isNull();
+  }
 }

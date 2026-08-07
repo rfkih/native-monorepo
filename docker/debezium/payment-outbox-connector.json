@@ -1,0 +1,50 @@
+{
+  "name": "payment-outbox-connector",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+
+    "//": "Tail payment-service's database; one connector per service DB (DB-per-service).",
+    "//2": "Per-service copy of debezium/outbox-connector.json (see docker/README.md) — only the",
+    "//3": "database/slot/publication/prefix differ. Producers routed here:",
+    "//4": "PaymentChargeSucceeded (restaurant/carwash/barbershop consumers — ADR 0045).",
+    "database.hostname": "postgres",
+    "database.port": "5432",
+    "database.user": "payment_service",
+    "database.password": "payment_service",
+    "database.dbname": "payment_service",
+    "topic.prefix": "payment",
+    "plugin.name": "pgoutput",
+    "slot.name": "payment_outbox_slot",
+    "publication.name": "payment_outbox_pub",
+
+    "//table": "Capture ONLY the transactional outbox table (rule 3: publish via the outbox).",
+    "table.include.list": "public.outbox",
+    "publication.autocreate.mode": "filtered",
+
+    "//binary": "payload is a bytea column shipped as base64 text via StringConverter; the",
+    "//binary2": "consumer's libs/events Base64ByteArrayDeserializer decodes it back to Avro bytes.",
+    "binary.handling.mode": "base64",
+    "transforms": "outbox",
+    "transforms.outbox.type": "io.debezium.transforms.outbox.EventRouter",
+    "transforms.outbox.table.field.event.id": "id",
+    "transforms.outbox.table.field.event.key": "aggregate_id",
+    "transforms.outbox.table.field.event.type": "event_type",
+    "transforms.outbox.table.field.event.payload": "payload",
+
+    "//topic": "Route to a topic named exactly after the event_type (no prefix), so the value",
+    "//topic2": "lands on `PaymentChargeSucceeded` — the topic the vertical @KafkaListeners",
+    "//topic3": "subscribe to.",
+    "transforms.outbox.route.by.field": "event_type",
+    "transforms.outbox.route.topic.replacement": "${routedByValue}",
+
+    "//headers": "Expose the outbox row id + company_id + traceparent as Kafka headers; the",
+    "//headers2": "consumer dedupes by the `id` header (the durable event id), not by offset (HR-3).",
+    "transforms.outbox.table.fields.additional.placement": "id:header:id,company_id:header:company_id,traceparent:header:traceparent",
+
+    "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+    "value.converter": "org.apache.kafka.connect.storage.StringConverter",
+
+    "tombstones.on.delete": "false",
+    "snapshot.mode": "initial"
+  }
+}

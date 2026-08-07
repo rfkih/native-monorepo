@@ -120,6 +120,17 @@ public class PaymentAdvice {
     return decorate(problem, request);
   }
 
+  @ExceptionHandler(id.co.nativeapp.payment.charge.domain.WebhookRejectedException.class)
+  public ProblemDetail handleWebhookRejected(
+      id.co.nativeapp.payment.charge.domain.WebhookRejectedException ex,
+      HttpServletRequest request) {
+    // UNIFORM 401 — deliberately NO detail and NO type distinction: the anonymous caller must not
+    // learn whether the tenant, the body, or the signature failed (no oracle).
+    ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.UNAUTHORIZED);
+    problem.setTitle("Unauthorized");
+    return decorate(problem, request);
+  }
+
   @ExceptionHandler(GatewayUnavailableException.class)
   public ProblemDetail handleGatewayUnavailable(
       GatewayUnavailableException ex, HttpServletRequest request) {

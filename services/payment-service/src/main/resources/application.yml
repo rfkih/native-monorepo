@@ -39,6 +39,14 @@ spring:
 # payment-service config — externalized, validated at startup (fail fast — ENGINEERING-STANDARDS
 # §7). No business config is hardcoded in Java.
 native:
+  # ADR 0045: the Midtrans settlement webhook is the fleet's second fully-anonymous surface (after
+  # self-order, ADR 0029) — Midtrans carries no Keycloak token; WebhookService is the ONLY
+  # authentication step (provisional tenant bind from the callback URL -> RLS-scoped loads ->
+  # constant-time signature verify). Without this declaration the shared libs/security chain would
+  # 401 every notification before the service logic ever ran.
+  security:
+    public-paths:
+      - "POST /api/v1/psp-webhooks/midtrans/*"
   # Error inbox + webhook alerting (ADR 0005/0009). A blank webhook-url (the default) disables all
   # outbound HTTP — safe for dev/CI. Set NATIVE_ALERT_WEBHOOK_URL in prod for parked-anomaly alerts.
   alert:

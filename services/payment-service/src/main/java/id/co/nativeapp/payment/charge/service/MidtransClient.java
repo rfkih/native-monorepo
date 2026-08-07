@@ -251,6 +251,14 @@ public class MidtransClient implements QrisGatewayPort {
     }
   }
 
+  /**
+   * Normalizes Midtrans's transaction vocabulary — shared with the webhook path (same package), so
+   * a notification and a status probe can never disagree on what counts as settled.
+   */
+  static RemoteStatus normalizeStatus(String transactionStatus, String fraudStatus) {
+    return normalize(transactionStatus, fraudStatus);
+  }
+
   private static RemoteStatus normalize(String transactionStatus, String fraudStatus) {
     if (transactionStatus == null) {
       return RemoteStatus.PENDING;

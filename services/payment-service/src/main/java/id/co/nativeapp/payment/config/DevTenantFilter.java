@@ -92,7 +92,12 @@ public class DevTenantFilter extends OncePerRequestFilter implements Ordered {
   @Override
   protected boolean shouldNotFilter(HttpServletRequest request) {
     String path = request.getRequestURI();
-    return path.equals("/healthz") || path.startsWith("/actuator");
+    // The PSP webhook is ANONYMOUS (ADR 0045): its tenant comes from the callback URL and is
+    // verified inside WebhookService — the dev header-trust filter must not 400 it (the same
+    // exemption restaurant's DevTenantFilter carries for /api/v1/self-order/).
+    return path.equals("/healthz")
+        || path.startsWith("/actuator")
+        || path.startsWith("/api/v1/psp-webhooks/");
   }
 
   private static boolean isUuid(String value) {

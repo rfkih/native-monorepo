@@ -61,7 +61,14 @@ public class SecurityConfig {
                         // X-Self-Order-Token itself; RoutingConfig's selfOrderRoute carries the
                         // dedicated anonymous rate limit + tenant-header strip instead of the
                         // authenticated-route filter chain.
-                        "/api/v1/self-order/**")
+                        "/api/v1/self-order/**",
+                        // Public PSP settlement webhook (ADR 0045): Midtrans's notification
+                        // servers carry no Keycloak token. The request is forwarded to
+                        // payment-service, which authenticates it itself (provisional tenant bind
+                        // from the callback URL + constant-time merchant-key signature check);
+                        // RoutingConfig's pspWebhookRoute carries the dedicated anonymous rate
+                        // limit + tenant-header strip instead of the authenticated filter chain.
+                        "/api/v1/psp-webhooks/**")
                     .permitAll()
                     .anyRequest()
                     .authenticated())
