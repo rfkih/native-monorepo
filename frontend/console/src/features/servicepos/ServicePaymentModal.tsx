@@ -26,6 +26,9 @@ import { DigitalInitiateView, DigitalPendingView } from '@/features/pos-shell/pa
 import { FullCoverageView } from '@/features/pos-shell/payment/FullCoverageView'
 import { CheckoutErrorText } from '@/features/pos-shell/payment/CheckoutErrorText'
 import { usePaymentAttempt } from '@/features/pos-shell/payment/usePaymentAttempt'
+import { Spinner } from '@/components/ui/Spinner'
+import { useQrisEffective, useStaticQrImageUrl, type QrisMode } from '@/features/payments/api'
+import { effectiveQrisMode } from '@/features/payments/effectiveMode'
 import { OfflineHint } from '@/features/pos/offline/OfflineHint'
 import { enqueueSale } from '@/features/pos/offline/queue'
 import type { ProvisionalTotals, SaleQueueRow } from '@/features/pos/offline/db'
@@ -114,6 +117,11 @@ export function ServicePaymentModal({
 }: Props) {
   const { t } = useTranslation()
   const [tender, setTender] = useState<ServiceTender>('CASH')
+
+  // ADR 0045: the QRIS mode this outlet actually resolves to — see PaymentModal's twin doc
+  // (never fetched while offline; `currency` is the sale's own currency, rule 8).
+  const qrisEffectiveQuery = useQrisEffective(session, session.businessId, { enabled: !offline })
+  const qrisMode = effectiveQrisMode(qrisEffectiveQuery.data ?? undefined, qrisEffectiveQuery.isError, offline, currency)
 
   // Phase 4 (ADR 0027): gift-card redemption entered HERE — see PaymentModal's class doc for the
   // residual/full-coverage design (identical here).
@@ -208,7 +216,14 @@ export function ServicePaymentModal({
           {tender === 'CASH' ? (
             <ServiceCashAttempt attempt={attempt} chargeMinor={residualDueMinor} currency={currency} locale={locale} />
           ) : (
-            <ServiceDigitalAttempt attempt={attempt} chargeMinor={residualDueMinor} currency={currency} locale={locale} tenderType={tender} />
+            <ServiceDigitalAttempt
+              attempt={attempt}
+              chargeMinor={residualDueMinor}
+              currency={currency}
+              locale={locale}
+              tenderType={tender}
+              qrisMode={qrisMode}
+            />
           )}
         </>
       )}
@@ -340,16 +355,23 @@ function ServiceDigitalAttempt({
   currency,
   locale,
   tenderType,
+  qrisMode,
 }: {
   attempt: TicketAttemptArgs
   chargeMinor: number
   currency: string
   locale: string
   tenderType: 'QRIS' | 'CARD'
+  /** ADR 0045: irrelevant for CARD — see PaymentModal's twin doc. */
+  qrisMode: QrisMode
 }) {
+  const { t } = useTranslation()
   const { config, session, onSuccess, onClose } = attempt
   const checkout = useTicketCheckout(config, session)
   const capture = useTicketCapture(config, session)
+
+  // ADR 0045: see PaymentModal's twin doc — fetched only once a PENDING ticket exists.
+  const showStaticQr = tenderType === 'QRIS' && qrisMode === 'STATIC'
 
   // One idempotency key per payment ATTEMPT (panel mount), reused across retries (review W1).
   const idempotencyKey = usePaymentAttempt()
@@ -374,6 +396,24 @@ function ServiceDigitalAttempt({
     })
   }
 
+  // ADR 0045: fetched once the PENDING ticket exists — the same businessId checkout used.
+  const staticQr = useStaticQrImageUrl(session, session.businessId, showStaticQr && pendingTicket != null)
+  const staticQrSlot = showStaticQr ? (
+    staticQr.status === 'ready' && staticQr.url ? (
+      <img
+        src={staticQr.url}
+        alt={t('pos.payment.qris.scanToPay')}
+        className="mx-auto block max-h-[260px] max-w-[260px] rounded-xl border border-line object-contain"
+      />
+    ) : staticQr.status === 'loading' ? (
+      <div className="flex justify-center py-4">
+        <Spinner className="text-brand-600" />
+      </div>
+    ) : (
+      <p className="text-center text-xs text-loss">{t('pos.payment.qris.imageError')}</p>
+    )
+  ) : undefined
+
   if (!pendingTicket) {
     return (
       <DigitalInitiateView
@@ -396,6 +436,9 @@ function ServiceDigitalAttempt({
       captureError={capture.isError}
       onConfirm={confirmPayment}
       onCancel={onClose}
+      qrSlot={staticQrSlot}
+      hintText={showStaticQr ? t('pos.payment.qris.staticHint') : undefined}
+      badgeText={showStaticQr ? null : undefined}
     />
   )
 }

@@ -21,6 +21,9 @@ export function DigitalInitiateView({
   errorSlot,
   onInitiate,
   onCancel,
+  qrSlot,
+  hintText,
+  badgeText,
 }: {
   chargeMinor: number
   currency: string
@@ -30,18 +33,34 @@ export function DigitalInitiateView({
   onInitiate: () => void
   /** Bills show a ghost cancel under the one-step Pay; the two-step surfaces don't. */
   onCancel?: () => void
+  /**
+   * ADR 0045: an optional slot rendered above the Pay button — the STATIC QRIS mode's own image
+   * (or its load-error fallback), so the customer can scan before the cashier taps Pay. Undefined
+   * (every non-STATIC surface) renders nothing — MANUAL stays pixel-identical.
+   */
+  qrSlot?: React.ReactNode
+  /** Overrides the default `pos.payment.pendingHint` copy (e.g. STATIC's scan instruction).
+   *  Undefined keeps today's copy. */
+  hintText?: string
+  /** Overrides the default badge label; `null` HIDES the badge entirely (STATIC has no "provider"
+   *  to badge). Undefined keeps today's `pos.payment.providerPendingBadge`. */
+  badgeText?: string | null
 }) {
   const { t } = useTranslation()
   return (
     <div className="px-5 pb-5">
       <div className="mb-4 rounded-lg border border-amber/30 bg-amber-tint px-4 py-3 text-sm text-amber-2">
-        <Badge tone="amber" className="mb-2">
-          {t('pos.payment.providerPendingBadge')}
-        </Badge>
-        <p className="mt-1 leading-relaxed">{t('pos.payment.pendingHint')}</p>
+        {badgeText !== null ? (
+          <Badge tone="amber" className="mb-2">
+            {badgeText ?? t('pos.payment.providerPendingBadge')}
+          </Badge>
+        ) : null}
+        <p className="mt-1 leading-relaxed">{hintText ?? t('pos.payment.pendingHint')}</p>
       </div>
 
       {errorSlot}
+
+      {qrSlot ? <div className="mb-4">{qrSlot}</div> : null}
 
       <Button className="w-full" data-testid="payment-pay" disabled={busy} onClick={onInitiate}>
         {busy ? <Spinner /> : t('pos.payment.payAmount', { amount: formatMoney(chargeMinor, currency, locale) })}
@@ -65,6 +84,9 @@ export function DigitalPendingView({
   captureError,
   onConfirm,
   onCancel,
+  qrSlot,
+  hintText,
+  badgeText,
 }: {
   pendingAmountMinor: number
   currency: string
@@ -73,17 +95,30 @@ export function DigitalPendingView({
   captureError: boolean
   onConfirm: () => void
   onCancel: () => void
+  /** ADR 0045: an optional slot rendered between the badge block and the amount row — the STATIC
+   *  QRIS mode's own image (or its load-error fallback). Undefined renders nothing (MANUAL/CARD
+   *  stay pixel-identical). */
+  qrSlot?: React.ReactNode
+  /** Overrides the default `pos.payment.pendingHint` copy. Undefined keeps today's copy. */
+  hintText?: string
+  /** Overrides the default badge label; `null` HIDES the badge. Undefined keeps today's
+   *  `pos.payment.providerPendingBadge`. */
+  badgeText?: string | null
 }) {
   const { t } = useTranslation()
   return (
     <div className="px-5 pb-5">
       {/* Prominent pending badge */}
       <div className="mb-4 rounded-lg border border-amber/30 bg-amber-tint px-4 py-3">
-        <div className="flex items-center gap-2">
-          <Badge tone="amber">{t('pos.payment.providerPendingBadge')}</Badge>
-        </div>
-        <p className="mt-2 text-sm leading-relaxed text-amber-2">{t('pos.payment.pendingHint')}</p>
+        {badgeText !== null ? (
+          <div className="flex items-center gap-2">
+            <Badge tone="amber">{badgeText ?? t('pos.payment.providerPendingBadge')}</Badge>
+          </div>
+        ) : null}
+        <p className="mt-2 text-sm leading-relaxed text-amber-2">{hintText ?? t('pos.payment.pendingHint')}</p>
       </div>
+
+      {qrSlot ? <div className="mb-4">{qrSlot}</div> : null}
 
       <div className="mb-4 flex items-baseline justify-between rounded-lg border border-line bg-paper px-4 py-3">
         <span className="text-sm text-ink-3">{t('pos.payment.pending')}</span>

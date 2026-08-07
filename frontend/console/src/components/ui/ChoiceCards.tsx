@@ -6,6 +6,10 @@ export interface Choice<T extends string> {
   title: string
   subtitle?: string
   aside?: ReactNode
+  /** Renders the card greyed-out and unselectable — a real `disabled` radio input (drops out of
+   *  both click and keyboard-tab reach), not just a visual dimming. `subtitle` is still shown, so
+   *  the caller can swap it for an explanatory hint when passing `disabled: true`. */
+  disabled?: boolean
 }
 
 export function ChoiceCards<T extends string>({
@@ -29,10 +33,15 @@ export function ChoiceCards<T extends string>({
           <label
             key={option.value}
             className={cn(
-              'relative flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition-all',
-              active
-                ? 'border-emerald bg-emerald-tint ring-4 ring-emerald/15'
-                : 'border-line bg-surface hover:border-ink-3',
+              'relative flex items-start gap-3 rounded-2xl border p-4 transition-all',
+              option.disabled
+                ? 'cursor-not-allowed border-line bg-surface opacity-55'
+                : cn(
+                    'cursor-pointer',
+                    active
+                      ? 'border-emerald bg-emerald-tint ring-4 ring-emerald/15'
+                      : 'border-line bg-surface hover:border-ink-3',
+                  ),
             )}
           >
             <input
@@ -40,6 +49,7 @@ export function ChoiceCards<T extends string>({
               name={name}
               value={option.value}
               checked={active}
+              disabled={option.disabled}
               onChange={() => onChange(option.value)}
               className="sr-only"
             />

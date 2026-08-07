@@ -32,6 +32,9 @@ import { ChannelListPanelView } from '@/features/pos-shell/payment/ChannelListPa
 import { CheckoutErrorText } from '@/features/pos-shell/payment/CheckoutErrorText'
 import { usePaymentAttempt } from '@/features/pos-shell/payment/usePaymentAttempt'
 import { useSalesChannels, type SalesChannel } from '@/features/channels/channelsApi'
+import { Spinner } from '@/components/ui/Spinner'
+import { useQrisEffective, useStaticQrImageUrl, type QrisMode } from '@/features/payments/api'
+import { effectiveQrisMode } from '@/features/payments/effectiveMode'
 import { OfflineHint } from './offline/OfflineHint'
 import { enqueueSale } from './offline/queue'
 import type { ProvisionalTotals, SaleQueueRow } from './offline/db'
@@ -130,6 +133,13 @@ export function PaymentModal({
   // surface is mounted (component-scoped, like usePaymentAttempt's key), and never while offline
   // (a platform order needs a live round-trip regardless).
   const channelsQuery = useSalesChannels(session, { enabled: !offline })
+
+  // ADR 0045: the QRIS mode this outlet actually resolves to — fetched only while mounted and
+  // never while offline (a digital mode is unreachable offline anyway, mirroring the channel
+  // roster above). `currency` is the sale's own currency (rule 8) — GATEWAY degrades to MANUAL
+  // for anything but IDR regardless of what the company configured.
+  const qrisEffectiveQuery = useQrisEffective(session, session.businessId, { enabled: !offline })
+  const qrisMode = effectiveQrisMode(qrisEffectiveQuery.data ?? undefined, qrisEffectiveQuery.isError, offline, currency)
 
   // Phase 4 (ADR 0027): gift-card redemption is entered HERE (unlike the loyalty member, which is
   // attached upstream). `residualDueMinor` is the identity the server's PriceBreakdownResponse
@@ -263,7 +273,14 @@ export function PaymentModal({
               channelsError={channelsQuery.isError}
             />
           ) : (
-            <RestaurantDigitalAttempt attempt={attempt} chargeMinor={residualDueMinor} currency={currency} locale={locale} tenderType={tender} />
+            <RestaurantDigitalAttempt
+              attempt={attempt}
+              chargeMinor={residualDueMinor}
+              currency={currency}
+              locale={locale}
+              tenderType={tender}
+              qrisMode={qrisMode}
+            />
           )}
         </>
       )}
@@ -416,17 +433,28 @@ function RestaurantDigitalAttempt({
   currency,
   locale,
   tenderType,
+  qrisMode,
 }: {
   attempt: AttemptArgs
   chargeMinor: number
   currency: string
   locale: string
   tenderType: 'QRIS' | 'CARD'
+  /** ADR 0045: irrelevant for CARD — only a QRIS tender in STATIC mode shows the merchant's own
+   *  QR image instead of the demo "pending provider" copy. */
+  qrisMode: QrisMode
 }) {
+  const { t } = useTranslation()
   const { session, lines, onSuccess, onClose, parkedOrderId, orderType, tableId } = attempt
   const checkout = useCheckout(session)
   const payParked = usePayParked(session)
   const capture = useCapturePayment(session)
+
+  // ADR 0045: STATIC QRIS shows the merchant's own uploaded QR instead of the demo "pending
+  // provider" badge/copy — CARD, or any other resolved mode, is untouched. The image is fetched
+  // only once a PENDING payment exists (the panel it actually renders in, DigitalPendingView) —
+  // fetching it earlier would just be wasted work while the cashier is still on the tender picker.
+  const showStaticQr = tenderType === 'QRIS' && qrisMode === 'STATIC'
 
   // One idempotency key per payment ATTEMPT (panel mount), reused across retries (review W2).
   const idempotencyKey = usePaymentAttempt()
@@ -495,6 +523,24 @@ function RestaurantDigitalAttempt({
     })
   }
 
+  // ADR 0045: fetched once the PENDING order exists — the same businessId checkout used.
+  const staticQr = useStaticQrImageUrl(session, session.businessId, showStaticQr && pendingPayment != null)
+  const staticQrSlot = showStaticQr ? (
+    staticQr.status === 'ready' && staticQr.url ? (
+      <img
+        src={staticQr.url}
+        alt={t('pos.payment.qris.scanToPay')}
+        className="mx-auto block max-h-[260px] max-w-[260px] rounded-xl border border-line object-contain"
+      />
+    ) : staticQr.status === 'loading' ? (
+      <div className="flex justify-center py-4">
+        <Spinner className="text-brand-600" />
+      </div>
+    ) : (
+      <p className="text-center text-xs text-loss">{t('pos.payment.qris.imageError')}</p>
+    )
+  ) : undefined
+
   if (!pendingPayment) {
     return (
       <DigitalInitiateView
@@ -521,6 +567,9 @@ function RestaurantDigitalAttempt({
       captureError={capture.isError}
       onConfirm={confirmPayment}
       onCancel={onClose}
+      qrSlot={staticQrSlot}
+      hintText={showStaticQr ? t('pos.payment.qris.staticHint') : undefined}
+      badgeText={showStaticQr ? null : undefined}
     />
   )
 }

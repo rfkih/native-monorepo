@@ -26,6 +26,9 @@ import { DigitalInitiateView } from '@/features/pos-shell/payment/DigitalPanelVi
 import { ChannelListPanelView } from '@/features/pos-shell/payment/ChannelListPanelView'
 import { CheckoutErrorText } from '@/features/pos-shell/payment/CheckoutErrorText'
 import { useSalesChannels } from '@/features/channels/channelsApi'
+import { Spinner } from '@/components/ui/Spinner'
+import { useQrisEffective, useStaticQrImageUrl } from '@/features/payments/api'
+import { effectiveQrisMode } from '@/features/payments/effectiveMode'
 import { usePayBill, type BillResponse } from './billsApi'
 
 interface Props {
@@ -59,6 +62,31 @@ export function BillPaymentModal({
   const channelsQuery = useSalesChannels(session)
 
   const currency = bill.currency
+
+  // ADR 0045: the QRIS mode this outlet actually resolves to — bills have no offline mode, so
+  // always fetched while mounted (see PaymentModal's twin doc for the fetch/degrade rules).
+  const qrisEffectiveQuery = useQrisEffective(session, session.businessId)
+  const qrisMode = effectiveQrisMode(qrisEffectiveQuery.data ?? undefined, qrisEffectiveQuery.isError, false, currency)
+  // Bills are one-step (pay directly) — STATIC shows the merchant's QR above the Pay button so the
+  // customer can scan BEFORE the cashier confirms, unlike the two-step surfaces' pending panel.
+  const showStaticQr = tender === 'QRIS' && qrisMode === 'STATIC'
+  const staticQr = useStaticQrImageUrl(session, session.businessId, showStaticQr)
+  const staticQrSlot = showStaticQr ? (
+    staticQr.status === 'ready' && staticQr.url ? (
+      <img
+        src={staticQr.url}
+        alt={t('pos.payment.qris.scanToPay')}
+        className="mx-auto block max-h-[260px] max-w-[260px] rounded-xl border border-line object-contain"
+      />
+    ) : staticQr.status === 'loading' ? (
+      <div className="flex justify-center py-4">
+        <Spinner className="text-brand-600" />
+      </div>
+    ) : (
+      <p className="text-center text-xs text-loss">{t('pos.payment.qris.imageError')}</p>
+    )
+  ) : undefined
+
   // For a split check use the caller-supplied subtotal; otherwise fall back to the full breakdown.
   const grandTotalMinor =
     checkTotalMinor ??
@@ -128,6 +156,9 @@ export function BillPaymentModal({
           errorSlot={errorSlot}
           onInitiate={() => pay({ tenderType: tender })}
           onCancel={onClose}
+          qrSlot={staticQrSlot}
+          hintText={showStaticQr ? t('pos.payment.qris.staticHint') : undefined}
+          badgeText={showStaticQr ? null : undefined}
         />
       )}
     </PaymentSurfaceFrame>

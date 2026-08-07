@@ -28,6 +28,7 @@ import {
   Network,
   Percent,
   Plus,
+  QrCode,
   Radio,
   Receipt,
   Scale,
@@ -180,6 +181,11 @@ export function Shell({ children }: { children: ReactNode }) {
             { to: '/team', label: t('nav.team'), icon: UsersRound, page: 'team', feature: 'team' },
             { to: '/onboarding', label: t('nav.onboarding'), icon: Building2 },
             { to: '/settings/printer', label: t('nav.printer'), icon: Printer, feature: 'printer' },
+            // Owner-only (ADR 0045) — a payments-integrity decision, not a plan-tier feature, so
+            // deliberately UNTAGGED (no `page`, no `feature`) like the escape hatch below.
+            ...(isOwner
+              ? [{ to: '/settings/payments', label: t('nav.payments'), icon: QrCode }]
+              : []),
             // The escape hatch (plan Risk 1): owner-only, and deliberately UNTAGGED (no `page`, no
             // `feature`) so it is never hidden by the grant or tier filters below — a FREE-tier
             // owner must always be able to find the toggle back to FULL.
