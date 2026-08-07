@@ -590,6 +590,9 @@ function MemberRow({
     <div
       className={cn(
         'group grid grid-cols-[minmax(0,2fr)_minmax(80px,1fr)_minmax(100px,1fr)_minmax(80px,1fr)_auto] items-center gap-4 border-b border-ink-50 px-6 py-3.5 transition-colors last:border-0 hover:bg-hover',
+        // Phone (Native Console Android): two-line card — person, then role · outlets · status,
+        // then always-visible actions (hover reveal is meaningless on touch).
+        'max-sm:flex max-sm:flex-col max-sm:items-stretch max-sm:gap-2.5 max-sm:px-4',
         !member.enabled && 'opacity-60',
       )}
     >
@@ -612,27 +615,30 @@ function MemberRow({
         </div>
       </div>
 
-      {/* Role */}
-      <span>
-        <RoleBadge role={primaryRole} />
-      </span>
+      {/* Role · outlets · status — grid cells on sm+ (sm:contents), one wrapped row on phone. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 sm:contents">
+        {/* Role */}
+        <span>
+          <RoleBadge role={primaryRole} />
+        </span>
 
-      {/* Outlets */}
-      <span
-        className={cn(
-          'truncate text-[13px]',
-          cashierUnassigned ? 'font-semibold text-amber-2' : 'text-ink-2',
-        )}
-      >
-        {outletSummary}
-      </span>
+        {/* Outlets */}
+        <span
+          className={cn(
+            'truncate text-[13px]',
+            cashierUnassigned ? 'font-semibold text-amber-2' : 'text-ink-2',
+          )}
+        >
+          {outletSummary}
+        </span>
 
-      {/* Status */}
-      <StatusDot enabled={member.enabled} />
+        {/* Status */}
+        <StatusDot enabled={member.enabled} />
+      </div>
 
       {/* Row actions — hidden for the current user (self-lockout prevention) */}
       {!isSelf ? (
-        <div className="flex shrink-0 items-center justify-end gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+        <div className="flex shrink-0 items-center justify-end gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 max-sm:flex-wrap max-sm:justify-start max-sm:opacity-100">
           <button
             type="button"
             aria-label={t('team.editOutlets')}
@@ -675,7 +681,7 @@ function MemberRow({
         </div>
       ) : (
         /* Reserve space so rows have consistent height when the action buttons are absent */
-        <div className="shrink-0" aria-hidden="true">
+        <div className="shrink-0 max-sm:hidden" aria-hidden="true">
           <span className="px-2 py-1 text-xs text-transparent select-none">
             {t('team.changeRole')}
           </span>
@@ -742,7 +748,7 @@ export function Team() {
 
       {/* Search + role filter */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative w-full max-w-[320px]">
+        <div className="relative w-full max-w-[320px] max-sm:max-w-full">
           <Search
             className="pointer-events-none absolute left-3.5 top-1/2 z-10 size-[17px] -translate-y-1/2 text-ink-3"
             aria-hidden
@@ -783,7 +789,7 @@ export function Team() {
       ) : (
         <Card className="overflow-hidden p-0">
           {/* Header row */}
-          <div className="grid grid-cols-[minmax(0,2fr)_minmax(80px,1fr)_minmax(100px,1fr)_minmax(80px,1fr)_auto] gap-4 border-b border-line bg-paper px-6 py-3.5">
+          <div className="grid grid-cols-[minmax(0,2fr)_minmax(80px,1fr)_minmax(100px,1fr)_minmax(80px,1fr)_auto] gap-4 border-b border-line bg-paper px-6 py-3.5 max-sm:hidden">
             <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
               {t('team.colPerson')}
             </span>

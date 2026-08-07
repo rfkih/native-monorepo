@@ -14,10 +14,11 @@ import { downloadCsv } from '@/lib/csv'
 import { EntityScope, LineSection, PeriodNav, StatementEmptyState, SummaryCard } from './parts'
 
 /**
- * Income Statement (Laba Rugi) — design 2b: the parchment palette retired.
- * Summary cards, then a composition chart whose series carry meaning (cyan revenue,
- * red expense, green net — green means profit only), then the account tables.
- * All data hooks, queries, and existing i18n keys are preserved unchanged.
+ * Income Statement (Laba Rugi) — summary cards, then the largest-expenses breakdown, then the
+ * account tables. Native Console Web design: the old composition chart always drew revenue as
+ * 100%, so a full card carried only two real numbers — replaced by the per-account expense
+ * breakdown, which answers the actual question: where did the money go. Green still means profit
+ * only. All data hooks, queries, and existing i18n keys are preserved unchanged.
  */
 export function IncomeStatement() {
   const { t, i18n } = useTranslation()
@@ -51,7 +52,11 @@ export function IncomeStatement() {
   const totalRevenue = data?.totalRevenueMinor ?? 0
   const totalExpense = data?.totalExpenseMinor ?? 0
   const expenseRatio = totalRevenue > 0 ? totalExpense / totalRevenue : 0
-  const netRatio = totalRevenue > 0 ? Math.max(0, net) / totalRevenue : 0
+
+  // Top five expense accounts by amount — the breakdown card's rows.
+  const topExpenses = [...(data?.expenseLines ?? [])]
+    .sort((a, b) => b.netMinor - a.netMinor)
+    .slice(0, 5)
 
   const exportCsv = () => {
     if (!data) return
@@ -91,13 +96,13 @@ export function IncomeStatement() {
             prevLabel={t('statements.prevPeriod')}
             nextLabel={t('statements.nextPeriod')}
           />
-          <Button variant="outline" onClick={() => window.print()}>
+          <Button variant="outline" onClick={() => window.print()} aria-label={t('statements.print')}>
             <Printer className="size-[15px]" aria-hidden />
-            {t('statements.print')}
+            <span className="max-sm:hidden">{t('statements.print')}</span>
           </Button>
-          <Button onClick={exportCsv} disabled={!data}>
+          <Button onClick={exportCsv} disabled={!data} aria-label={t('statements.export')}>
             <Download className="size-[15px]" aria-hidden />
-            {t('statements.export')}
+            <span className="max-sm:hidden">{t('statements.export')}</span>
           </Button>
         </div>
       </div>
@@ -152,44 +157,46 @@ export function IncomeStatement() {
             />
           </div>
 
-          {/* Composition — gridlines are ink, the series carry the meaning */}
-          <Card className="p-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="font-display text-lg font-semibold tracking-[-0.01em] text-ink">
-                {t('statements.composition')}
-              </h2>
-              <div className="flex gap-4 text-xs text-ink-3">
-                <LegendSwatch className="bg-brand-500" label={t('statements.revenue')} />
-                <LegendSwatch className="bg-loss" label={t('statements.expense')} />
-                <LegendSwatch className="bg-profit" label={t('statements.net')} />
+          {/* Largest expenses — each account's share of TOTAL EXPENSE (not of revenue), so every
+              row carries information the summary cards don't already state. */}
+          {topExpenses.length > 0 && totalExpense > 0 ? (
+            <Card className="p-6">
+              <div className="flex flex-wrap items-baseline justify-between gap-3">
+                <h2 className="font-display text-lg font-semibold tracking-[-0.01em] text-ink">
+                  {t('statements.topExpenses')}
+                </h2>
+                <span className="text-[12.5px] text-ink-3">{t('statements.topExpensesNote')}</span>
               </div>
-            </div>
-            <div className="relative mt-[18px] h-[188px]">
-              <div aria-hidden className="absolute inset-0 flex flex-col justify-between">
-                <span className="h-px bg-line" />
-                <span className="h-px bg-ink-50" />
-                <span className="h-px bg-ink-50" />
-                <span className="h-px bg-ink-50" />
-                <span className="h-px bg-line" />
+              <div className="mt-[18px] flex flex-col gap-[15px]">
+                {topExpenses.map((line) => {
+                  const share = Math.max(0, line.netMinor) / totalExpense
+                  return (
+                    <div key={line.accountCode}>
+                      <div className="mb-1.5 flex items-baseline justify-between gap-3">
+                        <span className="min-w-0 truncate font-mono text-[13px] font-semibold text-ink">
+                          {line.accountCode}
+                        </span>
+                        <span className="flex shrink-0 items-baseline gap-3">
+                          <span className="tnum font-mono text-[13.5px] font-semibold text-ink">
+                            {formatAmount(line.netMinor, currency, locale)}
+                          </span>
+                          <span className="tnum w-[42px] text-right font-mono text-xs text-ink-3">
+                            {formatPercent(share, locale)}
+                          </span>
+                        </span>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-ink-50">
+                        <div
+                          className="h-full rounded-full bg-loss"
+                          style={{ width: `${Math.min(100, share * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
-              <div className="relative flex h-full items-end justify-around gap-10 px-6 sm:px-14">
-                <CompositionBar className="bg-brand-500" height={totalRevenue > 0 ? 1 : 0} />
-                <CompositionBar className="bg-loss" height={expenseRatio} />
-                <CompositionBar className="bg-profit" height={netRatio} />
-              </div>
-            </div>
-            <div className="flex justify-around gap-10 px-6 pt-2.5 sm:px-14">
-              <span className="max-w-[150px] flex-1 text-center text-[13px] font-semibold text-ink-2">
-                {t('statements.revenue')}
-              </span>
-              <span className="max-w-[150px] flex-1 text-center text-[13px] font-semibold text-ink-2">
-                {t('statements.expense')}
-              </span>
-              <span className="max-w-[150px] flex-1 text-center text-[13px] font-semibold text-ink-2">
-                {t('statements.net')}
-              </span>
-            </div>
-          </Card>
+            </Card>
+          ) : null}
 
           {/* Account tables */}
           <div className="grid gap-5 lg:grid-cols-2">
@@ -230,22 +237,3 @@ export function IncomeStatement() {
   )
 }
 
-function LegendSwatch({ className, label }: { className: string; label: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className={`size-2.5 rounded-[3px] ${className}`} aria-hidden />
-      {label}
-    </span>
-  )
-}
-
-function CompositionBar({ className, height }: { className: string; height: number }) {
-  return (
-    <div className="flex h-full max-w-[150px] flex-1 items-end">
-      <div
-        className={`w-full rounded-t-md ${className}`}
-        style={{ height: `${Math.min(100, Math.max(0, height * 100))}%` }}
-      />
-    </div>
-  )
-}
