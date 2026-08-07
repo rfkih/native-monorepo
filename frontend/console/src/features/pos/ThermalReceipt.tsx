@@ -398,7 +398,11 @@ export function ThermalReceipt({
   const autoPrinted = useRef(false)
   useEffect(() => {
     if (!autoPrint || autoPrinted.current) return
-    if (!printer.connected || !printer.config?.autoPrint) return
+    // The toggle must be on, but a LIVE connection is deliberately NOT required (field-found on
+    // the Android till): idle SPP printers drop their socket between sales, and the mount-time
+    // re-attach can lose the race with a fast first sale — printReceipt now self-heals from the
+    // saved config, and a genuine failure surfaces via the autoFailed notice below.
+    if (!printer.config?.autoPrint) return
     const timer = setTimeout(() => {
       if (autoPrinted.current) return
       autoPrinted.current = true
@@ -426,7 +430,9 @@ export function ThermalReceipt({
    */
   const handlePrint = async () => {
     autoPrinted.current = true // a manual tap also cancels a not-yet-fired auto-print
-    if (printer.connected) {
+    // Attempt the device whenever a printer is CONFIGURED, connected or not — printReceipt
+    // self-heals a dropped link from the saved config (same reasoning as the auto-print gate).
+    if (printer.connected || printer.config) {
       setDeviceBusy(true)
       const ok = await printer.printReceipt(escposData(), { cashTender: cashTender ?? true })
       setDeviceBusy(false)
