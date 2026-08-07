@@ -6,8 +6,10 @@ import type { CapacitorConfig } from '@capacitor/cli';
 const SERVER_URL = process.env.NATIVE_TILL_URL ?? 'https://a8.tailbf9662.ts.net:8443';
 
 const config: CapacitorConfig = {
+  // appId is the app's permanent technical identity — NEVER rename it (a change = a different
+  // app to Android + Play). The user-facing launcher name is appName / strings.xml app_name.
   appId: 'id.co.nativeapp.till',
-  appName: 'Native Till',
+  appName: 'Native',
   // Required by the CLI but mostly unused at runtime while server.url is set — the shell
   // serves no bundled app (D3: thin client). Exception: error.html (server.errorPath).
   webDir: 'www',
