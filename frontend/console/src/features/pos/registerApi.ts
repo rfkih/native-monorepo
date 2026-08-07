@@ -13,6 +13,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, apiFetch } from '@/lib/api'
 import type { CompanySession } from '@/lib/session'
+import { lastClosedSession } from './lib/registerFloat'
 
 export interface RegisterSessionResponse {
   id: string
@@ -80,6 +81,25 @@ export function useRegisterExpected(
       apiFetch<RegisterExpectedResponse>(`/api/v1/register-sessions/${sessionId}/expected`, {
         tenant: tenantOf(session),
       }),
+  })
+}
+
+/**
+ * The outlet's most recent CLOSED session with a recorded count — the open form's float default
+ * ("cash stays in the drawer overnight": yesterday's counted cash is today's likely float).
+ * Served from the history endpoint (newest-first); enabled only while the open form is showing.
+ */
+export function useLastClosedSession(session: CompanySession, enabled: boolean) {
+  return useQuery({
+    queryKey: ['register-last-closed', session.companyId, session.businessId],
+    enabled,
+    queryFn: async () => {
+      const rows = await apiFetch<RegisterSessionResponse[]>('/api/v1/register-sessions', {
+        tenant: tenantOf(session),
+        query: { businessId: session.businessId },
+      })
+      return lastClosedSession(rows)
+    },
   })
 }
 

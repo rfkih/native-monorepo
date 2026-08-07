@@ -19,9 +19,11 @@ import { cn } from '@/lib/cn'
 import { formatMoney } from '@/lib/money'
 import type { CompanySession } from '@/lib/session'
 import { parseDiscountInput } from './lib/discountInput'
+import { minorToMajorInput } from './lib/registerFloat'
 import {
   useCloseRegisterSession,
   useCurrentRegisterSession,
+  useLastClosedSession,
   useOpenRegisterSession,
   useRegisterExpected,
   type RegisterSessionResponse,
@@ -74,6 +76,8 @@ export function RegisterSheet({
   const expectedQuery = useRegisterExpected(session, currentId, !!currentId)
 
   const [floatInput, setFloatInput] = useState('')
+  // The cashier typed in the float field — never overwrite their entry with the default.
+  const [floatTouched, setFloatTouched] = useState(false)
   const [countedInput, setCountedInput] = useState('')
   // Per non-cash tender counted/settled amounts (ADR 0038 phase 2), keyed by tender type.
   const [tenderCounts, setTenderCounts] = useState<Record<string, string>>({})
@@ -82,6 +86,18 @@ export function RegisterSheet({
 
   const current = currentQuery.data ?? null
   const busy = openSession.isPending || closeSession.isPending
+
+  // Float default (owner request): "the float should be filled at start of the day, defaulting to
+  // the last day's cash count" — the cash-stays-in-drawer-overnight model. Fetched only while the
+  // OPEN form is showing. DERIVED, not copied into state (react-hooks/set-state-in-effect): the
+  // input shows the default until the cashier types, then their entry wins unconditionally.
+  const showOpenForm = !closed && !currentQuery.isLoading && !current
+  const lastClosedQuery = useLastClosedSession(session, showOpenForm)
+  const lastClosed = lastClosedQuery.data ?? null
+  const floatDefault = lastClosed
+    ? minorToMajorInput(lastClosed.countedCashMinor ?? 0, currency)
+    : null
+  const floatValue = floatTouched ? floatInput : (floatDefault ?? floatInput)
 
   // Friendly copy for a known register fault, else the server's detail message (rule 9).
   const faultMessage = (err: unknown): string => {
@@ -92,8 +108,13 @@ export function RegisterSheet({
 
   function handleOpen() {
     openSession.mutate(
-      { openingFloatMinor: parseDiscountInput(floatInput, currency), currency },
-      { onSuccess: () => setFloatInput('') },
+      { openingFloatMinor: parseDiscountInput(floatValue, currency), currency },
+      {
+        onSuccess: () => {
+          setFloatInput('')
+          setFloatTouched(false)
+        },
+      },
     )
   }
 
@@ -305,11 +326,23 @@ export function RegisterSheet({
                 type="number"
                 min="0"
                 inputMode="numeric"
-                value={floatInput}
-                onChange={(e) => setFloatInput(e.target.value)}
+                value={floatValue}
+                onChange={(e) => {
+                  setFloatTouched(true)
+                  setFloatInput(e.target.value)
+                }}
                 placeholder="0"
                 className={inputClass}
               />
+              {lastClosed && !floatTouched ? (
+                <p className="mt-1.5 text-xs text-ink-3" data-testid="register-float-default-hint">
+                  {t('register.floatDefaultHint', {
+                    when: new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(
+                      new Date(lastClosed.closedAt ?? lastClosed.openedAt),
+                    ),
+                  })}
+                </p>
+              ) : null}
             </div>
             {openSession.isError ? (
               <p className="text-xs text-loss" role="alert">

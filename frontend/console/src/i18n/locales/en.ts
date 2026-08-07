@@ -980,6 +980,8 @@ export const en = {
     title: 'Register — closing kasir',
     openHint: 'Open the drawer to start the day: count the change fund (float) you are putting in.',
     floatLabel: 'Opening float',
+    floatDefaultHint:
+      'Prefilled from the last close’s counted cash ({{when}}) — adjust if cash was taken out.',
     openAction: 'Open register',
     openedAt: 'Opened',
     float: 'Opening float',

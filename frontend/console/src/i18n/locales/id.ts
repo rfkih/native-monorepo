@@ -973,6 +973,8 @@ export const id = {
     title: 'Kasir — closing kasir',
     openHint: 'Buka laci untuk memulai hari: hitung uang kembalian (modal awal) yang dimasukkan.',
     floatLabel: 'Modal awal',
+    floatDefaultHint:
+      'Terisi otomatis dari hitungan kas penutupan terakhir ({{when}}) — ubah jika ada uang yang diambil.',
     openAction: 'Buka kasir',
     openedAt: 'Dibuka',
     float: 'Modal awal',
