@@ -443,6 +443,19 @@ export const en = {
         usingCompany: 'Using company image',
         overrideSet: 'Outlet image set',
       },
+      divisions: {
+        heading: 'Divisions',
+        hint:
+          'Each division can use its own QRIS mode and image, or follow the company default below. An outlet then follows its division automatically, unless it has its own setting.',
+        empty: 'No divisions yet.',
+      },
+      division: {
+        modeHeading: 'QRIS mode for {{division}}',
+        gatewayHint: "Charges for this division use the company's Midtrans connection:",
+        inheritConfirmMessage:
+          "Revert to the company default? This division's own QRIS image will be removed.",
+        imageOwnSet: 'Division image set',
+      },
       outlets: {
         heading: 'Outlets',
         hint: 'Each outlet can use its own QRIS mode and image, or follow the company default below.',
@@ -451,14 +464,18 @@ export const en = {
       outlet: {
         effectiveOwn: 'Own mode: {{mode}}',
         effectiveInherits: 'Inherits company default ({{mode}})',
+        effectiveInheritsDivision: 'Inherits division default ({{mode}})',
         modeHeading: 'QRIS mode for {{outlet}}',
         inheritOption: 'Inherit company default',
         inheritDesc: 'Follows the company default, currently {{mode}}.',
+        inheritOptionDivision: 'Inherit division default',
+        inheritDescDivision: 'Follows the division default, currently {{mode}}.',
         inheritConfirmMessage:
           "Revert to the company default? This outlet's own QRIS image will be removed.",
         inheritConfirmYes: 'Yes, revert',
         gatewayHint: "Charges for this outlet use the company's Midtrans connection:",
         imageHeading: 'QRIS image',
+        imageInheritsDivision: 'Using division image',
       },
       company: {
         heading: 'Company default',

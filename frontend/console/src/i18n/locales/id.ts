@@ -434,6 +434,19 @@ export const id = {
         usingCompany: 'Memakai gambar perusahaan',
         overrideSet: 'Gambar gerai diatur',
       },
+      divisions: {
+        heading: 'Divisi',
+        hint:
+          'Setiap divisi dapat memakai mode dan gambar QRIS sendiri, atau mengikuti default perusahaan di bawah. Gerai kemudian otomatis mengikuti divisinya, kecuali punya pengaturan sendiri.',
+        empty: 'Belum ada divisi.',
+      },
+      division: {
+        modeHeading: 'Mode QRIS untuk {{division}}',
+        gatewayHint: 'Transaksi divisi ini memakai koneksi Midtrans perusahaan:',
+        inheritConfirmMessage:
+          'Kembali ke default perusahaan? Gambar QRIS khusus divisi ini akan dihapus.',
+        imageOwnSet: 'Gambar divisi diatur',
+      },
       outlets: {
         heading: 'Gerai',
         hint: 'Setiap gerai dapat memakai mode dan gambar QRIS sendiri, atau mengikuti default perusahaan di bawah.',
@@ -442,14 +455,18 @@ export const id = {
       outlet: {
         effectiveOwn: 'Mode sendiri: {{mode}}',
         effectiveInherits: 'Mengikuti default perusahaan ({{mode}})',
+        effectiveInheritsDivision: 'Mengikuti default divisi ({{mode}})',
         modeHeading: 'Mode QRIS untuk {{outlet}}',
         inheritOption: 'Ikuti default perusahaan',
         inheritDesc: 'Mengikuti default perusahaan, saat ini {{mode}}.',
+        inheritOptionDivision: 'Ikuti default divisi',
+        inheritDescDivision: 'Mengikuti default divisi, saat ini {{mode}}.',
         inheritConfirmMessage:
           'Kembali ke default perusahaan? Gambar QRIS khusus outlet ini akan dihapus.',
         inheritConfirmYes: 'Ya, kembali ke default',
         gatewayHint: 'Transaksi gerai ini memakai koneksi Midtrans perusahaan:',
         imageHeading: 'Gambar QRIS',
+        imageInheritsDivision: 'Memakai gambar divisi',
       },
       company: {
         heading: 'Default perusahaan',

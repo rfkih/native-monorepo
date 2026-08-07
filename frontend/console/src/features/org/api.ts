@@ -16,6 +16,13 @@ export interface OutletSummary {
    * compat; consumers FAIL OPEN to 'restaurant' on null (never brick a POS on cache staleness).
    */
   vertical?: string | null
+  /**
+   * ADR 0045 amendment (division-layer QRIS resolution): the outlet's parent business-unit id.
+   * Optional/nullable for wire compat with an older server that omits the column — consumers
+   * treat an absent value as "no division context", which degrades payment-settings resolution
+   * to outlet → company exactly as before the amendment (never a hard failure).
+   */
+  divisionId?: string | null
 }
 
 /**

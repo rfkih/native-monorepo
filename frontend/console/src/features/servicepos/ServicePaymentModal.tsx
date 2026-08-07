@@ -124,8 +124,12 @@ export function ServicePaymentModal({
   const [tender, setTender] = useState<ServiceTender>('CASH')
 
   // ADR 0045: the QRIS mode this outlet actually resolves to — see PaymentModal's twin doc
-  // (never fetched while offline; `currency` is the sale's own currency, rule 8).
-  const qrisEffectiveQuery = useQrisEffective(session, session.businessId, { enabled: !offline })
+  // (never fetched while offline; `currency` is the sale's own currency, rule 8). ADR 0045
+  // amendment: `divisionId` extends the resolution to outlet → division → company.
+  const qrisEffectiveQuery = useQrisEffective(session, session.businessId, {
+    enabled: !offline,
+    divisionId: session.divisionId,
+  })
   const qrisMode = effectiveQrisMode(qrisEffectiveQuery.data ?? undefined, qrisEffectiveQuery.isError, offline, currency)
 
   // ADR 0045: while a GATEWAY charge is live, `ServiceDigitalAttempt` registers its cancel function
@@ -435,7 +439,14 @@ function ServiceDigitalAttempt({
   }
 
   // ADR 0045: fetched once the PENDING ticket exists — the same businessId checkout used.
-  const staticQr = useStaticQrImageUrl(session, session.businessId, showStaticQr && pendingTicket != null)
+  // ADR 0045 amendment: divisionId extends the fallback to outlet → division → company.
+  const staticQr = useStaticQrImageUrl(
+    session,
+    session.businessId,
+    showStaticQr && pendingTicket != null,
+    0,
+    session.divisionId,
+  )
   const staticQrSlot = showStaticQr ? (
     staticQr.status === 'ready' && staticQr.url ? (
       <img
@@ -461,6 +472,7 @@ function ServiceDigitalAttempt({
     paymentId: gatewayActive && pendingPayment ? pendingPayment.paymentId : null,
     referenceId: pendingTicket?.ticketId ?? null,
     businessId: session.businessId,
+    divisionId: session.divisionId,
     amountMinor: pendingPayment?.amountMinor ?? chargeMinor,
     currency,
   })

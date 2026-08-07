@@ -25,6 +25,15 @@ export interface CompanySession {
   defaultLanguage: string
   /** The company's first business (org unit) — the POS records sales/orders against it. */
   businessId: string
+  /**
+   * ADR 0045 amendment (division-layer QRIS resolution): `businessId`'s parent business-unit id,
+   * when known. Null on the base (pre-`OutletGate`) session and whenever the resolved outlet's
+   * division is unknown (e.g. an older server that omits `divisionId` on `/api/v1/outlets`) —
+   * every payments hook treats `undefined`/`null` as "no division context" and resolves
+   * outlet → company exactly as before this amendment. Set by `OutletGate` from the SAME
+   * resolved-outlet list `businessId` itself comes from.
+   */
+  divisionId?: string | null
   actor: string
   /**
    * The company's plan tier (P1 tier-mode, `~/.claude/plans/umkm-tier-mode.md`) — FREE shows a
