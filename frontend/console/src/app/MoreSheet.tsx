@@ -101,7 +101,7 @@ export function MoreSheet({ onClose }: { onClose: () => void }) {
 
         {groups.length > 0 ? <MicroHeading>{t('mobile.more.allPages')}</MicroHeading> : null}
         {groups.map((group) => (
-          <div key={group.heading}>
+          <div key={group.key}>
             <MicroHeading>{group.heading}</MicroHeading>
             {group.items.map((item) => {
               const ItemIcon = item.icon

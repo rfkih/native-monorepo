@@ -6,12 +6,14 @@
 import { ChevronLeft } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
+import { cn } from '@/lib/cn'
 
 export function ScreenHeader({
   title,
   backTo,
   onBack,
   trailing,
+  className,
 }: {
   /** Already-translated title. */
   title: string
@@ -20,13 +22,20 @@ export function ScreenHeader({
   /** …or as a callback (overlays). */
   onBack?: () => void
   trailing?: React.ReactNode
+  /** Extra classes on the header element (e.g. `sm:hidden` for phone-only chrome). */
+  className?: string
 }) {
   const { t } = useTranslation()
   const backClass =
     'grid size-11 shrink-0 place-items-center rounded-full text-ink hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald'
 
   return (
-    <header className="sticky top-0 z-20 flex h-14 items-center gap-1 border-b border-line bg-paper/90 px-2 backdrop-blur">
+    <header
+      className={cn(
+        'sticky top-0 z-20 flex h-14 items-center gap-1 border-b border-line bg-paper/90 px-2 backdrop-blur',
+        className,
+      )}
+    >
       {backTo != null ? (
         <Link to={backTo} aria-label={t('common.back')} className={backClass}>
           <ChevronLeft className="size-[22px]" aria-hidden />

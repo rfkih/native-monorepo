@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Spinner } from '@/components/ui/Spinner'
 import { Wordmark } from '@/components/Wordmark'
+import { ScreenHeader } from '@/components/mobile/ScreenHeader'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { EmptyState } from '@/features/_shared/financeUi'
 import { DialogOverlay } from '@/features/org/parts'
@@ -67,8 +68,25 @@ export function MyExpenses() {
 
   return (
     <div className="min-h-screen bg-paper">
+      {/* Phone chrome (Native Console Android): back to /me + a compact new-claim action. */}
+      <ScreenHeader
+        className="sm:hidden"
+        title={t('me.expenses.title')}
+        backTo="/me"
+        trailing={
+          <button
+            type="button"
+            onClick={() => setDialog({ mode: 'create' })}
+            disabled={!ready}
+            className="flex h-10 items-center gap-1.5 rounded-full bg-emerald px-3.5 text-[13px] font-bold text-on-emerald disabled:opacity-50"
+          >
+            <Plus className="size-4" aria-hidden />
+            {t('me.expenses.newClaim')}
+          </button>
+        }
+      />
       {/* Topbar — mirrors features/me/Me.tsx's chrome */}
-      <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-line bg-surface/80 px-5 backdrop-blur lg:px-8">
+      <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-line bg-surface/80 px-5 backdrop-blur max-sm:hidden lg:px-8">
         <Wordmark />
         <div className="flex-1" />
         <Link
@@ -91,8 +109,8 @@ export function MyExpenses() {
         ) : null}
       </header>
 
-      <main className="mx-auto w-full max-w-[900px] px-5 py-8 lg:px-8">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <main className="mx-auto w-full max-w-[900px] px-5 py-8 max-sm:px-4 max-sm:py-4 max-sm:pb-[100px] lg:px-8">
+        <div className="flex flex-wrap items-center justify-between gap-3 max-sm:hidden">
           <div>
             <h1 className="font-display text-2xl font-bold tracking-[-0.02em] text-ink">
               {t('me.expenses.title')}
@@ -105,7 +123,7 @@ export function MyExpenses() {
           </Button>
         </div>
 
-        <div className="mt-6">
+        <div className="mt-6 max-sm:mt-0">
           {!ready ? (
             sessionLoading ? (
               <Card className="p-10 text-center">
