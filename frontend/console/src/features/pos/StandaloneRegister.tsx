@@ -1,0 +1,54 @@
+/**
+ * StandaloneRegister — mounts the POS RegisterSheet (closing kasir, ADR 0036/0038 daily
+ * close) outside the till: the manager "More" sheet's tile, so an owner/manager can close
+ * the day without walking through the POS. Hosts the same OutletGate the till uses.
+ *
+ * ADR 0028 guard preserved: closing over an offline device or an unsynced sale queue would
+ * understate expected cash, so the same condition that disables the till-menu entry blocks
+ * this surface with the same message instead of the sheet.
+ */
+import { useTranslation } from 'react-i18next'
+import { TriangleAlert } from 'lucide-react'
+import { Card } from '@/components/ui/Card'
+import { ScreenHeader } from '@/components/mobile/ScreenHeader'
+import { OutletGate } from '@/components/OutletGate'
+import { useSession } from '@/lib/session'
+import { localeOf } from '@/i18n'
+import { useOffline } from './offline/useOffline'
+import { RegisterSheet } from './RegisterSheet'
+
+export function StandaloneRegister({ onClose }: { onClose: () => void }) {
+  const { t, i18n } = useTranslation()
+  const { company } = useSession()
+  const locale = localeOf(i18n.language)
+  const { offline, queuedCount, rejectedCount } = useOffline()
+
+  if (!company) return null
+
+  const blocked = offline || queuedCount + rejectedCount > 0
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-paper">
+      <ScreenHeader title={t('register.title')} onBack={onClose} />
+      {blocked ? (
+        <div className="p-4">
+          <Card className="p-6 text-center text-sm text-ink-2">
+            <TriangleAlert className="mx-auto mb-2 size-5 text-amber" />
+            {t('register.disabledOffline')}
+          </Card>
+        </div>
+      ) : (
+        <OutletGate company={company} requiredVertical="restaurant">
+          {(session) => (
+            <RegisterSheet
+              session={session}
+              currency={company.baseCurrency}
+              locale={locale}
+              onClose={onClose}
+            />
+          )}
+        </OutletGate>
+      )}
+    </div>
+  )
+}

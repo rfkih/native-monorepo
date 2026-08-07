@@ -25,10 +25,15 @@ import { useTierAccess } from '@/lib/featureTier'
 import { MoreSheet } from './MoreSheet'
 import { shouldMountTabBar } from './tabBarPolicy'
 
-// Lazy — keeps the stocktake + POS menu API code out of the main chunk until the tile is used.
+// Lazy — keeps the stocktake/register + POS API code out of the main chunk until a tile is used.
 const StandaloneStocktake = lazy(() =>
   import('@/features/stocktake/StandaloneStocktake').then((m) => ({
     default: m.StandaloneStocktake,
+  })),
+)
+const StandaloneRegister = lazy(() =>
+  import('@/features/pos/StandaloneRegister').then((m) => ({
+    default: m.StandaloneRegister,
   })),
 )
 
@@ -44,6 +49,7 @@ export function MobileTabBarGate({ home }: { home: string }) {
   const [moreAnchor, setMoreAnchor] = useState<string | null>(null)
   const moreOpen = isPhone && moreAnchor === pathname
   const [stocktakeOpen, setStocktakeOpen] = useState(false)
+  const [registerOpen, setRegisterOpen] = useState(false)
 
   if (!isPhone || !shouldMountTabBar(pathname)) return null
 
@@ -102,11 +108,24 @@ export function MobileTabBarGate({ home }: { home: string }) {
                 }
               : undefined
           }
+          onOpenRegister={
+            posAllowed
+              ? () => {
+                  setMoreAnchor(null)
+                  setRegisterOpen(true)
+                }
+              : undefined
+          }
         />
       ) : null}
       {stocktakeOpen && isPhone ? (
         <Suspense fallback={null}>
           <StandaloneStocktake onClose={() => setStocktakeOpen(false)} />
+        </Suspense>
+      ) : null}
+      {registerOpen && isPhone ? (
+        <Suspense fallback={null}>
+          <StandaloneRegister onClose={() => setRegisterOpen(false)} />
         </Suspense>
       ) : null}
     </>
