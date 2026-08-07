@@ -29,19 +29,21 @@ import {
   TerminateDialog,
 } from './parts'
 
+/** Child dialogs carry `fromDetail` so closing them returns to the Kelola panel they came from —
+ *  the panel is the hub (Native Console Web design), the dialogs are its single-decision leaves. */
 type DialogState =
   | { kind: 'create' }
-  | { kind: 'edit'; employee: EmployeeListRow }
-  | { kind: 'assign'; employee: EmployeeListRow }
-  | { kind: 'endAssignment'; employee: EmployeeListRow }
-  | { kind: 'compensation'; employee: EmployeeListRow }
-  | { kind: 'terminate'; employee: EmployeeListRow }
-  | { kind: 'createLogin'; employee: EmployeeListRow }
-  | { kind: 'detail'; employee: EmployeeListRow }
+  | { kind: 'edit'; employee: EmployeeListRow; fromDetail?: boolean }
+  | { kind: 'assign'; employee: EmployeeListRow; fromDetail?: boolean }
+  | { kind: 'endAssignment'; employee: EmployeeListRow; fromDetail?: boolean }
+  | { kind: 'compensation'; employee: EmployeeListRow; fromDetail?: boolean }
+  | { kind: 'terminate'; employee: EmployeeListRow; fromDetail?: boolean }
+  | { kind: 'createLogin'; employee: EmployeeListRow; fromDetail?: boolean }
+  | { kind: 'detail'; employeeId: string }
   | { kind: 'assignExisting' }
 
 /** One employee, grouped from their (possibly several) current-assignment rows. */
-interface GroupedEmployee {
+export interface GroupedEmployee {
   employeeId: string
   fullName: string
   status: EmployeeListRow['status']
@@ -67,6 +69,14 @@ export function EmployeesTab({
 }) {
   const { t } = useTranslation()
   const [dialog, setDialog] = useState<DialogState | null>(null)
+
+  // Closing a child dialog returns to the Kelola panel when it was opened from there.
+  const closeDialog = () =>
+    setDialog((d) =>
+      d && 'fromDetail' in d && d.fromDetail
+        ? { kind: 'detail', employeeId: d.employee.employeeId }
+        : null,
+    )
 
   // BU scope = the unit + its child outlets; an outlet scopes to itself only.
   const unitIds = useMemo(
@@ -136,16 +146,7 @@ export function EmployeesTab({
               key={employee.employeeId}
               employee={employee}
               unitName={unitName}
-              onView={() => setDialog({ kind: 'detail', employee: employee.rows[0] })}
-              onAssign={() => setDialog({ kind: 'assign', employee: employee.rows[0] })}
-              onCompensation={() =>
-                setDialog({ kind: 'compensation', employee: employee.rows[0] })
-              }
-              onEdit={() => setDialog({ kind: 'edit', employee: employee.rows[0] })}
-              onEndAssignment={() =>
-                setDialog({ kind: 'endAssignment', employee: employee.rows[0] })
-              }
-              onTerminate={() => setDialog({ kind: 'terminate', employee: employee.rows[0] })}
+              onManage={() => setDialog({ kind: 'detail', employeeId: employee.employeeId })}
               onCreateLogin={() =>
                 setDialog({ kind: 'createLogin', employee: employee.rows[0] })
               }
@@ -161,7 +162,7 @@ export function EmployeesTab({
           companyId={companyId}
           actor={actor}
           edit={dialog.kind === 'edit' ? dialog.employee : null}
-          onClose={() => setDialog(null)}
+          onClose={closeDialog}
         />
       ) : null}
       {dialog?.kind === 'assign' ? (
@@ -171,7 +172,7 @@ export function EmployeesTab({
           childOutlets={childOutlets}
           companyId={companyId}
           actor={actor}
-          onClose={() => setDialog(null)}
+          onClose={closeDialog}
         />
       ) : null}
       {dialog?.kind === 'endAssignment' ? (
@@ -179,7 +180,7 @@ export function EmployeesTab({
           employee={dialog.employee}
           companyId={companyId}
           actor={actor}
-          onClose={() => setDialog(null)}
+          onClose={closeDialog}
         />
       ) : null}
       {dialog?.kind === 'compensation' ? (
@@ -188,7 +189,7 @@ export function EmployeesTab({
           companyId={companyId}
           actor={actor}
           baseCurrency={baseCurrency}
-          onClose={() => setDialog(null)}
+          onClose={closeDialog}
         />
       ) : null}
       {dialog?.kind === 'terminate' ? (
@@ -196,7 +197,7 @@ export function EmployeesTab({
           employee={dialog.employee}
           companyId={companyId}
           actor={actor}
-          onClose={() => setDialog(null)}
+          onClose={closeDialog}
         />
       ) : null}
       {dialog?.kind === 'createLogin' ? (
@@ -204,18 +205,41 @@ export function EmployeesTab({
           employee={dialog.employee}
           companyId={companyId}
           actor={actor}
-          onClose={() => setDialog(null)}
+          onClose={closeDialog}
         />
       ) : null}
-      {dialog?.kind === 'detail' ? (
-        <EmployeeDetailDrawer
-          employee={dialog.employee}
-          companyId={companyId}
-          actor={actor}
-          onClose={() => setDialog(null)}
-          onCreateLogin={() => setDialog({ kind: 'createLogin', employee: dialog.employee })}
-        />
-      ) : null}
+      {dialog?.kind === 'detail'
+        ? (() => {
+            // Re-derived each render so the panel always shows the freshest grouped rows (an ended
+            // assignment or termination refetches the list underneath it).
+            const selected = grouped.find((g) => g.employeeId === dialog.employeeId)
+            if (!selected) return null
+            const primary = selected.rows[0]
+            return (
+              <EmployeeDetailDrawer
+                employee={selected}
+                unitName={unitName}
+                companyId={companyId}
+                actor={actor}
+                onClose={() => setDialog(null)}
+                onCreateLogin={() =>
+                  setDialog({ kind: 'createLogin', employee: primary, fromDetail: true })
+                }
+                onEdit={() => setDialog({ kind: 'edit', employee: primary, fromDetail: true })}
+                onAssign={() => setDialog({ kind: 'assign', employee: primary, fromDetail: true })}
+                onEndAssignment={(row) =>
+                  setDialog({ kind: 'endAssignment', employee: row, fromDetail: true })
+                }
+                onCompensation={() =>
+                  setDialog({ kind: 'compensation', employee: primary, fromDetail: true })
+                }
+                onTerminate={() =>
+                  setDialog({ kind: 'terminate', employee: primary, fromDetail: true })
+                }
+              />
+            )
+          })()
+        : null}
       {dialog?.kind === 'assignExisting' ? (
         <AssignExistingDialog
           outlet={unit}
@@ -232,22 +256,12 @@ export function EmployeesTab({
 function EmployeeRow({
   employee,
   unitName,
-  onView,
-  onAssign,
-  onCompensation,
-  onEdit,
-  onEndAssignment,
-  onTerminate,
+  onManage,
   onCreateLogin,
 }: {
   employee: GroupedEmployee
   unitName: (id: string | null) => string
-  onView: () => void
-  onAssign: () => void
-  onCompensation: () => void
-  onEdit: () => void
-  onEndAssignment: () => void
-  onTerminate: () => void
+  onManage: () => void
   onCreateLogin: () => void
 }) {
   const { t } = useTranslation()
@@ -259,7 +273,7 @@ function EmployeeRow({
     .join('')
 
   return (
-    <div className="group flex items-center gap-3 rounded-xl px-2.5 py-2.5 transition-colors hover:bg-hover">
+    <div className="flex items-center gap-3 rounded-xl px-2.5 py-2.5 transition-colors hover:bg-hover">
       <span className="grid size-9 shrink-0 place-items-center rounded-full bg-emerald-tint text-[13px] font-semibold text-emerald-2">
         {initials}
       </span>
@@ -268,7 +282,7 @@ function EmployeeRow({
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={onView}
+            onClick={onManage}
             className={cn(
               'rounded text-left text-[14.5px] font-semibold hover:underline focus-visible:outline-2 focus-visible:outline-brand-500',
               active ? 'text-ink' : 'text-ink-3',
@@ -302,39 +316,26 @@ function EmployeeRow({
         </div>
       </div>
 
-      {/* Hover-revealed row actions (Team.tsx pattern). */}
-      <div className="flex items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+      {/* Always-visible actions (Native Console Web design): the six hover-hidden actions became
+          one Kelola button opening the side panel — nothing is discoverable-by-accident anymore. */}
+      <div className="flex shrink-0 items-center gap-2">
         {!employee.userId && active ? (
-          <RowAction label={t('hr.list.actionCreateLogin')} onClick={onCreateLogin} />
-        ) : null}
-        <RowAction label={t('hr.list.actionAssign')} onClick={onAssign} />
-        <RowAction label={t('hr.list.actionCompensation')} onClick={onCompensation} />
-        <RowAction label={t('hr.list.actionEdit')} onClick={onEdit} />
-        {employee.rows.some((r) => r.assignmentId) ? (
-          <RowAction label={t('hr.list.actionEndAssignment')} onClick={onEndAssignment} />
-        ) : null}
-        {active ? (
           <button
             type="button"
-            className="rounded-md px-2 py-1 text-xs text-loss/80 hover:bg-tint-loss hover:text-loss focus-visible:outline-2 focus-visible:outline-loss"
-            onClick={onTerminate}
+            onClick={onCreateLogin}
+            className="h-[34px] rounded-[10px] border border-emerald-line bg-emerald-tint px-3 text-[12.5px] font-semibold text-emerald-2 transition-colors hover:bg-brand-100/60 focus-visible:outline-2 focus-visible:outline-brand-500"
           >
-            {t('hr.list.actionTerminate')}
+            {t('hr.list.actionCreateLogin')}
           </button>
         ) : null}
+        <button
+          type="button"
+          onClick={onManage}
+          className="h-[34px] rounded-[10px] border border-line bg-surface px-3.5 text-[12.5px] font-semibold text-ink-2 transition-colors hover:border-brand-300 hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-brand-500"
+        >
+          {t('hr.list.manage')}
+        </button>
       </div>
     </div>
-  )
-}
-
-function RowAction({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      className="rounded-md px-2 py-1 text-xs text-ink-3 hover:bg-paper hover:text-ink focus-visible:outline-2 focus-visible:outline-brand-500"
-      onClick={onClick}
-    >
-      {label}
-    </button>
   )
 }

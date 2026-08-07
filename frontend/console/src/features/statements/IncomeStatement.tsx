@@ -53,8 +53,10 @@ export function IncomeStatement() {
   const totalExpense = data?.totalExpenseMinor ?? 0
   const expenseRatio = totalRevenue > 0 ? totalExpense / totalRevenue : 0
 
-  // Top five expense accounts by amount — the breakdown card's rows.
-  const topExpenses = [...(data?.expenseLines ?? [])]
+  // Top five expense accounts by amount — the breakdown card's rows. Contra lines (netMinor < 0)
+  // are excluded: they net the TOTAL down but are not "largest expenses" themselves.
+  const topExpenses = (data?.expenseLines ?? [])
+    .filter((l) => l.netMinor > 0)
     .sort((a, b) => b.netMinor - a.netMinor)
     .slice(0, 5)
 
@@ -169,7 +171,8 @@ export function IncomeStatement() {
               </div>
               <div className="mt-[18px] flex flex-col gap-[15px]">
                 {topExpenses.map((line) => {
-                  const share = Math.max(0, line.netMinor) / totalExpense
+                  // Clamped: with contra lines netting totalExpense down, a raw share can top 100%.
+                  const share = Math.min(1, line.netMinor / totalExpense)
                   return (
                     <div key={line.accountCode}>
                       <div className="mb-1.5 flex items-baseline justify-between gap-3">

@@ -142,6 +142,12 @@ export function Shell({ children }: { children: ReactNode }) {
   )
 }
 
+/**
+ * Pattern 1a (Native Console Web design): nine collapsible groups, one open at a time. Navigating
+ * auto-expands the group that owns the destination; a collapsed group that holds the current page
+ * keeps a brand dot so your place is never lost. Icons live on the group head — leaves are
+ * label-only rows.
+ */
 function Sidebar({
   groups,
   isActive,
@@ -155,40 +161,83 @@ function Sidebar({
   openPosLabel: string
   onNavigate?: () => void
 }) {
+  const activeKey = groups.find((g) => g.items.some(isActive))?.key ?? null
+  const [openKey, setOpenKey] = useState<string | null>(activeKey)
+  // Navigation always re-expands the owning group (manual toggles hold until the next navigate) —
+  // adjusted during render, not in an effect (react.dev "you might not need an effect").
+  const [prevActiveKey, setPrevActiveKey] = useState(activeKey)
+  if (activeKey !== prevActiveKey) {
+    setPrevActiveKey(activeKey)
+    if (activeKey) setOpenKey(activeKey)
+  }
+
   return (
     <>
       <Link to="/" aria-label="Native" onClick={onNavigate} className="px-2 pb-5 pt-1.5">
         <Wordmark />
       </Link>
 
-      {groups.map((group) => (
-        <div key={group.heading} className="contents">
-          <div className="px-3 pb-1.5 pt-2.5 text-[11px] font-bold uppercase tracking-[0.09em] text-ink-3">
-            {group.heading}
-          </div>
-          {group.items.map((item) => {
-            const ItemIcon = item.icon
-            const activeItem = isActive(item)
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                onClick={onNavigate}
-                aria-current={activeItem ? 'page' : undefined}
+      {groups.map((group) => {
+        const GroupIcon = group.icon
+        const open = openKey === group.key
+        const holdsActive = group.items.some(isActive)
+        return (
+          <div key={group.key} className="contents">
+            <button
+              type="button"
+              aria-expanded={open}
+              onClick={() => setOpenKey(open ? null : group.key)}
+              className={cn(
+                'flex h-[38px] w-full items-center gap-2.5 rounded-[11px] px-3 text-left text-[13px] font-semibold text-ink transition-colors focus-visible:outline-2 focus-visible:outline-brand-500',
+                open ? 'bg-paper' : 'hover:bg-hover',
+              )}
+            >
+              <GroupIcon
                 className={cn(
-                  'flex h-11 items-center gap-[11px] rounded-xl px-3 text-sm transition-colors',
-                  activeItem
-                    ? 'bg-emerald-tint font-semibold text-emerald-2'
-                    : 'font-medium text-ink-2 hover:bg-hover hover:text-ink',
+                  'size-[17px] shrink-0',
+                  open || holdsActive ? 'text-emerald' : 'text-ink-400',
                 )}
-              >
-                <ItemIcon className="size-[17px] shrink-0" strokeWidth={1.8} />
-                {item.label}
-              </Link>
-            )
-          })}
-        </div>
-      ))}
+                strokeWidth={1.8}
+              />
+              <span className="min-w-0 flex-1 truncate">{group.heading}</span>
+              {!open && holdsActive ? (
+                <span className="size-1.5 shrink-0 rounded-full bg-emerald" aria-hidden="true" />
+              ) : null}
+              <span className="font-mono text-[10px] font-semibold text-ink-3">
+                {group.items.length}
+              </span>
+              <ChevronDown
+                className={cn(
+                  'size-[13px] shrink-0 text-ink-3 transition-transform',
+                  open && 'rotate-180',
+                )}
+                aria-hidden="true"
+              />
+            </button>
+            {open
+              ? group.items.map((item) => {
+                  const activeItem = isActive(item)
+                  return (
+                    <Link
+                      key={item.to}
+                      to={item.to}
+                      onClick={onNavigate}
+                      aria-current={activeItem ? 'page' : undefined}
+                      className={cn(
+                        'flex h-[34px] items-center rounded-[10px] pl-[38px] pr-3 text-[12.5px] transition-colors focus-visible:outline-2 focus-visible:outline-brand-500',
+                        activeItem
+                          ? 'bg-emerald-tint font-bold text-emerald-2'
+                          : 'font-medium text-ink-3 hover:bg-hover hover:text-ink',
+                      )}
+                    >
+                      <span className="truncate">{item.label}</span>
+                    </Link>
+                  )
+                })
+              : null}
+          </div>
+        )
+      })}
 
       {canPos ? (
         <div className="mt-auto pt-4">

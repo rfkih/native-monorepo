@@ -1,8 +1,9 @@
 /**
- * useNavGroups — the console's grouped navigation data, extracted verbatim from Shell.tsx so the
- * desktop sidebar/drawer and the phone "More" sheet (MobileTabBarGate) render the exact same
- * role ∧ grant ∧ tier-filtered tree. Pure code motion: the items, gating semantics, and filter
- * are unchanged from the Shell.
+ * useNavGroups — the console's grouped navigation data, shared so the desktop sidebar/drawer and
+ * the phone "More" sheet (MobileTabBarGate) render the exact same role ∧ grant ∧ tier-filtered
+ * tree. The 29 destinations and their gating semantics are unchanged from the original Shell
+ * list; the grouping follows the Native Console Web design (pattern 1a): nine collapsible groups
+ * instead of two long lists.
  */
 import type { ComponentType } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -54,7 +55,9 @@ export type NavItem = {
    *  is never tier-gated (e.g. the always-visible `/settings/features` escape hatch). */
   feature?: FeatureKey
 }
-export type NavGroup = { heading: string; items: NavItem[] }
+/** `key` is the stable accordion identity (headings are translated); `icon` renders on the
+ *  collapsible group head — leaves render label-only (Native Console Web design, pattern 1a). */
+export type NavGroup = { key: string; heading: string; icon: Icon; items: NavItem[] }
 
 export function useNavGroups(): {
   groups: NavGroup[]
@@ -76,10 +79,14 @@ export function useNavGroups(): {
   // Each item tagged with a `feature` is additionally hidden when the company's tier does not
   // unlock it (P1 tier-mode) — the two gates compose as an independent AND, see the drop-step
   // below. `dashboard` is FREE, so it is tagged but never actually hidden by tier (plan Risk 2).
+  // Pattern 1a (Native Console Web design): the same 29 links, regrouped from two long lists into
+  // nine collapsible groups of three-to-four so only one group is open at a time in the sidebar.
   const rawGroups: NavGroup[] = canDashboard
     ? [
         {
-          heading: t('nav.groupFinance'),
+          key: 'summary',
+          heading: t('nav.groupSummary'),
+          icon: LayoutDashboard,
           items: [
             {
               to: '/',
@@ -89,6 +96,13 @@ export function useNavGroups(): {
               page: 'dashboard',
               feature: 'dashboard',
             },
+          ],
+        },
+        {
+          key: 'reports',
+          heading: t('nav.groupReports'),
+          icon: LineChart,
+          items: [
             {
               to: '/statements/income',
               label: t('nav.income'),
@@ -117,31 +131,35 @@ export function useNavGroups(): {
               page: 'expenses',
               feature: 'expenses',
             },
+          ],
+        },
+        {
+          key: 'receivables',
+          heading: t('nav.groupAr'),
+          icon: Receipt,
+          items: [
             { to: '/invoices', label: t('nav.invoices'), icon: Receipt, feature: 'accounting' },
             { to: '/customers', label: t('nav.customers'), icon: Users, feature: 'accounting' },
             { to: '/ar/aging', label: t('nav.arAging'), icon: Clock, feature: 'accounting' },
+          ],
+        },
+        {
+          key: 'payables',
+          heading: t('nav.groupAp'),
+          icon: FileText,
+          items: [
             { to: '/bills', label: t('nav.bills'), icon: FileText, feature: 'accounting' },
             { to: '/vendors', label: t('nav.vendors'), icon: Truck, feature: 'accounting' },
             { to: '/ap/aging', label: t('nav.apAging'), icon: History, feature: 'accounting' },
+          ],
+        },
+        {
+          key: 'cashTax',
+          heading: t('nav.groupCashTax'),
+          icon: Landmark,
+          items: [
             { to: '/bank', label: t('nav.bank'), icon: Landmark, feature: 'accounting' },
             { to: '/tax', label: t('nav.tax'), icon: Percent, feature: 'accounting' },
-            { to: '/promotions', label: t('nav.promotions'), icon: Tag, feature: 'promotions' },
-            { to: '/loyalty', label: t('nav.loyalty'), icon: Gift, feature: 'promotions' },
-            { to: '/channels', label: t('nav.channels'), icon: Radio, feature: 'channels' },
-            {
-              to: '/platform-settlements',
-              label: t('nav.platformSettlements'),
-              icon: HandCoins,
-              feature: 'channels',
-            },
-            { to: '/budgets', label: t('nav.budget'), icon: Target, feature: 'accounting' },
-            { to: '/assets', label: t('nav.assets'), icon: Laptop, feature: 'accounting' },
-            {
-              to: '/deferrals',
-              label: t('nav.deferrals'),
-              icon: CalendarClock,
-              feature: 'accounting',
-            },
             {
               to: '/opening-balances',
               label: t('nav.openingBalances'),
@@ -151,7 +169,40 @@ export function useNavGroups(): {
           ],
         },
         {
-          heading: t('nav.groupStructure'),
+          key: 'sales',
+          heading: t('nav.groupSales'),
+          icon: Tag,
+          items: [
+            { to: '/promotions', label: t('nav.promotions'), icon: Tag, feature: 'promotions' },
+            { to: '/loyalty', label: t('nav.loyalty'), icon: Gift, feature: 'promotions' },
+            { to: '/channels', label: t('nav.channels'), icon: Radio, feature: 'channels' },
+            {
+              to: '/platform-settlements',
+              label: t('nav.platformSettlements'),
+              icon: HandCoins,
+              feature: 'channels',
+            },
+          ],
+        },
+        {
+          key: 'planning',
+          heading: t('nav.groupPlanning'),
+          icon: Target,
+          items: [
+            { to: '/budgets', label: t('nav.budget'), icon: Target, feature: 'accounting' },
+            { to: '/assets', label: t('nav.assets'), icon: Laptop, feature: 'accounting' },
+            {
+              to: '/deferrals',
+              label: t('nav.deferrals'),
+              icon: CalendarClock,
+              feature: 'accounting',
+            },
+          ],
+        },
+        {
+          key: 'organization',
+          heading: t('nav.groupOrg'),
+          icon: Network,
           items: [
             { to: '/org', label: t('nav.org'), icon: Network, page: 'org', feature: 'orgStructure' },
             {
@@ -169,6 +220,13 @@ export function useNavGroups(): {
               feature: 'orgStructure',
             },
             { to: '/team', label: t('nav.team'), icon: UsersRound, page: 'team', feature: 'team' },
+          ],
+        },
+        {
+          key: 'settings',
+          heading: t('nav.groupSettings'),
+          icon: SlidersHorizontal,
+          items: [
             { to: '/onboarding', label: t('nav.onboarding'), icon: Building2 },
             { to: '/settings/printer', label: t('nav.printer'), icon: Printer, feature: 'printer' },
             // Owner-only (ADR 0045) — a payments-integrity decision, not a plan-tier feature, so

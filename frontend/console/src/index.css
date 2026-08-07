@@ -110,6 +110,8 @@ body {
   --animate-float: float 7s ease-in-out infinite;
   /* Phone bottom-sheet entrance (Native Console Android design). */
   --animate-sheet-up: sheet-up 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
+  /* Side-panel entrance (Native Console Web design — the "Kelola" panel). */
+  --animate-drawer-in: drawer-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 /* Dark theme — reassign the same variables; var()-based utilities follow automatically.
@@ -293,6 +295,16 @@ body {
   }
   to {
     transform: translateY(0);
+  }
+}
+@keyframes drawer-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
   }
 }
 @keyframes pulse-dot {

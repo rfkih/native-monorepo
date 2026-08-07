@@ -1,23 +1,30 @@
 /**
- * EmployeeDetailDrawer — the employee detail view (owner/manager). Its centrepiece is the Login
- * card: the linked login's USERNAME (resolved from the Team list — Keycloak owns it) plus, until the
- * employee first signs in, the one-time PASSWORD held for them (decrypted, ADR 0014). Once the
- * employee activates, the password is gone and the card shows "active". Owners can Reset the
- * password (issues a fresh one-time password, held again) or Remove the login.
+ * EmployeeDetailDrawer — the "Kelola" side panel (owner/manager), Native Console Web design: one
+ * always-visible entry point per row instead of six hover-hidden actions, and one panel hosting
+ * every per-employee action (assign / end assignment / compensation / login / edit / terminate)
+ * while the list stays visible behind it.
  *
- * The one-time password is a credential: shown here for the owner to hand over, never persisted
- * client-side beyond the query cache, never logged.
+ * The Login section's centrepiece: the linked login's USERNAME (resolved from the Team list —
+ * Keycloak owns it) plus, until the employee first signs in, the one-time PASSWORD held for them
+ * (decrypted, ADR 0014). Once the employee activates, the password is gone and the card shows
+ * "active". Owners can Reset the password (issues a fresh one-time password, held again) or
+ * Remove the login. The one-time password is a credential: shown here for the owner to hand over,
+ * never persisted client-side beyond the query cache, never logged.
+ *
+ * Compensation stays MASKED (salary PII, rule 6) — this panel shows only whether a package is set
+ * and the action to change it; amounts never render in the console.
  */
 
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Check, Copy, KeyRound, Pencil, Trash2, UserPlus } from 'lucide-react'
+import { Check, Copy, KeyRound, Pencil, Plus, Trash2, UserPlus, X } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { Drawer } from '@/components/ui/Drawer'
 import { Spinner } from '@/components/ui/Spinner'
 import { Field, TextInput } from '@/components/ui/Field'
-import { DialogOverlay } from '@/features/org/parts'
 import { useTeam } from '@/features/team/api'
+import { localeOf } from '@/i18n'
 import { cn } from '@/lib/cn'
 import {
   useEmployee,
@@ -28,23 +35,39 @@ import {
   useUpdateEmployee,
   type EmployeeListRow,
 } from './api'
+import type { GroupedEmployee } from './EmployeesTab'
 
 export function EmployeeDetailDrawer({
   employee,
+  unitName,
   companyId,
   actor,
   onClose,
   onCreateLogin,
+  onEdit,
+  onAssign,
+  onEndAssignment,
+  onCompensation,
+  onTerminate,
 }: {
-  employee: EmployeeListRow
+  employee: GroupedEmployee
+  unitName: (id: string | null) => string
   companyId: string
   actor: string
   onClose: () => void
   onCreateLogin: () => void
+  onEdit: () => void
+  onAssign: () => void
+  onEndAssignment: (row: EmployeeListRow) => void
+  onCompensation: () => void
+  onTerminate: () => void
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const locale = localeOf(i18n.language)
   const employeeId = employee.employeeId
   const hasLogin = !!employee.userId
+  const active = employee.status === 'ACTIVE'
+  const assignments = employee.rows.filter((r) => r.assignmentId)
 
   const detail = useEmployee({ companyId, actor, employeeId, enabled: true })
   const login = useEmployeeLogin({ companyId, actor, employeeId, enabled: hasLogin })
@@ -127,34 +150,186 @@ export function EmployeeDetailDrawer({
     .slice(0, 2)
     .map((p) => p.charAt(0).toUpperCase())
     .join('')
+  const headline = assignments[0]?.role
+    ? `${assignments[0].role} · ${unitName(assignments[0].orgUnitId)}`
+    : t('hr.list.unassigned')
+  const monthYear = (iso: string | null) =>
+    iso ? new Intl.DateTimeFormat(locale, { month: 'short', year: 'numeric' }).format(new Date(iso)) : null
 
   return (
-    <DialogOverlay onClose={onClose}>
-      <div className="space-y-5">
-        {/* Header */}
-        <div className="flex items-center gap-3">
-          <span className="grid size-11 shrink-0 place-items-center rounded-full bg-emerald-tint text-sm font-semibold text-emerald-2">
-            {initials}
-          </span>
-          <div className="min-w-0">
-            <h2 className="font-display text-lg font-semibold text-ink">{employee.fullName}</h2>
-            <div className="mt-0.5 flex items-center gap-2">
-              <Badge tone={employee.status === 'ACTIVE' ? 'emerald' : 'amber'}>
-                {employee.status === 'ACTIVE' ? t('hr.detail.active') : t('hr.list.inactive')}
-              </Badge>
-              <span className="text-xs text-ink-3">{employee.ptkpStatus}</span>
-            </div>
+    <Drawer onClose={onClose} ariaLabel={employee.fullName}>
+      {/* Header */}
+      <div className="flex flex-none items-center gap-3 border-b border-line px-5 pb-4 pt-5">
+        <span className="grid size-11 shrink-0 place-items-center rounded-full bg-emerald-tint text-[15px] font-semibold text-emerald-2">
+          {initials}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h2 className="truncate font-display text-[17px] font-bold text-ink">
+              {employee.fullName}
+            </h2>
+            {!active ? <Badge tone="amber">{t('hr.list.inactive')}</Badge> : null}
           </div>
+          <div className="mt-0.5 truncate text-[12.5px] font-medium text-ink-3">{headline}</div>
+        </div>
+        <button
+          type="button"
+          onClick={onEdit}
+          aria-label={t('hr.list.actionEdit')}
+          title={t('hr.list.actionEdit')}
+          className="grid size-9 shrink-0 place-items-center rounded-[10px] text-ink-3 transition-colors hover:bg-hover hover:text-ink"
+        >
+          <Pencil className="size-4" />
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={t('common.close')}
+          className="grid size-9 shrink-0 place-items-center rounded-[10px] text-ink-3 transition-colors hover:bg-hover hover:text-ink"
+        >
+          <X className="size-[18px]" />
+        </button>
+      </div>
+
+      {/* Body */}
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+        {/* Assignments — one row per current assignment, ended IN PLACE (the row carries its own
+            assignmentId, so "end" always targets exactly the assignment you can see). */}
+        <SectionHeading>{t('hr.detail.assignments')}</SectionHeading>
+        <div className="mt-2 flex flex-col gap-1.5">
+          {assignments.length === 0 ? (
+            <p className="text-sm text-ink-3">{t('hr.list.unassigned')}</p>
+          ) : (
+            assignments.map((row) => (
+              <div
+                key={row.assignmentId}
+                className="flex items-center justify-between gap-2.5 rounded-xl border border-line px-3.5 py-3"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-[13px] font-semibold text-ink">
+                    {row.role}
+                  </span>
+                  <span className="mt-0.5 block truncate text-[11.5px] font-medium text-ink-3">
+                    {unitName(row.orgUnitId)}
+                    {monthYear(row.effectiveFrom)
+                      ? ` · ${t('hr.detail.since', { date: monthYear(row.effectiveFrom) })}`
+                      : ''}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onEndAssignment(row)}
+                  className="h-[30px] shrink-0 rounded-[9px] border border-line px-2.5 text-[11.5px] font-semibold text-ink-3 transition-colors hover:border-loss/40 hover:text-loss"
+                >
+                  {t('hr.detail.endAssignment')}
+                </button>
+              </div>
+            ))
+          )}
+          {active ? (
+            <button
+              type="button"
+              onClick={onAssign}
+              className="mt-0.5 flex h-10 w-full items-center justify-center gap-1.5 rounded-[11px] border border-dashed border-line-strong text-[12.5px] font-semibold text-emerald-2 transition-colors hover:border-brand-300 hover:bg-emerald-tint"
+            >
+              <Plus className="size-3.5" />
+              {t('hr.detail.assignAnother')}
+            </button>
+          ) : null}
+        </div>
+
+        {/* Compensation — masked by design (salary PII): state + action only, never amounts. */}
+        <SectionHeading className="mt-6">{t('hr.detail.compensation')}</SectionHeading>
+        <div className="mt-2 rounded-[14px] border border-line bg-paper p-4">
+          <div className="flex items-center justify-between gap-3">
+            {employee.hasCompensation ? (
+              <Badge tone="emerald">{t('hr.list.compSet')}</Badge>
+            ) : (
+              <Badge tone="neutral">{t('hr.list.compNone')}</Badge>
+            )}
+            <span className="text-xs text-ink-3">{t('hr.detail.compHint')}</span>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-3 w-full"
+            onClick={onCompensation}
+          >
+            {t('hr.detail.compChange')}
+          </Button>
+        </div>
+
+        {/* Login card */}
+        <SectionHeading className="mt-6">{t('hr.detail.loginTitle')}</SectionHeading>
+        <div className="mt-2 rounded-[14px] border border-line p-4">
+          {!hasLogin ? (
+            <div className="space-y-3">
+              <p className="text-sm text-ink-3">{t('hr.detail.noLogin')}</p>
+              <Button type="button" variant="outline" onClick={onCreateLogin}>
+                <UserPlus className="size-4" />
+                {t('hr.list.actionCreateLogin')}
+              </Button>
+            </div>
+          ) : login.isLoading ? (
+            <Spinner className="text-brand-500" />
+          ) : (
+            <div className="space-y-3">
+              <Detail label={t('hr.detail.username')} value={username ?? '…'} mono />
+
+              {tempPassword ? (
+                <div className="space-y-1.5">
+                  <span className="text-xs font-medium text-ink-3">
+                    {t('hr.detail.tempPassword')}
+                  </span>
+                  <div className="flex items-center gap-2 rounded-xl bg-paper px-3 py-2">
+                    <code className="flex-1 truncate font-mono text-sm text-ink">
+                      {tempPassword}
+                    </code>
+                    <CopyButton text={tempPassword} />
+                  </div>
+                  <p className="text-xs text-ink-3">{t('hr.detail.tempPasswordHint')}</p>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Badge tone="emerald">{t('hr.detail.passwordActive')}</Badge>
+                  <span className="text-xs text-ink-3">{t('hr.detail.passwordActiveHint')}</span>
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button type="button" variant="outline" disabled={busy} onClick={handleReset}>
+                  <KeyRound className="size-4" />
+                  {busy && reset.isPending
+                    ? t('hr.detail.resetting')
+                    : t('hr.detail.resetPassword')}
+                </Button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={handleRemove}
+                  className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-loss/80 hover:bg-tint-loss hover:text-loss focus-visible:outline-2 focus-visible:outline-loss disabled:opacity-50"
+                >
+                  <Trash2 className="size-4" />
+                  {t('hr.detail.removeLogin')}
+                </button>
+              </div>
+              {reset.isError || relink.isError || unlink.isError ? (
+                <p className="text-sm text-loss">{t('hr.assign.error')}</p>
+              ) : null}
+            </div>
+          )}
         </div>
 
         {/* Profile (PII masked) */}
-        <div className="grid grid-cols-2 gap-3 rounded-2xl border border-line bg-surface p-4 text-sm">
+        <SectionHeading className="mt-6">{t('hr.detail.profile')}</SectionHeading>
+        <div className="mt-2 grid grid-cols-2 gap-3 rounded-[14px] border border-line p-4 text-sm">
           <Detail label={t('hr.detail.nik')} value={emp?.maskedNik ?? '—'} />
           <Detail label={t('hr.detail.bank')} value={emp?.maskedBankAccount ?? '—'} />
+          <Detail label={t('hr.form.ptkpStatus')} value={employee.rows[0]?.ptkpStatus ?? '—'} />
         </div>
 
         {/* hire_date (Track P Phase P8, ADR 0035) — NOT PII, feeds THR proration. */}
-        <section className="rounded-2xl border border-line bg-surface p-4">
+        <section className="mt-3 rounded-[14px] border border-line p-4">
           <div className="flex items-center justify-between gap-2">
             <div>
               <h3 className="text-sm font-semibold text-ink">{t('hr.detail.hireDate')}</h3>
@@ -218,7 +393,7 @@ export function EmployeeDetailDrawer({
 
         {/* npwp (Track P Phase P1/P10, ADR 0031) — PII (rule 6): masked once on file; missing NPWP
             drives the payroll engine's ×120% no-NPWP surcharge, so this nudges completion loudly. */}
-        <section className="rounded-2xl border border-line bg-surface p-4">
+        <section className="mt-3 rounded-[14px] border border-line p-4">
           <div className="flex items-center justify-between gap-2">
             <div>
               <h3 className="text-sm font-semibold text-ink">{t('hr.detail.npwp')}</h3>
@@ -290,76 +465,37 @@ export function EmployeeDetailDrawer({
             </div>
           )}
         </section>
-
-        {/* Login card — the point of this view */}
-        <section className="rounded-2xl border border-line bg-surface p-4">
-          <h3 className="mb-3 text-sm font-semibold text-ink">{t('hr.detail.loginTitle')}</h3>
-
-          {!hasLogin ? (
-            <div className="space-y-3">
-              <p className="text-sm text-ink-3">{t('hr.detail.noLogin')}</p>
-              <Button type="button" variant="outline" onClick={onCreateLogin}>
-                <UserPlus className="size-4" />
-                {t('hr.list.actionCreateLogin')}
-              </Button>
-            </div>
-          ) : login.isLoading ? (
-            <Spinner className="text-brand-500" />
-          ) : (
-            <div className="space-y-3">
-              <Detail label={t('hr.detail.username')} value={username ?? '…'} mono />
-
-              {tempPassword ? (
-                <div className="space-y-1.5">
-                  <span className="text-xs font-medium text-ink-3">
-                    {t('hr.detail.tempPassword')}
-                  </span>
-                  <div className="flex items-center gap-2 rounded-xl bg-paper px-3 py-2">
-                    <code className="flex-1 truncate font-mono text-sm text-ink">
-                      {tempPassword}
-                    </code>
-                    <CopyButton text={tempPassword} />
-                  </div>
-                  <p className="text-xs text-ink-3">{t('hr.detail.tempPasswordHint')}</p>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <Badge tone="emerald">{t('hr.detail.passwordActive')}</Badge>
-                  <span className="text-xs text-ink-3">{t('hr.detail.passwordActiveHint')}</span>
-                </div>
-              )}
-
-              <div className="flex flex-wrap gap-2 pt-1">
-                <Button type="button" variant="outline" disabled={busy} onClick={handleReset}>
-                  <KeyRound className="size-4" />
-                  {busy && reset.isPending
-                    ? t('hr.detail.resetting')
-                    : t('hr.detail.resetPassword')}
-                </Button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={handleRemove}
-                  className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-loss/80 hover:bg-tint-loss hover:text-loss focus-visible:outline-2 focus-visible:outline-loss disabled:opacity-50"
-                >
-                  <Trash2 className="size-4" />
-                  {t('hr.detail.removeLogin')}
-                </button>
-              </div>
-              {reset.isError || relink.isError || unlink.isError ? (
-                <p className="text-sm text-loss">{t('hr.assign.error')}</p>
-              ) : null}
-            </div>
-          )}
-        </section>
-
-        <div className="flex justify-end">
-          <Button type="button" variant="outline" onClick={onClose}>
-            {t('common.close')}
-          </Button>
-        </div>
       </div>
-    </DialogOverlay>
+
+      {/* Footer — the destructive action lives here, visible but out of the everyday path. */}
+      <div className="flex flex-none gap-2.5 border-t border-line px-5 py-4">
+        {active ? (
+          <button
+            type="button"
+            onClick={onTerminate}
+            className="h-11 shrink-0 rounded-xl border border-loss/30 px-4 text-[13px] font-semibold text-loss transition-colors hover:bg-tint-loss"
+          >
+            {t('hr.list.actionTerminate')}
+          </button>
+        ) : null}
+        <Button type="button" className="h-11 flex-1" onClick={onClose}>
+          {t('common.close')}
+        </Button>
+      </div>
+    </Drawer>
+  )
+}
+
+function SectionHeading({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div
+      className={cn(
+        'text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink-3',
+        className,
+      )}
+    >
+      {children}
+    </div>
   )
 }
 
