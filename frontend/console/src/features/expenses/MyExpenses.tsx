@@ -109,7 +109,7 @@ export function MyExpenses() {
         ) : null}
       </header>
 
-      <main className="mx-auto w-full max-w-[900px] px-5 py-8 max-sm:px-4 max-sm:py-4 max-sm:pb-[100px] lg:px-8">
+      <main className="mx-auto w-full max-w-[900px] px-5 py-8 max-sm:px-4 max-sm:py-4 lg:px-8">
         <div className="flex flex-wrap items-center justify-between gap-3 max-sm:hidden">
           <div>
             <h1 className="font-display text-2xl font-bold tracking-[-0.02em] text-ink">

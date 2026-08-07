@@ -85,8 +85,9 @@ export function MeHomePhone() {
     { key: 'claim', to: '/me/expenses', icon: Plus, label: t('me.expenses.newClaim') },
   ]
 
+  // Bottom clearance for the fixed tab bar comes from MobileTabBarGate's in-flow spacer.
   return (
-    <div className="min-h-screen bg-paper pb-[100px]">
+    <div className="min-h-screen bg-paper pb-6">
       {/* Compact topbar — mirrors the desktop Me header (POS/dashboard escape + logout). */}
       <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-line bg-surface/90 px-4 backdrop-blur">
         <Wordmark />

@@ -20,7 +20,8 @@ export function PhoneScreen({
   return (
     <div className="min-h-screen bg-paper">
       <ScreenHeader title={title} backTo={backTo} trailing={trailing} />
-      <main className="mx-auto max-w-[640px] px-4 pt-4 pb-[100px]">{children}</main>
+      {/* Bottom clearance for the fixed tab bar comes from MobileTabBarGate's in-flow spacer. */}
+      <main className="mx-auto max-w-[640px] px-4 pt-4 pb-6">{children}</main>
     </div>
   )
 }
