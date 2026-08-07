@@ -13,7 +13,6 @@ import static org.mockito.Mockito.when;
 import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
 import id.co.nativeapp.restaurant.register.domain.RegisterSession;
-import id.co.nativeapp.restaurant.register.domain.RegisterSessionDayClosedException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionIdempotencyKeyConflictException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionNotOpenException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionTender;
@@ -228,25 +227,25 @@ class RegisterSessionWriterTest {
     verify(tenderRepository, never()).save(any());
   }
 
-  // ── day-final (ADR 0038): one session per outlet per business day ─────────
+  // ── multi-session per day (owner decision reverting ADR 0038's day-final tightening) ──────
 
   @Test
-  void openIsRejectedWhenTheOutletAlreadyHasASessionForThatBusinessDay() {
+  void openSucceedsForAnOutletThatAlreadyHasAClosedSessionThatSameBusinessDay() {
     when(repository.findViewByOpenIdempotencyKey("fresh-open-key")).thenReturn(Optional.empty());
-    // A session (open or closed) already exists for the requested business day.
-    when(repository.findViewByBusinessIdAndBusinessDate(eq(OUTLET), any(LocalDate.class)))
-        .thenReturn(Optional.of(mock(RegisterSessionView.class)));
+    when(repository.saveAndFlush(any(RegisterSession.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
 
-    assertThatThrownBy(
+    // Several sessions per outlet per day are legal again — the writer no longer probes for an
+    // existing session on the requested business day at all (no repository call, no rejection).
+    OpenSessionResult result =
+        asTenant(
             () ->
-                asTenant(
-                    () ->
-                        writer.open(
-                            new OpenSessionRequest(
-                                OUTLET, 100_000L, "IDR", LocalDate.of(2026, 8, 6)),
-                            "fresh-open-key")))
-        .isInstanceOf(RegisterSessionDayClosedException.class);
-    verify(repository, never()).saveAndFlush(any());
+                writer.open(
+                    new OpenSessionRequest(OUTLET, 100_000L, "IDR", LocalDate.of(2026, 8, 6)),
+                    "fresh-open-key"));
+
+    assertThat(result.created()).isTrue();
+    verify(repository).saveAndFlush(any());
   }
 
   // ── per-tender expected preview (ADR 0038) ───────────────────────────────

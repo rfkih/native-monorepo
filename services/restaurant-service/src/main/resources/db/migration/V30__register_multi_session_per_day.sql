@@ -1,0 +1,23 @@
+-- restaurant-service V30 — register sessions: restore multi-session-per-day (owner decision).
+--
+-- ADR 0038 phase 1 (V25) tightened the register-close model to DAY-FINAL: at most one
+-- `cash_register_session` row per (company, outlet, business_date), open or closed, backstopped by
+-- `uq_crs_one_session_per_outlet_day`. The owner has since decided several sessions per outlet per
+-- day ARE legal again (e.g. a lunch shift and a dinner shift, each opened and closed separately) —
+-- reverting that once-per-day tightening back to ADR 0036's original multi-session model.
+--
+-- What stays UNCHANGED:
+--   * `uq_crs_one_open_per_outlet` (V21) — at most one OPEN session per outlet AT A TIME. This is
+--     the only cadence constraint left: a cashier may not open a second drawer while one is already
+--     open, but may open a new one any time after the previous one closes, same day or not.
+--   * `business_date` itself — still populated on every session (outlet-local calendar day the
+--     session was opened on, server-derived when the caller omits it). It remains purely
+--     INFORMATIONAL (grouping/reporting) now that it no longer participates in a uniqueness
+--     invariant.
+--   * `idx_sale_tender_window` (V25) — still serves the per-tender expected sums at close
+--     regardless of how many sessions an outlet has in a day.
+--   * finance-service's RegisterSessionClosed consumer — already keyed per session id, not per
+--     day, and already idempotent by event id; multiple closes for the same outlet on the same day
+--     simply post multiple variance entries, exactly as multiple sessions on different days already
+--     did. No finance-side change is required or made here.
+DROP INDEX uq_crs_one_session_per_outlet_day;

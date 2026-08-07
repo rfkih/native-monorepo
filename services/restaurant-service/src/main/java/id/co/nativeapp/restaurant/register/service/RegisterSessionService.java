@@ -38,13 +38,7 @@ public class RegisterSessionService {
     } catch (DataIntegrityViolationException conflict) {
       // Either the open-key unique (same-key race → replay) or the one-open-per-outlet partial
       // unique (second drawer → 409) fired. The re-read runs in a FRESH transaction — the aborted
-      // insert transaction is poisoned. NOTE: the day-final unique
-      // (uq_crs_one_session_per_outlet_day,
-      // ADR 0038) is NOT expected here — the writer's in-transaction day probe under the exclusive
-      // CashWindowLock catches that case first as a clean RegisterSessionDayClosedException; this
-      // branch remains the backstop and still yields a 409 (the status is right even if the slug
-      // says
-      // "already-open" for a day that was CLOSED).
+      // insert transaction is poisoned.
       return writer
           .findByOpenKey(idempotencyKey)
           .map(existing -> new OpenSessionResult(existing, false))
