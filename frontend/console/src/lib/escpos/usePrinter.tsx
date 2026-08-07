@@ -163,23 +163,42 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
 
   const printReceipt = useCallback(
     async (data: EscposReceiptData, opts?: { cashTender?: boolean }): Promise<boolean> => {
-      const transport = transportRef.current
       const cfg = loadPrinterConfig()
-      if (!transport || !cfg) return false
+      if (!cfg) return false
+      // `cashTender` defaults to true so a caller that hasn't been updated (e.g. the settings
+      // test print) keeps today's behavior; see shouldKickDrawer's doc for the actual policy.
+      const cashTender = opts?.cashTender ?? true
+      const bytes = renderReceipt(data, cfg.paper, {
+        drawerKick: shouldKickDrawer(cfg.drawerKick, cashTender),
+      })
+
+      const transport = transportRef.current
+      if (transport) {
+        try {
+          await transport.write(bytes)
+          return true
+        } catch {
+          // Device fell asleep / was unplugged mid-print — drop the stale handle and fall
+          // through to the self-heal below.
+          transportRef.current = null
+          setConnected(false)
+        }
+      }
+
+      // Self-heal, once (field-found on the Android till: cheap SPP printers drop their idle
+      // Bluetooth socket between connect and the sale, which made AUTO-print fail silently —
+      // by design it never pops window.print). silentReattach is deterministic for native
+      // (platform bond + saved deviceId) and grant-replay for usb/serial; BLE stays manual
+      // (its chooser needs a user gesture — the caller's fallback handles it).
+      const revived = await silentReattach(cfg).catch(() => null)
+      if (!revived) return false
       try {
-        // `cashTender` defaults to true so a caller that hasn't been updated (e.g. the settings
-        // test print) keeps today's behavior; see shouldKickDrawer's doc for the actual policy.
-        const cashTender = opts?.cashTender ?? true
-        const bytes = renderReceipt(data, cfg.paper, {
-          drawerKick: shouldKickDrawer(cfg.drawerKick, cashTender),
-        })
-        await transport.write(bytes)
+        await revived.write(bytes)
+        transportRef.current = revived
+        setConnected(true)
         return true
       } catch {
-        // Device fell asleep / was unplugged mid-print — drop the stale handle so the next attempt
-        // re-attaches, and let the caller fall back to the browser print dialog.
-        transportRef.current = null
-        setConnected(false)
+        await revived.disconnect().catch(() => {})
         return false
       }
     },
