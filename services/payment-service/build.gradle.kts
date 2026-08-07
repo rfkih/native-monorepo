@@ -101,4 +101,9 @@ dependencies {
 // annotation/assertion changes — exactly how the other services do it.
 tasks.named<Test>("test") {
     systemProperty("spring.profiles.active", "dev")
+    // The credential-encryption AES-256 key is 12-factor externalized (NEVER a literal in
+    // application.yml beyond the dev placeholder) — the test task supplies a deterministic 32-byte
+    // base64 key so the suite has a reproducible round-trip without touching Vault. Real
+    // environments source it from Vault. The loyalty-service idiom, byte-for-byte.
+    systemProperty("NATIVE_PII_KEY", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 }

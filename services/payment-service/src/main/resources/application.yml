@@ -27,6 +27,32 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: false
 
+  # Static QRIS image upload (ADR 0045) — the merchant's own QR, served back to the till verbatim.
+  # max-file-size bounds the single image part (mirrors PaymentSettings.MAX_QR_IMAGE_BYTES / the DB
+  # CHECK constraint); max-request-size adds headroom for the multipart envelope (boundary + other
+  # form fields) without effectively doubling the allowance. The employee-service receipt idiom.
+  servlet:
+    multipart:
+      max-file-size: 2MB
+      max-request-size: 3MB
+
+# payment-service config — externalized, validated at startup (fail fast — ENGINEERING-STANDARDS
+# §7). No business config is hardcoded in Java.
+native:
+  # Error inbox + webhook alerting (ADR 0005/0009). A blank webhook-url (the default) disables all
+  # outbound HTTP — safe for dev/CI. Set NATIVE_ALERT_WEBHOOK_URL in prod for parked-anomaly alerts.
+  alert:
+    webhook-url: ${NATIVE_ALERT_WEBHOOK_URL:}
+    connect-timeout-ms: ${NATIVE_ALERT_CONNECT_TIMEOUT_MS:2000}
+    read-timeout-ms: ${NATIVE_ALERT_READ_TIMEOUT_MS:3000}
+  pii:
+    # Credential column-level encryption (rule 6 — the merchant's own Midtrans server/client key
+    # are secret-grade tenant data). AES-256-GCM key, a base64-encoded 32-byte value, supplied as
+    # the NATIVE_PII_KEY env var in every real environment (Vault-injected in prod — see
+    # PiiEncryptionProperties javadoc). The committed default below is a DEV/TEST-ONLY placeholder,
+    # never a real secret.
+    key: ${NATIVE_PII_KEY:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=}
+
 management:
   endpoints:
     web:
