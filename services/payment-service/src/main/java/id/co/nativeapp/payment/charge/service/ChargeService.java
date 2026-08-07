@@ -1,7 +1,9 @@
 package id.co.nativeapp.payment.charge.service;
 
+import id.co.nativeapp.errorinbox.ErrorInboxWriter;
 import id.co.nativeapp.payment.charge.domain.ChargeStatus;
 import id.co.nativeapp.payment.charge.domain.GatewayUnavailableException;
+import id.co.nativeapp.payment.charge.domain.PaymentCharge;
 import id.co.nativeapp.payment.charge.dto.ChargeResponse;
 import id.co.nativeapp.payment.charge.dto.CreateChargeRequest;
 import id.co.nativeapp.payment.charge.projection.ChargeView;
@@ -23,11 +25,17 @@ public class ChargeService {
   private final ChargeWriter writer;
   private final ChargeReader reader;
   private final QrisGatewayPort gateway;
+  private final ErrorInboxWriter errorInbox;
 
-  public ChargeService(ChargeWriter writer, ChargeReader reader, QrisGatewayPort gateway) {
+  public ChargeService(
+      ChargeWriter writer,
+      ChargeReader reader,
+      QrisGatewayPort gateway,
+      ErrorInboxWriter errorInbox) {
     this.writer = writer;
     this.reader = reader;
     this.gateway = gateway;
+    this.errorInbox = errorInbox;
   }
 
   /** A create result: the response plus whether this call minted a NEW charge (→ 201 vs 200). */
@@ -128,10 +136,36 @@ public class ChargeService {
   }
 
   private void settle(UUID chargeId, String providerTxnId) {
+    boolean applied = false;
     try {
-      writer.applySettlement(chargeId, providerTxnId, Instant.now());
+      applied = writer.applySettlement(chargeId, providerTxnId, Instant.now());
     } catch (OptimisticLockingFailureException concurrentSettle) {
-      // A concurrent webhook/sync won the version check — its transaction carries the event.
+      // A concurrent webhook/sync transition won the version check — verify the winner below.
+    }
+    if (!applied) {
+      // Code review C1 (the webhook path's twin): a declined applySettlement is a correct no-op
+      // only when a concurrent settle already SUCCEEDED the charge. If the lazy expiry sweep (or
+      // a cancel) won the race window instead, Midtrans holds real money with no local capture —
+      // park for a human, never drop.
+      PaymentCharge fresh = writer.chargeById(chargeId);
+      if (fresh.getStatus() != ChargeStatus.SUCCEEDED) {
+        String companyId = TenantContext.require().companyId();
+        errorInbox.record(
+            new IllegalStateException(
+                "Midtrans reports charge "
+                    + fresh.getId()
+                    + " ("
+                    + fresh.getAmountMinor()
+                    + " "
+                    + fresh.getCurrency()
+                    + ") settled, but it went "
+                    + fresh.getStatus()
+                    + " locally during the sync/cancel — refund the customer via the Midtrans"
+                    + " dashboard"),
+            "payment.charge-sync.late-settlement",
+            companyId,
+            null);
+      }
     }
   }
 

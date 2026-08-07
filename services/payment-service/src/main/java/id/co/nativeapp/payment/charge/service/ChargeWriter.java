@@ -247,6 +247,17 @@ public class ChargeWriter {
     return charges.findByProviderOrderId(providerOrderId);
   }
 
+  /**
+   * A FRESH read of a charge — the post-settle verification (code review C1): when {@link
+   * #applySettlement} declined because the charge was no longer live, the caller must distinguish
+   * "a concurrent settle already SUCCEEDED it" (correct no-op) from "it went
+   * CANCELED/EXPIRED/FAILED in the race window" (real money with no capture — must park).
+   */
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public PaymentCharge chargeById(UUID chargeId) {
+    return require(chargeId);
+  }
+
   /** Loads a charge + the company's credentials for a remote (sync/cancel) operation. */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public RemoteOp loadForRemoteOp(UUID chargeId) {

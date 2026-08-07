@@ -274,24 +274,28 @@ public class ReconciliationWriter {
 
   /**
    * Validates the optional QRIS MDR fee leg (ADR 0045) and normalizes it to minor units: only
-   * {@link ReconciliationCategory#QRIS_CLEARING} may carry a fee, and a supplied fee must not be
-   * negative.
+   * {@link ReconciliationCategory#QRIS_CLEARING} may carry a POSITIVE fee, and a supplied fee must
+   * not be negative. An explicit {@code 0} means the same as {@code null} — "no fee" — on EVERY
+   * category (code review W2: a client that always sends the field must not be rejected for writing
+   * the semantically-identical zero).
    *
-   * @return {@code 0} when {@code feeMinor} is {@code null} (the "no fee" default), else {@code
-   *     feeMinor}
-   * @throws IllegalArgumentException if {@code feeMinor} is non-null for a category other than
-   *     {@code QRIS_CLEARING}, or if {@code feeMinor} is negative
+   * @return {@code 0} when {@code feeMinor} is {@code null} or {@code 0}, else {@code feeMinor}
+   * @throws IllegalArgumentException if {@code feeMinor} is negative, or is positive for a category
+   *     other than {@code QRIS_CLEARING}
    */
   private static long validateFee(ReconciliationCategory category, Long feeMinor) {
     if (feeMinor == null) {
       return 0L;
     }
+    if (feeMinor < 0L) {
+      throw new IllegalArgumentException("feeMinor must not be negative: " + feeMinor);
+    }
+    if (feeMinor == 0L) {
+      return 0L;
+    }
     if (category != ReconciliationCategory.QRIS_CLEARING) {
       throw new IllegalArgumentException(
           "feeMinor is only valid for QRIS_CLEARING (category=" + category + ")");
-    }
-    if (feeMinor < 0L) {
-      throw new IllegalArgumentException("feeMinor must not be negative: " + feeMinor);
     }
     return feeMinor;
   }

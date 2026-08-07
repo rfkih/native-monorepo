@@ -202,6 +202,19 @@ class ReconcilePostingTest {
   }
 
   @Test
+  void anExplicitZeroFeeOnANonQrisCategoryIsAcceptedAsNoFee() {
+    // Code review W2: 0 == "no fee" semantically — a client that always sends the field must not
+    // be rejected for writing the zero. Posts the ordinary 2-leg transfer.
+    JournalEntry entry =
+        writer.buildEntry(
+            line(500_000L), ReconciliationCategory.CLEARING, NOW, UUID.randomUUID(), 0L);
+    assertThat(entry.getLines()).hasSize(2);
+    assertThat(totalDebit(entry.getLines()))
+        .isEqualTo(totalCredit(entry.getLines()))
+        .isEqualTo(500_000L);
+  }
+
+  @Test
   void negativeFeeMinorIsRejected() {
     assertThatThrownBy(
             () ->

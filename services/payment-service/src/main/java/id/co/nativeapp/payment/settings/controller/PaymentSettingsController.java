@@ -114,6 +114,10 @@ public class PaymentSettingsController {
         // lets the till revalidate cheaply after the 5-minute freshness window.
         .cacheControl(CacheControl.maxAge(5, TimeUnit.MINUTES).cachePrivate())
         .eTag('"' + image.sha256() + '"')
+        // nosniff (security review N3): the magic-byte check validates only the LEADING bytes, so
+        // a stored polyglot must never be content-sniffed into something executable — the browser
+        // renders exactly the canonical image type or nothing.
+        .header("X-Content-Type-Options", "nosniff")
         .contentType(MediaType.parseMediaType(image.contentType()))
         .body(image.data());
   }

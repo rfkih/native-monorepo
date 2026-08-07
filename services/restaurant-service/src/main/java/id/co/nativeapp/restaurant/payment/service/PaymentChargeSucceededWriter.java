@@ -158,7 +158,14 @@ public class PaymentChargeSucceededWriter {
 
     try {
       captureWriter.capture(payment.getId());
-    } catch (RuntimeException captureFailure) {
+    } catch (IllegalArgumentException
+        | IllegalStateException
+        | id.co.nativeapp.restaurant.menu.domain.InsufficientStockException captureFailure) {
+      // Code review W1: DELIBERATELY narrow — only capture's deterministic BUSINESS failures park
+      // (unknown payment/order, non-PENDING guard, insufficient stock). A transient infrastructure
+      // fault (lock timeout, deadlock, DB blip) propagates instead, so the container's bounded
+      // retry gets to re-run the idempotent capture rather than turning a blip into ops toil —
+      // the carwash/barbershop consumers' exact posture.
       park(
           CAPTURE_FAILED_SOURCE,
           "PaymentChargeSucceeded chargeId="

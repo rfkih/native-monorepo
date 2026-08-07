@@ -47,6 +47,22 @@ public class WebhookService {
   /** The provisional actor recorded on webhook-driven writes. */
   static final String WEBHOOK_ACTOR = "psp-webhook:midtrans";
 
+  /**
+   * A per-process random key used ONLY to keep the unknown-tenant rejection timing-uniform with a
+   * bad-signature rejection (N1) — no caller can ever produce a signature that verifies against it,
+   * and it never encrypts anything.
+   */
+  private static final String DUMMY_KEY =
+      HexFormat.of()
+          .formatHex(
+              ((java.util.function.Supplier<byte[]>)
+                      () -> {
+                        byte[] bytes = new byte[32];
+                        new java.security.SecureRandom().nextBytes(bytes);
+                        return bytes;
+                      })
+                  .get());
+
   private static final String PARK_SOURCE_PREFIX = "payment.psp-webhook.";
 
   private final ChargeWriter writer;
@@ -108,9 +124,18 @@ public class WebhookService {
       String fraudStatus,
       String transactionId) {
     // A forged/unknown tenant sees no settings row under RLS — the same rejection as a bad
-    // signature (uniform, no oracle).
-    String serverKey = writer.companyServerKey().orElseThrow(WebhookRejectedException::new);
-    verifySignature(orderId, statusCode, grossAmount, serverKey, signatureKey);
+    // signature (uniform, no oracle). Timing-uniform too (security review N1): when no key
+    // exists, the digest is still computed against a per-process RANDOM dummy key (which no
+    // caller can ever satisfy), so "unknown tenant" and "bad signature" pay the same crypto cost
+    // and reject at the same point.
+    String serverKey = writer.companyServerKey().orElse(null);
+    verifySignature(
+        orderId, statusCode, grossAmount, serverKey != null ? serverKey : DUMMY_KEY, signatureKey);
+    if (serverKey == null) {
+      // Unreachable in practice (the random dummy never verifies) — a pure belt-and-suspenders
+      // guard so a future refactor of verifySignature cannot silently open this path.
+      throw new WebhookRejectedException();
+    }
 
     Optional<PaymentCharge> chargeLookup = writer.chargeByProviderOrderId(orderId);
     if (chargeLookup.isEmpty()) {
@@ -158,25 +183,40 @@ public class WebhookService {
     if (!charge.isLive()) {
       // Real money moved AFTER the charge went CANCELED/EXPIRED/FAILED locally: never
       // auto-capture — a human refunds via the merchant's Midtrans dashboard (ADR 0045).
-      park(
-          companyId,
-          "late-settlement",
-          "Midtrans settled charge "
-              + charge.getId()
-              + " ("
-              + charge.getAmountMinor()
-              + " "
-              + charge.getCurrency()
-              + ") AFTER it went "
-              + charge.getStatus()
-              + " locally — refund the customer via the Midtrans dashboard");
+      parkLateSettlement(companyId, charge);
       return;
     }
+    boolean applied = false;
     try {
-      writer.applySettlement(charge.getId(), transactionId, Instant.now());
+      applied = writer.applySettlement(charge.getId(), transactionId, Instant.now());
     } catch (OptimisticLockingFailureException concurrentSettle) {
-      // A concurrent sync/webhook won the version check — its transaction carries the event.
+      // A concurrent sync/webhook transition won the version check — verify the winner below.
     }
+    if (!applied) {
+      // Code review C1: applySettlement declining is only a correct no-op when a CONCURRENT
+      // settle already SUCCEEDED the charge. If instead the lazy expiry sweep (or a cancel) won
+      // the race window between our stale pre-check and applySettlement's fresh read, real money
+      // moved with NO capture and NO event — exactly the park-don't-drop case.
+      PaymentCharge fresh = writer.chargeById(charge.getId());
+      if (fresh.getStatus() != ChargeStatus.SUCCEEDED) {
+        parkLateSettlement(companyId, fresh);
+      }
+    }
+  }
+
+  private void parkLateSettlement(UUID companyId, PaymentCharge charge) {
+    park(
+        companyId,
+        "late-settlement",
+        "Midtrans settled charge "
+            + charge.getId()
+            + " ("
+            + charge.getAmountMinor()
+            + " "
+            + charge.getCurrency()
+            + ") AFTER it went "
+            + charge.getStatus()
+            + " locally — refund the customer via the Midtrans dashboard");
   }
 
   private static void verifySignature(

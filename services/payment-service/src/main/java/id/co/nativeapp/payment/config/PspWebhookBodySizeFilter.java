@@ -22,6 +22,18 @@ public class PspWebhookBodySizeFilter extends OncePerRequestFilter {
   protected void doFilterInternal(
       HttpServletRequest request, HttpServletResponse response, FilterChain chain)
       throws ServletException, IOException {
+    // A chunked body has no Content-Length (getContentLengthLong() == -1), so the size cap below
+    // cannot see it — the controller would materialize the whole streamed body into a String
+    // before any auth ran (the very heap-DoS this filter targets). Midtrans's notification
+    // servers always send Content-Length, so the anonymous webhook surface has no legitimate use
+    // for chunked encoding: refuse it outright rather than let it slip the cap (the
+    // SelfOrderBodySizeFilter O-2 hardening, ported — security review W1).
+    String transferEncoding = request.getHeader("Transfer-Encoding");
+    if (transferEncoding != null
+        && transferEncoding.toLowerCase(java.util.Locale.ROOT).contains("chunked")) {
+      response.sendError(HttpServletResponse.SC_LENGTH_REQUIRED, "Webhook requires Content-Length");
+      return;
+    }
     long declared = request.getContentLengthLong();
     if (declared > MAX_BODY_BYTES) {
       // 413 literal — HttpStatus.PAYLOAD_TOO_LARGE is deprecated in Framework 7 (renamed).
