@@ -33,11 +33,27 @@ class MainActivity : BridgeActivity() {
         super.onCreate(savedInstanceState)
         // A till must never dim mid-service (ADR 0043 D6).
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // The POS layout is designed at CSS-pixel scale; Android's accessibility font size
+        // otherwise multiplies into WebView text zoom and shatters the grid/receipt layouts.
+        bridge.webView.settings.textZoom = 100
         // Hardware sanity check independent of the deployed console build: prints fixed
         // test bytes over SPP. Debug builds only; the real path is the console's
         // printer settings (the 'native' transport tile).
         if (BuildConfig.DEBUG) {
             addDebugPrintButton()
+        }
+    }
+
+    @Deprecated("Deprecated in Java")
+    @Suppress("DEPRECATION", "MissingSuperCall") // legacy back path is what Capacitor drives
+    override fun onBackPressed() {
+        val webView = bridge?.webView
+        if (webView != null && webView.canGoBack()) {
+            webView.goBack()
+        } else {
+            // At history root a stray back gesture must background the till, never exit it —
+            // an accidental exit mid-shift loses the operator's place (cart state is in-page).
+            moveTaskToBack(true)
         }
     }
 
