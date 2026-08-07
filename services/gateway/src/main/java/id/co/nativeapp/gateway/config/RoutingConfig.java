@@ -680,6 +680,78 @@ public class RoutingConfig {
   }
 
   // ---------------------------------------------------------------------------
+  // payment-service (QRIS payment modes + PSP charges — ADR 0045)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * {@code GET /api/v1/payment-settings/effective} — the till reading its outlet's effective QRIS
+   * mode/availability at tender time (ADR 0045). POS_ROLES: the cashier is the primary consumer.
+   * The response is availability only (mode + booleans) — never key material.
+   *
+   * <p>{@code @Order(HIGHEST_PRECEDENCE)} is load-bearing: the general owner-only {@code
+   * /payment-settings/**} route below would otherwise swallow this exact path and 403 the cashier —
+   * the {@link #userMeOutletsRoute} first-match-wins pattern.
+   */
+  @Bean
+  @Order(Ordered.HIGHEST_PRECEDENCE)
+  RouterFunction<ServerResponse> paymentSettingsEffectiveRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("payment-service-settings-effective")
+        .route(path("/api/v1/payment-settings/effective"), http())
+        .before(uri(routes.paymentService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(POS_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
+   * {@code GET /api/v1/payment-settings/static-qr/image} — the till fetching the merchant's static
+   * QRIS image blob to show the customer (ADR 0045). POS_ROLES for the same reason as {@link
+   * #paymentSettingsEffectiveRoute}, and {@code @Order(HIGHEST_PRECEDENCE)} for the same
+   * first-match-wins reason (the owner-only {@code /payment-settings/**} route would 403 the
+   * cashier's image fetch).
+   */
+  @Bean
+  @Order(Ordered.HIGHEST_PRECEDENCE)
+  RouterFunction<ServerResponse> paymentSettingsStaticQrImageRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("payment-service-settings-static-qr-image")
+        .route(path("/api/v1/payment-settings/static-qr/image"), http())
+        .before(uri(routes.paymentService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(POS_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
+   * QRIS payment-settings administration ({@code /api/v1/payment-settings/**}) — OWNER-ONLY, the
+   * {@link #payrollRunBankFileRoute} sensitivity class: this surface stores the merchant's own
+   * Midtrans server key (write-only, encrypted at rest) and decides how money is taken at the till,
+   * so it is narrower than DASHBOARD_ROLES (no {@code manager}). The two POS reads above are carved
+   * out first; everything else here (mode upserts, credential saves, image uploads) is the owner's
+   * alone — enforced a second time service-side (ADR 0045).
+   */
+  @Bean
+  RouterFunction<ServerResponse> paymentSettingsRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("payment-service-settings")
+        .route(path("/api/v1/payment-settings/**"), http())
+        .before(uri(routes.paymentService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(OWNER_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  // ---------------------------------------------------------------------------
   // employee-service (self-service /me — every business role)
   // ---------------------------------------------------------------------------
 

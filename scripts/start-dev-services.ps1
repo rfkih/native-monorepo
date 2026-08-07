@@ -29,6 +29,7 @@ $services = @(
   @{ Name = 'carwash-service';     Port = 8087; Db = 'carwash_service' },
   @{ Name = 'barbershop-service';  Port = 8088; Db = 'barbershop_service' },
   @{ Name = 'entitlement-service'; Port = 8089; Db = 'entitlement_service' },
+  @{ Name = 'payment-service';     Port = 8091; Db = 'payment_service' },
   @{ Name = 'gateway';             Port = 8090; Db = $null }
 )
 
@@ -78,6 +79,7 @@ foreach ($svc in $services) {
     $env:CARWASH_SERVICE_URI = 'http://localhost:8087'
     $env:BARBERSHOP_SERVICE_URI = 'http://localhost:8088'
     $env:ENTITLEMENT_SERVICE_URI = 'http://localhost:8089'
+    $env:PAYMENT_SERVICE_URI = 'http://localhost:8091'
   }
 
   Start-Process -FilePath $java -ArgumentList '-jar', "`"$jar`"" -WindowStyle Hidden `
@@ -92,7 +94,8 @@ Remove-Item Env:SPRING_PROFILES_ACTIVE, Env:SERVER_PORT, Env:KAFKA_BOOTSTRAP_SER
   Env:NATIVE_DEV_TENANT_FILTER_ENABLED, Env:KEYCLOAK_BASE_URL, Env:DB_URL, Env:DB_USERNAME,
   Env:DB_PASSWORD, Env:KEYCLOAK_ISSUER_URI, Env:KEYCLOAK_JWK_SET_URI, Env:ORG_SERVICE_URI,
   Env:EMPLOYEE_SERVICE_URI, Env:FINANCE_SERVICE_URI, Env:RESTAURANT_SERVICE_URI,
-  Env:CARWASH_SERVICE_URI, Env:BARBERSHOP_SERVICE_URI, Env:ENTITLEMENT_SERVICE_URI `
+  Env:CARWASH_SERVICE_URI, Env:BARBERSHOP_SERVICE_URI, Env:ENTITLEMENT_SERVICE_URI,
+  Env:PAYMENT_SERVICE_URI `
   -ErrorAction SilentlyContinue
 
 if ($started.Count -eq 0) { Write-Host 'Nothing to start.'; exit 0 }

@@ -2067,4 +2067,137 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
     assertThat(forwarded.getHeader("X-Actor")).isNull();
     assertThat(forwarded.getHeader("X-Roles")).isNull();
   }
+
+  // ---------------------------------------------------------------------------
+  // /api/v1/payment-settings/** — QRIS payment settings (ADR 0045): admin is OWNER-ONLY (the
+  // Midtrans server key lives behind it); the two POS reads (/effective + /static-qr/image) are
+  // HIGHEST_PRECEDENCE carve-outs the cashier till needs at tender time.
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void aCashierCanReachThePaymentSettingsEffectiveRoute() throws Exception {
+    // The till reads the outlet's effective QRIS mode at tender time — the POS carve-out must be
+    // checked BEFORE the owner-only /payment-settings/** route (first match wins).
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/payment-settings/effective?businessId=x")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath())
+        .isEqualTo("/api/v1/payment-settings/effective?businessId=x");
+  }
+
+  @Test
+  void aCashierCanReachThePaymentSettingsStaticQrImageRoute() throws Exception {
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/payment-settings/static-qr/image?businessId=x")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath())
+        .isEqualTo("/api/v1/payment-settings/static-qr/image?businessId=x");
+  }
+
+  @Test
+  void aCashierIsDeniedThePaymentSettingsAdminRouteWith403() throws Exception {
+    // The two POS carve-outs must NOT broaden the admin surface: the settings list (and every
+    // other /payment-settings/** path) stays owner-only.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/payment-settings")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void aCashierIsDeniedThePaymentSettingsStaticQrUploadPathWith403() throws Exception {
+    // Route-precedence proof, the other direction: the narrow /static-qr/image carve-out must not
+    // swallow its PARENT /static-qr (the owner upload/delete path) — that falls through to the
+    // owner-only route.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/payment-settings/static-qr")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void aManagerIsDeniedThePaymentSettingsAdminRouteWith403() throws Exception {
+    // The persona the owner-only gate EXISTS to exclude (the bank-file precedent): payment
+    // settings hold the merchant's Midtrans server key, so a manager token must be denied.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, MANAGER_USERNAME, MANAGER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/payment-settings")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void anOwnerCanReachThePaymentSettingsAdminRoute() throws Exception {
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/payment-settings")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/payment-settings");
+  }
 }
