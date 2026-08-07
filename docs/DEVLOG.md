@@ -41,6 +41,28 @@ verbatim except the template's own `allowEmptyShould`/`optionalLayer` guards ext
 so the clone is green before its first feature lands. Branch `feat/qris-payments`; full plan at
 `~/.claude/plans/nested-wibbling-rabin.md`.
 
+## 2026-08-07 — Android till app P1: the app is 1:1 with the web (native transport + branding)
+
+P0's spike became the real thing. The thin-client already renders the web console verbatim, so
+"1:1" had exactly two gaps and both are closed. **(1) Printing parity**: `'native'` is now the 5th
+`TransportKind` in `frontend/console/src/lib/escpos/` — feature-detected off the Capacitor plugin
+proxy (`window.NativePrint ?? Capacitor.Plugins.NativePrint`, absent in every browser → console
+byte-for-byte inert outside the app), with a device **picker** in `/settings/printer` (the app has
+no OS chooser — `listDevices()` returns bonded Classic + BLE + attached USB), `PrinterConfig.deviceId`
+persistence and **deterministic silent re-attach** (the platform bond owns pairing), and
+`classifyConnectError` trusting the bridge's D4 reject codes verbatim. The Kotlin side grew from
+the SPP spike to all three links: SPP (bounded connect), **BLE GATT** (same print-service
+preference order as the web BLE transport, per-chunk ack, MTU negotiation) and **USB host**
+(bulk-OUT, consent dialog → `cancelled` on decline), one live connection, write-failure = close +
+reject so the console's window.print() fallback semantics hold. Auto-print is silent by
+construction in-app — no RawBT, no transient-activation caveat. En+id copy; vitest covers the
+bridge with a faked `window.NativePrint` (feature-detect, base64 byte round-trip 0–255, code
+mapping, browser-inert assertion) — console 280 tests green. **(2) Shell design parity**: adaptive
+icon + splash are the console's own brand glyph (Wordmark trend line) on the brand-500→800
+gradient, status bar = console paper, keep-screen-on on (D6 P1), versionCode 2 (D7: native change).
+ADR 0043 amended with the as-shipped bridge contract. NOTE: the app shows the native tile only
+after the console deploy reaches UAT (thin client renders the deployed origin).
+
 ## 2026-08-07 — Android till app P0: Capacitor shell + NativePrint SPP spike (ADR 0043 Proposed)
 
 The Bluetooth-Classic printing gap (ADR 0041: Web Bluetooth is BLE-only, the cheap 58 mm printers

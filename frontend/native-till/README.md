@@ -29,15 +29,24 @@ $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 The WebView origin defaults to the UAT console; override per build with
 `NATIVE_TILL_URL=https://... npx cap sync android`.
 
-## P0 hardware drill (acceptance)
+## P1 hardware drill (acceptance)
+
+> The printer tile lives in the console, so the **deployed** console (UAT origin) must include the
+> P1 `'native'` transport before the tile appears in-app — the thin client renders the live origin.
 
 1. Pair the thermal printer in **Android Settings → Bluetooth** (it must be *bonded*; the app
-   deliberately has no scan permission).
-2. Sideload `app-debug.apk` (enable "install unknown apps"), open **Native Till** — the UAT console
-   loads; log in via Keycloak as usual (same-origin `/auth/callback` round-trips in the WebView).
-3. Tap the translucent **🖨 TEST** button (bottom-right, debug builds only) → grant the Bluetooth
-   permission when asked → pick the printer from the bonded list.
-4. A "P0 NATIVE BRIDGE TEST" slip prints → the ADR 0041 Bluetooth-Classic gap is closed.
+   deliberately has no scan permission). USB printers just plug in (OTG).
+2. Sideload `app-debug.apk`, open **Native Till**, log in via Keycloak as usual.
+3. Console → **Settings → Printer**: a first tile **"This device's printer"** appears (only
+   in-app). Connect → pick the printer from the bonded/attached list → **Test print**.
+4. Kill and reopen the app: the printer **re-attaches silently** (saved `deviceId`, no chooser).
+5. Flip **Auto-print after payment** on and take a sale to cash: the receipt prints with **no
+   popup, no app switch** — the RawBT-era caveats are gone.
+6. Repeat step 3 for each hardware kind you have (Classic SPP / BLE / USB) — one build covers all
+   three.
+
+Fallback sanity check without any console deploy: the translucent **🖨 TEST** button
+(bottom-right, debug builds only) still prints fixed bytes straight over SPP.
 
 ## Versioning contract (D7)
 

@@ -79,3 +79,23 @@ module test-prints fixed bytes to a bonded SPP printer (this ADR authored `Propo
 bridge wired into the console (`'native'` transport, device picker, silent auto-print), sideload.
 **P2** — Play internal track, lock-task kiosk, Android CI job (flip this ADR to `Accepted` no later
 than GA). **P3** — cash drawer / barcode / customer display.
+
+## Amendment (2026-08-07): P1 — the exact bridge contract as shipped
+
+- **Call convention**: the bridge is the Capacitor plugin proxy (`Capacitor.Plugins.NativePrint`,
+  injected by the app's runtime; the console also honors a direct `window.NativePrint` for tests).
+  Methods take a single options object: `getInfo() → {apiVersion}`, `listDevices() → {devices}`,
+  `connect({deviceId})`, `write({base64})`, `disconnect()`. Rejections carry a `code` from the
+  existing `ConnectFailureReason` set; `classifyConnectError` trusts it verbatim on the native path.
+- **All three links shipped**: Classic **SPP** (RFCOMM, bounded 10 s connect), **BLE** (GATT —
+  same print-service preference order as the web BLE transport, per-chunk write acknowledgement,
+  MTU negotiation), **USB host** (bulk-OUT, printer-class interface preferred, per-device system
+  consent dialog mapped to `cancelled` on decline). One live connection at a time — mirroring the
+  web `usePrinter` model. A failed write closes the link and rejects, so the console's fall-back-
+  to-window.print() and re-attach semantics hold unchanged.
+- **Device identity**: Bluetooth = MAC, USB = `usb:vid:pid`. The console persists it as
+  `PrinterConfig.deviceId` and re-attaches silently on load — deterministic because the platform
+  bond owns the pairing (no per-session chooser, unlike Web Bluetooth).
+- **Shell branding**: adaptive icon + splash derive from the console's one brand glyph
+  (`Wordmark.tsx` trend line) on the brand-500→800 gradient; status bar matches the console paper
+  background. Keep-screen-on active (D6 P1). `versionCode 2`.

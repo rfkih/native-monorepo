@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.Toast
@@ -30,8 +31,11 @@ class MainActivity : BridgeActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         registerPlugin(NativePrintPlugin::class.java)
         super.onCreate(savedInstanceState)
-        // P0-only drill trigger: the console has no native wiring yet (that is P1),
-        // so the spike exposes a native overlay button that prints fixed test bytes.
+        // A till must never dim mid-service (ADR 0043 D6).
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // Hardware sanity check independent of the deployed console build: prints fixed
+        // test bytes over SPP. Debug builds only; the real path is the console's
+        // printer settings (the 'native' transport tile).
         if (BuildConfig.DEBUG) {
             addDebugPrintButton()
         }
