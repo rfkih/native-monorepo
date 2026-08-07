@@ -88,6 +88,7 @@ import { NoCompany } from './components/NoCompany'
 import { RegisterSheet } from './RegisterSheet'
 import { PosStatusBar } from '@/features/pos-shell/layout/PosStatusBar'
 import { TillMenuSheet } from '@/features/pos-shell/layout/TillMenuSheet'
+import { usePrinterStatusAction } from '@/features/pos-shell/layout/usePrinterStatusAction'
 import { StocktakeSheet } from '@/features/stocktake/StocktakeSheet'
 
 // ---------------------------------------------------------------------------
@@ -146,6 +147,9 @@ function PosInner({ session }: { session: CompanySession }) {
   // simply keeps its last-good `data` on a failed background refetch, so this fallback only kicks
   // in for the "opened the app already offline" case).
   const { offline, queuedCount, rejectedCount } = useOffline()
+  // Always-visible printer status (P1 printing-flow hardening) — see the hook's own doc for why
+  // this lives here rather than inside PosStatusBar (which stays stateless presentation).
+  const printerStatusAction = usePrinterStatusAction()
   const [showSyncCenter, setShowSyncCenter] = useState(false)
   const [showTillMenu, setShowTillMenu] = useState(false)
   const [showRegisterSheet, setShowRegisterSheet] = useState(false)
@@ -603,6 +607,7 @@ function PosInner({ session }: { session: CompanySession }) {
             badge: parkedCount > 0 ? { count: parkedCount, tone: 'warning' } : null,
             testId: 'pos-parked',
           },
+          printerStatusAction,
         ]}
         onOverflowClick={() => setShowTillMenu((v) => !v)}
         overflowOpen={showTillMenu}

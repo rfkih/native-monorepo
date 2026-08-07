@@ -1021,6 +1021,10 @@ export const id = {
     switcherTitle: 'Pesanan',
     switcherFloor: 'Denah meja',
     switcherParked: 'Pesanan ditahan',
+    printerConnected: 'Printer siap',
+    printerDisconnected: 'Printer terputus — ketuk untuk menghubungkan ulang',
+    printerSetUp: 'Belum ada printer — ketuk untuk menghubungkan',
+    printerReconnecting: 'Menghubungkan ulang…',
   },
   servicePos: {
     noCompanyHint: 'Buat perusahaan dulu — kasir membuat tiket untuk bisnisnya.',

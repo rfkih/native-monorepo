@@ -7,6 +7,7 @@ import {
   rawbtIntentUrl,
   requestNativePrinter,
   sendViaRawbtWs,
+  silentReattach,
   transportSupport,
 } from '../transport'
 
@@ -296,5 +297,113 @@ describe('classifyConnectError', () => {
       'noEndpoint',
     )
     expect(classifyConnectError(new Error('no writable characteristic'), 'ble')).toBe('noEndpoint')
+  })
+})
+
+/** A minimal WebUSB device good enough for openUsbDevice's interface/endpoint walk to succeed. */
+function fakeUsbDevice() {
+  return {
+    manufacturerName: 'Acme',
+    productName: 'Thermal 80',
+    configuration: {
+      interfaces: [
+        {
+          interfaceNumber: 0,
+          alternates: [
+            {
+              interfaceClass: 7, // USB printer class — openUsbDevice prefers this
+              endpoints: [{ direction: 'out', type: 'bulk', endpointNumber: 1 }],
+            },
+          ],
+        },
+      ],
+    },
+    async open() {},
+    async selectConfiguration() {},
+    async claimInterface() {},
+    async close() {},
+    async transferOut() {},
+  }
+}
+
+/** A minimal WebSerial port good enough for openSerialPort to succeed. */
+function fakeSerialPort() {
+  return {
+    async open() {},
+    async close() {},
+    writable: { getWriter: () => ({ write: async () => {}, releaseLock: () => {} }) },
+  }
+}
+
+describe('silentReattach — the mount-time / Reconnect-button decision (P1 printing-flow hardening)', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('USB: re-attaches when the browser still has the granted device', async () => {
+    vi.stubGlobal('navigator', { usb: { getDevices: async () => [fakeUsbDevice()] } })
+    const transport = await silentReattach({ transport: 'usb' })
+    expect(transport?.kind).toBe('usb')
+  })
+
+  it('USB: resolves null when the browser grant is gone (never asks for one — no chooser on mount)', async () => {
+    vi.stubGlobal('navigator', { usb: { getDevices: async () => [] } })
+    await expect(silentReattach({ transport: 'usb' })).resolves.toBeNull()
+  })
+
+  it('serial: re-attaches when a previously-opened port is still there', async () => {
+    vi.stubGlobal('navigator', { serial: { getPorts: async () => [fakeSerialPort()] } })
+    const transport = await silentReattach({ transport: 'serial' })
+    expect(transport?.kind).toBe('serial')
+  })
+
+  it('serial: resolves null with nothing to reattach to', async () => {
+    vi.stubGlobal('navigator', { serial: { getPorts: async () => [] } })
+    await expect(silentReattach({ transport: 'serial' })).resolves.toBeNull()
+  })
+
+  it('rawbt: re-attaches unconditionally on Android (no device grant to check)', async () => {
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 (Linux; Android 14) Chrome/126' })
+    const transport = await silentReattach({ transport: 'rawbt' })
+    expect(transport?.kind).toBe('rawbt')
+  })
+
+  it('rawbt: resolves null off Android (feature-detected off — never silently "reconnects" to nothing)', async () => {
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64) Chrome/126' })
+    await expect(silentReattach({ transport: 'rawbt' })).resolves.toBeNull()
+  })
+
+  it('native: re-attaches by the saved deviceId when the in-app bridge is present', async () => {
+    const bridge = fakeNativeBridge()
+    vi.stubGlobal('window', { NativePrint: bridge })
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 (Linux; Android 14) Chrome/126' })
+    const transport = await silentReattach({
+      transport: 'native',
+      deviceId: '66:22:AA:01:02:03',
+      label: 'RPP58',
+    })
+    expect(transport?.kind).toBe('native')
+    expect(bridge.calls.connect).toEqual([{ deviceId: '66:22:AA:01:02:03' }])
+  })
+
+  it('native: resolves null without a saved deviceId, even with the bridge present', async () => {
+    vi.stubGlobal('window', { NativePrint: fakeNativeBridge() })
+    await expect(silentReattach({ transport: 'native' })).resolves.toBeNull()
+  })
+
+  it('native: resolves null (not throw) when the bridge rejects the connect', async () => {
+    const bridge = fakeNativeBridge()
+    bridge.connect = async () => {
+      throw new Error('device out of range')
+    }
+    vi.stubGlobal('window', { NativePrint: bridge })
+    await expect(
+      silentReattach({ transport: 'native', deviceId: 'gone', label: 'RPP58' }),
+    ).resolves.toBeNull()
+  })
+
+  it('BLE is NEVER silently reattached — architecturally impossible (no persisted grant), not a bug', async () => {
+    // No navigator.bluetooth stub at all: if silentReattach ever called requestBlePrinter() here,
+    // this would throw (no such API) instead of resolving null — the assertion below is the guard.
+    vi.stubGlobal('navigator', {})
+    await expect(silentReattach({ transport: 'ble' })).resolves.toBeNull()
   })
 })

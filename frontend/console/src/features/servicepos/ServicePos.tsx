@@ -50,6 +50,7 @@ import { ServicePaymentModal } from './ServicePaymentModal'
 import { ServiceReceipt } from './ServiceReceipt'
 import { PosStatusBar } from '@/features/pos-shell/layout/PosStatusBar'
 import { TillMenuSheet } from '@/features/pos-shell/layout/TillMenuSheet'
+import { usePrinterStatusAction } from '@/features/pos-shell/layout/usePrinterStatusAction'
 import { PackageCard } from './components/PackageCard'
 import { AddonChip } from './components/AddonChip'
 import { SummaryPanel, type AddonLine } from './components/SummaryPanel'
@@ -95,6 +96,8 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
 
   // Phase 5 offline mode (ADR 0028) — see features/pos/Pos.tsx's twin doc for the fallback strategy.
   const { offline, queuedCount, rejectedCount } = useOffline()
+  // Always-visible printer status (P1 printing-flow hardening) — see the hook's own doc.
+  const printerStatusAction = usePrinterStatusAction()
   const [showSyncCenter, setShowSyncCenter] = useState(false)
   const [showTillMenu, setShowTillMenu] = useState(false)
   const cachedPackages = useCachedCatalogFallback<CatalogItemResponse[]>(
@@ -331,7 +334,7 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
         offline={offline}
         queuedCount={queuedCount + rejectedCount}
         onConnectionClick={() => setShowSyncCenter(true)}
-        pinned={[]}
+        pinned={[printerStatusAction]}
         onOverflowClick={() => setShowTillMenu((v) => !v)}
         overflowOpen={showTillMenu}
       />

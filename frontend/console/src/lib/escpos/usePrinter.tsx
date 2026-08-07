@@ -20,38 +20,16 @@ import {
 } from './printerStore'
 import {
   createRawbtTransport,
-  reattachUsbPrinter,
-  reattachSerialPrinter,
   requestNativePrinter,
   requestUsbPrinter,
   requestBlePrinter,
   requestSerialPrinter,
+  silentReattach,
   transportSupport,
   type PrinterTransport,
   type TransportKind,
 } from './transport'
 import { PrinterContext } from './printerContext'
-
-/**
- * Attempts a SILENT re-attach — no user gesture, safe to call from an effect on mount OR from a
- * "Reconnect" button — for every transport that CAN reconnect without one: USB/serial replay their
- * persisted browser grant, RawBT holds no device grant at all (it re-attaches unconditionally),
- * and native (in-app, ADR 0043) re-attaches by the saved deviceId (the platform bond persists).
- *
- * BLE is deliberately excluded: Web Bluetooth never persists a grant (browser spec), so reaching a
- * previously-paired device REQUIRES a fresh `navigator.bluetooth.requestDevice()` chooser, which in
- * turn requires an active user gesture. Silent reattach is architecturally impossible for it — see
- * `reconnect` below for the user-gesture path a "Reconnect" tap can use instead.
- */
-async function silentReattach(saved: PrinterConfig): Promise<PrinterTransport | null> {
-  if (saved.transport === 'usb') return reattachUsbPrinter()
-  if (saved.transport === 'serial') return reattachSerialPrinter()
-  if (saved.transport === 'rawbt' && transportSupport().rawbt) return createRawbtTransport()
-  if (saved.transport === 'native' && saved.deviceId && transportSupport().native) {
-    return requestNativePrinter(saved.deviceId, saved.label).catch(() => null)
-  }
-  return null
-}
 
 export function PrinterProvider({ children }: { children: ReactNode }) {
   const [config, setConfig] = useState<PrinterConfig | null>(() => loadPrinterConfig())

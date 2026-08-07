@@ -1028,6 +1028,10 @@ export const en = {
     switcherTitle: 'Orders',
     switcherFloor: 'Table floor',
     switcherParked: 'Parked orders',
+    printerConnected: 'Printer ready',
+    printerDisconnected: 'Printer offline — tap to reconnect',
+    printerSetUp: 'No printer set up — tap to connect one',
+    printerReconnecting: 'Reconnecting…',
   },
   servicePos: {
     noCompanyHint: 'Create a company first — the POS rings up tickets for its business.',

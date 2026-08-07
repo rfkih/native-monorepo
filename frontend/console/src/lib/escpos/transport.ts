@@ -471,3 +471,38 @@ export async function requestNativePrinter(
     },
   }
 }
+
+// ---------------------------------------------------------------------------
+// Reconnection policy (P1 printing-flow hardening) — which saved transport gets a SILENT re-attach
+// ---------------------------------------------------------------------------
+
+/** The slice of PrinterConfig this policy needs — a structural type (not imported from
+ *  printerStore.ts) so this module has no dependency the other way. */
+export interface SavedPrinterHint {
+  transport: TransportKind
+  deviceId?: string
+  label?: string
+}
+
+/**
+ * Attempts a SILENT re-attach — no user gesture, safe to call from a mount effect OR from a
+ * "Reconnect" button tap — for every transport that CAN reconnect without one: USB/serial replay
+ * their persisted browser grant, RawBT holds no device grant at all (it re-attaches
+ * unconditionally), and native (in-app, ADR 0043) re-attaches by the saved deviceId (the platform
+ * bond persists). Returns null (never throws) when there is nothing to silently reattach to.
+ *
+ * BLE is deliberately excluded: Web Bluetooth never persists a grant (browser spec), so reaching a
+ * previously-paired device REQUIRES a fresh `navigator.bluetooth.requestDevice()` chooser, which in
+ * turn requires an active user gesture — silent reattach is architecturally impossible for it. A
+ * caller offering a "Reconnect" action for BLE must call `requestBlePrinter()` directly from ITS
+ * OWN user-gesture handler instead (see usePrinter.tsx's `reconnect`).
+ */
+export async function silentReattach(saved: SavedPrinterHint): Promise<PrinterTransport | null> {
+  if (saved.transport === 'usb') return reattachUsbPrinter()
+  if (saved.transport === 'serial') return reattachSerialPrinter()
+  if (saved.transport === 'rawbt' && transportSupport().rawbt) return createRawbtTransport()
+  if (saved.transport === 'native' && saved.deviceId && transportSupport().native) {
+    return requestNativePrinter(saved.deviceId, saved.label).catch(() => null)
+  }
+  return null
+}
