@@ -69,9 +69,9 @@ const pwa = VitePWA({
     // navigation once it controls the page — login becomes an instant bounce back to the landing.
     // (`/auth/callback` still reaches the SPA via the server's history fallback — network, not
     // SW cache — and a callback is meaningless offline, so denylisting all of /auth/ is safe.)
-    // .apk: the Native Till installer is served off this origin (docker-cp'd onto the console
-    // nginx) — without the denylist entry the SW serves the SPA shell instead of the download
-    // and the router bounces the user to the landing page (field-found on a real phone).
+    // .apk: the Native app installer is served off this origin (host mount on the UAT edge,
+    // docker/uat/downloads) — without the denylist entry the SW serves the SPA shell instead
+    // of the download and the router bounces the user to the landing page (field-found).
     navigateFallbackDenylist: [/^\/api\//, /^\/auth\//, /\.apk$/],
     runtimeCaching: [
       {

@@ -48,6 +48,11 @@ Release builds drop the debug 🖨 TEST button automatically (BuildConfig.DEBUG)
 app can NOT install over a debug-signed one — uninstall first, once. Play Store later: use this
 key as the upload key with Play App Signing (P2 owner decision).
 
+Publish to UAT: copy the signed APK to `docker/uat/downloads/native-app-v<versionCode>.apk`
+(served by the edge at `https://<uat-origin>/native-app-v<versionCode>.apk`; see
+`docker/uat/downloads/README.md`). Do NOT `docker cp` it into the console container — that
+copy dies on the next recreate.
+
 ## P1 hardware drill (acceptance)
 
 > The printer tile lives in the console, so the **deployed** console (UAT origin) must include the

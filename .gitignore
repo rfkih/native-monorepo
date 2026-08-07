@@ -25,3 +25,7 @@ build-logic/tmp/
 # UAT stack runtime env — the current tunnel URL + GENERATED SECRETS (KC admin password,
 # PII/gift-card keys). Never commit; losing it strands the UAT data (see docker/uat/README.md).
 docker/uat.env
+
+# Signed Android installers served by the UAT edge (/*.apk -> docker/uat/downloads mount).
+# Binaries stay out of git; source of truth is C:\Users\rifki\native-till-signing\builds\.
+docker/uat/downloads/*.apk
