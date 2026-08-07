@@ -182,9 +182,12 @@ export function ServiceReceipt({
         valueLabel: formatMoney(payment.changeMinor, currency, locale),
       })
     }
-    paymentRows.push({ label: t('pos.receipt.status'), valueLabel: t(statusKey(payment.status)) })
+    // Paper efficiency: Status only when informative (Pending/Voided/Refunded) — "Paid" on
+    // every receipt was noise; the Time row duplicated the header dateTime byte-for-byte.
+    if (payment.status !== 'CAPTURED') {
+      paymentRows.push({ label: t('pos.receipt.status'), valueLabel: t(statusKey(payment.status)) })
+    }
   }
-  paymentRows.push({ label: t('pos.receipt.time'), valueLabel: dateTime })
 
   return (
     <ThermalReceipt

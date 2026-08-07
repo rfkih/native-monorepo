@@ -158,10 +158,10 @@ export function renderReceipt(
     }
   }
 
-  // Footer.
+  // Footer. (The reference deliberately does NOT repeat here — it already printed in the
+  // header meta row; the duplicate cost a line of paper per receipt.)
   e.line(divider(cols)).align('center')
   for (const l of wrap(data.footerNote, cols)) e.line(l)
-  e.line(toAscii(data.reference))
   e.align('left')
 
   // 3 lines clears the tear bar/cutter on the common mechanisms; more just wastes paper.

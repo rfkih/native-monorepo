@@ -116,50 +116,6 @@ export interface ThermalProps {
 }
 
 // ---------------------------------------------------------------------------
-// Decorative barcode — pure CSS/divs, no external lib
-// ---------------------------------------------------------------------------
-
-/**
- * Renders a row of vertical black bars of varying widths to simulate a barcode.
- * Uses a seeded-ish pattern derived from the reference string so it is stable
- * across renders for the same reference. Not a scannable barcode — decorative only.
- */
-function DecorativeBarcode({ reference }: { reference: string }) {
-  // Derive a deterministic sequence of bar widths (1–3 px) from the reference chars.
-  const bars: number[] = []
-  const totalBars = 60
-  for (let i = 0; i < totalBars; i++) {
-    const charCode = reference.charCodeAt(i % reference.length) || 65
-    bars.push(((charCode + i * 7) % 3) + 1)
-  }
-
-  return (
-    <div
-      aria-hidden="true"
-      style={{
-        display: 'flex',
-        alignItems: 'stretch',
-        height: 40,
-        gap: 1.5,
-        justifyContent: 'center',
-        margin: '8px 0 4px',
-      }}
-    >
-      {bars.map((width, idx) => (
-        <div
-          key={idx}
-          style={{
-            width,
-            backgroundColor: '#000',
-            flexShrink: 0,
-          }}
-        />
-      ))}
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
 // Dashed rule — the classic thermal receipt separator
 // ---------------------------------------------------------------------------
 
@@ -636,10 +592,8 @@ export function ThermalReceipt({
               <div style={{ fontWeight: 700, letterSpacing: '0.03em', fontSize: 13 }}>
                 {footerNote}
               </div>
-              <DecorativeBarcode reference={reference} />
-              <div style={{ fontSize: 10, color: '#666', letterSpacing: '0.05em' }}>
-                {reference}
-              </div>
+              {/* Barcode + repeated reference removed (paper efficiency, user request): the
+                  barcode was decorative-only and the reference already prints in the header. */}
               <div style={{ fontSize: 10, color: '#888', marginTop: 6 }}>
                 {t('pos.receipt.poweredBy')}
               </div>

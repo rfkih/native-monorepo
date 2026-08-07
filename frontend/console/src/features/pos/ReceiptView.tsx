@@ -204,8 +204,12 @@ export function ReceiptView({
   if (isCash && payment.changeMinor != null) {
     paymentRows.push({ label: t('pos.receipt.change'), valueLabel: formatMoney(payment.changeMinor, currency, locale) })
   }
-  paymentRows.push({ label: t('pos.receipt.status'), valueLabel: t(statusKey(payment.status)) })
-  paymentRows.push({ label: t('pos.receipt.time'), valueLabel: dateTime })
+  // Paper efficiency: Status prints only when it says something ("Paid" on every normal receipt
+  // was noise; Pending/Voided/Refunded still matter). Time was a byte-identical duplicate of the
+  // header dateTime — dropped.
+  if (payment.status !== 'CAPTURED') {
+    paymentRows.push({ label: t('pos.receipt.status'), valueLabel: t(statusKey(payment.status)) })
+  }
 
   return (
     <ThermalReceipt

@@ -111,7 +111,7 @@ export function BillReceiptView({
   if (isCash && changeMinor != null) {
     paymentRows.push({ label: t('pos.receipt.change'), valueLabel: formatMoney(changeMinor, currency, locale) })
   }
-  paymentRows.push({ label: t('pos.receipt.time'), valueLabel: dateTime })
+  // Time row dropped — byte-identical duplicate of the header dateTime (paper efficiency).
 
   return (
     <ThermalReceipt
