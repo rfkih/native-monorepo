@@ -75,6 +75,7 @@ has landed yet — the status names the phases that will land them.
 | **`TrialBalancePublished`** | **finance** (member within-company close) | **finance** (group consolidation) | **company_id, group_id, period, base_currency, reconciled, uses_illustrative_rules, lines[]** | **LIVE (CONSUMER P3d SEAM 2 group_trial_balance ingest; PRODUCER P3d SEAM 4a within-company close)** |
 | **`ConsolidationClosed`** | **finance** (within-company + group close) | **shell, notification** | **company_id (or group_id), period** | **LIVE (PRODUCER P3d SEAM 4a; notification consumer #22)** |
 | **`DeliveryReceipt`** | **notification-service** | **(audit/observability sinks; re-send policy)** | **notification_id, company_id, channel, status, provider_ref, delivered_at** | **LIVE (#22)** |
+| **`PaymentChargeSucceeded`** | **payment-service** | **restaurant-service, carwash-service, barbershop-service** (each filters on `vertical`) | **charge_id, company_id, vertical, payment_id, reference_id?, business_id, amount_minor, currency, provider, provider_txn_id?, succeeded_at** | **SCHEMA REGISTERED (ADR 0045); producer = charge webhook/sync transition, vertical consumers follow** |
 
 ---
 
@@ -2326,3 +2327,51 @@ for this catalog entry (no `libs/contracts` test module; no producer/consumer Ja
 `LoyaltyRedemptionFlaggedContractTest` (producer side) once scaffolded, and
 `notification-service`'s consumer-copy test once it builds the alert-handling path. Signed-off gap
 for this wave.
+
+### `PaymentChargeSucceeded`
+
+Emitted by payment-service when a dynamic-QRIS gateway charge (ADR 0045 — GATEWAY mode via the
+merchant's OWN Midtrans account) reaches **SUCCEEDED**: either the signed inbound Midtrans
+settlement webhook (`POST /api/v1/psp-webhooks/midtrans/{companyId}`, signature verified against
+the company's decrypted server key) or the server-side status-sync fallback applied the transition,
+and the outbox row is written in the SAME transaction as the status flip (rule 3). The POS vertical
+named in `vertical` consumes it, loads its PENDING payment, verifies `amount_minor`/`currency`
+match exactly, and runs its EXISTING idempotent capture writer (restaurant
+`PaymentCaptureWriter.capture(payment_id)`; carwash/barbershop
+`TicketCaptureWriter.capture(reference_id)` — the TICKET id) — recording the sale and emitting
+`SaleRecorded`, so finance needs ZERO change (QRIS already debits `QRIS_CLEARING` 1901). An
+already-CAPTURED payment no-ops (the cashier's manual mark-as-paid races the webhook harmlessly);
+VOIDED/missing/amount-mismatch parks in the error inbox, processed-marked, and never captures.
+
+- **Producer:** `payment-service`
+- **Consumers:** `restaurant-service`, `carwash-service`, `barbershop-service` (each skips events
+  whose `vertical` is not its own)
+- **Aggregate type / partition key:** `payment_charge` / `charge_id`
+- **Outbox `event_type`:** `PaymentChargeSucceeded`
+- **Schema:** `libs/contracts/src/main/resources/avro/PaymentChargeSucceeded.avsc`
+- **Full name:** `id.co.nativeapp.events.payment.PaymentChargeSucceeded`
+- **Status:** SCHEMA REGISTERED (contracts-first). Producer lands with the charge webhook/sync
+  transition; the three vertical consumers follow, one commit each.
+
+**Key fields**
+
+| Field | Avro type | Meaning |
+|---|---|---|
+| `charge_id` | `string` | The payment_charge id (UUID as string); partition key |
+| `company_id` | `string` | The owning tenant (UUID as string) |
+| `vertical` | `string` | `restaurant` \| `carwash` \| `barbershop` (lowercase module-key casing) — the consumer filter |
+| `payment_id` | `string` | The vertical's payment row id — restaurant's capture key, every vertical's verification anchor |
+| `reference_id` | `["null","string"]` default `null` | The vertical's capture key when different: the carwash/barbershop TICKET id; null for restaurant |
+| `business_id` | `string` | The outlet the charge was rung at (real OUTLET id, ADR 0012) |
+| `amount_minor` | `long` | The charged amount, minor units — the tender RESIDUAL (net of gift-card coverage); must equal the vertical payment's amount exactly, else park |
+| `currency` | `string` | ISO-4217 (`IDR` — QRIS is IDR-only, enforced at charge creation) |
+| `provider` | `string` | `MIDTRANS` (further providers = new `QrisGatewayPort` adapters, same event) |
+| `provider_txn_id` | `["null","string"]` default `null` | Midtrans `transaction_id` — the cross-system audit anchor |
+| `succeeded_at` | `timestamp-millis` | When the settlement was recorded (UTC) |
+
+**Compatibility.** Only backward-compatible evolution is allowed: append fields with a default,
+never reorder/remove/retype. `reference_id` and `provider_txn_id` are nullable unions with
+`default: null` from day one. **Contract tests:** producer-side triad in payment-service
+(`PaymentChargeSucceededContractTest` — parse, round-trip both nullable states, self-compat,
+added-optional accepted, required-without-default rejected); each vertical adds its consumer-side
+copy with its listener.

@@ -1,0 +1,19 @@
+{
+  "type": "record",
+  "name": "PaymentChargeSucceeded",
+  "namespace": "id.co.nativeapp.events.payment",
+  "doc": "Emitted by payment-service when a dynamic-QRIS gateway charge (ADR 0045, merchant's own Midtrans account) reaches SUCCEEDED — either from the signed inbound Midtrans settlement webhook or from the server-side status sync fallback, in the SAME transaction as the charge's status transition (rule 3, outbox). Consumed by the POS vertical named in `vertical`, which loads its PENDING payment, verifies amount+currency match, and runs its EXISTING idempotent capture writer (restaurant PaymentCaptureWriter.capture(payment_id); carwash/barbershop TicketCaptureWriter.capture(reference_id)) — recording the sale, emitting SaleRecorded, and so reaching finance with ZERO GL change (QRIS already routes to QRIS_CLEARING 1901). A consumer that finds the payment already CAPTURED no-ops (the cashier's manual mark-as-paid races the webhook harmlessly); VOIDED/missing/amount-mismatch parks in the error inbox and never captures. Money is an integer minor-units amount plus an ISO-4217 currency code, never a float (rule 8). No PII rides this event (rule 6).",
+  "fields": [
+    {"name": "charge_id", "type": "string", "doc": "The payment_charge aggregate id (UUID as string); also the Kafka partition key."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string)."},
+    {"name": "vertical", "type": "string", "doc": "Which POS vertical's payment this charge settles: restaurant | carwash | barbershop (lowercase module-key casing, the OrgUnitCreated.vertical convention). Every vertical consumes the topic and skips events whose vertical is not its own."},
+    {"name": "payment_id", "type": "string", "doc": "The vertical's payment row id (UUID as string) — restaurant's capture key, and every vertical's verification anchor."},
+    {"name": "reference_id", "type": ["null", "string"], "default": null, "doc": "The vertical's capture key when it differs from payment_id: the carwash/barbershop TICKET id (their capture writers are keyed by ticket). Null for restaurant."},
+    {"name": "business_id", "type": "string", "doc": "The outlet the charge was rung at (UUID as string; a real OUTLET org unit, ADR 0012)."},
+    {"name": "amount_minor", "type": "long", "doc": "The charged amount in minor units — the tender RESIDUAL the QR charged (net of any gift-card coverage), which must equal the vertical payment's amount exactly; a mismatch parks, never captures."},
+    {"name": "currency", "type": "string", "doc": "ISO-4217 currency code of amount_minor (IDR — QRIS is IDR-only; the charge writer enforces this at creation)."},
+    {"name": "provider", "type": "string", "doc": "The PSP that settled the charge: MIDTRANS (further providers are new QrisGatewayPort adapters, same event)."},
+    {"name": "provider_txn_id", "type": ["null", "string"], "default": null, "doc": "The provider's transaction id (Midtrans transaction_id) — the cross-system audit anchor. Null if the provider omitted it."},
+    {"name": "succeeded_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the settlement was recorded, epoch millis (UTC)."}
+  ]
+}
