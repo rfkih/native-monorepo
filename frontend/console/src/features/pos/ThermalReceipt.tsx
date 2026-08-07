@@ -27,10 +27,11 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Printer } from 'lucide-react'
+import { Printer, RefreshCw, TriangleAlert, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { usePrinter } from '@/lib/escpos/printerContext'
 import { toEscposReceiptData } from '@/lib/escpos/fromThermalProps'
+import { cn } from '@/lib/cn'
 
 // ---------------------------------------------------------------------------
 // Prop types — normalised data model
@@ -106,6 +107,12 @@ export interface ThermalProps {
    * no auto-print); on a device failure the Print button remains the manual recovery.
    */
   autoPrint?: boolean
+  /**
+   * True for a CASH sale — gates the cash-drawer kick (a card/QRIS/other-tender receipt must never
+   * pop the drawer, even when the device toggle is on; see usePrinter's printReceipt doc). Omitted
+   * defaults to true (the historical behavior) so an un-migrated caller keeps working.
+   */
+  cashTender?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -333,11 +340,17 @@ export function ThermalReceipt({
   isProvisional,
   provisionalNote,
   autoPrint,
+  cashTender,
 }: ThermalProps) {
   const { t } = useTranslation()
   const headingId = useId()
   const printer = usePrinter()
   const [deviceBusy, setDeviceBusy] = useState(false)
+  // Recovery UI (P1 flow hardening): a silent device failure used to just fall back to
+  // window.print() with no explanation. `notice` names WHY, and stays actionable (Retry) right
+  // here — never forcing a trip to /settings/printer mid-sale.
+  const [notice, setNotice] = useState<'autoFailed' | 'fallback' | null>(null)
+  const [recovering, setRecovering] = useState(false)
 
   const escposData = useCallback(
     () =>
@@ -390,26 +403,60 @@ export function ThermalReceipt({
       if (autoPrinted.current) return
       autoPrinted.current = true
       setDeviceBusy(true)
-      void printer.printReceipt(escposData()).finally(() => setDeviceBusy(false))
+      void printer
+        .printReceipt(escposData(), { cashTender: cashTender ?? true })
+        .then((ok) => {
+          // Deliberately still no window.print() fallback here (an OS dialog popping unprompted
+          // after every sale would be worse than none) — but the operator must be TOLD, not left
+          // to notice a missing receipt on their own. The banner's Retry stays right on this screen.
+          if (!ok) setNotice('autoFailed')
+        })
+        .finally(() => setDeviceBusy(false))
     }, 0)
     return () => clearTimeout(timer)
-  }, [autoPrint, printer, escposData])
+  }, [autoPrint, printer, escposData, cashTender])
 
   /**
    * Print handler (ADR 0039): when a thermal printer is connected, send raw ESC/POS bytes to it
    * (silent, no OS dialog). Otherwise — or if the device write fails — fall back to the browser's
    * window.print() (the WYSIWYG paper), which is exactly the previous behavior. The `onPrint` prop
-   * IS that browser path (callers pass window.print), so it doubles as the fallback.
+   * IS that browser path (callers pass window.print), so it doubles as the fallback. A failed
+   * DEVICE attempt (as opposed to simply having no device configured) now surfaces `notice` so the
+   * fallback dialog isn't a silent surprise.
    */
   const handlePrint = async () => {
     autoPrinted.current = true // a manual tap also cancels a not-yet-fired auto-print
     if (printer.connected) {
       setDeviceBusy(true)
-      const ok = await printer.printReceipt(escposData())
+      const ok = await printer.printReceipt(escposData(), { cashTender: cashTender ?? true })
       setDeviceBusy(false)
-      if (ok) return
+      if (ok) {
+        setNotice(null)
+        return
+      }
+      setNotice('fallback')
     }
     onPrint()
+  }
+
+  /**
+   * The banner's Retry action: re-attempts the SAVED connection right here (see usePrinter's
+   * `reconnect` doc — BLE legitimately reopens its chooser because THIS is the user gesture), then
+   * immediately re-sends the receipt if that succeeded. Clears the notice only on an actual
+   * successful print, never optimistically.
+   */
+  const retryDevice = async () => {
+    setRecovering(true)
+    try {
+      const reattached = await printer.reconnect()
+      if (!reattached) return
+      setDeviceBusy(true)
+      const ok = await printer.printReceipt(escposData(), { cashTender: cashTender ?? true })
+      setDeviceBusy(false)
+      if (ok) setNotice(null)
+    } finally {
+      setRecovering(false)
+    }
   }
 
   return (
@@ -598,6 +645,41 @@ export function ThermalReceipt({
             <TornEdge position="bottom" />
           </div>
         </div>
+
+        {/* ---------------------------------------------------------------- */}
+        {/* Recovery banner — a failed device print used to fail SILENTLY (a  */}
+        {/* window.print() fallback with no explanation, or nothing at all   */}
+        {/* for a failed auto-print). Now it's named + actionable right here. */}
+        {/* ---------------------------------------------------------------- */}
+        {notice ? (
+          <div
+            role="status"
+            className="mt-4 flex w-full items-start gap-2.5 rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-left text-[13px] leading-relaxed text-amber-100 print:hidden"
+            style={{ maxWidth: 320 }}
+          >
+            <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-300" />
+            <div className="min-w-0 flex-1">
+              <p>{t(notice === 'autoFailed' ? 'pos.receipt.autoPrintFailed' : 'pos.receipt.printFallback')}</p>
+              <button
+                type="button"
+                onClick={() => void retryDevice()}
+                disabled={recovering || deviceBusy}
+                className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-amber-400/40 bg-amber-500/10 px-2.5 py-1.5 text-xs font-semibold text-amber-100 transition-colors hover:bg-amber-500/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <RefreshCw className={cn('size-3.5', recovering && 'animate-spin motion-reduce:animate-none')} />
+                {recovering ? t('pos.receipt.reconnecting') : t('common.retry')}
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setNotice(null)}
+              aria-label={t('common.close')}
+              className="shrink-0 rounded-lg p-1 text-amber-300/70 transition-colors hover:text-amber-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300"
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
+        ) : null}
 
         {/* ---------------------------------------------------------------- */}
         {/* Buttons — outside the paper, hidden when printing                */}

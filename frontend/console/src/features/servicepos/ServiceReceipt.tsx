@@ -189,6 +189,7 @@ export function ServiceReceipt({
   return (
     <ThermalReceipt
       autoPrint
+      cashTender={isCash}
       businessName={businessName}
       title={t('servicePos.receipt.title')}
       reference={reference}

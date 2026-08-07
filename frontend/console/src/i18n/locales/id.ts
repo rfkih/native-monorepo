@@ -778,6 +778,9 @@ export const id = {
       thankYou: 'Terima kasih atas kunjungan Anda!',
       poweredBy: 'Didukung oleh Native',
       ref: 'Ref',
+      autoPrintFailed: 'Cetak otomatis gagal — coba lagi, atau gunakan tombol Cetak di bawah.',
+      printFallback: 'Tidak dapat menjangkau printer, jadi kami membuka dialog cetak peramban.',
+      reconnecting: 'Menghubungkan ulang…',
     },
     orderType: {
       label: 'Jenis pesanan',

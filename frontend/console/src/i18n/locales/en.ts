@@ -785,6 +785,9 @@ export const en = {
       thankYou: 'Thank you for your visit!',
       poweredBy: 'Powered by Native',
       ref: 'Ref',
+      autoPrintFailed: "Automatic printing didn't go through — try again, or use Print below.",
+      printFallback: "Couldn't reach the printer, so we opened the print dialog instead.",
+      reconnecting: 'Reconnecting…',
     },
     orderType: {
       label: 'Order type',

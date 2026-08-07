@@ -11,7 +11,13 @@
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { renderReceipt, type EscposReceiptData, type PaperWidth } from './receipt'
-import { loadPrinterConfig, savePrinterConfig, clearPrinterConfig, type PrinterConfig } from './printerStore'
+import {
+  loadPrinterConfig,
+  savePrinterConfig,
+  clearPrinterConfig,
+  shouldKickDrawer,
+  type PrinterConfig,
+} from './printerStore'
 import {
   createRawbtTransport,
   reattachUsbPrinter,
@@ -26,6 +32,27 @@ import {
 } from './transport'
 import { PrinterContext } from './printerContext'
 
+/**
+ * Attempts a SILENT re-attach — no user gesture, safe to call from an effect on mount OR from a
+ * "Reconnect" button — for every transport that CAN reconnect without one: USB/serial replay their
+ * persisted browser grant, RawBT holds no device grant at all (it re-attaches unconditionally),
+ * and native (in-app, ADR 0043) re-attaches by the saved deviceId (the platform bond persists).
+ *
+ * BLE is deliberately excluded: Web Bluetooth never persists a grant (browser spec), so reaching a
+ * previously-paired device REQUIRES a fresh `navigator.bluetooth.requestDevice()` chooser, which in
+ * turn requires an active user gesture. Silent reattach is architecturally impossible for it — see
+ * `reconnect` below for the user-gesture path a "Reconnect" tap can use instead.
+ */
+async function silentReattach(saved: PrinterConfig): Promise<PrinterTransport | null> {
+  if (saved.transport === 'usb') return reattachUsbPrinter()
+  if (saved.transport === 'serial') return reattachSerialPrinter()
+  if (saved.transport === 'rawbt' && transportSupport().rawbt) return createRawbtTransport()
+  if (saved.transport === 'native' && saved.deviceId && transportSupport().native) {
+    return requestNativePrinter(saved.deviceId, saved.label).catch(() => null)
+  }
+  return null
+}
+
 export function PrinterProvider({ children }: { children: ReactNode }) {
   const [config, setConfig] = useState<PrinterConfig | null>(() => loadPrinterConfig())
   const [connected, setConnected] = useState(false)
@@ -33,25 +60,13 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
   const transportRef = useRef<PrinterTransport | null>(null)
   const support = transportSupport()
 
-  // Silent re-attach of a persisted USB/serial grant on load (BLE cannot persist — skip it).
-  // RawBT holds no device grant at all, so it re-attaches unconditionally from the saved config.
-  // Native (in-app, ADR 0043) re-attaches by the saved deviceId — the platform bond persists, so
-  // this is deterministic; a printer that is off simply fails and stays disconnected.
+  // Silent re-attach of a persisted grant on load — see silentReattach's doc for what can/can't.
   useEffect(() => {
     const saved = loadPrinterConfig()
     if (!saved) return
     let cancelled = false
     ;(async () => {
-      const transport =
-        saved.transport === 'usb'
-          ? await reattachUsbPrinter()
-          : saved.transport === 'serial'
-            ? await reattachSerialPrinter()
-            : saved.transport === 'rawbt' && transportSupport().rawbt
-              ? createRawbtTransport()
-              : saved.transport === 'native' && saved.deviceId && transportSupport().native
-                ? await requestNativePrinter(saved.deviceId, saved.label).catch(() => null)
-                : null
+      const transport = await silentReattach(saved)
       if (cancelled) {
         await transport?.disconnect()
         return
@@ -118,6 +133,29 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
     setConfig(null)
   }, [])
 
+  /**
+   * The in-flow recovery action (see the context doc): reattempts the SAVED connection right where
+   * the operator is (typically the receipt view, mid-sale), never forcing a trip to
+   * /settings/printer. BLE re-opens the chooser here specifically BECAUSE this is always invoked
+   * from a user-gesture handler — see silentReattach's doc for why it can't happen on mount.
+   */
+  const reconnect = useCallback(async (): Promise<boolean> => {
+    const saved = loadPrinterConfig()
+    if (!saved) return false
+    setConnectingLabel(saved.transport)
+    try {
+      const transport =
+        saved.transport === 'ble' ? await requestBlePrinter().catch(() => null) : await silentReattach(saved)
+      if (!transport) return false
+      await transportRef.current?.disconnect().catch(() => {})
+      transportRef.current = transport
+      setConnected(true)
+      return true
+    } finally {
+      setConnectingLabel(null)
+    }
+  }, [])
+
   const setDrawerKick = useCallback((on: boolean) => {
     setConfig((prev) => {
       if (!prev) return prev
@@ -146,15 +184,17 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const printReceipt = useCallback(
-    async (data: EscposReceiptData): Promise<boolean> => {
+    async (data: EscposReceiptData, opts?: { cashTender?: boolean }): Promise<boolean> => {
       const transport = transportRef.current
       const cfg = loadPrinterConfig()
       if (!transport || !cfg) return false
       try {
-        // A drawer kick only makes sense for a cash sale — the caller signals cash by leaving a
-        // non-empty change/tendered row; we keep it simple and honor the device toggle, which the
-        // operator sets per till. The encoder emits the pulse before the receipt bytes.
-        const bytes = renderReceipt(data, cfg.paper, { drawerKick: cfg.drawerKick })
+        // `cashTender` defaults to true so a caller that hasn't been updated (e.g. the settings
+        // test print) keeps today's behavior; see shouldKickDrawer's doc for the actual policy.
+        const cashTender = opts?.cashTender ?? true
+        const bytes = renderReceipt(data, cfg.paper, {
+          drawerKick: shouldKickDrawer(cfg.drawerKick, cashTender),
+        })
         await transport.write(bytes)
         return true
       } catch {
@@ -181,6 +221,7 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
         setAutoPrint,
         setPaper,
         printReceipt,
+        reconnect,
       }}
     >
       {children}

@@ -29,8 +29,21 @@ export interface PrinterContextValue {
   /**
    * Prints the receipt to the connected device. Returns true on success, false if there is no
    * device or the write failed (the caller then falls back to window.print()).
+   *
+   * `cashTender` gates the drawer kick: it only makes sense to pop the drawer on a CASH sale, so a
+   * caller printing a card/QRIS/other-tender receipt should pass `false`. Omitted (or any caller
+   * not yet updated, e.g. the settings test print) defaults to `true` — the historical behavior.
    */
-  printReceipt: (data: EscposReceiptData) => Promise<boolean>
+  printReceipt: (data: EscposReceiptData, opts?: { cashTender?: boolean }) => Promise<boolean>
+  /**
+   * Re-attempts the LAST saved connection without leaving the current screen (P1 flow hardening —
+   * a cashier mid-sale should never have to abandon the till to reach `/settings/printer`).
+   * USB/serial/RawBT/native re-attach silently from the saved config; BLE has no persisted grant
+   * (browser spec) so it re-opens the device chooser — legitimate here because the call is only
+   * ever made from a user-gesture handler (a "Reconnect" button tap IS the gesture). Returns true
+   * on success, false if there is nothing saved to reconnect to or the attempt failed.
+   */
+  reconnect: () => Promise<boolean>
 }
 
 export const PrinterContext = createContext<PrinterContextValue | null>(null)

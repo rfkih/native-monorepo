@@ -54,3 +54,15 @@ export function clearPrinterConfig(): void {
     /* ignore */
   }
 }
+
+/**
+ * Whether THIS print should pulse the cash drawer: only when the device's drawer-kick toggle is
+ * on AND the sale is an actual cash tender. A card/QRIS/other-tender receipt must never pop the
+ * drawer, even with the device toggle left on — popping it for a non-cash sale is a genuine
+ * loss-prevention gap, not a cosmetic one (see ThermalReceipt's `cashTender` prop and usePrinter's
+ * `printReceipt` doc, which is the caller). A pure predicate so the policy is testable without a
+ * DOM/mounted printer context.
+ */
+export function shouldKickDrawer(deviceDrawerKick: boolean, cashTender: boolean): boolean {
+  return deviceDrawerKick && cashTender
+}
