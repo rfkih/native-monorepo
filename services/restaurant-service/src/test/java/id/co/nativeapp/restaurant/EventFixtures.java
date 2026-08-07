@@ -4,6 +4,7 @@ import id.co.nativeapp.events.AvroSerde;
 import id.co.nativeapp.events.Base64ByteArraySerializer;
 import id.co.nativeapp.restaurant.entitlement.messaging.EntitlementEventListener;
 import id.co.nativeapp.restaurant.entitlement.messaging.EntitlementEventSchemas;
+import id.co.nativeapp.restaurant.payment.messaging.PaymentChargeSucceededConsumerSchema;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Map;
@@ -58,6 +59,45 @@ public final class EventFixtures {
     publish(
         bootstrapServers,
         EntitlementEventSchemas.REVOKED_TOPIC,
+        companyId,
+        eventId,
+        AvroSerde.serialize(event));
+  }
+
+  /**
+   * Builds a {@code PaymentChargeSucceeded} record (ADR 0045) the way payment-service + Debezium
+   * would emit it. {@code referenceId} is {@code null} for the restaurant shape (its capture key is
+   * {@code paymentId}).
+   */
+  @SuppressWarnings("checkstyle:ParameterNumber")
+  public static GenericRecord paymentChargeSucceeded(
+      UUID chargeId,
+      String companyId,
+      String vertical,
+      UUID paymentId,
+      UUID businessId,
+      long amountMinor,
+      String currency) {
+    GenericRecord record = new GenericData.Record(PaymentChargeSucceededConsumerSchema.schema());
+    record.put("charge_id", chargeId.toString());
+    record.put("company_id", companyId);
+    record.put("vertical", vertical);
+    record.put("payment_id", paymentId.toString());
+    record.put("reference_id", null);
+    record.put("business_id", businessId.toString());
+    record.put("amount_minor", amountMinor);
+    record.put("currency", currency);
+    record.put("provider", "MIDTRANS");
+    record.put("provider_txn_id", "mt-txn-test");
+    record.put("succeeded_at", Instant.now().toEpochMilli());
+    return record;
+  }
+
+  public static void publishPaymentChargeSucceeded(
+      String bootstrapServers, String companyId, UUID eventId, GenericRecord event) {
+    publish(
+        bootstrapServers,
+        PaymentChargeSucceededConsumerSchema.TOPIC,
         companyId,
         eventId,
         AvroSerde.serialize(event));

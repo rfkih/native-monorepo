@@ -7,6 +7,8 @@ import id.co.nativeapp.restaurant.loyaltyref.messaging.LoyaltyRefDecodeException
 import id.co.nativeapp.restaurant.loyaltyref.messaging.LoyaltyRefMissingEventIdException;
 import id.co.nativeapp.restaurant.outletref.messaging.UserOutletAssignmentDecodeException;
 import id.co.nativeapp.restaurant.outletref.messaging.UserOutletAssignmentMissingEventIdException;
+import id.co.nativeapp.restaurant.payment.messaging.PaymentChargeSucceededDecodeException;
+import id.co.nativeapp.restaurant.payment.messaging.PaymentChargeSucceededMissingEventIdException;
 import java.util.HashMap;
 import java.util.Map;
 import org.apache.kafka.clients.producer.ProducerConfig;
@@ -50,7 +52,13 @@ import org.springframework.util.backoff.FixedBackOff;
  *   <li>{@link LoyaltyRefDecodeException} — a {@code LoyaltyBalanceChanged}/{@code
  *       GiftCardStateChanged} payload is not valid Avro (ADR 0027, Phase 4);
  *   <li>{@link LoyaltyRefMissingEventIdException} — same as above, missing/invalid {@code id}
- *       header.
+ *       header;
+ *   <li>{@link PaymentChargeSucceededDecodeException} — a {@code PaymentChargeSucceeded} payload is
+ *       not valid Avro (ADR 0045);
+ *   <li>{@link PaymentChargeSucceededMissingEventIdException} — same as above, missing/invalid
+ *       {@code id} header. Business-level anomalies on this event (unknown payment, state/amount
+ *       mismatch, a failed capture) are parked in the error inbox instead of thrown, so they never
+ *       reach this classifier.
  * </ul>
  */
 @Configuration
@@ -106,7 +114,9 @@ public class KafkaConfig {
         LoyaltyRefDecodeException.class,
         LoyaltyRefMissingEventIdException.class,
         EntitlementDecodeException.class,
-        EntitlementMissingEventIdException.class);
+        EntitlementMissingEventIdException.class,
+        PaymentChargeSucceededDecodeException.class,
+        PaymentChargeSucceededMissingEventIdException.class);
     return handler;
   }
 
