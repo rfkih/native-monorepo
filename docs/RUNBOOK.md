@@ -180,6 +180,49 @@ NOTE: loyalty-service is NOT in `scripts/start-dev-services.ps1` — the gift-ca
 (`GiftCardSold` → loyalty → `GiftCardStateChanged` → restaurant `gift_card_ref`) is inert without
 it. Launch its jar manually (any free port, e.g. 8093) with the same dev env vars the script sets.
 
+## QRIS modes + Midtrans gateway drill (ADR 0045)
+
+payment-service (:8091, DB `payment_service`) owns QRIS modes + PSP charges. On an EXISTING dev
+stack the Postgres init won't re-run — create the role/DB manually once
+(`CREATE ROLE payment_service LOGIN PASSWORD 'payment_service' REPLICATION; CREATE DATABASE
+payment_service OWNER payment_service;` + `GRANT ALL ON SCHEMA public TO payment_service` inside
+it), or `down -v`. Register the Debezium connector like every other service:
+`curl -X POST -H "Content-Type: application/json" --data @docker/debezium/payment-outbox-connector.json localhost:18083/connectors`.
+
+Env: `NATIVE_PII_KEY` (credential encryption; dev default committed),
+`NATIVE_PAYMENT_WEBHOOK_BASE_URL` = the PUBLIC gateway origin Midtrans must reach (the UAT Funnel
+URL; blank in local dev → the per-charge callback header is omitted and settlement arrives via
+`/sync`).
+
+**STATIC drill** (no PSP at all): owner PUT `/api/v1/payment-settings` `{mode: "STATIC"}` → POST
+`.../static-qr` (multipart `file`, jpeg/png/webp ≤ 2 MiB) → the till's QRIS pending panel and the
+customer display show the image; capture stays "Mark as paid" (Tandai lunas).
+
+**GATEWAY drill** (Midtrans SANDBOX, merchant's own account):
+1. Owner: PUT `/api/v1/payment-settings` `{mode:"GATEWAY", provider:"MIDTRANS",
+   environment:"SANDBOX", serverKey:"SB-Mid-server-…"}` (write-only — reads return `last4` only;
+   ciphertext at rest, verify via psql: `server_key_encrypted` is bytes, never the key).
+2. Till: QRIS checkout creates the PENDING payment as usual, then
+   `POST /api/v1/payment-charges` (`Idempotency-Key: charge:<paymentId>:1`) → 201 with
+   `qrString` — scan with the Midtrans sandbox simulator. Poll `GET /payment-charges/{id}`.
+3. Settlement path A (webhook): Midtrans calls
+   `POST /api/v1/psp-webhooks/midtrans/{companyId}` (per-charge `X-Override-Notification` — needs
+   the public URL). Path B (no tunnel): `POST /payment-charges/{id}/sync` applies the same
+   transition. Either way: charge → SUCCEEDED + ONE `PaymentChargeSucceeded` outbox row → the
+   vertical consumer runs its EXISTING capture → sale + `SaleRecorded` → finance debits 1901.
+4. Negative drills: cancel-vs-paid race (`/cancel` when the sandbox already settled → SUCCEEDED,
+   capture proceeds — money is never swallowed); tampered `signature_key` → uniform 401; unknown
+   `order_id` / wrong `gross_amount` / settlement AFTER a local cancel → parked in `error_log`
+   (sources `payment.psp-webhook.*`), answered 200, NO capture.
+5. Bank payout: reconcile the (net-of-MDR) deposit with category `QRIS_CLEARING` + `feeMinor` →
+   `Dr BANK (net) + Dr 5720 (fee) / Cr 1901 (gross)` (finance V52).
+
+**OPS — parked webhook anomalies** (`error_log`, `source LIKE 'payment.psp-webhook.%'`): these are
+"money moved at the PSP with no local capture" cases. `late-settlement` after a cashier cancel =
+refund the customer from the MERCHANT's own Midtrans dashboard (Native never holds funds);
+`amount-mismatch`/`unknown-order` = investigate before any manual capture. Never replay these
+blind.
+
 ## Tear down
 ```bash
 docker compose -f docker/compose.dev.yml down       # keep the Postgres volume (data persists)

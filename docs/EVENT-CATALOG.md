@@ -75,7 +75,7 @@ has landed yet — the status names the phases that will land them.
 | **`TrialBalancePublished`** | **finance** (member within-company close) | **finance** (group consolidation) | **company_id, group_id, period, base_currency, reconciled, uses_illustrative_rules, lines[]** | **LIVE (CONSUMER P3d SEAM 2 group_trial_balance ingest; PRODUCER P3d SEAM 4a within-company close)** |
 | **`ConsolidationClosed`** | **finance** (within-company + group close) | **shell, notification** | **company_id (or group_id), period** | **LIVE (PRODUCER P3d SEAM 4a; notification consumer #22)** |
 | **`DeliveryReceipt`** | **notification-service** | **(audit/observability sinks; re-send policy)** | **notification_id, company_id, channel, status, provider_ref, delivered_at** | **LIVE (#22)** |
-| **`PaymentChargeSucceeded`** | **payment-service** | **restaurant-service, carwash-service, barbershop-service** (each filters on `vertical`) | **charge_id, company_id, vertical, payment_id, reference_id?, business_id, amount_minor, currency, provider, provider_txn_id?, succeeded_at** | **PRODUCER LIVE (ADR 0045: webhook + sync settlement transitions emit via the outbox; Debezium `payment-outbox-connector`); `restaurant-service` consumer LIVE; carwash-service/barbershop-service consumers follow, one commit each** |
+| **`PaymentChargeSucceeded`** | **payment-service** | **restaurant-service, carwash-service, barbershop-service** (each filters on `vertical`) | **charge_id, company_id, vertical, payment_id, reference_id?, business_id, amount_minor, currency, provider, provider_txn_id?, succeeded_at** | **LIVE (ADR 0045): producer (webhook + sync settlement transitions, outbox, Debezium `payment-outbox-connector`) AND all three vertical consumers built — each runs its existing idempotent capture writer** |
 
 ---
 
@@ -2350,13 +2350,14 @@ VOIDED/missing/amount-mismatch parks in the error inbox, processed-marked, and n
 - **Outbox `event_type`:** `PaymentChargeSucceeded`
 - **Schema:** `libs/contracts/src/main/resources/avro/PaymentChargeSucceeded.avsc`
 - **Full name:** `id.co.nativeapp.events.payment.PaymentChargeSucceeded`
-- **Status:** PRODUCER LIVE — the webhook ({@code POST /api/v1/psp-webhooks/midtrans/{companyId}})
-  and the `/sync` fallback both emit through the same optimistic-guarded transition; Debezium ships
-  it via `docker/debezium/payment-outbox-connector.json`. Vertical consumers land one commit each:
-  `restaurant-service` LIVE (`payment.messaging.PaymentChargeSucceededListener` →
-  `PaymentChargeSucceededWriter`, dedupe by event id, park-don't-drop for unknown
-  payment/state-mismatch/amount-mismatch/capture-failed, then the existing
-  `PaymentCaptureWriter.capture(payment_id)`); `carwash-service`/`barbershop-service` follow.
+- **Status:** LIVE — the webhook (`POST /api/v1/psp-webhooks/midtrans/{companyId}`) and the
+  `/sync` fallback both emit through the same optimistic-guarded transition; Debezium ships it via
+  `docker/debezium/payment-outbox-connector.json`. ALL THREE vertical consumers are built
+  (`payment.messaging.PaymentChargeSucceededListener` → `PaymentChargeSucceededWriter` in each:
+  dedupe by event id, park-don't-drop for unknown-payment/state-mismatch/amount-mismatch/
+  capture-failed, then the existing capture writer — restaurant
+  `PaymentCaptureWriter.capture(payment_id)`; carwash/barbershop
+  `TicketCaptureWriter.capture(reference_id)`).
 
 **Key fields**
 

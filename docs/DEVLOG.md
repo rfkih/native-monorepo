@@ -5,6 +5,28 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-07 — QRIS payment modes SHIPPED end-to-end (ADR 0045): 12 commits, all gates green
+
+The whole program landed the same day it was planned. Per-company **MANUAL / STATIC / GATEWAY**
+QRIS with per-outlet overrides: the owner's `/settings/payments` page (mode cards, static-image
+upload with magic-byte verification, write-only AES-256-GCM Midtrans credentials showing only
+last4), the till's STATIC panel (merchant's own QR + Tandai lunas) and GATEWAY panel (per-sale
+dynamic QR from the **merchant's own Midtrans account**, countdown, auto-receipt on capture,
+manual override always available, customer-display mirror). The money loop: console orchestrates
+vertical-PENDING → payment-service charge (two-tx create, one-live-charge-per-payment,
+replay-by-key) → Midtrans → **signed anonymous webhook** (`/api/v1/psp-webhooks/midtrans/
+{companyId}`, provisional-bind → RLS-scoped loads → constant-time sha512, uniform 401, park-don't-
+drop for unknown-order/amount-mismatch/late-settlement) or the `/sync` fallback →
+`PaymentChargeSucceeded` (outbox, exactly-once via optimistic version) → each vertical's EXISTING
+idempotent capture writer → `SaleRecorded` → finance debits 1901 with ZERO GL change. Bank payout
+sweep: finance V52 `QRIS_CLEARING` reconcile category with the MDR fee leg (`Dr BANK net + Dr 5720
+fee / Cr 1901 gross`). Gateway edge: owner-only settings route + POS carve-outs + POS charges
+route + the fleet's third anonymous route (own `anon:psp-webhook:` bucket). Residuals (in the
+ADR): bills GATEWAY (no Payment row on bills), programmatic QRIS refunds (out-of-band via the
+merchant's dashboard), service-vertical/bills customer-display QR, tier-gating GATEWAY,
+`X-Override-Notification` to re-verify against current Midtrans docs at the sandbox drill.
+Full plan: `~/.claude/plans/nested-wibbling-rabin.md`.
+
 ## 2026-08-07 — QRIS payment modes program started: payment-service scaffolded (ADR 0045)
 
 QRIS goes real (ADR 0045, supersedes 0007): per-company modes **MANUAL** (today's mark-as-paid,
