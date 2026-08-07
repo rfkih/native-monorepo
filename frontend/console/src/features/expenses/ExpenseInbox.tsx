@@ -13,6 +13,8 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Field } from '@/components/ui/Field'
 import { Spinner } from '@/components/ui/Spinner'
+import { MobileSheet } from '@/components/mobile/MobileSheet'
+import { useIsPhone } from '@/components/mobile/useIsPhone'
 import { EmptyState } from '@/features/_shared/financeUi'
 import { DialogOverlay } from '@/features/org/parts'
 import { useSession } from '@/lib/session'
@@ -184,6 +186,75 @@ function Detail({ label, value }: { label: string; value: string }) {
   )
 }
 
+/** The read-only claim view (status + amount, facts grid, note, receipt) — shared verbatim
+ *  between the desktop dialog and the phone decision sheet. No title, no action buttons. */
+function DecisionBody({
+  claim,
+  loading,
+  receipt,
+  locale,
+}: {
+  claim: ExpenseClaimDetail | null | undefined
+  loading: boolean
+  receipt: ReturnType<typeof useManagerReceiptUrl>
+  locale: string
+}) {
+  const { t } = useTranslation()
+  if (loading || !claim) return <Spinner className="text-brand-500" />
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center gap-3">
+        <ClaimStatusBadge status={claim.status} />
+        <span className="tnum font-mono text-xl font-semibold text-ink">
+          {formatMoney(claim.amountMinor, claim.currency, locale)}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 rounded-2xl border border-line bg-surface p-4 text-sm">
+        <Detail label={t('me.expenses.detail.date')} value={formatDate(claim.expenseDate, locale)} />
+        <Detail label={t('me.expenses.detail.merchant')} value={claim.merchant || '—'} />
+        <Detail
+          label={t('me.expenses.detail.method')}
+          value={t(`expenses.reimbursementMethod.${claim.reimbursementMethod}`)}
+        />
+      </div>
+
+      {claim.note ? (
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wider text-ink-3">
+            {t('me.expenses.detail.note')}
+          </div>
+          <p className="mt-0.5 whitespace-pre-wrap text-sm text-ink-2">{claim.note}</p>
+        </div>
+      ) : null}
+
+      <div>
+        <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-ink-3">
+          {t('me.expenses.detail.receiptTitle')}
+        </div>
+        {receipt.status === 'loading' ? (
+          <div className="flex items-center gap-2 text-sm text-ink-3">
+            <Spinner /> {t('me.expenses.detail.receiptLoading')}
+          </div>
+        ) : receipt.status === 'ready' && receipt.url ? (
+          <img
+            src={receipt.url}
+            alt={t('me.expenses.detail.receiptTitle')}
+            className="max-h-64 w-full rounded-xl border border-line object-contain"
+          />
+        ) : receipt.status === 'error' ? (
+          <p className="text-sm text-loss">{t('me.expenses.detail.receiptError')}</p>
+        ) : (
+          <div className="flex items-center gap-2 text-sm text-ink-3">
+            <ImageOff className="size-4" aria-hidden="true" />
+            {t('me.expenses.detail.receiptNone')}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function DecisionDrawer({
   id,
   companyId,
@@ -198,113 +269,100 @@ function DecisionDrawer({
   onClose: () => void
 }) {
   const { t } = useTranslation()
+  const isPhone = useIsPhone()
   const detail = useClaim({ companyId, actor, id, enabled: true })
   const receipt = useManagerReceiptUrl({ companyId, actor, id, enabled: true })
   const [dialog, setDialog] = useState<'approve' | 'refuse' | null>(null)
 
   const claim = detail.data
 
+  const activeForm =
+    dialog === 'approve' && claim ? (
+      <ApproveDialog
+        claim={claim}
+        companyId={companyId}
+        actor={actor}
+        onClose={() => setDialog(null)}
+        onDecided={onClose}
+      />
+    ) : dialog === 'refuse' && claim ? (
+      <RefuseDialog
+        claim={claim}
+        companyId={companyId}
+        actor={actor}
+        onClose={() => setDialog(null)}
+        onDecided={onClose}
+      />
+    ) : null
+
+  // Phone (Native Console Android): a full-height decision sheet — scrollable claim detail,
+  // sticky Refuse/Approve footer. The approve/refuse forms (comment rules unchanged) swap into
+  // the sheet body.
+  if (isPhone) {
+    return (
+      <MobileSheet onClose={onClose} ariaLabel={t('expenses.inbox.decision.title')} height="full">
+        {activeForm ? (
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-7 pt-2">{activeForm}</div>
+        ) : (
+          <>
+            <div className="shrink-0 border-b border-line px-5 pb-3.5 pt-1 text-[17px] font-bold text-ink">
+              {t('expenses.inbox.decision.title')}
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+              <DecisionBody claim={claim} loading={detail.isLoading} receipt={receipt} locale={locale} />
+            </div>
+            <div className="flex shrink-0 gap-2.5 border-t border-line px-5 pb-7 pt-3.5">
+              <button
+                type="button"
+                disabled={!claim}
+                onClick={() => setDialog('refuse')}
+                className="h-14 flex-1 rounded-2xl border border-loss/30 bg-surface text-[14.5px] font-bold text-loss transition-colors hover:bg-tint-loss disabled:opacity-50"
+              >
+                {t('expenses.actions.refuse')}
+              </button>
+              <button
+                type="button"
+                disabled={!claim}
+                onClick={() => setDialog('approve')}
+                className="h-14 flex-1 rounded-2xl bg-emerald text-[14.5px] font-bold text-on-emerald transition-colors hover:bg-emerald-2 disabled:opacity-50"
+              >
+                {t('expenses.actions.approve')}
+              </button>
+            </div>
+          </>
+        )}
+      </MobileSheet>
+    )
+  }
+
   return (
     <DialogOverlay onClose={onClose}>
-      {dialog === 'approve' && claim ? (
-        <ApproveDialog
-          claim={claim}
-          companyId={companyId}
-          actor={actor}
-          onClose={() => setDialog(null)}
-          onDecided={onClose}
-        />
-      ) : dialog === 'refuse' && claim ? (
-        <RefuseDialog
-          claim={claim}
-          companyId={companyId}
-          actor={actor}
-          onClose={() => setDialog(null)}
-          onDecided={onClose}
-        />
-      ) : (
+      {activeForm ?? (
         <div className="space-y-5">
           <h2 className="font-display text-lg font-semibold text-ink">
             {t('expenses.inbox.decision.title')}
           </h2>
 
-          {detail.isLoading || !claim ? (
-            <Spinner className="text-brand-500" />
-          ) : (
-            <>
-              <div className="flex items-center gap-3">
-                <ClaimStatusBadge status={claim.status} />
-                <span className="tnum font-mono text-xl font-semibold text-ink">
-                  {formatMoney(claim.amountMinor, claim.currency, locale)}
-                </span>
-              </div>
+          <DecisionBody claim={claim} loading={detail.isLoading} receipt={receipt} locale={locale} />
 
-              <div className="grid grid-cols-2 gap-3 rounded-2xl border border-line bg-surface p-4 text-sm">
-                <Detail
-                  label={t('me.expenses.detail.date')}
-                  value={formatDate(claim.expenseDate, locale)}
-                />
-                <Detail
-                  label={t('me.expenses.detail.merchant')}
-                  value={claim.merchant || '—'}
-                />
-                <Detail
-                  label={t('me.expenses.detail.method')}
-                  value={t(`expenses.reimbursementMethod.${claim.reimbursementMethod}`)}
-                />
-              </div>
-
-              {claim.note ? (
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-wider text-ink-3">
-                    {t('me.expenses.detail.note')}
-                  </div>
-                  <p className="mt-0.5 whitespace-pre-wrap text-sm text-ink-2">{claim.note}</p>
-                </div>
-              ) : null}
-
-              <div>
-                <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-ink-3">
-                  {t('me.expenses.detail.receiptTitle')}
-                </div>
-                {receipt.status === 'loading' ? (
-                  <div className="flex items-center gap-2 text-sm text-ink-3">
-                    <Spinner /> {t('me.expenses.detail.receiptLoading')}
-                  </div>
-                ) : receipt.status === 'ready' && receipt.url ? (
-                  <img
-                    src={receipt.url}
-                    alt={t('me.expenses.detail.receiptTitle')}
-                    className="max-h-64 w-full rounded-xl border border-line object-contain"
-                  />
-                ) : receipt.status === 'error' ? (
-                  <p className="text-sm text-loss">{t('me.expenses.detail.receiptError')}</p>
-                ) : (
-                  <div className="flex items-center gap-2 text-sm text-ink-3">
-                    <ImageOff className="size-4" aria-hidden="true" />
-                    {t('me.expenses.detail.receiptNone')}
-                  </div>
-                )}
-              </div>
-
-              <div className="flex flex-wrap justify-end gap-2 pt-1">
-                <Button type="button" variant="outline" onClick={onClose}>
-                  {t('me.expenses.detail.close')}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="text-loss hover:bg-tint-loss"
-                  onClick={() => setDialog('refuse')}
-                >
-                  {t('expenses.actions.refuse')}
-                </Button>
-                <Button type="button" onClick={() => setDialog('approve')}>
-                  {t('expenses.actions.approve')}
-                </Button>
-              </div>
-            </>
-          )}
+          {claim ? (
+            <div className="flex flex-wrap justify-end gap-2 pt-1">
+              <Button type="button" variant="outline" onClick={onClose}>
+                {t('me.expenses.detail.close')}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="text-loss hover:bg-tint-loss"
+                onClick={() => setDialog('refuse')}
+              >
+                {t('expenses.actions.refuse')}
+              </Button>
+              <Button type="button" onClick={() => setDialog('approve')}>
+                {t('expenses.actions.approve')}
+              </Button>
+            </div>
+          ) : null}
         </div>
       )}
     </DialogOverlay>
