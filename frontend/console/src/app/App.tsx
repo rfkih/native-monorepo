@@ -94,6 +94,12 @@ const PaymentSettings = lazy(() =>
 const MyExpenses = lazy(() =>
   import('@/features/expenses/MyExpenses').then((m) => ({ default: m.MyExpenses })),
 )
+const MePayslipsScreen = lazy(() =>
+  import('@/features/me/MePayslipsScreen').then((m) => ({ default: m.MePayslipsScreen })),
+)
+const MeTimeoffScreen = lazy(() =>
+  import('@/features/me/MeTimeoffScreen').then((m) => ({ default: m.MeTimeoffScreen })),
+)
 const ExpensesHub = lazy(() =>
   import('@/features/expenses/ExpensesHub').then((m) => ({ default: m.ExpensesHub })),
 )
@@ -400,6 +406,10 @@ export function App() {
           {/* My expenses (ADR 0030, Phase E6) — same gate as /me itself: never page-restricted, so
               a login can never be locked out of submitting its own reimbursement claims. */}
           <Route path="/me/expenses" element={<MyExpenses />} />
+          {/* Phone-only section screens (Native Console Android) — same open gate as /me; at
+              tablet width and up each bounces back to the inline /me sections. */}
+          <Route path="/me/payslips" element={<MePayslipsScreen />} />
+          <Route path="/me/timeoff" element={<MeTimeoffScreen />} />
 
           {/* Printer settings (ADR 0039) — a per-DEVICE thermal-printer pairing, so it is NOT
               page-gated: whoever sets up a till (cashier or manager) must be able to connect it.

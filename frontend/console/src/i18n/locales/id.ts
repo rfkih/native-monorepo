@@ -48,6 +48,14 @@ export const id = {
         empty: 'Belum ada slip gaji yang diposting tahun ini.',
       },
     },
+    home: {
+      leaveRemaining: 'Sisa cuti',
+      daysUnit: 'hari',
+      claimsPending: 'Klaim menunggu',
+      claimsUnit: 'pengajuan',
+      personalData: 'Data pribadi',
+      piiHint: 'NIK dan rekening ditampilkan tersamar. Hubungi HR untuk mengubahnya.',
+    },
     sales: {
       title: 'Penjualan bulan ini',
       mySales: 'Penjualan saya',

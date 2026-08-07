@@ -20,13 +20,16 @@ import { useMyClaims } from '@/features/expenses/api'
 import { hasAnyRole, useAuth } from '@/lib/authContext'
 import { AUTH_MODE } from '@/lib/config'
 import { localeOf } from '@/i18n'
+import { useIsPhone } from '@/components/mobile/useIsPhone'
 import { isNotLinked, useMyProfile, useMySales } from './api'
+import { MeHomePhone } from './MeHomePhone'
 import { MyTimeoff } from './MyTimeoff'
 import { PayslipsSection } from './PayslipsSection'
 
 export function Me() {
   const { t, i18n } = useTranslation()
   const auth = useAuth()
+  const isPhone = useIsPhone()
   const locale = localeOf(i18n.language)
   // In oidc mode apiFetch uses the bearer (identity derived server-side); companyId/actor are only
   // the cache key + the dev-header fallback. An employee-only login has no loaded company session.
@@ -37,6 +40,10 @@ export function Me() {
 
   const profile = useMyProfile({ companyId, actor, enabled: true })
   const notLinked = isNotLinked(profile.error)
+
+  // Below 640px the surface splits into the phone Beranda + per-section screens
+  // (/me/payslips, /me/timeoff) — Native Console Android design. Desktop unchanged.
+  if (isPhone) return <MeHomePhone />
 
   return (
     <div className="min-h-screen bg-paper">

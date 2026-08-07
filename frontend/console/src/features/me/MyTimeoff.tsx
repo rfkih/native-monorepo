@@ -54,15 +54,24 @@ export function MyTimeoff({ companyId, actor }: { companyId: string; actor: stri
 
   return (
     <section>
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-3 max-sm:flex-col max-sm:items-stretch">
         <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
           {t('me.timeoff.title')}
         </h2>
         <div className="flex gap-2">
-          <Button type="button" variant="outline" onClick={() => setDialog({ kind: 'overtime' })}>
+          <Button
+            type="button"
+            variant="outline"
+            className="max-sm:h-[52px] max-sm:flex-1 max-sm:rounded-[15px]"
+            onClick={() => setDialog({ kind: 'overtime' })}
+          >
             {t('me.timeoff.logOvertime')}
           </Button>
-          <Button type="button" onClick={() => setDialog({ kind: 'leave' })}>
+          <Button
+            type="button"
+            className="max-sm:h-[52px] max-sm:flex-1 max-sm:rounded-[15px]"
+            onClick={() => setDialog({ kind: 'leave' })}
+          >
             {t('me.timeoff.requestLeave')}
           </Button>
         </div>

@@ -52,6 +52,14 @@ export const en = {
         empty: 'No payslips posted yet this year.',
       },
     },
+    home: {
+      leaveRemaining: 'Leave remaining',
+      daysUnit: 'days',
+      claimsPending: 'Pending claims',
+      claimsUnit: 'submissions',
+      personalData: 'Personal details',
+      piiHint: 'Your ID number and bank account are shown masked. Contact HR to change them.',
+    },
     sales: {
       title: 'Sales this month',
       mySales: 'My sales',
