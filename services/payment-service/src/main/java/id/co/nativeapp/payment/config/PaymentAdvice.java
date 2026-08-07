@@ -1,5 +1,10 @@
 package id.co.nativeapp.payment.config;
 
+import id.co.nativeapp.payment.charge.domain.ChargeConflictException;
+import id.co.nativeapp.payment.charge.domain.ChargeNotFoundException;
+import id.co.nativeapp.payment.charge.domain.ChargeStateException;
+import id.co.nativeapp.payment.charge.domain.ChargeValidationException;
+import id.co.nativeapp.payment.charge.domain.GatewayUnavailableException;
 import id.co.nativeapp.payment.settings.domain.InvalidQrImageException;
 import id.co.nativeapp.payment.settings.domain.PaymentSettingsNotFoundException;
 import id.co.nativeapp.payment.settings.domain.SettingsForbiddenException;
@@ -83,6 +88,45 @@ public class PaymentAdvice {
     problem.setType(URI.create(TYPE_BASE + "qris-image-too-large"));
     problem.setTitle("Upload too large");
     problem.setDetail("The QRIS image exceeds the 2 MiB limit.");
+    return decorate(problem, request);
+  }
+
+  @ExceptionHandler(ChargeNotFoundException.class)
+  public ProblemDetail handleChargeNotFound(
+      ChargeNotFoundException ex, HttpServletRequest request) {
+    ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.NOT_FOUND);
+    problem.setType(URI.create(TYPE_BASE + "payment-charge-not-found"));
+    problem.setTitle("Not Found");
+    problem.setDetail(ex.getMessage());
+    return decorate(problem, request);
+  }
+
+  @ExceptionHandler({ChargeConflictException.class, ChargeStateException.class})
+  public ProblemDetail handleChargeConflict(RuntimeException ex, HttpServletRequest request) {
+    ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+    problem.setType(URI.create(TYPE_BASE + "payment-charge-conflict"));
+    problem.setTitle("Conflict");
+    problem.setDetail(ex.getMessage());
+    return decorate(problem, request);
+  }
+
+  @ExceptionHandler(ChargeValidationException.class)
+  public ProblemDetail handleChargeValidation(
+      ChargeValidationException ex, HttpServletRequest request) {
+    ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.UNPROCESSABLE_ENTITY);
+    problem.setType(URI.create(TYPE_BASE + "payment-charge-invalid"));
+    problem.setTitle("Invalid charge request");
+    problem.setDetail(ex.getMessage());
+    return decorate(problem, request);
+  }
+
+  @ExceptionHandler(GatewayUnavailableException.class)
+  public ProblemDetail handleGatewayUnavailable(
+      GatewayUnavailableException ex, HttpServletRequest request) {
+    ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.BAD_GATEWAY);
+    problem.setType(URI.create(TYPE_BASE + "psp-unavailable"));
+    problem.setTitle("Payment gateway unavailable");
+    problem.setDetail(ex.getMessage());
     return decorate(problem, request);
   }
 

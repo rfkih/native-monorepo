@@ -52,6 +52,20 @@ native:
     # PiiEncryptionProperties javadoc). The committed default below is a DEV/TEST-ONLY placeholder,
     # never a real secret.
     key: ${NATIVE_PII_KEY:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=}
+  payment:
+    # The PUBLIC gateway origin Midtrans must reach for the per-charge webhook callback
+    # (X-Override-Notification). Blank (the default) omits the header — settlement then arrives
+    # via POST /payment-charges/{id}/sync. Set to the UAT Funnel / prod origin in real deploys.
+    webhook-base-url: ${NATIVE_PAYMENT_WEBHOOK_BASE_URL:}
+    midtrans:
+      # Base URLs are constants of the Midtrans platform; overridable ONLY so tests can point at
+      # a local stub server. The merchant's environment (SANDBOX vs PRODUCTION) selects which one.
+      sandbox-base-url: ${NATIVE_MIDTRANS_SANDBOX_BASE_URL:https://api.sandbox.midtrans.com}
+      production-base-url: ${NATIVE_MIDTRANS_PRODUCTION_BASE_URL:https://api.midtrans.com}
+      connect-timeout-ms: ${NATIVE_MIDTRANS_CONNECT_TIMEOUT_MS:2000}
+      read-timeout-ms: ${NATIVE_MIDTRANS_READ_TIMEOUT_MS:10000}
+      # Midtrans custom_expiry for the dynamic QR — how long the customer has to scan and pay.
+      expiry-minutes: ${NATIVE_MIDTRANS_EXPIRY_MINUTES:15}
 
 management:
   endpoints:

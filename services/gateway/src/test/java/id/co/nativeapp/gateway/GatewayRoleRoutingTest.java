@@ -2186,6 +2186,25 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
   }
 
   @Test
+  void aCashierCanReachThePaymentChargesRoute() throws Exception {
+    // Dynamic-QRIS charges are a till surface (ADR 0045): the cashier creates/polls/cancels the
+    // charge for its own PENDING payment. Capture never happens on this surface.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/payment-charges/some-charge-id")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/payment-charges/some-charge-id");
+  }
+
+  @Test
   void anOwnerCanReachThePaymentSettingsAdminRoute() throws Exception {
     String token = obtainAccessToken();
 

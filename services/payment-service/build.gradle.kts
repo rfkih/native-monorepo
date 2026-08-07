@@ -91,6 +91,13 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.testcontainers:testcontainers-postgresql")
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
+    // A lightweight stub for the Midtrans Core API edge (the gateway module's idiom): the
+    // MidtransClient unit tests and the charge-flow acceptance test point the configurable base
+    // URL at it — no real PSP in any test. okhttp is pinned to mockwebserver's own line: the Boot
+    // BOM manages a newer okhttp whose internals mockwebserver 4.x can't load
+    // (NoClassDefFoundError okhttp3/internal/Util).
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    testImplementation("com.squareup.okhttp3:okhttp:4.12.0")
 }
 
 // libs/security (#16) ships an auto-configuration whose DEFAULT (non-dev) path stands up a JWT

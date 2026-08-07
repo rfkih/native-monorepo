@@ -751,6 +751,27 @@ public class RoutingConfig {
         .build();
   }
 
+  /**
+   * Dynamic-QRIS charges ({@code /api/v1/payment-charges/**}) — POS_ROLES, like every till surface
+   * (ADR 0045): the cashier creates the charge for its own PENDING payment, polls the QR, and
+   * syncs/cancels. The money-capture path is NOT here — it runs through the vertical's idempotent
+   * consumer, and the consumer independently verifies amount/currency, so this surface cannot move
+   * money on its own.
+   */
+  @Bean
+  RouterFunction<ServerResponse> paymentChargesRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("payment-service-charges")
+        .route(path("/api/v1/payment-charges/**"), http())
+        .before(uri(routes.paymentService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(POS_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
   // ---------------------------------------------------------------------------
   // employee-service (self-service /me — every business role)
   // ---------------------------------------------------------------------------
