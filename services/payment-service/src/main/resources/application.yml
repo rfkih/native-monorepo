@@ -1,0 +1,58 @@
+spring:
+  application:
+    name: payment-service
+
+  datasource:
+    # Connect as the service's own NON-superuser role (no BYPASSRLS) so RLS is
+    # genuinely enforced. Overridden per environment; in real deploys the creds
+    # come from Vault (short-TTL dynamic credentials).
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/payment_service}
+    username: ${DB_USERNAME:payment_service}
+    password: ${DB_PASSWORD:payment_service}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      # The schema is owned by Flyway; the app only validates that the mapping
+      # matches the migrated schema and never mutates DDL.
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # Lean observability: liveness/readiness + Prometheus metrics. /healthz is
+        # the simple LB probe (see HealthController); richer probes under /actuator.
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      # Pinned explicitly (never rely on Spring's implicit default): the unauthenticated
+      # /actuator/health/** the gateway permits must NEVER leak DB internals (version,
+      # connection details). `never` keeps the body a bare {"status":...}.
+      show-details: never
+      # Readiness aggregates the DB indicator (ENGINEERING-STANDARDS §7): a pod reports
+      # NOT_READY (and is pulled from rotation) while its schema is still hydrating or
+      # the DB is unreachable. Liveness stays the cheap /healthz probe (no DB hit) so a
+      # transient DB blip never gets the pod killed. No Kafka here (producer-only via
+      # the outbox; Debezium does the transport).
+      group:
+        readiness:
+          include: readinessState, db
+  metrics:
+    tags:
+      service: payment-service
+
+# Structured JSON logs are defined ONCE in libs/observability's shared logback-native-json.xml
+# (ENGINEERING-STANDARDS §5), included via this service's logback-spring.xml.

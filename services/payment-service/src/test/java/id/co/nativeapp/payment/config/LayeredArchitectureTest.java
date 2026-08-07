@@ -1,0 +1,493 @@
+package id.co.nativeapp.payment.config;
+
+import static com.tngtech.archunit.base.DescribedPredicate.describe;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
+import static com.tngtech.archunit.library.Architectures.layeredArchitecture;
+
+import com.tngtech.archunit.core.domain.JavaClass;
+import com.tngtech.archunit.core.domain.JavaClasses;
+import com.tngtech.archunit.core.domain.JavaField;
+import com.tngtech.archunit.core.domain.JavaMethod;
+import com.tngtech.archunit.core.importer.ClassFileImporter;
+import com.tngtech.archunit.core.importer.ImportOption;
+import com.tngtech.archunit.lang.ArchCondition;
+import com.tngtech.archunit.lang.ArchRule;
+import com.tngtech.archunit.lang.ConditionEvents;
+import com.tngtech.archunit.lang.SimpleConditionEvent;
+import java.util.Set;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+
+/**
+ * Enforces the Native LAYERED architecture (controller -> service -> repository -> domain).
+ *
+ * <p>Cloned from service-template. Several rules carry {@code allowEmptyShould(true)} (and every
+ * layer is {@code optionalLayer()}): the template's own pattern so each rule loads — and is already
+ * enforced — on a freshly cloned service whose first feature packages have not landed yet. Once
+ * feature classes exist the rules bind exactly as in every other service; do not remove the guards,
+ * they are inert afterward.
+ */
+class LayeredArchitectureTest {
+
+  private static final String BASE_PACKAGE = "id.co.nativeapp.payment";
+
+  /**
+   * Fully-qualified names of types that must NEVER hold a monetary amount on a persistent
+   * {@code @Entity}/{@code @Embeddable} (HR-8): the boxed floating types and {@code BigDecimal},
+   * plus the primitive {@code float}/{@code double} (a primitive is not a class "dependency"
+   * ArchUnit's {@code dependOnClassesThat} can see, so a field-type scan is required to cover
+   * {@code double amount}).
+   */
+  private static final Set<String> BANNED_MONEY_FIELD_TYPES =
+      Set.of("float", "double", "java.lang.Float", "java.lang.Double", "java.math.BigDecimal");
+
+  /** Simple names of the RLS wiring beans whose single source of truth is libs/tenant. */
+  private static final Set<String> RLS_WIRING_TYPES =
+      Set.of("RlsConnectionInitializer", "RlsTransactionSynchronizer", "RlsAutoApplyAspect");
+
+  /** The Spring request-mapping annotations that mark a controller method as an HTTP handler. */
+  private static final Set<Class<? extends java.lang.annotation.Annotation>> HANDLER_MAPPINGS =
+      Set.of(
+          org.springframework.web.bind.annotation.RequestMapping.class,
+          org.springframework.web.bind.annotation.GetMapping.class,
+          org.springframework.web.bind.annotation.PostMapping.class,
+          org.springframework.web.bind.annotation.PutMapping.class,
+          org.springframework.web.bind.annotation.PatchMapping.class,
+          org.springframework.web.bind.annotation.DeleteMapping.class);
+
+  private static JavaClasses classes;
+
+  @BeforeAll
+  static void importClasses() {
+    classes =
+        new ClassFileImporter()
+            .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
+            .importPackages(BASE_PACKAGE);
+  }
+
+  /**
+   * The Native LAYERED standard, enforced over the per-feature LAYER sub-packages ({@code
+   * <feature>.controller / .service / .repository / .domain / .dto / .messaging / .projection}).
+   * Layers are matched by package-name suffix (e.g. {@code "..controller.."}), so the single rule
+   * covers every present and future feature package under the service root.
+   *
+   * <p>Direction (downward only): controller -&gt; service -&gt; repository -&gt; domain, with dto
+   * as the boundary-translation layer and messaging as the feature-local event plumbing. Controller
+   * and messaging are the entry points (accessed by no layer); domain is the sink (accessed by all,
+   * accesses none of these); projection holds native-query read models produced by the repository
+   * and consumed (mapped to a dto) by the service. {@code consideringOnlyDependenciesInLayers()}
+   * scopes the check to edges between these layers, ignoring JDK / Spring / libs dependencies.
+   *
+   * <p>Every layer is {@code optionalLayer()}: this freshly cloned service has no feature packages
+   * until the settings/charge features land — the direction rules are already enforced for the day
+   * they do.
+   */
+  @Test
+  void featureLayersRespectTheLayeredArchitecture() {
+    ArchRule rule =
+        layeredArchitecture()
+            .consideringOnlyDependenciesInLayers()
+            .optionalLayer("Controller")
+            .definedBy("..controller..")
+            .optionalLayer("Dto")
+            .definedBy("..dto..")
+            .optionalLayer("Messaging")
+            .definedBy("..messaging..")
+            .optionalLayer("Projection")
+            .definedBy("..projection..")
+            .optionalLayer("Service")
+            .definedBy("..service..")
+            .optionalLayer("Repository")
+            .definedBy("..repository..")
+            .optionalLayer("Domain")
+            .definedBy("..domain..")
+            // Controller is an entry point: nothing depends on a controller.
+            .whereLayer("Controller")
+            .mayNotBeAccessedByAnyLayer()
+            // Messaging is feature-local event plumbing reached only from the service layer (the
+            // producer-side Avro *Schema holders are built by the *Writer service beans); no
+            // controller/repository/domain/dto may reach into it. CODE-STRUCTURE §3.2.
+            .whereLayer("Messaging")
+            .mayOnlyBeAccessedByLayers("Service")
+            // Service is reachable from the controller entry point and from messaging.
+            .whereLayer("Service")
+            .mayOnlyBeAccessedByLayers("Controller", "Messaging")
+            // Repository is a data port used only by the service layer.
+            .whereLayer("Repository")
+            .mayOnlyBeAccessedByLayers("Service")
+            // Domain is the sink: every layer may read it.
+            .whereLayer("Domain")
+            .mayOnlyBeAccessedByLayers("Controller", "Service", "Repository", "Dto", "Messaging")
+            // Dto is the boundary translation layer (request/response/command/result).
+            .whereLayer("Dto")
+            .mayOnlyBeAccessedByLayers("Controller", "Service", "Messaging")
+            // Projection holds native-query read models, produced by the repository and consumed
+            // (mapped to a dto) by the service — reachable from neither the controller nor below.
+            // CODE-STRUCTURE §3.3.
+            .whereLayer("Projection")
+            .mayOnlyBeAccessedByLayers("Service", "Repository")
+            .as(
+                "controller -> service -> repository -> domain (+ dto boundary, feature messaging,"
+                    + " projection read models)");
+    rule.check(classes);
+  }
+
+  @Test
+  void controllersMustNotDependOnRepositories() {
+    ArchRule rule =
+        noClasses()
+            .that()
+            .haveSimpleNameEndingWith("Controller")
+            .should()
+            .dependOnClassesThat()
+            .areAssignableTo(org.springframework.data.repository.Repository.class)
+            .as("controllers go through the service layer, never the repository")
+            .allowEmptyShould(true);
+    rule.check(classes);
+  }
+
+  @Test
+  void repositoriesAreAccessedOnlyByTheServiceLayer() {
+    ArchRule rule =
+        classes()
+            .that()
+            .areAssignableTo(org.springframework.data.repository.Repository.class)
+            .and()
+            .resideInAPackage(BASE_PACKAGE + "..")
+            .should()
+            .onlyHaveDependentClassesThat(
+                describe(
+                    "are in the service layer (*Service/*Writer/*Reader) or are repositories",
+                    javaClass ->
+                        javaClass.getSimpleName().endsWith("Service")
+                            || javaClass.getSimpleName().endsWith("Writer")
+                            || javaClass.getSimpleName().endsWith("Reader")
+                            || javaClass.isAssignableTo(
+                                org.springframework.data.repository.Repository.class)))
+            .as("repositories are a data port used only from the service layer")
+            .allowEmptyShould(true);
+    rule.check(classes);
+  }
+
+  @Test
+  void repositoriesMustNotDependOnServicesOrControllers() {
+    ArchRule rule =
+        noClasses()
+            .that()
+            .haveSimpleNameEndingWith("Repository")
+            .should()
+            .dependOnClassesThat()
+            .haveSimpleNameEndingWith("Service")
+            .orShould()
+            .dependOnClassesThat()
+            .haveSimpleNameEndingWith("Writer")
+            .orShould()
+            .dependOnClassesThat()
+            .haveSimpleNameEndingWith("Controller")
+            .as("repositories sit below the service layer and never depend upward")
+            .allowEmptyShould(true);
+    rule.check(classes);
+  }
+
+  @Test
+  void servicesMustNotDependOnControllers() {
+    ArchRule rule =
+        noClasses()
+            .that()
+            .haveSimpleNameEndingWith("Service")
+            .or()
+            .haveSimpleNameEndingWith("Writer")
+            .or()
+            .haveSimpleNameEndingWith("Reader")
+            .should()
+            .dependOnClassesThat()
+            .haveSimpleNameEndingWith("Controller")
+            .as("the service layer never depends on the HTTP layer above it")
+            .allowEmptyShould(true);
+    rule.check(classes);
+  }
+
+  @Test
+  void controllersMustNotDependOnEntities() {
+    ArchRule rule =
+        noClasses()
+            .that()
+            .haveSimpleNameEndingWith("Controller")
+            .should()
+            .dependOnClassesThat()
+            .areAnnotatedWith(jakarta.persistence.Entity.class)
+            .as("controllers expose DTOs, never JPA entities (no lazy-load/PII leaks)")
+            .allowEmptyShould(true);
+    rule.check(classes);
+  }
+
+  @Test
+  void restControllersAreNamedController() {
+    ArchRule rule =
+        classes()
+            .that()
+            .areAnnotatedWith(org.springframework.web.bind.annotation.RestController.class)
+            .should()
+            .haveSimpleNameEndingWith("Controller")
+            .as("@RestController classes are named *Controller");
+    rule.check(classes);
+  }
+
+  /**
+   * OpenAPI contract (ENGINEERING-STANDARDS §1.3 / ADR 0008): every HTTP handler on a business
+   * {@code @RestController} carries an {@code @Operation}, so the springdoc-generated {@code
+   * /v3/api-docs} has a human summary for each endpoint instead of a bare inferred operationId. The
+   * {@code config} {@code HealthController} ({@code /healthz}) is infrastructure, not a business
+   * API, so it is exempt ({@code resideOutsideOfPackage("..config..")}). {@code allowEmptyShould}
+   * so the rule loads (and is already enforced) on a freshly cloned service that has no controller
+   * yet.
+   */
+  @Test
+  void apiHandlersAreDocumentedWithAnOperation() {
+    ArchRule rule =
+        classes()
+            .that()
+            .areAnnotatedWith(org.springframework.web.bind.annotation.RestController.class)
+            .and()
+            .resideOutsideOfPackage("..config..")
+            .should(documentEveryHandlerWithAnOperation())
+            .as(
+                "every @RequestMapping handler on a business @RestController carries an @Operation"
+                    + " (OpenAPI docs — ENGINEERING-STANDARDS §1.3)")
+            .allowEmptyShould(true);
+    rule.check(classes);
+  }
+
+  @Test
+  void springServicesAreNamedService() {
+    ArchRule rule =
+        classes()
+            .that()
+            .areAnnotatedWith(org.springframework.stereotype.Service.class)
+            .should()
+            .haveSimpleNameEndingWith("Service")
+            .as("@Service classes are named *Service")
+            .allowEmptyShould(true);
+    rule.check(classes);
+  }
+
+  @Test
+  void transactionalLivesOnlyInTheServiceLayer() {
+    ArchRule rule =
+        classes()
+            .that()
+            .containAnyMethodsThat(
+                describe(
+                    "are annotated with @Transactional",
+                    method ->
+                        method.isAnnotatedWith(
+                            org.springframework.transaction.annotation.Transactional.class)))
+            .should()
+            .haveSimpleNameEndingWith("Service")
+            .orShould()
+            .haveSimpleNameEndingWith("Writer")
+            .orShould()
+            .haveSimpleNameEndingWith("Reader")
+            .as("tx boundaries live in the service layer so the tx proxy and RLS aspect engage")
+            .allowEmptyShould(true);
+    rule.check(classes);
+  }
+
+  /**
+   * Native-query convention (CLAUDE.md "native-query aliases snake_case; map via projection
+   * interfaces"): every {@code @Query} declared on a repository must be a NATIVE query ({@code
+   * nativeQuery = true}). The companion rule — read queries select only the needed columns into a
+   * projection rather than {@code SELECT *} of the entity — is a return-type convention that
+   * generics erasure makes impractical to assert statically, so it is enforced by code review; this
+   * guard pins the objective half (no JPQL slips back in) so a future repository cannot silently
+   * add a non-native {@code @Query}. CODE-STRUCTURE §3.3.
+   */
+  @Test
+  void repositoryQueriesAreNative() {
+    ArchRule rule =
+        classes()
+            .that()
+            .areAssignableTo(org.springframework.data.repository.Repository.class)
+            .and()
+            .resideInAPackage(BASE_PACKAGE + "..")
+            .should(haveOnlyNativeAtQueryMethods())
+            .as(
+                "every @Query on a repository is a native query (CLAUDE.md native-query convention)")
+            .allowEmptyShould(true);
+    rule.check(classes);
+  }
+
+  /**
+   * HR-8: no monetary amount on a persistent {@code @Entity}/{@code @Embeddable} may be a floating
+   * type ({@code float}/{@code double}, primitive OR boxed) or {@code BigDecimal} — money is the
+   * libs/money {@code Money} (integer minor units + ISO-4217 currency), persisted as the two-column
+   * {@code MoneyEmbeddable}. This covers BOTH {@code @Embeddable} (where the money columns live)
+   * and {@code @Entity}, and BOTH primitive and boxed floating types (a primitive field is not a
+   * class dependency, so a field-type scan is required — {@code dependOnClassesThat} alone would
+   * miss {@code double amount}).
+   */
+  @Test
+  void entitiesHaveNoDecimalMoneyFields() {
+    ArchRule rule =
+        classes()
+            .that()
+            .areAnnotatedWith(jakarta.persistence.Entity.class)
+            .or()
+            .areAnnotatedWith(jakarta.persistence.Embeddable.class)
+            .should(haveNoFloatingPointOrDecimalFields())
+            .as(
+                "money is libs/money Money (minor units + currency), never a float/double/BigDecimal"
+                    + " field (HR-8)")
+            .allowEmptyShould(true);
+    rule.check(classes);
+  }
+
+  /**
+   * Drift guard: the RLS + JPA-auditing wiring has a SINGLE source — libs/tenant's {@code
+   * TenantRlsAutoConfiguration}. No service class may re-declare it by carrying
+   * {@code @EnableTransactionManagement} / {@code @EnableJpaAuditing}, or by declaring a
+   * {@code @Bean} of {@code RlsConnectionInitializer} / {@code RlsTransactionSynchronizer} / {@code
+   * RlsAutoApplyAspect}. A per-service copy would drift from (and could mis-order) the load-bearing
+   * rule-5 aspect, so it is banned statically here rather than discovered later in review.
+   */
+  @Test
+  void servicesDoNotRedeclareTheRlsOrAuditingWiring() {
+    ArchRule rule =
+        classes()
+            .that()
+            .resideInAPackage(BASE_PACKAGE + "..")
+            .should(notRedeclareTheRlsOrAuditingWiring())
+            .as(
+                "the RLS + JPA-auditing wiring is owned solely by libs/tenant"
+                    + " (TenantRlsAutoConfiguration); a service must not redeclare it (HR-5 drift)");
+    rule.check(classes);
+  }
+
+  /**
+   * Positive condition (violated == bad): flags any repository method annotated with {@code @Query}
+   * whose {@code nativeQuery} attribute is not {@code true} (i.e. a JPQL query). Reads the actual
+   * annotation instance so the {@code nativeQuery} flag is inspected, not just the presence of the
+   * annotation.
+   */
+  private static ArchCondition<JavaClass> haveOnlyNativeAtQueryMethods() {
+    return new ArchCondition<>("have only native @Query methods") {
+      @Override
+      public void check(JavaClass item, ConditionEvents events) {
+        for (JavaMethod method : item.getMethods()) {
+          if (method.isAnnotatedWith(org.springframework.data.jpa.repository.Query.class)) {
+            org.springframework.data.jpa.repository.Query query =
+                method.getAnnotationOfType(org.springframework.data.jpa.repository.Query.class);
+            if (!query.nativeQuery()) {
+              events.add(
+                  SimpleConditionEvent.violated(
+                      method,
+                      String.format(
+                          "%s.%s carries a non-native @Query (JPQL) — repository queries must be"
+                              + " native (nativeQuery = true) per the CLAUDE.md native-query"
+                              + " convention",
+                          item.getName(), method.getName())));
+            }
+          }
+        }
+      }
+    };
+  }
+
+  /**
+   * Positive condition (violated == bad): flags any HTTP handler method (one carrying a Spring
+   * request-mapping annotation) that has no {@code io.swagger.v3.oas.annotations.Operation} — the
+   * OpenAPI summary springdoc renders into {@code /v3/api-docs}.
+   */
+  private static ArchCondition<JavaClass> documentEveryHandlerWithAnOperation() {
+    return new ArchCondition<>("document every request-mapping handler with @Operation") {
+      @Override
+      public void check(JavaClass item, ConditionEvents events) {
+        for (JavaMethod method : item.getMethods()) {
+          boolean isHandler = HANDLER_MAPPINGS.stream().anyMatch(a -> method.isAnnotatedWith(a));
+          if (isHandler && !method.isAnnotatedWith(io.swagger.v3.oas.annotations.Operation.class)) {
+            events.add(
+                SimpleConditionEvent.violated(
+                    method,
+                    String.format(
+                        "%s.%s is an HTTP handler with no @Operation — add an OpenAPI"
+                            + " io.swagger.v3.oas.annotations.Operation summary"
+                            + " (ENGINEERING-STANDARDS §1.3)",
+                        item.getName(), method.getName())));
+          }
+        }
+      }
+    };
+  }
+
+  /**
+   * Positive condition (violated == bad): a field-type scan flagging any {@code float}/{@code
+   * double}/{@code Float}/{@code Double}/{@code BigDecimal} field. Covers primitive AND boxed — a
+   * primitive field is not a class dependency, so {@code dependOnClassesThat} would miss {@code
+   * double amount}.
+   */
+  private static ArchCondition<JavaClass> haveNoFloatingPointOrDecimalFields() {
+    return new ArchCondition<>("have no float/double/BigDecimal field") {
+      @Override
+      public void check(JavaClass item, ConditionEvents events) {
+        for (JavaField field : item.getFields()) {
+          String typeName = field.getRawType().getName();
+          if (BANNED_MONEY_FIELD_TYPES.contains(typeName)) {
+            events.add(
+                SimpleConditionEvent.violated(
+                    field,
+                    String.format(
+                        "Field %s.%s is of banned monetary type %s (use libs/money Money /"
+                            + " MoneyEmbeddable, HR-8)",
+                        item.getName(), field.getName(), typeName)));
+          }
+        }
+      }
+    };
+  }
+
+  /**
+   * Positive condition (violated == bad): flags a class that carries
+   * {@code @EnableTransactionManagement} / {@code @EnableJpaAuditing}, or declares a {@code @Bean}
+   * whose return type is one of the libs/tenant RLS wiring types.
+   */
+  private static ArchCondition<JavaClass> notRedeclareTheRlsOrAuditingWiring() {
+    return new ArchCondition<>("not redeclare the libs/tenant RLS / JPA-auditing wiring") {
+      @Override
+      public void check(JavaClass item, ConditionEvents events) {
+        if (item.isAnnotatedWith(
+            org.springframework.transaction.annotation.EnableTransactionManagement.class)) {
+          events.add(
+              SimpleConditionEvent.violated(
+                  item,
+                  item.getName()
+                      + " is annotated @EnableTransactionManagement — that wiring lives ONLY in"
+                      + " libs/tenant's TenantRlsAutoConfiguration (HR-5 drift)"));
+        }
+        if (item.isAnnotatedWith(
+            org.springframework.data.jpa.repository.config.EnableJpaAuditing.class)) {
+          events.add(
+              SimpleConditionEvent.violated(
+                  item,
+                  item.getName()
+                      + " is annotated @EnableJpaAuditing — that wiring lives ONLY in libs/tenant"
+                      + " (TenantRlsAutoConfiguration)"));
+        }
+        for (JavaMethod method : item.getMethods()) {
+          if (method.isAnnotatedWith(org.springframework.context.annotation.Bean.class)
+              && RLS_WIRING_TYPES.contains(method.getRawReturnType().getSimpleName())) {
+            events.add(
+                SimpleConditionEvent.violated(
+                    method,
+                    String.format(
+                        "%s.%s declares an RLS-wiring @Bean (%s) — owned by libs/tenant only"
+                            + " (HR-5 drift)",
+                        item.getName(),
+                        method.getName(),
+                        method.getRawReturnType().getSimpleName())));
+          }
+        }
+      }
+    };
+  }
+}

@@ -44,6 +44,10 @@ CREATE DATABASE notification_service OWNER notification_service;
 CREATE ROLE entitlement_service LOGIN PASSWORD 'entitlement_service' REPLICATION;
 CREATE DATABASE entitlement_service OWNER entitlement_service;
 
+-- ---- payment-service (QRIS modes + PSP charge lifecycle, ADR 0045) ----
+CREATE ROLE payment_service LOGIN PASSWORD 'payment_service' REPLICATION;
+CREATE DATABASE payment_service OWNER payment_service;
+
 -- Each service owns its schema so Flyway (running as the app role) can create its
 -- tables; PostgreSQL 16 revokes CREATE on public from PUBLIC by default.
 \connect org_service
@@ -72,3 +76,6 @@ GRANT ALL ON SCHEMA public TO notification_service;
 
 \connect entitlement_service
 GRANT ALL ON SCHEMA public TO entitlement_service;
+
+\connect payment_service
+GRANT ALL ON SCHEMA public TO payment_service;

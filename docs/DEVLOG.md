@@ -5,6 +5,20 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-07 — QRIS payment modes program started: payment-service scaffolded (ADR 0045)
+
+QRIS goes real (ADR 0045, supersedes 0007): per-company modes **MANUAL** (today's mark-as-paid,
+still the default) / **STATIC** (merchant uploads their own QRIS image; till + customer display
+show it) / **GATEWAY** (dynamic QRIS via the **merchant's own Midtrans account**; auto-capture on
+the signed webhook → `PaymentChargeSucceeded` → the verticals' existing capture writers — zero GL
+change, QRIS already routes to 1901). New **payment-service** scaffolded from service-template
+(package `id.co.nativeapp.payment`, DB/role `payment_service` added to the Postgres init — existing
+dev stacks must create them manually or `down -v`; producer-only, so no processed_event and no
+Kafka dep). V1 baseline = outbox + error_log folded in (the loyalty lesson). ArchUnit suite kept
+verbatim except the template's own `allowEmptyShould`/`optionalLayer` guards extended to every rule
+so the clone is green before its first feature lands. Branch `feat/qris-payments`; full plan at
+`~/.claude/plans/nested-wibbling-rabin.md`.
+
 ## 2026-08-07 — Android till app P0: Capacitor shell + NativePrint SPP spike (ADR 0043 Proposed)
 
 The Bluetooth-Classic printing gap (ADR 0041: Web Bluetooth is BLE-only, the cheap 58 mm printers
