@@ -25,7 +25,7 @@ boundary, a security posture. Routine, local choices do not need one — use a c
 | [0004](0004-openapi-docs-springdoc.md) | Use springdoc-openapi (3.0.x) for OpenAPI docs, piloted in finance-service | Accepted (pilot; extended fleet-wide by [0008](0008-openapi-docs-fleet-rollout.md)) |
 | [0005](0005-error-inbox-and-alerting.md) | Error-inbox + webhook alerting for production-error visibility, piloted in finance-service | Accepted (pilot; extended fleet-wide by [0009](0009-error-inbox-fleet-rollout.md)) |
 | [0006](0006-pos-payment-tenders.md) | POS payment tenders — provider-agnostic port, cash live, digital flagged-pending, revenue-at-capture | Accepted |
-| [0007](0007-real-psp-adapter-webhook.md) | Real payment-service-provider adapter + settlement webhook (the digital-tender switch) | Proposed |
+| [0007](0007-real-psp-adapter-webhook.md) | Real payment-service-provider adapter + settlement webhook (the digital-tender switch) | Superseded by [0045](0045-qris-modes-and-payment-service.md) |
 | [0008](0008-openapi-docs-fleet-rollout.md) | Roll springdoc-openapi out fleet-wide with an `@Operation` ArchUnit enforcer | Accepted |
 | [0009](0009-error-inbox-fleet-rollout.md) | Extract the error-inbox into `libs/error-inbox` and roll it out fleet-wide | Accepted |
 | [0010](0010-distributed-tracing-otel.md) | Wire distributed tracing (Micrometer Tracing + OpenTelemetry) fleet-wide | Accepted |
@@ -56,3 +56,11 @@ boundary, a security posture. Routine, local choices do not need one — use a c
 | [0035](0035-thr-run-type.md) | THR run type — the off-cycle Tunjangan Hari Raya allowance | Accepted |
 | [0036](0036-register-sessions-and-platform-channel-settlements.md) | Register sessions (closing kasir) + online-channel platform settlements | Accepted |
 | [0037](0037-opening-balances-and-business-migration.md) | Opening balances & business migration — the opening balance sheet + brought-forward assets | Accepted |
+| [0038](0038-daily-close-all-tender-and-inventory.md) | Daily close v2 — once-per-day, all-tender reconciliation, inventory stocktake | Accepted |
+| [0039](0039-direct-thermal-printing-escpos.md) | Direct thermal receipt printing (ESC/POS over WebUSB / Web Bluetooth / WebSerial) | Accepted |
+| [0040](0040-traceable-http-error-reference.md) | Traceable HTTP error reference (500s → error_log + a user-quotable reference) | Accepted |
+| [0041](0041-rawbt-bridge-transport.md) | RawBT bridge transport for Bluetooth-Classic thermal printers (Android) | Accepted |
+| [0042](0042-go-live-official-coa-and-tax-rates.md) | Go-live: declare the chart of accounts + tax rates OFFICIAL | Accepted |
+| [0043](0043-native-android-till-app.md) | Native Android till app — Capacitor thin-client + in-process NativePrint bridge | Proposed |
+| [0044](0044-plan-tier-simple-mode.md) | Plan tier & Simple mode — UMKM feature curation | Proposed |
+| [0045](0045-qris-modes-and-payment-service.md) | QRIS payment modes (manual / static image / Midtrans gateway) via a central payment-service | Accepted |

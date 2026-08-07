@@ -1,6 +1,8 @@
 # 0007. Real payment-service-provider adapter + settlement webhook (the digital-tender switch)
 
-- **Status:** Proposed
+- **Status:** Superseded by [0045](0045-qris-modes-and-payment-service.md) — the revenue-at-capture
+  invariant survives; the per-vertical adapter + in-service webhook shape is replaced by a central
+  payment-service
 - **Date:** 2026-06-20
 - **Deciders:** rifki + Claude (pairing)
 - **Related:** [ADR 0006](0006-pos-payment-tenders.md) (the payment tender port this completes); CLAUDE.md
