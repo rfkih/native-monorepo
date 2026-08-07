@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { Segmented } from '@/components/ui/Segmented'
 import { EmptyState } from '@/features/_shared/financeUi'
+import { LedgerPhoneList } from '@/features/_shared/LedgerPhoneList'
+import { useIsPhone } from '@/components/mobile/useIsPhone'
 import { useSession } from '@/lib/session'
 import { localeOf } from '@/i18n'
 import { formatMoney } from '@/lib/money'
@@ -23,6 +25,7 @@ type StatusFilter = BillStatus | 'ALL'
 export function BillsList() {
   const { t, i18n } = useTranslation()
   const { company } = useSession()
+  const isPhone = useIsPhone()
   const locale = localeOf(i18n.language)
   const [status, setStatus] = useState<StatusFilter>('ALL')
 
@@ -83,6 +86,21 @@ export function BillsList() {
         </Card>
       ) : bills.length === 0 ? (
         <EmptyState title={t('ap.bills.empty')} hint={t('ap.bills.emptyHint')} />
+      ) : isPhone ? (
+        /* Phone (Native Console Android): two-line rows instead of the 7-column table. */
+        <LedgerPhoneList
+          locale={locale}
+          rows={bills.map((bill) => ({
+            id: bill.id,
+            to: `/bills/${bill.id}`,
+            party: bill.vendorName,
+            meta: `${bill.billNumber} · ${formatDate(bill.billDate, locale)}`,
+            badge: <BillStatusBadge status={bill.status} />,
+            due: formatDate(bill.dueDate, locale),
+            outstandingMinor: bill.outstandingMinor,
+            currency: bill.currency,
+          }))}
+        />
       ) : (
         <Card className="overflow-hidden rounded-[20px]">
           <table className="w-full text-sm">

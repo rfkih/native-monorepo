@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { Segmented } from '@/components/ui/Segmented'
 import { EmptyState } from '@/features/_shared/financeUi'
+import { LedgerPhoneList } from '@/features/_shared/LedgerPhoneList'
+import { useIsPhone } from '@/components/mobile/useIsPhone'
 import { useSession } from '@/lib/session'
 import { localeOf } from '@/i18n'
 import { formatMoney } from '@/lib/money'
@@ -23,6 +25,7 @@ type StatusFilter = InvoiceStatus | 'ALL'
 export function InvoicesList() {
   const { t, i18n } = useTranslation()
   const { company } = useSession()
+  const isPhone = useIsPhone()
   const locale = localeOf(i18n.language)
   const [status, setStatus] = useState<StatusFilter>('ALL')
 
@@ -83,6 +86,21 @@ export function InvoicesList() {
         </Card>
       ) : invoices.length === 0 ? (
         <EmptyState title={t('ar.invoices.empty')} hint={t('ar.invoices.emptyHint')} />
+      ) : isPhone ? (
+        /* Phone (Native Console Android): two-line rows instead of the 7-column table. */
+        <LedgerPhoneList
+          locale={locale}
+          rows={invoices.map((inv) => ({
+            id: inv.id,
+            to: `/invoices/${inv.id}`,
+            party: inv.customerName,
+            meta: `${inv.invoiceNumber} · ${formatDate(inv.issueDate, locale)}`,
+            badge: <InvoiceStatusBadge status={inv.status} />,
+            due: formatDate(inv.dueDate, locale),
+            outstandingMinor: inv.outstandingMinor,
+            currency: inv.currency,
+          }))}
+        />
       ) : (
         <Card className="overflow-hidden rounded-[20px]">
           <table className="w-full text-sm">

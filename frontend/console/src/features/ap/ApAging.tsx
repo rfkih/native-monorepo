@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { Field, TextInput } from '@/components/ui/Field'
 import { EmptyState } from '@/features/_shared/financeUi'
+import { AgingPhoneList } from '@/features/_shared/AgingPhoneList'
+import { useIsPhone } from '@/components/mobile/useIsPhone'
 import { downloadCsv } from '@/lib/csv'
 import { useSession } from '@/lib/session'
 import { localeOf } from '@/i18n'
@@ -24,6 +26,7 @@ function todayIso(): string {
 export function ApAging() {
   const { t, i18n } = useTranslation()
   const { company } = useSession()
+  const isPhone = useIsPhone()
   const locale = localeOf(i18n.language)
   const [asOf, setAsOf] = useState(todayIso())
 
@@ -113,6 +116,31 @@ export function ApAging() {
         </Card>
       ) : rows.length === 0 ? (
         <EmptyState title={t('ap.aging.empty')} hint={t('ap.aging.emptyHint')} />
+      ) : isPhone ? (
+        /* Phone (Native Console Android): per-vendor cards with bucket chips. */
+        <AgingPhoneList
+          rows={rows.map((r) => ({
+            id: r.vendorId,
+            name: r.vendorName,
+            buckets: [
+              r.currentMinor,
+              r.overdue1To30Minor,
+              r.overdue31To60Minor,
+              r.overdue61To90Minor,
+              r.overdue90PlusMinor,
+            ],
+            outstandingMinor: r.outstandingMinor,
+          }))}
+          labels={[
+            t('ap.aging.colCurrent'),
+            t('ap.aging.col1To30'),
+            t('ap.aging.col31To60'),
+            t('ap.aging.col61To90'),
+            t('ap.aging.col90Plus'),
+          ]}
+          currency={currency}
+          locale={locale}
+        />
       ) : (
         <Card className="overflow-x-auto rounded-[20px]">
           <table className="w-full text-sm">
