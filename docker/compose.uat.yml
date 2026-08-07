@@ -359,6 +359,26 @@ services:
       DB_USERNAME: notification_service
       DB_PASSWORD: notification_service
 
+  payment-service:
+    # QRIS payment modes + PSP charge lifecycle (ADR 0045). Producer-only (no Kafka
+    # consumer — Debezium tails its outbox), so no kafka dependency. NATIVE_PII_KEY is
+    # MANDATORY under the prod profile: the service refuses the committed dev placeholder
+    # at startup (it encrypts the merchants' own Midtrans server keys). The webhook base
+    # URL makes every charge carry its public callback (X-Override-Notification).
+    <<: *java-service
+    image: native-uat/payment-service:latest
+    container_name: native-uat-payment-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *java-env
+      DB_URL: jdbc:postgresql://postgres:5432/payment_service
+      DB_USERNAME: payment_service
+      DB_PASSWORD: payment_service
+      NATIVE_PII_KEY: ${NATIVE_PII_KEY}
+      NATIVE_PAYMENT_WEBHOOK_BASE_URL: ${PUBLIC_URL}
+
   # ---------------------------------------------------------------------------
   # Console SPA — one image for any URL: entrypoint rewrites env.js from NATIVE_*.
   # ---------------------------------------------------------------------------

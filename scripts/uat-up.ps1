@@ -30,7 +30,8 @@ $pgVolume = 'native-uat_native-uat-pgdata'
 
 $services = @(
     'gateway', 'org-service', 'restaurant-service', 'carwash-service', 'barbershop-service',
-    'loyalty-service', 'finance-service', 'entitlement-service', 'employee-service', 'notification-service'
+    'loyalty-service', 'finance-service', 'entitlement-service', 'employee-service', 'notification-service',
+    'payment-service'
 )
 
 function Invoke-Compose {
