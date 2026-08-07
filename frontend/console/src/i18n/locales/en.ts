@@ -308,8 +308,15 @@ export const en = {
     org: 'Org tree',
     groups: 'Groups',
     close: 'Period close',
-    groupFinance: 'Finance',
-    groupStructure: 'Structure',
+    groupSummary: 'Overview',
+    groupReports: 'Reports',
+    groupAr: 'Receivables',
+    groupAp: 'Payables',
+    groupCashTax: 'Cash & tax',
+    groupSales: 'Sales',
+    groupPlanning: 'Planning',
+    groupOrg: 'Organization',
+    groupSettings: 'Settings',
     team: 'Team',
     menu: 'Menu',
     kitchen: 'Kitchen',
@@ -339,6 +346,9 @@ export const en = {
     switchCompany: 'Switch company',
     yourBusinesses: 'Your companies',
     addBusiness: 'Add company or division',
+  },
+  dashboardPhone: {
+    perOutlet: 'By outlet',
   },
   mobile: {
     tabs: {

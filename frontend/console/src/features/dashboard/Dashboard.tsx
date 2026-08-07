@@ -14,7 +14,11 @@ import { formatMoney, formatPercent } from '@/lib/money'
 import { currentPeriod, formatPeriod, shiftPeriod } from '@/lib/period'
 import { EmptyState, PeriodNav } from '@/features/_shared/financeUi'
 import { useOrgUnits, type OrgUnit } from '@/features/org/api'
-import { usePnl, usePnlTrend, useOutletRevenue, type PnlResponse, type OutletRow } from './api'
+import { usePnl, usePnlTrend, useOutletRevenue, type OutletRow } from './api'
+import { readFigures, monthShort } from './figures'
+import { DeltaPill } from './DeltaPill'
+import { DashboardPhone } from './DashboardPhone'
+import { useIsPhone } from '@/components/mobile/useIsPhone'
 
 /** How many trailing months the sparkline + revenue-delta look back over. */
 const TREND_MONTHS = 8
@@ -23,6 +27,7 @@ export function Dashboard() {
   const { t, i18n } = useTranslation()
   const { company } = useSession()
   const { isExtended } = useTierAccess()
+  const isPhone = useIsPhone()
   const locale = localeOf(i18n.language)
 
   const [period, setPeriod] = useState(currentPeriod())
@@ -73,6 +78,11 @@ export function Dashboard() {
   if (!company) {
     return <EmptyState title={t('dashboard.noCompany')} hint={t('dashboard.noCompanyHint')} />
   }
+
+  // Below 640px the dashboard renders the phone home (Native Console Android design) — same
+  // monthly hooks (shared query cache), phone-shaped layout. Desktop unchanged.
+  if (isPhone) return <DashboardPhone />
+
 
   const data = query.data ?? null
   const converted = presentation != null && data?.presentationCurrency != null
@@ -840,20 +850,6 @@ function Glance({
   )
 }
 
-function DeltaPill({ value, locale }: { value: number; locale: string }) {
-  const up = value >= 0
-  return (
-    <span
-      className={cn(
-        'tnum inline-flex items-center gap-1 rounded-full px-3 py-1.5 font-mono text-[13px] font-bold',
-        up ? 'bg-tint-profit text-profit-ink' : 'bg-tint-loss text-loss',
-      )}
-    >
-      {up ? '▲' : '▼'} {formatPercent(Math.abs(value), locale)}
-    </span>
-  )
-}
-
 function AllocationBar({
   segments,
   locale,
@@ -919,33 +915,9 @@ function Sparkline({ spark }: { spark: SparkPath }) {
   )
 }
 
-interface Figures {
-  revenue: number
-  expense: number
-  net: number
-}
-
-function readFigures(data: PnlResponse | null, converted: boolean): Figures {
-  if (!data) return { revenue: 0, expense: 0, net: 0 }
-  if (converted) {
-    return {
-      revenue: data.presentationRevenueMinor ?? 0,
-      expense: data.presentationExpenseMinor ?? 0,
-      net: data.presentationNetMinor ?? 0,
-    }
-  }
-  return { revenue: data.revenueMinor, expense: data.expenseMinor, net: data.netMinor }
-}
-
 function signedPercent(value: number, locale: string): string {
   const arrow = value >= 0 ? '▲' : '▼'
   return `${arrow} ${formatPercent(Math.abs(value), locale)}`
-}
-
-/** 'YYYY-MM' → the locale-short month name (e.g. "Jun"). */
-function monthShort(period: string, locale: string): string {
-  const [y, m] = period.split('-').map(Number)
-  return new Date(y, m - 1, 1).toLocaleDateString(locale, { month: 'short' })
 }
 
 interface SparkPath {

@@ -299,8 +299,15 @@ export const id = {
     org: 'Struktur organisasi',
     groups: 'Grup',
     close: 'Penutupan periode',
-    groupFinance: 'Keuangan',
-    groupStructure: 'Struktur',
+    groupSummary: 'Ringkasan',
+    groupReports: 'Laporan',
+    groupAr: 'Piutang',
+    groupAp: 'Utang',
+    groupCashTax: 'Kas & pajak',
+    groupSales: 'Penjualan',
+    groupPlanning: 'Perencanaan',
+    groupOrg: 'Organisasi',
+    groupSettings: 'Pengaturan',
     team: 'Tim',
     menu: 'Menu',
     kitchen: 'Dapur',
@@ -330,6 +337,9 @@ export const id = {
     switchCompany: 'Ganti perusahaan',
     yourBusinesses: 'Perusahaan Anda',
     addBusiness: 'Tambah perusahaan atau divisi',
+  },
+  dashboardPhone: {
+    perOutlet: 'Per outlet',
   },
   mobile: {
     tabs: {
