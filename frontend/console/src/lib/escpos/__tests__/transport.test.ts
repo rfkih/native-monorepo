@@ -2,7 +2,9 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
   classifyConnectError,
   createRawbtTransport,
+  listNativeDevices,
   rawbtIntentUrl,
+  requestNativePrinter,
   sendViaRawbtWs,
   transportSupport,
 } from '../transport'
@@ -151,6 +153,104 @@ describe('sendViaRawbtWs / rawbt transport write', () => {
     FakeWebSocket.behavior = 'error'
     await createRawbtTransport().write(new Uint8Array([0x0a]))
     expect(loc.href.startsWith('intent:base64,')).toBe(true)
+  })
+})
+
+/** Structural stand-in for the app's Capacitor NativePrint plugin proxy (ADR 0043). */
+function fakeNativeBridge() {
+  const calls = {
+    connect: [] as unknown[],
+    write: [] as { base64: string }[],
+    disconnect: 0,
+  }
+  return {
+    calls,
+    async listDevices() {
+      return {
+        devices: [
+          { id: '66:22:AA:01:02:03', name: 'RPP58', kind: 'classic', bonded: true },
+          { id: 'usb:0483:5740', name: 'POS-80', kind: 'usb', bonded: true },
+        ],
+      }
+    },
+    async connect(options: unknown) {
+      calls.connect.push(options)
+    },
+    async write(options: { base64: string }) {
+      calls.write.push(options)
+    },
+    async disconnect() {
+      calls.disconnect += 1
+    },
+  }
+}
+
+describe('native app bridge (ADR 0043)', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('feature-detects OFF in a plain browser and node — the console stays byte-for-byte inert', () => {
+    // transportSupport also touches navigator — stub it so this doesn't lean on Node's global.
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64) Chrome/126' })
+    // No window at all (this node test env) …
+    expect(transportSupport().native).toBe(false)
+    // … and a window without the bridge (every real browser).
+    vi.stubGlobal('window', {})
+    expect(transportSupport().native).toBe(false)
+  })
+
+  it('detects the bridge under both the direct and the Capacitor.Plugins shapes', () => {
+    vi.stubGlobal('window', { NativePrint: fakeNativeBridge() })
+    expect(transportSupport().native).toBe(true)
+    vi.stubGlobal('window', { Capacitor: { Plugins: { NativePrint: fakeNativeBridge() } } })
+    expect(transportSupport().native).toBe(true)
+  })
+
+  it('lists the bonded/attached devices for the settings picker', async () => {
+    vi.stubGlobal('window', { NativePrint: fakeNativeBridge() })
+    const devices = await listNativeDevices()
+    expect(devices.map((d) => d.kind)).toEqual(['classic', 'usb'])
+    // And resolves empty (not throwing) without the bridge — callers need no guard.
+    vi.stubGlobal('window', {})
+    await expect(listNativeDevices()).resolves.toEqual([])
+  })
+
+  it('connects by device id and round-trips the exact ESC/POS bytes as base64', async () => {
+    const bridge = fakeNativeBridge()
+    vi.stubGlobal('window', { NativePrint: bridge })
+    const transport = await requestNativePrinter('66:22:AA:01:02:03', 'RPP58')
+    expect(bridge.calls.connect).toEqual([{ deviceId: '66:22:AA:01:02:03' }])
+    expect(transport.kind).toBe('native')
+    expect(transport.label).toBe('RPP58')
+
+    // Every byte value 0..255 — the stream is binary (NUL, GS commands, drawer pulses), not text.
+    const bytes = new Uint8Array(256).map((_, i) => i)
+    await transport.write(bytes)
+    const decoded = Uint8Array.from(atob(bridge.calls.write[0].base64), (c) => c.charCodeAt(0))
+    expect(Array.from(decoded)).toEqual(Array.from(bytes))
+
+    await transport.disconnect()
+    expect(bridge.calls.disconnect).toBe(1)
+  })
+
+  it('handles a write longer than one String.fromCharCode chunk', async () => {
+    const bridge = fakeNativeBridge()
+    vi.stubGlobal('window', { NativePrint: bridge })
+    const transport = await requestNativePrinter('66:22:AA:01:02:03')
+    await transport.write(new Uint8Array(100_000).fill(0x41))
+    expect(atob(bridge.calls.write[0].base64).length).toBe(100_000)
+  })
+
+  it('classifyConnectError trusts the plugin reject code directly on the native path', () => {
+    for (const code of ['cancelled', 'blocked', 'inUse', 'noEndpoint', 'unknown'] as const) {
+      const err = Object.assign(new Error('native failure'), { code })
+      expect(classifyConnectError(err, 'native')).toBe(code)
+    }
+    // Codes outside the contract, missing codes, and non-Error rejections all degrade safely.
+    expect(classifyConnectError(Object.assign(new Error('x'), { code: 'weird' }), 'native')).toBe(
+      'unknown',
+    )
+    expect(classifyConnectError(new Error('no code'), 'native')).toBe('unknown')
+    expect(classifyConnectError(null, 'native')).toBe('unknown')
   })
 })
 

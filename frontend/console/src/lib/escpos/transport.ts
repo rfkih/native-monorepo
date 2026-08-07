@@ -1,5 +1,6 @@
 /**
- * Printer transports (ADR 0039, RawBT bridge ADR 0041): four ways to carry the same ESC/POS bytes.
+ * Printer transports (ADR 0039, RawBT bridge ADR 0041, native app bridge ADR 0043): five ways to
+ * carry the same ESC/POS bytes.
  *
  *  - WebUSB    — USB thermal printers (interface class 0x07). Desktop Chrome + Android Chrome
  *                (OTG tablets — the common Indonesian till). Permission survives reloads via
@@ -10,6 +11,10 @@
  *  - RawBT     — Android only: hands the bytes to the RawBT app via its `rawbt:` intent URL,
  *                and RawBT drives the printer over Bluetooth CLASSIC (SPP) — the transport for
  *                the many cheap printers Chrome's BLE-only Web Bluetooth can never reach.
+ *  - Native    — inside the Native Till Android app only: the in-process `NativePrint` plugin
+ *                reaches Bluetooth Classic (SPP), BLE AND USB printers directly — silent, no
+ *                popups, no companion apps. The WebView has no WebUSB/WebBluetooth/WebSerial, so
+ *                in-app this is the one real device path; in a browser it feature-detects off.
  *
  * The browser APIs are HTTPS-gated (the UAT funnel and prod both qualify) and need one
  * user-gesture pairing; after that printing is silent — no print dialog. Browsers without these
@@ -22,7 +27,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-export type TransportKind = 'usb' | 'ble' | 'serial' | 'rawbt'
+export type TransportKind = 'usb' | 'ble' | 'serial' | 'rawbt' | 'native'
 
 export interface PrinterTransport {
   readonly kind: TransportKind
@@ -40,7 +45,17 @@ export function transportSupport(): Record<TransportKind, boolean> {
     serial: !!nav.serial,
     // intent: URLs are an Android-Chrome mechanism — RawBT itself is an Android app.
     rawbt: /android/i.test(nav.userAgent ?? ''),
+    native: !!getNativePrintBridge(),
   }
+}
+
+/** Chunked byte→base64 (String.fromCharCode blows the arg limit on long receipts). */
+function bytesToBase64(bytes: Uint8Array): string {
+  let bin = ''
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+  }
+  return btoa(bin)
 }
 
 // ---------------------------------------------------------------------------
@@ -199,7 +214,24 @@ export type ConnectFailureReason =
   | 'noEndpoint'
   | 'unknown'
 
+const CONNECT_FAILURE_REASONS: readonly ConnectFailureReason[] = [
+  'cancelled',
+  'blocked',
+  'inUse',
+  'bleUnreachable',
+  'noEndpoint',
+  'unknown',
+]
+
 export function classifyConnectError(err: unknown, kind?: TransportKind): ConnectFailureReason {
+  // The native bridge (ADR 0043) rejects with a `code` already drawn from this exact set —
+  // trust it directly instead of pattern-matching browser DOMException names.
+  if (kind === 'native') {
+    const code = (err as { code?: unknown } | null)?.code
+    return CONNECT_FAILURE_REASONS.includes(code as ConnectFailureReason)
+      ? (code as ConnectFailureReason)
+      : 'unknown'
+  }
   const name = err instanceof Error ? err.name : ''
   const message = err instanceof Error ? err.message : String(err)
   if (name === 'NotFoundError') return 'cancelled' // chooser dismissed / no device picked
@@ -269,13 +301,9 @@ const RAWBT_PLAY_URL = `https://play.google.com/store/apps/details?id=${RAWBT_PA
  * pattern, and the shape RawBT's own web examples use (encodeURI, which leaves base64 intact).
  */
 export function rawbtIntentUrl(bytes: Uint8Array): string {
-  let bin = ''
-  for (let i = 0; i < bytes.length; i += 0x8000) {
-    bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
-  }
   return (
     'intent:' +
-    encodeURI(`base64,${btoa(bin)}`) +
+    encodeURI(`base64,${bytesToBase64(bytes)}`) +
     `#Intent;scheme=rawbt;package=${RAWBT_PACKAGE};` +
     `S.browser_fallback_url=${encodeURIComponent(RAWBT_PLAY_URL)};end;`
   )
@@ -355,6 +383,76 @@ export function createRawbtTransport(): PrinterTransport {
     },
     async disconnect() {
       /* nothing held */
+    },
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Native app bridge (ADR 0043) — inside the Native Till Android app only
+// ---------------------------------------------------------------------------
+
+/** A printer the app can reach: bonded Bluetooth (Classic SPP or BLE) or attached USB. */
+export interface NativeDevice {
+  /** Opaque handle — a Bluetooth MAC or a `usb:` key. Persisted for deterministic re-attach. */
+  id: string
+  name: string
+  kind: 'classic' | 'ble' | 'usb'
+  bonded: boolean
+}
+
+/**
+ * The Capacitor plugin surface (methods take a single options object — the Capacitor call
+ * convention). Rejections carry a `code` from the ConnectFailureReason set (D4 mapping).
+ */
+interface NativePrintBridge {
+  listDevices(): Promise<{ devices: NativeDevice[] }>
+  connect(options: { deviceId: string }): Promise<void>
+  write(options: { base64: string }): Promise<void>
+  disconnect(): Promise<void>
+}
+
+/**
+ * The bridge is injected by the app's Capacitor runtime as `Capacitor.Plugins.NativePrint`;
+ * `window.NativePrint` is checked first so tests (and any future non-Capacitor shell) can provide
+ * the same surface directly. Absent in every browser — the tile never shows there.
+ */
+function getNativePrintBridge(): NativePrintBridge | null {
+  if (typeof window === 'undefined') return null // node test env
+  const w = window as any
+  return (w.NativePrint ?? w.Capacitor?.Plugins?.NativePrint ?? null) as NativePrintBridge | null
+}
+
+/** The bonded/attached printers the app can reach, for the settings device picker. */
+export async function listNativeDevices(): Promise<NativeDevice[]> {
+  const bridge = getNativePrintBridge()
+  if (!bridge) return []
+  return (await bridge.listDevices()).devices
+}
+
+/**
+ * Opens the app-side connection to the chosen device and wraps it as a PrinterTransport. Unlike
+ * the browser transports there is no chooser here — the web layer picks the device (the platform
+ * bond IS the pairing state), which is what makes silent re-attach by saved id deterministic.
+ */
+export async function requestNativePrinter(
+  deviceId: string,
+  label?: string,
+): Promise<PrinterTransport> {
+  const bridge = getNativePrintBridge()
+  if (!bridge) throw new Error('NativePrint bridge not present')
+  await bridge.connect({ deviceId })
+  return {
+    kind: 'native',
+    label: label ?? deviceId,
+    async write(bytes: Uint8Array) {
+      await bridge.write({ base64: bytesToBase64(bytes) })
+    },
+    async disconnect() {
+      try {
+        await bridge.disconnect()
+      } catch {
+        /* already gone */
+      }
     },
   }
 }

@@ -18,6 +18,11 @@ export interface PrinterConfig {
   autoPrint?: boolean
   /** Last-known device label, for the settings UI (informational only). */
   label?: string
+  /**
+   * Native-app transport only (ADR 0043): the chosen device's bridge id (Bluetooth MAC / usb key).
+   * The platform bond owns the pairing, so re-attach by this id is deterministic.
+   */
+  deviceId?: string
 }
 
 const KEY = 'native.pos.printer'

@@ -337,6 +337,14 @@ export const id = {
       rawbt: 'Aplikasi RawBT',
       rawbtHint:
         'Mencetak lewat aplikasi Android gratis RawBT — cara menjangkau printer Bluetooth Classic yang tidak bisa dipasangkan Chrome. Pasang RawBT dan atur printer Anda sebagai default-nya dulu. Tips: pasang juga aplikasi pendampingnya "Server for RawBT" agar cetakan berjalan senyap di latar belakang — layar RawBT tidak muncul lagi.',
+      native: 'Printer perangkat ini',
+      nativeHint:
+        'Mencetak langsung dari aplikasi Native Till ke printer Bluetooth yang sudah dipasangkan (Classic atau LE) atau printer USB — senyap, tanpa popup, tanpa aplikasi tambahan.',
+      nativePickTitle: 'Pilih printer',
+      nativeNoDevices:
+        'Tidak ada printer terpasang. Pasangkan printer di Pengaturan Android → Bluetooth (atau colokkan lewat USB), lalu pindai ulang.',
+      nativeRescan: 'Pindai ulang',
+      nativeKind: { classic: 'Bluetooth', ble: 'Bluetooth LE', usb: 'USB' },
       connect: 'Hubungkan',
       connecting: 'Menghubungkan…',
       connected: 'Printer terhubung',

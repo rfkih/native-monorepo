@@ -16,6 +16,7 @@ import {
   createRawbtTransport,
   reattachUsbPrinter,
   reattachSerialPrinter,
+  requestNativePrinter,
   requestUsbPrinter,
   requestBlePrinter,
   requestSerialPrinter,
@@ -34,6 +35,8 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
 
   // Silent re-attach of a persisted USB/serial grant on load (BLE cannot persist — skip it).
   // RawBT holds no device grant at all, so it re-attaches unconditionally from the saved config.
+  // Native (in-app, ADR 0043) re-attaches by the saved deviceId — the platform bond persists, so
+  // this is deterministic; a printer that is off simply fails and stays disconnected.
   useEffect(() => {
     const saved = loadPrinterConfig()
     if (!saved) return
@@ -46,7 +49,9 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
             ? await reattachSerialPrinter()
             : saved.transport === 'rawbt' && transportSupport().rawbt
               ? createRawbtTransport()
-              : null
+              : saved.transport === 'native' && saved.deviceId && transportSupport().native
+                ? await requestNativePrinter(saved.deviceId, saved.label).catch(() => null)
+                : null
       if (cancelled) {
         await transport?.disconnect()
         return
@@ -62,7 +67,16 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const connect = useCallback(
-    async (kind: TransportKind, paper: PaperWidth, drawerKick: boolean) => {
+    async (
+      kind: TransportKind,
+      paper: PaperWidth,
+      drawerKick: boolean,
+      // Native only: the settings picker chose a device (there is no OS chooser in-app).
+      native?: { deviceId: string; label: string },
+    ) => {
+      if (kind === 'native' && !native) {
+        throw new Error('native connect requires a picked device') // settings always passes one
+      }
       setConnectingLabel(kind)
       try {
         await transportRef.current?.disconnect()
@@ -73,7 +87,9 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
               ? await requestBlePrinter()
               : kind === 'serial'
                 ? await requestSerialPrinter()
-                : createRawbtTransport() // no chooser — RawBT owns the printer link
+                : kind === 'native' && native
+                  ? await requestNativePrinter(native.deviceId, native.label)
+                  : createRawbtTransport() // no chooser — RawBT owns the printer link
         transportRef.current = transport
         const next: PrinterConfig = {
           transport: kind,
@@ -82,6 +98,7 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
           // Fresh localStorage read, not the state closure (connect is a stable callback).
           autoPrint: loadPrinterConfig()?.autoPrint ?? false,
           label: transport.label,
+          deviceId: native?.deviceId,
         }
         savePrinterConfig(next)
         setConfig(next)

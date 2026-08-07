@@ -346,6 +346,14 @@ export const en = {
       rawbt: 'RawBT app',
       rawbtHint:
         'Prints through the free RawBT Android app — the way to reach Bluetooth Classic printers Chrome cannot pair. Install RawBT and set your printer as its default first. Tip: also install its companion "Server for RawBT" app and prints go silently in the background — no RawBT screen flashing up.',
+      native: "This device's printer",
+      nativeHint:
+        'Prints straight from the Native Till app to a paired Bluetooth printer (Classic or LE) or a USB printer — silent, no popups, no extra apps.',
+      nativePickTitle: 'Choose a printer',
+      nativeNoDevices:
+        'No paired printers found. Pair the printer in Android Settings → Bluetooth (or plug it in by USB), then scan again.',
+      nativeRescan: 'Scan again',
+      nativeKind: { classic: 'Bluetooth', ble: 'Bluetooth LE', usb: 'USB' },
       connect: 'Connect',
       connecting: 'Connecting…',
       connected: 'Printer connected',

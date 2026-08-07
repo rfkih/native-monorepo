@@ -14,7 +14,13 @@ export interface PrinterContextValue {
   config: PrinterConfig | null
   support: Record<TransportKind, boolean>
   connectingLabel: string | null
-  connect: (kind: TransportKind, paper: PaperWidth, drawerKick: boolean) => Promise<void>
+  connect: (
+    kind: TransportKind,
+    paper: PaperWidth,
+    drawerKick: boolean,
+    /** Native (in-app) transport only: the device picked in settings (ADR 0043). */
+    native?: { deviceId: string; label: string },
+  ) => Promise<void>
   disconnect: () => Promise<void>
   setDrawerKick: (on: boolean) => void
   setAutoPrint: (on: boolean) => void
