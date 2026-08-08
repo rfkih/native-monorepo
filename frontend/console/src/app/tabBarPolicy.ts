@@ -8,7 +8,7 @@
 export function shouldMountTabBar(pathname: string): boolean {
   if (pathname === '/pos' || pathname.startsWith('/pos/')) return false
   if (pathname === '/menu' || pathname === '/catalog' || pathname === '/kitchen') return false
-  if (pathname === '/ingredients') return false
+  if (pathname === '/inventory') return false
   if (pathname === '/onboarding' || pathname.startsWith('/onboarding/')) return false
   return true
 }

@@ -944,9 +944,9 @@ function PosInner({ session }: { session: CompanySession }) {
               key: 'ingredients',
               icon: <Package className="size-4" aria-hidden="true" />,
               label: t('inventory.tillMenuLabel'),
-              // A route, not a sheet — /ingredients is the bahan catalog behind the opname
+              // A route, not a sheet — /inventory is the stock-item catalog behind the opname
               // (ADR 0046). Navigation unmounts the POS; nothing to clean up here.
-              onSelect: () => navigate('/ingredients'),
+              onSelect: () => navigate('/inventory'),
               disabled: offline,
               disabledTitle: t('inventory.loadError'),
             },

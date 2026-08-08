@@ -152,7 +152,7 @@ export function StocktakeSheet({
               className="mt-4"
               onClick={() => {
                 onClose()
-                navigate('/ingredients')
+                navigate('/inventory')
               }}
             >
               {t('stocktake.emptyCta')}
