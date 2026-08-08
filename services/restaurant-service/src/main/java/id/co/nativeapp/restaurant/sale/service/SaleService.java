@@ -2,9 +2,12 @@ package id.co.nativeapp.restaurant.sale.service;
 
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
+import id.co.nativeapp.restaurant.sale.dto.SaleHistoryResponse;
 import id.co.nativeapp.restaurant.sale.dto.SaleResponse;
 import id.co.nativeapp.tenant.TenantContext;
+import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
@@ -74,5 +77,14 @@ public class SaleService {
    */
   public List<SaleResponse> findAllForCurrentTenant() {
     return writer.findAllForCurrentTenant();
+  }
+
+  /**
+   * The cashier's "today's transactions" list ({@code GET /api/v1/sales}) — a business unit's sales
+   * with {@code occurredAt} in {@code [from, to)}, newest first, hard-capped at 200 rows. The
+   * client computes the outlet's local-day bounds; no timezone math happens server-side.
+   */
+  public List<SaleHistoryResponse> findHistory(UUID businessId, Instant from, Instant to) {
+    return writer.findHistory(businessId, from, to);
   }
 }

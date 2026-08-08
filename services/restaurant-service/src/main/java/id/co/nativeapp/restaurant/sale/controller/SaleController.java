@@ -3,6 +3,7 @@ package id.co.nativeapp.restaurant.sale.controller;
 import id.co.nativeapp.restaurant.config.DevTenantFilter;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
+import id.co.nativeapp.restaurant.sale.dto.SaleHistoryResponse;
 import id.co.nativeapp.restaurant.sale.dto.SaleRequest;
 import id.co.nativeapp.restaurant.sale.dto.SaleResponse;
 import id.co.nativeapp.restaurant.sale.service.SaleService;
@@ -10,14 +11,25 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * {@code POST /api/v1/sales} — record a sale.
+ * REST endpoints for the sale feature:
+ *
+ * <ul>
+ *   <li>{@code POST /api/v1/sales} — record a sale
+ *   <li>{@code GET /api/v1/sales?businessId=...&from=...&to=...} — the cashier's "today's
+ *       transactions" list
+ * </ul>
  *
  * <p>The request carries only the business payload; the tenant ({@code company_id}) and actor come
  * from the bound {@link id.co.nativeapp.tenant.TenantContext TenantContext} (set at the request
@@ -69,5 +81,23 @@ public class SaleController {
     return result.created()
         ? ResponseEntity.created(URI.create("/api/v1/sales/" + body.id())).body(body)
         : ResponseEntity.ok(body);
+  }
+
+  /**
+   * The cashier's "today's transactions" list: a business unit's sales with {@code occurred_at} in
+   * {@code [from, to)}, newest first, hard-capped at 200 rows. All three params are required — the
+   * client computes the outlet's local-day bounds; no timezone math happens server-side. Returns
+   * {@code 200 OK}.
+   */
+  @Operation(
+      summary = "List a business unit's sales in a time window",
+      description =
+          "Lists the business unit's sales with occurred_at in [from, to), newest first, hard"
+              + " LIMIT 200. All three params (businessId, from, to) are required; the client"
+              + " computes the outlet's local-day bounds — no timezone math happens server-side.")
+  @GetMapping
+  public ResponseEntity<List<SaleHistoryResponse>> salesHistory(
+      @RequestParam UUID businessId, @RequestParam Instant from, @RequestParam Instant to) {
+    return ResponseEntity.ok(saleService.findHistory(businessId, from, to));
   }
 }

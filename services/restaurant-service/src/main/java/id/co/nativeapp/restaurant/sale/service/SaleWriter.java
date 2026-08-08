@@ -10,8 +10,10 @@ import id.co.nativeapp.restaurant.register.service.CashWindowLock;
 import id.co.nativeapp.restaurant.sale.domain.Sale;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
+import id.co.nativeapp.restaurant.sale.dto.SaleHistoryResponse;
 import id.co.nativeapp.restaurant.sale.dto.SaleResponse;
 import id.co.nativeapp.restaurant.sale.messaging.SaleRecordedSchema;
+import id.co.nativeapp.restaurant.sale.projection.SaleHistoryView;
 import id.co.nativeapp.restaurant.sale.projection.SaleView;
 import id.co.nativeapp.restaurant.sale.repository.SaleRepository;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
@@ -323,6 +325,19 @@ public class SaleWriter {
     return repository.findAllViews().stream().map(SaleWriter::toResponse).toList();
   }
 
+  /**
+   * The cashier's "today's transactions" list ({@code GET /api/v1/sales}) — a business unit's sales
+   * with {@code occurredAt} in {@code [from, to)}, newest first, hard-capped at 200 rows.
+   * RLS-scoped automatically; no manual {@code company_id} predicate. Read path: a native-query
+   * projection (only the response columns), never {@code SELECT *} of the entity.
+   */
+  @Transactional(readOnly = true)
+  public List<SaleHistoryResponse> findHistory(UUID businessId, Instant from, Instant to) {
+    return repository.findHistory(businessId, from, to).stream()
+        .map(SaleWriter::toHistoryResponse)
+        .toList();
+  }
+
   /** Maps a read projection to the response shape (currency CHAR(3) is right-padded — strip it). */
   private static SaleResponse toResponse(SaleView view) {
     return new SaleResponse(
@@ -332,5 +347,17 @@ public class SaleWriter {
         view.getCurrency().strip(),
         view.getOccurredAt(),
         view.getIdempotencyKey());
+  }
+
+  /** Maps a read projection to the response shape (currency CHAR(3) is right-padded — strip it). */
+  private static SaleHistoryResponse toHistoryResponse(SaleHistoryView view) {
+    return new SaleHistoryResponse(
+        view.getId(),
+        view.getOrderId(),
+        view.getOccurredAt(),
+        view.getAmountMinor(),
+        view.getCurrency().strip(),
+        view.getTenderType(),
+        view.getChannelCode());
   }
 }
