@@ -67,3 +67,4 @@ boundary, a security posture. Routine, local choices do not need one — use a c
 | [0046](0046-ingredient-inventory-phase1.md) | Ingredient-level inventory, phase 1: catalog + receive/adjust + stock opname (no recipes) | Accepted |
 | [0047](0047-three-tier-pricing.md) | Three-tier pricing: Gratis / Basic / Premium + usage add-ons (display & soft-enforce phase) | Accepted |
 | [0048](0048-minio-object-storage-for-media.md) | MinIO object storage for binary media (menu images, receipts, static QRIS) | Accepted |
+| [0049](0049-business-and-employee-apps-outlet-terminal-auth.md) | Business + Employee apps; terminal auth = outlet credential + PIN operators + personal elevation | Proposed |
