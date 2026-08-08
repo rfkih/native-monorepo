@@ -5,6 +5,25 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-08 — Ingredient inventory phase 1 (ADR 0046): stock opname re-aimed at bahan
+
+Owner feedback: "stock opname" must count INGREDIENTS (roti, patty, saus), not finished menu
+items — the ADR 0038 phase-3 stocktake had the wrong subject for made-to-order food. Phase 1
+(counts only, owner-chosen): new restaurant `inventory` feature — `ingredient` catalog per
+outlet (integer qty in the ingredient's own unit; g/ml/pcs/pack picker because the ArchUnit
+decimal-field ban makes fractional quantities impossible; nullable cost pair
+unit_cost_minor+cost_currency), receive/set endpoints, and `/api/v1/ingredient-stocktakes`
+cloning the stocktake idioms (Idempotency-Key replay, optimistic-lock retryable 409,
+adjust-to-count). KEY CONTRACT CALL: the ingredient opname REUSES `StocktakeCompleted`
+verbatim (the schema is subject-agnostic — one signed net shrinkage scalar), so
+finance-service needed ZERO changes; a zero-costed-lines count emits no event (currency
+required, nothing to post). Menu-item stock + its endpoints survive untouched as the 86
+gate; the legacy `/api/v1/stocktakes` keeps serving history. Console: /ingredients
+management screen (menu-grant gating), StocktakeSheet subject switch (units shown,
+no-valued-lines summary), empty state links to /ingredients. Recipes/BOM + per-sale
+depletion remain the deferred phase 2 — variance on costed bahan meanwhile includes normal
+kitchen usage, which the entry hint says out loud.
+
 ## 2026-08-07 — Register cadence rework (ADR 0038 amendment): multi-session/day + POS open gate
 
 UAT drill findings drove three same-day register changes. (1) The "expected 0" mystery = sales
