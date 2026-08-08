@@ -20,6 +20,21 @@ export function setAccessToken(token: string | null): void {
 }
 
 /**
+ * The Business-app till's signed-in operator token (ADR 0049 P3b) — null for every normal `user`
+ * login and for a `device` terminal with no operator signed in yet. Set by
+ * `features/operator/OperatorSessionProvider` on operator sign-in/sign-out/expiry, sent as
+ * `X-Operator-Session` on every request (see {@link authHeaders}). A vertical that doesn't consume
+ * it (P2 wired only the restaurant/carwash/barbershop sale-write paths) simply ignores the header —
+ * this is deliberately unconditional, exactly like `X-Company-Id`, rather than scoped per call.
+ */
+let operatorSessionToken: string | null = null
+
+/** Called by the operator-session provider whenever the signed-in operator changes. */
+export function setOperatorSession(token: string | null): void {
+  operatorSessionToken = token
+}
+
+/**
  * A handler the auth layer registers to react to an AUTHORIZATION FAILURE in oidc mode: a request
  * rejected with 401 means the bearer is expired/invalid at the gateway. Rather than surface a
  * silent, un-actionable error, the auth layer recovers the session (silent renew) or ENDS it
@@ -147,6 +162,8 @@ function authHeaders(tenant?: { companyId: string; actor: string }, actor?: stri
   } else if (actor) {
     headers['X-Actor'] = actor
   }
+  // ADR 0049 P3b: the signed-in operator, when one exists — see operatorSessionToken's doc.
+  if (operatorSessionToken) headers['X-Operator-Session'] = operatorSessionToken
   return headers
 }
 

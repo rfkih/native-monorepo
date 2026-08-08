@@ -11,7 +11,7 @@
  * in as props/slots — no hooks beyond i18n, no fetching.
  */
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, MoreVertical, Store, Wifi, WifiOff } from 'lucide-react'
+import { ArrowLeft, KeyRound, MoreVertical, Store, UserRound, Wifi, WifiOff } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { cn } from '@/lib/cn'
 
@@ -38,6 +38,9 @@ export function PosStatusBar({
   pinned,
   onOverflowClick,
   overflowOpen,
+  operator,
+  showOperatorSignIn = false,
+  onOperatorSignInClick,
 }: {
   businessName: string
   /** The OutletPicker element (a stateful cross-feature component — slotted in, not imported). */
@@ -53,6 +56,15 @@ export function PosStatusBar({
   pinned: StatusBarAction[]
   onOverflowClick: () => void
   overflowOpen: boolean
+  /**
+   * ADR 0049 P3b — the signed-in operator on a Business-app device terminal (name + role, rule 6).
+   * Undefined/null on a normal `user` login, where this whole affordance never renders.
+   */
+  operator?: { displayName: string; role: string } | null
+  /** True only on a device terminal with no operator signed in yet — renders the "Sign in"
+   * affordance instead of the chip. */
+  showOperatorSignIn?: boolean
+  onOperatorSignInClick?: () => void
 }) {
   const { t } = useTranslation()
   return (
@@ -119,6 +131,38 @@ export function PosStatusBar({
           </span>
         ) : null}
       </button>
+
+      {/* ADR 0049 P3b — the signed-in operator (device terminal only). Mirrors the connection
+          pill's compact-on-phone idiom (icon-only below sm, icon + text at sm+) so it stays a
+          fixed, small shrink-0 element and never reintroduces the 360px overflow bug (the outlet
+          picker above is the only element expected to shrink). */}
+      {operator ? (
+        <span
+          data-testid="pos-operator-chip"
+          title={`${operator.displayName} · ${operator.role}`}
+          className="flex h-9 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-semibold text-white/70 ring-1 ring-inset ring-white/15 max-sm:px-2 dark:text-ink-2 dark:ring-line"
+        >
+          <UserRound className="size-3.5 shrink-0" aria-hidden="true" />
+          <span className="hidden max-w-[110px] truncate sm:inline">
+            {t('posShell.operatorChip', { name: operator.displayName, role: operator.role })}
+          </span>
+        </span>
+      ) : showOperatorSignIn ? (
+        <button
+          type="button"
+          onClick={onOperatorSignInClick}
+          data-testid="pos-operator-signin"
+          aria-label={t('posShell.operatorSignIn')}
+          className={cn(
+            'flex h-9 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-semibold transition-colors max-sm:px-2',
+            'bg-warning/15 text-warning ring-1 ring-inset ring-warning/40 hover:bg-warning/25',
+            'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300',
+          )}
+        >
+          <KeyRound className="size-3.5 shrink-0" aria-hidden="true" />
+          <span className="hidden sm:inline">{t('posShell.operatorSignIn')}</span>
+        </button>
+      ) : null}
 
       {/* Pinned per-shift actions */}
       {pinned.map((a) => (

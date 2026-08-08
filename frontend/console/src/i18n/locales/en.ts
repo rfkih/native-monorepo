@@ -1245,6 +1245,30 @@ export const en = {
     printerDisconnected: 'Printer offline — tap to reconnect',
     printerSetUp: 'No printer set up — tap to connect one',
     printerReconnecting: 'Reconnecting…',
+    /** ADR 0049 P3b — the signed-in operator chip / sign-in affordance (device terminal only). */
+    operatorChip: '{{name}} · {{role}}',
+    operatorSignIn: 'Sign in',
+  },
+  /** ADR 0049 P3b — the Business-app till's employee-pick + PIN sign-in (OperatorPinSheet). */
+  operatorPin: {
+    title: 'Who is ringing?',
+    pinTitle: 'Enter PIN',
+    signedInTitle: 'Signed in',
+    enterPinFor: 'Enter the PIN for {{name}}',
+    digitsEntered: '{{count}} digits entered',
+    backspace: 'Delete last digit',
+    signInAction: 'Sign in',
+    signedInAs: 'Signed in as {{name}} · {{role}}',
+    rosterError: 'Could not load who can sign in here. Try again.',
+    rosterEmpty: 'No one is set up to sign in at this outlet yet — ask the owner or manager to set an operator PIN from the Employees tab.',
+    tillMenuSignOut: 'Sign out operator',
+    error: {
+      wrongPin: 'Wrong PIN. Try again.',
+      locked: 'Too many attempts — try again in a few minutes.',
+      notAssigned: 'Not assigned to this outlet.',
+      notLinked: 'This employee has no login linked yet — ask the owner or manager to link one.',
+      generic: 'Could not sign in. Try again.',
+    },
   },
   servicePos: {
     noCompanyHint: 'Create a company first — the POS rings up tickets for its business.',

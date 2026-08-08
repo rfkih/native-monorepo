@@ -10,6 +10,15 @@ import { createContext, useContext } from 'react'
 export const BUSINESS_ROLES = ['owner', 'manager', 'cashier', 'employee'] as const
 export type BusinessRole = (typeof BUSINESS_ROLES)[number]
 
+/**
+ * ADR 0049 — `device` is a persistent per-outlet Keycloak login (the Business-app till itself, not
+ * a person): the POS terminal then requires a PIN-identified operator before a sale can ring.
+ * `user` is an ordinary personal login — today's exact behavior, byte-identical. Read from the JWT
+ * `actor_type` claim (default `user`; the gateway injects/strips the same claim as `X-Actor-Type`,
+ * but the CLIENT must read it from the verified token itself to branch the UI — see auth.tsx).
+ */
+export type ActorType = 'device' | 'user'
+
 export interface AuthState {
   /** Initial auth resolution finished (a redirect/login may still be pending if false). */
   ready: boolean
@@ -33,6 +42,8 @@ export interface AuthState {
   sub: string | null
   /** Curated business roles the principal holds. */
   roles: BusinessRole[]
+  /** `device` (a Business-app till) or `user` (a normal personal login) — see {@link ActorType}. */
+  actorType: ActorType
   /**
    * Starts the login redirect. `loginHint` (an email) pre-fills the IdP's username field —
    * used right after signup so the user never re-types the address they just registered.

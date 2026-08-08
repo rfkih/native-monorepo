@@ -1234,6 +1234,30 @@ export const id = {
     printerDisconnected: 'Printer terputus — ketuk untuk menghubungkan ulang',
     printerSetUp: 'Belum ada printer — ketuk untuk menghubungkan',
     printerReconnecting: 'Menghubungkan ulang…',
+    /** ADR 0049 P3b — chip operator yang sedang masuk / tombol masuk (khusus terminal perangkat). */
+    operatorChip: '{{name}} · {{role}}',
+    operatorSignIn: 'Masuk',
+  },
+  /** ADR 0049 P3b — pemilihan karyawan + masuk PIN pada aplikasi Bisnis (OperatorPinSheet). */
+  operatorPin: {
+    title: 'Siapa yang melayani?',
+    pinTitle: 'Masukkan PIN',
+    signedInTitle: 'Berhasil masuk',
+    enterPinFor: 'Masukkan PIN untuk {{name}}',
+    digitsEntered: '{{count}} digit dimasukkan',
+    backspace: 'Hapus digit terakhir',
+    signInAction: 'Masuk',
+    signedInAs: 'Masuk sebagai {{name}} · {{role}}',
+    rosterError: 'Gagal memuat daftar yang bisa masuk di sini. Coba lagi.',
+    rosterEmpty: 'Belum ada yang diatur untuk masuk di outlet ini — minta pemilik atau manajer mengatur PIN operator dari tab Karyawan.',
+    tillMenuSignOut: 'Keluarkan operator',
+    error: {
+      wrongPin: 'PIN salah. Coba lagi.',
+      locked: 'Terlalu banyak percobaan — coba lagi beberapa menit lagi.',
+      notAssigned: 'Tidak ditugaskan di outlet ini.',
+      notLinked: 'Karyawan ini belum tertaut ke login — minta pemilik atau manajer menautkannya.',
+      generic: 'Gagal masuk. Coba lagi.',
+    },
   },
   servicePos: {
     noCompanyHint: 'Buat perusahaan dulu — kasir membuat tiket untuk bisnisnya.',

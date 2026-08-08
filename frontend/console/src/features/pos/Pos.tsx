@@ -28,6 +28,7 @@ import {
   History,
   ClipboardList,
   Gift,
+  KeyRound,
   LogOut,
   Monitor,
   Moon,
@@ -93,6 +94,9 @@ import { NoCompany } from './components/NoCompany'
 import { RegisterSheet } from './RegisterSheet'
 import { useCurrentRegisterSession } from './registerApi'
 import { noConfirmedOpenSession } from './lib/registerGate'
+import { useOperatorSession } from '@/features/operator/operatorSessionContext'
+import { operatorSignInRequired } from '@/features/operator/operatorGate'
+import { OperatorPinSheet } from '@/features/operator/OperatorPinSheet'
 import { PosStatusBar } from '@/features/pos-shell/layout/PosStatusBar'
 import { TillMenuSheet } from '@/features/pos-shell/layout/TillMenuSheet'
 import { usePrinterStatusAction } from '@/features/pos-shell/layout/usePrinterStatusAction'
@@ -155,6 +159,14 @@ function PosInner({ session }: { session: CompanySession }) {
   // payment gate below (registerGate.ts) — same query RegisterSheet itself reads, so opening it
   // costs no extra round trip.
   const registerSessionQuery = useCurrentRegisterSession(session)
+
+  // ADR 0049 P3b — the Business-app device terminal's operator gate. `isDeviceTerminal` is derived
+  // from the VERIFIED token claim (auth.actorType, ADR 0049), never a client-side guess; a normal
+  // `user` login (today's exact behavior) leaves this false everywhere below, so the operator
+  // chip/PIN gate/till-menu sign-out never render or fire for it.
+  const isDeviceTerminal = auth.actorType === 'device'
+  const operatorSession = useOperatorSession()
+  const [showOperatorPinSheet, setShowOperatorPinSheet] = useState(false)
 
   // Phase 5 offline mode (ADR 0028). When the live catalog/rules queries have no data at all (a
   // fresh page load while offline — the common case is a query that already succeeded THIS session
@@ -629,6 +641,9 @@ function PosInner({ session }: { session: CompanySession }) {
         ]}
         onOverflowClick={() => setShowTillMenu((v) => !v)}
         overflowOpen={showTillMenu}
+        operator={isDeviceTerminal ? operatorSession.operator : null}
+        showOperatorSignIn={isDeviceTerminal && !operatorSession.operator}
+        onOperatorSignInClick={() => setShowOperatorPinSheet(true)}
       />
 
       {/* ── 2. Bill context strip (64px) — Walk-in tab + open-bill tabs ─────── */}
@@ -825,11 +840,24 @@ function PosInner({ session }: { session: CompanySession }) {
           onExpand={() => setBillSheetOpen(true)}
           onDestinationClick={() => setShowBillSelector(true)}
           onSend={() => {
+            // ADR 0049 P3b: a device terminal with no signed-in operator must identify one BEFORE
+            // the kitchen ticket fires (it attributes the sale too) — FAIL CLOSED, mirroring the
+            // eventual P4 backend guard. A no-op for a normal `user` login (isDeviceTerminal false).
+            if (operatorSignInRequired(isDeviceTerminal, operatorSession.operator)) {
+              setShowOperatorPinSheet(true)
+              return
+            }
             // P4: Send SENDS — the kitchen ticket fires directly; the sheet stays collapsed
             // (the KOT and payment overlays render sheet-independently inside BillDetail).
             setAutoKotToken((k) => k + 1)
           }}
           onPay={() => {
+            // ADR 0049 P3b operator gate — checked FIRST, before the register-open gate below (a
+            // cashier identifies themselves before anything else happens at the till).
+            if (operatorSignInRequired(isDeviceTerminal, operatorSession.operator)) {
+              setShowOperatorPinSheet(true)
+              return
+            }
             // Payment gate (owner request "open the register first"): online + no confirmed open
             // session → redirect to the RegisterSheet instead of proceeding. Loading/error states
             // fail OPEN (let the sale proceed) — see registerGate.ts. Covers BOTH pay entry points
@@ -988,6 +1016,19 @@ function PosInner({ session }: { session: CompanySession }) {
             // never role-gated, so a cashier who is also an employee can always reach their own
             // payslips/time-off/claims from the till). On phone /me carries the employee tab bar.
             { key: 'me', icon: <UserRound className="size-4" aria-hidden="true" />, label: t('me.tillMenuLabel'), to: '/me' },
+            // ADR 0049 P3b — shift change: clears the operator session, dropping the till back to
+            // the PIN prompt on the next sale. Only shown on a device terminal with an operator
+            // actually signed in (a normal `user` login never sees this item).
+            ...(isDeviceTerminal && operatorSession.operator
+              ? [
+                  {
+                    key: 'operator-signout',
+                    icon: <KeyRound className="size-4" aria-hidden="true" />,
+                    label: t('operatorPin.tillMenuSignOut'),
+                    onSelect: () => operatorSession.signOut(),
+                  },
+                ]
+              : []),
             {
               key: 'theme',
               icon: theme === 'dark' ? <Sun className="size-4" aria-hidden="true" /> : <Moon className="size-4" aria-hidden="true" />,
@@ -1003,6 +1044,10 @@ function PosInner({ session }: { session: CompanySession }) {
             },
           ]}
         />
+      ) : null}
+
+      {showOperatorPinSheet ? (
+        <OperatorPinSheet session={session} onClose={() => setShowOperatorPinSheet(false)} />
       ) : null}
 
       {showRegisterSheet ? (

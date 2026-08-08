@@ -9,6 +9,7 @@ import { queryClient } from '@/lib/queryClient'
 import { AuthProvider } from '@/lib/auth'
 import { SessionProvider } from '@/lib/SessionProvider'
 import { PrinterProvider } from '@/lib/escpos/usePrinter'
+import { OperatorSessionProvider } from '@/features/operator/OperatorSessionProvider'
 import { App } from '@/app/App'
 
 bootstrapPwa()
@@ -18,11 +19,15 @@ createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <SessionProvider>
-          <PrinterProvider>
-            <BrowserRouter>
-              <App />
-            </BrowserRouter>
-          </PrinterProvider>
+          {/* ADR 0049 P3b — app-wide so the signed-in operator survives OutletGate's remount and
+              any route change within the same device session (see the provider's own doc). */}
+          <OperatorSessionProvider>
+            <PrinterProvider>
+              <BrowserRouter>
+                <App />
+              </BrowserRouter>
+            </PrinterProvider>
+          </OperatorSessionProvider>
         </SessionProvider>
       </AuthProvider>
     </QueryClientProvider>

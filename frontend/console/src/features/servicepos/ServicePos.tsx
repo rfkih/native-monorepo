@@ -15,7 +15,7 @@
  */
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Gift, LogOut, Moon, Settings, Sun, UserRound } from 'lucide-react'
+import { Gift, KeyRound, LogOut, Moon, Settings, Sun, UserRound } from 'lucide-react'
 import { useSession, type CompanySession } from '@/lib/session'
 import { useAuth, hasAnyRole } from '@/lib/authContext'
 import { useTheme } from '@/lib/theme'
@@ -48,6 +48,9 @@ import {
 } from './api'
 import { ServicePaymentModal } from './ServicePaymentModal'
 import { ServiceReceipt } from './ServiceReceipt'
+import { useOperatorSession } from '@/features/operator/operatorSessionContext'
+import { operatorSignInRequired } from '@/features/operator/operatorGate'
+import { OperatorPinSheet } from '@/features/operator/OperatorPinSheet'
 import { PosStatusBar } from '@/features/pos-shell/layout/PosStatusBar'
 import { TillMenuSheet } from '@/features/pos-shell/layout/TillMenuSheet'
 import { usePrinterStatusAction } from '@/features/pos-shell/layout/usePrinterStatusAction'
@@ -88,6 +91,13 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
   const canManualDiscount = hasAnyRole(auth.roles, 'owner', 'manager')
   const canDashboard = hasAnyRole(auth.roles, 'owner', 'manager')
   const { theme, toggle } = useTheme()
+
+  // ADR 0049 P3b — same operator gate as features/pos/Pos.tsx's twin doc; `isDeviceTerminal` comes
+  // from the VERIFIED token claim, so a normal `user` login (today's exact behavior) never sees
+  // any of the operator chip/PIN gate/till-menu sign-out below.
+  const isDeviceTerminal = auth.actorType === 'device'
+  const operatorSession = useOperatorSession()
+  const [showOperatorPinSheet, setShowOperatorPinSheet] = useState(false)
 
   const packagesQuery = useCatalogPackages(config, session)
   const addonsQuery = useCatalogAddons(config, session)
@@ -337,6 +347,9 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
         pinned={[printerStatusAction]}
         onOverflowClick={() => setShowTillMenu((v) => !v)}
         overflowOpen={showTillMenu}
+        operator={isDeviceTerminal ? operatorSession.operator : null}
+        showOperatorSignIn={isDeviceTerminal && !operatorSession.operator}
+        onOperatorSignInClick={() => setShowOperatorPinSheet(true)}
       />
 
       {showTillMenu ? (
@@ -365,6 +378,19 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
             // so a cashier who is also an employee can always reach their payslips/time-off/claims
             // from the till (on phone /me carries the employee tab bar).
             { key: 'me', icon: <UserRound className="size-4" aria-hidden="true" />, label: t('me.tillMenuLabel'), to: '/me' },
+            // ADR 0049 P3b — shift change: clears the operator session, dropping the till back to
+            // the PIN prompt on the next charge. Only shown on a device terminal with an operator
+            // actually signed in.
+            ...(isDeviceTerminal && operatorSession.operator
+              ? [
+                  {
+                    key: 'operator-signout',
+                    icon: <KeyRound className="size-4" aria-hidden="true" />,
+                    label: t('operatorPin.tillMenuSignOut'),
+                    onSelect: () => operatorSession.signOut(),
+                  },
+                ]
+              : []),
             {
               key: 'theme',
               icon: theme === 'dark' ? <Sun className="size-4" aria-hidden="true" /> : <Moon className="size-4" aria-hidden="true" />,
@@ -380,6 +406,10 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
             },
           ]}
         />
+      ) : null}
+
+      {showOperatorPinSheet ? (
+        <OperatorPinSheet session={session} onClose={() => setShowOperatorPinSheet(false)} />
       ) : null}
 
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
@@ -477,7 +507,16 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
             breakdown={breakdown}
             grandTotalMinor={grandTotalMinor}
             canCharge={canCharge}
-            onCharge={() => setModal('payment')}
+            onCharge={() => {
+              // ADR 0049 P3b operator gate — a device terminal with no signed-in operator must
+              // identify one before charging (it attributes the sale). FAIL CLOSED; a no-op for a
+              // normal `user` login.
+              if (operatorSignInRequired(isDeviceTerminal, operatorSession.operator)) {
+                setShowOperatorPinSheet(true)
+                return
+              }
+              setModal('payment')
+            }}
           />
         </aside>
       </div>

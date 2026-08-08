@@ -1,10 +1,16 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { UserManager, WebStorageStateStore, type User } from 'oidc-client-ts'
 import { isNativeShell } from '@/lib/escpos/transport'
 import { setAccessToken, setUnauthorizedHandler } from '@/lib/api'
-import { AUTH_MODE, KEYCLOAK_CLIENT_ID, KEYCLOAK_REALM, KEYCLOAK_URL } from '@/lib/config'
+import { AUTH_MODE, KEYCLOAK_CLIENT_ID, KEYCLOAK_REALM, KEYCLOAK_SCOPE, KEYCLOAK_URL } from '@/lib/config'
 import { DEV_ACTOR } from '@/lib/devIdentity'
-import { AuthContext, BUSINESS_ROLES, type AuthState, type BusinessRole } from '@/lib/authContext'
+import {
+  AuthContext,
+  BUSINESS_ROLES,
+  type ActorType,
+  type AuthState,
+  type BusinessRole,
+} from '@/lib/authContext'
 
 /**
  * Authentication provider for the console.
@@ -29,6 +35,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 // dev: synthetic principal, full access. The header-trust path lives in api.ts.
 // ---------------------------------------------------------------------------
 function DevAuthProvider({ children }: { children: ReactNode }) {
+  // ADR 0049 P3b: a dev run can simulate the Business-app terminal without Keycloak — set
+  // VITE_DEV_ACTOR_TYPE=device and the synthetic principal carries only `cashier` (matching a real
+  // per-outlet device login, which is never owner/manager-capable) instead of every business role,
+  // so the operator-PIN gate/chip render exactly as they would on a real device.
+  const isDeviceDev = import.meta.env.VITE_DEV_ACTOR_TYPE === 'device'
   const value = useMemo<AuthState>(
     () => ({
       ready: true,
@@ -37,12 +48,13 @@ function DevAuthProvider({ children }: { children: ReactNode }) {
       companyIds: [],
       actor: DEV_ACTOR,
       sub: null,
-      roles: [...BUSINESS_ROLES],
+      actorType: isDeviceDev ? 'device' : 'user',
+      roles: isDeviceDev ? ['cashier'] : [...BUSINESS_ROLES],
       login: () => {},
       logout: () => {},
       refresh: async () => true,
     }),
-    [],
+    [isDeviceDev],
   )
   // Ensure no stale bearer leaks into the dev header-trust path.
   useEffect(() => setAccessToken(null), [])
@@ -62,7 +74,7 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
         redirect_uri: `${window.location.origin}/auth/callback`,
         post_logout_redirect_uri: window.location.origin,
         response_type: 'code',
-        scope: 'openid profile email',
+        scope: KEYCLOAK_SCOPE,
         automaticSilentRenew: true,
         // Native Till shell (ADR 0043): the WebView process dies with the app, and
         // sessionStorage with it — every cold start dumped the operator on the logged-out
@@ -81,8 +93,12 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
     companyIds: [],
     actor: '',
     sub: null,
+    actorType: 'user',
     roles: [],
   })
+  // Mirrors state.actorType for recoverOrLogout's kiosk-softening branch below — see apply()'s
+  // comment for why a ref (not the `state` closure) is needed there.
+  const actorTypeRef = useRef<ActorType>('user')
 
   useEffect(() => {
     let mounted = true
@@ -91,6 +107,7 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
       if (!mounted) return
       if (!user || user.expired || !user.access_token) {
         setAccessToken(null)
+        actorTypeRef.current = 'user'
         setState({
           ready: true,
           authenticated: false,
@@ -98,6 +115,7 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
           companyIds: [],
           actor: '',
           sub: null,
+          actorType: 'user',
           roles: [],
         })
         return
@@ -107,6 +125,11 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
       // The company_id claim is `string | string[]` (a multivalued mapper emits an array — the
       // login's allowed companies, first = default active; pre-rollout tokens carry a scalar).
       const companyIds = extractCompanyIds(claims.company_id)
+      const actorType = extractActorType(claims)
+      // Mirrored into a ref (not just React state) so recoverOrLogout below — a stable closure
+      // captured once on mount — can read the CURRENT actor type instead of the stale value from
+      // whenever the effect first ran (see its own doc).
+      actorTypeRef.current = actorType
       setState({
         ready: true,
         authenticated: true,
@@ -117,6 +140,7 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
           (typeof claims.sub === 'string' && claims.sub) ||
           'unknown',
         sub: typeof claims.sub === 'string' ? claims.sub : null,
+        actorType,
         roles: extractRoles(claims),
       })
     }
@@ -151,6 +175,7 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
         companyIds: [],
         actor: '',
         sub: null,
+        actorType: 'user',
         roles: [],
       })
     }
@@ -174,6 +199,8 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
         await manager.signinSilent()
       } catch {
         // Truly unrecoverable (refresh token expired / IdP session gone) → hard logout.
+        // Read BEFORE apply(null) below, which always resets the ref to 'user'.
+        const wasKiosk = actorTypeRef.current === 'device' || isNativeShell()
         setAccessToken(null)
         apply(null) // flip to unauthenticated so the app stops issuing tenant-scoped calls
         try {
@@ -181,7 +208,16 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
         } catch {
           // best-effort clear of the stored (dead) session
         }
-        if (mounted) {
+        // Kiosk-renew softening (ADR 0049 P3b): a Business-app terminal — an outlet `device` login
+        // (ADR 0049), or literally the native shell, which is ALWAYS a till — must never be
+        // auto-bounced to the Keycloak hosted login FORM here: nobody is standing at a shared till
+        // to type a password, and a silent redirect strands the terminal on the IdP's page until
+        // someone notices. Left signed out instead (apply(null) already ran above) — the terminal
+        // falls back to its normal signed-out screen with its own explicit "Sign in" affordance,
+        // which re-attempts login on a real tap/gesture rather than an automatic one. A normal
+        // `user` login (a phone/laptop with a person in front of it) keeps the existing hard bounce
+        // — for a person, it is the fastest way back in once the refresh token is genuinely dead.
+        if (mounted && !wasKiosk) {
           // Explicit re-login: seamless if the Keycloak SSO session is still alive, otherwise the
           // login form. Either way the user is never stranded on a silently-broken page.
           void manager.signinRedirect()
@@ -290,4 +326,14 @@ function extractRoles(claims: Record<string, unknown>): BusinessRole[] {
     ;(realmAccess as { roles: unknown[] }).roles.forEach((r) => found.add(String(r)))
   }
   return BUSINESS_ROLES.filter((r) => found.has(r))
+}
+
+/**
+ * Reads the ADR 0049 `actor_type` claim (`device | user`) — mirrors the gateway's
+ * `TenantJwtAuthoritiesConverter.extractActorType`/`DEFAULT_ACTOR_TYPE` exactly: an absent/blank
+ * claim (every login minted before the Keycloak mapper shipped, and every ordinary person login
+ * today) defaults to `user`, never silently `device`.
+ */
+function extractActorType(claims: Record<string, unknown>): ActorType {
+  return claims.actor_type === 'device' ? 'device' : 'user'
 }

@@ -35,6 +35,8 @@ const proxy: Record<string, ProxyOptions> = GATEWAY
       '/api/v1/employees': { target: EMPLOYEE, changeOrigin: true },
       '/api/v1/payroll-runs': { target: EMPLOYEE, changeOrigin: true },
       '/api/v1/payroll-setup': { target: EMPLOYEE, changeOrigin: true },
+      // employee-service (ADR 0049 P3b) — the till's operator roster + PIN sign-in
+      '/api/v1/operators': { target: EMPLOYEE, changeOrigin: true },
       // restaurant-service (POS)
       '/api/v1/menu': { target: RESTAURANT, changeOrigin: true },
       '/api/v1/orders': { target: RESTAURANT, changeOrigin: true },

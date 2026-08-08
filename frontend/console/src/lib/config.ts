@@ -44,3 +44,13 @@ export const KEYCLOAK_REALM: string =
 
 /** The public SPA client id registered in the Keycloak realm (authorization-code + PKCE, no secret). */
 export const KEYCLOAK_CLIENT_ID = 'native-console'
+
+/**
+ * The OIDC scope every console login requests (ADR 0049 P3b). `offline_access` on top of the base
+ * scopes lets a persistent Business-app till (a per-outlet `device` login, ADR 0049) silently renew
+ * across restarts — the offline refresh token pairs with the native shell's localStorage token
+ * store (ADR 0043) to keep a kiosk signed in without a re-login. A normal person login requests the
+ * same scope (one client, one login flow) — Keycloak issuing an offline session it doesn't need is
+ * harmless; it never forces the kiosk-persistence behavior on its own.
+ */
+export const KEYCLOAK_SCOPE = 'openid profile email offline_access'
