@@ -38,7 +38,7 @@ import { PhoneSheetContent } from './components/PhoneSheetContent'
 import { BillLineItem } from './components/BillLineItem'
 import { BillBreakdown } from './components/BillBreakdown'
 import { CancelConfirmDialog } from './components/CancelConfirmDialog'
-import { BillPaymentModal } from './BillPaymentModal'
+import { BillPaymentModal, type BillPaidInfo } from './BillPaymentModal'
 import { BillReceiptView } from './BillReceiptView'
 import { KotView } from './KotView'
 import {
@@ -112,9 +112,11 @@ export function BillDetail({
   interface CheckResult {
     paidLines: BillLineResponse[]
     checkTotalMinor: number
-    tenderType: 'CASH' | 'QRIS' | 'CARD'
+    tenderType: 'CASH' | 'QRIS' | 'CARD' | 'ONLINE'
     tenderedMinor?: number
     changeMinor?: number
+    /** Outstanding bill balance right after this check, minor units (0 on the final check). */
+    remainingAfterMinor: number
   }
   const [checkResult, setCheckResult] = useState<CheckResult | null>(null)
 
@@ -201,6 +203,8 @@ export function BillDetail({
     checkTotalMinor: number
     idempotencyKey: string
     paidLineObjects: BillLineResponse[]
+    /** What stays unpaid on the bill once this check settles, minor units. */
+    remainingAfterMinor: number
   }
   const [pendingPay, setPendingPay] = useState<PendingPayInfo | null>(null)
 
@@ -216,6 +220,7 @@ export function BillDetail({
         checkTotalMinor: selectedTotal,
         idempotencyKey: freshIdempotencyKey(),
         paidLineObjects: selectedLines,
+        remainingAfterMinor: unpaidTotal - selectedTotal,
 })
     } else {
       setPendingPay({
@@ -223,19 +228,23 @@ export function BillDetail({
         checkTotalMinor: unpaidTotal,
         idempotencyKey: freshIdempotencyKey(),
         paidLineObjects: unpaidLines,
+        remainingAfterMinor: 0,
 })
     }
     setShowPayModal(true)
   }
 
-  function handlePaySuccess() {
+  function handlePaySuccess(paid: BillPaidInfo) {
     setShowPayModal(false)
     void qc.invalidateQueries({ queryKey: ['bill', session.companyId, billId] })
     if (pendingPay) {
       setCheckResult({
         paidLines: pendingPay.paidLineObjects,
         checkTotalMinor: pendingPay.checkTotalMinor,
-        tenderType: 'CASH',
+        tenderType: paid.tenderType,
+        tenderedMinor: paid.tenderedMinor,
+        changeMinor: paid.changeMinor,
+        remainingAfterMinor: pendingPay.remainingAfterMinor,
 })
     }
     setPendingPay(null)
@@ -279,6 +288,28 @@ export function BillDetail({
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-paper">
         <Spinner />
       </div>
+    )
+  }
+
+  // Customer receipt after paying a check — rendered as the SOLE surface, and checked BEFORE the
+  // status guard, deliberately: the pay-success refetch flips the bill to PAID on the final check,
+  // and the closed-bill early return below used to unmount the receipt before the cashier ever saw
+  // it (and on earlier checks the z-50 sheet buried the old z-40 overlay). A stable tree position
+  // across the OPEN→PAID transition also keeps the auto-print from re-firing on a remount.
+  if (checkResult) {
+    return (
+      <BillReceiptView
+        bill={bill}
+        paidLines={checkResult.paidLines}
+        checkTotalMinor={checkResult.checkTotalMinor}
+        tenderType={checkResult.tenderType}
+        tenderedMinor={checkResult.tenderedMinor}
+        changeMinor={checkResult.changeMinor}
+        remainingMinor={checkResult.remainingAfterMinor}
+        locale={locale}
+        tableLabel={tableLabel}
+        onClose={handleReceiptClose}
+      />
     )
   }
 
@@ -638,20 +669,7 @@ export function BillDetail({
         />
       ) : null}
 
-      {/* Customer receipt (after paying a check) */}
-      {checkResult ? (
-        <BillReceiptView
-          bill={bill}
-          paidLines={checkResult.paidLines}
-          checkTotalMinor={checkResult.checkTotalMinor}
-          tenderType={checkResult.tenderType}
-          tenderedMinor={checkResult.tenderedMinor}
-          changeMinor={checkResult.changeMinor}
-          locale={locale}
-          tableLabel={tableLabel}
-          onClose={handleReceiptClose}
-        />
-      ) : null}
+      {/* Customer receipt (after paying a check) renders via the checkResult early return above. */}
 
       {/* Kitchen ticket (KOT) */}
       {showKot ? (

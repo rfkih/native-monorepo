@@ -31,6 +31,15 @@ import { useQrisEffective, useStaticQrImageUrl } from '@/features/payments/api'
 import { effectiveQrisMode } from '@/features/payments/effectiveMode'
 import { usePayBill, type BillResponse } from './billsApi'
 
+/** What was actually paid — reported to onSuccess so the check receipt shows the real tender. */
+export interface BillPaidInfo {
+  tenderType: PosTender
+  /** Amount handed over in minor units (CASH only). */
+  tenderedMinor?: number
+  /** Change due in minor units (CASH only). */
+  changeMinor?: number
+}
+
 interface Props {
   session: CompanySession
   bill: BillResponse
@@ -41,7 +50,7 @@ interface Props {
   checkTotalMinor?: number
   /** Fresh idempotency key per check-pay attempt — required for split checks. */
   idempotencyKey?: string
-  onSuccess: () => void
+  onSuccess: (paid: BillPaidInfo) => void
   onClose: () => void
 }
 
@@ -111,7 +120,17 @@ export function BillPaymentModal({
   function pay(payment: { tenderType: PosTender; tenderedMinor?: number; channelCode?: string }) {
     payBill.mutate(
       { billId: bill.id, payment, lineIds, idempotencyKey },
-      { onSuccess: () => onSuccess() },
+      {
+        onSuccess: () =>
+          onSuccess({
+            tenderType: payment.tenderType,
+            tenderedMinor: payment.tenderedMinor,
+            changeMinor:
+              payment.tenderType === 'CASH' && payment.tenderedMinor != null
+                ? Math.max(0, payment.tenderedMinor - grandTotalMinor)
+                : undefined,
+          }),
+      },
     )
   }
 

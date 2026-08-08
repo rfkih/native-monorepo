@@ -1,11 +1,15 @@
 /**
  * BillReceiptView — customer receipt after paying a bill or a split check.
  *
- * Shown after usePayBill succeeds. For a split check it renders only the paid
- * lines; for a full-bill pay it renders all lines.
+ * Shown after usePayBill succeeds — once per check payment, split or full. For
+ * a split check it renders only the paid lines, plus the same-bill linkage the
+ * cashier hands out with each partial receipt: the guest name and table as
+ * labeled rows, a "Split check — N of M items" marker, and the remaining
+ * balance after this check. Every check of one bill prints the same Ref #.
  *
  * Delegates all rendering to ThermalReceipt so both the on-screen display and
- * the window.print() output are identical (WYSIWYG).
+ * the window.print() output are identical (WYSIWYG). Mounts at z-[70] — above
+ * the z-50 bill sheet (same layering as KotView).
  *
  * Money rule (rule 8): all amounts are integer minor units, formatted via formatMoney().
  * Strings rule (rule 9): all user-facing text is an i18n key.
@@ -23,11 +27,13 @@ interface Props {
   /** Total paid in this check, in minor units. */
   checkTotalMinor: number
   /** Tender type used for this check. */
-  tenderType: 'CASH' | 'QRIS' | 'CARD'
+  tenderType: 'CASH' | 'QRIS' | 'CARD' | 'ONLINE'
   /** Tendered amount in minor units (CASH only). */
   tenderedMinor?: number
   /** Change in minor units (CASH only). */
   changeMinor?: number
+  /** Outstanding bill balance right after this check, in minor units (0 on the final check). */
+  remainingMinor?: number
   locale: string
   businessName?: string
   tableLabel?: string | null
@@ -42,6 +48,8 @@ function tenderKey(tenderType: string): string {
       return 'pos.payment.tenderQris'
     case 'CARD':
       return 'pos.payment.tenderCard'
+    case 'ONLINE':
+      return 'pos.payment.tenderOnline'
     default:
       return tenderType
   }
@@ -54,6 +62,7 @@ export function BillReceiptView({
   tenderType,
   tenderedMinor,
   changeMinor,
+  remainingMinor,
   locale,
   businessName,
   tableLabel,
@@ -63,7 +72,7 @@ export function BillReceiptView({
   const currency = bill.currency
   const isCash = tenderType === 'CASH'
 
-  // Short reference — last 8 chars of bill id
+  // Short reference — last 8 chars of bill id; identical on every check of the same bill.
   const reference = bill.id.slice(-8).toUpperCase()
 
   // Formatted date/time
@@ -72,13 +81,21 @@ export function BillReceiptView({
     timeStyle: 'short',
   }).format(new Date())
 
-  // Tagline: guest label
-  const tagline = bill.guestLabel
+  // This check covers only part of the bill (a split check, or the remainder after one).
+  const paidQty = paidLines.reduce((s, l) => s + l.qty, 0)
+  const totalQty = bill.lines.reduce((s, l) => s + l.qty, 0)
+  const isPartial = paidQty < totalQty
 
-  // Meta rows
-  const metaRows: ThermalRow[] = []
+  // Meta rows — guest + table are labeled so a partial receipt is traceable to its bill.
+  const metaRows: ThermalRow[] = [{ label: t('pos.receipt.guest'), valueLabel: bill.guestLabel }]
   if (tableLabel) {
     metaRows.push({ label: t('pos.table.label'), valueLabel: tableLabel })
+  }
+  if (isPartial) {
+    metaRows.push({
+      label: t('pos.receipt.splitCheck'),
+      valueLabel: t('pos.receipt.splitItems', { paid: paidQty, total: totalQty }),
+    })
   }
 
   // Line items
@@ -111,16 +128,20 @@ export function BillReceiptView({
   if (isCash && changeMinor != null) {
     paymentRows.push({ label: t('pos.receipt.change'), valueLabel: formatMoney(changeMinor, currency, locale) })
   }
+  // Balance still open on the bill — printed on every partial receipt (Rp 0 on the final check).
+  if (isPartial && remainingMinor != null) {
+    paymentRows.push({ label: t('pos.receipt.remaining'), valueLabel: formatMoney(remainingMinor, currency, locale) })
+  }
   // Time row dropped — byte-identical duplicate of the header dateTime (paper efficiency).
 
   return (
     <ThermalReceipt
       autoPrint
       cashTender={isCash}
+      zIndexClass="z-[70]"
       businessName={businessName ?? 'Native POS'}
       title={t('pos.receipt.title')}
       reference={reference}
-      tagline={tagline}
       dateTime={dateTime}
       metaRows={metaRows}
       lineItems={lineItems}

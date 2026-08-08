@@ -113,6 +113,12 @@ export interface ThermalProps {
    * defaults to true (the historical behavior) so an un-migrated caller keeps working.
    */
   cashTender?: boolean
+  /**
+   * Stacking override for surfaces that mount over another z-50 overlay (same idea as
+   * PaymentSurfaceFrame's zIndexClass): BillReceiptView passes z-[70] so a check receipt sits
+   * above the z-50 bill sheet like KotView does. Defaults to the historical z-40.
+   */
+  zIndexClass?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -297,6 +303,7 @@ export function ThermalReceipt({
   provisionalNote,
   autoPrint,
   cashTender,
+  zIndexClass = 'z-40',
 }: ThermalProps) {
   const { t } = useTranslation()
   const headingId = useId()
@@ -448,7 +455,10 @@ export function ThermalReceipt({
       {/* Backdrop + scroll container (screen only)                           */}
       {/* ------------------------------------------------------------------ */}
       <div
-        className="fixed inset-0 z-40 grid place-items-start justify-center overflow-y-auto bg-black/60 py-8 px-4 backdrop-blur-sm"
+        className={cn(
+          'fixed inset-0 grid place-items-start justify-center overflow-y-auto bg-black/60 py-8 px-4 backdrop-blur-sm',
+          zIndexClass,
+        )}
         role="dialog"
         aria-modal="true"
         aria-labelledby={headingId}
