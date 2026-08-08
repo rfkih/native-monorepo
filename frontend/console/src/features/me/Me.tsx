@@ -12,7 +12,7 @@ import { LogOut, TriangleAlert, UserRound } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton, Skeleton } from '@/components/ui/Skeleton'
 import { Wordmark } from '@/components/Wordmark'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { EmptyState } from '@/features/_shared/financeUi'
@@ -88,9 +88,30 @@ export function Me() {
 
       <main className="mx-auto w-full max-w-[1080px] px-5 py-8 lg:px-8">
         {profile.isLoading ? (
-          <Card className="p-10 text-center">
-            <Spinner className="mx-auto text-brand-500" />
-          </Card>
+          <div>
+            <div className="flex items-center gap-3">
+              <Skeleton className="size-12 shrink-0 rounded-2xl" />
+              <div>
+                <Skeleton className="h-6 w-40" />
+                <Skeleton className="mt-1.5 h-4 w-24" />
+              </div>
+            </div>
+            <div className="mt-6 grid grid-cols-1 items-start gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
+              <div className="flex flex-col gap-4">
+                <Skeleton className="h-40 rounded-card" />
+                <Skeleton className="h-24 rounded-card" />
+                <Skeleton className="h-24 rounded-card" />
+                <Skeleton className="h-24 rounded-card" />
+              </div>
+              <div className="flex min-w-0 flex-col gap-6">
+                <Skeleton className="h-56 rounded-card" />
+                <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-2">
+                  <Skeleton className="h-48 rounded-card" />
+                  <Skeleton className="h-48 rounded-card" />
+                </div>
+              </div>
+            </div>
+          </div>
         ) : notLinked ? (
           <EmptyState title={t('me.notLinked.title')} hint={t('me.notLinked.hint')} />
         ) : profile.isError || !profile.data ? (
@@ -289,9 +310,7 @@ function ClaimsCard({
         </Button>
       </div>
       {claims.isLoading ? (
-        <Card className="mt-2 p-6 text-center">
-          <Spinner className="mx-auto text-brand-500" />
-        </Card>
+        <ListSkeleton rows={4} className="mt-2" />
       ) : rows.length === 0 ? (
         <p className="mt-2 text-sm text-ink-3">{t('me.expenses.card.empty')}</p>
       ) : (

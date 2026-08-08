@@ -21,7 +21,7 @@ import { Check, Copy, KeyRound, Pencil, Plus, Trash2, UserPlus, X } from 'lucide
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Drawer } from '@/components/ui/Drawer'
-import { Spinner } from '@/components/ui/Spinner'
+import { Skeleton } from '@/components/ui/Skeleton'
 import { Field, TextInput } from '@/components/ui/Field'
 import { useTeam } from '@/features/team/api'
 import { localeOf } from '@/i18n'
@@ -271,7 +271,17 @@ export function EmployeeDetailDrawer({
               </Button>
             </div>
           ) : login.isLoading ? (
-            <Spinner className="text-brand-500" />
+            <div className="space-y-3">
+              <div>
+                <Skeleton className="h-3 w-20" />
+                <Skeleton className="mt-1.5 h-4 w-32" />
+              </div>
+              <Skeleton className="h-8 w-40 rounded-lg" />
+              <div className="flex gap-2 pt-1">
+                <Skeleton className="h-9 w-32 rounded-xl" />
+                <Skeleton className="h-9 w-28 rounded-lg" />
+              </div>
+            </div>
           ) : (
             <div className="space-y-3">
               <Detail label={t('hr.detail.username')} value={username ?? '…'} mono />

@@ -5,7 +5,7 @@ import { ChevronRight, TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton, StatCardsSkeleton } from '@/components/ui/Skeleton'
 import { Field, TextInput } from '@/components/ui/Field'
 import { EmptyState, KpiTile } from '@/features/_shared/financeUi'
 import { useSession } from '@/lib/session'
@@ -47,9 +47,11 @@ export function InvoiceDetail() {
   }
   if (query.isLoading) {
     return (
-      <Card className="p-10 text-center">
-        <Spinner className="mx-auto text-brand-500" />
-      </Card>
+      <div className="flex flex-col gap-[18px]">
+        <StatCardsSkeleton cards={3} />
+        <ListSkeleton rows={4} />
+        <ListSkeleton rows={3} />
+      </div>
     )
   }
   if (query.isError) {

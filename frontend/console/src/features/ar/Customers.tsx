@@ -4,7 +4,7 @@ import { Plus, TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton } from '@/components/ui/Skeleton'
 import { Field, TextInput } from '@/components/ui/Field'
 import { EmptyState } from '@/features/_shared/financeUi'
 import { useSession } from '@/lib/session'
@@ -53,9 +53,7 @@ export function Customers() {
           {t('ar.customers.error')}
         </Card>
       ) : query.isLoading ? (
-        <Card className="p-10 text-center">
-          <Spinner className="mx-auto text-brand-500" />
-        </Card>
+        <ListSkeleton rows={6} />
       ) : customers.length === 0 ? (
         <EmptyState title={t('ar.customers.empty')} hint={t('ar.customers.emptyHint')} />
       ) : (

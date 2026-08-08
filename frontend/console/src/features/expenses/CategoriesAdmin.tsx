@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Field, TextInput } from '@/components/ui/Field'
 import { Select } from '@/components/ui/Select'
-import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton } from '@/components/ui/Skeleton'
 import { Badge } from '@/components/ui/Badge'
 import { EmptyState } from '@/features/_shared/financeUi'
 import { DialogOverlay } from '@/features/org/parts'
@@ -91,9 +91,7 @@ export function CategoriesAdmin() {
           {t('expenses.categories.error')}
         </Card>
       ) : categories.isLoading ? (
-        <Card className="p-10 text-center">
-          <Spinner className="mx-auto text-brand-500" />
-        </Card>
+        <ListSkeleton rows={5} />
       ) : rows.length === 0 ? (
         <Card className="p-10 text-center">
           <h2 className="font-display text-xl font-semibold text-ink">

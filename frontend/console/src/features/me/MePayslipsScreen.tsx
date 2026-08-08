@@ -9,7 +9,7 @@ import { useTranslation } from 'react-i18next'
 import { Navigate } from 'react-router-dom'
 import { TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
-import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton, StatCardsSkeleton } from '@/components/ui/Skeleton'
 import { PhoneScreen } from '@/components/mobile/PhoneScreen'
 import { useIsPhone } from '@/components/mobile/useIsPhone'
 import { EmptyState } from '@/features/_shared/financeUi'
@@ -33,9 +33,10 @@ export function MePayslipsScreen() {
   return (
     <PhoneScreen title={t('me.payslips.title')} backTo="/me">
       {profile.isLoading ? (
-        <Card className="p-10 text-center">
-          <Spinner className="mx-auto text-brand-500" />
-        </Card>
+        <div className="flex flex-col gap-2">
+          <StatCardsSkeleton cards={2} />
+          <ListSkeleton rows={4} />
+        </div>
       ) : notLinked ? (
         <EmptyState title={t('me.notLinked.title')} hint={t('me.notLinked.hint')} />
       ) : profile.isError || !profile.data ? (

@@ -23,6 +23,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton } from '@/components/ui/Skeleton'
 import { Field, TextInput } from '@/components/ui/Field'
 import { useSession, type CompanySession } from '@/lib/session'
 import { localeOf } from '@/i18n'
@@ -185,7 +186,7 @@ function PackagesSection({
       </div>
 
       {query.isLoading ? (
-        <Spinner className="size-5 text-ink-3" />
+        <ListSkeleton rows={3} className="rounded-none border-0" />
       ) : items.length === 0 ? (
         <p className="rounded-xl border border-dashed border-line bg-paper px-4 py-6 text-center text-sm text-ink-3">
           {t(config.primaryItemLabels.emptyKey)}
@@ -259,7 +260,7 @@ function AddonsSection({
       </div>
 
       {query.isLoading ? (
-        <Spinner className="size-5 text-ink-3" />
+        <ListSkeleton rows={3} className="rounded-none border-0" />
       ) : items.length === 0 ? (
         <p className="rounded-xl border border-dashed border-line bg-paper px-4 py-6 text-center text-sm text-ink-3">
           {t(`${config.i18nNs}.emptyAddons`)}
@@ -617,7 +618,7 @@ function WashersSection({
       </div>
 
       {query.isLoading ? (
-        <Spinner className="size-5 text-ink-3" />
+        <ListSkeleton rows={3} className="rounded-none border-0" />
       ) : items.length === 0 ? (
         <p className="rounded-xl border border-dashed border-line bg-paper px-4 py-6 text-center text-sm text-ink-3">
           {t(config.staffLabels.emptyKey)}

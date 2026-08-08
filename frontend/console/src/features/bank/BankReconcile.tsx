@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Field, TextInput } from '@/components/ui/Field'
 import { Segmented } from '@/components/ui/Segmented'
-import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton, StatCardsSkeleton } from '@/components/ui/Skeleton'
 import { EmptyState, KpiTile } from '@/features/_shared/financeUi'
 import { useSession } from '@/lib/session'
 import { localeOf } from '@/i18n'
@@ -70,9 +70,10 @@ export function BankReconcile() {
   }
   if (accountQuery.isLoading) {
     return (
-      <Card className="p-10 text-center">
-        <Spinner className="mx-auto text-brand-500" />
-      </Card>
+      <div className="flex flex-col gap-[18px]">
+        <StatCardsSkeleton cards={3} />
+        <ListSkeleton rows={6} />
+      </div>
     )
   }
   if (accountQuery.isError) {
@@ -178,9 +179,7 @@ export function BankReconcile() {
           {t('bank.reconcile.linesError')}
         </Card>
       ) : linesQuery.isLoading ? (
-        <Card className="p-10 text-center">
-          <Spinner className="mx-auto text-brand-500" />
-        </Card>
+        <ListSkeleton rows={6} />
       ) : lines.length === 0 ? (
         <EmptyState title={t('bank.reconcile.empty')} hint={t('bank.reconcile.emptyHint')} />
       ) : (

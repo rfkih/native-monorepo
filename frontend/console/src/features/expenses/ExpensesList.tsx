@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Select } from '@/components/ui/Select'
 import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton, Skeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/features/_shared/financeUi'
 import { DialogOverlay } from '@/features/org/parts'
 import { useOrgUnits } from '@/features/org/api'
@@ -124,9 +125,7 @@ export function ExpensesList() {
       </div>
 
       {claims.isLoading ? (
-        <Card className="p-10 text-center">
-          <Spinner className="mx-auto text-brand-500" />
-        </Card>
+        <ListSkeleton rows={6} />
       ) : claims.isError ? (
         <Card className="p-8 text-center text-sm text-loss">
           <TriangleAlert className="mx-auto mb-2 size-5" />
@@ -282,7 +281,18 @@ function ClaimDetailDrawer({
           </h2>
 
           {detail.isLoading || !claim ? (
-            <Spinner className="text-brand-500" />
+            <div className="space-y-5">
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-6 w-24 rounded-full" />
+                <Skeleton className="h-6 w-28" />
+              </div>
+              <div className="grid grid-cols-2 gap-3 rounded-2xl border border-line bg-surface p-4">
+                <Skeleton className="h-9" />
+                <Skeleton className="h-9" />
+                <Skeleton className="h-9" />
+              </div>
+              <Skeleton className="h-40 rounded-xl" />
+            </div>
           ) : (
             <>
               <div className="flex items-center gap-3">

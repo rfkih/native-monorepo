@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { Plus, Trash2, TriangleAlert, X } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton } from '@/components/ui/Skeleton'
 import { Field, TextInput } from '@/components/ui/Field'
 import { EmptyState } from '@/features/_shared/financeUi'
 import { useSession } from '@/lib/session'
@@ -137,9 +137,7 @@ export function Budgets() {
           {t('budget.error')}
         </Card>
       ) : budgetsQuery.isLoading ? (
-        <Card className="p-10 text-center">
-          <Spinner className="mx-auto text-brand-500" />
-        </Card>
+        <ListSkeleton rows={6} />
       ) : budgets.length === 0 ? (
         <EmptyState title={t('budget.empty')} hint={t('budget.emptyHint')} />
       ) : (

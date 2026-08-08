@@ -17,6 +17,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
+import { Skeleton } from '@/components/ui/Skeleton'
 import { apiFetch } from '@/lib/api'
 import { type CompanySession } from '@/lib/session'
 import { localeOf } from '@/i18n'
@@ -126,7 +127,16 @@ export function ModulesPanel({ session }: { session: CompanySession }) {
           {t('modules.error')}
         </p>
       ) : query.isLoading ? (
-        <Spinner className="size-5 text-ink-3" />
+        <ul className="divide-y divide-line">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <li key={i} className="flex items-center gap-3 py-2.5">
+              <div className="min-w-0 flex-1">
+                <Skeleton className="h-4 w-32" />
+              </div>
+              <Skeleton className="h-8 w-20 rounded-xl" />
+            </li>
+          ))}
+        </ul>
       ) : (
         <ul className="divide-y divide-line">
           {rows.map((row) => (

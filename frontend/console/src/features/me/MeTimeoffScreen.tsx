@@ -9,7 +9,7 @@ import { useTranslation } from 'react-i18next'
 import { Navigate } from 'react-router-dom'
 import { TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
-import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton, StatCardsSkeleton } from '@/components/ui/Skeleton'
 import { PhoneScreen } from '@/components/mobile/PhoneScreen'
 import { useIsPhone } from '@/components/mobile/useIsPhone'
 import { EmptyState } from '@/features/_shared/financeUi'
@@ -31,9 +31,11 @@ export function MeTimeoffScreen() {
   return (
     <PhoneScreen title={t('me.timeoff.title')} backTo="/me">
       {profile.isLoading ? (
-        <Card className="p-10 text-center">
-          <Spinner className="mx-auto text-brand-500" />
-        </Card>
+        <div className="flex flex-col gap-3">
+          <StatCardsSkeleton cards={4} />
+          <ListSkeleton rows={3} />
+          <ListSkeleton rows={3} />
+        </div>
       ) : notLinked ? (
         <EmptyState title={t('me.notLinked.title')} hint={t('me.notLinked.hint')} />
       ) : profile.isError || !profile.data ? (

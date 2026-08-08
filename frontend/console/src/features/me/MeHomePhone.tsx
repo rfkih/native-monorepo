@@ -11,7 +11,7 @@ import { Link } from 'react-router-dom'
 import { CalendarDays, Clock, LogOut, Plus, ReceiptText, TriangleAlert, UserRound } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
-import { Spinner } from '@/components/ui/Spinner'
+import { Skeleton } from '@/components/ui/Skeleton'
 import { Wordmark } from '@/components/Wordmark'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { EmptyState } from '@/features/_shared/financeUi'
@@ -116,9 +116,29 @@ export function MeHomePhone() {
       </header>
 
       {profile.isLoading ? (
-        <Card className="m-4 p-10 text-center">
-          <Spinner className="mx-auto text-brand-500" />
-        </Card>
+        <>
+          <div className="flex items-center gap-3 border-b border-line bg-surface px-5 pb-4 pt-3.5">
+            <Skeleton className="size-[52px] shrink-0 rounded-[18px]" />
+            <div className="min-w-0 flex-1">
+              <Skeleton className="h-5 w-36" />
+              <Skeleton className="mt-1.5 h-3.5 w-24" />
+            </div>
+          </div>
+          <div className="flex flex-col gap-3.5 px-4 pt-4">
+            <div className="grid grid-cols-2 gap-2.5">
+              <Skeleton className="h-[88px] rounded-[18px]" />
+              <Skeleton className="h-[88px] rounded-[18px]" />
+            </div>
+            <Skeleton className="h-32 rounded-[18px]" />
+            <div className="grid grid-cols-2 gap-2.5">
+              <Skeleton className="h-[60px] rounded-2xl" />
+              <Skeleton className="h-[60px] rounded-2xl" />
+              <Skeleton className="h-[60px] rounded-2xl" />
+              <Skeleton className="h-[60px] rounded-2xl" />
+            </div>
+            <Skeleton className="h-52 rounded-[18px]" />
+          </div>
+        </>
       ) : notLinked ? (
         <div className="p-4">
           <EmptyState title={t('me.notLinked.title')} hint={t('me.notLinked.hint')} />

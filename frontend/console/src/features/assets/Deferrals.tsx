@@ -4,7 +4,7 @@ import { Plus, TriangleAlert, X } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton } from '@/components/ui/Skeleton'
 import { Field, TextInput } from '@/components/ui/Field'
 import { EmptyState } from '@/features/_shared/financeUi'
 import { useSession } from '@/lib/session'
@@ -110,9 +110,7 @@ export function Deferrals() {
           {t('deferrals.error')}
         </Card>
       ) : deferralsQuery.isLoading ? (
-        <Card className="p-10 text-center">
-          <Spinner className="mx-auto text-brand-500" />
-        </Card>
+        <ListSkeleton rows={6} />
       ) : deferrals.length === 0 ? (
         <EmptyState title={t('deferrals.empty')} hint={t('deferrals.emptyHint')} />
       ) : (

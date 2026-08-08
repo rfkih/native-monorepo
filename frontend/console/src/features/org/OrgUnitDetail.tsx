@@ -15,7 +15,7 @@ import {
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton, StatCardsSkeleton } from '@/components/ui/Skeleton'
 import { Segmented } from '@/components/ui/Segmented'
 import { EmptyState, KpiTile, PeriodNav } from '@/features/_shared/financeUi'
 import { useTeam, type TeamMember } from '@/features/team/api'
@@ -117,9 +117,11 @@ export function OrgUnitDetail() {
   }
   if (unitsQuery.isLoading) {
     return (
-      <Card className="p-10 text-center">
-        <Spinner className="mx-auto text-brand-500" />
-      </Card>
+      <div className="flex flex-col gap-[18px]">
+        <StatCardsSkeleton cards={4} />
+        <StatCardsSkeleton cards={3} />
+        <ListSkeleton rows={4} />
+      </div>
     )
   }
   if (!unit || !isDetailType) {
@@ -710,11 +712,7 @@ function PeopleTab({
     )
   }
   if (usersQuery.isLoading) {
-    return (
-      <Card className="p-10 text-center">
-        <Spinner className="mx-auto text-brand-500" />
-      </Card>
-    )
+    return <ListSkeleton rows={4} avatar />
   }
 
   const rows = usersQuery.data ?? []

@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/Button'
 import { Field, TextInput } from '@/components/ui/Field'
 import { Select } from '@/components/ui/Select'
 import { Spinner } from '@/components/ui/Spinner'
+import { Skeleton } from '@/components/ui/Skeleton'
 import { DialogOverlay } from '@/features/org/parts'
 import { cn } from '@/lib/cn'
 import { isoMinorExponent } from '@/lib/money'
@@ -194,9 +195,7 @@ export function NewClaimDialog({
 
         <Field label={t('me.expenses.form.category')} htmlFor="claim-category">
           {categories.isLoading ? (
-            <div className="flex h-[52px] items-center px-1">
-              <Spinner className="text-brand-500" />
-            </div>
+            <Skeleton className="h-[52px] rounded-xl" />
           ) : (categories.data ?? []).length === 0 ? (
             <p className="rounded-xl border border-line bg-paper px-3.5 py-2.5 text-sm text-ink-3">
               {t('me.expenses.form.categoriesEmpty')}

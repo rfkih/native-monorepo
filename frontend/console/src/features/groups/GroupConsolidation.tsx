@@ -4,7 +4,7 @@ import { Check, Play, Plus, TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton, Skeleton } from '@/components/ui/Skeleton'
 import { Field, TextInput } from '@/components/ui/Field'
 import { EmptyState, PeriodNav } from '@/features/_shared/financeUi'
 import { useSession } from '@/lib/session'
@@ -408,8 +408,16 @@ function GroupDetail({
           </div>
 
           {membersQuery.isLoading ? (
-            <div className="mt-4 flex justify-center">
-              <Spinner className="text-brand-500" />
+            <div className="mt-3 flex flex-col gap-3">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="flex items-center justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="mt-1.5 h-3 w-20" />
+                  </div>
+                  <Skeleton className="h-3 w-14 shrink-0" />
+                </div>
+              ))}
             </div>
           ) : membersQuery.isError ? (
             <p className="mt-3 text-sm text-loss">{t('groups.error')}</p>
@@ -473,9 +481,11 @@ function GroupDetail({
             {t('groups.consolidationError')}
           </Card>
         ) : consolidationQuery.isLoading ? (
-          <Card className="rounded-[20px] p-10 text-center">
-            <Spinner className="mx-auto text-brand-500" />
-          </Card>
+          <>
+            <Skeleton className="h-40 rounded-[20px]" />
+            <Skeleton className="h-32 rounded-[20px]" />
+            <Skeleton className="h-24 rounded-[20px]" />
+          </>
         ) : data == null ? (
           <Card className="rounded-[20px] p-10 text-center">
             <h3 className="font-display text-lg font-semibold text-ink">{t('groups.noClose')}</h3>
@@ -640,9 +650,10 @@ export function GroupConsolidation() {
           {t('groups.error')}
         </Card>
       ) : groupsQuery.isLoading ? (
-        <Card className="rounded-[20px] p-10 text-center">
-          <Spinner className="mx-auto text-brand-500" />
-        </Card>
+        <div className="grid gap-[18px] md:grid-cols-[260px_1fr]">
+          <ListSkeleton rows={4} className="rounded-[20px]" />
+          <ListSkeleton rows={3} className="rounded-[20px]" />
+        </div>
       ) : groups.length === 0 ? (
         <EmptyState title={t('groups.empty')} hint={t('groups.emptyHint')} />
       ) : (

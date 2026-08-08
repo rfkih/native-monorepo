@@ -14,6 +14,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/features/_shared/financeUi'
 import { useSession, type CompanySession } from '@/lib/session'
 import { cn } from '@/lib/cn'
@@ -59,9 +60,7 @@ function ChannelsInner({ company }: { company: CompanySession }) {
           {t('channels.error')}
         </Card>
       ) : query.isLoading ? (
-        <Card className="p-10 text-center">
-          <Spinner className="mx-auto text-brand-500" />
-        </Card>
+        <ListSkeleton rows={5} />
       ) : channels.length === 0 ? (
         <EmptyState title={t('channels.empty')} hint={t('channels.emptyHint')} />
       ) : (

@@ -4,7 +4,7 @@ import { Download, FileCheck2, Info, ReceiptText, TriangleAlert } from 'lucide-r
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { Spinner } from '@/components/ui/Spinner'
+import { Skeleton, StatCardsSkeleton } from '@/components/ui/Skeleton'
 import { Field, TextInput } from '@/components/ui/Field'
 import { EmptyState, KpiTile } from '@/features/_shared/financeUi'
 import { downloadCsv } from '@/lib/csv'
@@ -163,9 +163,10 @@ export function TaxReport() {
           {t('tax.report.error')}
         </Card>
       ) : returnQuery.isLoading || !data ? (
-        <Card className="p-10 text-center">
-          <Spinner className="mx-auto text-brand-500" />
-        </Card>
+        <>
+          <StatCardsSkeleton cards={3} />
+          <Skeleton className="h-16 rounded-card" />
+        </>
       ) : (
         <>
           <div className="grid gap-3 sm:grid-cols-3">

@@ -35,6 +35,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton } from '@/components/ui/Skeleton'
 import { Field, TextInput } from '@/components/ui/Field'
 import { Segmented } from '@/components/ui/Segmented'
 import { useSession, type CompanySession } from '@/lib/session'
@@ -1850,9 +1851,7 @@ function ModifierGroupsPanel({
         {/* Groups list */}
         <div className="max-h-[65vh] min-h-0 overflow-y-auto overscroll-contain px-4 py-3">
           {groupsQuery.isLoading ? (
-            <div className="flex items-center justify-center py-10 text-brand-500">
-              <Spinner />
-            </div>
+            <ListSkeleton rows={2} className="rounded-none border-0" />
           ) : groupsQuery.isError ? (
             <p className="py-6 text-center text-sm text-loss">{t('menu.options.loadError')}</p>
           ) : groups.length === 0 ? (
@@ -2377,9 +2376,7 @@ function MenuManagementInner({ session }: { session: CompanySession }) {
       <main className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-5 lg:px-8">
         <div className="mx-auto max-w-3xl">
           {menuQuery.isLoading ? (
-            <div className="flex items-center justify-center py-24 text-brand-500">
-              <Spinner />
-            </div>
+            <ListSkeleton rows={6} />
           ) : menuQuery.isError ? (
             <Card className="p-8 text-center text-sm text-loss">
               <TriangleAlert className="mx-auto mb-2 size-5" />

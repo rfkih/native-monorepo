@@ -4,7 +4,7 @@ import { ArrowLeft, Download, TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton, StatCardsSkeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/features/_shared/financeUi'
 import { downloadCsv } from '@/lib/csv'
 import { SummaryCard } from '@/features/statements/parts'
@@ -118,9 +118,10 @@ export function BudgetDetail() {
           {t('budget.error')}
         </Card>
       ) : query.isLoading || !data ? (
-        <Card className="p-10 text-center">
-          <Spinner className="mx-auto text-brand-500" />
-        </Card>
+        <>
+          <StatCardsSkeleton cards={3} />
+          <ListSkeleton rows={6} />
+        </>
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-3">

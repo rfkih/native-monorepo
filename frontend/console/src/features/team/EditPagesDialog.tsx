@@ -8,7 +8,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/Button'
-import { Spinner } from '@/components/ui/Spinner'
+import { Skeleton } from '@/components/ui/Skeleton'
 import { DialogOverlay } from '@/features/org/parts'
 import { cn } from '@/lib/cn'
 import { grantablePagesForRoles, type PageKey } from '@/lib/pageAccess'
@@ -72,8 +72,16 @@ export function EditPagesDialog({
         {grantable.length === 0 ? (
           <p className="text-sm text-ink-3">{t('team.editPagesDialog.noneForRole')}</p>
         ) : pagesQuery.isLoading || selected === null ? (
-          <div className="flex justify-center py-6">
-            <Spinner className="text-emerald" />
+          <div className="overflow-hidden rounded-xl border border-line">
+            {[0, 1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="flex h-11 items-center gap-3 border-b border-ink-50 px-4 last:border-0"
+              >
+                <Skeleton className="size-4 rounded" />
+                <Skeleton className="h-3.5 w-40" />
+              </div>
+            ))}
           </div>
         ) : (
           <div

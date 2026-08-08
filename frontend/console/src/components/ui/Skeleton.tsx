@@ -22,6 +22,79 @@ export function Skeleton({ className }: { className?: string }) {
   return <div aria-hidden="true" className={cn('animate-pulse rounded-lg bg-ink-100', className)} />
 }
 
+/**
+ * Composite content skeletons — for a screen's FIRST data load (React Query v5's `isLoading`
+ * is first-load only; refetches keep the stale content rendered, so these never flash on a
+ * filter change or invalidation). Pick the one that mirrors the loaded layout; compose with
+ * raw <Skeleton /> blocks when a screen's shape is special. Shown immediately, no artificial
+ * delay: a skeleton→content swap reads as a crossfade, unlike a spinner→content jump.
+ */
+
+/** Rows in a bordered card — the standard list/table surface (invoices, vendors, team…). */
+export function ListSkeleton({
+  rows = 6,
+  avatar = false,
+  className,
+}: {
+  rows?: number
+  avatar?: boolean
+  className?: string
+}) {
+  return (
+    <div
+      aria-busy="true"
+      className={cn('overflow-hidden rounded-card border border-line bg-surface', className)}
+    >
+      <div className="divide-y divide-line">
+        {Array.from({ length: rows }, (_, i) => (
+          <div key={i} className="flex items-center gap-3 px-4 py-3.5 sm:px-5">
+            {avatar ? <Skeleton className="size-9 shrink-0 rounded-xl" /> : null}
+            <div className="min-w-0 flex-1">
+              <Skeleton className="h-4 w-40 max-w-[60%]" />
+              <Skeleton className="mt-1.5 h-3 w-24 max-w-[40%]" />
+            </div>
+            <Skeleton className="h-4 w-20 shrink-0" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+const STAT_GRID: Record<number, string> = {
+  2: 'sm:grid-cols-2',
+  3: 'sm:grid-cols-3',
+  4: 'sm:grid-cols-4',
+}
+
+/** A row of stat tiles (label + big figure), like the dashboard/aging headline cards. */
+export function StatCardsSkeleton({ cards = 3, className }: { cards?: 2 | 3 | 4; className?: string }) {
+  return (
+    <div aria-busy="true" className={cn('grid gap-4', STAT_GRID[cards] ?? 'sm:grid-cols-3', className)}>
+      {Array.from({ length: cards }, (_, i) => (
+        <div key={i} className="rounded-card border border-line bg-surface p-5">
+          <Skeleton className="h-3 w-20" />
+          <Skeleton className="mt-3 h-7 w-28 max-w-full" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** Stacked label + input ghosts — detail drawers and dialogs that load a record before editing. */
+export function FormSkeleton({ fields = 4, className }: { fields?: number; className?: string }) {
+  return (
+    <div aria-busy="true" className={cn('flex flex-col gap-5', className)}>
+      {Array.from({ length: fields }, (_, i) => (
+        <div key={i}>
+          <Skeleton className="h-3.5 w-24" />
+          <Skeleton className="mt-2 h-10 rounded-xl" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
 /** Full-screen shell ghost — same geometry as Shell (240px sidebar at lg+, 64px topbar). */
 export function AppSkeleton() {
   return (

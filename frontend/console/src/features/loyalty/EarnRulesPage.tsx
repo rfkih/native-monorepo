@@ -23,6 +23,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton } from '@/components/ui/Skeleton'
 import { Segmented } from '@/components/ui/Segmented'
 import { Field, TextInput } from '@/components/ui/Field'
 import { EmptyState } from '@/features/_shared/financeUi'
@@ -89,9 +90,7 @@ function EarnRulesPageInner({ company }: { company: CompanySession }) {
             {t('loyalty.earnRules.errors.load')}
           </Card>
         ) : rulesQuery.isLoading ? (
-          <Card className="p-10 text-center">
-            <Spinner className="mx-auto text-brand-500" />
-          </Card>
+          <ListSkeleton rows={3} />
         ) : rules.length === 0 ? (
           <EmptyState title={t('loyalty.earnRules.empty')} hint={t('loyalty.earnRules.emptyHint')} />
         ) : (

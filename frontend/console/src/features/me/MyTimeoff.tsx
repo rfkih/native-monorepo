@@ -10,7 +10,7 @@ import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Field, TextInput } from '@/components/ui/Field'
-import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton } from '@/components/ui/Skeleton'
 import { DialogOverlay } from '@/features/org/parts'
 import { cn } from '@/lib/cn'
 import {
@@ -109,9 +109,7 @@ export function MyTimeoff({
         {t('me.timeoff.myLeaveRequests')}
       </h3>
       {leaveRequests.isLoading ? (
-        <Card className="mt-2 p-6 text-center">
-          <Spinner className="mx-auto text-brand-500" />
-        </Card>
+        <ListSkeleton rows={3} className="mt-2" />
       ) : (leaveRequests.data ?? []).length === 0 ? (
         <p className="mt-2 text-sm text-ink-3">{t('me.timeoff.leaveEmpty')}</p>
       ) : (
@@ -134,9 +132,7 @@ export function MyTimeoff({
         {t('me.timeoff.myOvertimeEntries')}
       </h3>
       {overtimeEntries.isLoading ? (
-        <Card className="mt-2 p-6 text-center">
-          <Spinner className="mx-auto text-brand-500" />
-        </Card>
+        <ListSkeleton rows={3} className="mt-2" />
       ) : (overtimeEntries.data ?? []).length === 0 ? (
         <p className="mt-2 text-sm text-ink-3">{t('me.timeoff.overtimeEmpty')}</p>
       ) : (

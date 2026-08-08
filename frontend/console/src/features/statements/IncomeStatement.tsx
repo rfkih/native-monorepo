@@ -4,7 +4,7 @@ import { Download, Printer, TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton, StatCardsSkeleton } from '@/components/ui/Skeleton'
 import { useSession } from '@/lib/session'
 import { localeOf } from '@/i18n'
 import { formatMoney, formatAmount, formatPercent } from '@/lib/money'
@@ -124,9 +124,14 @@ export function IncomeStatement() {
       ) : showEmpty ? (
         <StatementEmptyState title={t('statements.noData')} hint={t('statements.noDataHint')} />
       ) : query.isLoading && !data ? (
-        <Card className="flex justify-center p-10 text-emerald">
-          <Spinner />
-        </Card>
+        <>
+          <StatCardsSkeleton cards={3} />
+          <ListSkeleton rows={5} className="rounded-[20px]" />
+          <div className="grid gap-5 lg:grid-cols-2">
+            <ListSkeleton rows={5} className="rounded-[20px]" />
+            <ListSkeleton rows={5} className="rounded-[20px]" />
+          </div>
+        </>
       ) : (
         <>
           {/* Summary cards */}

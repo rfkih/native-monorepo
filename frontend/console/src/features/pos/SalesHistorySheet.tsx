@@ -11,6 +11,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { History, ReceiptText, TriangleAlert, X } from 'lucide-react'
 import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton } from '@/components/ui/Skeleton'
 import { cn } from '@/lib/cn'
 import { formatMoney } from '@/lib/money'
 import type { CompanySession } from '@/lib/session'
@@ -93,9 +94,7 @@ export function SalesHistorySheet({
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
         {history.isLoading ? (
-          <div className="grid h-40 place-items-center text-brand-500">
-            <Spinner />
-          </div>
+          <ListSkeleton rows={6} />
         ) : history.isError ? (
           <div className="mx-auto mt-10 max-w-sm rounded-2xl border border-loss/30 bg-tint-loss px-6 py-6 text-center text-sm text-loss">
             <TriangleAlert className="mx-auto mb-2 size-5" aria-hidden />

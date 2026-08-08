@@ -21,6 +21,7 @@ import {
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton, Skeleton } from '@/components/ui/Skeleton'
 import { Wordmark } from '@/components/Wordmark'
 import { ScreenHeader } from '@/components/mobile/ScreenHeader'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
@@ -126,9 +127,7 @@ export function MyExpenses() {
         <div className="mt-6 max-sm:mt-0">
           {!ready ? (
             sessionLoading ? (
-              <Card className="p-10 text-center">
-                <Spinner className="mx-auto text-brand-500" />
-              </Card>
+              <ListSkeleton rows={5} avatar />
             ) : (
               <EmptyState
                 title={t('me.expenses.noCompany.title')}
@@ -136,9 +135,7 @@ export function MyExpenses() {
               />
             )
           ) : claims.isLoading ? (
-            <Card className="p-10 text-center">
-              <Spinner className="mx-auto text-brand-500" />
-            </Card>
+            <ListSkeleton rows={5} avatar />
           ) : claims.isError ? (
             <Card className="p-8 text-center text-sm text-loss">
               <TriangleAlert className="mx-auto mb-2 size-5" />
@@ -344,7 +341,18 @@ function ClaimDetailSheet({
           <h2 className="font-display text-lg font-semibold text-ink">{t('me.expenses.detail.title')}</h2>
 
           {detail.isLoading || !claim ? (
-            <Spinner className="text-brand-500" />
+            <div className="space-y-5">
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-6 w-24 rounded-full" />
+                <Skeleton className="h-6 w-28" />
+              </div>
+              <div className="grid grid-cols-2 gap-3 rounded-2xl border border-line bg-surface p-4">
+                <Skeleton className="h-9" />
+                <Skeleton className="h-9" />
+                <Skeleton className="h-9" />
+              </div>
+              <Skeleton className="h-40 rounded-xl" />
+            </div>
           ) : (
             <>
               <div className="flex items-center gap-3">

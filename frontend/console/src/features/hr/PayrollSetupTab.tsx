@@ -12,7 +12,7 @@ import { ChevronRight, ShieldCheck, TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton, Skeleton } from '@/components/ui/Skeleton'
 import { Field, TextInput } from '@/components/ui/Field'
 import { Select } from '@/components/ui/Select'
 import { EmptyState } from '@/features/_shared/financeUi'
@@ -82,9 +82,7 @@ export function PayrollSetupTab({
       ) : null}
 
       {rulesQuery.isLoading ? (
-        <Card className="p-10 text-center">
-          <Spinner className="mx-auto text-brand-500" />
-        </Card>
+        <ListSkeleton rows={5} />
       ) : rules.length === 0 ? (
         <EmptyState
           title={t('payrollSetup.table.empty')}
@@ -251,7 +249,21 @@ function RuleDetailDrawer({
         </div>
 
         {detailQuery.isLoading ? (
-          <Spinner className="mx-auto text-brand-500" />
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+              <Skeleton className="h-3.5 w-16" />
+              <Skeleton className="h-3.5 w-20" />
+              <Skeleton className="h-3.5 w-20" />
+              <Skeleton className="h-3.5 w-24" />
+              <Skeleton className="h-3.5 w-16" />
+              <Skeleton className="h-3.5 w-28" />
+            </div>
+            <div>
+              <Skeleton className="h-3 w-24" />
+              <Skeleton className="mt-1.5 h-4 w-full" />
+            </div>
+            <Skeleton className="h-20 rounded-xl" />
+          </div>
         ) : !detail ? (
           <p className="text-sm text-loss">{t('payrollSetup.detail.notFound')}</p>
         ) : (

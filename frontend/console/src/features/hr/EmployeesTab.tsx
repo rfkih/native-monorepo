@@ -13,7 +13,7 @@ import { Card } from '@/components/ui/Card'
 import { ErrorDetails } from '@/components/ErrorDetails'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/features/_shared/financeUi'
 import type { OrgUnit } from '@/features/org/api'
 import { cn } from '@/lib/cn'
@@ -134,9 +134,7 @@ export function EmployeesTab({
           <ErrorDetails error={query.error} className="mx-auto max-w-md" />
         </Card>
       ) : query.isLoading ? (
-        <Card className="p-10 text-center">
-          <Spinner className="mx-auto text-brand-500" />
-        </Card>
+        <ListSkeleton rows={5} avatar />
       ) : grouped.length === 0 ? (
         <EmptyState title={t('hr.list.empty')} hint={t('hr.list.emptyHint')} />
       ) : (

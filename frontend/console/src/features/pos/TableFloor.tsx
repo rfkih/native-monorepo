@@ -26,6 +26,7 @@ import {
 } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
+import { Skeleton } from '@/components/ui/Skeleton'
 import { isOutletNotAssigned } from '@/lib/api'
 import { formatMoney } from '@/lib/money'
 import { cn } from '@/lib/cn'
@@ -173,8 +174,20 @@ export function TableFloor({ session, locale, tables, onOpenBill, onClose }: Pro
             </p>
 
             {billsQuery.isLoading ? (
-              <div className="grid place-items-center py-12 text-brand-500">
-                <Spinner />
+              <div
+                className="grid gap-3"
+                style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))' }}
+              >
+                {[0, 1, 2, 3, 4, 5].map((i) => (
+                  <div
+                    key={i}
+                    className="flex flex-col items-center gap-1.5 rounded-2xl border-[1.5px] border-line bg-surface px-3 py-4"
+                  >
+                    <Skeleton className="size-5 rounded" />
+                    <Skeleton className="h-[17px] w-10" />
+                    <Skeleton className="h-2.5 w-14" />
+                  </div>
+                ))}
               </div>
             ) : activeTables.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-line px-5 py-8 text-center">

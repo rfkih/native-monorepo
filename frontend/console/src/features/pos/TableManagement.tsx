@@ -16,6 +16,7 @@ import { X, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton } from '@/components/ui/Skeleton'
 import { cn } from '@/lib/cn'
 import type { CompanySession } from '@/lib/session'
 import {
@@ -64,9 +65,7 @@ export function TableManagement({ session, onClose }: Props) {
         {/* Table list */}
         <div className="flex-1 overflow-y-auto overscroll-contain p-5">
           {tablesQuery.isLoading ? (
-            <div className="grid place-items-center py-16 text-brand-500">
-              <Spinner />
-            </div>
+            <ListSkeleton rows={4} />
           ) : tables.length === 0 ? (
             <p className="py-10 text-center text-sm text-ink-3">{t('pos.table.noTables')}</p>
           ) : (

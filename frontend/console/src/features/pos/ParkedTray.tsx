@@ -12,7 +12,7 @@
 import { useTranslation } from 'react-i18next'
 import { X, ShoppingBag, Table2, Smartphone } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
-import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton } from '@/components/ui/Skeleton'
 import { formatMoney } from '@/lib/money'
 import { cn } from '@/lib/cn'
 import type { CompanySession } from '@/lib/session'
@@ -62,9 +62,7 @@ export function ParkedTray({ session, locale, onResume, onClose }: Props) {
         {/* List */}
         <div className="flex-1 overflow-y-auto overscroll-contain p-5">
           {parkedQuery.isLoading ? (
-            <div className="grid place-items-center py-16 text-brand-500">
-              <Spinner />
-            </div>
+            <ListSkeleton rows={4} />
           ) : parked.length === 0 ? (
             <p className="py-10 text-center text-sm text-ink-3">
               {t('pos.parked.noParked')}

@@ -14,8 +14,7 @@
  */
 import { lazy, Suspense } from 'react'
 import { Navigate } from 'react-router-dom'
-import { Spinner } from '@/components/ui/Spinner'
-import { PosSkeleton } from '@/components/ui/Skeleton'
+import { ListSkeleton, PosSkeleton, Skeleton } from '@/components/ui/Skeleton'
 import { VerticalComingSoon } from '@/components/VerticalComingSoon'
 import { useSession } from '@/lib/session'
 import { useResolvedOutlets } from '@/features/org/useResolvedOutlets'
@@ -26,10 +25,21 @@ import { barbershopConfig } from './barbershopConfig'
 
 const Pos = lazy(() => import('@/features/pos/Pos').then((m) => ({ default: m.Pos })))
 
-function CenteredSpinner() {
+// Mirrors CatalogManagementInner's page shape (header + Packages/Add-ons/Washers cards) — the
+// vertical isn't known yet at this point, so the ghost is the shared chrome, not a vertical-specific
+// one.
+function CatalogSwitchSkeleton() {
   return (
-    <div className="grid min-h-[60vh] place-items-center">
-      <Spinner className="size-6 text-ink-3" />
+    <div className="min-h-screen bg-paper">
+      <div className="flex h-16 items-center gap-3 border-b border-line bg-surface px-4 sm:px-6">
+        <Skeleton className="size-9 shrink-0 rounded-full" />
+        <Skeleton className="h-4 w-32" />
+      </div>
+      <div className="mx-auto max-w-3xl space-y-6 px-4 py-6 sm:px-6">
+        <ListSkeleton rows={3} />
+        <ListSkeleton rows={2} />
+        <ListSkeleton rows={2} />
+      </div>
     </div>
   )
 }
@@ -83,7 +93,7 @@ export function CatalogSwitch() {
   }
 
   if (status === 'loading') {
-    return <CenteredSpinner />
+    return <CatalogSwitchSkeleton />
   }
 
   const effectiveOutlet = outlets.find((o) => o.id === effectiveOutletId)

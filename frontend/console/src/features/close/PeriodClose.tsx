@@ -4,7 +4,7 @@ import { Check, TriangleAlert, X } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/features/_shared/financeUi'
 import { useIsPhone } from '@/components/mobile/useIsPhone'
 import { useSession } from '@/lib/session'
@@ -171,9 +171,7 @@ export function PeriodClose() {
       {query.isError ? (
         <Card className="p-8 text-center text-sm text-loss">{t('close.error')}</Card>
       ) : query.isLoading ? (
-        <Card className="p-10 text-center">
-          <Spinner className="mx-auto text-brand-500" />
-        </Card>
+        <ListSkeleton rows={4} />
       ) : items.length === 0 ? (
         <EmptyState title={t('close.empty')} hint={t('close.emptyHint')} />
       ) : isPhone ? (

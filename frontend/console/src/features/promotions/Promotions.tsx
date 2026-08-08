@@ -18,7 +18,7 @@ import { Plus, Tag, Ticket, TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton } from '@/components/ui/Skeleton'
 import { Segmented } from '@/components/ui/Segmented'
 import { EmptyState } from '@/features/_shared/financeUi'
 import { useSession, type CompanySession } from '@/lib/session'
@@ -151,9 +151,7 @@ function PromotionsInner({ company }: { company: CompanySession }) {
             {t('promotions.errors.loadRules')}
           </Card>
         ) : rulesQuery.isLoading ? (
-          <Card className="p-10 text-center">
-            <Spinner className="mx-auto text-brand-500" />
-          </Card>
+          <ListSkeleton rows={3} />
         ) : rules.length === 0 ? (
           <EmptyState title={t('promotions.emptyRules')} hint={t('promotions.emptyRulesHint')} />
         ) : (
@@ -220,9 +218,7 @@ function PromotionsInner({ company }: { company: CompanySession }) {
             {t('promotions.errors.loadCoupons')}
           </Card>
         ) : couponsQuery.isLoading ? (
-          <Card className="p-10 text-center">
-            <Spinner className="mx-auto text-brand-500" />
-          </Card>
+          <ListSkeleton rows={3} />
         ) : coupons.length === 0 ? (
           <EmptyState title={t('promotions.emptyCoupons')} hint={t('promotions.emptyCouponsHint')} />
         ) : (

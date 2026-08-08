@@ -11,7 +11,7 @@ import { ChevronDown, ChevronRight, Printer, TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton, Skeleton, StatCardsSkeleton } from '@/components/ui/Skeleton'
 import { KpiTile } from '@/features/_shared/financeUi'
 import { PayslipPrint } from '@/features/_shared/PayslipPrint'
 import { formatMoney } from '@/lib/money'
@@ -54,9 +54,10 @@ export function PayslipsSection({
         {t('me.payslips.title')}
       </h2>
       {payslips.isLoading ? (
-        <Card className="mt-2 p-8 text-center">
-          <Spinner className="mx-auto text-brand-500" />
-        </Card>
+        <div className="mt-2 flex flex-col gap-2">
+          <StatCardsSkeleton cards={2} />
+          <ListSkeleton rows={4} />
+        </div>
       ) : payslips.isError ? (
         <Card className="mt-2 p-8 text-center text-sm text-loss">
           <TriangleAlert className="mx-auto mb-2 size-5" />
@@ -180,7 +181,17 @@ function PayslipRow({
       {open ? (
         <div className="px-3 pb-4 pt-1">
           {detail.isLoading ? (
-            <Spinner className="my-3 text-brand-500" />
+            <div className="my-3 space-y-3">
+              <div className="flex justify-end">
+                <Skeleton className="h-9 w-32 rounded-xl" />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Skeleton className="h-16 rounded-xl" />
+                <Skeleton className="h-16 rounded-xl" />
+                <Skeleton className="h-16 rounded-xl" />
+              </div>
+              <Skeleton className="h-24 rounded-xl" />
+            </div>
           ) : detail.isError || !detail.data ? (
             <p className="text-sm text-loss">{t('me.error')}</p>
           ) : (

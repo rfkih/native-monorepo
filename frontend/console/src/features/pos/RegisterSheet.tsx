@@ -14,6 +14,7 @@ import { useTranslation } from 'react-i18next'
 import { Banknote, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
+import { FormSkeleton } from '@/components/ui/Skeleton'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { formatMoney } from '@/lib/money'
@@ -237,8 +238,8 @@ export function RegisterSheet({
             )}
           </div>
         ) : currentQuery.isLoading ? (
-          <div className="grid place-items-center py-14">
-            <Spinner />
+          <div className="px-5 py-5">
+            <FormSkeleton fields={3} />
           </div>
         ) : current ? (
           /* ── OPEN session → close form ──────────────────────────────────── */

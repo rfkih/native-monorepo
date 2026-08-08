@@ -13,7 +13,7 @@ import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Field, TextInput } from '@/components/ui/Field'
-import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton, Skeleton } from '@/components/ui/Skeleton'
 import { Segmented } from '@/components/ui/Segmented'
 import { EmptyState } from '@/features/_shared/financeUi'
 import { DialogOverlay } from '@/features/org/parts'
@@ -127,9 +127,7 @@ function LeaveRequestsSection({ companyId, actor }: { companyId: string; actor: 
     <div className="flex flex-col gap-3">
       <StatusFilterBar value={status} onChange={setStatus} />
       {query.isLoading ? (
-        <Card className="p-10 text-center">
-          <Spinner className="mx-auto text-brand-500" />
-        </Card>
+        <ListSkeleton rows={5} />
       ) : rows.length === 0 ? (
         <EmptyState title={t('attendance.leave.empty')} hint={t('attendance.leave.emptyHint')} />
       ) : (
@@ -214,9 +212,7 @@ function OvertimeEntriesSection({ companyId, actor }: { companyId: string; actor
     <div className="flex flex-col gap-3">
       <StatusFilterBar value={status} onChange={setStatus} />
       {query.isLoading ? (
-        <Card className="p-10 text-center">
-          <Spinner className="mx-auto text-brand-500" />
-        </Card>
+        <ListSkeleton rows={5} />
       ) : rows.length === 0 ? (
         <EmptyState title={t('attendance.overtime.empty')} hint={t('attendance.overtime.emptyHint')} />
       ) : (
@@ -398,9 +394,7 @@ function BalancesSection({ companyId, actor }: { companyId: string; actor: strin
       </div>
 
       {query.isLoading ? (
-        <Card className="p-10 text-center">
-          <Spinner className="mx-auto text-brand-500" />
-        </Card>
+        <ListSkeleton rows={5} />
       ) : rows.length === 0 ? (
         <EmptyState title={t('attendance.balances.empty')} hint={t('attendance.balances.emptyHint')} />
       ) : (
@@ -530,8 +524,18 @@ function CalendarSection({ companyId, actor }: { companyId: string; actor: strin
 
   if (query.isLoading) {
     return (
-      <Card className="p-10 text-center">
-        <Spinner className="mx-auto text-brand-500" />
+      <Card className="p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="mt-2 h-4 w-64 max-w-full" />
+          </div>
+          <Skeleton className="h-9 w-24 rounded-xl" />
+        </div>
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <Skeleton className="h-20 rounded-xl" />
+          <Skeleton className="h-20 rounded-xl" />
+        </div>
       </Card>
     )
   }

@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { ChevronDown, ChevronRight, Plus, Trash2, TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/features/_shared/financeUi'
 import { useSession } from '@/lib/session'
 import { cn } from '@/lib/cn'
@@ -309,9 +309,7 @@ export function OrgTree() {
           {t('org.error')}
         </Card>
       ) : query.isLoading ? (
-        <Card className="p-10 text-center">
-          <Spinner className="mx-auto text-brand-500" />
-        </Card>
+        <ListSkeleton rows={6} className="rounded-[20px]" />
       ) : roots.length === 0 ? (
         <EmptyState title={t('org.empty')} hint={t('org.emptyHint')} />
       ) : (

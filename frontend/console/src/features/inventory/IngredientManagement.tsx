@@ -18,6 +18,7 @@ import { Card } from '@/components/ui/Card'
 import { Field, TextInput } from '@/components/ui/Field'
 import { Segmented } from '@/components/ui/Segmented'
 import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton } from '@/components/ui/Skeleton'
 import { OutletGate } from '@/components/OutletGate'
 import { OutletPicker } from '@/components/OutletPicker'
 import { ApiError } from '@/lib/api'
@@ -132,9 +133,7 @@ function IngredientManagementInner({
       <main className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-5 lg:px-8">
         <div className="mx-auto max-w-3xl">
           {query.isLoading ? (
-            <div className="flex items-center justify-center py-24 text-brand-500">
-              <Spinner />
-            </div>
+            <ListSkeleton rows={6} />
           ) : query.isError ? (
             <Card className="p-8 text-center text-sm text-loss">
               <TriangleAlert className="mx-auto mb-2 size-5" />

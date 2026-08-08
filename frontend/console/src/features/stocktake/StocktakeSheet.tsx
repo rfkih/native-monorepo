@@ -20,6 +20,7 @@ import { useNavigate } from 'react-router-dom'
 import { ClipboardCheck, TriangleAlert, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton, Skeleton } from '@/components/ui/Skeleton'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { formatMoney } from '@/lib/money'
@@ -133,9 +134,17 @@ export function StocktakeSheet({
         {result ? (
           <StocktakeSummary result={result} currency={currency} locale={locale} onDone={onClose} />
         ) : ingredientsQuery.isLoading ? (
-          <div className="grid place-items-center py-14">
-            <Spinner />
-          </div>
+          <>
+            <div className="shrink-0 px-5 pt-3">
+              <Skeleton className="h-3 w-4/5" />
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-3">
+              <ListSkeleton rows={5} className="rounded-none border-0" />
+            </div>
+            <div className="shrink-0 border-t border-line px-5 py-4">
+              <Skeleton className="h-11 rounded-xl" />
+            </div>
+          </>
         ) : ingredientsQuery.isError ? (
           <div className="px-5 py-10 text-center">
             <TriangleAlert className="mx-auto mb-2 size-5 text-loss" aria-hidden="true" />

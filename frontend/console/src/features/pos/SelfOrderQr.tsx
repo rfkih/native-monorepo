@@ -24,6 +24,7 @@ import QRCode from 'qrcode'
 import { Printer, QrCode as QrCodeIcon, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
+import { Skeleton } from '@/components/ui/Skeleton'
 import type { CompanySession } from '@/lib/session'
 import { useSelfOrderAccess, useRotateSelfOrderAccess } from './selfOrderApi'
 
@@ -81,8 +82,13 @@ export function SelfOrderQr({ session, outletId }: Props) {
 
       <div className="px-5 pb-5">
         {query.isLoading ? (
-          <div className="grid place-items-center py-8 text-brand-500">
-            <Spinner />
+          <div className="grid grid-cols-2 gap-3">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="flex flex-col items-center gap-2 rounded-xl border border-line bg-surface p-3">
+                <Skeleton className="size-[160px] rounded-lg" />
+                <Skeleton className="h-3 w-16" />
+              </div>
+            ))}
           </div>
         ) : query.isError ? (
           <p className="text-xs text-loss" role="alert">

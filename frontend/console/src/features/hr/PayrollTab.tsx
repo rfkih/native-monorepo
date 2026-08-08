@@ -18,7 +18,7 @@ import { ChevronDown, ChevronRight, Download, Play, Printer, TriangleAlert } fro
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton, Skeleton } from '@/components/ui/Skeleton'
 import { Segmented } from '@/components/ui/Segmented'
 import { Field, TextInput } from '@/components/ui/Field'
 import { EmptyState, KpiTile, PeriodNav } from '@/features/_shared/financeUi'
@@ -156,9 +156,10 @@ export function PayrollTab({
       ) : null}
 
       {setup.isLoading ? (
-        <Card className="p-10 text-center">
-          <Spinner className="mx-auto text-brand-500" />
-        </Card>
+        <div className="flex flex-col gap-4">
+          <Skeleton className="h-9 w-64 rounded-xl" />
+          <ListSkeleton rows={4} />
+        </div>
       ) : !setup.data?.seeded ? (
         /* Setup gate — payroll needs the pay-component catalog + statutory rules first. */
         <Card className="p-8 text-center">
@@ -280,9 +281,7 @@ export function PayrollTab({
 
               {/* Run history */}
               {runsQuery.isLoading ? (
-                <Card className="p-10 text-center">
-                  <Spinner className="mx-auto text-brand-500" />
-                </Card>
+                <ListSkeleton rows={4} />
               ) : allRuns.length === 0 ? (
                 <EmptyState
                   title={t('hr.payroll.history.empty')}
@@ -587,7 +586,15 @@ function RunDetail({
               {openEmployee === row.employeeId ? (
                 <div className="mb-2 ml-7 overflow-x-auto">
                   {lines.isLoading ? (
-                    <Spinner className="my-2 text-brand-500" />
+                    <div className="my-2 space-y-2">
+                      {[0, 1, 2].map((i) => (
+                        <div key={i} className="flex items-center gap-4">
+                          <Skeleton className="h-3 w-24" />
+                          <Skeleton className="h-3 w-16" />
+                          <Skeleton className="h-3 w-12" />
+                        </div>
+                      ))}
+                    </div>
                   ) : (
                     <table className="w-full text-left text-sm">
                       <thead>
@@ -878,8 +885,16 @@ function LiabilitiesPanel({
 
   if (liabilities.isLoading) {
     return (
-      <Card className="p-10 text-center">
-        <Spinner className="mx-auto text-brand-500" />
+      <Card className="p-4">
+        <Skeleton className="h-3 w-32" />
+        <div className="mt-2 divide-y divide-line">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div key={i} className="flex items-center justify-between gap-3 py-2">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-4 w-20" />
+            </div>
+          ))}
+        </div>
       </Card>
     )
   }

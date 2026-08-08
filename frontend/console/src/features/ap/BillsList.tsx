@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { Plus, TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton } from '@/components/ui/Skeleton'
 import { Segmented } from '@/components/ui/Segmented'
 import { EmptyState } from '@/features/_shared/financeUi'
 import { LedgerPhoneList } from '@/features/_shared/LedgerPhoneList'
@@ -81,9 +81,7 @@ export function BillsList() {
           {t('ap.bills.error')}
         </Card>
       ) : query.isLoading ? (
-        <Card className="p-10 text-center">
-          <Spinner className="mx-auto text-brand-500" />
-        </Card>
+        <ListSkeleton rows={6} />
       ) : bills.length === 0 ? (
         <EmptyState title={t('ap.bills.empty')} hint={t('ap.bills.emptyHint')} />
       ) : isPhone ? (

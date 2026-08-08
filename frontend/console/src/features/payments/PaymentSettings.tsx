@@ -43,6 +43,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Segmented } from '@/components/ui/Segmented'
 import { Spinner } from '@/components/ui/Spinner'
+import { FormSkeleton, ListSkeleton, Skeleton } from '@/components/ui/Skeleton'
 import { Field, TextInput } from '@/components/ui/Field'
 import { ChoiceCards, type Choice } from '@/components/ui/ChoiceCards'
 import { Wordmark } from '@/components/Wordmark'
@@ -147,9 +148,12 @@ function PaymentSettingsContent({ session }: { session: CompanySession }) {
 
   if (!ownerSettings.data) {
     return (
-      <Card className="p-10 text-center">
-        <Spinner className="mx-auto text-brand-500" />
-      </Card>
+      <>
+        <ListSkeleton rows={3} className="rounded-2xl" />
+        <FormSkeleton fields={2} />
+        <Skeleton className="h-32 rounded-card" />
+        <FormSkeleton fields={3} />
+      </>
     )
   }
 
@@ -256,7 +260,10 @@ function DivisionsSection({
           ))}
         </div>
       ) : orgUnitsQuery.isLoading ? (
-        <Spinner className="mx-auto text-brand-500" />
+        <div className="flex flex-col gap-3">
+          <Skeleton className="h-16 rounded-2xl" />
+          <Skeleton className="h-16 rounded-2xl" />
+        </div>
       ) : (
         <p className="text-sm text-ink-3">{t('settings.payments.divisions.empty')}</p>
       )}
@@ -874,7 +881,7 @@ function StaticImageEditor({
         {preview.status === 'ready' && preview.url ? (
           <img src={preview.url} alt={t('settings.payments.static.previewAlt')} className="size-full object-contain" />
         ) : preview.status === 'loading' ? (
-          <Spinner className="text-brand-500" />
+          <Skeleton className="size-full rounded-none" />
         ) : (
           <QrCode className="size-8 text-ink-3" strokeWidth={1.5} aria-hidden />
         )}

@@ -31,7 +31,7 @@ import { useTheme } from '@/lib/theme'
 import { localeOf } from '@/i18n'
 import { cn } from '@/lib/cn'
 import { apiFetch } from '@/lib/api'
-import { Spinner } from '@/components/ui/Spinner'
+import { Skeleton } from '@/components/ui/Skeleton'
 import { OutletPicker } from '@/components/OutletPicker'
 import { useBill, type BillSummaryResponse } from '@/features/pos/billsApi'
 import { useTables, type TableResponse } from '@/features/pos/api'
@@ -182,8 +182,21 @@ function KitchenInner({ session }: { session: CompanySession }) {
       {/* ── Board ──────────────────────────────────────────────────────────── */}
       <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
         {billsQuery.isLoading ? (
-          <div className="flex items-center justify-center py-24 text-brand-500">
-            <Spinner />
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="flex flex-col rounded-2xl border-2 border-line bg-surface shadow-md">
+                <div className="border-b border-line px-5 py-4">
+                  <Skeleton className="h-7 w-20" />
+                </div>
+                <div className="flex-1 space-y-3 px-5 py-4">
+                  <Skeleton className="h-5 w-full" />
+                  <Skeleton className="h-5 w-3/4" />
+                </div>
+                <div className="border-t border-line px-5 py-4">
+                  <Skeleton className="h-11 rounded-xl" />
+                </div>
+              </div>
+            ))}
           </div>
         ) : billsQuery.isError ? (
           <div className="mx-auto mt-16 max-w-sm rounded-2xl border border-loss/30 bg-loss/10 px-6 py-8 text-center">
@@ -259,16 +272,16 @@ function TicketCard({ bill, tables, session, onBump }: TicketCardProps) {
             </p>
           ) : null}
         </div>
-        {detailQuery.isLoading ? (
-          <span className="text-ink-3" aria-hidden="true">
-            <Spinner />
-          </span>
-        ) : null}
       </div>
 
       {/* ── Item lines ── */}
       <div className="flex-1 space-y-4 px-5 py-4">
-        {detailQuery.isError ? (
+        {detailQuery.isLoading ? (
+          <div className="space-y-2.5">
+            <Skeleton className="h-5 w-3/4" />
+            <Skeleton className="h-5 w-1/2" />
+          </div>
+        ) : detailQuery.isError ? (
           <p className="text-sm text-loss" role="alert">
             {t('kitchen.lineLoadError')}
           </p>

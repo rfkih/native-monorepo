@@ -11,7 +11,7 @@ import { Check, Copy, Plus, Search, Store, TriangleAlert, UserX } from 'lucide-r
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton, Skeleton } from '@/components/ui/Skeleton'
 import { Field, TextInput } from '@/components/ui/Field'
 import { Segmented } from '@/components/ui/Segmented'
 import { EmptyState } from '@/features/_shared/financeUi'
@@ -471,8 +471,16 @@ function EditOutletsDialog({
         </p>
 
         {isLoading ? (
-          <div className="flex justify-center py-6">
-            <Spinner className="text-emerald" />
+          <div className="overflow-hidden rounded-xl border border-line">
+            {[0, 1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="flex h-11 items-center gap-3 border-b border-ink-50 px-4 last:border-0"
+              >
+                <Skeleton className="size-4 rounded" />
+                <Skeleton className="h-3.5 w-32" />
+              </div>
+            ))}
           </div>
         ) : allOutlets.length === 0 ? (
           <p className="rounded-xl border border-line bg-paper px-4 py-3 text-sm text-ink-3">
@@ -785,9 +793,7 @@ export function Team() {
           {t('team.error')}
         </Card>
       ) : query.isLoading ? (
-        <Card className="p-10 text-center">
-          <Spinner className="mx-auto text-emerald" />
-        </Card>
+        <ListSkeleton rows={6} avatar />
       ) : members.length === 0 ? (
         <EmptyState title={t('team.empty')} hint={t('team.emptyHint')} />
       ) : (

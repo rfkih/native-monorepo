@@ -21,7 +21,7 @@ import {
 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/Button'
-import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton, Skeleton } from '@/components/ui/Skeleton'
 import { cn } from '@/lib/cn'
 import { formatMoney } from '@/lib/money'
 import type { CompanySession } from '@/lib/session'
@@ -285,8 +285,14 @@ export function BillDetail({
 
   if (billQuery.isLoading || !bill) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-paper">
-        <Spinner />
+      <div className="fixed inset-0 z-50 flex flex-col bg-paper">
+        <div className="flex items-center gap-3 border-b border-line bg-surface px-4 py-3">
+          <Skeleton className="size-9 rounded-xl" />
+          <Skeleton className="h-5 w-32" />
+        </div>
+        <div className="min-h-0 flex-1 overflow-hidden p-4">
+          <ListSkeleton rows={5} />
+        </div>
       </div>
     )
   }

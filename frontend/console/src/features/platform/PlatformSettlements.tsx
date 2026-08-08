@@ -18,7 +18,7 @@ import { useTranslation } from 'react-i18next'
 import { TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { Spinner } from '@/components/ui/Spinner'
+import { ListSkeleton } from '@/components/ui/Skeleton'
 import { Field, TextInput } from '@/components/ui/Field'
 import { Select } from '@/components/ui/Select'
 import { EmptyState } from '@/features/_shared/financeUi'
@@ -126,9 +126,7 @@ function OutstandingSection({
           {t('platform.outstanding.error')}
         </Card>
       ) : query.isLoading ? (
-        <Card className="p-10 text-center">
-          <Spinner className="mx-auto text-brand-500" />
-        </Card>
+        <ListSkeleton rows={4} />
       ) : rows.length === 0 ? (
         <EmptyState
           title={t('platform.outstanding.empty')}
@@ -347,9 +345,7 @@ function HistorySection({
           {t('platform.history.error')}
         </Card>
       ) : query.isLoading ? (
-        <Card className="p-10 text-center">
-          <Spinner className="mx-auto text-brand-500" />
-        </Card>
+        <ListSkeleton rows={6} />
       ) : rows.length === 0 ? (
         <EmptyState title={t('platform.history.empty')} hint={t('platform.history.emptyHint')} />
       ) : (
