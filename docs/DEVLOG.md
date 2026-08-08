@@ -5,6 +5,25 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-08 — Three-tier pricing (ADR 0047): Gratis/Basic/Premium + usage add-ons
+
+The ADR 0044 ladder grows its designed third rung: `FREE < BASIC < FULL` (FULL *displayed*
+"Premium" — the stored string is kept for grandfathered rows and the fail-open mapping). Feature
+split is POS-vs-books: Basic adds the remaining operational surface (promotions, channels,
+customer display, org structure); Premium adds everything financial (statements, accounting, HR).
+New companies now start FREE on every create path (delivers ADR 0044 P2); existing rows
+grandfather FULL. Prices live in ONE adjustable sheet (`frontend/console/src/lib/pricing.ts`,
+integer IDR minor units): Basic Rp 149.000/mo, Premium Rp 299.000/mo, +Rp 49.000/mo per outlet
+after 2, +Rp 50.000/mo per *started* 20-employee pack after 10 — with a pure, unit-tested
+`computeMonthlyPrice`. Display + soft-enforce phase (owner decision): `/settings/features`
+became three derived plan cards with an owner-only tier picker and a LIVE monthly quote from
+actual outlet + distinct-active-employee counts, plus amber over-limit callouts — nothing
+hard-blocks and nothing is charged in-app; collection stays manual until real billing (the
+entitlement-service `billing_line` engine + `PlanTierChanged` gate stay future). The public
+landing gained a `#harga` section rendered from the same sheet. i18n en+id throughout.
+Ops note: while the stack is UAT-only, all QRIS payment settings are forced to MANUAL mode
+(data-level, `updated_by='uat-disable-payments'`) so no static QR or gateway charge can occur.
+
 ## 2026-08-08 — Ingredient inventory phase 1 (ADR 0046): stock opname re-aimed at bahan
 
 Owner feedback: "stock opname" must count INGREDIENTS (roti, patty, saus), not finished menu

@@ -43,7 +43,8 @@ public class PlanTierWriter {
   /**
    * Changes the bound tenant's plan tier.
    *
-   * @param requestedTier the requested tier ({@code FREE} or {@code FULL}, any case, trimmed)
+   * @param requestedTier the requested tier ({@code FREE}, {@code BASIC}, or {@code FULL}, any
+   *     case, trimmed)
    * @throws PlanTierForbiddenException if the caller's role set is non-empty and does not include
    *     {@code owner} (→ {@code 403})
    * @throws InvalidPlanTierException if {@code requestedTier} is not a whitelisted tier (→ {@code

@@ -93,11 +93,11 @@ public class Company extends Auditable {
    * The company's plan tier — UI curation only (ADR 0044 D7: NOT a security boundary; API
    * authorization stays with the gateway/service role checks). Unlike {@code base_currency} /
    * {@code country}, this column is MUTABLE: an owner flips it via {@link
-   * id.co.nativeapp.org.company.service.PlanTierWriter}. Defaults to {@code "FULL"} so a company
-   * built through the all-args constructor (which does not yet accept a caller-supplied tier — P1
-   * scope) matches the {@code V10} column's grandfather default; every existing/newly-bootstrapped
-   * company reads as {@code FULL} until an owner explicitly opts into {@code FREE} (or a future
-   * create-path default, P2).
+   * id.co.nativeapp.org.company.service.PlanTierWriter}. Defaults to {@code "FULL"} to match the
+   * {@code V10} column's grandfather default for pre-ADR-0047 rows; since ADR 0047 the ONE create
+   * path ({@code CompanyWriter.create}) overrides it to {@code FREE}, so newly-bootstrapped
+   * companies start free while existing rows keep reading {@code FULL} (Hibernate overwrites this
+   * initializer from the row on load — it can never flip a persisted value).
    */
   @Column(name = "plan_tier", nullable = false, length = 16)
   private String planTier = "FULL";
@@ -245,7 +245,8 @@ public class Company extends Auditable {
    * (strip + upper-case) exactly like {@link CountryDefaults#requireValidCountry(String)} / {@link
    * Vertical#fromKey(String)}.
    *
-   * @param planTier the requested tier ({@code FREE} or {@code FULL}, any case, trimmed)
+   * @param planTier the requested tier ({@code FREE}, {@code BASIC}, or {@code FULL}, any case,
+   *     trimmed)
    * @throws IllegalArgumentException if {@code planTier} is null or not in {@link #PLAN_TIERS} —
    *     the same validation-exception type the aggregate already uses for a bad country/vertical
    *     value. {@link id.co.nativeapp.org.company.service.PlanTierWriter} is the only caller and
