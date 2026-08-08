@@ -99,6 +99,15 @@ native:
     # real secret (the AES-256 key must decode to exactly 32 bytes).
     key: ${NATIVE_PII_KEY:bmF0aXZlLWRldi1wbGFjZWhvbGRlci1waWkta2V5MzI=}
 
+  # Operator-session HMAC signing key (ADR 0049 P1) — DISTINCT from native.pii.key above: this key
+  # is shared FLEET-WIDE (every vertical must verify a token employee-service minted, OFFLINE — rule
+  # 2), unlike the per-service PII key. base64 of the 32 ASCII bytes
+  # "native-dev-optok-placeholder-key" — a dev-only placeholder, not a real secret. In production
+  # NATIVE_OPERATOR_TOKEN_KEY is injected from Vault; the test suite overrides it via a system
+  # property (build.gradle.kts). No vertical consumes the minted token yet (P2).
+  operator-token:
+    signing-key: ${NATIVE_OPERATOR_TOKEN_KEY:bmF0aXZlLWRldi1vcHRvay1wbGFjZWhvbGRlci1rZXk=}
+
 management:
   endpoints:
     web:

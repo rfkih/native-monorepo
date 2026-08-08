@@ -17,6 +17,7 @@ checkstyle = "10.21.1"
 jacoco = "0.8.15"
 foojay = "1.0.0"
 awssdk = "2.46.7" # AWS SDK v2 — generic S3 client for the MinIO object store (ADR 0048); vendor-neutral exit
+bouncycastle = "1.85.2" # bcprov-jdk18on — Argon2PasswordEncoder's JCE provider (ADR 0049 P1 operator PIN hashing)
 
 [libraries]
 archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref = "archunit" }
@@ -27,6 +28,7 @@ postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" 
 h2 = { module = "com.h2database:h2", version.ref = "h2" }
 springdoc-starter-webmvc-ui = { module = "org.springdoc:springdoc-openapi-starter-webmvc-ui", version.ref = "springdoc" }
 awssdk-s3 = { module = "software.amazon.awssdk:s3", version.ref = "awssdk" }
+bouncycastle-provider = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
 
 [plugins]
 spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }

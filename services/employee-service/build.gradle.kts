@@ -95,6 +95,14 @@ dependencies {
     // Spring Boot 4 renamed the AOP starter to spring-boot-starter-aspectj.
     implementation("org.springframework.boot:spring-boot-starter-aspectj")
 
+    // Argon2id operator-PIN hashing (ADR 0049 P1): Spring Security's crypto module (already on the
+    // classpath transitively via libs/security's resource-server starter) provides
+    // Argon2PasswordEncoder, but its Argon2 implementation delegates to a real JCE provider that
+    // ships neither with the JDK nor with spring-security-crypto itself — BouncyCastle is that
+    // provider. Registered as a plain JCE provider by Argon2PasswordEncoder itself (no
+    // Security.addProvider wiring needed here).
+    implementation(libs.bouncycastle.provider)
+
     // Lean observability: actuator endpoints + the Prometheus meter registry that
     // backs /actuator/prometheus. Versions managed by the Spring Boot 4 BOM.
     implementation("org.springframework.boot:spring-boot-starter-actuator")
@@ -153,5 +161,12 @@ tasks.named<Test>("test") {
         // A deterministic 32-byte (AES-256) key, base64-encoded — test-only, never a real secret.
         // Decodes to the 32 ASCII bytes "native-pii-test-key-0123456789ab".
         "bmF0aXZlLXBpaS10ZXN0LWtleS0wMTIzNDU2Nzg5YWI=",
+    )
+    systemProperty(
+        "NATIVE_OPERATOR_TOKEN_KEY",
+        // A deterministic 32-byte HMAC signing key, base64-encoded — test-only, never a real
+        // secret, and DISTINCT from NATIVE_PII_KEY above (ADR 0049 P1). Decodes to the 32 ASCII
+        // bytes "native-optok-test-key-0123456789".
+        "bmF0aXZlLW9wdG9rLXRlc3Qta2V5LTAxMjM0NTY3ODk=",
     )
 }

@@ -966,6 +966,28 @@ public class RoutingConfig {
   }
 
   /**
+   * The till's operator sign-in ({@code /api/v1/operators/**}, ADR 0049 P1) — POS_ROLES, like every
+   * other till surface ({@link #salesRoute}, {@link #menuRoute}): a cashier is exactly who needs
+   * {@code POST /api/v1/operators/session} to identify themselves at a shared terminal. A FRESH
+   * path prefix (no overlap with {@link #employeesRoute}'s {@code /api/v1/employees/**}, the
+   * owner/manager-only surface the PIN set/reset endpoint rides instead), so no {@code @Order}
+   * precedence game is needed here.
+   */
+  @Bean
+  RouterFunction<ServerResponse> operatorsRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("employee-service-operators")
+        .route(path("/api/v1/operators/**"), http())
+        .before(uri(routes.employeeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(POS_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
    * {@code GET /api/v1/payroll-runs/{runId}/bank-file} — the net-pay bank file (Track P phase P5):
    * decrypted bank-account PII, OWNER-ONLY (narrower than {@link #payrollRunsRoute}'s
    * DASHBOARD_ROLES, which also admits {@code manager}).

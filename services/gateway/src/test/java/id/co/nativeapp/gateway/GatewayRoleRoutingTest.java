@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.web.client.HttpClientErrorException;
 
 /**
@@ -1056,6 +1057,74 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
     assertThat(forwarded.getPath()).isEqualTo("/api/v1/employees/some-id/assignments");
     assertThat(forwarded.getHeader("X-Company-Id")).isEqualTo(EXPECTED_COMPANY_ID);
     assertThat(forwarded.getHeader("X-Actor")).isNotBlank();
+  }
+
+  // ---------------------------------------------------------------------------
+  // /api/v1/operators/** — the till's operator PIN sign-in (ADR 0049 P1): POS_ROLES, a FRESH
+  // prefix distinct from the owner/manager-only /api/v1/employees/** the PIN set/reset endpoint
+  // rides instead.
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void aCashierCanReachTheOperatorsRoute() throws Exception {
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .post()
+            .uri("/api/v1/operators/session")
+            .contentType(MediaType.APPLICATION_JSON)
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .body("{}")
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/operators/session");
+  }
+
+  @Test
+  void anOwnerCanAlsoReachTheOperatorsRoute() throws Exception {
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .post()
+            .uri("/api/v1/operators/session")
+            .contentType(MediaType.APPLICATION_JSON)
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .body("{}")
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/operators/session");
+  }
+
+  @Test
+  void anEmployeeOnlyRoleIsDeniedTheOperatorsRouteWith403() throws Exception {
+    // The persona the POS_ROLES gate exists to exclude: "employee" is admitted to the /me/**
+    // self-service surface (ME_ROLES) but carries none of owner/manager/cashier — an employee-app
+    // login must not be able to mint an operator session (that is the till's job).
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, EMPLOYEE_USERNAME, EMPLOYEE_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .post()
+                    .uri("/api/v1/operators/session")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
   }
 
   @Test

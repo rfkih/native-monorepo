@@ -14,6 +14,10 @@ import id.co.nativeapp.employee.expense.domain.InvalidReceiptContentTypeExceptio
 import id.co.nativeapp.employee.expense.domain.ReceiptNotFoundException;
 import id.co.nativeapp.employee.expense.domain.SelfApprovalException;
 import id.co.nativeapp.employee.me.domain.EmployeeNotLinkedException;
+import id.co.nativeapp.employee.operator.domain.InvalidOperatorPinException;
+import id.co.nativeapp.employee.operator.domain.OperatorNotAssignedException;
+import id.co.nativeapp.employee.operator.domain.OperatorNotLinkedException;
+import id.co.nativeapp.employee.operator.domain.OperatorPinLockedException;
 import id.co.nativeapp.employee.payroll.domain.CommissionNotFoundException;
 import id.co.nativeapp.employee.payroll.domain.CompensationAlreadyEndedException;
 import id.co.nativeapp.employee.payroll.domain.CompensationNotFoundException;
@@ -569,6 +573,57 @@ public class EmployeeApiAdvice {
     ProblemDetail problem =
         problem(HttpStatus.CONFLICT, "timeoff-idempotency-key-conflict", request);
     problem.setTitle("Idempotency-Key conflict");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Operator PIN / session (ADR 0049 P1)
+  // -------------------------------------------------------------------------------------------
+
+  /** An operator-session attempt against a currently-locked PIN → 423 Locked. */
+  @ExceptionHandler(OperatorPinLockedException.class)
+  public ProblemDetail handleOperatorPinLocked(
+      OperatorPinLockedException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.LOCKED, "operator-pin-locked", request);
+    problem.setTitle("Operator PIN locked");
+    // The message names only the employee id (a UUID), never PII (rule 6).
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /** An operator-session attempt for an employee not actively assigned to the outlet → 403. */
+  @ExceptionHandler(OperatorNotAssignedException.class)
+  public ProblemDetail handleOperatorNotAssigned(
+      OperatorNotAssignedException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.FORBIDDEN, "operator-not-assigned", request);
+    problem.setTitle("Not assigned to this outlet");
+    // The message names only ids (UUIDs), never PII (rule 6).
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /**
+   * A failed operator-session PIN verification (unset OR wrong PIN, deliberately indistinguishable)
+   * → 401, a UNIFORM message so this endpoint cannot be used to enumerate which employees have a
+   * PIN configured (ADR 0049 P1).
+   */
+  @ExceptionHandler(InvalidOperatorPinException.class)
+  public ProblemDetail handleInvalidOperatorPin(
+      InvalidOperatorPinException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.UNAUTHORIZED, "invalid-operator-pin", request);
+    problem.setTitle("Invalid operator PIN");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /** A PIN-verified operator whose employee has no linked console login → 409 Conflict. */
+  @ExceptionHandler(OperatorNotLinkedException.class)
+  public ProblemDetail handleOperatorNotLinked(
+      OperatorNotLinkedException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.CONFLICT, "operator-not-linked", request);
+    problem.setTitle("Operator not linked to a login");
+    // The message names only the employee id (a UUID), never PII (rule 6).
     problem.setDetail(ex.getMessage());
     return problem;
   }
