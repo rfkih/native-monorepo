@@ -55,11 +55,29 @@ class IngredientWriterTest {
 
     IngredientResponse response =
         asTenant(
-            () -> writer.create(new CreateIngredientRequest(OUTLET, "Roti", "pcs", null, null)));
+            () ->
+                writer.create(
+                    new CreateIngredientRequest(OUTLET, "Roti", "pcs", null, null, null)));
 
     assertThat(response.name()).isEqualTo("Roti");
     assertThat(response.stockQty()).isZero();
     verify(guard).enforce(OUTLET);
+  }
+
+  @Test
+  void createAppliesTheInitialStockQty() {
+    // Review finding (ADR 0046): a dropped opening quantity books the whole first count as a
+    // phantom inventory GAIN on a costed ingredient — the seed must actually persist.
+    when(repository.saveAndFlush(any(Ingredient.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    IngredientResponse response =
+        asTenant(
+            () ->
+                writer.create(
+                    new CreateIngredientRequest(OUTLET, "Roti", "pcs", 2_000L, "IDR", 30)));
+
+    assertThat(response.stockQty()).isEqualTo(30);
+    assertThat(response.unitCostMinor()).isEqualTo(2_000L);
   }
 
   @Test

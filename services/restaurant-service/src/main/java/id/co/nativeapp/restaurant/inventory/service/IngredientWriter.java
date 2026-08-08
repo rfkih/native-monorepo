@@ -54,6 +54,9 @@ public class IngredientWriter {
             request.unit(),
             request.unitCostMinor(),
             request.costCurrency());
+    if (request.initialStockQty() != null && request.initialStockQty() > 0) {
+      ingredient.setStock(request.initialStockQty());
+    }
     ingredient.setCompanyId(companyId);
     Ingredient saved = repository.saveAndFlush(ingredient);
     return IngredientResponse.from(saved);

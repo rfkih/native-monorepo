@@ -20,6 +20,7 @@ import { Segmented } from '@/components/ui/Segmented'
 import { Spinner } from '@/components/ui/Spinner'
 import { OutletGate } from '@/components/OutletGate'
 import { OutletPicker } from '@/components/OutletPicker'
+import { ApiError } from '@/lib/api'
 import { useSession, type CompanySession } from '@/lib/session'
 import { useTheme } from '@/lib/theme'
 import { localeOf } from '@/i18n'
@@ -266,6 +267,16 @@ function IngredientRow({
 // Create / edit dialog (edit also hosts the two-step remove)
 // ---------------------------------------------------------------------------
 
+/** The 409 `ingredient-name-conflict` problem — a duplicate ACTIVE name at this outlet. */
+function isNameConflict(err: unknown): boolean {
+  return (
+    err instanceof ApiError &&
+    err.status === 409 &&
+    typeof err.problem?.type === 'string' &&
+    err.problem.type.includes('ingredient-name-conflict')
+  )
+}
+
 function IngredientFormDialog({
   session,
   baseCurrency,
@@ -390,7 +401,7 @@ function IngredientFormDialog({
 
         {mutationError ? (
           <p className="text-xs text-loss" role="alert">
-            {t('inventory.errorGeneric')}
+            {isNameConflict(mutationError) ? t('inventory.nameTaken') : t('inventory.errorGeneric')}
           </p>
         ) : null}
 

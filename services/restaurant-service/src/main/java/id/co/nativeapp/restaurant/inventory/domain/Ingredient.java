@@ -188,7 +188,9 @@ public class Ingredient extends Auditable {
       Money.ofMinor(unitCostMinor, costCurrency);
     }
     this.unitCostMinor = unitCostMinor;
-    this.costCurrency = costCurrency;
+    // Normalized: a blank currency counts as ABSENT above, so persist null — storing the blank
+    // would slip a currency-without-amount row past the guard into the V31 CHECK (a 500).
+    this.costCurrency = currencyPresent ? costCurrency : null;
   }
 
   // ---------------------------------------------------------------------------

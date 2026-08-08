@@ -1,11 +1,14 @@
 package id.co.nativeapp.restaurant.inventory.service;
 
+import id.co.nativeapp.restaurant.inventory.domain.IngredientNameConflictException;
 import id.co.nativeapp.restaurant.inventory.dto.CreateIngredientRequest;
 import id.co.nativeapp.restaurant.inventory.dto.IngredientResponse;
 import id.co.nativeapp.restaurant.inventory.dto.UpdateIngredientRequest;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 /**
@@ -35,16 +38,40 @@ public class IngredientService {
   /**
    * Creates a new active ingredient. The {@code company_id} is stamped inside {@link
    * IngredientWriter#create} from the bound tenant scope, never from the request body (rule 5).
+   *
+   * @throws IngredientNameConflictException if an ACTIVE ingredient with the same name already
+   *     exists at the outlet (the V31 partial unique index; caught here AFTER the writer's
+   *     {@code REQUIRES_NEW} transaction aborted — the {@code StocktakeService} pattern)
    */
   public IngredientResponse create(CreateIngredientRequest request) {
     TenantContext.require();
-    return writer.create(request);
+    try {
+      return writer.create(request);
+    } catch (DataIntegrityViolationException ex) {
+      throw asNameConflict(ex, request.name());
+    }
   }
 
-  /** Applies a partial update to an ingredient. */
+  /** Applies a partial update to an ingredient (a rename can hit the same name unique). */
   public IngredientResponse update(UUID id, UpdateIngredientRequest request) {
     TenantContext.require();
-    return writer.update(id, request);
+    try {
+      return writer.update(id, request);
+    } catch (DataIntegrityViolationException ex) {
+      throw asNameConflict(ex, request.name());
+    }
+  }
+
+  /**
+   * Maps the name-unique violation to its domain fault; any OTHER integrity violation is rethrown
+   * untouched (never masquerade an unknown constraint as a name conflict).
+   */
+  private static RuntimeException asNameConflict(DataIntegrityViolationException ex, String name) {
+    String message = String.valueOf(ex.getMessage()).toLowerCase(Locale.ROOT);
+    if (message.contains("uq_ingredient_company_business_name")) {
+      return new IngredientNameConflictException(name);
+    }
+    return ex;
   }
 
   /** Soft-deactivates an ingredient (sets {@code active = false}). */

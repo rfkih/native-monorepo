@@ -1192,6 +1192,7 @@ export const en = {
     setQtyLabel: 'New quantity ({{unit}})',
     setSubmit: 'Set quantity',
     errorGeneric: 'Could not save. Please try again.',
+    nameTaken: 'An ingredient with this name already exists at this outlet.',
   },
   posShell: {
     /** Redesign P4 — the shared POS shell chrome (status bar, till menu, ticket dock). */

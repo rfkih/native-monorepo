@@ -1,5 +1,6 @@
 package id.co.nativeapp.restaurant.config;
 
+import id.co.nativeapp.restaurant.inventory.domain.IngredientNameConflictException;
 import id.co.nativeapp.restaurant.inventory.domain.IngredientNotFoundException;
 import id.co.nativeapp.restaurant.inventory.domain.IngredientStocktakeNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -23,6 +24,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  *       ingredient-not-found})
  *   <li>{@link IngredientStocktakeNotFoundException} — unknown/cross-tenant id → {@code 404}
  *       ({@code ingredient-stocktake-not-found})
+ *   <li>{@link IngredientNameConflictException} — duplicate ACTIVE name at the outlet → {@code
+ *       409} ({@code ingredient-name-conflict})
  * </ul>
  */
 @RestControllerAdvice
@@ -46,6 +49,15 @@ public class IngredientAdvice {
     ProblemDetail problem =
         problem(HttpStatus.NOT_FOUND, "ingredient-stocktake-not-found", request);
     problem.setTitle("Ingredient stocktake not found");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  @ExceptionHandler(IngredientNameConflictException.class)
+  public ProblemDetail handleIngredientNameConflict(
+      IngredientNameConflictException ex, HttpServletRequest request) {
+    ProblemDetail problem = problem(HttpStatus.CONFLICT, "ingredient-name-conflict", request);
+    problem.setTitle("Ingredient name already in use");
     problem.setDetail(ex.getMessage());
     return problem;
   }

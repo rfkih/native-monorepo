@@ -36,6 +36,15 @@ class IngredientTest {
     assertThat(ingredient.getCostCurrency()).isNull();
   }
 
+  @Test
+  void blankCostCurrencyWithNoAmountNormalizesToNull() {
+    // Review finding (ADR 0046): a 3-space currency passes bean validation and counts as ABSENT
+    // here — persisting the blank would violate the V31 both-or-neither CHECK (a 500).
+    Ingredient blankCurrency = new Ingredient(BUSINESS_ID, "Selada", "g", null, "   ");
+    assertThat(blankCurrency.getUnitCostMinor()).isNull();
+    assertThat(blankCurrency.getCostCurrency()).isNull();
+  }
+
   // -----------------------------------------------------------------------
   // setStock — ALWAYS tracked (unlike MenuItem, no null/untracked state)
   // -----------------------------------------------------------------------

@@ -16,10 +16,15 @@ import org.springframework.lang.Nullable;
  * (used to value a stock opname variance), both absent means the ingredient is counted
  * operationally with no ledger impact. {@code Ingredient#setUnitCost} enforces the both-or-neither
  * invariant.
+ *
+ * <p>{@code initialStockQty} seeds the on-hand quantity at creation ({@code null} = 0). Without it
+ * a costed ingredient created "with stock" would start at 0 and its first opname would book the
+ * whole opening count as a phantom inventory GAIN (review finding, ADR 0046).
  */
 public record CreateIngredientRequest(
     @NotNull UUID businessId,
     @NotBlank @Size(max = 255) String name,
     @NotBlank @Size(max = 16) String unit,
     @Nullable @PositiveOrZero Long unitCostMinor,
-    @Nullable @Size(min = 3, max = 3) String costCurrency) {}
+    @Nullable @Size(min = 3, max = 3) String costCurrency,
+    @Nullable @PositiveOrZero Integer initialStockQty) {}

@@ -1183,6 +1183,7 @@ export const id = {
     setQtyLabel: 'Jumlah baru ({{unit}})',
     setSubmit: 'Atur jumlah',
     errorGeneric: 'Tidak dapat menyimpan. Silakan coba lagi.',
+    nameTaken: 'Bahan dengan nama ini sudah ada di gerai ini.',
   },
   posShell: {
     /** Redesign P4 — kerangka POS bersama (bilah status, menu kasir, dok tiket). */
