@@ -393,6 +393,7 @@ export const id = {
       stocktake: 'Opname stok',
       registerClose: 'Closing kasir',
       menuPrices: 'Menu & harga',
+      ingredients: 'Bahan',
       kitchenDisplay: 'Layar dapur',
       openPos: 'POS',
       allPages: 'Semua halaman',
@@ -1076,8 +1077,8 @@ export const id = {
     title: 'Kasir — closing kasir',
     titleOpen: 'Buka kasir',
     titleClose: 'Closing kasir',
-    /** Permintaan owner — setelah closing langsung lanjut ke stock opname (hitung stok). */
-    continueStocktake: 'Lanjut ke hitung stok',
+    /** Permintaan owner — setelah closing langsung lanjut ke stock opname. */
+    continueStocktake: 'Lanjut ke stock opname',
     openHint: 'Buka laci untuk memulai hari: hitung uang kembalian (modal awal) yang dimasukkan.',
     /** Permintaan owner — "buka kasir dulu": muncul saat tombol bayar mengarahkan kasir ke sini
      * karena belum ada sesi kasir yang terbuka. */
@@ -1118,21 +1119,23 @@ export const id = {
       'Penutupan itu sudah tercatat dengan jumlah berbeda. Muat ulang untuk melihat kondisi terkini.',
   },
   stocktake: {
-    /** ADR 0038 fase 3 — stok opname / hitung stok. */
-    title: 'Hitung stok',
-    tillMenuLabel: 'Hitung stok',
+    /** ADR 0038 fase 3 + ADR 0046 — stock opname sekarang menghitung BAHAN, bukan item menu.
+     * Stok item menu tetap di /menu sebagai penanda habis (86). */
+    title: 'Stock opname',
+    tillMenuLabel: 'Stock opname',
     entryHint:
-      'Jumlah terisi otomatis dengan kuantitas sistem — ubah hanya item yang berbeda dari hasil hitung fisik Anda.',
-    systemQty: 'Sistem: {{qty}}',
+      'Jumlah terisi otomatis dengan kuantitas sistem — ubah hanya yang berbeda dari hasil hitung fisik Anda. Sebelum ada resep, selisih bahan berbiaya juga mencakup pemakaian dapur normal, bukan hanya kehilangan.',
+    systemQty: 'Sistem: {{qty}} {{unit}}',
     countedForItem: 'Jumlah terhitung untuk {{name}}',
     notCounted: 'Belum dihitung',
-    submitAction: 'Kirim hitung stok',
-    errorGeneric: 'Tidak dapat mengirim hitung stok. Silakan coba lagi.',
-    loadError: 'Tidak dapat memuat menu.',
-    emptyHint: 'Belum ada item yang dilacak stoknya di outlet ini — aktifkan pelacakan stok untuk item di Manajemen menu terlebih dahulu.',
-    /** Laporan owner: hint di atas jalan buntu — tombol ini benar-benar membawa ke sana. Di
-     * Manajemen menu, tombol "Lacak stok" di setiap baris item memulai pelacakan stok. */
-    emptyCta: 'Buka manajemen menu',
+    submitAction: 'Kirim stock opname',
+    errorGeneric: 'Tidak dapat mengirim stock opname. Silakan coba lagi.',
+    loadError: 'Tidak dapat memuat daftar bahan.',
+    emptyHint:
+      'Belum ada bahan di gerai ini — tambahkan bahan baku yang Anda beli dan hitung (roti, patty, saus…) untuk mulai stock opname.',
+    emptyCta: 'Buka daftar bahan',
+    /** Muncul di ringkasan saat tidak ada baris berbiaya — tidak ada yang dibukukan. */
+    noValuedLines: 'Terhitung — tidak ada bahan berbiaya, jadi tidak ada yang dibukukan.',
     countedAt: 'Dihitung',
     resultBalanced: 'Seimbang — tidak ada penyusutan',
     resultLoss: 'Penyusutan bersih (rugi)',
@@ -1140,6 +1143,45 @@ export const id = {
     done: 'Selesai',
     varianceLinesTitle: 'Item dengan selisih',
     lineCounts: 'Sistem {{system}} → terhitung {{counted}}',
+  },
+  inventory: {
+    /** ADR 0046 fase 1 — katalog bahan per gerai di balik stock opname. */
+    title: 'Bahan',
+    tillMenuLabel: 'Bahan',
+    backToPos: 'Kembali ke POS',
+    addAction: 'Tambah bahan',
+    loadError: 'Tidak dapat memuat daftar bahan.',
+    emptyTitle: 'Belum ada bahan',
+    emptyHint:
+      'Tambahkan bahan baku yang dibeli dan dihitung gerai ini — roti, patty, saus, sayuran. Stock opname menghitung bahan-bahan ini, bukan item menu.',
+    costPerUnit: '{{cost}} / {{unit}}',
+    noCost: 'Belum ada biaya — dihitung, tidak pernah dibukukan',
+    receiveAction: 'Terima',
+    setAction: 'Atur jumlah',
+    editAction: 'Ubah',
+    addTitle: 'Tambah bahan',
+    editTitle: 'Ubah bahan',
+    nameLabel: 'Nama',
+    namePlaceholder: 'mis. Roti burger',
+    nameRequired: 'Isi nama bahan.',
+    unitLabel: 'Satuan',
+    unitHint: 'Dihitung dalam bilangan bulat — pakai g atau ml untuk yang ditimbang atau ditakar.',
+    costLabel: 'Biaya per satuan ({{currency}}, opsional)',
+    costHint:
+      'Dipakai menilai selisih stock opname di pembukuan. Kosongkan untuk menghitung tanpa membukukan apa pun.',
+    costPlaceholder: 'Opsional',
+    initialQtyLabel: 'Jumlah awal',
+    removeAction: 'Hapus bahan',
+    removeConfirm: 'Ketuk lagi untuk menghapus — hilang dari daftar dan hitungan berikutnya.',
+    receiveTitle: 'Terima — {{name}}',
+    receiveHint: 'Stok saat ini: {{qty}} {{unit}}. Masukkan jumlah yang diterima (atau koreksi negatif).',
+    receiveAmountLabel: 'Jumlah ({{unit}})',
+    receiveSubmit: 'Tambahkan ke stok',
+    setTitle: 'Atur jumlah — {{name}}',
+    setHint: 'Stok saat ini: {{qty}} {{unit}}. Masukkan jumlah absolut yang baru.',
+    setQtyLabel: 'Jumlah baru ({{unit}})',
+    setSubmit: 'Atur jumlah',
+    errorGeneric: 'Tidak dapat menyimpan. Silakan coba lagi.',
   },
   posShell: {
     /** Redesign P4 — kerangka POS bersama (bilah status, menu kasir, dok tiket). */

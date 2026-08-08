@@ -1,13 +1,15 @@
 /**
- * StocktakeSheet — inventory stocktake (ADR 0038 phase 3, "daily close v2"). Lists the outlet's
- * TRACKED menu items (stockQuantity != null) pre-filled with the current system quantity; the
- * operator corrects any item that differs from the physical count. Submitting POSTs every tracked
- * line to the server, which adjusts stock to the count and books valued net shrinkage for items
- * that carry a `unitCostMinor` — the response is then shown as a summary (red = net loss, green =
- * net gain, neutral = balanced), exactly like RegisterSheet's over/short verdict.
+ * StocktakeSheet — the stock opname (ADR 0038 phase 3 flow, re-aimed at INGREDIENTS by ADR
+ * 0046). Lists the outlet's active ingredients (bahan) pre-filled with the current system
+ * quantity; the operator corrects what differs from the physical count. Submitting POSTs
+ * every line to the server, which adjusts each ingredient's stock to the count and books
+ * valued net shrinkage for ingredients that carry a cost — the response is shown as a
+ * summary (red = net loss, green = net gain, neutral = balanced), exactly like
+ * RegisterSheet's over/short verdict. A count where NO line carries a cost posts nothing
+ * (`currency` null on the response) and the summary says so instead of showing money.
  *
- * Reached from the till menu (features/pos-shell/layout/TillMenuSheet), independent of the register
- * close — a stocktake can be run any time the outlet is online, whether or not a drawer is open.
+ * Reached from the till menu (features/pos-shell/layout/TillMenuSheet) and chained from the
+ * register-close verdict — a stocktake can run any time the outlet is online.
  *
  * Money rule (rule 8): unit cost / variance value render via formatMoney; quantities via the
  * Intl-backed helpers in ./lib/qty (never a raw toString). Strings rule (rule 9): i18n keys only.
@@ -22,9 +24,13 @@ import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { formatMoney } from '@/lib/money'
 import type { CompanySession } from '@/lib/session'
-import { useMenu, type MenuItem } from '@/features/pos/api'
+import { useIngredients, type Ingredient } from '@/features/inventory/ingredientApi'
+import {
+  useSubmitIngredientStocktake,
+  type IngredientStocktakeLineResponse,
+  type IngredientStocktakeResponse,
+} from '@/features/inventory/ingredientStocktakeApi'
 import { formatQty, formatSignedQty, parseQtyInput } from './lib/qty'
-import { useSubmitStocktake, type StocktakeLineResponse, type StocktakeResponse } from './stocktakeApi'
 
 /** The three verdict tones shared by the live per-line preview and the post-submit summary. */
 type Tone = 'loss' | 'gain' | 'balanced'
@@ -58,32 +64,32 @@ export function StocktakeSheet({
 }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const menuQuery = useMenu(session)
-  const submit = useSubmitStocktake(session)
+  const ingredientsQuery = useIngredients(session)
+  const submit = useSubmitIngredientStocktake(session)
 
-  const trackedItems: MenuItem[] = (menuQuery.data ?? []).filter((i) => i.stockQuantity != null)
+  const ingredients: Ingredient[] = ingredientsQuery.data ?? []
 
-  // Only the operator's EDITS are kept in state, keyed by menuItemId — not a full seeded map. An
-  // item with no override effectively reads as its current system quantity (see `valueFor` below),
-  // so every item starts "counted" at the system qty and the operator only has to touch what
-  // differs. This avoids syncing query data into state via an effect (react-hooks/set-state-in-effect).
+  // Only the operator's EDITS are kept in state, keyed by ingredientId — not a full seeded map.
+  // A row with no override effectively reads as its current system quantity (see `valueFor`
+  // below), so every ingredient starts "counted" at the system qty and the operator only has to
+  // touch what differs. Avoids syncing query data into state (react-hooks/set-state-in-effect).
   const [overrides, setOverrides] = useState<Record<string, string>>({})
   // Held after a successful submit so the summary stays visible.
-  const [result, setResult] = useState<StocktakeResponse | null>(null)
+  const [result, setResult] = useState<IngredientStocktakeResponse | null>(null)
 
-  function valueFor(item: MenuItem): string {
-    return overrides[item.id] ?? String(item.stockQuantity ?? 0)
+  function valueFor(ing: Ingredient): string {
+    return overrides[ing.id] ?? String(ing.stockQty)
   }
 
   const parsedCounts = new Map<string, number | null>(
-    trackedItems.map((item) => [item.id, parseQtyInput(valueFor(item))]),
+    ingredients.map((ing) => [ing.id, parseQtyInput(valueFor(ing))]),
   )
-  const allCounted = trackedItems.length > 0 && [...parsedCounts.values()].every((v) => v !== null)
+  const allCounted = ingredients.length > 0 && [...parsedCounts.values()].every((v) => v !== null)
 
   function handleSubmit() {
-    const lines = trackedItems.map((item) => ({
-      menuItemId: item.id,
-      countedQty: parsedCounts.get(item.id) ?? 0,
+    const lines = ingredients.map((ing) => ({
+      ingredientId: ing.id,
+      countedQty: parsedCounts.get(ing.id) ?? 0,
     }))
     submit.mutate(lines, {
       onSuccess: (res) => {
@@ -126,27 +132,27 @@ export function StocktakeSheet({
 
         {result ? (
           <StocktakeSummary result={result} currency={currency} locale={locale} onDone={onClose} />
-        ) : menuQuery.isLoading ? (
+        ) : ingredientsQuery.isLoading ? (
           <div className="grid place-items-center py-14">
             <Spinner />
           </div>
-        ) : menuQuery.isError ? (
+        ) : ingredientsQuery.isError ? (
           <div className="px-5 py-10 text-center">
             <TriangleAlert className="mx-auto mb-2 size-5 text-loss" aria-hidden="true" />
             <p className="text-sm text-loss">{t('stocktake.loadError')}</p>
           </div>
-        ) : trackedItems.length === 0 ? (
+        ) : ingredients.length === 0 ? (
           <div className="px-5 py-10 text-center">
             <p className="text-sm text-ink-3">{t('stocktake.emptyHint')}</p>
-            {/* Owner report: the hint named Menu management but offered no way there — a dead
-                end. Close FIRST: the standalone hosts (MobileTabBarGate) stay mounted across
-                route changes, and a lingering fixed overlay would cover the menu page. */}
+            {/* The hint names the ingredient screen — this button actually goes there. Close
+                FIRST: the standalone hosts (MobileTabBarGate) stay mounted across route
+                changes, and a lingering fixed overlay would cover the destination page. */}
             <Button
               variant="secondary"
               className="mt-4"
               onClick={() => {
                 onClose()
-                navigate('/menu')
+                navigate('/ingredients')
               }}
             >
               {t('stocktake.emptyCta')}
@@ -157,12 +163,12 @@ export function StocktakeSheet({
             <p className="shrink-0 px-5 pt-3 text-xs leading-relaxed text-ink-3">{t('stocktake.entryHint')}</p>
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-3">
               <ul className="space-y-2">
-                {trackedItems.map((item) => (
-                  <StocktakeItemRow
-                    key={item.id}
-                    item={item}
-                    value={valueFor(item)}
-                    onChange={(raw) => setOverrides((p) => ({ ...p, [item.id]: raw }))}
+                {ingredients.map((ing) => (
+                  <StocktakeIngredientRow
+                    key={ing.id}
+                    ingredient={ing}
+                    value={valueFor(ing)}
+                    onChange={(raw) => setOverrides((p) => ({ ...p, [ing.id]: raw }))}
                     currency={currency}
                     locale={locale}
                   />
@@ -191,40 +197,43 @@ export function StocktakeSheet({
   )
 }
 
-function StocktakeItemRow({
-  item,
+function StocktakeIngredientRow({
+  ingredient,
   value,
   onChange,
   currency,
   locale,
 }: {
-  item: MenuItem
+  ingredient: Ingredient
   value: string
   onChange: (raw: string) => void
   currency: string
   locale: string
 }) {
   const { t } = useTranslation()
-  const systemQty = item.stockQuantity ?? 0
+  const systemQty = ingredient.stockQty
   const countedQty = parseQtyInput(value)
   const varianceQty = countedQty != null ? countedQty - systemQty : null
   const tone = varianceQty != null ? toneOfVariance(varianceQty) : null
   // Client-side preview only (the server recomputes authoritatively on submit) — a simple
   // qty × unit-cost, never rounded beyond integer minor units.
   const valuePreviewMinor =
-    varianceQty != null && item.unitCostMinor != null ? varianceQty * item.unitCostMinor : null
+    varianceQty != null && ingredient.unitCostMinor != null
+      ? varianceQty * ingredient.unitCostMinor
+      : null
+  const previewCurrency = ingredient.costCurrency ?? currency
 
   return (
     <li className="flex items-center gap-3 rounded-xl border border-line bg-paper px-3 py-2.5">
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium text-ink">{item.name}</div>
+        <div className="truncate text-sm font-medium text-ink">{ingredient.name}</div>
         <div className="tnum mt-0.5 text-xs text-ink-3">
-          {t('stocktake.systemQty', { qty: formatQty(systemQty, locale) })}
+          {t('stocktake.systemQty', { qty: formatQty(systemQty, locale), unit: ingredient.unit })}
         </div>
       </div>
 
       <input
-        aria-label={t('stocktake.countedForItem', { name: item.name })}
+        aria-label={t('stocktake.countedForItem', { name: ingredient.name })}
         type="number"
         min="0"
         step="1"
@@ -243,7 +252,7 @@ function StocktakeItemRow({
             </div>
             {valuePreviewMinor != null ? (
               <div className={cn('tnum font-mono text-[11px]', tone ? TONE_TEXT[tone] : undefined)}>
-                {formatMoney(Math.abs(valuePreviewMinor), currency, locale)}
+                {formatMoney(Math.abs(valuePreviewMinor), previewCurrency, locale)}
               </div>
             ) : null}
           </>
@@ -261,7 +270,7 @@ function StocktakeSummary({
   locale,
   onDone,
 }: {
-  result: StocktakeResponse
+  result: IngredientStocktakeResponse
   currency: string
   locale: string
   onDone: () => void
@@ -290,9 +299,15 @@ function StocktakeSummary({
                 ? t('stocktake.resultLoss')
                 : t('stocktake.resultGain')}
           </div>
-          <div className="tnum mt-1 font-mono text-2xl font-bold">
-            {formatMoney(Math.abs(result.shrinkageMinor), currency, locale)}
-          </div>
+          {/* currency null = no counted line carried a cost — nothing was posted, so showing a
+              zero money figure would imply a valuation that never happened. */}
+          {result.currency != null ? (
+            <div className="tnum mt-1 font-mono text-2xl font-bold">
+              {formatMoney(Math.abs(result.shrinkageMinor), result.currency, locale)}
+            </div>
+          ) : (
+            <div className="mt-1 text-xs">{t('stocktake.noValuedLines')}</div>
+          )}
         </div>
 
         {variedLines.length > 0 ? (
@@ -302,7 +317,12 @@ function StocktakeSummary({
             </div>
             <ul className="divide-y divide-line">
               {variedLines.map((line) => (
-                <StocktakeVarianceLine key={line.menuItemId} line={line} currency={currency} locale={locale} />
+                <StocktakeVarianceLine
+                  key={line.ingredientId}
+                  line={line}
+                  currency={result.currency ?? currency}
+                  locale={locale}
+                />
               ))}
             </ul>
           </div>
@@ -323,7 +343,7 @@ function StocktakeVarianceLine({
   currency,
   locale,
 }: {
-  line: StocktakeLineResponse
+  line: IngredientStocktakeLineResponse
   currency: string
   locale: string
 }) {
@@ -337,7 +357,8 @@ function StocktakeVarianceLine({
           {t('stocktake.lineCounts', {
             system: formatQty(line.systemQty, locale),
             counted: formatQty(line.countedQty, locale),
-          })}
+          })}{' '}
+          {line.unit}
         </div>
       </div>
       <div className="shrink-0 text-right">

@@ -19,6 +19,7 @@ import {
   LogOut,
   Moon,
   NotebookText,
+  Package,
   Plus,
   Store,
   Sun,
@@ -90,6 +91,10 @@ export function MoreSheet({
       : null,
     canPos && pageAccess.isAllowed('menu') && tierAccess.allows('products')
       ? { key: 'menu', to: '/menu', icon: NotebookText, label: t('mobile.more.menuPrices') }
+      : null,
+    // Ingredient (bahan) catalog behind the stock opname (ADR 0046) — the menu tile's gate.
+    canPos && pageAccess.isAllowed('menu') && tierAccess.allows('products')
+      ? { key: 'ingredients', to: '/ingredients', icon: Package, label: t('mobile.more.ingredients') }
       : null,
     canPos && pageAccess.isAllowed('kitchen') && tierAccess.allows('kitchen')
       ? { key: 'kitchen', to: '/kitchen', icon: CookingPot, label: t('mobile.more.kitchenDisplay') }

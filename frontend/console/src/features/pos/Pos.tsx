@@ -19,6 +19,7 @@
  */
 import { useState, useMemo, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import {
   Banknote,
   BookOpen,
@@ -30,6 +31,7 @@ import {
   LogOut,
   Monitor,
   Moon,
+  Package,
   Sun,
   Table2,
 } from 'lucide-react'
@@ -135,6 +137,7 @@ function PosInner({ session }: { session: CompanySession }) {
   const { t, i18n } = useTranslation()
   const { theme, toggle } = useTheme()
   const auth = useAuth()
+  const navigate = useNavigate()
   const locale = localeOf(i18n.language)
 
   const menuQuery = useMenu(session)
@@ -936,6 +939,16 @@ function PosInner({ session }: { session: CompanySession }) {
               // support) — same posture as the register close.
               disabled: offline,
               disabledTitle: t('offline.disabled.stocktake'),
+            },
+            {
+              key: 'ingredients',
+              icon: <Package className="size-4" aria-hidden="true" />,
+              label: t('inventory.tillMenuLabel'),
+              // A route, not a sheet — /ingredients is the bahan catalog behind the opname
+              // (ADR 0046). Navigation unmounts the POS; nothing to clean up here.
+              onSelect: () => navigate('/ingredients'),
+              disabled: offline,
+              disabledTitle: t('inventory.loadError'),
             },
             {
               key: 'history',

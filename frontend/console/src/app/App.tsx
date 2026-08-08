@@ -108,6 +108,11 @@ const AccessDenied = lazy(() =>
 const MenuManagement = lazy(() =>
   import('@/features/menu/MenuManagement').then((m) => ({ default: m.MenuManagement })),
 )
+const IngredientManagement = lazy(() =>
+  import('@/features/inventory/IngredientManagement').then((m) => ({
+    default: m.IngredientManagement,
+  })),
+)
 const Kitchen = lazy(() =>
   import('@/features/kitchen/Kitchen').then((m) => ({ default: m.Kitchen })),
 )
@@ -439,6 +444,9 @@ export function App() {
               itself (a display is meaningless without a POS terminal driving it). */}
           {posAllowed && <Route path="/pos/customer-display" element={<CustomerDisplay />} />}
           {menuAllowed && <Route path="/menu" element={<MenuManagement />} />}
+          {/* Ingredient (bahan) catalog behind the stock opname (ADR 0046) — same product-
+              management surface as /menu, gated identically. */}
+          {menuAllowed && <Route path="/ingredients" element={<IngredientManagement />} />}
           {/* /catalog is the carwash counterpart of /menu — gated identically (menuAllowed). */}
           {menuAllowed && <Route path="/catalog" element={<CatalogSwitch />} />}
           {kitchenAllowed && <Route path="/kitchen" element={<Kitchen />} />}

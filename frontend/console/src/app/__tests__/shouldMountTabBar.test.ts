@@ -8,6 +8,7 @@ describe('shouldMountTabBar', () => {
     expect(shouldMountTabBar('/menu')).toBe(false)
     expect(shouldMountTabBar('/catalog')).toBe(false)
     expect(shouldMountTabBar('/kitchen')).toBe(false)
+    expect(shouldMountTabBar('/ingredients')).toBe(false)
   })
 
   it('never mounts inside the onboarding wizard', () => {

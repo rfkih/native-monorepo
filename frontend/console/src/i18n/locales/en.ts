@@ -404,6 +404,7 @@ export const en = {
       stocktake: 'Stocktake',
       registerClose: 'Close register',
       menuPrices: 'Menu & prices',
+      ingredients: 'Ingredients',
       kitchenDisplay: 'Kitchen display',
       openPos: 'POS',
       allPages: 'All pages',
@@ -1127,21 +1128,23 @@ export const en = {
       'That close was already recorded with a different amount. Refresh to see the current state.',
   },
   stocktake: {
-    /** ADR 0038 phase 3 — inventory stocktake / stock count. */
+    /** ADR 0038 phase 3 + ADR 0046 — the stock opname now counts INGREDIENTS (bahan), not
+     * menu items. Menu-item stock stays on /menu as the sold-out gate. */
     title: 'Stock count',
     tillMenuLabel: 'Stock count',
     entryHint:
-      'Counts start pre-filled with the system quantity — only change items that differ from what you physically count.',
-    systemQty: 'System: {{qty}}',
+      'Counts start pre-filled with the system quantity — only change what differs from your physical count. Until recipes exist, a costed ingredient’s difference includes normal kitchen usage, not just loss.',
+    systemQty: 'System: {{qty}} {{unit}}',
     countedForItem: 'Counted quantity for {{name}}',
     notCounted: 'Not counted',
     submitAction: 'Submit stock count',
     errorGeneric: 'Could not submit the stock count. Please try again.',
-    loadError: 'Could not load the menu.',
-    emptyHint: 'No tracked items at this outlet yet — turn on stock tracking for an item in Menu management first.',
-    /** Owner report: the hint above was a dead end — this button actually goes there. In Menu
-     * management, each item row's "Track stock" button starts stock tracking. */
-    emptyCta: 'Open Menu management',
+    loadError: 'Could not load the ingredient list.',
+    emptyHint:
+      'No ingredients at this outlet yet — add the raw materials you buy and count (bread, patty, sauce…) to start the stock count.',
+    emptyCta: 'Open ingredients',
+    /** Shown on the summary when no counted line carried a cost — nothing was posted. */
+    noValuedLines: 'Counted — no costed ingredients, so nothing was posted to the books.',
     countedAt: 'Counted',
     resultBalanced: 'Balanced — no shrinkage',
     resultLoss: 'Net shrinkage (loss)',
@@ -1149,6 +1152,45 @@ export const en = {
     done: 'Done',
     varianceLinesTitle: 'Items with a variance',
     lineCounts: 'System {{system}} → counted {{counted}}',
+  },
+  inventory: {
+    /** ADR 0046 phase 1 — the per-outlet ingredient (bahan) catalog behind the stock opname. */
+    title: 'Ingredients',
+    tillMenuLabel: 'Ingredients',
+    backToPos: 'Back to the POS',
+    addAction: 'Add ingredient',
+    loadError: 'Could not load the ingredient list.',
+    emptyTitle: 'No ingredients yet',
+    emptyHint:
+      'Add the raw materials this outlet buys and counts — bread, patty, sauce, vegetables. The stock count (stock opname) counts these, not menu items.',
+    costPerUnit: '{{cost}} / {{unit}}',
+    noCost: 'No cost set — counted, never posted to the books',
+    receiveAction: 'Receive',
+    setAction: 'Set quantity',
+    editAction: 'Edit',
+    addTitle: 'Add ingredient',
+    editTitle: 'Edit ingredient',
+    nameLabel: 'Name',
+    namePlaceholder: 'e.g. Burger buns',
+    nameRequired: 'Enter a name.',
+    unitLabel: 'Unit',
+    unitHint: 'Counted in whole numbers — use g or ml for anything you weigh or measure.',
+    costLabel: 'Cost per unit ({{currency}}, optional)',
+    costHint:
+      'Used to value the stock-count difference in the books. Leave empty to count without posting anything.',
+    costPlaceholder: 'Optional',
+    initialQtyLabel: 'Starting quantity',
+    removeAction: 'Remove ingredient',
+    removeConfirm: 'Tap again to remove — it disappears from lists and future counts.',
+    receiveTitle: 'Receive — {{name}}',
+    receiveHint: 'Current stock: {{qty}} {{unit}}. Enter what you received (or a negative correction).',
+    receiveAmountLabel: 'Amount ({{unit}})',
+    receiveSubmit: 'Add to stock',
+    setTitle: 'Set quantity — {{name}}',
+    setHint: 'Current stock: {{qty}} {{unit}}. Enter the new absolute quantity.',
+    setQtyLabel: 'New quantity ({{unit}})',
+    setSubmit: 'Set quantity',
+    errorGeneric: 'Could not save. Please try again.',
   },
   posShell: {
     /** Redesign P4 — the shared POS shell chrome (status bar, till menu, ticket dock). */
