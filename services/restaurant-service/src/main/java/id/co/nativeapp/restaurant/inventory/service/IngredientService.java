@@ -40,8 +40,8 @@ public class IngredientService {
    * IngredientWriter#create} from the bound tenant scope, never from the request body (rule 5).
    *
    * @throws IngredientNameConflictException if an ACTIVE ingredient with the same name already
-   *     exists at the outlet (the V31 partial unique index; caught here AFTER the writer's
-   *     {@code REQUIRES_NEW} transaction aborted — the {@code StocktakeService} pattern)
+   *     exists at the outlet (the V31 partial unique index; caught here AFTER the writer's {@code
+   *     REQUIRES_NEW} transaction aborted — the {@code StocktakeService} pattern)
    */
   public IngredientResponse create(CreateIngredientRequest request) {
     TenantContext.require();

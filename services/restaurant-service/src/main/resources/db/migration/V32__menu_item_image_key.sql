@@ -1,0 +1,14 @@
+-- V32 (ADR 0048): menu images move from inline base64 data URLs to the object store.
+--
+-- image_key holds the content-addressed object key
+-- (restaurant/{company_id}/menu/{sha256}.{ext}); the legacy image_url column stays for
+-- dual-read (existing data URLs keep rendering until the owner-triggered per-tenant
+-- backfill converts them — POST /api/v1/menu/images/migrate). An item has AT MOST one of
+-- the two set; the aggregate enforces it (attachImage clears image_url and vice versa) —
+-- no CHECK here so legacy rows mid-migration are never stranded invalid.
+--
+-- No RLS work: the menu_item tenant-isolation policy (V2) covers new columns
+-- automatically. No backfill here either — a Flyway UPDATE cannot reach the object store,
+-- and under FORCE RLS it would silently match 0 rows anyway (the V6/V7 lesson); the
+-- conversion runs inside normal tenant-bound transactions instead.
+ALTER TABLE menu_item ADD COLUMN IF NOT EXISTS image_key TEXT NULL;

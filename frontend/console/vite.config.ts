@@ -74,6 +74,24 @@ const pwa = VitePWA({
     // of the download and the router bounces the user to the landing page (field-found).
     navigateFallbackDenylist: [/^\/api\//, /^\/auth\//, /\.apk$/],
     runtimeCaching: [
+      // Menu images off the object store (ADR 0048): /api/media/** URLs are content-addressed
+      // (sha256 keys) and served with Cache-Control: immutable, so CacheFirst is safe by
+      // construction — a changed image is a DIFFERENT URL. This is what keeps product photos on
+      // the offline till: the old base64-in-IndexedDB payload is gone, so previously-viewed
+      // images must survive via the SW cache instead. MUST be registered BEFORE the generic
+      // /api/ NetworkOnly rule (workbox: first matching route wins). Function matcher, not a
+      // RegExp: workbox tests RegExps against the full href, where a ^\/api\/ anchor can never
+      // match.
+      {
+        urlPattern: ({ url, sameOrigin }) =>
+          sameOrigin && url.pathname.startsWith('/api/media/'),
+        handler: 'CacheFirst',
+        options: {
+          cacheName: 'media-images',
+          expiration: { maxEntries: 500, maxAgeSeconds: 30 * 24 * 60 * 60 },
+          cacheableResponse: { statuses: [200] },
+        },
+      },
       {
         urlPattern: /^\/api\//,
         handler: 'NetworkOnly',

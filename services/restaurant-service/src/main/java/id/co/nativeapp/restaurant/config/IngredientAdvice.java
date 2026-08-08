@@ -24,8 +24,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  *       ingredient-not-found})
  *   <li>{@link IngredientStocktakeNotFoundException} — unknown/cross-tenant id → {@code 404}
  *       ({@code ingredient-stocktake-not-found})
- *   <li>{@link IngredientNameConflictException} — duplicate ACTIVE name at the outlet → {@code
- *       409} ({@code ingredient-name-conflict})
+ *   <li>{@link IngredientNameConflictException} — duplicate ACTIVE name at the outlet → {@code 409}
+ *       ({@code ingredient-name-conflict})
  * </ul>
  */
 @RestControllerAdvice

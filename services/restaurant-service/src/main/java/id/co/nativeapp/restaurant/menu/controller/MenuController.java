@@ -2,6 +2,7 @@ package id.co.nativeapp.restaurant.menu.controller;
 
 import id.co.nativeapp.restaurant.menu.dto.CreateMenuItemRequest;
 import id.co.nativeapp.restaurant.menu.dto.MenuItemResponse;
+import id.co.nativeapp.restaurant.menu.dto.MigrateMenuImagesResponse;
 import id.co.nativeapp.restaurant.menu.dto.UpdateMenuItemRequest;
 import id.co.nativeapp.restaurant.menu.service.MenuService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -127,5 +128,23 @@ public class MenuController {
   public ResponseEntity<MenuItemResponse> patchMenuItem(
       @PathVariable UUID itemId, @Valid @RequestBody UpdateMenuItemRequest request) {
     return ResponseEntity.ok(menuService.updateItem(itemId, request));
+  }
+
+  /**
+   * Converts the bound tenant's remaining legacy inline base64 menu images to the object store (ADR
+   * 0048). Owner-only at the gateway; idempotent — a re-run on a fully migrated tenant returns
+   * {@code {"migrated":0,"skipped":0}}. Rows whose legacy payload no longer validates are counted
+   * as {@code skipped} and keep rendering via dual-read.
+   */
+  @Operation(
+      summary = "Migrate legacy inline menu images to the object store",
+      description =
+          "Converts every remaining base64-data-URL menu image of the bound tenant into the object"
+              + " store (ADR 0048), replacing the inline payload with a content-addressed key."
+              + " Idempotent and RLS-scoped; owner-only at the gateway. Returns the migrated and"
+              + " skipped counts — skipped rows keep serving via dual-read.")
+  @PostMapping("/images/migrate")
+  public ResponseEntity<MigrateMenuImagesResponse> migrateImages() {
+    return ResponseEntity.ok(menuService.migrateImages());
   }
 }

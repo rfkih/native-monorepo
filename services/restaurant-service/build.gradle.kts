@@ -60,6 +60,11 @@ dependencies {
     // as `api`.
     implementation(project(":libs:entitlement-check"))
 
+    // Object storage (ADR 0048): menu images live in MinIO as content-addressed objects, not
+    // inline base64 in menu_item. Auto-configures the MediaStorage bean from native.media.*;
+    // this service's credentials are policy-scoped to the restaurant/ prefix.
+    implementation(project(":libs:media-storage"))
+
     // Web (/healthz + POST /sales) + JPA persistence.
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")

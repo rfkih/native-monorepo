@@ -40,6 +40,7 @@ public interface MenuItemRepository extends JpaRepository<MenuItem, UUID> {
                  m.available       AS available,
                  m.stock_quantity  AS stock_quantity,
                  m.image_url       AS image_url,
+                 m.image_key       AS image_key,
                  m.unit_cost_minor AS unit_cost_minor
             FROM menu_item m
             LEFT JOIN menu_category mc ON mc.id = m.category_id
@@ -54,9 +55,11 @@ public interface MenuItemRepository extends JpaRepository<MenuItem, UUID> {
   /**
    * Loads items by id for the checkout validation path, projected to {@link MenuItemView} —
    * checkout only needs each item's business, name, price, currency, active, available flags, and
-   * stock_quantity to validate the request and snapshot the line, never the full aggregate.
-   * RLS-scoped; callers chunk the id list to at most 1 000 per call (CLAUDE.md IN-clause
-   * convention).
+   * stock_quantity to validate the request and snapshot the line, never the full aggregate. The
+   * image columns are deliberately NOT selected (checkout never renders an image; pre-ADR-0048 this
+   * query dragged every base64 payload through the JVM per checkout) — {@code
+   * MenuItemView.getImageUrl()/getImageKey()} are {@code null} on this path. RLS-scoped; callers
+   * chunk the id list to at most 1 000 per call (CLAUDE.md IN-clause convention).
    */
   @Query(
       value =
@@ -71,13 +74,30 @@ public interface MenuItemRepository extends JpaRepository<MenuItem, UUID> {
                  m.active          AS active,
                  m.available       AS available,
                  m.stock_quantity  AS stock_quantity,
-                 m.image_url       AS image_url,
                  m.unit_cost_minor AS unit_cost_minor
             FROM menu_item m
            WHERE m.id IN (:ids)
           """,
       nativeQuery = true)
   List<MenuItemView> findViewsByIds(@Param("ids") List<UUID> ids);
+
+  /**
+   * Ids of this tenant's items still carrying a LEGACY inline base64 image (pre-ADR-0048 data URL
+   * in {@code image_url}) — the work list for the owner-triggered {@code POST
+   * /api/v1/menu/images/migrate} backfill. RLS-scoped: the query runs inside a normal tenant-bound
+   * transaction, so it can only ever see (and the backfill only ever converts) the caller's own
+   * rows — deliberately NOT a Flyway backfill (a migration cannot reach the object store, and under
+   * FORCE RLS its UPDATE would silently match 0 rows — the V6/V7 lesson).
+   */
+  @Query(
+      value =
+          """
+          SELECT m.id AS id
+            FROM menu_item m
+           WHERE m.image_url LIKE 'data:image/%'
+          """,
+      nativeQuery = true)
+  List<UUID> findLegacyInlineImageItemIds();
 
   /**
    * Atomically deducts {@code qty} from a <em>tracked</em> item's stock in a single UPDATE, using

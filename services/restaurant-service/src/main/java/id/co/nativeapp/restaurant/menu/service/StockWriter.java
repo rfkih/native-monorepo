@@ -23,9 +23,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class StockWriter {
 
   private final MenuItemRepository repository;
+  private final MenuImageStore imageStore;
 
-  public StockWriter(MenuItemRepository repository) {
+  public StockWriter(MenuItemRepository repository, MenuImageStore imageStore) {
     this.repository = repository;
+    this.imageStore = imageStore;
   }
 
   /**
@@ -51,7 +53,8 @@ public class StockWriter {
             .orElseThrow(() -> new NoSuchElementException("Menu item not found: " + menuItemId));
     item.setStock(quantity);
     MenuItem saved = repository.saveAndFlush(item);
-    return MenuItemResponse.from(saved);
+    return MenuItemResponse.from(
+        saved, imageStore.resolve(saved.getImageKey(), saved.getImageUrl()));
   }
 
   /**
@@ -73,6 +76,7 @@ public class StockWriter {
             .orElseThrow(() -> new NoSuchElementException("Menu item not found: " + menuItemId));
     item.addStock(amount); // throws UntrackedStockException if not tracked
     MenuItem saved = repository.saveAndFlush(item);
-    return MenuItemResponse.from(saved);
+    return MenuItemResponse.from(
+        saved, imageStore.resolve(saved.getImageKey(), saved.getImageUrl()));
   }
 }

@@ -33,14 +33,17 @@ public class MenuReader {
   private final MenuItemRepository repository;
   private final ModifierGroupRepository groupRepository;
   private final ModifierOptionRepository optionRepository;
+  private final MenuImageStore imageStore;
 
   public MenuReader(
       MenuItemRepository repository,
       ModifierGroupRepository groupRepository,
-      ModifierOptionRepository optionRepository) {
+      ModifierOptionRepository optionRepository,
+      MenuImageStore imageStore) {
     this.repository = repository;
     this.groupRepository = groupRepository;
     this.optionRepository = optionRepository;
+    this.imageStore = imageStore;
   }
 
   /**
@@ -128,9 +131,11 @@ public class MenuReader {
    *
    * <p>Stock increment: includes {@code stockQuantity} ({@code null} = untracked / infinite).
    *
-   * <p>Image increment: includes {@code imageUrl} ({@code null} = no image set).
+   * <p>Image (ADR 0048): a stored {@code image_key} resolves to its public {@code /api/media/…}
+   * URL; a not-yet-migrated row's legacy {@code image_url} (data URL or external URL) passes
+   * through — dual-read, so the response contract never changes shape ({@code null} = no image).
    */
-  static MenuItemResponse toResponse(MenuItemView view, List<ModifierGroupResponse> groups) {
+  private MenuItemResponse toResponse(MenuItemView view, List<ModifierGroupResponse> groups) {
     return new MenuItemResponse(
         view.getId(),
         view.getBusinessId(),
@@ -142,7 +147,7 @@ public class MenuReader {
         view.isActive(),
         view.isAvailable(),
         view.getStockQuantity(),
-        view.getImageUrl(),
+        imageStore.resolve(view.getImageKey(), view.getImageUrl()),
         view.getUnitCostMinor(),
         groups);
   }

@@ -2,6 +2,7 @@ package id.co.nativeapp.restaurant.menu.service;
 
 import id.co.nativeapp.restaurant.menu.dto.CreateMenuItemRequest;
 import id.co.nativeapp.restaurant.menu.dto.MenuItemResponse;
+import id.co.nativeapp.restaurant.menu.dto.MigrateMenuImagesResponse;
 import id.co.nativeapp.restaurant.menu.dto.UpdateMenuItemRequest;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
@@ -69,5 +70,15 @@ public class MenuService {
   public MenuItemResponse updateItem(UUID itemId, UpdateMenuItemRequest request) {
     TenantContext.require();
     return writer.updateItem(itemId, request);
+  }
+
+  /**
+   * Converts the CURRENT tenant's remaining legacy inline base64 menu images to the object store
+   * (ADR 0048). Owner-triggered, idempotent, RLS-bound — see {@link
+   * MenuWriter#migrateLegacyImages()}.
+   */
+  public MigrateMenuImagesResponse migrateImages() {
+    TenantContext.require();
+    return writer.migrateLegacyImages();
   }
 }

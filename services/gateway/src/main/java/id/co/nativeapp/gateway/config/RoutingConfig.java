@@ -386,6 +386,28 @@ public class RoutingConfig {
         .build();
   }
 
+  /**
+   * {@code POST /api/v1/menu/images/migrate} — the owner-triggered, per-tenant conversion of legacy
+   * inline base64 menu images to the object store (ADR 0048). OWNER_ROLES: a bulk data-migration
+   * action, not a POS operation. {@code @Order(HIGHEST_PRECEDENCE)} is load-bearing: the general
+   * {@code /menu/**} POS route below would otherwise swallow this path and admit cashiers — the
+   * {@link #userMeOutletsRoute} first-match-wins pattern.
+   */
+  @Bean
+  @Order(Ordered.HIGHEST_PRECEDENCE)
+  RouterFunction<ServerResponse> menuImageMigrateRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("restaurant-service-menu-image-migrate")
+        .route(path("/api/v1/menu/images/migrate"), http())
+        .before(uri(routes.restaurantService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(OWNER_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
   @Bean
   RouterFunction<ServerResponse> menuRoute(
       GatewayRouteProperties routes,

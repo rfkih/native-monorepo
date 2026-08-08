@@ -86,13 +86,23 @@ public class MenuItem extends Auditable {
   @Nullable private Integer stockQuantity;
 
   /**
-   * Optional image — either a compact base64 data URL (e.g. {@code data:image/jpeg;base64,...}) or
-   * an external HTTP(S) URL. {@code NULL} means no image has been set. The application enforces a 3
-   * MB soft cap via {@code @Size} validation on the request DTO; this column is unconstrained at
-   * the DB layer so the sentinel sits in the right tier.
+   * LEGACY image column (pre-ADR-0048) — either a base64 data URL or an external HTTP(S) URL.
+   * {@code NULL} means no legacy image. New data-URL uploads are converted to object-store keys
+   * ({@link #imageKey}) by the writer; this column survives for dual-read of not-yet-migrated rows
+   * and for the external-URL passthrough. At most ONE of {@code imageUrl}/{@code imageKey} is set —
+   * every mutator here maintains that invariant.
    */
   @Column(name = "image_url", nullable = true)
   @Nullable private String imageUrl;
+
+  /**
+   * Object-store key of the item's image (ADR 0048): {@code
+   * restaurant/{companyId}/menu/{sha256}.{ext}}, content-addressed and immutable. {@code NULL} = no
+   * stored image (a legacy {@link #imageUrl} may still exist). The read path maps this to the
+   * public {@code /api/media/…} URL; the key itself never leaves the service raw.
+   */
+  @Column(name = "image_key", nullable = true)
+  @Nullable private String imageKey;
 
   /**
    * The item's unit cost in minor units (same currency as {@link #price}), used to value a
@@ -201,19 +211,44 @@ public class MenuItem extends Auditable {
     return available;
   }
 
-  /** The optional image URL (data URL or external URL); {@code null} when not set. */
+  /** The LEGACY image URL (data URL or external URL); {@code null} when not set or migrated. */
   @Nullable public String getImageUrl() {
     return imageUrl;
   }
 
+  /** The object-store image key (ADR 0048); {@code null} when the item has no stored image. */
+  @Nullable public String getImageKey() {
+    return imageKey;
+  }
+
   /**
-   * Sets (or clears) the image URL. Pass {@code null} to remove the image; an empty string is
-   * stored as {@code null} (treated as "clear").
+   * Sets (or clears) the LEGACY image URL. Pass {@code null} to remove the image; an empty string
+   * is stored as {@code null} (treated as "clear"). Setting or clearing a legacy URL always clears
+   * {@link #imageKey} — at most one image representation is ever set.
    *
    * @param imageUrl new image URL, or {@code null} / empty to clear
    */
   public void setImageUrl(@Nullable String imageUrl) {
     this.imageUrl = (imageUrl != null && imageUrl.isEmpty()) ? null : imageUrl;
+    this.imageKey = null;
+  }
+
+  /**
+   * Attaches an object-store image by its content-addressed key (ADR 0048), clearing any legacy
+   * {@link #imageUrl} — at most one image representation is ever set.
+   *
+   * @param imageKey the object key (non-null; built by the writer via the media-storage key
+   *     builder, never a request value)
+   */
+  public void attachImage(String imageKey) {
+    this.imageKey = Objects.requireNonNull(imageKey, "imageKey");
+    this.imageUrl = null;
+  }
+
+  /** Removes the item's image entirely (both the object-store key and any legacy URL). */
+  public void clearImage() {
+    this.imageKey = null;
+    this.imageUrl = null;
   }
 
   /**
@@ -224,7 +259,9 @@ public class MenuItem extends Auditable {
    * @param name new display name (non-blank); {@code null} = leave unchanged
    * @param category new category (non-blank); {@code null} = leave unchanged
    * @param price new price; {@code null} = leave unchanged (currency cannot be changed)
-   * @param imageUrl new image URL, or empty string to clear; {@code null} = leave unchanged
+   * @param imageUrl new LEGACY image URL (external HTTP(S) — the writer converts data URLs to
+   *     {@link #attachImage} before reaching here), or empty string to clear the image (key AND
+   *     legacy URL); {@code null} = leave unchanged
    * @param unitCostMinor new unit cost in minor units (&ge; 0); {@code null} = leave unchanged
    */
   public void update(
@@ -243,8 +280,13 @@ public class MenuItem extends Auditable {
       this.price = MoneyEmbeddable.of(price);
     }
     if (imageUrl != null) {
-      // empty string = clear the image; any other value = set
-      this.imageUrl = imageUrl.isEmpty() ? null : imageUrl;
+      // empty string = clear the image (both representations); any other value = set the
+      // legacy URL, which also clears the object-store key (setImageUrl invariant).
+      if (imageUrl.isEmpty()) {
+        clearImage();
+      } else {
+        setImageUrl(imageUrl);
+      }
     }
     if (unitCostMinor != null) {
       setUnitCostMinor(unitCostMinor);

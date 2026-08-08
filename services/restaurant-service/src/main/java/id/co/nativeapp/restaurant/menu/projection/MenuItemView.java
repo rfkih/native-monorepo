@@ -37,10 +37,19 @@ public interface MenuItemView {
   @Nullable Integer getStockQuantity();
 
   /**
-   * Optional image URL (base64 data URL or external HTTP(S) URL); {@code null} when no image has
-   * been set.
+   * LEGACY image URL (base64 data URL or external HTTP(S) URL, pre-ADR-0048); {@code null} when no
+   * legacy image is set (migrated rows carry {@link #getImageKey()} instead). Only the menu-list
+   * query selects it — the checkout-validation query omits both image columns, so this accessor is
+   * {@code null} on that path.
    */
   @Nullable String getImageUrl();
+
+  /**
+   * Object-store image key (ADR 0048); {@code null} when the item has no stored image. The reader
+   * maps this to the public {@code /api/media/…} URL — the raw key never reaches a response. Only
+   * the menu-list query selects it (see {@link #getImageUrl()}).
+   */
+  @Nullable String getImageKey();
 
   /**
    * The item's unit cost in minor units (same currency as {@link #getCurrency()}); {@code null}

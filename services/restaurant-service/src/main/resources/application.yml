@@ -58,6 +58,20 @@ spring:
 # restaurant-service config — externalized, validated at startup (fail fast — ENGINEERING-STANDARDS
 # §7). No business config is hardcoded in Java.
 native:
+  # Object storage (ADR 0048): menu images are content-addressed objects under the
+  # restaurant/ prefix. Dev defaults target the host-published MinIO container with the
+  # fixed dev credentials docker/minio/init.sh provisions; UAT/prod override via env
+  # (compose network endpoint + generated secrets). public-base-url is the anonymous
+  # GET-only media proxy the gateway exposes — responses embed it, so it must be the
+  # URL a BROWSER can reach in that environment.
+  media:
+    endpoint: ${MEDIA_ENDPOINT:http://localhost:9000}
+    access-key: ${MEDIA_ACCESS_KEY:restaurant-media}
+    secret-key: ${MEDIA_SECRET_KEY:restaurant-media-secret}
+    bucket: ${MEDIA_BUCKET:native-media}
+    service-prefix: restaurant
+    public-base-url: ${MEDIA_PUBLIC_BASE_URL:http://localhost:8090/api/media}
+
   giftcard:
     # Security review W-4: the HMAC-SHA256 key GiftCardCodeGenerator keys the card-code derivation
     # with, base64-encoded 32-byte value, NATIVE_GIFTCARD_CODE_KEY env var, Vault-injected in prod.

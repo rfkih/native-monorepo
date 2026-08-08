@@ -3,12 +3,14 @@ package id.co.nativeapp.restaurant.menu;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import id.co.nativeapp.mediastorage.Sha256;
 import id.co.nativeapp.restaurant.PostgresRlsTestBase;
 import id.co.nativeapp.restaurant.menu.dto.CreateMenuItemRequest;
 import id.co.nativeapp.restaurant.menu.dto.MenuItemResponse;
 import id.co.nativeapp.restaurant.menu.dto.UpdateMenuItemRequest;
 import id.co.nativeapp.restaurant.menu.service.MenuService;
 import id.co.nativeapp.tenant.TenantContext;
+import java.util.Base64;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.UUID;
@@ -21,6 +23,11 @@ import org.springframework.boot.test.context.SpringBootTest;
  *
  * <p>Convention tested: for {@code imageUrl} in PATCH — {@code null} (absent) = leave unchanged;
  * empty string = clear the image; any other non-null value = set/replace the image.
+ *
+ * <p>ADR 0048 (convert-on-write): an uploaded base64 data URL is stored to the object store and the
+ * response's {@code imageUrl} becomes the PUBLIC {@code /api/media/…} URL — content-addressed, so
+ * the same payload always resolves to the same URL ({@link #SAMPLE_IMAGE_PUBLIC_URL}). External
+ * HTTP(S) URLs still pass through verbatim.
  *
  * <p>All tests use the same shared {@link PostgresRlsTestBase} Testcontainers setup (singleton
  * container, reset per-test via {@code @BeforeEach}).
@@ -37,6 +44,19 @@ class MenuItemImageEditTest extends PostgresRlsTestBase {
   private static final String SAMPLE_IMAGE =
       "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
+  /**
+   * The public URL convert-on-write resolves {@link #SAMPLE_IMAGE} to: the dev {@code
+   * public-base-url} + the content-addressed key (sha256 of the DECODED bytes, {@code .png} from
+   * the validated canonical type).
+   */
+  private static final String SAMPLE_IMAGE_PUBLIC_URL =
+      "http://localhost:8090/api/media/restaurant/"
+          + TENANT
+          + "/menu/"
+          + Sha256.hex(
+              Base64.getDecoder().decode(SAMPLE_IMAGE.substring(SAMPLE_IMAGE.indexOf(',') + 1)))
+          + ".png";
+
   @Autowired private MenuService menuService;
 
   // ---------------------------------------------------------------------------
@@ -44,7 +64,7 @@ class MenuItemImageEditTest extends PostgresRlsTestBase {
   // ---------------------------------------------------------------------------
 
   @Test
-  void createWithImageUrlReturnsItInGetMenu() throws Exception {
+  void createWithImageUrlReturnsPublicMediaUrlInGetMenu() throws Exception {
     UUID itemId =
         TenantContext.callAs(
             TENANT,
@@ -61,7 +81,32 @@ class MenuItemImageEditTest extends PostgresRlsTestBase {
     MenuItemResponse found =
         items.stream().filter(i -> i.id().equals(itemId)).findFirst().orElseThrow();
 
-    assertThat(found.imageUrl()).isEqualTo(SAMPLE_IMAGE);
+    // Convert-on-write (ADR 0048): the inline data URL never comes back — the response carries
+    // the content-addressed public media URL instead.
+    assertThat(found.imageUrl()).isEqualTo(SAMPLE_IMAGE_PUBLIC_URL);
+  }
+
+  @Test
+  void createWithExternalUrlPassesThroughVerbatim() throws Exception {
+    String external = "https://cdn.example.co.id/photos/nasi-goreng.jpg";
+    UUID itemId =
+        TenantContext.callAs(
+            TENANT,
+            ACTOR,
+            () ->
+                menuService
+                    .createItem(
+                        new CreateMenuItemRequest(
+                            BUSINESS, "Nasi Campur", "MAIN", 17_000L, "IDR", external))
+                    .id());
+
+    List<MenuItemResponse> items =
+        TenantContext.callAs(TENANT, ACTOR, () -> menuService.findActiveByBusiness(BUSINESS));
+    MenuItemResponse found =
+        items.stream().filter(i -> i.id().equals(itemId)).findFirst().orElseThrow();
+
+    // The documented legacy affordance: an external HTTP(S) URL is stored and echoed verbatim.
+    assertThat(found.imageUrl()).isEqualTo(external);
   }
 
   // ---------------------------------------------------------------------------
@@ -172,7 +217,7 @@ class MenuItemImageEditTest extends PostgresRlsTestBase {
         TenantContext.callAs(TENANT, ACTOR, () -> menuService.findActiveByBusiness(BUSINESS));
     MenuItemResponse found =
         items.stream().filter(i -> i.id().equals(itemId)).findFirst().orElseThrow();
-    assertThat(found.imageUrl()).isEqualTo(SAMPLE_IMAGE);
+    assertThat(found.imageUrl()).isEqualTo(SAMPLE_IMAGE_PUBLIC_URL);
   }
 
   // ---------------------------------------------------------------------------
@@ -188,7 +233,7 @@ class MenuItemImageEditTest extends PostgresRlsTestBase {
         TenantContext.callAs(TENANT, ACTOR, () -> menuService.findActiveByBusiness(BUSINESS));
     assertThat(
             before.stream().filter(i -> i.id().equals(itemId)).findFirst().orElseThrow().imageUrl())
-        .isEqualTo(SAMPLE_IMAGE);
+        .isEqualTo(SAMPLE_IMAGE_PUBLIC_URL);
 
     // PATCH with empty string = clear.
     TenantContext.callAs(
@@ -224,7 +269,7 @@ class MenuItemImageEditTest extends PostgresRlsTestBase {
     MenuItemResponse found =
         items.stream().filter(i -> i.id().equals(itemId)).findFirst().orElseThrow();
     assertThat(found.name()).isEqualTo("Teh Manis Panas");
-    assertThat(found.imageUrl()).isEqualTo(SAMPLE_IMAGE); // still set
+    assertThat(found.imageUrl()).isEqualTo(SAMPLE_IMAGE_PUBLIC_URL); // still set
   }
 
   // ---------------------------------------------------------------------------
