@@ -24,6 +24,7 @@ import {
   BookOpen,
   ChefHat,
   ClipboardCheck,
+  History,
   ClipboardList,
   Gift,
   LogOut,
@@ -92,6 +93,7 @@ import { PosStatusBar } from '@/features/pos-shell/layout/PosStatusBar'
 import { TillMenuSheet } from '@/features/pos-shell/layout/TillMenuSheet'
 import { usePrinterStatusAction } from '@/features/pos-shell/layout/usePrinterStatusAction'
 import { StocktakeSheet } from '@/features/stocktake/StocktakeSheet'
+import { SalesHistorySheet } from './SalesHistorySheet'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -164,6 +166,7 @@ function PosInner({ session }: { session: CompanySession }) {
   // (vs. a manual till-menu open) — only then does the sheet show the explanatory reason line.
   const [registerGateActive, setRegisterGateActive] = useState(false)
   const [showStocktakeSheet, setShowStocktakeSheet] = useState(false)
+  const [showSalesHistory, setShowSalesHistory] = useState(false)
   // P4: the dock's Send/Pay reach INTO the bill sheet — each ++ asks BillDetail to fire the
   // kitchen ticket / the pay modal as soon as the bill is loaded (no manual sheet detour).
   const [autoKotToken, setAutoKotToken] = useState(0)
@@ -935,6 +938,16 @@ function PosInner({ session }: { session: CompanySession }) {
               disabledTitle: t('offline.disabled.stocktake'),
             },
             {
+              key: 'history',
+              icon: <History className="size-4" aria-hidden="true" />,
+              label: t('pos.history.tillMenuLabel'),
+              onSelect: () => setShowSalesHistory(true),
+              // Server-truth read: the list cannot answer offline (queued sales live in the
+              // SyncCenter until they replay).
+              disabled: offline,
+              disabledTitle: t('pos.history.disabledOffline'),
+            },
+            {
               key: 'display',
               icon: <Monitor className="size-4" aria-hidden="true" />,
               label: t('pos.customerDisplay.button'),
@@ -1005,6 +1018,10 @@ function PosInner({ session }: { session: CompanySession }) {
           locale={locale}
           onClose={() => setShowStocktakeSheet(false)}
         />
+      ) : null}
+
+      {showSalesHistory ? (
+        <SalesHistorySheet session={session} locale={locale} onClose={() => setShowSalesHistory(false)} />
       ) : null}
 
       {showSyncCenter ? <SyncCenter locale={locale} onClose={() => setShowSyncCenter(false)} /> : null}

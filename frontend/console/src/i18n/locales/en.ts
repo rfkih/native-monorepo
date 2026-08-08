@@ -871,6 +871,18 @@ export const en = {
         checkStatus: 'Check payment status',
       },
     },
+    history: {
+      tillMenuLabel: "Today's sales",
+      title: "Today's sales",
+      emptyTitle: 'No sales yet today',
+      emptyHint: 'Completed sales appear here the moment they are recorded.',
+      error: 'Could not load today’s sales. Try again.',
+      tenderOnline: 'Online',
+      noReceipt: 'No receipt available',
+      receiptUnavailable: 'This sale has no reprintable receipt.',
+      reprintLabel: 'Reprint',
+      disabledOffline: 'Sales history needs a connection.',
+    },
     receipt: {
       title: 'Receipt',
       orderRef: 'Order',

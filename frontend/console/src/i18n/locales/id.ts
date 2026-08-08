@@ -862,6 +862,18 @@ export const id = {
         checkStatus: 'Periksa status pembayaran',
       },
     },
+    history: {
+      tillMenuLabel: 'Penjualan hari ini',
+      title: 'Penjualan hari ini',
+      emptyTitle: 'Belum ada penjualan hari ini',
+      emptyHint: 'Penjualan yang selesai langsung muncul di sini.',
+      error: 'Tidak dapat memuat penjualan hari ini. Coba lagi.',
+      tenderOnline: 'Daring',
+      noReceipt: 'Struk tidak tersedia',
+      receiptUnavailable: 'Penjualan ini tidak memiliki struk untuk dicetak ulang.',
+      reprintLabel: 'Cetak ulang',
+      disabledOffline: 'Riwayat penjualan membutuhkan koneksi.',
+    },
     receipt: {
       title: 'Struk',
       orderRef: 'Pesanan',

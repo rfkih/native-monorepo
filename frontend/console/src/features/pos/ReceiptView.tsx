@@ -39,6 +39,16 @@ interface Props {
   /** Phase 5 (ADR 0028): true for a client-side receipt generated while offline — the sale is
    * queued and not yet confirmed by the server. Renders a solid provisional marker (ThermalReceipt). */
   provisional?: boolean
+  /**
+   * Reprint mode (today's-sales history): the header shows the ORIGINAL sale time (`occurredAt`),
+   * a "reprint" meta row marks the copy, and auto-print is suppressed — reprinting is always a
+   * deliberate button press, never a side effect of opening the history entry.
+   */
+  reprint?: boolean
+  /** ISO instant of the original sale — header time for a reprint (defaults to now). */
+  occurredAt?: string
+  /** Overrides the bottom action label (default: "new order"). */
+  actionLabelText?: string
   onNew: () => void
 }
 
@@ -95,6 +105,9 @@ export function ReceiptView({
   tableLabel,
   appliedPromotions,
   provisional,
+  reprint,
+  occurredAt,
+  actionLabelText,
   onNew,
 }: Props) {
   const { t } = useTranslation()
@@ -107,11 +120,12 @@ export function ReceiptView({
   // Short reference — last 8 chars of orderId
   const reference = order.orderId.slice(-8).toUpperCase()
 
-  // Formatted date/time
-  const dateTime = new Intl.DateTimeFormat(locale, {
+  // Formatted date/time — a reprint shows the ORIGINAL sale moment, not "now".
+  const dateTimeFormat = new Intl.DateTimeFormat(locale, {
     dateStyle: 'medium',
     timeStyle: 'short',
-  }).format(new Date())
+  })
+  const dateTime = dateTimeFormat.format(occurredAt ? new Date(occurredAt) : new Date())
 
   // Tagline: order type label
   const tagline = orderTypeKey ? t(orderTypeKey) : undefined
@@ -120,6 +134,10 @@ export function ReceiptView({
   const metaRows: ThermalRow[] = []
   if (order.orderType === 'DINE_IN' && tableLabel) {
     metaRows.push({ label: t('pos.table.label'), valueLabel: tableLabel })
+  }
+  // A copy must say it is one — and when it was made.
+  if (reprint) {
+    metaRows.push({ label: t('pos.history.reprintLabel'), valueLabel: dateTimeFormat.format(new Date()) })
   }
 
   // Line items
@@ -213,7 +231,7 @@ export function ReceiptView({
 
   return (
     <ThermalReceipt
-      autoPrint
+      autoPrint={!reprint}
       cashTender={isCash}
       businessName={businessName ?? 'Native POS'}
       title={t('pos.receipt.title')}
@@ -228,7 +246,7 @@ export function ReceiptView({
       footerNote={t('pos.receipt.thankYou')}
       onPrint={() => window.print()}
       onAction={onNew}
-      actionLabel={t('pos.receipt.newOrder')}
+      actionLabel={actionLabelText ?? t('pos.receipt.newOrder')}
       isPending={isPending}
       pendingNote={isPending ? t('pos.receipt.pendingNote') : undefined}
       isProvisional={provisional}
