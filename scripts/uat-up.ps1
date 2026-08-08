@@ -113,8 +113,25 @@ if (-not (Test-Path $envFile)) {
         "NATIVE_PII_KEY=$(New-Secret 32)"
         "NATIVE_PII_HMAC_KEY=$(New-Secret 32)"
         "NATIVE_GIFTCARD_CODE_KEY=$(New-Secret 32)"
+        "MINIO_ROOT_PASSWORD=$(New-Secret 32)"
+        "MEDIA_RESTAURANT_SECRET_KEY=$(New-Secret 32)"
+        "MEDIA_EMPLOYEE_SECRET_KEY=$(New-Secret 32)"
+        "MEDIA_PAYMENT_SECRET_KEY=$(New-Secret 32)"
     )
     [IO.File]::WriteAllLines($envFile, $lines)   # UTF-8 no BOM
+}
+
+# Secrets introduced AFTER a stack first ran (ADR 0048: MinIO root + per-service media keys)
+# are appended to a pre-existing uat.env idempotently — unlike the PII keys, nothing is
+# ciphertext-bound to them, so minting them on upgrade is safe. [IO.File]::AppendAllLines
+# keeps the file's UTF-8-no-BOM encoding (PS5.1 Add-Content would write ANSI).
+$existingLines = [IO.File]::ReadAllLines($envFile)
+foreach ($mediaKey in @('MINIO_ROOT_PASSWORD', 'MEDIA_RESTAURANT_SECRET_KEY',
+                        'MEDIA_EMPLOYEE_SECRET_KEY', 'MEDIA_PAYMENT_SECRET_KEY')) {
+    if (-not ($existingLines | Where-Object { $_ -like "$mediaKey=*" })) {
+        [IO.File]::AppendAllLines($envFile, [string[]]@("$mediaKey=$(New-Secret 32)"))
+        Write-Host "  appended new secret $mediaKey to docker/uat.env" -ForegroundColor Cyan
+    }
 }
 
 # ---------------------------------------------------------------- 5. public URL
@@ -282,6 +299,17 @@ try {
     $smokeFailures += '/auth/admin/ is publicly reachable (expected 404)'
 } catch {
     if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -ne 404) { $smokeFailures += "/auth/admin/ returned $([int]$_.Exception.Response.StatusCode) (expected 404)" }
+}
+
+# ADR 0048: a bogus public media key must reach MinIO and come back 404 — anything else
+# means the gateway route, the anonymous-download policy, or the minio container is broken
+# (403 = policy missing, 401 = route not permitAll, 5xx = proxy/minio down).
+$bogusKey = '0' * 64
+try {
+    Invoke-WebRequest -Uri "$publicUrl/api/media/restaurant/smoke/menu/$bogusKey.jpg" -UseBasicParsing -TimeoutSec 10 | Out-Null
+    $smokeFailures += '/api/media bogus key returned success (expected 404)'
+} catch {
+    if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -ne 404) { $smokeFailures += "/api/media bogus key returned $([int]$_.Exception.Response.StatusCode) (expected 404)" }
 }
 
 if ($smokeFailures) {

@@ -10,8 +10,9 @@
 **Native** — a multi-tenant B2B SaaS: per-company console over independently-deployable vertical
 services + a shared platform layer + an event-driven financial consolidation core + an HR/payroll
 module. Java 25 · Spring Boot 4.1 · Gradle (Kotlin DSL) · PostgreSQL 16 (DB-per-service) · Kafka +
-Debezium CDC (transactional outbox) · Keycloak (OIDC) · Redis. Localized (en/id), multi-currency
-(IDR/USD). Package root: **`id.co.nativeapp.<service>`**.
+Debezium CDC (transactional outbox) · Keycloak (OIDC) · Redis · MinIO (S3-compatible object store
+for binary media — ADR 0048). Localized (en/id), multi-currency (IDR/USD). Package root:
+**`id.co.nativeapp.<service>`**.
 
 ## Monorepo layout
 ```
@@ -27,6 +28,9 @@ libs/               shared PLATFORM (auto-config, not deployable):
   security          JWT/JWKS validation, tenant-from-token filter, RFC-7807 ApiExceptionHandler
   observability     shared JSON logback (logback-native-json.xml) + Kafka readiness health indicator
   entitlement-check cached "is company entitled to module X?" gate
+  media-storage     generic S3 client for the MinIO object store (ADR 0048): MediaStorage port,
+                    {service}/{companyId}/{domain}/{sha256}.{ext} key builder, the fleet's ONE
+                    magic-byte image validator, auto-config from native.media.*
 service-template/   the blueprint every service is cloned from (widget feature + the ArchUnit suite)
 services/           the 8 deployable Spring Boot apps (see table below)
 frontend/console/   the per-company management console (Vite+React+TS+Tailwind+TanStack Query+i18n;
@@ -35,7 +39,8 @@ docs/               this map, RUNBOOK, DEVLOG, ARCHITECTURE, EVENT-CATALOG, CODE
   adr/              Architecture Decision Records — the append-only "why" log (read adr/README.md)
   generated/        machine-readable manifests (services.yaml, events.yaml) — generated + drift-checked
                     (./gradlew generateProjectDocs / verifyProjectDocs; do not hand-edit)
-docker/             compose.dev.yml (Postgres/Kafka/SchemaReg/Debezium/Keycloak/Redis) + connector/realm/init
+docker/             compose.dev.yml (Postgres/Kafka/SchemaReg/Debezium/Keycloak/Redis/MinIO) +
+                    connector/realm/init + minio/init.sh (bucket + prefix-scoped users, ADR 0048)
 deploy/             Kustomize base + per-service overlays (#24, author-only-unverified)
 .github/workflows/  ci.yml (build + test + image matrix)
 .claude/            agents/ (the 10-agent team), commands/ (slash commands: /new-service /new-feature
@@ -47,13 +52,13 @@ deploy/             Kustomize base + per-service overlays (#24, author-only-unve
 |---|---|---|---|---|
 | **gateway** | the only external edge: JWKS-validates the JWT, injects `X-Company-Id/X-Actor/X-Roles`, Redis rate-limit. Reactive Spring Cloud Gateway, **no DB**. Packages: `security/filter/ratelimit/config` (not JPA layers). | — | — | — |
 | **org-service** | company (immutable base_currency + default_language), org tree (unit/outlet/team/legal_employer, ADR 0012; business units carry an immutable LOWERCASE `vertical`: restaurant \| carwash \| barbershop), user-outlet assignments, consolidation_group + membership | CompanyCreated, OrgUnitCreated/Changed, UserOutletAssignmentChanged, GroupDefined, GroupMembershipChanged | — | V1–V7 |
-| **restaurant-service** | 1st vertical: `sale` aggregate + full restaurant POS backend (menu w/ per-item stock = the 86 gate, orders/bills/tables, register sessions ADR 0036/0038, menu-item stocktake, **ingredient inventory + ingredient stock opname ADR 0046** — `inventory` feature: `ingredient`/`ingredient_stocktake(_line)` tables, `/api/v1/ingredients/**` + `/api/v1/ingredient-stocktakes/**`) | SaleRecorded, StocktakeCompleted (menu-item AND ingredient flows), RegisterSessionClosed, … | EntitlementGranted/Revoked, UserOutletAssignmentChanged, … | V1–V31 |
+| **restaurant-service** | 1st vertical: `sale` aggregate + full restaurant POS backend (menu w/ per-item stock = the 86 gate — menu images live in the OBJECT STORE since ADR 0048: convert-on-write to `image_key`, public `/api/media/…` URLs, owner backfill `POST /api/v1/menu/images/migrate`; orders/bills/tables, register sessions ADR 0036/0038, menu-item stocktake, **ingredient inventory + ingredient stock opname ADR 0046** — `inventory` feature: `ingredient`/`ingredient_stocktake(_line)` tables, `/api/v1/ingredients/**` + `/api/v1/ingredient-stocktakes/**`) | SaleRecorded, StocktakeCompleted (menu-item AND ingredient flows), RegisterSessionClosed, … | EntitlementGranted/Revoked, UserOutletAssignmentChanged, … | V1–V32 |
 | **carwash-service** | 2nd vertical: `wash`, entitlement-gated; metrics; POS-parity foundation ported from restaurant-service — `pricing` (tax_charge_rule, VAT_CARWASH key), `payment` (CashProvider/DigitalProvider/PaymentProviderRegistry port + `carwash_payment`; ticket quote/checkout/capture — `TicketCaptureWriter.capture(ticketId)` is the idempotent digital-capture unit, ADR 0023), `outletref` (`user_outlet_assignment_ref` + `OutletAccessGuard`) | SaleRecorded, MetricPublished | EntitlementGranted/Revoked, EmployeeChanged, AssignmentChanged, UserOutletAssignmentChanged | V1–V7 |
 | **barbershop-service** | 3rd vertical: barbershop ticket flow (quote/checkout/capture) on the carwash foundation, entitlement-gated; sells gift cards at the POS; loyalty/gift-card redemption checks via local read models (V5) | SaleRecorded, MetricPublished, GiftCardSold | EntitlementGranted/Revoked, EmployeeChanged, AssignmentChanged, UserOutletAssignmentChanged, GiftCardStateChanged, LoyaltyBalanceChanged | V1–V5 |
 | **loyalty-service** | loyalty points + gift-card ledger across verticals (ADR 0026/0027): balances from sale/refund/void flows, gift-card lifecycle, redemption anomaly flags | GiftCardStateChanged, LoyaltyBalanceChanged, LoyaltyRedemptionFlagged | GiftCardSold, SaleRecorded, SaleRefunded, SaleVoided | V1–V2 |
 | **employee-service** | HR: employee/contract/assignment (PII-encrypted, console CRUD + list APIs) + **payroll engine** (gross-to-net, flagged-illustrative statutory; runtime setup/compensation/run-read APIs) + **own-sales commission** (`PERCENT_OF_METRIC` earning rule; config at `/api/v1/employees/{id}/compensation/{pkgId}/commission`) + **employee self-service** `/api/v1/me/**` (profile masked, own payslips w/ real amounts, `GET /me/sales`) via the V7 `employee.user_id`↔Keycloak-`sub` link. Gateway-routed (`/api/v1/employees/**`, `/api/v1/payroll-runs/**`, `/api/v1/payroll-setup/**` — DASHBOARD_ROLES; `/api/v1/me/**` — ME_ROLES incl. employee; local port 8084) | EmployeeChanged, AssignmentChanged, PayrollPosted, LaborCostAllocated | OrgUnitCreated/Changed, MetricPublished, PeriodSealed | V1–V7 |
 | **finance-service** | the consolidation core: dimensional ledger, P&L, FX, group consolidation. **The big one (V1–V12)** | ConsolidationClosed, TrialBalancePublished | SaleRecorded, ExpenseRecorded, PayrollPosted, LaborCostAllocated, GroupDefined, GroupMembershipChanged, TrialBalancePublished | V1–V12 |
-| **payment-service** | QRIS payment modes + PSP charge lifecycle (ADR 0045): `payment_settings` (mode MANUAL\|STATIC\|GATEWAY, merchant static QRIS image, merchant-own Midtrans creds — AES-encrypted), `payment_charge` (dynamic QRIS per transaction, settled by the signed inbound Midtrans webhook at `/api/v1/psp-webhooks/midtrans/{companyId}`) | PaymentChargeSucceeded | — | V1–V3 |
+| **payment-service** | QRIS payment modes + PSP charge lifecycle (ADR 0045): `payment_settings` (mode MANUAL\|STATIC\|GATEWAY, merchant static QRIS image — object-store-backed since ADR 0048, merchant-own Midtrans creds — AES-encrypted), `payment_charge` (dynamic QRIS per transaction, settled by the signed inbound Midtrans webhook at `/api/v1/psp-webhooks/midtrans/{companyId}`) | PaymentChargeSucceeded | — | V1–V5 |
 | **entitlement-service** | module entitlements per company + billing | EntitlementGranted/Revoked | CompanyCreated | V1 |
 | **notification-service** | notify + (stub) delivery | DeliveryReceipt | ConsolidationClosed | V1 |
 

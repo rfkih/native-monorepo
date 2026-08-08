@@ -195,6 +195,55 @@ services:
       retries: 10
 
   # ---------------------------------------------------------------------------
+  # MinIO — the platform object store (ADR 0048): menu images, expense receipts,
+  # static QRIS as content-addressed objects. No public port — the ONLY public
+  # surface is the gateway's anonymous GET /api/media/restaurant/** proxy; the
+  # private prefixes are reached solely by their owning services' scoped creds.
+  # Versioning is enabled by the init job; back up with `mc mirror` (RUNBOOK
+  # "Object-store backup") — objects do NOT ride along in pg_dump.
+  # ---------------------------------------------------------------------------
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: native-uat-minio
+    restart: unless-stopped
+    mem_limit: 512m
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER: native-minio-root
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD} # generated into uat.env by uat-up.ps1
+    volumes:
+      - native-uat-minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot bootstrap (idempotent, re-runs on every stack start): bucket + versioning,
+  # anonymous download on the restaurant/ prefix ONLY, one prefix-scoped user per service
+  # — the storage twin of the per-service Postgres roles. Community MinIO has no web
+  # console; ALL administration goes through `mc` like this job does.
+  minio-init:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    container_name: native-uat-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: "no"
+    entrypoint: ["/bin/sh", "/init.sh"]
+    environment:
+      MINIO_ROOT_USER: native-minio-root
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MEDIA_RESTAURANT_ACCESS_KEY: restaurant-media
+      MEDIA_RESTAURANT_SECRET_KEY: ${MEDIA_RESTAURANT_SECRET_KEY}
+      MEDIA_EMPLOYEE_ACCESS_KEY: employee-media
+      MEDIA_EMPLOYEE_SECRET_KEY: ${MEDIA_EMPLOYEE_SECRET_KEY}
+      MEDIA_PAYMENT_ACCESS_KEY: payment-media
+      MEDIA_PAYMENT_SECRET_KEY: ${MEDIA_PAYMENT_SECRET_KEY}
+    volumes:
+      - ./minio/init.sh:/init.sh:ro
+
+  # ---------------------------------------------------------------------------
   # The 10 Native services — images built by scripts/uat-up.ps1 from host-built
   # bootJars via docker/runtime.Dockerfile. All listen on 8080, nothing published;
   # the gateway reaches them by compose hostname (its route-URI yml defaults).
@@ -210,10 +259,13 @@ services:
       <<: *java-env
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      # The anonymous GET-only public menu-image proxy's target (ADR 0048).
+      MEDIA_URI: http://minio:9000
       # Behind cloudflared+edge the client IP arrives as a single-entry XFF that the
       # edge OVERWRITES from CF-Connecting-IP (see docker/uat/edge.conf).
       SIGNUP_RATE_LIMIT_TRUST_XFF: "true"
       SELF_ORDER_RATE_LIMIT_TRUST_XFF: "true"
+      MEDIA_RATE_LIMIT_TRUST_XFF: "true"
 
   org-service:
     <<: *java-service
@@ -241,12 +293,20 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
     environment:
       <<: *java-env
       DB_URL: jdbc:postgresql://postgres:5432/restaurant_service
       DB_USERNAME: restaurant_service
       DB_PASSWORD: restaurant_service
       NATIVE_GIFTCARD_CODE_KEY: ${NATIVE_GIFTCARD_CODE_KEY}
+      # Object store (ADR 0048): menu images under the restaurant/ prefix; the public
+      # base is what BROWSERS fetch — the gateway's /api/media proxy on the public origin.
+      MEDIA_ENDPOINT: http://minio:9000
+      MEDIA_ACCESS_KEY: restaurant-media
+      MEDIA_SECRET_KEY: ${MEDIA_RESTAURANT_SECRET_KEY}
+      MEDIA_PUBLIC_BASE_URL: ${PUBLIC_URL}/api/media
 
   carwash-service:
     <<: *java-service
@@ -337,12 +397,18 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
     environment:
       <<: *java-env
       DB_URL: jdbc:postgresql://postgres:5432/employee_service
       DB_USERNAME: employee_service
       DB_PASSWORD: employee_service
       NATIVE_PII_KEY: ${NATIVE_PII_KEY}
+      # Object store (ADR 0048): expense receipts under the PRIVATE employee/ prefix.
+      MEDIA_ENDPOINT: http://minio:9000
+      MEDIA_ACCESS_KEY: employee-media
+      MEDIA_SECRET_KEY: ${MEDIA_EMPLOYEE_SECRET_KEY}
 
   notification-service:
     <<: *java-service
@@ -371,6 +437,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
     environment:
       <<: *java-env
       DB_URL: jdbc:postgresql://postgres:5432/payment_service
@@ -378,6 +446,10 @@ services:
       DB_PASSWORD: payment_service
       NATIVE_PII_KEY: ${NATIVE_PII_KEY}
       NATIVE_PAYMENT_WEBHOOK_BASE_URL: ${PUBLIC_URL}
+      # Object store (ADR 0048): the static QRIS image under the PRIVATE payment/ prefix.
+      MEDIA_ENDPOINT: http://minio:9000
+      MEDIA_ACCESS_KEY: payment-media
+      MEDIA_SECRET_KEY: ${MEDIA_PAYMENT_SECRET_KEY}
 
   # ---------------------------------------------------------------------------
   # Console SPA — one image for any URL: entrypoint rewrites env.js from NATIVE_*.
@@ -445,3 +517,4 @@ services:
 
 volumes:
   native-uat-pgdata:
+  native-uat-minio-data:

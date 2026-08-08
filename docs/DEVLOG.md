@@ -5,6 +5,31 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-08 — MinIO object storage for binary media (ADR 0048)
+
+All binary media moved out of Postgres into a MinIO object store — **infrastructure, not a
+media-service** (rule 2 intact; talking to the store = talking to your own DB). One bucket
+(`native-media`), key `{service}/{companyId}/{domain}/{sha256}.{ext}`: the per-service prefix is
+the storage twin of database-per-service (prefix-scoped credentials from `docker/minio/init.sh`),
+`companyId` is tenant isolation, the content hash makes objects immutable/cacheable. New
+`libs/media-storage` (generic S3 client — AWS SDK v2, vendor-neutral exit — plus the fleet's now
+ONE magic-byte image validator, replacing the identical employee/payment copies).
+
+Three surfaces converted, each dual-read (legacy rows keep serving until converted, all conversion
+runs inside tenant-bound transactions — never a Flyway backfill, the V6/V7 FORCE-RLS lesson):
+**menu images** (restaurant V32 `image_key`; convert-on-write intercepts the console's base64 data
+URLs; responses now carry anonymous public `/api/media/restaurant/**` URLs served by a GET-only
+gateway proxy with immutable cache headers — payloads shrink from megabytes of inline base64;
+owner-triggered idempotent backfill `POST /api/v1/menu/images/migrate`; console SW gained a
+CacheFirst media route so the offline till keeps product photos), **expense receipts** (employee
+V15 `object_key`, bytea nullable + payload-home CHECK; read-through migration on first serve;
+receipt GETs gained sha256 ETag + private cache), and **static QRIS** (payment V5, same shape;
+availability flag recognises either payload home). Replaced objects delete best-effort strictly
+afterCommit. Ops: bucket versioning on; `mc mirror` backup is REQUIRED before prod trusts receipts
+(RUNBOOK "Object store"); community MinIO is console-less — all admin via `mc`. Also defused a
+date time-bomb the build tripped over: payment's Midtrans stub hardcoded expiry_time 2026-08-07,
+so every stubbed charge was born expired from 08-08 — now dynamic.
+
 ## 2026-08-08 — Three-tier pricing (ADR 0047): Gratis/Basic/Premium + usage add-ons
 
 The ADR 0044 ladder grows its designed third rung: `FREE < BASIC < FULL` (FULL *displayed*

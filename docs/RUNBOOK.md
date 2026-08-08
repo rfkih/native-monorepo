@@ -223,6 +223,38 @@ refund the customer from the MERCHANT's own Midtrans dashboard (Native never hol
 `amount-mismatch`/`unknown-order` = investigate before any manual capture. Never replay these
 blind.
 
+## Object store (MinIO) — media drill + operations (ADR 0048)
+
+The dev stack's MinIO holds all binary media: menu images (`restaurant/…`, the only
+anonymous-readable prefix), expense receipts (`employee/…`) and static QRIS (`payment/…`),
+content-addressed as `{service}/{companyId}/{domain}/{sha256}.{ext}` in bucket `native-media`.
+`minio-init` (docker/minio/init.sh) provisions the bucket + versioning + one prefix-scoped user
+per service on every stack start — idempotent, safe to re-run. The community image has NO web
+console: administer with `mc` one-liners, e.g.
+
+```
+docker run --rm --network native-dev_default minio/mc:RELEASE.2025-08-13T08-35-41Z \
+  sh -c "mc alias set n http://minio:9000 minioadmin minioadmin && mc ls -r n/native-media"
+```
+
+- **Round-trip drill**: console → Products → add item with a photo → the response `imageUrl`
+  is `http://localhost:8090/api/media/restaurant/<tenant>/menu/<sha>.jpg` and renders anonymously
+  (curl it with no token: 200 + `Cache-Control: … immutable`). A bogus key under `restaurant/`
+  is 404; ANY key under `employee/` or `payment/` is 401/403 (route + policy both deny — by design).
+- **Per-tenant menu-image backfill** (legacy inline base64 → store): as an OWNER of that tenant,
+  `curl -X POST -H "Authorization: Bearer $TOK" $BASE/api/v1/menu/images/migrate` → `{"migrated":N,
+  "skipped":M}`. Idempotent; run once per tenant after deploy. Receipts + QRIS need nothing:
+  they read-through migrate on first serve (`native.media.read-through-migrate`, default on).
+- **Backup (REQUIRED before prod trusts receipts)**: objects do NOT ride along in `pg_dump`.
+  Versioning is on; mirror with
+  `mc mirror --overwrite n/native-media /backup/native-media` (or a second S3 target) on a
+  schedule. Restore = mirror back + restart nothing (keys are content-addressed).
+- **Troubleshooting**: images 404 after a redeploy → did `minio-init` exit 0? (`docker logs
+  native[-uat]-minio-init`). Menu images broken but receipts fine → the anonymous policy on
+  `restaurant/` is missing (re-run minio-init) or the gateway `MEDIA_URI` is wrong. Upload 500s →
+  the service's `MEDIA_SECRET_KEY` doesn't match what minio-init provisioned (it UPDATES the
+  user's secret on every run — restart the stack so both sides agree).
+
 ## Tear down
 ```bash
 docker compose -f docker/compose.dev.yml down       # keep the Postgres volume (data persists)
