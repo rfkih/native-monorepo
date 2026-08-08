@@ -27,6 +27,12 @@ import org.junit.jupiter.api.Test;
  * {@code gift_card_id}, {@code gift_card_redeemed_minor}) round-trip, and proves the evolution pair
  * — a new (Phase 4) reader can decode an old (pre-Phase-4) producer's bytes, AND an old
  * (pre-Phase-4) reader can decode a new (Phase 4) producer's bytes, dropping unknown fields.
+ *
+ * <p>ADR 0049 P0 (inert seller wire) additions: asserts the trailing optional {@code
+ * sold_by_user_id} field round-trips (including as {@code null}, its only value today), and proves
+ * the same evolution pair as the {@code channel} addition above — a new reader decodes an old
+ * (pre-P0) producer's bytes with the field defaulting to null, and an old (pre-P0) reader decodes a
+ * new producer's bytes, silently dropping the field.
  */
 class SaleRecordedContractTest {
 
@@ -400,6 +406,176 @@ class SaleRecordedContractTest {
 
     assertThat(decoded.get("amount_minor")).isEqualTo(77_700_00L);
     assertThat(decoded.get("channel")).isNull();
+  }
+
+  /**
+   * The PRE-ADR-0049-P0 producer/consumer shape (19 fields, through {@code channel}) — the schema
+   * every service ran before ADR 0049 P0 appended the trailing {@code sold_by_user_id} field.
+   * Mirrors {@link #PRE_CHANNEL_SCHEMA_JSON}'s role for the {@code channel} field.
+   */
+  private static final String PRE_SOLD_BY_USER_ID_SCHEMA_JSON =
+      """
+      {
+        "type": "record",
+        "name": "SaleRecorded",
+        "namespace": "id.co.nativeapp.events.restaurant",
+        "fields": [
+          {"name": "sale_id", "type": "string"},
+          {"name": "company_id", "type": "string"},
+          {"name": "business_id", "type": "string"},
+          {"name": "amount_minor", "type": "long"},
+          {"name": "currency", "type": "string"},
+          {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+          {"name": "tender_type", "type": ["null", "string"], "default": null},
+          {"name": "subtotal_minor", "type": ["null", "long"], "default": null},
+          {"name": "discount_minor", "type": ["null", "long"], "default": null},
+          {"name": "service_charge_minor", "type": ["null", "long"], "default": null},
+          {"name": "tax_minor", "type": ["null", "long"], "default": null},
+          {"name": "tax_rule_version", "type": ["null", "string"], "default": null},
+          {"name": "uses_illustrative_rules", "type": ["null", "boolean"], "default": null},
+          {"name": "loyalty_member_id", "type": ["null", "string"], "default": null},
+          {"name": "loyalty_redeemed_points", "type": ["null", "long"], "default": null},
+          {"name": "loyalty_redeemed_minor", "type": ["null", "long"], "default": null},
+          {"name": "gift_card_id", "type": ["null", "string"], "default": null},
+          {"name": "gift_card_redeemed_minor", "type": ["null", "long"], "default": null},
+          {"name": "channel", "type": ["null", "string"], "default": null}
+        ]
+      }
+      """;
+
+  @Test
+  void schemaCarriesTheSoldByUserIdField() {
+    // ADR 0049 P0: sold_by_user_id -- ["null","string"] with default null, appended LAST.
+    Schema schema = SaleRecordedSchema.schema();
+    assertThat(schema.getField("sold_by_user_id")).isNotNull();
+    assertThat(schema.getField("sold_by_user_id").schema().getType()).isEqualTo(Schema.Type.UNION);
+    assertThat(schema.getField("sold_by_user_id").hasDefaultValue()).isTrue();
+  }
+
+  @Test
+  void soldByUserIdNullRoundTrips() {
+    // The only value produced today (P0 is an inert wire; nothing sets Sale.soldByUserId yet).
+    Schema schema = SaleRecordedSchema.schema();
+    GenericRecord record = new GenericData.Record(schema);
+    record.put("sale_id", "33333333-3333-3333-3333-333333333333");
+    record.put("company_id", "11111111-1111-1111-1111-111111111111");
+    record.put("business_id", "22222222-2222-2222-2222-222222222222");
+    record.put("amount_minor", 1_500_000L);
+    record.put("currency", "IDR");
+    record.put("occurred_at", 1_750_000_000_000L);
+    record.put("tender_type", "CASH");
+    record.put("sold_by_user_id", null);
+
+    byte[] bytes = AvroSerde.serialize(record);
+    GenericRecord decoded = AvroSerde.deserialize(bytes, schema);
+
+    assertThat(decoded.get("sold_by_user_id")).isNull();
+  }
+
+  @Test
+  void soldByUserIdRoundTripsWhenPresent() {
+    // Proves the field itself round-trips as a non-null value too, even though no producer sets it
+    // yet (P0 wire only) -- exercises the wire shape ADR 0049 P2 will start populating.
+    Schema schema = SaleRecordedSchema.schema();
+    GenericRecord record = new GenericData.Record(schema);
+    record.put("sale_id", "33333333-3333-3333-3333-333333333333");
+    record.put("company_id", "11111111-1111-1111-1111-111111111111");
+    record.put("business_id", "22222222-2222-2222-2222-222222222222");
+    record.put("amount_minor", 1_500_000L);
+    record.put("currency", "IDR");
+    record.put("occurred_at", 1_750_000_000_000L);
+    record.put("tender_type", "CASH");
+    record.put("sold_by_user_id", "66666666-6666-6666-6666-666666666666");
+
+    byte[] bytes = AvroSerde.serialize(record);
+    GenericRecord decoded = AvroSerde.deserialize(bytes, schema);
+
+    assertThat(decoded.get("sold_by_user_id").toString())
+        .isEqualTo("66666666-6666-6666-6666-666666666666");
+  }
+
+  @Test
+  void newReaderIsBackwardCompatibleWithThePreSoldByUserIdSchema() {
+    // OLD-WRITER / NEW-READER: a reader on the current (ADR 0049 P0) schema must be able to read
+    // bytes written by an already-deployed pre-P0 producer (the rolling-deploy window before every
+    // vertical picks up ADR 0049 P0).
+    Schema oldWriter = new Schema.Parser().parse(PRE_SOLD_BY_USER_ID_SCHEMA_JSON);
+    Schema newReader = SaleRecordedSchema.schema();
+    assertThat(AvroSerde.isBackwardCompatible(oldWriter, newReader)).isTrue();
+  }
+
+  @Test
+  void soldByUserIdAbsentFromAnOldSchemaPayloadDecodesToNull() {
+    // Backward-compat proof (mirrors the channel pattern above): bytes written against the PRE-P0
+    // schema (no sold_by_user_id field at all) must decode with sold_by_user_id == null under the
+    // current consumer schema.
+    Schema oldWriter = new Schema.Parser().parse(PRE_SOLD_BY_USER_ID_SCHEMA_JSON);
+    Schema newReader = SaleRecordedSchema.schema();
+
+    GenericRecord produced = new GenericData.Record(oldWriter);
+    produced.put("sale_id", "33333333-3333-3333-3333-333333333333");
+    produced.put("company_id", "11111111-1111-1111-1111-111111111111");
+    produced.put("business_id", "22222222-2222-2222-2222-222222222222");
+    produced.put("amount_minor", 77_700_00L);
+    produced.put("currency", "IDR");
+    produced.put("occurred_at", 1_750_000_000_000L);
+    produced.put("tender_type", "CASH");
+    produced.put("subtotal_minor", 70_000_00L);
+    produced.put("discount_minor", 0L);
+    produced.put("service_charge_minor", 0L);
+    produced.put("tax_minor", 7_700_00L);
+    produced.put("tax_rule_version", "ILLUSTRATIVE-2026.1");
+    produced.put("uses_illustrative_rules", true);
+    produced.put("loyalty_member_id", null);
+    produced.put("loyalty_redeemed_points", null);
+    produced.put("loyalty_redeemed_minor", null);
+    produced.put("gift_card_id", null);
+    produced.put("gift_card_redeemed_minor", null);
+    produced.put("channel", null);
+
+    byte[] wireBytes = AvroSerde.serialize(produced);
+    GenericRecord decoded = AvroSerde.deserialize(wireBytes, oldWriter, newReader);
+
+    assertThat(decoded.get("amount_minor")).isEqualTo(77_700_00L);
+    assertThat(decoded.get("sold_by_user_id")).isNull();
+  }
+
+  @Test
+  void oldReaderDecodesNewWriterBytesIgnoringTheSoldByUserIdField() {
+    // NEW-WRITER / OLD-READER: an already-deployed pre-P0 consumer (finance not yet upgraded) must
+    // still be able to project bytes written by an upgraded (P0) producer -- the new field is
+    // simply
+    // dropped by Avro schema resolution, not an error.
+    Schema newWriter = SaleRecordedSchema.schema();
+    Schema oldReader = new Schema.Parser().parse(PRE_SOLD_BY_USER_ID_SCHEMA_JSON);
+
+    GenericRecord produced = new GenericData.Record(newWriter);
+    produced.put("sale_id", "33333333-3333-3333-3333-333333333333");
+    produced.put("company_id", "11111111-1111-1111-1111-111111111111");
+    produced.put("business_id", "22222222-2222-2222-2222-222222222222");
+    produced.put("amount_minor", 77_700_00L);
+    produced.put("currency", "IDR");
+    produced.put("occurred_at", 1_750_000_000_000L);
+    produced.put("tender_type", "CASH");
+    produced.put("subtotal_minor", 70_000_00L);
+    produced.put("discount_minor", 0L);
+    produced.put("service_charge_minor", 0L);
+    produced.put("tax_minor", 7_700_00L);
+    produced.put("tax_rule_version", "ILLUSTRATIVE-2026.1");
+    produced.put("uses_illustrative_rules", true);
+    produced.put("loyalty_member_id", null);
+    produced.put("loyalty_redeemed_points", null);
+    produced.put("loyalty_redeemed_minor", null);
+    produced.put("gift_card_id", null);
+    produced.put("gift_card_redeemed_minor", null);
+    produced.put("channel", null);
+    produced.put("sold_by_user_id", "66666666-6666-6666-6666-666666666666");
+
+    byte[] wireBytes = AvroSerde.serialize(produced);
+    GenericRecord decoded = AvroSerde.deserialize(wireBytes, newWriter, oldReader);
+
+    assertThat(decoded.get("amount_minor")).isEqualTo(77_700_00L);
+    assertThat(decoded.getSchema().getField("sold_by_user_id")).isNull();
   }
 
   @Test

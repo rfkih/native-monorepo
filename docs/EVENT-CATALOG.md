@@ -310,6 +310,7 @@ whole rupiah for IDR); `currency` is the ISO-4217 code. `occurred_at` is epoch m
 | `gift_card_id` | `["null","string"]` (default `null`) | Phase 4: the gift card (UUID as string) redeemed against this sale as a **tender**, or `null` when no gift card was used. Distinct from `loyalty_member_id` — a gift-card redemption is a liability settlement, not a discount |
 | `gift_card_redeemed_minor` | `["null","long"]` (default `null`) | Phase 4: the amount of stored value redeemed from the gift card, in minor units — a **tender-settlement** amount (like `tender_type`), NOT a deduction from revenue. Must be `<= amount_minor`. Finance splits the clearing debit: Dr `GIFT_CARD_LIABILITY` for this amount, Dr the tender-clearing account (resolved from `tender_type`) for the residual (`amount_minor - gift_card_redeemed_minor`). `null` (treated as 0) when no gift card was used |
 | `channel` | `["null","string"]` (default `null`) | Phase B (ADR 0036): the sales-channel code for an ONLINE-tender sale (e.g. `GOFOOD`, `GRABFOOD`) — a company-managed `sales_channel.code`, immutable once created. `null` for every non-ONLINE tender and for every producer in this wave (no producer threads a real channel yet — that lands in Phase B2); finance routes the ONLINE clearing debit to `PLATFORM_RECEIVABLE` and accumulates a per-channel receivable sub-ledger under this code, with a null channel on an ONLINE sale accumulating under `UNKNOWN` (with a warning) rather than dropping money |
+| `sold_by_user_id` | `["null","string"]` (default `null`) | ADR 0049 P0: the seller (operator's Keycloak `sub`) captured at ring time, for audit/reporting only — commission attribution still keys off `MetricPublished.subject_id` (unchanged by this field). `null` for every producer today; restaurant-service's `Sale.sold_by_user_id` column is wired but nothing sets it until ADR 0049 P2 (the PIN / operator-session flow) |
 
 **Reconciliation identity (Phase 2).** When all four breakdown fields are non-null, finance asserts:
 `subtotal_minor - discount_minor + service_charge_minor + tax_minor == amount_minor`. A violated
@@ -351,7 +352,8 @@ amount_minor`. This SUPERSEDES the Phase 2 identity above (Phase 2 is the specia
     {"name": "loyalty_redeemed_minor", "type": ["null", "long"], "default": null, "doc": "Phase 4 (ADR 0027): the currency value of redeemed loyalty points, in the sale currency's minor units. A CONTRA-REVENUE deduction, exactly like discount_minor -- it EXTENDS the reconciliation identity to: subtotal - discount - loyalty_redeemed + service_charge + tax == amount. Null (treated as 0 by finance) when no points were redeemed."},
     {"name": "gift_card_id", "type": ["null", "string"], "default": null, "doc": "Phase 4 (ADR 0027): the gift card (UUID as string) redeemed against this sale as a TENDER, or null when no gift card was used. Distinct from loyalty_member_id -- a gift card redemption is a liability settlement, not a discount."},
     {"name": "gift_card_redeemed_minor", "type": ["null", "long"], "default": null, "doc": "Phase 4 (ADR 0027): the amount of stored value redeemed from the gift card, in the sale currency's minor units. A TENDER-SETTLEMENT amount (like tender_type), NOT a deduction from revenue -- it must be <= amount_minor. Finance splits the clearing debit: Dr GIFT_CARD_LIABILITY for this amount, Dr the tender-clearing account (resolved from tender_type) for the residual (amount_minor - gift_card_redeemed_minor). Null (treated as 0) when no gift card was used."},
-    {"name": "channel", "type": ["null", "string"], "default": null, "doc": "Phase B (ADR 0036): the sales-channel code for an ONLINE-tender sale (e.g. GOFOOD, GRABFOOD) -- a company-managed sales_channel.code, IMMUTABLE once created. Null for every non-ONLINE tender (and for producers older than this field). Finance routes the ONLINE clearing debit to PLATFORM_RECEIVABLE and accumulates a per-channel receivable sub-ledger under this code; an ONLINE sale with a null channel accumulates under UNKNOWN (with a warning) rather than dropping money. Additive backward-compatible field -- appended LAST with default null (rule 7)."}
+    {"name": "channel", "type": ["null", "string"], "default": null, "doc": "Phase B (ADR 0036): the sales-channel code for an ONLINE-tender sale (e.g. GOFOOD, GRABFOOD) -- a company-managed sales_channel.code, IMMUTABLE once created. Null for every non-ONLINE tender (and for producers older than this field). Finance routes the ONLINE clearing debit to PLATFORM_RECEIVABLE and accumulates a per-channel receivable sub-ledger under this code; an ONLINE sale with a null channel accumulates under UNKNOWN (with a warning) rather than dropping money. Additive backward-compatible field -- appended LAST with default null (rule 7)."},
+    {"name": "sold_by_user_id", "type": ["null", "string"], "default": null, "doc": "ADR 0049 P0: the seller (operator's Keycloak sub) captured at ring time -- for audit/reporting only; commission attribution keys off MetricPublished.subject_id (unchanged), not this field. Null until ADR 0049 P2 (the PIN / operator-session flow) starts populating it -- every producer today sends null. Additive backward-compatible field -- appended LAST with default null (rule 7)."}
   ]
 }
 ```
@@ -397,6 +399,17 @@ alongside it) and threads the real code onto `SaleRecorded`/`SaleVoided`/`SaleRe
 `channel` field. `carwash-service` and `barbershop-service` are unchanged by this wave — they
 still send an explicit `null` for every sale (they carry no `ONLINE` tender / channel catalog of
 their own yet).
+
+**ADR 0049 P0 (inert seller wire) — schema-first, same discipline.** The trailing `sold_by_user_id`
+field (the operator's Keycloak `sub` captured at ring time) is appended LAST, `["null","string"]`
+with `default: null`, the identical additive discipline the `channel` field follows. This is
+audit/reporting only — **commission attribution is unaffected**: it still keys off
+`MetricPublished.subject_id` (that event's schema does not change at all; ADR 0049 only changes
+*which id* a later phase writes into it). This P0 wave lands ONLY the schema, catalog entry, and
+`restaurant-service` producer plumbing (a nullable `Sale.sold_by_user_id` column, read straight
+into the record by `SaleRecordedSchema.toRecord`); every producer sends an explicit `null` today —
+nothing sets the column yet. ADR 0049 P2 is what starts populating it, once the PIN /
+operator-session flow exists.
 
 ### `ExpenseRecorded`
 

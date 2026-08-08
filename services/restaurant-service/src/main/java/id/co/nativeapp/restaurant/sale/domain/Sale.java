@@ -85,6 +85,16 @@ public class Sale extends Auditable {
   @Column(name = "channel_code", updatable = false)
   private String channelCode;
 
+  /**
+   * The seller's Keycloak {@code sub}, captured at ring time (V33, ADR 0049 P0) — distinct from the
+   * inherited {@link Auditable#getCreatedBy() createdBy}, which will record the DEVICE once outlet
+   * credentials exist (ADR 0049 P3). Deliberately NOT threaded into any constructor: P0 is an inert
+   * wire, so every existing call site is unchanged and this stays {@code null} until ADR 0049 P2
+   * (the PIN / operator-session flow) starts populating it.
+   */
+  @Column(name = "sold_by_user_id", updatable = false)
+  private String soldByUserId;
+
   protected Sale() {
     // for JPA
   }
@@ -204,5 +214,13 @@ public class Sale extends Auditable {
    */
   public String getChannelCode() {
     return channelCode;
+  }
+
+  /**
+   * The seller's Keycloak {@code sub} captured at ring time (ADR 0049), or {@code null} — pre-P2
+   * this is {@code null} for every sale (P0 is an inert wire; nothing sets this field yet).
+   */
+  public String getSoldByUserId() {
+    return soldByUserId;
   }
 }
