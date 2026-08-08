@@ -106,7 +106,7 @@ function CatalogManagementInner({
         <Link
           to="/pos"
           aria-label={t('a11y.backToDashboard')}
-          className="grid size-9 shrink-0 place-items-center rounded-xl border border-line text-ink-3 transition-all hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+          className="grid size-9 shrink-0 place-items-center rounded-full border border-line text-ink-3 transition-all hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
         >
           <ArrowLeft className="size-4" />
         </Link>

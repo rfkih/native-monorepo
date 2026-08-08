@@ -114,7 +114,7 @@ function KitchenInner({ session }: { session: CompanySession }) {
             to="/pos"
             aria-label={t('kitchen.backToPos')}
             title={t('kitchen.backToPos')}
-            className="grid size-9 shrink-0 place-items-center rounded-xl border border-line text-ink-3 transition-all hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+            className="grid size-9 shrink-0 place-items-center rounded-full border border-line text-ink-3 transition-all hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
           >
             <ArrowLeft className="size-4" />
           </Link>
@@ -172,7 +172,7 @@ function KitchenInner({ session }: { session: CompanySession }) {
             onClick={toggle}
             aria-label={t('a11y.toggleTheme')}
             title={t('a11y.toggleTheme')}
-            className="grid size-9 shrink-0 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-all hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+            className="grid size-9 shrink-0 place-items-center rounded-full border border-line bg-surface text-ink-3 transition-all hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
           >
             {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
           </button>

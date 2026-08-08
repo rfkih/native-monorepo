@@ -88,7 +88,7 @@ export function Shell({ children }: { children: ReactNode }) {
             type="button"
             onClick={() => setDrawerOpen(true)}
             aria-label={t('nav.menu')}
-            className="hidden size-9 place-items-center rounded-xl border border-line text-ink-2 hover:bg-hover sm:grid lg:hidden"
+            className="hidden size-9 place-items-center rounded-full border border-line text-ink-2 hover:bg-hover sm:grid lg:hidden"
           >
             <Menu className="size-4.5" />
           </button>
@@ -114,7 +114,7 @@ export function Shell({ children }: { children: ReactNode }) {
             onClick={toggle}
             aria-label={t('a11y.toggleTheme')}
             title={t('a11y.toggleTheme')}
-            className="grid size-10 place-items-center rounded-xl border border-line bg-surface text-ink-3 transition-colors hover:bg-hover hover:text-ink"
+            className="grid size-10 place-items-center rounded-full border border-line bg-surface text-ink-3 transition-colors hover:bg-hover hover:text-ink"
           >
             {theme === 'dark' ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}
           </button>
