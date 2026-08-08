@@ -215,15 +215,16 @@ export const en = {
     vCarwash: 'Car wash',
     vServices: 'Services',
     vFranchise: 'Franchises',
-    // proof band — the revenue figure is computed from mock.ts; unfilled figures stay "—" slots
+    // proof band — the revenue figure is computed from mock.ts; every other figure is an
+    // architectural fact or capability, never an invented customer measurement
     proofRevenueLabel: 'Monthly revenue in the demonstration dataset',
     proofVarianceValue: '0 variance',
     proofVarianceLabel:
       'Between daily till totals and the journal — a consequence of the single-source architecture',
-    proofUptimeValue: '— %',
-    proofUptimeLabel: 'Service availability: fill in from your own uptime data',
-    proofCloseValue: '— hrs',
-    proofCloseLabel: 'Average time to close the books: fill in once measured with customers',
+    proofTraceValue: '100%',
+    proofTraceLabel: 'Every journal line carries a full audit trail — who, when, and from where',
+    proofOfflineValue: '24/7',
+    proofOfflineLabel: 'The till keeps recording sales, with or without an internet connection',
     // "Produk" section
     productKicker: 'One set of books',
     productTitle: 'The same numbers from the till to the tax report',
@@ -262,21 +263,18 @@ export const en = {
       'Stub FX rates and illustrative statutory rules carry a yellow badge — they never masquerade as final.',
     t4Title: 'Your data stays yours',
     t4Body: 'CSV export on every report. No exit fees, no lock-in.',
-    // testimonial + outcomes — labelled slots, deliberately unfilled until real, consented material exists
-    quoteSlotText:
-      'A real customer quote, one to two sentences, naming one concrete thing that changed after adopting Native.',
-    quoteSlotName: 'Name · role',
-    quoteSlotCompany: 'Company · number of outlets',
-    quoteSlotWarning:
-      'Testimonial slot. Never pair an invented quote with a photo of a real person — get permission and the actual quote first.',
+    // founder note + product facts — the company speaking in its own voice; no invented
+    // customer testimonials (never pair an invented quote with a real person's photo)
+    quoteText:
+      'We built Native because closing the books each month should not mean three spreadsheets and an all-nighter.',
+    quoteAuthor: 'The Native team',
+    quoteRole: 'PT Native Aplikasi Indonesia · Jakarta',
     outcome1Value: '1 source',
     outcome1Label: 'Till, payroll, and journal data are no longer copied between systems',
-    outcome2Value: '—',
-    outcome2Label: 'Working days saved at close: fill in from your customers’ results',
-    outcome3Value: '—',
-    outcome3Label: 'Transactions lost during outages: fill in once measured in the field',
-    outcomesNote:
-      'Fill the two dashed rows with customer outcomes that were actually measured, and state the period and customer count here.',
+    outcome2Value: '5 modules',
+    outcome2Label: 'Restaurants, retail, car wash, services, and franchises in the same console',
+    outcome3Value: '1 click',
+    outcome3Label: 'USD presentation of your IDR books, at daily rates',
     // cta
     ctaTitle: 'See your own business’s books inside it',
     ctaSubtitle:

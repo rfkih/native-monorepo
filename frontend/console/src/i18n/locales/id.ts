@@ -214,10 +214,10 @@ export const id = {
     proofVarianceValue: '0 selisih',
     proofVarianceLabel:
       'Antara total kasir harian dan jurnal — konsekuensi arsitektur satu sumber',
-    proofUptimeValue: '— %',
-    proofUptimeLabel: 'Ketersediaan layanan: isi dari data uptime Anda sendiri',
-    proofCloseValue: '— jam',
-    proofCloseLabel: 'Rata-rata waktu tutup buku: isi setelah diukur pada pelanggan',
+    proofTraceValue: '100%',
+    proofTraceLabel: 'Setiap baris jurnal membawa jejak audit penuh — siapa, kapan, dari mana',
+    proofOfflineValue: '24/7',
+    proofOfflineLabel: 'Kasir tetap mencatat penjualan, dengan atau tanpa internet',
     productKicker: 'Satu pembukuan',
     productTitle: 'Angka yang sama dari kasir sampai laporan pajak',
     productLede:
@@ -254,20 +254,16 @@ export const id = {
       'Kurs stub dan aturan statutori ilustratif diberi badge kuning, tidak pernah tampil seolah final.',
     t4Title: 'Data Anda milik Anda',
     t4Body: 'Ekspor CSV di setiap laporan. Tidak ada biaya keluar, tidak ada penguncian data.',
-    quoteSlotText:
-      'Kutipan pelanggan sungguhan, satu sampai dua kalimat, menyebut satu hal konkret yang berubah setelah memakai Native.',
-    quoteSlotName: 'Nama · jabatan',
-    quoteSlotCompany: 'Perusahaan · jumlah outlet',
-    quoteSlotWarning:
-      'Slot testimoni. Jangan pasangkan kutipan karangan ke foto orang sungguhan — minta izin dan kutipan aslinya lebih dulu.',
+    quoteText:
+      'Kami membangun Native karena tutup buku bulanan tidak seharusnya berarti tiga spreadsheet dan lembur di akhir bulan.',
+    quoteAuthor: 'Tim Native',
+    quoteRole: 'PT Native Aplikasi Indonesia · Jakarta',
     outcome1Value: '1 sumber',
     outcome1Label: 'Data kasir, gaji, dan jurnal tidak lagi disalin antar sistem',
-    outcome2Value: '—',
-    outcome2Label: 'Hari kerja yang dihemat saat tutup buku: isi dari hasil pelanggan Anda',
-    outcome3Value: '—',
-    outcome3Label: 'Transaksi hilang saat internet mati: isi setelah diukur di lapangan',
-    outcomesNote:
-      'Isi dua baris bertanda strip dengan hasil pelanggan yang benar-benar diukur, lalu sebutkan periode dan jumlah pelanggannya di sini.',
+    outcome2Value: '5 modul',
+    outcome2Label: 'Restoran, retail, carwash, jasa, dan franchise di console yang sama',
+    outcome3Value: '1 klik',
+    outcome3Label: 'Penyajian USD dari pembukuan IDR, memakai kurs harian',
     ctaTitle: 'Lihat pembukuan usaha Anda sendiri di dalamnya',
     ctaSubtitle:
       'Kami impor data tiga bulan terakhir Anda ke lingkungan percobaan, lalu menelusurinya bersama selama 30 menit.',

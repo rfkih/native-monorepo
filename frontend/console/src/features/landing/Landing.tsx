@@ -6,10 +6,11 @@
  * band whose primary opens a demo-request mail draft; "Coba gratis" → /signup.
  *
  * Layout from the Landing.dc.html redesign (DesignSync project, 2026-08): hero over the warung photo
- * with the dashboard mock, verticals strip, proof band with LABELLED unfilled slots, "Produk" section
- * around the offline-POS card, dark "Kepatuhan" panel, testimonial + outcome SLOTS (deliberately
- * unfilled — never pair an invented quote with a real person's photo; see github.md in the design
- * project), photo CTA band, and a sitemap footer. Fully localized (react-i18next), locale-aware
+ * with the dashboard mock, verticals strip, proof band, "Produk" section around the offline-POS
+ * card, dark "Kepatuhan" panel, a founder-note card + product-fact rows (every figure is an
+ * architectural fact or capability — no invented customer measurements or testimonials; never pair
+ * an invented quote with a real person's photo), photo CTA band, and a sitemap footer. Fully
+ * localized (react-i18next), locale-aware
  * `Intl` for money/percentages, theme-aware via tokens; photos are hashed local assets — no external
  * calls at runtime.
  */
@@ -30,12 +31,11 @@ import {
   Quote,
   Store,
   Sun,
-  User,
   Users,
   type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
-import { Wordmark } from '@/components/Wordmark'
+import { BrandMark, Wordmark } from '@/components/Wordmark'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { useAuth } from '@/lib/authContext'
 import { useTheme } from '@/lib/theme'
@@ -312,8 +312,8 @@ function ProofBar() {
   const stats: [string, string][] = [
     [money(MOCK_REVENUE, locale, true), t('landing.proofRevenueLabel')],
     [t('landing.proofVarianceValue'), t('landing.proofVarianceLabel')],
-    [t('landing.proofUptimeValue'), t('landing.proofUptimeLabel')],
-    [t('landing.proofCloseValue'), t('landing.proofCloseLabel')],
+    [t('landing.proofTraceValue'), t('landing.proofTraceLabel')],
+    [t('landing.proofOfflineValue'), t('landing.proofOfflineLabel')],
   ]
   return (
     <section className="px-5 pt-3.5">
@@ -450,7 +450,7 @@ function ComplianceSection() {
   )
 }
 
-// ── Testimonial + outcomes — labelled slots, deliberately unfilled (see module docblock) ─────────
+// ── Founder note + product facts — no invented customer quotes or measurements ───────────────────
 
 function SocialProofSection() {
   const { t } = useTranslation()
@@ -465,22 +465,19 @@ function SocialProofSection() {
         <Reveal>
           <div className="rounded-[24px] border border-line bg-ink-50/60 p-8 sm:p-10">
             <Quote className="size-[30px] text-brand-100" fill="currentColor" strokeWidth={0} />
-            <blockquote className="mt-5 text-[19px] font-medium leading-[1.5] tracking-[-0.01em] text-ink-3 text-pretty sm:text-[22px]">
-              {t('landing.quoteSlotText')}
+            <blockquote className="mt-5 text-[19px] font-medium leading-[1.5] tracking-[-0.01em] text-ink-2 text-pretty sm:text-[22px]">
+              {t('landing.quoteText')}
             </blockquote>
             <div className="mt-6 flex items-center gap-3.5">
-              <span className="grid size-[52px] shrink-0 place-items-center rounded-full border border-dashed border-line-strong text-ink-3">
-                <User className="size-[22px]" strokeWidth={1.7} />
+              <span className="grid size-[52px] shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand-500 to-brand-800">
+                <BrandMark size={24} />
               </span>
               <div>
-                <div className="text-[15px] font-bold text-ink-3">{t('landing.quoteSlotName')}</div>
+                <div className="text-[15px] font-bold text-ink">{t('landing.quoteAuthor')}</div>
                 <div className="mt-0.5 text-[13px] font-medium text-ink-3">
-                  {t('landing.quoteSlotCompany')}
+                  {t('landing.quoteRole')}
                 </div>
               </div>
-            </div>
-            <div className="mt-5 rounded-xl border border-warning/30 bg-amber-tint px-3.5 py-3 text-[12.5px] font-medium leading-normal text-amber-2">
-              {t('landing.quoteSlotWarning')}
             </div>
           </div>
         </Reveal>
@@ -497,9 +494,6 @@ function SocialProofSection() {
                 <span className="text-[14px] font-medium leading-normal text-ink-2">{label}</span>
               </div>
             ))}
-            <p className="mx-1 mt-0.5 text-[12px] leading-normal text-ink-3">
-              {t('landing.outcomesNote')}
-            </p>
           </div>
         </Reveal>
       </div>
