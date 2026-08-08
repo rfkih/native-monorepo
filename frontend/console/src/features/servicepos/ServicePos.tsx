@@ -15,7 +15,7 @@
  */
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Gift, LogOut, Moon, Settings, Sun } from 'lucide-react'
+import { Gift, LogOut, Moon, Settings, Sun, UserRound } from 'lucide-react'
 import { useSession, type CompanySession } from '@/lib/session'
 import { useAuth, hasAnyRole } from '@/lib/authContext'
 import { useTheme } from '@/lib/theme'
@@ -361,6 +361,10 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
                   },
                 ]
               : []),
+            // The door to the employee self-service surface — /me is the always-available floor,
+            // so a cashier who is also an employee can always reach their payslips/time-off/claims
+            // from the till (on phone /me carries the employee tab bar).
+            { key: 'me', icon: <UserRound className="size-4" aria-hidden="true" />, label: t('me.tillMenuLabel'), to: '/me' },
             {
               key: 'theme',
               icon: theme === 'dark' ? <Sun className="size-4" aria-hidden="true" /> : <Moon className="size-4" aria-hidden="true" />,

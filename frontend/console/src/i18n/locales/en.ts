@@ -8,6 +8,8 @@ export const en = {
     error: 'Could not load your details. Try again.',
     toDashboard: 'Dashboard',
     toPos: 'Open POS',
+    /** POS till-menu entry — the door from the cashier surface to the employee self-service area. */
+    tillMenuLabel: 'My account',
     notLinked: {
       title: 'Your login is not linked to an employee yet',
       hint: 'Ask your manager to link it from the Employees tab — then your profile and payslips will appear here.',

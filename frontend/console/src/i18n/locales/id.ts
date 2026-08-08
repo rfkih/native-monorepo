@@ -6,6 +6,8 @@ export const id = {
     error: 'Gagal memuat detail Anda. Coba lagi.',
     toDashboard: 'Dasbor',
     toPos: 'Buka POS',
+    /** Entri menu kasir — pintu dari layar kasir ke ruang swalayan karyawan. */
+    tillMenuLabel: 'Akun saya',
     notLinked: {
       title: 'Login Anda belum tertaut ke karyawan',
       hint: 'Minta manajer menautkannya dari tab Karyawan — setelah itu profil dan slip gaji Anda muncul di sini.',

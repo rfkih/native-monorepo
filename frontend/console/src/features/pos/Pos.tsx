@@ -34,6 +34,7 @@ import {
   Package,
   Sun,
   Table2,
+  UserRound,
 } from 'lucide-react'
 import { useSession, type CompanySession } from '@/lib/session'
 import { useAuth, hasAnyRole } from '@/lib/authContext'
@@ -983,6 +984,10 @@ function PosInner({ session }: { session: CompanySession }) {
             },
             { key: 'kitchen', icon: <ChefHat className="size-4" aria-hidden="true" />, label: t('nav.kitchen'), to: '/kitchen' },
             { key: 'menu', icon: <BookOpen className="size-4" aria-hidden="true" />, label: t('nav.menu'), to: '/menu' },
+            // The door to the employee self-service surface (/me is the always-available floor —
+            // never role-gated, so a cashier who is also an employee can always reach their own
+            // payslips/time-off/claims from the till). On phone /me carries the employee tab bar.
+            { key: 'me', icon: <UserRound className="size-4" aria-hidden="true" />, label: t('me.tillMenuLabel'), to: '/me' },
             {
               key: 'theme',
               icon: theme === 'dark' ? <Sun className="size-4" aria-hidden="true" /> : <Moon className="size-4" aria-hidden="true" />,
