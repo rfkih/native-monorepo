@@ -28,14 +28,25 @@ function PrefetchPosChunk() {
 }
 
 /**
- * Warms the hot lazy route chunks once the first screen has painted and the main thread is
+ * Warms the lazy route chunks once the first screen has painted and the main thread is
  * idle — a route change then swaps instantly under the view transition instead of flashing
- * the Suspense spinner mid-navigation (the "not smooth" complaint on the Android app).
- * Employee self-service chunks always; the back-office set only for logins that can open it.
+ * the Suspense spinner mid-navigation (the "not smooth" complaint on the Android app, where
+ * there is deliberately no service worker to soften a cold chunk fetch).
+ *
+ * Two tiers: the HOT set immediately at idle (first screens a login opens), then EVERYTHING
+ * else the login's roles can reach at a later idle — the whole app is ~1–2 MB of
+ * immutable-cached chunks, fetched once per deploy, so trading that for zero mid-navigation
+ * spinners is the right deal on a business device.
  */
-function PrefetchRouteChunks({ canDashboard }: { canDashboard: boolean }) {
+function PrefetchRouteChunks({
+  canDashboard,
+  canPos,
+}: {
+  canDashboard: boolean
+  canPos: boolean
+}) {
   useEffect(() => {
-    const warm = () => {
+    const warmHot = () => {
       void import('@/features/me/Me')
       void import('@/features/expenses/MyExpenses')
       void import('@/features/me/MePayslipsScreen')
@@ -48,16 +59,52 @@ function PrefetchRouteChunks({ canDashboard }: { canDashboard: boolean }) {
         void import('@/features/close/PeriodClose')
       }
     }
+    const warmRest = () => {
+      if (canPos) {
+        void import('@/features/menu/MenuManagement')
+        void import('@/features/inventory/IngredientManagement')
+        void import('@/features/servicepos/PosSwitch')
+        void import('@/features/kitchen/Kitchen')
+        void import('@/features/settings/PrinterSettings')
+        void import('@/features/pos/StandaloneRegister')
+        void import('@/features/stocktake/StandaloneStocktake')
+      }
+      if (canDashboard) {
+        void import('@/features/statements/BalanceSheet')
+        void import('@/features/statements/CashFlow')
+        void import('@/features/budget/Budgets')
+        void import('@/features/org/OrgTree')
+        void import('@/features/org/OrgUnitDetail')
+        void import('@/features/ar/Customers')
+        void import('@/features/ar/InvoicesList')
+        void import('@/features/ar/ArAging')
+        void import('@/features/ap/Vendors')
+        void import('@/features/ap/BillsList')
+        void import('@/features/ap/ApAging')
+        void import('@/features/bank/BankAccounts')
+        void import('@/features/tax/TaxReport')
+        void import('@/features/assets/FixedAssets')
+        void import('@/features/promotions/Promotions')
+        void import('@/features/channels/Channels')
+      }
+    }
     const w = window as Window & {
       requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number
     }
+    let restTimer: ReturnType<typeof setTimeout> | undefined
     if (typeof w.requestIdleCallback === 'function') {
-      w.requestIdleCallback(warm, { timeout: 3000 })
-      return
+      w.requestIdleCallback(warmHot, { timeout: 3000 })
+      restTimer = setTimeout(() => w.requestIdleCallback!(warmRest, { timeout: 5000 }), 4000)
+    } else {
+      const hotTimer = setTimeout(warmHot, 1500)
+      restTimer = setTimeout(warmRest, 5000)
+      return () => {
+        clearTimeout(hotTimer)
+        clearTimeout(restTimer)
+      }
     }
-    const timer = setTimeout(warm, 1500)
-    return () => clearTimeout(timer)
-  }, [canDashboard])
+    return () => clearTimeout(restTimer)
+  }, [canDashboard, canPos])
   return null
 }
 
@@ -434,7 +481,7 @@ export function App() {
           (Phase 5 offline mode, ADR 0028). Renders nothing when there is nothing to say. */}
       <OfflineBanner />
       {posAllowed && <PrefetchPosChunk />}
-      <PrefetchRouteChunks canDashboard={canDashboard} />
+      <PrefetchRouteChunks canDashboard={canDashboard} canPos={canPos} />
       <Suspense fallback={<CenteredSpinner />}>
         <TransitionedRoutes>
           {/* The POS is a full-screen "front office" — it renders OUTSIDE the sidebar/topbar shell.

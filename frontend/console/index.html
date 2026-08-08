@@ -20,12 +20,9 @@
         }
       })()
     </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
-      rel="stylesheet"
-    />
+    <!-- Fonts are SELF-HOSTED (src/index.css @font-face → hashed /assets, immutable-cached):
+         the Google Fonts CDN cost every cold start an external round trip + a visible font swap,
+         worst in the Android shell which runs without a service worker. -->
     <title>Native — Multi-entity finance, consolidated</title>
     <meta
       name="description"
