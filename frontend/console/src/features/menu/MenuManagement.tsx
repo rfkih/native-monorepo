@@ -44,6 +44,11 @@ import { cn } from '@/lib/cn'
 import { formatMoney, isoMinorExponent } from '@/lib/money'
 import { OutletPicker } from '@/components/OutletPicker'
 import { useMenu, useSetStock, useAddStock } from '@/features/pos/api'
+import {
+  CATEGORY_TEMPLATE_KEYS,
+  canonicalCategoryKey,
+  displayCategoryName,
+} from '@/features/pos/lib/categoryCanon'
 import { OutletGate } from '@/components/OutletGate'
 import type { MenuItem, ModifierGroupResponse, ModifierOptionResponse } from '@/features/pos/api'
 import {
@@ -254,34 +259,12 @@ function ImagePicker({
 // replaces the old free-text field, plus a dedicated manager to build the list.
 // ---------------------------------------------------------------------------
 
-/** Starter category templates offered in the picker + the manager (i18n keys). */
-const CATEGORY_TEMPLATE_KEYS = [
-  'appetizers',
-  'mains',
-  'sides',
-  'desserts',
-  'beverages',
-  'coffeeTea',
-  'snacks',
-  'specials',
-] as const
+// Starter templates + language-canonical identity live in pos/lib/categoryCanon (owner
+// report: 'Main Course' vs 'Menu Utama' split — canonical grouping fixes it read-side).
 
 const SELECT_CLASS =
   'h-[52px] w-full rounded-xl border border-line bg-surface px-4 text-[15px] text-ink transition-colors focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/15'
 
-function dedupeCaseInsensitive(names: string[]): string[] {
-  const seen = new Set<string>()
-  const out: string[] = []
-  for (const n of names) {
-    const trimmed = n.trim()
-    const key = trimmed.toLowerCase()
-    if (trimmed && !seen.has(key)) {
-      seen.add(key)
-      out.push(trimmed)
-    }
-  }
-  return out
-}
 
 /** A category dropdown: the business's managed categories first, then starter templates. */
 function CategorySelect({
@@ -299,9 +282,19 @@ function CategorySelect({
   const categories = useCategories(session)
   const managed = (categories.data ?? []).filter((c) => c.active).map((c) => c.name)
   const templates = CATEGORY_TEMPLATE_KEYS.map((k) => t(`menu.categoryTemplates.${k}`))
-  // Keep any current value that is neither managed nor a template (e.g. an item created before this
-  // change) so editing never silently drops it.
-  const options = dedupeCaseInsensitive([...(value ? [value] : []), ...managed, ...templates])
+  // Keep any current value that is neither managed nor a template (e.g. an item created before
+  // this change) so editing never silently drops it. Dedupe LANGUAGE-CANONICALLY so the en and
+  // id names of one template never appear as two options; labels follow the current language.
+  const seen = new Set<string>()
+  const options: { value: string; label: string }[] = []
+  for (const n of [...(value ? [value] : []), ...managed, ...templates]) {
+    const trimmed = n.trim()
+    if (!trimmed) continue
+    const canon = canonicalCategoryKey(trimmed)
+    if (seen.has(canon)) continue
+    seen.add(canon)
+    options.push({ value: trimmed, label: displayCategoryName(trimmed, t) })
+  }
   return (
     <select
       id={id}
@@ -314,8 +307,8 @@ function CategorySelect({
         {t('menu.createItem.categoryPlaceholder')}
       </option>
       {options.map((o) => (
-        <option key={o} value={o}>
-          {o}
+        <option key={o.value} value={o.value}>
+          {o.label}
         </option>
       ))}
     </select>
@@ -337,14 +330,16 @@ function CategoryManagerDialog({
   const [custom, setCustom] = useState('')
 
   const managed = (categories.data ?? []).filter((c) => c.active)
-  const managedLower = new Set(managed.map((c) => c.name.toLowerCase()))
+  // Canonical (categoryCanon): a managed "Menu Utama" suppresses the "Main Course" suggestion
+  // too — they are the same template in different languages.
+  const managedCanon = new Set(managed.map((c) => canonicalCategoryKey(c.name)))
   const suggestions = CATEGORY_TEMPLATE_KEYS.map((k) => t(`menu.categoryTemplates.${k}`)).filter(
-    (n) => !managedLower.has(n.toLowerCase()),
+    (n) => !managedCanon.has(canonicalCategoryKey(n)),
   )
 
   function add(name: string) {
     const trimmed = name.trim()
-    if (!trimmed || managedLower.has(trimmed.toLowerCase()) || create.isPending) return
+    if (!trimmed || managedCanon.has(canonicalCategoryKey(trimmed)) || create.isPending) return
     create.mutate({ name: trimmed, displayOrder: managed.length })
   }
 
@@ -2303,14 +2298,22 @@ function MenuManagementInner({ session }: { session: CompanySession }) {
 
   const items = menuQuery.data ?? []
 
-  // Group items by category string (display name or category key).
-  const categoryMap = new Map<string, MenuItem[]>()
+  // Group items LANGUAGE-CANONICALLY (categoryCanon): en/id variants of the same starter
+  // template land in ONE section; the heading follows the current UI language.
+  const categoryMap = new Map<string, { name: string; items: MenuItem[] }>()
   for (const item of items) {
-    const key = item.category ?? t('menu.uncategorized')
-    if (!categoryMap.has(key)) categoryMap.set(key, [])
-    categoryMap.get(key)!.push(item)
+    const raw = item.category ?? t('menu.uncategorized')
+    const key = canonicalCategoryKey(raw)
+    let bucket = categoryMap.get(key)
+    if (!bucket) {
+      bucket = { name: raw, items: [] }
+      categoryMap.set(key, bucket)
+    }
+    bucket.items.push(item)
   }
-  const categories = [...categoryMap.entries()]
+  const categories = [...categoryMap.entries()].map(
+    ([key, b]) => [key, displayCategoryName(b.name, t), b.items] as const,
+  )
 
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-paper">
@@ -2398,9 +2401,9 @@ function MenuManagementInner({ session }: { session: CompanySession }) {
             </Card>
           ) : (
             <div>
-              {categories.map(([catName, catItems]) => (
+              {categories.map(([catKey, catName, catItems]) => (
                 <CategorySection
-                  key={catName}
+                  key={catKey}
                   categoryName={catName}
                   items={catItems}
                   session={session}

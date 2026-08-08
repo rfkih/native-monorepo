@@ -52,6 +52,7 @@ import { SyncCenter } from './offline/SyncCenter'
 import type { SaleQueueRow } from './offline/db'
 import { useDisplayPublisher } from './display/displayPublisher'
 import { deriveCategories, visibleMenuItems } from './lib/categories'
+import { displayCategoryName } from './lib/categoryCanon'
 import { lineKey } from './lib/lineKey'
 import { parseDiscountInput } from './lib/discountInput'
 import {
@@ -668,7 +669,7 @@ function PosInner({ session }: { session: CompanySession }) {
           {orderedCategories.map((cat) => (
             <CategoryCell
               key={cat.id}
-              label={cat.name}
+              label={displayCategoryName(cat.name, t)}
               icon={<CategoryIcon name={cat.name} />}
               active={cat.id === activeCategoryId}
               onClick={() => {
@@ -711,7 +712,7 @@ function PosInner({ session }: { session: CompanySession }) {
                   : 'border border-line bg-surface text-ink-2 hover:border-emerald-line hover:bg-emerald-tint',
               )}
             >
-              {cat.name}
+              {displayCategoryName(cat.name, t)}
             </button>
           ))}
         </div>
