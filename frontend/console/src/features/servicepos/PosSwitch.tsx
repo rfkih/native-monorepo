@@ -15,6 +15,7 @@
 import { lazy, Suspense } from 'react'
 import { Navigate } from 'react-router-dom'
 import { Spinner } from '@/components/ui/Spinner'
+import { PosSkeleton } from '@/components/ui/Skeleton'
 import { VerticalComingSoon } from '@/components/VerticalComingSoon'
 import { useSession } from '@/lib/session'
 import { useResolvedOutlets } from '@/features/org/useResolvedOutlets'
@@ -41,14 +42,14 @@ export function PosSwitch() {
   // useResolvedOutlets would otherwise report 'loading' forever with no company to resolve against).
   if (!company) {
     return (
-      <Suspense fallback={<CenteredSpinner />}>
+      <Suspense fallback={<PosSkeleton />}>
         <Pos />
       </Suspense>
     )
   }
 
   if (status === 'loading') {
-    return <CenteredSpinner />
+    return <PosSkeleton />
   }
 
   const effectiveOutlet = outlets.find((o) => o.id === effectiveOutletId)
@@ -62,7 +63,7 @@ export function PosSwitch() {
   }
   if (vertical === 'restaurant') {
     return (
-      <Suspense fallback={<CenteredSpinner />}>
+      <Suspense fallback={<PosSkeleton />}>
         <Pos />
       </Suspense>
     )

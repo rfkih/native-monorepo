@@ -7,6 +7,7 @@ import { TransitionedRoutes } from '@/app/TransitionedRoutes'
 import { MobileTabBarGate } from '@/app/MobileTabBarGate'
 import { SettingsChrome } from '@/components/SettingsChrome'
 import { Spinner } from '@/components/ui/Spinner'
+import { AppSkeleton, PosSkeleton } from '@/components/ui/Skeleton'
 import { BrandMark, Wordmark } from '@/components/Wordmark'
 import { OfflineBanner } from '@/features/pos/offline/OfflineBanner'
 import { hasAnyRole, useAuth } from '@/lib/authContext'
@@ -267,14 +268,6 @@ function CenteredSpinner() {
   )
 }
 
-function FullScreenSpinner() {
-  return (
-    <div className="grid min-h-screen place-items-center text-brand-600">
-      <Spinner />
-    </div>
-  )
-}
-
 /** The /login route — immediately starts the Keycloak login redirect (a bookmarkable entry point). */
 function LoginLauncher() {
   const { t } = useTranslation()
@@ -394,9 +387,16 @@ export function App() {
     )
   }
 
+  // The skeleton every boot gate below shows: shell-shaped normally, till-shaped when the entry
+  // path is the POS (the Android till's cold start). The static index.html boot skeleton makes
+  // the SAME pathname call (its inline script sets data-boot="pos"), so the pre-JS ghost, these
+  // gates, and each surface's own data skeletons hand off without changing shape — boot reads as
+  // ONE surface instead of skeleton → spinner → skeleton (the "not smooth first load" complaint).
+  const bootFallback = pathname.startsWith('/pos') ? <PosSkeleton /> : <AppSkeleton />
+
   // Wait for the OIDC provider to resolve the session (silent restore or redirect callback).
   if (!auth.ready) {
-    return <FullScreenSpinner />
+    return bootFallback
   }
 
   // Unauthenticated → the public marketing site. Login is EXPLICIT: the landing "Sign in" button
@@ -418,7 +418,7 @@ export function App() {
 
   // Authenticated → wait for the signed-in company AND the page grants to load, then route.
   if (loading || !pageAccess.ready) {
-    return <FullScreenSpinner />
+    return bootFallback
   }
 
   const canDashboard = hasAnyRole(auth.roles, 'owner', 'manager')
@@ -482,7 +482,7 @@ export function App() {
       <OfflineBanner />
       {posAllowed && <PrefetchPosChunk />}
       <PrefetchRouteChunks canDashboard={canDashboard} canPos={canPos} />
-      <Suspense fallback={<CenteredSpinner />}>
+      <Suspense fallback={bootFallback}>
         <TransitionedRoutes>
           {/* The POS is a full-screen "front office" — it renders OUTSIDE the sidebar/topbar shell.
               PosSwitch picks the per-vertical surface (restaurant Pos vs carwash ServicePos). */}

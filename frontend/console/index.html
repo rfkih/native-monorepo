@@ -18,12 +18,73 @@
         } catch (e) {
           document.documentElement.dataset.theme = 'light'
         }
+        // Route-aware boot skeleton: /pos paths (the Android till's cold start) get the
+        // till-shaped ghost instead of the dashboard-shaped one — see the style block below.
+        if (location.pathname.indexOf('/pos') === 0) {
+          document.documentElement.dataset.boot = 'pos'
+        }
       })()
     </script>
     <!-- Fonts are SELF-HOSTED (src/index.css @font-face → hashed /assets, immutable-cached):
          the Google Fonts CDN cost every cold start an external round trip + a visible font swap,
          worst in the Android shell which runs without a service worker. -->
     <title>Native — Multi-entity finance, consolidated</title>
+    <!-- Boot skeleton (perceived-performance pass): paints an app ghost the instant the HTML
+         arrives — before the JS bundle downloads/parses — then React's first render replaces
+         #root wholesale. Two variants sharing one markup: the default mirrors AppSkeleton in
+         components/ui/Skeleton.tsx (240px sidebar at ≥1024px, 64px topbar, 1100px content,
+         3 stat cards + panel); on /pos paths the script above sets data-boot="pos" and the
+         same DOM renders the PosSkeleton geometry instead (56px header, category chips, tile
+         grid, 340px order rail at ≥1024px) — so a till cold start never flips shape mid-boot.
+         Colours are the light/dark theme tokens from index.css; data-theme is set pre-paint
+         by the script above, so there is no flash of the wrong theme. -->
+    <style>
+      .bsk-root { --bsk-line: #e5e8ec; min-height: 100vh; background: #f6f9fa; font-size: 0; }
+      .bsk { border-radius: 8px; background: #e5e8ec; animation: bsk-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+      .bsk-panel { background: #ffffff; }
+      [data-theme='dark'] .bsk-root { --bsk-line: #2a2f3a; background: #101319; }
+      [data-theme='dark'] .bsk { background: #2a2f3a; }
+      [data-theme='dark'] .bsk-panel { background: #171b22; }
+      @keyframes bsk-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+      @media (prefers-reduced-motion: reduce) { .bsk { animation: none; } }
+      .bsk-side { display: none; }
+      .bsk-main { display: flex; flex-direction: column; min-height: 100vh; }
+      .bsk-top { flex-shrink: 0; height: 64px; display: flex; align-items: center; gap: 12px; padding: 0 16px; border-bottom: 1px solid var(--bsk-line); }
+      .bsk-btn { display: none; }
+      .bsk-content { width: 100%; max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
+      .bsk-cards { display: grid; gap: 16px; margin-top: 24px; }
+      .bsk-hero { height: 256px; border-radius: 20px; margin-top: 16px; }
+      .bsk-spacer { flex: 1; }
+      /* Till variant (data-boot="pos") — matches PosSkeleton in components/ui/Skeleton.tsx. */
+      .bsk-posbody { display: none; }
+      [data-boot='pos'] .bsk-side, [data-boot='pos'] .bsk-content, [data-boot='pos'] .bsk-btn { display: none !important; }
+      [data-boot='pos'] .bsk-root { display: block; }
+      [data-boot='pos'] .bsk-top { height: 56px; }
+      [data-boot='pos'] .bsk-posbody { display: flex; flex: 1; min-height: 0; }
+      [data-boot='pos'] .bsk-burger { display: block; }
+      .bsk-posmenu { flex: 1; min-width: 0; padding: 12px; }
+      .bsk-chips { display: flex; gap: 8px; overflow: hidden; }
+      .bsk-tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 16px; }
+      .bsk-rail { display: none; }
+      @media (min-width: 640px) {
+        .bsk-top { padding: 0 24px; }
+        .bsk-btn { display: block; }
+        .bsk-content { padding: 24px; }
+        .bsk-cards { grid-template-columns: repeat(3, 1fr); }
+        .bsk-hero { height: 320px; }
+        .bsk-posmenu { padding: 16px; }
+        .bsk-tiles { grid-template-columns: repeat(3, 1fr); }
+      }
+      @media (min-width: 1024px) {
+        .bsk-root { display: grid; grid-template-columns: 240px 1fr; }
+        .bsk-side { display: flex; flex-direction: column; height: 100vh; padding: 20px 16px; border-right: 1px solid var(--bsk-line); }
+        .bsk-burger { display: none; }
+        .bsk-rail { display: flex; flex-direction: column; gap: 12px; width: 340px; flex-shrink: 0; padding: 16px; border-left: 1px solid var(--bsk-line); }
+      }
+      @media (min-width: 1280px) {
+        .bsk-tiles { grid-template-columns: repeat(4, 1fr); }
+      }
+    </style>
     <meta
       name="description"
       content="Native consolidates revenue, expense, payroll and FX across all your companies in real time — from the point of sale to the group P&amp;L."
@@ -40,7 +101,77 @@
     <meta name="twitter:image" content="/og-image.svg" />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="bsk-root" aria-busy="true" aria-hidden="true">
+        <div class="bsk-side bsk-panel">
+          <div style="display: flex; align-items: center; gap: 10px; padding: 0 8px">
+            <div class="bsk" style="width: 36px; height: 36px; border-radius: 12px"></div>
+            <div class="bsk" style="width: 96px; height: 16px"></div>
+          </div>
+          <div class="bsk" style="width: 64px; height: 10px; margin: 32px 0 0"></div>
+          <div class="bsk" style="height: 36px; border-radius: 12px; margin-top: 10px"></div>
+          <div class="bsk" style="height: 36px; border-radius: 12px; margin-top: 10px"></div>
+          <div class="bsk" style="width: 80%; height: 36px; border-radius: 12px; margin-top: 10px"></div>
+          <div class="bsk" style="width: 64px; height: 10px; margin-top: 28px"></div>
+          <div class="bsk" style="height: 36px; border-radius: 12px; margin-top: 10px"></div>
+          <div class="bsk" style="height: 36px; border-radius: 12px; margin-top: 10px"></div>
+          <div class="bsk" style="width: 80%; height: 36px; border-radius: 12px; margin-top: 10px"></div>
+          <div class="bsk" style="width: 64px; height: 10px; margin-top: 28px"></div>
+          <div class="bsk" style="height: 36px; border-radius: 12px; margin-top: 10px"></div>
+          <div class="bsk" style="height: 36px; border-radius: 12px; margin-top: 10px"></div>
+          <div class="bsk" style="width: 80%; height: 36px; border-radius: 12px; margin-top: 10px"></div>
+        </div>
+        <div class="bsk-main">
+          <div class="bsk-top bsk-panel">
+            <div class="bsk bsk-burger" style="width: 36px; height: 36px; border-radius: 12px"></div>
+            <div class="bsk" style="width: 160px; max-width: 40vw; height: 16px"></div>
+            <div class="bsk-spacer"></div>
+            <div class="bsk" style="width: 36px; height: 36px; border-radius: 999px"></div>
+            <div class="bsk" style="width: 36px; height: 36px; border-radius: 999px"></div>
+            <div class="bsk bsk-btn" style="width: 112px; height: 36px; border-radius: 12px"></div>
+          </div>
+          <div class="bsk-content">
+            <div class="bsk" style="width: 192px; max-width: 60vw; height: 28px"></div>
+            <div class="bsk" style="width: 288px; max-width: 80vw; height: 16px; margin-top: 8px"></div>
+            <div class="bsk-cards">
+              <div class="bsk" style="height: 112px; border-radius: 20px"></div>
+              <div class="bsk" style="height: 112px; border-radius: 20px"></div>
+              <div class="bsk" style="height: 112px; border-radius: 20px"></div>
+            </div>
+            <div class="bsk bsk-hero"></div>
+          </div>
+          <div class="bsk-posbody">
+            <div class="bsk-posmenu">
+              <div class="bsk-chips">
+                <div class="bsk" style="width: 96px; height: 36px; border-radius: 999px; flex-shrink: 0"></div>
+                <div class="bsk" style="width: 96px; height: 36px; border-radius: 999px; flex-shrink: 0"></div>
+                <div class="bsk" style="width: 96px; height: 36px; border-radius: 999px; flex-shrink: 0"></div>
+                <div class="bsk" style="width: 96px; height: 36px; border-radius: 999px; flex-shrink: 0"></div>
+                <div class="bsk" style="width: 96px; height: 36px; border-radius: 999px; flex-shrink: 0"></div>
+              </div>
+              <div class="bsk-tiles">
+                <div class="bsk" style="height: 112px; border-radius: 16px"></div>
+                <div class="bsk" style="height: 112px; border-radius: 16px"></div>
+                <div class="bsk" style="height: 112px; border-radius: 16px"></div>
+                <div class="bsk" style="height: 112px; border-radius: 16px"></div>
+                <div class="bsk" style="height: 112px; border-radius: 16px"></div>
+                <div class="bsk" style="height: 112px; border-radius: 16px"></div>
+                <div class="bsk" style="height: 112px; border-radius: 16px"></div>
+                <div class="bsk" style="height: 112px; border-radius: 16px"></div>
+              </div>
+            </div>
+            <div class="bsk-rail bsk-panel">
+              <div class="bsk" style="width: 128px; height: 20px"></div>
+              <div class="bsk" style="height: 48px; border-radius: 12px"></div>
+              <div class="bsk" style="height: 48px; border-radius: 12px"></div>
+              <div class="bsk" style="height: 48px; border-radius: 12px"></div>
+              <div class="bsk-spacer"></div>
+              <div class="bsk" style="height: 56px; border-radius: 12px"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
     <!-- Runtime config (window.__NATIVE_CONFIG__). A stub in dev (public/env.js); the container
          regenerates it from env vars at start so ONE built image serves every environment. Loaded
          as a classic script so it runs BEFORE the deferred module bundle reads it. -->
