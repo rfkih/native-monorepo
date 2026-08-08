@@ -40,6 +40,8 @@ today, before billing exists, everything stays free and an owner simply toggles 
 4. **Defaults**: existing companies grandfather to `FULL` (column default — no regression); new
    signups start `FREE` (create paths write it explicitly — lands in P2 with the friendly
    locked-page screens so a deep link never dead-ends).
+   *(Delivered by [ADR 0047](0047-three-tier-pricing.md), which also inserts the `BASIC` tier
+   and the priced Gratis/Basic/Premium ladder.)*
 5. **FREE set (initial)**: POS (incl. daily register close), products/menu, kitchen display,
    printer settings, simplified dashboard, expenses-lite, team basics, `/me`, add-business, the
    Features toggle. Everything else (`statements`, `accounting`, `promotions`, `channels`,

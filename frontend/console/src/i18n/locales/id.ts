@@ -177,6 +177,17 @@ export const id = {
   landing: {
     navProduct: 'Produk',
     navCompliance: 'Kepatuhan',
+    navPricing: 'Harga',
+    /** ADR 0047 — bagian harga di landing, dirender dari lib/pricing.ts (tidak pernah manual). */
+    pricing: {
+      kicker: 'Harga',
+      title: 'Satu langganan, bukan tiga',
+      lede: 'Kasir, akuntansi, dan penggajian biasanya berarti tiga langganan terpisah. Native menyatukannya — mulai gratis, naik paket saat pembukuan harus jalan sendiri.',
+      ctaFree: 'Mulai gratis',
+      ctaPaid: 'Hubungi kami',
+      addOns:
+        'Paket berbayar termasuk {{outlets}} gerai dan {{employees}} karyawan. Gerai tambahan {{outletPrice}}/bulan; setiap tambahan {{packSize}} karyawan {{packPrice}}/bulan. Harga belum termasuk perangkat.',
+    },
     signIn: 'Masuk',
     navDemo: 'Jadwalkan demo',
     heroBadgeCount: '5 modul',
@@ -456,18 +467,35 @@ export const id = {
       testFooter: 'Printer berhasil terhubung.',
     },
     tier: {
-      title: 'Fitur',
-      switchLabel: 'Tampilkan fitur lengkap',
-      help: 'Mode sederhana menampilkan hanya fitur yang dibutuhkan usaha kecil: kasir, produk, struk, dan ringkasan penjualan. Aktifkan fitur lengkap untuk akuntansi, HR, promosi, dan lainnya.',
-      error: 'Tidak dapat memperbarui pengaturan fitur. Coba lagi.',
-      freePlanName: 'Sederhana',
-      fullPlanName: 'Akses lengkap',
+      /** ADR 0047 — halaman paket tiga tingkat (Gratis/Basic/Premium + biaya tambahan). */
+      title: 'Paket & fitur',
+      help: 'Pilih paket yang pas: Gratis untuk mulai berjualan, Basic untuk menjalankan seluruh toko, Premium untuk menjalankan seluruh perusahaan — termasuk akuntansi, pajak, dan penggajian. Harga menyesuaikan jumlah gerai dan tim Anda.',
+      error: 'Tidak dapat memperbarui paket. Coba lagi.',
+      freePlanName: 'Gratis',
+      basicPlanName: 'Basic',
+      fullPlanName: 'Premium',
       freePlanTagline: 'Semua yang dibutuhkan usaha kecil untuk mulai berjualan hari ini.',
-      fullPlanTagline: 'Kantor belakang lengkap — akuntansi, HR, promosi, dan lainnya.',
+      basicPlanTagline: 'Perangkat toko lengkap — promosi, channel penjualan, struktur multi-gerai.',
+      fullPlanTagline: 'Perusahaan lengkap — laporan, akuntansi penuh, pajak, HR & penggajian.',
       currentPlanBadge: 'Paket saat ini',
-      switchOnHint: 'Fitur lengkap aktif untuk semua orang di perusahaan ini.',
-      switchOffHint: 'Fitur lengkap nonaktif — konsol hanya menampilkan paket Sederhana di bawah.',
-      fullIncludesEverything: 'Semua di Sederhana, ditambah:',
+      includesEverythingIn: 'Semua di {{plan}}, ditambah:',
+      priceFree: 'Gratis',
+      perMonth: '/bulan',
+      choosePlan: 'Pilih paket ini',
+      currentUsage: 'Pemakaian Anda saat ini',
+      usageOutlets: '{{count}} gerai',
+      usageEmployees: '{{count}} karyawan',
+      priceBase: 'Paket dasar ({{plan}})',
+      outletAddOnLine: '{{count}} gerai tambahan × {{price}}',
+      employeeAddOnLine: '{{count}} × paket {{size}} karyawan × {{price}}',
+      totalPerMonth: 'Total per bulan',
+      freeIncludesHint: 'Termasuk {{outlets}} gerai dan hingga {{employees}} karyawan.',
+      addOnHint:
+        'Termasuk {{outlets}} gerai dan {{employees}} karyawan. Gerai tambahan {{outletPrice}}/bulan; setiap tambahan {{packSize}} karyawan {{packPrice}}/bulan.',
+      overLimitBody:
+        'Pemakaian Anda melebihi gerai atau tim yang termasuk paket ini — harga yang ditampilkan sudah mencakup biaya tambahannya.',
+      overLimitFreeBody:
+        'Pemakaian Anda melebihi yang termasuk paket Gratis. Semua tetap berjalan — pilih Basic atau Premium agar sesuai dengan bisnis Anda.',
       feature: {
         pos: 'Kasir (POS)',
         products: 'Produk & menu',

@@ -77,14 +77,17 @@ public class Company extends Auditable {
   private String country;
 
   /**
-   * The whitelisted plan tiers (ADR 0044, "Simple mode" for UMKM): {@code FREE} shows a curated
-   * console (POS, products, receipts, register close, a simple sales summary, basic expenses, team
-   * + printer settings); {@code FULL} shows the whole back-office. A TIER, not a boolean, so a real
-   * paid tier (e.g. {@code PRO}/{@code ENTERPRISE}) ranks in later without a migration — same
+   * The whitelisted plan tiers (ADR 0044 "Simple mode"; ladder extended by ADR 0047 three-tier
+   * pricing): {@code FREE} shows a curated console (POS, products, receipts, register close, a
+   * simple sales summary, basic expenses, team + printer settings); {@code BASIC} adds the rest of
+   * the operational POS surface (promotions, channels, customer display, org structure); {@code
+   * FULL} — displayed as "Premium" — shows the whole back-office (statements, accounting, HR). The
+   * stored value {@code FULL} is deliberately KEPT (grandfathered rows + the console's fail-open
+   * mapping produce it); only its display name changed. A TIER, not a boolean — same
    * whitelist-in-the-aggregate pattern as {@code country} (V9) / {@code OrgUnit.vertical} (V6): no
    * {@code CHECK} constraint, the invariant lives here.
    */
-  public static final Set<String> PLAN_TIERS = Set.of("FREE", "FULL");
+  public static final Set<String> PLAN_TIERS = Set.of("FREE", "BASIC", "FULL");
 
   /**
    * The company's plan tier — UI curation only (ADR 0044 D7: NOT a security boundary; API

@@ -74,16 +74,19 @@ class PlanTierAcceptanceTest extends PostgresRlsTestBase {
         .getId();
   }
 
-  // ── (a) findCurrentView returns planTier; grandfather default ──────────
+  // ── (a) findCurrentView returns planTier; create-path + grandfather defaults ──
 
   @Test
-  void aFreshlyBootstrappedCompanyReadsPlanTierFullThroughFindCurrentView() throws Exception {
+  void aFreshlyBootstrappedCompanyStartsOnTheFreeTier() throws Exception {
+    // ADR 0044 D4 "signup-default-FREE", delivered with ADR 0047: every create path starts the
+    // company at FREE; only PRE-EXISTING rows grandfather to FULL via the V10 column default
+    // (covered by the raw-insert test below).
     UUID companyId = bootstrapCompany("Warung Acme", "owner-a");
 
     CompanyResponse response =
         TenantContext.callAs(companyId.toString(), "owner-a", companyService::getCurrentCompany);
 
-    assertThat(response.planTier()).isEqualTo("FULL");
+    assertThat(response.planTier()).isEqualTo("FREE");
   }
 
   @Test
@@ -166,6 +169,20 @@ class PlanTierAcceptanceTest extends PostgresRlsTestBase {
         TenantContext.callAs(
             companyId.toString(), "owner-d", () -> companyService.changePlanTier("FULL"));
     assertThat(afterFull.planTier()).isEqualTo("FULL");
+  }
+
+  // ── (e) BASIC is a whitelisted tier (ADR 0047 three-tier ladder) ────────
+
+  @Test
+  void ownerSetsTheBasicTier() throws Exception {
+    UUID companyId = bootstrapCompany("Warung Eka", "owner-e");
+    setRoles("owner");
+
+    CompanyResponse afterBasic =
+        TenantContext.callAs(
+            companyId.toString(), "owner-e", () -> companyService.changePlanTier("basic"));
+
+    assertThat(afterBasic.planTier()).isEqualTo("BASIC");
   }
 
   private static Connection adminConnection() throws SQLException {

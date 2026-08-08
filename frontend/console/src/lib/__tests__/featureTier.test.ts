@@ -27,20 +27,27 @@ const FREE_FEATURES: FeatureKey[] = [
   'expenses',
   'team',
 ]
-const FULL_FEATURES: FeatureKey[] = [
-  'statements',
-  'accounting',
-  'promotions',
-  'channels',
-  'orgStructure',
-  'customerDisplay',
-  'hr',
-]
+// BASIC = the rest of the operational POS surface (ADR 0047 "jalankan toko").
+const BASIC_FEATURES: FeatureKey[] = ['promotions', 'channels', 'orgStructure', 'customerDisplay']
+// FULL ("Premium") = everything financial (ADR 0047 "jalankan perusahaan").
+const FULL_FEATURES: FeatureKey[] = ['statements', 'accounting', 'hr']
 
-describe('tierAllowsFeature — truth table', () => {
-  it('FULL allows every feature (FREE and FULL alike)', () => {
+describe('tierAllowsFeature — truth table (FREE < BASIC < FULL, ADR 0047)', () => {
+  it('FULL allows every feature', () => {
     for (const feature of ALL_FEATURES) {
       expect(tierAllowsFeature('FULL', feature)).toBe(true)
+    }
+  })
+
+  it('BASIC allows the FREE + BASIC sets', () => {
+    for (const feature of [...FREE_FEATURES, ...BASIC_FEATURES]) {
+      expect(tierAllowsFeature('BASIC', feature)).toBe(true)
+    }
+  })
+
+  it('BASIC hides every FULL-only (financial) feature', () => {
+    for (const feature of FULL_FEATURES) {
+      expect(tierAllowsFeature('BASIC', feature)).toBe(false)
     }
   })
 
@@ -50,14 +57,14 @@ describe('tierAllowsFeature — truth table', () => {
     }
   })
 
-  it('FREE hides every FULL-only feature', () => {
-    for (const feature of FULL_FEATURES) {
+  it('FREE hides every BASIC and FULL feature', () => {
+    for (const feature of [...BASIC_FEATURES, ...FULL_FEATURES]) {
       expect(tierAllowsFeature('FREE', feature)).toBe(false)
     }
   })
 
-  it('covers every FeatureKey across both tiers (no key silently skipped)', () => {
-    const tiers: PlanTier[] = ['FREE', 'FULL']
+  it('covers every FeatureKey across all tiers (no key silently skipped)', () => {
+    const tiers: PlanTier[] = ['FREE', 'BASIC', 'FULL']
     for (const feature of ALL_FEATURES) {
       for (const tier of tiers) {
         // Every combination must resolve to a boolean — this fails loudly (throws/undefined) if
@@ -84,6 +91,10 @@ describe('toPlanTier — fail OPEN, never fail closed (plan Risk 5)', () => {
 
   it('the literal FREE resolves to FREE', () => {
     expect(toPlanTier('FREE')).toBe('FREE')
+  })
+
+  it('the literal BASIC resolves to BASIC (ADR 0047)', () => {
+    expect(toPlanTier('BASIC')).toBe('BASIC')
   })
 
   it('the literal FULL resolves to FULL', () => {

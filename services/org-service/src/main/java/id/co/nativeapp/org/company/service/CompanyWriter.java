@@ -111,6 +111,9 @@ public class CompanyWriter {
             command.phone(),
             command.companySize(),
             command.primaryInterest());
+    // New companies start on the free tier (ADR 0044 D4 "signup-default-FREE", delivered with
+    // the ADR 0047 three-tier pricing); pre-existing rows keep the V10 grandfather FULL default.
+    company.changePlanTier("FREE");
     company.setCompanyId(tenant);
     Company savedCompany = companyRepository.save(company);
 

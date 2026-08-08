@@ -179,6 +179,17 @@ export const en = {
     // header / nav
     navProduct: 'Product',
     navCompliance: 'Compliance',
+    navPricing: 'Pricing',
+    /** ADR 0047 — the landing pricing section, rendered from lib/pricing.ts (never hand-kept). */
+    pricing: {
+      kicker: 'Pricing',
+      title: 'One subscription instead of three',
+      lede: 'POS, accounting, and payroll usually mean three separate subscriptions. Native bundles them — start free, upgrade when the books should keep themselves.',
+      ctaFree: 'Start free',
+      ctaPaid: 'Talk to us',
+      addOns:
+        'Paid plans include {{outlets}} outlets and {{employees}} employees. Additional outlet {{outletPrice}}/month; every additional {{packSize}} employees {{packPrice}}/month. Prices exclude hardware.',
+    },
     signIn: 'Sign in',
     navDemo: 'Book a demo',
     // hero
@@ -469,18 +480,35 @@ export const en = {
       testFooter: 'Printer connected successfully.',
     },
     tier: {
-      title: 'Features',
-      switchLabel: 'Show extended features',
-      help: 'Simple mode shows only what a small business needs: point-of-sale, products, receipts, and a sales summary. Turn on extended features for accounting, HR, promotions, and more.',
-      error: 'Could not update the features setting. Try again.',
-      freePlanName: 'Simple',
-      fullPlanName: 'Full access',
+      /** ADR 0047 — the three-tier plan page (Gratis/Basic/Premium + usage add-ons). */
+      title: 'Plan & features',
+      help: 'Choose the plan that fits: Gratis runs the till, Basic runs the whole shop, Premium runs the whole company — accounting, tax, and payroll included. The price adjusts with your outlets and team.',
+      error: 'Could not update the plan. Try again.',
+      freePlanName: 'Gratis',
+      basicPlanName: 'Basic',
+      fullPlanName: 'Premium',
       freePlanTagline: 'Everything a small business needs to open the till today.',
-      fullPlanTagline: 'The complete back office — accounting, HR, promotions, and more.',
+      basicPlanTagline: 'The complete shop toolkit — promotions, channels, multi-outlet structure.',
+      fullPlanTagline: 'The complete company — statements, full accounting, tax, HR & payroll.',
       currentPlanBadge: 'Current plan',
-      switchOnHint: 'Extended features are on for everyone at this company.',
-      switchOffHint: 'Extended features are off — the console shows only the Simple set below.',
-      fullIncludesEverything: 'Everything in Simple, plus:',
+      includesEverythingIn: 'Everything in {{plan}}, plus:',
+      priceFree: 'Free',
+      perMonth: '/month',
+      choosePlan: 'Choose this plan',
+      currentUsage: 'Your current usage',
+      usageOutlets: '{{count}} outlet(s)',
+      usageEmployees: '{{count}} employee(s)',
+      priceBase: 'Base ({{plan}})',
+      outletAddOnLine: '{{count}} extra outlet(s) × {{price}}',
+      employeeAddOnLine: '{{count}} × {{size}}-employee pack × {{price}}',
+      totalPerMonth: 'Total per month',
+      freeIncludesHint: 'Includes {{outlets}} outlet and up to {{employees}} employees.',
+      addOnHint:
+        'Includes {{outlets}} outlets and {{employees}} employees. Extra outlet {{outletPrice}}/month; every additional {{packSize}} employees {{packPrice}}/month.',
+      overLimitBody:
+        'Your usage is above this plan’s included outlets or team size — the price shown already includes the add-ons.',
+      overLimitFreeBody:
+        'Your usage is above what Gratis includes. Everything keeps working — choose Basic or Premium to match your business.',
       feature: {
         pos: 'Point of sale',
         products: 'Products & menu',

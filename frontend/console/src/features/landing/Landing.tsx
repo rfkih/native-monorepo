@@ -41,6 +41,9 @@ import { useAuth } from '@/lib/authContext'
 import { useTheme } from '@/lib/theme'
 import { localeOf } from '@/i18n'
 import { cn } from '@/lib/cn'
+import { formatMoney } from '@/lib/money'
+import { FEATURE_MIN_TIER, type FeatureKey, type PlanTier } from '@/lib/featureTier'
+import { PRICING } from '@/lib/pricing'
 import { Backdrop, DashboardMock, FxChip, PosReceiptMock, SaleToast, VerticalStrip } from './art'
 import { Photo } from './Photo'
 import { ctaPhoto, heroPhoto, posPhoto } from './photos'
@@ -190,6 +193,9 @@ function Header({ onSignIn }: { onSignIn: () => void }) {
           </a>
           <a href="#kepatuhan" className={navLink}>
             {t('landing.navCompliance')}
+          </a>
+          <a href="#harga" className={navLink}>
+            {t('landing.navPricing')}
           </a>
         </nav>
         <div className="ml-auto flex items-center gap-1.5 sm:gap-2.5">
@@ -450,6 +456,126 @@ function ComplianceSection() {
   )
 }
 
+// ── Pricing (ADR 0047) — rendered from lib/pricing.ts + FEATURE_MIN_TIER, never hand-kept ────────
+
+function PricingSection() {
+  const { t, i18n } = useTranslation()
+  const locale = localeOf(i18n.language)
+  const money = (minor: number) => formatMoney(minor, PRICING.currency, locale)
+  const featureLabel = (key: FeatureKey) =>
+    t(`settings.tier.feature.${key}` as Parameters<typeof t>[0])
+  const keysAt = (tier: PlanTier) =>
+    (Object.keys(FEATURE_MIN_TIER) as FeatureKey[]).filter((k) => FEATURE_MIN_TIER[k] === tier)
+  const planName = (p: PlanTier) =>
+    p === 'FREE'
+      ? t('settings.tier.freePlanName')
+      : p === 'BASIC'
+        ? t('settings.tier.basicPlanName')
+        : t('settings.tier.fullPlanName')
+
+  const plans: { tier: PlanTier; tagline: string; highlight?: boolean }[] = [
+    { tier: 'FREE', tagline: t('settings.tier.freePlanTagline') },
+    { tier: 'BASIC', tagline: t('settings.tier.basicPlanTagline'), highlight: true },
+    { tier: 'FULL', tagline: t('settings.tier.fullPlanTagline') },
+  ]
+
+  return (
+    <section id="harga" className="scroll-mt-20 px-5 pt-24">
+      <Reveal className="mx-auto w-full max-w-6xl">
+        <div className="text-center">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.09em] text-brand-700">
+            {t('landing.pricing.kicker')}
+          </div>
+          <h2 className="mt-3 font-display text-[28px] font-extrabold leading-[1.15] tracking-[-0.025em] text-ink text-balance sm:text-[34px]">
+            {t('landing.pricing.title')}
+          </h2>
+          <p className="mx-auto mt-3.5 max-w-2xl text-[15.5px] leading-relaxed text-ink-3 text-pretty">
+            {t('landing.pricing.lede')}
+          </p>
+        </div>
+
+        <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-3">
+          {plans.map(({ tier, tagline, highlight }, index) => (
+            <div
+              key={tier}
+              className={cn(
+                'flex flex-col gap-4 rounded-[24px] border bg-surface p-6 sm:p-7',
+                highlight ? 'border-brand-500 shadow-lg ring-4 ring-brand-500/10' : 'border-line',
+              )}
+            >
+              <div>
+                <div className="text-[13px] font-bold uppercase tracking-[0.06em] text-ink-3">
+                  {planName(tier)}
+                </div>
+                <div className="tnum mt-2 font-mono text-[28px] font-bold tracking-[-0.02em] text-ink">
+                  {tier === 'FREE' ? (
+                    t('settings.tier.priceFree')
+                  ) : (
+                    <>
+                      {money(PRICING.tiers[tier].baseMinor)}
+                      <span className="font-sans text-sm font-medium text-ink-3">
+                        {t('settings.tier.perMonth')}
+                      </span>
+                    </>
+                  )}
+                </div>
+                <p className="mt-2 text-sm leading-relaxed text-ink-3">{tagline}</p>
+              </div>
+              <ul className="flex flex-1 flex-col gap-2.5">
+                {index > 0 ? (
+                  <li className="text-xs font-bold uppercase tracking-[0.06em] text-ink-3">
+                    {t('settings.tier.includesEverythingIn', {
+                      plan: planName(plans[index - 1].tier),
+                    })}
+                  </li>
+                ) : null}
+                {keysAt(tier).map((key) => (
+                  <li key={key} className="flex items-start gap-2.5 text-sm text-ink-2">
+                    <span
+                      className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-tint-profit text-profit"
+                      aria-hidden
+                    >
+                      <Check className="size-3" strokeWidth={2.5} />
+                    </span>
+                    {featureLabel(key)}
+                  </li>
+                ))}
+              </ul>
+              {tier === 'FREE' ? (
+                <Link
+                  to="/signup"
+                  className="inline-flex h-11 w-full items-center justify-center rounded-xl border border-line bg-surface text-sm font-bold text-ink transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+                >
+                  {t('landing.pricing.ctaFree')}
+                </Link>
+              ) : (
+                <CtaLink
+                  href="#demo"
+                  variant={highlight ? 'primary' : 'outline'}
+                  className="w-full"
+                >
+                  {t('landing.pricing.ctaPaid')}
+                </CtaLink>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* The usage add-on rules, from the same price sheet — one sentence, no fine print. */}
+        <p className="mx-auto mt-6 max-w-3xl text-center text-[13px] leading-relaxed text-ink-3">
+          {t('landing.pricing.addOns', {
+            outlets: PRICING.tiers.BASIC.outletsIncluded,
+            employees: PRICING.employeesIncluded,
+            outletPrice: money(PRICING.extraOutletMinor),
+            packSize: PRICING.employeePackSize,
+            packPrice: money(PRICING.employeePackMinor),
+          })}
+        </p>
+      </Reveal>
+    </section>
+  )
+}
+
 // ── Founder note + product facts — no invented customer quotes or measurements ───────────────────
 
 function SocialProofSection() {
@@ -565,6 +691,7 @@ function Footer() {
         { label: t('landing.fPayroll'), href: '#produk' },
         { label: t('landing.fStatements'), href: '#produk' },
         { label: t('landing.fArAp'), href: '#produk' },
+        { label: t('landing.navPricing'), href: '#harga' },
       ],
     },
     {
@@ -644,6 +771,7 @@ export function Landing() {
         <ProofBar />
         <ProductSection />
         <ComplianceSection />
+        <PricingSection />
         <SocialProofSection />
         <CtaBand />
       </main>

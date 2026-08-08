@@ -15,11 +15,12 @@
  */
 import { useSession } from '@/lib/session'
 
-export type PlanTier = 'FREE' | 'FULL'
+export type PlanTier = 'FREE' | 'BASIC' | 'FULL'
 
-/** FREE < FULL — PRO/ENTERPRISE (real billing, P3) would append with a higher rank; no other
- *  code changes, per the plan's "reader stays put" property. */
-const TIER_RANK: Record<PlanTier, number> = { FREE: 0, FULL: 1 }
+/** FREE < BASIC < FULL (ADR 0047 three-tier ladder — Gratis / Basic / Premium; the stored
+ *  value `FULL` keeps its string, only its DISPLAY name is "Premium"). A future higher tier
+ *  appends with a higher rank; no other code changes ("reader stays put"). */
+const TIER_RANK: Record<PlanTier, number> = { FREE: 0, BASIC: 1, FULL: 2 }
 
 export function tierRank(tier: PlanTier): number {
   return TIER_RANK[tier]
@@ -62,12 +63,14 @@ export const FEATURE_MIN_TIER: Record<FeatureKey, PlanTier> = {
   dashboard: 'FREE',
   expenses: 'FREE',
   team: 'FREE',
+  // BASIC = the rest of the operational POS surface — "jalankan toko" (ADR 0047).
+  promotions: 'BASIC',
+  channels: 'BASIC',
+  orgStructure: 'BASIC',
+  customerDisplay: 'BASIC',
+  // FULL ("Premium") = everything financial — "jalankan perusahaan".
   statements: 'FULL',
   accounting: 'FULL',
-  promotions: 'FULL',
-  channels: 'FULL',
-  orgStructure: 'FULL',
-  customerDisplay: 'FULL',
   hr: 'FULL',
 }
 
@@ -83,7 +86,9 @@ export function tierAllowsFeature(tier: PlanTier, feature: FeatureKey): boolean 
  * Risk 5 — mirrors the page-grant fail-open stance in `lib/pageAccess.ts`).
  */
 export function toPlanTier(value: string | null | undefined): PlanTier {
-  return value === 'FREE' ? 'FREE' : 'FULL'
+  if (value === 'FREE') return 'FREE'
+  if (value === 'BASIC') return 'BASIC'
+  return 'FULL'
 }
 
 /**
