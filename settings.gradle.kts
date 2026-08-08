@@ -27,6 +27,7 @@ include("libs:security")
 include("libs:entitlement-check")
 include("libs:observability")
 include("libs:error-inbox")
+include("libs:media-storage")
 include("service-template")
 // Further modules are wired in as each milestone lands:
 include("services:gateway")

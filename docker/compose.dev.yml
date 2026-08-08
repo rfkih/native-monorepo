@@ -169,6 +169,54 @@ services:
       - ./keycloak/themes/native:/opt/keycloak/themes/native:ro
 
   # ---------------------------------------------------------------------------
+  # MinIO — the platform object store (ADR 0048): binary media (menu images, expense
+  # receipts, static QRIS) live here as content-addressed objects, NOT in Postgres.
+  # Infrastructure like Postgres/Kafka — never a business service. Tag-pinned; the
+  # community image is administered headless via `mc` (minio-init below) — the web
+  # console no longer ships in community builds.
+  # ---------------------------------------------------------------------------
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: native-minio
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+    volumes:
+      - native-minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot bootstrap (idempotent, re-runs on every stack start): bucket + versioning,
+  # anonymous download on the restaurant/ prefix only, and one prefix-scoped user per
+  # service — the storage twin of postgres/init/01-init-databases.sql. Dev credentials
+  # follow the dev convention (fixed, matching the <svc>/<svc> DB creds idiom).
+  minio-init:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    container_name: native-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: "no"
+    entrypoint: ["/bin/sh", "/init.sh"]
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MEDIA_RESTAURANT_ACCESS_KEY: restaurant-media
+      MEDIA_RESTAURANT_SECRET_KEY: restaurant-media-secret
+      MEDIA_EMPLOYEE_ACCESS_KEY: employee-media
+      MEDIA_EMPLOYEE_SECRET_KEY: employee-media-secret
+      MEDIA_PAYMENT_ACCESS_KEY: payment-media
+      MEDIA_PAYMENT_SECRET_KEY: payment-media-secret
+    volumes:
+      - ./minio/init.sh:/init.sh:ro
+
+  # ---------------------------------------------------------------------------
   # Redis — backs the gateway's distributed per-tenant token-bucket rate limit
   # (M1.1). The limit is keyed per (company_id, sub) and must hold across gateway
   # replicas, so the bucket lives in Redis (an atomic Lua script), not in-JVM.
@@ -186,3 +234,4 @@ services:
 
 volumes:
   native-postgres-data:
+  native-minio-data:

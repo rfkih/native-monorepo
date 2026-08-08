@@ -1,7 +1,9 @@
 package id.co.nativeapp.gateway.config;
 
+import static org.springframework.cloud.gateway.server.mvc.filter.BeforeFilterFunctions.rewritePath;
 import static org.springframework.cloud.gateway.server.mvc.filter.BeforeFilterFunctions.uri;
 import static org.springframework.cloud.gateway.server.mvc.handler.HandlerFunctions.http;
+import static org.springframework.web.servlet.function.RequestPredicates.GET;
 import static org.springframework.web.servlet.function.RequestPredicates.path;
 
 import id.co.nativeapp.gateway.filter.AnonymousTenantHeaderStripFilter;
@@ -15,6 +17,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpHeaders;
 import org.springframework.web.servlet.function.RouterFunction;
 import org.springframework.web.servlet.function.ServerResponse;
 
@@ -744,6 +747,59 @@ public class RoutingConfig {
         .before(uri(routes.paymentService()))
         .filter(new AnonymousRateLimitFilter(limiter, rateLimits.pspWebhook(), "anon:psp-webhook:"))
         .filter(new AnonymousTenantHeaderStripFilter())
+        .build();
+  }
+
+  // ---------------------------------------------------------------------------
+  // object store (public menu-image serving — ADR 0048)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Public media proxy — {@code GET /api/media/restaurant/**} rewritten onto the MinIO bucket
+   * ({@code /native-media/restaurant/…}) and forwarded to the object store itself (ADR 0048), the
+   * gateway's only non-service target. ANONYMOUS by design: menu images already reach anonymous
+   * diners through self-order (ADR 0029), an {@code <img>} tag cannot carry a bearer token, and the
+   * offline till caches image URLs in its service worker — so the protection model is
+   * unguessability (256-bit content-hash keys) + tenant-scoped prefixes, not authentication.
+   *
+   * <p>Deliberately NARROW: only the {@code restaurant/} prefix is routed (matching the only
+   * anonymous-download prefix {@code docker/minio/init.sh} grants). {@code employee/} (expense
+   * receipts) and {@code payment/} (QRIS) objects are NOT reachable here — no route matches them,
+   * the edge 401s them ({@code SecurityConfig} opens only this exact prefix), and MinIO itself
+   * would deny anonymous reads on those prefixes (defense in depth, three layers). GET-only: the
+   * store is written exclusively by the owning services with their prefix-scoped credentials.
+   *
+   * <p>{@link AnonymousRateLimitFilter} meters per client IP in its OWN namespace ({@code
+   * anon:media:}, loose — a first menu render bursts a whole grid of image GETs); {@link
+   * AnonymousTenantHeaderStripFilter} strips any client-supplied trusted headers as on every
+   * anonymous route. The after-filter pins cache semantics: content-hash keys are immutable, so a
+   * hit caches for a year ({@code immutable}); anything else (403/404 from MinIO) is {@code
+   * no-store} so a miss or a denied probe is never cached. {@code X-Content-Type-Options: nosniff}
+   * matches the authenticated blob endpoints' posture.
+   */
+  @Bean
+  RouterFunction<ServerResponse> mediaRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      RateLimitProperties rateLimits) {
+    return GatewayRouterFunctions.route("media")
+        .route(GET("/api/media/restaurant/**"), http())
+        .before(rewritePath("/api/media/(?<key>.*)", "/native-media/${key}"))
+        .before(uri(routes.media()))
+        .filter(new AnonymousRateLimitFilter(limiter, rateLimits.media(), "anon:media:"))
+        .filter(new AnonymousTenantHeaderStripFilter())
+        .after(
+            (request, response) -> {
+              if (response.statusCode().is2xxSuccessful()) {
+                response
+                    .headers()
+                    .set(HttpHeaders.CACHE_CONTROL, "public, max-age=31536000, immutable");
+              } else {
+                response.headers().set(HttpHeaders.CACHE_CONTROL, "no-store");
+              }
+              response.headers().set("X-Content-Type-Options", "nosniff");
+              return response;
+            })
         .build();
   }
 

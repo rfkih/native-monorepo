@@ -64,3 +64,6 @@ boundary, a security posture. Routine, local choices do not need one — use a c
 | [0043](0043-native-android-till-app.md) | Native Android till app — Capacitor thin-client + in-process NativePrint bridge | Proposed |
 | [0044](0044-plan-tier-simple-mode.md) | Plan tier & Simple mode — UMKM feature curation | Proposed |
 | [0045](0045-qris-modes-and-payment-service.md) | QRIS payment modes (manual / static image / Midtrans gateway) via a central payment-service | Accepted |
+| [0046](0046-ingredient-inventory-phase1.md) | Ingredient-level inventory, phase 1: catalog + receive/adjust + stock opname (no recipes) | Accepted |
+| [0047](0047-three-tier-pricing.md) | Three-tier pricing: Gratis / Basic / Premium + usage add-ons (display & soft-enforce phase) | Accepted |
+| [0048](0048-minio-object-storage-for-media.md) | MinIO object storage for binary media (menu images, receipts, static QRIS) | Accepted |

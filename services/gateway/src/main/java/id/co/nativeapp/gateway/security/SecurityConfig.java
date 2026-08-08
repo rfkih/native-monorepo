@@ -68,7 +68,16 @@ public class SecurityConfig {
                         // from the callback URL + constant-time merchant-key signature check);
                         // RoutingConfig's pspWebhookRoute carries the dedicated anonymous rate
                         // limit + tenant-header strip instead of the authenticated filter chain.
-                        "/api/v1/psp-webhooks/**")
+                        "/api/v1/psp-webhooks/**",
+                        // Public menu-image serving (ADR 0048): GET-only proxy onto the object
+                        // store's restaurant/ prefix — an <img> tag cannot carry a bearer token,
+                        // and the same images already reach anonymous self-order diners. The
+                        // protection model is unguessable 256-bit content-hash keys + MinIO's
+                        // anonymous policy covering ONLY this prefix; RoutingConfig's mediaRoute
+                        // carries the anonymous rate limit + tenant-header strip. Deliberately
+                        // NARROW: employee/ (receipts) and payment/ (QRIS) prefixes stay behind
+                        // authenticated service endpoints and are NOT opened here.
+                        "/api/media/restaurant/**")
                     .permitAll()
                     .anyRequest()
                     .authenticated())

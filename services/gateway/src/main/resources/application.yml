@@ -54,6 +54,10 @@ native:
       entitlement-service: ${ENTITLEMENT_SERVICE_URI:http://entitlement-service:8080}
       loyalty-service: ${LOYALTY_SERVICE_URI:http://loyalty-service:8080}
       payment-service: ${PAYMENT_SERVICE_URI:http://payment-service:8080}
+      # The one NON-service target: the MinIO object store (ADR 0048), proxied by the anonymous
+      # GET-only /api/media/restaurant/** route. Defaults to the host-published dev container
+      # (the gateway runs on the host in dev); compose networks override to http://minio:9000.
+      media: ${MEDIA_URI:http://localhost:9000}
     rate-limit:
       # Token bucket per (company_id, sub): capacity is the burst size; the bucket
       # refills refill-tokens every refill-period. Tuned low here so the limit is easy
@@ -91,6 +95,15 @@ native:
         refill-tokens: ${PSP_WEBHOOK_RATE_LIMIT_REFILL_TOKENS:120}
         refill-period: ${PSP_WEBHOOK_RATE_LIMIT_REFILL_PERIOD:1m}
         trust-forwarded-for: ${PSP_WEBHOOK_RATE_LIMIT_TRUST_XFF:false}
+      # Anonymous per-client-IP bucket for the PUBLIC /api/media/restaurant/** object-store proxy
+      # (ADR 0048) — its OWN namespace (anon:media:). Tuned LOOSE: a first menu render can burst
+      # ~100 image GETs from one IP (a whole product grid), and repeat visits are absorbed by the
+      # browser cache (content-hash keys, Cache-Control: immutable), so sustained traffic is low.
+      media:
+        capacity: ${MEDIA_RATE_LIMIT_CAPACITY:300}
+        refill-tokens: ${MEDIA_RATE_LIMIT_REFILL_TOKENS:300}
+        refill-period: ${MEDIA_RATE_LIMIT_REFILL_PERIOD:1m}
+        trust-forwarded-for: ${MEDIA_RATE_LIMIT_TRUST_XFF:false}
 
 management:
   endpoints:

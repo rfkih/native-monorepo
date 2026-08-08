@@ -13,6 +13,9 @@ import org.springframework.validation.annotation.Validated;
  * /api/v1/employees/**} / {@code /api/v1/payroll-*} to employee-service. Targets default to the
  * docker dev-stack hostnames and are overridden per environment. Each is {@code @NotNull}, so the
  * app fails fast at startup if a required target is missing or malformed.
+ *
+ * <p>{@code media} is the one NON-service target: the MinIO object store itself (ADR 0048), proxied
+ * by the anonymous read-only {@code /api/media/**} route ({@code RoutingConfig#mediaRoute}).
  */
 @Validated
 @ConfigurationProperties("native.gateway.routes")
@@ -25,4 +28,5 @@ public record GatewayRouteProperties(
     @NotNull URI barbershopService,
     @NotNull URI entitlementService,
     @NotNull URI loyaltyService,
-    @NotNull URI paymentService) {}
+    @NotNull URI paymentService,
+    @NotNull URI media) {}
