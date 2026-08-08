@@ -1,0 +1,122 @@
+package id.co.nativeapp.restaurant.inventory.service;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import id.co.nativeapp.restaurant.inventory.domain.Ingredient;
+import id.co.nativeapp.restaurant.inventory.domain.IngredientNotFoundException;
+import id.co.nativeapp.restaurant.inventory.dto.CreateIngredientRequest;
+import id.co.nativeapp.restaurant.inventory.dto.IngredientResponse;
+import id.co.nativeapp.restaurant.inventory.repository.IngredientRepository;
+import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
+import id.co.nativeapp.tenant.TenantContext;
+import java.util.Optional;
+import java.util.UUID;
+import org.junit.jupiter.api.Test;
+
+/**
+ * Unit pins for {@link IngredientWriter} (ADR 0046 phase 1): create stamps {@code company_id}, the
+ * set/add stock paths, the not-found 404 path, and the {@link OutletAccessGuard} call on every
+ * mutation. Repository + guard are mocked; SQL + RLS are exercised by the integration tests.
+ */
+class IngredientWriterTest {
+
+  private static final String COMPANY = "11111111-1111-1111-1111-111111111111";
+  private static final UUID OUTLET = UUID.fromString("5f5e0167-ee70-45b8-8afe-019e8129e659");
+
+  private final IngredientRepository repository = mock(IngredientRepository.class);
+  private final OutletAccessGuard guard = mock(OutletAccessGuard.class);
+  private final IngredientWriter writer = new IngredientWriter(repository, guard);
+
+  private static <T> T asTenant(java.util.concurrent.Callable<T> action) {
+    try {
+      return TenantContext.callAs(COMPANY, "test", action);
+    } catch (RuntimeException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new IllegalStateException(e);
+    }
+  }
+
+  private Ingredient tracked(int stock) {
+    Ingredient ingredient = new Ingredient(OUTLET, "Patty", "pcs", 5_000L, "IDR");
+    ingredient.setStock(stock);
+    ingredient.setCompanyId(COMPANY);
+    return ingredient;
+  }
+
+  @Test
+  void createStampsTheCompanyIdFromTheBoundTenant() {
+    when(repository.saveAndFlush(any(Ingredient.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    IngredientResponse response =
+        asTenant(
+            () -> writer.create(new CreateIngredientRequest(OUTLET, "Roti", "pcs", null, null)));
+
+    assertThat(response.name()).isEqualTo("Roti");
+    assertThat(response.stockQty()).isZero();
+    verify(guard).enforce(OUTLET);
+  }
+
+  @Test
+  void setStockUpdatesTheAbsoluteQuantity() {
+    Ingredient ingredient = tracked(10);
+    when(repository.findById(ingredient.getId())).thenReturn(Optional.of(ingredient));
+    when(repository.saveAndFlush(any(Ingredient.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    IngredientResponse response = asTenant(() -> writer.setStock(ingredient.getId(), 25));
+
+    assertThat(response.stockQty()).isEqualTo(25);
+    verify(guard).enforce(OUTLET);
+  }
+
+  @Test
+  void setStockOnAMissingIngredientThrowsNotFound() {
+    UUID id = UUID.randomUUID();
+    when(repository.findById(id)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> asTenant(() -> writer.setStock(id, 5)))
+        .isInstanceOf(IngredientNotFoundException.class);
+  }
+
+  @Test
+  void addStockIncrementsTheCurrentQuantity() {
+    Ingredient ingredient = tracked(10);
+    when(repository.findById(ingredient.getId())).thenReturn(Optional.of(ingredient));
+    when(repository.saveAndFlush(any(Ingredient.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    IngredientResponse response = asTenant(() -> writer.addStock(ingredient.getId(), 5));
+
+    assertThat(response.stockQty()).isEqualTo(15);
+  }
+
+  @Test
+  void addStockWithNegativeDeltaFloorsAtZero() {
+    Ingredient ingredient = tracked(3);
+    when(repository.findById(ingredient.getId())).thenReturn(Optional.of(ingredient));
+    when(repository.saveAndFlush(any(Ingredient.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    IngredientResponse response = asTenant(() -> writer.addStock(ingredient.getId(), -100));
+
+    assertThat(response.stockQty()).isZero();
+  }
+
+  @Test
+  void deactivateSetsActiveFalse() {
+    Ingredient ingredient = tracked(10);
+    when(repository.findById(ingredient.getId())).thenReturn(Optional.of(ingredient));
+    when(repository.saveAndFlush(any(Ingredient.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    asTenant(
+        () -> {
+          writer.deactivate(ingredient.getId());
+          return null;
+        });
+
+    assertThat(ingredient.isActive()).isFalse();
+  }
+}

@@ -1,0 +1,36 @@
+package id.co.nativeapp.restaurant.inventory.dto;
+
+import id.co.nativeapp.restaurant.inventory.domain.Ingredient;
+import java.util.UUID;
+import org.springframework.lang.Nullable;
+
+/**
+ * Response body for a single ingredient (ADR 0046 phase 1).
+ *
+ * <p>{@code stockQty} is ALWAYS a number (never {@code null}) — unlike {@code
+ * MenuItemResponse.stockQuantity}, an ingredient has no untracked state. {@code unitCostMinor}/
+ * {@code costCurrency} are {@code null} together when the ingredient carries no cost.
+ */
+public record IngredientResponse(
+    UUID id,
+    UUID businessId,
+    String name,
+    String unit,
+    int stockQty,
+    @Nullable Long unitCostMinor,
+    @Nullable String costCurrency,
+    boolean active) {
+
+  /** Maps the write-path aggregate to the response shape. */
+  public static IngredientResponse from(Ingredient ingredient) {
+    return new IngredientResponse(
+        ingredient.getId(),
+        ingredient.getBusinessId(),
+        ingredient.getName(),
+        ingredient.getUnit(),
+        ingredient.getStockQty(),
+        ingredient.getUnitCostMinor(),
+        ingredient.getCostCurrency(),
+        ingredient.isActive());
+  }
+}

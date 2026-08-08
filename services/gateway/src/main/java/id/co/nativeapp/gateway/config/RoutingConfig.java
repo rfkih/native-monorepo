@@ -434,6 +434,44 @@ public class RoutingConfig {
   }
 
   /**
+   * Ingredient catalog (ADR 0046 phase 1): the raw-material (bahan) list an outlet counts at a
+   * stock opname. Same POS_ROLES surface as {@link #menuRoute} — cashiers manage/receive stock at
+   * the till.
+   */
+  @Bean
+  RouterFunction<ServerResponse> ingredientsRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("restaurant-service-ingredients")
+        .route(path("/api/v1/ingredients/**"), http())
+        .before(uri(routes.restaurantService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(POS_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
+   * Ingredient stock opname (ADR 0046 phase 1): the physical count of the ingredient catalog, the
+   * successor subject to {@link #stocktakesRoute}'s legacy menu-item count. Same POS_ROLES surface
+   * as every till surface — the operator counts stock at the outlet.
+   */
+  @Bean
+  RouterFunction<ServerResponse> ingredientStocktakesRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("restaurant-service-ingredient-stocktakes")
+        .route(path("/api/v1/ingredient-stocktakes/**"), http())
+        .before(uri(routes.restaurantService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(POS_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
    * Company-managed sales channels + the ONLINE tender (ADR 0036 Phase B2): a cashier LISTs the
    * channel picker at checkout (GET), while CREATE/PATCH are further gated to owner/manager
    * SERVICE-SIDE by {@code SalesChannelWriter} — the route itself carries POS_ROLES (owner,

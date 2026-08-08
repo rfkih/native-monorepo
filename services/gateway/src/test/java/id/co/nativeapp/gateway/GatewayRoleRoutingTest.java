@@ -35,6 +35,14 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
   private static final String MANAGER_USERNAME = "manager-acme";
   private static final String MANAGER_PASSWORD = "manager-password";
 
+  // An EMPLOYEE-ONLY user (realmRoles: ["employee"] only — no owner/manager/cashier). ME_ROLES
+  // admits "employee" for the self-service /me/** surface, but it is NOT in POS_ROLES — the persona
+  // the ADR 0046 ingredient-inventory POS routes exist to exclude
+  // (ingredients/ingredient-stocktakes
+  // routes tests below).
+  private static final String EMPLOYEE_USERNAME = "employee-acme";
+  private static final String EMPLOYEE_PASSWORD = "employee-password";
+
   @Test
   void aCashierCanReachThePosMenuRoute() throws Exception {
     String token =
@@ -85,6 +93,108 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
 
     assertThat(response).isEqualTo("ok");
     assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/stocktakes?businessId=x");
+  }
+
+  // ---------------------------------------------------------------------------
+  // /api/v1/ingredients/** + /api/v1/ingredient-stocktakes/** — raw-material catalog + stock
+  // opname (ADR 0046 phase 1): the same POS_ROLES surface as every till route (menu, stocktakes).
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void aCashierCanReachTheIngredientsRoute() throws Exception {
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/ingredients?businessId=x")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/ingredients?businessId=x");
+  }
+
+  @Test
+  void aCashierCanReachTheIngredientStocktakesRoute() throws Exception {
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/ingredient-stocktakes?businessId=x")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath())
+        .isEqualTo("/api/v1/ingredient-stocktakes?businessId=x");
+  }
+
+  @Test
+  void anOwnerCanAlsoReachTheIngredientsRoute() throws Exception {
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/ingredients?businessId=x")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/ingredients?businessId=x");
+  }
+
+  @Test
+  void anEmployeeOnlyRoleIsDeniedTheIngredientsRouteWith403() throws Exception {
+    // The persona the POS_ROLES gate exists to exclude: "employee" is admitted to the /me/**
+    // self-service surface (ME_ROLES) but carries none of owner/manager/cashier.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, EMPLOYEE_USERNAME, EMPLOYEE_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/ingredients?businessId=x")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void anEmployeeOnlyRoleIsDeniedTheIngredientStocktakesRouteWith403() throws Exception {
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, EMPLOYEE_USERNAME, EMPLOYEE_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/ingredient-stocktakes?businessId=x")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
   }
 
   @Test
