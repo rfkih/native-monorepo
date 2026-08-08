@@ -7,20 +7,28 @@ import id.co.nativeapp.employee.expense.domain.ClaimStateException;
 import id.co.nativeapp.employee.expense.domain.ClaimStatus;
 import id.co.nativeapp.employee.expense.domain.ExpenseClaim;
 import id.co.nativeapp.employee.expense.domain.ExpenseReceipt;
-import id.co.nativeapp.employee.expense.domain.ReceiptContentTypeValidator;
+import id.co.nativeapp.employee.expense.domain.InvalidReceiptContentTypeException;
+import id.co.nativeapp.employee.expense.projection.ReceiptMetaView;
 import id.co.nativeapp.employee.expense.repository.ExpenseClaimRepository;
 import id.co.nativeapp.employee.expense.repository.ExpenseReceiptRepository;
 import id.co.nativeapp.employee.me.domain.EmployeeNotLinkedException;
+import id.co.nativeapp.mediastorage.ImageContentTypeValidator;
+import id.co.nativeapp.mediastorage.MediaKeys;
+import id.co.nativeapp.mediastorage.MediaStorage;
+import id.co.nativeapp.mediastorage.MediaStorageProperties;
+import id.co.nativeapp.mediastorage.Sha256;
+import id.co.nativeapp.mediastorage.UnsupportedImageTypeException;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
 import java.util.Objects;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 /**
@@ -43,9 +51,17 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
  * {@code CHECK} constraint with a confusing 500; it fails the SAME way (a {@link
  * MaxUploadSizeExceededException}, mapped to 413 by {@code EmployeeApiAdvice}) either path takes.
  *
- * <p><strong>Content-type — untrusted declared header.</strong> {@link ReceiptContentTypeValidator}
- * verifies the ACTUAL bytes (magic-byte signature) against the DECLARED multipart {@code
- * Content-Type} before anything is persisted; a mismatch is a {@code 422}, never silently accepted.
+ * <p><strong>Content-type — untrusted declared header.</strong> The shared magic-byte validator
+ * (libs/media-storage {@link ImageContentTypeValidator} — the fleet's one copy since ADR 0048)
+ * verifies the ACTUAL bytes against the DECLARED multipart {@code Content-Type} before anything is
+ * persisted; a mismatch is translated to this feature's {@link InvalidReceiptContentTypeException}
+ * ({@code 422}), never silently accepted.
+ *
+ * <p><strong>Payload home (ADR 0048).</strong> The validated bytes go to the OBJECT STORE
+ * (content-addressed under {@code employee/{tenant}/receipt/{sha256}.{ext}}, put inside the write
+ * transaction — a rollback orphans one harmless content-addressed object); the row keeps metadata
+ * only. A replaced receipt's old object is deleted best-effort AFTER COMMIT (never before — a
+ * rollback must not lose the object the surviving row still points to).
  *
  * <p><strong>Replace on re-upload.</strong> A claim carries at most one live receipt in v1: this
  * method locks the claim row ({@code SELECT … FOR UPDATE} — E3 review W1), deletes any existing
@@ -68,17 +84,28 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 @Component
 public class ReceiptWriter {
 
+  private static final Logger log = LoggerFactory.getLogger(ReceiptWriter.class);
+
+  /** The media family segment in this service's object keys. */
+  static final String MEDIA_DOMAIN = "receipt";
+
   private final ExpenseClaimRepository claimRepository;
   private final ExpenseReceiptRepository receiptRepository;
   private final EmployeeRepository employeeRepository;
+  private final MediaStorage mediaStorage;
+  private final MediaStorageProperties mediaProperties;
 
   public ReceiptWriter(
       ExpenseClaimRepository claimRepository,
       ExpenseReceiptRepository receiptRepository,
-      EmployeeRepository employeeRepository) {
+      EmployeeRepository employeeRepository,
+      MediaStorage mediaStorage,
+      MediaStorageProperties mediaProperties) {
     this.claimRepository = claimRepository;
     this.receiptRepository = receiptRepository;
     this.employeeRepository = employeeRepository;
+    this.mediaStorage = mediaStorage;
+    this.mediaProperties = mediaProperties;
   }
 
   /**
@@ -107,9 +134,17 @@ public class ReceiptWriter {
       throw new MaxUploadSizeExceededException(ExpenseReceipt.MAX_BYTES);
     }
     // The CANONICAL detected type is what gets stored (and later served) — never the raw declared
-    // header, which may be a case/whitespace variant or absent entirely (E3 review S1/S2).
-    String canonicalContentType = ReceiptContentTypeValidator.validate(declaredContentType, data);
-    String sha256 = sha256Hex(data);
+    // header, which may be a case/whitespace variant or absent entirely (E3 review S1/S2). The
+    // check itself is the fleet-shared magic-byte validator (ADR 0048); its exception is
+    // translated to this feature's own so the API contract (422 shape) is unchanged.
+    String canonicalContentType;
+    try {
+      canonicalContentType = ImageContentTypeValidator.validate(declaredContentType, data);
+    } catch (UnsupportedImageTypeException e) {
+      throw new InvalidReceiptContentTypeException(
+          e.getDeclaredContentType(), e.getDetectedContentType());
+    }
+    String sha256 = Sha256.hex(data);
 
     // Serialize concurrent uploads to the same claim on the claim ROW (E3 review W1): without
     // this, two READ COMMITTED transactions could each delete-then-insert and commit TWO rows.
@@ -118,12 +153,56 @@ public class ReceiptWriter {
     claimRepository.lockForReceiptSwap(claimId);
     requireOwnDraftClaim(claimId, me.getId());
 
+    // The replaced receipt's object (if any) — deletable only AFTER this transaction commits.
+    String previousObjectKey =
+        receiptRepository
+            .findMetaByClaimId(claimId)
+            .map(ReceiptMetaView::getObjectKey)
+            .orElse(null);
+
+    // Payload to the object store (ADR 0048), metadata row to Postgres — put BEFORE the row so a
+    // committed row can never dangle; the reverse failure (stored object, rolled-back row) is a
+    // harmless content-addressed orphan.
+    String objectKey =
+        MediaKeys.imageKey(
+            mediaProperties.servicePrefix(), tenant, MEDIA_DOMAIN, sha256, canonicalContentType);
+    mediaStorage.put(objectKey, data, canonicalContentType);
+
     // Replace-on-reupload, atomically: delete the claim's existing receipt(s), then insert the
     // freshly-validated one in the same transaction (class Javadoc).
     receiptRepository.deleteByClaimId(claimId);
-    ExpenseReceipt receipt = new ExpenseReceipt(claimId, canonicalContentType, data, sha256);
+    ExpenseReceipt receipt =
+        new ExpenseReceipt(claimId, canonicalContentType, data.length, sha256, objectKey);
     receipt.setCompanyId(tenant);
-    return receiptRepository.saveAndFlush(receipt);
+    ExpenseReceipt saved = receiptRepository.saveAndFlush(receipt);
+    scheduleReplacedObjectCleanup(previousObjectKey, objectKey);
+    return saved;
+  }
+
+  /**
+   * Best-effort delete of a REPLACED receipt's object, registered to run only {@code afterCommit}:
+   * deleting before commit could lose the object a rolled-back transaction's surviving row still
+   * references. A failed delete is an accepted orphan (ADR 0048), never an error. No-ops when the
+   * old and new keys are equal (re-upload of the identical file — content addressing) or outside a
+   * transaction (plain unit tests).
+   */
+  private void scheduleReplacedObjectCleanup(String previousObjectKey, String newObjectKey) {
+    if (previousObjectKey == null
+        || previousObjectKey.equals(newObjectKey)
+        || !TransactionSynchronizationManager.isSynchronizationActive()) {
+      return;
+    }
+    TransactionSynchronizationManager.registerSynchronization(
+        new TransactionSynchronization() {
+          @Override
+          public void afterCommit() {
+            try {
+              mediaStorage.delete(previousObjectKey);
+            } catch (RuntimeException e) {
+              log.warn("replaced receipt object not deleted (accepted orphan): {}", e.getMessage());
+            }
+          }
+        });
   }
 
   private ExpenseClaim requireOwnDraftClaim(UUID claimId, UUID employeeId) {
@@ -141,15 +220,5 @@ public class ReceiptWriter {
   private Employee resolveMe() {
     String actor = TenantContext.require().actor();
     return employeeRepository.findByUserId(actor).orElseThrow(EmployeeNotLinkedException::new);
-  }
-
-  private static String sha256Hex(byte[] data) {
-    try {
-      MessageDigest digest = MessageDigest.getInstance("SHA-256");
-      return HexFormat.of().formatHex(digest.digest(data));
-    } catch (NoSuchAlgorithmException e) {
-      // SHA-256 is a mandatory JDK algorithm (JCA standard names) — unreachable in practice.
-      throw new IllegalStateException("SHA-256 MessageDigest unavailable", e);
-    }
   }
 }

@@ -27,7 +27,11 @@ public interface ExpenseReceiptRepository extends JpaRepository<ExpenseReceipt, 
   @Query(
       value =
           """
-          SELECT id AS id, content_type AS content_type, byte_size AS byte_size, sha256 AS sha256
+          SELECT id           AS id,
+                 content_type AS content_type,
+                 byte_size    AS byte_size,
+                 sha256       AS sha256,
+                 object_key   AS object_key
             FROM expense_receipt
            WHERE claim_id = :claimId
            ORDER BY created_at DESC

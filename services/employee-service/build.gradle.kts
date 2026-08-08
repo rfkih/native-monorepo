@@ -54,6 +54,10 @@ dependencies {
     implementation(project(":libs:contracts")) // event Avro schemas: single source of truth
     implementation(project(":libs:tenant"))
     implementation(project(":libs:error-inbox")) // ADR 0009: cross-service DLT error recorder
+    // Object storage (ADR 0048): expense-receipt payloads live in MinIO as content-addressed
+    // objects; the expense_receipt row keeps metadata only. Credentials are policy-scoped to
+    // the employee/ prefix; also supplies the fleet-shared magic-byte image validator.
+    implementation(project(":libs:media-storage"))
 
     // observability — the SHARED logback-native-json.xml (one-object-per-line JSON logs with the
     // trace/correlation MDC fields + a dev console fallback) this service's logback-spring.xml

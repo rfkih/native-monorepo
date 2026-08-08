@@ -17,7 +17,6 @@ import id.co.nativeapp.employee.expense.domain.ClaimNotFoundException;
 import id.co.nativeapp.employee.expense.domain.ClaimStateException;
 import id.co.nativeapp.employee.expense.domain.ClaimStatus;
 import id.co.nativeapp.employee.expense.domain.ExpenseClaim;
-import id.co.nativeapp.employee.expense.domain.ExpenseReceipt;
 import id.co.nativeapp.employee.expense.domain.ReceiptNotFoundException;
 import id.co.nativeapp.employee.expense.domain.SelfApprovalException;
 import id.co.nativeapp.employee.expense.dto.ExpenseClaimResponse;
@@ -385,9 +384,8 @@ class ExpenseClaimControllerTest {
 
   @Test
   void getReceiptReturns200WithTheBytesAndCorrectHeaders() throws Exception {
-    ExpenseReceipt receipt =
-        new ExpenseReceipt(CLAIM, "image/jpeg", JPEG_BYTES.clone(), "a".repeat(64));
-    when(receiptReader.receiptForManager(CLAIM)).thenReturn(receipt);
+    when(receiptReader.receiptForManager(CLAIM))
+        .thenReturn(new ReceiptContentResponse("image/jpeg", JPEG_BYTES.clone(), "a".repeat(64)));
 
     mockMvc
         .perform(get("/api/v1/expense-claims/" + CLAIM + "/receipt"))

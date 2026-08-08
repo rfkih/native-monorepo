@@ -3,6 +3,7 @@ package id.co.nativeapp.employee.expense;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -21,8 +22,11 @@ import id.co.nativeapp.employee.expense.repository.ExpenseClaimRepository;
 import id.co.nativeapp.employee.expense.repository.ExpenseReceiptRepository;
 import id.co.nativeapp.employee.expense.service.ReceiptWriter;
 import id.co.nativeapp.employee.me.domain.EmployeeNotLinkedException;
+import id.co.nativeapp.mediastorage.MediaStorage;
+import id.co.nativeapp.mediastorage.MediaStorageProperties;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.tenant.TenantContext;
+import java.net.URI;
 import java.time.LocalDate;
 import java.util.Optional;
 import java.util.UUID;
@@ -45,9 +49,22 @@ class ReceiptWriterTest {
   private final ExpenseClaimRepository claimRepository = mock(ExpenseClaimRepository.class);
   private final ExpenseReceiptRepository receiptRepository = mock(ExpenseReceiptRepository.class);
   private final EmployeeRepository employeeRepository = mock(EmployeeRepository.class);
+  private final MediaStorage mediaStorage = mock(MediaStorage.class);
 
   private final ReceiptWriter writer =
-      new ReceiptWriter(claimRepository, receiptRepository, employeeRepository);
+      new ReceiptWriter(
+          claimRepository,
+          receiptRepository,
+          employeeRepository,
+          mediaStorage,
+          new MediaStorageProperties(
+              URI.create("http://localhost:9000"),
+              "employee-media",
+              "employee-media-secret",
+              "native-media",
+              "employee",
+              null,
+              "us-east-1"));
 
   private static Employee employee() {
     return new Employee("Budi", PtkpStatus.TK0, "3201234567890123", "1234567890123456");
@@ -81,6 +98,13 @@ class ReceiptWriterTest {
     assertThat(result.getContentType()).isEqualTo("image/jpeg");
     assertThat(result.getByteSize()).isEqualTo(JPEG_BYTES.length);
     assertThat(result.getCompanyId()).isEqualTo(TENANT);
+    // ADR 0048: the row is object-backed — payload in the store under the tenant-scoped
+    // content-addressed key, no inline bytea.
+    assertThat(result.getObjectKey())
+        .startsWith("employee/" + TENANT + "/receipt/")
+        .endsWith(".jpg");
+    assertThat(result.getData()).isNull();
+    verify(mediaStorage, times(1)).put(eq(result.getObjectKey()), any(), any());
     verify(receiptRepository, times(1)).deleteByClaimId(claim.getId());
     verify(receiptRepository, times(1)).saveAndFlush(any());
   }

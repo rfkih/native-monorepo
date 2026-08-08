@@ -17,6 +17,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -141,11 +143,15 @@ public class ExpenseClaimController {
   @Operation(summary = "Stream the receipt photo for any expense claim in the tenant")
   @GetMapping("/{id}/receipt")
   public ResponseEntity<byte[]> getReceipt(@PathVariable UUID id) {
-    ReceiptContentResponse content =
-        ReceiptContentResponse.from(receiptReader.receiptForManager(id));
+    ReceiptContentResponse content = receiptReader.receiptForManager(id);
+    // The MyExpenseClaimController#receiptResponse idiom: short private cache + sha256 ETag +
+    // nosniff on an authenticated binary response.
     return ResponseEntity.ok()
         .contentType(MediaType.parseMediaType(content.contentType()))
         .contentLength(content.data().length)
+        .cacheControl(CacheControl.maxAge(5, TimeUnit.MINUTES).cachePrivate())
+        .eTag('"' + content.sha256() + '"')
+        .header("X-Content-Type-Options", "nosniff")
         .body(content.data());
   }
 }

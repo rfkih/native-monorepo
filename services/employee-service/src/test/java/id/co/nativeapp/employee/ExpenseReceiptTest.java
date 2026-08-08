@@ -10,6 +10,7 @@ import id.co.nativeapp.employee.expense.domain.ExpenseCategory;
 import id.co.nativeapp.employee.expense.domain.ExpenseReceipt;
 import id.co.nativeapp.employee.expense.domain.ReceiptNotFoundException;
 import id.co.nativeapp.employee.expense.dto.CreateClaimCommand;
+import id.co.nativeapp.employee.expense.dto.ReceiptContentResponse;
 import id.co.nativeapp.employee.expense.service.ExpenseCategoryWriter;
 import id.co.nativeapp.employee.expense.service.ExpenseClaimService;
 import id.co.nativeapp.employee.expense.service.ReceiptReader;
@@ -84,14 +85,61 @@ class ExpenseReceiptTest extends PostgresRlsTestBase {
             ACTOR_A,
             () -> receiptWriter.upload(claimId, "image/jpeg", JPEG_BYTES.clone()));
 
-    ExpenseReceipt served =
+    // ADR 0048: the row is object-backed — metadata in Postgres, payload in the object store.
+    assertThat(uploaded.getObjectKey()).startsWith("employee/" + TENANT_A + "/receipt/");
+    assertThat(uploaded.getData()).isNull();
+
+    ReceiptContentResponse served =
         TenantContext.callAs(TENANT_A, ACTOR_A, () -> receiptReader.myReceipt(claimId));
 
-    assertThat(served.getData()).isEqualTo(JPEG_BYTES);
-    assertThat(served.getContentType()).isEqualTo("image/jpeg");
-    assertThat(served.getByteSize()).isEqualTo(JPEG_BYTES.length);
-    assertThat(served.getSha256()).isEqualTo(uploaded.getSha256());
-    assertThat(served.getId()).isEqualTo(uploaded.getId());
+    assertThat(served.data()).isEqualTo(JPEG_BYTES);
+    assertThat(served.contentType()).isEqualTo("image/jpeg");
+    assertThat(served.sha256()).isEqualTo(uploaded.getSha256());
+  }
+
+  @Test
+  void legacyByteaRowServesAndReadThroughMigratesToTheObjectStore() throws Exception {
+    UUID claimId = createOwnDraftClaim(TENANT_A, ACTOR_A);
+    TenantContext.callAs(
+        TENANT_A, ACTOR_A, () -> receiptWriter.upload(claimId, "image/jpeg", JPEG_BYTES.clone()));
+
+    // Rewrite the row into the PRE-ADR-0048 shape (inline bytea, no object key) over the admin
+    // (BYPASSRLS) connection — the production writer can no longer produce one, by design.
+    try (java.sql.Connection admin =
+            java.sql.DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        java.sql.PreparedStatement ps =
+            admin.prepareStatement(
+                "UPDATE expense_receipt SET data = ?, object_key = NULL WHERE claim_id = ?")) {
+      ps.setBytes(1, JPEG_BYTES.clone());
+      ps.setObject(2, claimId);
+      assertThat(ps.executeUpdate()).isEqualTo(1);
+    }
+
+    // The legacy row serves its bytea verbatim…
+    ReceiptContentResponse served =
+        TenantContext.callAs(TENANT_A, ACTOR_A, () -> receiptReader.myReceipt(claimId));
+    assertThat(served.data()).isEqualTo(JPEG_BYTES);
+
+    // …and that serve flipped it to object-backed (read-through migration, ADR 0048).
+    try (java.sql.Connection admin =
+            java.sql.DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        java.sql.PreparedStatement ps =
+            admin.prepareStatement(
+                "SELECT object_key, data FROM expense_receipt WHERE claim_id = ?")) {
+      ps.setObject(1, claimId);
+      try (java.sql.ResultSet rs = ps.executeQuery()) {
+        assertThat(rs.next()).isTrue();
+        assertThat(rs.getString(1)).startsWith("employee/" + TENANT_A + "/receipt/");
+        assertThat(rs.getBytes(2)).isNull();
+      }
+    }
+
+    // A second serve (now object-backed) is still byte-identical.
+    ReceiptContentResponse again =
+        TenantContext.callAs(TENANT_A, ACTOR_A, () -> receiptReader.myReceipt(claimId));
+    assertThat(again.data()).isEqualTo(JPEG_BYTES);
   }
 
   @Test
@@ -108,10 +156,10 @@ class ExpenseReceiptTest extends PostgresRlsTestBase {
                 TENANT_A, "SELECT count(*) FROM expense_receipt WHERE claim_id = ?", claimId))
         .isEqualTo(1L);
 
-    ExpenseReceipt current =
+    ReceiptContentResponse current =
         TenantContext.callAs(TENANT_A, ACTOR_A, () -> receiptReader.myReceipt(claimId));
-    assertThat(current.getContentType()).isEqualTo("image/png");
-    assertThat(current.getData()).isEqualTo(PNG_BYTES);
+    assertThat(current.contentType()).isEqualTo("image/png");
+    assertThat(current.data()).isEqualTo(PNG_BYTES);
   }
 
   @Test

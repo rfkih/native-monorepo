@@ -23,6 +23,8 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -139,13 +141,21 @@ public class MyExpenseClaimController {
   @Operation(summary = "Stream the receipt photo for one of the caller's own claims")
   @GetMapping("/{id}/receipt")
   public ResponseEntity<byte[]> getReceipt(@PathVariable UUID id) {
-    return receiptResponse(ReceiptContentResponse.from(receiptReader.myReceipt(id)));
+    return receiptResponse(receiptReader.myReceipt(id));
   }
 
+  /**
+   * Serve headers mirror the payment static-QR endpoint's idiom: a SHORT private cache + the
+   * content sha256 as the ETag (a replaced receipt changes the digest, so a stale conditional GET
+   * revalidates cheaply), {@code nosniff} on an authenticated binary response.
+   */
   private static ResponseEntity<byte[]> receiptResponse(ReceiptContentResponse content) {
     return ResponseEntity.ok()
         .contentType(MediaType.parseMediaType(content.contentType()))
         .contentLength(content.data().length)
+        .cacheControl(CacheControl.maxAge(5, TimeUnit.MINUTES).cachePrivate())
+        .eTag('"' + content.sha256() + '"')
+        .header("X-Content-Type-Options", "nosniff")
         .body(content.data());
   }
 

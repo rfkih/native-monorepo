@@ -12,13 +12,17 @@ import org.hibernate.type.SqlTypes;
 
 /**
  * The {@code expense_receipt} aggregate — one uploaded receipt photo for a claim (ADR 0030 §8,
- * Phase E3). Stored as {@code bytea} in the employee-service database: no object store in v1, so
- * RLS/Auditable/backups/tenant deletion come free (see V11's Javadoc).
+ * Phase E3). The METADATA row lives here (Auditable, RLS, sha256 — unchanged); since ADR 0048 the
+ * PAYLOAD lives in the object store under {@code objectKey} for new uploads, while legacy rows keep
+ * their {@code bytea} until the read-through migration converts them. The V15 {@code CHECK}
+ * guarantees exactly this dual-home invariant: a row always has {@code data} OR {@code objectKey}
+ * (receipts are expense evidence — a payload-less metadata row must be unrepresentable).
  *
- * <p><strong>Trust boundary.</strong> By the time this constructor runs, {@link
- * ReceiptContentTypeValidator} has already confirmed the DECLARED {@code contentType} matches the
- * ACTUAL magic bytes of {@code data} — the declared header alone is never trusted. {@code sha256}
- * is a lowercase hex digest of the exact stored bytes, computed by the writer.
+ * <p><strong>Trust boundary.</strong> By the time a constructor runs, the shared magic-byte
+ * validator (libs/media-storage {@code ImageContentTypeValidator}) has already confirmed the
+ * DECLARED {@code contentType} matches the ACTUAL bytes — the declared header alone is never
+ * trusted. {@code sha256} is a lowercase hex digest of the exact stored bytes, computed by the
+ * writer.
  *
  * <p><strong>Money/PII (rule 6/8).</strong> Not applicable — a receipt photo carries neither. It is
  * a business document (ADR 0030 §8), stored unencrypted, never logged.
@@ -58,19 +62,28 @@ public class ExpenseReceipt extends Auditable {
   @Column(name = "sha256", nullable = false, length = 64)
   private String sha256;
 
-  @Column(name = "data", nullable = false)
+  /** Inline payload — LEGACY rows only (pre-ADR-0048); {@code null} once object-backed. */
+  @Column(name = "data")
   private byte[] data;
+
+  /**
+   * Object-store key of the payload (ADR 0048): {@code
+   * employee/{companyId}/receipt/{sha256}.{ext}}; {@code null} on a legacy inline row. Exactly one
+   * of {@code data}/{@code objectKey} is set (V15 CHECK).
+   */
+  @Column(name = "object_key")
+  private String objectKey;
 
   protected ExpenseReceipt() {
     // for JPA
   }
 
   /**
-   * Creates a new receipt row.
+   * Creates a LEGACY inline-payload receipt row (pre-ADR-0048 shape — retained for tests and for
+   * representing not-yet-migrated data; the production writer creates object-backed rows).
    *
    * @param claimId the owning claim; must be non-null
-   * @param contentType the verified content type (one of {@link ReceiptContentTypeValidator}'s
-   *     whitelisted types); must be non-blank
+   * @param contentType the verified canonical content type; must be non-blank
    * @param data the receipt bytes; must be non-empty and no larger than {@link #MAX_BYTES}
    * @param sha256 the lowercase hex SHA-256 digest of {@code data}; must be non-blank
    * @throws IllegalArgumentException if {@code data} is empty or exceeds {@link #MAX_BYTES}
@@ -87,6 +100,47 @@ public class ExpenseReceipt extends Auditable {
     this.data = data.clone();
     this.byteSize = data.length;
     this.sha256 = requireNonBlank(sha256, "sha256");
+  }
+
+  /**
+   * Creates an OBJECT-BACKED receipt row (ADR 0048): the payload already lives in the object store
+   * under {@code objectKey}; this row carries the metadata only ({@code data} stays {@code null}).
+   *
+   * @param claimId the owning claim; must be non-null
+   * @param contentType the verified canonical content type; must be non-blank
+   * @param byteSize the stored payload's exact size; must be 1..{@link #MAX_BYTES}
+   * @param sha256 the lowercase hex SHA-256 digest of the stored bytes; must be non-blank
+   * @param objectKey the content-addressed object key; must be non-blank
+   * @throws IllegalArgumentException if {@code byteSize} is out of bounds
+   */
+  public ExpenseReceipt(
+      UUID claimId, String contentType, int byteSize, String sha256, String objectKey) {
+    this.id = UUID.randomUUID();
+    this.claimId = Objects.requireNonNull(claimId, "claimId");
+    this.contentType = requireNonBlank(contentType, "contentType");
+    if (byteSize <= 0 || byteSize > MAX_BYTES) {
+      throw new IllegalArgumentException(
+          "expense receipt byteSize must be between 1 and " + MAX_BYTES + ", was " + byteSize);
+    }
+    this.byteSize = byteSize;
+    this.sha256 = requireNonBlank(sha256, "sha256");
+    this.objectKey = requireNonBlank(objectKey, "objectKey");
+  }
+
+  /**
+   * Read-through migration (ADR 0048): the payload has been copied to the object store — drop the
+   * inline bytes and record the key. Idempotence lives in the caller (it skips already-migrated
+   * rows); this method just enforces the exactly-one-payload-home invariant.
+   *
+   * @param objectKey the content-addressed key the bytes were stored under; must be non-blank
+   * @throws IllegalStateException if this row is already object-backed
+   */
+  public void moveToObjectStore(String objectKey) {
+    if (this.data == null) {
+      throw new IllegalStateException("receipt " + id + " is already object-backed");
+    }
+    this.objectKey = requireNonBlank(objectKey, "objectKey");
+    this.data = null;
   }
 
   private static String requireNonBlank(String value, String field) {
@@ -121,10 +175,16 @@ public class ExpenseReceipt extends Auditable {
   }
 
   /**
-   * @return a defensive copy of the receipt bytes.
+   * @return a defensive copy of the inline receipt bytes, or {@code null} when this row is
+   *     object-backed (the payload lives under {@link #getObjectKey()}).
    */
   public byte[] getData() {
-    return data.clone();
+    return data == null ? null : data.clone();
+  }
+
+  /** The object-store key of the payload (ADR 0048); {@code null} on a legacy inline row. */
+  public String getObjectKey() {
+    return objectKey;
   }
 
   @Override

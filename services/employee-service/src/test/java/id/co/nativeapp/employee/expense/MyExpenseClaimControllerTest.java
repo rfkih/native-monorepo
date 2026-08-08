@@ -25,6 +25,7 @@ import id.co.nativeapp.employee.expense.domain.ReceiptNotFoundException;
 import id.co.nativeapp.employee.expense.dto.ExpenseCategoryResponse;
 import id.co.nativeapp.employee.expense.dto.ExpenseClaimResponse;
 import id.co.nativeapp.employee.expense.dto.PageResponse;
+import id.co.nativeapp.employee.expense.dto.ReceiptContentResponse;
 import id.co.nativeapp.employee.expense.service.ExpenseCategoryReader;
 import id.co.nativeapp.employee.expense.service.ExpenseClaimReader;
 import id.co.nativeapp.employee.expense.service.ExpenseClaimService;
@@ -359,13 +360,15 @@ class MyExpenseClaimControllerTest {
 
   @Test
   void getReceiptReturns200WithTheBytesAndCorrectHeaders() throws Exception {
-    when(receiptReader.myReceipt(CLAIM)).thenReturn(sampleReceipt());
+    when(receiptReader.myReceipt(CLAIM))
+        .thenReturn(new ReceiptContentResponse("image/jpeg", JPEG_BYTES.clone(), "a".repeat(64)));
 
     mockMvc
         .perform(get("/api/v1/me/expense-claims/" + CLAIM + "/receipt"))
         .andExpect(status().isOk())
         .andExpect(header().string("Content-Type", "image/jpeg"))
         .andExpect(header().longValue("Content-Length", JPEG_BYTES.length))
+        .andExpect(header().string("ETag", "\"" + "a".repeat(64) + "\""))
         .andExpect(content().bytes(JPEG_BYTES));
   }
 

@@ -18,4 +18,7 @@ public interface ReceiptMetaView {
   int getByteSize();
 
   String getSha256();
+
+  /** Object-store key (ADR 0048); {@code null} on a legacy inline row. */
+  String getObjectKey();
 }

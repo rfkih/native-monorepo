@@ -74,6 +74,20 @@ spring:
 # the test suite overrides it via the NATIVE_PII_KEY system property in build.gradle.kts. The app
 # fails fast at startup if the key is missing or not a valid 32-byte base64 value.
 native:
+  # Object storage (ADR 0048): expense-receipt payloads are content-addressed objects under the
+  # employee/ prefix (PRIVATE — served only through the authenticated receipt endpoints, never the
+  # public media proxy). Dev defaults target the host-published MinIO container with the fixed dev
+  # credentials docker/minio/init.sh provisions; UAT/prod override via env. No public-base-url:
+  # this service never embeds public media URLs. read-through-migrate flips legacy bytea rows to
+  # object-backed as they are served (off = legacy rows keep serving from bytea, still correct).
+  media:
+    endpoint: ${MEDIA_ENDPOINT:http://localhost:9000}
+    access-key: ${MEDIA_ACCESS_KEY:employee-media}
+    secret-key: ${MEDIA_SECRET_KEY:employee-media-secret}
+    bucket: ${MEDIA_BUCKET:native-media}
+    service-prefix: employee
+    read-through-migrate: ${MEDIA_READ_THROUGH_MIGRATE:true}
+
   # Error inbox + webhook alerting (ADR 0005/0009). A blank webhook-url (the default) disables all
   # outbound HTTP — safe for dev/CI. Set NATIVE_ALERT_WEBHOOK_URL in prod for DLT-milestone alerts.
   alert:
