@@ -101,7 +101,7 @@ export function OutletPicker() {
 
   return (
     <>
-      <div ref={containerRef} className="relative">
+      <div ref={containerRef} className="relative min-w-0 max-w-full">
         {/* Trigger button */}
         <button
           ref={triggerRef}
@@ -111,7 +111,7 @@ export function OutletPicker() {
           aria-label={t('pos.outletSelectorLabel', { name: activeOutlet.name })}
           onClick={() => setOpen((v) => !v)}
           className={cn(
-            'flex h-[40px] min-w-0 max-w-[200px] items-center gap-2 rounded-xl',
+            'flex h-[40px] w-full min-w-0 max-w-[200px] items-center gap-2 rounded-xl',
             'border-[1.5px] border-emerald-line bg-emerald-tint px-3 text-left',
             'text-[13px] font-semibold text-emerald-2',
             'transition-all hover:bg-emerald-tint/70',

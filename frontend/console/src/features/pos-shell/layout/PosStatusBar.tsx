@@ -87,7 +87,7 @@ export function PosStatusBar({
           right (connection pill, pinned actions, the overflow button) is shrink-0, so a long
           outlet name must compress instead of pushing the overflow trigger off a 360px screen
           (owner report: the till menu was unreachable on the S23). */}
-      <div className="min-w-0 shrink overflow-hidden">{outletPicker}</div>
+      <div className="min-w-0 shrink">{outletPicker}</div>
 
       <div className="min-w-0 flex-1" />
 
