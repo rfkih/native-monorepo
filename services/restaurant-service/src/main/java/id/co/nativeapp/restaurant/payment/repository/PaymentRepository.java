@@ -1,6 +1,7 @@
 package id.co.nativeapp.restaurant.payment.repository;
 
 import id.co.nativeapp.restaurant.payment.domain.Payment;
+import id.co.nativeapp.restaurant.payment.projection.PaymentReceiptView;
 import id.co.nativeapp.restaurant.payment.projection.PaymentView;
 import java.util.Optional;
 import java.util.UUID;
@@ -34,4 +35,28 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID> {
               + " FROM payment p WHERE p.id = :id",
       nativeQuery = true)
   Optional<PaymentView> findViewById(@Param("id") UUID id);
+
+  /**
+   * The most recent payment against an order — the order read path's receipt-rebuild need ({@code
+   * GET /api/v1/orders/{id}}, {@code OrderWriter.findById}). A voided+retried order can have
+   * several payment rows; the newest ({@code created_at DESC}) is the one whose receipt the cashier
+   * expects. RLS applies — the caller must be in a {@code @Transactional} context with the tenant
+   * GUC set.
+   *
+   * @param orderId the order to find the latest payment for
+   * @return the narrow receipt projection, or empty when the order has no payment (e.g. a parked,
+   *     unpaid order)
+   */
+  @Query(
+      value =
+          "SELECT p.id AS id, p.order_id AS order_id, p.tender_type AS tender_type,"
+              + " p.status AS status, p.amount_minor AS amount_minor, p.currency AS currency,"
+              + " p.tendered_minor AS tendered_minor, p.change_minor AS change_minor,"
+              + " p.provider_pending AS provider_pending, p.sale_id AS sale_id"
+              + " FROM payment p"
+              + " WHERE p.order_id = :orderId"
+              + " ORDER BY p.created_at DESC"
+              + " LIMIT 1",
+      nativeQuery = true)
+  Optional<PaymentReceiptView> findLatestReceiptViewByOrderId(@Param("orderId") UUID orderId);
 }

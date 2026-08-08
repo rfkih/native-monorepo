@@ -4,11 +4,13 @@ import id.co.nativeapp.money.Money;
 import id.co.nativeapp.restaurant.payment.domain.Payment;
 import id.co.nativeapp.restaurant.payment.domain.TenderType;
 import id.co.nativeapp.restaurant.payment.dto.PaymentResponse;
+import id.co.nativeapp.restaurant.payment.projection.PaymentReceiptView;
 import id.co.nativeapp.restaurant.payment.repository.PaymentRepository;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Instant;
 import java.util.Currency;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -186,5 +188,37 @@ public class PaymentWriter {
             orderId, businessId, zero, zero, zero, saleId, capturedAt, idempotencyKey);
     payment.setCompanyId(companyId);
     return PaymentResponse.from(repository.saveAndFlush(payment));
+  }
+
+  /**
+   * The most recent payment against an order — backs the order read path's receipt-rebuild need
+   * ({@code GET /api/v1/orders/{id}}, {@code OrderWriter.findById}) ONLY; the checkout/pay-parked
+   * write paths already attach the payment they just captured via {@code OrderResponse.withPayment}
+   * and never call this. Read path: a native-query projection ({@link PaymentReceiptView}), mapped
+   * to the response HERE in the service layer (a {@code dto} may not depend on the {@code
+   * projection} layer — CODE-STRUCTURE §3.3/§6).
+   *
+   * @param orderId the order to find the latest payment for
+   * @return the mapped response, or empty when the order has no payment (e.g. a parked, unpaid
+   *     order) — the caller leaves {@code OrderResponse.payment} {@code null} in that case
+   */
+  @Transactional(readOnly = true)
+  public Optional<PaymentResponse> findLatestForOrder(UUID orderId) {
+    return repository.findLatestReceiptViewByOrderId(orderId).map(PaymentWriter::toResponse);
+  }
+
+  /** Maps a read projection to the response shape (currency CHAR(3) is right-padded — strip it). */
+  private static PaymentResponse toResponse(PaymentReceiptView view) {
+    return new PaymentResponse(
+        view.getId(),
+        view.getOrderId(),
+        view.getTenderType(),
+        view.getStatus(),
+        view.getAmountMinor(),
+        view.getCurrency().strip(),
+        view.getTenderedMinor(),
+        view.getChangeMinor(),
+        view.isProviderPending(),
+        view.getSaleId());
   }
 }

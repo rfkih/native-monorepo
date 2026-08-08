@@ -755,7 +755,11 @@ public class OrderWriter {
 
   /**
    * Fetches a single order by id in a FRESH read-only transaction. Used for the GET /orders/{id}
-   * resume path — returns the full order view including lines and modifiers.
+   * resume/reprint path — returns the full order view including lines, modifiers, and (when one
+   * exists) the payment that settled it, so a receipt can be rebuilt from a fresh fetch rather than
+   * only from the checkout/pay-parked response. {@code breakdown} stays {@code null} here
+   * deliberately: the tax/service-charge split is not persisted per order and must not be
+   * recomputed from current rules, which could differ from what was actually charged.
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
   public Optional<OrderResponse> findById(UUID orderId) {
@@ -765,7 +769,11 @@ public class OrderWriter {
             view -> {
               List<OrderLineView> lineViews = lineRepository.findViewsByOrderId(view.getId());
               List<OrderLineResponse> lines = buildLineResponses(lineViews);
-              return toOrderResponse(view, lines);
+              OrderResponse response = toOrderResponse(view, lines);
+              return paymentWriter
+                  .findLatestForOrder(view.getId())
+                  .map(response::withPayment)
+                  .orElse(response);
             });
   }
 
