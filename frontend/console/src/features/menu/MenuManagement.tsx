@@ -2339,16 +2339,22 @@ function MenuManagementInner({ session }: { session: CompanySession }) {
           <OutletPicker />
         </div>
 
+        {/* Phone: both action buttons drop to their own shared row (after the picker row) —
+            inline they crushed the title even with the picker moved; full-width halves give
+            proper touch targets instead. */}
         <Button
           variant="outline"
           onClick={() => setShowManageCategories(true)}
-          className="shrink-0"
+          className="shrink-0 max-sm:order-last max-sm:flex-1"
         >
           <span className="hidden sm:inline">{t('menu.categories.manage')}</span>
           <span className="sm:hidden">{t('menu.categories.manageShort')}</span>
         </Button>
 
-        <Button onClick={() => setShowCreateItem(true)} className="shrink-0">
+        <Button
+          onClick={() => setShowCreateItem(true)}
+          className="shrink-0 max-sm:order-last max-sm:flex-1"
+        >
           <Plus className="size-4" />
           <span>{t('menu.addItem')}</span>
         </Button>

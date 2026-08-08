@@ -152,8 +152,12 @@ function KitchenInner({ session }: { session: CompanySession }) {
             </div>
           ) : null}
 
-          {/* Outlet picker — tracks which outlet this KDS terminal is serving */}
-          <OutletPicker />
+          {/* Outlet picker — tracks which outlet this KDS terminal is serving. Phone: its own
+              full-width second row — inline it crushed the title/live line to nothing at 360px
+              (the header-crush class, see IngredientManagement). */}
+          <div className="min-w-0 max-sm:order-last max-sm:w-full">
+            <OutletPicker />
+          </div>
 
           {/* Refresh indicator */}
           {billsQuery.isFetching ? (

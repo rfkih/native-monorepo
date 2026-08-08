@@ -99,7 +99,10 @@ function CatalogManagementInner({
 
   return (
     <div className="min-h-screen bg-paper">
-      <div className="flex h-16 items-center gap-2.5 border-b border-line bg-surface px-4 sm:px-6">
+      {/* Phone: the header wraps (auto height) and the picker takes its own full-width row —
+          inline at a fixed h-16 it crushed the title (the header-crush class). Desktop keeps
+          the original single h-16 row. */}
+      <div className="flex flex-wrap items-center gap-2.5 border-b border-line bg-surface px-4 py-2.5 sm:h-16 sm:flex-nowrap sm:px-6 sm:py-0">
         <Link
           to="/pos"
           aria-label={t('a11y.backToDashboard')}
@@ -110,7 +113,9 @@ function CatalogManagementInner({
         <div className="min-w-0 flex-1">
           <h1 className="truncate font-display text-[15px] font-bold text-ink">{t('serviceCatalog.title')}</h1>
         </div>
-        <OutletPicker />
+        <div className="min-w-0 max-sm:order-last max-sm:w-full">
+          <OutletPicker />
+        </div>
       </div>
 
       <div className="mx-auto max-w-3xl space-y-6 px-4 py-6 sm:px-6">
