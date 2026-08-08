@@ -22,6 +22,7 @@ import id.co.nativeapp.employee.expense.domain.SelfApprovalException;
 import id.co.nativeapp.employee.expense.dto.ExpenseClaimResponse;
 import id.co.nativeapp.employee.expense.dto.OrgUnitExpenseSummaryResponse;
 import id.co.nativeapp.employee.expense.dto.PageResponse;
+import id.co.nativeapp.employee.expense.dto.ReceiptContentResponse;
 import id.co.nativeapp.employee.expense.service.ExpenseClaimReader;
 import id.co.nativeapp.employee.expense.service.ExpenseClaimService;
 import id.co.nativeapp.employee.expense.service.ReceiptReader;

@@ -31,16 +31,16 @@ import org.springframework.transaction.annotation.Transactional;
  * served from bytea indefinitely, still correct).
  */
 @Component
-public class ReceiptObjectMigrator {
+public class ReceiptObjectMigrationWriter {
 
-  private static final Logger log = LoggerFactory.getLogger(ReceiptObjectMigrator.class);
+  private static final Logger log = LoggerFactory.getLogger(ReceiptObjectMigrationWriter.class);
 
   private final ExpenseReceiptRepository receiptRepository;
   private final MediaStorage mediaStorage;
   private final MediaStorageProperties mediaProperties;
   private final boolean enabled;
 
-  public ReceiptObjectMigrator(
+  public ReceiptObjectMigrationWriter(
       ExpenseReceiptRepository receiptRepository,
       MediaStorage mediaStorage,
       MediaStorageProperties mediaProperties,

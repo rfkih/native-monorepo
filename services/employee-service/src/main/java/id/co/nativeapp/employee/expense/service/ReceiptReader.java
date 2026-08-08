@@ -24,8 +24,8 @@ import org.springframework.transaction.annotation.Transactional;
  * via {@link ExpenseReceiptRepository#findMetaByClaimId} — a projection that never selects {@code
  * data} — then load the FULL entity via the inherited {@code findById}. An object-backed row's
  * bytes come from the object store; a legacy row serves its inline bytea AND opportunistically
- * flips to object-backed via {@link ReceiptObjectMigrator} (read-through migration — never on the
- * critical path, failures are swallowed there). The controller receives the finished {@link
+ * flips to object-backed via {@link ReceiptObjectMigrationWriter} (read-through migration — never
+ * on the critical path, failures are swallowed there). The controller receives the finished {@link
  * ReceiptContentResponse}, never the entity.
  */
 @Service
@@ -35,14 +35,14 @@ public class ReceiptReader {
   private final ExpenseReceiptRepository receiptRepository;
   private final EmployeeRepository employeeRepository;
   private final MediaStorage mediaStorage;
-  private final ReceiptObjectMigrator migrator;
+  private final ReceiptObjectMigrationWriter migrator;
 
   public ReceiptReader(
       ExpenseClaimRepository claimRepository,
       ExpenseReceiptRepository receiptRepository,
       EmployeeRepository employeeRepository,
       MediaStorage mediaStorage,
-      ReceiptObjectMigrator migrator) {
+      ReceiptObjectMigrationWriter migrator) {
     this.claimRepository = claimRepository;
     this.receiptRepository = receiptRepository;
     this.employeeRepository = employeeRepository;
