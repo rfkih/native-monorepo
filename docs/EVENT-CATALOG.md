@@ -1978,18 +1978,24 @@ consumers may decode positionally).
 
 ### `StocktakeCompleted`
 
-Emitted by restaurant-service when a physical inventory stocktake is submitted at the daily
-close (ADR 0038 phase 3, daily close v2). The count adjusts each tracked menu item's stock to
-the counted quantity; this event carries the NET valued shrinkage so finance-service posts a
-single inventory adjustment. `shrinkage_minor` is SERVER-computed by the producer as `Σ over
-cost-bearing lines of (system_qty − counted_qty) × unit_cost_minor` — the valued LOSS — and is
-SIGNED: positive = a net loss/shrinkage (`Dr INVENTORY_SHRINKAGE / Cr INVENTORY`), negative = a
-net gain/found stock (`Dr INVENTORY / Cr INVENTORY_SHRINKAGE`), zero = no journal entry (the
-event is still marked processed). Only lines whose item carries a unit cost contribute; items
-without a cost are counted operationally (stock adjusted) but never post to the ledger.
-Revenue/COGS-on-sale is NOT touched — this is a periodic stocktake, not perpetual inventory.
+Emitted by restaurant-service when a physical inventory stocktake is submitted (ADR 0038
+phase 3, daily close v2; extended by ADR 0046). The counted subject is the flow's tracked
+stock rows — **menu items** in the legacy `/api/v1/stocktakes` flow (`stocktake.service.
+StocktakeWriter`), **ingredients** in the `/api/v1/ingredient-stocktakes` flow
+(`inventory.service.IngredientStocktakeWriter`, ADR 0046) — and the count adjusts each
+counted row's stock to the counted quantity; this event carries the NET valued shrinkage so
+finance-service posts a single inventory adjustment, identical for both subjects.
+`shrinkage_minor` is SERVER-computed by the producer as `Σ over cost-bearing lines of
+(system_qty − counted_qty) × unit_cost_minor` — the valued LOSS — and is SIGNED: positive = a
+net loss/shrinkage (`Dr INVENTORY_SHRINKAGE / Cr INVENTORY`), negative = a net gain/found
+stock (`Dr INVENTORY / Cr INVENTORY_SHRINKAGE`), zero = no journal entry (the event is still
+marked processed). Only lines whose row carries a unit cost contribute; rows without a cost
+are counted operationally (stock adjusted) but never post to the ledger — an ingredient
+stocktake with ZERO costed lines emits no event at all (a currency is required here and there
+is nothing to post; ADR 0046). Revenue/COGS-on-sale is NOT touched — this is a periodic
+stocktake, not perpetual inventory.
 
-- **Producer:** `restaurant-service`
+- **Producer:** `restaurant-service` (two writers: legacy menu-item stocktake + ingredient stocktake, ADR 0046)
 - **Consumers:** `finance-service` (post the inventory-adjustment journal entry)
 - **Aggregate type / partition key:** `stocktake` / `stocktake_id`
 - **Outbox `event_type`:** `StocktakeCompleted`
@@ -2014,7 +2020,7 @@ Revenue/COGS-on-sale is NOT touched — this is a periodic stocktake, not perpet
   "type": "record",
   "name": "StocktakeCompleted",
   "namespace": "id.co.nativeapp.events.restaurant",
-  "doc": "Emitted by restaurant-service when a physical inventory stocktake is submitted at the daily close (ADR 0038 phase 3). The count adjusts each tracked menu item's stock to the counted quantity; this event carries the NET valued shrinkage so finance-service posts a single inventory adjustment. Money is integer minor units + an ISO-4217 currency code, never a float (CLAUDE.md rule 8). shrinkage_minor is SERVER-computed by the producer as Σ over cost-bearing lines of (system_qty − counted_qty) × unit_cost_minor — the valued LOSS — and is SIGNED: positive = a net loss/shrinkage (Dr INVENTORY_SHRINKAGE / Cr INVENTORY), negative = a net gain/found stock (Dr INVENTORY / Cr INVENTORY_SHRINKAGE), zero = no journal entry (the event is still marked processed). Only lines whose item carries a unit cost contribute; items without a cost are counted operationally (stock adjusted) but never post to the ledger. Revenue/COGS-on-sale is NOT touched — this is a periodic stocktake, not perpetual inventory.",
+  "doc": "Emitted by restaurant-service when a physical inventory stocktake is submitted (ADR 0038 phase 3; extended by ADR 0046). The counted subject is the flow's tracked stock rows — MENU ITEMS in the legacy /api/v1/stocktakes flow, INGREDIENTS in the /api/v1/ingredient-stocktakes flow (ADR 0046) — and the count adjusts each counted row's stock to the counted quantity; this event carries the NET valued shrinkage so finance-service posts a single inventory adjustment, identical for both subjects. Money is integer minor units + an ISO-4217 currency code, never a float (CLAUDE.md rule 8). shrinkage_minor is SERVER-computed by the producer as Σ over cost-bearing lines of (system_qty − counted_qty) × unit_cost_minor — the valued LOSS — and is SIGNED: positive = a net loss/shrinkage (Dr INVENTORY_SHRINKAGE / Cr INVENTORY), negative = a net gain/found stock (Dr INVENTORY / Cr INVENTORY_SHRINKAGE), zero = no journal entry (the event is still marked processed). Only lines whose row carries a unit cost contribute; rows without a cost are counted operationally (stock adjusted) but never post to the ledger — an ingredient stocktake with ZERO costed lines emits no event at all (a currency is required here and there is nothing to post; ADR 0046). Revenue/COGS-on-sale is NOT touched — this is a periodic stocktake, not perpetual inventory.",
   "fields": [
     {"name": "stocktake_id", "type": "string", "doc": "The stocktake aggregate id (UUID as string); also the Kafka partition key and the finance idempotency source id."},
     {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string)."},

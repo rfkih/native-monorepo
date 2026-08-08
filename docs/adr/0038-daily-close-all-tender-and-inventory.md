@@ -111,6 +111,8 @@ review → commit. As throughout, **all account codes are ILLUSTRATIVE**; an SME
   evolution, not built here.
 - Inventory enters the ledger only at stocktake (periodic), so between counts the books still don't
   reflect COGS-on-sale; perpetual inventory + recipe/BOM is a separate future program.
+  ([ADR 0046](0046-ingredient-inventory-phase1.md) later re-aims the opname's SUBJECT at
+  ingredients — same periodic model, same `StocktakeCompleted` event; recipes still deferred.)
 - **Known limitation — cash over/short (selisih kas) stays GL-journal-only.** The Phase-2
   `RegisterCloseWriter` posts cash variance to real P&L accounts (`5700` short / `4300` over) but,
   unlike Phase-3 shrinkage, does *not* write the P&L read models, so a till over/short shows only in
