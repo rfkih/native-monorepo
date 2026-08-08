@@ -13,9 +13,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
 
 /**
- * Unit pins for {@link IngredientService}'s integrity-violation mapping (review finding, ADR
- * 0046): the V31 partial-unique name collision becomes a clean 409 domain fault, while any OTHER
- * integrity violation is rethrown untouched.
+ * Unit pins for {@link IngredientService}'s integrity-violation mapping (review finding, ADR 0046):
+ * the V31 partial-unique name collision becomes a clean 409 domain fault, while any OTHER integrity
+ * violation is rethrown untouched.
  */
 class IngredientServiceTest {
 
@@ -59,7 +59,6 @@ class IngredientServiceTest {
         new DataIntegrityViolationException("ck_ingredient_cost_both_or_neither violated");
     when(writer.create(any())).thenThrow(other);
 
-    assertThatThrownBy(() -> asTenant(() -> service.create(request())))
-        .isSameAs(other);
+    assertThatThrownBy(() -> asTenant(() -> service.create(request()))).isSameAs(other);
   }
 }

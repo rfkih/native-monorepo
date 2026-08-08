@@ -806,6 +806,9 @@ public class RoutingConfig {
       RateLimitProperties rateLimits) {
     return GatewayRouterFunctions.route("media")
         .route(GET("/api/media/restaurant/**"), http())
+        // COUPLING (review N1): the bucket segment here must match the services'
+        // native.media.bucket (MEDIA_BUCKET, default native-media) — the fleet does not
+        // override it anywhere; if that ever changes, externalize this rewrite too.
         .before(rewritePath("/api/media/(?<key>.*)", "/native-media/${key}"))
         .before(uri(routes.media()))
         .filter(new AnonymousRateLimitFilter(limiter, rateLimits.media(), "anon:media:"))

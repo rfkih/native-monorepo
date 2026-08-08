@@ -18,13 +18,9 @@ import id.co.nativeapp.payment.settings.repository.PaymentSettingsRepository;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.Objects;
 import java.util.UUID;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 /**
@@ -54,14 +50,14 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
  * detected type is what gets stored and later served. The bytes themselves go to the OBJECT STORE
  * ({@code payment/{tenant}/qr/{sha256}.{ext}}, put inside the write transaction — a rollback
  * orphans one harmless content-addressed object); the row keeps metadata + key. A replaced or
- * removed image's old object is deleted best-effort strictly AFTER COMMIT. Uploading to a scope
- * with no row yet creates it with mode {@link QrisMode#STATIC} — uploading an image IS the intent
- * to use it.
+ * removed image's old object is deliberately NEVER deleted: content addressing means the identical
+ * image uploaded to two scopes (company default + an outlet override) shares ONE key, so a per-row
+ * delete could break the object the sibling scope still serves — the customer-facing payment QR
+ * (review C1). Orphans are accepted waste (ADR 0048). Uploading to a scope with no row yet creates
+ * it with mode {@link QrisMode#STATIC} — uploading an image IS the intent to use it.
  */
 @Component
 public class SettingsWriter {
-
-  private static final Logger log = LoggerFactory.getLogger(SettingsWriter.class);
 
   /** The media family segment in this service's object keys. */
   static final String MEDIA_DOMAIN = "qr";
@@ -148,17 +144,16 @@ public class SettingsWriter {
     String sha256 = Sha256.hex(data);
 
     PaymentSettings row = findScope(unitId).orElseGet(() -> newRow(unitId, QrisMode.STATIC));
-    String previousObjectKey = row.getStaticQrObjectKey();
 
-    // Payload to the object store (ADR 0048), metadata + key on the row.
+    // Payload to the object store (ADR 0048), metadata + key on the row. The replaced image's
+    // old object is NEVER deleted (class Javadoc, review C1): the identical image on another
+    // scope shares the same content-addressed key.
     String objectKey =
         MediaKeys.imageKey(
             mediaProperties.servicePrefix(), tenant, MEDIA_DOMAIN, sha256, canonicalContentType);
     mediaStorage.put(objectKey, data, canonicalContentType);
     row.attachStaticQrObject(canonicalContentType, data.length, sha256, objectKey);
-    PaymentSettings saved = repository.saveAndFlush(row);
-    scheduleReplacedObjectCleanup(previousObjectKey, objectKey);
-    return saved;
+    return repository.saveAndFlush(row);
   }
 
   /** Removes a scope's static QRIS image (404 when the scope has none). */
@@ -172,36 +167,10 @@ public class SettingsWriter {
                 () ->
                     new PaymentSettingsNotFoundException(
                         "This scope has no static QRIS image to remove."));
-    String previousObjectKey = row.getStaticQrObjectKey();
+    // The removed image's object is NEVER deleted (class Javadoc, review C1) — the identical
+    // image on another scope shares the same content-addressed key; orphans are accepted.
     row.removeStaticQr();
     repository.saveAndFlush(row);
-    scheduleReplacedObjectCleanup(previousObjectKey, null);
-  }
-
-  /**
-   * Best-effort delete of a replaced/removed image's object, strictly {@code afterCommit} (the
-   * employee-service ReceiptWriter idiom): deleting before commit could lose the object a
-   * rolled-back transaction's surviving row still references. A failed delete is an accepted orphan
-   * (ADR 0048). No-ops when there is nothing to delete, the key is unchanged (re-upload of the
-   * identical image — content addressing), or no transaction is active (plain unit tests).
-   */
-  private void scheduleReplacedObjectCleanup(String previousObjectKey, String newObjectKey) {
-    if (previousObjectKey == null
-        || previousObjectKey.equals(newObjectKey)
-        || !TransactionSynchronizationManager.isSynchronizationActive()) {
-      return;
-    }
-    TransactionSynchronizationManager.registerSynchronization(
-        new TransactionSynchronization() {
-          @Override
-          public void afterCommit() {
-            try {
-              mediaStorage.delete(previousObjectKey);
-            } catch (RuntimeException e) {
-              log.warn("replaced QRIS object not deleted (accepted orphan): {}", e.getMessage());
-            }
-          }
-        });
   }
 
   private java.util.Optional<PaymentSettings> findScope(UUID unitId) {

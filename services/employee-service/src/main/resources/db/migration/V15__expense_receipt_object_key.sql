@@ -8,11 +8,13 @@
 -- a Flyway backfill (a migration cannot reach the object store, and under FORCE RLS its
 -- UPDATE would silently match 0 rows — the org-service V6/V7 lesson).
 --
--- The CHECK guarantees a row is never payload-less: every receipt has its bytes inline OR
--- in the object store (receipts are expense evidence — a dangling metadata row would be an
--- audit problem, so the DB refuses to represent one).
+-- The CHECK guarantees EXACTLY ONE payload home: every receipt has its bytes inline OR in
+-- the object store — never neither (receipts are expense evidence; a dangling metadata row
+-- would be an audit problem) and never both (the aggregate's moveToObjectStore invariant,
+-- mirrored by payment's V5 qr_complete shape).
 ALTER TABLE expense_receipt ADD COLUMN IF NOT EXISTS object_key TEXT NULL;
 ALTER TABLE expense_receipt ALTER COLUMN data DROP NOT NULL;
 ALTER TABLE expense_receipt
   ADD CONSTRAINT ck_expense_receipt_payload_present
-  CHECK (data IS NOT NULL OR object_key IS NOT NULL);
+  CHECK ((data IS NOT NULL OR object_key IS NOT NULL)
+         AND NOT (data IS NOT NULL AND object_key IS NOT NULL));

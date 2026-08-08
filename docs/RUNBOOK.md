@@ -240,7 +240,10 @@ docker run --rm --network native-dev_default minio/mc:RELEASE.2025-08-13T08-35-4
 - **Round-trip drill**: console → Products → add item with a photo → the response `imageUrl`
   is `http://localhost:8090/api/media/restaurant/<tenant>/menu/<sha>.jpg` and renders anonymously
   (curl it with no token: 200 + `Cache-Control: … immutable`). A bogus key under `restaurant/`
-  is 404; ANY key under `employee/` or `payment/` is 401/403 (route + policy both deny — by design).
+  is **404** on MinIO (a strict AWS-style backend would 403 — the anonymous policy is
+  GetObject-only, no ListBucket; browsers treat both alike); ANY key under `employee/` or
+  `payment/` is 401/403 (route + policy both deny — by design). Anonymous listing of the bucket
+  or any prefix is always denied (verified 403 — the whole point of the explicit policy).
 - **Per-tenant menu-image backfill** (legacy inline base64 → store): as an OWNER of that tenant,
   `curl -X POST -H "Authorization: Bearer $TOK" $BASE/api/v1/menu/images/migrate` → `{"migrated":N,
   "skipped":M}`. Idempotent; run once per tenant after deploy. Receipts + QRIS need nothing:

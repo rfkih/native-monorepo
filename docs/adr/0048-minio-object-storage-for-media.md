@@ -30,7 +30,11 @@ for an unmodified backing store).
   database-per-service**: `docker/minio/init.sh` provisions one prefix-scoped user per service, so
   cross-service access is impossible at the store. `companyId` in the key is tenant isolation and
   makes offboarding a prefix delete. **Content-hash keys** make objects immutable (`Cache-Control:
-  immutable`, dedup, CDN-ready).
+  immutable`, dedup, CDN-ready). The anonymous grant is an EXPLICIT GetObject-only policy on the
+  `restaurant/` prefix — never a `download` preset, which can include ListBucket and would let
+  anonymous clients enumerate keys, defeating unguessability (MinIO still answers a
+  covered-prefix miss with 404; a strict AWS-style backend would 403 — both fine for a browser,
+  and listing is denied either way).
 - **Metadata stays in the owning service's DB** (Auditable + RLS + sha256 + byte size + canonical
   content type — the receipt idiom unchanged); only the blob column is replaced by the object key.
   The blob itself is NOT Debezium-audited content: the audited metadata row + immutable
@@ -60,8 +64,11 @@ for an unmodified backing store).
   evidence).
 - **No identity-document images** (KTP/NIK scans, rule 6 PII) under this design — that requires
   SSE-KMS encryption and its own ADR before the first such byte is stored.
-- Orphaned objects (rolled-back writes, replaced content) are accepted waste, bounded by content
-  addressing; cleanup is best-effort delete on replace, never a correctness concern.
+- Orphaned objects (rolled-back writes, replaced/removed content) are accepted waste, bounded by
+  content addressing — and **replaced objects are deliberately never deleted**: byte-identical
+  content on two rows of one tenant shares a single key, so a per-row delete could destroy the
+  object a sibling row still references (a lost receipt or a broken payment QR). Reclamation, if
+  ever needed, is an offline sweep that checks references first.
 - The community MinIO has no web console: all operations are `mc` one-liners (RUNBOOK). Vendor
   drift is a watched risk with a cheap exit (`mc mirror` to any S3 target + config change).
 - Per-service media credentials join the secret set (dev: fixed dev creds in compose; UAT:

@@ -39,8 +39,27 @@ echo "minio-init: ensuring bucket ${BUCKET} (versioned)"
 mc mb --ignore-existing "native/${BUCKET}"
 mc version enable "native/${BUCKET}"
 
-echo "minio-init: anonymous download on restaurant/ prefix ONLY"
-mc anonymous set download "native/${BUCKET}/restaurant"
+# Anonymous access: an EXPLICIT bucket policy granting s3:GetObject on the restaurant/
+# prefix ONLY — never the `download` preset, which can carry prefix ListBucket and would
+# let anonymous clients ENUMERATE keys, defeating the unguessable-content-hash model
+# (review W1). Consequence: an anonymous GET of a MISSING restaurant/ key is 403 (S3
+# returns 404 only to callers holding ListBucket), which is fine — the gateway marks
+# every non-2xx no-store and a browser <img> treats 403 and 404 identically.
+echo "minio-init: anonymous GetObject-only policy on restaurant/ prefix"
+cat > /tmp/anonymous-media.json <<POLICY
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {"AWS": ["*"]},
+      "Action": ["s3:GetObject"],
+      "Resource": ["arn:aws:s3:::${BUCKET}/restaurant/*"]
+    }
+  ]
+}
+POLICY
+mc anonymous set-json /tmp/anonymous-media.json "native/${BUCKET}"
 
 # create_scoped_user <service> <access-key> <secret-key>
 # One user + one policy per service, allowed Put/Get/Delete under its own prefix only.

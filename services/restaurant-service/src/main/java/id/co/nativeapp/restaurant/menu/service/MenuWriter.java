@@ -1,6 +1,8 @@
 package id.co.nativeapp.restaurant.menu.service;
 
+import id.co.nativeapp.mediastorage.UnsupportedImageTypeException;
 import id.co.nativeapp.money.Money;
+import id.co.nativeapp.restaurant.menu.domain.InvalidMenuImageException;
 import id.co.nativeapp.restaurant.menu.domain.MenuItem;
 import id.co.nativeapp.restaurant.menu.dto.CreateMenuItemRequest;
 import id.co.nativeapp.restaurant.menu.dto.MenuItemResponse;
@@ -182,8 +184,12 @@ public class MenuWriter {
         item.attachImage(imageStore.storeDataUrl(companyId, item.getImageUrl()));
         repository.saveAndFlush(item);
         migrated++;
-      } catch (RuntimeException e) {
-        // Item id only — never the payload (it stays serving via dual-read).
+      } catch (InvalidMenuImageException | UnsupportedImageTypeException e) {
+        // A genuinely unusable LEGACY payload (corrupt base64, unrecognised format): skip it —
+        // the row keeps serving via dual-read and the response's skipped count flags it for
+        // manual attention. Item id only in the log — never the payload. Any OTHER failure
+        // (object store down, key-build bug) deliberately propagates and fails the request
+        // LOUD (review W2): an outage must never masquerade as "N corrupt rows" under a 200.
         log.warn("menu image migrate: skipped item {}: {}", itemId, e.getMessage());
         skipped++;
       }

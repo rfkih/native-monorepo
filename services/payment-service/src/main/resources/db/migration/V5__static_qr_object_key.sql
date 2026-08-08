@@ -11,7 +11,7 @@
 -- columns together (the V2 invariant), and a row may never carry BOTH payload homes.
 ALTER TABLE payment_settings ADD COLUMN IF NOT EXISTS static_qr_object_key TEXT NULL;
 
-ALTER TABLE payment_settings DROP CONSTRAINT ck_payment_settings_qr_complete;
+ALTER TABLE payment_settings DROP CONSTRAINT IF EXISTS ck_payment_settings_qr_complete;
 ALTER TABLE payment_settings
   ADD CONSTRAINT ck_payment_settings_qr_complete
   CHECK (

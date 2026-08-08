@@ -8,7 +8,6 @@ import id.co.nativeapp.employee.expense.domain.ClaimStatus;
 import id.co.nativeapp.employee.expense.domain.ExpenseClaim;
 import id.co.nativeapp.employee.expense.domain.ExpenseReceipt;
 import id.co.nativeapp.employee.expense.domain.InvalidReceiptContentTypeException;
-import id.co.nativeapp.employee.expense.projection.ReceiptMetaView;
 import id.co.nativeapp.employee.expense.repository.ExpenseClaimRepository;
 import id.co.nativeapp.employee.expense.repository.ExpenseReceiptRepository;
 import id.co.nativeapp.employee.me.domain.EmployeeNotLinkedException;
@@ -22,13 +21,9 @@ import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.Objects;
 import java.util.UUID;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 /**
@@ -60,8 +55,10 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
  * <p><strong>Payload home (ADR 0048).</strong> The validated bytes go to the OBJECT STORE
  * (content-addressed under {@code employee/{tenant}/receipt/{sha256}.{ext}}, put inside the write
  * transaction — a rollback orphans one harmless content-addressed object); the row keeps metadata
- * only. A replaced receipt's old object is deleted best-effort AFTER COMMIT (never before — a
- * rollback must not lose the object the surviving row still points to).
+ * only. A replaced receipt's old object is deliberately NEVER deleted: content addressing means
+ * byte-identical receipts on DIFFERENT claims share one key, so a per-row delete could destroy the
+ * object a sibling row still references (review C1) — receipts are audit evidence, and an orphaned
+ * object is accepted waste while a dangling row would be data loss.
  *
  * <p><strong>Replace on re-upload.</strong> A claim carries at most one live receipt in v1: this
  * method locks the claim row ({@code SELECT … FOR UPDATE} — E3 review W1), deletes any existing
@@ -83,8 +80,6 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
  */
 @Component
 public class ReceiptWriter {
-
-  private static final Logger log = LoggerFactory.getLogger(ReceiptWriter.class);
 
   /** The media family segment in this service's object keys. */
   static final String MEDIA_DOMAIN = "receipt";
@@ -153,16 +148,11 @@ public class ReceiptWriter {
     claimRepository.lockForReceiptSwap(claimId);
     requireOwnDraftClaim(claimId, me.getId());
 
-    // The replaced receipt's object (if any) — deletable only AFTER this transaction commits.
-    String previousObjectKey =
-        receiptRepository
-            .findMetaByClaimId(claimId)
-            .map(ReceiptMetaView::getObjectKey)
-            .orElse(null);
-
     // Payload to the object store (ADR 0048), metadata row to Postgres — put BEFORE the row so a
     // committed row can never dangle; the reverse failure (stored object, rolled-back row) is a
-    // harmless content-addressed orphan.
+    // harmless content-addressed orphan. The replaced receipt's old object is NEVER deleted (class
+    // Javadoc, review C1): a byte-identical receipt on a sibling claim shares the same key, so a
+    // per-row delete could destroy evidence another row still references.
     String objectKey =
         MediaKeys.imageKey(
             mediaProperties.servicePrefix(), tenant, MEDIA_DOMAIN, sha256, canonicalContentType);
@@ -174,35 +164,7 @@ public class ReceiptWriter {
     ExpenseReceipt receipt =
         new ExpenseReceipt(claimId, canonicalContentType, data.length, sha256, objectKey);
     receipt.setCompanyId(tenant);
-    ExpenseReceipt saved = receiptRepository.saveAndFlush(receipt);
-    scheduleReplacedObjectCleanup(previousObjectKey, objectKey);
-    return saved;
-  }
-
-  /**
-   * Best-effort delete of a REPLACED receipt's object, registered to run only {@code afterCommit}:
-   * deleting before commit could lose the object a rolled-back transaction's surviving row still
-   * references. A failed delete is an accepted orphan (ADR 0048), never an error. No-ops when the
-   * old and new keys are equal (re-upload of the identical file — content addressing) or outside a
-   * transaction (plain unit tests).
-   */
-  private void scheduleReplacedObjectCleanup(String previousObjectKey, String newObjectKey) {
-    if (previousObjectKey == null
-        || previousObjectKey.equals(newObjectKey)
-        || !TransactionSynchronizationManager.isSynchronizationActive()) {
-      return;
-    }
-    TransactionSynchronizationManager.registerSynchronization(
-        new TransactionSynchronization() {
-          @Override
-          public void afterCommit() {
-            try {
-              mediaStorage.delete(previousObjectKey);
-            } catch (RuntimeException e) {
-              log.warn("replaced receipt object not deleted (accepted orphan): {}", e.getMessage());
-            }
-          }
-        });
+    return receiptRepository.saveAndFlush(receipt);
   }
 
   private ExpenseClaim requireOwnDraftClaim(UUID claimId, UUID employeeId) {
