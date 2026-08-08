@@ -1,2 +1,3 @@
 id.co.nativeapp.security.NativeSecurityAutoConfiguration
 id.co.nativeapp.security.NativeProblemDetailAutoConfiguration
+id.co.nativeapp.security.OperatorContextAutoConfiguration

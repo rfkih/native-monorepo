@@ -23,7 +23,9 @@ import org.springframework.web.servlet.function.ServerResponse;
  *   <li>{@code X-Company-Id} — the resolved ACTIVE company (what the services' tenant binding
  *       reads),
  *   <li>{@code X-Actor} — the {@code sub} (the acting principal),
- *   <li>{@code X-Roles} — the comma-joined role names.
+ *   <li>{@code X-Roles} — the comma-joined role names,
+ *   <li>{@code X-Actor-Type} — {@code device | user} (ADR 0049), from the {@code actor_type} claim,
+ *       defaulting to {@code "user"} when absent.
  * </ul>
  *
  * <p><strong>Active-company selection.</strong> A multi-company login picks its active company per
@@ -33,9 +35,11 @@ import org.springframework.web.servlet.function.ServerResponse;
  * is the default, so a single-company login behaves exactly as before.
  *
  * <p><strong>Spoof defence.</strong> Any inbound {@code X-Company-Id} / {@code X-Actor} / {@code
- * X-Roles} from the client is removed before the JWT-derived values are set: {@code X-Company-Id}
- * only survives as the VALIDATED selection, never verbatim; the headers leaving the gateway are
- * derived solely from the verified token plus the token-validated selection.
+ * X-Roles} / {@code X-Actor-Type} from the client is removed before the JWT-derived values are set:
+ * {@code X-Company-Id} only survives as the VALIDATED selection, never verbatim; the headers
+ * leaving the gateway are derived solely from the verified token plus the token-validated
+ * selection. A client can therefore never self-declare {@code X-Actor-Type: user} to dodge a future
+ * operator-required guard (ADR 0049 P4).
  *
  * <p>If the token carries NO companies the request is rejected with {@code 403} (authenticated but
  * not authorized for any tenant-scoped service — §1.1), UNLESS this instance was built {@link
@@ -59,6 +63,16 @@ public final class TenantContextHeaderFilter
 
   /** Comma-joined granted roles. */
   public static final String ROLES_HEADER = "X-Roles";
+
+  /**
+   * Actor-type header (ADR 0049): {@code device | user}, gateway-injected from the JWT {@code
+   * actor_type} claim ({@link TenantJwtAuthoritiesConverter#extractActorType}), defaulting to
+   * {@code "user"} when the claim is absent — inert until ADR 0049 P3 provisions per-outlet kiosk
+   * ({@code device}) logins. On the strip list ({@link #managedHeaders()}) exactly like {@link
+   * #ACTOR_HEADER}/{@link #ROLES_HEADER}, so a client can never self-declare {@code user} to dodge
+   * a future operator-required guard (ADR 0049 P4).
+   */
+  public static final String ACTOR_TYPE_HEADER = "X-Actor-Type";
 
   /** Whether a 0-company token may pass through (tenant-less) instead of being 403'd. */
   private final boolean tenantOptional;
@@ -94,6 +108,7 @@ public final class TenantContextHeaderFilter
     List<String> allowed = TenantJwtAuthoritiesConverter.extractCompanyIds(jwt);
     String actor = jwt.getSubject();
     String roles = String.join(",", TenantJwtAuthoritiesConverter.extractRoles(jwt));
+    String actorType = TenantJwtAuthoritiesConverter.extractActorType(jwt);
 
     if (allowed.isEmpty()) {
       if (!tenantOptional) {
@@ -109,8 +124,10 @@ public final class TenantContextHeaderFilter
                     headers.remove(COMPANY_HEADER);
                     headers.remove(ACTOR_HEADER);
                     headers.remove(ROLES_HEADER);
+                    headers.remove(ACTOR_TYPE_HEADER);
                     headers.set(ACTOR_HEADER, actor);
                     headers.set(ROLES_HEADER, roles);
+                    headers.set(ACTOR_TYPE_HEADER, actorType);
                   })
               .build();
       return next.handle(tenantless);
@@ -137,9 +154,11 @@ public final class TenantContextHeaderFilter
                   headers.remove(COMPANY_HEADER);
                   headers.remove(ACTOR_HEADER);
                   headers.remove(ROLES_HEADER);
+                  headers.remove(ACTOR_TYPE_HEADER);
                   headers.set(COMPANY_HEADER, active);
                   headers.set(ACTOR_HEADER, actor);
                   headers.set(ROLES_HEADER, roles);
+                  headers.set(ACTOR_TYPE_HEADER, actorType);
                 })
             .build();
 
@@ -154,8 +173,16 @@ public final class TenantContextHeaderFilter
     return null;
   }
 
-  /** The header names this filter manages — strips inbound, sets from the JWT. */
+  /**
+   * The header names this filter manages — strips inbound, sets from the JWT. {@link
+   * AnonymousTenantHeaderStripFilter} reuses this list so the anonymous self-order route strips the
+   * SAME headers (never diverges) — including {@link #ACTOR_TYPE_HEADER}, so an anonymous caller
+   * can never inject {@code X-Actor-Type} either. Deliberately does NOT include {@code
+   * X-Operator-Session} (ADR 0049 P2): that header is not gateway-managed — it passes through
+   * untouched (there is no global unknown-header strip in this gateway) for restaurant-service's
+   * {@code OperatorSessionFilter} to verify OFFLINE.
+   */
   public static List<String> managedHeaders() {
-    return List.of(COMPANY_HEADER, ACTOR_HEADER, ROLES_HEADER);
+    return List.of(COMPANY_HEADER, ACTOR_HEADER, ROLES_HEADER, ACTOR_TYPE_HEADER);
   }
 }

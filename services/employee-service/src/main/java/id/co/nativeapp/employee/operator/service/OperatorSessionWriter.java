@@ -2,7 +2,6 @@ package id.co.nativeapp.employee.operator.service;
 
 import id.co.nativeapp.employee.assignment.domain.Assignment;
 import id.co.nativeapp.employee.assignment.repository.AssignmentRepository;
-import id.co.nativeapp.employee.config.OperatorTokenSigningKey;
 import id.co.nativeapp.employee.employee.domain.Employee;
 import id.co.nativeapp.employee.employee.repository.EmployeeRepository;
 import id.co.nativeapp.employee.operator.domain.InvalidOperatorPinException;
@@ -14,6 +13,7 @@ import id.co.nativeapp.employee.operator.dto.OperatorSessionResponse;
 import id.co.nativeapp.employee.operator.repository.OperatorPinRepository;
 import id.co.nativeapp.security.OperatorTokenCodec;
 import id.co.nativeapp.security.OperatorTokenPayload;
+import id.co.nativeapp.security.OperatorTokenSigningKey;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Clock;

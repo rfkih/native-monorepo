@@ -1,4 +1,4 @@
-package id.co.nativeapp.employee.config;
+package id.co.nativeapp.security;
 
 import java.time.Duration;
 import java.util.Base64;
@@ -6,8 +6,12 @@ import java.util.Objects;
 
 /**
  * Holds the decoded {@code native.operator-token.signing-key} bytes + the configured {@link
- * #tokenTtl()} — the small bean {@code OperatorSessionWriter} (operator feature) mints tokens with,
- * via {@code libs/security} {@code OperatorTokenCodec} (ADR 0049 P1).
+ * #tokenTtl()} (ADR 0049 P1/P2) — promoted from employee-service (the token MINTER) into {@code
+ * libs/security} in P2 so every OFFLINE VERIFIER (restaurant-service's {@code
+ * OperatorTokenSigningConfig}, and every future vertical) can build the identical typed key without
+ * duplicating this class. Employee-service's {@code operator.service.OperatorSessionWriter} mints
+ * tokens with it via {@link OperatorTokenCodec}; a vertical's {@code OperatorSessionFilter} (also
+ * {@code libs/security}) verifies with it.
  *
  * <p>Validation mirrors {@code PiiCipher.fromBase64Key} / {@code
  * SelfOrderSecretCipher.fromBase64Key} (fail fast at bean creation): valid base64, decoding to AT
@@ -58,8 +62,9 @@ public final class OperatorTokenSigningKey {
   }
 
   /**
-   * The raw HMAC signing-key bytes, for {@code OperatorTokenCodec.encode}. Never logged (rule 6);
-   * returns a defensive copy so a caller cannot mutate the shared key in place.
+   * The raw HMAC signing-key bytes, for {@code OperatorTokenCodec.encode}/{@code verifySignature}.
+   * Never logged (rule 6); returns a defensive copy so a caller cannot mutate the shared key in
+   * place.
    */
   public byte[] secretBytes() {
     return secretBytes.clone();

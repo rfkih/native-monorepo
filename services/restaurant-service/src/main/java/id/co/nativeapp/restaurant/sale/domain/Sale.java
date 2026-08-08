@@ -223,4 +223,26 @@ public class Sale extends Auditable {
   public String getSoldByUserId() {
     return soldByUserId;
   }
+
+  /**
+   * Stamps the verified operator's Keycloak {@code sub} as this sale's seller (ADR 0049 P2) —
+   * called by {@code SaleWriter} on a freshly-constructed (not-yet-persisted) sale, from an {@code
+   * OperatorContextProvider} principal, NEVER from a client-supplied value (rule 5).
+   *
+   * <p>Guarded to fire only when {@link #soldByUserId} is still {@code null}: the {@code
+   * sold_by_user_id} column is {@code updatable=false} (see the field javadoc), so this is meant to
+   * run exactly once, at creation. The guard makes that invariant explicit and fails loudly instead
+   * of silently no-op'ing at the database level on a later, mistaken call against an already-saved
+   * sale.
+   *
+   * @param userId the operator's Keycloak {@code sub} — never a client-supplied value
+   * @throws IllegalStateException if {@link #soldByUserId} is already stamped on this sale
+   */
+  public void stampSeller(String userId) {
+    Objects.requireNonNull(userId, "userId");
+    if (this.soldByUserId != null) {
+      throw new IllegalStateException("soldByUserId is already stamped on this sale");
+    }
+    this.soldByUserId = userId;
+  }
 }

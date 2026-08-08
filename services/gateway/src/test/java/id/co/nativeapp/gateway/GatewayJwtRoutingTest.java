@@ -54,11 +54,12 @@ class GatewayJwtRoutingTest extends GatewayIntegrationTestBase {
             .get()
             .uri("/api/v1/sales/123")
             .header(HttpHeaders.AUTHORIZATION, bearer(token))
-            // The client TRIES to spoof its actor/roles — the gateway must overwrite these. (A
-            // spoofed X-Company-Id naming a FOREIGN company is no longer overwritten — it is
-            // rejected 403 outright; see GatewayCompanySelectionTest. ADR 0021.)
+            // The client TRIES to spoof its actor/roles/actor-type — the gateway must overwrite
+            // these. (A spoofed X-Company-Id naming a FOREIGN company is no longer overwritten — it
+            // is rejected 403 outright; see GatewayCompanySelectionTest. ADR 0021.)
             .header(TenantContextHeaderFilter.ACTOR_HEADER, "attacker")
             .header(TenantContextHeaderFilter.ROLES_HEADER, "superadmin")
+            .header(TenantContextHeaderFilter.ACTOR_TYPE_HEADER, "device")
             .retrieve()
             .body(String.class);
 
@@ -85,6 +86,32 @@ class GatewayJwtRoutingTest extends GatewayIntegrationTestBase {
         .doesNotContain("offline_access")
         .doesNotContain("uma_authorization")
         .doesNotContain("default-roles-native");
+    // ADR 0049: X-Actor-Type defaults to "user" (this token's login carries no actor_type
+    // attribute) — the spoofed "device" value is overwritten, never honoured from the client.
+    assertThat(forwarded.getHeader(TenantContextHeaderFilter.ACTOR_TYPE_HEADER)).isEqualTo("user");
+  }
+
+  /**
+   * ADR 0049 P2: the gateway has no global unknown-header strip, so a client-sent {@code
+   * X-Operator-Session} — NOT one of {@link TenantContextHeaderFilter#managedHeaders()} — passes
+   * through to the downstream untouched, for restaurant-service's {@code OperatorSessionFilter} to
+   * verify OFFLINE. This is the one header this gateway deliberately does NOT manage/strip/inject.
+   */
+  @Test
+  void anOperatorSessionHeaderPassesThroughToTheDownstreamUntouched() throws Exception {
+    String token = obtainAccessToken();
+    String operatorToken = "some-operator-session-token.signature";
+
+    gatewayClient()
+        .get()
+        .uri("/api/v1/sales/123")
+        .header(HttpHeaders.AUTHORIZATION, bearer(token))
+        .header("X-Operator-Session", operatorToken)
+        .retrieve()
+        .body(String.class);
+
+    RecordedRequest forwarded = theForwardedRequest();
+    assertThat(forwarded.getHeader("X-Operator-Session")).isEqualTo(operatorToken);
   }
 
   @Test

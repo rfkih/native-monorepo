@@ -107,6 +107,16 @@ native:
     # backstop. NATIVE_SELFORDER_CACHE_TTL env var.
     cache-ttl: ${NATIVE_SELFORDER_CACHE_TTL:PT30M}
 
+  # Operator-session HMAC signing key (ADR 0049 P2) — mirrors employee-service's identical property
+  # (the MINTER side; restaurant-service is an OFFLINE VERIFIER of the same tokens). DISTINCT from
+  # native.giftcard.code-key / native.self-order.secret-key: this key is shared FLEET-WIDE (every
+  # vertical must verify a token employee-service minted, offline — rule 2). base64 of the 32 ASCII
+  # bytes "native-dev-optok-placeholder-key" — a dev-only placeholder, not a real secret; refused
+  # outside the dev profile by OperatorTokenSigningConfig's L2 guard. In production
+  # NATIVE_OPERATOR_TOKEN_KEY is injected from Vault.
+  operator-token:
+    signing-key: ${NATIVE_OPERATOR_TOKEN_KEY:bmF0aXZlLWRldi1vcHRvay1wbGFjZWhvbGRlci1rZXk=}
+
 management:
   endpoints:
     web:

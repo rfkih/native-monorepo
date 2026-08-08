@@ -110,3 +110,13 @@ claim defaulting to today's behavior (P0), then the PIN/operator session (P1), t
 consuming it (P2), then the device credential + Business-app UX (P3), and only **last** flip the
 `operator-required` enforcement (P4); the Employee app (P5) is independent. Follow-up: implementation
 plan at `~/.claude/plans/sleepy-sleeping-seahorse.md`.
+
+**Known gap deferred to P4 — async-tender operator attribution.** Cash/manual sales are recorded on
+the synchronous ring request, where the operator session is present. A **QRIS/card sale is recorded
+at async capture** (the `PaymentChargeSucceeded` Kafka consumer thread), which has no HTTP request
+and therefore no operator context — so it falls back to the bound actor. This is inert today (every
+actor is still a person), but once outlet-device credentials exist (P3) a PIN-rung digital sale would
+credit the device, not the operator. P4 must carry the operator captured at ring time (when the
+charge is created) through to the async capture (stamp it on the charge/order and read it back), and
+its `operator-required` guard must reconcile with the async path (which never sees `actor_type` or
+`X-Operator-Session`). Tracked with the P2 code-review W2 note.

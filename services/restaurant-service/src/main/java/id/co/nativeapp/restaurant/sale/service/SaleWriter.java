@@ -7,6 +7,7 @@ import id.co.nativeapp.restaurant.metric.domain.RestaurantMetricContract;
 import id.co.nativeapp.restaurant.metric.messaging.MetricPublishedSchema;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
 import id.co.nativeapp.restaurant.register.service.CashWindowLock;
+import id.co.nativeapp.restaurant.sale.domain.OperatorMismatchException;
 import id.co.nativeapp.restaurant.sale.domain.Sale;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
@@ -16,6 +17,8 @@ import id.co.nativeapp.restaurant.sale.messaging.SaleRecordedSchema;
 import id.co.nativeapp.restaurant.sale.projection.SaleHistoryView;
 import id.co.nativeapp.restaurant.sale.projection.SaleView;
 import id.co.nativeapp.restaurant.sale.repository.SaleRepository;
+import id.co.nativeapp.security.OperatorContextProvider;
+import id.co.nativeapp.security.OperatorPrincipal;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Instant;
@@ -59,18 +62,21 @@ public class SaleWriter {
   private final PostOutboxHook postOutboxHook;
   private final OutletAccessGuard outletAccessGuard;
   private final CashWindowLock cashWindowLock;
+  private final OperatorContextProvider operatorContextProvider;
 
   public SaleWriter(
       SaleRepository repository,
       OutboxWriter outboxWriter,
       PostOutboxHook postOutboxHook,
       OutletAccessGuard outletAccessGuard,
-      CashWindowLock cashWindowLock) {
+      CashWindowLock cashWindowLock,
+      OperatorContextProvider operatorContextProvider) {
     this.repository = repository;
     this.outboxWriter = outboxWriter;
     this.postOutboxHook = postOutboxHook;
     this.outletAccessGuard = outletAccessGuard;
     this.cashWindowLock = cashWindowLock;
+    this.operatorContextProvider = operatorContextProvider;
   }
 
   /**
@@ -88,6 +94,10 @@ public class SaleWriter {
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public RecordSaleResult create(RecordSaleCommand command) {
     String companyId = TenantContext.require().companyId();
+    // ADR 0049 P2: read once, up front, so the SAME operator context stamps the seller AND
+    // attributes the commission metric below — read via a verified X-Operator-Session (absent for
+    // every sale today, since no PIN operators exist yet in the field; inert by default).
+    Optional<OperatorPrincipal> operator = operatorContextProvider.current();
 
     // Idempotency fast path: a prior sale under this tenant + key short-circuits,
     // emitting no second event. RLS-scoped, so it can only match this tenant's rows.
@@ -138,6 +148,11 @@ public class SaleWriter {
             command.channel(),
             giftCardRedeemedOf(command));
     sale.setCompanyId(companyId);
+    // ADR 0049 P2: stamp the verified operator (if any) as the seller BEFORE the first save — the
+    // sold_by_user_id column is updatable=false, so this must happen at creation. A mismatched
+    // operator (wrong tenant/outlet) rejects the whole write (OperatorMismatchException, 409) —
+    // never silently falls back to the device actor.
+    stampSellerIfOperatorPresent(sale, operator, companyId, command.businessId());
     Sale saved = repository.saveAndFlush(sale);
 
     // Build the SaleRecorded GenericRecord from the .avsc and serialize it for the
@@ -173,8 +188,9 @@ public class SaleWriter {
         saved.getOccurredAt());
 
     // Own-sales commission feed: emit a MetricPublished (sales_amount @ employee) in the SAME
-    // transaction, attributed to the cashier who rang it (rule 3).
-    emitSalesMetric(saved, companyId);
+    // transaction, attributed to the operator who rang it when one is present (ADR 0049 P2), else
+    // the cashier who rang it (rule 3).
+    emitSalesMetric(saved, companyId, operator);
 
     // Test seam: a no-op in production; a test can install a hook that throws here to
     // prove the sale AND the outbox row roll back together (atomicity, rule 3).
@@ -198,6 +214,8 @@ public class SaleWriter {
   @Transactional(propagation = Propagation.MANDATORY)
   public RecordSaleResult recordInCurrentTx(RecordSaleCommand command) {
     String companyId = TenantContext.require().companyId();
+    // ADR 0049 P2: same operator-context read as create() — see its comment.
+    Optional<OperatorPrincipal> operator = operatorContextProvider.current();
 
     // Phase 5 enforcement — CHOKE-POINT guard (see create()). This is the sole guard for
     // PaymentCaptureWriter.capture (digital-tender revenue recognition), which records a sale in
@@ -217,6 +235,7 @@ public class SaleWriter {
             command.channel(),
             giftCardRedeemedOf(command));
     sale.setCompanyId(companyId);
+    stampSellerIfOperatorPresent(sale, operator, companyId, command.businessId());
     Sale saved = repository.saveAndFlush(sale);
 
     GenericRecord event =
@@ -241,7 +260,7 @@ public class SaleWriter {
         UUID.fromString(companyId),
         saved.getOccurredAt());
 
-    emitSalesMetric(saved, companyId);
+    emitSalesMetric(saved, companyId, operator);
 
     postOutboxHook.afterOutboxWrite(saved);
 
@@ -270,21 +289,50 @@ public class SaleWriter {
   }
 
   /**
-   * Emits one {@code MetricPublished} ({@code sales_amount} @ employee grain) for a sale,
-   * attributed to the cashier who rang it (the bound actor = the JWT sub, also on {@code
-   * sale.created_by}), in the caller's transaction (rule 3). Skipped when the actor is NOT a UUID:
-   * {@code metric_input.subject_id} is a UUID column, so a non-UUID actor (the header-trust dev
-   * recipe's fixed actor) cannot key a metric row — emitting one would fail the consumer decode.
-   * This is a documented dev-mode caveat; real logins always carry a UUID sub.
+   * Emits one {@code MetricPublished} ({@code sales_amount} @ employee grain) for a sale, in the
+   * caller's transaction (rule 3).
+   *
+   * <p><strong>ADR 0049 P2 seller attribution.</strong> When a verified {@code operator} is present
+   * (a PIN-identified cashier), the metric {@code subject} is the OPERATOR's Keycloak {@code sub} —
+   * the load-bearing commission-correctness change, since the operator may differ from the device
+   * actor once outlet credentials exist (P3). When no operator is present (today's norm — no PIN
+   * operators exist yet in the field), behaviour is BYTE-IDENTICAL to pre-ADR-0049: the bound actor
+   * (the JWT sub, also on {@code sale.created_by}), skipped when the actor is NOT a UUID — {@code
+   * metric_input.subject_id} is a UUID column, so a non-UUID actor (the header-trust dev recipe's
+   * fixed actor) cannot key a metric row — emitting one would fail the consumer decode. This is a
+   * documented dev-mode caveat; real logins always carry a UUID sub. The operator path carries no
+   * such fallback: {@code operatorUserId} is always the employee's own linked Keycloak sub
+   * (employee-service refuses to mint a session for an unlinked employee — {@code
+   * OperatorNotLinkedException}), so it is used as-is.
    */
-  private void emitSalesMetric(Sale saved, String companyId) {
-    String actor = TenantContext.require().actor();
-    UUID subject;
-    try {
-      subject = UUID.fromString(actor);
-    } catch (IllegalArgumentException e) {
-      log.debug("Skipping sales_amount metric — actor '{}' is not a UUID sub (dev recipe)", actor);
-      return;
+  private void emitSalesMetric(Sale saved, String companyId, Optional<OperatorPrincipal> operator) {
+    String subjectId;
+    if (operator.isPresent()) {
+      // The operator's user id is always the employee's linked Keycloak sub (a UUID) — but guard it
+      // symmetrically with the actor path (code review S1): metric_input.subject_id is a UUID
+      // column,
+      // so a non-UUID would be a poison MetricPublished the payroll consumer cannot decode. Skip
+      // rather than emit garbage (a corrupt employee.user_id is a data fault, not a per-sale
+      // error).
+      String operatorUserId = operator.get().operatorUserId();
+      try {
+        subjectId = UUID.fromString(operatorUserId).toString();
+      } catch (IllegalArgumentException e) {
+        log.warn(
+            "Skipping sales_amount metric — operator subject '{}' is not a UUID", operatorUserId);
+        return;
+      }
+    } else {
+      String actor = TenantContext.require().actor();
+      UUID subject;
+      try {
+        subject = UUID.fromString(actor);
+      } catch (IllegalArgumentException e) {
+        log.debug(
+            "Skipping sales_amount metric — actor '{}' is not a UUID sub (dev recipe)", actor);
+        return;
+      }
+      subjectId = subject.toString();
     }
     String period = saved.getOccurredAt().atZone(ZoneOffset.UTC).toLocalDate().toString();
     GenericRecord metric =
@@ -292,7 +340,7 @@ public class SaleWriter {
             RestaurantMetricContract.SALES_AMOUNT,
             period,
             RestaurantMetricContract.EMPLOYEE_GRAIN,
-            subject.toString(),
+            subjectId,
             saved.getAmount().amountMinor(),
             saved.getBusinessId().toString());
     outboxWriter.write(
@@ -303,6 +351,28 @@ public class SaleWriter {
         null,
         UUID.fromString(companyId),
         saved.getOccurredAt());
+  }
+
+  /**
+   * Stamps {@code sale.sold_by_user_id} from a verified operator principal, if present (ADR 0049
+   * P2). No-op when {@code operator} is empty — every sale is unaffected until PIN operators exist
+   * in the field (inert by default).
+   *
+   * @throws OperatorMismatchException if the operator token's {@code companyId}/{@code businessId}
+   *     do not match the bound tenant / this sale's own outlet — a stolen/misdirected token must
+   *     never attribute a sale, and must never silently fall back to the device actor either
+   */
+  private static void stampSellerIfOperatorPresent(
+      Sale sale, Optional<OperatorPrincipal> operator, String companyId, UUID businessId) {
+    if (operator.isEmpty()) {
+      return;
+    }
+    OperatorPrincipal principal = operator.get();
+    if (!principal.companyId().equals(companyId) || !principal.businessId().equals(businessId)) {
+      throw new OperatorMismatchException(
+          companyId, principal.companyId(), businessId, principal.businessId());
+    }
+    sale.stampSeller(principal.operatorUserId());
   }
 
   /**

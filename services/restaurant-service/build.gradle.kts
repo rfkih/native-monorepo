@@ -136,4 +136,10 @@ tasks.named<Test>("test") {
     // every other service's test task (loyalty/carwash/barbershop-service) — see
     // GiftCardCodeGenerator's class javadoc for why a fleet-wide key match matters.
     systemProperty("NATIVE_GIFTCARD_CODE_KEY", "Z2lmdC1jYXJkLWNvZGUtaG1hYy1rZXktMDEyMzQ1Njc=")
+    // ADR 0049 P2: the operator-session HMAC signing key, IDENTICAL to employee-service's test value
+    // (both a real, valid key — never the committed application.yml dev placeholder, which
+    // OperatorTokenSigningConfig's L2 guard would only reject outside the dev profile anyway; this
+    // just keeps the two services' test fixtures byte-for-byte matched). Decodes to the 32 ASCII
+    // bytes "native-optok-test-key-0123456789".
+    systemProperty("NATIVE_OPERATOR_TOKEN_KEY", "bmF0aXZlLW9wdG9rLXRlc3Qta2V5LTAxMjM0NTY3ODk=")
 }

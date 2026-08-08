@@ -172,6 +172,34 @@ class LayeredArchitectureTest {
     rule.check(classes);
   }
 
+  /**
+   * ADR 0049 rule 2: a vertical verifies the operator token OFFLINE (self-contained HMAC, {@code
+   * libs/security OperatorSessionFilter}) and holds only its own local read models — it must NEVER
+   * hold a synchronous HTTP client to another business service (CLAUDE.md hard rule 2, "no
+   * synchronous calls between business services"). Bans the two Spring web-client families ({@code
+   * RestClient}/{@code RestTemplate}'s package, and the reactive {@code WebClient}'s package) and
+   * the raw JDK {@link java.net.http.HttpClient} package — any of the three would be a live
+   * cross-service synchronous call, exactly what the offline-verified operator token (and every
+   * other event-driven integration in this fleet) exists to avoid.
+   */
+  @Test
+  void verticalsNeverHoldASynchronousCrossServiceHttpClient() {
+    ArchRule rule =
+        noClasses()
+            .that()
+            .resideInAPackage(BASE_PACKAGE + "..")
+            .should()
+            .dependOnClassesThat()
+            .resideInAnyPackage(
+                "org.springframework.web.client..",
+                "org.springframework.web.reactive.function.client..",
+                "java.net.http..")
+            .as(
+                "verticals verify the operator token OFFLINE + hold local read models — no"
+                    + " synchronous cross-service HTTP client, rule 2 / ADR 0049");
+    rule.check(classes);
+  }
+
   @Test
   void servicesMustNotDependOnControllers() {
     ArchRule rule =

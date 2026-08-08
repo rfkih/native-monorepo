@@ -73,6 +73,21 @@
             "access.token.claim": "true",
             "userinfo.token.claim": "false"
           }
+        },
+        {
+          "name": "actor_type",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "actor_type",
+            "claim.name": "actor_type",
+            "jsonType.label": "String",
+            "multivalued": "false",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "false"
+          }
         }
       ]
     },
@@ -132,6 +147,21 @@
             "claim.name": "roles",
             "jsonType.label": "String",
             "multivalued": "true",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "false"
+          }
+        },
+        {
+          "name": "actor_type",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "actor_type",
+            "claim.name": "actor_type",
+            "jsonType.label": "String",
+            "multivalued": "false",
             "id.token.claim": "false",
             "access.token.claim": "true",
             "userinfo.token.claim": "false"

@@ -14,6 +14,7 @@ import id.co.nativeapp.restaurant.sale.projection.SaleHistoryView;
 import id.co.nativeapp.restaurant.sale.repository.SaleRepository;
 import id.co.nativeapp.restaurant.sale.service.PostOutboxHook;
 import id.co.nativeapp.restaurant.sale.service.SaleWriter;
+import id.co.nativeapp.security.OperatorContextProvider;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Instant;
 import java.util.List;
@@ -37,8 +38,17 @@ class SaleHistoryWriterTest {
   private final PostOutboxHook postOutboxHook = mock(PostOutboxHook.class);
   private final OutletAccessGuard outletAccessGuard = mock(OutletAccessGuard.class);
   private final CashWindowLock cashWindowLock = mock(CashWindowLock.class);
+  // A real (not mocked) instance: outside a bound HTTP request it always resolves to
+  // Optional.empty() (no OperatorPrincipal) — exactly what this unaffected-by-ADR-0049 test needs.
+  private final OperatorContextProvider operatorContextProvider = new OperatorContextProvider();
   private final SaleWriter writer =
-      new SaleWriter(repository, outboxWriter, postOutboxHook, outletAccessGuard, cashWindowLock);
+      new SaleWriter(
+          repository,
+          outboxWriter,
+          postOutboxHook,
+          outletAccessGuard,
+          cashWindowLock,
+          operatorContextProvider);
 
   private static <T> T asTenant(Callable<T> action) {
     try {

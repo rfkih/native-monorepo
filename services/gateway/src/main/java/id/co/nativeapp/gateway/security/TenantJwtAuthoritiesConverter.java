@@ -43,6 +43,18 @@ public final class TenantJwtAuthoritiesConverter
   public static final String ROLES_CLAIM = "roles";
 
   /**
+   * Custom claim carrying the login's actor type ({@code device | user}, ADR 0049) — a Keycloak
+   * {@code oidc-usermodel-attribute-mapper} maps the {@code actor_type} user attribute into it.
+   * Only a per-outlet kiosk login (ADR 0049 P3, the Business-app device credential) ever carries
+   * {@code device}; every login today has no such attribute, so the claim is absent and defaults to
+   * {@code "user"} (see {@link #extractActorType}) — inert until device credentials exist.
+   */
+  public static final String ACTOR_TYPE_CLAIM = "actor_type";
+
+  /** The default actor type when the token carries no {@link #ACTOR_TYPE_CLAIM}. */
+  public static final String DEFAULT_ACTOR_TYPE = "user";
+
+  /**
    * The curated business roles a downstream service authorizes on. Only these are projected into
    * authorities / {@code X-Roles}; Keycloak's infrastructure roles ({@code default-roles-native},
    * {@code offline_access}, {@code uma_authorization}, ...) are dropped at the edge.
@@ -103,6 +115,20 @@ public final class TenantJwtAuthoritiesConverter
       addCuratedRoles(m.get(ROLES_CLAIM), roles);
     }
     return roles;
+  }
+
+  /**
+   * Recovers the login's actor type ({@code device | user}, ADR 0049) from the {@code actor_type}
+   * claim, defaulting to {@link #DEFAULT_ACTOR_TYPE} ({@code "user"}) when the claim is absent or
+   * blank — every login today (no device credentials exist yet) resolves to the default, so this is
+   * inert until ADR 0049 P3 provisions per-outlet kiosk logins.
+   */
+  public static String extractActorType(Jwt jwt) {
+    Object claim = jwt.getClaim(ACTOR_TYPE_CLAIM);
+    if (claim instanceof String s && !s.isBlank()) {
+      return s;
+    }
+    return DEFAULT_ACTOR_TYPE;
   }
 
   private static void addCuratedRoles(Object claim, List<String> roles) {
