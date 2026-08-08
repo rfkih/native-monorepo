@@ -102,12 +102,20 @@ class ChargeFlowAcceptanceTest extends PostgresRlsTestBase {
               return switch (chargeBehavior) {
                 case "down" -> new MockResponse().setResponseCode(500);
                 default ->
+                    // expiry_time must be DYNAMIC (now + 1 day): a hardcoded date was a time
+                    // bomb — once it passed, every stubbed charge was born expired and the
+                    // lazy expireIfPast sweep flipped QR_ISSUED to EXPIRED (field-found
+                    // 2026-08-08, the day after the hardcoded 2026-08-07 23:59:00).
                     json(
-                        """
-                        {"status_code":"201","transaction_id":"mt-txn-1",
-                         "qr_string":"00020101021226QRIS-PAYLOAD",
-                         "expiry_time":"2026-08-07 23:59:00"}
-                        """);
+                        "{\"status_code\":\"201\",\"transaction_id\":\"mt-txn-1\","
+                            + "\"qr_string\":\"00020101021226QRIS-PAYLOAD\","
+                            + "\"expiry_time\":\""
+                            + java.time.LocalDateTime.now()
+                                .plusDays(1)
+                                .format(
+                                    java.time.format.DateTimeFormatter.ofPattern(
+                                        "yyyy-MM-dd HH:mm:ss"))
+                            + "\"}");
               };
             }
             if (path.endsWith("/status")) {

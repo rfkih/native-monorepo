@@ -43,6 +43,10 @@ dependencies {
     implementation(project(":libs:contracts"))
     implementation(project(":libs:tenant"))
     implementation(project(":libs:error-inbox"))
+    // Object storage (ADR 0048): the static QRIS image lives in MinIO as a content-addressed
+    // object; the payment_settings row keeps metadata + key. Credentials are policy-scoped to
+    // the payment/ prefix; also supplies the fleet-shared magic-byte image validator.
+    implementation(project(":libs:media-storage"))
 
     // observability — the SHARED logback-native-json.xml (JSON logs, trace/correlation MDC fields,
     // dev console fallback) that this service's logback-spring.xml <include>s (ENGINEERING-STANDARDS

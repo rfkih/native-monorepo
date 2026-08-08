@@ -41,7 +41,8 @@ public interface PaymentSettingsRepository extends JpaRepository<PaymentSettings
           SELECT id,
                  org_unit_id,
                  mode,
-                 (static_qr_data IS NOT NULL)      AS has_static_image,
+                 (static_qr_data IS NOT NULL
+                    OR static_qr_object_key IS NOT NULL) AS has_static_image,
                  static_qr_byte_size,
                  static_qr_sha256,
                  provider,
@@ -53,31 +54,38 @@ public interface PaymentSettingsRepository extends JpaRepository<PaymentSettings
           """)
   List<SettingsView> findAllViews();
 
-  /** A unit's (outlet or division) image, if that row exists AND carries one. */
+  /**
+   * A unit's (outlet or division) image, if that row exists AND carries one — "carries one" =
+   * either payload home (inline bytea on a legacy row, object key since ADR 0048).
+   */
   @Query(
       nativeQuery = true,
       value =
           """
-          SELECT static_qr_content_type AS content_type,
+          SELECT id                     AS id,
+                 static_qr_content_type AS content_type,
                  static_qr_sha256       AS sha256,
-                 static_qr_data         AS data
+                 static_qr_data         AS data,
+                 static_qr_object_key   AS object_key
             FROM payment_settings
            WHERE org_unit_id = :orgUnitId
-             AND static_qr_data IS NOT NULL
+             AND (static_qr_data IS NOT NULL OR static_qr_object_key IS NOT NULL)
           """)
   Optional<QrImageView> findImageByOrgUnitId(@Param("orgUnitId") UUID orgUnitId);
 
-  /** The company default row's image, if it exists AND carries one. */
+  /** The company default row's image, if it exists AND carries one (either payload home). */
   @Query(
       nativeQuery = true,
       value =
           """
-          SELECT static_qr_content_type AS content_type,
+          SELECT id                     AS id,
+                 static_qr_content_type AS content_type,
                  static_qr_sha256       AS sha256,
-                 static_qr_data         AS data
+                 static_qr_data         AS data,
+                 static_qr_object_key   AS object_key
             FROM payment_settings
            WHERE org_unit_id IS NULL
-             AND static_qr_data IS NOT NULL
+             AND (static_qr_data IS NOT NULL OR static_qr_object_key IS NOT NULL)
           """)
   Optional<QrImageView> findCompanyDefaultImage();
 }

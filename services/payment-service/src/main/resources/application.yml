@@ -39,6 +39,20 @@ spring:
 # payment-service config — externalized, validated at startup (fail fast — ENGINEERING-STANDARDS
 # §7). No business config is hardcoded in Java.
 native:
+  # Object storage (ADR 0048): the static QRIS image is a content-addressed object under the
+  # payment/ prefix (PRIVATE — served only through the authenticated /static-qr/image endpoint,
+  # never the public media proxy). Dev defaults target the host-published MinIO container with the
+  # fixed dev credentials docker/minio/init.sh provisions; UAT/prod override via env. No
+  # public-base-url: this service never embeds public media URLs. read-through-migrate flips
+  # legacy bytea rows to object-backed as they are served.
+  media:
+    endpoint: ${MEDIA_ENDPOINT:http://localhost:9000}
+    access-key: ${MEDIA_ACCESS_KEY:payment-media}
+    secret-key: ${MEDIA_SECRET_KEY:payment-media-secret}
+    bucket: ${MEDIA_BUCKET:native-media}
+    service-prefix: payment
+    read-through-migrate: ${MEDIA_READ_THROUGH_MIGRATE:true}
+
   # ADR 0045: the Midtrans settlement webhook is the fleet's second fully-anonymous surface (after
   # self-order, ADR 0029) — Midtrans carries no Keycloak token; WebhookService is the ONLY
   # authentication step (provisional tenant bind from the callback URL -> RLS-scoped loads ->

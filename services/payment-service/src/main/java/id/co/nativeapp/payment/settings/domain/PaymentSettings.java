@@ -73,8 +73,17 @@ public class PaymentSettings extends Auditable {
   @Column(name = "static_qr_sha256", length = 64)
   private String staticQrSha256;
 
+  /** Inline image payload — LEGACY rows only (pre-ADR-0048); {@code null} once object-backed. */
   @Column(name = "static_qr_data")
   private byte[] staticQrData;
+
+  /**
+   * Object-store key of the image (ADR 0048): {@code payment/{companyId}/qr/{sha256}.{ext}}; {@code
+   * null} on a legacy inline row or when no image is set. At most one of {@code
+   * staticQrData}/{@code staticQrObjectKey} is non-null (V5 CHECK).
+   */
+  @Column(name = "static_qr_object_key")
+  private String staticQrObjectKey;
 
   @Enumerated(EnumType.STRING)
   @Column(name = "provider", length = 16)
@@ -155,9 +164,11 @@ public class PaymentSettings extends Auditable {
   }
 
   /**
-   * Attaches (or replaces) the static QRIS image. By the time this runs, {@link
-   * QrImageContentTypeValidator} has already confirmed the declared content type matches the actual
-   * magic bytes — the declared header alone is never trusted.
+   * Attaches (or replaces) the static QRIS image as a LEGACY inline payload (pre-ADR-0048 shape —
+   * retained for tests and for representing not-yet-migrated rows; the production writer attaches
+   * object-backed images). By the time this runs, the shared magic-byte validator has already
+   * confirmed the declared content type matches the actual bytes — the declared header alone is
+   * never trusted.
    *
    * @throws IllegalArgumentException if {@code data} is empty or exceeds {@link
    *     #MAX_QR_IMAGE_BYTES}
@@ -172,18 +183,59 @@ public class PaymentSettings extends Auditable {
     this.staticQrData = data.clone();
     this.staticQrByteSize = data.length;
     this.staticQrSha256 = requireNonBlank(sha256, "sha256");
+    this.staticQrObjectKey = null;
   }
 
-  /** Removes the static QRIS image (all four columns together — the V2 CHECK's invariant). */
+  /**
+   * Attaches (or replaces) the static QRIS image as an OBJECT-BACKED payload (ADR 0048): the bytes
+   * already live in the object store under {@code objectKey}; the row keeps metadata only.
+   *
+   * @throws IllegalArgumentException if {@code byteSize} is out of bounds or a field is blank
+   */
+  public void attachStaticQrObject(
+      String contentType, int byteSize, String sha256, String objectKey) {
+    if (byteSize <= 0 || byteSize > MAX_QR_IMAGE_BYTES) {
+      throw new IllegalArgumentException(
+          "QRIS image byteSize must be between 1 and " + MAX_QR_IMAGE_BYTES + ", was " + byteSize);
+    }
+    this.staticQrContentType = requireNonBlank(contentType, "contentType");
+    this.staticQrByteSize = byteSize;
+    this.staticQrSha256 = requireNonBlank(sha256, "sha256");
+    this.staticQrObjectKey = requireNonBlank(objectKey, "objectKey");
+    this.staticQrData = null;
+  }
+
+  /**
+   * Read-through migration (ADR 0048): the inline image has been copied to the object store — drop
+   * the bytea and record the key.
+   *
+   * @throws IllegalStateException if this row carries no inline image to move
+   */
+  public void moveStaticQrToObjectStore(String objectKey) {
+    if (this.staticQrData == null) {
+      throw new IllegalStateException(
+          "payment settings " + id + " has no inline QRIS image to move");
+    }
+    this.staticQrObjectKey = requireNonBlank(objectKey, "objectKey");
+    this.staticQrData = null;
+  }
+
+  /** Removes the static QRIS image (every image column together — the qr_complete invariant). */
   public void removeStaticQr() {
     this.staticQrContentType = null;
     this.staticQrData = null;
     this.staticQrByteSize = null;
     this.staticQrSha256 = null;
+    this.staticQrObjectKey = null;
   }
 
   public boolean hasStaticQr() {
-    return staticQrData != null;
+    return staticQrData != null || staticQrObjectKey != null;
+  }
+
+  /** The image's object-store key (ADR 0048); {@code null} on a legacy inline row or no image. */
+  public String getStaticQrObjectKey() {
+    return staticQrObjectKey;
   }
 
   public boolean hasServerKey() {
@@ -220,6 +272,14 @@ public class PaymentSettings extends Auditable {
 
   public String getStaticQrSha256() {
     return staticQrSha256 == null ? null : staticQrSha256.strip();
+  }
+
+  /**
+   * @return a defensive copy of the LEGACY inline image bytes, or {@code null} when the image is
+   *     object-backed (ADR 0048) or absent. Read-through migration is the only production caller.
+   */
+  public byte[] getStaticQrData() {
+    return staticQrData == null ? null : staticQrData.clone();
   }
 
   public PspProvider getProvider() {

@@ -1,23 +1,30 @@
 package id.co.nativeapp.payment.settings.service;
 
+import id.co.nativeapp.mediastorage.ImageContentTypeValidator;
+import id.co.nativeapp.mediastorage.MediaKeys;
+import id.co.nativeapp.mediastorage.MediaStorage;
+import id.co.nativeapp.mediastorage.MediaStorageProperties;
+import id.co.nativeapp.mediastorage.Sha256;
+import id.co.nativeapp.mediastorage.UnsupportedImageTypeException;
+import id.co.nativeapp.payment.settings.domain.InvalidQrImageException;
 import id.co.nativeapp.payment.settings.domain.PaymentSettings;
 import id.co.nativeapp.payment.settings.domain.PaymentSettingsNotFoundException;
 import id.co.nativeapp.payment.settings.domain.ProviderEnvironment;
 import id.co.nativeapp.payment.settings.domain.PspProvider;
-import id.co.nativeapp.payment.settings.domain.QrImageContentTypeValidator;
 import id.co.nativeapp.payment.settings.domain.QrisMode;
 import id.co.nativeapp.payment.settings.domain.SettingsValidationException;
 import id.co.nativeapp.payment.settings.dto.UpsertSettingsRequest;
 import id.co.nativeapp.payment.settings.repository.PaymentSettingsRepository;
 import id.co.nativeapp.tenant.TenantContext;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
 import java.util.Objects;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 /**
@@ -41,18 +48,35 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
  *
  * <p><strong>Image upload.</strong> Size re-checked against {@link
  * PaymentSettings#MAX_QR_IMAGE_BYTES} (defense in depth behind the multipart cap → the same 413
- * either path), then magic-byte verified ({@link QrImageContentTypeValidator}) BEFORE any row is
- * touched; the CANONICAL detected type is what gets stored and later served. Uploading to a scope
+ * either path), then magic-byte verified BEFORE any row is touched — the fleet-shared
+ * libs/media-storage {@link ImageContentTypeValidator} since ADR 0048, its exception translated to
+ * this feature's {@link InvalidQrImageException} so the 422 contract is unchanged; the CANONICAL
+ * detected type is what gets stored and later served. The bytes themselves go to the OBJECT STORE
+ * ({@code payment/{tenant}/qr/{sha256}.{ext}}, put inside the write transaction — a rollback
+ * orphans one harmless content-addressed object); the row keeps metadata + key. A replaced or
+ * removed image's old object is deleted best-effort strictly AFTER COMMIT. Uploading to a scope
  * with no row yet creates it with mode {@link QrisMode#STATIC} — uploading an image IS the intent
  * to use it.
  */
 @Component
 public class SettingsWriter {
 
-  private final PaymentSettingsRepository repository;
+  private static final Logger log = LoggerFactory.getLogger(SettingsWriter.class);
 
-  public SettingsWriter(PaymentSettingsRepository repository) {
+  /** The media family segment in this service's object keys. */
+  static final String MEDIA_DOMAIN = "qr";
+
+  private final PaymentSettingsRepository repository;
+  private final MediaStorage mediaStorage;
+  private final MediaStorageProperties mediaProperties;
+
+  public SettingsWriter(
+      PaymentSettingsRepository repository,
+      MediaStorage mediaStorage,
+      MediaStorageProperties mediaProperties) {
     this.repository = repository;
+    this.mediaStorage = mediaStorage;
+    this.mediaProperties = mediaProperties;
   }
 
   /** Upserts the company default scope (mode + optional gateway credentials). */
@@ -108,19 +132,33 @@ public class SettingsWriter {
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public PaymentSettings attachStaticQr(UUID unitId, String declaredContentType, byte[] data) {
-    TenantContext.require();
+    String tenant = TenantContext.require().companyId();
     Objects.requireNonNull(data, "data");
     if (data.length > PaymentSettings.MAX_QR_IMAGE_BYTES) {
       throw new MaxUploadSizeExceededException(PaymentSettings.MAX_QR_IMAGE_BYTES);
     }
     // The CANONICAL detected type is what gets stored (and later served) — never the raw declared
     // header. Fail fast on the bytes BEFORE touching any row.
-    String canonicalContentType = QrImageContentTypeValidator.validate(declaredContentType, data);
-    String sha256 = sha256Hex(data);
+    String canonicalContentType;
+    try {
+      canonicalContentType = ImageContentTypeValidator.validate(declaredContentType, data);
+    } catch (UnsupportedImageTypeException e) {
+      throw new InvalidQrImageException(e.getDeclaredContentType(), e.getDetectedContentType());
+    }
+    String sha256 = Sha256.hex(data);
 
     PaymentSettings row = findScope(unitId).orElseGet(() -> newRow(unitId, QrisMode.STATIC));
-    row.attachStaticQr(canonicalContentType, data, sha256);
-    return repository.saveAndFlush(row);
+    String previousObjectKey = row.getStaticQrObjectKey();
+
+    // Payload to the object store (ADR 0048), metadata + key on the row.
+    String objectKey =
+        MediaKeys.imageKey(
+            mediaProperties.servicePrefix(), tenant, MEDIA_DOMAIN, sha256, canonicalContentType);
+    mediaStorage.put(objectKey, data, canonicalContentType);
+    row.attachStaticQrObject(canonicalContentType, data.length, sha256, objectKey);
+    PaymentSettings saved = repository.saveAndFlush(row);
+    scheduleReplacedObjectCleanup(previousObjectKey, objectKey);
+    return saved;
   }
 
   /** Removes a scope's static QRIS image (404 when the scope has none). */
@@ -134,8 +172,36 @@ public class SettingsWriter {
                 () ->
                     new PaymentSettingsNotFoundException(
                         "This scope has no static QRIS image to remove."));
+    String previousObjectKey = row.getStaticQrObjectKey();
     row.removeStaticQr();
     repository.saveAndFlush(row);
+    scheduleReplacedObjectCleanup(previousObjectKey, null);
+  }
+
+  /**
+   * Best-effort delete of a replaced/removed image's object, strictly {@code afterCommit} (the
+   * employee-service ReceiptWriter idiom): deleting before commit could lose the object a
+   * rolled-back transaction's surviving row still references. A failed delete is an accepted orphan
+   * (ADR 0048). No-ops when there is nothing to delete, the key is unchanged (re-upload of the
+   * identical image — content addressing), or no transaction is active (plain unit tests).
+   */
+  private void scheduleReplacedObjectCleanup(String previousObjectKey, String newObjectKey) {
+    if (previousObjectKey == null
+        || previousObjectKey.equals(newObjectKey)
+        || !TransactionSynchronizationManager.isSynchronizationActive()) {
+      return;
+    }
+    TransactionSynchronizationManager.registerSynchronization(
+        new TransactionSynchronization() {
+          @Override
+          public void afterCommit() {
+            try {
+              mediaStorage.delete(previousObjectKey);
+            } catch (RuntimeException e) {
+              log.warn("replaced QRIS object not deleted (accepted orphan): {}", e.getMessage());
+            }
+          }
+        });
   }
 
   private java.util.Optional<PaymentSettings> findScope(UUID unitId) {
@@ -146,15 +212,5 @@ public class SettingsWriter {
     PaymentSettings row = new PaymentSettings(unitId, mode);
     row.setCompanyId(TenantContext.require().companyId());
     return row;
-  }
-
-  private static String sha256Hex(byte[] data) {
-    try {
-      MessageDigest digest = MessageDigest.getInstance("SHA-256");
-      return HexFormat.of().formatHex(digest.digest(data));
-    } catch (NoSuchAlgorithmException e) {
-      // SHA-256 is a mandatory JDK algorithm (JCA standard names) — unreachable in practice.
-      throw new IllegalStateException("SHA-256 MessageDigest unavailable", e);
-    }
   }
 }

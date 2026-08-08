@@ -1,5 +1,6 @@
 package id.co.nativeapp.payment.settings.service;
 
+import id.co.nativeapp.mediastorage.MediaStorage;
 import id.co.nativeapp.payment.config.ActorRolesProvider;
 import id.co.nativeapp.payment.settings.domain.PaymentSettings;
 import id.co.nativeapp.payment.settings.domain.SettingsForbiddenException;
@@ -28,11 +29,20 @@ public class SettingsService {
   private final SettingsWriter writer;
   private final SettingsReader reader;
   private final ActorRolesProvider roles;
+  private final MediaStorage mediaStorage;
+  private final QrObjectMigrationWriter migrationWriter;
 
-  public SettingsService(SettingsWriter writer, SettingsReader reader, ActorRolesProvider roles) {
+  public SettingsService(
+      SettingsWriter writer,
+      SettingsReader reader,
+      ActorRolesProvider roles,
+      MediaStorage mediaStorage,
+      QrObjectMigrationWriter migrationWriter) {
     this.writer = writer;
     this.reader = reader;
     this.roles = roles;
+    this.mediaStorage = mediaStorage;
+    this.migrationWriter = migrationWriter;
   }
 
   /** Owner: the company's full QRIS configuration. */
@@ -83,11 +93,22 @@ public class SettingsService {
     return reader.effective(businessId, divisionId);
   }
 
-  /** POS: the effective static QRIS image blob, mapped to its dto. NOT owner-gated. */
+  /**
+   * POS: the effective static QRIS image blob, mapped to its dto. NOT owner-gated. Payload homes
+   * (ADR 0048): an object-backed row's bytes come from the object store; a legacy row serves its
+   * inline bytea and opportunistically flips to object-backed (read-through migration — never on
+   * the critical path, failures swallowed in {@link QrObjectMigrationWriter}).
+   */
   public QrImageContentResponse effectiveImage(UUID businessId, UUID divisionId) {
     QrImageView image = reader.effectiveImage(businessId, divisionId);
-    return new QrImageContentResponse(
-        image.getContentType(), image.getSha256().strip(), image.getData());
+    byte[] data;
+    if (image.getObjectKey() != null) {
+      data = mediaStorage.get(image.getObjectKey()).data();
+    } else {
+      data = image.getData();
+      migrationWriter.migrateOpportunistically(image.getId());
+    }
+    return new QrImageContentResponse(image.getContentType(), image.getSha256().strip(), data);
   }
 
   private void requireOwner() {
