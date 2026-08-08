@@ -62,6 +62,7 @@ export function RegisterSheet({
   locale,
   reasonMessage,
   onClose,
+  onContinueToStocktake,
 }: {
   session: CompanySession
   currency: string
@@ -71,6 +72,11 @@ export function RegisterSheet({
    * there's no open session to close. */
   reasonMessage?: string
   onClose: () => void
+  /** Owner request — "after closing, continue straight to stock opname": when provided, the
+   * close verdict offers a PRIMARY continue-to-stocktake action (Done demotes to secondary).
+   * Callers omit it when the stocktake can't run right now (offline — ADR 0038 phase 3 has no
+   * offline path). */
+  onContinueToStocktake?: () => void
 }) {
   const { t } = useTranslation()
   const currentQuery = useCurrentRegisterSession(session)
@@ -215,9 +221,20 @@ export function RegisterSheet({
                 {formatMoney(Math.abs(closed.overShortMinor ?? 0), currency, locale)}
               </div>
             </div>
-            <Button className="w-full" onClick={onClose}>
-              {t('register.done')}
-            </Button>
+            {onContinueToStocktake ? (
+              <div className="space-y-2">
+                <Button className="w-full" onClick={onContinueToStocktake}>
+                  {t('register.continueStocktake')}
+                </Button>
+                <Button variant="outline" className="w-full" onClick={onClose}>
+                  {t('register.done')}
+                </Button>
+              </div>
+            ) : (
+              <Button className="w-full" onClick={onClose}>
+                {t('register.done')}
+              </Button>
+            )}
           </div>
         ) : currentQuery.isLoading ? (
           <div className="grid place-items-center py-14">

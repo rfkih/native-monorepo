@@ -1064,6 +1064,8 @@ export const id = {
     title: 'Kasir — closing kasir',
     titleOpen: 'Buka kasir',
     titleClose: 'Closing kasir',
+    /** Permintaan owner — setelah closing langsung lanjut ke stock opname (hitung stok). */
+    continueStocktake: 'Lanjut ke hitung stok',
     openHint: 'Buka laci untuk memulai hari: hitung uang kembalian (modal awal) yang dimasukkan.',
     /** Permintaan owner — "buka kasir dulu": muncul saat tombol bayar mengarahkan kasir ke sini
      * karena belum ada sesi kasir yang terbuka. */

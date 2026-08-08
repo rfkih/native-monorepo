@@ -985,6 +985,16 @@ function PosInner({ session }: { session: CompanySession }) {
             // After a successful open, land back where the cashier was — hit Pay again rather
             // than auto-opening the payment modal (the pay button itself re-checks the gate).
           }}
+          onContinueToStocktake={
+            // Same availability rule as the till-menu stocktake entry: no offline path (ADR 0038).
+            offline
+              ? undefined
+              : () => {
+                  setShowRegisterSheet(false)
+                  setRegisterGateActive(false)
+                  setShowStocktakeSheet(true)
+                }
+          }
         />
       ) : null}
 

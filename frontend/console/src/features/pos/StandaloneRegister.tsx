@@ -1,12 +1,15 @@
 /**
  * StandaloneRegister — mounts the POS RegisterSheet (closing kasir, ADR 0036/0038 daily
  * close) outside the till: the manager "More" sheet's tile, so an owner/manager can close
- * the day without walking through the POS. Hosts the same OutletGate the till uses.
+ * the day without walking through the POS. Hosts the same OutletGate the till uses, and the
+ * close verdict chains into the StocktakeSheet (owner request: closing flows into stock
+ * opname) without leaving this screen.
  *
  * ADR 0028 guard preserved: closing over an offline device or an unsynced sale queue would
  * understate expected cash, so the same condition that disables the till-menu entry blocks
  * this surface with the same message instead of the sheet.
  */
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
@@ -14,6 +17,7 @@ import { ScreenHeader } from '@/components/mobile/ScreenHeader'
 import { OutletGate } from '@/components/OutletGate'
 import { useSession } from '@/lib/session'
 import { localeOf } from '@/i18n'
+import { StocktakeSheet } from '@/features/stocktake/StocktakeSheet'
 import { useOffline } from './offline/useOffline'
 import { RegisterSheet } from './RegisterSheet'
 
@@ -22,6 +26,7 @@ export function StandaloneRegister({ onClose }: { onClose: () => void }) {
   const { company } = useSession()
   const locale = localeOf(i18n.language)
   const { offline, queuedCount, rejectedCount } = useOffline()
+  const [stocktake, setStocktake] = useState(false)
 
   if (!company) return null
 
@@ -29,7 +34,7 @@ export function StandaloneRegister({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-paper">
-      <ScreenHeader title={t('register.title')} onBack={onClose} />
+      <ScreenHeader title={t(stocktake ? 'stocktake.title' : 'register.title')} onBack={onClose} />
       {blocked ? (
         <div className="p-4">
           <Card className="p-6 text-center text-sm text-ink-2">
@@ -39,14 +44,24 @@ export function StandaloneRegister({ onClose }: { onClose: () => void }) {
         </div>
       ) : (
         <OutletGate company={company} requiredVertical="restaurant">
-          {(session) => (
-            <RegisterSheet
-              session={session}
-              currency={company.baseCurrency}
-              locale={locale}
-              onClose={onClose}
-            />
-          )}
+          {(session) =>
+            stocktake ? (
+              <StocktakeSheet
+                session={session}
+                currency={company.baseCurrency}
+                locale={locale}
+                onClose={onClose}
+              />
+            ) : (
+              <RegisterSheet
+                session={session}
+                currency={company.baseCurrency}
+                locale={locale}
+                onClose={onClose}
+                onContinueToStocktake={() => setStocktake(true)}
+              />
+            )
+          }
         </OutletGate>
       )}
     </div>

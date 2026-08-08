@@ -1073,6 +1073,8 @@ export const en = {
     title: 'Register — closing kasir',
     titleOpen: 'Open the register',
     titleClose: 'Close the register',
+    /** Owner request — the close verdict chains into the stocktake (stock opname). */
+    continueStocktake: 'Continue to stock count',
     openHint: 'Open the drawer to start the day: count the change fund (float) you are putting in.',
     /** Owner request — "open the register first": shown when the pay button re-routes the cashier
      * here because there's no open session yet. */
