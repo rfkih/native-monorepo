@@ -119,7 +119,7 @@ function DialogOverlay({
 }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       onClick={(e) => {
@@ -129,7 +129,7 @@ function DialogOverlay({
         if (e.key === 'Escape') onClose()
       }}
     >
-      <Card className="w-full max-w-md p-6">{children}</Card>
+      <Card className="w-full max-w-md p-6 max-sm:sheet-up max-sm:max-h-[92dvh] max-sm:overflow-y-auto max-sm:rounded-b-none max-sm:rounded-t-[26px]">{children}</Card>
     </div>
   )
 }
@@ -2132,7 +2132,10 @@ function ItemRow({
         </div>
 
         {/* Actions */}
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
+        {/* Phone: the cluster takes its own full-width row and WRAPS - with shrink-0 alone
+            its max-content width clipped at the card edge, hiding edit/availability/delete
+            (owner report: cannot edit the menu on the phone). */}
+        <div className="flex shrink-0 flex-wrap items-center gap-2 max-sm:w-full max-sm:min-w-0">
           {/* Stock control — visually distinct from the manual available toggle */}
           <StockControl item={item} session={session} />
 
@@ -2158,7 +2161,7 @@ function ItemRow({
             onClick={() => setShowEditDialog(true)}
             aria-label={t('menu.editItem.action', { name: item.name })}
             className={cn(
-              'grid size-[30px] shrink-0 place-items-center rounded-lg transition-colors',
+              'grid size-[30px] shrink-0 place-items-center rounded-lg transition-colors max-sm:size-11',
               'text-ink-3 hover:bg-hover hover:text-ink',
               'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500',
             )}
@@ -2200,7 +2203,7 @@ function ItemRow({
             onClick={() => setShowDeleteDialog(true)}
             aria-label={t('menu.delete.action', { name: item.name })}
             className={cn(
-              'grid size-[30px] shrink-0 place-items-center rounded-lg transition-colors',
+              'grid size-[30px] shrink-0 place-items-center rounded-lg transition-colors max-sm:size-11',
               'text-ink-3 hover:bg-tint-loss/60 hover:text-loss',
               'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-loss',
             )}
@@ -2329,8 +2332,12 @@ function MenuManagementInner({ session }: { session: CompanySession }) {
           <div className="truncate text-xs text-ink-3">{session.name}</div>
         </div>
 
-        {/* Outlet picker — tracks which outlet menu edits and KDS tickets belong to */}
-        <OutletPicker />
+        {/* Outlet picker — tracks which outlet menu edits and KDS tickets belong to. Phone:
+            drops to its own full-width second row — inline it crushed the title to nothing
+            on a 360px header (same fix as IngredientManagement). */}
+        <div className="min-w-0 max-sm:order-last max-sm:w-full">
+          <OutletPicker />
+        </div>
 
         <Button
           variant="outline"
@@ -2343,7 +2350,7 @@ function MenuManagementInner({ session }: { session: CompanySession }) {
 
         <Button onClick={() => setShowCreateItem(true)} className="shrink-0">
           <Plus className="size-4" />
-          <span className="hidden sm:inline">{t('menu.addItem')}</span>
+          <span>{t('menu.addItem')}</span>
         </Button>
 
         <button

@@ -106,7 +106,11 @@ function IngredientManagementInner({
           <div className="truncate text-xs text-ink-3">{session.name}</div>
         </div>
 
-        <OutletPicker />
+        {/* Phone: the picker drops to its own full-width second row (order-last inside the
+            flex-wrap) — inline it crushed the title to nothing on a 360px header. */}
+        <div className="min-w-0 max-sm:order-last max-sm:w-full">
+          <OutletPicker />
+        </div>
 
         <Button onClick={() => setShowCreate(true)} className="shrink-0">
           <Plus className="size-4" />
@@ -236,25 +240,27 @@ function IngredientRow({
         {formatQty(ingredient.stockQty, locale)} {ingredient.unit}
       </div>
 
-      <div className="flex shrink-0 items-center gap-1.5">
+      {/* Phone: a full-width three-up grid with taller touch targets; desktop keeps the
+          compact inline cluster. */}
+      <div className="flex shrink-0 items-center gap-1.5 max-sm:grid max-sm:w-full max-sm:grid-cols-3">
         <button
           type="button"
           onClick={onReceive}
-          className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-semibold text-brand-600 transition-colors hover:bg-emerald-tint focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500"
+          className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-semibold text-brand-600 transition-colors hover:bg-emerald-tint focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500 max-sm:py-2.5"
         >
           {t('inventory.receiveAction')}
         </button>
         <button
           type="button"
           onClick={onSet}
-          className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-2 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500"
+          className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-2 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500 max-sm:py-2.5"
         >
           {t('inventory.setAction')}
         </button>
         <button
           type="button"
           onClick={onEdit}
-          className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-2 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500"
+          className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-2 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500 max-sm:py-2.5"
         >
           {t('inventory.editAction')}
         </button>
@@ -567,13 +573,14 @@ function DialogShell({
 }) {
   const { t } = useTranslation()
   return (
+    // Phone: bottom-anchored sheet (the app's dialog idiom below sm); desktop stays centered.
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:grid sm:place-items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-label={title}
     >
-      <div className="reveal max-h-full w-full max-w-sm overflow-y-auto overscroll-contain rounded-card border border-line bg-surface p-5 shadow-lg">
+      <div className="reveal max-h-full w-full max-w-sm overflow-y-auto overscroll-contain rounded-t-2xl border border-line bg-surface p-5 pb-[calc(1.25rem+var(--safe-area-inset-bottom,0px))] shadow-lg max-sm:max-w-full sm:rounded-card sm:pb-5">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-display text-lg font-semibold text-ink">{title}</h2>
           <button
