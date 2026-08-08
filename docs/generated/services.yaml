@@ -35,7 +35,7 @@ services:
     events: true
   - name: org-service
     module: ":services:org-service"
-    migrations: { count: 10, range: "V1..V10" }
+    migrations: { count: 11, range: "V1..V11" }
     events: true
   - name: payment-service
     module: ":services:payment-service"

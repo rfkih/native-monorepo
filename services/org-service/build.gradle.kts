@@ -110,6 +110,19 @@ dependencies {
 // DevSecurityConfig and leaves the header-trust DevTenantFilter as the tenant source (no Keycloak
 // needed). The SECURED non-dev path is proven separately in libs/security against a real Keycloak.
 // Set here (not per-test-class) so no existing test annotation/assertion changes.
+// ORG_PII_KEY: the test PII/credential encryption key (a base64 32-byte AES-256 key) for the
+// device-credential password (ADR 0049 P3a). In production the key comes from Vault via env; here a
+// fixed dev/test key keeps the encrypt/decrypt round-trip and the ciphertext-at-rest assertions
+// deterministic. It is NOT a real secret, and is DISTINCT from every other service's test key
+// (org-service holds its own PII cipher instance, database-per-service — rule 1; the env var is
+// service-namespaced — ORG_PII_KEY, not the shared NATIVE_PII_KEY — so a co-deployed slice cannot
+// key two services' ciphers identically: security review P3a LOW-3).
 tasks.named<Test>("test") {
     systemProperty("spring.profiles.active", "dev")
+    systemProperty(
+        "ORG_PII_KEY",
+        // A deterministic 32-byte (AES-256) key, base64-encoded — test-only, never a real secret.
+        // Decodes to the 32 ASCII bytes "native-org-pii-test-key-01234567".
+        "bmF0aXZlLW9yZy1waWktdGVzdC1rZXktMDEyMzQ1Njc=",
+    )
 }

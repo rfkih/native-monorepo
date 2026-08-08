@@ -56,10 +56,23 @@ management:
 # (ENGINEERING-STANDARDS §5), included via this service's logback-spring.xml — dev keeps a console
 # pattern, every non-dev profile emits one JSON object per line.
 
+# PII/credential column-level encryption key (rule 6) — the device-credential password (ADR 0049
+# P3a). A base64-encoded 32-byte AES-256 key, sourced from the NATIVE_PII_KEY environment variable.
+# IN PRODUCTION this env value is injected from VAULT (a short-TTL secret reference) — NEVER a
+# literal secret committed here. The committed default below is a dev-only fallback (a placeholder,
+# not a real secret) so the local stack has a deterministic key; the test suite overrides it via the
+# NATIVE_PII_KEY system property in build.gradle.kts. The app fails fast at startup if the key is
+# missing or not a valid 32-byte base64 value. Deliberately org-service's OWN key — distinct from
+# every other service's native.pii.key (database-per-service, rule 1).
+#
 # Keycloak Admin REST client — active in ALL profiles (the signup endpoint uses it regardless of
 # the JWT/dev security profile). The client secret defaults to the dev-realm value and is
 # overridden in production via KEYCLOAK_ADMIN_SECRET (from Vault / env).
 native:
+  pii:
+    # base64 of the 32 ASCII bytes "native-org-dev-placeholder-pii32" — a dev-only placeholder, not a
+    # real secret (the AES-256 key must decode to exactly 32 bytes).
+    key: ${ORG_PII_KEY:bmF0aXZlLW9yZy1kZXYtcGxhY2Vob2xkZXItcGlpMzI=}
   keycloak-admin:
     base-url: ${KEYCLOAK_BASE_URL:http://localhost:8080}
     realm: native

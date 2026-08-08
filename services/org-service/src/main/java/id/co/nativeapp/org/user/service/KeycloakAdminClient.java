@@ -64,6 +64,12 @@ public class KeycloakAdminClient {
 
   private static final int TEMP_PASSWORD_LENGTH = 16;
 
+  /**
+   * Device-credential passwords are longer than the human-facing temporary password (ADR 0049 P3a)
+   * — never typed by a person, so extra entropy costs nothing.
+   */
+  private static final int DEVICE_PASSWORD_LENGTH = 24;
+
   private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
   private final KeycloakAdminProperties props;
@@ -302,14 +308,21 @@ public class KeycloakAdminClient {
   }
 
   /**
-   * Lists all users in the realm whose {@code company_id} attribute matches {@code companyId}.
+   * Lists all users in the realm whose {@code company_id} attribute matches {@code companyId} —
+   * excluding {@code actor_type=device} logins (ADR 0049 P3a).
    *
    * <p>Uses Keycloak's attribute search ({@code q=company_id:{value}}) to filter at the server
-   * side. For each user, a second call fetches the user's realm role mappings to populate the
+   * side. For each HUMAN user, a second call fetches the user's realm role mappings to populate the
    * {@code roles} field. This N+1 pattern is acceptable given expected small team sizes.
    *
+   * <p><strong>Device/kiosk logins are filtered OUT here</strong> (checked via the raw {@code
+   * actor_type} attribute BEFORE the role-mapping fetch, so a device also skips that N+1 call) —
+   * this is THE Team/people list (its only call site is {@code UserService#listUsers}), and a
+   * device must never appear as staff nor be linkable to an {@code employee.user_id} (a device must
+   * never earn commission — ADR 0049).
+   *
    * @param companyId the tenant's company id to filter by
-   * @return list of users belonging to the company; empty if none match
+   * @return list of human users belonging to the company; empty if none match
    * @throws KeycloakAdminException if the Admin API is unreachable or returns an unexpected error
    */
   @SuppressWarnings("unchecked")
@@ -345,11 +358,29 @@ public class KeycloakAdminClient {
 
     List<KeycloakUser> result = new ArrayList<>(rawUsers.size());
     for (Map<?, ?> raw : rawUsers) {
+      if (isDeviceUser(raw)) {
+        continue; // ADR 0049 P3a — device/kiosk logins never appear on the Team list
+      }
       String userId = (String) raw.get("id");
       List<String> roles = fetchBusinessRoles(userId, token);
       result.add(mapToKeycloakUser(raw, roles));
     }
     return result;
+  }
+
+  /**
+   * Whether the raw Keycloak user representation carries {@code actor_type=device} — the device/
+   * kiosk marker set by {@link #createDeviceUser}. Reads directly off the raw attributes map (no
+   * {@link KeycloakUser} carrier needed) so {@link #listUsersByCompanyId} can filter before paying
+   * for the role-mapping N+1 call.
+   */
+  @SuppressWarnings("unchecked")
+  private static boolean isDeviceUser(Map<?, ?> raw) {
+    Object attrs = raw.get("attributes");
+    if (attrs instanceof Map<?, ?> attrMap && attrMap.get("actor_type") instanceof List<?> values) {
+      return !values.isEmpty() && "device".equals(String.valueOf(values.get(0)));
+    }
+    return false;
   }
 
   /**
@@ -471,6 +502,149 @@ public class KeycloakAdminClient {
     } catch (RestClientException e) {
       throw new KeycloakAdminException(
           "Keycloak invited-user creation failed — connection error", e);
+    }
+  }
+
+  /**
+   * Result of creating a device (kiosk) user: the new user's Keycloak id and the generated
+   * password. The password is returned ONCE and NEVER stored or logged by this client — the caller
+   * (org-service's device-credential feature) stores it encrypted for later re-reveal (ADR 0049 P3a
+   * — unlike {@link InviteResult}'s temporary password, which is never persisted at all).
+   */
+  public record DeviceCredentialResult(String userId, String password) {}
+
+  /**
+   * Creates a Keycloak user shaped as a per-outlet DEVICE/KIOSK login (ADR 0049 P3a) — the Business
+   * app's persistent base credential.
+   *
+   * <p>Deliberately different from {@link #createInvitedUser} in every way that matters for a
+   * kiosk:
+   *
+   * <ul>
+   *   <li>{@code credentials.temporary=false} — no forced change; a kiosk cannot "log in once to
+   *       set its own password".
+   *   <li>{@code requiredActions=[]} — NO {@code UPDATE_PASSWORD}, NO email/{@code VERIFY_EMAIL}
+   *       (the device has no email and nobody types a temporary password into it).
+   *   <li>{@code attributes.actor_type=["device"]} — the gateway-injected/stripped claim (ADR 0049)
+   *       that lets a vertical demand an operator session for a device sale, and lets {@link
+   *       #listUsersByCompanyId} filter this login out of the Team page.
+   *   <li>the {@code cashier} realm role ONLY — assigned here, never {@code owner}/{@code manager}
+   *       (POS-capable, not back-office; the existing {@code DASHBOARD_ROLES}/{@code OWNER_ROLES}
+   *       gateway route gates already exclude {@code cashier} — no new security code).
+   * </ul>
+   *
+   * <p><strong>Offline / long-lived refresh.</strong> This method does NOT grant {@code
+   * offline_access} — that is a CLIENT-level optional scope (assigned to {@code native-console} /
+   * {@code native-gateway} at the realm, not a per-user attribute) that the Business app REQUESTS
+   * at login time (e.g. {@code scope=openid profile email offline_access}) to receive a long-lived
+   * offline refresh token. There is nothing to set on the user object for this; it is a P3b
+   * (frontend) concern.
+   *
+   * <p><strong>The generated password is NEVER logged.</strong>
+   *
+   * @param username the device login's identifier (caller-derived, stable/unique — e.g. {@code
+   *     till.<outletId>})
+   * @param companyId the tenant company id to set as the {@code company_id} user attribute
+   * @return the {@link DeviceCredentialResult} containing the new Keycloak user id and the
+   *     generated password — NEVER log or store the password in plaintext
+   * @throws UsernameAlreadyExistsException if a Keycloak account already exists for this username
+   * @throws KeycloakAdminException if the Admin API is unreachable or returns an unexpected error
+   */
+  public DeviceCredentialResult createDeviceUser(String username, String companyId) {
+    // Generated fresh here, never assigned to a variable that touches a log statement.
+    String password = generateDevicePassword();
+
+    String token = acquireToken();
+    String url = props.getBaseUrl() + "/admin/realms/" + props.getRealm() + "/users";
+
+    Map<String, Object> body = new HashMap<>();
+    body.put("username", username);
+    body.put("enabled", true);
+    body.put(
+        "attributes", Map.of("company_id", List.of(companyId), "actor_type", List.of("device")));
+    body.put("requiredActions", List.of()); // kiosk-persistent: no forced change, no email verify
+    body.put(
+        "credentials", List.of(Map.of("type", "password", "value", password, "temporary", false)));
+
+    try {
+      ResponseEntity<Void> response =
+          restClient
+              .post()
+              .uri(URI.create(url))
+              .header("Authorization", "Bearer " + token)
+              .contentType(MediaType.APPLICATION_JSON)
+              .body(body)
+              .retrieve()
+              .toBodilessEntity();
+
+      URI location = response.getHeaders().getLocation();
+      if (location == null) {
+        throw new KeycloakAdminException(
+            "Keycloak device-user creation succeeded but returned no Location header");
+      }
+      String path = location.getPath();
+      String userId = path.substring(path.lastIndexOf('/') + 1);
+
+      // cashier ONLY — never owner/manager (POS-capable, not back-office).
+      assignRealmRole(userId, "cashier");
+      log.info("Device credential Keycloak user created: userId={}", userId);
+      return new DeviceCredentialResult(userId, password);
+    } catch (RestClientResponseException e) {
+      if (e.getStatusCode() == HttpStatus.CONFLICT) {
+        throw new UsernameAlreadyExistsException(username);
+      }
+      throw new KeycloakAdminException(
+          "Keycloak device-user creation failed with status " + e.getStatusCode(), e);
+    } catch (RestClientException e) {
+      throw new KeycloakAdminException(
+          "Keycloak device-user creation failed — connection error", e);
+    }
+  }
+
+  /**
+   * Resets a device (kiosk) login's password to a fresh, NON-temporary password — unlike {@link
+   * #resetTemporaryPassword}, this does NOT arm {@code UPDATE_PASSWORD}: a device cannot complete a
+   * forced-change flow, so the new password must be immediately usable exactly like the original
+   * (ADR 0049 P3a).
+   *
+   * <p><strong>The generated password is NEVER logged.</strong> It is returned once so the caller
+   * can store it encrypted (mirroring {@link #resetTemporaryPassword}'s contract) for later reveal.
+   *
+   * @param userId the device login's Keycloak UUID
+   * @return the new password — NEVER log or store in plaintext
+   * @throws KeycloakAdminException if the Admin API is unreachable or returns an unexpected error
+   */
+  public String resetDevicePassword(String userId) {
+    String password = generateDevicePassword();
+    String token = acquireToken();
+    String url =
+        props.getBaseUrl()
+            + "/admin/realms/"
+            + props.getRealm()
+            + "/users/"
+            + userId
+            + "/reset-password";
+    try {
+      restClient
+          .put()
+          .uri(URI.create(url))
+          .header("Authorization", "Bearer " + token)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(Map.of("type", "password", "value", password, "temporary", false))
+          .retrieve()
+          .toBodilessEntity();
+      log.info("Reset device credential password for Keycloak user {}", userId);
+      return password;
+    } catch (RestClientResponseException e) {
+      throw new KeycloakAdminException(
+          "Keycloak device-password reset for user "
+              + userId
+              + " failed with status "
+              + e.getStatusCode(),
+          e);
+    } catch (RestClientException e) {
+      throw new KeycloakAdminException(
+          "Keycloak device-password reset for user " + userId + " failed — connection error", e);
     }
   }
 
@@ -919,6 +1093,23 @@ public class KeycloakAdminClient {
     char[] chars = PASSWORD_CHARS.toCharArray();
     char[] password = new char[TEMP_PASSWORD_LENGTH];
     for (int i = 0; i < TEMP_PASSWORD_LENGTH; i++) {
+      password[i] = chars[SECURE_RANDOM.nextInt(chars.length)];
+    }
+    return new String(password);
+  }
+
+  /**
+   * Generates a cryptographically random device-credential password of length {@link
+   * #DEVICE_PASSWORD_LENGTH} using characters from {@link #PASSWORD_CHARS}. Longer than the
+   * human-facing {@link #generateTemporaryPassword()} — this credential is never typed by a person
+   * (copy/paste or QR-provisioned) and is long-lived, so extra entropy costs nothing.
+   *
+   * <p><strong>NEVER log the returned value.</strong>
+   */
+  private static String generateDevicePassword() {
+    char[] chars = PASSWORD_CHARS.toCharArray();
+    char[] password = new char[DEVICE_PASSWORD_LENGTH];
+    for (int i = 0; i < DEVICE_PASSWORD_LENGTH; i++) {
       password[i] = chars[SECURE_RANDOM.nextInt(chars.length)];
     }
     return new String(password);

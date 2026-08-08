@@ -57,7 +57,7 @@ abstract class PostgresRlsTestBase {
         Statement st = admin.createStatement()) {
       st.execute(
           "TRUNCATE TABLE company, org_unit, legal_employer, group_membership,"
-              + " consolidation_group, user_outlet_assignment, outbox");
+              + " consolidation_group, user_outlet_assignment, device_credential, outbox");
     } catch (SQLException ignored) {
       // Tables not created yet (pre-Flyway) — nothing to reset.
     }
