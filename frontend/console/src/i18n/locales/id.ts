@@ -874,6 +874,7 @@ export const id = {
       receiptUnavailable: 'Penjualan ini tidak memiliki struk untuk dicetak ulang.',
       reprintLabel: 'Cetak ulang',
       disabledOffline: 'Riwayat penjualan membutuhkan koneksi.',
+      capNote: '200 terbaru ditampilkan',
     },
     receipt: {
       title: 'Struk',

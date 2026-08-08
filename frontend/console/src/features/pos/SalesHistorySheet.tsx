@@ -50,6 +50,9 @@ export function SalesHistorySheet({
   const rows = history.data ?? []
   const currency = rows[0]?.currency ?? session.baseCurrency
   const totalMinor = rows.reduce((sum, r) => sum + r.amountMinor, 0)
+  // The server caps the list at its newest 200 rows. At the cap the sum is NOT the day's
+  // total any more — never present a truncated figure as if it were (review W2).
+  const capped = rows.length >= 200
   const timeFormat = new Intl.DateTimeFormat(locale, { timeStyle: 'short' })
 
   // A selected row with a loaded order + payment renders the receipt overlay ON TOP of the
@@ -68,9 +71,14 @@ export function SalesHistorySheet({
         <span className="min-w-0 flex-1 truncate text-[16px] font-bold text-ink">
           {t('pos.history.title')}
         </span>
-        {rows.length > 0 ? (
+        {rows.length > 0 && !capped ? (
           <span className="tnum font-mono text-[13px] font-semibold text-ink-2">
             {formatMoney(totalMinor, currency, locale)}
+          </span>
+        ) : null}
+        {capped ? (
+          <span className="text-[11.5px] font-semibold text-amber-2">
+            {t('pos.history.capNote')}
           </span>
         ) : null}
         <button

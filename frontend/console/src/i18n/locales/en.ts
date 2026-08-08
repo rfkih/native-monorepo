@@ -883,6 +883,7 @@ export const en = {
       receiptUnavailable: 'This sale has no reprintable receipt.',
       reprintLabel: 'Reprint',
       disabledOffline: 'Sales history needs a connection.',
+      capNote: 'Latest 200 shown',
     },
     receipt: {
       title: 'Receipt',
