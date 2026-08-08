@@ -1118,6 +1118,9 @@ export const id = {
     errorGeneric: 'Tidak dapat mengirim hitung stok. Silakan coba lagi.',
     loadError: 'Tidak dapat memuat menu.',
     emptyHint: 'Belum ada item yang dilacak stoknya di outlet ini — aktifkan pelacakan stok untuk item di Manajemen menu terlebih dahulu.',
+    /** Laporan owner: hint di atas jalan buntu — tombol ini benar-benar membawa ke sana. Di
+     * Manajemen menu, tombol "Lacak stok" di setiap baris item memulai pelacakan stok. */
+    emptyCta: 'Buka manajemen menu',
     countedAt: 'Dihitung',
     resultBalanced: 'Seimbang — tidak ada penyusutan',
     resultLoss: 'Penyusutan bersih (rugi)',

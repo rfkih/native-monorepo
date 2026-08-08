@@ -14,6 +14,7 @@
  */
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import { ClipboardCheck, TriangleAlert, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
@@ -56,6 +57,7 @@ export function StocktakeSheet({
   onClose: () => void
 }) {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const menuQuery = useMenu(session)
   const submit = useSubmitStocktake(session)
 
@@ -136,6 +138,19 @@ export function StocktakeSheet({
         ) : trackedItems.length === 0 ? (
           <div className="px-5 py-10 text-center">
             <p className="text-sm text-ink-3">{t('stocktake.emptyHint')}</p>
+            {/* Owner report: the hint named Menu management but offered no way there — a dead
+                end. Close FIRST: the standalone hosts (MobileTabBarGate) stay mounted across
+                route changes, and a lingering fixed overlay would cover the menu page. */}
+            <Button
+              variant="secondary"
+              className="mt-4"
+              onClick={() => {
+                onClose()
+                navigate('/menu')
+              }}
+            >
+              {t('stocktake.emptyCta')}
+            </Button>
           </div>
         ) : (
           <>

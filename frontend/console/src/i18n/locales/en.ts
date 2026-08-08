@@ -1127,6 +1127,9 @@ export const en = {
     errorGeneric: 'Could not submit the stock count. Please try again.',
     loadError: 'Could not load the menu.',
     emptyHint: 'No tracked items at this outlet yet — turn on stock tracking for an item in Menu management first.',
+    /** Owner report: the hint above was a dead end — this button actually goes there. In Menu
+     * management, each item row's "Track stock" button starts stock tracking. */
+    emptyCta: 'Open Menu management',
     countedAt: 'Counted',
     resultBalanced: 'Balanced — no shrinkage',
     resultLoss: 'Net shrinkage (loss)',
