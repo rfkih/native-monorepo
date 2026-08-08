@@ -1059,8 +1059,11 @@ export const id = {
     addonSelectedLabel: 'Hapus {{name}}',
   },
   register: {
-    /** ADR 0036 — closing kasir (sesi kasir). */
+    /** ADR 0036 — closing kasir (sesi kasir). `title` = label menu kasir & layar mandiri;
+     * judul sheet mengikuti keadaan (form buka vs form tutup). */
     title: 'Kasir — closing kasir',
+    titleOpen: 'Buka kasir',
+    titleClose: 'Closing kasir',
     openHint: 'Buka laci untuk memulai hari: hitung uang kembalian (modal awal) yang dimasukkan.',
     /** Permintaan owner — "buka kasir dulu": muncul saat tombol bayar mengarahkan kasir ke sini
      * karena belum ada sesi kasir yang terbuka. */

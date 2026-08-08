@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { noConfirmedOpenSession, shouldAutoPromptRegister, type RegisterQueryState } from '../registerGate'
+import { noConfirmedOpenSession, type RegisterQueryState } from '../registerGate'
 
 function state(partial: Partial<RegisterQueryState>): RegisterQueryState {
   return { offline: false, isLoading: false, isError: false, session: null, ...partial }
@@ -28,28 +28,5 @@ describe('noConfirmedOpenSession', () => {
 
   it('fails OPEN on an unresolved (undefined) session even if not flagged loading/error', () => {
     expect(noConfirmedOpenSession(state({ session: undefined }))).toBe(false)
-  })
-})
-
-describe('shouldAutoPromptRegister', () => {
-  it('prompts once: no confirmed open session and not yet prompted', () => {
-    expect(shouldAutoPromptRegister(state({ session: null }), false)).toBe(true)
-  })
-
-  it('never re-prompts once already prompted this visit', () => {
-    expect(shouldAutoPromptRegister(state({ session: null }), true)).toBe(false)
-  })
-
-  it('does not prompt when a session is open', () => {
-    expect(shouldAutoPromptRegister(state({ session: { id: 'abc' } }), false)).toBe(false)
-  })
-
-  it('does not prompt offline even if never prompted', () => {
-    expect(shouldAutoPromptRegister(state({ offline: true, session: null }), false)).toBe(false)
-  })
-
-  it('does not prompt while loading or errored', () => {
-    expect(shouldAutoPromptRegister(state({ isLoading: true, session: undefined }), false)).toBe(false)
-    expect(shouldAutoPromptRegister(state({ isError: true, session: undefined }), false)).toBe(false)
   })
 })

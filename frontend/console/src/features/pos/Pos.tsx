@@ -17,7 +17,7 @@
  * All behaviour, hooks, mutations, and data flows are kept exactly as they were.
  * Only the presentation layer changes.
  */
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   Banknote,
@@ -87,7 +87,7 @@ import { OpenBillDialog } from './components/OpenBillDialog'
 import { NoCompany } from './components/NoCompany'
 import { RegisterSheet } from './RegisterSheet'
 import { useCurrentRegisterSession } from './registerApi'
-import { noConfirmedOpenSession, shouldAutoPromptRegister } from './lib/registerGate'
+import { noConfirmedOpenSession } from './lib/registerGate'
 import { PosStatusBar } from '@/features/pos-shell/layout/PosStatusBar'
 import { TillMenuSheet } from '@/features/pos-shell/layout/TillMenuSheet'
 import { usePrinterStatusAction } from '@/features/pos-shell/layout/usePrinterStatusAction'
@@ -161,12 +161,8 @@ function PosInner({ session }: { session: CompanySession }) {
   const [showTillMenu, setShowTillMenu] = useState(false)
   const [showRegisterSheet, setShowRegisterSheet] = useState(false)
   // True while the register sheet is showing BECAUSE the payment gate redirected the cashier here
-  // (vs. the entry auto-prompt or a manual till-menu open) — only then does the sheet show the
-  // explanatory reason line.
+  // (vs. a manual till-menu open) — only then does the sheet show the explanatory reason line.
   const [registerGateActive, setRegisterGateActive] = useState(false)
-  // Once-per-till-visit guard for the entry auto-prompt (shouldAutoPromptRegister) — a dismissed
-  // sheet must not re-pop; the payment gate below is the real enforcement.
-  const autoPromptedRegisterRef = useRef(false)
   const [showStocktakeSheet, setShowStocktakeSheet] = useState(false)
   // P4: the dock's Send/Pay reach INTO the bill sheet — each ++ asks BillDetail to fire the
   // kitchen ticket / the pay modal as soon as the bill is loaded (no manual sheet detour).
@@ -404,27 +400,6 @@ function PosInner({ session }: { session: CompanySession }) {
     publishCurrentDisplayState()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayPublisher, activeBill, lineCount, cart, items, breakdown, clientSubtotalMinor, grandTotalMinor, currency])
-
-  // "Open the register first" entry prompt (owner request): once per till visit, auto-show the
-  // RegisterSheet (float-prefilled open form) when the current-session query settles online with
-  // no open session. Dismissible — the cashier can still browse/build a cart; the payment gate
-  // below is what actually enforces this.
-  useEffect(() => {
-    if (
-      shouldAutoPromptRegister(
-        {
-          offline,
-          isLoading: registerSessionQuery.isLoading,
-          isError: registerSessionQuery.isError,
-          session: registerSessionQuery.data,
-        },
-        autoPromptedRegisterRef.current,
-      )
-    ) {
-      autoPromptedRegisterRef.current = true
-      setShowRegisterSheet(true)
-    }
-  }, [offline, registerSessionQuery.isLoading, registerSessionQuery.isError, registerSessionQuery.data])
 
   const discountInvalid =
     discountInput !== '' && (isNaN(Number(discountInput)) || Number(discountInput) < 0)

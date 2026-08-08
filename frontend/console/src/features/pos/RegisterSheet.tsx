@@ -151,19 +151,28 @@ export function RegisterSheet({
   const inputClass =
     'h-12 w-full rounded-xl border border-line bg-surface px-3 text-right font-mono text-lg tnum text-ink placeholder:text-ink-3/50 transition-colors focus:border-emerald focus:outline-none focus:ring-4 focus:ring-emerald/10'
 
+  // State-aware header: the OPEN form must never announce itself as "closing kasir" (owner bug
+  // report: the sheet reads as a forced close when it is actually asking to open the drawer).
+  const title =
+    closed || current
+      ? t('register.titleClose')
+      : currentQuery.isLoading
+        ? t('register.title')
+        : t('register.titleOpen')
+
   return (
     <div
       className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
-      aria-label={t('register.title')}
+      aria-label={title}
     >
       <div className="reveal max-h-full w-full max-w-sm overflow-y-auto overscroll-contain rounded-card border border-line bg-surface shadow-lg">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <h2 className="flex items-center gap-2 font-display text-lg font-semibold text-ink">
             <Banknote className="size-5 text-emerald-2" aria-hidden="true" />
-            {t('register.title')}
+            {title}
           </h2>
           <button
             type="button"

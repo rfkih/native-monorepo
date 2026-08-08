@@ -1068,8 +1068,11 @@ export const en = {
     addonSelectedLabel: 'Remove {{name}}',
   },
   register: {
-    /** ADR 0036 — closing kasir (register sessions). */
+    /** ADR 0036 — closing kasir (register sessions). `title` labels the till-menu entry and the
+     * standalone screen; the sheet's own header is state-aware (open vs close form). */
     title: 'Register — closing kasir',
+    titleOpen: 'Open the register',
+    titleClose: 'Close the register',
     openHint: 'Open the drawer to start the day: count the change fund (float) you are putting in.',
     /** Owner request — "open the register first": shown when the pay button re-routes the cashier
      * here because there's no open session yet. */
