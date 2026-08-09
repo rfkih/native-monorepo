@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <!-- Set the theme BEFORE first paint to avoid a flash of the wrong colours (FOUC). Reads the
+         same storage key as the console's src/lib/theme.ts (shared via the @ alias — see
+         vite.config.ts); falls back to the OS preference. No in-app theme toggle exists here (the
+         employee app never mounts the console's Shell/topbar), but the shared design-token CSS
+         still answers to data-theme, so this keeps a dark-OS visitor from seeing a light flash. -->
+    <script>
+      ;(function () {
+        try {
+          var t = localStorage.getItem('native.console.theme')
+          if (t !== 'light' && t !== 'dark') {
+            t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+          }
+          document.documentElement.dataset.theme = t
+        } catch (e) {
+          document.documentElement.dataset.theme = 'light'
+        }
+      })()
+    </script>
+    <title>Native</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- Runtime config (window.__NATIVE_CONFIG__). A stub in dev (public/env.js); the deploy image
+         regenerates it from env vars at start so one built image serves every environment — same
+         pattern the console uses. Loaded as a classic script so it runs BEFORE the deferred module
+         bundle reads it. -->
+    <script src="/env.js"></script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
