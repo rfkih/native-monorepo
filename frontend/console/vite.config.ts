@@ -102,9 +102,34 @@ const pwa = VitePWA({
   },
 })
 
+// Boot-critical vendor split (startup-perf pass). The entry chunk carried React + Router + Query +
+// oidc-client-ts + i18next all inline (~700 KB). Splitting the STABLE libraries into their own
+// content-hashed chunks means: (1) a normal web/app deploy that only changes app code leaves these
+// hashes untouched, so the immutable-cached vendor chunks survive in the WebView disk cache and are
+// NOT re-downloaded (the Android shell has no service worker — ADR 0043 — so the HTTP cache is the
+// only thing keeping repeat launches fast); (2) they download in parallel over HTTP/2 instead of as
+// one long pole. CRITICAL: only libraries already on the boot path are bucketed here. Everything else
+// is left to Rollup's default so a lazy-only dependency stays OUT of the boot download and inside its
+// route chunk — e.g. `qrcode` is reached only through the lazy POS chunks (QrisPanelViews /
+// SelfOrderQr), so it must never be named here.
+function bootVendorChunk(id: string): string | undefined {
+  if (!id.includes('node_modules')) return
+  if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'vendor-react'
+  if (/[\\/]node_modules[\\/](react-router|@remix-run)[\\/]/.test(id)) return 'vendor-router'
+  if (/[\\/]node_modules[\\/]@tanstack[\\/]/.test(id)) return 'vendor-query'
+  if (/[\\/]node_modules[\\/]oidc-client-ts[\\/]/.test(id)) return 'vendor-oidc'
+  if (/[\\/]node_modules[\\/](i18next|react-i18next)[\\/]/.test(id)) return 'vendor-i18n'
+  return undefined
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss(), pwa],
+  build: {
+    rollupOptions: {
+      output: { manualChunks: bootVendorChunk },
+    },
+  },
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },

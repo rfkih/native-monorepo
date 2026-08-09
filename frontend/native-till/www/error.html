@@ -45,6 +45,9 @@
       <div class="hint" id="hint"></div>
     </div>
     <script>
+      // Drop the cold-start splash immediately so the retry page is visible at once, rather than
+      // sitting under the splash until its backstop duration elapses (capacitor.config.ts).
+      try { window.Capacitor && window.Capacitor.Plugins.SplashScreen.hide() } catch (e) {}
       // The shell's one origin. Keep in sync with capacitor.config.ts SERVER_URL.
       var ORIGIN = 'https://a8.tailbf9662.ts.net:8443'
       function retry() {

@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import './i18n'
 import { bootstrapPwa } from '@/lib/pwa'
+import { hideNativeSplash } from '@/lib/nativeSplash'
 import { queryClient } from '@/lib/queryClient'
 import { AuthProvider } from '@/lib/auth'
 import { SessionProvider } from '@/lib/SessionProvider'
@@ -33,3 +34,8 @@ createRoot(document.getElementById('root')!).render(
     </QueryClientProvider>
   </StrictMode>,
 )
+
+// Native Till shell (ADR 0043): hand the Capacitor cold-start splash off to the app once React has
+// committed and the WebView has painted a frame (two rAFs), so the splash never covers real content
+// nor reveals a blank frame. No-op in a browser (see nativeSplash.ts).
+requestAnimationFrame(() => requestAnimationFrame(hideNativeSplash))

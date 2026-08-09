@@ -26,6 +26,24 @@ const config: CapacitorConfig = {
     // The console is HTTPS-only; nothing in the shell talks cleartext.
     allowMixedContent: false,
   },
+  plugins: {
+    // Cold-start splash (startup-perf pass): a thin client (ADR 0043) must fetch the whole console
+    // over the network before first paint, and there is no service worker to soften it — so the gap
+    // was a blank paper screen. This keeps a branded splash (paper background = --color-paper, no
+    // white flash) over exactly that gap. The web app calls SplashScreen.hide() the instant it
+    // paints its first frame (frontend/console/src/lib/nativeSplash.ts), so on a healthy load the
+    // splash disappears the moment content is ready. launchShowDuration is only a BACKSTOP for the
+    // paths that never signal hide — the offline error page, or an older console deploy without the
+    // hide call — so the terminal can never get stuck on the splash.
+    SplashScreen: {
+      launchAutoHide: true,
+      launchShowDuration: 3000,
+      backgroundColor: '#F6F9FA',
+      showSpinner: false,
+      splashFullScreen: true,
+      splashImmersive: false,
+    },
+  },
 };
 
 export default config;
