@@ -68,6 +68,14 @@ Two ambiguous prefixes were decided explicitly: **payment-settings stays OWNER-o
 credentials are owner config, not bookkeeping), and **`/consolidation-groups` = OPS** while
 **`/groups` (finance consolidation) = FINANCE**.
 
+One **method-split** carve-out: **`GET /api/v1/org-units/**` is readable by every OFFICE role**
+(`{owner, manager, hr, accountant}`, a `HIGHEST_PRECEDENCE` GET route) while create/rename/move/
+deactivate (POST/PUT/DELETE) stay OPS via the general all-methods route. The HR/People area needs unit
+names to scope employees and payroll, and per-unit reports name their units — reading the org
+*structure* is not *managing* it. Floor roles are excluded (they use the narrower `GET /api/v1/outlets`
+picker). employee-service's own `/api/v1/employees/org-units` projection carries no unit name, so the
+console reads names from org-service; this widening is what lets an `hr`-alone login use the People area.
+
 **Out of scope (deferred):** per-company roles ("HR at company A only") — ADR 0021's global-role
 limitation stands; revisit with Keycloak groups / per-company claims when a customer needs it. A
 dedicated waitress **order-only (no-payment)** screen and a real backed KDS are later work (P3) — for now

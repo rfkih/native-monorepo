@@ -463,6 +463,96 @@ class GatewayRoleExpansionTest extends GatewayIntegrationTestBase {
   }
 
   // ---------------------------------------------------------------------------
+  // org-units: every OFFICE role may READ the tree (unit names for HR/reports),
+  // but only owner/manager may WRITE (create/rename/move/deactivate a unit).
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void anHrRoleCanReadTheOrgUnitsTree() throws Exception {
+    // The HR/People area needs unit names to scope employees + payroll — a READ, not management.
+    String token = obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, HR_USERNAME, HR_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/org-units")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/org-units");
+  }
+
+  @Test
+  void anAccountantRoleCanReadTheOrgUnitsTree() throws Exception {
+    // Per-unit reports (P&L) name their units — accountant reads the tree too.
+    String token =
+        obtainAccessToken(
+            REALM, CLIENT_ID, CLIENT_SECRET, ACCOUNTANT_USERNAME, ACCOUNTANT_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/org-units")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/org-units");
+  }
+
+  @Test
+  void anHrRoleIsDeniedWritingOrgUnitsWith403() throws Exception {
+    // Reading the tree is widened to office roles; MANAGING it (POST/PUT/DELETE) stays
+    // owner/manager.
+    // A write verb does not match the GET read route and falls through to the OPS-only route → 403.
+    String token = obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, HR_USERNAME, HR_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .post()
+                    .uri("/api/v1/org-units")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .body("{}")
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void aChefIsDeniedReadingTheOrgUnitsTreeWith403() throws Exception {
+    // Floor roles are NOT office roles — they use the narrower GET /api/v1/outlets picker, never
+    // the
+    // org-unit tree.
+    String token = obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CHEF_USERNAME, CHEF_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/org-units")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  // ---------------------------------------------------------------------------
   // Multi-role login (hr + accountant on the SAME token): access is the union
   // ---------------------------------------------------------------------------
 

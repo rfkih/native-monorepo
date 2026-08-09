@@ -90,6 +90,18 @@ public class RoutingConfig {
   private static final String[] OPS_ROLES = {"owner", "manager"};
 
   /**
+   * Roles allowed to READ the org-unit tree ({@code GET /api/v1/org-units/**}) — every OFFICE role
+   * ({@code owner}/{@code manager}/{@code hr}/{@code accountant}). Reading the org STRUCTURE (unit
+   * names, the BU→outlet tree) is not the same as MANAGING it: the People/HR area needs unit names
+   * to scope employees and payroll, and per-unit reports name their units, but only {@code owner}/
+   * {@code manager} may create/rename/move/deactivate units. The write verbs on {@code
+   * /api/v1/org-units/**} therefore stay at {@link #OPS_ROLES} via the general (all-methods) route;
+   * this GET-only carve-out is ordered before it (preset role-based access model Phase 2). Floor
+   * roles are NOT included — they use the narrower {@code GET /api/v1/outlets} picker instead.
+   */
+  private static final String[] ORG_READ_ROLES = {"owner", "manager", "hr", "accountant"};
+
+  /**
    * Roles allowed on the financial REPORTS surface (P&amp;L, statements, revenue) — {@code owner}/
    * {@code manager}/{@code accountant}: a manager still reads the top-line reports, an accountant
    * reads them as part of the books.
@@ -372,6 +384,30 @@ public class RoutingConfig {
         .filter(new RateLimitFilter(limiter))
         .filter(new RoleAuthorizationFilter(OPS_ROLES))
         .filter(TenantContextHeaderFilter.tenantOptional())
+        .build();
+  }
+
+  /**
+   * {@code GET /api/v1/org-units/**} — READ the org-unit tree, allowed for every office role
+   * ({@link #ORG_READ_ROLES}), not just owner/manager. The HR/People area and per-unit reports need
+   * unit names to scope employees, payroll, and P&amp;L; reading structure is not managing it.
+   * {@code @Order(HIGHEST_PRECEDENCE)} is load-bearing: this GET carve-out must be matched before
+   * the general (all-methods) {@link #orgUnitsRoute} so an {@code hr}/{@code accountant} GET is
+   * admitted; a write verb (POST/PUT/DELETE) does not match here and falls through to that OPS-only
+   * route.
+   */
+  @Bean
+  @Order(Ordered.HIGHEST_PRECEDENCE)
+  RouterFunction<ServerResponse> orgUnitsReadRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("org-service-org-units-read")
+        .route(GET("/api/v1/org-units/**"), http())
+        .before(uri(routes.orgService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(ORG_READ_ROLES))
+        .filter(tenantFilter)
         .build();
   }
 
