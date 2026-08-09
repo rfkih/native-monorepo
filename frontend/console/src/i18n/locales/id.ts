@@ -2463,6 +2463,7 @@ export const id = {
       chef: 'Hanya kasir / layar dapur.',
       waitress: 'Hanya kasir.',
     },
+    roleTierLocked: 'Menu butuh paket Premium (peran tetap berfungsi).',
     inviteDialog: {
       title: 'Undang anggota tim',
       emailLabel: 'Alamat email',

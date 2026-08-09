@@ -17,6 +17,7 @@ import { Segmented } from '@/components/ui/Segmented'
 import { EmptyState } from '@/features/_shared/financeUi'
 import { useOutlets } from '@/features/org/api'
 import { useSession } from '@/lib/session'
+import { useTierAccess, type FeatureKey } from '@/lib/featureTier'
 import { useAuth } from '@/lib/authContext'
 import { cn } from '@/lib/cn'
 import {
@@ -49,6 +50,18 @@ const ROLES = [
   'employee',
 ] as const
 type Role = (typeof ROLES)[number]
+
+/**
+ * The pure back-office roles whose ENTIRE surface is tier-gated (ADR 0047 / `featureTier.ts`): an
+ * `accountant`'s finance/reports and an `hr`'s people/payroll are all Premium (`FULL`) features, so
+ * on a lower plan the role is assignable and WORKS (the gateway authorizes it) but its console menus
+ * stay tier-hidden — the picker flags that so an owner isn't surprised by an empty sidebar. Floor
+ * roles are FREE and `manager` keeps a FREE surface (team/expenses/dashboard), so neither is flagged.
+ */
+const ROLE_TIER_FEATURE: Partial<Record<Role, FeatureKey>> = {
+  accountant: 'accounting',
+  hr: 'hr',
+}
 
 // ── Dialog state union ────────────────────────────────────────────────────────
 
@@ -134,6 +147,7 @@ function RoleCheckboxGroup({
   ariaLabel: string
 }) {
   const { t } = useTranslation()
+  const { allows } = useTierAccess()
   return (
     <div
       role="group"
@@ -142,6 +156,10 @@ function RoleCheckboxGroup({
     >
       {ROLES.map((r, idx) => {
         const checkboxId = `${idPrefix}-${r}`
+        // The role's back-office surface needs a higher plan than this company has: it still WORKS
+        // (the gateway authorizes it) but its menus stay tier-hidden — flag it so it isn't a surprise.
+        const tierFeature = ROLE_TIER_FEATURE[r]
+        const tierLocked = tierFeature !== undefined && !allows(tierFeature)
         return (
           <label
             key={r}
@@ -161,6 +179,11 @@ function RoleCheckboxGroup({
             <span className="min-w-0">
               <span className="block text-sm font-semibold text-ink">{t(`team.role.${r}`)}</span>
               <span className="block text-xs text-ink-3">{t(`team.roleHint.${r}`)}</span>
+              {tierLocked ? (
+                <span className="mt-0.5 block text-[11px] font-medium text-warning">
+                  {t('team.roleTierLocked')}
+                </span>
+              ) : null}
             </span>
           </label>
         )

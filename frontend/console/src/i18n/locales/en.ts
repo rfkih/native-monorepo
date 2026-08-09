@@ -2484,6 +2484,7 @@ export const en = {
       chef: 'Point of sale / kitchen display only.',
       waitress: 'Point of sale only.',
     },
+    roleTierLocked: 'Menus require the Premium plan (the role still works).',
     inviteDialog: {
       title: 'Invite teammate',
       emailLabel: 'Email address',
