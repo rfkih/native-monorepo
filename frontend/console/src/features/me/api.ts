@@ -196,6 +196,28 @@ export function useMyPayslipsYtd(
   }
 }
 
+/**
+ * PUT /api/v1/me/operator-pin — the CALLER sets/changes their OWN operator PIN (also serves
+ * forgot-PIN); the backend resolves the target from the verified token's subject, so the request
+ * body carries only the new PIN. Write-only by contract, mirroring `useSetOperatorPin` in
+ * `features/hr/api.ts` — the PIN is never returned/read back (rule 6), so there is no matching
+ * read hook and no query invalidation. Uses the PERSONAL bearer (ADR 0049 P3b, `auth: 'personal'`)
+ * so this always resolves to the SIGNED-IN PERSON, never a device terminal's bare outlet
+ * credential.
+ */
+export function useSetMyOperatorPin(params: TenantParams) {
+  const { companyId, actor } = params
+  return useMutation({
+    mutationFn: ({ newPin }: { newPin: string }) =>
+      apiFetch<null>('/api/v1/me/operator-pin', {
+        method: 'PUT',
+        tenant: { companyId, actor },
+        body: { newPin },
+        auth: 'personal',
+      }),
+  })
+}
+
 /** GET /api/v1/me/sales — own sales + commission preview for the current month. */
 export function useMySales(params: TenantParams & { period?: string; enabled: boolean }) {
   const { companyId, actor, period, enabled } = params

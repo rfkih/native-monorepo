@@ -8,7 +8,7 @@
 
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router-dom'
-import { LogOut, TriangleAlert, UserRound } from 'lucide-react'
+import { LogOut, Settings, TriangleAlert, UserRound } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -74,6 +74,15 @@ export function Me() {
             {t('me.toPos')}
           </Link>
         ) : null}
+        <Link
+          to="/me/account"
+          viewTransition
+          title={t('me.account.title')}
+          className="grid size-10 place-items-center rounded-full text-ink-3 hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-emerald"
+        >
+          <Settings className="size-[18px]" aria-hidden="true" />
+          <span className="sr-only">{t('me.account.title')}</span>
+        </Link>
         <LanguageSwitcher />
         {AUTH_MODE === 'oidc' && auth.authenticated ? (
           <button

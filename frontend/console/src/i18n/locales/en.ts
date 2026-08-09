@@ -176,6 +176,30 @@ export const en = {
         error: 'Could not save this claim — check the fields and try again.',
       },
     },
+    // Two-app + outlet-terminal program, Phase 3 — "Account settings": the CALLER changes their
+    // own operator PIN and password (Keycloak's own secure flow — see auth.changePassword()).
+    account: {
+      title: 'Account settings',
+      subtitle: 'Manage your own sign-in PIN and password.',
+      pin: {
+        title: 'Change PIN',
+        body: 'The 4–6 digit code you enter at the till to ring a sale under your own name.',
+        newLabel: 'New PIN',
+        confirmLabel: 'Confirm new PIN',
+        mismatch: 'PINs do not match.',
+        invalid: 'Enter 4 to 6 digits.',
+        submit: 'Save PIN',
+        submitting: 'Saving…',
+        saved: 'Your PIN has been changed.',
+        error: 'Could not save your PIN. Try again.',
+      },
+      password: {
+        title: 'Change password',
+        body: 'Your password is managed by Keycloak, our sign-in provider.',
+        button: 'Change password',
+        hint: 'Opens a secure Keycloak page — you’ll return here once it’s done.',
+      },
+    },
   },
   landing: {
     // header / nav

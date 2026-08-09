@@ -81,6 +81,8 @@ function DevAuthProvider({ children }: { children: ReactNode }) {
       dropElevation: () => setElevated(false),
       login: () => {},
       logout: () => {},
+      // No Keycloak in dev mode — nothing to redirect to.
+      changePassword: () => console.info('[dev] changePassword is a no-op outside oidc mode'),
       refresh: async () => true,
     }),
     [isDeviceDev, elevated],
@@ -142,7 +144,10 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
   )
 
   const [state, setState] = useState<
-    Omit<AuthState, 'login' | 'logout' | 'refresh' | 'elevatedRoles' | 'elevate' | 'dropElevation'>
+    Omit<
+      AuthState,
+      'login' | 'logout' | 'changePassword' | 'refresh' | 'elevatedRoles' | 'elevate' | 'dropElevation'
+    >
   >({
     ready: false,
     authenticated: false,
@@ -458,6 +463,14 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
         setOperatorSession(null)
         void manager.signoutRedirect()
       },
+      // Employee self-service "Account settings" (two-app program) — the SAME signinRedirect
+      // mechanism `elevate()` above uses, but on the PRIMARY manager (this is the caller's own
+      // credential, not a second elevation login) and with `kc_action: 'UPDATE_PASSWORD'` instead
+      // of `prompt: 'login'`. Keycloak runs its built-in secure change-password action for the
+      // already-authenticated principal and redirects back to `/auth/callback`, which `init()`
+      // above already handles exactly like any other login return.
+      changePassword: () =>
+        void manager.signinRedirect({ extraQueryParams: { kc_action: 'UPDATE_PASSWORD' } }),
       // Silent renew: fetches a fresh token so a just-enlarged company_id claim (after "Add
       // another business") reaches the session. The addUserLoaded event applies the new claims.
       refresh: async () => {

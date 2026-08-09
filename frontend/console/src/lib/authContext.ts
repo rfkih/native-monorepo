@@ -67,6 +67,16 @@ export interface AuthState {
   login: (loginHint?: string) => void
   logout: () => void
   /**
+   * Opens Keycloak's OWN secure change-password screen for the CALLER (Employee self-service
+   * "Account settings" — two-app program). Implemented as a fresh `signinRedirect` on the SAME
+   * PRIMARY manager `login`/`logout` use, passing `kc_action: 'UPDATE_PASSWORD'` instead of
+   * `elevate()`'s `prompt: 'login'` — Keycloak runs its built-in UPDATE_PASSWORD required action
+   * for the already-authenticated principal, then redirects back to `/auth/callback` (existing
+   * handling). No new Keycloak client, no realm change, no backend call: Keycloak owns the
+   * credential (rule 6). A no-op (console.info) in dev mode — there is no Keycloak to redirect to.
+   */
+  changePassword: () => void
+  /**
    * Silently renews the access token (oidc mode) so a just-changed `company_id` claim — e.g. after
    * "Add another business" enlarged the membership set — reaches the session without a re-login.
    * Resolves `true` when the renew succeeded (the fresh claims are applied), `false` when it failed

@@ -52,6 +52,7 @@ function PrefetchRouteChunks({
       void import('@/features/expenses/MyExpenses')
       void import('@/features/me/MePayslipsScreen')
       void import('@/features/me/MeTimeoffScreen')
+      void import('@/features/me/MeAccount')
       if (canDashboard) {
         void import('@/features/dashboard/Dashboard')
         void import('@/features/statements/IncomeStatement')
@@ -191,6 +192,9 @@ const MePayslipsScreen = lazy(() =>
 )
 const MeTimeoffScreen = lazy(() =>
   import('@/features/me/MeTimeoffScreen').then((m) => ({ default: m.MeTimeoffScreen })),
+)
+const MeAccount = lazy(() =>
+  import('@/features/me/MeAccount').then((m) => ({ default: m.MeAccount })),
 )
 const ExpensesHub = lazy(() =>
   import('@/features/expenses/ExpensesHub').then((m) => ({ default: m.ExpensesHub })),
@@ -514,6 +518,9 @@ export function App() {
               tablet width and up each bounces back to the inline /me sections. */}
           <Route path="/me/payslips" element={<MePayslipsScreen />} />
           <Route path="/me/timeoff" element={<MeTimeoffScreen />} />
+          {/* Account settings (two-app + outlet-terminal program, Phase 3) — own PIN + password,
+              same open gate as /me itself. */}
+          <Route path="/me/account" element={<MeAccount />} />
 
           {/* Printer settings (ADR 0039) — a per-DEVICE thermal-printer pairing, so it is NOT
               page-gated: whoever sets up a till (cashier or manager) must be able to connect it.

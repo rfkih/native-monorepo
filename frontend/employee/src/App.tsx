@@ -20,6 +20,9 @@ const MePayslipsScreen = lazy(() =>
 const MeTimeoffScreen = lazy(() =>
   import('@/features/me/MeTimeoffScreen').then((m) => ({ default: m.MeTimeoffScreen })),
 )
+const MeAccount = lazy(() =>
+  import('@/features/me/MeAccount').then((m) => ({ default: m.MeAccount })),
+)
 
 function CenteredSpinner() {
   return (
@@ -38,7 +41,7 @@ function CenteredSpinner() {
  *
  * Unauthenticated → a minimal branded sign-in screen (explicit login, mirroring the console's own
  * "login is user-initiated" rule — no auto-bounce to the IdP).
- * Authenticated → the same four self-service routes the console mounts, at the same paths, so a
+ * Authenticated → the same five self-service routes the console mounts, at the same paths, so a
  * bookmark/deep-link from either app works identically.
  */
 export function App() {
@@ -74,6 +77,7 @@ export function App() {
         <Route path="/me/expenses" element={<MyExpenses />} />
         <Route path="/me/payslips" element={<MePayslipsScreen />} />
         <Route path="/me/timeoff" element={<MeTimeoffScreen />} />
+        <Route path="/me/account" element={<MeAccount />} />
         <Route path="*" element={<Navigate to="/me" replace />} />
       </Routes>
     </Suspense>

@@ -171,6 +171,30 @@ export const id = {
         error: 'Gagal menyimpan klaim ini — periksa isian dan coba lagi.',
       },
     },
+    // Program dua-aplikasi + terminal-outlet, Fase 3 — "Pengaturan akun": pengguna mengubah PIN
+    // dan kata sandinya sendiri (kata sandi lewat alur aman Keycloak — lihat auth.changePassword()).
+    account: {
+      title: 'Pengaturan akun',
+      subtitle: 'Kelola PIN masuk dan kata sandi Anda sendiri.',
+      pin: {
+        title: 'Ubah PIN',
+        body: 'Kode 4–6 digit yang Anda masukkan di mesin kasir untuk mencatat penjualan atas nama Anda.',
+        newLabel: 'PIN baru',
+        confirmLabel: 'Konfirmasi PIN baru',
+        mismatch: 'PIN tidak cocok.',
+        invalid: 'Masukkan 4 sampai 6 digit.',
+        submit: 'Simpan PIN',
+        submitting: 'Menyimpan…',
+        saved: 'PIN Anda berhasil diubah.',
+        error: 'PIN gagal disimpan. Coba lagi.',
+      },
+      password: {
+        title: 'Ubah kata sandi',
+        body: 'Kata sandi Anda dikelola oleh Keycloak, penyedia layanan masuk kami.',
+        button: 'Ubah kata sandi',
+        hint: 'Membuka halaman aman Keycloak — Anda akan kembali ke sini setelah selesai.',
+      },
+    },
   },
   app: {
     name: 'Native',

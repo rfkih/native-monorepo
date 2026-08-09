@@ -8,7 +8,16 @@
 
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { CalendarDays, Clock, LogOut, Plus, ReceiptText, TriangleAlert, UserRound } from 'lucide-react'
+import {
+  CalendarDays,
+  Clock,
+  LogOut,
+  Plus,
+  ReceiptText,
+  Settings,
+  TriangleAlert,
+  UserRound,
+} from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Skeleton } from '@/components/ui/Skeleton'
@@ -102,6 +111,14 @@ export function MeHomePhone() {
             {t('me.toPos')}
           </Link>
         ) : null}
+        <Link
+          to="/me/account"
+          viewTransition
+          aria-label={t('me.account.title')}
+          className="grid size-11 place-items-center rounded-full text-ink-3 hover:bg-hover hover:text-ink"
+        >
+          <Settings className="size-[18px]" aria-hidden />
+        </Link>
         <LanguageSwitcher />
         {AUTH_MODE === 'oidc' && auth.authenticated ? (
           <button
