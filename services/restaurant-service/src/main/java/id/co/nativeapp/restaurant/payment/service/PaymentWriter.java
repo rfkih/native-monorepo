@@ -6,6 +6,10 @@ import id.co.nativeapp.restaurant.payment.domain.TenderType;
 import id.co.nativeapp.restaurant.payment.dto.PaymentResponse;
 import id.co.nativeapp.restaurant.payment.projection.PaymentReceiptView;
 import id.co.nativeapp.restaurant.payment.repository.PaymentRepository;
+import id.co.nativeapp.restaurant.sale.domain.OperatorMismatchException;
+import id.co.nativeapp.restaurant.sale.service.OperatorRequiredGuard;
+import id.co.nativeapp.security.OperatorContextProvider;
+import id.co.nativeapp.security.OperatorPrincipal;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Instant;
@@ -32,16 +36,31 @@ import org.springframework.transaction.annotation.Transactional;
  * point — revenue is deferred to the explicit {@code capture} call (ADR 0006 invariant). The order,
  * its lines, and the pending payment all commit together; no {@code SaleRecorded} is emitted until
  * capture.
+ *
+ * <p><strong>ADR 0049 P4.</strong> {@link #recordPendingDigitalInCurrentTx} is the SINGLE
+ * PENDING-minting choke point for every digital-tender checkout path (legacy order checkout,
+ * park-then-pay) — so it is where the {@code operator-required} guard for a device (outlet-
+ * terminal) digital sale is centralized, and where the ring-time operator (if any) is stamped onto
+ * the PENDING {@link Payment} row for {@code PaymentCaptureWriter#capture} to read back and thread
+ * onto the sale at async capture time.
  */
 @Component
 public class PaymentWriter {
 
   private final PaymentProviderRegistry providers;
   private final PaymentRepository repository;
+  private final OperatorContextProvider operatorContextProvider;
+  private final OperatorRequiredGuard operatorRequiredGuard;
 
-  public PaymentWriter(PaymentProviderRegistry providers, PaymentRepository repository) {
+  public PaymentWriter(
+      PaymentProviderRegistry providers,
+      PaymentRepository repository,
+      OperatorContextProvider operatorContextProvider,
+      OperatorRequiredGuard operatorRequiredGuard) {
     this.providers = providers;
     this.repository = repository;
+    this.operatorContextProvider = operatorContextProvider;
+    this.operatorRequiredGuard = operatorRequiredGuard;
   }
 
   /**
@@ -98,10 +117,23 @@ public class PaymentWriter {
    * checkout rolls back (e.g. an invalid item) the pending row is never persisted — there is no
    * dangling PENDING payment for a non-existent order.
    *
+   * <p><strong>ADR 0049 P4.</strong> The digital-tender CHECKOUT is the synchronous choke point for
+   * a device (outlet-terminal) sale — the actual revenue-recognizing {@code SaleRecorded} does not
+   * emit until the async capture, which has no live operator session to enforce against (see {@code
+   * OperatorRequiredGuard} javadoc). So the guard is enforced HERE: a device actor with no verified
+   * operator session is rejected outright ({@code 409 operator-required}) before the PENDING
+   * payment is ever minted. When an operator session IS present, its {@code operatorUserId} is
+   * stamped onto the PENDING payment ({@link Payment#stampSeller}) so {@code
+   * PaymentCaptureWriter#capture} can thread it onto the sale (and the commission metric) at async
+   * capture time — otherwise a PIN-rung digital sale would silently fall back to the bound (device)
+   * actor once outlet credentials exist.
+   *
    * @param instruction the authorization instruction, must be a digital tender
    * @param occurredAt the checkout instant (stamped on the payment)
    * @return the PENDING payment response (status = PENDING, providerPending = true, saleId = null)
    * @throws IllegalArgumentException if the tender type is CASH
+   * @throws id.co.nativeapp.restaurant.sale.domain.OperatorRequiredException if the current request
+   *     is a device (outlet-terminal) actor with no verified operator session bound
    */
   @Transactional(propagation = Propagation.MANDATORY)
   public PaymentResponse recordPendingDigitalInCurrentTx(
@@ -111,6 +143,11 @@ public class PaymentWriter {
           "recordPendingDigital requires a digital tender; got " + instruction.tenderType());
     }
     String companyId = TenantContext.require().companyId();
+
+    // ADR 0049 P4: read once, up front, so the SAME operator context both enforces the device
+    // guard AND stamps the ring-time seller onto the PENDING payment below.
+    Optional<OperatorPrincipal> operator = operatorContextProvider.current();
+    operatorRequiredGuard.enforce(instruction.businessId(), operator);
 
     TenderAuthorization auth =
         providers.providerFor(instruction.tenderType()).authorize(instruction);
@@ -124,6 +161,21 @@ public class PaymentWriter {
             auth.providerRef(),
             occurredAt,
             instruction.idempotencyKey());
+    // ADR 0049 P4: stamp the ring-time operator (if any) BEFORE the first save — sold_by_user_id
+    // is updatable=false, so this must happen at creation, exactly like Sale#stampSeller. The
+    // operator token's companyId/businessId MUST match the bound tenant / this checkout's outlet
+    // before we trust it as the ring-time seller — the HMAC signature proves authenticity fleet-
+    // wide (the key is shared), NOT that the token belongs HERE, so a stolen/misdirected but
+    // validly-signed token is rejected outright (OperatorMismatchException, 409) before any PENDING
+    // payment is minted. This is the SAME assertion the synchronous cash path enforces
+    // (OperatorMismatchException.requireMatch), applied here so the seller PaymentCaptureWriter
+    // reads back at async capture is guaranteed already-validated (SaleWriter trusts it as-is).
+    operator.ifPresent(
+        principal -> {
+          OperatorMismatchException.requireMatch(
+              principal.companyId(), principal.businessId(), companyId, instruction.businessId());
+          payment.stampSeller(principal.operatorUserId());
+        });
     payment.setCompanyId(companyId);
     return PaymentResponse.from(repository.saveAndFlush(payment));
   }

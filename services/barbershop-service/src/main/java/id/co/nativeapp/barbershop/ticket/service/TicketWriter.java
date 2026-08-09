@@ -37,6 +37,8 @@ import id.co.nativeapp.barbershop.ticket.projection.TicketView;
 import id.co.nativeapp.barbershop.ticket.repository.BarbershopTicketLineRepository;
 import id.co.nativeapp.barbershop.ticket.repository.BarbershopTicketRepository;
 import id.co.nativeapp.money.Money;
+import id.co.nativeapp.security.OperatorContextProvider;
+import id.co.nativeapp.security.OperatorPrincipal;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Instant;
@@ -113,6 +115,8 @@ public class TicketWriter {
   private final ManualDiscountGuard manualDiscountGuard;
   private final LoyaltyRedemptionGuard loyaltyRedemptionGuard;
   private final OfflineReplayGuard offlineReplayGuard;
+  private final OperatorContextProvider operatorContextProvider;
+  private final OperatorRequiredGuard operatorRequiredGuard;
 
   @SuppressWarnings("checkstyle:ParameterNumber")
   public TicketWriter(
@@ -131,7 +135,9 @@ public class TicketWriter {
       AppliedPromotionRepository appliedPromotionRepository,
       ManualDiscountGuard manualDiscountGuard,
       LoyaltyRedemptionGuard loyaltyRedemptionGuard,
-      OfflineReplayGuard offlineReplayGuard) {
+      OfflineReplayGuard offlineReplayGuard,
+      OperatorContextProvider operatorContextProvider,
+      OperatorRequiredGuard operatorRequiredGuard) {
     this.ticketRepository = ticketRepository;
     this.lineRepository = lineRepository;
     this.paymentRepository = paymentRepository;
@@ -148,6 +154,8 @@ public class TicketWriter {
     this.manualDiscountGuard = manualDiscountGuard;
     this.loyaltyRedemptionGuard = loyaltyRedemptionGuard;
     this.offlineReplayGuard = offlineReplayGuard;
+    this.operatorContextProvider = operatorContextProvider;
+    this.operatorRequiredGuard = operatorRequiredGuard;
   }
 
   /**
@@ -179,6 +187,13 @@ public class TicketWriter {
     }
 
     outletAccessGuard.enforce(request.businessId());
+
+    // ADR 0049 P4 — CHOKE-POINT guard: a device (outlet-terminal) ticket with no verified operator
+    // session is rejected outright (409 operator-required), covering BOTH the CASH-recognized-
+    // revenue branch AND the PENDING-digital-mint branch below (this single method mints both —
+    // see class javadoc). Inert for actor_type=user (owner/manager/barber ringing directly).
+    Optional<OperatorPrincipal> operator = operatorContextProvider.current();
+    operatorRequiredGuard.enforce(request.businessId(), operator);
 
     // Phase 3 (ADR 0026): a positive manual discount requires owner/manager.
     manualDiscountGuard.enforce(request.discountMinor());

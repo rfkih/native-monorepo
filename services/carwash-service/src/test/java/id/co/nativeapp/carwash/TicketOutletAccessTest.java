@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import id.co.nativeapp.carwash.catalog.dto.CatalogItemCreateRequest;
 import id.co.nativeapp.carwash.catalog.dto.CatalogItemResponse;
 import id.co.nativeapp.carwash.catalog.service.CatalogService;
+import id.co.nativeapp.carwash.config.ActorTypeProvider;
 import id.co.nativeapp.carwash.entitlement.dto.EntitlementProjectedEvent;
 import id.co.nativeapp.carwash.entitlement.service.EntitlementProjectionService;
 import id.co.nativeapp.carwash.outletref.domain.OutletNotAssignedException;
@@ -13,11 +14,13 @@ import id.co.nativeapp.carwash.outletref.messaging.UserOutletAssignmentEvent;
 import id.co.nativeapp.carwash.outletref.service.UserOutletAssignmentRefService;
 import id.co.nativeapp.carwash.payment.domain.TenderType;
 import id.co.nativeapp.carwash.ticket.domain.ItemType;
+import id.co.nativeapp.carwash.ticket.domain.OperatorRequiredException;
 import id.co.nativeapp.carwash.ticket.dto.CheckoutRequest;
 import id.co.nativeapp.carwash.ticket.dto.CheckoutResult;
 import id.co.nativeapp.carwash.ticket.dto.PaymentRequest;
 import id.co.nativeapp.carwash.ticket.dto.TicketLineInput;
 import id.co.nativeapp.carwash.ticket.service.TicketService;
+import id.co.nativeapp.security.OperatorPrincipal;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.LocalDate;
 import java.util.List;
@@ -73,6 +76,21 @@ class TicketOutletAccessTest extends KafkaPostgresRedisTestBase {
     RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
   }
 
+  /**
+   * ADR 0049 P4: binds a request carrying both {@code X-Roles} and {@code X-Actor-Type: device},
+   * plus (optionally) a pre-verified {@link OperatorPrincipal} request attribute — mirroring what
+   * {@code OperatorSessionFilter} sets after verifying a real {@code X-Operator-Session} token.
+   */
+  private void setRolesAsDeviceActor(String roles, OperatorPrincipal operator) {
+    MockHttpServletRequest request = new MockHttpServletRequest();
+    request.addHeader("X-Roles", roles);
+    request.addHeader(ActorTypeProvider.ACTOR_TYPE_HEADER, ActorTypeProvider.DEVICE);
+    if (operator != null) {
+      request.setAttribute(OperatorPrincipal.REQUEST_ATTRIBUTE, operator);
+    }
+    RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+  }
+
   @AfterEach
   void clearRequestContext() {
     RequestContextHolder.resetRequestAttributes();
@@ -119,6 +137,38 @@ class TicketOutletAccessTest extends KafkaPostgresRedisTestBase {
 
     CheckoutResult result =
         TenantContext.callAs(TENANT, OWNER_ACTOR, () -> ticketService.checkout(request));
+    assertThat(result.created()).isTrue();
+  }
+
+  // ---------------------------------------------------------------- ADR 0049 P4: device guard
+
+  @Test
+  void deviceActorWithNoOperatorSessionIsRejectedWithOperatorRequired() throws Exception {
+    grantCarwash(TENANT);
+    CatalogItemResponse pkg = createPackage();
+
+    setRolesAsDeviceActor("cashier", null);
+    CheckoutRequest request = checkoutRequest(pkg.id(), "device-no-operator-1");
+
+    assertThatThrownBy(
+            () ->
+                TenantContext.callAs(TENANT, CASHIER_ACTOR, () -> ticketService.checkout(request)))
+        .isInstanceOf(OperatorRequiredException.class);
+  }
+
+  @Test
+  void deviceActorWithAVerifiedOperatorSessionIsAdmitted() throws Exception {
+    grantCarwash(TENANT);
+    CatalogItemResponse pkg = createPackage();
+
+    OperatorPrincipal operator =
+        new OperatorPrincipal(
+            TENANT, OUTLET, UUID.randomUUID().toString(), UUID.randomUUID(), "cashier");
+    setRolesAsDeviceActor("cashier", operator);
+    CheckoutRequest request = checkoutRequest(pkg.id(), "device-operator-1");
+
+    CheckoutResult result =
+        TenantContext.callAs(TENANT, CASHIER_ACTOR, () -> ticketService.checkout(request));
     assertThat(result.created()).isTrue();
   }
 

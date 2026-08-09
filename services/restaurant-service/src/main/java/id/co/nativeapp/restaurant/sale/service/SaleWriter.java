@@ -63,6 +63,7 @@ public class SaleWriter {
   private final OutletAccessGuard outletAccessGuard;
   private final CashWindowLock cashWindowLock;
   private final OperatorContextProvider operatorContextProvider;
+  private final OperatorRequiredGuard operatorRequiredGuard;
 
   public SaleWriter(
       SaleRepository repository,
@@ -70,13 +71,15 @@ public class SaleWriter {
       PostOutboxHook postOutboxHook,
       OutletAccessGuard outletAccessGuard,
       CashWindowLock cashWindowLock,
-      OperatorContextProvider operatorContextProvider) {
+      OperatorContextProvider operatorContextProvider,
+      OperatorRequiredGuard operatorRequiredGuard) {
     this.repository = repository;
     this.outboxWriter = outboxWriter;
     this.postOutboxHook = postOutboxHook;
     this.outletAccessGuard = outletAccessGuard;
     this.cashWindowLock = cashWindowLock;
     this.operatorContextProvider = operatorContextProvider;
+    this.operatorRequiredGuard = operatorRequiredGuard;
   }
 
   /**
@@ -117,6 +120,11 @@ public class SaleWriter {
     // only a genuinely new sale at an unassigned outlet is rejected.
     outletAccessGuard.enforce(command.businessId());
 
+    // ADR 0049 P4 — CHOKE-POINT guard: a device (outlet-terminal) sale with no verified operator
+    // session is rejected outright (409 operator-required). Inert for actor_type=user (owner/
+    // manager/cashier ringing directly) — see ActorTypeProvider/OperatorRequiredGuard javadoc.
+    operatorRequiredGuard.enforce(command.businessId(), operator);
+
     // CashWindowLock (verified HIGH race fix) — SHARED, FIRST lock-acquiring statement, strictly
     // BEFORE occurredAt is resolved below (see RegisterSessionWriter class javadoc for the
     // contract).
@@ -148,11 +156,12 @@ public class SaleWriter {
             command.channel(),
             giftCardRedeemedOf(command));
     sale.setCompanyId(companyId);
-    // ADR 0049 P2: stamp the verified operator (if any) as the seller BEFORE the first save — the
+    // ADR 0049 P2/P4: stamp the resolved seller (if any) BEFORE the first save — the
     // sold_by_user_id column is updatable=false, so this must happen at creation. A mismatched
     // operator (wrong tenant/outlet) rejects the whole write (OperatorMismatchException, 409) —
     // never silently falls back to the device actor.
-    stampSellerIfOperatorPresent(sale, operator, companyId, command.businessId());
+    String resolvedSellerId = resolveSeller(operator, command);
+    stampSeller(sale, resolvedSellerId, operator, companyId, command.businessId());
     Sale saved = repository.saveAndFlush(sale);
 
     // Build the SaleRecorded GenericRecord from the .avsc and serialize it for the
@@ -188,9 +197,10 @@ public class SaleWriter {
         saved.getOccurredAt());
 
     // Own-sales commission feed: emit a MetricPublished (sales_amount @ employee) in the SAME
-    // transaction, attributed to the operator who rang it when one is present (ADR 0049 P2), else
-    // the cashier who rang it (rule 3).
-    emitSalesMetric(saved, companyId, operator);
+    // transaction, attributed to the resolved seller (operator who rang it, ADR 0049 P2; else the
+    // ring-time operator carried async via command.soldByUserId(), ADR 0049 P4), else the cashier
+    // who rang it (rule 3, today's exact pre-ADR-0049 behaviour).
+    emitSalesMetric(saved, companyId, resolvedSellerId);
 
     // Test seam: a no-op in production; a test can install a hook that throws here to
     // prove the sale AND the outbox row roll back together (atomicity, rule 3).
@@ -223,6 +233,12 @@ public class SaleWriter {
     // harmless for the checkout/payParked/payBill paths, which already fail-fast-guard upstream.
     outletAccessGuard.enforce(command.businessId());
 
+    // ADR 0049 P4 — CHOKE-POINT guard (see create()). On the async PaymentCaptureWriter.capture
+    // path (a Kafka consumer thread, no HTTP request) ActorTypeProvider always resolves "user", so
+    // this never re-fires there — the device was already required (or the operator already
+    // captured) at the synchronous checkout that minted the PENDING payment.
+    operatorRequiredGuard.enforce(command.businessId(), operator);
+
     Money amount = Money.ofMinor(command.amountMinor(), command.currency());
     Sale sale =
         new Sale(
@@ -235,7 +251,8 @@ public class SaleWriter {
             command.channel(),
             giftCardRedeemedOf(command));
     sale.setCompanyId(companyId);
-    stampSellerIfOperatorPresent(sale, operator, companyId, command.businessId());
+    String resolvedSellerId = resolveSeller(operator, command);
+    stampSeller(sale, resolvedSellerId, operator, companyId, command.businessId());
     Sale saved = repository.saveAndFlush(sale);
 
     GenericRecord event =
@@ -260,7 +277,7 @@ public class SaleWriter {
         UUID.fromString(companyId),
         saved.getOccurredAt());
 
-    emitSalesMetric(saved, companyId, operator);
+    emitSalesMetric(saved, companyId, resolvedSellerId);
 
     postOutboxHook.afterOutboxWrite(saved);
 
@@ -289,37 +306,65 @@ public class SaleWriter {
   }
 
   /**
+   * Resolves the seller id for a sale (ADR 0049 P2/P4), in priority order:
+   *
+   * <ol>
+   *   <li>{@code command.soldByUserId()} — the RING-TIME operator carried async (ADR 0049 P4) by
+   *       {@code PaymentCaptureWriter#capture} from the payment row {@code
+   *       payment.service.PaymentWriter#recordPendingDigitalInCurrentTx} stamped (and
+   *       tenant/outlet-validated) at checkout. When present it is AUTHORITATIVE and wins: the
+   *       commission credit follows whoever RANG the sale, never whoever holds a live session at
+   *       CAPTURE time — so a shift-change cashier who merely clicks "mark as paid" can never take
+   *       the ringer's credit (code-review follow-up). {@code null} for every non-capture caller
+   *       (the legacy {@code POST /api/v1/sales}, {@code OrderWriter}/{@code BillWriter}'s CASH
+   *       paths never set it).
+   *   <li>Else a LIVE verified operator session ({@code operator}, read at the top of {@link
+   *       #create}/{@link #recordInCurrentTx} via {@code OperatorContextProvider}) — the
+   *       PIN-identified cashier ringing THIS request directly (the direct/checkout paths, where
+   *       there is no async-carried ring-time seller).
+   *   <li>Else {@code null} — today's exact pre-ADR-0049 behaviour: {@link #emitSalesMetric} falls
+   *       back to the bound actor and {@link #stampSeller} leaves {@code sold_by_user_id} unset.
+   * </ol>
+   */
+  private static String resolveSeller(
+      Optional<OperatorPrincipal> operator, RecordSaleCommand command) {
+    if (command.soldByUserId() != null) {
+      return command.soldByUserId();
+    }
+    return operator.map(OperatorPrincipal::operatorUserId).orElse(null);
+  }
+
+  /**
    * Emits one {@code MetricPublished} ({@code sales_amount} @ employee grain) for a sale, in the
    * caller's transaction (rule 3).
    *
-   * <p><strong>ADR 0049 P2 seller attribution.</strong> When a verified {@code operator} is present
-   * (a PIN-identified cashier), the metric {@code subject} is the OPERATOR's Keycloak {@code sub} —
-   * the load-bearing commission-correctness change, since the operator may differ from the device
-   * actor once outlet credentials exist (P3). When no operator is present (today's norm — no PIN
-   * operators exist yet in the field), behaviour is BYTE-IDENTICAL to pre-ADR-0049: the bound actor
-   * (the JWT sub, also on {@code sale.created_by}), skipped when the actor is NOT a UUID — {@code
-   * metric_input.subject_id} is a UUID column, so a non-UUID actor (the header-trust dev recipe's
-   * fixed actor) cannot key a metric row — emitting one would fail the consumer decode. This is a
-   * documented dev-mode caveat; real logins always carry a UUID sub. The operator path carries no
-   * such fallback: {@code operatorUserId} is always the employee's own linked Keycloak sub
-   * (employee-service refuses to mint a session for an unlinked employee — {@code
-   * OperatorNotLinkedException}), so it is used as-is.
+   * <p><strong>ADR 0049 P2/P4 seller attribution.</strong> When {@code resolvedSellerId} is
+   * non-null (a PIN-identified cashier's live operator session, ADR 0049 P2; or the ring-time
+   * operator carried async through a digital-tender capture, ADR 0049 P4), the metric {@code
+   * subject} is THAT id — the load-bearing commission-correctness change, since it may differ from
+   * the device actor once outlet credentials exist (P3). When {@code resolvedSellerId} is {@code
+   * null} (today's norm off a device — no PIN operators exist yet in the field, or an ordinary
+   * {@code actor_type=user} login rang directly), behaviour is BYTE-IDENTICAL to pre-ADR-0049: the
+   * bound actor (the JWT sub, also on {@code sale.created_by}), skipped when the actor is NOT a
+   * UUID — {@code metric_input.subject_id} is a UUID column, so a non-UUID actor (the header-trust
+   * dev recipe's fixed actor) cannot key a metric row — emitting one would fail the consumer
+   * decode. This is a documented dev-mode caveat; real logins always carry a UUID sub. The
+   * resolved-seller path carries no such fallback for a malformed id — a non-UUID id is skipped
+   * (never emitted as garbage), symmetrically with the actor path.
    */
-  private void emitSalesMetric(Sale saved, String companyId, Optional<OperatorPrincipal> operator) {
+  private void emitSalesMetric(Sale saved, String companyId, String resolvedSellerId) {
     String subjectId;
-    if (operator.isPresent()) {
-      // The operator's user id is always the employee's linked Keycloak sub (a UUID) — but guard it
-      // symmetrically with the actor path (code review S1): metric_input.subject_id is a UUID
-      // column,
-      // so a non-UUID would be a poison MetricPublished the payroll consumer cannot decode. Skip
-      // rather than emit garbage (a corrupt employee.user_id is a data fault, not a per-sale
+    if (resolvedSellerId != null) {
+      // A resolved seller id is always expected to be the employee's linked Keycloak sub (a UUID)
+      // — but guard it symmetrically with the actor path (code review S1): metric_input.subject_id
+      // is a UUID column, so a non-UUID would be a poison MetricPublished the payroll consumer
+      // cannot decode. Skip rather than emit garbage (a corrupt id is a data fault, not a per-sale
       // error).
-      String operatorUserId = operator.get().operatorUserId();
       try {
-        subjectId = UUID.fromString(operatorUserId).toString();
+        subjectId = UUID.fromString(resolvedSellerId).toString();
       } catch (IllegalArgumentException e) {
         log.warn(
-            "Skipping sales_amount metric — operator subject '{}' is not a UUID", operatorUserId);
+            "Skipping sales_amount metric — resolved seller '{}' is not a UUID", resolvedSellerId);
         return;
       }
     } else {
@@ -354,25 +399,45 @@ public class SaleWriter {
   }
 
   /**
-   * Stamps {@code sale.sold_by_user_id} from a verified operator principal, if present (ADR 0049
-   * P2). No-op when {@code operator} is empty — every sale is unaffected until PIN operators exist
-   * in the field (inert by default).
+   * Stamps {@code sale.sold_by_user_id} from the resolved seller id, if any (ADR 0049 P2/P4). No-op
+   * when {@code resolvedSellerId} is {@code null}.
    *
-   * @throws OperatorMismatchException if the operator token's {@code companyId}/{@code businessId}
-   *     do not match the bound tenant / this sale's own outlet — a stolen/misdirected token must
-   *     never attribute a sale, and must never silently fall back to the device actor either
+   * <p>Validation is applied to whichever principal actually SUPPLIED {@code resolvedSellerId}:
+   *
+   * <ul>
+   *   <li>When the resolved seller is the LIVE operator session (the direct/checkout ring path —
+   *       {@code resolvedSellerId} equals {@code operator.operatorUserId()}), its token's {@code
+   *       companyId}/{@code businessId} must match the bound tenant / this sale's own outlet, else
+   *       the whole write is rejected ({@link OperatorMismatchException}, 409) — a
+   *       stolen/misdirected token must never attribute a sale, and must never silently fall back
+   *       to the device actor.
+   *   <li>When the resolved seller instead came from {@code command.soldByUserId()} (ADR 0049 P4's
+   *       async-carried ring-time operator — the Kafka consumer thread has no live token), it is
+   *       trusted as-is: it was ALREADY validated against the tenant/outlet at the moment {@code
+   *       PaymentWriter#recordPendingDigitalInCurrentTx} stamped it onto the PENDING payment during
+   *       the synchronous checkout (via the same {@link OperatorMismatchException#requireMatch}). A
+   *       live operator present on a manual on-request capture is merely the capturer, not the
+   *       seller, so it neither wins ({@link #resolveSeller}) nor gates the write here.
+   * </ul>
+   *
+   * @throws OperatorMismatchException if the LIVE operator that supplied the seller id names a
+   *     {@code companyId}/{@code businessId} that does not match the bound tenant / this outlet
    */
-  private static void stampSellerIfOperatorPresent(
-      Sale sale, Optional<OperatorPrincipal> operator, String companyId, UUID businessId) {
-    if (operator.isEmpty()) {
+  private static void stampSeller(
+      Sale sale,
+      String resolvedSellerId,
+      Optional<OperatorPrincipal> operator,
+      String companyId,
+      UUID businessId) {
+    if (resolvedSellerId == null) {
       return;
     }
-    OperatorPrincipal principal = operator.get();
-    if (!principal.companyId().equals(companyId) || !principal.businessId().equals(businessId)) {
-      throw new OperatorMismatchException(
-          companyId, principal.companyId(), businessId, principal.businessId());
+    if (operator.isPresent() && resolvedSellerId.equals(operator.get().operatorUserId())) {
+      OperatorPrincipal principal = operator.get();
+      OperatorMismatchException.requireMatch(
+          principal.companyId(), principal.businessId(), companyId, businessId);
     }
-    sale.stampSeller(principal.operatorUserId());
+    sale.stampSeller(resolvedSellerId);
   }
 
   /**

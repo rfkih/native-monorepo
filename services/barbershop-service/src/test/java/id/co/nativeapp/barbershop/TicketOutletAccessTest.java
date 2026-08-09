@@ -8,6 +8,7 @@ import id.co.nativeapp.barbershop.catalog.dto.CatalogItemResponse;
 import id.co.nativeapp.barbershop.catalog.dto.StaffProfileCreateRequest;
 import id.co.nativeapp.barbershop.catalog.dto.StaffProfileResponse;
 import id.co.nativeapp.barbershop.catalog.service.CatalogService;
+import id.co.nativeapp.barbershop.config.ActorTypeProvider;
 import id.co.nativeapp.barbershop.entitlement.dto.EntitlementProjectedEvent;
 import id.co.nativeapp.barbershop.entitlement.service.EntitlementProjectionService;
 import id.co.nativeapp.barbershop.outletref.domain.OutletNotAssignedException;
@@ -15,11 +16,13 @@ import id.co.nativeapp.barbershop.outletref.messaging.UserOutletAssignmentEvent;
 import id.co.nativeapp.barbershop.outletref.service.UserOutletAssignmentRefService;
 import id.co.nativeapp.barbershop.payment.domain.TenderType;
 import id.co.nativeapp.barbershop.ticket.domain.ItemType;
+import id.co.nativeapp.barbershop.ticket.domain.OperatorRequiredException;
 import id.co.nativeapp.barbershop.ticket.dto.CheckoutRequest;
 import id.co.nativeapp.barbershop.ticket.dto.CheckoutResult;
 import id.co.nativeapp.barbershop.ticket.dto.PaymentRequest;
 import id.co.nativeapp.barbershop.ticket.dto.TicketLineInput;
 import id.co.nativeapp.barbershop.ticket.service.TicketService;
+import id.co.nativeapp.security.OperatorPrincipal;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.LocalDate;
 import java.util.List;
@@ -76,6 +79,21 @@ class TicketOutletAccessTest extends KafkaPostgresRedisTestBase {
     RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
   }
 
+  /**
+   * ADR 0049 P4: binds a request carrying both {@code X-Roles} and {@code X-Actor-Type: device},
+   * plus (optionally) a pre-verified {@link OperatorPrincipal} request attribute — mirroring what
+   * {@code OperatorSessionFilter} sets after verifying a real {@code X-Operator-Session} token.
+   */
+  private void setRolesAsDeviceActor(String roles, OperatorPrincipal operator) {
+    MockHttpServletRequest request = new MockHttpServletRequest();
+    request.addHeader("X-Roles", roles);
+    request.addHeader(ActorTypeProvider.ACTOR_TYPE_HEADER, ActorTypeProvider.DEVICE);
+    if (operator != null) {
+      request.setAttribute(OperatorPrincipal.REQUEST_ATTRIBUTE, operator);
+    }
+    RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+  }
+
   @AfterEach
   void clearRequestContext() {
     RequestContextHolder.resetRequestAttributes();
@@ -125,6 +143,40 @@ class TicketOutletAccessTest extends KafkaPostgresRedisTestBase {
 
     CheckoutResult result =
         TenantContext.callAs(TENANT, OWNER_ACTOR, () -> ticketService.checkout(request));
+    assertThat(result.created()).isTrue();
+  }
+
+  // ---------------------------------------------------------------- ADR 0049 P4: device guard
+
+  @Test
+  void deviceActorWithNoOperatorSessionIsRejectedWithOperatorRequired() throws Exception {
+    grantBarbershop(TENANT);
+    CatalogItemResponse service = createService();
+    StaffProfileResponse barber = createStaffProfile();
+
+    setRolesAsDeviceActor("cashier", null);
+    CheckoutRequest request = checkoutRequest(service.id(), barber.id(), "device-no-operator-1");
+
+    assertThatThrownBy(
+            () ->
+                TenantContext.callAs(TENANT, CASHIER_ACTOR, () -> ticketService.checkout(request)))
+        .isInstanceOf(OperatorRequiredException.class);
+  }
+
+  @Test
+  void deviceActorWithAVerifiedOperatorSessionIsAdmitted() throws Exception {
+    grantBarbershop(TENANT);
+    CatalogItemResponse service = createService();
+    StaffProfileResponse barber = createStaffProfile();
+
+    OperatorPrincipal operator =
+        new OperatorPrincipal(
+            TENANT, OUTLET, UUID.randomUUID().toString(), UUID.randomUUID(), "cashier");
+    setRolesAsDeviceActor("cashier", operator);
+    CheckoutRequest request = checkoutRequest(service.id(), barber.id(), "device-operator-1");
+
+    CheckoutResult result =
+        TenantContext.callAs(TENANT, CASHIER_ACTOR, () -> ticketService.checkout(request));
     assertThat(result.created()).isTrue();
   }
 

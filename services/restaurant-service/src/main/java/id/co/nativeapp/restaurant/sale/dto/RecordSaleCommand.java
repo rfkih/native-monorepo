@@ -54,8 +54,17 @@ import java.util.UUID;
  * @param channel Phase B2 (ADR 0036): the sales-channel code this sale rang through, or {@code
  *     null}. Set ONLY when {@code tenderType} is {@code "ONLINE"} — the calling writer
  *     (OrderWriter/BillWriter) validates the channel exists and is active BEFORE assembling this
- *     command. Threaded straight to {@code SaleRecorded}'s wire {@code channel} field (appended
- *     LAST here too, mirroring the event's positional-decode-safety discipline)
+ *     command. Threaded straight to {@code SaleRecorded}'s wire {@code channel} field
+ * @param soldByUserId ADR 0049 P4: the operator's Keycloak {@code sub} captured at RING TIME by
+ *     {@code payment.service.PaymentWriter#recordPendingDigitalInCurrentTx} and stamped on the
+ *     PENDING payment ({@code payment.sold_by_user_id}) — threaded here ONLY by {@code
+ *     payment.service.PaymentCaptureWriter#capture} (the async {@code PaymentChargeSucceeded}
+ *     consumer thread has no live operator session to read) so a digital sale still credits the
+ *     RING-TIME operator instead of falling back to the bound actor. {@code null} for every other
+ *     caller (a live operator session, read via {@code OperatorContextProvider}, always takes
+ *     precedence over this field — see {@code SaleWriter}'s seller-resolution javadoc). Appended
+ *     LAST, mirroring every prior additive field's positional-decode-safety discipline — this is an
+ *     internal application command, never the HTTP request body (rule 5)
  */
 @SuppressWarnings("checkstyle:ParameterNumber")
 public record RecordSaleCommand(
@@ -71,12 +80,13 @@ public record RecordSaleCommand(
     Long loyaltyRedeemedMinor,
     UUID giftCardId,
     Long giftCardRedeemedMinor,
-    String channel) {
+    String channel,
+    String soldByUserId) {
 
   /**
    * Convenience constructor preserving the original five-argument shape (no-tender / legacy
-   * callers). Sets {@code tenderType} and {@code breakdown} to {@code null}, and every Phase 4/B2
-   * field to {@code null}.
+   * callers). Sets {@code tenderType} and {@code breakdown} to {@code null}, and every Phase 4/B2/
+   * P4 field to {@code null}.
    */
   public RecordSaleCommand(
       UUID businessId,
@@ -97,12 +107,13 @@ public record RecordSaleCommand(
         null,
         null,
         null,
+        null,
         null);
   }
 
   /**
    * Convenience constructor for callers with a tender type but no breakdown (Phase 1 / no-pricing
-   * path). Sets {@code breakdown} and every Phase 4/B2 field to {@code null}.
+   * path). Sets {@code breakdown} and every Phase 4/B2/P4 field to {@code null}.
    */
   public RecordSaleCommand(
       UUID businessId,
@@ -124,12 +135,14 @@ public record RecordSaleCommand(
         null,
         null,
         null,
+        null,
         null);
   }
 
   /**
    * Convenience constructor for pre-Phase-4 callers with a tender type AND a breakdown. Sets every
-   * Phase 4 (ADR 0027) field and {@code channel} (Phase B2) to {@code null}.
+   * Phase 4 (ADR 0027) field, {@code channel} (Phase B2), and {@code soldByUserId} (P4) to {@code
+   * null}.
    */
   public RecordSaleCommand(
       UUID businessId,
@@ -152,13 +165,14 @@ public record RecordSaleCommand(
         null,
         null,
         null,
+        null,
         null);
   }
 
   /**
    * Convenience constructor for a tender type + breakdown + channel but no Phase 4 (ADR 0027)
-   * loyalty/gift-card fields — the shape {@code BillWriter} uses (bills do not yet support
-   * loyalty/gift-card redemption).
+   * loyalty/gift-card fields or P4 {@code soldByUserId} — the shape {@code BillWriter} uses (bills
+   * do not yet support loyalty/gift-card redemption or digital-tender operator threading).
    */
   public RecordSaleCommand(
       UUID businessId,
@@ -182,6 +196,7 @@ public record RecordSaleCommand(
         null,
         null,
         null,
-        channel);
+        channel,
+        null);
   }
 }

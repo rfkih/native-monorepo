@@ -1498,7 +1498,11 @@ public class OrderWriter {
         loyaltyRedeemedMinor > 0L ? loyaltyRedeemedMinor : null,
         giftCardRedeemedMinor > 0L ? giftCardId : null,
         giftCardRedeemedMinor > 0L ? giftCardRedeemedMinor : null,
-        channel);
+        channel,
+        // ADR 0049 P4: OrderWriter's CASH/ONLINE checkout/park-pay paths record the sale
+        // synchronously (the operator, if any, is read live by SaleWriter itself) — soldByUserId is
+        // exclusively the async-capture-carried field PaymentCaptureWriter threads through.
+        null);
   }
 
   // -------------------------------------------------------------------------

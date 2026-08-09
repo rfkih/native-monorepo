@@ -5,9 +5,12 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import id.co.nativeapp.restaurant.config.ActorTypeProvider;
 import id.co.nativeapp.restaurant.payment.dto.PaymentResponse;
 import id.co.nativeapp.restaurant.payment.projection.PaymentReceiptView;
 import id.co.nativeapp.restaurant.payment.repository.PaymentRepository;
+import id.co.nativeapp.restaurant.sale.service.OperatorRequiredGuard;
+import id.co.nativeapp.security.OperatorContextProvider;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.Optional;
 import java.util.UUID;
@@ -28,7 +31,13 @@ class PaymentWriterFindLatestForOrderTest {
 
   private final PaymentProviderRegistry providers = mock(PaymentProviderRegistry.class);
   private final PaymentRepository repository = mock(PaymentRepository.class);
-  private final PaymentWriter writer = new PaymentWriter(providers, repository);
+  // Real (not mocked) instances: outside a bound HTTP request they always resolve to no operator /
+  // no device actor — exactly what this ADR 0049-P4-unaffected read-path test needs.
+  private final OperatorContextProvider operatorContextProvider = new OperatorContextProvider();
+  private final OperatorRequiredGuard operatorRequiredGuard =
+      new OperatorRequiredGuard(new ActorTypeProvider());
+  private final PaymentWriter writer =
+      new PaymentWriter(providers, repository, operatorContextProvider, operatorRequiredGuard);
 
   private static <T> T asTenant(Callable<T> action) {
     try {

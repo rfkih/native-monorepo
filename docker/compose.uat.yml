@@ -325,6 +325,7 @@ services:
       DB_USERNAME: carwash_service
       DB_PASSWORD: carwash_service
       NATIVE_GIFTCARD_CODE_KEY: ${NATIVE_GIFTCARD_CODE_KEY}
+      NATIVE_OPERATOR_TOKEN_KEY: ${NATIVE_OPERATOR_TOKEN_KEY} # ADR 0049 P4 — verifies operator tokens offline (prod-guard requires a real key)
 
   barbershop-service:
     <<: *java-service
@@ -341,6 +342,7 @@ services:
       DB_USERNAME: barbershop_service
       DB_PASSWORD: barbershop_service
       NATIVE_GIFTCARD_CODE_KEY: ${NATIVE_GIFTCARD_CODE_KEY}
+      NATIVE_OPERATOR_TOKEN_KEY: ${NATIVE_OPERATOR_TOKEN_KEY} # ADR 0049 P4 — verifies operator tokens offline (prod-guard requires a real key)
 
   loyalty-service:
     <<: *java-service

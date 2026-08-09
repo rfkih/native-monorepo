@@ -59,4 +59,29 @@ public class OperatorMismatchException extends RuntimeException {
   public UUID getTokenBusinessId() {
     return tokenBusinessId;
   }
+
+  /**
+   * Asserts a verified operator-session token applies HERE — its {@code companyId} matches the
+   * bound tenant AND its {@code businessId} matches this sale's own outlet — throwing {@link
+   * OperatorMismatchException} otherwise. This is the SINGLE tenant/outlet binding for an operator
+   * token: the HMAC signature (checked offline by {@code OperatorSessionFilter}) proves the token
+   * is authentic <em>fleet-wide</em>, NOT that it belongs to this company/outlet. So every consumer
+   * that stamps the operator as the seller MUST call this first — both the synchronous sale path
+   * ({@code SaleWriter}) and the digital-tender PENDING stamp point ({@code
+   * PaymentWriter#recordPendingDigitalInCurrentTx}, ADR 0049 P4) — so the two can never diverge,
+   * and a stored ring-time seller is guaranteed already-validated when async capture reads it back.
+   *
+   * <p>Takes the raw claim values (not the {@code libs/security OperatorPrincipal}) so this {@code
+   * domain} class stays free of any web/security dependency.
+   *
+   * @throws OperatorMismatchException if {@code tokenCompanyId}/{@code tokenBusinessId} do not
+   *     match {@code boundCompanyId}/{@code businessId}
+   */
+  public static void requireMatch(
+      String tokenCompanyId, UUID tokenBusinessId, String boundCompanyId, UUID businessId) {
+    if (!tokenCompanyId.equals(boundCompanyId) || !tokenBusinessId.equals(businessId)) {
+      throw new OperatorMismatchException(
+          boundCompanyId, tokenCompanyId, businessId, tokenBusinessId);
+    }
+  }
 }

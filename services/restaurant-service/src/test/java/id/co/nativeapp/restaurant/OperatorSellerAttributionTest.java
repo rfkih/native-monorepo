@@ -4,8 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import id.co.nativeapp.events.AvroSerde;
+import id.co.nativeapp.restaurant.config.ActorTypeProvider;
 import id.co.nativeapp.restaurant.metric.messaging.MetricPublishedSchema;
 import id.co.nativeapp.restaurant.sale.domain.OperatorMismatchException;
+import id.co.nativeapp.restaurant.sale.domain.OperatorRequiredException;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
 import id.co.nativeapp.restaurant.sale.service.SaleService;
@@ -100,7 +102,20 @@ class OperatorSellerAttributionTest extends PostgresRlsTestBase {
    */
   private RecordSaleResult recordSaleWithOperatorToken(
       RecordSaleCommand command, String operatorToken) throws Exception {
+    return recordSaleWithOperatorToken(command, operatorToken, null);
+  }
+
+  /**
+   * ADR 0049 P4 variant of {@link #recordSaleWithOperatorToken(RecordSaleCommand, String)} that
+   * ALSO sets {@code X-Actor-Type} (mirroring the gateway-injected header) when {@code actorType}
+   * is non-null — used to prove the {@code OperatorRequiredGuard} device-guard behaviour.
+   */
+  private RecordSaleResult recordSaleWithOperatorToken(
+      RecordSaleCommand command, String operatorToken, String actorType) throws Exception {
     MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/sales");
+    if (actorType != null) {
+      request.addHeader(ActorTypeProvider.ACTOR_TYPE_HEADER, actorType);
+    }
     if (operatorToken != null) {
       request.addHeader(OperatorSessionFilter.OPERATOR_SESSION_HEADER, operatorToken);
     }
@@ -255,5 +270,61 @@ class OperatorSellerAttributionTest extends PostgresRlsTestBase {
         .hasMessageContaining("401");
 
     assertThat(saleRowCountAsAdmin(command.idempotencyKey())).isZero();
+  }
+
+  // ---------------------------------------------------------------- ADR 0049 P4: device guard
+
+  /**
+   * The load-bearing P4 rejection: an {@code X-Actor-Type: device} request with NO {@code
+   * X-Operator-Session} must never record a sale — it would otherwise attribute the sale to the
+   * device itself (or to nobody), silently breaking commission.
+   */
+  @Test
+  void aDeviceActorWithNoOperatorSessionIsRejectedWithOperatorRequired() throws Exception {
+    RecordSaleCommand command =
+        new RecordSaleCommand(
+            OUTLET_A, 100_000L, "IDR", Instant.now(), UUID.randomUUID().toString());
+
+    assertThatThrownBy(() -> recordSaleWithOperatorToken(command, null, ActorTypeProvider.DEVICE))
+        .isInstanceOf(OperatorRequiredException.class);
+
+    // No sale was recorded (the transactional write rolled back before saveAndFlush).
+    assertThat(saleRowCountAsAdmin(command.idempotencyKey())).isZero();
+  }
+
+  /**
+   * A device actor WITH a verified operator session is admitted and credited to the operator —
+   * proving the P4 guard does not block the legitimate PIN-rung device sale.
+   */
+  @Test
+  void aDeviceActorWithAVerifiedOperatorSessionIsAdmittedAndCreditedToTheOperator()
+      throws Exception {
+    String operatorUserId = UUID.randomUUID().toString();
+    String token = mintToken(TENANT_A, OUTLET_A, operatorUserId);
+    RecordSaleCommand command =
+        new RecordSaleCommand(
+            OUTLET_A, 250_000L, "IDR", Instant.now(), UUID.randomUUID().toString());
+
+    RecordSaleResult result = recordSaleWithOperatorToken(command, token, ActorTypeProvider.DEVICE);
+    assertThat(result.created()).isTrue();
+    assertThat(soldByUserIdAsAdmin(result.sale().id())).isEqualTo(operatorUserId);
+  }
+
+  /**
+   * A normal {@code actor_type=user} login (owner/manager/cashier ringing directly, no outlet
+   * device involved) with no operator session is completely unaffected by the P4 guard — the exact
+   * pre-P4/P2 behaviour ({@link #anOperatorAbsentSaleIsUnchangedActorSubjectAndNullSeller} verifies
+   * the metric-skip half of this; this pins that no {@code X-Actor-Type} header at all behaves
+   * identically to an explicit {@code X-Actor-Type: user}).
+   */
+  @Test
+  void anExplicitUserActorTypeWithNoOperatorSessionIsUnaffectedByTheDeviceGuard() throws Exception {
+    RecordSaleCommand command =
+        new RecordSaleCommand(
+            OUTLET_A, 175_000L, "IDR", Instant.now(), UUID.randomUUID().toString());
+
+    RecordSaleResult result = recordSaleWithOperatorToken(command, null, ActorTypeProvider.USER);
+    assertThat(result.created()).isTrue();
+    assertThat(soldByUserIdAsAdmin(result.sale().id())).isNull();
   }
 }

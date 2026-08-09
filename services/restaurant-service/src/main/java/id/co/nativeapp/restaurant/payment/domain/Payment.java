@@ -119,6 +119,20 @@ public class Payment extends Auditable {
   @Column(name = "channel_code", updatable = false, length = 32)
   private String channelCode;
 
+  /**
+   * The operator's Keycloak {@code sub}, captured at RING TIME (ADR 0049 P4) — set by {@code
+   * payment.service.PaymentWriter#recordPendingDigitalInCurrentTx} when a verified operator session
+   * is present at checkout, for a PENDING digital (QRIS/CARD) tender ONLY. There is no live
+   * operator session on the async {@code PaymentChargeSucceeded} capture thread (a Kafka consumer,
+   * no HTTP request), so this column is what lets {@code PaymentCaptureWriter#capture} thread the
+   * RING-TIME operator through to the sale's {@code sold_by_user_id} / commission metric subject
+   * instead of falling back to the bound (device) actor. {@code null} for a CASH/ONLINE payment
+   * (captured synchronously, where the sale itself is stamped directly by {@code SaleWriter}) and
+   * for any checkout with no operator session present.
+   */
+  @Column(name = "sold_by_user_id", updatable = false)
+  private String soldByUserId;
+
   protected Payment() {
     // for JPA
   }
@@ -381,5 +395,35 @@ public class Payment extends Auditable {
    */
   public String getChannelCode() {
     return channelCode;
+  }
+
+  /**
+   * The operator's Keycloak {@code sub} captured at ring time (ADR 0049 P4), or {@code null} — set
+   * ONLY for a PENDING digital tender whose checkout carried a verified operator session.
+   */
+  public String getSoldByUserId() {
+    return soldByUserId;
+  }
+
+  /**
+   * Stamps the verified operator's Keycloak {@code sub} onto this PENDING digital payment (ADR 0049
+   * P4) — called by {@code PaymentWriter} on a freshly-constructed (not-yet-persisted) payment from
+   * an {@code OperatorContextProvider} principal, NEVER from a client-supplied value (rule 5).
+   * {@code PaymentCaptureWriter#capture} reads it back at async capture time to thread the
+   * ring-time operator onto the sale.
+   *
+   * <p>Guarded to fire only when {@link #soldByUserId} is still {@code null}: the {@code
+   * sold_by_user_id} column is {@code updatable=false}, so this is meant to run exactly once, at
+   * creation.
+   *
+   * @param userId the operator's Keycloak {@code sub} — never a client-supplied value
+   * @throws IllegalStateException if {@link #soldByUserId} is already stamped on this payment
+   */
+  public void stampSeller(String userId) {
+    Objects.requireNonNull(userId, "userId");
+    if (this.soldByUserId != null) {
+      throw new IllegalStateException("soldByUserId is already stamped on this payment");
+    }
+    this.soldByUserId = userId;
   }
 }

@@ -7,11 +7,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import id.co.nativeapp.events.OutboxWriter;
+import id.co.nativeapp.restaurant.config.ActorTypeProvider;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
 import id.co.nativeapp.restaurant.register.service.CashWindowLock;
 import id.co.nativeapp.restaurant.sale.dto.SaleHistoryResponse;
 import id.co.nativeapp.restaurant.sale.projection.SaleHistoryView;
 import id.co.nativeapp.restaurant.sale.repository.SaleRepository;
+import id.co.nativeapp.restaurant.sale.service.OperatorRequiredGuard;
 import id.co.nativeapp.restaurant.sale.service.PostOutboxHook;
 import id.co.nativeapp.restaurant.sale.service.SaleWriter;
 import id.co.nativeapp.security.OperatorContextProvider;
@@ -38,9 +40,11 @@ class SaleHistoryWriterTest {
   private final PostOutboxHook postOutboxHook = mock(PostOutboxHook.class);
   private final OutletAccessGuard outletAccessGuard = mock(OutletAccessGuard.class);
   private final CashWindowLock cashWindowLock = mock(CashWindowLock.class);
-  // A real (not mocked) instance: outside a bound HTTP request it always resolves to
-  // Optional.empty() (no OperatorPrincipal) — exactly what this unaffected-by-ADR-0049 test needs.
+  // Real (not mocked) instances: outside a bound HTTP request they always resolve to no operator /
+  // no device actor — exactly what this unaffected-by-ADR-0049 test needs.
   private final OperatorContextProvider operatorContextProvider = new OperatorContextProvider();
+  private final OperatorRequiredGuard operatorRequiredGuard =
+      new OperatorRequiredGuard(new ActorTypeProvider());
   private final SaleWriter writer =
       new SaleWriter(
           repository,
@@ -48,7 +52,8 @@ class SaleHistoryWriterTest {
           postOutboxHook,
           outletAccessGuard,
           cashWindowLock,
-          operatorContextProvider);
+          operatorContextProvider,
+          operatorRequiredGuard);
 
   private static <T> T asTenant(Callable<T> action) {
     try {

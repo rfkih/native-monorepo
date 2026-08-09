@@ -89,6 +89,15 @@ native:
     # one whole rupiah, so 5,000,000 = Rp5,000,000. A request above this is rejected 422
     # (gift-card-mint-limit). NATIVE_GIFTCARD_MAX_MINT_MINOR env var.
     max-mint-minor: ${NATIVE_GIFTCARD_MAX_MINT_MINOR:5000000}
+  # Operator-session HMAC signing key (ADR 0049 P4) — mirrors restaurant-service/employee-service's
+  # identical property (the MINTER is employee-service; barbershop-service is an OFFLINE VERIFIER of
+  # the same tokens). This key is shared FLEET-WIDE (every vertical must verify a token
+  # employee-service minted, offline — rule 2). base64 of the 32 ASCII bytes
+  # "native-dev-optok-placeholder-key" — a dev-only placeholder, not a real secret; refused outside
+  # the dev profile by OperatorTokenSigningConfig's L2 guard. In production NATIVE_OPERATOR_TOKEN_KEY
+  # is injected from Vault.
+  operator-token:
+    signing-key: ${NATIVE_OPERATOR_TOKEN_KEY:bmF0aXZlLWRldi1vcHRvay1wbGFjZWhvbGRlci1rZXk=}
 
 management:
   endpoints:

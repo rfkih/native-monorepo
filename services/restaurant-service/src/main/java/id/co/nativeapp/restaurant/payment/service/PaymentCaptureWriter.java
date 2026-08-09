@@ -202,6 +202,12 @@ public class PaymentCaptureWriter {
     // the pair together, never one without the other) — no extra conditional needed here.
     Long loyaltyRedeemedMinor = order.getLoyaltyRedeemedMinor();
 
+    // ADR 0049 P4: the ring-time operator (if any), stamped onto the PENDING payment at checkout
+    // by PaymentWriter#recordPendingDigitalInCurrentTx — read back here and threaded through so a
+    // PIN-rung digital sale still credits the OPERATOR, never the bound (device) actor, at this
+    // async capture (a Kafka consumer thread with no live operator session of its own).
+    String soldByUserId = payment.getSoldByUserId();
+
     // Record the sale and emit SaleRecorded in THIS transaction (MANDATORY joins us).
     RecordSaleCommand saleCommand =
         (breakdown != null)
@@ -221,14 +227,23 @@ public class PaymentCaptureWriter {
                 // ADR 0036 Phase B2: this path is the flagged-pending digital (QRIS/CARD)
                 // capture — ONLINE never goes through it (it captures synchronously, see
                 // PaymentWriter), so no channel ever rides here.
-                null)
+                null,
+                soldByUserId)
             : new RecordSaleCommand(
                 payment.getBusinessId(),
                 grandTotal.amountMinor(),
                 grandTotal.currency().getCurrencyCode(),
                 capturedAt,
                 saleIdempotencyKey,
-                payment.getTenderType().name());
+                payment.getTenderType().name(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                soldByUserId);
     RecordSaleResult saleResult = saleWriter.recordInCurrentTx(saleCommand);
 
     // Capture the payment aggregate: PENDING → CAPTURED, sets sale_id + captured_at.

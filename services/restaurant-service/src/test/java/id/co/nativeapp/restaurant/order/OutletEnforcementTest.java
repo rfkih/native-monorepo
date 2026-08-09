@@ -9,6 +9,7 @@ import id.co.nativeapp.restaurant.bill.dto.BillResponse;
 import id.co.nativeapp.restaurant.bill.dto.OpenBillRequest;
 import id.co.nativeapp.restaurant.bill.dto.PayBillRequest;
 import id.co.nativeapp.restaurant.bill.service.BillService;
+import id.co.nativeapp.restaurant.config.ActorTypeProvider;
 import id.co.nativeapp.restaurant.menu.dto.CreateMenuItemRequest;
 import id.co.nativeapp.restaurant.menu.service.MenuService;
 import id.co.nativeapp.restaurant.order.dto.CheckoutRequest;
@@ -24,6 +25,7 @@ import id.co.nativeapp.restaurant.payment.dto.PaymentResponse;
 import id.co.nativeapp.restaurant.payment.service.PaymentCaptureService;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.service.SaleService;
+import id.co.nativeapp.security.OperatorPrincipal;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -552,6 +554,54 @@ class OutletEnforcementTest extends PostgresRlsTestBase {
                           new PaymentRequest(TenderType.QRIS, null)));
               return captureService.capture(checkout.order().payment().paymentId());
             });
+    assertThat(captured.status()).isEqualTo("CAPTURED");
+    assertThat(captured.saleId()).isNotNull();
+  }
+
+  /**
+   * ADR 0049 P4: a device (outlet-terminal) actor with a verified operator session at CHECKOUT
+   * mints a PENDING digital payment (the {@code OperatorRequiredGuard} in {@code
+   * PaymentWriter#recordPendingDigitalInCurrentTx} is satisfied). The async capture ({@code
+   * PaymentCaptureWriter#capture} → {@code SaleWriter#recordInCurrentTx}) must NOT re-enforce that
+   * guard — simulated here by resetting the request context entirely before calling {@code
+   * captureService.capture}, exactly mirroring the real {@code PaymentChargeSucceeded} Kafka
+   * consumer thread (no HTTP request at all). If the guard were mistakenly request-context-
+   * independent, this capture would incorrectly 409.
+   */
+  @Test
+  void deviceCheckoutWithOperatorThenOffRequestCaptureDoesNotReenforceTheOperatorGuard()
+      throws Exception {
+    assignCashierTo(BUSINESS_ID);
+    UUID menuItemId = createMenuItem(BUSINESS_ID);
+
+    String operatorUserId = UUID.randomUUID().toString();
+    setRoles("cashier");
+    mockRequest.addHeader(ActorTypeProvider.ACTOR_TYPE_HEADER, ActorTypeProvider.DEVICE);
+    mockRequest.setAttribute(
+        OperatorPrincipal.REQUEST_ATTRIBUTE,
+        new OperatorPrincipal(TENANT, BUSINESS_ID, operatorUserId, UUID.randomUUID(), "cashier"));
+
+    UUID paymentId =
+        TenantContext.callAs(
+            TENANT,
+            CASHIER_ACTOR,
+            () -> {
+              CheckoutResult checkout =
+                  orderService.checkout(
+                      new CheckoutRequest(
+                          BUSINESS_ID,
+                          UUID.randomUUID().toString(),
+                          List.of(new OrderLineRequest(menuItemId, 1)),
+                          new PaymentRequest(TenderType.QRIS, null)));
+              return checkout.order().payment().paymentId();
+            });
+
+    // Simulate the REAL async capture path: NO HTTP request at all (a Kafka consumer thread) —
+    // ActorTypeProvider/OperatorContextProvider both fall back to their off-request defaults.
+    RequestContextHolder.resetRequestAttributes();
+
+    PaymentResponse captured =
+        TenantContext.callAs(TENANT, CASHIER_ACTOR, () -> captureService.capture(paymentId));
     assertThat(captured.status()).isEqualTo("CAPTURED");
     assertThat(captured.saleId()).isNotNull();
   }
