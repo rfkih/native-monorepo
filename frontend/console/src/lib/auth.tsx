@@ -431,7 +431,12 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
       ready: state.ready && !elevateCallbackPending,
       elevatedRoles,
       // "Sign in to manage" (till-menu, device terminal only) — starts the SECOND OIDC round-trip.
-      elevate: () => void elevationManager.signinRedirect(),
+      // prompt=login FORCES a fresh Keycloak login: without it, KC's SSO session (the device's own
+      // till.<outlet> login) would silently re-authenticate the elevation AS THE DEVICE (cashier),
+      // never prompting for the owner/manager — so no back-office roles are ever gained. The device
+      // itself persists via its offline-refresh token (independent of the SSO session), so forcing
+      // a fresh elevation login here does not disturb the kiosk.
+      elevate: () => void elevationManager.signinRedirect({ prompt: 'login' }),
       dropElevation,
       // login_hint pre-fills Keycloak's username field (used by the post-signup hand-off).
       login: (loginHint?: string) =>
