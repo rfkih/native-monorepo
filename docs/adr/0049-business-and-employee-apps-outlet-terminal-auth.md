@@ -189,3 +189,38 @@ country/base-currency). Shipped in three reviewed phases (security + code PASS e
 (P3 till conditional + session-scoped operator). Review fixes: length-cap the PIN input
 (`@Size(max=64)`, still admits null/blank so the uniform-401 non-enumeration holds) and `.reset()`
 the reveal mutation so the plaintext password can't linger in the MutationCache.
+
+## Addendum 2 (2026-08-09): first-time PIN enrollment (manager-present) + employee self-service (PIN + password)
+
+Follow-ups after the owner tried the feature:
+
+- **A require-PIN outlet no longer strands a PIN-less employee.** The roster gained `hasPin` and a
+  require-PIN outlet now lists ALL actively-assigned + login-linked employees (LEFT JOIN
+  `operator_pin`), so a fresh employee is pickable at the till. Their **first PIN is set with a
+  MANAGER present**: the till gates the "Set a PIN" step on an elevated owner/manager
+  (`auth.elevatedRoles`), and the write goes through the **existing** owner/manager `PUT
+  /api/v1/employees/{id}/operator-pin` (with the elevated personal bearer) — **NOT** a new
+  cashier-reachable endpoint. (An earlier design put a `POST /api/v1/operators/pin` enroll on the
+  POS_ROLES surface; a code review flagged that it let a lone cashier set a PIN-less colleague's
+  first PIN and then ring as them — contradicting this ADR's owner/manager-only PIN-write invariant
+  and the spoof-proof attribution guarantee — so it was **removed**. Requiring an elevated manager
+  keeps the invariant AND keeps enrollment at the till.) This **closes** the enroll-then-impersonate
+  residual: a lone cashier can no longer bootstrap a colleague's PIN.
+- **Self-service:** `PUT /api/v1/me/operator-pin` (ME_ROLES) — the employee changes their OWN PIN,
+  resolved strictly from the JWT `sub` (also serves forgot-PIN, no current-PIN required since the
+  caller is already authenticated). In the Employee app, an **Account** screen offers **Change PIN**
+  (this endpoint) and **Change password** — the latter delegated to Keycloak's own secure action via
+  `signinRedirect({ kc_action: 'UPDATE_PASSWORD' })` on the primary `UserManager`: **no backend, no
+  new client, no realm change; Keycloak keeps sole ownership of the password** (rule 6, rule 2).
+- **Policy freshness:** the till's `useOutletPinPolicy` now reads fresh (`staleTime:0` +
+  focus/interval refetch) so a kiosk picks up a manager's policy toggle promptly — a now-no-PIN
+  outlet never keeps flashing the keypad (the backend mint is already fail-safe on the reverse).
+
+The operator PIN stays Argon2id **inside employee-service** throughout (no Keycloak round-trip). No
+event/contract change. Commits: **`5276b9c8`** (employee-service: roster `hasPin` + `/me/operator-pin`;
+the POS enroll endpoint removed), **`309cc4b7`** (till: fresh policy + manager-present enrollment +
+the pure/unit-tested `operatorSheetStep` gate), **`33452597`** (Employee-app `/me/account`: Change PIN
++ Change password). Each phase security + code reviewed (the manager-present decision resolved a
+code-review C1 that an earlier lone-cashier enroll endpoint would have contradicted this ADR's
+owner/manager-only PIN-write invariant). Not ADR 0051 (that number is a concurrent session's
+Android-shell program).

@@ -5,6 +5,24 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-09 — Operator-PIN follow-ups: manager-present first-PIN enrollment + employee self-service (ADR 0049 addendum 2)
+
+Three refinements after the owner tried the operator-PIN feature. (1) A require-PIN outlet no longer
+strands a PIN-less employee: the roster gained `hasPin` and now lists all assigned+linked employees, and
+their FIRST PIN is set with a **manager present** — the till gates the Set-PIN step on an elevated
+owner/manager (`auth.elevatedRoles`) and writes via the EXISTING owner/manager `PUT /employees/{id}/
+operator-pin`, not a cashier-surface endpoint. (An earlier design added a `POST /operators/pin` enroll on
+the POS surface; a code review flagged that a lone cashier could set a PIN-less colleague's first PIN and
+ring as them — contradicting the owner/manager-only PIN-write invariant + the spoof-proof attribution
+guarantee — so it was removed. Requiring an elevated manager keeps enrollment at the till AND closes the
+impersonation surface; the gate decision was extracted to a pure, unit-tested `operatorSheetStep`.) (2)
+Self-service: `PUT /api/v1/me/operator-pin` (resolved from the JWT sub; also forgot-PIN) + an Employee-app
+Account screen with **Change PIN** and **Change password** — the latter delegated to Keycloak's own secure
+`kc_action=UPDATE_PASSWORD` action (no backend, KC keeps sole ownership of the password). (3) The till's
+policy read is now fresh (staleTime:0 + focus/interval refetch) so a kiosk picks up a manager's toggle.
+PIN stays Argon2id inside employee-service; no event/contract change. Commits `5276b9c8` (backend),
+`309cc4b7` (till), `33452597` (Employee-app account). Each phase security + code reviewed. Not pushed.
+
 ## 2026-08-09 — Per-outlet operator-PIN policy + terminal management + session-scoped operator (ADR 0049 addendum)
 
 Three owner asks on the outlet terminal, shipped in three reviewed phases (security + code PASS each).
