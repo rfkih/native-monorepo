@@ -1,0 +1,22 @@
+# Build-context ignore for the Employee image (docker build -f employee/Dockerfile ... frontend).
+# The employee build needs `frontend/` as its context (to reach the shared console/src), so keep
+# the heavy, regenerated, or irrelevant trees out of the daemon upload. The Dockerfile installs
+# deps fresh (npm ci) and copies only source, so none of these are needed at build time.
+**/node_modules
+**/dist
+**/dist-ssr
+**/.vite
+**/*.local
+
+# Native shells' Android build output + tooling (never part of a web image build).
+native-*/android/.gradle
+native-*/android/**/build
+native-*/android/app/build
+native-*/www
+
+# The other web packages are irrelevant to the employee image.
+self-order
+
+# VCS / editor noise.
+**/.git
+**/.DS_Store
