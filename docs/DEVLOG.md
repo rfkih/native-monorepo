@@ -5,6 +5,42 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-09 — Two-app split + outlet-terminal auth (ADR 0049): P0–P4 shipped, P5 Employee app built
+
+The owner split Native into **two apps**: a **Business/terminal app** (the console — logged in with a
+per-outlet credential, kiosk-persistent, cashiers PIN-in to ring for commission and see name+role
+only, owner/manager reach the back office via a personal login layered on top) and a dedicated
+**Employee app** (personal login → full `/me` self-service). The load-bearing problem: today the
+seller is the JWT `sub` (implicit → `sale.created_by` + `MetricPublished.subject`), so an outlet-login
+terminal would credit every sale to the *device*. Fix = a per-employee **PIN → HMAC operator token,
+verified OFFLINE inside each vertical** (hard-rule 2 forbids a sale-time restaurant→employee sync
+call — mirrors the self-order token), stamped as the seller. The elegant core: **`MetricPublished.avsc`
+is UNCHANGED** — only *which id the producer writes* to the existing `subject_id` changes, so the
+whole commission/payroll pipeline is untouched.
+
+Shipped inert-first so commission never silently breaks: **P0** seller field + `SaleRecorded` additive
+`sold_by_user_id` (V33); **P1** employee-service `operator_pin` (Argon2id) + `POST /operators/session`
+(HMAC mint); **P2** verticals verify the token offline + restaurant substitutes the operator as the
+metric subject (carwash/barbershop stay washer/barber-attributed — substituting there would
+misattribute); **P3** org-service per-outlet device (kiosk) Keycloak credential + the terminal UX
+(PIN sign-in, name/role chip, personal owner/manager elevation via a 2nd dormant `UserManager`). P0–P3
+are deployed + e2e-verified on UAT. **P4** flipped the enforce guard (an `X-Actor-Type=device` sale
+must carry an operator, else 409) and threaded the ring-time operator through the **async** QRIS/card
+capture — stamped on `payment.sold_by_user_id` (V35) at the PENDING-mint choke point, read back at
+`PaymentCaptureWriter.capture` (a Kafka consumer thread; a new `ActorTypeProvider` defaults to `"user"`
+off-request so the async path never trips the device guard). A **security-review HIGH** was fixed before
+sign-off: the digital-tender stamp now applies the same tenant/outlet assertion as the cash path
+(`OperatorMismatchException.requireMatch`, shared by `PaymentWriter`+`SaleWriter`) — the HMAC key is
+fleet-wide, so without it a validly-signed but foreign-outlet token could have become the stored seller
+and misattributed commission cross-tenant; commission credit follows the ring-time operator, never a
+shift-change capturer. **P5** the Employee app is built + deploy-ready: a new sibling web package
+`frontend/employee/` reusing the console's `/me` screens UNCHANGED via a `@`→`../console/src` alias
+(personal login, elevation dormant, no POS/Shell), a working deploy image, and a `native-employee`
+Capacitor shell (appId `id.co.nativeapp.employee`). Its live UAT origin (a 2nd Tailscale funnel origin
+on :10000 — runbook in `frontend/employee/README.md`) is the one remaining step, deferred while a
+concurrent session was actively deploying to the shared UAT stack. Branch `feat/business-employee-apps`,
+not pushed.
+
 ## 2026-08-09 — Recipes/BOM costing phase A: per-sale ingredient depletion + HPP (ADR 0050)
 
 The #2 competitive gap closed at its first stage (recipe → depletion → HPP; Pawoon/Olsera/majoo/
