@@ -12,9 +12,11 @@ export interface OperatorSessionValue {
    * signed out). Always null on a normal `user` login's till — nothing ever calls `signIn` there. */
   operator: OperatorInfo | null
   /** Verifies `(employeeId, pin)` at `businessId` and, on success, signs the operator in (persists
-   * + arms `X-Operator-Session` on every subsequent request). Throws on failure — the caller (the
-   * PIN sheet) maps the thrown error to a friendly message. */
-  signIn: (businessId: string, employeeId: string, pin: string) => Promise<OperatorInfo>
+   * + arms `X-Operator-Session` on every subsequent request). `pin` is OPTIONAL (ADR 0049 P3d) —
+   * omit it entirely at a no-PIN outlet; the sheet decides which to send based on the outlet's
+   * policy, never this context. Throws on failure — the caller (the PIN sheet) maps the thrown
+   * error to a friendly message. */
+  signIn: (businessId: string, employeeId: string, pin?: string) => Promise<OperatorInfo>
   /** Clears the operator (shift change / the till-menu "Sign out operator" item) — back to the PIN
    * prompt on the next sale. */
   signOut: () => void

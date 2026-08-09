@@ -1257,6 +1257,9 @@ export const en = {
   operatorPin: {
     title: 'Who is ringing?',
     pinTitle: 'Enter PIN',
+    noPinTitle: 'Signing in',
+    noPinHint: 'Tap your name to start',
+    noPinSigningInAs: 'Signing in as {{name}}…',
     signedInTitle: 'Signed in',
     enterPinFor: 'Enter the PIN for {{name}}',
     digitsEntered: '{{count}} digits entered',

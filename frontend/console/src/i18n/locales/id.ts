@@ -1246,6 +1246,9 @@ export const id = {
   operatorPin: {
     title: 'Siapa yang melayani?',
     pinTitle: 'Masukkan PIN',
+    noPinTitle: 'Sedang masuk',
+    noPinHint: 'Ketuk nama Anda untuk mulai',
+    noPinSigningInAs: 'Sedang masuk sebagai {{name}}…',
     signedInTitle: 'Berhasil masuk',
     enterPinFor: 'Masukkan PIN untuk {{name}}',
     digitsEntered: '{{count}} digit dimasukkan',

@@ -52,6 +52,7 @@ import { ServiceReceipt } from './ServiceReceipt'
 import { useOperatorSession } from '@/features/operator/operatorSessionContext'
 import { operatorSignInRequired } from '@/features/operator/operatorGate'
 import { OperatorPinSheet } from '@/features/operator/OperatorPinSheet'
+import { useOutletPinPolicy } from '@/features/operator/api'
 import { PosStatusBar } from '@/features/pos-shell/layout/PosStatusBar'
 import { TillMenuSheet } from '@/features/pos-shell/layout/TillMenuSheet'
 import { usePrinterStatusAction } from '@/features/pos-shell/layout/usePrinterStatusAction'
@@ -104,6 +105,12 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
   const isDeviceTerminal = auth.actorType === 'device'
   const operatorSession = useOperatorSession()
   const [showOperatorPinSheet, setShowOperatorPinSheet] = useState(false)
+  // ADR 0049 P3d — same prefetched require-PIN policy as features/pos/Pos.tsx's twin doc:
+  // fetched here (not lazily inside OperatorPinSheet) so the sheet never flashes the PIN pad
+  // before flipping to the no-PIN picker; a missing/erroring read defaults CLOSED
+  // (`requirePin: true`, the server's own safe default).
+  const pinPolicyQuery = useOutletPinPolicy(session, session.businessId, isDeviceTerminal)
+  const operatorRequirePin = pinPolicyQuery.data?.requirePin ?? true
   // ADR 0049 P3b slice 2 — which of the till-menu's account actions (elevate / the three logouts)
   // this login sees — see accountMenuGate.ts's doc for the exact rules.
   const accountMenu = accountMenuVisibility({
@@ -461,7 +468,11 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
       ) : null}
 
       {showOperatorPinSheet ? (
-        <OperatorPinSheet session={session} onClose={() => setShowOperatorPinSheet(false)} />
+        <OperatorPinSheet
+          session={session}
+          requirePin={operatorRequirePin}
+          onClose={() => setShowOperatorPinSheet(false)}
+        />
       ) : null}
 
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">

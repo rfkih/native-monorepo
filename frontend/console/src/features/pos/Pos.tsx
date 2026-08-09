@@ -100,6 +100,7 @@ import { noConfirmedOpenSession } from './lib/registerGate'
 import { useOperatorSession } from '@/features/operator/operatorSessionContext'
 import { operatorSignInRequired } from '@/features/operator/operatorGate'
 import { OperatorPinSheet } from '@/features/operator/OperatorPinSheet'
+import { useOutletPinPolicy } from '@/features/operator/api'
 import { PosStatusBar } from '@/features/pos-shell/layout/PosStatusBar'
 import { TillMenuSheet } from '@/features/pos-shell/layout/TillMenuSheet'
 import { usePrinterStatusAction } from '@/features/pos-shell/layout/usePrinterStatusAction'
@@ -170,6 +171,13 @@ function PosInner({ session }: { session: CompanySession }) {
   const isDeviceTerminal = auth.actorType === 'device'
   const operatorSession = useOperatorSession()
   const [showOperatorPinSheet, setShowOperatorPinSheet] = useState(false)
+  // ADR 0049 P3d — the outlet's require-PIN policy, prefetched here (not lazily inside
+  // OperatorPinSheet) so it's already in cache by the time the sheet opens — it never flashes the
+  // PIN pad before flipping to the no-PIN picker. Enabled only on a device terminal, mirroring the
+  // roster's own gating; a missing/erroring read defaults CLOSED (`requirePin: true`, the server's
+  // own safe default — never assume no-PIN on a read failure).
+  const pinPolicyQuery = useOutletPinPolicy(session, session.businessId, isDeviceTerminal)
+  const operatorRequirePin = pinPolicyQuery.data?.requirePin ?? true
   // ADR 0049 P3b slice 2 — which of the till-menu's account actions (elevate / the three logouts)
   // this login sees — see accountMenuGate.ts's doc for the exact rules.
   const accountMenu = accountMenuVisibility({
@@ -1097,7 +1105,11 @@ function PosInner({ session }: { session: CompanySession }) {
       ) : null}
 
       {showOperatorPinSheet ? (
-        <OperatorPinSheet session={session} onClose={() => setShowOperatorPinSheet(false)} />
+        <OperatorPinSheet
+          session={session}
+          requirePin={operatorRequirePin}
+          onClose={() => setShowOperatorPinSheet(false)}
+        />
       ) : null}
 
       {showRegisterSheet ? (

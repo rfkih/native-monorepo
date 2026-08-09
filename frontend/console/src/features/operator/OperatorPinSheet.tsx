@@ -1,16 +1,26 @@
 /**
- * OperatorPinSheet (ADR 0049 P3b) — the Business-app till's employee-pick + PIN sign-in. Reuses the
- * exact centered-dialog shell RegisterSheet/StocktakeSheet/GiftCardSellModal already use (POS
- * terminal, consistency over novelty) and CashPanelView's numeric-keypad idiom for the PIN pad.
+ * OperatorPinSheet (ADR 0049 P3b, policy-aware P3d) — the Business-app till's employee-pick (+
+ * PIN, when the outlet requires one) sign-in. Reuses the exact centered-dialog shell
+ * RegisterSheet/StocktakeSheet/GiftCardSellModal already use (POS terminal, consistency over
+ * novelty) and CashPanelView's numeric-keypad idiom for the PIN pad.
  *
- * Two steps, plus a brief confirmation:
+ * `requirePin` (the caller's already-fetched `useOutletPinPolicy` read, ADR 0049 P3d) branches the
+ * step after the pick:
  *   'pick' — the outlet's roster (name only, rule 6) as tappable rows; loading/empty/error states.
- *   'pin'  — a masked numeric pad (4-6 digits); auto-submits at 6, or the Sign in button once at
- *            least 4 digits are entered. A failed attempt clears the pad and shows a friendly,
- *            translated reason (never the raw server message) so the PIN stays uninferrable.
+ *            A `requirePin === false` outlet shows a "tap your name to start" hint — there is no
+ *            next step to type into.
+ *   'pin'  — PIN-required outlets ONLY: a masked numeric pad (4-6 digits); auto-submits at 6, or
+ *            the Sign in button once at least 4 digits are entered. A failed attempt clears the
+ *            pad and shows a friendly, translated reason (never the raw server message) so the PIN
+ *            stays uninferrable.
+ *   'confirming' — no-PIN outlets ONLY: picking a name mints immediately (no pad to fill in) — a
+ *            brief busy state, or the same friendly error mapping as the PIN step with a Retry
+ *            (never a raw server message).
  *   success — "Signed in as NAME · ROLE" before handing back to the till (Continue closes the
  *            sheet; the caller's own gate re-check on the next Pay/Send tap picks up the new
- *            operator — mirrors RegisterSheet's "hit Pay again" pattern, no auto-continue).
+ *            operator — mirrors RegisterSheet's "hit Pay again" pattern, no auto-continue). Shown
+ *            identically in both modes — only the PIN entry itself is skipped, never the
+ *            confirmation.
  *
  * Strings rule (rule 9): every label is an i18n key; the roster's displayName/role are literal
  * server data (free-text employee names/job titles), never translated.
@@ -53,9 +63,14 @@ function pinErrorKey(err: unknown): string {
 
 export function OperatorPinSheet({
   session,
+  requirePin,
   onClose,
 }: {
   session: CompanySession
+  /** The outlet's require-PIN policy (ADR 0049 P3d) — the caller (Pos.tsx/ServicePos.tsx) fetches
+   * this via `useOutletPinPolicy` and passes it down; the sheet itself never fetches it, so it
+   * stays a pure function of its props for the branch this doc describes. */
+  requirePin: boolean
   onClose: () => void
 }) {
   const { t } = useTranslation()
@@ -86,6 +101,10 @@ export function OperatorPinSheet({
     setEmployee(entry)
     setPin('')
     setError(null)
+    // No-PIN outlet (ADR 0049 P3d): there is no pad to fill in — the pick itself IS the sign-in
+    // attempt. `entry` is passed explicitly (not read back off state) since `setEmployee` above
+    // hasn't committed yet in this same tick.
+    if (!requirePin) void submit('', entry)
   }
 
   function backToRoster() {
@@ -94,16 +113,17 @@ export function OperatorPinSheet({
     setError(null)
   }
 
-  async function submit(candidatePin: string) {
-    if (!employee || busy) return
+  async function submit(candidatePin: string, target: OperatorRosterEntry | null = employee) {
+    if (!target || busy) return
     setBusy(true)
     setError(null)
     try {
-      const info = await operatorSession.signIn(
-        session.businessId,
-        employee.employeeId,
-        candidatePin,
-      )
+      // requirePin === false: sign in with NO pin at all (never an empty string — the mint hook
+      // omits the field entirely when undefined, mirroring the server's own "ignored, not just
+      // blank" treatment at a no-PIN outlet).
+      const info = requirePin
+        ? await operatorSession.signIn(session.businessId, target.employeeId, candidatePin)
+        : await operatorSession.signIn(session.businessId, target.employeeId)
       setSignedInAs(info)
     } catch (err) {
       setError(err)
@@ -128,7 +148,9 @@ export function OperatorPinSheet({
   const title = signedInAs
     ? t('operatorPin.signedInTitle')
     : employee
-      ? t('operatorPin.pinTitle')
+      ? requirePin
+        ? t('operatorPin.pinTitle')
+        : t('operatorPin.noPinTitle')
       : t('operatorPin.title')
 
   return (
@@ -204,24 +226,52 @@ export function OperatorPinSheet({
                 <p className="text-sm text-ink-3">{t('operatorPin.rosterEmpty')}</p>
               </div>
             ) : (
-              <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line">
-                {roster.map((entry) => (
-                  <li key={entry.employeeId}>
-                    <button
-                      type="button"
-                      data-testid="operator-pin-roster-row"
-                      onClick={() => pickEmployee(entry)}
-                      className="flex h-14 w-full items-center gap-3 px-4 text-left text-sm font-medium text-ink transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald"
-                    >
-                      <span className="grid size-9 shrink-0 place-items-center rounded-full bg-emerald-tint text-[13px] font-bold text-emerald-2">
-                        {initials(entry.displayName)}
-                      </span>
-                      <span className="truncate">{entry.displayName}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <>
+                {!requirePin ? (
+                  <p className="mb-3 text-center text-xs text-ink-3">{t('operatorPin.noPinHint')}</p>
+                ) : null}
+                <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line">
+                  {roster.map((entry) => (
+                    <li key={entry.employeeId}>
+                      <button
+                        type="button"
+                        data-testid="operator-pin-roster-row"
+                        onClick={() => pickEmployee(entry)}
+                        className="flex h-14 w-full items-center gap-3 px-4 text-left text-sm font-medium text-ink transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-emerald"
+                      >
+                        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-emerald-tint text-[13px] font-bold text-emerald-2">
+                          {initials(entry.displayName)}
+                        </span>
+                        <span className="truncate">{entry.displayName}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </>
             )}
+          </div>
+        ) : !requirePin ? (
+          /* ── No-PIN step: pick-and-mint interstitial ─────────────────────── */
+          <div className="space-y-4 px-5 py-8 text-center" data-testid="operator-nopin-confirm">
+            <p className="text-sm text-ink-3">
+              {t('operatorPin.noPinSigningInAs', { name: employee.displayName })}
+            </p>
+            {busy ? (
+              <Spinner className="mx-auto size-6 text-emerald-2" />
+            ) : error ? (
+              <>
+                <p className="text-xs text-loss" role="alert">
+                  {t(pinErrorKey(error) as Parameters<typeof t>[0])}
+                </p>
+                <Button
+                  className="w-full"
+                  data-testid="operator-nopin-retry"
+                  onClick={() => void submit('', employee)}
+                >
+                  {t('common.retry')}
+                </Button>
+              </>
+            ) : null}
           </div>
         ) : (
           /* ── Step 2: PIN pad ─────────────────────────────────────────────── */

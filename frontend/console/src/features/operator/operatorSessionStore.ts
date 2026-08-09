@@ -1,8 +1,15 @@
 /**
- * operatorSessionStore.ts — pure persistence for the till's signed-in operator (ADR 0049 P3b). No
- * React, no fetch: just localStorage read/write/validate, so the expiry/shape logic is unit
- * testable without a DOM (this repo's vitest runs with `environment: 'node'` — see
- * lib/__tests__/SessionProvider.test.ts's header doc for the same constraint).
+ * operatorSessionStore.ts — pure persistence for the till's signed-in operator (ADR 0049 P3b/P3d).
+ * No React, no fetch: just `Storage` (an interface, not a concrete store) read/write/validate, so
+ * the expiry/shape logic is unit testable without a DOM (this repo's vitest runs with
+ * `environment: 'node'` — see lib/__tests__/SessionProvider.test.ts's header doc for the same
+ * constraint) and the caller picks WHICH storage.
+ *
+ * As of P3d, `OperatorSessionProvider.tsx` passes `window.sessionStorage`, not `localStorage`
+ * (owner request): the operator session is now SESSION-scoped — it survives an in-app
+ * reload/route change, but is gone after the app/tab fully closes and reopens, so every cold
+ * launch re-picks (and re-PINs, at a PIN-required outlet) the operator. Still additionally bounded
+ * by the token's own `expiresAt` either way (checked below, independent of which storage backs it).
  *
  * ONE operator at a time, ONE key: a Business-app device rings for exactly one outlet (ADR 0049 —
  * the outlet credential carries a single `user_outlet_assignment`), so there is never more than one
