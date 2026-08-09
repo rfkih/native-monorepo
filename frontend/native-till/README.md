@@ -72,6 +72,79 @@ copy dies on the next recreate.
 Fallback sanity check without any console deploy: the translucent **🖨 TEST** button
 (bottom-right, debug builds only) still prints fixed bytes straight over SPP.
 
+## Bundled shell + OTA device drill (ADR 0051 P2/P3)
+
+The default build is still the **thin client** (ADR 0043 — WebView loads the live origin). This drill
+verifies the two things that can only be proven on real hardware before the bundled + OTA model can
+be switched on: the **OIDC round-trip inside the `https://localhost` WebView** (P2) and a full **OTA
+cycle incl. rollback** (P3). `<ORIGIN>` below is the deployed origin, e.g.
+`https://a8.tailbf9662.ts.net:8443`.
+
+### Server prerequisites (once)
+- **Gateway CORS** must allow the bundled origin — set on the gateway container and redeploy:
+  `NATIVE_GATEWAY_CORS_ALLOWED_ORIGINS=https://localhost` (empty = off = thin-client default).
+  Verify from any machine:
+  ```bash
+  curl -s -D - -o /dev/null -X OPTIONS \
+    -H "Origin: https://localhost" -H "Access-Control-Request-Method: GET" \
+    "<ORIGIN>/api/v1/companies/mine" | grep -i access-control-allow-origin
+  # expect: access-control-allow-origin: https://localhost
+  ```
+- **Keycloak** `native-console` client must list `https://localhost/*` in Valid Redirect URIs — already
+  in `docker/keycloak/native-realm.json`; confirm it's in the RUNNING realm (realm re-import wipes KC
+  users — do not re-import to fix this; add the URI via the admin console/kcadm if missing).
+
+### Part A — bundled build + OIDC-in-WebView (closes P2)
+```powershell
+cd frontend/native-till
+$env:NATIVE_TILL_ORIGIN = "<ORIGIN>"   # bakes absolute VITE_API_BASE_URL + <ORIGIN>/auth into the bundle
+npm run bundle                          # builds console → stages www/
+$env:NATIVE_TILL_BUNDLED = "1"          # drop server.url → serve www from https://localhost
+npx cap sync android
+cd android; $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"; .\gradlew.bat assembleRelease
+```
+Sanity before installing: `android/app/src/main/assets/capacitor.config.json` must have **no**
+`server.url` (only `errorPath`). Then uninstall the old app once (signing), install the APK, and check:
+1. **Instant boot** — the app shows the splash then the shell with no network wait for the app itself.
+2. **Login** — Keycloak login opens, and on success lands back **authenticated** (the redirect to
+   `https://localhost/auth/callback` is served by the local shell; the flow stays IN-WebView, never a
+   system browser).
+3. **Data loads** — dashboard/POS fetch works (proves cross-origin CORS + bearer to `<ORIGIN>/api`).
+4. **Printing** — the native printer tile still works (the bridge is present with local assets).
+
+Acceptance (P2): login + data + print all succeed from the bundled build.
+
+### Part B — OTA cycle (closes P3 mechanism)
+Rebuild the bundled APK with OTA enabled and install it:
+```powershell
+$env:NATIVE_TILL_UPDATE_URL = "<ORIGIN>/app/updates/updates.json"
+npx cap sync android; cd android; .\gradlew.bat assembleRelease   # install this build
+```
+Make a **visible** web change (e.g. a label), then publish a higher bundle version:
+```powershell
+cd frontend/native-till
+$env:NATIVE_TILL_ORIGIN = "<ORIGIN>"; npm run bundle
+$env:NATIVE_TILL_BUNDLE_VERSION = "1.0.1"          # semver, higher than the installed bundle
+$env:NATIVE_TILL_OTA_BASE_URL   = "<ORIGIN>/app/updates"
+npm run publish                                     # → ota-dist/updates.json + native-till-1.0.1.zip
+```
+Copy both `ota-dist/*` into the UAT host mount `docker/uat/downloads/app/updates/` (served by
+`edge.conf`). Confirm the endpoint answers the client's POST:
+`curl -s -X POST "<ORIGIN>/app/updates/updates.json"` → the `{version,url,checksum}` JSON.
+On the device: **relaunch twice** (Capgo checks in the background, applies on the *next* cold start).
+Acceptance (P3): the visible change appears with **no APK reinstall**.
+
+### Part C — negative rollback test (P3 safety — from the security review)
+Publish a deliberately **broken** bundle (a version whose `index.html`/JS white-screens), bump its
+version, push it via `updates.json`, relaunch twice. The broken bundle activates, never calls
+`notifyAppReady()`, and on the **following** launch Capgo auto-rolls-back to the last good bundle.
+Acceptance: a bad bundle cannot brick the till.
+
+### Do NOT switch OTA on for the fleet until (activation gate, then re-review)
+Parts A–C green **and** Capgo **encryption v2** (RSA-signed checksum) **and** an anti-rollback control
+are in place — see ADR 0051 P3. The `npm run publish` checksum is integrity-only (SHA-256); it proves
+no corruption, not authorship. To revert to the thin client, build with `NATIVE_TILL_BUNDLED` unset.
+
 ## Versioning contract (D7)
 
 `versionCode`/`versionName` bump **only when native code changes** (plugin, kiosk, WebView host,
