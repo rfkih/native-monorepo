@@ -24,29 +24,37 @@ public interface OperatorPinRepository extends JpaRepository<OperatorPin, UUID> 
   Optional<OperatorPin> findByEmployeeId(UUID employeeId);
 
   /**
-   * The PIN-sign-in-capable roster of an outlet (ADR 0049 P3b, {@code GET
+   * The sign-in-capable roster of a PIN-required outlet (ADR 0049 P3b/P2, {@code GET
    * /api/v1/operators/roster}): every employee who is BOTH (a) actively assigned to {@code
    * businessId} as of {@code asOf} (the fleet's standard effective-dated predicate — mirrors {@link
    * id.co.nativeapp.employee.assignment.repository.AssignmentRepository#existsActiveAssignment})
-   * AND (b) carries an {@code operator_pin} row (so they can actually sign in). The inner {@code
-   * JOIN} to {@code operator_pin} enforces (b); the {@code EXISTS} against {@code assignment}
-   * enforces (a) without duplicating a row for an employee who happens to hold more than one
-   * concurrent assignment to the same outlet. Each of the three tables enforces its OWN RLS policy
-   * — no manual {@code WHERE company_id} needed (rule 5). Sorted by name for the till's PIN-picker
-   * list.
+   * AND (b) has a non-blank {@code user_id} (login-linked — the source of the minted token's {@code
+   * operatorUserId}, so an unlinked employee could never complete a sign-in even with a PIN).
+   * Unlike the original P3b query, this NO LONGER requires an existing {@code operator_pin} row —
+   * an assigned+linked employee with no PIN yet is still listed (so the till can offer {@code POST
+   * /api/v1/operators/pin} first-time enrollment for them), flagged via the {@code LEFT
+   * JOIN}-derived {@code has_pin} boolean instead of being filtered out. Identical assigned+linked
+   * filter to {@link #findLinkedRoster} — the two remain distinct repository methods (one per
+   * outlet policy branch, {@code operator.service.OperatorRosterService#roster}) even though they
+   * now share the same predicate, so a future PIN-required-only refinement has a natural home. Each
+   * table enforces its OWN RLS policy — no manual {@code WHERE company_id} needed (rule 5). Sorted
+   * by name for the till's PIN-picker list.
    *
-   * <p><strong>This endpoint deliberately enumerates who can sign in (name only) — see {@code
-   * operator.controller.OperatorRosterController} for why that is intentional, unlike {@code POST
-   * /api/v1/operators/session}'s non-enumeration hardening.</strong>
+   * <p><strong>This endpoint deliberately enumerates who can sign in (name only, plus the has-PIN
+   * flag) — see {@code operator.controller.OperatorRosterController} for why that is intentional,
+   * unlike {@code POST /api/v1/operators/session}'s non-enumeration hardening.</strong>
    */
   @Query(
       value =
           """
-          SELECT e.id        AS employee_id,
-                 e.full_name AS full_name
+          SELECT e.id                        AS employee_id,
+                 e.full_name                  AS full_name,
+                 (p.employee_id IS NOT NULL) AS has_pin
             FROM employee e
-            JOIN operator_pin p ON p.employee_id = e.id
-           WHERE EXISTS (
+            LEFT JOIN operator_pin p ON p.employee_id = e.id
+           WHERE e.user_id IS NOT NULL
+             AND e.user_id <> ''
+             AND EXISTS (
                    SELECT 1
                      FROM assignment a
                     WHERE a.employee_id = e.id
@@ -65,18 +73,20 @@ public interface OperatorPinRepository extends JpaRepository<OperatorPin, UUID> 
    * require_pin = false} (the per-outlet no-PIN toggle, ADR 0049): every employee who is BOTH (a)
    * actively assigned to {@code businessId} as of {@code asOf} AND (b) has a non-blank {@code
    * user_id} (login-linked — the source of the minted token's {@code operatorUserId}, so an
-   * unlinked employee could never be picked here even without a PIN gate). Unlike {@link
-   * #findRoster}, this does NOT require an {@code operator_pin} row — a no-PIN outlet has no PIN
-   * concept for its roster to filter on. Each of the two tables enforces its OWN RLS policy — no
+   * unlinked employee could never be picked here even without a PIN gate). The {@code has_pin}
+   * column is carried for shape-parity with {@link #findRoster} but is irrelevant at a no-PIN
+   * outlet (no PIN is ever checked there). Each of the two tables enforces its OWN RLS policy — no
    * manual {@code WHERE company_id} needed (rule 5). Sorted by name for the till's picker list;
    * same deliberate enumeration (name only, rule 6) as {@link #findRoster}.
    */
   @Query(
       value =
           """
-          SELECT e.id        AS employee_id,
-                 e.full_name AS full_name
+          SELECT e.id                        AS employee_id,
+                 e.full_name                  AS full_name,
+                 (p.employee_id IS NOT NULL) AS has_pin
             FROM employee e
+            LEFT JOIN operator_pin p ON p.employee_id = e.id
            WHERE e.user_id IS NOT NULL
              AND e.user_id <> ''
              AND EXISTS (

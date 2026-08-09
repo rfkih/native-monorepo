@@ -18,6 +18,11 @@ import org.springframework.web.bind.annotation.RestController;
  * cashier-role device token can reach it while the owner/manager-only Team list ({@code GET
  * /api/v1/employees}, DASHBOARD_ROLES) stays out of reach.
  *
+ * <p>At a require-PIN outlet the roster lists ALL actively-assigned + login-linked employees —
+ * including those with no PIN yet — so a PIN-less employee can still be picked; a manager/owner
+ * elevation then enrolls their first PIN via {@code PUT /api/v1/employees/{id}/operator-pin} (first
+ * enrollment now requires a manager present, not a self-serve till flow).
+ *
  * <p><strong>This endpoint deliberately ENUMERATES who can sign in (name only) — that is
  * intentional, unlike {@code POST /api/v1/operators/session}'s uniform-401 non-enumeration
  * hardening.</strong> The roster disclosing "these are the operators at this till" is exactly what
@@ -40,12 +45,15 @@ public class OperatorRosterController {
   }
 
   @Operation(
-      summary = "List the operators (employeeId + displayName) who can sign in at an outlet today",
+      summary =
+          "List the operators (employeeId + displayName + hasPin) who can sign in at an"
+              + " outlet today",
       description =
-          "Employees of the bound tenant actively assigned to businessId as of today AND carrying"
-              + " an operator_pin row (so they can actually sign in). Returns ONLY {employeeId,"
-              + " displayName}, sorted by name — no role, status, or PII (rule 6). businessId is"
-              + " required (400 when missing/blank/not a UUID).")
+          "Employees of the bound tenant actively assigned to businessId as of today AND"
+              + " login-linked — including employees with no PIN yet, so they can be picked to"
+              + " enrol one via manager/owner elevation. Returns {employeeId, displayName, hasPin},"
+              + " sorted by name — no role, status, or other PII (rule 6). businessId is required"
+              + " (400 when missing/blank/not a UUID).")
   @GetMapping("/roster")
   public List<OperatorRosterEntry> roster(@RequestParam(required = false) String businessId) {
     return operatorRosterService.roster(businessId);

@@ -4,10 +4,12 @@ import id.co.nativeapp.employee.me.dto.MeProfileResponse;
 import id.co.nativeapp.employee.me.dto.MyPayslipDetailResponse;
 import id.co.nativeapp.employee.me.dto.MyPayslipHeaderResponse;
 import id.co.nativeapp.employee.me.dto.MySalesResponse;
+import id.co.nativeapp.employee.me.dto.SetMyOperatorPinRequest;
 import id.co.nativeapp.employee.me.service.MeReader;
 import id.co.nativeapp.employee.me.service.MeWriter;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -15,6 +17,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -100,5 +104,18 @@ public class MeController {
   @GetMapping("/sales")
   public MySalesResponse sales(@RequestParam(required = false) String period) {
     return meReader.salesSummary(period);
+  }
+
+  @Operation(
+      summary = "Set or change my own operator PIN",
+      description =
+          "Self-service set-or-change of the caller's own till operator PIN (ADR 0049 P2). No"
+              + " current PIN is required — the caller is already authenticated on this surface —"
+              + " so this also serves forgot-PIN. 404 with the employee-not-linked problem type"
+              + " when the login has no employee link.")
+  @PutMapping("/operator-pin")
+  public ResponseEntity<Void> setOperatorPin(@Valid @RequestBody SetMyOperatorPinRequest request) {
+    meWriter.setOwnOperatorPin(request.newPin());
+    return ResponseEntity.noContent().build();
   }
 }

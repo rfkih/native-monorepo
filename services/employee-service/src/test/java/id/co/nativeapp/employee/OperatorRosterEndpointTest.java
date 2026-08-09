@@ -24,9 +24,11 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
- * HTTP-boundary coverage for {@code GET /api/v1/operators/roster?businessId=} (ADR 0049 P3b) — the
- * Business-app till's employee-pick PIN picker: assigned-to-this-outlet AND has-a-PIN, sorted by
- * name, and nothing beyond {@code {employeeId, displayName}} (rule 6).
+ * HTTP-boundary coverage for {@code GET /api/v1/operators/roster?businessId=} (ADR 0049 P3b/P2) —
+ * the Business-app till's employee-pick PIN picker: assigned-to-this-outlet AND login-linked
+ * employees, sorted by name, carrying nothing beyond {@code {employeeId, displayName, hasPin}}
+ * (rule 6). Since P2, a PIN-less employee is listed too (flagged {@code hasPin: false}) rather than
+ * hidden — the till routes such a tap to {@code POST /api/v1/operators/pin} enrollment.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -43,14 +45,16 @@ class OperatorRosterEndpointTest extends PostgresRlsTestBase {
   @Autowired private OrgProjectionService orgProjectionService;
 
   @Test
-  void returnsAssignedEmployeesWithAPinSortedByNameAndOnlyTheTwoSafeFields() throws Exception {
+  void returnsAssignedLinkedEmployeesSortedByNameAndOnlyTheThreeSafeFields() throws Exception {
     UUID outletId = seedOutlet();
 
     UUID zed = createEmployee("Zed Prakoso", "3202000000009101", "2222333344449101");
+    linkLogin(zed, UUID.randomUUID().toString());
     addAssignment(zed, outletId, "cashier");
     setPin(zed, "1111");
 
     UUID budi = createEmployee("Budi Santoso", "3202000000009102", "2222333344449102");
+    linkLogin(budi, UUID.randomUUID().toString());
     addAssignment(budi, outletId, "shift_lead");
     setPin(budi, "2222");
 
@@ -65,47 +69,68 @@ class OperatorRosterEndpointTest extends PostgresRlsTestBase {
             // Sorted by displayName: "Budi Santoso" before "Zed Prakoso".
             .andExpect(jsonPath("$[0].displayName").value("Budi Santoso"))
             .andExpect(jsonPath("$[0].employeeId").value(budi.toString()))
+            .andExpect(jsonPath("$[0].hasPin").value(true))
             .andExpect(jsonPath("$[1].displayName").value("Zed Prakoso"))
             .andExpect(jsonPath("$[1].employeeId").value(zed.toString()))
+            .andExpect(jsonPath("$[1].hasPin").value(true))
             .andReturn()
             .getResponse()
             .getContentAsString();
 
-    // Confirm ONLY {employeeId, displayName} — no role/status/PII field ever leaks onto this path.
+    // Confirm ONLY {employeeId, displayName, hasPin} — no role/status/PII ever leaks onto this
+    // path.
     JsonNode rows = json.readTree(response);
     for (JsonNode row : rows) {
       List<String> fieldNames = new ArrayList<>();
       row.fieldNames().forEachRemaining(fieldNames::add);
-      assertThat(fieldNames).containsExactlyInAnyOrder("employeeId", "displayName");
+      assertThat(fieldNames).containsExactlyInAnyOrder("employeeId", "displayName", "hasPin");
     }
   }
 
   @Test
-  void excludesAnEmployeeAssignedButWithNoPinSet() throws Exception {
+  void aPinLessAssignedAndLinkedEmployeeIsListedFlaggedHasPinFalse() throws Exception {
     UUID outletId = seedOutlet();
 
     UUID withPin = createEmployee("Siti Rahma", "3202000000009103", "2222333344449103");
+    linkLogin(withPin, UUID.randomUUID().toString());
     addAssignment(withPin, outletId, "cashier");
     setPin(withPin, "3333");
 
     UUID withoutPin = createEmployee("Andi Wijaya", "3202000000009104", "2222333344449104");
+    linkLogin(withoutPin, UUID.randomUUID().toString());
     addAssignment(withoutPin, outletId, "cashier");
-    // Deliberately no PIN set for withoutPin.
+    // Deliberately no PIN set for withoutPin — since ADR 0049 P2 this must still be LISTED
+    // (flagged hasPin: false), so the till can offer first-time enrollment, not hidden as before.
 
-    String response =
-        mvc.perform(
-                get("/api/v1/operators/roster")
-                    .param("businessId", outletId.toString())
-                    .header("X-Company-Id", TENANT_A)
-                    .header("X-Actor", ACTOR))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.length()").value(1))
-            .andExpect(jsonPath("$[0].employeeId").value(withPin.toString()))
-            .andReturn()
-            .getResponse()
-            .getContentAsString();
+    mvc.perform(
+            get("/api/v1/operators/roster")
+                .param("businessId", outletId.toString())
+                .header("X-Company-Id", TENANT_A)
+                .header("X-Actor", ACTOR))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(2))
+        .andExpect(jsonPath("$[0].employeeId").value(withoutPin.toString()))
+        .andExpect(jsonPath("$[0].hasPin").value(false))
+        .andExpect(jsonPath("$[1].employeeId").value(withPin.toString()))
+        .andExpect(jsonPath("$[1].hasPin").value(true));
+  }
 
-    assertThat(response).doesNotContain(withoutPin.toString());
+  @Test
+  void anUnlinkedEmployeeIsExcludedRegardlessOfAssignmentOrPin() throws Exception {
+    UUID outletId = seedOutlet();
+
+    UUID unlinked = createEmployee("Galih Pranowo", "3202000000009113", "2222333344449113");
+    addAssignment(unlinked, outletId, "cashier");
+    setPin(unlinked, "9012"); // has a PIN, but no login-link — must still be EXCLUDED.
+    // Deliberately no linkLogin call.
+
+    mvc.perform(
+            get("/api/v1/operators/roster")
+                .param("businessId", outletId.toString())
+                .header("X-Company-Id", TENANT_A)
+                .header("X-Actor", ACTOR))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(0));
   }
 
   @Test
@@ -114,10 +139,12 @@ class OperatorRosterEndpointTest extends PostgresRlsTestBase {
     UUID otherOutletId = seedOutlet();
 
     UUID assignedHere = createEmployee("Dewi Lestari", "3202000000009105", "2222333344449105");
+    linkLogin(assignedHere, UUID.randomUUID().toString());
     addAssignment(assignedHere, outletId, "cashier");
     setPin(assignedHere, "4444");
 
     UUID assignedElsewhere = createEmployee("Rudi Hartono", "3202000000009106", "2222333344449106");
+    linkLogin(assignedElsewhere, UUID.randomUUID().toString());
     addAssignment(assignedElsewhere, otherOutletId, "cashier"); // NOT outletId
     setPin(assignedElsewhere, "5555");
 
@@ -143,10 +170,12 @@ class OperatorRosterEndpointTest extends PostgresRlsTestBase {
     UUID outletB = seedOutlet();
 
     UUID atA = createEmployee("Fitri Handayani", "3202000000009107", "2222333344449107");
+    linkLogin(atA, UUID.randomUUID().toString());
     addAssignment(atA, outletA, "cashier");
     setPin(atA, "6666");
 
     UUID atB = createEmployee("Joko Susanto", "3202000000009108", "2222333344449108");
+    linkLogin(atB, UUID.randomUUID().toString());
     addAssignment(atB, outletB, "cashier");
     setPin(atB, "7777");
 
@@ -212,6 +241,12 @@ class OperatorRosterEndpointTest extends PostgresRlsTestBase {
                     .header("X-Actor", ACTOR))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.length()").value(2))
+            // Sorted by displayName: "Budi Santoso" before "Zaenal Arifin". The has_pin flag is
+            // carried but irrelevant to list membership at a no-PIN outlet.
+            .andExpect(jsonPath("$[0].employeeId").value(withPin.toString()))
+            .andExpect(jsonPath("$[0].hasPin").value(true))
+            .andExpect(jsonPath("$[1].employeeId").value(withoutPin.toString()))
+            .andExpect(jsonPath("$[1].hasPin").value(false))
             .andReturn()
             .getResponse()
             .getContentAsString();

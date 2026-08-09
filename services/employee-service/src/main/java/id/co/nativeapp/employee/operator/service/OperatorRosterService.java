@@ -12,18 +12,19 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * The read side for {@code GET /api/v1/operators/roster} (ADR 0049 P3b) — the device's PIN-picker
- * list: which employees of the bound tenant can sign in as an operator at a given outlet today.
- * {@code @Transactional(readOnly = true)} so the Spring proxy + the auto-RLS aspect engage (rule 5)
- * — RLS scopes {@code employee}, {@code operator_pin}, and {@code assignment} alike, so no manual
- * {@code company_id} filter is needed.
+ * The read side for {@code GET /api/v1/operators/roster} (ADR 0049 P3b/P2) — the device's
+ * PIN-picker list: which employees of the bound tenant can sign in as an operator at a given outlet
+ * today. {@code @Transactional(readOnly = true)} so the Spring proxy + the auto-RLS aspect engage
+ * (rule 5) — RLS scopes {@code employee}, {@code operator_pin}, and {@code assignment} alike, so no
+ * manual {@code company_id} filter is needed.
  *
- * <p><strong>Policy-aware (ADR 0049).</strong> The roster reflects the outlet's {@code
- * outlet_operator_policy}: a PIN-required outlet (the default) lists assigned employees who ALSO
- * carry an {@code operator_pin} row ({@link OperatorPinRepository#findRoster}, unchanged); a no-PIN
- * outlet instead lists every assigned employee with a linked login, regardless of whether they ever
- * set a PIN ({@link OperatorPinRepository#findLinkedRoster}) — a PIN row is not a login-link
- * prerequisite there.
+ * <p><strong>Policy-aware (ADR 0049), and — since P2 — PIN-agnostic list membership.</strong> Both
+ * the PIN-required roster ({@link OperatorPinRepository#findRoster}) and the no-PIN roster ({@link
+ * OperatorPinRepository#findLinkedRoster}) list every actively-assigned, login-linked employee
+ * regardless of whether they have ever set a PIN; each row instead carries a {@code hasPin} flag. A
+ * PIN-less employee at a PIN-required outlet is therefore still pickable — the till routes a {@code
+ * hasPin: false} tap to {@code POST /api/v1/operators/pin} (first-time enrollment) instead of the
+ * PIN pad, closing the P1 gap where such an employee could never be selected at all.
  */
 @Service
 public class OperatorRosterService {
@@ -60,7 +61,12 @@ public class OperatorRosterService {
             ? operatorPinRepository.findRoster(businessId, asOf)
             : operatorPinRepository.findLinkedRoster(businessId, asOf);
     return rows.stream()
-        .map(view -> new OperatorRosterEntry(view.getEmployeeId(), view.getFullName()))
+        .map(
+            view ->
+                new OperatorRosterEntry(
+                    view.getEmployeeId(),
+                    view.getFullName(),
+                    Boolean.TRUE.equals(view.getHasPin())))
         .toList();
   }
 
