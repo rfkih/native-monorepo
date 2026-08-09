@@ -9,6 +9,11 @@ Proposed
 Extends [ADR 0039](0039-direct-thermal-printing-escpos.md) and [ADR 0041](0041-rawbt-bridge-transport.md);
 reuses [ADR 0028](0028-offline-mode-cash-only-queue.md) unchanged.
 
+**Amended by [ADR 0051](0051-bundled-shell-with-ota-live-updates.md)** for the *delivery model*: the
+thin-client `server.url` boot (D1) evolves to a bundled shell + OTA live updates for instant cold
+start (0051 removes D1's original objection — app-release cadence per web feature — with the OTA
+layer). The `NativePrint` bridge decision (D2/D3) and everything else here stand.
+
 ## Context
 
 The dominant thermal printers on Indonesian tills are **Bluetooth Classic (SPP) only**. Web

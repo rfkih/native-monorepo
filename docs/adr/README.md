@@ -68,3 +68,5 @@ boundary, a security posture. Routine, local choices do not need one — use a c
 | [0047](0047-three-tier-pricing.md) | Three-tier pricing: Gratis / Basic / Premium + usage add-ons (display & soft-enforce phase) | Accepted |
 | [0048](0048-minio-object-storage-for-media.md) | MinIO object storage for binary media (menu images, receipts, static QRIS) | Accepted |
 | [0049](0049-business-and-employee-apps-outlet-terminal-auth.md) | Business + Employee apps; terminal auth = outlet credential + PIN operators + personal elevation | Proposed |
+| [0050](0050-recipes-bom-costing.md) | Recipes / BOM + per-sale ingredient depletion + HPP costing | Accepted |
+| [0051](0051-bundled-shell-with-ota-live-updates.md) | Bundled Android shell + OTA live updates for instant cold start | Proposed |

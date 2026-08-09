@@ -5,6 +5,12 @@ import type { CapacitorConfig } from '@capacitor/cli';
 // per build with NATIVE_TILL_URL (e.g. a prod origin) before `npx cap sync android`.
 const SERVER_URL = process.env.NATIVE_TILL_URL ?? 'https://a8.tailbf9662.ts.net:8443';
 
+// Bundled mode (ADR 0051): NATIVE_TILL_BUNDLED=1 drops server.url so the WebView boots the app from
+// local disk (webDir → https://localhost) for instant, network-free cold start. The bundle is staged
+// by `scripts/bundle-console.mjs` (built with absolute api/keycloak URLs). Default stays the thin
+// client until the bundled build is verified end-to-end on a device (P2) and OTA lands (P3).
+const BUNDLED = process.env.NATIVE_TILL_BUNDLED === '1' || process.env.NATIVE_TILL_BUNDLED === 'true';
+
 const config: CapacitorConfig = {
   // appId is the app's permanent technical identity — NEVER rename it (a change = a different
   // app to Android + Play). The user-facing launcher name is appName / strings.xml app_name.
@@ -16,12 +22,13 @@ const config: CapacitorConfig = {
   // Matches the console's page background (--color-paper) so the moment between splash
   // and first paint isn't a white flash.
   backgroundColor: '#F6F9FA',
-  server: {
-    url: SERVER_URL,
-    // Offline cold start (no SW in-shell, ADR 0043 amendment): show a branded retry page
-    // instead of Chromium's raw net::ERR_* error. Lives in www/, auto-retries the origin.
-    errorPath: 'error.html',
-  },
+  // Bundled (ADR 0051): no `url` → Capacitor serves the packaged webDir from local disk.
+  // Thin client (ADR 0043): `url` points the WebView at the live origin.
+  // Both keep errorPath: a branded retry page (www/error.html) instead of Chromium's raw
+  // net::ERR_* — the primary path when thin, a broken-install fallback when bundled.
+  server: BUNDLED
+    ? { errorPath: 'error.html' }
+    : { url: SERVER_URL, errorPath: 'error.html' },
   android: {
     // The console is HTTPS-only; nothing in the shell talks cleartext.
     allowMixedContent: false,

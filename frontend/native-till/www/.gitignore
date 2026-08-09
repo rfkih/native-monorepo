@@ -1,0 +1,5 @@
+# Bundled console build output, staged by scripts/bundle-console.mjs (ADR 0051). It is a build
+# artifact — regenerated per build, never committed. Only the offline shell (error.html) is tracked.
+*
+!.gitignore
+!error.html
