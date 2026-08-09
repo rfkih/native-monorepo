@@ -90,14 +90,21 @@ public class RoutingConfig {
   private static final String[] OPS_ROLES = {"owner", "manager"};
 
   /**
-   * Roles allowed to READ the org-unit tree ({@code GET /api/v1/org-units/**}) — every OFFICE role
-   * ({@code owner}/{@code manager}/{@code hr}/{@code accountant}). Reading the org STRUCTURE (unit
-   * names, the BU→outlet tree) is not the same as MANAGING it: the People/HR area needs unit names
-   * to scope employees and payroll, and per-unit reports name their units, but only {@code owner}/
-   * {@code manager} may create/rename/move/deactivate units. The write verbs on {@code
-   * /api/v1/org-units/**} therefore stay at {@link #OPS_ROLES} via the general (all-methods) route;
-   * this GET-only carve-out is ordered before it (preset role-based access model Phase 2). Floor
-   * roles are NOT included — they use the narrower {@code GET /api/v1/outlets} picker instead.
+   * Roles allowed to READ the org-unit tree — the EXACT {@code GET /api/v1/org-units} flat list
+   * only ({@code useOrgUnits}: the console builds the BU→outlet tree client-side from {@code
+   * parentId}). Every OFFICE role ({@code owner}/{@code manager}/{@code hr}/{@code accountant}):
+   * the People/HR area needs unit names to scope employees + payroll and per-unit reports name
+   * their units, but only {@code owner}/{@code manager} may create/rename/move/deactivate units.
+   *
+   * <p><strong>Exact path, deliberately NOT {@code /**}.</strong> The {@code /api/v1/org-units}
+   * prefix is NOT structure-only — two sensitive sibling GETs live under it: {@code GET
+   * /{outletId}/device-credential} (reveals a DECRYPTED per-outlet till password) and {@code GET
+   * /{orgUnitId}/users} (per-unit staffing). A {@code /**} carve-out would hand those to {@code
+   * hr}/{@code accountant} — a decrypted-credential disclosure + POS escalation across the very
+   * floor/office boundary this model enforces. So the read route matches ONLY the exact list path;
+   * every {@code /{id}/...} sub-resource (and all write verbs) falls through to the general {@link
+   * #OPS_ROLES} route (owner/manager). Floor roles are excluded entirely — they use the narrower
+   * {@code GET /api/v1/outlets} picker (preset role-based access model Phase 2).
    */
   private static final String[] ORG_READ_ROLES = {"owner", "manager", "hr", "accountant"};
 
@@ -388,13 +395,16 @@ public class RoutingConfig {
   }
 
   /**
-   * {@code GET /api/v1/org-units/**} — READ the org-unit tree, allowed for every office role
-   * ({@link #ORG_READ_ROLES}), not just owner/manager. The HR/People area and per-unit reports need
-   * unit names to scope employees, payroll, and P&amp;L; reading structure is not managing it.
-   * {@code @Order(HIGHEST_PRECEDENCE)} is load-bearing: this GET carve-out must be matched before
-   * the general (all-methods) {@link #orgUnitsRoute} so an {@code hr}/{@code accountant} GET is
-   * admitted; a write verb (POST/PUT/DELETE) does not match here and falls through to that OPS-only
-   * route.
+   * {@code GET /api/v1/org-units} (EXACT flat list) — READ the org-unit structure, allowed for
+   * every office role ({@link #ORG_READ_ROLES}), not just owner/manager. The HR/People area and
+   * per-unit reports need unit names to scope employees, payroll, and P&amp;L; reading structure is
+   * not managing it. {@code @Order(HIGHEST_PRECEDENCE)} is load-bearing: this GET carve-out must be
+   * matched before the general (all-methods) {@link #orgUnitsRoute} so an {@code hr}/{@code
+   * accountant} GET of the list is admitted; write verbs and — crucially — every {@code
+   * /api/v1/org-units/{id}/...} sub-resource (notably the {@code device-credential} reveal and
+   * {@code /users} staffing) do NOT match this exact path and fall through to that OPS-only route.
+   * The path is exact, NOT {@code /**}, precisely to keep those sensitive siblings
+   * owner/manager-only (see {@link #ORG_READ_ROLES}).
    */
   @Bean
   @Order(Ordered.HIGHEST_PRECEDENCE)
@@ -403,7 +413,7 @@ public class RoutingConfig {
       RedisTokenBucketRateLimiter limiter,
       TenantContextHeaderFilter tenantFilter) {
     return GatewayRouterFunctions.route("org-service-org-units-read")
-        .route(GET("/api/v1/org-units/**"), http())
+        .route(GET("/api/v1/org-units"), http())
         .before(uri(routes.orgService()))
         .filter(new RateLimitFilter(limiter))
         .filter(new RoleAuthorizationFilter(ORG_READ_ROLES))

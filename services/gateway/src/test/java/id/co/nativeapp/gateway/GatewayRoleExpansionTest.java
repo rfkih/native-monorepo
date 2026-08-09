@@ -552,6 +552,80 @@ class GatewayRoleExpansionTest extends GatewayIntegrationTestBase {
     assertThat(receivedRequests).isEmpty();
   }
 
+  @Test
+  void anAccountantIsDeniedTheOutletDeviceCredentialRevealWith403() throws Exception {
+    // REGRESSION (the org-units read-widen must be the EXACT list path, never /**): the sibling
+    // GET /api/v1/org-units/{outletId}/device-credential reveals a DECRYPTED till password and MUST
+    // stay owner/manager-only. An office role reaching it would harvest POS credentials — the exact
+    // floor/office escalation this model forbids. It falls through to the OPS route → 403.
+    String token =
+        obtainAccessToken(
+            REALM, CLIENT_ID, CLIENT_SECRET, ACCOUNTANT_USERNAME, ACCOUNTANT_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/org-units/11111111-1111-1111-1111-111111111111/device-credential")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void anHrRoleIsDeniedTheOutletDeviceCredentialRevealWith403() throws Exception {
+    String token = obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, HR_USERNAME, HR_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/org-units/11111111-1111-1111-1111-111111111111/device-credential")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void anAccountantIsDeniedTheOrgUnitUsersSubResourceWith403() throws Exception {
+    // The other sibling GET /api/v1/org-units/{id}/users (per-unit staffing) is likewise NOT part
+    // of
+    // the widened structure read — it stays owner/manager-only via the OPS fall-through.
+    String token =
+        obtainAccessToken(
+            REALM, CLIENT_ID, CLIENT_SECRET, ACCOUNTANT_USERNAME, ACCOUNTANT_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/org-units/11111111-1111-1111-1111-111111111111/users")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
   // ---------------------------------------------------------------------------
   // Multi-role login (hr + accountant on the SAME token): access is the union
   // ---------------------------------------------------------------------------

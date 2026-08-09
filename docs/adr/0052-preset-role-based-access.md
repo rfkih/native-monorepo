@@ -68,13 +68,18 @@ Two ambiguous prefixes were decided explicitly: **payment-settings stays OWNER-o
 credentials are owner config, not bookkeeping), and **`/consolidation-groups` = OPS** while
 **`/groups` (finance consolidation) = FINANCE**.
 
-One **method-split** carve-out: **`GET /api/v1/org-units/**` is readable by every OFFICE role**
-(`{owner, manager, hr, accountant}`, a `HIGHEST_PRECEDENCE` GET route) while create/rename/move/
-deactivate (POST/PUT/DELETE) stay OPS via the general all-methods route. The HR/People area needs unit
-names to scope employees and payroll, and per-unit reports name their units — reading the org
+One **method-split** carve-out: the **exact `GET /api/v1/org-units`** flat list is readable by every
+OFFICE role (`{owner, manager, hr, accountant}`, a `HIGHEST_PRECEDENCE` GET route) while create/rename/
+move/deactivate (POST/PUT/DELETE) stay OPS via the general all-methods route. The HR/People area needs
+unit names to scope employees and payroll, and per-unit reports name their units — reading the org
 *structure* is not *managing* it. Floor roles are excluded (they use the narrower `GET /api/v1/outlets`
 picker). employee-service's own `/api/v1/employees/org-units` projection carries no unit name, so the
 console reads names from org-service; this widening is what lets an `hr`-alone login use the People area.
+The path is **exact, deliberately not `/**`**: the `/api/v1/org-units` prefix is not structure-only —
+`GET /{outletId}/device-credential` reveals a *decrypted* till password and `GET /{id}/users` is per-unit
+staffing; a wildcard would leak those to `hr`/`accountant` (a decrypted-credential disclosure + POS
+escalation across this very boundary — caught in security review). Those `/{id}/...` sub-resources stay
+owner/manager-only via the OPS fall-through, pinned by regression tests.
 
 **Out of scope (deferred):** per-company roles ("HR at company A only") — ADR 0021's global-role
 limitation stands; revisit with Keycloak groups / per-company claims when a customer needs it. A
