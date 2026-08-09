@@ -1248,6 +1248,10 @@ export const en = {
     /** ADR 0049 P3b — the signed-in operator chip / sign-in affordance (device terminal only). */
     operatorChip: '{{name}} · {{role}}',
     operatorSignIn: 'Sign in',
+    /** ADR 0049 P3b slice 2 — the till-menu's personal-elevation actions (device terminal only). */
+    elevateEntry: 'Sign in to manage',
+    endElevation: 'Sign out of back office',
+    logoutOutlet: 'Log out outlet',
   },
   /** ADR 0049 P3b — the Business-app till's employee-pick + PIN sign-in (OperatorPinSheet). */
   operatorPin: {

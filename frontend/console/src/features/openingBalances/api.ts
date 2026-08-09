@@ -9,9 +9,20 @@
  * float.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiFetch, ApiError } from '@/lib/api'
+import { apiFetch as apiFetchBase, ApiError, type RequestOptions } from '@/lib/api'
 import type { CompanySession } from '@/lib/session'
 import type { AssetDetail } from '@/features/assets/api'
+
+/**
+ * ADR 0049 P3b — every call in this module targets a DASHBOARD_ROLES-gated back-office route
+ * (`/api/v1/opening-balances/**`, `/api/v1/assets/opening`), so it always uses the PERSONAL bearer
+ * (the elevation token on a device terminal; identical to the single login token for a normal
+ * `user` login). Shadows the shared `apiFetch` import so every call site below is correct with ZERO
+ * per-call changes.
+ */
+function apiFetch<T>(path: string, opts: RequestOptions = {}) {
+  return apiFetchBase<T>(path, { ...opts, auth: 'personal' })
+}
 
 export type OpeningBalanceSide = 'DEBIT' | 'CREDIT'
 

@@ -13,7 +13,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api'
-import { hasAnyRole, useAuth } from '@/lib/authContext'
+import { effectiveRoles, hasAnyRole, useAuth } from '@/lib/authContext'
 
 /**
  * The grantable console page keys. Mirrors the org-service whitelist for every key EXCEPT
@@ -81,17 +81,27 @@ export function usePageAccess(): {
   isAllowed: (page: PageKey) => boolean
 } {
   const auth = useAuth()
-  const bypass = hasAnyRole(auth.roles, 'owner')
+  // ADR 0049 P3b: bypass on the EFFECTIVE roles — an elevated device (owner) must never be gated by
+  // its own bare `cashier` grant row. A normal `user` login has `elevatedRoles = []`, so this reads
+  // identically to `auth.roles` there (byte-identical).
+  const elevated = auth.elevatedRoles.length > 0
+  const bypass = hasAnyRole(effectiveRoles(auth.roles, auth.elevatedRoles), 'owner')
 
   const query = useQuery<MyPages>({
     enabled: auth.authenticated && !bypass,
-    queryKey: ['myPages', auth.companyId ?? 'me'],
+    // Elevation switches WHOSE grants this reads (the elevated person's, not the device's) — key it
+    // so the cache never mixes the two across an elevate/drop transition.
+    queryKey: ['myPages', auth.companyId ?? 'me', elevated],
     retry: false,
     staleTime: 30_000,
     refetchOnWindowFocus: true,
     queryFn: async () => {
       const result = await apiFetch<MyPages>('/api/v1/users/me/pages', {
         tenant: { companyId: auth.companyId ?? 'me', actor: auth.actor },
+        // ME_ROLES admits every business role, so the OUTLET bearer already succeeds here either
+        // way — this just makes sure an ELEVATED device reads the elevated PERSON's own grants
+        // (not the bare device login's), matching who is actually driving the back office right now.
+        auth: elevated ? 'personal' : 'outlet',
       })
       return result ?? { mode: 'ALL', pageKeys: [] }
     },

@@ -25,7 +25,7 @@ import {
   Sun,
 } from 'lucide-react'
 import { MobileSheet } from '@/components/mobile/MobileSheet'
-import { hasAnyRole, useAuth } from '@/lib/authContext'
+import { effectiveRoles, hasAnyRole, useAuth } from '@/lib/authContext'
 import { usePageAccess } from '@/lib/pageAccess'
 import { useTierAccess } from '@/lib/featureTier'
 import { AUTH_MODE } from '@/lib/config'
@@ -79,7 +79,11 @@ export function MoreSheet({
   const { theme, toggle } = useTheme()
   const navigate = useNavigate()
 
-  const canDashboard = hasAnyRole(auth.roles, 'owner', 'manager')
+  // ADR 0049 P3b — mirrors MobileTabBarGate's canDashboard (merged/elevated roles), so this sheet's
+  // tiles + "Add business" row don't disappear on an elevated device just because MoreSheet itself
+  // is only ever reachable once the tab bar already decided canDashboard was true. Byte-identical
+  // for a normal `user` login (elevatedRoles is always `[]`).
+  const canDashboard = hasAnyRole(effectiveRoles(auth.roles, auth.elevatedRoles), 'owner', 'manager')
   const canPos = hasAnyRole(auth.roles, 'owner', 'manager', 'cashier')
 
   const tiles = [

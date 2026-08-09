@@ -19,7 +19,7 @@ import { EmptyState } from '@/features/_shared/financeUi'
 import { useMyClaims } from '@/features/expenses/api'
 import { ClaimStatusBadge } from '@/features/expenses/parts'
 import { formatDate } from '@/features/expenses/format'
-import { hasAnyRole, useAuth } from '@/lib/authContext'
+import { effectiveRoles, hasAnyRole, useAuth } from '@/lib/authContext'
 import { AUTH_MODE } from '@/lib/config'
 import { formatMoney } from '@/lib/money'
 import { localeOf } from '@/i18n'
@@ -39,7 +39,9 @@ export function Me() {
   const companyId = auth.companyId ?? 'me'
   const actor = auth.actor
   const canPos = hasAnyRole(auth.roles, 'owner', 'manager', 'cashier')
-  const canDashboard = hasAnyRole(auth.roles, 'owner', 'manager')
+  // ADR 0049 P3b — merged/elevated roles, mirroring App.tsx's canDashboard (consistency; /me stays
+  // reachable by every login so this is a rare path for a device, but never a WRONG one).
+  const canDashboard = hasAnyRole(effectiveRoles(auth.roles, auth.elevatedRoles), 'owner', 'manager')
 
   const profile = useMyProfile({ companyId, actor, enabled: true })
   const notLinked = isNotLinked(profile.error)

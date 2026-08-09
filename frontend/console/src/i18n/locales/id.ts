@@ -1237,6 +1237,10 @@ export const id = {
     /** ADR 0049 P3b — chip operator yang sedang masuk / tombol masuk (khusus terminal perangkat). */
     operatorChip: '{{name}} · {{role}}',
     operatorSignIn: 'Masuk',
+    /** ADR 0049 P3b tahap 2 — aksi elevasi pribadi pada menu kasir (khusus terminal perangkat). */
+    elevateEntry: 'Masuk untuk mengelola',
+    endElevation: 'Keluar dari back office',
+    logoutOutlet: 'Keluar dari gerai',
   },
   /** ADR 0049 P3b — pemilihan karyawan + masuk PIN pada aplikasi Bisnis (OperatorPinSheet). */
   operatorPin: {

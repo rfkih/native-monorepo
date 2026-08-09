@@ -26,6 +26,7 @@ import { Spinner } from '@/components/ui/Spinner'
 import { ListSkeleton } from '@/components/ui/Skeleton'
 import { Field, TextInput } from '@/components/ui/Field'
 import { useSession, type CompanySession } from '@/lib/session'
+import { effectiveRoles, hasAnyRole, useAuth } from '@/lib/authContext'
 import { localeOf } from '@/i18n'
 import { cn } from '@/lib/cn'
 import { formatMoney, isoMinorExponent } from '@/lib/money'
@@ -92,6 +93,15 @@ function CatalogManagementInner({
 }) {
   const { t, i18n } = useTranslation()
   const locale = localeOf(i18n.language)
+  const auth = useAuth()
+  // ADR 0049 P3b — WasherDialog's employee-link dropdown fires features/hr/api's useEmployees,
+  // a DASHBOARD_ROLES-only call (that module always sends the PERSONAL bearer). /catalog itself
+  // stays reachable by a bare cashier (canPos, App.tsx `menuAllowed`) — deliberately unchanged, a
+  // cashier manages the catalog intentionally — so this call must be gated separately: a bare
+  // cashier's personal bearer is null and the call would 401 → spurious global recovery. Mirrors
+  // ServicePos.tsx/App.tsx's canDashboard (merged/elevated roles) — a normal `user` login has
+  // `elevatedRoles = []`, so this is byte-identical to the base owner/manager check there.
+  const canDashboard = hasAnyRole(effectiveRoles(auth.roles, auth.elevatedRoles), 'owner', 'manager')
   // The page subtitle names the primary item and the staff role inline — lowercased so it reads as
   // a natural mid-sentence noun ("packages"/"washers" for carwash, "services"/"barbers" for
   // barbershop) while the sentence itself stays ONE shared serviceCatalog.subtitle key.
@@ -125,7 +135,7 @@ function CatalogManagementInner({
         </p>
         <PackagesSection session={session} config={config} locale={locale} />
         <AddonsSection session={session} config={config} locale={locale} />
-        <WashersSection session={session} config={config} />
+        <WashersSection session={session} config={config} canDashboard={canDashboard} />
       </div>
     </div>
   )
@@ -596,9 +606,12 @@ function EditCatalogItemDialog({
 function WashersSection({
   session,
   config,
+  canDashboard,
 }: {
   session: CompanySession
   config: VerticalPosConfig
+  /** ADR 0049 P3b — gates WasherDialog's useEmployees call; see CatalogManagementInner's doc. */
+  canDashboard: boolean
 }) {
   const { t } = useTranslation()
   const query = useStaffProfiles(config, session, { includeInactive: true })
@@ -674,6 +687,7 @@ function WashersSection({
           session={session}
           config={config}
           titleKey={config.staffLabels.addLabelKey}
+          canDashboard={canDashboard}
           onClose={() => setDialog(null)}
         />
       ) : null}
@@ -683,6 +697,7 @@ function WashersSection({
           config={config}
           titleKey={config.staffLabels.editLabelKey}
           profile={dialog}
+          canDashboard={canDashboard}
           onClose={() => setDialog(null)}
         />
       ) : null}
@@ -694,18 +709,26 @@ function WashersSection({
  * The employee link dropdown REUSES the existing HR employees list (features/hr/api's
  * useEmployees) rather than a bespoke fetch — it is already a lightweight GET /api/v1/employees
  * call with no heavy UI dependencies.
+ *
+ * ADR 0049 P3b: `useEmployees` is DASHBOARD_ROLES-only (features/hr/api.ts always sends the
+ * PERSONAL bearer) but `/catalog` itself stays reachable by a bare cashier (canPos) — so the call
+ * is gated on `canDashboard`, not fired unconditionally (see CatalogManagementInner's doc). A
+ * non-manager still sees the dropdown; it just degrades to "no employee linked" (the
+ * `serviceCatalog.employeeNone` option) with an empty list — never a spurious 401/recovery.
  */
 function WasherDialog({
   session,
   config,
   titleKey,
   profile,
+  canDashboard,
   onClose,
 }: {
   session: CompanySession
   config: VerticalPosConfig
   titleKey: string
   profile?: StaffProfileResponse
+  canDashboard: boolean
   onClose: () => void
 }) {
   const { t } = useTranslation()
@@ -716,7 +739,7 @@ function WasherDialog({
     companyId: session.companyId,
     actor: session.actor,
     orgUnitIds: [],
-    enabled: true,
+    enabled: canDashboard,
   })
   const employees = employeesQuery.data ?? []
 

@@ -20,6 +20,23 @@ export function setAccessToken(token: string | null): void {
 }
 
 /**
+ * ADR 0049 P3b — the PERSONAL bearer for back-office calls (`opts.auth: 'personal'`, see {@link
+ * authHeaders}). For a normal `user` login this mirrors {@link accessToken} exactly (there is only
+ * ever one login, so "personal" and "outlet" are the same token) — set by `lib/auth.tsx`'s
+ * `OidcAuthProvider` whenever a non-device principal loads. For a `device` terminal (the
+ * Business-app till) this stays `null` until an owner/manager ELEVATES on top (a second, personal
+ * OIDC login — `AuthState.elevate()`); it is the elevation token, never the outlet credential, and
+ * the outlet token remains the ONLY tenant source (`X-Company-Id` is unaffected by this — see
+ * {@link authHeaders}).
+ */
+let personalAccessToken: string | null = null
+
+/** Called by the auth layer whenever the personal/elevation bearer changes (or clears). */
+export function setPersonalAccessToken(token: string | null): void {
+  personalAccessToken = token
+}
+
+/**
  * The Business-app till's signed-in operator token (ADR 0049 P3b) — null for every normal `user`
  * login and for a `device` terminal with no operator signed in yet. Set by
  * `features/operator/OperatorSessionProvider` on operator sign-in/sign-out/expiry, sent as
@@ -120,6 +137,29 @@ export function isOrgUnitHasData(err: unknown): boolean {
   )
 }
 
+/**
+ * ADR 0049 P3b — which bearer a call uses in oidc mode: `'outlet'` (default) is the till's own
+ * credential (POS/sale/menu/register/operator-session calls — everything a bare cashier or an
+ * unelevated device terminal must be able to do); `'personal'` is the signed-in PERSON's bearer
+ * (every canDashboard-gated back-office read/write — dashboard, statements, AR/AP, bank, tax, org,
+ * team, close, budgets, HR/payroll, etc.) — for a normal `user` login the two are the SAME token
+ * (see {@link setPersonalAccessToken}'s doc), so this only matters on a device terminal. Ignored in
+ * dev mode (header-trust, no bearer at all). `X-Company-Id` is unaffected either way — the outlet
+ * token stays the only tenant source.
+ */
+export type AuthTarget = 'outlet' | 'personal'
+
+/**
+ * Pure bearer selection (ADR 0049 P3b) — kept standalone (no module state, no AUTH_MODE) so it is
+ * unit-testable in isolation; {@link authHeaders} is the only caller.
+ */
+export function selectBearerToken(
+  target: AuthTarget,
+  tokens: { outlet: string | null; personal: string | null },
+): string | null {
+  return target === 'personal' ? tokens.personal : tokens.outlet
+}
+
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   body?: unknown
@@ -133,6 +173,8 @@ export interface RequestOptions {
    * conflict — lets a call override a default if it ever needs to.
    */
   headers?: Record<string, string>
+  /** Which bearer to send in oidc mode — see {@link AuthTarget}. Defaults to `'outlet'`. */
+  auth?: AuthTarget
 }
 
 function buildQuery(query?: Record<string, string | undefined>): string {
@@ -146,15 +188,22 @@ function buildQuery(query?: Record<string, string | undefined>): string {
 }
 
 /** The tenant/actor headers shared by {@link apiFetch} and {@link apiUpload} — see each's docs. */
-function authHeaders(tenant?: { companyId: string; actor: string }, actor?: string): Record<string, string> {
+function authHeaders(
+  tenant?: { companyId: string; actor: string },
+  actor?: string,
+  auth: AuthTarget = 'outlet',
+): Record<string, string> {
   const headers: Record<string, string> = {}
   if (AUTH_MODE === 'oidc') {
     // Actor/roles come from the verified token. X-Company-Id is the ACTIVE-COMPANY SELECTION
     // (multi-company ownership, ADR 0021): the gateway and each service validate it against the
     // token's allowed set before binding — a value outside the set is a 403, so this is a
     // selection, never a trusted tenant. Omitted (bootstrap calls), the token's first company is
-    // the default.
-    if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`
+    // the default. ADR 0049 P3b: which BEARER (outlet vs personal) is selected via `auth` — see
+    // {@link selectBearerToken}; X-Company-Id itself is unaffected — the outlet stays the only
+    // tenant source either way.
+    const bearer = selectBearerToken(auth, { outlet: accessToken, personal: personalAccessToken })
+    if (bearer) headers['Authorization'] = `Bearer ${bearer}`
     if (tenant) headers['X-Company-Id'] = tenant.companyId
   } else if (tenant) {
     headers['X-Company-Id'] = tenant.companyId
@@ -227,7 +276,7 @@ async function handleResponse<T>(
 export async function apiFetch<T>(path: string, opts: RequestOptions = {}): Promise<T | null> {
   const headers: Record<string, string> = { Accept: 'application/json' }
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json'
-  Object.assign(headers, authHeaders(opts.tenant, opts.actor))
+  Object.assign(headers, authHeaders(opts.tenant, opts.actor, opts.auth))
   if (opts.headers) Object.assign(headers, opts.headers)
 
   const res = await fetch(API_BASE_URL + path + buildQuery(opts.query), {
@@ -246,6 +295,8 @@ export interface UploadOptions {
   actor?: string
   /** Extra headers merged in after the auth/tenant headers (callers win on conflict). */
   headers?: Record<string, string>
+  /** Which bearer to send in oidc mode — see {@link AuthTarget}. Defaults to `'outlet'`. */
+  auth?: AuthTarget
 }
 
 /**
@@ -266,7 +317,7 @@ export async function apiUpload<T>(
   opts: UploadOptions = {},
 ): Promise<T | null> {
   const headers: Record<string, string> = { Accept: 'application/json' }
-  Object.assign(headers, authHeaders(opts.tenant, opts.actor))
+  Object.assign(headers, authHeaders(opts.tenant, opts.actor, opts.auth))
   if (opts.headers) Object.assign(headers, opts.headers)
 
   const res = await fetch(API_BASE_URL + path, {
@@ -288,7 +339,7 @@ export async function apiUpload<T>(
  */
 export async function apiFetchBlob(path: string, opts: RequestOptions = {}): Promise<Blob | null> {
   const headers: Record<string, string> = {}
-  Object.assign(headers, authHeaders(opts.tenant, opts.actor))
+  Object.assign(headers, authHeaders(opts.tenant, opts.actor, opts.auth))
   if (opts.headers) Object.assign(headers, opts.headers)
 
   const res = await fetch(API_BASE_URL + path + buildQuery(opts.query), {
@@ -320,7 +371,7 @@ export async function apiDownload(
   fallbackFilename = 'download',
 ): Promise<void> {
   const headers: Record<string, string> = {}
-  Object.assign(headers, authHeaders(opts.tenant, opts.actor))
+  Object.assign(headers, authHeaders(opts.tenant, opts.actor, opts.auth))
   if (opts.headers) Object.assign(headers, opts.headers)
 
   const res = await fetch(API_BASE_URL + path + buildQuery(opts.query), {

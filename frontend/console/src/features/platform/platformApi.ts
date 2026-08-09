@@ -12,8 +12,18 @@
  * "negative balances are tolerated by design").
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiFetch } from '@/lib/api'
+import { apiFetch as apiFetchBase, type RequestOptions } from '@/lib/api'
 import type { CompanySession } from '@/lib/session'
+
+/**
+ * ADR 0049 P3b — every call in this module targets a DASHBOARD_ROLES-gated back-office route
+ * (`/api/v1/platform-settlements/**`), so it always uses the PERSONAL bearer (the elevation token
+ * on a device terminal; identical to the single login token for a normal `user` login). Shadows the
+ * shared `apiFetch` import so every call site below is correct with ZERO per-call changes.
+ */
+function apiFetch<T>(path: string, opts: RequestOptions = {}) {
+  return apiFetchBase<T>(path, { ...opts, auth: 'personal' })
+}
 
 /** Mirrors backend PlatformOutstandingResponse exactly. */
 export interface PlatformOutstanding {

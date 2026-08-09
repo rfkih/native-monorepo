@@ -198,8 +198,13 @@ function earnRulesKey(session: CompanySession) {
   return ['loyalty-earn-rules', session.companyId]
 }
 
-/** GET /api/v1/loyalty/earn-rules — the admin listing (activeOnly=false so an owner/manager sees
- * every historical version, newest first per the server's ordering). */
+/**
+ * GET /api/v1/loyalty/earn-rules — the admin listing (activeOnly=false so an owner/manager sees
+ * every historical version, newest first per the server's ordering). ADR 0049 P3b: this route is
+ * DASHBOARD_ROLES-gated (unlike the member/gift-card hooks above, which are POS_ROLES and shared
+ * with the till), so it uses the PERSONAL bearer — the elevation token on a device terminal;
+ * identical to the single login token for a normal `user` login.
+ */
 export function useEarnRules(session: CompanySession) {
   return useQuery({
     queryKey: earnRulesKey(session),
@@ -207,6 +212,7 @@ export function useEarnRules(session: CompanySession) {
       const result = await apiFetch<EarnRuleResponse[]>('/api/v1/loyalty/earn-rules', {
         tenant: tenantOf(session),
         query: { activeOnly: 'false' },
+        auth: 'personal',
       })
       return result ?? []
     },
@@ -214,7 +220,8 @@ export function useEarnRules(session: CompanySession) {
 }
 
 /** POST /api/v1/loyalty/earn-rules — owner/manager only (403 `earn-rule-write-forbidden`
- * otherwise); 422 `earn-rule-invalid` on an unrecognised provenance. */
+ * otherwise); 422 `earn-rule-invalid` on an unrecognised provenance. ADR 0049 P3b: PERSONAL bearer
+ * — see {@link useEarnRules}'s doc. */
 export function useCreateEarnRule(session: CompanySession) {
   const qc = useQueryClient()
   return useMutation({
@@ -222,6 +229,7 @@ export function useCreateEarnRule(session: CompanySession) {
       apiFetch<EarnRuleResponse>('/api/v1/loyalty/earn-rules', {
         method: 'POST',
         tenant: tenantOf(session),
+        auth: 'personal',
         body: input,
       }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: earnRulesKey(session) }),

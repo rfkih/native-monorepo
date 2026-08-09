@@ -40,10 +40,26 @@ export interface AuthState {
    * identity from the verified token. Null in dev mode (no token).
    */
   sub: string | null
-  /** Curated business roles the principal holds. */
+  /** Curated business roles the principal holds — from the OUTLET/primary token only (a device
+   * terminal's own roles, e.g. `['cashier']`). Never includes an elevation — see {@link
+   * effectiveRoles} for the merged set back-office route gating should read. */
   roles: BusinessRole[]
   /** `device` (a Business-app till) or `user` (a normal personal login) — see {@link ActorType}. */
   actorType: ActorType
+  /**
+   * ADR 0049 P3b — the roles of a PERSONAL owner/manager elevation layered on top of a device
+   * terminal (a second, ordinary OIDC login — see `lib/auth.tsx`). Always `[]` for a normal `user`
+   * login (nothing ever elevates there) and for a device terminal with no elevation active — so
+   * {@link effectiveRoles}`(roles, elevatedRoles)` is byte-identical to `roles` in both of those
+   * cases, and only differs on an ELEVATED device.
+   */
+  elevatedRoles: BusinessRole[]
+  /** Starts the personal-elevation login redirect (a device terminal's "Sign in to manage"). A
+   * no-op-shaped call on a normal `user` login (nothing in the UI ever invokes it there). */
+  elevate: () => void
+  /** Ends the personal elevation (till-menu "Sign out of back office") — drops back to the bare
+   * outlet terminal; does NOT touch the outlet credential itself (see `auth.logout` for that). */
+  dropElevation: () => void
   /**
    * Starts the login redirect. `loginHint` (an email) pre-fills the IdP's username field —
    * used right after signup so the user never re-types the address they just registered.
@@ -70,4 +86,23 @@ export function useAuth(): AuthState {
 /** True if the principal holds any of the given roles. */
 export function hasAnyRole(roles: readonly string[], ...wanted: BusinessRole[]): boolean {
   return wanted.some((r) => roles.includes(r))
+}
+
+/**
+ * ADR 0049 P3b — the EFFECTIVE role set: the login's base `roles` unioned with any personal
+ * elevation `elevatedRoles`. This is the ONLY thing back-office route gating (`canDashboard`/
+ * `isOwner` in App.tsx) should read — `canPos`/`canEmployee` stay on the base `roles` (elevation
+ * never changes what the OUTLET credential itself can do). A normal `user` login always has
+ * `elevatedRoles = []`, so `effectiveRoles(roles, []) === roles`'s VALUES byte-for-byte (same
+ * members, same order-independent set) — kept a pure function (no React) so it is trivially unit
+ * testable and usable outside a component.
+ */
+export function effectiveRoles(
+  roles: readonly BusinessRole[],
+  elevatedRoles: readonly BusinessRole[],
+): BusinessRole[] {
+  if (elevatedRoles.length === 0) return [...roles]
+  const merged = new Set<BusinessRole>(roles)
+  for (const r of elevatedRoles) merged.add(r)
+  return [...merged]
 }

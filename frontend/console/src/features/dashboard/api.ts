@@ -1,6 +1,17 @@
 import { useQueries, useQuery } from '@tanstack/react-query'
-import { apiFetch } from '@/lib/api'
+import { apiFetch as apiFetchBase, type RequestOptions } from '@/lib/api'
 import { shiftPeriod } from '@/lib/period'
+
+/**
+ * ADR 0049 P3b — every call in this module targets a DASHBOARD_ROLES-gated back-office route
+ * (`/api/v1/pnl/**`), so it always uses the PERSONAL bearer (the elevation token on a device
+ * terminal; identical to the single login token for a normal `user` login — see lib/api.ts's
+ * `setPersonalAccessToken` doc). Shadows the shared `apiFetch` import so every call site below is
+ * correct with ZERO per-call changes — the single choke point for this file.
+ */
+function apiFetch<T>(path: string, opts: RequestOptions = {}) {
+  return apiFetchBase<T>(path, { ...opts, auth: 'personal' })
+}
 
 /** Mirror of finance-service OutletRevenueResponse.OutletRow. */
 export interface OutletRow {

@@ -505,6 +505,7 @@ export function useCreatePackage(config: VerticalPosConfig, session: CompanySess
       apiFetch<CatalogItemResponse>(`${config.apiBase}/${config.packagesPath}`, {
         method: 'POST',
         tenant: tenantOf(session),
+        auth: 'personal',
         body,
       }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: catalogKey(config, session, 'packages') }),
@@ -518,6 +519,7 @@ export function useUpdatePackage(config: VerticalPosConfig, session: CompanySess
       apiFetch<CatalogItemResponse>(`${config.apiBase}/${config.packagesPath}/${id}`, {
         method: 'PATCH',
         tenant: tenantOf(session),
+        auth: 'personal',
         body,
       }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: catalogKey(config, session, 'packages') }),
@@ -531,6 +533,7 @@ export function useCreateAddon(config: VerticalPosConfig, session: CompanySessio
       apiFetch<CatalogItemResponse>(`${config.apiBase}/addons`, {
         method: 'POST',
         tenant: tenantOf(session),
+        auth: 'personal',
         body,
       }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: catalogKey(config, session, 'addons') }),
@@ -544,6 +547,7 @@ export function useUpdateAddon(config: VerticalPosConfig, session: CompanySessio
       apiFetch<CatalogItemResponse>(`${config.apiBase}/addons/${id}`, {
         method: 'PATCH',
         tenant: tenantOf(session),
+        auth: 'personal',
         body,
       }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: catalogKey(config, session, 'addons') }),
@@ -570,6 +574,7 @@ export function useCreateStaffProfile(config: VerticalPosConfig, session: Compan
       apiFetch<StaffProfileResponse>(`${config.apiBase}/staff-profiles`, {
         method: 'POST',
         tenant: tenantOf(session),
+        auth: 'personal',
         body,
       }),
     onSuccess: () =>
@@ -584,6 +589,7 @@ export function useUpdateStaffProfile(config: VerticalPosConfig, session: Compan
       apiFetch<StaffProfileResponse>(`${config.apiBase}/staff-profiles/${id}`, {
         method: 'PATCH',
         tenant: tenantOf(session),
+        auth: 'personal',
         body,
       }),
     onSuccess: () =>

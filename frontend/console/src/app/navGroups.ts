@@ -39,7 +39,7 @@ import {
   UsersRound,
   Wallet,
 } from 'lucide-react'
-import { hasAnyRole, useAuth } from '@/lib/authContext'
+import { effectiveRoles, hasAnyRole, useAuth } from '@/lib/authContext'
 import { usePageAccess, type PageKey } from '@/lib/pageAccess'
 import { useTierAccess, type FeatureKey } from '@/lib/featureTier'
 
@@ -68,9 +68,15 @@ export function useNavGroups(): {
   const { t } = useTranslation()
   const auth = useAuth()
 
-  const canDashboard = hasAnyRole(auth.roles, 'owner', 'manager')
+  // ADR 0049 P3b — mirrors App.tsx's canDashboard/isOwner exactly (merged/elevated roles): this is
+  // the SHARED source for both the desktop Shell sidebar and MoreSheet's phone nav list, so without
+  // this an elevated device could open a back-office ROUTE directly but find no nav links to reach
+  // any OTHER one. `canPos` deliberately stays on the BASE roles (unaffected by elevation). Normal
+  // `user` login: byte-identical (`elevatedRoles` is always `[]`).
+  const roles = effectiveRoles(auth.roles, auth.elevatedRoles)
+  const canDashboard = hasAnyRole(roles, 'owner', 'manager')
   const canPos = hasAnyRole(auth.roles, 'owner', 'manager', 'cashier')
-  const isOwner = hasAnyRole(auth.roles, 'owner')
+  const isOwner = hasAnyRole(roles, 'owner')
   const pageAccess = usePageAccess()
   const tierAccess = useTierAccess()
 

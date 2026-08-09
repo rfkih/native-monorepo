@@ -7,7 +7,26 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiDownload, apiFetch } from '@/lib/api'
+import {
+  apiDownload as apiDownloadBase,
+  apiFetch as apiFetchBase,
+  type RequestOptions,
+} from '@/lib/api'
+
+/**
+ * ADR 0049 P3b — every call in this module targets a DASHBOARD_ROLES/OWNER_ROLES-gated back-office
+ * route (`/api/v1/employees/**`, `/api/v1/payroll-*\/**`, `/api/v1/leave-*\/**`,
+ * `/api/v1/overtime-entries/**`, `/api/v1/work-calendar/**` — "owner/manager only" per this file's
+ * own header doc), so every call always uses the PERSONAL bearer (the elevation token on a device
+ * terminal; identical to the single login token for a normal `user` login). Shadows the shared
+ * `apiFetch`/`apiDownload` imports so every call site below is correct with ZERO per-call changes.
+ */
+function apiFetch<T>(path: string, opts: RequestOptions = {}) {
+  return apiFetchBase<T>(path, { ...opts, auth: 'personal' })
+}
+function apiDownload(path: string, opts: RequestOptions = {}, fallbackFilename?: string) {
+  return apiDownloadBase(path, { ...opts, auth: 'personal' }, fallbackFilename)
+}
 
 // ---------------------------------------------------------------------------
 // Types (mirrors of employee-service DTOs)

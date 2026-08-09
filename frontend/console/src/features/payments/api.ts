@@ -75,6 +75,7 @@ export function useOwnerPaymentSettings(session: CompanySession) {
     queryFn: () =>
       apiFetch<OwnerPaymentSettingsResponse>('/api/v1/payment-settings', {
         tenant: tenantOf(session),
+        auth: 'personal',
       }),
   })
 }
@@ -108,6 +109,7 @@ export function useUpsertPaymentSettings(session: CompanySession) {
       apiFetch<OwnerPaymentSettingsResponse>('/api/v1/payment-settings', {
         method: 'PUT',
         tenant: tenantOf(session),
+        auth: 'personal',
         body,
       }),
     onSuccess: () => invalidatePaymentSettings(qc, session),
@@ -123,6 +125,7 @@ export function useUpsertUnitOverride(session: CompanySession) {
       apiFetch<OwnerPaymentSettingsResponse>(`/api/v1/payment-settings/units/${unitId}`, {
         method: 'PUT',
         tenant: tenantOf(session),
+        auth: 'personal',
         body: { mode },
       }),
     onSuccess: () => invalidatePaymentSettings(qc, session),
@@ -138,6 +141,7 @@ export function useDeleteUnitOverride(session: CompanySession) {
       apiFetch<null>(`/api/v1/payment-settings/units/${unitId}`, {
         method: 'DELETE',
         tenant: tenantOf(session),
+        auth: 'personal',
       }),
     onSuccess: () => invalidatePaymentSettings(qc, session),
   })
@@ -174,6 +178,7 @@ export function useUploadStaticQr(session: CompanySession) {
       formData.append('file', file)
       return apiUpload<StaticQrMeta>(staticQrUploadPath(unitId), formData, {
         tenant: tenantOf(session),
+        auth: 'personal',
       })
     },
     onSuccess: () => invalidatePaymentSettings(qc, session),
@@ -188,6 +193,7 @@ export function useDeleteStaticQr(session: CompanySession) {
       apiFetch<null>(staticQrUploadPath(unitId), {
         method: 'DELETE',
         tenant: tenantOf(session),
+        auth: 'personal',
       }),
     onSuccess: () => invalidatePaymentSettings(qc, session),
   })

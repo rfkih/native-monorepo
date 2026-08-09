@@ -26,7 +26,12 @@ export interface CompanyResponse {
   planTier?: string
 }
 
-/** POST /api/v1/companies — the tenant bootstrap (X-Actor only; the new companyId is server-side). */
+/**
+ * POST /api/v1/companies — the tenant bootstrap (X-Actor only; the new companyId is server-side).
+ * ADR 0049 P3b: DASHBOARD_ROLES-gated + tenant-optional (bootstrap), so it uses the PERSONAL bearer
+ * — the elevation token on a device terminal (the new company attaches to the actual PERSON's
+ * identity, never the device's); identical to the single login token for a normal `user` login.
+ */
 export async function createCompany(
   body: CreateCompanyRequest,
   actor: string,
@@ -35,6 +40,7 @@ export async function createCompany(
     method: 'POST',
     body,
     actor,
+    auth: 'personal',
   })
   if (!res) throw new Error('Empty response from create-company')
   return res

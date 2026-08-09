@@ -15,9 +15,24 @@
  * Strings rule (rule 9): no hardcoded user-facing strings here — this is data plumbing only.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiFetch } from '@/lib/api'
+import { apiFetch as apiFetchBase, type RequestOptions } from '@/lib/api'
 import type { CompanySession } from '@/lib/session'
 import type { Vertical } from '@/features/org/api'
+
+/**
+ * ADR 0049 P3b — every call in this module is a back-office promotion/coupon admin call
+ * (restaurant's `/api/v1/promotions/**` is DASHBOARD_ROLES-gated at the GATEWAY; carwash's/
+ * barbershop's ride their broader `/api/v1/{carwash,barbershop}/**` POS_ROLES gateway prefix but
+ * are owner/manager-checked SERVICE-SIDE — see RoutingConfig.java's `promotionsRoute` doc), so
+ * every call always uses the PERSONAL bearer (the elevation token on a device terminal; identical
+ * to the single login token for a normal `user` login). Shadows the shared `apiFetch` import so
+ * every call site below is correct with ZERO per-call changes. (Promotions.tsx's OWN separate reads
+ * of `pos/api.ts`/`servicepos/api.ts` for the item/category picker are untouched — those hit
+ * POS_ROLES-open catalog routes that already work on the bare outlet bearer.)
+ */
+function apiFetch<T>(path: string, opts: RequestOptions = {}) {
+  return apiFetchBase<T>(path, { ...opts, auth: 'personal' })
+}
 
 export type PromotionVertical = Vertical
 

@@ -9,7 +9,7 @@
 
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, apiFetch, apiFetchBlob, apiUpload } from '@/lib/api'
+import { ApiError, apiFetch, apiFetchBlob, apiUpload, type AuthTarget } from '@/lib/api'
 
 interface TenantParams {
   companyId: string
@@ -62,6 +62,7 @@ export function useCategories(params: TenantParams & { enabled: boolean }) {
     queryFn: async () => {
       const result = await apiFetch<ExpenseCategory[]>('/api/v1/expense-categories', {
         tenant: { companyId, actor },
+        auth: 'personal',
       })
       return result ?? []
     },
@@ -90,6 +91,7 @@ export function useCreateCategory(params: TenantParams) {
       apiFetch<ExpenseCategory>('/api/v1/expense-categories', {
         method: 'POST',
         tenant: { companyId, actor },
+        auth: 'personal',
         body,
       }),
     onSuccess: () => invalidateCategories(queryClient, companyId),
@@ -113,6 +115,7 @@ export function useUpdateCategory(params: TenantParams) {
       apiFetch<ExpenseCategory>(`/api/v1/expense-categories/${id}`, {
         method: 'PATCH',
         tenant: { companyId, actor },
+        auth: 'personal',
         body,
       }),
     onSuccess: () => invalidateCategories(queryClient, companyId),
@@ -128,6 +131,7 @@ export function useSeedDefaultCategories(params: TenantParams) {
       apiFetch<ExpenseCategory[]>('/api/v1/expense-categories/seed-defaults', {
         method: 'POST',
         tenant: { companyId, actor },
+        auth: 'personal',
       }),
     onSuccess: () => invalidateCategories(queryClient, companyId),
   })
@@ -291,6 +295,7 @@ export function useClaims(
     queryFn: async () => {
       const result = await apiFetch<PageResponse<ExpenseClaimSummary>>('/api/v1/expense-claims', {
         tenant: { companyId, actor },
+        auth: 'personal',
         query: {
           status,
           orgUnitId,
@@ -312,6 +317,7 @@ export function useClaim(params: TenantParams & { id: string | null; enabled: bo
     queryFn: () =>
       apiFetch<ExpenseClaimDetail>(`/api/v1/expense-claims/${id}`, {
         tenant: { companyId, actor },
+        auth: 'personal',
       }),
   })
 }
@@ -367,6 +373,7 @@ export function useOrgUnitExpenseSummary(
     queryFn: async () => {
       const result = await apiFetch<OrgUnitExpenseSummary>('/api/v1/expense-claims/summary', {
         tenant: { companyId, actor },
+        auth: 'personal',
         query: { orgUnitIds: scope || undefined, period },
       })
       return result ?? EMPTY_SUMMARY
@@ -402,6 +409,7 @@ export function useApproveClaim(params: TenantParams) {
       apiFetch<ExpenseClaimDetail>(`/api/v1/expense-claims/${id}/approve`, {
         method: 'POST',
         tenant: { companyId, actor },
+        auth: 'personal',
         headers: { 'Idempotency-Key': idempotencyKey },
         body: { comment },
       }),
@@ -424,6 +432,7 @@ export function useRefuseClaim(params: TenantParams) {
       apiFetch<ExpenseClaimDetail>(`/api/v1/expense-claims/${id}/refuse`, {
         method: 'POST',
         tenant: { companyId, actor },
+        auth: 'personal',
         headers: { 'Idempotency-Key': idempotencyKey },
         body: { comment },
       }),
@@ -440,6 +449,7 @@ export function usePayClaimNow(params: TenantParams) {
       apiFetch<ExpenseClaimDetail>(`/api/v1/expense-claims/${id}/pay`, {
         method: 'POST',
         tenant: { companyId, actor },
+        auth: 'personal',
         headers: { 'Idempotency-Key': idempotencyKey },
       }),
     onSuccess: (_, { id }) => invalidateManagerClaims(queryClient, companyId, id),
@@ -461,6 +471,7 @@ export function useVoidClaim(params: TenantParams) {
       apiFetch<ExpenseClaimDetail>(`/api/v1/expense-claims/${id}/void`, {
         method: 'POST',
         tenant: { companyId, actor },
+        auth: 'personal',
         headers: { 'Idempotency-Key': idempotencyKey },
         body: { comment },
       }),
@@ -625,14 +636,17 @@ const RECEIPT_IDLE: ReceiptPreviewState = { url: null, status: 'idle' }
  * to back inside an effect. When disabled/no path, the hook returns the idle constant directly
  * (never runs the effect body at all) rather than resetting state from inside the effect.
  *
- * Shared by {@link useMyReceiptUrl} (the employee `/me` surface) and {@link useManagerReceiptUrl}
- * (the manager surface, Phase E7) — same lifecycle, different endpoint.
+ * Shared by {@link useMyReceiptUrl} (the employee `/me` surface, ME_ROLES — stays on the outlet
+ * bearer, `auth` defaults to `'outlet'`) and {@link useManagerReceiptUrl} (the manager surface,
+ * Phase E7, DASHBOARD_ROLES — passes `auth: 'personal'`, ADR 0049 P3b) — same lifecycle, different
+ * endpoint + bearer.
  */
 function useReceiptUrlAtPath(
   path: string | null,
   enabled: boolean,
   companyId: string,
   actor: string,
+  auth: AuthTarget = 'outlet',
 ) {
   const active = enabled && !!path
   const [state, setState] = useState<ReceiptPreviewState>(RECEIPT_IDLE)
@@ -646,7 +660,7 @@ function useReceiptUrlAtPath(
     void (async () => {
       setState({ url: null, status: 'loading' })
       try {
-        const blob = await apiFetchBlob(path, { tenant: { companyId, actor } })
+        const blob = await apiFetchBlob(path, { tenant: { companyId, actor }, auth })
         if (cancelled) return
         if (!blob) {
           setState({ url: null, status: 'none' })
@@ -664,7 +678,7 @@ function useReceiptUrlAtPath(
       cancelled = true
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
-  }, [companyId, actor, path, active])
+  }, [companyId, actor, path, active, auth])
 
   return active ? state : RECEIPT_IDLE
 }
@@ -680,5 +694,5 @@ export function useMyReceiptUrl(params: TenantParams & { id: string | null; enab
 export function useManagerReceiptUrl(params: TenantParams & { id: string | null; enabled: boolean }) {
   const { companyId, actor, id, enabled } = params
   const path = id ? `/api/v1/expense-claims/${id}/receipt` : null
-  return useReceiptUrlAtPath(path, enabled, companyId, actor)
+  return useReceiptUrlAtPath(path, enabled, companyId, actor, 'personal')
 }

@@ -1,5 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiFetch } from '@/lib/api'
+import { apiFetch as apiFetchBase, type RequestOptions } from '@/lib/api'
+
+/**
+ * ADR 0049 P3b — every call in this module targets a DASHBOARD_ROLES-gated back-office route
+ * (`/api/v1/ar/**`, `/api/v1/customers/**`, `/api/v1/invoices/**`), so it always uses the PERSONAL
+ * bearer (the elevation token on a device terminal; identical to the single login token for a
+ * normal `user` login). Shadows the shared `apiFetch` import so every call site below is correct
+ * with ZERO per-call changes.
+ */
+function apiFetch<T>(path: string, opts: RequestOptions = {}) {
+  return apiFetchBase<T>(path, { ...opts, auth: 'personal' })
+}
 
 /**
  * Accounts Receivable — typed client for finance-service's customer/invoice/aging endpoints

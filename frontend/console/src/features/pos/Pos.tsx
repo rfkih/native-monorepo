@@ -29,16 +29,19 @@ import {
   ClipboardList,
   Gift,
   KeyRound,
+  LogIn,
   LogOut,
   Monitor,
   Moon,
   Package,
   Sun,
   Table2,
+  Undo2,
   UserRound,
 } from 'lucide-react'
 import { useSession, type CompanySession } from '@/lib/session'
 import { useAuth, hasAnyRole } from '@/lib/authContext'
+import { accountMenuVisibility } from '@/features/pos-shell/layout/accountMenuGate'
 import { useTheme } from '@/lib/theme'
 import { localeOf } from '@/i18n'
 import { cn } from '@/lib/cn'
@@ -167,6 +170,13 @@ function PosInner({ session }: { session: CompanySession }) {
   const isDeviceTerminal = auth.actorType === 'device'
   const operatorSession = useOperatorSession()
   const [showOperatorPinSheet, setShowOperatorPinSheet] = useState(false)
+  // ADR 0049 P3b slice 2 — which of the till-menu's account actions (elevate / the three logouts)
+  // this login sees — see accountMenuGate.ts's doc for the exact rules.
+  const accountMenu = accountMenuVisibility({
+    isDeviceTerminal,
+    operatorSignedIn: operatorSession.operator != null,
+    elevatedRoles: auth.elevatedRoles,
+  })
 
   // Phase 5 offline mode (ADR 0028). When the live catalog/rules queries have no data at all (a
   // fresh page load while offline — the common case is a query that already succeeded THIS session
@@ -1015,11 +1025,26 @@ function PosInner({ session }: { session: CompanySession }) {
             // The door to the employee self-service surface (/me is the always-available floor —
             // never role-gated, so a cashier who is also an employee can always reach their own
             // payslips/time-off/claims from the till). On phone /me carries the employee tab bar.
-            { key: 'me', icon: <UserRound className="size-4" aria-hidden="true" />, label: t('me.tillMenuLabel'), to: '/me' },
-            // ADR 0049 P3b — shift change: clears the operator session, dropping the till back to
-            // the PIN prompt on the next sale. Only shown on a device terminal with an operator
-            // actually signed in (a normal `user` login never sees this item).
-            ...(isDeviceTerminal && operatorSession.operator
+            // ADR 0049 P3b: dropped on a DEVICE terminal — the operator chip + sign-out (below)
+            // already cover "who is ringing"; a device has no personal /me identity of its own.
+            // KEPT for a normal `user` login (backward compat until the Employee app, P5).
+            ...(isDeviceTerminal
+              ? []
+              : [{ key: 'me', icon: <UserRound className="size-4" aria-hidden="true" />, label: t('me.tillMenuLabel'), to: '/me' }]),
+            // ADR 0049 P3b — the three device-terminal account actions (elevate / end-elevation /
+            // log-out-outlet) plus the operator sign-out, all driven by ONE shared visibility gate
+            // so this list and ServicePos.tsx's twin can never disagree on what a given login sees.
+            ...(accountMenu.showElevateEntry
+              ? [
+                  {
+                    key: 'elevate',
+                    icon: <LogIn className="size-4" aria-hidden="true" />,
+                    label: t('posShell.elevateEntry'),
+                    onSelect: () => auth.elevate(),
+                  },
+                ]
+              : []),
+            ...(accountMenu.showOperatorSignOut
               ? [
                   {
                     key: 'operator-signout',
@@ -1029,19 +1054,44 @@ function PosInner({ session }: { session: CompanySession }) {
                   },
                 ]
               : []),
+            ...(accountMenu.showEndElevation
+              ? [
+                  {
+                    key: 'end-elevation',
+                    icon: <Undo2 className="size-4" aria-hidden="true" />,
+                    label: t('posShell.endElevation'),
+                    onSelect: () => auth.dropElevation(),
+                  },
+                ]
+              : []),
             {
               key: 'theme',
               icon: theme === 'dark' ? <Sun className="size-4" aria-hidden="true" /> : <Moon className="size-4" aria-hidden="true" />,
               label: t('a11y.toggleTheme'),
               onSelect: toggle,
             },
-            {
-              key: 'logout',
-              icon: <LogOut className="size-4" aria-hidden="true" />,
-              label: t('nav.logout'),
-              onSelect: auth.logout,
-              danger: true,
-            },
+            ...(accountMenu.showPlainLogout
+              ? [
+                  {
+                    key: 'logout',
+                    icon: <LogOut className="size-4" aria-hidden="true" />,
+                    label: t('nav.logout'),
+                    onSelect: auth.logout,
+                    danger: true,
+                  },
+                ]
+              : []),
+            ...(accountMenu.showLogoutOutlet
+              ? [
+                  {
+                    key: 'logout-outlet',
+                    icon: <LogOut className="size-4" aria-hidden="true" />,
+                    label: t('posShell.logoutOutlet'),
+                    onSelect: auth.logout,
+                    danger: true,
+                  },
+                ]
+              : []),
           ]}
         />
       ) : null}

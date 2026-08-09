@@ -16,7 +16,7 @@ import { Wordmark } from '@/components/Wordmark'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { EmptyState } from '@/features/_shared/financeUi'
 import { useMyClaims } from '@/features/expenses/api'
-import { hasAnyRole, useAuth } from '@/lib/authContext'
+import { effectiveRoles, hasAnyRole, useAuth } from '@/lib/authContext'
 import { AUTH_MODE } from '@/lib/config'
 import { formatMoney } from '@/lib/money'
 import { localeOf } from '@/i18n'
@@ -60,7 +60,8 @@ export function MeHomePhone() {
   const companyId = auth.companyId ?? 'me'
   const actor = auth.actor
   const canPos = hasAnyRole(auth.roles, 'owner', 'manager', 'cashier')
-  const canDashboard = hasAnyRole(auth.roles, 'owner', 'manager')
+  // ADR 0049 P3b — merged/elevated roles, mirroring Me.tsx's desktop twin.
+  const canDashboard = hasAnyRole(effectiveRoles(auth.roles, auth.elevatedRoles), 'owner', 'manager')
 
   const profile = useMyProfile({ companyId, actor, enabled: true })
   const notLinked = isNotLinked(profile.error)

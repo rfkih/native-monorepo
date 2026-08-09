@@ -10,7 +10,7 @@ import { Spinner } from '@/components/ui/Spinner'
 import { AppSkeleton, PosSkeleton } from '@/components/ui/Skeleton'
 import { BrandMark, Wordmark } from '@/components/Wordmark'
 import { OfflineBanner } from '@/features/pos/offline/OfflineBanner'
-import { hasAnyRole, useAuth } from '@/lib/authContext'
+import { effectiveRoles, hasAnyRole, useAuth } from '@/lib/authContext'
 import { isNativeShell } from '@/lib/escpos/transport'
 import { usePageAccess } from '@/lib/pageAccess'
 import { useSession } from '@/lib/session'
@@ -421,12 +421,19 @@ export function App() {
     return bootFallback
   }
 
-  const canDashboard = hasAnyRole(auth.roles, 'owner', 'manager')
+  // ADR 0049 P3b — the MERGED role set (outlet/base roles ∪ any personal elevation). A normal
+  // `user` login always has `elevatedRoles = []`, so this is byte-identical to `auth.roles` there;
+  // on an ELEVATED device terminal it additionally carries the elevation's owner/manager role,
+  // lighting up every existing `{canDashboard && <Route/>}` block below with no per-route change.
+  // `canPos`/`canEmployee` deliberately stay on the BASE `auth.roles` — elevation only ever ADDS
+  // back-office reach, it never changes what the outlet credential itself can do.
+  const roles = effectiveRoles(auth.roles, auth.elevatedRoles)
+  const canDashboard = hasAnyRole(roles, 'owner', 'manager')
   const canPos = hasAnyRole(auth.roles, 'owner', 'manager', 'cashier')
   const canEmployee = hasAnyRole(auth.roles, 'employee')
   // The /settings/features escape hatch (P1 tier-mode) — owner-only, server-enforced too (the
   // org-service PUT independently re-checks the role); a manager token never sees the route mount.
-  const isOwner = hasAnyRole(auth.roles, 'owner')
+  const isOwner = hasAnyRole(roles, 'owner')
 
   if (!canDashboard && !canPos && !canEmployee) {
     return (

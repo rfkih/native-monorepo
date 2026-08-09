@@ -15,9 +15,10 @@
  */
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Gift, KeyRound, LogOut, Moon, Settings, Sun, UserRound } from 'lucide-react'
+import { Gift, KeyRound, LogIn, LogOut, Moon, Settings, Sun, Undo2, UserRound } from 'lucide-react'
 import { useSession, type CompanySession } from '@/lib/session'
-import { useAuth, hasAnyRole } from '@/lib/authContext'
+import { effectiveRoles, useAuth, hasAnyRole } from '@/lib/authContext'
+import { accountMenuVisibility } from '@/features/pos-shell/layout/accountMenuGate'
 import { useTheme } from '@/lib/theme'
 import { OutletPicker } from '@/components/OutletPicker'
 import { localeOf } from '@/i18n'
@@ -87,9 +88,14 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
   const locale = localeOf(i18n.language)
   const auth = useAuth()
   // The manual discount is owner/manager-only (ADR 0026 §5; the server 403s anyway — this hides the
-  // input for a cashier so it never sees an affordance it cannot use).
+  // input for a cashier so it never sees an affordance it cannot use). Deliberately stays on the
+  // BASE roles — a discount at the till is an outlet-credential capability, not a back-office one.
   const canManualDiscount = hasAnyRole(auth.roles, 'owner', 'manager')
-  const canDashboard = hasAnyRole(auth.roles, 'owner', 'manager')
+  // ADR 0049 P3b — the "back to dashboard" affordance + the catalog-management shortcut below read
+  // the MERGED (elevated) roles, so an elevated device gets the same back-office affordances a
+  // normal owner/manager login has. A normal `user` login has `elevatedRoles = []`, so this is
+  // byte-identical to the base `auth.roles` there.
+  const canDashboard = hasAnyRole(effectiveRoles(auth.roles, auth.elevatedRoles), 'owner', 'manager')
   const { theme, toggle } = useTheme()
 
   // ADR 0049 P3b — same operator gate as features/pos/Pos.tsx's twin doc; `isDeviceTerminal` comes
@@ -98,6 +104,13 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
   const isDeviceTerminal = auth.actorType === 'device'
   const operatorSession = useOperatorSession()
   const [showOperatorPinSheet, setShowOperatorPinSheet] = useState(false)
+  // ADR 0049 P3b slice 2 — which of the till-menu's account actions (elevate / the three logouts)
+  // this login sees — see accountMenuGate.ts's doc for the exact rules.
+  const accountMenu = accountMenuVisibility({
+    isDeviceTerminal,
+    operatorSignedIn: operatorSession.operator != null,
+    elevatedRoles: auth.elevatedRoles,
+  })
 
   const packagesQuery = useCatalogPackages(config, session)
   const addonsQuery = useCatalogAddons(config, session)
@@ -376,12 +389,26 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
               : []),
             // The door to the employee self-service surface — /me is the always-available floor,
             // so a cashier who is also an employee can always reach their payslips/time-off/claims
-            // from the till (on phone /me carries the employee tab bar).
-            { key: 'me', icon: <UserRound className="size-4" aria-hidden="true" />, label: t('me.tillMenuLabel'), to: '/me' },
-            // ADR 0049 P3b — shift change: clears the operator session, dropping the till back to
-            // the PIN prompt on the next charge. Only shown on a device terminal with an operator
-            // actually signed in.
-            ...(isDeviceTerminal && operatorSession.operator
+            // from the till (on phone /me carries the employee tab bar). ADR 0049 P3b: dropped on a
+            // DEVICE terminal (the operator chip + sign-out cover "who is ringing" there); KEPT for
+            // a normal `user` login (backward compat until the Employee app, P5).
+            ...(isDeviceTerminal
+              ? []
+              : [{ key: 'me', icon: <UserRound className="size-4" aria-hidden="true" />, label: t('me.tillMenuLabel'), to: '/me' }]),
+            // ADR 0049 P3b — the three device-terminal account actions (elevate / end-elevation /
+            // log-out-outlet) plus the operator sign-out, all driven by ONE shared visibility gate
+            // so this list and Pos.tsx's twin can never disagree on what a given login sees.
+            ...(accountMenu.showElevateEntry
+              ? [
+                  {
+                    key: 'elevate',
+                    icon: <LogIn className="size-4" aria-hidden="true" />,
+                    label: t('posShell.elevateEntry'),
+                    onSelect: () => auth.elevate(),
+                  },
+                ]
+              : []),
+            ...(accountMenu.showOperatorSignOut
               ? [
                   {
                     key: 'operator-signout',
@@ -391,19 +418,44 @@ function ServicePosInner({ config, session }: { config: VerticalPosConfig; sessi
                   },
                 ]
               : []),
+            ...(accountMenu.showEndElevation
+              ? [
+                  {
+                    key: 'end-elevation',
+                    icon: <Undo2 className="size-4" aria-hidden="true" />,
+                    label: t('posShell.endElevation'),
+                    onSelect: () => auth.dropElevation(),
+                  },
+                ]
+              : []),
             {
               key: 'theme',
               icon: theme === 'dark' ? <Sun className="size-4" aria-hidden="true" /> : <Moon className="size-4" aria-hidden="true" />,
               label: t('a11y.toggleTheme'),
               onSelect: toggle,
             },
-            {
-              key: 'logout',
-              icon: <LogOut className="size-4" aria-hidden="true" />,
-              label: t('nav.logout'),
-              onSelect: auth.logout,
-              danger: true,
-            },
+            ...(accountMenu.showPlainLogout
+              ? [
+                  {
+                    key: 'logout',
+                    icon: <LogOut className="size-4" aria-hidden="true" />,
+                    label: t('nav.logout'),
+                    onSelect: auth.logout,
+                    danger: true,
+                  },
+                ]
+              : []),
+            ...(accountMenu.showLogoutOutlet
+              ? [
+                  {
+                    key: 'logout-outlet',
+                    icon: <LogOut className="size-4" aria-hidden="true" />,
+                    label: t('posShell.logoutOutlet'),
+                    onSelect: auth.logout,
+                    danger: true,
+                  },
+                ]
+              : []),
           ]}
         />
       ) : null}

@@ -63,7 +63,13 @@ export function useSalesChannels(session: CompanySession, opts: { enabled?: bool
   })
 }
 
-/** POST /api/v1/sales-channels — owner/manager only (gateway-enforced). */
+/**
+ * POST /api/v1/sales-channels — owner/manager only (the gateway only requires POS_ROLES here;
+ * restaurant-service itself re-checks owner/manager — see this file's header doc). ADR 0049 P3b:
+ * only Channels.tsx/ChannelDialog.tsx (the back-office admin surface) call this, never the POS —
+ * so it uses the PERSONAL bearer (the elevation token on a device terminal; identical to the single
+ * login token for a normal `user` login) to satisfy that SERVICE-side check on an elevated device.
+ */
 export function useCreateSalesChannel(session: CompanySession) {
   const qc = useQueryClient()
   return useMutation({
@@ -71,6 +77,7 @@ export function useCreateSalesChannel(session: CompanySession) {
       apiFetch<SalesChannel>('/api/v1/sales-channels', {
         method: 'POST',
         tenant: tenantOf(session),
+        auth: 'personal',
         body,
       }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: channelsKey(session) }),
@@ -91,6 +98,8 @@ export function useUpdateSalesChannel(session: CompanySession) {
       apiFetch<SalesChannel>(`/api/v1/sales-channels/${id}`, {
         method: 'PATCH',
         tenant: tenantOf(session),
+        // ADR 0049 P3b — see useCreateSalesChannel's doc (same owner/manager service-side check).
+        auth: 'personal',
         body,
       }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: channelsKey(session) }),

@@ -93,6 +93,13 @@ export interface PatchOrgUnitBody {
   reactivate?: boolean
 }
 
+// ADR 0049 P3b — `/api/v1/org-units/**` is DASHBOARD_ROLES-gated (see RoutingConfig.java), so every
+// hook below uses the PERSONAL bearer (`auth: 'personal'` — the elevation token on a device
+// terminal; identical to the single login token for a normal `user` login). {@link useOutlets}
+// above is DELIBERATELY untouched — `/api/v1/outlets` is POS_ROLES (readable by a bare cashier), so
+// it must keep using the default outlet bearer (OutletGate resolves the terminal's outlet on every
+// POS boot, elevated or not).
+
 /** GET /api/v1/org-units — flat list; tree is built client-side from parentId. */
 export function useOrgUnits(params: { companyId: string; actor: string; enabled: boolean }) {
   const { companyId, actor, enabled } = params
@@ -103,6 +110,7 @@ export function useOrgUnits(params: { companyId: string; actor: string; enabled:
     queryFn: () =>
       apiFetch<OrgUnit[]>('/api/v1/org-units', {
         tenant: { companyId, actor },
+        auth: 'personal',
       }),
   })
 }
@@ -116,6 +124,7 @@ export function useCreateOrgUnit(params: { companyId: string; actor: string }) {
       apiFetch<OrgUnitResponse>('/api/v1/org-units', {
         method: 'POST',
         tenant: { companyId, actor },
+        auth: 'personal',
         body,
       }),
     onSuccess: () => {
@@ -138,6 +147,7 @@ export function useDeleteOrgUnit(params: { companyId: string; actor: string }) {
       apiFetch<null>(`/api/v1/org-units/${id}`, {
         method: 'DELETE',
         tenant: { companyId, actor },
+        auth: 'personal',
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['orgUnits', companyId] })
@@ -154,6 +164,7 @@ export function usePatchOrgUnit(params: { companyId: string; actor: string }) {
       apiFetch<OrgUnitResponse>(`/api/v1/org-units/${id}`, {
         method: 'PATCH',
         tenant: { companyId, actor },
+        auth: 'personal',
         body,
       }),
     onSuccess: () => {
@@ -212,7 +223,7 @@ export function useUnitPnl(params: {
     queryFn: () =>
       apiFetch<UnitPnlResponse>(
         `/api/v1/pnl/org-units/${unitId}?period=${period}&currency=${encodeURIComponent(baseCurrency)}`,
-        { tenant: { companyId, actor } },
+        { tenant: { companyId, actor }, auth: 'personal' },
       ),
   })
 }
@@ -241,6 +252,7 @@ export function useUnitUsers(params: {
     queryFn: async () => {
       const result = await apiFetch<OrgUnitUser[]>(`/api/v1/org-units/${unitId}/users`, {
         tenant: { companyId, actor },
+        auth: 'personal',
       })
       return result ?? []
     },

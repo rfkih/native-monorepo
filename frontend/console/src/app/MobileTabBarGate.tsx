@@ -19,7 +19,7 @@ import { useLocation } from 'react-router-dom'
 import { CalendarDays, House, ChartNoAxesColumn, Menu, ReceiptText, UsersRound, Wallet } from 'lucide-react'
 import { MobileTabBar, type MobileTab } from '@/components/mobile/MobileTabBar'
 import { useIsPhone } from '@/components/mobile/useIsPhone'
-import { hasAnyRole, useAuth } from '@/lib/authContext'
+import { effectiveRoles, hasAnyRole, useAuth } from '@/lib/authContext'
 import { usePageAccess } from '@/lib/pageAccess'
 import { useTierAccess } from '@/lib/featureTier'
 import { MoreSheet } from './MoreSheet'
@@ -53,7 +53,10 @@ export function MobileTabBarGate({ home }: { home: string }) {
 
   if (!isPhone || !shouldMountTabBar(pathname)) return null
 
-  const canDashboard = hasAnyRole(auth.roles, 'owner', 'manager')
+  // ADR 0049 P3b — the back-office persona reads the MERGED (elevated) roles, mirroring App.tsx's
+  // canDashboard: an elevated device terminal on phone width gets the owner/manager tab set, not
+  // the bare cashier one. Byte-identical for a normal `user` login (elevatedRoles is always `[]`).
+  const canDashboard = hasAnyRole(effectiveRoles(auth.roles, auth.elevatedRoles), 'owner', 'manager')
   const canEmployee = hasAnyRole(auth.roles, 'employee')
 
   let tabs: MobileTab[]
