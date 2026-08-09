@@ -5,6 +5,26 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-09 — Recipes/BOM costing phase A: per-sale ingredient depletion + HPP (ADR 0050)
+
+The #2 competitive gap closed at its first stage (recipe → depletion → HPP; Pawoon/Olsera/majoo/
+ESB all have it — none lands it in a real ledger, which is where phases B/C go). New restaurant
+`recipe/` feature (V34 `recipe_line`): base lines + per-modifier-option signed deltas (keyed on the
+option ids sale lines already snapshot), integer qty in the ingredient's own unit. Full-replace
+`PUT /api/v1/menu/{itemId}/recipe` (whole-old-or-whole-new under concurrency) + reporting-only HPP
+(`hpp-summary`, Σ base qty × ingredient cost, currency-match-only with completeness flags — never
+guessed). `IngredientDepletionWriter` runs BESIDE `StockDeductionWriter` at all four sale sites
+(checkout / payParked / per-CHECK bill payment behind the derived-key replay short-circuit /
+digital capture): floors at 0 in ascending-UUID lock order and NEVER blocks a sale — the 86 gate
+stays menu-item stock (ADR 0046 decision 2). Same-tx consistency: modifier deletes cascade recipe
+deltas (`ModifierOptionCascade` hook), ingredient deactivation vetoed 409 while referenced
+(`IngredientDeactivationGuard` hook) — both dependency-inverted, no feature cycles. Finance
+untouched this phase; ADR 0050 pins the B/C contracts (`IngredientsReceived` → Dr 1100/Cr 2050
+GRNI; `SaleCogsRecorded` → Dr 5100/Cr 1100) and the load-bearing **B-before-C** invariant
+(perpetual COGS before purchase capitalization would drive 1100 negative + double-count food
+cost). Console: RecipeDrawer editor + HPP/margin chips on /menu, opname copy now reads variance
+as waste for recipe-covered menus.
+
 ## 2026-08-08 — MinIO object storage for binary media (ADR 0048)
 
 All binary media moved out of Postgres into a MinIO object store — **infrastructure, not a

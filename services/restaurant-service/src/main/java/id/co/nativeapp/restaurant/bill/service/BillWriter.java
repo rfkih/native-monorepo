@@ -40,6 +40,7 @@ import id.co.nativeapp.restaurant.promotion.dto.EvalResult;
 import id.co.nativeapp.restaurant.promotion.repository.AppliedPromotionRepository;
 import id.co.nativeapp.restaurant.promotion.service.ManualDiscountGuard;
 import id.co.nativeapp.restaurant.promotion.service.PromotionEngineService;
+import id.co.nativeapp.restaurant.recipe.service.IngredientDepletionWriter;
 import id.co.nativeapp.restaurant.register.service.CashWindowLock;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
@@ -105,6 +106,7 @@ public class BillWriter {
   private final TaxChargeService taxChargeService;
   private final SaleWriter saleWriter;
   private final StockDeductionWriter stockDeductionWriter;
+  private final IngredientDepletionWriter ingredientDepletionWriter;
   private final RestaurantTableRepository tableRepository;
   private final OutletAccessGuard outletAccessGuard;
   private final PromotionEngineService promotionEngine;
@@ -123,6 +125,7 @@ public class BillWriter {
       TaxChargeService taxChargeService,
       SaleWriter saleWriter,
       StockDeductionWriter stockDeductionWriter,
+      IngredientDepletionWriter ingredientDepletionWriter,
       RestaurantTableRepository tableRepository,
       OutletAccessGuard outletAccessGuard,
       PromotionEngineService promotionEngine,
@@ -138,6 +141,7 @@ public class BillWriter {
     this.taxChargeService = taxChargeService;
     this.saleWriter = saleWriter;
     this.stockDeductionWriter = stockDeductionWriter;
+    this.ingredientDepletionWriter = ingredientDepletionWriter;
     this.tableRepository = tableRepository;
     this.outletAccessGuard = outletAccessGuard;
     this.promotionEngine = promotionEngine;
@@ -494,6 +498,11 @@ public class BillWriter {
     // -----------------------------------------------------------------------
     deductStock(targetLineViews, currency);
 
+    // ADR 0050: recipe-driven ingredient depletion for THIS check's lines only — per-check by
+    // design (same tx + idempotency short-circuit as the check's sale, so a replay can never
+    // double-deplete). Floors at 0, never blocks the payment.
+    ingredientDepletionWriter.depleteForLines(toDepletionLines(targetLineViews));
+
     // -----------------------------------------------------------------------
     // Record ONE sale for this check — one SaleRecorded outbox event.
     // -----------------------------------------------------------------------
@@ -809,6 +818,33 @@ public class BillWriter {
     }
 
     stockDeductionWriter.deductForLines(adaptedLines, menuItemViews);
+  }
+
+  /**
+   * ADR 0050: depletion input for a check's lines — the synthetic adapters in {@link #deductStock}
+   * deliberately drop modifiers, so the selected option ids are re-read from the persisted {@code
+   * bill_line_modifier} snapshots (chunked ≤ 1000).
+   */
+  private List<IngredientDepletionWriter.DepletionLine> toDepletionLines(
+      List<BillLineView> lineViews) {
+    List<UUID> lineIds = lineViews.stream().map(BillLineView::getId).toList();
+    Map<UUID, List<UUID>> optionIdsByLine = new HashMap<>();
+    for (int i = 0; i < lineIds.size(); i += 1000) {
+      List<UUID> chunk = lineIds.subList(i, Math.min(i + 1000, lineIds.size()));
+      for (BillLineModifierView mv : modifierRepository.findViewsByBillLineIds(chunk)) {
+        optionIdsByLine
+            .computeIfAbsent(mv.getBillLineId(), id -> new ArrayList<>())
+            .add(mv.getOptionId());
+      }
+    }
+    return lineViews.stream()
+        .map(
+            lv ->
+                new IngredientDepletionWriter.DepletionLine(
+                    lv.getMenuItemId(),
+                    lv.getQty(),
+                    optionIdsByLine.getOrDefault(lv.getId(), List.of())))
+        .toList();
   }
 
   /** Loads modifier snapshots for a batch of line views and builds {@link BillLineResponse}s. */

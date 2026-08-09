@@ -6,6 +6,7 @@ import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -41,4 +42,27 @@ public interface IngredientRepository extends JpaRepository<Ingredient, UUID> {
               + " i.id",
       nativeQuery = true)
   List<IngredientView> findActiveByBusiness(@Param("businessId") UUID businessId);
+
+  /**
+   * Per-sale recipe depletion (ADR 0050 phase A): subtracts {@code qty} flooring at 0 — an
+   * ingredient shortfall must NEVER block or roll back a sale (the dish was made; the 86 gate
+   * remains {@code menu_item.stock_quantity}). The V31 {@code ck_ingredient_stock_nonneg} CHECK
+   * stays intact because {@code GREATEST(stock_qty - :qty, 0)} can never go negative. Bumps {@code
+   * updated_at}/{@code version} like {@code MenuItemRepository#deductStock}; the true level is
+   * re-established at the next ingredient stocktake.
+   *
+   * @return 1 if the row exists (even when already at 0); 0 if the ingredient no longer exists
+   */
+  @Modifying
+  @Query(
+      value =
+          """
+          UPDATE ingredient
+             SET stock_qty  = GREATEST(stock_qty - :qty, 0),
+                 updated_at = NOW(),
+                 version    = version + 1
+           WHERE id = :id
+          """,
+      nativeQuery = true)
+  int depleteStockFloorZero(@Param("id") UUID id, @Param("qty") int qty);
 }

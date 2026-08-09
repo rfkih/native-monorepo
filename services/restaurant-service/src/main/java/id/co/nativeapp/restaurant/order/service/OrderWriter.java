@@ -45,6 +45,7 @@ import id.co.nativeapp.restaurant.promotion.repository.AppliedPromotionRepositor
 import id.co.nativeapp.restaurant.promotion.repository.CouponRepository;
 import id.co.nativeapp.restaurant.promotion.service.ManualDiscountGuard;
 import id.co.nativeapp.restaurant.promotion.service.PromotionEngineService;
+import id.co.nativeapp.restaurant.recipe.service.IngredientDepletionWriter;
 import id.co.nativeapp.restaurant.register.service.CashWindowLock;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
@@ -139,6 +140,7 @@ public class OrderWriter {
   private final TaxChargeService taxChargeService;
   private final RestaurantTableRepository tableRepository;
   private final StockDeductionWriter stockDeductionWriter;
+  private final IngredientDepletionWriter ingredientDepletionWriter;
   private final OutletAccessGuard outletAccessGuard;
   private final PromotionEngineService promotionEngine;
   private final CouponRepository couponRepository;
@@ -162,6 +164,7 @@ public class OrderWriter {
       TaxChargeService taxChargeService,
       RestaurantTableRepository tableRepository,
       StockDeductionWriter stockDeductionWriter,
+      IngredientDepletionWriter ingredientDepletionWriter,
       OutletAccessGuard outletAccessGuard,
       PromotionEngineService promotionEngine,
       CouponRepository couponRepository,
@@ -182,6 +185,7 @@ public class OrderWriter {
     this.taxChargeService = taxChargeService;
     this.tableRepository = tableRepository;
     this.stockDeductionWriter = stockDeductionWriter;
+    this.ingredientDepletionWriter = ingredientDepletionWriter;
     this.outletAccessGuard = outletAccessGuard;
     this.promotionEngine = promotionEngine;
     this.couponRepository = couponRepository;
@@ -333,6 +337,9 @@ public class OrderWriter {
       } else {
         stockDeductionWriter.deductForLines(cart.linesToAdd(), cart.itemViews());
       }
+      // ADR 0050: recipe-driven ingredient depletion — ONE behavior for online and offline replay
+      // (floors at 0, never throws for stock), same tx as the sale + outbox rows.
+      ingredientDepletionWriter.depleteForLines(toDepletionLines(cart.linesToAdd()));
 
       String tenderTypeName =
           (request.payment() != null && !residual.giftCardFullyCovers())
@@ -1255,6 +1262,52 @@ public class OrderWriter {
     }
 
     stockDeductionWriter.deductForLines(adaptedLines, menuItemViews);
+
+    // ADR 0050: recipe-driven ingredient depletion for the parked lines — the adapters above
+    // deliberately drop modifiers, so the option ids are re-read from the persisted snapshots.
+    ingredientDepletionWriter.depleteForLines(
+        toDepletionLinesFromViews(lineViews, loadOptionIdsByLineId(lineViews)));
+  }
+
+  /** Checkout-path depletion input: the in-memory lines carry their modifier snapshots. */
+  private static List<IngredientDepletionWriter.DepletionLine> toDepletionLines(
+      List<OrderLine> lines) {
+    return lines.stream()
+        .map(
+            line ->
+                new IngredientDepletionWriter.DepletionLine(
+                    line.getMenuItemId(),
+                    line.getQty(),
+                    line.getModifiers().stream().map(OrderLineModifier::getOptionId).toList()))
+        .toList();
+  }
+
+  /** Persisted-path depletion input: line views + a lineId → selected option ids lookup. */
+  private static List<IngredientDepletionWriter.DepletionLine> toDepletionLinesFromViews(
+      List<OrderLineView> lineViews, Map<UUID, List<UUID>> optionIdsByLineId) {
+    return lineViews.stream()
+        .map(
+            lv ->
+                new IngredientDepletionWriter.DepletionLine(
+                    lv.getMenuItemId(),
+                    lv.getQty(),
+                    optionIdsByLineId.getOrDefault(lv.getId(), List.of())))
+        .toList();
+  }
+
+  /** Batch-loads the persisted modifier option ids for a set of order lines (chunked ≤ 1000). */
+  private Map<UUID, List<UUID>> loadOptionIdsByLineId(List<OrderLineView> lineViews) {
+    List<UUID> lineIds = lineViews.stream().map(OrderLineView::getId).toList();
+    Map<UUID, List<UUID>> byLineId = new HashMap<>();
+    for (int i = 0; i < lineIds.size(); i += 1000) {
+      List<UUID> chunk = lineIds.subList(i, Math.min(i + 1000, lineIds.size()));
+      for (OrderLineModifierView mv : modifierRepository.findViewsByOrderLineIds(chunk)) {
+        byLineId
+            .computeIfAbsent(mv.getOrderLineId(), id -> new ArrayList<>())
+            .add(mv.getOptionId());
+      }
+    }
+    return byLineId;
   }
 
   /**

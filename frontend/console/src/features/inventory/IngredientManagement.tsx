@@ -282,6 +282,20 @@ function isNameConflict(err: unknown): boolean {
   )
 }
 
+/**
+ * The 409 `ingredient-in-recipe` problem (ADR 0050 phase A) — deactivation refused because a
+ * live menu-item recipe still references this ingredient. The server's `detail` NAMES the
+ * referencing items, so the caller shows it verbatim rather than a generic message.
+ */
+function isIngredientInRecipe(err: unknown): boolean {
+  return (
+    err instanceof ApiError &&
+    err.status === 409 &&
+    typeof err.problem?.type === 'string' &&
+    err.problem.type.includes('ingredient-in-recipe')
+  )
+}
+
 function IngredientFormDialog({
   session,
   baseCurrency,
@@ -406,7 +420,12 @@ function IngredientFormDialog({
 
         {mutationError ? (
           <p className="text-xs text-loss" role="alert">
-            {isNameConflict(mutationError) ? t('inventory.nameTaken') : t('inventory.errorGeneric')}
+            {isNameConflict(mutationError)
+              ? t('inventory.nameTaken')
+              : isIngredientInRecipe(mutationError)
+                ? (mutationError instanceof ApiError && mutationError.problem?.detail) ||
+                  t('recipe.ingredientInRecipeError')
+                : t('inventory.errorGeneric')}
           </p>
         ) : null}
 

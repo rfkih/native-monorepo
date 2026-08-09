@@ -19,6 +19,7 @@ import { Link } from 'react-router-dom'
 import {
   ArrowLeft,
   BookOpen,
+  ChefHat,
   ChevronDown,
   ChevronRight,
   ImageIcon,
@@ -42,7 +43,7 @@ import { useSession, type CompanySession } from '@/lib/session'
 import { useTheme } from '@/lib/theme'
 import { localeOf } from '@/i18n'
 import { cn } from '@/lib/cn'
-import { formatMoney, isoMinorExponent } from '@/lib/money'
+import { formatMoney, formatPercent, isoMinorExponent } from '@/lib/money'
 import { OutletPicker } from '@/components/OutletPicker'
 import { useMenu, useSetStock, useAddStock } from '@/features/pos/api'
 import {
@@ -72,6 +73,8 @@ import {
   useUn86Option,
 } from './api'
 import { resizeImageFile } from './image'
+import { RecipeDrawer } from './RecipeDrawer'
+import { computeMarginRatio, useHppSummary, type HppSummaryRow } from './recipeApi'
 
 // ---------------------------------------------------------------------------
 // Entry guard
@@ -2058,12 +2061,17 @@ function ItemRow({
   item,
   session,
   locale,
+  hppRow,
   onManageOptions,
+  onManageRecipe,
 }: {
   item: MenuItem
   session: CompanySession
   locale: string
+  /** This item's row from useHppSummary — undefined until it has a recipe with at least one line. */
+  hppRow: HppSummaryRow | undefined
   onManageOptions: () => void
+  onManageRecipe: () => void
 }) {
   const { t } = useTranslation()
   const mark86 = use86Item(session)
@@ -2123,6 +2131,10 @@ function ItemRow({
               </span>
             ) : null}
           </div>
+          {/* HPP/margin chip (ADR 0050 phase A) — only once the item has a recipe on file
+              (useHppSummary omits items with none). Amber whenever the server flags the
+              underlying cost data as incomplete; otherwise a profit-toned readout. */}
+          {hppRow ? <HppChip item={item} hppRow={hppRow} locale={locale} /> : null}
         </div>
 
         {/* Actions */}
@@ -2147,6 +2159,17 @@ function ItemRow({
                 {item.modifierGroups.length}
               </span>
             ) : null}
+          </button>
+
+          {/* Recipe button (ADR 0050 phase A) — opens RecipeDrawer to build/edit the BOM. */}
+          <button
+            type="button"
+            onClick={onManageRecipe}
+            aria-label={t('recipe.manageAction', { name: item.name })}
+            className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-2 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+          >
+            <ChefHat className="size-3.5" aria-hidden="true" />
+            {t('recipe.action')}
           </button>
 
           {/* Edit item button */}
@@ -2226,6 +2249,34 @@ function ItemRow({
   )
 }
 
+/** The HPP/margin readout on ItemRow — a thin wrapper so the two `computeMarginRatio` inputs
+ *  (price side vs HPP side) are computed once and stay in sync with the badge's tone. */
+function HppChip({
+  item,
+  hppRow,
+  locale,
+}: {
+  item: MenuItem
+  hppRow: HppSummaryRow
+  locale: string
+}) {
+  const { t } = useTranslation()
+  const margin =
+    hppRow.unitHppMinor != null && hppRow.hppCurrency != null
+      ? computeMarginRatio(item.priceMinor, item.currency, hppRow.unitHppMinor, hppRow.hppCurrency)
+      : null
+  return (
+    <Badge tone={hppRow.completeness === 'COMPLETE' ? 'profit' : 'amber'} className="mt-1 text-[11px]">
+      {hppRow.unitHppMinor != null && hppRow.hppCurrency != null
+        ? t('recipe.chipLabel', {
+            hpp: formatMoney(hppRow.unitHppMinor, hppRow.hppCurrency, locale),
+            margin: margin != null ? formatPercent(margin, locale) : '—',
+          })
+        : t('recipe.completenessMissingCost')}
+    </Badge>
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Category section
 // ---------------------------------------------------------------------------
@@ -2235,13 +2286,17 @@ function CategorySection({
   items,
   session,
   locale,
+  hppByItemId,
   onManageOptions,
+  onManageRecipe,
 }: {
   categoryName: string
   items: MenuItem[]
   session: CompanySession
   locale: string
+  hppByItemId: Map<string, HppSummaryRow>
   onManageOptions: (item: MenuItem) => void
+  onManageRecipe: (item: MenuItem) => void
 }) {
   const [expanded, setExpanded] = useState(true)
 
@@ -2272,7 +2327,9 @@ function CategorySection({
               item={item}
               session={session}
               locale={locale}
+              hppRow={hppByItemId.get(item.id)}
               onManageOptions={() => onManageOptions(item)}
+              onManageRecipe={() => onManageRecipe(item)}
             />
           ))}
         </Card>
@@ -2291,11 +2348,14 @@ function MenuManagementInner({ session }: { session: CompanySession }) {
   const locale = localeOf(i18n.language)
 
   const menuQuery = useMenu(session)
+  const hppSummaryQuery = useHppSummary(session)
   const [showCreateItem, setShowCreateItem] = useState(false)
   const [showManageCategories, setShowManageCategories] = useState(false)
   const [managingOptionsFor, setManagingOptionsFor] = useState<MenuItem | null>(null)
+  const [recipeFor, setRecipeFor] = useState<MenuItem | null>(null)
 
   const items = menuQuery.data ?? []
+  const hppByItemId = new Map((hppSummaryQuery.data ?? []).map((r) => [r.menuItemId, r]))
 
   // Group items LANGUAGE-CANONICALLY (categoryCanon): en/id variants of the same starter
   // template land in ONE section; the heading follows the current UI language.
@@ -2405,7 +2465,9 @@ function MenuManagementInner({ session }: { session: CompanySession }) {
                   items={catItems}
                   session={session}
                   locale={locale}
+                  hppByItemId={hppByItemId}
                   onManageOptions={(item) => setManagingOptionsFor(item)}
+                  onManageRecipe={(item) => setRecipeFor(item)}
                 />
               ))}
             </div>
@@ -2434,6 +2496,15 @@ function MenuManagementInner({ session }: { session: CompanySession }) {
           item={managingOptionsFor}
           locale={locale}
           onClose={() => setManagingOptionsFor(null)}
+        />
+      ) : null}
+
+      {recipeFor ? (
+        <RecipeDrawer
+          session={session}
+          item={recipeFor}
+          locale={locale}
+          onClose={() => setRecipeFor(null)}
         />
       ) : null}
     </div>

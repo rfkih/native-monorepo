@@ -63,6 +63,7 @@ public abstract class PostgresRlsTestBase {
               + " bill_line_modifier, bill_line, bill,"
               + " payment, order_line_modifier, order_line, restaurant_order,"
               + " stocktake_line, stocktake,"
+              + " recipe_line,"
               + " ingredient_stocktake_line, ingredient_stocktake, ingredient,"
               + " restaurant_table, menu_item_modifier_option, menu_item_modifier_group, menu_item,"
               + " menu_category, sale, sales_channel, gift_card_sale, gift_card_ref,"

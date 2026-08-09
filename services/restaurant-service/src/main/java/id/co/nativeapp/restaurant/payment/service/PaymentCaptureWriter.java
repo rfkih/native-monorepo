@@ -6,7 +6,9 @@ import id.co.nativeapp.restaurant.menu.repository.MenuItemRepository;
 import id.co.nativeapp.restaurant.menu.service.StockDeductionWriter;
 import id.co.nativeapp.restaurant.order.domain.Order;
 import id.co.nativeapp.restaurant.order.domain.OrderLine;
+import id.co.nativeapp.restaurant.order.projection.OrderLineModifierView;
 import id.co.nativeapp.restaurant.order.projection.OrderLineView;
+import id.co.nativeapp.restaurant.order.repository.OrderLineModifierRepository;
 import id.co.nativeapp.restaurant.order.repository.OrderLineRepository;
 import id.co.nativeapp.restaurant.order.repository.OrderRepository;
 import id.co.nativeapp.restaurant.payment.domain.Payment;
@@ -16,6 +18,7 @@ import id.co.nativeapp.restaurant.pricing.domain.PriceBreakdown;
 import id.co.nativeapp.restaurant.pricing.service.TaxChargeService;
 import id.co.nativeapp.restaurant.promotion.projection.AppliedPromotionView;
 import id.co.nativeapp.restaurant.promotion.repository.AppliedPromotionRepository;
+import id.co.nativeapp.restaurant.recipe.service.IngredientDepletionWriter;
 import id.co.nativeapp.restaurant.register.service.CashWindowLock;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
@@ -23,7 +26,9 @@ import id.co.nativeapp.restaurant.sale.service.SaleWriter;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -83,8 +88,10 @@ public class PaymentCaptureWriter {
   private final PaymentRepository paymentRepository;
   private final OrderRepository orderRepository;
   private final OrderLineRepository orderLineRepository;
+  private final OrderLineModifierRepository orderLineModifierRepository;
   private final MenuItemRepository menuItemRepository;
   private final StockDeductionWriter stockDeductionWriter;
+  private final IngredientDepletionWriter ingredientDepletionWriter;
   private final SaleWriter saleWriter;
   private final AppliedPromotionRepository appliedPromotionRepository;
   private final TaxChargeService taxChargeService;
@@ -95,8 +102,10 @@ public class PaymentCaptureWriter {
       PaymentRepository paymentRepository,
       OrderRepository orderRepository,
       OrderLineRepository orderLineRepository,
+      OrderLineModifierRepository orderLineModifierRepository,
       MenuItemRepository menuItemRepository,
       StockDeductionWriter stockDeductionWriter,
+      IngredientDepletionWriter ingredientDepletionWriter,
       SaleWriter saleWriter,
       AppliedPromotionRepository appliedPromotionRepository,
       TaxChargeService taxChargeService,
@@ -104,8 +113,10 @@ public class PaymentCaptureWriter {
     this.paymentRepository = paymentRepository;
     this.orderRepository = orderRepository;
     this.orderLineRepository = orderLineRepository;
+    this.orderLineModifierRepository = orderLineModifierRepository;
     this.menuItemRepository = menuItemRepository;
     this.stockDeductionWriter = stockDeductionWriter;
+    this.ingredientDepletionWriter = ingredientDepletionWriter;
     this.saleWriter = saleWriter;
     this.appliedPromotionRepository = appliedPromotionRepository;
     this.taxChargeService = taxChargeService;
@@ -359,5 +370,29 @@ public class PaymentCaptureWriter {
     }
 
     stockDeductionWriter.deductForLines(adaptedLines, menuItemViews);
+
+    // ADR 0050: recipe-driven ingredient depletion — the adapters above deliberately drop
+    // modifiers, so the selected option ids are re-read from the persisted snapshots. Same tx as
+    // the capture + sale + outbox; floors at 0, never blocks the capture. The idempotent
+    // already-CAPTURED early return above means a re-delivered capture never double-depletes.
+    List<UUID> lineIds = lineViews.stream().map(OrderLineView::getId).toList();
+    Map<UUID, List<UUID>> optionIdsByLine = new HashMap<>();
+    for (int i = 0; i < lineIds.size(); i += 1000) {
+      List<UUID> chunk = lineIds.subList(i, Math.min(i + 1000, lineIds.size()));
+      for (OrderLineModifierView mv : orderLineModifierRepository.findViewsByOrderLineIds(chunk)) {
+        optionIdsByLine
+            .computeIfAbsent(mv.getOrderLineId(), id -> new ArrayList<>())
+            .add(mv.getOptionId());
+      }
+    }
+    ingredientDepletionWriter.depleteForLines(
+        lineViews.stream()
+            .map(
+                lv ->
+                    new IngredientDepletionWriter.DepletionLine(
+                        lv.getMenuItemId(),
+                        lv.getQty(),
+                        optionIdsByLine.getOrDefault(lv.getId(), List.of())))
+            .toList());
   }
 }

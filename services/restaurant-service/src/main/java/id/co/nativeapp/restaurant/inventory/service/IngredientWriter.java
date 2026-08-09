@@ -9,6 +9,7 @@ import id.co.nativeapp.restaurant.inventory.repository.IngredientRepository;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -30,10 +31,15 @@ public class IngredientWriter {
 
   private final IngredientRepository repository;
   private final OutletAccessGuard outletAccessGuard;
+  private final List<IngredientDeactivationGuard> deactivationGuards;
 
-  public IngredientWriter(IngredientRepository repository, OutletAccessGuard outletAccessGuard) {
+  public IngredientWriter(
+      IngredientRepository repository,
+      OutletAccessGuard outletAccessGuard,
+      List<IngredientDeactivationGuard> deactivationGuards) {
     this.repository = repository;
     this.outletAccessGuard = outletAccessGuard;
+    this.deactivationGuards = deactivationGuards;
   }
 
   /**
@@ -85,6 +91,9 @@ public class IngredientWriter {
    * active = false}. The row disappears from {@code GET /api/v1/ingredients} (which filters to
    * active rows) but historical ingredient-stocktake lines that reference it are unaffected.
    *
+   * <p>Registered {@link IngredientDeactivationGuard}s may veto first (ADR 0050: the recipe feature
+   * blocks deactivating an ingredient a recipe still references — 409).
+   *
    * @throws IngredientNotFoundException if not found or not visible to the current tenant
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -92,6 +101,9 @@ public class IngredientWriter {
     TenantContext.require();
     Ingredient ingredient = load(id);
     outletAccessGuard.enforce(ingredient.getBusinessId());
+    for (IngredientDeactivationGuard guard : deactivationGuards) {
+      guard.checkDeactivate(id);
+    }
     ingredient.deactivate();
     repository.saveAndFlush(ingredient);
   }

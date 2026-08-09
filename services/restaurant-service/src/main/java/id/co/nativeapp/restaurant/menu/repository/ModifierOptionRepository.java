@@ -106,6 +106,31 @@ public interface ModifierOptionRepository extends JpaRepository<ModifierOption, 
   List<ModifierOptionView> findAvailableViewsByGroupIds(@Param("groupIds") List<UUID> groupIds);
 
   /**
+   * Scalar ids of ALL options belonging to a menu item (via its modifier groups) — the recipe
+   * feature's option-ownership validation (ADR 0050). Scalar list, not a projection (house rule:
+   * count/exists/id scalars are not entity reads).
+   */
+  @Query(
+      value =
+          """
+          SELECT mo.id
+            FROM menu_item_modifier_option mo
+            JOIN menu_item_modifier_group mg ON mg.id = mo.group_id
+           WHERE mg.menu_item_id = :menuItemId
+          """,
+      nativeQuery = true)
+  List<UUID> findIdsByMenuItemId(@Param("menuItemId") UUID menuItemId);
+
+  /**
+   * Scalar ids of a group's options — collected BEFORE {@link #deleteByGroupId} so the recipe
+   * feature can cascade-delete the per-option deltas in the same transaction (ADR 0050).
+   */
+  @Query(
+      value = "SELECT mo.id FROM menu_item_modifier_option mo WHERE mo.group_id = :groupId",
+      nativeQuery = true)
+  List<UUID> findIdsByGroupId(@Param("groupId") UUID groupId);
+
+  /**
    * Hard-deletes all options belonging to a modifier group. Called as part of group deletion. RLS
    * is active — only rows visible to the current tenant are deleted. Must be invoked within an
    * active {@link org.springframework.transaction.annotation.Transactional} context.

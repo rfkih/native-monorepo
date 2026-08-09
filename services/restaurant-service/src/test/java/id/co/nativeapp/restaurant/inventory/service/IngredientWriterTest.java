@@ -30,7 +30,9 @@ class IngredientWriterTest {
 
   private final IngredientRepository repository = mock(IngredientRepository.class);
   private final OutletAccessGuard guard = mock(OutletAccessGuard.class);
-  private final IngredientWriter writer = new IngredientWriter(repository, guard);
+  // No deactivation guards in the unit pins — the ADR 0050 recipe veto is integration-tested.
+  private final IngredientWriter writer =
+      new IngredientWriter(repository, guard, java.util.List.of());
 
   private static <T> T asTenant(java.util.concurrent.Callable<T> action) {
     try {

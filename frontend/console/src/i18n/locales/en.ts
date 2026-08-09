@@ -1166,7 +1166,7 @@ export const en = {
     title: 'Stock count',
     tillMenuLabel: 'Stock count',
     entryHint:
-      'Counts start pre-filled with the system quantity — only change what differs from your physical count. Until recipes exist, a costed item’s difference includes normal usage, not just loss.',
+      'Counts start pre-filled with the system quantity — only change what differs from your physical count. For a menu covered by a recipe, a costed ingredient’s difference reads as waste/loss; for the rest, it still includes normal usage, not just loss.',
     systemQty: 'System: {{qty}} {{unit}}',
     countedForItem: 'Counted quantity for {{name}}',
     notCounted: 'Not counted',
@@ -2619,6 +2619,51 @@ export const en = {
       errorGeneric: 'Could not update stock. Please try again.',
       lowStock: '{{count}} left',
     },
+  },
+  /** Recipe / BOM (ADR 0050 phase A) — RecipeDrawer, the ItemRow HPP/margin chip, and the
+   *  ingredient-in-recipe delete error (surfaced from IngredientManagement). */
+  recipe: {
+    action: 'Recipe',
+    manageAction: 'Manage recipe for {{name}}',
+    drawerLabel: 'Recipe for {{name}}',
+    loadError: 'Could not load the recipe. Please try again.',
+    hppLabel: 'HPP',
+    hppNone: 'No recipe yet',
+    marginLabel: 'Margin',
+    /** Shown next to the live HPP figure when the underlying cost data is incomplete. */
+    completenessMissingCost: 'Some ingredients have no cost on file',
+    completenessCurrencyMismatch: 'Ingredient costs are in different currencies',
+    baseSection: 'Base ingredients',
+    baseSectionHint: 'Every portion of this item uses these ingredients, in this quantity.',
+    baseEmpty: 'No base ingredients yet — add the first one below.',
+    addLine: 'Add ingredient',
+    /** Quantities are always whole numbers — nudges the operator to pick a unit that survives that. */
+    roundingHint:
+      'Quantities are whole numbers. For an ingredient used in a tiny amount per portion (a pinch, a dash), track it in pcs or pack instead of g/ml so the quantity rounds to something usable.',
+    optionSection: 'Per-option extras',
+    optionSectionHint:
+      'Add a signed quantity to change what an option uses — positive to add more, negative to use less (e.g. "extra cheese" +20 g, "no cheese" -20 g). These do not change the headline HPP.',
+    addDelta: 'Add ingredient',
+    ingredientLabel: 'Ingredient',
+    ingredientPlaceholder: 'Select an ingredient…',
+    qtyLabel: 'Quantity ({{unit}})',
+    deltaQtyLabel: 'Quantity change ({{unit}})',
+    removeLine: 'Remove line',
+    ingredientInactiveWarning: 'This ingredient is no longer active — consider replacing it.',
+    save: 'Save recipe',
+    saveErrorGeneric: 'Could not save the recipe. Please try again.',
+    errors: {
+      ingredientRequired: 'Choose an ingredient.',
+      qtyInteger: 'Enter a whole number.',
+      baseQtyPositive: 'Must be greater than zero.',
+      deltaNonZero: 'Must not be zero — use a positive or negative number.',
+      duplicateIngredient: 'This ingredient is already on this line list.',
+    },
+    /** The ItemRow chip (useHppSummary) — {{hpp}} and {{margin}} are already formatted via Intl. */
+    chipLabel: 'HPP {{hpp}} · {{margin}} margin',
+    /** DELETE /api/v1/ingredients/{id} → 409 ingredient-in-recipe — fallback if the server sent
+     *  no detail text (the server's `detail` normally names the referencing items). */
+    ingredientInRecipeError: 'This ingredient is used in a recipe and cannot be removed.',
   },
   bills: {
     trayTitle: 'Bills / Tabs',

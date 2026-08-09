@@ -14,6 +14,7 @@ import id.co.nativeapp.restaurant.menu.repository.ModifierGroupRepository;
 import id.co.nativeapp.restaurant.menu.repository.ModifierOptionRepository;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
+import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
@@ -33,14 +34,17 @@ public class ModifierWriter {
   private final MenuItemRepository menuItemRepository;
   private final ModifierGroupRepository groupRepository;
   private final ModifierOptionRepository optionRepository;
+  private final List<ModifierOptionCascade> optionCascades;
 
   public ModifierWriter(
       MenuItemRepository menuItemRepository,
       ModifierGroupRepository groupRepository,
-      ModifierOptionRepository optionRepository) {
+      ModifierOptionRepository optionRepository,
+      List<ModifierOptionCascade> optionCascades) {
     this.menuItemRepository = menuItemRepository;
     this.groupRepository = groupRepository;
     this.optionRepository = optionRepository;
+    this.optionCascades = optionCascades;
   }
 
   /** Creates a modifier group under a menu item. */
@@ -188,6 +192,12 @@ public class ModifierWriter {
     groupRepository
         .findById(groupId)
         .orElseThrow(() -> new NoSuchElementException("Modifier group not found: " + groupId));
+    // ADR 0050: let downstream features clean up per-option state (recipe deltas) in the SAME
+    // transaction, while the option ids still exist to enumerate.
+    List<UUID> optionIds = optionRepository.findIdsByGroupId(groupId);
+    for (ModifierOptionCascade cascade : optionCascades) {
+      cascade.onOptionsDeleting(optionIds);
+    }
     // Hard-delete all options first (no FK cascade from group → options in the domain layer).
     optionRepository.deleteByGroupId(groupId);
     groupRepository.deleteById(groupId);
@@ -224,6 +234,10 @@ public class ModifierWriter {
     optionRepository
         .findById(optionId)
         .orElseThrow(() -> new NoSuchElementException("Modifier option not found: " + optionId));
+    // ADR 0050: cascade per-option state (recipe deltas) in the SAME transaction.
+    for (ModifierOptionCascade cascade : optionCascades) {
+      cascade.onOptionsDeleting(List.of(optionId));
+    }
     optionRepository.deleteById(optionId);
   }
 }
