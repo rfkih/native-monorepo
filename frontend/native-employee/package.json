@@ -1,0 +1,20 @@
+{
+  "name": "native-employee",
+  "version": "0.1.0",
+  "description": "Native Karyawan — Android thin-client shell over the live console's employee self-service surface (ADR 0049 P5)",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "sync": "cap sync android",
+    "open": "cap open android",
+    "apk": "cap sync android && cd android && gradlew assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/core": "^8.5.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.0",
+    "typescript": "^7.0.2"
+  }
+}

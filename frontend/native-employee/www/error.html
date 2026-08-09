@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Native Karyawan</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #0e8fab, #064654);
+        font-family: system-ui, -apple-system, sans-serif;
+        color: #fff;
+        text-align: center;
+        padding: 24px;
+      }
+      .card { max-width: 340px; }
+      svg { margin-bottom: 20px; }
+      h1 { font-size: 22px; font-weight: 800; margin-bottom: 10px; }
+      p { font-size: 15px; line-height: 1.5; opacity: 0.85; margin-bottom: 24px; }
+      button {
+        background: #fff;
+        color: #095f73;
+        border: 0;
+        border-radius: 12px;
+        padding: 14px 28px;
+        font-size: 16px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .hint { font-size: 12px; opacity: 0.6; margin-top: 16px; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 18 L10 10 L14 14 L20 5" />
+      </svg>
+      <h1>Tidak ada koneksi</h1>
+      <p>Aplikasi memerlukan internet untuk memuat. Periksa Wi-Fi atau data seluler, lalu coba lagi.<br /><span style="opacity:.7">No connection — check the internet and retry.</span></p>
+      <button onclick="retry()">Coba lagi · Retry</button>
+      <div class="hint" id="hint"></div>
+    </div>
+    <script>
+      // The shell's one origin. Keep in sync with capacitor.config.ts SERVER_URL.
+      var ORIGIN = 'https://a8.tailbf9662.ts.net:8443'
+      function retry() {
+        window.location.href = ORIGIN
+      }
+      // Quiet auto-retry so the app recovers by itself when the network returns.
+      var tries = 0
+      setInterval(function () {
+        tries++
+        document.getElementById('hint').textContent = 'Mencoba ulang otomatis… (' + tries + ')'
+        fetch(ORIGIN + '/', { mode: 'no-cors' })
+          .then(function () { retry() })
+          .catch(function () {})
+      }, 8000)
+    </script>
+  </body>
+</html>

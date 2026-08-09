@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pre-Android-12 launch window: the brand gradient with the centered trend-line mark
+     (Android 12+ shows the system splash — the adaptive icon on windowSplashScreenBackground). -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="315"
+                android:startColor="#0E8FAB"
+                android:endColor="#064654"
+                android:type="linear" />
+        </shape>
+    </item>
+    <item
+        android:drawable="@drawable/splash_mark"
+        android:gravity="center"
+        android:width="96dp"
+        android:height="96dp" />
+</layer-list>

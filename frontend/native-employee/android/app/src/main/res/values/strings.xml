@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Native Karyawan</string>
+    <string name="title_activity_main">Native Karyawan</string>
+    <string name="package_name">id.co.nativeapp.employee</string>
+    <string name="custom_url_scheme">id.co.nativeapp.employee</string>
+</resources>

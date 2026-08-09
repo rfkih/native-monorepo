@@ -1,0 +1,91 @@
+apply plugin: 'com.android.application'
+apply plugin: 'org.jetbrains.kotlin.android'
+
+// Release signing (mirrors the Till app's ADR 0043 D7 pattern): the keystore lives OUTSIDE the
+// repo and is referenced by the gitignored android/keystore.properties (see README). This app
+// has its OWN keystore — the Till app's signing key must NEVER be reused here. Without
+// keystore.properties, release builds are simply unsigned — debug builds are unaffected — so
+// CI/fresh clones still compile.
+def keystorePropsFile = rootProject.file('keystore.properties')
+def keystoreProps = new Properties()
+if (keystorePropsFile.exists()) {
+    keystorePropsFile.withInputStream { keystoreProps.load(it) }
+}
+
+android {
+    namespace = "id.co.nativeapp.employee"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "id.co.nativeapp.employee"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        // Fresh lineage (ADR 0049 P5) — a brand-new app, NOT a continuation of the Till app's
+        // versionCode/versionName. Bumps ONLY on native shell changes; web features ship via the
+        // normal console deploy with no app release.
+        versionCode 1
+        versionName "1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    signingConfigs {
+        release {
+            if (keystoreProps.getProperty('storeFile')) {
+                storeFile file(keystoreProps.getProperty('storeFile'))
+                storePassword keystoreProps.getProperty('storePassword')
+                keyAlias keystoreProps.getProperty('keyAlias')
+                keyPassword keystoreProps.getProperty('keyPassword')
+            }
+        }
+    }
+    buildTypes {
+        release {
+            // Deliberately NOT minified: the shell is a couple MB of bare Capacitor with no
+            // plugins; R8's saving isn't worth the reflection risk on the JS bridge without a
+            // device matrix.
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (keystoreProps.getProperty('storeFile')) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+    buildFeatures {
+        buildConfig true
+    }
+    kotlinOptions {
+        jvmTarget = '21'
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}
