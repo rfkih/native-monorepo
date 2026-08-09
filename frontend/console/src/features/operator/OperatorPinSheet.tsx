@@ -1,26 +1,39 @@
 /**
- * OperatorPinSheet (ADR 0049 P3b, policy-aware P3d) — the Business-app till's employee-pick (+
- * PIN, when the outlet requires one) sign-in. Reuses the exact centered-dialog shell
- * RegisterSheet/StocktakeSheet/GiftCardSellModal already use (POS terminal, consistency over
- * novelty) and CashPanelView's numeric-keypad idiom for the PIN pad.
+ * OperatorPinSheet (ADR 0049 P3b, policy-aware P3d, manager-present first-time enrollment P3e) —
+ * the Business-app till's employee-pick (+ PIN, when the outlet requires one) sign-in. Reuses the
+ * exact centered-dialog shell RegisterSheet/StocktakeSheet/GiftCardSellModal already use (POS
+ * terminal, consistency over novelty) and CashPanelView's numeric-keypad idiom for the PIN pad.
  *
  * `requirePin` (the caller's already-fetched `useOutletPinPolicy` read, ADR 0049 P3d) branches the
  * step after the pick:
- *   'pick' — the outlet's roster (name only, rule 6) as tappable rows; loading/empty/error states.
- *            A `requirePin === false` outlet shows a "tap your name to start" hint — there is no
- *            next step to type into.
- *   'pin'  — PIN-required outlets ONLY: a masked numeric pad (4-6 digits); auto-submits at 6, or
- *            the Sign in button once at least 4 digits are entered. A failed attempt clears the
- *            pad and shows a friendly, translated reason (never the raw server message) so the PIN
- *            stays uninferrable.
+ *   'pick' — the outlet's roster (name only + `hasPin`, rule 6) as tappable rows; loading/empty/
+ *            error states. A `requirePin === false` outlet shows a "tap your name to start" hint —
+ *            there is no next step to type into.
+ *   'pin'  — PIN-required outlets, picked employee already has one (`hasPin: true`): a masked
+ *            numeric pad (4-6 digits); auto-submits at 6, or the Sign in button once at least 4
+ *            digits are entered. A failed attempt clears the pad and shows a friendly, translated
+ *            reason (never the raw server message) so the PIN stays uninferrable.
+ *   'enroll-manager-required' — PIN-required outlets, picked employee has NO PIN yet (`hasPin:
+ *            false`, P3e), and NO owner/manager is currently elevated on this till. The owner
+ *            decided first-PIN enrollment must never be self-serve — this step shows who needs it
+ *            and a "Sign in to manage" action (`useAuth().elevate()`, the same elevation trigger the
+ *            till menu uses) instead of a PIN pad. Once a manager elevates, `elevatedRoles` updates
+ *            and the sheet re-renders straight into 'enroll-create' below — no extra tap needed.
+ *   'enroll-create'/'enroll-confirm' — PIN-required outlets, picked employee has NO PIN yet AND an
+ *            owner/manager IS currently elevated (`useAuth().elevatedRoles` includes 'owner' or
+ *            'manager'): the elevated manager sets a 4-6 digit PIN for the employee, then re-enters
+ *            it to confirm (same keypad idiom as 'pin', reused via `PinEntryPad`/`PinDots` below). A
+ *            mismatch clears only the confirm entry and lets the manager retry; a match writes the
+ *            PIN via the EXISTING owner/manager endpoint (`useSetOperatorPin`, `features/hr/api.ts`
+ *            — an upsert, so there is no "already exists" conflict to fall back from) then chains
+ *            the existing sign-in with the same PIN (enrolled AND signed in in one flow).
  *   'confirming' — no-PIN outlets ONLY: picking a name mints immediately (no pad to fill in) — a
  *            brief busy state, or the same friendly error mapping as the PIN step with a Retry
  *            (never a raw server message).
  *   success — "Signed in as NAME · ROLE" before handing back to the till (Continue closes the
  *            sheet; the caller's own gate re-check on the next Pay/Send tap picks up the new
  *            operator — mirrors RegisterSheet's "hit Pay again" pattern, no auto-continue). Shown
- *            identically in both modes — only the PIN entry itself is skipped, never the
- *            confirmation.
+ *            identically in every mode.
  *
  * Strings rule (rule 9): every label is an i18n key; the roster's displayName/role are literal
  * server data (free-text employee names/job titles), never translated.
@@ -32,17 +45,24 @@ import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { ListSkeleton } from '@/components/ui/Skeleton'
 import { ApiError } from '@/lib/api'
+import { hasAnyRole, useAuth } from '@/lib/authContext'
 import { cn } from '@/lib/cn'
 import type { CompanySession } from '@/lib/session'
+import { useSetOperatorPin } from '@/features/hr/api'
 import { useOperatorSession } from './operatorSessionContext'
+import { operatorSheetStep } from './operatorGate'
 import { useOperatorRoster, type OperatorRosterEntry } from './api'
 
 const PIN_MIN_LENGTH = 4
 const PIN_MAX_LENGTH = 6
 
-/** Maps the server's operator-session failure to a friendly, translated message (rule 9) — the
- * till never shows a raw ApiError string, and the mapping stays uniform for the 401 case (the
- * server itself is deliberately non-enumerating — see OperatorSessionController's own doc). */
+/** Maps the server's operator-session/set-PIN failure to a friendly, translated message (rule 9) —
+ * the till never shows a raw ApiError string, and the mapping stays uniform for the 401 case (the
+ * server itself is deliberately non-enumerating — see OperatorSessionController's own doc). Shared
+ * by the enter-PIN step (the operator-session endpoint's own 401/423/403/409 vocabulary) AND the
+ * manager-present enroll step (the elevated manager's `useSetOperatorPin` write, which only ever
+ * produces the 401/403/generic cases here — there is no PIN-lockout or not-linked case on THAT
+ * endpoint, but the same friendly copy still reads fine for it). */
 function pinErrorKey(err: unknown): string {
   if (err instanceof ApiError) {
     switch (err.status) {
@@ -74,8 +94,10 @@ export function OperatorPinSheet({
   onClose: () => void
 }) {
   const { t } = useTranslation()
+  const auth = useAuth()
   const operatorSession = useOperatorSession()
   const rosterQuery = useOperatorRoster(session, session.businessId)
+  const setOperatorPinMutation = useSetOperatorPin(session)
   const panelRef = useRef<HTMLDivElement>(null)
 
   const [employee, setEmployee] = useState<OperatorRosterEntry | null>(null)
@@ -83,6 +105,27 @@ export function OperatorPinSheet({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<unknown>(null)
   const [signedInAs, setSignedInAs] = useState<{ displayName: string; role: string } | null>(null)
+
+  // P3e enroll-only state. `firstPin` holds the create-step entry while the confirm-step pad
+  // fills in fresh (reusing `pin` for whichever pad is on screen — the two steps are never shown
+  // at once). `mismatch` is a LOCAL check (never round-trips to the server) — distinct from
+  // `error`, which is always a server failure.
+  const [enrollStep, setEnrollStep] = useState<'create' | 'confirm'>('create')
+  const [firstPin, setFirstPin] = useState('')
+  const [mismatch, setMismatch] = useState(false)
+
+  // ADR 0049 P3b elevation — the till's OWN roles are the outlet's own (cashier); only the ELEVATED
+  // roles (a personal owner/manager login layered on top, `auth.elevate()`) ever include owner/
+  // manager on a device terminal. First-PIN enrollment is manager-present ONLY — never self-serve —
+  // so this checks `elevatedRoles` alone, never the merged `effectiveRoles`.
+  const managerPresent = hasAnyRole(auth.elevatedRoles, 'owner', 'manager')
+  // Which step to show — the pure, unit-tested decision core (operatorGate.ts). `set-pin`/
+  // `manager-required` only ever arise for a require-PIN outlet's PIN-LESS employee
+  // (`hasPin === false`; an unknown/missing hasPin falls through to enter-pin — W2).
+  const sheetStep = employee
+    ? operatorSheetStep({ requirePin, hasPin: employee.hasPin, managerElevated: managerPresent })
+    : null
+  const isEnrollFlow = sheetStep === 'set-pin' || sheetStep === 'manager-required'
 
   // Focus contract mirrors TillMenuSheet/MobileSheet (the SheetOverlay rules): initial focus on
   // the panel, Escape closes.
@@ -97,10 +140,17 @@ export function OperatorPinSheet({
 
   const roster = rosterQuery.data ?? []
 
-  function pickEmployee(entry: OperatorRosterEntry) {
-    setEmployee(entry)
+  function resetPinState() {
     setPin('')
     setError(null)
+    setEnrollStep('create')
+    setFirstPin('')
+    setMismatch(false)
+  }
+
+  function pickEmployee(entry: OperatorRosterEntry) {
+    setEmployee(entry)
+    resetPinState()
     // No-PIN outlet (ADR 0049 P3d): there is no pad to fill in — the pick itself IS the sign-in
     // attempt. `entry` is passed explicitly (not read back off state) since `setEmployee` above
     // hasn't committed yet in this same tick.
@@ -109,8 +159,7 @@ export function OperatorPinSheet({
 
   function backToRoster() {
     setEmployee(null)
-    setPin('')
-    setError(null)
+    resetPinState()
   }
 
   async function submit(candidatePin: string, target: OperatorRosterEntry | null = employee) {
@@ -133,12 +182,61 @@ export function OperatorPinSheet({
     }
   }
 
+  /** Sets the employee's first PIN via the EXISTING owner/manager write (P3e, manager-present
+   * only — `isEnrollFlow` never reaches this without `managerPresent` also true, see the render
+   * branch below), then chains the existing sign-in with that same PIN — enrolled AND signed in in
+   * one flow. `useSetOperatorPin` is an UPSERT (a manager may set OR reset), so there is no
+   * "already exists" conflict to fall back from here. */
+  async function submitEnroll(finalPin: string) {
+    if (!employee || busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      await setOperatorPinMutation.mutateAsync({ employeeId: employee.employeeId, pin: finalPin })
+      const info = await operatorSession.signIn(session.businessId, employee.employeeId, finalPin)
+      setSignedInAs(info)
+    } catch (err) {
+      setPin('')
+      setFirstPin('')
+      setEnrollStep('create')
+      setMismatch(false)
+      setError(err)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** Advances the create → confirm → submit enroll sequence with `candidatePin` (the pad's current
+   * digits) — called both by auto-submit-at-max-length (`pressDigit`) and the explicit
+   * Continue/Create-PIN button. */
+  function advanceEnroll(candidatePin: string) {
+    if (busy) return
+    if (enrollStep === 'create') {
+      setFirstPin(candidatePin)
+      setPin('')
+      setMismatch(false)
+      setEnrollStep('confirm')
+      return
+    }
+    if (candidatePin !== firstPin) {
+      setMismatch(true)
+      setPin('')
+      return
+    }
+    setMismatch(false)
+    void submitEnroll(candidatePin)
+  }
+
   function pressDigit(d: string) {
     if (busy || pin.length >= PIN_MAX_LENGTH) return
     const next = pin + d
     setPin(next)
     setError(null)
-    if (next.length === PIN_MAX_LENGTH) void submit(next)
+    setMismatch(false)
+    if (next.length === PIN_MAX_LENGTH) {
+      if (isEnrollFlow) advanceEnroll(next)
+      else void submit(next)
+    }
   }
   function pressBackspace() {
     if (busy) return
@@ -149,7 +247,13 @@ export function OperatorPinSheet({
     ? t('operatorPin.signedInTitle')
     : employee
       ? requirePin
-        ? t('operatorPin.pinTitle')
+        ? isEnrollFlow
+          ? !managerPresent
+            ? t('operatorPin.enroll.managerRequiredTitle')
+            : enrollStep === 'create'
+              ? t('operatorPin.enroll.createTitle')
+              : t('operatorPin.enroll.confirmTitle')
+          : t('operatorPin.pinTitle')
         : t('operatorPin.noPinTitle')
       : t('operatorPin.title')
 
@@ -273,27 +377,110 @@ export function OperatorPinSheet({
               </>
             ) : null}
           </div>
+        ) : isEnrollFlow ? (
+          !managerPresent ? (
+            /* ── Enroll gate: manager must be present (owner decision — never self-serve) ──── */
+            <div
+              className="space-y-4 px-5 py-8 text-center"
+              data-testid="operator-pin-enroll-manager-required"
+            >
+              <p className="text-sm text-ink-3">
+                {t('operatorPin.enroll.managerRequiredPrompt', { name: employee.displayName })}
+              </p>
+              <Button
+                className="w-full"
+                data-testid="operator-pin-enroll-elevate"
+                onClick={() => auth.elevate()}
+              >
+                {t('posShell.elevateEntry')}
+              </Button>
+            </div>
+          ) : enrollStep === 'create' ? (
+            /* ── Enroll step 1: create PIN (P3e, manager sets a first sign-in PIN) ─────────── */
+            <div className="px-5 py-5" data-testid="operator-pin-enroll-create">
+              <p className="mb-4 text-center text-sm text-ink-3">
+                {t('operatorPin.enroll.createPrompt', { name: employee.displayName })}
+              </p>
+
+              <PinDots
+                length={pin.length}
+                statusText={t('operatorPin.digitsEntered', { count: pin.length })}
+              />
+
+              {error ? (
+                <p className="mb-3 text-center text-xs text-loss" role="alert">
+                  {t(pinErrorKey(error) as Parameters<typeof t>[0])}
+                </p>
+              ) : null}
+
+              <PinEntryPad
+                pin={pin}
+                busy={busy}
+                onDigit={pressDigit}
+                onBackspace={pressBackspace}
+                backspaceLabel={t('operatorPin.backspace')}
+              />
+
+              <Button
+                className="w-full"
+                data-testid="operator-pin-enroll-continue"
+                disabled={busy || pin.length < PIN_MIN_LENGTH}
+                onClick={() => advanceEnroll(pin)}
+              >
+                {t('common.continue')}
+              </Button>
+            </div>
+          ) : (
+            /* ── Enroll step 2: confirm PIN (P3e) ──────────────────────────── */
+            <div className="px-5 py-5" data-testid="operator-pin-enroll-confirm">
+              <p className="mb-4 text-center text-sm text-ink-3">
+                {t('operatorPin.enroll.confirmPrompt')}
+              </p>
+
+              <PinDots
+                length={pin.length}
+                statusText={t('operatorPin.digitsEntered', { count: pin.length })}
+              />
+
+              {mismatch ? (
+                <p className="mb-3 text-center text-xs text-loss" role="alert">
+                  {t('operatorPin.enroll.mismatch')}
+                </p>
+              ) : error ? (
+                <p className="mb-3 text-center text-xs text-loss" role="alert">
+                  {t(pinErrorKey(error) as Parameters<typeof t>[0])}
+                </p>
+              ) : null}
+
+              <PinEntryPad
+                pin={pin}
+                busy={busy}
+                onDigit={pressDigit}
+                onBackspace={pressBackspace}
+                backspaceLabel={t('operatorPin.backspace')}
+              />
+
+              <Button
+                className="w-full"
+                data-testid="operator-pin-enroll-submit"
+                disabled={busy || pin.length < PIN_MIN_LENGTH}
+                onClick={() => advanceEnroll(pin)}
+              >
+                {busy ? <Spinner /> : t('operatorPin.enroll.confirmAction')}
+              </Button>
+            </div>
+          )
         ) : (
-          /* ── Step 2: PIN pad ─────────────────────────────────────────────── */
+          /* ── Step 2: PIN pad (employee already has a PIN) ────────────────── */
           <div className="px-5 py-5">
             <p className="mb-4 text-center text-sm text-ink-3">
               {t('operatorPin.enterPinFor', { name: employee.displayName })}
             </p>
 
-            <div className="mb-5 flex justify-center gap-2.5" aria-hidden="true">
-              {Array.from({ length: PIN_MAX_LENGTH }, (_, i) => (
-                <span
-                  key={i}
-                  className={cn(
-                    'size-3 rounded-full border-2 transition-colors',
-                    i < pin.length ? 'border-emerald bg-emerald' : 'border-line bg-transparent',
-                  )}
-                />
-              ))}
-            </div>
-            <p className="sr-only" role="status">
-              {t('operatorPin.digitsEntered', { count: pin.length })}
-            </p>
+            <PinDots
+              length={pin.length}
+              statusText={t('operatorPin.digitsEntered', { count: pin.length })}
+            />
 
             {error ? (
               <p className="mb-3 text-center text-xs text-loss" role="alert">
@@ -301,20 +488,13 @@ export function OperatorPinSheet({
               </p>
             ) : null}
 
-            {/* Numeric keypad (3×4 grid) — CashPanelView's keypad idiom */}
-            <div className="mb-4 grid grid-cols-3 gap-1.5">
-              {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
-                <PinKeypadButton key={d} label={d} onClick={() => pressDigit(d)} disabled={busy} />
-              ))}
-              <span aria-hidden="true" />
-              <PinKeypadButton label="0" onClick={() => pressDigit('0')} disabled={busy} />
-              <PinKeypadButton
-                label="⌫"
-                ariaLabel={t('operatorPin.backspace')}
-                onClick={pressBackspace}
-                disabled={busy || pin.length === 0}
-              />
-            </div>
+            <PinEntryPad
+              pin={pin}
+              busy={busy}
+              onDigit={pressDigit}
+              onBackspace={pressBackspace}
+              backspaceLabel={t('operatorPin.backspace')}
+            />
 
             <Button
               className="w-full"
@@ -338,6 +518,61 @@ function initials(name: string): string {
   const first = parts[0][0] ?? ''
   const last = parts.length > 1 ? (parts[parts.length - 1][0] ?? '') : ''
   return (first + last).toUpperCase()
+}
+
+/** The masked-progress dots above every PIN pad (enter-PIN, enroll-create, enroll-confirm) — the
+ * visible indicator is `aria-hidden` (a filled dot reveals nothing about the digit), paired with an
+ * `sr-only` status paragraph carrying the actual count for assistive tech. */
+function PinDots({ length, statusText }: { length: number; statusText: string }) {
+  return (
+    <>
+      <div className="mb-5 flex justify-center gap-2.5" aria-hidden="true">
+        {Array.from({ length: PIN_MAX_LENGTH }, (_, i) => (
+          <span
+            key={i}
+            className={cn(
+              'size-3 rounded-full border-2 transition-colors',
+              i < length ? 'border-emerald bg-emerald' : 'border-line bg-transparent',
+            )}
+          />
+        ))}
+      </div>
+      <p className="sr-only" role="status">
+        {statusText}
+      </p>
+    </>
+  )
+}
+
+/** The numeric keypad (3×4 grid) shared by every PIN pad — CashPanelView's keypad idiom. */
+function PinEntryPad({
+  pin,
+  busy,
+  onDigit,
+  onBackspace,
+  backspaceLabel,
+}: {
+  pin: string
+  busy: boolean
+  onDigit: (d: string) => void
+  onBackspace: () => void
+  backspaceLabel: string
+}) {
+  return (
+    <div className="mb-4 grid grid-cols-3 gap-1.5">
+      {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
+        <PinKeypadButton key={d} label={d} onClick={() => onDigit(d)} disabled={busy} />
+      ))}
+      <span aria-hidden="true" />
+      <PinKeypadButton label="0" onClick={() => onDigit('0')} disabled={busy} />
+      <PinKeypadButton
+        label="⌫"
+        ariaLabel={backspaceLabel}
+        onClick={onBackspace}
+        disabled={busy || pin.length === 0}
+      />
+    </div>
+  )
 }
 
 function PinKeypadButton({

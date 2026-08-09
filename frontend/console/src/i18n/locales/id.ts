@@ -1265,6 +1265,18 @@ export const id = {
       notLinked: 'Karyawan ini belum tertaut ke login — minta pemilik atau manajer menautkannya.',
       generic: 'Gagal masuk. Coba lagi.',
     },
+    enroll: {
+      // Gerbang wajib-manajer (rombak P3e) — PIN pertama karyawan tidak lagi bisa dibuat sendiri;
+      // pemilik atau manajer yang sudah elevasi harus hadir di kasir untuk membuatnya.
+      managerRequiredTitle: 'Perlu login manajer',
+      managerRequiredPrompt: 'Manajer harus login untuk membuat PIN {{name}}',
+      createTitle: 'Atur PIN',
+      confirmTitle: 'Konfirmasi PIN',
+      createPrompt: 'Atur PIN untuk {{name}}',
+      confirmPrompt: 'Masukkan PIN sekali lagi untuk konfirmasi',
+      confirmAction: 'Atur PIN',
+      mismatch: 'PIN tidak cocok. Coba lagi.',
+    },
   },
   servicePos: {
     noCompanyHint: 'Buat perusahaan dulu — kasir membuat tiket untuk bisnisnya.',

@@ -1,21 +1,34 @@
 /**
  * operator/api.ts — TanStack Query hooks for the Business-app till's operator identification (ADR
- * 0049 P3b/P3d): the roster the picker shows (`GET /api/v1/operators/roster`), the per-outlet
- * require-PIN policy (`GET /api/v1/operators/policy`), and the sign-in mutation (`POST
- * /api/v1/operators/session`) that mints the signed operator session — PIN-verified or, at a
- * no-PIN outlet, a bare pick. `features/operator/OperatorSessionProvider.tsx` persists the
- * mutation's result and arms `X-Operator-Session` (lib/api.ts) for every subsequent request — this
- * module only talks to the network, exactly like `features/pos/registerApi.ts`'s split from
- * `RegisterSheet.tsx`.
+ * 0049 P3b/P3d): the roster the picker shows (`GET /api/v1/operators/roster`, each entry carrying
+ * `hasPin`), the per-outlet require-PIN policy (`GET /api/v1/operators/policy`), and the sign-in
+ * mutation (`POST /api/v1/operators/session`) that mints the signed operator session —
+ * PIN-verified or, at a no-PIN outlet, a bare pick. `features/operator/OperatorSessionProvider.tsx`
+ * persists the sign-in mutation's result and arms `X-Operator-Session` (lib/api.ts) for every
+ * subsequent request — this module only talks to the network, exactly like
+ * `features/pos/registerApi.ts`'s split from `RegisterSheet.tsx`.
+ *
+ * P3e amendment (manager-present enrollment) — the owner decided a PIN-less employee's FIRST PIN
+ * must never be self-serve: it now requires an elevated owner/manager standing at the till (ADR
+ * 0049 P3b elevation, `useAuth().elevatedRoles`). There is consequently no first-PIN endpoint in
+ * THIS module anymore (`POST /api/v1/operators/pin` is gone) — `OperatorPinSheet` gates the
+ * create/confirm PIN step on that elevation and, once present, sets the PIN via the EXISTING
+ * owner/manager write, `useSetOperatorPin` (`features/hr/api.ts`, `PUT
+ * /api/v1/employees/{id}/operator-pin`, personal bearer — an upsert, so there is no "PIN already
+ * exists" conflict to handle), before chaining the sign-in mutation below with that same PIN.
  */
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api'
 import type { CompanySession } from '@/lib/session'
 
-/** `GET /api/v1/operators/roster` entry — name only (rule 6, no role/status/PII on the roster). */
+/** `GET /api/v1/operators/roster` entry — name only + `hasPin` (rule 6, no role/status/other PII
+ * on the roster). `hasPin: false` (a require-PIN outlet only) means the employee is assigned +
+ * linked but has never set a PIN yet — {@link OperatorPinSheet} branches to the first-time
+ * enroll (create + confirm) step instead of the ordinary Enter-PIN pad for that entry. */
 export interface OperatorRosterEntry {
   employeeId: string
   displayName: string
+  hasPin: boolean
 }
 
 /** `POST /api/v1/operators/session` response. */
@@ -117,6 +130,14 @@ export interface OutletPinPolicy {
  *
  * Callers MUST default a missing/erroring read to `requirePin: true` (`data?.requirePin ?? true`)
  * — the server's own safe default — never assume no-PIN on a read failure.
+ *
+ * Deliberately overrides the global `queryClient` staleness defaults (`staleTime: 30_000`,
+ * `refetchOnWindowFocus: false`) for THIS query only: a manager can flip the outlet's require-PIN
+ * policy from another device at any moment, and a kiosk sitting on this screen must pick it up —
+ * a stale read would either keep showing the keypad after a manager turns PIN OFF, or keep
+ * skipping straight to sign-in after a manager turns PIN ON. `staleTime: 0` + refetch-on-focus
+ * covers the kiosk being woken up/tapped again; the 5-minute `refetchInterval` is a modest safety
+ * net for a kiosk left untouched (and thus never refocused) on the roster/PIN screen itself.
  */
 export function useOutletPinPolicy(
   session: CompanySession | null,
@@ -126,6 +147,9 @@ export function useOutletPinPolicy(
   return useQuery({
     queryKey: ['operator-pin-policy', session?.companyId, businessId],
     enabled: enabled && !!session && !!businessId,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchInterval: 5 * 60 * 1000,
     queryFn: () =>
       apiFetch<OutletPinPolicy>('/api/v1/operators/policy', {
         tenant: tenantOf(session as CompanySession),

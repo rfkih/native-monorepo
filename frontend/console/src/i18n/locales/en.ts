@@ -1276,6 +1276,18 @@ export const en = {
       notLinked: 'This employee has no login linked yet — ask the owner or manager to link one.',
       generic: 'Could not sign in. Try again.',
     },
+    enroll: {
+      // Manager-present gate (P3e rework) — a PIN-less employee's first PIN is never self-serve;
+      // an elevated owner/manager must be standing at the till to set it.
+      managerRequiredTitle: 'Manager sign-in needed',
+      managerRequiredPrompt: "A manager must sign in to set up {{name}}'s PIN",
+      createTitle: 'Set a PIN',
+      confirmTitle: 'Confirm the PIN',
+      createPrompt: 'Set a PIN for {{name}}',
+      confirmPrompt: 'Enter the PIN again to confirm',
+      confirmAction: 'Set PIN',
+      mismatch: "PINs didn't match. Try again.",
+    },
   },
   servicePos: {
     noCompanyHint: 'Create a company first — the POS rings up tickets for its business.',
