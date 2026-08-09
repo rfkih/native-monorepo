@@ -144,3 +144,48 @@ assertion, the operator is never recorded) — a foreign-but-signed token satisf
 commission there (the operator is never used as the metric subject — the washer/barber is) but thinner
 accountability than restaurant. (3) The operator token has no `jti` de-dup, so replay within `exp`
 can misattribute (pre-existing P1/P2 bearer-token design).
+
+## Addendum (2026-08-09): per-outlet operator-PIN policy + terminal management + session-scoped operator
+
+A manager can now choose, **per outlet**, whether ringing requires an operator PIN; can **view the
+outlet's device login** (username + on-demand, audited password reveal) and manage employee PINs from
+the console; and the operator selection now **clears every time the app is closed**.
+
+- **Policy lives in employee-service, not org-service.** New `outlet_operator_policy` (V17,
+  `company_id` + `business_id` + `require_pin` default true, FORCE RLS). Deliberately NOT an
+  `org_unit` column + `OrgUnitChanged` field — that keeps it inside the one service that already owns
+  operators (`operator_pin`, roster, mint), so there is **no Avro/event-contract change (rule 7
+  untouched) and the verticals need zero changes**. `GET /api/v1/operators/policy` (POS_ROLES, the
+  till reads it); `PUT /api/v1/employees/outlet-pin-policy/{businessId}` (DASHBOARD_ROLES,
+  owner/manager). Absent row ⇒ `require_pin=true` (**fail-safe**: a missing/RLS-hidden policy is
+  PIN-required, never fail-open).
+- **Conditional mint.** `OperatorSessionWriter#verifyAndMint` reads the policy first; `require_pin=false`
+  skips the entire PIN load/decoy/lockout/verify branch and mints after only the assignment +
+  login-link + role checks — so a no-PIN pick **still mints an `operatorUserId`-bearing token**, and
+  both the P4 device-guard ("a device sale must carry an operator") and commission attribution hold
+  unchanged. `require_pin=true` is byte-identical to before. The roster is policy-aware (a no-PIN
+  outlet lists all assigned + login-linked employees; a PIN outlet keeps assigned-and-has-PIN).
+- **Trust model (owner-accepted).** At a `require_pin=false` outlet any POS caller can attribute a
+  sale to any assigned + login-linked colleague with no verification — honor-system attribution,
+  gated behind the owner/manager opt-in, **bounded to attribution only** (no money/PII, and the
+  token's `role` is never used for authorization anywhere).
+- **Terminal management UI** (owner/manager, OUTLET-gated): reuses the EXISTING device-credential
+  reveal (`GET .../device-credential`, decrypt + `no-store` + reveal audit log) behind an explicit
+  "Show password" (a mutation, never cached; plaintext held only in ephemeral state, `.reset()` on
+  hide/unmount), create/reset/remove, the require-PIN toggle, and a per-employee Set/Reset PIN dialog
+  (the existing `PUT .../operator-pin`). **PINs are one-way Argon2id — set/reset only, never
+  viewable**; only the outlet password (reversibly encrypted for re-setup) is revealable.
+- **Session-scoped operator.** The operator session moved from `localStorage` to `sessionStorage`
+  (survives a reload, clears on a full app/tab close), while the **outlet/device token stays in
+  `localStorage`** (kiosk-persistent) — so a closed-and-reopened app re-picks (and re-PINs, if
+  required) the operator but stays logged in as the outlet. Still bounded by the token `exp`.
+  Capacitor caveat: this relies on a WebView clearing sessionStorage on a cold launch (the same
+  assumption the personal-elevation manager already makes); a cold-boot clear is the fallback.
+
+`require_pin` is a **mutable** per-outlet setting — a deliberate departure from ADR 0049's
+"settings live at creation" rule (it is an operational preference, not an immutable identity like
+country/base-currency). Shipped in three reviewed phases (security + code PASS each): **`3c4bba60`**
+(P1 employee-service backend), **`ece1c6d2`** (P2 console terminal/PIN/policy UI), **`14f8f873`**
+(P3 till conditional + session-scoped operator). Review fixes: length-cap the PIN input
+(`@Size(max=64)`, still admits null/blank so the uniform-401 non-enumeration holds) and `.reset()`
+the reveal mutation so the plaintext password can't linger in the MutationCache.

@@ -5,6 +5,25 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-09 — Per-outlet operator-PIN policy + terminal management + session-scoped operator (ADR 0049 addendum)
+
+Three owner asks on the outlet terminal, shipped in three reviewed phases (security + code PASS each).
+(1) **A manager can see the outlet's device login** (username + on-demand, audited password reveal) and
+**set/reset employee PINs** from the console — PINs stay one-way Argon2id (set/reset only, never
+viewable); only the outlet password is revealable. (2) **Per-outlet "require a PIN to operate" toggle**:
+off ⇒ the cashier just taps their name (trust-based, no PIN) and rings; on ⇒ the pick→PIN flow is
+unchanged. (3) **No operator session** — it now clears every time the app is closed. Kept the policy
+**inside employee-service** (`outlet_operator_policy` V17) rather than an `org_unit` column + an
+`OrgUnitChanged` field, so there is NO event-contract change and the verticals are untouched: a no-PIN
+pick still mints an `operatorUserId`-bearing token, so the P4 device-guard and commission attribution
+both still hold — the only thing the toggle changes is whether `OperatorSessionWriter#verifyAndMint`
+checks a PIN. Absent policy row ⇒ require_pin=true (fail-safe). The operator session moved from
+localStorage to sessionStorage (clears on cold app launch; the outlet/device token stays in localStorage,
+kiosk-persistent). Trust-model trade-off is owner-accepted + bounded to attribution (the token's role is
+never used for authz). Commits `3c4bba60` (backend), `ece1c6d2` (terminal UI), `14f8f873` (till + session).
+Review fixes: `@Size(max=64)` on the PIN input (still admits null/blank → uniform 401), and `.reset()` the
+reveal mutation so the plaintext can't linger in the MutationCache. Not pushed.
+
 ## 2026-08-09 — Two-app split + outlet-terminal auth (ADR 0049): P0–P4 shipped, P5 Employee app built
 
 The owner split Native into **two apps**: a **Business/terminal app** (the console — logged in with a
