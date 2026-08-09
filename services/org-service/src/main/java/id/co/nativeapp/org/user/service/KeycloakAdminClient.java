@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpMethod;
@@ -928,19 +929,21 @@ public class KeycloakAdminClient {
   }
 
   /**
-   * Replaces the user's current business realm roles (owner/manager/cashier) with {@code newRole}.
+   * Replaces the user's current business realm roles (see {@link KeycloakUser#BUSINESS_ROLES}) with
+   * {@code newRoles} — a SET, so a single login may hold several roles at once (preset role-based
+   * access model Phase 1; access at the gateway is the UNION of every held role's surfaces).
    *
    * <p>The implementation: (1) fetches the current realm roles to find which business roles the
-   * user holds; (2) removes those roles; (3) assigns the new role. Only the business roles ({@code
-   * owner}/{@code manager}/{@code cashier}) are touched — Keycloak's built-in default roles are NOT
-   * stripped.
+   * user holds; (2) removes ALL of those; (3) assigns EVERY role in {@code newRoles}. Only the
+   * business roles are touched — Keycloak's built-in default roles are NOT stripped.
    *
    * @param userId the Keycloak user UUID
-   * @param newRole the new business role to assign (must be one of owner/manager/cashier)
+   * @param newRoles the new set of business roles to assign (each validated by the caller against
+   *     the allowed-roles whitelist before this is called)
    * @throws KeycloakAdminException if the Admin API is unreachable or returns an unexpected error
    */
   @SuppressWarnings("unchecked")
-  public void replaceRealmRole(String userId, String newRole) {
+  public void replaceRealmRoles(String userId, Set<String> newRoles) {
     String token = acquireToken();
     String realmBase = props.getBaseUrl() + "/admin/realms/" + props.getRealm();
     String mappingUrl = realmBase + "/users/" + userId + "/role-mappings/realm";
@@ -999,9 +1002,11 @@ public class KeycloakAdminClient {
       }
     }
 
-    // 4. Assign the new role.
-    assignRealmRole(userId, newRole);
-    log.info("Replaced business role for Keycloak user {} with '{}'", userId, newRole);
+    // 4. Assign every role in the new set (sequential POSTs — mirrors createInvitedUser).
+    for (String role : newRoles) {
+      assignRealmRole(userId, role);
+    }
+    log.info("Replaced business roles for Keycloak user {} with {}", userId, newRoles);
   }
 
   // ---------------------------------------------------------------------------

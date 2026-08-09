@@ -7,6 +7,7 @@ import id.co.nativeapp.org.user.dto.UserResponse;
 import id.co.nativeapp.org.user.service.KeycloakAdminClient.InviteResult;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -42,9 +43,17 @@ public class UserService {
 
   private static final Logger log = LoggerFactory.getLogger(UserService.class);
 
-  /** The allowed business roles for validation. */
+  /**
+   * The allowed business roles for validation.
+   *
+   * <p>{@code hr}/{@code accountant}/{@code chef}/{@code waitress} (preset role-based access model
+   * Phase 1) join the original four: {@code hr}/{@code accountant} split the back-office surface
+   * finer than {@code owner}/{@code manager}, {@code chef}/{@code waitress} ring the till like
+   * {@code cashier}. Multiple roles per login are supported (invite {@code additionalRoles}; patch
+   * {@code roles}) — access is the union.
+   */
   private static final Set<String> ALLOWED_ROLES =
-      Set.of("owner", "manager", "cashier", "employee");
+      Set.of("owner", "manager", "cashier", "employee", "hr", "accountant", "chef", "waitress");
 
   private final KeycloakAdminClient keycloak;
   private final UserOutletAssignmentService outletAssignments;
@@ -213,14 +222,19 @@ public class UserService {
   // ---------------------------------------------------------------------------
 
   /**
-   * Updates a teammate's role and/or enabled status.
+   * Updates a teammate's business-role SET and/or enabled status.
    *
-   * <p>At least one of {@code role} or {@code enabled} must be non-null. The cross-tenant guard is
-   * enforced (see class javadoc). The self-lockout guard rejects:
+   * <p>At least one of {@code roles} or {@code enabled} must be non-null. {@code roles}, when
+   * provided, REPLACES the target's entire current business-role set (preset role-based access
+   * model Phase 1 — a login may hold several roles at once; every element is validated against
+   * {@link #ALLOWED_ROLES}). The cross-tenant guard is enforced (see class javadoc). The
+   * self-lockout guard rejects:
    *
    * <ul>
    *   <li>Setting {@code enabled=false} on yourself (deactivating yourself), and
-   *   <li>Changing your own role away from {@code owner} (self-demotion).
+   *   <li>Replacing your own role set with one that no longer contains {@code owner}
+   *       (self-demotion) — {@code hr}/{@code accountant}/{@code chef}/{@code waitress} are NOT
+   *       "privileged" for this guard (only {@code owner} matters here, exactly as before).
    * </ul>
    *
    * @param userId the target user's Keycloak UUID
@@ -228,14 +242,14 @@ public class UserService {
    * @return the updated user state
    */
   public UserResponse patchUser(String userId, PatchUserRequest request) {
-    if (request.role() == null && request.enabled() == null) {
+    if (request.roles() == null && request.enabled() == null) {
       // The controller should guard this, but belt-and-suspenders: both null is a no-op and
       // the spec requires a 400 here rather than silently succeeding.
-      throw new IllegalArgumentException("At least one of 'role' or 'enabled' must be provided");
+      throw new IllegalArgumentException("At least one of 'roles' or 'enabled' must be provided");
     }
 
-    if (request.role() != null) {
-      validateRole(request.role());
+    if (request.roles() != null) {
+      request.roles().forEach(UserService::validateRole);
     }
 
     TenantContext.Tenant caller = TenantContext.require();
@@ -249,29 +263,30 @@ public class UserService {
       throw new SelfLockoutException("You cannot disable your own account.");
     }
 
-    // Self-lockout guard: cannot demote self away from owner.
+    // Self-lockout guard: cannot demote self away from owner (only "owner" is privileged here —
+    // hr/accountant/chef/waitress are ordinary roles for this guard's purposes).
     if (target.id().equals(callerId)
-        && request.role() != null
+        && request.roles() != null
         && target.roles().contains("owner")
-        && !request.role().equals("owner")) {
+        && !request.roles().contains("owner")) {
       throw new SelfLockoutException(
-          "You cannot change your own role away from 'owner'. "
+          "You cannot remove the 'owner' role from your own account. "
               + "Assign the owner role to another user first.");
     }
 
     // Apply changes.
-    if (request.role() != null) {
-      keycloak.replaceRealmRole(userId, request.role());
+    if (request.roles() != null) {
+      keycloak.replaceRealmRoles(userId, new LinkedHashSet<>(request.roles()));
     }
     if (request.enabled() != null) {
       keycloak.setEnabled(userId, request.enabled());
     }
 
     log.info(
-        "Patched user: userId={}, callerCompanyId={}, role={}, enabled={}",
+        "Patched user: userId={}, callerCompanyId={}, roles={}, enabled={}",
         userId,
         caller.companyId(),
-        request.role(),
+        request.roles(),
         request.enabled());
 
     // Re-fetch the updated user to return current state.

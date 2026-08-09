@@ -21,7 +21,11 @@
       { "name": "owner", "description": "Company owner — full console access" },
       { "name": "manager", "description": "Scope-limited manager" },
       { "name": "cashier", "description": "Operational POS user" },
-      { "name": "employee", "description": "Self-service employee — /me surface only" }
+      { "name": "employee", "description": "Self-service employee — /me surface only" },
+      { "name": "hr", "description": "HR — employee records, leave, expense claims, payroll" },
+      { "name": "accountant", "description": "Detailed finance back-office — AP/AR/bank/tax/books" },
+      { "name": "chef", "description": "Kitchen floor — POS till access like a cashier" },
+      { "name": "waitress", "description": "Front-of-house floor — POS till access like a cashier" }
     ]
   },
   "clients": [

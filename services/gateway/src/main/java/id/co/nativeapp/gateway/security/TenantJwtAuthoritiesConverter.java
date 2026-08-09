@@ -27,8 +27,8 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
  * infrastructure roles ({@code default-roles-native}, {@code offline_access}, {@code
  * uma_authorization}) that are meaningless to a downstream service and would leak the IdP's
  * internal authorization model across the trust boundary. We therefore whitelist the curated
- * business roles ({@code owner}/{@code manager}/{@code cashier}) and drop everything else, so
- * {@code X-Roles} carries only roles a service actually authorizes on.
+ * business roles (see {@link #BUSINESS_ROLES}) and drop everything else, so {@code X-Roles} carries
+ * only roles a service actually authorizes on.
  */
 public final class TenantJwtAuthoritiesConverter
     implements Converter<Jwt, AbstractAuthenticationToken> {
@@ -58,9 +58,15 @@ public final class TenantJwtAuthoritiesConverter
    * The curated business roles a downstream service authorizes on. Only these are projected into
    * authorities / {@code X-Roles}; Keycloak's infrastructure roles ({@code default-roles-native},
    * {@code offline_access}, {@code uma_authorization}, ...) are dropped at the edge.
+   *
+   * <p>{@code hr}/{@code accountant}/{@code chef}/{@code waitress} (preset role-based access model
+   * Phase 1) join the original four: {@code hr}/{@code accountant} split the back-office surface
+   * finer than {@code owner}/{@code manager} (HR vs. detailed finance), {@code chef}/{@code
+   * waitress} ring the till like {@code cashier}. A login may hold several of these roles at once —
+   * access is the union (route gate = "any of the route's allowed roles").
    */
   public static final Set<String> BUSINESS_ROLES =
-      Set.of("owner", "manager", "cashier", "employee");
+      Set.of("owner", "manager", "cashier", "employee", "hr", "accountant", "chef", "waitress");
 
   @Override
   public AbstractAuthenticationToken convert(Jwt jwt) {

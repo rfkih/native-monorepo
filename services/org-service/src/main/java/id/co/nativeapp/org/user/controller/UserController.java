@@ -26,9 +26,9 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>All endpoints are authenticated and require the {@code owner} or {@code manager} role
  * (enforced at the gateway edge by {@link id.co.nativeapp.gateway.filter.RoleAuthorizationFilter}
- * with {@code DASHBOARD_ROLES}). The tenant is derived from the JWT via the gateway's {@link
- * id.co.nativeapp.gateway.filter.TenantContextHeaderFilter} — never from the request body or a path
- * parameter (rule 5).
+ * with the gateway's OPS_ROLES capability array). The tenant is derived from the JWT via the
+ * gateway's {@link id.co.nativeapp.gateway.filter.TenantContextHeaderFilter} — never from the
+ * request body or a path parameter (rule 5).
  *
  * <p><strong>Cross-tenant identity guard.</strong> Addressed-by-id operations (PATCH, DELETE)
  * resolve the target user's {@code company_id} from Keycloak and return 404 if it does not match
@@ -104,22 +104,24 @@ public class UserController {
   }
 
   /**
-   * Updates a teammate's role and/or enabled status.
+   * Updates a teammate's role SET and/or enabled status.
    *
-   * <p>At least one of {@code role} or {@code enabled} must be provided (both null → 400). The
-   * cross-tenant guard rejects targeting a user from a different company with 404. The self-lockout
-   * guard rejects disabling the caller's own account or demoting the caller away from {@code owner}
-   * with 409.
+   * <p>At least one of {@code roles} or {@code enabled} must be provided (both null → 400). {@code
+   * roles}, when provided, REPLACES the target's entire business-role set (preset role-based access
+   * model Phase 1 — a login may hold several roles at once; access at the gateway is the union).
+   * The cross-tenant guard rejects targeting a user from a different company with 404. The
+   * self-lockout guard rejects disabling the caller's own account or replacing the caller's own
+   * role set with one that no longer contains {@code owner}, with 409.
    *
    * @param id the target user's Keycloak UUID
    * @return {@code 200} with the updated {@link UserResponse}
    */
   @Operation(
-      summary = "Update a user's role or status",
+      summary = "Update a user's role set or status",
       description =
-          "Updates a teammate's role (owner/manager/cashier) and/or enabled status. At least one"
-              + " field must be provided. Cross-tenant targets return 404. Self-lockout (disable"
-              + " self / demote own owner role) returns 409. Requires owner or manager role.")
+          "Replaces a teammate's business-role SET and/or enabled status. At least one field must"
+              + " be provided. Cross-tenant targets return 404. Self-lockout (disable self / replace"
+              + " own role set without owner) returns 409. Requires owner or manager role.")
   @PatchMapping("/{id}")
   public ResponseEntity<UserResponse> patchUser(
       @PathVariable String id, @RequestBody PatchUserRequest request) {

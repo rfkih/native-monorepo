@@ -24,15 +24,30 @@ import org.springframework.web.servlet.function.ServerResponse;
 /**
  * Edge routing (Spring Cloud Gateway, servlet/webmvc stack).
  *
- * <p>The console is two role-separated surfaces behind one gateway:
+ * <p>The console is a set of PRESET-ROLE capability surfaces behind one gateway (preset role-based
+ * access model Phase 1 — 8 roles: {@code owner}/{@code manager}/{@code cashier}/{@code employee}/
+ * {@code hr}/{@code accountant}/{@code chef}/{@code waitress}; a login may hold several, access is
+ * the union):
  *
  * <ul>
- *   <li><b>Cashier POS</b> ({@code owner}/{@code manager}/{@code cashier}): {@code
- *       /api/v1/menu/**}, {@code /api/v1/orders/**}, {@code /api/v1/sales/**}, {@code
- *       /api/v1/payments/**}, {@code /api/v1/tables/**} → restaurant-service.
- *   <li><b>Owner dashboard</b> ({@code owner}/{@code manager} only): {@code /api/v1/companies/**} →
- *       org-service; {@code /api/v1/revenue/**}, {@code /api/v1/pnl/**}, {@code
- *       /api/v1/statements/**} → finance-service.
+ *   <li><b>POS</b> ({@link #POS_ROLES} — owner/manager/cashier/chef/waitress): the till + floor —
+ *       {@code /api/v1/menu/**}, {@code /api/v1/orders/**}, {@code /api/v1/sales/**}, {@code
+ *       /api/v1/payments/**}, {@code /api/v1/tables/**}, the vertical POS surfaces, and more →
+ *       restaurant/carwash/barbershop/loyalty/payment-service.
+ *   <li><b>OPS</b> ({@link #OPS_ROLES} — owner/manager): org structure/team, promotions,
+ *       entitlements, company management → org-service/restaurant-service/entitlement-service.
+ *   <li><b>REPORTS</b> ({@link #REPORTS_ROLES} — owner/manager/accountant): {@code
+ *       /api/v1/revenue/**}, {@code /api/v1/pnl/**}, {@code /api/v1/statements/**} →
+ *       finance-service.
+ *   <li><b>FINANCE</b> ({@link #FINANCE_ROLES} — owner/accountant): the detailed back-office books
+ *       (AP/AR/bank/tax/budgets/assets/deferrals/…) → finance-service.
+ *   <li><b>HR</b> ({@link #HR_ROLES} — owner/manager/hr): employee records, expense claims, leave,
+ *       overtime, work calendar → employee-service.
+ *   <li><b>PAYROLL</b> ({@link #PAYROLL_ROLES} — owner/hr): payroll runs/setup/reports →
+ *       employee-service.
+ *   <li><b>OWNER-ONLY</b> ({@link #OWNER_ROLES}): the highest-sensitivity PII exports and QRIS
+ *       payment-settings administration.
+ *   <li><b>ME</b> ({@link #ME_ROLES} — every business role): {@code /api/v1/me/**} self-service.
  * </ul>
  *
  * <p>Every AUTHENTICATED route carries the same filter chain, in order: {@link RateLimitFilter}
@@ -58,26 +73,67 @@ import org.springframework.web.servlet.function.ServerResponse;
 @Configuration
 public class RoutingConfig {
 
-  /** Roles allowed on the cashier POS surface. */
-  private static final String[] POS_ROLES = {"owner", "manager", "cashier"};
+  /**
+   * Roles allowed on the operational POS/till surface (preset role-based access model Phase 1):
+   * {@code owner}/{@code manager} (full access) plus {@code cashier}/{@code chef}/{@code waitress}
+   * (operational-only — the floor rings the till exactly like a cashier, no back-office reach).
+   */
+  private static final String[] POS_ROLES = {"owner", "manager", "cashier", "chef", "waitress"};
 
-  /** Roles allowed on the owner/manager dashboard surface. */
-  private static final String[] DASHBOARD_ROLES = {"owner", "manager"};
+  /**
+   * Roles allowed on the OPERATIONS surface — org structure/team, promotions, entitlements,
+   * consolidation groups, self-order-access administration. {@code owner}/{@code manager} only: a
+   * manager runs operations but does not see the detailed books, HR, or payroll (preset role-based
+   * access model Phase 1 — narrower than the old, single {@code DASHBOARD_ROLES} bucket this
+   * replaces).
+   */
+  private static final String[] OPS_ROLES = {"owner", "manager"};
+
+  /**
+   * Roles allowed on the financial REPORTS surface (P&amp;L, statements, revenue) — {@code owner}/
+   * {@code manager}/{@code accountant}: a manager still reads the top-line reports, an accountant
+   * reads them as part of the books.
+   */
+  private static final String[] REPORTS_ROLES = {"owner", "manager", "accountant"};
+
+  /**
+   * Roles allowed on the detailed FINANCE back-office surface (AP/AR/bank/tax/budgets/assets/
+   * deferrals/opening-balances/platform-settlements/payroll-liabilities/consolidation groups/
+   * closes) — {@code owner}/{@code accountant} only. {@code manager} is deliberately EXCLUDED: a
+   * manager runs operations, not the detailed books (preset role-based access model Phase 1).
+   */
+  private static final String[] FINANCE_ROLES = {"owner", "accountant"};
+
+  /**
+   * Roles allowed on the HR surface (employee records, expense claims, leave, overtime, work
+   * calendar, leave balances) — {@code owner}/{@code manager}/{@code hr}.
+   */
+  private static final String[] HR_ROLES = {"owner", "manager", "hr"};
+
+  /**
+   * Roles allowed on the PAYROLL surface (payroll runs/setup/reports) — {@code owner}/{@code hr}
+   * only. {@code manager} is deliberately EXCLUDED: payroll is not an operations concern (preset
+   * role-based access model Phase 1). The highest-sensitivity payroll PII (bank file, authorized
+   * payslips, 1721a1, bpjs-summary) stays narrower still at {@link #OWNER_ROLES} (unchanged).
+   */
+  private static final String[] PAYROLL_ROLES = {"owner", "hr"};
 
   /**
    * Roles allowed on the employee self-service surface ({@code /api/v1/me/**}) — every business
    * role: the endpoints resolve the caller from the token's own sub, so there is no cross-user
    * exposure to widen.
    */
-  private static final String[] ME_ROLES = {"owner", "manager", "cashier", "employee"};
+  private static final String[] ME_ROLES = {
+    "owner", "manager", "cashier", "employee", "hr", "accountant", "chef", "waitress"
+  };
 
   /**
-   * Roles allowed on the OWNER-ONLY surface — narrower than {@link #DASHBOARD_ROLES} (which also
-   * admits {@code manager}). Reserved for the highest-sensitivity PII exports: the payroll net-pay
-   * bank file with decrypted bank accounts (Track P phase P5); the {@code 1721-A1} statutory export
-   * (NIK/NPWP) and the printable-payslip authorized read (decrypted salary) (Track P phase P9); and
-   * {@code bpjs-summary} (per-employee wage — a P9 judgment call, see {@code
-   * payrollReportBpjsSummaryRoute}'s javadoc).
+   * Roles allowed on the OWNER-ONLY surface — narrower than every other capability array above.
+   * Reserved for the highest-sensitivity PII exports: the payroll net-pay bank file with decrypted
+   * bank accounts (Track P phase P5); the {@code 1721-A1} statutory export (NIK/NPWP) and the
+   * printable-payslip authorized read (decrypted salary) (Track P phase P9); {@code bpjs-summary}
+   * (per-employee wage — a P9 judgment call, see {@code payrollReportBpjsSummaryRoute}'s javadoc);
+   * and QRIS payment-settings administration (the merchant's own PSP server key, ADR 0045).
    */
   private static final String[] OWNER_ROLES = {"owner"};
 
@@ -172,7 +228,7 @@ public class RoutingConfig {
         .route(path("/api/v1/self-order-access/**"), http())
         .before(uri(routes.restaurantService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(OPS_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -212,8 +268,8 @@ public class RoutingConfig {
    * {@code GET /api/v1/users/me/pages} — the caller's own page-access mode. Allowed for EVERY
    * business role (a login reads its own grants) via {@code ME_ROLES}. Like {@link
    * #userMeOutletsRoute}, this exact path must be ordered before the general {@code /users/**}
-   * (DASHBOARD_ROLES) route — {@code @Order(HIGHEST_PRECEDENCE)} makes the specific match win, so
-   * an {@code employee}/{@code cashier} login is not 403'd reading its own page grants.
+   * ({@link #OPS_ROLES}) route — {@code @Order(HIGHEST_PRECEDENCE)} makes the specific match win,
+   * so an {@code employee}/{@code cashier} login is not 403'd reading its own page grants.
    */
   @Bean
   @Order(Ordered.HIGHEST_PRECEDENCE)
@@ -239,7 +295,7 @@ public class RoutingConfig {
         .route(path("/api/v1/users/**"), http())
         .before(uri(routes.orgService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(OPS_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -314,7 +370,7 @@ public class RoutingConfig {
         .route(path("/api/v1/companies/**"), http())
         .before(uri(routes.orgService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(OPS_ROLES))
         .filter(TenantContextHeaderFilter.tenantOptional())
         .build();
   }
@@ -328,7 +384,7 @@ public class RoutingConfig {
         .route(path("/api/v1/org-units/**"), http())
         .before(uri(routes.orgService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(OPS_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -364,7 +420,7 @@ public class RoutingConfig {
         .route(path("/api/v1/consolidation-groups/**"), http())
         .before(uri(routes.orgService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(OPS_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -634,7 +690,7 @@ public class RoutingConfig {
         .route(path("/api/v1/promotions/**"), http())
         .before(uri(routes.restaurantService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(OPS_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -655,7 +711,7 @@ public class RoutingConfig {
         .route(path("/api/v1/loyalty/earn-rules/**"), http())
         .before(uri(routes.loyaltyService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(OPS_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -737,7 +793,7 @@ public class RoutingConfig {
         .route(path("/api/v1/entitlements/**"), http())
         .before(uri(routes.entitlementService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(OPS_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -878,9 +934,10 @@ public class RoutingConfig {
    * QRIS payment-settings administration ({@code /api/v1/payment-settings/**}) — OWNER-ONLY, the
    * {@link #payrollRunBankFileRoute} sensitivity class: this surface stores the merchant's own
    * Midtrans server key (write-only, encrypted at rest) and decides how money is taken at the till,
-   * so it is narrower than DASHBOARD_ROLES (no {@code manager}). The two POS reads above are carved
-   * out first; everything else here (mode upserts, credential saves, image uploads) is the owner's
-   * alone — enforced a second time service-side (ADR 0045).
+   * so it is narrower than every other capability array (no {@code manager}, {@code hr}, {@code
+   * accountant}, {@code chef}, or {@code waitress}). The two POS reads above are carved out first;
+   * everything else here (mode upserts, credential saves, image uploads) is the owner's alone —
+   * enforced a second time service-side (ADR 0045).
    */
   @Bean
   RouterFunction<ServerResponse> paymentSettingsRoute(
@@ -960,7 +1017,7 @@ public class RoutingConfig {
         .route(path("/api/v1/employees/**"), http())
         .before(uri(routes.employeeService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(HR_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -989,14 +1046,14 @@ public class RoutingConfig {
 
   /**
    * {@code GET /api/v1/payroll-runs/{runId}/bank-file} — the net-pay bank file (Track P phase P5):
-   * decrypted bank-account PII, OWNER-ONLY (narrower than {@link #payrollRunsRoute}'s
-   * DASHBOARD_ROLES, which also admits {@code manager}).
+   * decrypted bank-account PII, OWNER-ONLY (narrower than {@link #payrollRunsRoute}'s {@link
+   * #PAYROLL_ROLES}, which also admits {@code hr}).
    *
    * <p>{@code @Order(HIGHEST_PRECEDENCE)} is load-bearing — the same {@code
    * userMeOutletsRoute}/{@code currentCompanyRoute} pattern: RouterFunction beans are matched in
    * declaration order across the WHOLE bean set (first match wins, NOT most-specific-path wins), so
-   * without this the general {@code /api/v1/payroll-runs/**} route below (DASHBOARD_ROLES) would
-   * swallow this exact path FIRST and let a {@code manager} token through — this route must be
+   * without this the general {@code /api/v1/payroll-runs/**} route below ({@link #PAYROLL_ROLES})
+   * would swallow this exact path FIRST and let an {@code hr} token through — this route must be
    * checked before that one for its narrower OWNER_ROLES gate to apply. The route path pattern
    * carries a single-path-SEGMENT wildcard between {@code payroll-runs} and {@code bank-file} (one
    * {@code *}, not {@code **}), matching only {@code /payroll-runs/{runId}/bank-file}, never a
@@ -1027,10 +1084,10 @@ public class RoutingConfig {
    * /payroll-runs/*&#47;payslips/*} route below via {@link #payrollRunsRoute}.
    *
    * <p>{@code @Order(HIGHEST_PRECEDENCE)} for the same reason as every other exact-path carve-out
-   * here: the general {@code /api/v1/payroll-runs/**} route (DASHBOARD_ROLES) would otherwise match
-   * first and let a manager token through. Two path-segment wildcards ({@code *}, never {@code **})
-   * match only this exact sub-path, so it cannot shadow the masked payslip route, the bank-file
-   * route, or any other {@code /payroll-runs/**} path.
+   * here: the general {@code /api/v1/payroll-runs/**} route ({@link #PAYROLL_ROLES}) would
+   * otherwise match first and let an {@code hr} token through. Two path-segment wildcards ({@code
+   * *}, never {@code **}) match only this exact sub-path, so it cannot shadow the masked payslip
+   * route, the bank-file route, or any other {@code /payroll-runs/**} path.
    */
   @Bean
   @Order(Ordered.HIGHEST_PRECEDENCE)
@@ -1057,7 +1114,7 @@ public class RoutingConfig {
         .route(path("/api/v1/payroll-runs/**"), http())
         .before(uri(routes.employeeService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(PAYROLL_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -1072,7 +1129,7 @@ public class RoutingConfig {
         .route(path("/api/v1/payroll-setup/**"), http())
         .before(uri(routes.employeeService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(PAYROLL_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -1083,8 +1140,8 @@ public class RoutingConfig {
    * #payrollRunBankFileRoute}'s javadoc already anticipated this route for.
    *
    * <p>{@code @Order(HIGHEST_PRECEDENCE)} so this exact path is checked before the general {@code
-   * /api/v1/payroll-reports/**} DASHBOARD_ROLES route below — the same first-match-wins pattern as
-   * every other narrow-owner-only carve-out in this class.
+   * /api/v1/payroll-reports/**} {@link #PAYROLL_ROLES} route below — the same first-match-wins
+   * pattern as every other narrow-owner-only carve-out in this class.
    */
   @Bean
   @Order(Ordered.HIGHEST_PRECEDENCE)
@@ -1127,8 +1184,10 @@ public class RoutingConfig {
   /**
    * The remaining statutory report(s) under {@code /api/v1/payroll-reports/**} — today just {@code
    * GET /api/v1/payroll-reports/pph21-monthly} (Track P phase P9), the AGGREGATE-only SPT Masa
-   * summary (no per-employee figure) — owner/manager DASHBOARD_ROLES, same as every other payroll
-   * read. The two narrower OWNER_ROLES carve-outs above are checked first.
+   * summary (no per-employee figure) — {@code owner}/{@code hr} ({@link #PAYROLL_ROLES}), same as
+   * every other payroll read. {@code manager} is deliberately EXCLUDED here (preset role-based
+   * access model Phase 1 — payroll is not an operations concern). The two narrower {@link
+   * #OWNER_ROLES} carve-outs above are checked first.
    */
   @Bean
   RouterFunction<ServerResponse> payrollReportsRoute(
@@ -1139,7 +1198,7 @@ public class RoutingConfig {
         .route(path("/api/v1/payroll-reports/**"), http())
         .before(uri(routes.employeeService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(PAYROLL_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -1159,7 +1218,7 @@ public class RoutingConfig {
         .route(path("/api/v1/expense-claims/**"), http())
         .before(uri(routes.employeeService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(HR_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -1178,7 +1237,7 @@ public class RoutingConfig {
         .route(path("/api/v1/expense-categories/**"), http())
         .before(uri(routes.employeeService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(HR_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -1198,7 +1257,7 @@ public class RoutingConfig {
         .route(path("/api/v1/leave-requests/**"), http())
         .before(uri(routes.employeeService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(HR_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -1216,7 +1275,7 @@ public class RoutingConfig {
         .route(path("/api/v1/overtime-entries/**"), http())
         .before(uri(routes.employeeService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(HR_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -1235,7 +1294,7 @@ public class RoutingConfig {
         .route(path("/api/v1/work-calendar/**"), http())
         .before(uri(routes.employeeService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(HR_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -1254,7 +1313,7 @@ public class RoutingConfig {
         .route(path("/api/v1/leave-balances/**"), http())
         .before(uri(routes.employeeService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(HR_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -1271,7 +1330,7 @@ public class RoutingConfig {
         .route(path("/api/v1/revenue/**"), http())
         .before(uri(routes.financeService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(REPORTS_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -1285,7 +1344,7 @@ public class RoutingConfig {
         .route(path("/api/v1/pnl/**"), http())
         .before(uri(routes.financeService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(REPORTS_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -1299,7 +1358,7 @@ public class RoutingConfig {
         .route(path("/api/v1/statements/**"), http())
         .before(uri(routes.financeService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(REPORTS_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -1318,7 +1377,7 @@ public class RoutingConfig {
         .route(path("/api/v1/platform-settlements/**"), http())
         .before(uri(routes.financeService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(FINANCE_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -1337,7 +1396,7 @@ public class RoutingConfig {
         .route(path("/api/v1/opening-balances/**"), http())
         .before(uri(routes.financeService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(FINANCE_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -1351,7 +1410,7 @@ public class RoutingConfig {
         .route(path("/api/v1/groups/**"), http())
         .before(uri(routes.financeService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(FINANCE_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -1365,7 +1424,7 @@ public class RoutingConfig {
         .route(path("/api/v1/closes/**"), http())
         .before(uri(routes.financeService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(FINANCE_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -1380,7 +1439,7 @@ public class RoutingConfig {
         .route(path("/api/v1/customers/**"), http())
         .before(uri(routes.financeService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(FINANCE_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -1395,7 +1454,7 @@ public class RoutingConfig {
         .route(path("/api/v1/invoices/**"), http())
         .before(uri(routes.financeService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(FINANCE_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -1410,7 +1469,7 @@ public class RoutingConfig {
         .route(path("/api/v1/ar/**"), http())
         .before(uri(routes.financeService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(FINANCE_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -1425,7 +1484,7 @@ public class RoutingConfig {
         .route(path("/api/v1/vendors/**"), http())
         .before(uri(routes.financeService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(FINANCE_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -1447,7 +1506,7 @@ public class RoutingConfig {
         .route(path("/api/v1/ap/**"), http())
         .before(uri(routes.financeService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(FINANCE_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -1467,7 +1526,7 @@ public class RoutingConfig {
         .route(path("/api/v1/bank-accounts/**"), http())
         .before(uri(routes.financeService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(FINANCE_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -1486,7 +1545,7 @@ public class RoutingConfig {
         .route(path("/api/v1/bank/**"), http())
         .before(uri(routes.financeService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(FINANCE_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -1507,7 +1566,7 @@ public class RoutingConfig {
         .route(path("/api/v1/tax/**"), http())
         .before(uri(routes.financeService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(FINANCE_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -1527,7 +1586,7 @@ public class RoutingConfig {
         .route(path("/api/v1/budgets/**"), http())
         .before(uri(routes.financeService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(FINANCE_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -1546,7 +1605,7 @@ public class RoutingConfig {
         .route(path("/api/v1/assets/**"), http())
         .before(uri(routes.financeService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(FINANCE_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -1564,7 +1623,7 @@ public class RoutingConfig {
         .route(path("/api/v1/deferrals/**"), http())
         .before(uri(routes.financeService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(FINANCE_ROLES))
         .filter(tenantFilter)
         .build();
   }
@@ -1584,7 +1643,7 @@ public class RoutingConfig {
         .route(path("/api/v1/payroll-liabilities/**"), http())
         .before(uri(routes.financeService()))
         .filter(new RateLimitFilter(limiter))
-        .filter(new RoleAuthorizationFilter(DASHBOARD_ROLES))
+        .filter(new RoleAuthorizationFilter(FINANCE_ROLES))
         .filter(tenantFilter)
         .build();
   }

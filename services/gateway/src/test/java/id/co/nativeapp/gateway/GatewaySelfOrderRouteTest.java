@@ -138,8 +138,8 @@ class GatewaySelfOrderRouteTest extends GatewayIntegrationTestBase {
 
   @Test
   void aCashierIsDeniedTheSelfOrderAccessRouteWith403() throws Exception {
-    // DASHBOARD_ROLES only — the cashier POS role has no business minting/rotating a table's QR
-    // tokens.
+    // OPS_ROLES only (owner/manager) — the cashier POS role has no business minting/rotating a
+    // table's QR tokens.
     String token =
         obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
 

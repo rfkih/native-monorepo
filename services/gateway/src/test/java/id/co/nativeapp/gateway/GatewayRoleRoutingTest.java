@@ -1558,24 +1558,29 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
   }
 
   @Test
-  void aManagerCanReachThePph21MonthlyReportRoute() throws Exception {
-    // W2 review fix: pph21-monthly is the ordinary DASHBOARD_ROLES aggregate (owner OR manager) —
-    // the positive counterpart to the three owner-only manager-denied tests above, proving the
-    // manager fixture genuinely reaches a DASHBOARD_ROLES route rather than being denied globally.
+  void aManagerIsDeniedThePph21MonthlyReportRouteWith403() throws Exception {
+    // Preset role-based access model Phase 1 (superseding the W2 review-fix test this replaces):
+    // pph21-monthly now rides PAYROLL_ROLES ({@code owner}/{@code hr}), NOT the old single
+    // DASHBOARD_ROLES bucket — manager is deliberately EXCLUDED from payroll (payroll is not an
+    // operations concern). See GatewayRoleExpansionTest for the owner/hr positive-path coverage.
     String token =
         obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, MANAGER_USERNAME, MANAGER_PASSWORD);
 
-    String response =
-        gatewayClient()
-            .get()
-            .uri("/api/v1/payroll-reports/pph21-monthly?period=2026-07")
-            .header(HttpHeaders.AUTHORIZATION, bearer(token))
-            .retrieve()
-            .body(String.class);
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/payroll-reports/pph21-monthly?period=2026-07")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
 
-    assertThat(response).isEqualTo("ok");
-    assertThat(theForwardedRequest().getPath())
-        .isEqualTo("/api/v1/payroll-reports/pph21-monthly?period=2026-07");
+    assertThat(receivedRequests).isEmpty();
   }
 
   // ---------------------------------------------------------------------------

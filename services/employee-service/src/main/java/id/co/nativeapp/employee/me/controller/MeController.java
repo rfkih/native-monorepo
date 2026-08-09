@@ -27,7 +27,8 @@ import org.springframework.web.bind.annotation.RestController;
  * {@code /api/v1/me} — the employee self-service surface. The caller is resolved from the
  * gateway-injected {@code X-Actor} (the JWT sub) via the employee↔login link; there is NO
  * employee-id parameter anywhere, so a caller can only ever read their own data. Routed at the
- * gateway for every business role (owner/manager/cashier/employee).
+ * gateway for every business role (owner/manager/cashier/employee/hr/accountant/chef/waitress —
+ * preset role-based access model Phase 1).
  *
  * <p>PII: NIK/bank stay masked even to the person themselves; only payslip AMOUNTS decrypt —
  * strictly the caller's own lines (rule 6 stays intact for everyone else's data).

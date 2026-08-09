@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.List;
 import okhttp3.FormBody;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -324,7 +325,7 @@ class UserManagementAcceptanceTest {
                     .uri("/api/v1/users/" + ownerBKeycloakId)
                     .header(HttpHeaders.AUTHORIZATION, bearer(tokenA))
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body("{\"role\": \"manager\"}")
+                    .body("{\"roles\": [\"manager\"]}")
                     .retrieve()
                     .body(String.class))
         .isInstanceOf(HttpClientErrorException.class)
@@ -409,6 +410,69 @@ class UserManagementAcceptanceTest {
     assertThat(invited.get("temporaryPassword").asString()).isNotBlank();
   }
 
+  // ===========================================================================
+  // Preset role-based access model Phase 1 — the 4 new roles (hr/accountant/chef/waitress)
+  // ===========================================================================
+
+  @Test
+  void inviteWithEachOfTheFourNewRolesSucceeds() throws Exception {
+    // hr/accountant/chef/waitress must all pass the extended ALLOWED_ROLES whitelist and be
+    // assignable as real Keycloak realm roles end-to-end — the same proof
+    // inviteWithTheEmployeeRoleSucceeds gives the original four.
+    for (String role : List.of("hr", "accountant", "chef", "waitress")) {
+      String email = uniqueEmail();
+      String tokenA = tokenForOwnerA();
+
+      String body =
+          appClient()
+              .post()
+              .uri("/api/v1/users")
+              .header(HttpHeaders.AUTHORIZATION, bearer(tokenA))
+              .contentType(MediaType.APPLICATION_JSON)
+              .body(
+                  """
+                  {"username": "%1$s", "email": "%1$s", "role": "%2$s"}
+                  """
+                      .formatted(email, role))
+              .retrieve()
+              .body(String.class);
+
+      JsonNode invited = JSON.readValue(body, JsonNode.class);
+      assertThat(invited.get("role").asString()).as("role for %s", role).isEqualTo(role);
+      assertThat(invited.get("temporaryPassword").asString()).isNotBlank();
+    }
+  }
+
+  @Test
+  void inviteWithAdditionalRolesPersistsTheFullRoleSet() throws Exception {
+    // A single login can hold several roles at once (e.g. hr + accountant) — additionalRoles is
+    // the invite-time mechanism; access at the gateway is the union of every held role's surfaces.
+    String email = uniqueEmail();
+    String tokenA = tokenForOwnerA();
+
+    String body =
+        appClient()
+            .post()
+            .uri("/api/v1/users")
+            .header(HttpHeaders.AUTHORIZATION, bearer(tokenA))
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(
+                """
+                {"username": "%1$s", "email": "%1$s", "role": "hr", "additionalRoles": ["accountant"]}
+                """
+                    .formatted(email))
+            .retrieve()
+            .body(String.class);
+
+    JsonNode invited = JSON.readValue(body, JsonNode.class);
+    assertThat(invited.get("role").asString()).isEqualTo("hr");
+    assertThat(invited.get("roles").toString()).contains("hr").contains("accountant");
+
+    String userId = invited.get("id").asString();
+    verifyKeycloakUserInvited(userId, email, COMPANY_A, "hr");
+    verifyKeycloakUserInvited(userId, email, COMPANY_A, "accountant");
+  }
+
   @Test
   void inviteWithInvalidRoleReturns400() {
     String tokenA = tokenForOwnerA();
@@ -465,7 +529,7 @@ class UserManagementAcceptanceTest {
                     .uri("/api/v1/users/" + userId)
                     .header(HttpHeaders.AUTHORIZATION, bearer(tokenA))
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body("{\"role\": \"cfo\"}")
+                    .body("{\"roles\": [\"cfo\"]}")
                     .retrieve()
                     .body(String.class))
         .isInstanceOf(HttpClientErrorException.class)
@@ -543,7 +607,7 @@ class UserManagementAcceptanceTest {
                     .uri("/api/v1/users/" + ownerAKeycloakId)
                     .header(HttpHeaders.AUTHORIZATION, bearer(tokenA))
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body("{\"role\": \"manager\"}")
+                    .body("{\"roles\": [\"manager\"]}")
                     .retrieve()
                     .body(String.class))
         .isInstanceOf(HttpClientErrorException.class)
@@ -587,13 +651,72 @@ class UserManagementAcceptanceTest {
             .uri("/api/v1/users/" + userId)
             .header(HttpHeaders.AUTHORIZATION, bearer(tokenA))
             .contentType(MediaType.APPLICATION_JSON)
-            .body("{\"role\": \"manager\"}")
+            .body("{\"roles\": [\"manager\"]}")
             .retrieve()
             .body(String.class);
 
     JsonNode updated = JSON.readValue(patchBody, JsonNode.class);
     assertThat(updated.get("roles").toString()).contains("manager");
     assertThat(updated.get("id").asString()).isEqualTo(userId);
+  }
+
+  @Test
+  void patchWithARoleSetReplacesTheEntireRoleSetAndPersistsAllRoles() throws Exception {
+    // Preset role-based access model Phase 1: PATCH roles is a SET, not a single role — the
+    // response (and Keycloak's own role-mapping list) must carry every element, and the replace
+    // must be a full replacement (the invited "cashier" role must be GONE after the patch).
+    String email = uniqueEmail();
+    String tokenA = tokenForOwnerA();
+
+    String inviteBody =
+        appClient()
+            .post()
+            .uri("/api/v1/users")
+            .header(HttpHeaders.AUTHORIZATION, bearer(tokenA))
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(
+                """
+                {"username": "%1$s", "email": "%1$s", "role": "cashier"}
+                """
+                    .formatted(email))
+            .retrieve()
+            .body(String.class);
+    String userId = JSON.readValue(inviteBody, JsonNode.class).get("id").asString();
+
+    // Patch: replace the single "cashier" role with the SET {hr, accountant}.
+    String patchBody =
+        appClient()
+            .patch()
+            .uri("/api/v1/users/" + userId)
+            .header(HttpHeaders.AUTHORIZATION, bearer(tokenA))
+            .contentType(MediaType.APPLICATION_JSON)
+            .body("{\"roles\": [\"hr\", \"accountant\"]}")
+            .retrieve()
+            .body(String.class);
+
+    JsonNode updated = JSON.readValue(patchBody, JsonNode.class);
+    assertThat(updated.get("roles").toString()).contains("hr").contains("accountant");
+    assertThat(updated.get("roles").toString()).doesNotContain("cashier");
+    assertThat(updated.get("id").asString()).isEqualTo(userId);
+
+    // Re-list to confirm the change is durable (not just echoed back from the request).
+    String listBody =
+        appClient()
+            .get()
+            .uri("/api/v1/users")
+            .header(HttpHeaders.AUTHORIZATION, bearer(tokenA))
+            .retrieve()
+            .body(String.class);
+    JsonNode users = JSON.readValue(listBody, JsonNode.class);
+    boolean found = false;
+    for (JsonNode user : users) {
+      if (userId.equals(user.get("id").asString())) {
+        found = true;
+        assertThat(user.get("roles").toString()).contains("hr").contains("accountant");
+        assertThat(user.get("roles").toString()).doesNotContain("cashier");
+      }
+    }
+    assertThat(found).as("patched user should still appear in the company's user list").isTrue();
   }
 
   @Test

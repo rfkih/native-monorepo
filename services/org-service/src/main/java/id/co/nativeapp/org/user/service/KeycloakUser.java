@@ -8,7 +8,7 @@ import java.util.List;
  * <p>Carries only the fields needed by user management operations: identity ({@code id}, {@code
  * username}, {@code email}), account state ({@code enabled}), the tenant attribution ({@code
  * companyId} — extracted from the {@code company_id} user attribute), and the user's business realm
- * roles ({@code roles}: owner/manager/cashier).
+ * roles ({@code roles}: see {@link #BUSINESS_ROLES}).
  *
  * <p>This is NOT a domain entity — it is a data carrier from the Keycloak Admin API, analogous to a
  * projection. It lives in the service layer (only used by {@link KeycloakAdminClient} and {@link
@@ -24,8 +24,8 @@ import java.util.List;
  * @param enabled whether the account is enabled in Keycloak
  * @param companyIds ALL values of the {@code company_id} user attribute — the companies this login
  *     belongs to (multi-company ownership, ADR 0021); never null, empty if the attribute is unset
- * @param roles the business realm roles assigned to this user (owner/manager/cashier); never null,
- *     may be empty if the user has no business roles
+ * @param roles the business realm roles assigned to this user (see {@link #BUSINESS_ROLES}); never
+ *     null, may be empty if the user has no business roles
  */
 public record KeycloakUser(
     String id,
@@ -35,8 +35,14 @@ public record KeycloakUser(
     List<String> companyIds,
     List<String> roles) {
 
-  /** The known business roles used to identify which roles to replace on a role change. */
-  static final List<String> BUSINESS_ROLES = List.of("owner", "manager", "cashier", "employee");
+  /**
+   * The known business roles used to identify which roles to replace on a role change.
+   *
+   * <p>{@code hr}/{@code accountant}/{@code chef}/{@code waitress} (preset role-based access model
+   * Phase 1) join the original four.
+   */
+  static final List<String> BUSINESS_ROLES =
+      List.of("owner", "manager", "cashier", "employee", "hr", "accountant", "chef", "waitress");
 
   public KeycloakUser {
     roles = roles == null ? List.of() : List.copyOf(roles);
