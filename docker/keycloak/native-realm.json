@@ -108,19 +108,19 @@
     {
       "clientId": "native-console",
       "name": "Native console SPA",
-      "description": "Public SPA client: authorization-code + PKCE (no secret); token carries company_id + roles for the gateway. Dev redirect URIs only — set the real console origin in production (no wildcard).",
+      "description": "Public SPA client: authorization-code + PKCE (no secret); token carries company_id + roles for the gateway. Dev + bundled-shell redirect URIs; set the real console origin in production too (no wildcard). https://localhost is the Capacitor local origin of the bundled Android shell (ADR 0051).",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": true,
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
-      "redirectUris": ["http://localhost:5173/*", "http://localhost:4173/*"],
+      "redirectUris": ["http://localhost:5173/*", "http://localhost:4173/*", "https://localhost/*"],
       "webOrigins": ["+"],
       "attributes": {
         "access.token.signed.response.alg": "RS256",
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "http://localhost:5173/*##http://localhost:4173/*"
+        "post.logout.redirect.uris": "http://localhost:5173/*##http://localhost:4173/*##https://localhost/*"
       },
       "protocolMappers": [
         {

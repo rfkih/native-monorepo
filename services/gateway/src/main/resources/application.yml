@@ -44,6 +44,11 @@ native:
     # widen only if an environment has real clock drift (JwtDecoderConfig binds this).
     jwt:
       clock-skew: ${GATEWAY_JWT_CLOCK_SKEW:5s}
+    # Cross-origin allow-list for the bundled Android shell (ADR 0051). EMPTY by default = CORS OFF
+    # (the thin client is same-origin, so the edge behaves exactly as before). The bundled deploy
+    # sets this to its exact local origin, e.g. https://localhost. Comma-separated; NEVER a wildcard.
+    cors:
+      allowed-origins: ${NATIVE_GATEWAY_CORS_ALLOWED_ORIGINS:}
     routes:
       org-service: ${ORG_SERVICE_URI:http://org-service:8080}
       restaurant-service: ${RESTAURANT_SERVICE_URI:http://restaurant-service:8080}

@@ -16,7 +16,11 @@ import org.springframework.context.annotation.Configuration;
  * reused across every route.
  */
 @Configuration
-@EnableConfigurationProperties({GatewayRouteProperties.class, RateLimitProperties.class})
+@EnableConfigurationProperties({
+  GatewayRouteProperties.class,
+  RateLimitProperties.class,
+  CorsProperties.class
+})
 public class GatewayConfig {
 
   @Bean

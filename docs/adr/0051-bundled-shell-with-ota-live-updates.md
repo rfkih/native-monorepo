@@ -76,7 +76,12 @@ Java-25 backend build stays isolated from the Android toolchain.
    `oidc-client-ts` reads the `?code=`. `window.location.origin` is `https://localhost`, so
    `redirect_uri` derives correctly with no console code change. (Keycloak is self-hosted, so Google's
    embedded-WebView IdP restriction — a watch-item in ADR 0043 D4 — does not apply; a future *social*
-   login would still need a Custom Tab.)
+   login would still need a Custom Tab.) **Security note (P2 review):** `https://localhost` is a
+   non-unique origin, so the code-exchange safety rests on PKCE S256 *and* the flow staying **inside
+   the WebView** — the `https://localhost` redirect must never be delegated to the system browser / an
+   Android App Link. PKCE S256 is enforced and `directAccessGrantsEnabled: false`; the `*` in
+   `https://localhost/*` is a path wildcard (Keycloak matches the host literally, so no
+   `localhost.attacker.com` open-redirect).
 
 6. **Toolchain isolation and distribution unchanged** (ADR 0043 D5/D6): `frontend/native-till/` stays a
    monorepo sibling with its own Android build; sideload/MDM for UAT, Play for GA.
@@ -88,8 +93,11 @@ Java-25 backend build stays isolated from the Android toolchain.
 - **Web-deploy cadence is preserved** via OTA — the property ADR 0043 was built around is kept, at the
   cost of running a Capgo update endpoint (an operational dependency + a bundle-publish CI step).
 - **New security surface on the gateway** (CORS) and **new IdP config** (redirect URIs) — both scoped
-  to the bundled origin, both requiring review. A misconfigured `*` CORS would be a real regression, so
-  the allow-list is config-driven and reviewed.
+  to the bundled origin, both reviewed (P2 review: PASS). CORS is off by default, exact-origin only,
+  credential-less, `/api/**`-only, and a `*`/cleartext-non-loopback origin is rejected at startup so
+  the gateway cannot boot permissive. Follow-up (pre-existing, not a regression): the **production**
+  realm must strip the dev `http://localhost:5173|4173` redirect URIs from `native-console` — they are
+  dev-only.
 - **A device-verified OIDC round-trip is now a release gate** — OIDC-in-a-local-WebView can only be
   proven on a device (add to the ADR 0043 hardware drill).
 - **First-run needs connectivity** (download the initial data + log in); subsequent boots are instant

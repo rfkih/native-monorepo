@@ -1,5 +1,8 @@
 package id.co.nativeapp.gateway.security;
 
+import id.co.nativeapp.gateway.config.CorsProperties;
+import java.time.Duration;
+import java.util.List;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
@@ -7,6 +10,9 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 /**
  * The gateway's single synchronous security edge (HR-2).
@@ -43,8 +49,16 @@ import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 public class SecurityConfig {
 
   @Bean
-  SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-    return http.authorizeHttpRequests(
+  SecurityFilterChain filterChain(HttpSecurity http, CorsConfigurationSource corsConfigurationSource)
+      throws Exception {
+    return http
+        // CORS for the bundled Android shell (ADR 0051). With an empty allow-list (the default and
+        // every thin-client deploy) the source registers NO mapping, so this is a no-op and the edge
+        // behaves exactly as before. When configured, Spring Security's CorsFilter answers the
+        // preflight (OPTIONS) before authentication and adds the headers to real responses — which
+        // still pass through the unchanged JWT validation below.
+        .cors(cors -> cors.configurationSource(corsConfigurationSource))
+        .authorizeHttpRequests(
             auth ->
                 auth.requestMatchers(
                         "/healthz",
@@ -93,5 +107,41 @@ public class SecurityConfig {
         .exceptionHandling(
             ex -> ex.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
         .build();
+  }
+
+  /**
+   * CORS policy for the bundled Android shell (ADR 0051), scoped to {@code /api/**} only.
+   *
+   * <p>An EMPTY allow-list (the default, and every same-origin thin-client deploy — see {@link
+   * CorsProperties}) registers no mapping, so {@code getCorsConfiguration} returns {@code null} for
+   * every request and no CORS header is ever emitted: identical to the pre-0051 edge. A configured
+   * bundled deploy gets an EXACT-origin policy (never {@code *}), the exact method + request-header
+   * set the console sends (see {@code frontend/console/src/lib/api.ts}), {@code Content-Disposition}
+   * exposed so a cross-origin file download can read its filename, and — critically —
+   * {@code allowCredentials=false}: auth rides a bearer header, not a cookie, so credentials must
+   * stay off (exact-origin + no-credentials is the only combination that is not a CORS foot-gun).
+   */
+  @Bean
+  CorsConfigurationSource corsConfigurationSource(CorsProperties props) {
+    UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+    if (props.allowedOrigins().isEmpty()) {
+      return source; // no mapping → no CORS anywhere (same as before ADR 0051)
+    }
+    CorsConfiguration config = new CorsConfiguration();
+    config.setAllowedOrigins(props.allowedOrigins()); // exact origins, never "*"
+    config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+    config.setAllowedHeaders(
+        List.of(
+            "Authorization",
+            "Content-Type",
+            "Accept",
+            "X-Company-Id",
+            "X-Operator-Session",
+            "Idempotency-Key"));
+    config.setExposedHeaders(List.of("Content-Disposition"));
+    config.setAllowCredentials(false);
+    config.setMaxAge(Duration.ofHours(1));
+    source.registerCorsConfiguration("/api/**", config);
+    return source;
   }
 }
