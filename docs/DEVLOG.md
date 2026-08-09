@@ -5,6 +5,40 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-09 — Preset role-based access: office vs floor roles, gateway-enforced (ADR 0052)
+
+The owner wants everyone to log in as themselves and their **role** to decide the surface: office roles
+(owner/manager/HR/accountant) see only their back-office slice, floor roles (cashier/chef/waitress) only
+POS. Adds four roles — `hr`, `accountant`, `chef`, `waitress` — and splits the gateway's single broad
+`owner/manager` back-office gate into named **capability arrays** (POS/OPS/REPORTS/FINANCE/HR/PAYROLL/
+OWNER/ME); the gateway route→role table is the security boundary (menu-hiding + ADR-0013 page grants are
+UI-only). Multi-role = the union of bundles; `manager` is deliberately narrowed to operations (OPS+REPORTS
++HR — **no** detailed finance, **no** payroll). `PATCH /users/{id}` became a multi-role set-replace.
+Console mirrors it (`lib/rolePreset.ts` — `ROLE_HOME` + `can*` — byte-for-byte against `RoutingConfig`),
+re-gates every nav group + route, and adds a **standalone HR People page** (over `useOrgUnits`, never the
+OPS `/users`) so an `hr`-alone login has a working surface. `/groups` (mixed OPS-membership + FINANCE-
+figures) is OPS-routed with the consolidated P&L gated to owner/accountant *inside* the page.
+
+**Two CRITICALs were caught by the mandatory security review before deploy:** (1) the multi-role assign
+had no anti-escalation guard — a `manager` could `PATCH` itself to `{manager,accountant,hr}` (self-granting
+the finance/payroll surfaces this model withholds) or to `owner` (takeover); fixed with
+`authorizeRoleAdministration` (owner administers office/privileged logins; a manager administers floor
+logins only) on invite/patch/deactivate. (2) To give the HR area unit names we widened `GET /org-units` to
+office roles, but a `/**` wildcard swept in `GET /org-units/{outletId}/device-credential` — the DECRYPTED
+per-outlet till password — letting `hr`/`accountant` harvest POS credentials; fixed by narrowing to the
+EXACT `/api/v1/org-units` list (sub-resources stay owner/manager). Both re-reviewed PASS. Commits
+`289f9328` (P1) · `9d7a7ed9` (esc guard) · `be84d7da`→`d025c148` (org-units read-widen + narrow) ·
+`9210533c` (P2 console) · `5cb68c74`/ADR 0052. Frontend code-reviewed PASS.
+
+**Deployed to UAT 2026-08-09** (gateway + org-service + console rebuilt; the 4 realm roles applied to the
+live realm via kcadm — realm-JSON does not auto-apply) and **verified end-to-end** with real browser OIDC
+logins + per-login gateway token replay: hr→`/people` (HR+PAYROLL+org-read, all else 403); accountant→
+`/statements` (REPORTS+FINANCE); chef→`/kitchen`, waitress→`/pos` (POS only); a multi-role hr+accountant
+login = the union, landing on the higher-priority home. **Note:** office nav is `role ∧ grant ∧ tier`, so
+a FREE-tier company hides the HR/finance nav even for a matching role (the role works; only the links are
+tier-suppressed) — assign office roles on a paid tier. Per-company roles remain deferred (ADR 0021).
+Branch `feat/business-employee-apps`, not pushed.
+
 ## 2026-08-09 — Operator-PIN follow-ups: manager-present first-PIN enrollment + employee self-service (ADR 0049 addendum 2)
 
 Three refinements after the owner tried the operator-PIN feature. (1) A require-PIN outlet no longer
