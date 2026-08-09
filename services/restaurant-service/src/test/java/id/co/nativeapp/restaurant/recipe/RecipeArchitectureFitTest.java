@@ -9,28 +9,28 @@ import com.tngtech.archunit.lang.ArchRule;
 import org.junit.jupiter.api.Test;
 
 /**
- * Recipe-scoped regression guard for two ArchUnit layering rules the recipe main source
- * originally tripped, both since fixed in main source (this test package never touches main
- * source — QA scope):
+ * Recipe-scoped regression guard for two ArchUnit layering rules the recipe main source originally
+ * tripped, both since fixed in main source (this test package never touches main source — QA
+ * scope):
  *
  * <ol>
  *   <li>{@code repositoriesAreAccessedOnlyByTheServiceLayer()} in the fleet-wide {@code
  *       config.LayeredArchitectureTest} — originally, {@code RecipeIngredientGuard} and {@code
- *       RecipeModifierCascade} held a {@code RecipeLineRepository} field directly. That rule
- *       allows a {@code JpaRepository} to be depended on only by a class whose SIMPLE NAME ends
- *       {@code Service}, {@code Writer}, or {@code Reader} — {@code *Guard}/{@code *Cascade} does
- *       not qualify. Fixed by routing both classes through {@code RecipeReader}/{@code
- *       RecipeWriter} instead of holding the repository directly.
- *   <li>{@code featureLayersRespectTheLayeredArchitecture()} in the same class — originally,
- *       {@code RecipeResponse.LineResponse.from(RecipeLineView)} (a {@code dto}) called getters
- *       directly on {@code RecipeLineView} (a {@code projection}), the one dto in the whole
- *       service with a {@code from(...View)} static factory. Fixed by moving the projection ->
- *       dto mapping into {@code RecipeReader} (mirroring every other feature).
+ *       RecipeModifierCascade} held a {@code RecipeLineRepository} field directly. That rule allows
+ *       a {@code JpaRepository} to be depended on only by a class whose SIMPLE NAME ends {@code
+ *       Service}, {@code Writer}, or {@code Reader} — {@code *Guard}/{@code *Cascade} does not
+ *       qualify. Fixed by routing both classes through {@code RecipeReader}/{@code RecipeWriter}
+ *       instead of holding the repository directly.
+ *   <li>{@code featureLayersRespectTheLayeredArchitecture()} in the same class — originally, {@code
+ *       RecipeResponse.LineResponse.from(RecipeLineView)} (a {@code dto}) called getters directly
+ *       on {@code RecipeLineView} (a {@code projection}), the one dto in the whole service with a
+ *       {@code from(...View)} static factory. Fixed by moving the projection -> dto mapping into
+ *       {@code RecipeReader} (mirroring every other feature).
  * </ol>
  *
- * <p>These two rules are RESTATED here, scoped to the {@code recipe} package only, so a
- * regression is caught fast and locally without waiting on the (also still-enforcing) fleet-wide
- * {@code LayeredArchitectureTest}.
+ * <p>These two rules are RESTATED here, scoped to the {@code recipe} package only, so a regression
+ * is caught fast and locally without waiting on the (also still-enforcing) fleet-wide {@code
+ * LayeredArchitectureTest}.
  */
 class RecipeArchitectureFitTest {
 

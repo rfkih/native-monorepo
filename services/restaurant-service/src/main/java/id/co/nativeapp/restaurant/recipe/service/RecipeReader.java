@@ -75,8 +75,8 @@ public class RecipeReader {
 
   /**
    * Outlet-wide HPP summary — one row per menu item that HAS at least one base recipe line.
-   * Outlet-scoped (review W1): HPP is derived ingredient-cost data, so the read follows the
-   * {@code IngredientReader#findByBusiness} guard precedent, not the open menu-catalog one.
+   * Outlet-scoped (review W1): HPP is derived ingredient-cost data, so the read follows the {@code
+   * IngredientReader#findByBusiness} guard precedent, not the open menu-catalog one.
    */
   @Transactional(readOnly = true, propagation = Propagation.REQUIRED)
   public List<HppSummaryRow> hppSummary(UUID businessId) {
