@@ -46,6 +46,15 @@ import org.springframework.transaction.annotation.Transactional;
  * checks run — so a wrong PIN can never leak assignment status or PIN existence — after which the
  * lockout resets, the role resolves, and the token is minted.
  *
+ * <p><strong>Per-outlet operator-PIN policy (ADR 0049).</strong> The FIRST thing this method does
+ * is resolve {@code businessId}'s policy via {@link OutletOperatorPolicyReader} (RLS-scoped,
+ * defaulting to {@code true} — PIN required — when no row exists). When the policy requires a PIN,
+ * the verification flow above runs unchanged. When it does not, the ENTIRE PIN branch is skipped —
+ * no PIN load, no lockout check, no Argon2 verify, no decoy — and execution proceeds straight to
+ * the outlet-assignment / login-link / role checks below, exactly as it would after a successful
+ * PIN today. A caller-supplied {@code pin} is ignored either way in no-PIN mode. The token minted
+ * at the end is byte-identical in shape regardless of which branch ran.
+ *
  * <p><strong>The seller is taken from this token, never the request body</strong> (rule 5) — the
  * minted {@code operatorUserId} is the employee's OWN linked Keycloak subject id ({@link
  * Employee#getUserId()}), resolved server-side from the verified {@code employeeId}, never a
@@ -67,6 +76,7 @@ public class OperatorSessionWriter {
   private final OperatorPinRepository operatorPinRepository;
   private final AssignmentRepository assignmentRepository;
   private final EmployeeRepository employeeRepository;
+  private final OutletOperatorPolicyReader outletOperatorPolicyReader;
   private final PasswordEncoder operatorPinEncoder;
   private final OperatorTokenSigningKey signingKey;
   private final Clock clock;
@@ -84,12 +94,14 @@ public class OperatorSessionWriter {
       OperatorPinRepository operatorPinRepository,
       AssignmentRepository assignmentRepository,
       EmployeeRepository employeeRepository,
+      OutletOperatorPolicyReader outletOperatorPolicyReader,
       PasswordEncoder operatorPinEncoder,
       OperatorTokenSigningKey signingKey,
       Clock clock) {
     this.operatorPinRepository = operatorPinRepository;
     this.assignmentRepository = assignmentRepository;
     this.employeeRepository = employeeRepository;
+    this.outletOperatorPolicyReader = outletOperatorPolicyReader;
     this.operatorPinEncoder = operatorPinEncoder;
     this.signingKey = signingKey;
     this.clock = clock;
@@ -116,33 +128,47 @@ public class OperatorSessionWriter {
     Instant now = clock.instant();
     LocalDate asOf = LocalDate.now(clock);
 
-    OperatorPin operatorPin = operatorPinRepository.findByEmployeeId(employeeId).orElse(null);
-    if (operatorPin == null) {
-      // No PIN row for this employee (or invisible under RLS to this tenant): run a decoy Argon2
-      // verify so this path costs the same as a wrong-PIN attempt, then fail with the SAME uniform
-      // 401. A caller therefore cannot tell "no PIN set" from "wrong PIN" by response or timing
-      // (ADR 0049 non-enumeration; security review M1). The result is deliberately ignored.
-      operatorPinEncoder.matches(pin, decoyPinHash);
-      throw new InvalidOperatorPinException();
-    }
+    boolean requirePin = outletOperatorPolicyReader.requirePin(businessId);
 
-    if (operatorPin.isLocked(now)) {
-      throw new OperatorPinLockedException(employeeId);
-    }
+    if (requirePin) {
+      // Normalize a missing/blank pin to "" so it flows into the SAME Argon2 verify calls below as
+      // any other wrong value — this is what makes "pin is null/blank" indistinguishable from "pin
+      // is wrong" (both land on the uniform 401 InvalidOperatorPinException), rather than a
+      // separate validation-level 400 (ADR 0049 non-enumeration).
+      String submittedPin = pin == null ? "" : pin;
 
-    if (!operatorPinEncoder.matches(pin, operatorPin.getPinHash())) {
-      operatorPin.recordFailedAttempt(now);
+      OperatorPin operatorPin = operatorPinRepository.findByEmployeeId(employeeId).orElse(null);
+      if (operatorPin == null) {
+        // No PIN row for this employee (or invisible under RLS to this tenant): run a decoy Argon2
+        // verify so this path costs the same as a wrong-PIN attempt, then fail with the SAME
+        // uniform 401. A caller therefore cannot tell "no PIN set" from "wrong PIN" by response or
+        // timing (ADR 0049 non-enumeration; security review M1). The result is deliberately
+        // ignored.
+        operatorPinEncoder.matches(submittedPin, decoyPinHash);
+        throw new InvalidOperatorPinException();
+      }
+
+      if (operatorPin.isLocked(now)) {
+        throw new OperatorPinLockedException(employeeId);
+      }
+
+      if (!operatorPinEncoder.matches(submittedPin, operatorPin.getPinHash())) {
+        operatorPin.recordFailedAttempt(now);
+        operatorPinRepository.flush();
+        throw new InvalidOperatorPinException();
+      }
+
+      operatorPin.recordSuccessfulVerification();
       operatorPinRepository.flush();
-      throw new InvalidOperatorPinException();
     }
+    // else: the outlet's policy trusts the employee-pick alone (ADR 0049) — the entire PIN branch
+    // above is skipped; any supplied pin is ignored. The checks below run IDENTICALLY either way.
 
-    operatorPin.recordSuccessfulVerification();
-    operatorPinRepository.flush();
-
-    // The PIN is correct — ONLY NOW check outlet-assignment and login-link. Running these AFTER the
-    // PIN verify means a wrong PIN can never reveal whether the employee is assigned to this outlet
-    // or has a PIN at all (security review M1); a 403/409 is disclosed only to a caller that has
-    // already proved the PIN.
+    // ONLY NOW check outlet-assignment and login-link (after a correct PIN in PIN-mode, or
+    // unconditionally in no-PIN mode). Running these AFTER the PIN verify in PIN-mode means a wrong
+    // PIN can never reveal whether the employee is assigned to this outlet or has a PIN at all
+    // (security review M1); a 403/409 is disclosed only to a caller that has already proved the PIN
+    // (or an outlet that never required one).
     if (!assignmentRepository.existsActiveAssignment(employeeId, businessId, asOf)) {
       throw new OperatorNotAssignedException(employeeId, businessId);
     }

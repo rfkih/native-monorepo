@@ -196,6 +196,30 @@ class OperatorEndpointTest extends PostgresRlsTestBase {
   }
 
   @Test
+  void aMissingPinAtAPinRequiredOutletIs401NotAValidation400() throws Exception {
+    // ADR 0049 per-outlet policy: pin is now OPTIONAL at the DTO boundary (no @NotBlank), so a
+    // missing pin at a PIN-required outlet (the default — no policy row) must be rejected via the
+    // SAME uniform InvalidOperatorPinException 401 path as a wrong pin, not a distinct 400.
+    UUID outletId = seedOutlet();
+    UUID employeeId = createEmployee("Nita Prasetya", "3202000000009010", "2222333344449010");
+    linkLogin(employeeId, UUID.randomUUID().toString());
+    addAssignment(employeeId, outletId, "cashier");
+    setPin(employeeId, "2580");
+
+    String body =
+        json.writeValueAsString(
+            Map.of("businessId", outletId.toString(), "employeeId", employeeId.toString()));
+
+    mvc.perform(
+            post("/api/v1/operators/session")
+                .header("X-Company-Id", TENANT_A)
+                .header("X-Actor", ACTOR)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body))
+        .andExpect(status().isUnauthorized());
+  }
+
+  @Test
   void anEmployeeWithNoLinkedLoginCannotBecomeAnOperator() throws Exception {
     UUID outletId = seedOutlet();
     UUID employeeId = createEmployee("Fitri Handayani", "3202000000009006", "2222333344449006");

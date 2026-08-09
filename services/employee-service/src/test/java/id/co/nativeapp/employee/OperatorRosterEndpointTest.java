@@ -186,6 +186,42 @@ class OperatorRosterEndpointTest extends PostgresRlsTestBase {
   }
 
   @Test
+  void aNoPinOutletListsEveryAssignedAndLinkedEmployeeRegardlessOfAnyPinRow() throws Exception {
+    UUID outletId = seedOutlet();
+    setRequirePin(outletId, false);
+
+    UUID withPin = createEmployee("Budi Santoso", "3202000000009110", "2222333344449110");
+    addAssignment(withPin, outletId, "cashier");
+    linkLogin(withPin, UUID.randomUUID().toString());
+    setPin(withPin, "1212"); // has a PIN too — still listed, PIN is irrelevant in this mode.
+
+    UUID withoutPin = createEmployee("Zaenal Arifin", "3202000000009111", "2222333344449111");
+    addAssignment(withoutPin, outletId, "cashier");
+    linkLogin(withoutPin, UUID.randomUUID().toString());
+    // Deliberately no PIN ever set — must still be listed (no-PIN outlet).
+
+    UUID unlinked = createEmployee("Wawan Setia", "3202000000009112", "2222333344449112");
+    addAssignment(unlinked, outletId, "cashier");
+    // Deliberately no login-link — must be EXCLUDED (no operatorUserId to mint against).
+
+    String response =
+        mvc.perform(
+                get("/api/v1/operators/roster")
+                    .param("businessId", outletId.toString())
+                    .header("X-Company-Id", TENANT_A)
+                    .header("X-Actor", ACTOR))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(2))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+    assertThat(response).contains(withPin.toString());
+    assertThat(response).contains(withoutPin.toString());
+    assertThat(response).doesNotContain(unlinked.toString());
+  }
+
+  @Test
   void aMissingBusinessIdIs400() throws Exception {
     mvc.perform(
             get("/api/v1/operators/roster")
@@ -247,6 +283,26 @@ class OperatorRosterEndpointTest extends PostgresRlsTestBase {
                 .header("X-Actor", ACTOR)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(Map.of("pin", pin))))
+        .andExpect(status().isNoContent());
+  }
+
+  private void linkLogin(UUID employeeId, String userSub) throws Exception {
+    mvc.perform(
+            post("/api/v1/employees/" + employeeId + "/login-link")
+                .header("X-Company-Id", TENANT_A)
+                .header("X-Actor", ACTOR)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(Map.of("userId", userSub))))
+        .andExpect(status().isOk());
+  }
+
+  private void setRequirePin(UUID businessId, boolean requirePin) throws Exception {
+    mvc.perform(
+            put("/api/v1/employees/outlet-pin-policy/" + businessId)
+                .header("X-Company-Id", TENANT_A)
+                .header("X-Actor", ACTOR)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(Map.of("requirePin", requirePin))))
         .andExpect(status().isNoContent());
   }
 

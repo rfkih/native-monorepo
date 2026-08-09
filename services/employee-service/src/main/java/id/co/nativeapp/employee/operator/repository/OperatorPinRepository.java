@@ -59,4 +59,37 @@ public interface OperatorPinRepository extends JpaRepository<OperatorPin, UUID> 
       nativeQuery = true)
   List<OperatorRosterView> findRoster(
       @Param("businessId") UUID businessId, @Param("asOf") LocalDate asOf);
+
+  /**
+   * The sign-in-capable roster of an outlet whose {@code outlet_operator_policy} is {@code
+   * require_pin = false} (the per-outlet no-PIN toggle, ADR 0049): every employee who is BOTH (a)
+   * actively assigned to {@code businessId} as of {@code asOf} AND (b) has a non-blank {@code
+   * user_id} (login-linked — the source of the minted token's {@code operatorUserId}, so an
+   * unlinked employee could never be picked here even without a PIN gate). Unlike {@link
+   * #findRoster}, this does NOT require an {@code operator_pin} row — a no-PIN outlet has no PIN
+   * concept for its roster to filter on. Each of the two tables enforces its OWN RLS policy — no
+   * manual {@code WHERE company_id} needed (rule 5). Sorted by name for the till's picker list;
+   * same deliberate enumeration (name only, rule 6) as {@link #findRoster}.
+   */
+  @Query(
+      value =
+          """
+          SELECT e.id        AS employee_id,
+                 e.full_name AS full_name
+            FROM employee e
+           WHERE e.user_id IS NOT NULL
+             AND e.user_id <> ''
+             AND EXISTS (
+                   SELECT 1
+                     FROM assignment a
+                    WHERE a.employee_id = e.id
+                      AND a.org_unit_id = :businessId
+                      AND a.effective_from <= :asOf
+                      AND a.effective_to >= :asOf
+                 )
+           ORDER BY e.full_name
+          """,
+      nativeQuery = true)
+  List<OperatorRosterView> findLinkedRoster(
+      @Param("businessId") UUID businessId, @Param("asOf") LocalDate asOf);
 }

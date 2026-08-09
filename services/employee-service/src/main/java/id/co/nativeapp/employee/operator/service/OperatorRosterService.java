@@ -1,6 +1,7 @@
 package id.co.nativeapp.employee.operator.service;
 
 import id.co.nativeapp.employee.operator.dto.OperatorRosterEntry;
+import id.co.nativeapp.employee.operator.projection.OperatorRosterView;
 import id.co.nativeapp.employee.operator.repository.OperatorPinRepository;
 import id.co.nativeapp.tenant.TenantContext;
 import java.time.Clock;
@@ -16,20 +17,33 @@ import org.springframework.transaction.annotation.Transactional;
  * {@code @Transactional(readOnly = true)} so the Spring proxy + the auto-RLS aspect engage (rule 5)
  * — RLS scopes {@code employee}, {@code operator_pin}, and {@code assignment} alike, so no manual
  * {@code company_id} filter is needed.
+ *
+ * <p><strong>Policy-aware (ADR 0049).</strong> The roster reflects the outlet's {@code
+ * outlet_operator_policy}: a PIN-required outlet (the default) lists assigned employees who ALSO
+ * carry an {@code operator_pin} row ({@link OperatorPinRepository#findRoster}, unchanged); a no-PIN
+ * outlet instead lists every assigned employee with a linked login, regardless of whether they ever
+ * set a PIN ({@link OperatorPinRepository#findLinkedRoster}) — a PIN row is not a login-link
+ * prerequisite there.
  */
 @Service
 public class OperatorRosterService {
 
   private final OperatorPinRepository operatorPinRepository;
+  private final OutletOperatorPolicyReader outletOperatorPolicyReader;
   private final Clock clock;
 
-  public OperatorRosterService(OperatorPinRepository operatorPinRepository, Clock clock) {
+  public OperatorRosterService(
+      OperatorPinRepository operatorPinRepository,
+      OutletOperatorPolicyReader outletOperatorPolicyReader,
+      Clock clock) {
     this.operatorPinRepository = operatorPinRepository;
+    this.outletOperatorPolicyReader = outletOperatorPolicyReader;
     this.clock = clock;
   }
 
   /**
-   * The roster of PIN-sign-in-capable employees for {@code businessId}, sorted by display name.
+   * The roster of sign-in-capable employees for {@code businessId}, sorted by display name — the
+   * PIN-holder roster for a PIN-required outlet, or the assigned+linked roster for a no-PIN outlet.
    *
    * @param rawBusinessId the outlet id as received from the query string; must be a non-blank UUID
    * @throws IllegalArgumentException when {@code rawBusinessId} is missing, blank, or not a valid
@@ -40,7 +54,12 @@ public class OperatorRosterService {
     TenantContext.require();
     UUID businessId = parseBusinessId(rawBusinessId);
     LocalDate asOf = LocalDate.now(clock);
-    return operatorPinRepository.findRoster(businessId, asOf).stream()
+    boolean requirePin = outletOperatorPolicyReader.requirePin(businessId);
+    List<OperatorRosterView> rows =
+        requirePin
+            ? operatorPinRepository.findRoster(businessId, asOf)
+            : operatorPinRepository.findLinkedRoster(businessId, asOf);
+    return rows.stream()
         .map(view -> new OperatorRosterEntry(view.getEmployeeId(), view.getFullName()))
         .toList();
   }
