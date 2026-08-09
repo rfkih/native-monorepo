@@ -1349,6 +1349,7 @@ export const en = {
       expenses: 'Expenses',
       attendance: 'Attendance',
       payroll: 'Payroll',
+      terminal: 'Terminal',
     },
     smart: {
       outlets: 'Active outlets',
@@ -1659,6 +1660,22 @@ export const en = {
         'The login exists, but attaching it to the employee failed. Retry the link — the login is safe to reuse.',
       retryLink: 'Retry link',
     },
+    // ADR 0049 P1 — owner/manager set/reset the till PIN this employee enters to ring a sale
+    // under their own name. Write-only (rule 6): the backend never returns the PIN, so this
+    // dialog only ever sets/resets, never reveals.
+    operatorPin: {
+      title: 'Set operator PIN — {{name}}',
+      body: 'Choose a 4–6 digit PIN this employee will enter at the till. It is never shown again after this — only reset.',
+      pinLabel: 'PIN',
+      confirmLabel: 'Confirm PIN',
+      mismatch: 'PINs do not match.',
+      invalid: 'Enter 4 to 6 digits.',
+      submit: 'Save PIN',
+      submitting: 'Saving…',
+      doneTitle: 'PIN saved',
+      doneBody: '{{name}} can now use this PIN at the till.',
+      error: 'Could not save the PIN. Try again.',
+    },
     detail: {
       active: 'Active',
       assignments: 'Assignments',
@@ -1700,6 +1717,11 @@ export const en = {
       resetting: 'Resetting…',
       removeLogin: 'Remove login',
       copyPassword: 'Copy password',
+      // ADR 0049 P1 — the till PIN, separate from the console login above (never revealed here).
+      operatorPinTitle: 'Operator PIN',
+      operatorPinHint:
+        'The 4–6 digit code this employee enters at the till to ring a sale under their name.',
+      operatorPinAction: 'Set / reset PIN',
     },
     roles: {
       chef: 'Chef',
@@ -3779,6 +3801,47 @@ export const en = {
       body: 'This page is part of the extended toolkit — accounting, HR, promotions, and more. Turn on extended features to open it.',
       cta: 'Enable extended features',
       managerBody: 'Ask the business owner to turn on extended features to open this page.',
+    },
+  },
+  // Two-app + outlet-terminal program (ADR 0049) Phase 2 — the console manager UI for the
+  // outlet's Business-app till: the device (terminal) credential and the require-PIN policy.
+  // Owner/manager only, mirrors the org-unit hub's other tabs (orgHub.tabs.terminal is the tab
+  // label itself).
+  terminal: {
+    subtitle: "Manage this outlet's till login and operator PIN policy.",
+    device: {
+      title: 'Terminal login',
+      subtitle: "The credential this outlet's Business-app till signs in with.",
+      show: 'Show login',
+      checking: 'Checking…',
+      hide: 'Hide',
+      none: 'No terminal login has been created yet.',
+      create: 'Create terminal login',
+      creating: 'Creating…',
+      username: 'Username',
+      password: 'Password',
+      showPassword: 'Show password',
+      hidePassword: 'Hide password',
+      copyUsername: 'Copy username',
+      copyPassword: 'Copy password',
+      resetPassword: 'Reset password',
+      resetting: 'Resetting…',
+      remove: 'Remove',
+      oneTimeNote: "Save this now — it won't be shown like this again. Reset any time for a fresh one.",
+      error: 'Something went wrong. Try again.',
+      alreadyExists: 'A terminal login already exists for this outlet — refresh and reset it instead.',
+      removeDialog: {
+        title: 'Remove the terminal login?',
+        body: 'The till at this outlet will not be able to sign in until a new login is created.',
+        confirm: 'Remove login',
+        removing: 'Removing…',
+      },
+    },
+    pin: {
+      title: 'Operator PIN policy',
+      toggleLabel: 'Require PIN',
+      hint: 'On: cashiers enter a PIN to ring. Off: cashiers just pick their name.',
+      error: 'Could not save the policy. Try again.',
     },
   },
 }

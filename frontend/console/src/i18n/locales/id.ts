@@ -1338,6 +1338,7 @@ export const id = {
       expenses: 'Pengeluaran',
       attendance: 'Absensi',
       payroll: 'Penggajian',
+      terminal: 'Terminal',
     },
     smart: {
       outlets: 'Gerai aktif',
@@ -1650,6 +1651,23 @@ export const id = {
         'Login sudah ada, tetapi penautan ke karyawan gagal. Ulangi penautan — login aman dipakai ulang.',
       retryLink: 'Ulangi penautan',
     },
+    // ADR 0049 P1 — pemilik/manajer mengatur/menyetel ulang PIN mesin kasir yang dimasukkan
+    // karyawan ini untuk mencatat penjualan atas namanya. Write-only (aturan 6): backend tidak
+    // pernah mengembalikan PIN, jadi dialog ini hanya mengatur/menyetel ulang, tidak pernah
+    // menampilkannya.
+    operatorPin: {
+      title: 'Atur PIN operator — {{name}}',
+      body: 'Pilih PIN 4–6 digit yang akan dimasukkan karyawan ini di mesin kasir. Tidak akan ditampilkan lagi setelah ini — hanya bisa disetel ulang.',
+      pinLabel: 'PIN',
+      confirmLabel: 'Konfirmasi PIN',
+      mismatch: 'PIN tidak cocok.',
+      invalid: 'Masukkan 4 sampai 6 digit.',
+      submit: 'Simpan PIN',
+      submitting: 'Menyimpan…',
+      doneTitle: 'PIN tersimpan',
+      doneBody: '{{name}} sekarang bisa memakai PIN ini di mesin kasir.',
+      error: 'PIN gagal disimpan. Coba lagi.',
+    },
     detail: {
       active: 'Aktif',
       assignments: 'Penugasan',
@@ -1690,6 +1708,12 @@ export const id = {
       resetting: 'Menyetel ulang…',
       removeLogin: 'Hapus login',
       copyPassword: 'Salin sandi',
+      // ADR 0049 P1 — PIN mesin kasir, terpisah dari login konsol di atas (tidak pernah
+      // ditampilkan di sini).
+      operatorPinTitle: 'PIN operator',
+      operatorPinHint:
+        'Kode 4–6 digit yang dimasukkan karyawan ini di mesin kasir untuk mencatat penjualan atas namanya.',
+      operatorPinAction: 'Atur / setel ulang PIN',
     },
     roles: {
       chef: 'Koki',
@@ -3751,6 +3775,48 @@ export const id = {
       body: 'Halaman ini bagian dari perangkat lengkap — akuntansi, HR, promosi, dan lainnya. Aktifkan fitur lengkap untuk membukanya.',
       cta: 'Aktifkan fitur lengkap',
       managerBody: 'Minta pemilik usaha mengaktifkan fitur lengkap untuk membuka halaman ini.',
+    },
+  },
+  // Program aplikasi Bisnis + terminal gerai (ADR 0049) Fase 2 — UI konsol untuk mengelola mesin
+  // kasir (Business-app till) sebuah gerai: kredensial terminal dan kebijakan wajib-PIN.
+  // Khusus pemilik/manajer, mengikuti tab lain di org-unit hub (label tabnya sendiri ada di
+  // orgHub.tabs.terminal).
+  terminal: {
+    subtitle: 'Kelola login mesin kasir dan kebijakan PIN operator untuk gerai ini.',
+    device: {
+      title: 'Login mesin kasir',
+      subtitle: 'Kredensial yang dipakai aplikasi Bisnis di gerai ini untuk masuk.',
+      show: 'Tampilkan login',
+      checking: 'Memeriksa…',
+      hide: 'Sembunyikan',
+      none: 'Belum ada login mesin kasir untuk gerai ini.',
+      create: 'Buat login mesin kasir',
+      creating: 'Membuat…',
+      username: 'Nama pengguna',
+      password: 'Kata sandi',
+      showPassword: 'Tampilkan kata sandi',
+      hidePassword: 'Sembunyikan kata sandi',
+      copyUsername: 'Salin nama pengguna',
+      copyPassword: 'Salin kata sandi',
+      resetPassword: 'Setel ulang kata sandi',
+      resetting: 'Menyetel ulang…',
+      remove: 'Hapus',
+      oneTimeNote:
+        'Simpan sekarang — tidak akan ditampilkan seperti ini lagi. Setel ulang kapan saja untuk mendapat yang baru.',
+      error: 'Terjadi kesalahan. Coba lagi.',
+      alreadyExists: 'Login mesin kasir untuk gerai ini sudah ada — muat ulang lalu gunakan Setel ulang.',
+      removeDialog: {
+        title: 'Hapus login mesin kasir ini?',
+        body: 'Mesin kasir di gerai ini tidak bisa masuk sampai login baru dibuat.',
+        confirm: 'Hapus login',
+        removing: 'Menghapus…',
+      },
+    },
+    pin: {
+      title: 'Kebijakan PIN operator',
+      toggleLabel: 'Wajib PIN',
+      hint: 'Aktif: kasir memasukkan PIN untuk mencatat penjualan. Nonaktif: kasir cukup memilih namanya.',
+      error: 'Kebijakan gagal disimpan. Coba lagi.',
     },
   },
 } satisfies typeof en

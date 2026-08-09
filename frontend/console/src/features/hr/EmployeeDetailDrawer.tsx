@@ -17,7 +17,7 @@
 
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Check, Copy, KeyRound, Pencil, Plus, Trash2, UserPlus, X } from 'lucide-react'
+import { Check, Copy, KeyRound, Lock, Pencil, Plus, Trash2, UserPlus, X } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Drawer } from '@/components/ui/Drawer'
@@ -49,6 +49,7 @@ export function EmployeeDetailDrawer({
   onEndAssignment,
   onCompensation,
   onTerminate,
+  onSetOperatorPin,
 }: {
   employee: GroupedEmployee
   unitName: (id: string | null) => string
@@ -61,6 +62,7 @@ export function EmployeeDetailDrawer({
   onEndAssignment: (row: EmployeeListRow) => void
   onCompensation: () => void
   onTerminate: () => void
+  onSetOperatorPin: () => void
 }) {
   const { t, i18n } = useTranslation()
   const locale = localeOf(i18n.language)
@@ -328,6 +330,17 @@ export function EmployeeDetailDrawer({
               ) : null}
             </div>
           )}
+        </div>
+
+        {/* Operator PIN (ADR 0049 P1) — the till PIN, separate from the console login above. Never
+            revealed here (write-only, rule 6): the action always opens a fresh set/reset dialog. */}
+        <SectionHeading className="mt-6">{t('hr.detail.operatorPinTitle')}</SectionHeading>
+        <div className="mt-2 rounded-[14px] border border-line p-4">
+          <p className="text-sm text-ink-3">{t('hr.detail.operatorPinHint')}</p>
+          <Button type="button" variant="outline" className="mt-3" onClick={onSetOperatorPin}>
+            <Lock className="size-4" />
+            {t('hr.detail.operatorPinAction')}
+          </Button>
         </div>
 
         {/* Profile (PII masked) */}

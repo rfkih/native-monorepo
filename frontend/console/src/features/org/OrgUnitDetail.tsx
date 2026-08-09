@@ -25,6 +25,8 @@ import { AttendanceTab } from '@/features/hr/AttendanceTab'
 import { EmployeesTab } from '@/features/hr/EmployeesTab'
 import { PayrollTab } from '@/features/hr/PayrollTab'
 import { OrgUnitExpensesTab } from '@/features/expenses/OrgUnitExpensesTab'
+import { TerminalCard } from '@/features/terminal/TerminalCard'
+import { effectiveRoles, hasAnyRole, useAuth } from '@/lib/authContext'
 import { useSession } from '@/lib/session'
 import { cn } from '@/lib/cn'
 import { formatMoney, formatPercent } from '@/lib/money'
@@ -54,7 +56,15 @@ import {
  * All copy via i18n (rule 9); money via formatMoney minor units + Intl.
  */
 
-type TabKey = 'overview' | 'outlets' | 'employees' | 'people' | 'expenses' | 'attendance' | 'payroll'
+type TabKey =
+  | 'overview'
+  | 'outlets'
+  | 'employees'
+  | 'people'
+  | 'expenses'
+  | 'attendance'
+  | 'payroll'
+  | 'terminal'
 
 type DialogState =
   | { kind: 'addOutlet' }
@@ -65,8 +75,14 @@ type DialogState =
 export function OrgUnitDetail() {
   const { t, i18n } = useTranslation()
   const { company } = useSession()
+  const auth = useAuth()
   const { unitId } = useParams<{ unitId: string }>()
   const locale = localeOf(i18n.language)
+  // Terminal tab (ADR 0049 Phase 2, device credential + require-PIN policy) is owner/manager only
+  // — the /org route is already canDashboard-gated, but this mirrors that check explicitly (the
+  // same defense-in-depth PayrollTab uses for its owner-only bank-file download) since the tab
+  // exposes a reveal-on-demand secret.
+  const isOwnerOrManager = hasAnyRole(effectiveRoles(auth.roles, auth.elevatedRoles), 'owner', 'manager')
 
   const [tab, setTab] = useState<TabKey>('overview')
   const [period, setPeriod] = useState(currentPeriod())
@@ -150,6 +166,9 @@ export function OrgUnitDetail() {
     { value: 'expenses', label: t('orgHub.tabs.expenses') },
     { value: 'attendance', label: t('orgHub.tabs.attendance') },
     { value: 'payroll', label: t('orgHub.tabs.payroll') },
+    ...(!isBu && isOwnerOrManager
+      ? [{ value: 'terminal' as TabKey, label: t('orgHub.tabs.terminal') }]
+      : []),
   ]
 
   return (
@@ -328,6 +347,12 @@ export function OrgUnitDetail() {
           locale={locale}
           onNavigateToAttendance={() => setTab('attendance')}
         />
+      ) : null}
+      {tab === 'terminal' && !isBu && isOwnerOrManager ? (
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-ink-3">{t('terminal.subtitle')}</p>
+          <TerminalCard outletId={unit.id} companyId={company.companyId} actor={company.actor} />
+        </div>
       ) : null}
 
       {/* Dialogs (lifted org parts; mutations invalidate ['orgUnits'] so the page re-renders) */}

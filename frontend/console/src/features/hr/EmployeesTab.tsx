@@ -20,6 +20,7 @@ import { cn } from '@/lib/cn'
 import { useEmployees, type EmployeeListRow } from './api'
 import { CreateLoginDialog } from './CreateLoginDialog'
 import { EmployeeDetailDrawer } from './EmployeeDetailDrawer'
+import { OperatorPinDialog } from './OperatorPinDialog'
 import {
   AssignDialog,
   AssignExistingDialog,
@@ -39,6 +40,7 @@ type DialogState =
   | { kind: 'compensation'; employee: EmployeeListRow; fromDetail?: boolean }
   | { kind: 'terminate'; employee: EmployeeListRow; fromDetail?: boolean }
   | { kind: 'createLogin'; employee: EmployeeListRow; fromDetail?: boolean }
+  | { kind: 'operatorPin'; employee: EmployeeListRow; fromDetail?: boolean }
   | { kind: 'detail'; employeeId: string }
   | { kind: 'assignExisting' }
 
@@ -206,6 +208,14 @@ export function EmployeesTab({
           onClose={closeDialog}
         />
       ) : null}
+      {dialog?.kind === 'operatorPin' ? (
+        <OperatorPinDialog
+          employee={dialog.employee}
+          companyId={companyId}
+          actor={actor}
+          onClose={closeDialog}
+        />
+      ) : null}
       {dialog?.kind === 'detail'
         ? (() => {
             // Re-derived each render so the panel always shows the freshest grouped rows (an ended
@@ -233,6 +243,9 @@ export function EmployeesTab({
                 }
                 onTerminate={() =>
                   setDialog({ kind: 'terminate', employee: primary, fromDetail: true })
+                }
+                onSetOperatorPin={() =>
+                  setDialog({ kind: 'operatorPin', employee: primary, fromDetail: true })
                 }
               />
             )

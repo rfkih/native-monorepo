@@ -471,6 +471,23 @@ export function useResetPassword(params: TenantParams) {
   })
 }
 
+/**
+ * `PUT /api/v1/employees/{id}/operator-pin` (ADR 0049 P1) — owner/manager set or reset the
+ * employee's till PIN. Write-only: the backend never returns the PIN (204), so there is no
+ * matching read hook — this is a set/reset action only, never a reveal.
+ */
+export function useSetOperatorPin(params: TenantParams) {
+  const { companyId, actor } = params
+  return useMutation({
+    mutationFn: ({ employeeId, pin }: { employeeId: string; pin: string }) =>
+      apiFetch<null>(`/api/v1/employees/${employeeId}/operator-pin`, {
+        method: 'PUT',
+        tenant: { companyId, actor },
+        body: { pin },
+      }),
+  })
+}
+
 export function useEndAssignment(params: TenantParams) {
   const { companyId, actor } = params
   const invalidate = useHrInvalidate(companyId)
