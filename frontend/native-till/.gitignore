@@ -1,1 +1,3 @@
 node_modules/
+# OTA publish output (ADR 0051 P3): zip + updates.json produced by scripts/publish-bundle.mjs.
+ota-dist/

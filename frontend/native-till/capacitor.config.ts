@@ -11,6 +11,15 @@ const SERVER_URL = process.env.NATIVE_TILL_URL ?? 'https://a8.tailbf9662.ts.net:
 // client until the bundled build is verified end-to-end on a device (P2) and OTA lands (P3).
 const BUNDLED = process.env.NATIVE_TILL_BUNDLED === '1' || process.env.NATIVE_TILL_BUNDLED === 'true';
 
+// OTA live updates (ADR 0051 P3, Capgo self-hosted): NATIVE_TILL_UPDATE_URL points at the update
+// endpoint that returns {version,url,checksum}. EMPTY = OTA OFF — the plugin is present but dormant
+// (autoUpdate disabled), so a build without it behaves exactly as the plain bundled/thin shell and
+// can never contact Capgo Cloud. When set: check in the background and swap the web bundle on the
+// NEXT cold start (directUpdate:false — never mid-shift on a till); resetWhenUpdate keeps a native APK
+// update (a versionCode bump) authoritative over any downloaded bundle. The console calls
+// notifyAppReady() on boot (lib/nativeUpdater.ts) so a good bundle is not rolled back.
+const UPDATE_URL = process.env.NATIVE_TILL_UPDATE_URL ?? '';
+
 const config: CapacitorConfig = {
   // appId is the app's permanent technical identity — NEVER rename it (a change = a different
   // app to Android + Play). The user-facing launcher name is appName / strings.xml app_name.
@@ -50,6 +59,16 @@ const config: CapacitorConfig = {
       splashFullScreen: true,
       splashImmersive: false,
     },
+    // OTA live updates (ADR 0051 P3). Dormant unless NATIVE_TILL_UPDATE_URL is set — autoUpdate:false
+    // then, so the plugin never checks a server nor falls back to the Capgo Cloud default.
+    CapacitorUpdater: UPDATE_URL
+      ? {
+          updateUrl: UPDATE_URL,
+          autoUpdate: true,
+          directUpdate: false,
+          resetWhenUpdate: true,
+        }
+      : { autoUpdate: false },
   },
 };
 

@@ -115,9 +115,34 @@ Java-25 backend build stays isolated from the Android toolchain.
   plugin — and a `versionCode` bump — before the OTA server exists.)
 - **P2 — Cross-origin backend (security-reviewed).** Gateway CORS allow-list + Keycloak redirect URIs;
   device-verified OIDC round-trip on the bundled build. Flip the bundled build for UAT.
-- **P3 — OTA activation.** Stand up the self-hosted Capgo endpoint (off the edge/object store), a
-  bundle-publish CI step, `autoUpdate: true`, and a rollback path; verify a web feature reaches an
-  installed till with no APK.
+- **P3 — OTA activation** (client foundation shipped; server + device verification remain). Client:
+  `@capgo/capacitor-updater` is installed and configured **dormant** — `NATIVE_TILL_UPDATE_URL` empty →
+  `autoUpdate:false`, so it never contacts a server nor the Capgo Cloud default; the console calls
+  `notifyAppReady()` on boot (`lib/nativeUpdater.ts`) so a good bundle is not rolled back;
+  `directUpdate:false` (swap on next cold start, never mid-shift) + `resetWhenUpdate:true` (a native
+  APK/versionCode update wins over any downloaded bundle). Endpoint contract (self-hosted): the app
+  POSTs `AppInfos` (platform, app_id, version_name, …) to `updateUrl`; the server returns
+  `{version, url, checksum}`. **checksum = SHA-256 (hex) of the zip** — verified against the plugin's
+  `CryptoCipher.calcChecksum` / `DownloadService`, so `scripts/publish-bundle.mjs` computes it directly
+  and needs no Capgo account. Serving: `docker/uat/edge.conf` `/app/updates/` off the host mount
+  (`updates.json` + `native-till-<version>.zip`), `error_page 405 =200` so the client's POST reads the
+  static manifest. Publish: `npm run bundle` then `npm run publish` (a self-contained zip+sha256; the
+  `@capgo/cli bundle zip` path is avoided because the native-till `typescript@^7` devDep breaks the
+  CLI's `capacitor.config.ts` loader). **REMAINING:** (1) device-verify a full OTA cycle (download →
+  swap on next launch → `notifyAppReady` → no rollback); (2) **security — required before production
+  activation:** a bare SHA-256 is integrity-only. Whoever can serve/replace the endpoint or zip can
+  push arbitrary web code to every till, so switch on **Capgo encryption v2** (RSA-signed checksum: the
+  app carries the public key, only the private-key holder can mint a valid bundle) — the plugin already
+  supports it (`CryptoCipher.decryptChecksum`). This turns OTA from a supply-chain liability into a
+  signed channel. **Signing alone is NOT sufficient** (security review): the plugin installs whenever
+  the server's version merely *differs* from the running one (no monotonic check), so an
+  endpoint-controlling attacker can force a **downgrade/replay to an older, validly-signed bundle** —
+  pair encryption v2 with an anti-rollback control (a client-enforced minimum-version floor, bundle
+  freshness/expiry, or channel pinning). Also at activation: an explicit Android
+  `network_security_config` (cleartext off, consider cert-pinning the OTA host), and a device-verified
+  NEGATIVE test (ship an intentionally white-screening bundle, confirm auto-rollback — a paint-based
+  `notifyAppReady` won't catch a bundle that paints then fails at runtime). Route P3 activation through
+  a security review, as P2 was.
 - **P4 — GA.** Fold OTA + the bundled build into the Play release; flip this ADR to `Accepted`.
 
 Flip ADR 0043 to note it is amended here for the delivery model (its print-bridge decision stands).
