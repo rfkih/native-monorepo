@@ -1,6 +1,6 @@
 # 0049. Split into a Business (outlet-terminal) app and an Employee app; terminal auth = outlet credential + PIN operators + personal elevation
 
-- **Status:** Proposed
+- **Status:** Accepted (P0–P4 implemented; P0–P3 deployed+verified on UAT; P5 Employee app in progress)
 - **Date:** 2026-08-08
 - **Deciders:** Owner (product) + Claude (tech-lead)
 - **Related:** [0013](0013-per-login-page-grants-subtractive-ui.md) (login↔employee link, page grants),
@@ -120,3 +120,27 @@ credit the device, not the operator. P4 must carry the operator captured at ring
 charge is created) through to the async capture (stamp it on the charge/order and read it back), and
 its `operator-required` guard must reconcile with the async path (which never sees `actor_type` or
 `X-Operator-Session`). Tracked with the P2 code-review W2 note.
+
+**Resolved in P4 (`de933ebe`).** The ring-time operator is stamped onto the PENDING `payment`
+(`payment.sold_by_user_id`, migration V35) at the single digital-tender mint point
+(`PaymentWriter.recordPendingDigitalInCurrentTx`) and read back at `PaymentCaptureWriter.capture`,
+then threaded via `RecordSaleCommand.soldByUserId` so the async-recorded sale credits the operator —
+no event-schema change. The `operator-required` guard reconciles with the async path via a new
+per-vertical `ActorTypeProvider` that defaults to `"user"` when there is no HTTP request (the Kafka
+consumer thread), so the device guard is inert on capture. A **security-review HIGH** was fixed before
+sign-off: the digital-tender stamp now applies the SAME tenant/outlet assertion as the cash path
+(`OperatorMismatchException.requireMatch`, shared by `PaymentWriter` and `SaleWriter`) — the HMAC
+signing key is fleet-wide, so without it a validly-signed but foreign-outlet operator token could have
+become the stored ring-time seller and misattributed commission cross-tenant at capture. Commission
+credit follows the RING-TIME operator (`command.soldByUserId` wins over a live capture-time session),
+so a shift-change capturer cannot take the ringer's credit.
+
+**P4 residuals (deferred).** (1) `ActorTypeProvider` is fail-open by construction — off-request →
+`"user"` — which is load-bearing for the async path but means any future `@Async`/`DeferredResult`
+write path would silently skip the device guard; not exploitable today (no async return types on the
+write paths) — hardening = thread `actor_type` explicitly on the command, or an ArchUnit ban on async
+write-path return types. (2) The carwash/barbershop enforce gate is presence-only (no company/outlet
+assertion, the operator is never recorded) — a foreign-but-signed token satisfies it; harmless for
+commission there (the operator is never used as the metric subject — the washer/barber is) but thinner
+accountability than restaurant. (3) The operator token has no `jti` de-dup, so replay within `exp`
+can misattribute (pre-existing P1/P2 bearer-token design).
