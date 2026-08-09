@@ -79,6 +79,10 @@ class UserManagementAcceptanceTest {
   private static final String COMPANY_A = "11111111-1111-1111-1111-111111111111";
   private static final String OWNER_A_USERNAME = "owner-acme";
   private static final String OWNER_A_PASSWORD = "owner-password";
+  // A manager-ONLY login in company A (owner-acme holds owner+manager, so it can't stand in for a
+  // plain manager) — the caller for the role-hierarchy / anti-escalation tests.
+  private static final String MANAGER_A_USERNAME = "manager-acme";
+  private static final String MANAGER_A_PASSWORD = "manager-password";
   private static final String COMPANY_B = "22222222-2222-2222-2222-222222222222";
   private static final String OWNER_B_USERNAME = "owner-beta";
   private static final String OWNER_B_PASSWORD = "beta-owner-password";
@@ -102,6 +106,7 @@ class UserManagementAcceptanceTest {
   // We need the KC user id of owner-acme to test self-lockout.
   private static String ownerAKeycloakId;
   private static String ownerBKeycloakId;
+  private static String managerAKeycloakId;
 
   @LocalServerPort private int port;
 
@@ -115,6 +120,7 @@ class UserManagementAcceptanceTest {
     // Resolve the Keycloak user ids of the seeded users (needed for self-lockout assertions).
     ownerAKeycloakId = findKeycloakUserIdByEmail("owner@acme.example.co.id");
     ownerBKeycloakId = findKeycloakUserIdByEmail("owner@beta.example.co.id");
+    managerAKeycloakId = findKeycloakUserIdByEmail("manager@acme.example.co.id");
   }
 
   @BeforeEach
@@ -758,8 +764,160 @@ class UserManagementAcceptanceTest {
   }
 
   // ===========================================================================
+  // Role-hierarchy / anti-escalation (ADR 0052) — the gateway lets owner AND manager reach
+  // /users/**; these prove the fine-grained guard that stops a MANAGER from escalating.
+  // ===========================================================================
+
+  @Test
+  void managerCannotEscalateSelfToOwnerByPatch() {
+    // The takeover attack: a manager PATCHes their own login to {owner}. Must be 403, not a
+    // demotion
+    // (self-lockout doesn't fire — the manager holds no owner role to lose).
+    String tokenM = tokenForManagerA();
+    assertInsufficientPrivilege(
+        () ->
+            appClient()
+                .patch()
+                .uri("/api/v1/users/" + managerAKeycloakId)
+                .header(HttpHeaders.AUTHORIZATION, bearer(tokenM))
+                .contentType(MediaType.APPLICATION_JSON)
+                .body("{\"roles\": [\"owner\"]}")
+                .retrieve()
+                .body(String.class));
+  }
+
+  @Test
+  void managerCannotSelfGrantAccountantOrHrByPatch() {
+    // The boundary-defeat attack: a manager PATCHes self to {manager, accountant, hr},
+    // self-granting
+    // the finance + payroll surfaces ADR 0052 withholds from managers. Must be 403.
+    String tokenM = tokenForManagerA();
+    assertInsufficientPrivilege(
+        () ->
+            appClient()
+                .patch()
+                .uri("/api/v1/users/" + managerAKeycloakId)
+                .header(HttpHeaders.AUTHORIZATION, bearer(tokenM))
+                .contentType(MediaType.APPLICATION_JSON)
+                .body("{\"roles\": [\"manager\", \"accountant\", \"hr\"]}")
+                .retrieve()
+                .body(String.class));
+  }
+
+  @Test
+  void managerCannotInviteAnOwner() {
+    // The escalation-by-invite variant: a manager creates a new owner and gets its temp password.
+    String tokenM = tokenForManagerA();
+    assertInsufficientPrivilege(
+        () ->
+            appClient()
+                .post()
+                .uri("/api/v1/users")
+                .header(HttpHeaders.AUTHORIZATION, bearer(tokenM))
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(
+                    """
+                    {"username": "%1$s", "email": "%1$s", "role": "owner"}
+                    """
+                        .formatted(uniqueEmail()))
+                .retrieve()
+                .body(String.class));
+  }
+
+  @Test
+  void managerCannotInviteAnAccountant() {
+    // A manager may not hand out finance access (accountant) it does not itself hold.
+    String tokenM = tokenForManagerA();
+    assertInsufficientPrivilege(
+        () ->
+            appClient()
+                .post()
+                .uri("/api/v1/users")
+                .header(HttpHeaders.AUTHORIZATION, bearer(tokenM))
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(
+                    """
+                    {"username": "%1$s", "email": "%1$s", "role": "accountant"}
+                    """
+                        .formatted(uniqueEmail()))
+                .retrieve()
+                .body(String.class));
+  }
+
+  @Test
+  void managerCannotDemoteAnOwnerByPatch() {
+    // The "strip the real owner" attack: a manager PATCHes owner-acme (a privileged login) down to
+    // cashier. The target-hierarchy guard forbids a non-owner from touching an owner login → 403.
+    String tokenM = tokenForManagerA();
+    assertInsufficientPrivilege(
+        () ->
+            appClient()
+                .patch()
+                .uri("/api/v1/users/" + ownerAKeycloakId)
+                .header(HttpHeaders.AUTHORIZATION, bearer(tokenM))
+                .contentType(MediaType.APPLICATION_JSON)
+                .body("{\"roles\": [\"cashier\"]}")
+                .retrieve()
+                .body(String.class));
+  }
+
+  @Test
+  void managerCannotDeactivateAnOwner() {
+    // A manager may not disable an owner login (lockout / DoS). Deactivate carries the same guard.
+    String tokenM = tokenForManagerA();
+    assertInsufficientPrivilege(
+        () ->
+            appClient()
+                .delete()
+                .uri("/api/v1/users/" + ownerAKeycloakId)
+                .header(HttpHeaders.AUTHORIZATION, bearer(tokenM))
+                .retrieve()
+                .toBodilessEntity());
+  }
+
+  @Test
+  void managerCanInviteAFloorLogin() throws Exception {
+    // The guard must NOT over-block: a manager runs the floor, so inviting a cashier still
+    // succeeds.
+    String email = uniqueEmail();
+    String tokenM = tokenForManagerA();
+
+    String body =
+        appClient()
+            .post()
+            .uri("/api/v1/users")
+            .header(HttpHeaders.AUTHORIZATION, bearer(tokenM))
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(
+                """
+                {"username": "%1$s", "email": "%1$s", "role": "cashier"}
+                """
+                    .formatted(email))
+            .retrieve()
+            .body(String.class);
+
+    JsonNode node = JSON.readValue(body, JsonNode.class);
+    assertThat(node.get("role").asString()).isEqualTo("cashier");
+    assertThat(node.get("temporaryPassword").asString()).isNotBlank();
+  }
+
+  // ===========================================================================
   // Helpers
   // ===========================================================================
+
+  /** Asserts the call fails with 403 + the {@code insufficient-privilege} RFC-7807 type. */
+  private static void assertInsufficientPrivilege(
+      org.assertj.core.api.ThrowableAssert.ThrowingCallable call) {
+    assertThatThrownBy(call)
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex -> {
+              HttpClientErrorException e = (HttpClientErrorException) ex;
+              assertThat(e.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+              assertThat(e.getResponseBodyAsString())
+                  .contains("https://errors.nativeapp.id/insufficient-privilege");
+            });
+  }
 
   private String tokenForOwnerA() {
     return obtainToken(OWNER_A_USERNAME, OWNER_A_PASSWORD);
@@ -767,6 +925,10 @@ class UserManagementAcceptanceTest {
 
   private String tokenForOwnerB() {
     return obtainToken(OWNER_B_USERNAME, OWNER_B_PASSWORD);
+  }
+
+  private String tokenForManagerA() {
+    return obtainToken(MANAGER_A_USERNAME, MANAGER_A_PASSWORD);
   }
 
   private String obtainToken(String username, String password) {

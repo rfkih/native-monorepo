@@ -35,6 +35,14 @@ import org.springframework.stereotype.Service;
  * available via {@link TenantContext.Tenant#actor()}) is compared against the target user id for
  * PATCH-disable and DELETE (deactivate) operations. A caller cannot disable or demote themselves.
  *
+ * <p><strong>Role-hierarchy guard (the escalation boundary).</strong> The gateway lets both {@code
+ * owner} and {@code manager} reach {@code /users/**}; {@link #authorizeRoleAdministration} is the
+ * fine-grained check that keeps a manager from escalating — self-granting {@code accountant}/{@code
+ * hr} (the finance/payroll surfaces ADR 0052 withholds from managers) or {@code owner}, or
+ * disabling/demoting the owner. Only an {@code owner} administers owner/manager/accountant/hr
+ * logins; a manager administers floor logins only. Applies to invite, patch (roles AND enabled),
+ * and deactivate; {@link #resetPassword} carries the equivalent guard for password resets.
+ *
  * <p><strong>PII hygiene (rule 6).</strong> Email addresses and temporary passwords are NEVER
  * logged. Log statements carry only stable, non-PII identifiers (user UUIDs, company UUIDs, roles).
  */
@@ -54,6 +62,17 @@ public class UserService {
    */
   private static final Set<String> ALLOWED_ROLES =
       Set.of("owner", "manager", "cashier", "employee", "hr", "accountant", "chef", "waitress");
+
+  /**
+   * The roles a NON-owner (i.e. {@code manager}) caller may assign to, or administer on, another
+   * login — the floor / self-service roles. The office / privileged roles ({@code owner}, {@code
+   * manager}, {@code accountant}, {@code hr}) are OWNER-administered only: a manager runs the
+   * floor, and must not be able to hand out (or self-grant) finance/payroll access it does not
+   * itself hold, nor escalate anyone to {@code owner}/{@code manager}. See {@link
+   * #authorizeRoleAdministration} and ADR 0052.
+   */
+  private static final Set<String> MANAGER_MANAGEABLE_ROLES =
+      Set.of("cashier", "waitress", "chef", "employee");
 
   private final KeycloakAdminClient keycloak;
   private final UserOutletAssignmentService outletAssignments;
@@ -134,6 +153,11 @@ public class UserService {
       }
     }
     roles.forEach(UserService::validateRole);
+
+    // Role-hierarchy guard: a non-owner (manager) may only invite floor logins — never create an
+    // owner/manager/accountant/hr login (escalation). No existing target, so the current-roles set
+    // is empty.
+    authorizeRoleAdministration(Set.of(), new LinkedHashSet<>(roles));
 
     String companyId = TenantContext.require().companyId();
 
@@ -274,6 +298,15 @@ public class UserService {
               + "Assign the owner role to another user first.");
     }
 
+    // Role-hierarchy guard: a non-owner (manager) may not grant a privileged/office role nor touch
+    // a login that holds one (so a manager can neither self-grant finance/payroll nor
+    // demote/disable
+    // the owner/accountant). Runs for enabled-only patches too — the current-target check still
+    // bites.
+    authorizeRoleAdministration(
+        new LinkedHashSet<>(target.roles()),
+        request.roles() == null ? null : new LinkedHashSet<>(request.roles()));
+
     // Apply changes.
     if (request.roles() != null) {
       keycloak.replaceRealmRoles(userId, new LinkedHashSet<>(request.roles()));
@@ -316,6 +349,10 @@ public class UserService {
       throw new SelfLockoutException("You cannot deactivate your own account.");
     }
 
+    // Role-hierarchy guard: a non-owner (manager) may not deactivate an owner/manager/accountant/hr
+    // login (only floor logins). Deactivation changes no roles, so there is nothing to grant-check.
+    authorizeRoleAdministration(new LinkedHashSet<>(target.roles()), null);
+
     keycloak.setEnabled(userId, false);
 
     log.info("Deactivated user: userId={}, callerCompanyId={}", userId, caller.companyId());
@@ -353,6 +390,58 @@ public class UserService {
   private static void validateRole(String role) {
     if (!ALLOWED_ROLES.contains(role)) {
       throw new InvalidRoleException(role);
+    }
+  }
+
+  /**
+   * Role-hierarchy guard for team administration (invite / patch-roles / patch-enabled /
+   * deactivate) — the fine-grained companion to {@link #resetPassword}'s guard.
+   *
+   * <p>The gateway lets BOTH {@code owner} and {@code manager} reach {@code /api/v1/users/**}. That
+   * coarse gate is NOT enough: without this guard a {@code manager} could {@code PATCH} their own
+   * login to {@code {manager, accountant, hr}} (self-granting the finance + payroll surfaces this
+   * very model exists to withhold from managers — ADR 0052) or straight to {@code owner} (full
+   * account/tenant takeover), and could disable or demote the real owner. So:
+   *
+   * <ul>
+   *   <li>An {@code owner} caller administers everyone — returns immediately ({@link #validateRole}
+   *       and the self-lockout guards still apply).
+   *   <li>A NON-owner caller (a manager) may assign ONLY {@link #MANAGER_MANAGEABLE_ROLES} (never
+   *       grant {@code owner}/{@code manager}/{@code accountant}/{@code hr}), and may administer
+   *       ONLY a login that currently holds none but those floor roles (never touch an owner /
+   *       manager / accountant / hr login — no demoting or disabling them).
+   * </ul>
+   *
+   * <p>Combined with the self-lockout guard (an owner cannot drop their own {@code owner} role), a
+   * company always retains at least one owner. Throws {@link InsufficientPrivilegeException} (403).
+   *
+   * @param currentTargetRoles the target's business roles today — EMPTY for an invite (no existing
+   *     login to protect)
+   * @param requestedRoles the roles being assigned, or {@code null} when only {@code enabled}
+   *     changes (a manager still may not disable a privileged target)
+   */
+  private void authorizeRoleAdministration(
+      Set<String> currentTargetRoles, Set<String> requestedRoles) {
+    // Resolve the caller's own roles from Keycloak (authoritative; same pattern as resetPassword).
+    KeycloakUser caller = resolveInTenant(TenantContext.require().actor());
+    if (caller.roles().contains("owner")) {
+      return; // an owner administers everyone
+    }
+    // Non-owner caller (a manager): may only GRANT floor roles...
+    if (requestedRoles != null) {
+      for (String role : requestedRoles) {
+        if (!MANAGER_MANAGEABLE_ROLES.contains(role)) {
+          throw new InsufficientPrivilegeException(
+              "Only an owner may assign the '" + role + "' role.");
+        }
+      }
+    }
+    // ...and may only ADMINISTER a login that currently holds floor roles only.
+    for (String role : currentTargetRoles) {
+      if (!MANAGER_MANAGEABLE_ROLES.contains(role)) {
+        throw new InsufficientPrivilegeException(
+            "Only an owner may change an owner, manager, accountant, or HR login.");
+      }
     }
   }
 
