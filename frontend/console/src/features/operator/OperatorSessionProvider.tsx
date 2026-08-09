@@ -33,6 +33,7 @@ import { useOperatorSignInMutation } from './api'
 import {
   clearOperatorSession,
   loadOperatorSession,
+  OPERATOR_SESSION_STORAGE_KEY,
   saveOperatorSession,
   type OperatorSessionData,
 } from './operatorSessionStore'
@@ -56,6 +57,15 @@ export function OperatorSessionProvider({ children }: { children: ReactNode }) {
   // inline — this effect only covers the initial load.
   useEffect(() => {
     armOperatorSessionHeader(data?.token ?? null)
+    // P3d migration cleanup (code review W1): the operator session moved from localStorage to
+    // sessionStorage. Evict any token a PRE-P3d build left in the OLD localStorage key — otherwise a
+    // device updated mid-shift keeps a stale (valid-until-exp) operator credential as debris in
+    // localStorage that nothing ever reads or clears. One-time, harmless when absent.
+    try {
+      window.localStorage.removeItem(OPERATOR_SESSION_STORAGE_KEY)
+    } catch {
+      /* storage unavailable — best effort */
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
