@@ -283,6 +283,7 @@ services:
       DB_PASSWORD: org_service
       KEYCLOAK_BASE_URL: http://keycloak:8080/auth # KC admin REST, internal
       KEYCLOAK_ADMIN_SECRET: ${KEYCLOAK_ADMIN_SECRET} # rotated by uat-up.ps1
+      ORG_PII_KEY: ${ORG_PII_KEY} # ADR 0049 P3a — device-credential password cipher (prod-guard requires a real key)
 
   restaurant-service:
     <<: *java-service
@@ -307,6 +308,7 @@ services:
       MEDIA_ACCESS_KEY: restaurant-media
       MEDIA_SECRET_KEY: ${MEDIA_RESTAURANT_SECRET_KEY}
       MEDIA_PUBLIC_BASE_URL: ${PUBLIC_URL}/api/media
+      NATIVE_OPERATOR_TOKEN_KEY: ${NATIVE_OPERATOR_TOKEN_KEY} # ADR 0049 P2 — verifies operator tokens offline (prod-guard requires a real key)
 
   carwash-service:
     <<: *java-service
@@ -409,6 +411,7 @@ services:
       MEDIA_ENDPOINT: http://minio:9000
       MEDIA_ACCESS_KEY: employee-media
       MEDIA_SECRET_KEY: ${MEDIA_EMPLOYEE_SECRET_KEY}
+      NATIVE_OPERATOR_TOKEN_KEY: ${NATIVE_OPERATOR_TOKEN_KEY} # ADR 0049 P1 — mints/signs operator tokens (prod-guard requires a real key)
 
   notification-service:
     <<: *java-service
