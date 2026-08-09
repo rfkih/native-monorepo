@@ -95,6 +95,12 @@ if (-not $SkipBuild) {
     Write-Host '== Building console image ==' -ForegroundColor Cyan
     & docker build -t native-uat/console:latest (Join-Path $repoRoot 'frontend\console')
     if ($LASTEXITCODE -ne 0) { throw 'docker build failed for console' }
+
+    # Employee app (ADR 0049 P5): a SECOND origin over the shared /me surface. Its build CONTEXT is
+    # frontend/ (the parent) because it consumes ../console/src via the `@` alias.
+    Write-Host '== Building employee image ==' -ForegroundColor Cyan
+    & docker build -f (Join-Path $repoRoot 'frontend\employee\Dockerfile') -t native-uat/employee:latest (Join-Path $repoRoot 'frontend')
+    if ($LASTEXITCODE -ne 0) { throw 'docker build failed for employee' }
 }
 
 # ---------------------------------------------------------------- 4. secrets
@@ -209,12 +215,26 @@ Invoke-Kcadm @('config', 'credentials', '--server', 'http://localhost:8080/auth'
 # (e.g. pkce.code.challenge.method) survive.
 $consoleId = Get-KcClientId 'native-console'
 $client = (Invoke-Kcadm @('get', "clients/$consoleId", '-r', 'native')) -join "`n" | ConvertFrom-Json
-$client.redirectUris = @("$publicUrl/*")
-$client.webOrigins = @($publicUrl)
+# ADR 0049 P5: in stable-funnel mode the Employee app has its OWN origin on funnel :10000 — register
+# it on the same native-console client (ADDITIVE to the console's :8443 origin) so its OIDC login and
+# the cross-origin token POST (webOrigins) work. Skipped in quicktunnel mode (there is no :10000
+# funnel there). Note the compose `employee` service + the edge :8081 block + the `tailscale funnel
+# --https=10000 http://127.0.0.1:8089` are the other half of this origin.
+$redirectUris = @("$publicUrl/*")
+$webOrigins = @($publicUrl)
+$logoutUris = "$publicUrl/*"
+if ($PublicUrl) {
+    $employeeUrl = $PublicUrl -replace ':8443', ':10000'
+    $redirectUris += "$employeeUrl/*"
+    $webOrigins += $employeeUrl
+    $logoutUris = "$publicUrl/*##$employeeUrl/*"
+}
+$client.redirectUris = $redirectUris
+$client.webOrigins = $webOrigins
 if ($client.attributes.PSObject.Properties['post.logout.redirect.uris']) {
-    $client.attributes.'post.logout.redirect.uris' = "$publicUrl/*"
+    $client.attributes.'post.logout.redirect.uris' = $logoutUris
 } else {
-    $client.attributes | Add-Member -NotePropertyName 'post.logout.redirect.uris' -NotePropertyValue "$publicUrl/*"
+    $client.attributes | Add-Member -NotePropertyName 'post.logout.redirect.uris' -NotePropertyValue $logoutUris
 }
 $patchFile = Join-Path $env:TEMP 'native-console-client.json'
 [IO.File]::WriteAllText($patchFile, ($client | ConvertTo-Json -Depth 16), (New-Object System.Text.UTF8Encoding($false)))

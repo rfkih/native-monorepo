@@ -56,7 +56,7 @@ dependency (react as the **same** instance — no dual-package hazard) from the 
 Keycloak/API URLs are injected at container start from `NATIVE_*` env (`docker-entrypoint.d/`), so
 one image serves any environment.
 
-## UAT wiring (the remaining step) — a SECOND funnel origin
+## UAT deploy — a SECOND funnel origin (LIVE)
 
 The console owns the `:8443` funnel origin and `${origin}/auth/callback`. Two apps cannot share one
 origin's callback, so the Employee app gets its **own** origin on the Tailscale funnel's second
@@ -65,8 +65,12 @@ the token `iss` the services validate is unchanged. `/api` is same-origin on `:1
 browser reaches Keycloak at `:8443/auth` directly (a full-page redirect), and KC redirects back to
 `:10000/auth/callback` (served by this SPA via its history fallback).
 
-> Not yet applied to the live UAT stack: a concurrent session was actively deploying to the shared
-> stack, and adding this origin means recreating the shared `edge` container — coordinate first.
+> **Live since 2026-08-09** at `https://a8.tailbf9662.ts.net:10000` (probe tenant). Verified: the
+> origin serves the employee SPA, "Sign in" redirects to Keycloak with the `:10000/auth/callback`
+> redirect_uri + PKCE, and KC accepts it (login form renders). The console `:8443` origin is
+> unaffected. `scripts/uat-up.ps1` now builds the employee image and registers **both** origins on
+> the `native-console` client, so a full bring-up keeps the Employee app working (no manual re-add).
+> The Tailscale funnel `:10000` mapping persists out-of-band, like the main `:8443` funnel.
 
 ### 1. Build the image
 ```sh
