@@ -50,9 +50,14 @@ export interface InviteMemberBody {
   additionalRoles?: string[]
 }
 
-/** PATCH /api/v1/users/{id} body. */
+/**
+ * PATCH /api/v1/users/{id} body. `roles`, when provided, REPLACES the target's entire business-
+ * role SET (preset role-based access model Phase 1/2 — org-service's `PatchUserRequest.roles()` is
+ * a full replace-all list, not a single primary role; a login may hold several roles at once, e.g.
+ * `hr` + `accountant`).
+ */
 export interface UpdateMemberBody {
-  role?: string
+  roles?: string[]
   enabled?: boolean
 }
 

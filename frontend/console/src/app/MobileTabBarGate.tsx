@@ -22,6 +22,7 @@ import { useIsPhone } from '@/components/mobile/useIsPhone'
 import { effectiveRoles, hasAnyRole, useAuth } from '@/lib/authContext'
 import { usePageAccess } from '@/lib/pageAccess'
 import { useTierAccess } from '@/lib/featureTier'
+import { canFinance, canHr, canOps, canPayroll, canPos, canReports } from '@/lib/rolePreset'
 import { MoreSheet } from './MoreSheet'
 import { shouldMountTabBar } from './tabBarPolicy'
 
@@ -54,16 +55,25 @@ export function MobileTabBarGate({ home }: { home: string }) {
   if (!isPhone || !shouldMountTabBar(pathname)) return null
 
   // ADR 0049 P3b — the back-office persona reads the MERGED (elevated) roles, mirroring App.tsx's
-  // canDashboard: an elevated device terminal on phone width gets the owner/manager tab set, not
-  // the bare cashier one. Byte-identical for a normal `user` login (elevatedRoles is always `[]`).
-  const canDashboard = hasAnyRole(effectiveRoles(auth.roles, auth.elevatedRoles), 'owner', 'manager')
+  // per-capability booleans: an elevated device terminal on phone width gets the office tab set,
+  // not the bare cashier one. Byte-identical for a normal `user` login (elevatedRoles is always
+  // `[]`). Preset role-based access model Phase 2 — `officeOk` is the union of every non-POS
+  // capability (owner/manager/accountant/hr all reach SOME Shell-wrapped page on phone and need a
+  // way back to it; Shell's own hamburger button is hidden below the phone cutoff, so the tab
+  // bar's "More" entry is their ONLY navigation at this width).
+  const roles = effectiveRoles(auth.roles, auth.elevatedRoles)
+  const opsOk = canOps(roles)
+  const officeOk = opsOk || canReports(roles) || canFinance(roles) || canHr(roles) || canPayroll(roles)
   const canEmployee = hasAnyRole(auth.roles, 'employee')
 
   let tabs: MobileTab[]
-  if (canDashboard) {
+  if (officeOk) {
     const reportsTab =
-      pageAccess.isAllowed('reports') && tierAccess.allows('statements') && home !== '/statements/income'
-    const teamTab = pageAccess.isAllowed('team') && tierAccess.allows('team') && home !== '/team'
+      canReports(roles) &&
+      pageAccess.isAllowed('reports') &&
+      tierAccess.allows('statements') &&
+      home !== '/statements/income'
+    const teamTab = opsOk && pageAccess.isAllowed('team') && tierAccess.allows('team') && home !== '/team'
     tabs = [
       { key: 'home', label: t('mobile.tabs.home'), icon: House, to: home, end: true },
       ...(reportsTab
@@ -86,14 +96,11 @@ export function MobileTabBarGate({ home }: { home: string }) {
       { key: 'claims', label: t('mobile.tabs.claims'), icon: Wallet, to: '/me/expenses' },
     ]
   } else {
-    // Cashier-only — every surface they own is an excluded path; no bar.
+    // POS-only (cashier/chef/waitress) — every surface they own is an excluded path; no bar.
     return null
   }
 
-  const posAllowed =
-    hasAnyRole(auth.roles, 'owner', 'manager', 'cashier') &&
-    pageAccess.isAllowed('pos') &&
-    tierAccess.allows('pos')
+  const posAllowed = canPos(auth.roles) && pageAccess.isAllowed('pos') && tierAccess.allows('pos')
 
   return (
     <>

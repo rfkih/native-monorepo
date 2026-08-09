@@ -26,15 +26,27 @@ export function Shell({ children }: { children: ReactNode }) {
   const { t } = useTranslation()
   const { company } = useSession()
   const auth = useAuth()
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
   const { theme, toggle } = useTheme()
   const [drawerOpen, setDrawerOpen] = useState(false)
 
   // Nav data + role/grant/tier filtering live in navGroups.ts (shared with the phone More sheet).
   const { groups, canPos } = useNavGroups()
 
-  const isActive = (item: NavItem) =>
-    item.end ? pathname === item.to : pathname.startsWith(item.to)
+  // The People group's items carry a `?tab=` query string (navGroups.ts) targeting the standalone
+  // People page (`PeoplePage.tsx`, ADR 0052) — so an item like `/people?tab=payroll` is "active"
+  // once BOTH the pathname AND the search string match (the page reads its own `?tab=` to pick the
+  // initial Segmented tab, same as `OrgUnitDetail` does for its own `?tab=`). Every other item (no
+  // `?` in `to`) matches on pathname alone, unchanged from before.
+  const isActive = (item: NavItem) => {
+    const qIndex = item.to.indexOf('?')
+    if (qIndex !== -1) {
+      const itemPath = item.to.slice(0, qIndex)
+      const itemSearch = item.to.slice(qIndex)
+      return pathname === itemPath && search === itemSearch
+    }
+    return item.end ? pathname === item.to : pathname.startsWith(item.to)
+  }
 
   // Breadcrumb falls out of the same data: "<group> · <active item>".
   const flat = groups.flatMap((g) => g.items.map((it) => ({ ...it, group: g.heading })))

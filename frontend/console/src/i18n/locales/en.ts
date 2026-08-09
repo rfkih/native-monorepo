@@ -382,8 +382,12 @@ export const en = {
     groupSales: 'Sales',
     groupPlanning: 'Planning',
     groupOrg: 'Organization',
+    groupPeople: 'People',
     groupSettings: 'Settings',
     team: 'Team',
+    employees: 'Employees',
+    payroll: 'Payroll',
+    attendance: 'Leave & attendance',
     menu: 'Menu',
     kitchen: 'Kitchen',
     expenses: 'Expenses',
@@ -1441,6 +1445,23 @@ export const en = {
       back: 'Back to the org tree',
     },
   },
+  // The standalone HR People page (ADR 0052) — owner/manager/hr. Reuses orgHub.tabs.* for the
+  // Employees/Attendance/Payroll tab labels (same tabs, same wording).
+  people: {
+    title: 'People',
+    subtitle: 'Employee records, attendance, and payroll for this business.',
+    tabsLabel: 'People sections',
+    unitPicker: {
+      label: 'Business',
+    },
+    noCompany: 'No company selected',
+    noCompanyHint: 'Create a company to see its people.',
+    noBusinessUnit: {
+      title: 'No business set up yet',
+      hint: 'Create a business unit from Organization to start adding employees.',
+    },
+    error: 'Could not load the businesses for this company.',
+  },
   attendance: {
     view: {
       label: 'Attendance sections',
@@ -1746,6 +1767,9 @@ export const en = {
       npwpError: 'Could not save the NPWP. Try again.',
       loginTitle: 'Login',
       noLogin: 'No login yet. Create one so this employee can sign in.',
+      // ADR 0052 — an hr-alone login (`!canManageLogins`) sees this instead: creating a login is an
+      // owner/manager-only action (org-service).
+      noLoginReadOnly: 'No login yet. Ask an owner or manager to create one.',
       username: 'Username',
       tempPassword: 'One-time password',
       tempPasswordHint:
@@ -1755,6 +1779,9 @@ export const en = {
       resetPassword: 'Reset password',
       resetting: 'Resetting…',
       removeLogin: 'Remove login',
+      // ADR 0052 — shown instead of Reset/Remove for an hr-alone login: managing an EXISTING login
+      // is also owner/manager-only.
+      loginManageRestricted: 'Only an owner or manager can reset or remove this login.',
       copyPassword: 'Copy password',
       // ADR 0049 P1 — the till PIN, separate from the console login above (never revealed here).
       operatorPinTitle: 'Operator PIN',
@@ -2260,6 +2287,9 @@ export const en = {
     noClose: 'No close for this period.',
     noCloseHint: 'Run a group close to see the consolidated figures.',
     consolidationError: 'Could not load consolidation.',
+    financeOnly: 'Consolidated figures need finance access',
+    financeOnlyHint:
+      'You can manage this group’s members here. The consolidated figures and group close are available to the owner and accountant.',
     state: 'Close state',
     closeRunSeq: 'Close run',
     eliminations: 'Eliminations',
@@ -2439,6 +2469,20 @@ export const en = {
       manager: 'Manager',
       cashier: 'Cashier',
       employee: 'Employee',
+      hr: 'HR',
+      accountant: 'Accountant',
+      chef: 'Chef',
+      waitress: 'Waitstaff',
+    },
+    roleHint: {
+      owner: 'Everything.',
+      manager: 'Operations, reports, and HR — not detailed finance or payroll.',
+      cashier: 'Point of sale only.',
+      employee: 'Own profile only (payslips, leave, claims).',
+      hr: 'HR and payroll.',
+      accountant: 'Reports and detailed finance.',
+      chef: 'Point of sale / kitchen display only.',
+      waitress: 'Point of sale only.',
     },
     inviteDialog: {
       title: 'Invite teammate',

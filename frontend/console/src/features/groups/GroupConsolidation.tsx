@@ -8,6 +8,8 @@ import { ListSkeleton, Skeleton } from '@/components/ui/Skeleton'
 import { Field, TextInput } from '@/components/ui/Field'
 import { EmptyState, PeriodNav } from '@/features/_shared/financeUi'
 import { useSession } from '@/lib/session'
+import { effectiveRoles, useAuth } from '@/lib/authContext'
+import { canFinance } from '@/lib/rolePreset'
 import { localeOf } from '@/i18n'
 import { formatMoney } from '@/lib/money'
 import { currentPeriod, shiftPeriod, formatPeriod } from '@/lib/period'
@@ -311,7 +313,14 @@ function GroupDetail({
 }) {
   const { t, i18n } = useTranslation()
   const locale = localeOf(i18n.language)
+  const auth = useAuth()
   const [period, setPeriod] = useState(currentPeriod())
+
+  // The page reaches here via the OPS gate (owner/manager manage group MEMBERSHIP,
+  // /consolidation-groups). The consolidated figures + run-close are the detailed books
+  // (/api/v1/groups/**, FINANCE = owner/accountant) — a manager is deliberately NOT shown them and
+  // we must not even FIRE the read (it would 403). See ADR 0052.
+  const canViewConsolidation = canFinance(effectiveRoles(auth.roles, auth.elevatedRoles))
 
   const membersQuery = useGroupMembers({ companyId, actor, groupId: group.id, enabled: true })
   const consolidationQuery = useGroupConsolidation({
@@ -319,7 +328,7 @@ function GroupDetail({
     actor,
     groupId: group.id,
     period,
-    enabled: true,
+    enabled: canViewConsolidation,
   })
 
   const data = consolidationQuery.data ?? null
@@ -340,55 +349,61 @@ function GroupDetail({
                 <span className="font-medium text-ink-2">{t('groups.reportingCurrency')}: {group.reportingCurrency}</span>
               </p>
             </div>
-            <div className="flex shrink-0 flex-col items-end gap-2">
-              {data ? (
-                <span className="rounded-full bg-tint-profit px-3 py-1.5 text-xs font-semibold text-profit-ink">
-                  {t(`groups.states.${data.state}` as Parameters<typeof t>[0])} #{data.closeRunSeq}
+            {canViewConsolidation ? (
+              <div className="flex shrink-0 flex-col items-end gap-2">
+                {data ? (
+                  <span className="rounded-full bg-tint-profit px-3 py-1.5 text-xs font-semibold text-profit-ink">
+                    {t(`groups.states.${data.state}` as Parameters<typeof t>[0])} #{data.closeRunSeq}
+                  </span>
+                ) : null}
+                <Button
+                  className="px-3.5 text-xs"
+                  onClick={() => onDialog({ kind: 'runClose', groupId: group.id, period, nextSeq })}
+                >
+                  <Play className="size-3.5" /> {t('groups.runGroupClose')}
+                </Button>
+              </div>
+            ) : null}
+          </div>
+
+          {canViewConsolidation ? (
+            <>
+              {/* Period nav */}
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-ink-3">
+                  {t('groups.consolidation')}
                 </span>
-              ) : null}
-              <Button
-                className="px-3.5 text-xs"
-                onClick={() => onDialog({ kind: 'runClose', groupId: group.id, period, nextSeq })}
-              >
-                <Play className="size-3.5" /> {t('groups.runGroupClose')}
-              </Button>
-            </div>
-          </div>
+                <PeriodNav
+                  period={period}
+                  locale={locale}
+                  onPrev={() => setPeriod((p) => shiftPeriod(p, -1))}
+                  onNext={() => setPeriod((p) => shiftPeriod(p, 1))}
+                  prevLabel={t('groups.prevPeriod')}
+                  nextLabel={t('groups.nextPeriod')}
+                />
+              </div>
 
-          {/* Period nav */}
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-ink-3">
-              {t('groups.consolidation')}
-            </span>
-            <PeriodNav
-              period={period}
-              locale={locale}
-              onPrev={() => setPeriod((p) => shiftPeriod(p, -1))}
-              onNext={() => setPeriod((p) => shiftPeriod(p, 1))}
-              prevLabel={t('groups.prevPeriod')}
-              nextLabel={t('groups.nextPeriod')}
-            />
-          </div>
-
-          {/* Provisional badges */}
-          {data ? (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {data.usesIllustrativeRules ? (
-                <Badge tone="amber">
-                  <TriangleAlert className="size-3" /> {t('groups.illustrative')}
-                </Badge>
+              {/* Provisional badges */}
+              {data ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {data.usesIllustrativeRules ? (
+                    <Badge tone="amber">
+                      <TriangleAlert className="size-3" /> {t('groups.illustrative')}
+                    </Badge>
+                  ) : null}
+                  {data.usesStubFx ? (
+                    <Badge tone="amber">
+                      <TriangleAlert className="size-3" /> {t('groups.stubFx')}
+                    </Badge>
+                  ) : null}
+                  {data.usesSimplifiedTranslationPolicy ? (
+                    <Badge tone="amber">
+                      <TriangleAlert className="size-3" /> {t('groups.simplifiedPolicy')}
+                    </Badge>
+                  ) : null}
+                </div>
               ) : null}
-              {data.usesStubFx ? (
-                <Badge tone="amber">
-                  <TriangleAlert className="size-3" /> {t('groups.stubFx')}
-                </Badge>
-              ) : null}
-              {data.usesSimplifiedTranslationPolicy ? (
-                <Badge tone="amber">
-                  <TriangleAlert className="size-3" /> {t('groups.simplifiedPolicy')}
-                </Badge>
-              ) : null}
-            </div>
+            </>
           ) : null}
         </Card>
 
@@ -476,7 +491,14 @@ function GroupDetail({
 
       {/* RIGHT column */}
       <div className="flex flex-col gap-[18px]">
-        {consolidationQuery.isError ? (
+        {!canViewConsolidation ? (
+          <Card className="rounded-[20px] p-10 text-center">
+            <h3 className="font-display text-lg font-semibold text-ink">
+              {t('groups.financeOnly')}
+            </h3>
+            <p className="mt-2 text-sm text-ink-3">{t('groups.financeOnlyHint')}</p>
+          </Card>
+        ) : consolidationQuery.isError ? (
           <Card className="rounded-[20px] p-8 text-center text-sm text-loss">
             {t('groups.consolidationError')}
           </Card>
@@ -605,7 +627,13 @@ function GroupDetail({
  * Group Consolidation page — lists groups led by this company, shows members + consolidated KPI
  * tiles for a selected group and period. Supports define-group, add/remove-member, and run-group-
  * close actions. Badges usesIllustrativeRules / usesStubFx / usesSimplifiedTranslationPolicy per
- * FRONTEND-STRUCTURE rule 7. Money via formatMoney (minor units, rule 8). Owner/manager only.
+ * FRONTEND-STRUCTURE rule 7. Money via formatMoney (minor units, rule 8).
+ *
+ * <p><strong>Split by capability (ADR 0052):</strong> the page + group MEMBERSHIP management
+ * ({@code /consolidation-groups}) is OPS (owner/manager — that gates the route + nav); the
+ * consolidated FIGURES + run-close ({@code /api/v1/groups/**}) are the detailed books, FINANCE
+ * (owner/accountant). A manager manages who is in a group but is not shown the consolidated numbers
+ * (and the read is not even fired — see {@code canViewConsolidation}).
  */
 export function GroupConsolidation() {
   const { t } = useTranslation()

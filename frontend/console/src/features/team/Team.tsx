@@ -31,8 +31,23 @@ import {
 } from './api'
 import { EditPagesDialog } from './EditPagesDialog'
 
-/** The roles the invite/change-role UI offers. */
-const ROLES = ['owner', 'manager', 'cashier', 'employee'] as const
+/**
+ * The roles the invite/change-role UI offers — the full preset role-based access model Phase 1/2
+ * set (mirrors the gateway's `TenantJwtAuthoritiesConverter.BUSINESS_ROLES` exactly), ordered by
+ * privilege (owner highest, employee the floor — the same order `rolePreset.ts`'s `ROLE_HOME`
+ * ranks by) so a role picker's default primary/first-checked role is always the most senior one
+ * chosen.
+ */
+const ROLES = [
+  'owner',
+  'manager',
+  'accountant',
+  'hr',
+  'chef',
+  'cashier',
+  'waitress',
+  'employee',
+] as const
 type Role = (typeof ROLES)[number]
 
 // ── Dialog state union ────────────────────────────────────────────────────────
@@ -81,6 +96,77 @@ function RoleBadge({ role }: { role: string }) {
     ? t(`team.role.${role as Role}`)
     : role
   return <Badge tone={tone}>{label}</Badge>
+}
+
+/**
+ * A login's FULL role set as a wrap of badges — preset role-based access model Phase 1/2 lets one
+ * login hold several roles at once (e.g. `hr` + `accountant`), so the member row shows every one
+ * of them, not just a single "primary" pick. Non-business-role entries (should not happen; the
+ * Keycloak-side whitelist matches `ROLES` exactly) fall back to the raw string, same as
+ * {@link RoleBadge} alone.
+ */
+function RoleBadgeList({ roles }: { roles: string[] }) {
+  if (roles.length === 0) return <RoleBadge role="" />
+  return (
+    <span className="flex flex-wrap items-center gap-1">
+      {roles.map((r) => (
+        <RoleBadge key={r} role={r} />
+      ))}
+    </span>
+  )
+}
+
+/**
+ * A multi-select role checkbox list — a login can hold several roles at once (preset role-based
+ * access model Phase 1/2), so both the invite and change-role dialogs pick a SET, not a single
+ * value. Each row shows the role name plus a one-line capability hint (`team.roleHint.*`) so an
+ * owner/manager choosing among 8 roles knows what each one actually unlocks.
+ */
+function RoleCheckboxGroup({
+  selected,
+  onToggle,
+  idPrefix,
+  ariaLabel,
+}: {
+  selected: ReadonlySet<Role>
+  onToggle: (role: Role) => void
+  idPrefix: string
+  ariaLabel: string
+}) {
+  const { t } = useTranslation()
+  return (
+    <div
+      role="group"
+      aria-label={ariaLabel}
+      className="overflow-hidden rounded-xl border border-line"
+    >
+      {ROLES.map((r, idx) => {
+        const checkboxId = `${idPrefix}-${r}`
+        return (
+          <label
+            key={r}
+            htmlFor={checkboxId}
+            className={cn(
+              'flex cursor-pointer items-start gap-3 px-4 py-2.5 transition-colors hover:bg-hover',
+              idx !== ROLES.length - 1 && 'border-b border-ink-50',
+            )}
+          >
+            <input
+              id={checkboxId}
+              type="checkbox"
+              checked={selected.has(r)}
+              onChange={() => onToggle(r)}
+              className="mt-0.5 size-4 shrink-0 cursor-pointer accent-emerald"
+            />
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold text-ink">{t(`team.role.${r}`)}</span>
+              <span className="block text-xs text-ink-3">{t(`team.roleHint.${r}`)}</span>
+            </span>
+          </label>
+        )
+      })}
+    </div>
+  )
 }
 
 // ── Status — a dot plus text, green only when the account is live ─────────────
@@ -146,15 +232,31 @@ function InviteDialog({
 }) {
   const { t } = useTranslation()
   const [email, setEmail] = useState('')
-  const [role, setRole] = useState<Role>('cashier')
+  // Multi-select (preset role-based access model Phase 1/2 — a login may hold several roles at
+  // once, e.g. hr + accountant). `ROLES` is privilege-ordered, so the FIRST selected role (in
+  // that order) becomes the invite's primary `role`; the rest ride along as `additionalRoles` —
+  // the invite API shape itself is unchanged (org-service still splits primary/additional).
+  const [roles, setRoles] = useState<ReadonlySet<Role>>(new Set(['cashier']))
   const [result, setResult] = useState<InviteResponse | null>(null)
   const mutation = useInviteMember({ companyId, actor })
 
+  function toggleRole(r: Role) {
+    setRoles((prev) => {
+      const next = new Set(prev)
+      if (next.has(r)) next.delete(r)
+      else next.add(r)
+      return next
+    })
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    const chosen = ROLES.filter((r) => roles.has(r))
+    if (chosen.length === 0) return
+    const [role, ...additionalRoles] = chosen
     mutation.mutate(
       // A teammate invite is email-based: the email doubles as the login username.
-      { username: email.trim(), email: email.trim(), role },
+      { username: email.trim(), email: email.trim(), role, additionalRoles },
       {
         onSuccess: (res) => {
           if (res) setResult(res)
@@ -170,8 +272,6 @@ function InviteDialog({
     if (type.includes('email-already-exists')) return t('team.errorEmailExists')
     return t('team.errorGeneric')
   }
-
-  const roleOptions = ROLES.map((r) => ({ value: r, label: t(`team.role.${r}`) }))
 
   // ── Post-success: show the one-time temp password ─────────────────────────
 
@@ -241,10 +341,10 @@ function InviteDialog({
         </Field>
 
         <Field label={t('team.inviteDialog.roleLabel')}>
-          <Segmented
-            options={roleOptions}
-            value={role}
-            onChange={setRole}
+          <RoleCheckboxGroup
+            selected={roles}
+            onToggle={toggleRole}
+            idPrefix="invite-role"
             ariaLabel={t('team.inviteDialog.roleLabel')}
           />
         </Field>
@@ -259,7 +359,7 @@ function InviteDialog({
           <Button type="button" variant="outline" onClick={onClose}>
             {t('common.cancel')}
           </Button>
-          <Button type="submit" disabled={mutation.isPending || !email.trim()}>
+          <Button type="submit" disabled={mutation.isPending || !email.trim() || roles.size === 0}>
             {mutation.isPending
               ? t('team.inviteDialog.submitting')
               : t('team.inviteDialog.submit')}
@@ -284,19 +384,34 @@ function ChangeRoleDialog({
   onClose: () => void
 }) {
   const { t } = useTranslation()
-  const currentRole = (member.roles.find((r) => ROLES.includes(r as Role)) ?? 'cashier') as Role
-  const [role, setRole] = useState<Role>(currentRole)
+  // Multi-select, seeded from the member's CURRENT role set (preset role-based access model
+  // Phase 1/2 — a login may hold several roles at once). The PATCH replaces the whole set, so an
+  // unrecognized role on the member (should not happen) is silently dropped, matching what the
+  // checkbox list can actually express.
+  const currentRoles = new Set(member.roles.filter((r) => ROLES.includes(r as Role))) as ReadonlySet<Role>
+  const [roles, setRoles] = useState<ReadonlySet<Role>>(currentRoles)
   const mutation = useUpdateMember({ companyId, actor })
+
+  function toggleRole(r: Role) {
+    setRoles((prev) => {
+      const next = new Set(prev)
+      if (next.has(r)) next.delete(r)
+      else next.add(r)
+      return next
+    })
+  }
+
+  const changed =
+    roles.size !== currentRoles.size || [...roles].some((r) => !currentRoles.has(r))
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (roles.size === 0) return
     mutation.mutate(
-      { id: member.id, body: { role } },
+      { id: member.id, body: { roles: ROLES.filter((r) => roles.has(r)) } },
       { onSuccess: () => onClose() },
     )
   }
-
-  const roleOptions = ROLES.map((r) => ({ value: r, label: t(`team.role.${r}`) }))
 
   return (
     <DialogOverlay onClose={onClose}>
@@ -309,10 +424,10 @@ function ChangeRoleDialog({
         </p>
 
         <Field label={t('team.changeRoleDialog.roleLabel')}>
-          <Segmented
-            options={roleOptions}
-            value={role}
-            onChange={setRole}
+          <RoleCheckboxGroup
+            selected={roles}
+            onToggle={toggleRole}
+            idPrefix={`change-role-${member.id}`}
             ariaLabel={t('team.changeRoleDialog.roleLabel')}
           />
         </Field>
@@ -327,7 +442,7 @@ function ChangeRoleDialog({
           </Button>
           <Button
             type="submit"
-            disabled={mutation.isPending || role === currentRole}
+            disabled={mutation.isPending || !changed || roles.size === 0}
           >
             {mutation.isPending
               ? t('team.changeRoleDialog.submitting')
@@ -627,9 +742,9 @@ function MemberRow({
 
       {/* Role · outlets · status — grid cells on sm+ (sm:contents), one wrapped row on phone. */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 sm:contents">
-        {/* Role */}
+        {/* Role(s) — a login may hold several at once (preset role-based access model Phase 1/2). */}
         <span>
-          <RoleBadge role={primaryRole} />
+          <RoleBadgeList roles={member.roles} />
         </span>
 
         {/* Outlets */}
@@ -772,13 +887,14 @@ export function Team() {
             className="h-11 pl-10 pr-4 text-sm"
           />
         </div>
-        {/* Phone: the 5-pill filter is wider than 390px — it must scroll inside its own box,
-            never widen the page (a wider layout viewport also mis-positions the fixed tab bar). */}
+        {/* The 9-pill filter (All + 8 roles) is wider than most viewports — it scrolls inside its
+            own box (both phone and desktop now), never widening the page (a wider layout
+            viewport also mis-positions the fixed phone tab bar). */}
         <Segmented
           ariaLabel={t('team.title')}
           value={roleFilter}
           onChange={setRoleFilter}
-          className="h-11 max-sm:max-w-full max-sm:overflow-x-auto"
+          className="h-11 max-w-full overflow-x-auto"
           options={[
             { value: 'all', label: t('team.filterAll') },
             ...ROLES.map((r) => ({ value: r, label: t(`team.role.${r}`) })),

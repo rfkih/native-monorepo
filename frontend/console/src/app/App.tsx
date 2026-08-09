@@ -13,6 +13,14 @@ import { OfflineBanner } from '@/features/pos/offline/OfflineBanner'
 import { effectiveRoles, hasAnyRole, useAuth } from '@/lib/authContext'
 import { isNativeShell } from '@/lib/escpos/transport'
 import { usePageAccess } from '@/lib/pageAccess'
+import {
+  canFinance,
+  canHr,
+  canOps,
+  canPos as canPosRole,
+  canReports,
+  ROLE_HOME,
+} from '@/lib/rolePreset'
 import { useSession } from '@/lib/session'
 
 /**
@@ -40,10 +48,16 @@ function PrefetchPosChunk() {
  * spinners is the right deal on a business device.
  */
 function PrefetchRouteChunks({
-  canDashboard,
+  canOps: opsOk,
+  canReports: reportsOk,
+  canFinance: financeOk,
+  canHr: hrOk,
   canPos,
 }: {
-  canDashboard: boolean
+  canOps: boolean
+  canReports: boolean
+  canFinance: boolean
+  canHr: boolean
   canPos: boolean
 }) {
   useEffect(() => {
@@ -53,13 +67,18 @@ function PrefetchRouteChunks({
       void import('@/features/me/MePayslipsScreen')
       void import('@/features/me/MeTimeoffScreen')
       void import('@/features/me/MeAccount')
-      if (canDashboard) {
+      if (opsOk) {
         void import('@/features/dashboard/Dashboard')
-        void import('@/features/statements/IncomeStatement')
-        void import('@/features/expenses/ExpensesHub')
         void import('@/features/team/Team')
-        void import('@/features/close/PeriodClose')
       }
+      if (reportsOk) void import('@/features/statements/IncomeStatement')
+      if (hrOk) {
+        void import('@/features/expenses/ExpensesHub')
+        // ADR 0052 — People is `hr`'s ROLE_HOME landing (and manager's/owner's People nav
+        // target), so it belongs in the HOT set, not `warmRest`.
+        void import('@/features/people/PeoplePage')
+      }
+      if (financeOk) void import('@/features/close/PeriodClose')
     }
     const warmRest = () => {
       if (canPos) {
@@ -71,12 +90,20 @@ function PrefetchRouteChunks({
         void import('@/features/pos/StandaloneRegister')
         void import('@/features/stocktake/StandaloneStocktake')
       }
-      if (canDashboard) {
+      if (reportsOk) {
         void import('@/features/statements/BalanceSheet')
         void import('@/features/statements/CashFlow')
-        void import('@/features/budget/Budgets')
+      }
+      // ADR 0052 — the org-unit hub is the OWNER/MANAGER org-management drill-down only now; `hr`
+      // reaches its own records via the standalone People page above, never this route.
+      if (opsOk) void import('@/features/org/OrgUnitDetail')
+      if (opsOk) {
         void import('@/features/org/OrgTree')
-        void import('@/features/org/OrgUnitDetail')
+        void import('@/features/promotions/Promotions')
+        void import('@/features/channels/Channels')
+      }
+      if (financeOk) {
+        void import('@/features/budget/Budgets')
         void import('@/features/ar/Customers')
         void import('@/features/ar/InvoicesList')
         void import('@/features/ar/ArAging')
@@ -86,8 +113,6 @@ function PrefetchRouteChunks({
         void import('@/features/bank/BankAccounts')
         void import('@/features/tax/TaxReport')
         void import('@/features/assets/FixedAssets')
-        void import('@/features/promotions/Promotions')
-        void import('@/features/channels/Channels')
       }
     }
     const w = window as Window & {
@@ -106,7 +131,7 @@ function PrefetchRouteChunks({
       }
     }
     return () => clearTimeout(restTimer)
-  }, [canDashboard, canPos])
+  }, [opsOk, reportsOk, financeOk, hrOk, canPos])
   return null
 }
 
@@ -141,6 +166,9 @@ const OrgTree = lazy(() =>
 )
 const OrgUnitDetail = lazy(() =>
   import('@/features/org/OrgUnitDetail').then((m) => ({ default: m.OrgUnitDetail })),
+)
+const PeoplePage = lazy(() =>
+  import('@/features/people/PeoplePage').then((m) => ({ default: m.PeoplePage })),
 )
 const GroupConsolidation = lazy(() =>
   import('@/features/groups/GroupConsolidation').then((m) => ({ default: m.GroupConsolidation })),
@@ -428,18 +456,27 @@ export function App() {
   // ADR 0049 P3b — the MERGED role set (outlet/base roles ∪ any personal elevation). A normal
   // `user` login always has `elevatedRoles = []`, so this is byte-identical to `auth.roles` there;
   // on an ELEVATED device terminal it additionally carries the elevation's owner/manager role,
-  // lighting up every existing `{canDashboard && <Route/>}` block below with no per-route change.
+  // lighting up every existing `{opsOk && <Route/>}`-style block below with no per-route change.
   // `canPos`/`canEmployee` deliberately stay on the BASE `auth.roles` — elevation only ever ADDS
   // back-office reach, it never changes what the outlet credential itself can do.
+  //
+  // Preset role-based access model Phase 2 — the per-capability booleans below MIRROR the
+  // gateway's `RoutingConfig` capability arrays exactly (`lib/rolePreset.ts`); every route gate in
+  // this file reads one of them instead of the old single binary `canDashboard`. Page-hiding here
+  // is UX only — the gateway's `RoleAuthorizationFilter` is the real boundary, so a route that
+  // slips past a stale check here still 403s at the API.
   const roles = effectiveRoles(auth.roles, auth.elevatedRoles)
-  const canDashboard = hasAnyRole(roles, 'owner', 'manager')
-  const canPos = hasAnyRole(auth.roles, 'owner', 'manager', 'cashier')
+  const opsOk = canOps(roles)
+  const reportsOk = canReports(roles)
+  const financeOk = canFinance(roles)
+  const hrOk = canHr(roles)
+  const canPos = canPosRole(auth.roles)
   const canEmployee = hasAnyRole(auth.roles, 'employee')
   // The /settings/features escape hatch (P1 tier-mode) — owner-only, server-enforced too (the
   // org-service PUT independently re-checks the role); a manager token never sees the route mount.
   const isOwner = hasAnyRole(roles, 'owner')
 
-  if (!canDashboard && !canPos && !canEmployee) {
+  if (!opsOk && !reportsOk && !financeOk && !hrOk && !canPos && !canEmployee) {
     return (
       <Suspense fallback={<CenteredSpinner />}>
         <AccessDenied />
@@ -453,37 +490,74 @@ export function App() {
   const posAllowed = canPos && pageAccess.isAllowed('pos')
   const menuAllowed = canPos && pageAccess.isAllowed('menu')
   const kitchenAllowed = canPos && pageAccess.isAllowed('kitchen')
-  const dashboardAllowed = canDashboard && pageAccess.isAllowed('dashboard')
-  const reportsAllowed = canDashboard && pageAccess.isAllowed('reports')
-  const orgAllowed = canDashboard && pageAccess.isAllowed('org')
-  const groupsAllowed = canDashboard && pageAccess.isAllowed('groups')
-  const closeAllowed = canDashboard && pageAccess.isAllowed('close')
-  const teamAllowed = canDashboard && pageAccess.isAllowed('team')
-  const expensesAllowed = canDashboard && pageAccess.isAllowed('expenses')
+  const dashboardAllowed = opsOk && pageAccess.isAllowed('dashboard')
+  const reportsAllowed = reportsOk && pageAccess.isAllowed('reports')
+  // The org TREE (browse/create units) and the org-unit HUB (`/org/:unitId`) are both OWNER/MANAGER
+  // org-management screens — ADR 0052: `hr` reaches its own employee/payroll/attendance records via
+  // the standalone People page (`peopleAllowed` below) instead, never this route. (The hub used to
+  // ALSO open for `hr` here, back when `/people` was a redirector INTO it — that only ever half-
+  // worked, since the hub's `useTeam`/`useUnitUsers` calls are OPS-only regardless of who reaches
+  // it; People replaces that gap rather than patching it.)
+  const orgAllowed = opsOk && pageAccess.isAllowed('org')
+  const orgUnitAllowed = opsOk && pageAccess.isAllowed('org')
+  // `/groups` mixes org-service's OPS-gated consolidation-group MEMBERSHIP (the page BACKBONE — the
+  // group list an accountant can't even load) with finance-service's FINANCE-gated consolidated
+  // P&L/close. The route is OPS (owner/manager reach it via the membership backbone); the
+  // consolidated figures are gated to owner/accountant INSIDE the page (canViewConsolidation) so a
+  // manager sees membership + a note, never a 403, and an accountant is not sent to a list that 403s.
+  const groupsAllowed = opsOk && pageAccess.isAllowed('groups')
+  const closeAllowed = financeOk && pageAccess.isAllowed('close')
+  const teamAllowed = opsOk && pageAccess.isAllowed('team')
+  // Expense CLAIMS hit the HR-gated `/api/v1/expense-claims/**` — owner/manager/hr, not the wider
+  // OPS bundle.
+  const expensesAllowed = hrOk && pageAccess.isAllowed('expenses')
+  // The detailed back-office books (AP/AR/bank/tax/budgets/assets/deferrals/opening-balances/
+  // platform-settlements) — owner/accountant only, no PageKey (mirrors the pre-Phase-2 shape,
+  // which never page-granted these either).
+  const financeAllowed = financeOk
+  // Org structure administration (promotions/loyalty/channels) — owner/manager only.
+  const opsAdminAllowed = opsOk
+  // The People (HR) area — owner/manager/hr; no PageKey (a fresh, client-only surface).
+  const peopleAllowed = hrOk
 
   // Land on the FIRST page the login can actually open — avoids a redirect loop when a grant hides
-  // the login's natural landing page. /me is the always-available floor.
-  const home = dashboardAllowed
-    ? '/'
-    : reportsAllowed
-      ? '/statements/income'
-      : orgAllowed
-        ? '/org'
-        : groupsAllowed
-          ? '/groups'
-          : closeAllowed
-            ? '/close'
-            : teamAllowed
-              ? '/team'
-              : expensesAllowed
-                ? '/expenses'
-                : posAllowed
-                  ? '/pos'
-                  : menuAllowed
-                    ? '/menu'
-                    : kitchenAllowed
-                      ? '/kitchen'
-                    : '/me'
+  // the login's natural landing page. /me is the always-available floor. `ROLE_HOME` picks the
+  // role's PREFERRED destination; when a grant/tier has hidden exactly that page, the detailed
+  // fallback cascade below (unchanged in spirit from before Phase 2) finds the next-best one.
+  const preferredHome = ROLE_HOME(roles)
+  const homeReachable: Record<string, boolean> = {
+    '/': dashboardAllowed,
+    '/statements/income': reportsAllowed,
+    '/people': peopleAllowed,
+    '/kitchen': kitchenAllowed,
+    '/pos': posAllowed,
+    '/me': true,
+  }
+  const home = homeReachable[preferredHome]
+    ? preferredHome
+    : dashboardAllowed
+      ? '/'
+      : reportsAllowed
+        ? '/statements/income'
+        : peopleAllowed
+          ? '/people'
+          : orgAllowed
+            ? '/org'
+            : groupsAllowed
+              ? '/groups'
+              : closeAllowed
+                ? '/close'
+                : teamAllowed
+                  ? '/team'
+                  : expensesAllowed
+                    ? '/expenses'
+                    : posAllowed
+                      ? '/pos'
+                      : menuAllowed
+                        ? '/menu'
+                        : kitchenAllowed
+                          ? '/kitchen'
+                          : '/me'
 
   return (
     <>
@@ -492,7 +566,13 @@ export function App() {
           (Phase 5 offline mode, ADR 0028). Renders nothing when there is nothing to say. */}
       <OfflineBanner />
       {posAllowed && <PrefetchPosChunk />}
-      <PrefetchRouteChunks canDashboard={canDashboard} canPos={canPos} />
+      <PrefetchRouteChunks
+        canOps={opsOk}
+        canReports={reportsOk}
+        canFinance={financeOk}
+        canHr={hrOk}
+        canPos={canPos}
+      />
       <Suspense fallback={bootFallback}>
         <TransitionedRoutes>
           {/* The POS is a full-screen "front office" — it renders OUTSIDE the sidebar/topbar shell.
@@ -549,8 +629,8 @@ export function App() {
           {/* Onboarding picks its chrome ONCE, on entry (see OnboardingRoute): first company →
               full-page standalone wizard (no shell to wander off into); adding another company →
               the normal shell around it. */}
-          {canDashboard && <Route path="/onboarding" element={<OnboardingRoute />} />}
-  
+          {opsOk && <Route path="/onboarding" element={<OnboardingRoute />} />}
+
           {/* Everything else shares the back-office shell, mounted once via a layout route. */}
           <Route
             element={
@@ -583,55 +663,55 @@ export function App() {
                 element={company ? <CashFlow /> : <Navigate to="/onboarding" replace />}
               />
             )}
-            {canDashboard && (
+            {financeAllowed && (
               <Route
                 path="/budgets"
                 element={company ? <Budgets /> : <Navigate to="/onboarding" replace />}
               />
             )}
-            {canDashboard && (
+            {financeAllowed && (
               <Route
                 path="/budgets/:id"
                 element={company ? <BudgetDetail /> : <Navigate to="/onboarding" replace />}
               />
             )}
-            {canDashboard && (
+            {financeAllowed && (
               <Route
                 path="/assets"
                 element={company ? <FixedAssets /> : <Navigate to="/onboarding" replace />}
               />
             )}
-            {canDashboard && (
+            {financeAllowed && (
               <Route
                 path="/deferrals"
                 element={company ? <Deferrals /> : <Navigate to="/onboarding" replace />}
               />
             )}
-            {canDashboard && (
+            {opsAdminAllowed && (
               <Route
                 path="/promotions"
                 element={company ? <Promotions /> : <Navigate to="/onboarding" replace />}
               />
             )}
-            {canDashboard && (
+            {opsAdminAllowed && (
               <Route
                 path="/loyalty"
                 element={company ? <EarnRulesPage /> : <Navigate to="/onboarding" replace />}
               />
             )}
-            {canDashboard && (
+            {opsAdminAllowed && (
               <Route
                 path="/channels"
                 element={company ? <Channels /> : <Navigate to="/onboarding" replace />}
               />
             )}
-            {canDashboard && (
+            {financeAllowed && (
               <Route
                 path="/platform-settlements"
                 element={company ? <PlatformSettlements /> : <Navigate to="/onboarding" replace />}
               />
             )}
-            {canDashboard && (
+            {financeAllowed && (
               <Route
                 path="/opening-balances"
                 element={company ? <OpeningBalances /> : <Navigate to="/onboarding" replace />}
@@ -649,79 +729,79 @@ export function App() {
                 element={company ? <CategoriesAdmin /> : <Navigate to="/onboarding" replace />}
               />
             )}
-            {canDashboard && (
+            {financeAllowed && (
               <Route
                 path="/invoices"
                 element={company ? <InvoicesList /> : <Navigate to="/onboarding" replace />}
               />
             )}
-            {canDashboard && (
+            {financeAllowed && (
               <Route
                 path="/invoices/new"
                 element={company ? <NewInvoice /> : <Navigate to="/onboarding" replace />}
               />
             )}
-            {canDashboard && (
+            {financeAllowed && (
               <Route
                 path="/invoices/:id"
                 element={company ? <InvoiceDetail /> : <Navigate to="/onboarding" replace />}
               />
             )}
-            {canDashboard && (
+            {financeAllowed && (
               <Route
                 path="/customers"
                 element={company ? <Customers /> : <Navigate to="/onboarding" replace />}
               />
             )}
-            {canDashboard && (
+            {financeAllowed && (
               <Route
                 path="/ar/aging"
                 element={company ? <ArAging /> : <Navigate to="/onboarding" replace />}
               />
             )}
-            {canDashboard && (
+            {financeAllowed && (
               <Route
                 path="/bills"
                 element={company ? <BillsList /> : <Navigate to="/onboarding" replace />}
               />
             )}
-            {canDashboard && (
+            {financeAllowed && (
               <Route
                 path="/bills/new"
                 element={company ? <NewBill /> : <Navigate to="/onboarding" replace />}
               />
             )}
-            {canDashboard && (
+            {financeAllowed && (
               <Route
                 path="/bills/:id"
                 element={company ? <BillDetail /> : <Navigate to="/onboarding" replace />}
               />
             )}
-            {canDashboard && (
+            {financeAllowed && (
               <Route
                 path="/vendors"
                 element={company ? <Vendors /> : <Navigate to="/onboarding" replace />}
               />
             )}
-            {canDashboard && (
+            {financeAllowed && (
               <Route
                 path="/ap/aging"
                 element={company ? <ApAging /> : <Navigate to="/onboarding" replace />}
               />
             )}
-            {canDashboard && (
+            {financeAllowed && (
               <Route
                 path="/bank"
                 element={company ? <BankAccounts /> : <Navigate to="/onboarding" replace />}
               />
             )}
-            {canDashboard && (
+            {financeAllowed && (
               <Route
                 path="/bank/:id"
                 element={company ? <BankReconcile /> : <Navigate to="/onboarding" replace />}
               />
             )}
-            {canDashboard && (
+            {financeAllowed && (
               <Route
                 path="/tax"
                 element={company ? <TaxReport /> : <Navigate to="/onboarding" replace />}
@@ -733,7 +813,7 @@ export function App() {
                 element={company ? <OrgTree /> : <Navigate to="/onboarding" replace />}
               />
             )}
-            {orgAllowed && (
+            {orgUnitAllowed && (
               <Route
                 path="/org/:unitId"
                 element={company ? <OrgUnitDetail /> : <Navigate to="/onboarding" replace />}
@@ -755,6 +835,16 @@ export function App() {
               <Route
                 path="/team"
                 element={company ? <Team /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {/* People (HR, ADR 0052) — the standalone employee/attendance/payroll page for
+                owner/manager/hr, replacing the old `/people` → `/org/:unitId` redirector that
+                dead-ended (and, once org-units reads opened up to `hr`, would have started
+                403ing) an hr-alone login on the OPS-only org-unit hub. */}
+            {peopleAllowed && (
+              <Route
+                path="/people"
+                element={company ? <PeoplePage /> : <Navigate to="/onboarding" replace />}
               />
             )}
             <Route path="*" element={<Navigate to={home} replace />} />

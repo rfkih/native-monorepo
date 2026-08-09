@@ -25,9 +25,10 @@ import { Wordmark } from '@/components/Wordmark'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { EmptyState } from '@/features/_shared/financeUi'
 import { useMyClaims } from '@/features/expenses/api'
-import { effectiveRoles, hasAnyRole, useAuth } from '@/lib/authContext'
+import { effectiveRoles, useAuth } from '@/lib/authContext'
 import { AUTH_MODE } from '@/lib/config'
 import { formatMoney } from '@/lib/money'
+import { canFinance, canHr, canOps, canPos as canPosRole, canReports, ROLE_HOME } from '@/lib/rolePreset'
 import { localeOf } from '@/i18n'
 import { isNotLinked, useMyLeaveBalance, useMyProfile, useMySales } from './api'
 
@@ -68,9 +69,11 @@ export function MeHomePhone() {
   const locale = localeOf(i18n.language)
   const companyId = auth.companyId ?? 'me'
   const actor = auth.actor
-  const canPos = hasAnyRole(auth.roles, 'owner', 'manager', 'cashier')
+  const canPos = canPosRole(auth.roles)
   // ADR 0049 P3b — merged/elevated roles, mirroring Me.tsx's desktop twin.
-  const canDashboard = hasAnyRole(effectiveRoles(auth.roles, auth.elevatedRoles), 'owner', 'manager')
+  const officeRoles = effectiveRoles(auth.roles, auth.elevatedRoles)
+  const officeOk =
+    canOps(officeRoles) || canReports(officeRoles) || canFinance(officeRoles) || canHr(officeRoles)
 
   const profile = useMyProfile({ companyId, actor, enabled: true })
   const notLinked = isNotLinked(profile.error)
@@ -102,8 +105,12 @@ export function MeHomePhone() {
       <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-line bg-surface/90 px-4 backdrop-blur">
         <Wordmark />
         <div className="flex-1" />
-        {canDashboard ? (
-          <Link to="/" viewTransition className="rounded-xl px-2 py-1.5 text-sm font-medium text-ink-3 hover:text-ink">
+        {officeOk ? (
+          <Link
+            to={ROLE_HOME(officeRoles)}
+            viewTransition
+            className="rounded-xl px-2 py-1.5 text-sm font-medium text-ink-3 hover:text-ink"
+          >
             {t('me.toDashboard')}
           </Link>
         ) : canPos ? (

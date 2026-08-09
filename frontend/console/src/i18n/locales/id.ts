@@ -369,8 +369,12 @@ export const id = {
     groupSales: 'Penjualan',
     groupPlanning: 'Perencanaan',
     groupOrg: 'Organisasi',
+    groupPeople: 'SDM',
     groupSettings: 'Pengaturan',
     team: 'Tim',
+    employees: 'Karyawan',
+    payroll: 'Penggajian',
+    attendance: 'Cuti & absensi',
     menu: 'Menu',
     kitchen: 'Dapur',
     expenses: 'Pengeluaran',
@@ -1431,6 +1435,21 @@ export const id = {
       back: 'Kembali ke struktur organisasi',
     },
   },
+  people: {
+    title: 'SDM',
+    subtitle: 'Data karyawan, absensi, dan penggajian untuk bisnis ini.',
+    tabsLabel: 'Bagian SDM',
+    unitPicker: {
+      label: 'Bisnis',
+    },
+    noCompany: 'Belum ada perusahaan dipilih',
+    noCompanyHint: 'Buat perusahaan untuk melihat data SDM-nya.',
+    noBusinessUnit: {
+      title: 'Belum ada bisnis yang dibuat',
+      hint: 'Buat unit bisnis dari menu Organisasi untuk mulai menambah karyawan.',
+    },
+    error: 'Gagal memuat daftar bisnis untuk perusahaan ini.',
+  },
   attendance: {
     view: {
       label: 'Bagian absensi',
@@ -1737,6 +1756,9 @@ export const id = {
       npwpError: 'NPWP gagal disimpan. Coba lagi.',
       loginTitle: 'Login',
       noLogin: 'Belum ada login. Buat satu agar karyawan ini bisa masuk.',
+      // ADR 0052 — ditampilkan untuk login yang hanya punya peran hr (`!canManageLogins`):
+      // membuat login adalah tindakan khusus pemilik/manajer (org-service).
+      noLoginReadOnly: 'Belum ada login. Minta pemilik atau manajer untuk membuatnya.',
       username: 'Nama pengguna',
       tempPassword: 'Kata sandi sekali pakai',
       tempPasswordHint:
@@ -1746,6 +1768,9 @@ export const id = {
       resetPassword: 'Setel ulang sandi',
       resetting: 'Menyetel ulang…',
       removeLogin: 'Hapus login',
+      // ADR 0052 — ditampilkan sebagai ganti tombol Setel ulang/Hapus untuk login yang hanya
+      // berperan hr: mengelola login yang sudah ada juga khusus pemilik/manajer.
+      loginManageRestricted: 'Hanya pemilik atau manajer yang dapat menyetel ulang atau menghapus login ini.',
       copyPassword: 'Salin sandi',
       // ADR 0049 P1 — PIN mesin kasir, terpisah dari login konsol di atas (tidak pernah
       // ditampilkan di sini).
@@ -2241,6 +2266,9 @@ export const id = {
     noClose: 'Belum ada penutupan untuk periode ini.',
     noCloseHint: 'Jalankan penutupan grup untuk melihat angka terkonsolidasi.',
     consolidationError: 'Tidak dapat memuat konsolidasi.',
+    financeOnly: 'Angka terkonsolidasi butuh akses keuangan',
+    financeOnlyHint:
+      'Anda dapat mengelola anggota grup ini di sini. Angka terkonsolidasi dan penutupan grup tersedia untuk pemilik dan akuntan.',
     state: 'Status penutupan',
     closeRunSeq: 'Urutan penutupan',
     eliminations: 'Eliminasi',
@@ -2420,6 +2448,20 @@ export const id = {
       manager: 'Manajer',
       cashier: 'Kasir',
       employee: 'Karyawan',
+      hr: 'HRD',
+      accountant: 'Akuntan',
+      chef: 'Koki',
+      waitress: 'Pramusaji',
+    },
+    roleHint: {
+      owner: 'Akses penuh.',
+      manager: 'Operasional, laporan, dan SDM — tidak termasuk keuangan detail atau penggajian.',
+      cashier: 'Hanya kasir.',
+      employee: 'Hanya profil sendiri (slip gaji, cuti, klaim).',
+      hr: 'SDM dan penggajian.',
+      accountant: 'Laporan dan keuangan detail.',
+      chef: 'Hanya kasir / layar dapur.',
+      waitress: 'Hanya kasir.',
     },
     inviteDialog: {
       title: 'Undang anggota tim',

@@ -51,14 +51,27 @@ export const POS_PAGES: PageKey[] = ['pos', 'menu', 'kitchen']
 
 /**
  * The pages a login's ROLES can actually reach — the grantable set for a role-aware page picker.
- * Grants only NARROW within this (they never grant beyond the role), so a cashier only ever sees the
- * POS pages, an owner/manager login sees the dashboard pages + POS surface, and an employee-only
- * login has just {@code /me} (nothing to restrict).
+ * Grants only NARROW within this (they never grant beyond the role), so a cashier/chef/waitress
+ * only ever sees the POS pages, an owner/manager login sees the dashboard pages + POS surface, and
+ * an employee-only login has just {@code /me} (nothing to restrict).
+ *
+ * Preset role-based access model Phase 2: `chef`/`waitress` join `cashier` on the POS pages (the
+ * gateway's `POS_ROLES` — see `RoutingConfig`). `accountant`/`hr` are NOT added to
+ * {@code DASHBOARD_PAGES} here — that bundle stays the historical owner/manager back-office shape;
+ * their own (finer-grained) reports/finance/HR pages have no {@link PageKey} of their own yet, so
+ * there is nothing narrower for an owner/manager to additionally restrict on those two roles today
+ * (a residual — the grant system only ever NARROWS, never widens, so this cannot over-grant).
  */
 export function grantablePagesForRoles(roles: string[]): PageKey[] {
   const out: PageKey[] = []
   if (roles.includes('owner') || roles.includes('manager')) out.push(...DASHBOARD_PAGES)
-  if (roles.includes('owner') || roles.includes('manager') || roles.includes('cashier')) {
+  if (
+    roles.includes('owner') ||
+    roles.includes('manager') ||
+    roles.includes('cashier') ||
+    roles.includes('chef') ||
+    roles.includes('waitress')
+  ) {
     out.push(...POS_PAGES)
   }
   return out

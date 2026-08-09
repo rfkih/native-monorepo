@@ -25,9 +25,10 @@ import {
   Sun,
 } from 'lucide-react'
 import { MobileSheet } from '@/components/mobile/MobileSheet'
-import { effectiveRoles, hasAnyRole, useAuth } from '@/lib/authContext'
+import { effectiveRoles, useAuth } from '@/lib/authContext'
 import { usePageAccess } from '@/lib/pageAccess'
 import { useTierAccess } from '@/lib/featureTier'
+import { canFinance, canHr, canOps, canPos } from '@/lib/rolePreset'
 import { AUTH_MODE } from '@/lib/config'
 import { useSession } from '@/lib/session'
 import { useTheme } from '@/lib/theme'
@@ -79,31 +80,36 @@ export function MoreSheet({
   const { theme, toggle } = useTheme()
   const navigate = useNavigate()
 
-  // ADR 0049 P3b — mirrors MobileTabBarGate's canDashboard (merged/elevated roles), so this sheet's
-  // tiles + "Add business" row don't disappear on an elevated device just because MoreSheet itself
-  // is only ever reachable once the tab bar already decided canDashboard was true. Byte-identical
-  // for a normal `user` login (elevatedRoles is always `[]`).
-  const canDashboard = hasAnyRole(effectiveRoles(auth.roles, auth.elevatedRoles), 'owner', 'manager')
-  const canPos = hasAnyRole(auth.roles, 'owner', 'manager', 'cashier')
+  // ADR 0049 P3b — mirrors MobileTabBarGate's per-capability booleans (merged/elevated roles), so
+  // this sheet's tiles + "Add business" row don't disappear on an elevated device just because
+  // MoreSheet itself is only ever reachable once the tab bar already decided some office
+  // capability was true. Byte-identical for a normal `user` login (elevatedRoles is always `[]`).
+  // Preset role-based access model Phase 2 — `close` is FINANCE (owner/accountant), `expenses`
+  // (claims) is HR (owner/manager/hr); neither is the wider OPS bundle any more.
+  const roles = effectiveRoles(auth.roles, auth.elevatedRoles)
+  const opsOk = canOps(roles)
+  const financeOk = canFinance(roles)
+  const hrOk = canHr(roles)
+  const posOk = canPos(auth.roles)
 
   const tiles = [
-    canDashboard && pageAccess.isAllowed('close') && tierAccess.allows('orgStructure')
+    financeOk && pageAccess.isAllowed('close') && tierAccess.allows('orgStructure')
       ? { key: 'close', to: '/close', icon: CalendarCheck, label: t('mobile.more.closeBook') }
       : null,
-    canDashboard && pageAccess.isAllowed('expenses') && tierAccess.allows('expenses')
+    hrOk && pageAccess.isAllowed('expenses') && tierAccess.allows('expenses')
       ? { key: 'inbox', to: '/expenses', icon: Inbox, label: t('mobile.more.claimInbox') }
       : null,
-    canPos && pageAccess.isAllowed('menu') && tierAccess.allows('products')
+    posOk && pageAccess.isAllowed('menu') && tierAccess.allows('products')
       ? { key: 'menu', to: '/menu', icon: NotebookText, label: t('mobile.more.menuPrices') }
       : null,
     // Inventory (stock-item) catalog behind the stock opname (ADR 0046) — the menu tile's gate.
-    canPos && pageAccess.isAllowed('menu') && tierAccess.allows('products')
+    posOk && pageAccess.isAllowed('menu') && tierAccess.allows('products')
       ? { key: 'ingredients', to: '/inventory', icon: Package, label: t('mobile.more.ingredients') }
       : null,
-    canPos && pageAccess.isAllowed('kitchen') && tierAccess.allows('kitchen')
+    posOk && pageAccess.isAllowed('kitchen') && tierAccess.allows('kitchen')
       ? { key: 'kitchen', to: '/kitchen', icon: CookingPot, label: t('mobile.more.kitchenDisplay') }
       : null,
-    canPos && pageAccess.isAllowed('pos') && tierAccess.allows('pos')
+    posOk && pageAccess.isAllowed('pos') && tierAccess.allows('pos')
       ? { key: 'pos', to: '/pos', icon: Store, label: t('mobile.more.openPos') }
       : null,
   ].filter((x) => x != null)
@@ -176,7 +182,7 @@ export function MoreSheet({
                 {c.companyId === company.companyId ? <Check className="size-4 shrink-0 text-profit" /> : null}
               </button>
             ))}
-            {canDashboard ? (
+            {opsOk ? (
               <button
                 type="button"
                 onClick={() => {

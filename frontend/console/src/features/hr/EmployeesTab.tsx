@@ -1,9 +1,15 @@
 /**
- * Employees tab of the org-unit hub — the Odoo-style HR list scoped to the current unit. The BU
- * rollup is CLIENT-computed: a business unit's scope is [itself, ...its child outlets] from the
- * org tree the hub already has (employee-service's projection holds no parent_id). Employees are
- * HR RECORDS, deliberately separate from the Team page's login users. No PII renders here — the
- * list endpoint never returns NIK / bank account / amounts.
+ * Employees tab — the Odoo-style HR list scoped to the current unit. Reused by both the org-unit
+ * hub (`OrgUnitDetail`, owner/manager) and the standalone People page (`PeoplePage`, ADR 0052 —
+ * owner/manager/hr). The BU rollup is CLIENT-computed: a business unit's scope is [itself,
+ * ...its child outlets] from the org tree the hub already has (employee-service's projection holds
+ * no parent_id). Employees are HR RECORDS, deliberately separate from the Team page's login users.
+ * No PII renders here — the list endpoint never returns NIK / bank account / amounts.
+ *
+ * `canManageLogins` (default `true`) gates every affordance that touches org-service's OPS-only
+ * `/api/v1/users/**` (creating a console login) so an hr-alone login sees employee records without
+ * ever firing — or 403ing on — that call; see the prop's own doc below and
+ * `EmployeeDetailDrawer`'s file header for the rest of the split.
  */
 
 import { useMemo, useState } from 'react'
@@ -61,6 +67,7 @@ export function EmployeesTab({
   companyId,
   actor,
   baseCurrency,
+  canManageLogins = true,
 }: {
   unit: OrgUnit
   childOutlets: OrgUnit[]
@@ -68,6 +75,15 @@ export function EmployeesTab({
   companyId: string
   actor: string
   baseCurrency: string
+  /**
+   * Whether this login may create/reset/remove a console LOGIN for an employee here (org-service
+   * `/api/v1/users/**`, OPS-only — owner/manager). Defaults to `true`, preserving `OrgUnitDetail`'s
+   * historical owner/manager-only usage unchanged; the standalone People page (`PeoplePage.tsx`,
+   * reachable by `hr` too) passes `canOps(roles)` so an hr-alone login sees employee RECORDS
+   * without ever rendering — let alone firing — that OPS-gated affordance (a forbidden call is a
+   * console error even if the button is merely hidden, ADR 0052).
+   */
+  canManageLogins?: boolean
 }) {
   const { t } = useTranslation()
   const [dialog, setDialog] = useState<DialogState | null>(null)
@@ -146,6 +162,7 @@ export function EmployeesTab({
               key={employee.employeeId}
               employee={employee}
               unitName={unitName}
+              canManageLogins={canManageLogins}
               onManage={() => setDialog({ kind: 'detail', employeeId: employee.employeeId })}
               onCreateLogin={() =>
                 setDialog({ kind: 'createLogin', employee: employee.rows[0] })
@@ -229,6 +246,7 @@ export function EmployeesTab({
                 unitName={unitName}
                 companyId={companyId}
                 actor={actor}
+                canManageLogins={canManageLogins}
                 onClose={() => setDialog(null)}
                 onCreateLogin={() =>
                   setDialog({ kind: 'createLogin', employee: primary, fromDetail: true })
@@ -267,11 +285,13 @@ export function EmployeesTab({
 function EmployeeRow({
   employee,
   unitName,
+  canManageLogins,
   onManage,
   onCreateLogin,
 }: {
   employee: GroupedEmployee
   unitName: (id: string | null) => string
+  canManageLogins: boolean
   onManage: () => void
   onCreateLogin: () => void
 }) {
@@ -330,7 +350,7 @@ function EmployeeRow({
       {/* Always-visible actions (Native Console Web design): the six hover-hidden actions became
           one Kelola button opening the side panel — nothing is discoverable-by-accident anymore. */}
       <div className="flex shrink-0 items-center gap-2">
-        {!employee.userId && active ? (
+        {canManageLogins && !employee.userId && active ? (
           <button
             type="button"
             onClick={onCreateLogin}

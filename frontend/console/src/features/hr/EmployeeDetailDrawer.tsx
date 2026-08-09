@@ -1,15 +1,20 @@
 /**
- * EmployeeDetailDrawer — the "Kelola" side panel (owner/manager), Native Console Web design: one
- * always-visible entry point per row instead of six hover-hidden actions, and one panel hosting
- * every per-employee action (assign / end assignment / compensation / login / edit / terminate)
- * while the list stays visible behind it.
+ * EmployeeDetailDrawer — the "Kelola" side panel, Native Console Web design: one always-visible
+ * entry point per row instead of six hover-hidden actions, and one panel hosting every
+ * per-employee action (assign / end assignment / compensation / login / edit / terminate) while
+ * the list stays visible behind it. Reused by both `OrgUnitDetail` (owner/manager) and the
+ * standalone `PeoplePage` (owner/manager/hr, ADR 0052) — see `canManageLogins` below.
  *
  * The Login section's centrepiece: the linked login's USERNAME (resolved from the Team list —
  * Keycloak owns it) plus, until the employee first signs in, the one-time PASSWORD held for them
  * (decrypted, ADR 0014). Once the employee activates, the password is gone and the card shows
- * "active". Owners can Reset the password (issues a fresh one-time password, held again) or
- * Remove the login. The one-time password is a credential: shown here for the owner to hand over,
- * never persisted client-side beyond the query cache, never logged.
+ * "active". Owner/manager can Reset the password (issues a fresh one-time password, held again)
+ * or Remove the login — gated by `canManageLogins`, since both the username lookup and the reset
+ * call hit org-service's OPS-only `/api/v1/users/**`. An hr-alone login still sees WHETHER a login
+ * exists and the held one-time password (employee-service's `/api/v1/employees/**` is HR-gated,
+ * and handing a new hire their credentials is a normal HR task) — just not the username or the
+ * manage actions. The one-time password is a credential: shown here for hand-over, never
+ * persisted client-side beyond the query cache, never logged.
  *
  * Compensation stays MASKED (salary PII, rule 6) — this panel shows only whether a package is set
  * and the action to change it; amounts never render in the console.
@@ -42,6 +47,7 @@ export function EmployeeDetailDrawer({
   unitName,
   companyId,
   actor,
+  canManageLogins,
   onClose,
   onCreateLogin,
   onEdit,
@@ -55,6 +61,13 @@ export function EmployeeDetailDrawer({
   unitName: (id: string | null) => string
   companyId: string
   actor: string
+  /**
+   * Whether this login may create/reset/remove a console LOGIN for this employee (org-service
+   * `/api/v1/users/**`, OPS-only — owner/manager). When `false` (an hr-alone login on the People
+   * page), the whole login-management surface below is read-only — most importantly, the team
+   * list (`useTeam`) is never even FETCHED, since that call itself is OPS-only.
+   */
+  canManageLogins: boolean
   onClose: () => void
   onCreateLogin: () => void
   onEdit: () => void
@@ -72,8 +85,13 @@ export function EmployeeDetailDrawer({
   const assignments = employee.rows.filter((r) => r.assignmentId)
 
   const detail = useEmployee({ companyId, actor, employeeId, enabled: true })
+  // useEmployeeLogin reads employee-service's `/api/v1/employees/{id}/login` — HR-gated, so this
+  // stays enabled regardless of `canManageLogins` (an hr login legitimately sees whether a login
+  // exists and the held one-time password, since handing that over is a normal HR onboarding
+  // task). useTeam below is the one that must NOT fire for a non-OPS login — it hits org-service's
+  // `/api/v1/users`, OPS-only, and is needed only to resolve the login's USERNAME.
   const login = useEmployeeLogin({ companyId, actor, employeeId, enabled: hasLogin })
-  const team = useTeam({ companyId, actor, enabled: hasLogin })
+  const team = useTeam({ companyId, actor, enabled: hasLogin && canManageLogins })
   const reset = useResetPassword({ companyId, actor })
   const relink = useLinkLogin({ companyId, actor })
   const unlink = useUnlinkLogin({ companyId, actor })
@@ -266,11 +284,15 @@ export function EmployeeDetailDrawer({
         <div className="mt-2 rounded-[14px] border border-line p-4">
           {!hasLogin ? (
             <div className="space-y-3">
-              <p className="text-sm text-ink-3">{t('hr.detail.noLogin')}</p>
-              <Button type="button" variant="outline" onClick={onCreateLogin}>
-                <UserPlus className="size-4" />
-                {t('hr.list.actionCreateLogin')}
-              </Button>
+              <p className="text-sm text-ink-3">
+                {canManageLogins ? t('hr.detail.noLogin') : t('hr.detail.noLoginReadOnly')}
+              </p>
+              {canManageLogins ? (
+                <Button type="button" variant="outline" onClick={onCreateLogin}>
+                  <UserPlus className="size-4" />
+                  {t('hr.list.actionCreateLogin')}
+                </Button>
+              ) : null}
             </div>
           ) : login.isLoading ? (
             <div className="space-y-3">
@@ -286,7 +308,12 @@ export function EmployeeDetailDrawer({
             </div>
           ) : (
             <div className="space-y-3">
-              <Detail label={t('hr.detail.username')} value={username ?? '…'} mono />
+              {/* Username resolution needs the org-service team list (`useTeam`), OPS-only — an
+                  hr-alone login (`!canManageLogins`) never fires that query, so it never renders a
+                  username row rather than showing a permanent "…" placeholder. */}
+              {canManageLogins ? (
+                <Detail label={t('hr.detail.username')} value={username ?? '…'} mono />
+              ) : null}
 
               {tempPassword ? (
                 <div className="space-y-1.5">
@@ -308,24 +335,33 @@ export function EmployeeDetailDrawer({
                 </div>
               )}
 
-              <div className="flex flex-wrap gap-2 pt-1">
-                <Button type="button" variant="outline" disabled={busy} onClick={handleReset}>
-                  <KeyRound className="size-4" />
-                  {busy && reset.isPending
-                    ? t('hr.detail.resetting')
-                    : t('hr.detail.resetPassword')}
-                </Button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={handleRemove}
-                  className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-loss/80 hover:bg-tint-loss hover:text-loss focus-visible:outline-2 focus-visible:outline-loss disabled:opacity-50"
-                >
-                  <Trash2 className="size-4" />
-                  {t('hr.detail.removeLogin')}
-                </button>
-              </div>
-              {reset.isError || relink.isError || unlink.isError ? (
+              {/* Reset (org-service `/api/v1/users/{id}/reset-password`, OPS-only) and Remove are
+                  bundled behind ONE `canManageLogins` gate — deliberately conservative: Remove
+                  itself is HR-gated at the API (employee-service login-link), but pairing "can
+                  delete this login" with "cannot create one" reads as a confusing half-permission,
+                  so both stay owner/manager-only here, matching Create above. */}
+              {canManageLogins ? (
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Button type="button" variant="outline" disabled={busy} onClick={handleReset}>
+                    <KeyRound className="size-4" />
+                    {busy && reset.isPending
+                      ? t('hr.detail.resetting')
+                      : t('hr.detail.resetPassword')}
+                  </Button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={handleRemove}
+                    className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-loss/80 hover:bg-tint-loss hover:text-loss focus-visible:outline-2 focus-visible:outline-loss disabled:opacity-50"
+                  >
+                    <Trash2 className="size-4" />
+                    {t('hr.detail.removeLogin')}
+                  </button>
+                </div>
+              ) : (
+                <p className="text-xs text-ink-3">{t('hr.detail.loginManageRestricted')}</p>
+              )}
+              {canManageLogins && (reset.isError || relink.isError || unlink.isError) ? (
                 <p className="text-sm text-loss">{t('hr.assign.error')}</p>
               ) : null}
             </div>

@@ -19,9 +19,10 @@ import { EmptyState } from '@/features/_shared/financeUi'
 import { useMyClaims } from '@/features/expenses/api'
 import { ClaimStatusBadge } from '@/features/expenses/parts'
 import { formatDate } from '@/features/expenses/format'
-import { effectiveRoles, hasAnyRole, useAuth } from '@/lib/authContext'
+import { effectiveRoles, useAuth } from '@/lib/authContext'
 import { AUTH_MODE } from '@/lib/config'
 import { formatMoney } from '@/lib/money'
+import { canFinance, canHr, canOps, canPos as canPosRole, canReports, ROLE_HOME } from '@/lib/rolePreset'
 import { localeOf } from '@/i18n'
 import { useIsPhone } from '@/components/mobile/useIsPhone'
 import { isNotLinked, useMyProfile, useMySales } from './api'
@@ -38,10 +39,14 @@ export function Me() {
   // the cache key + the dev-header fallback. An employee-only login has no loaded company session.
   const companyId = auth.companyId ?? 'me'
   const actor = auth.actor
-  const canPos = hasAnyRole(auth.roles, 'owner', 'manager', 'cashier')
-  // ADR 0049 P3b — merged/elevated roles, mirroring App.tsx's canDashboard (consistency; /me stays
-  // reachable by every login so this is a rare path for a device, but never a WRONG one).
-  const canDashboard = hasAnyRole(effectiveRoles(auth.roles, auth.elevatedRoles), 'owner', 'manager')
+  const canPos = canPosRole(auth.roles)
+  // ADR 0049 P3b — merged/elevated roles, mirroring App.tsx's per-capability booleans (consistency;
+  // /me stays reachable by every login so this is a rare path for a device, but never a WRONG
+  // one). `officeRoles`/`officeOk` cover the full preset role-based access model Phase 2 union —
+  // any login that reaches SOME back-office surface gets a way back to it, not just owner/manager.
+  const officeRoles = effectiveRoles(auth.roles, auth.elevatedRoles)
+  const officeOk =
+    canOps(officeRoles) || canReports(officeRoles) || canFinance(officeRoles) || canHr(officeRoles)
 
   const profile = useMyProfile({ companyId, actor, enabled: true })
   const notLinked = isNotLinked(profile.error)
@@ -56,10 +61,11 @@ export function Me() {
       <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-line bg-surface/80 px-5 backdrop-blur lg:px-8">
         <Wordmark />
         <div className="flex-1" />
-        {/* An employee+cashier login can jump to the POS; owner/manager back to the dashboard. */}
-        {canDashboard ? (
+        {/* An employee+cashier/chef/waitress login can jump to the POS; any office-capable login
+            (owner/manager/accountant/hr) back to its own back-office home. */}
+        {officeOk ? (
           <Link
-            to="/"
+            to={ROLE_HOME(officeRoles)}
             viewTransition
             className="rounded-xl px-2.5 py-1.5 text-sm font-medium text-ink-3 hover:text-ink"
           >

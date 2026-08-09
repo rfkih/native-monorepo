@@ -6,8 +6,22 @@ import { createContext, useContext } from 'react'
  *
  * The curated business roles mirror the gateway's
  * `TenantJwtAuthoritiesConverter.BUSINESS_ROLES`.
+ *
+ * `hr`/`accountant`/`chef`/`waitress` (preset role-based access model Phase 2 — the UI mirror of
+ * the gateway's Phase 1) join the original four: `hr`/`accountant` split the back-office surface
+ * finer than `owner`/`manager` (HR vs. detailed finance), `chef`/`waitress` ring the till like
+ * `cashier`. See `lib/rolePreset.ts` for the capability table every nav/route gate reads.
  */
-export const BUSINESS_ROLES = ['owner', 'manager', 'cashier', 'employee'] as const
+export const BUSINESS_ROLES = [
+  'owner',
+  'manager',
+  'cashier',
+  'employee',
+  'hr',
+  'accountant',
+  'chef',
+  'waitress',
+] as const
 export type BusinessRole = (typeof BUSINESS_ROLES)[number]
 
 /**
