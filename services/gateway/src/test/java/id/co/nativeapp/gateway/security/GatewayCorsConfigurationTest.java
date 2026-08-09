@@ -22,7 +22,8 @@ class GatewayCorsConfigurationTest {
   @Test
   void emptyAllowListRegistersNoCorsMappingSoTheEdgeBehavesAsBeforeAdr0051() {
     UrlBasedCorsConfigurationSource source =
-        (UrlBasedCorsConfigurationSource) config.corsConfigurationSource(new CorsProperties(List.of()));
+        (UrlBasedCorsConfigurationSource)
+            config.corsConfigurationSource(new CorsProperties(List.of()));
 
     // No mapping at all → getCorsConfiguration returns null for every request → no CORS header.
     assertThat(source.getCorsConfigurations()).isEmpty();
@@ -57,7 +58,11 @@ class GatewayCorsConfigurationTest {
         .containsExactlyInAnyOrder("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS");
     assertThat(cfg.getAllowedHeaders())
         .contains(
-            "Authorization", "Content-Type", "Accept", "X-Company-Id", "X-Operator-Session",
+            "Authorization",
+            "Content-Type",
+            "Accept",
+            "X-Company-Id",
+            "X-Operator-Session",
             "Idempotency-Key");
     // The download filename must be readable cross-origin (apiDownload reads Content-Disposition).
     assertThat(cfg.getExposedHeaders()).contains("Content-Disposition");
@@ -82,6 +87,7 @@ class GatewayCorsConfigurationTest {
     // https anywhere, and http ONLY for loopback dev (5173/4173) — never other cleartext hosts.
     CorsProperties props =
         new CorsProperties(List.of("https://localhost", "http://localhost:5173"));
-    assertThat(props.allowedOrigins()).containsExactly("https://localhost", "http://localhost:5173");
+    assertThat(props.allowedOrigins())
+        .containsExactly("https://localhost", "http://localhost:5173");
   }
 }

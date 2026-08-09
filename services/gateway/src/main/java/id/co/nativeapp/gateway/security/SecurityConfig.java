@@ -49,11 +49,12 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 public class SecurityConfig {
 
   @Bean
-  SecurityFilterChain filterChain(HttpSecurity http, CorsConfigurationSource corsConfigurationSource)
-      throws Exception {
+  SecurityFilterChain filterChain(
+      HttpSecurity http, CorsConfigurationSource corsConfigurationSource) throws Exception {
     return http
         // CORS for the bundled Android shell (ADR 0051). With an empty allow-list (the default and
-        // every thin-client deploy) the source registers NO mapping, so this is a no-op and the edge
+        // every thin-client deploy) the source registers NO mapping, so this is a no-op and the
+        // edge
         // behaves exactly as before. When configured, Spring Security's CorsFilter answers the
         // preflight (OPTIONS) before authentication and adds the headers to real responses — which
         // still pass through the unchanged JWT validation below.
@@ -116,10 +117,11 @@ public class SecurityConfig {
    * CorsProperties}) registers no mapping, so {@code getCorsConfiguration} returns {@code null} for
    * every request and no CORS header is ever emitted: identical to the pre-0051 edge. A configured
    * bundled deploy gets an EXACT-origin policy (never {@code *}), the exact method + request-header
-   * set the console sends (see {@code frontend/console/src/lib/api.ts}), {@code Content-Disposition}
-   * exposed so a cross-origin file download can read its filename, and — critically —
-   * {@code allowCredentials=false}: auth rides a bearer header, not a cookie, so credentials must
-   * stay off (exact-origin + no-credentials is the only combination that is not a CORS foot-gun).
+   * set the console sends (see {@code frontend/console/src/lib/api.ts}), {@code
+   * Content-Disposition} exposed so a cross-origin file download can read its filename, and —
+   * critically — {@code allowCredentials=false}: auth rides a bearer header, not a cookie, so
+   * credentials must stay off (exact-origin + no-credentials is the only combination that is not a
+   * CORS foot-gun).
    */
   @Bean
   CorsConfigurationSource corsConfigurationSource(CorsProperties props) {
