@@ -71,3 +71,4 @@ boundary, a security posture. Routine, local choices do not need one — use a c
 | [0050](0050-recipes-bom-costing.md) | Recipes / BOM + per-sale ingredient depletion + HPP costing | Accepted |
 | [0051](0051-bundled-shell-with-ota-live-updates.md) | Bundled Android shell + OTA live updates for instant cold start | Proposed |
 | [0052](0052-preset-role-based-access.md) | Preset role-based access — office vs floor roles, capability-gated at the gateway | Accepted |
+| [0053](0053-environments-branching-release-pipeline.md) | Environments, branching & the release pipeline (dev → UAT → prod on a VPS) | Accepted |
