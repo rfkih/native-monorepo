@@ -8,6 +8,7 @@ import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { useAuth } from '@/lib/authContext'
 import { StaffShell } from './staff/StaffShell'
 import { Beranda } from './staff/Beranda'
+import { useIsSupervisor } from './staff/ui'
 
 // Route-level code splitting for everything beyond the landing home. Screens live in ./staff and
 // reuse the console's /me data hooks via the `@` alias (see vite.config.ts).
@@ -27,13 +28,9 @@ const ProfileScreen = lazy(() =>
   import('./staff/ProfileScreen').then((m) => ({ default: m.ProfileScreen })),
 )
 const MeAccount = lazy(() => import('@/features/me/MeAccount').then((m) => ({ default: m.MeAccount })))
-// Create flows reuse the console's existing full-screen forms as an interim bridge (ADR 0049 P5
-// core pass): the redesigned tab screens link their "Ajukan cuti / Catat lembur / Klaim baru"
-// actions here. The bottom-sheet versions replace these in the forms follow-up.
-const MeTimeoffScreen = lazy(() =>
-  import('@/features/me/MeTimeoffScreen').then((m) => ({ default: m.MeTimeoffScreen })),
+const ApprovalsScreen = lazy(() =>
+  import('./staff/ApprovalsScreen').then((m) => ({ default: m.ApprovalsScreen })),
 )
-const MyExpenses = lazy(() => import('@/features/expenses/MyExpenses').then((m) => ({ default: m.MyExpenses })))
 
 function CenteredSpinner() {
   return (
@@ -51,6 +48,7 @@ function CenteredSpinner() {
  */
 export function App() {
   const auth = useAuth()
+  const isSup = useIsSupervisor()
   const { t } = useTranslation()
 
   if (!auth.ready) {
@@ -83,12 +81,14 @@ export function App() {
           <Route path="/me/payslips" element={<PayslipsScreen />} />
         </Route>
         {/* Pushed screens — own back header, no tab bar. */}
-        <Route path="/me/expenses/new" element={<MyExpenses />} />
         <Route path="/me/expenses/:id" element={<ClaimDetailScreen />} />
-        <Route path="/me/timeoff/new-leave" element={<MeTimeoffScreen />} />
-        <Route path="/me/timeoff/new-overtime" element={<MeTimeoffScreen />} />
         <Route path="/me/profile" element={<ProfileScreen />} />
         <Route path="/me/account" element={<MeAccount />} />
+        {/* Supervisor approvals — HR-capable logins only (the gateway enforces the same boundary). */}
+        <Route
+          path="/me/approvals"
+          element={isSup ? <ApprovalsScreen /> : <Navigate to="/me" replace />}
+        />
         <Route path="*" element={<Navigate to="/me" replace />} />
       </Routes>
     </Suspense>

@@ -10,6 +10,7 @@ import {
   CalendarClock,
   CheckCircle2,
   ChevronRight,
+  ClipboardCheck,
   FileText,
   TriangleAlert,
   UserRound,
@@ -18,7 +19,8 @@ import { Badge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/features/_shared/financeUi'
-import { useMyClaims } from '@/features/expenses/api'
+import { useClaims, useMyClaims } from '@/features/expenses/api'
+import { useLeaveRequests, useOvertimeEntries } from '@/features/hr/api'
 import { formatMoney } from '@/lib/money'
 import { localeOf } from '@/i18n'
 import {
@@ -30,7 +32,7 @@ import {
   useMyProfile,
   useMySales,
 } from '@/features/me/api'
-import { SectionLabel, greetingKey, useTenant } from './ui'
+import { SectionLabel, greetingKey, useIsSupervisor, useTenant } from './ui'
 
 export function Beranda() {
   const { t, i18n } = useTranslation()
@@ -45,6 +47,20 @@ export function Beranda() {
   const balance = useMyLeaveBalance({ companyId, actor, year, enabled: true })
   const sales = useMySales({ companyId, actor, enabled: true })
   const payslips = useMyPayslips({ companyId, actor, enabled: true })
+
+  // Supervisor approvals (ADR 0049 P5 — "one app, two roles"): pending counts for the home card,
+  // fetched only for a supervisor login (the gateway is the real boundary — see rolePreset).
+  const isSup = useIsSupervisor()
+  const supClaims = useClaims({ companyId, actor, status: 'SUBMITTED', page: 0, size: 50, enabled: isSup })
+  const supLeave = useLeaveRequests({ companyId, actor, status: 'SUBMITTED', page: 0, size: 50, enabled: isSup })
+  const supOvertime = useOvertimeEntries({
+    companyId,
+    actor,
+    status: 'SUBMITTED',
+    page: 0,
+    size: 50,
+    enabled: isSup,
+  })
 
   const latestSlip = [...(payslips.data ?? [])].sort((a, b) => b.period.localeCompare(a.period))[0]
   const latestDetail = useMyPayslip({
@@ -174,6 +190,28 @@ export function Beranda() {
         </div>
       </section>
 
+      {/* Supervisor approvals (ADR 0049 P5 — "one app, two roles") */}
+      {isSup ? (
+        <section className="px-4 pt-[18px]">
+          <Link
+            to="/me/approvals"
+            viewTransition
+            className="block rounded-[20px] border border-brand-100 bg-brand-50 p-[18px] transition-transform active:scale-[0.99]"
+          >
+            <div className="flex items-center gap-2.5">
+              <ClipboardCheck className="size-[19px] shrink-0 text-brand-700" strokeWidth={1.9} aria-hidden />
+              <span className="text-[15px] font-bold text-brand-700">{t('staff.approvals.home')}</span>
+              <ChevronRight className="ml-auto size-[18px] shrink-0 text-brand-700" aria-hidden />
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              <ApprovalStat n={supClaims.data?.totalElements ?? 0} label={t('staff.approvals.tabClaims')} />
+              <ApprovalStat n={supLeave.data?.totalElements ?? 0} label={t('staff.approvals.tabLeave')} />
+              <ApprovalStat n={supOvertime.data?.totalElements ?? 0} label={t('staff.approvals.tabOvertime')} />
+            </div>
+          </Link>
+        </section>
+      ) : null}
+
       {/* This month — sales + commission (same null rule as the console SalesSection) */}
       {sales.data != null &&
       (sales.data.salesMinor !== 0 || sales.data.commissionBasisPoints !== null) ? (
@@ -288,6 +326,16 @@ function TodoCard({
       </span>
       <ChevronRight className="size-[18px] shrink-0 text-ink-300" aria-hidden />
     </Link>
+  )
+}
+
+/** A count tile in the supervisor approvals card. */
+function ApprovalStat({ n, label }: { n: number; label: string }) {
+  return (
+    <div className="rounded-[14px] bg-surface px-3 py-2.5">
+      <div className="tnum font-mono text-[22px] font-bold leading-none text-ink">{n}</div>
+      <div className="mt-1 text-[11.5px] font-medium text-ink-3">{label}</div>
+    </div>
   )
 }
 

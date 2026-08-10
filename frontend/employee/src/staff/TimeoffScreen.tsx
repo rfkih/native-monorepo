@@ -7,7 +7,6 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link } from 'react-router-dom'
 import { TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Skeleton } from '@/components/ui/Skeleton'
@@ -24,6 +23,7 @@ import {
 } from '@/features/me/api'
 import { cn } from '@/lib/cn'
 import { SectionLabel, StaffHeader, TimeoffStatusBadge, useTenant } from './ui'
+import { LeaveRequestSheet, OvertimeSheet } from './TimeoffForms'
 
 type Segment = 'leave' | 'overtime'
 
@@ -33,6 +33,7 @@ export function TimeoffScreen() {
   const { companyId, actor } = useTenant()
   const year = new Date().getFullYear()
   const [segment, setSegment] = useState<Segment>('leave')
+  const [sheet, setSheet] = useState<'leave' | 'overtime' | null>(null)
 
   const balance = useMyLeaveBalance({ companyId, actor, year, enabled: true })
   const leave = useMyLeaveRequests({ companyId, actor, enabled: true })
@@ -105,22 +106,22 @@ export function TimeoffScreen() {
           </p>
         </Card>
 
-        {/* Actions */}
+        {/* Actions — open the sheet forms (ADR 0049 P5: dialogs become sheets) */}
         <div className="flex gap-2.5">
-          <Link
-            to="/me/timeoff/new-leave"
-            viewTransition
-            className="flex h-11 flex-1 items-center justify-center rounded-[14px] bg-brand-600 text-[14px] font-bold text-white transition-transform active:scale-[0.98]"
+          <button
+            type="button"
+            onClick={() => setSheet('leave')}
+            className="flex h-11 flex-1 items-center justify-center rounded-[14px] bg-brand-600 text-[14px] font-bold text-white transition-transform active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700"
           >
             {t('staff.timeoff.requestLeave')}
-          </Link>
-          <Link
-            to="/me/timeoff/new-overtime"
-            viewTransition
-            className="flex h-11 flex-1 items-center justify-center rounded-[14px] border border-line bg-surface text-[14px] font-bold text-ink transition-transform active:scale-[0.98]"
+          </button>
+          <button
+            type="button"
+            onClick={() => setSheet('overtime')}
+            className="flex h-11 flex-1 items-center justify-center rounded-[14px] border border-line bg-surface text-[14px] font-bold text-ink transition-transform active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
           >
             {t('staff.timeoff.logOvertime')}
-          </Link>
+          </button>
         </div>
 
         {/* Segmented control */}
@@ -160,6 +161,13 @@ export function TimeoffScreen() {
           {t('staff.timeoff.cancelHint')}
         </p>
       </div>
+
+      {sheet === 'leave' ? (
+        <LeaveRequestSheet companyId={companyId} actor={actor} onClose={() => setSheet(null)} />
+      ) : null}
+      {sheet === 'overtime' ? (
+        <OvertimeSheet companyId={companyId} actor={actor} onClose={() => setSheet(null)} />
+      ) : null}
     </>
   )
 }

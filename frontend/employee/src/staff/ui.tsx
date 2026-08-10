@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/Badge'
 import { cn } from '@/lib/cn'
 import { useAuth } from '@/lib/authContext'
+import { canHr } from '@/lib/rolePreset'
 import type { TimeoffStatus } from '@/features/me/api'
 
 /** Tenant params for the /me hooks. In oidc mode identity comes from the bearer; companyId/actor are
@@ -15,6 +16,17 @@ import type { TimeoffStatus } from '@/features/me/api'
 export function useTenant(): { companyId: string; actor: string } {
   const auth = useAuth()
   return { companyId: auth.companyId ?? 'me', actor: auth.actor }
+}
+
+/**
+ * True when the signed-in person can decide their team's requests (ADR 0049 P5 "one app, two roles").
+ * The HR bundle (owner / manager / hr) is what the gateway gates the leave/overtime/claim decision
+ * endpoints on — this is UI gating only; the gateway is the real boundary (see rolePreset.ts). No
+ * elevation concept in the employee app (a plain personal login), so the base roles are the merged set.
+ */
+export function useIsSupervisor(): boolean {
+  const auth = useAuth()
+  return canHr(auth.roles)
 }
 
 /** Time-of-day greeting bucket for the home header (staff.greeting.*). */

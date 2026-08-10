@@ -15,6 +15,7 @@ import { EmptyState } from '@/features/_shared/financeUi'
 import { ClaimStatusBadge } from '@/features/expenses/parts'
 import { formatDate } from '@/features/expenses/format'
 import { useMyClaims, type MyExpenseClaim } from '@/features/expenses/api'
+import { NewClaimDialog } from '@/features/expenses/NewClaimDialog'
 import { isNotLinked } from '@/features/me/api'
 import { formatMoney } from '@/lib/money'
 import { localeOf } from '@/i18n'
@@ -29,6 +30,7 @@ export function ClaimsScreen() {
   const year = new Date().getFullYear()
 
   const [page, setPage] = useState(0)
+  const [showNew, setShowNew] = useState(false)
 
   // The pending/reimbursed tiles have no dedicated employee-facing aggregate endpoint (unlike the
   // manager's useOrgUnitExpenseSummary) — this reads a generously sized first page as a best-effort
@@ -136,15 +138,25 @@ export function ClaimsScreen() {
       </div>
 
       {!notLinked ? (
-        <Link
-          to="/me/expenses/new"
-          viewTransition
+        <button
+          type="button"
+          onClick={() => setShowNew(true)}
           className="fixed right-4 z-40 flex items-center gap-2 rounded-full bg-brand-600 px-5 py-3.5 text-[14px] font-bold text-white shadow-lg transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700"
           style={{ bottom: 'calc(82px + env(safe-area-inset-bottom))' }}
         >
           <Plus className="size-[18px]" aria-hidden />
           {t('staff.claims.newClaim')}
-        </Link>
+        </button>
+      ) : null}
+
+      {showNew ? (
+        <NewClaimDialog
+          companyId={companyId}
+          actor={actor}
+          currency={currency}
+          claim={null}
+          onClose={() => setShowNew(false)}
+        />
       ) : null}
     </>
   )

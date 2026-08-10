@@ -4,6 +4,7 @@
  * MyExpenses's ClaimDetailSheet (console) field-for-field but as a full-height phone screen with a
  * sticky back header and a pinned action footer instead of a dialog.
  */
+import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ImageOff, TriangleAlert } from 'lucide-react'
@@ -22,6 +23,7 @@ import {
   useMyReceiptUrl,
   useSubmitClaim,
 } from '@/features/expenses/api'
+import { NewClaimDialog } from '@/features/expenses/NewClaimDialog'
 import { isNotLinked } from '@/features/me/api'
 import { formatMoney } from '@/lib/money'
 import { localeOf } from '@/i18n'
@@ -43,6 +45,7 @@ export function ClaimDetailScreen() {
   const submitClaim = useSubmitClaim({ companyId, actor })
   const cancelClaim = useCancelClaim({ companyId, actor })
   const notLinked = isNotLinked(detail.error)
+  const [showEdit, setShowEdit] = useState(false)
 
   const d = detail.data
   const categoryName = categories.data?.find((cat) => cat.id === d?.categoryId)?.name ?? null
@@ -164,6 +167,11 @@ export function ClaimDetailScreen() {
               {t('staff.claimDetail.submit')}
             </Button>
           ) : null}
+          {d.status === 'DRAFT' ? (
+            <Button variant="outline" size="xl" className="mt-2 w-full" onClick={() => setShowEdit(true)}>
+              {t('staff.claimDetail.edit')}
+            </Button>
+          ) : null}
           {d.status === 'DRAFT' || d.status === 'SUBMITTED' ? (
             <Button
               variant="outline"
@@ -185,6 +193,16 @@ export function ClaimDetailScreen() {
             </Button>
           )}
         </footer>
+      ) : null}
+
+      {showEdit && d ? (
+        <NewClaimDialog
+          companyId={companyId}
+          actor={actor}
+          currency={d.currency}
+          claim={d}
+          onClose={() => setShowEdit(false)}
+        />
       ) : null}
     </div>
   )
