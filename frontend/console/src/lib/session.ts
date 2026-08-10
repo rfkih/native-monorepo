@@ -43,6 +43,12 @@ export interface CompanySession {
    * (see lib/featureTier.ts, plan Risk 5).
    */
   planTier: PlanTier
+  /**
+   * The company's immutable 6-char login-namespace code (ADR 0054). Shown read-only so an owner can
+   * tell staff how to sign in — an invited employee's Keycloak username is `<companyCode>.<local>`.
+   * Empty string only for a stale server that predates the column (`toSession` defaults it).
+   */
+  companyCode: string
 }
 
 export interface SessionContextValue {

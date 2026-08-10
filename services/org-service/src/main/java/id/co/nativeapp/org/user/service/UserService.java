@@ -1,5 +1,6 @@
 package id.co.nativeapp.org.user.service;
 
+import id.co.nativeapp.org.company.service.CompanyReader;
 import id.co.nativeapp.org.user.dto.InviteUserResponse;
 import id.co.nativeapp.org.user.dto.PatchUserRequest;
 import id.co.nativeapp.org.user.dto.ResetPasswordResponse;
@@ -66,14 +67,17 @@ public class UserService {
   private final KeycloakAdminClient keycloak;
   private final UserOutletAssignmentService outletAssignments;
   private final TeamAdministrationGuard guard;
+  private final CompanyReader companyReader;
 
   public UserService(
       KeycloakAdminClient keycloak,
       UserOutletAssignmentService outletAssignments,
-      TeamAdministrationGuard guard) {
+      TeamAdministrationGuard guard,
+      CompanyReader companyReader) {
     this.keycloak = keycloak;
     this.outletAssignments = outletAssignments;
     this.guard = guard;
+    this.companyReader = companyReader;
   }
 
   // ---------------------------------------------------------------------------
@@ -90,6 +94,8 @@ public class UserService {
    */
   public List<UserResponse> listUsers() {
     String companyId = TenantContext.require().companyId();
+    // The bound tenant's code, to strip the <companyCode>. prefix off scoped logins for display.
+    String companyCode = companyReader.findCurrentCompanyCode();
     List<KeycloakUser> users = keycloak.listUsersByCompanyId(companyId);
 
     // Enrich each user with their active outlet count in one grouped query (no N+1).
@@ -104,7 +110,7 @@ public class UserService {
             u ->
                 new UserResponse(
                     u.id(),
-                    u.username(),
+                    localUsername(u.username(), companyCode),
                     u.email(),
                     u.roles(),
                     u.enabled(),
@@ -155,8 +161,18 @@ public class UserService {
 
     String companyId = TenantContext.require().companyId();
 
-    // Pre-check the login identifier (and the email, when given) to surface the 409 cleanly.
-    if (keycloak.usernameExists(username)) {
+    // Company-scoped username (ADR 0054): the stored Keycloak login is <company_code>.<local>, so
+    // the same short local name (the "employee id" the owner typed) is unique PER COMPANY inside
+    // the single shared realm. The local part is what the owner sees; the code prefix is
+    // transparent
+    // and derived from the bound tenant's company (never from the request).
+    String composedUsername = companyReader.findCurrentCompanyCode() + "." + username;
+
+    // Pre-check the login identifier (and the email, when given) to surface the 409 cleanly. The
+    // check is on the COMPOSED name, so the 409 is now effectively per-company — two companies may
+    // each hold a "budi". The exception carries the LOCAL name (never the composed value), and the
+    // advice does not echo it, so no cross-tenant username is leaked.
+    if (keycloak.usernameExists(composedUsername)) {
       throw new UsernameAlreadyExistsException(username);
     }
     String email0 = (email == null || email.isBlank()) ? null : email.strip();
@@ -166,13 +182,14 @@ public class UserService {
 
     // createInvitedUser returns the Keycloak userId AND the generated temporary password.
     // The password is NEVER logged — the InviteResult carries it only to pass it to the response.
-    InviteResult result = keycloak.createInvitedUser(username, email0, companyId, roles);
+    InviteResult result = keycloak.createInvitedUser(composedUsername, email0, companyId, roles);
 
     log.info(
         "Invited user created: userId={}, companyId={}, roles={}",
         result.userId(),
         companyId,
         roles);
+    // The response surfaces the LOCAL username (what the owner typed), not the composed value.
     return new InviteUserResponse(
         result.userId(), username, email0, role, roles, result.temporaryPassword());
   }
@@ -191,7 +208,7 @@ public class UserService {
    * @return the resolved user, guaranteed to belong to the caller's tenant
    */
   public UserResponse getUserById(String userId) {
-    return toResponse(resolveInTenant(userId));
+    return toResponse(resolveInTenant(userId), companyReader.findCurrentCompanyCode());
   }
 
   // ---------------------------------------------------------------------------
@@ -317,7 +334,7 @@ public class UserService {
         request.enabled());
 
     // Re-fetch the updated user to return current state.
-    return toResponse(resolveInTenant(userId));
+    return toResponse(resolveInTenant(userId), companyReader.findCurrentCompanyCode());
   }
 
   // ---------------------------------------------------------------------------
@@ -392,8 +409,31 @@ public class UserService {
    * Lives here (service → dto), not on the dto, so the dto never depends on the service layer
    * (ArchUnit layering rule).
    */
-  private static UserResponse toResponse(KeycloakUser user) {
+  private static UserResponse toResponse(KeycloakUser user, String companyCode) {
     return UserResponse.withoutCount(
-        user.id(), user.username(), user.email(), user.roles(), user.enabled());
+        user.id(),
+        localUsername(user.username(), companyCode),
+        user.email(),
+        user.roles(),
+        user.enabled());
+  }
+
+  /**
+   * The console-facing LOCAL part of a stored Keycloak username: strips the bound tenant's EXACT
+   * {@code <companyCode>.} prefix (ADR 0054) from an invited-employee login so the UI shows what
+   * the owner typed. Owner logins (email usernames) and any legacy bare username do not carry the
+   * prefix and pass through unchanged. Matching the exact company code — not a shape regex — cannot
+   * mis-strip an owner email whose local part merely looks like a code, and correctly strips a
+   * local part that itself contains {@code '@'}. Display-only — every tenancy / self-lockout guard
+   * keys on the user id, never on the username, so stripping cannot weaken them.
+   */
+  private static String localUsername(String storedUsername, String companyCode) {
+    if (storedUsername != null
+        && companyCode != null
+        && !companyCode.isBlank()
+        && storedUsername.startsWith(companyCode + ".")) {
+      return storedUsername.substring(companyCode.length() + 1);
+    }
+    return storedUsername;
   }
 }

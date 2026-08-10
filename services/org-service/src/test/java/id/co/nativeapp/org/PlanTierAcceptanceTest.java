@@ -95,22 +95,25 @@ class PlanTierAcceptanceTest extends PostgresRlsTestBase {
     // Simulate a row that predates this feature: inserted directly over the admin (BYPASSRLS)
     // connection, naming every NOT NULL column EXCEPT plan_tier, so the V10 column DEFAULT
     // ('FULL') is the only thing that can have supplied the value — the grandfather guarantee
-    // (D6: "existing companies default FULL — no regression").
+    // (D6: "existing companies default FULL — no regression"). company_code (ADR 0054) is also
+    // NOT NULL but has NO column default, so it is named explicitly here.
     UUID companyId = UUID.randomUUID();
     try (Connection admin = adminConnection();
         PreparedStatement ps =
             admin.prepareStatement(
                 "INSERT INTO company (id, name, base_currency, default_language,"
-                    + " legal_employer_id, created_at, created_by, updated_at, updated_by,"
-                    + " version, company_id) VALUES (?, ?, ?, ?, ?, now(), ?, now(), ?, 0, ?)")) {
+                    + " legal_employer_id, company_code, created_at, created_by, updated_at,"
+                    + " updated_by, version, company_id) VALUES (?, ?, ?, ?, ?, ?, now(), ?, now(),"
+                    + " ?, 0, ?)")) {
       ps.setObject(1, companyId);
       ps.setString(2, "Legacy Co");
       ps.setString(3, "IDR");
       ps.setString(4, "id");
       ps.setObject(5, companyId);
-      ps.setString(6, "migration-test");
+      ps.setString(6, "lgcy01");
       ps.setString(7, "migration-test");
-      ps.setString(8, companyId.toString());
+      ps.setString(8, "migration-test");
+      ps.setString(9, companyId.toString());
       ps.executeUpdate();
     }
 

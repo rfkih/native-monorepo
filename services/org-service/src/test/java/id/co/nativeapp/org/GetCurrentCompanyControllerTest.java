@@ -62,7 +62,14 @@ class GetCurrentCompanyControllerTest {
   void withABoundTenantAndAnExistingCompanyReturns200WithCompanyBody() throws Exception {
     CompanyResponse stubResponse =
         new CompanyResponse(
-            COMPANY_ID, "Acme Corp", "IDR", "id", LEGAL_EMPLOYER_ID, FIRST_BUSINESS_ID, "FULL");
+            COMPANY_ID,
+            "Acme Corp",
+            "IDR",
+            "id",
+            LEGAL_EMPLOYER_ID,
+            FIRST_BUSINESS_ID,
+            "FULL",
+            "acme07");
     when(companyService.getCurrentCompany()).thenReturn(stubResponse);
 
     TenantContext.callAs(

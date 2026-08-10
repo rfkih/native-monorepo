@@ -90,6 +90,7 @@ export function OnboardingWizard() {
         businessId: res.firstBusinessId,
         actor: AUTH_MODE === 'oidc' ? auth.actor : DEV_ACTOR,
         planTier: toPlanTier(res.planTier),
+        companyCode: res.companyCode ?? '',
       })
     },
   })

@@ -16,8 +16,12 @@ import jakarta.validation.constraints.Size;
  * <p><strong>Server-side validation is authoritative.</strong> This endpoint is PUBLIC and
  * unauthenticated, so the React client's checks are advisory only — a direct API call bypasses
  * them. {@code ownerEmail} must be a syntactically valid email and {@code ownerPassword} must meet
- * a minimum length HERE, not just in the browser (security review, Increment 1). Password
- * complexity beyond length is enforced by Keycloak's realm password policy.
+ * a minimum length HERE, not just in the browser (security review, Increment 1). The owner's
+ * initial password is admin-SET on the Keycloak user with {@code temporary=false} (it never runs
+ * through {@code UPDATE_PASSWORD}), so Keycloak's realm password policy does NOT gate it — the
+ * realm's {@code length(10)}/{@code notEmail} floor is therefore mirrored HERE ({@code @Size(min =
+ * 10)} + {@link #isPasswordDistinctFromEmail()}) so the highest-privilege account is never admitted
+ * below the realm's own bar (security review, ADR 0054).
  *
  * <p><strong>Whitelists are enforced HERE, not just in the client.</strong> {@code country}, {@code
  * defaultLanguage}, {@code vertical}, {@code companySize} and {@code primaryInterest} are
@@ -77,5 +81,20 @@ public record SignupRequest(
             message = "unsupported interest")
         String primaryInterest,
     @NotBlank @Email String ownerEmail,
-    @NotBlank @Size(min = 8, max = 128) String ownerPassword,
-    @NotNull @AssertTrue(message = "terms must be accepted") Boolean termsAccepted) {}
+    @NotBlank @Size(min = 10, max = 128) String ownerPassword,
+    @NotNull @AssertTrue(message = "terms must be accepted") Boolean termsAccepted) {
+
+  /**
+   * Cross-field rule mirroring the realm's {@code notEmail} password policy for the admin-set owner
+   * credential (see the class javadoc): rejects an initial password equal to the owner's email
+   * (case-insensitive). Returns {@code true} when either side is null so {@code @NotBlank} owns the
+   * null case with a cleaner message. Discovered by bean validation as the {@code
+   * passwordDistinctFromEmail} boolean property.
+   */
+  @AssertTrue(message = "password must not be the same as the email address") public boolean isPasswordDistinctFromEmail() {
+    if (ownerPassword == null || ownerEmail == null) {
+      return true;
+    }
+    return !ownerPassword.equalsIgnoreCase(ownerEmail);
+  }
+}

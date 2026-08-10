@@ -75,6 +75,7 @@ public interface CompanyRepository extends JpaRepository<Company, UUID> {
                  c.default_language  AS default_language,
                  c.legal_employer_id AS legal_employer_id,
                  c.plan_tier         AS plan_tier,
+                 c.company_code      AS company_code,
                  fb.id               AS first_business_id
             FROM company c
             JOIN (
@@ -88,4 +89,15 @@ public interface CompanyRepository extends JpaRepository<Company, UUID> {
           """,
       nativeQuery = true)
   Optional<CompanyCurrentView> findCurrentView();
+
+  /**
+   * The bound tenant's {@code company_code} (ADR 0054) — a deliberately JOIN-FREE scalar read used
+   * by the invite flow to compose {@code <company_code>.<local>} usernames. Unlike {@link
+   * #findCurrentView()} it does not join {@code org_unit}, so it resolves the code even when the
+   * org tree is absent (e.g. a test that seeds only the company row). RLS scopes the single {@code
+   * company} row to the bound tenant; no {@code WHERE company_id}. A single scalar column (like
+   * {@code count}/{@code exists}), not a projection.
+   */
+  @Query(value = "SELECT company_code FROM company LIMIT 1", nativeQuery = true)
+  Optional<String> findCurrentCompanyCode();
 }

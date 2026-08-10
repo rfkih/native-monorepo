@@ -411,6 +411,9 @@ export const id = {
     tagline: 'Kasir, pembukuan, dan tim — satu aplikasi.',
     signIn: 'Masuk',
     createAccount: 'Buat akun',
+    companyCode: 'Kode perusahaan',
+    companyCodeHint: 'Dari manajer Anda — opsional, mempercepat masuk',
+    employeeId: 'ID karyawan',
   },
   mobile: {
     tabs: {
@@ -1700,6 +1703,8 @@ export const id = {
       doneTitle: 'Login dibuat untuk {{name}}',
       doneBody:
         'Bagikan kata sandi sekali pakai di bawah. Karyawan wajib menggantinya saat pertama masuk.',
+      signInWith: 'Masuk dengan',
+      signInWithNote: 'Karyawan masuk dengan nama pengguna ini.',
       tempPassword: 'Kata sandi sekali pakai',
       tempPasswordNote:
         'Hanya tampil sekali — salin sekarang. Tidak disimpan dan tidak bisa dipulihkan, hanya bisa direset.',

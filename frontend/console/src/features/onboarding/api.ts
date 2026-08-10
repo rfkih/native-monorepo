@@ -24,6 +24,8 @@ export interface CompanyResponse {
   /** Optional — an older server (pre P1 tier-mode) omits this column; callers fail OPEN to FULL
    *  via `toPlanTier` (lib/featureTier.ts), never hiding a feature on a read gap. */
   planTier?: string
+  /** The company's login-namespace code (ADR 0054); absent on an older server. */
+  companyCode?: string
 }
 
 /**

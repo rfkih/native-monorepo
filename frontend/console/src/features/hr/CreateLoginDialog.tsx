@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/Button'
 import { Field, TextInput } from '@/components/ui/Field'
 import { DialogOverlay } from '@/features/org/parts'
+import { useSession } from '@/lib/session'
 import { useInviteMember, type InviteResponse } from '@/features/team/api'
 import { useLinkLogin, type EmployeeListRow } from './api'
 
@@ -30,6 +31,7 @@ export function CreateLoginDialog({
   onClose: () => void
 }) {
   const { t } = useTranslation()
+  const { company } = useSession()
   // A sensible default username derived from the employee's name (owner can edit). Some employees
   // have no email, so the login is keyed by this username; email is optional contact metadata.
   const suggestedUsername = employee.fullName
@@ -99,6 +101,11 @@ export function CreateLoginDialog({
             {t('hr.createLogin.doneTitle', { name: employee.fullName })}
           </h2>
           <p className="text-sm text-ink-2">{t('hr.createLogin.doneBody')}</p>
+          <Field label={t('hr.createLogin.signInWith')} hint={t('hr.createLogin.signInWithNote')}>
+            <p className="select-all rounded-xl border border-line bg-paper px-3.5 py-2.5 font-mono text-sm text-ink">
+              {company?.companyCode ? `${company.companyCode}.${username.trim()}` : username.trim()}
+            </p>
+          </Field>
           <Field label={t('hr.createLogin.tempPassword')}>
             <p className="select-all rounded-xl border border-line bg-paper px-3.5 py-2.5 font-mono text-sm text-ink">
               {invite.temporaryPassword}

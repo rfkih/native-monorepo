@@ -139,6 +139,14 @@ class UserManagementAcceptanceTest {
     } catch (SQLException ignored) {
       // Not yet migrated (first run) — nothing to reset.
     }
+    // The invite flow now reads the caller company's company_code (ADR 0054) to compose
+    // <company_code>.<local> usernames, so both tenants need a company row. adminConnection() is
+    // the
+    // container superuser (bypasses RLS), so it inserts across tenants directly; codes are FIXED so
+    // the scoped-username assertions are deterministic. org_unit is NOT seeded — the code read is
+    // JOIN-free.
+    seedCompany(COMPANY_A, "acme01", "Acme");
+    seedCompany(COMPANY_B, "beta01", "Beta");
     // NOTE: we do NOT reset Keycloak users created by the test API calls here.
     // Tests use unique email addresses per run (uniqueEmail()) to avoid cross-test collisions.
     // The seeded realm users (owner-acme, owner-beta, cashier-acme) are NOT deleted.
@@ -266,6 +274,86 @@ class UserManagementAcceptanceTest {
             ex ->
                 assertThat(((HttpClientErrorException) ex).getStatusCode())
                     .isEqualTo(HttpStatus.CONFLICT));
+  }
+
+  // ===========================================================================
+  // Company-scoped usernames (ADR 0054)
+  // ===========================================================================
+
+  @Test
+  void twoTenantsCanEachInviteTheSameLocalNameAndTheStoredNameIsCompanyScoped() throws Exception {
+    // The stored Keycloak username is <company_code>.<local>, so the SAME short local name is
+    // unique PER COMPANY — the 409 is now per-company, not global. Both invites succeed; the
+    // response surfaces the LOCAL name, while the stored KC usernames carry each company's prefix.
+    String local = "budi" + System.nanoTime();
+
+    JsonNode nodeA =
+        JSON.readValue(inviteLocal(tokenForOwnerA(), local, "cashier"), JsonNode.class);
+    JsonNode nodeB =
+        JSON.readValue(inviteLocal(tokenForOwnerB(), local, "cashier"), JsonNode.class);
+
+    assertThat(nodeA.get("username").asString()).isEqualTo(local);
+    assertThat(nodeB.get("username").asString()).isEqualTo(local);
+
+    assertThat(keycloakUsername(nodeA.get("id").asString())).isEqualTo("acme01." + local);
+    assertThat(keycloakUsername(nodeB.get("id").asString())).isEqualTo("beta01." + local);
+  }
+
+  @Test
+  void sameTenantDuplicateLocalNameReturns409() throws Exception {
+    String local = "kasir" + System.nanoTime();
+    String tokenA = tokenForOwnerA();
+
+    // First invite of the local name under company A succeeds.
+    inviteLocal(tokenA, local, "cashier");
+
+    // Second invite of the SAME local name under the SAME company → 409 (composed name collides).
+    assertThatThrownBy(() -> inviteLocal(tokenA, local, "employee"))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.CONFLICT));
+  }
+
+  @Test
+  void listShowsTheLocalUsernameNotTheStoredCompanyScopedName() throws Exception {
+    // GET /users strips the <companyCode>. prefix for display, so the console shows what the owner
+    // typed — never the raw scoped Keycloak username.
+    String local = "sari" + System.nanoTime();
+    String tokenA = tokenForOwnerA();
+    inviteLocal(tokenA, local, "cashier");
+
+    String listBody =
+        appClient()
+            .get()
+            .uri("/api/v1/users")
+            .header(HttpHeaders.AUTHORIZATION, bearer(tokenA))
+            .retrieve()
+            .body(String.class);
+    JsonNode users = JSON.readValue(listBody, JsonNode.class);
+
+    boolean found = false;
+    for (JsonNode user : users) {
+      // No listed login shows a raw company-code prefix.
+      assertThat(user.get("username").asString()).doesNotStartWith("acme01.");
+      if (local.equals(user.get("username").asString())) {
+        found = true;
+      }
+    }
+    assertThat(found).as("the scoped login should list by its local username").isTrue();
+  }
+
+  /** Invites a login by a bare local username (no email) and returns the raw response body. */
+  private String inviteLocal(String token, String localUsername, String role) {
+    return appClient()
+        .post()
+        .uri("/api/v1/users")
+        .header(HttpHeaders.AUTHORIZATION, bearer(token))
+        .contentType(MediaType.APPLICATION_JSON)
+        .body("{\"username\": \"%s\", \"role\": \"%s\"}".formatted(localUsername, role))
+        .retrieve()
+        .body(String.class);
   }
 
   // ===========================================================================
@@ -1133,6 +1221,23 @@ class UserManagementAcceptanceTest {
     }
   }
 
+  /** Fetches the stored Keycloak {@code username} for a user id via the Admin API (ADR 0054). */
+  private String keycloakUsername(String userId) throws IOException {
+    String adminToken = obtainAdminToken();
+    String userUrl = KEYCLOAK.getAuthServerUrl() + "/admin/realms/" + REALM + "/users/" + userId;
+    Request request =
+        new Request.Builder()
+            .url(userUrl)
+            .header("Authorization", "Bearer " + adminToken)
+            .get()
+            .build();
+    try (Response response = HTTP.newCall(request).execute()) {
+      assertThat(response.code()).isEqualTo(200);
+      JsonNode user = JSON.readValue(response.body().string(), JsonNode.class);
+      return user.get("username").asString();
+    }
+  }
+
   private static String obtainAdminToken() {
     String tokenUrl =
         KEYCLOAK.getAuthServerUrl() + "/realms/" + REALM + "/protocol/openid-connect/token";
@@ -1169,6 +1274,31 @@ class UserManagementAcceptanceTest {
   private static Connection adminConnection() throws SQLException {
     return java.sql.DriverManager.getConnection(
         POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+  }
+
+  /**
+   * Inserts a minimal {@code company} row for {@code companyId} with a FIXED {@code company_code}
+   * (ADR 0054), via the container superuser connection (bypasses RLS, cross-tenant). Only the
+   * mandatory NOT-NULL columns plus what the invite flow's JOIN-free code read needs; {@code
+   * org_unit} is deliberately NOT seeded.
+   */
+  private static void seedCompany(String companyId, String companyCode, String name) {
+    try (Connection admin = adminConnection();
+        var ps =
+            admin.prepareStatement(
+                "INSERT INTO company (id, name, base_currency, default_language, legal_employer_id,"
+                    + " country, plan_tier, company_code, created_at, created_by, updated_at,"
+                    + " updated_by, version, company_id) VALUES (?::uuid, ?, 'IDR', 'id', ?::uuid,"
+                    + " 'ID', 'FULL', ?, now(), 'test', now(), 'test', 0, ?)")) {
+      ps.setString(1, companyId);
+      ps.setString(2, name);
+      ps.setString(3, companyId);
+      ps.setString(4, companyCode);
+      ps.setString(5, companyId);
+      ps.executeUpdate();
+    } catch (SQLException e) {
+      throw new IllegalStateException("Failed to seed company " + companyId, e);
+    }
   }
 
   private static void provisionAppRole() {

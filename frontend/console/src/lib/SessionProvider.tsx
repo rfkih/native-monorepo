@@ -26,6 +26,8 @@ interface CompanyDto {
    * read gap never HIDES a feature.
    */
   planTier?: string
+  /** The company's login-namespace code (ADR 0054). Absent on an older server → '' via toSession. */
+  companyCode?: string
 }
 
 const LEGACY_STORAGE_KEY = 'native.console.session'
@@ -153,6 +155,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       businessId: dto.firstBusinessId,
       actor: auth.actor,
       planTier: toPlanTier(dto.planTier),
+      companyCode: dto.companyCode ?? '',
     }),
     [auth.actor],
   )

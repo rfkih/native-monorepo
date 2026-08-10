@@ -22,8 +22,10 @@ import id.co.nativeapp.tenant.TenantContext;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import org.apache.avro.generic.GenericRecord;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -81,9 +83,13 @@ public class CompanyWriter {
    * @param newCompanyId the freshly generated company id == new tenant id (bound in the scope)
    * @param command the create-company command (name, currency, language, country + optional funnel
    *     fields, first business) — mirrors {@link #addBusiness(CreateBusinessCommand)}'s shape
+   * @param companyCode the minted 6-char login-namespace code (ADR 0054); on the vanishingly
+   *     unlikely {@code uq_company_company_code} collision this throws {@link
+   *     CompanyCodeCollisionException} and {@link CompanyService} retries with a fresh code
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
-  public CreateCompanyResult create(UUID newCompanyId, CreateCompanyCommand command) {
+  public CreateCompanyResult create(
+      UUID newCompanyId, CreateCompanyCommand command, String companyCode) {
     String name = command.name();
 
     // The tenant the auto-RLS aspect has bound to this transaction; it MUST equal the
@@ -110,7 +116,8 @@ public class CompanyWriter {
             command.country(),
             command.phone(),
             command.companySize(),
-            command.primaryInterest());
+            command.primaryInterest(),
+            companyCode);
     // New companies start on the free tier (ADR 0044 D4 "signup-default-FREE", delivered with
     // the ADR 0047 three-tier pricing); pre-existing rows keep the V10 grandfather FULL default.
     company.changePlanTier("FREE");
@@ -132,11 +139,22 @@ public class CompanyWriter {
     firstBusiness.setCompanyId(tenant);
     OrgUnit savedBusiness = orgUnitRepository.save(firstBusiness);
 
-    // Flush so the inserts (and any RLS WITH CHECK violation) surface inside this
-    // transaction, before the outbox rows, rather than at commit.
-    legalEmployerRepository.flush();
-    companyRepository.flush();
-    orgUnitRepository.flush();
+    // Flush so the inserts (and any RLS WITH CHECK violation) surface inside this transaction,
+    // before the outbox rows, rather than at commit. flush() synchronizes the WHOLE persistence
+    // context, so a duplicate company_code (ADR 0054) may surface on the first flush regardless of
+    // which repository triggers it — translate that one UNIQUE-index violation into a retryable
+    // CompanyCodeCollisionException; every other integrity violation (e.g. an RLS WITH CHECK
+    // failure) propagates unchanged.
+    try {
+      legalEmployerRepository.flush();
+      companyRepository.flush();
+      orgUnitRepository.flush();
+    } catch (DataIntegrityViolationException e) {
+      if (mentionsCompanyCodeIndex(e)) {
+        throw new CompanyCodeCollisionException();
+      }
+      throw e;
+    }
 
     // CompanyCreated: the outbox INSERT runs on this transaction's connection (rule 3),
     // so it commits atomically with the company + legal_employer + org_unit above.
@@ -241,6 +259,31 @@ public class CompanyWriter {
   /** Today's date (UTC), via the injected clock, for effective-dating new nodes. */
   private LocalDate today() {
     return LocalDate.now(clock);
+  }
+
+  /**
+   * Whether the failure chain names the {@code uq_company_company_code} UNIQUE index (ADR 0054) — a
+   * duplicate {@code company_code}. Prefers Hibernate's parsed {@link
+   * org.hibernate.exception.ConstraintViolationException#getConstraintName()} when populated, and
+   * falls back to a case-insensitive scan of the whole cause chain's messages (robust across the
+   * Spring {@link DataIntegrityViolationException} → Hibernate → PostgreSQL layers, where the
+   * driver puts the violated index name in the error text). Both together make it resilient to a
+   * dialect that leaves the constraint name null OR a driver that omits it from the message.
+   */
+  private static boolean mentionsCompanyCodeIndex(Throwable e) {
+    for (Throwable c = e; c != null; c = c.getCause()) {
+      if (c instanceof org.hibernate.exception.ConstraintViolationException cve) {
+        String name = cve.getConstraintName();
+        if (name != null && name.toLowerCase(Locale.ROOT).contains("uq_company_company_code")) {
+          return true;
+        }
+      }
+      String message = c.getMessage();
+      if (message != null && message.toLowerCase(Locale.ROOT).contains("uq_company_company_code")) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**

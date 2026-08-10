@@ -102,7 +102,14 @@ class ChangePlanTierControllerTest {
   void anOwnerFlippingTheTierReturns200WithTheUpdatedCompany() throws Exception {
     CompanyResponse updated =
         new CompanyResponse(
-            COMPANY_ID, "Acme Corp", "IDR", "id", LEGAL_EMPLOYER_ID, FIRST_BUSINESS_ID, "FREE");
+            COMPANY_ID,
+            "Acme Corp",
+            "IDR",
+            "id",
+            LEGAL_EMPLOYER_ID,
+            FIRST_BUSINESS_ID,
+            "FREE",
+            "acme07");
     when(companyService.changePlanTier("FREE")).thenReturn(updated);
 
     TenantContext.callAs(

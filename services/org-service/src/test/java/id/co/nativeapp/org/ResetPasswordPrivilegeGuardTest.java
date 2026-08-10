@@ -7,6 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import id.co.nativeapp.org.company.service.CompanyReader;
 import id.co.nativeapp.org.user.service.InsufficientPrivilegeException;
 import id.co.nativeapp.org.user.service.KeycloakAdminClient;
 import id.co.nativeapp.org.user.service.KeycloakUser;
@@ -35,6 +36,7 @@ class ResetPasswordPrivilegeGuardTest {
   @Mock private KeycloakAdminClient keycloak;
   @Mock private UserOutletAssignmentService outletAssignments;
   @Mock private TeamAdministrationGuard guard;
+  @Mock private CompanyReader companyReader;
 
   private KeycloakUser user(String id, String role) {
     return new KeycloakUser(id, id + "@example.co.id", null, true, List.of(COMPANY), List.of(role));
@@ -42,7 +44,7 @@ class ResetPasswordPrivilegeGuardTest {
 
   @Test
   void managerCannotResetAnOwner() {
-    UserService service = new UserService(keycloak, outletAssignments, guard);
+    UserService service = new UserService(keycloak, outletAssignments, guard, companyReader);
     when(keycloak.getUserById("owner-id")).thenReturn(Optional.of(user("owner-id", "owner")));
     when(keycloak.getUserById("mgr-sub")).thenReturn(Optional.of(user("mgr-sub", "manager")));
 
@@ -58,7 +60,7 @@ class ResetPasswordPrivilegeGuardTest {
 
   @Test
   void ownerCanResetAManager() {
-    UserService service = new UserService(keycloak, outletAssignments, guard);
+    UserService service = new UserService(keycloak, outletAssignments, guard, companyReader);
     when(keycloak.getUserById("mgr-id")).thenReturn(Optional.of(user("mgr-id", "manager")));
     when(keycloak.getUserById("owner-sub")).thenReturn(Optional.of(user("owner-sub", "owner")));
     when(keycloak.resetTemporaryPassword("mgr-id")).thenReturn("NewTemp1!");
@@ -72,7 +74,7 @@ class ResetPasswordPrivilegeGuardTest {
 
   @Test
   void managerCanResetACashierWithoutFetchingTheCallersRoles() {
-    UserService service = new UserService(keycloak, outletAssignments, guard);
+    UserService service = new UserService(keycloak, outletAssignments, guard, companyReader);
     when(keycloak.getUserById("csh-id")).thenReturn(Optional.of(user("csh-id", "cashier")));
     when(keycloak.resetTemporaryPassword("csh-id")).thenReturn("NewTemp2!");
 

@@ -11,6 +11,8 @@ import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
@@ -45,6 +47,14 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class CompanyService {
+
+  private static final Logger log = LoggerFactory.getLogger(CompanyService.class);
+
+  /**
+   * How many fresh {@code company_code}s to try before giving up (ADR 0054). With a ~30^6 space a
+   * collision is astronomically unlikely; a handful of attempts is a safety net, not a real path.
+   */
+  private static final int MAX_COMPANY_CODE_ATTEMPTS = 5;
 
   private final CompanyWriter writer;
   private final CompanyReader reader;
@@ -89,13 +99,45 @@ public class CompanyService {
       // CHECK passes. callAs declares checked Exception; the writer only throws
       // unchecked, so the catch below just rethrows.
       return TenantContext.callAs(
-          newCompanyId.toString(), command.actor(), () -> writer.create(newCompanyId, command));
+          newCompanyId.toString(),
+          command.actor(),
+          () -> bootstrapWithUniqueCode(newCompanyId, command));
     } catch (RuntimeException e) {
       throw e;
     } catch (Exception e) {
-      // Unreachable: writer.create throws only unchecked exceptions.
+      // Unreachable: the bootstrap throws only unchecked exceptions.
       throw new IllegalStateException("create-company failed", e);
     }
+  }
+
+  /**
+   * Bootstraps the tenant, minting a fresh {@code company_code} per attempt and retrying on the
+   * vanishingly unlikely {@code uq_company_company_code} collision (ADR 0054).
+   *
+   * <p>The retry lives HERE, OUTSIDE {@link CompanyWriter#create}'s {@code REQUIRES_NEW}
+   * transaction, because the UNIQUE-index violation marks that transaction rollback-only — each
+   * attempt must run in a fresh transaction (a new {@code writer.create} call = a new proxy-entered
+   * {@code REQUIRES_NEW} tx with the RLS GUC re-bound). Runs inside the caller's already-bound
+   * tenant scope, so every attempt targets the same {@code newCompanyId} tenant. Uniqueness cannot
+   * be pre-checked in-app: under FORCE RLS a company sees only its own row, so the DB index is the
+   * only cross-tenant arbiter.
+   */
+  private CreateCompanyResult bootstrapWithUniqueCode(
+      UUID newCompanyId, CreateCompanyCommand command) {
+    for (int attempt = 1; attempt <= MAX_COMPANY_CODE_ATTEMPTS; attempt++) {
+      try {
+        return writer.create(newCompanyId, command, CompanyCodeGenerator.generate());
+      } catch (CompanyCodeCollisionException collision) {
+        // Mint a fresh code and retry in a new transaction. Logged so an unexpectedly saturated
+        // code space becomes observable rather than silent (the code carries no PII).
+        log.warn(
+            "company_code collision on attempt {} of {} — retrying with a fresh code",
+            attempt,
+            MAX_COMPANY_CODE_ATTEMPTS);
+      }
+    }
+    throw new IllegalStateException(
+        "create-company: exhausted " + MAX_COMPANY_CODE_ATTEMPTS + " unique company-code attempts");
   }
 
   /**

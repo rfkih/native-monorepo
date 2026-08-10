@@ -54,6 +54,24 @@ public class CompanyReader {
         view.getDefaultLanguage(),
         view.getLegalEmployerId(),
         view.getFirstBusinessId(),
-        view.getPlanTier());
+        view.getPlanTier(),
+        view.getCompanyCode());
+  }
+
+  /**
+   * The bound tenant's 6-char {@code company_code} (ADR 0054) — the login-namespace prefix the
+   * invite flow composes into {@code <company_code>.<local>} usernames. Deliberately JOIN-FREE
+   * (unlike {@link #findCurrentCompany()}, which joins {@code org_unit}): the invite path must
+   * resolve the code even when the org tree is absent, and RLS already scopes the single {@code
+   * company} row to the bound tenant.
+   *
+   * @return the company code for the bound tenant
+   * @throws NoSuchElementException if no company exists for the bound tenant
+   */
+  @Transactional(readOnly = true)
+  public String findCurrentCompanyCode() {
+    return companyRepository
+        .findCurrentCompanyCode()
+        .orElseThrow(() -> new NoSuchElementException("No company found for the current tenant"));
   }
 }

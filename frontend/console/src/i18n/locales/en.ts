@@ -424,6 +424,9 @@ export const en = {
     tagline: 'The till, the books, and your team — one app.',
     signIn: 'Sign in',
     createAccount: 'Create an account',
+    companyCode: 'Company code',
+    companyCodeHint: 'From your manager — optional, speeds up sign-in',
+    employeeId: 'Employee ID',
   },
   mobile: {
     tabs: {
@@ -1711,6 +1714,8 @@ export const en = {
       doneTitle: 'Login created for {{name}}',
       doneBody:
         'Share the one-time password below. The employee must change it at first sign-in.',
+      signInWith: 'Sign in with',
+      signInWithNote: 'The employee signs in with this username.',
       tempPassword: 'One-time password',
       tempPasswordNote:
         'Shown once — copy it now. It is never stored and cannot be recovered, only reset.',

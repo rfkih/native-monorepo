@@ -10,6 +10,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -114,6 +115,18 @@ public class Company extends Auditable {
   @Column(name = "primary_interest", length = 32)
   private String primaryInterest;
 
+  /**
+   * The company's short login-namespace code (ADR 0054): 6 chars from the unambiguous alphabet
+   * {@code [23456789abcdefghjkmnpqrstvwxyz]} (no {@code 0/1/i/l/o/u}). Invited-employee Keycloak
+   * usernames are composed as {@code <company_code>.<local>}, so a short human login name is unique
+   * per company inside the single shared realm. IMMUTABLE like {@link #baseCurrency} / {@link
+   * #country}: mapped {@code updatable = false}, no setter, minted once at creation. Cross-tenant
+   * uniqueness is arbitrated by the {@code uq_company_company_code} UNIQUE index (RLS hides other
+   * tenants' rows from any in-app pre-check), so the create flow mints-and-retries against it.
+   */
+  @Column(name = "company_code", nullable = false, updatable = false, length = 6)
+  private String companyCode;
+
   protected Company() {
     // for JPA
   }
@@ -133,6 +146,8 @@ public class Company extends Auditable {
    * @param phone optional contact phone (nullable)
    * @param companySize optional employee-count band (nullable — funnel data)
    * @param primaryInterest optional signup interest (nullable — funnel data)
+   * @param companyCode the 6-char login-namespace code (ADR 0054); IMMUTABLE — minted + collision-
+   *     checked by the create flow, validated here to {@code [a-z2-9]{6}}
    */
   public Company(
       UUID id,
@@ -143,7 +158,8 @@ public class Company extends Auditable {
       String country,
       String phone,
       String companySize,
-      String primaryInterest) {
+      String primaryInterest,
+      String companyCode) {
     this.id = Objects.requireNonNull(id, "id");
     this.name = requireNonBlank(name, "name");
     this.baseCurrency = requireValidCurrency(baseCurrency);
@@ -153,6 +169,7 @@ public class Company extends Auditable {
     this.phone = phone;
     this.companySize = companySize;
     this.primaryInterest = primaryInterest;
+    this.companyCode = requireValidCompanyCode(companyCode);
   }
 
   /**
@@ -167,7 +184,17 @@ public class Company extends Auditable {
    */
   public Company(
       UUID id, String name, String baseCurrency, String defaultLanguage, UUID legalEmployerId) {
-    this(id, name, baseCurrency, defaultLanguage, legalEmployerId, "ID", null, null, null);
+    this(
+        id,
+        name,
+        baseCurrency,
+        defaultLanguage,
+        legalEmployerId,
+        "ID",
+        null,
+        null,
+        null,
+        deriveCompanyCode(id));
   }
 
   /**
@@ -191,6 +218,41 @@ public class Company extends Auditable {
       throw new IllegalArgumentException(field + " must not be blank");
     }
     return trimmed;
+  }
+
+  /** The 6-char company-code alphabet (ADR 0054): Crockford base32 minus ambiguous 0/1/i/l/o/u. */
+  private static final String COMPANY_CODE_ALPHABET = "23456789abcdefghjkmnpqrstvwxyz";
+
+  private static final Pattern COMPANY_CODE_PATTERN = Pattern.compile("[a-z2-9]{6}");
+
+  /**
+   * Validates {@code companyCode} is 6 chars of the lowercase, unambiguous alphabet (ADR 0054).
+   * Rejects uppercase, {@code 0}/{@code 1}, and non-alphanumerics — the same fail-with-{@code
+   * IllegalArgumentException} posture as {@link #requireValidCurrency}.
+   */
+  private static String requireValidCompanyCode(String companyCode) {
+    Objects.requireNonNull(companyCode, "companyCode");
+    String code = companyCode.strip();
+    if (!COMPANY_CODE_PATTERN.matcher(code).matches()) {
+      throw new IllegalArgumentException("companyCode must be 6 chars of [a-z2-9]");
+    }
+    return code;
+  }
+
+  /**
+   * Deterministic fallback code for the convenience/fixture constructor (tests only): 6 chars from
+   * {@link #COMPANY_CODE_ALPHABET}, derived from the id bits. Production ALWAYS supplies a
+   * service-minted, collision-checked code via the all-args constructor — this path never runs in
+   * the create flow.
+   */
+  private static String deriveCompanyCode(UUID id) {
+    long v = (id.getMostSignificantBits() ^ id.getLeastSignificantBits()) & Long.MAX_VALUE;
+    StringBuilder sb = new StringBuilder(6);
+    for (int i = 0; i < 6; i++) {
+      sb.append(COMPANY_CODE_ALPHABET.charAt((int) (v % COMPANY_CODE_ALPHABET.length())));
+      v /= COMPANY_CODE_ALPHABET.length();
+    }
+    return sb.toString();
   }
 
   public UUID getId() {
@@ -232,6 +294,15 @@ public class Company extends Auditable {
   /** Optional signup interest; {@code null} on the in-app create path. */
   public String getPrimaryInterest() {
     return primaryInterest;
+  }
+
+  /**
+   * The immutable 6-char login-namespace code (ADR 0054). Deliberately NOT emitted in {@code
+   * CompanyCreated} — it is an org-service-local identity concern (login username composition), not
+   * a cross-service fact.
+   */
+  public String getCompanyCode() {
+    return companyCode;
   }
 
   /** The company's plan tier ({@code FREE} | {@code FULL}) — see {@link #PLAN_TIERS}. */

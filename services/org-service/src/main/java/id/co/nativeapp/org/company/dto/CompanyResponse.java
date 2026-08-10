@@ -12,6 +12,9 @@ import java.util.UUID;
  *
  * @param planTier the company's plan tier ({@code FREE} | {@code FULL} — ADR 0044); UI curation
  *     only, not an API authorization signal
+ * @param companyCode the immutable 6-char login-namespace code (ADR 0054); the console shows it
+ *     read-only in Settings so an owner can read it to staff (staff sign in as {@code
+ *     <companyCode>.<local>})
  */
 public record CompanyResponse(
     UUID id,
@@ -20,7 +23,8 @@ public record CompanyResponse(
     String defaultLanguage,
     UUID legalEmployerId,
     UUID firstBusinessId,
-    String planTier) {
+    String planTier,
+    String companyCode) {
 
   public static CompanyResponse from(Company company, OrgUnit firstBusiness) {
     return new CompanyResponse(
@@ -30,6 +34,7 @@ public record CompanyResponse(
         company.getDefaultLanguage(),
         company.getLegalEmployerId(),
         firstBusiness.getId(),
-        company.getPlanTier());
+        company.getPlanTier(),
+        company.getCompanyCode());
   }
 }

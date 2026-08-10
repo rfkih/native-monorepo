@@ -1,8 +1,9 @@
-import { Suspense, lazy } from 'react'
+import { Suspense, lazy, useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Spinner } from '@/components/ui/Spinner'
 import { Button } from '@/components/ui/Button'
+import { Field, TextInput } from '@/components/ui/Field'
 import { Wordmark } from '@/components/Wordmark'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { useAuth } from '@/lib/authContext'
@@ -50,18 +51,52 @@ export function App() {
   const auth = useAuth()
   const isSup = useIsSupervisor()
   const { t } = useTranslation()
+  // Optional login pre-fill (ADR 0054): a staff login is <companyCode>.<employeeId>. There is no
+  // company context before authentication, so both are typed here (from what the manager gave the
+  // employee) and composed into Keycloak's `login_hint`; left blank, the plain hosted login prompts
+  // for the full username as before.
+  const [companyCode, setCompanyCode] = useState('')
+  const [employeeId, setEmployeeId] = useState('')
 
   if (!auth.ready) {
     return <CenteredSpinner />
   }
 
   if (!auth.authenticated) {
+    const loginHint =
+      companyCode.trim() && employeeId.trim()
+        ? `${companyCode.trim().toLowerCase()}.${employeeId.trim()}`
+        : undefined
     return (
       <div className="grid min-h-[100dvh] place-items-center bg-paper px-6">
         <div className="flex w-full max-w-sm flex-col items-center gap-6 text-center">
           <Wordmark />
           <p className="text-sm text-ink-3">{t('me.subtitle')}</p>
-          <Button size="xl" className="w-full" onClick={() => auth.login()}>
+          <div className="w-full space-y-3 text-left">
+            <Field
+              label={t('appWelcome.companyCode')}
+              hint={t('appWelcome.companyCodeHint')}
+              htmlFor="company-code"
+            >
+              <TextInput
+                id="company-code"
+                value={companyCode}
+                onChange={(e) => setCompanyCode(e.target.value)}
+                autoCapitalize="none"
+                autoCorrect="off"
+              />
+            </Field>
+            <Field label={t('appWelcome.employeeId')} htmlFor="employee-id">
+              <TextInput
+                id="employee-id"
+                value={employeeId}
+                onChange={(e) => setEmployeeId(e.target.value)}
+                autoCapitalize="none"
+                autoCorrect="off"
+              />
+            </Field>
+          </div>
+          <Button size="xl" className="w-full" onClick={() => auth.login(loginHint)}>
             {t('appWelcome.signIn')}
           </Button>
           <LanguageSwitcher />
