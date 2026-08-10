@@ -58,7 +58,7 @@ function NodeActions({
 }) {
   const { t } = useTranslation()
   return (
-    <div className="flex items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 [div:hover>&]:opacity-100">
+    <div className="flex flex-wrap items-center gap-1 w-full order-last mt-1 pl-8 sm:w-auto sm:order-none sm:mt-0 sm:pl-0 sm:opacity-0 sm:transition-opacity sm:focus-within:opacity-100 sm:[div:hover>&]:opacity-100">
       {unit.active ? (
         <button
           type="button"
@@ -141,10 +141,10 @@ function OrgNode({
   return (
     <div>
       <div
-        className="group flex items-center gap-2.5 rounded-xl px-2.5 py-2.5 hover:bg-hover transition-colors"
+        className="group flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-xl px-2.5 py-2.5 hover:bg-hover transition-colors sm:flex-nowrap"
       >
-        {/* indent spacer */}
-        <div style={{ width: depth * 26 }} aria-hidden="true" />
+        {/* indent spacer (tighter per-level so deep nodes still fit a phone row) */}
+        <div className="shrink-0" style={{ width: depth * 20 }} aria-hidden="true" />
 
         {/* chevron toggle */}
         <button
@@ -173,7 +173,7 @@ function OrgNode({
         {unit.type === 'TEAM' ? (
           <span
             className={cn(
-              'flex-1 text-[14.5px] font-semibold',
+              'min-w-0 flex-1 truncate text-[14.5px] font-semibold',
               unit.active ? 'text-ink' : 'text-ink-3',
             )}
           >
@@ -192,23 +192,21 @@ function OrgNode({
           </Link>
         )}
 
-        {/* type + vertical badges (vertical renders only on business units) */}
-        <OrgUnitTypeBadge type={unit.type} />
-        <VerticalBadge vertical={unit.vertical} />
-
-        {/* active/inactive indicator */}
-        <span className="flex items-center gap-1.5 shrink-0">
-          <span
-            className={cn(
-              'size-1.5 rounded-full',
-              unit.active ? 'bg-profit' : 'bg-ink-300',
-            )}
-            aria-hidden="true"
-          />
-          <span className="text-[11px] text-ink-3 hidden sm:block">
-            {unit.active ? t('org.active') : t('org.inactive')}
+        {/* type + vertical badges + status dot as ONE shrink-0 cluster — keeps the name's width and
+            stops the row overlapping at phone width (vertical renders only on business units) */}
+        <div className="flex shrink-0 items-center gap-2">
+          <OrgUnitTypeBadge type={unit.type} />
+          <VerticalBadge vertical={unit.vertical} />
+          <span className="flex items-center gap-1.5">
+            <span
+              className={cn('size-1.5 rounded-full', unit.active ? 'bg-profit' : 'bg-ink-300')}
+              aria-hidden="true"
+            />
+            <span className="text-[11px] text-ink-3 hidden sm:block">
+              {unit.active ? t('org.active') : t('org.inactive')}
+            </span>
           </span>
-        </span>
+        </div>
 
         <NodeActions
           unit={unit}
