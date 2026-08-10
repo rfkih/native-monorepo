@@ -94,3 +94,30 @@ eligibility**: *pegawai tetap*, *pegawai tidak tetap* (harian lepas), and *bukan
 - **P4 (defer)** — the long tail above.
 
 Each phase MUST go through `domain-specialist` + `security-engineer`/`code-review` (money + statutory).
+
+## Owner decision + grounded daily method (2026-08-10)
+
+The owner's "freelance" = **daily / shift workers** (*pegawai tidak tetap* / harian lepas), so
+**`DAILY_CASUAL` is the target** (promoted ahead of `NON_EMPLOYEE`, which is deferred). Sequence stays
+P0 gate → P1 kontrak → then `DAILY_CASUAL`.
+
+**Grounded method (PMK 168/2023, in force since 1 Jan 2024 — the current regime, superseding the
+pre-2024 PER-16 Rp 4.5jt/month method):** monthly withholding for a daily worker uses **TER Harian**
+on the daily wage — **≤ Rp 450,000/day → 0%**, **> Rp 450,000 to ≤ Rp 2,500,000/day → 0.5%**, and
+**> Rp 2,500,000/day → Art-17 progressive on (50% × daily gross)**. `StatutoryCalcType.DAILY_THRESHOLD`
+carries these as params (`day_zero_ceiling_minor`, `day_low_rate_bp`, `day_high_threshold_minor`, and
+the Art-17 bracket + `deemed_rate_bp` reuse). **These figures ship `ILLUSTRATIVE_PLACEHOLDER` (loud
+flag) until an accountant confirms them against the current PMK/DJP — never `OFFICIAL` on my say-so.**
+
+**Days-worked capture (new gap):** there is no attendance/clock system (ADR 0033 = leave + overtime
+only), so daily pay `= daily_rate × days_worked` has no source. **MVP = a manual per-run days-worked
+entry** per casual employee (a payroll-run work input, alongside the existing overtime/unpaid-leave
+inputs) + a `daily_rate` basis on the compensation package (`PayFrequency.DAILY`). A real attendance
+feed is a later, separate concern.
+
+**Build pieces (`DAILY_CASUAL`), each reviewed:** enum value; `PayFrequency.DAILY` + a
+`compensation_package` rate-basis migration; a per-run days-worked input (entity + migration + HR entry
+UI); `DAILY_THRESHOLD` calc type + `StatutoryParams` + `GrossToNetCalculator` branch; `ID-2026.4`
+dataset (`PPH21_TER_HARIAN`, illustrative); `PayrollRunWriter` per-person profile + the P0 gate + the
+one-tax-profile invariant; console HR contract-type + rate + days entry; employee-app display. This is
+a multi-part program with a hard accountant-verification gate on the figures — not a single small change.
