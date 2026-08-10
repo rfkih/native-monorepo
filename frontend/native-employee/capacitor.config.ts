@@ -5,11 +5,10 @@ import type { CapacitorConfig } from '@capacitor/cli';
 // via the normal web deploy with no app update. Override the origin per build with
 // NATIVE_EMPLOYEE_URL (e.g. a prod origin) before `npx cap sync android`.
 //
-// PLACEHOLDER: the fallback below is the shared UAT funnel origin (the same one the Till app
-// shell points at) — there is no dedicated employee origin yet. Replace this default once one
-// exists; do not ship this placeholder to a real release build without an explicit
-// NATIVE_EMPLOYEE_URL override.
-const SERVER_URL = process.env.NATIVE_EMPLOYEE_URL ?? 'https://a8.tailbf9662.ts.net:8443';
+// The default is the Employee app's OWN funnel origin, port :10000 (ADR 0049 P5) — NOT the
+// console/Business origin :8443, which would load the full console instead of the /me
+// self-service surface. Override per environment (e.g. a prod origin) via NATIVE_EMPLOYEE_URL.
+const SERVER_URL = process.env.NATIVE_EMPLOYEE_URL ?? 'https://a8.tailbf9662.ts.net:10000';
 
 const config: CapacitorConfig = {
   // appId is the app's permanent technical identity — NEVER rename it (a change = a different
