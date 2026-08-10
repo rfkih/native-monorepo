@@ -7,7 +7,10 @@ import id.co.nativeapp.employee.assignment.domain.Assignment;
 import id.co.nativeapp.employee.assignment.domain.ConflictingLegalEmployerException;
 import id.co.nativeapp.employee.assignment.repository.AssignmentRepository;
 import id.co.nativeapp.employee.employee.domain.Employee;
+import id.co.nativeapp.employee.employee.domain.EmploymentType;
+import id.co.nativeapp.employee.employee.projection.EmploymentTypeAsOfView;
 import id.co.nativeapp.employee.employee.repository.EmployeeRepository;
+import id.co.nativeapp.employee.employee.repository.EmploymentContractRepository;
 import id.co.nativeapp.employee.expense.projection.LinkedClaimIdView;
 import id.co.nativeapp.employee.expense.projection.LinkedClaimTotalView;
 import id.co.nativeapp.employee.expense.service.ExpenseClaimPayrollLinker;
@@ -20,6 +23,7 @@ import id.co.nativeapp.employee.payroll.domain.EarningRule;
 import id.co.nativeapp.employee.payroll.domain.IncompletePeriodException;
 import id.co.nativeapp.employee.payroll.domain.LaborCostAllocation;
 import id.co.nativeapp.employee.payroll.domain.MetricInput;
+import id.co.nativeapp.employee.payroll.domain.MissingEmploymentContractForRunException;
 import id.co.nativeapp.employee.payroll.domain.MissingHireDateException;
 import id.co.nativeapp.employee.payroll.domain.NonMonthlyCompensationException;
 import id.co.nativeapp.employee.payroll.domain.PayComponent;
@@ -42,6 +46,7 @@ import id.co.nativeapp.employee.payroll.domain.StatutoryParams;
 import id.co.nativeapp.employee.payroll.domain.StatutoryRule;
 import id.co.nativeapp.employee.payroll.domain.TaxableReimbursementComponentException;
 import id.co.nativeapp.employee.payroll.domain.ThrRunMisconfiguredException;
+import id.co.nativeapp.employee.payroll.domain.UnsupportedEmploymentTypeForRunException;
 import id.co.nativeapp.employee.payroll.dto.PayrollResult.ComputedLine;
 import id.co.nativeapp.employee.payroll.dto.PayrollResult.PersonResult;
 import id.co.nativeapp.employee.payroll.dto.RunPayrollCommand;
@@ -74,6 +79,7 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -99,6 +105,27 @@ import org.springframework.transaction.annotation.Transactional;
  * stores the company-level totals. <strong>post</strong> flips CALCULATED -&gt; POSTED and emits
  * {@code PayrollPosted} + aggregated {@code LaborCostAllocated} via the outbox in the SAME
  * transaction (rule 3) — only that transition emits, so a retried post cannot double-emit.
+ *
+ * <p><strong>Employment-type scope gate (ADR 0055 §5, P0).</strong> Before anything else,
+ * {@code calculate} resolves every in-scope employee's effective {@link
+ * id.co.nativeapp.employee.employee.domain.EmploymentType} as-of the run's period (see {@link
+ * #requireSupportedEmploymentTypes}) and rejects the WHOLE run (422) if any of them is outside
+ * {@link #SUPPORTED_EMPLOYMENT_TYPES} — {@code PERMANENT}/{@code CONTRACT}/{@code PROBATION} today,
+ * all computed identically as <em>pegawai tetap</em> ({@code CONTRACT} is byte-identical to {@code
+ * PERMANENT} for monthly pay). {@code INTERN} is deliberately GATED, not allowed: a magang stipend
+ * is usually <em>bukan pegawai</em>, so computing an intern as pegawai tetap (full BPJS + biaya
+ * jabatan + monthly TER + THR) would be a misclassification, not merely a simplification — it fails
+ * closed with the same 422 as {@code DAILY_CASUAL} until the bukan-pegawai path lands (domain-
+ * specialist review). {@code GrossToNetCalculator} itself never reads {@code EmploymentType} — it
+ * stays type-agnostic (ADR 0055 §1) — so this gate is the ONLY place a not-yet-supported type is
+ * caught, closing the latent hole ADR 0031 flagged rather than silently computing the wrong PPh 21
+ * method. The gate is FAIL-CLOSED on the read itself too: an in-scope employee with NO {@code
+ * employment_contract} row covering the run's as-of date (never contracted, or a lapsed contract)
+ * has no matching row in {@link #requireSupportedEmploymentTypes}'s lookup and is rejected the SAME
+ * way (a distinct {@link
+ * id.co.nativeapp.employee.payroll.domain.MissingEmploymentContractForRunException}) rather than
+ * silently falling through and being computed as pegawai tetap by default (domain-specialist
+ * review).
  *
  * <p><strong>December / final-month Art-17 true-up (Track P phase P3).</strong> When a run's period
  * is December AND the frozen rule set resolves an {@code ANNUAL_PROGRESSIVE} rule ({@code
@@ -205,6 +232,7 @@ public class PayrollRunWriter {
   private final PeriodSealRepository periodSealRepository;
   private final AssignmentRepository assignmentRepository;
   private final EmployeeRepository employeeRepository;
+  private final EmploymentContractRepository employmentContractRepository;
   private final OrgUnitProjectionRepository orgUnitProjectionRepository;
   private final GrossToNetCalculator calculator;
   private final LaborCostAllocator allocator;
@@ -229,6 +257,7 @@ public class PayrollRunWriter {
       PeriodSealRepository periodSealRepository,
       AssignmentRepository assignmentRepository,
       EmployeeRepository employeeRepository,
+      EmploymentContractRepository employmentContractRepository,
       OrgUnitProjectionRepository orgUnitProjectionRepository,
       GrossToNetCalculator calculator,
       LaborCostAllocator allocator,
@@ -250,6 +279,7 @@ public class PayrollRunWriter {
     this.periodSealRepository = periodSealRepository;
     this.assignmentRepository = assignmentRepository;
     this.employeeRepository = employeeRepository;
+    this.employmentContractRepository = employmentContractRepository;
     this.orgUnitProjectionRepository = orgUnitProjectionRepository;
     this.calculator = calculator;
     this.allocator = allocator;
@@ -280,6 +310,20 @@ public class PayrollRunWriter {
   private static final int CHUNK_SIZE = 1000;
 
   /**
+   * ADR 0055 §5 — the P0 scope gate. The {@link EmploymentType}s this engine can correctly compute
+   * PPh 21 for TODAY, all currently treated as <em>pegawai tetap</em> (monthly TER + December
+   * Art-17): {@code CONTRACT} is byte-identical to {@code PERMANENT} for monthly pay (ADR 0055 §2);
+   * {@code PROBATION} (masa percobaan) is a full pegawai tetap and gets this SAME explicit "allowed"
+   * decision rather than defaulting silently. {@code INTERN} is deliberately EXCLUDED (domain-
+   * specialist review, P0 fix): a magang stipend is usually <em>bukan pegawai</em>, so computing it
+   * as pegawai tetap would be a misclassification, not a simplification — it stays gated until the
+   * bukan-pegawai path lands. A type outside this set (currently {@code INTERN} and {@code
+   * DAILY_CASUAL}) rejects the WHOLE run — see {@link #requireSupportedEmploymentTypes}.
+   */
+  private static final Set<EmploymentType> SUPPORTED_EMPLOYMENT_TYPES =
+      Set.of(EmploymentType.PERMANENT, EmploymentType.CONTRACT, EmploymentType.PROBATION);
+
+  /**
    * Calculates a new payroll run for the period: gates on completeness, freezes the rule set,
    * computes gross-to-net + allocation, and leaves the run CALCULATED (ready to post). Returns the
    * persisted run.
@@ -300,7 +344,14 @@ public class PayrollRunWriter {
           command.holidayDate());
     }
 
-    // Track P Phase P7 — the pending-work-entries gate, FIRST: any SUBMITTED (undecided)
+    // ADR 0055 §5 — the P0 employment-type scope gate, EARLIEST of all: reject the WHOLE run (422)
+    // before anything else if any in-scope employee's effective employment type is not one the
+    // engine can correctly compute today. Applies to REGULAR and THR alike — GrossToNetCalculator
+    // never reads EmploymentType at all, so silently computing an unsupported type would produce a
+    // wrong-but-plausible PPh 21 figure (the hole ADR 0031 flagged).
+    requireSupportedEmploymentTypes(command.employeeIds(), asOf);
+
+    // Track P Phase P7 — the pending-work-entries gate, next: any SUBMITTED (undecided)
     // leave_request/overtime_entry for one of this run's employees in this period blocks the WHOLE
     // run before any other work happens — pay must never silently ignore a request nobody has
     // decided yet. THR-scoped OUT (Track P Phase P8): a THR run never consumes work inputs at all
@@ -956,13 +1007,51 @@ public class PayrollRunWriter {
   }
 
   // ---------------------------------------------------------------------
+  // Employment-type scope gate (ADR 0055 §5, P0)
+  // ---------------------------------------------------------------------
+
+  /**
+   * Resolves each {@code employeeId}'s effective {@link EmploymentType} as-of {@code asOf} (chunked
+   * {@code IN} lookup, CLAUDE.md ≤1000) and throws {@link UnsupportedEmploymentTypeForRunException}
+   * on the FIRST employee whose type is not in {@link #SUPPORTED_EMPLOYMENT_TYPES} — rejecting the
+   * WHOLE run rather than silently computing that one person with the wrong PPh 21 method.
+   *
+   * <p><strong>Fail-closed on a missing/lapsed contract (domain-specialist review, P0 fix).</strong>
+   * An in-scope employee with NO {@code employment_contract} row covering {@code asOf} (never
+   * contracted, or a contract whose {@code effective_to} is before this run's as-of date) has no
+   * matching row in the lookup — that employee is tracked separately per chunk and, if any remain
+   * unresolved after the chunk's rows are scanned, {@link MissingEmploymentContractForRunException}
+   * rejects the WHOLE run. Silently falling through here would have computed that employee as
+   * pegawai tetap by DEFAULT, defeating the whole point of a fail-closed gate.
+   */
+  private void requireSupportedEmploymentTypes(List<UUID> employeeIds, LocalDate asOf) {
+    for (List<UUID> idChunk : chunk(employeeIds)) {
+      Set<UUID> resolved = new HashSet<>();
+      for (EmploymentTypeAsOfView view :
+          employmentContractRepository.findEffectiveTypesAsOf(idChunk, asOf)) {
+        resolved.add(view.getEmployeeId());
+        EmploymentType type = EmploymentType.from(view.getEmploymentType());
+        if (!SUPPORTED_EMPLOYMENT_TYPES.contains(type)) {
+          throw new UnsupportedEmploymentTypeForRunException(view.getEmployeeId(), type);
+        }
+      }
+      for (UUID employeeId : idChunk) {
+        if (!resolved.contains(employeeId)) {
+          throw new MissingEmploymentContractForRunException(employeeId);
+        }
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------
   // Work inputs (Track P Phase P7) — pending gate, resolution, and per-employee synthesis
   // ---------------------------------------------------------------------
 
   /**
    * Chunks {@code ids} at {@link #CHUNK_SIZE} and throws {@link PendingWorkEntriesException} if any
    * SUBMITTED (undecided) leave request or overtime entry exists for {@code period} among them —
-   * see the class Javadoc's calculate() note: this runs FIRST, before any other work.
+   * see the class Javadoc's calculate() note: this runs right after the ADR 0055 employment-type
+   * scope gate, before any other work.
    */
   private void requireNoPendingWorkEntries(List<UUID> employeeIds, String period) {
     List<UUID> pendingLeave = new ArrayList<>();

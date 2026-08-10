@@ -27,6 +27,10 @@ class EnumAndMaskingTest {
   void employmentTypeParsesCaseInsensitivelyAndRejectsUnknown() {
     assertThat(EmploymentType.from("permanent")).isEqualTo(EmploymentType.PERMANENT);
     assertThat(EmploymentType.from("CONTRACT")).isEqualTo(EmploymentType.CONTRACT);
+    // ADR 0055 — DAILY_CASUAL is a storable value (case-insensitive, like every other type) even
+    // though the payroll RUN engine gates it off (PayrollRunWriter, see
+    // PayrollEmploymentTypeScopeGateTest) until its own tax path lands.
+    assertThat(EmploymentType.from("daily_casual")).isEqualTo(EmploymentType.DAILY_CASUAL);
     assertThatThrownBy(() -> EmploymentType.from("freelance"))
         .isInstanceOf(IllegalArgumentException.class);
   }

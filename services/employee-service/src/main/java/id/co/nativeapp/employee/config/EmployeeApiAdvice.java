@@ -23,6 +23,7 @@ import id.co.nativeapp.employee.payroll.domain.CompensationAlreadyEndedException
 import id.co.nativeapp.employee.payroll.domain.CompensationNotFoundException;
 import id.co.nativeapp.employee.payroll.domain.DuplicateCommissionException;
 import id.co.nativeapp.employee.payroll.domain.IncompletePeriodException;
+import id.co.nativeapp.employee.payroll.domain.MissingEmploymentContractForRunException;
 import id.co.nativeapp.employee.payroll.domain.MissingHireDateException;
 import id.co.nativeapp.employee.payroll.domain.NonMonthlyCompensationException;
 import id.co.nativeapp.employee.payroll.domain.OverlappingCompensationException;
@@ -34,6 +35,7 @@ import id.co.nativeapp.employee.payroll.domain.TaxableReimbursementComponentExce
 import id.co.nativeapp.employee.payroll.domain.ThrRunMisconfiguredException;
 import id.co.nativeapp.employee.payroll.domain.UnknownDatasetVersionException;
 import id.co.nativeapp.employee.payroll.domain.UnknownStatutoryRuleException;
+import id.co.nativeapp.employee.payroll.domain.UnsupportedEmploymentTypeForRunException;
 import id.co.nativeapp.employee.timeoff.domain.CrossMonthLeaveRequestException;
 import id.co.nativeapp.employee.timeoff.domain.DecisionCommentRequiredException;
 import id.co.nativeapp.employee.timeoff.domain.InsufficientLeaveBalanceException;
@@ -161,6 +163,39 @@ public class EmployeeApiAdvice {
       MissingHireDateException ex, HttpServletRequest request) {
     ProblemDetail problem = problem(HttpStatus.UNPROCESSABLE_ENTITY, "missing-hire-date", request);
     problem.setTitle("Missing hire date");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /**
+   * A payroll run includes an employee whose effective employment type the engine cannot yet
+   * correctly compute PPh 21 for → 422 (ADR 0055 §5, the P0 scope gate).
+   */
+  @ExceptionHandler(UnsupportedEmploymentTypeForRunException.class)
+  public ProblemDetail handleUnsupportedEmploymentTypeForRun(
+      UnsupportedEmploymentTypeForRunException ex, HttpServletRequest request) {
+    ProblemDetail problem =
+        problem(HttpStatus.UNPROCESSABLE_ENTITY, "unsupported-employment-type-for-run", request);
+    problem.setTitle("Unsupported employment type for payroll run");
+    // The message names only the employee id (a UUID) and the employment-type enum value, never
+    // PII (rule 6).
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  /**
+   * A payroll run includes an in-scope employee with NO {@code employment_contract} row covering
+   * the run's as-of date (never contracted, or a lapsed contract) → 422 (ADR 0055 §5, the P0 scope
+   * gate's fail-closed read — domain-specialist review). The engine refuses to default an
+   * unclassified employee to pegawai tetap.
+   */
+  @ExceptionHandler(MissingEmploymentContractForRunException.class)
+  public ProblemDetail handleMissingEmploymentContractForRun(
+      MissingEmploymentContractForRunException ex, HttpServletRequest request) {
+    ProblemDetail problem =
+        problem(HttpStatus.UNPROCESSABLE_ENTITY, "missing-employment-contract-for-run", request);
+    problem.setTitle("Missing employment contract for payroll run");
+    // The message names only the employee id (a UUID), never PII (rule 6).
     problem.setDetail(ex.getMessage());
     return problem;
   }

@@ -16,6 +16,7 @@ import id.co.nativeapp.employee.expense.service.ExpenseClaimService;
 import id.co.nativeapp.employee.org.dto.OrgUnitProjectedEvent;
 import id.co.nativeapp.employee.org.service.OrgProjectionService;
 import id.co.nativeapp.employee.payroll.domain.CompensationPackage;
+import id.co.nativeapp.employee.payroll.domain.MissingEmploymentContractForRunException;
 import id.co.nativeapp.employee.payroll.dto.PayrollRunResponse;
 import id.co.nativeapp.employee.payroll.dto.PayslipLineResponse;
 import id.co.nativeapp.employee.payroll.dto.RunPayrollCommand;
@@ -415,16 +416,20 @@ class PayrollAnnualTrueUpEndToEndTest extends PostgresRlsTestBase {
               payrollRunService.calculate(
                   new RunPayrollCommand("2026-11", List.of(employeeA), List.of()), IDR);
 
-              // run_seq=3 for period 2026-11: an unknown employee id fails calculate() loudly;
-              // PayrollRunService.calculate catches the RuntimeException and records a FAILED
-              // audit row (a separate REQUIRES_NEW transaction) with NO payslip lines at all — the
-              // doomed compute transaction rolled back entirely. The mere EXISTENCE of this higher
-              // run_seq row must not perturb the MAX(run_seq) resolution for run_seq=1 either.
+              // run_seq=3 for period 2026-11: an unknown employee id fails calculate() loudly —
+              // now via the ADR 0055 P0 fail-closed scope gate (MissingEmploymentContractForRun,
+              // since a random/unknown id resolves NO employment_contract row) rather than the
+              // later "Unknown employee in this tenant" check, but the outcome this test cares
+              // about is unchanged: PayrollRunService.calculate catches the RuntimeException and
+              // records a FAILED audit row (a separate REQUIRES_NEW transaction) with NO payslip
+              // lines at all — the doomed compute transaction rolled back entirely. The mere
+              // EXISTENCE of this higher run_seq row must not perturb the MAX(run_seq) resolution
+              // for run_seq=1 either.
               try {
                 payrollRunService.calculate(
                     new RunPayrollCommand("2026-11", List.of(UUID.randomUUID()), List.of()), IDR);
                 throw new AssertionError("expected the unknown-employee run to fail");
-              } catch (IllegalArgumentException expected) {
+              } catch (MissingEmploymentContractForRunException expected) {
                 // recordFailedAttempt already wrote the FAILED row — asserted below.
               }
 
