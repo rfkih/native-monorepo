@@ -126,6 +126,9 @@ export const staffResources = {
         confirmRefuse: 'Refuse',
         submitting: 'Saving…',
       },
+      explain: {
+        ptkp: 'PTKP (non-taxable income) is the yearly income the government does not tax, set by your marital status and number of dependents — e.g. TK/0 (single, no dependents) or K/1 (married, one dependent). It decides how much PPh 21 tax is withheld from your pay.',
+      },
     },
   },
   id: {
@@ -242,6 +245,9 @@ export const staffResources = {
         confirmApprove: 'Setujui',
         confirmRefuse: 'Tolak',
         submitting: 'Menyimpan…',
+      },
+      explain: {
+        ptkp: 'PTKP (Penghasilan Tidak Kena Pajak) adalah penghasilan setahun yang tidak dikenai pajak, ditentukan oleh status pernikahan dan jumlah tanggungan Anda — mis. TK/0 (lajang, tanpa tanggungan) atau K/1 (menikah, satu tanggungan). Ini menentukan besar PPh 21 yang dipotong dari gaji Anda.',
       },
     },
   },

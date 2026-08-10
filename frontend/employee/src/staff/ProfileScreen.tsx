@@ -17,7 +17,7 @@ import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { EmptyState } from '@/features/_shared/financeUi'
 import { isNotLinked, useMyProfile, type MeProfile } from '@/features/me/api'
 import { useAuth } from '@/lib/authContext'
-import { SectionLabel, useTenant } from './ui'
+import { InfoTip, SectionLabel, useTenant } from './ui'
 
 export function ProfileScreen() {
   const { t } = useTranslation()
@@ -80,7 +80,7 @@ function ProfileBody({ profile: p, onLogout }: { profile: MeProfile; onLogout: (
   const subline =
     p.assignments.length > 0 ? p.assignments.map((a) => a.role).join(' · ') : t('me.assignments.empty')
 
-  const rows: { key: string; label: string; value: ReactNode; amber?: boolean }[] = [
+  const rows: { key: string; label: string; value: ReactNode; amber?: boolean; info?: string }[] = [
     {
       key: 'status',
       label: t('me.profile.status'),
@@ -95,7 +95,7 @@ function ProfileBody({ profile: p, onLogout }: { profile: MeProfile; onLogout: (
     p.hasNpwp
       ? { key: 'npwp', label: t('me.profile.npwp'), value: p.maskedNpwp ?? '' }
       : { key: 'npwp', label: t('me.profile.npwp'), value: t('me.profile.npwpNone'), amber: true },
-    { key: 'ptkp', label: t('me.profile.ptkp'), value: p.ptkpStatus },
+    { key: 'ptkp', label: t('me.profile.ptkp'), value: p.ptkpStatus, info: t('staff.explain.ptkp') },
   ]
 
   return (
@@ -116,13 +116,16 @@ function ProfileBody({ profile: p, onLogout }: { profile: MeProfile; onLogout: (
       {/* Personal data (rule 6 — masked, never logged) */}
       <section className="px-4 pt-5">
         <SectionLabel className="pl-1">{t('staff.profile.personalData')}</SectionLabel>
-        <Card className="mt-2 overflow-hidden rounded-[18px] p-0">
+        <Card className="mt-2 rounded-[18px] p-0">
           {rows.map((row) => (
             <div
               key={row.key}
               className="flex min-h-[52px] items-center justify-between gap-3 border-b border-line/60 px-4 py-3 last:border-b-0"
             >
-              <span className="text-[13.5px] font-medium text-ink-3">{row.label}</span>
+              <span className="flex items-center gap-1.5 text-[13.5px] font-medium text-ink-3">
+                {row.label}
+                {row.info ? <InfoTip label={row.label} text={row.info} /> : null}
+              </span>
               <span
                 className={
                   row.amber
