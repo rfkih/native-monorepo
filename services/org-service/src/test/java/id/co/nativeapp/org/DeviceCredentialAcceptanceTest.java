@@ -65,6 +65,10 @@ class DeviceCredentialAcceptanceTest {
   private static final String GW_CLIENT_SECRET = "native-gateway-secret";
   private static final String OWNER_USERNAME = "owner-acme";
   private static final String OWNER_PASSWORD = "owner-password";
+  // A cashier-ONLY login in company A — the non-owner/manager caller for the
+  // TeamAdministrationGuard.requireOwnerOrManager() server-side-authz tests.
+  private static final String CASHIER_USERNAME = "cashier-acme";
+  private static final String CASHIER_PASSWORD = "cashier-password";
   private static final String COMPANY_A = "11111111-1111-1111-1111-111111111111";
 
   private static final String APP_USER = "app_user";
@@ -274,11 +278,89 @@ class DeviceCredentialAcceptanceTest {
   }
 
   // ===========================================================================
+  // TeamAdministrationGuard.requireOwnerOrManager() — server-side re-check (defense in depth).
+  // This service does not itself enforce role-based authorization (that is the gateway's job); the
+  // guard is what stands between a route misconfiguration and a decrypted till password. Every
+  // endpoint must reject a non-owner/manager caller with 403, REGARDLESS of whether a credential
+  // exists for the outlet (no enumeration) — proven here with cashier-acme against an outlet that
+  // has NO device credential yet.
+  // ===========================================================================
+
+  @Test
+  void nonOwnerManagerCallerIsForbiddenOnEveryEndpointEvenWithoutACredential() throws Exception {
+    String ownerToken = tokenForOwner();
+    String outletId = createOutletUnderCompanyA(ownerToken);
+    String cashierToken = tokenForCashier();
+
+    // CREATE
+    assertForbidden(
+        () ->
+            appClient()
+                .post()
+                .uri("/api/v1/org-units/" + outletId + "/device-credential")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + cashierToken)
+                .retrieve()
+                .body(String.class));
+
+    // REVEAL (GET) — no credential exists yet; must still be 403, not 404.
+    assertForbidden(
+        () ->
+            appClient()
+                .get()
+                .uri("/api/v1/org-units/" + outletId + "/device-credential")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + cashierToken)
+                .retrieve()
+                .body(String.class));
+
+    // RESET
+    assertForbidden(
+        () ->
+            appClient()
+                .post()
+                .uri("/api/v1/org-units/" + outletId + "/device-credential/reset")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + cashierToken)
+                .retrieve()
+                .body(String.class));
+
+    // DELETE
+    assertForbidden(
+        () ->
+            appClient()
+                .delete()
+                .uri("/api/v1/org-units/" + outletId + "/device-credential")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + cashierToken)
+                .retrieve()
+                .toBodilessEntity());
+
+    // Owner is unaffected by the cashier's rejected attempts — create still succeeds as owner
+    // (the full lifecycle is already proven end-to-end by the test above).
+    JsonNode created = createDeviceCredential(ownerToken, outletId);
+    assertThat(created.get("username").asString()).isEqualTo("till." + outletId);
+  }
+
+  // ===========================================================================
   // Helpers
   // ===========================================================================
 
   private String tokenForOwner() {
     return obtainToken(OWNER_USERNAME, OWNER_PASSWORD);
+  }
+
+  private String tokenForCashier() {
+    return obtainToken(CASHIER_USERNAME, CASHIER_PASSWORD);
+  }
+
+  /**
+   * Asserts the call fails with {@code 403 Forbidden} (the guard's uniform anti-enumeration
+   * status).
+   */
+  private static void assertForbidden(org.assertj.core.api.ThrowableAssert.ThrowingCallable call) {
+    assertThatThrownBy(call)
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
   }
 
   /**

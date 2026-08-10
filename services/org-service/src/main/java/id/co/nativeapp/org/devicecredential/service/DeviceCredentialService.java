@@ -4,6 +4,7 @@ import id.co.nativeapp.org.devicecredential.domain.DeviceCredential;
 import id.co.nativeapp.org.devicecredential.dto.DeviceCredentialResponse;
 import id.co.nativeapp.org.user.service.KeycloakAdminClient;
 import id.co.nativeapp.org.user.service.KeycloakAdminClient.DeviceCredentialResult;
+import id.co.nativeapp.org.user.service.TeamAdministrationGuard;
 import id.co.nativeapp.org.user.service.UserOutletAssignmentWriter;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
@@ -38,6 +39,14 @@ import org.springframework.stereotype.Service;
  *
  * <p><strong>Credential hygiene (rule 6).</strong> The generated/decrypted password is NEVER
  * logged; only stable, non-PII identifiers (outlet id, Keycloak user id) appear in log statements.
+ *
+ * <p><strong>Role-hierarchy guard (defense in depth).</strong> Every public method calls {@link
+ * TeamAdministrationGuard#requireOwnerOrManager()} FIRST — before any reader/existence check — so
+ * an unauthorized caller gets a uniform {@code 403} regardless of whether a credential exists for
+ * the outlet (no enumeration). The gateway's {@code /org-units} OPS route (owner/manager) is the
+ * primary gate; this re-checks server-side because a {@code reveal} returns a DECRYPTED till
+ * password, and a route misconfiguration must not re-expose it on its own (see the guard's javadoc
+ * for the org-units read-widen precedent).
  */
 @Service
 public class DeviceCredentialService {
@@ -51,16 +60,19 @@ public class DeviceCredentialService {
   private final DeviceCredentialWriter writer;
   private final KeycloakAdminClient keycloak;
   private final UserOutletAssignmentWriter outletAssignmentWriter;
+  private final TeamAdministrationGuard guard;
 
   public DeviceCredentialService(
       DeviceCredentialReader reader,
       DeviceCredentialWriter writer,
       KeycloakAdminClient keycloak,
-      UserOutletAssignmentWriter outletAssignmentWriter) {
+      UserOutletAssignmentWriter outletAssignmentWriter,
+      TeamAdministrationGuard guard) {
     this.reader = reader;
     this.writer = writer;
     this.keycloak = keycloak;
     this.outletAssignmentWriter = outletAssignmentWriter;
+    this.guard = guard;
   }
 
   /**
@@ -73,8 +85,11 @@ public class DeviceCredentialService {
    *     {@code 404}
    * @throws DeviceCredentialAlreadyExistsException a credential already exists for this outlet →
    *     {@code 409}
+   * @throws id.co.nativeapp.org.user.service.InsufficientPrivilegeException the caller holds
+   *     neither {@code owner} nor {@code manager} → {@code 403}
    */
   public DeviceCredentialResponse create(UUID outletId) {
+    guard.requireOwnerOrManager();
     TenantContext.Tenant tenant = TenantContext.require();
     reader.requireOutlet(outletId); // 404 unknown/cross-tenant; 400 not-an-outlet
     if (reader.existsForOutlet(outletId)) {
@@ -109,8 +124,11 @@ public class DeviceCredentialService {
    * ONCE.
    *
    * @throws DeviceCredentialNotFoundException no credential exists for this outlet → {@code 404}
+   * @throws id.co.nativeapp.org.user.service.InsufficientPrivilegeException the caller holds
+   *     neither {@code owner} nor {@code manager} → {@code 403}
    */
   public DeviceCredentialResponse reset(UUID outletId) {
+    guard.requireOwnerOrManager();
     TenantContext.require();
     DeviceCredential credential = reader.requireCredential(outletId);
     String newPassword = keycloak.resetDevicePassword(credential.getKeycloakUserId());
@@ -123,8 +141,11 @@ public class DeviceCredentialService {
    * Reveals the stored username + decrypted password, for re-provisioning a physical device.
    *
    * @throws DeviceCredentialNotFoundException no credential exists for this outlet → {@code 404}
+   * @throws id.co.nativeapp.org.user.service.InsufficientPrivilegeException the caller holds
+   *     neither {@code owner} nor {@code manager} → {@code 403}
    */
   public DeviceCredentialResponse reveal(UUID outletId) {
+    guard.requireOwnerOrManager();
     TenantContext.Tenant tenant = TenantContext.require();
     DeviceCredential credential = reader.requireCredential(outletId);
     // Audit the disclosure (P3a LOW-1) — a reveal is a read, so it leaves no Auditable/CDC trail on
@@ -143,8 +164,11 @@ public class DeviceCredentialService {
    * javadoc), its outlet assignment (closed), and the local row.
    *
    * @throws DeviceCredentialNotFoundException no credential exists for this outlet → {@code 404}
+   * @throws id.co.nativeapp.org.user.service.InsufficientPrivilegeException the caller holds
+   *     neither {@code owner} nor {@code manager} → {@code 403}
    */
   public void delete(UUID outletId) {
+    guard.requireOwnerOrManager();
     TenantContext.require();
     DeviceCredential credential = reader.requireCredential(outletId);
     keycloak.deleteUser(credential.getKeycloakUserId());

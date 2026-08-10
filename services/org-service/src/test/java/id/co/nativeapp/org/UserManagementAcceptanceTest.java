@@ -83,6 +83,10 @@ class UserManagementAcceptanceTest {
   // plain manager) — the caller for the role-hierarchy / anti-escalation tests.
   private static final String MANAGER_A_USERNAME = "manager-acme";
   private static final String MANAGER_A_PASSWORD = "manager-password";
+  // A cashier-ONLY login in company A — the floor-login TARGET for the page-grant / outlet-
+  // assignment role-hierarchy guard tests (a manager may administer this login).
+  private static final String CASHIER_A_USERNAME = "cashier-acme";
+  private static final String CASHIER_A_PASSWORD = "cashier-password";
   private static final String COMPANY_B = "22222222-2222-2222-2222-222222222222";
   private static final String OWNER_B_USERNAME = "owner-beta";
   private static final String OWNER_B_PASSWORD = "beta-owner-password";
@@ -107,6 +111,7 @@ class UserManagementAcceptanceTest {
   private static String ownerAKeycloakId;
   private static String ownerBKeycloakId;
   private static String managerAKeycloakId;
+  private static String cashierAKeycloakId;
 
   @LocalServerPort private int port;
 
@@ -121,6 +126,7 @@ class UserManagementAcceptanceTest {
     ownerAKeycloakId = findKeycloakUserIdByEmail("owner@acme.example.co.id");
     ownerBKeycloakId = findKeycloakUserIdByEmail("owner@beta.example.co.id");
     managerAKeycloakId = findKeycloakUserIdByEmail("manager@acme.example.co.id");
+    cashierAKeycloakId = findKeycloakUserIdByEmail("cashier@acme.example.co.id");
   }
 
   @BeforeEach
@@ -899,6 +905,86 @@ class UserManagementAcceptanceTest {
     JsonNode node = JSON.readValue(body, JsonNode.class);
     assertThat(node.get("role").asString()).isEqualTo("cashier");
     assertThat(node.get("temporaryPassword").asString()).isNotBlank();
+  }
+
+  // ===========================================================================
+  // Role-hierarchy guard on the page-grant / outlet-assignment replace-set PUTs (the flagged gap —
+  // security-review Finding: TeamAdministrationGuard was extracted so these two sibling write
+  // paths get the SAME fine-grained owner/manager boundary as invite/patch/deactivate.
+  // ===========================================================================
+
+  @Test
+  void managerCannotReplacePagesForAnOwner() {
+    // The target-hierarchy check: a manager may not touch a privileged (owner) login's page grants,
+    // even though no role is being changed.
+    String tokenM = tokenForManagerA();
+    assertInsufficientPrivilege(
+        () ->
+            appClient()
+                .put()
+                .uri("/api/v1/users/" + ownerAKeycloakId + "/pages")
+                .header(HttpHeaders.AUTHORIZATION, bearer(tokenM))
+                .contentType(MediaType.APPLICATION_JSON)
+                .body("{\"pageKeys\": [\"pos\"]}")
+                .retrieve()
+                .body(String.class));
+  }
+
+  @Test
+  void managerCanReplacePagesForAFloorLogin() throws Exception {
+    // The guard must NOT over-block: a manager may re-scope a cashier's (floor login) pages.
+    String tokenM = tokenForManagerA();
+
+    String body =
+        appClient()
+            .put()
+            .uri("/api/v1/users/" + cashierAKeycloakId + "/pages")
+            .header(HttpHeaders.AUTHORIZATION, bearer(tokenM))
+            .contentType(MediaType.APPLICATION_JSON)
+            .body("{\"pageKeys\": [\"pos\"]}")
+            .retrieve()
+            .body(String.class);
+
+    JsonNode node = JSON.readValue(body, JsonNode.class);
+    assertThat(node.get("mode").asString()).isEqualTo("RESTRICTED");
+    assertThat(node.get("pageKeys").toString()).contains("pos");
+  }
+
+  @Test
+  void managerCannotReplaceOutletsForAnOwner() {
+    // Same target-hierarchy check on the outlet-assignment replace-set PUT.
+    String tokenM = tokenForManagerA();
+    assertInsufficientPrivilege(
+        () ->
+            appClient()
+                .put()
+                .uri("/api/v1/users/" + ownerAKeycloakId + "/outlets")
+                .header(HttpHeaders.AUTHORIZATION, bearer(tokenM))
+                .contentType(MediaType.APPLICATION_JSON)
+                .body("{\"orgUnitIds\": []}")
+                .retrieve()
+                .body(String.class));
+  }
+
+  @Test
+  void managerCanReplaceOutletsForAFloorLoginWithAnEmptySet() throws Exception {
+    // The guard must NOT over-block: a manager may re-scope a cashier's outlet assignments. An
+    // empty set ("remove all") needs no valid outlet id, isolating this test to the guard alone.
+    String tokenM = tokenForManagerA();
+
+    String body =
+        appClient()
+            .put()
+            .uri("/api/v1/users/" + cashierAKeycloakId + "/outlets")
+            .header(HttpHeaders.AUTHORIZATION, bearer(tokenM))
+            .contentType(MediaType.APPLICATION_JSON)
+            .body("{\"orgUnitIds\": []}")
+            .retrieve()
+            .body(String.class);
+
+    JsonNode node = JSON.readValue(body, JsonNode.class);
+    assertThat(node.isArray()).isTrue();
+    assertThat(node).isEmpty();
   }
 
   // ===========================================================================

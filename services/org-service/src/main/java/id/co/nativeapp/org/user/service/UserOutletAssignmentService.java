@@ -3,6 +3,7 @@ package id.co.nativeapp.org.user.service;
 import id.co.nativeapp.org.user.dto.UserOutletAssignmentResponse;
 import id.co.nativeapp.org.user.projection.UserOutletAssignmentView;
 import id.co.nativeapp.tenant.TenantContext;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -24,6 +25,11 @@ import org.springframework.stereotype.Service;
  * shape as {@link UserService#getUserById(String)} (anti-enumeration: caller cannot distinguish
  * "not found" from "different tenant").
  *
+ * <p><strong>Role-hierarchy guard.</strong> {@link #replaceOutletsForUser(String, List)}
+ * additionally runs the target through {@link TeamAdministrationGuard#authorizeRoleAdministration}
+ * with no requested-roles change — a non-owner (manager) caller may re-scope a floor login's outlet
+ * assignments but not an owner / manager / accountant / hr login's (ADR 0052).
+ *
  * <p><strong>NOT {@code @Transactional}.</strong> The service itself carries no transaction; the
  * writer/reader beans own the transaction boundaries (CODE-STRUCTURE §3.1 — {@code @Transactional}
  * only on service-layer beans with separate {@code *Writer} components for {@code REQUIRES_NEW}).
@@ -34,14 +40,17 @@ public class UserOutletAssignmentService {
   private final KeycloakAdminClient keycloak;
   private final UserOutletAssignmentWriter writer;
   private final UserOutletAssignmentReader reader;
+  private final TeamAdministrationGuard guard;
 
   public UserOutletAssignmentService(
       KeycloakAdminClient keycloak,
       UserOutletAssignmentWriter writer,
-      UserOutletAssignmentReader reader) {
+      UserOutletAssignmentReader reader,
+      TeamAdministrationGuard guard) {
     this.keycloak = keycloak;
     this.writer = writer;
     this.reader = reader;
+    this.guard = guard;
   }
 
   // ---------------------------------------------------------------------------
@@ -89,19 +98,24 @@ public class UserOutletAssignmentService {
   /**
    * Atomically replaces the outlet assignment set for the given user (PUT semantics).
    *
-   * <p>The cross-tenant guard is enforced first. All outlet ids are validated before any write
-   * (all-or-nothing). Returns the resulting active assignment list.
+   * <p>The cross-tenant guard is enforced first, then the role-hierarchy guard ({@link
+   * TeamAdministrationGuard#authorizeRoleAdministration}, no requested-roles change — only the
+   * target-hierarchy check bites): a non-owner (manager) caller may re-scope a floor login's
+   * outlets but not an owner / manager / accountant / hr login's. All outlet ids are validated
+   * before any write (all-or-nothing). Returns the resulting active assignment list.
    *
    * @param userId the Keycloak subject id of the target user
    * @param orgUnitIds the desired complete set of outlet org-unit UUIDs (empty = remove all)
    * @return the resulting active outlet assignments, ordered by outlet name
    * @throws UserNotFoundException if the user is absent or belongs to a different tenant (404)
+   * @throws InsufficientPrivilegeException if a non-owner caller targets a privileged login (403)
    * @throws InvalidOutletAssignmentException if any org-unit id is not an active OUTLET (400)
    */
   public List<UserOutletAssignmentResponse> replaceOutletsForUser(
       String userId, List<UUID> orgUnitIds) {
     TenantContext.require();
-    resolveInTenant(userId); // cross-tenant guard
+    KeycloakUser target = resolveInTenant(userId); // cross-tenant guard
+    guard.authorizeRoleAdministration(new LinkedHashSet<>(target.roles()), null);
     writer.replaceAssignments(userId, orgUnitIds);
     // Re-read for the authoritative post-write state.
     return toResponses(reader.findActiveByUserId(userId));
@@ -131,13 +145,13 @@ public class UserOutletAssignmentService {
   // ---------------------------------------------------------------------------
 
   /**
-   * Resolves a user by id and enforces the cross-tenant guard. Returns {@link
-   * UserNotFoundException} (404) in ALL other cases — user does not exist, user belongs to a
-   * different company. The 404 (not 403) is the anti-enumeration design: a caller cannot learn
-   * whether a user id exists in a different tenant. Mirrors the logic in {@link
-   * UserService#resolveInTenant}.
+   * Resolves a user by id and enforces the cross-tenant guard. Returns the {@link KeycloakUser} if
+   * it exists AND belongs to the caller's tenant; throws {@link UserNotFoundException} (404) in ALL
+   * other cases — user does not exist, user belongs to a different company. The 404 (not 403) is
+   * the anti-enumeration design: a caller cannot learn whether a user id exists in a different
+   * tenant. Mirrors the logic in {@link UserService#resolveInTenant}.
    */
-  private void resolveInTenant(String userId) {
+  private KeycloakUser resolveInTenant(String userId) {
     String callerCompanyId = TenantContext.require().companyId();
     KeycloakUser user =
         keycloak.getUserById(userId).orElseThrow(() -> new UserNotFoundException(userId));
@@ -145,6 +159,7 @@ public class UserOutletAssignmentService {
     if (!user.belongsTo(callerCompanyId)) {
       throw new UserNotFoundException(userId);
     }
+    return user;
   }
 
   private static List<UserOutletAssignmentResponse> toResponses(
