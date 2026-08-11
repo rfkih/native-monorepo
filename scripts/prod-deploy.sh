@@ -91,8 +91,18 @@ smoke() { # cheap end-to-end probes through the edge (the tunnels' origin), from
   log "smoke OK (console, employee, keycloak issuer, gateway status=$status)"
 }
 
-deploy_manifest() { # deploy_manifest <images.yml> — pull + up with the given pin file
-  $COMPOSE -f "$1" $PROJECT pull -q && $COMPOSE -f "$1" $PROJECT up -d --remove-orphans
+pull_with_retry() { # pull_with_retry <images.yml> — registries blip (TLS timeouts); retry before failing
+  local i
+  for i in 1 2 3; do
+    $COMPOSE -f "$1" $PROJECT pull -q 2>&1 | tee -a deploy.log && return 0
+    log "pull attempt $i/3 failed — retrying in 15s"
+    sleep 15
+  done
+  return 1
+}
+
+up_manifest() { # up_manifest <images.yml> — (re)converge onto the given pin file
+  $COMPOSE -f "$1" $PROJECT up -d --remove-orphans
 }
 
 # ---- 1. pre-deploy DB snapshot (disaster net — routine rollback NEVER restores it) -----------
@@ -113,10 +123,17 @@ else
   log "postgres not running (first deploy?) — skipping snapshot"
 fi
 
-# ---- 2-3. pull + rolling up with the new digests ---------------------------------------------
-log "pull + up ($MANIFEST)"
-if ! deploy_manifest "$MANIFEST" 2>&1 | tee -a deploy.log; then
-  log "DEPLOY FAIL: compose pull/up errored"
+# ---- 2. pull FIRST — a pull failure leaves the running stack untouched (no rollback needed) --
+log "pulling $MANIFEST"
+if ! pull_with_retry "$MANIFEST"; then
+  log "=== DEPLOY ABORTED: image pull failed after retries — stack UNTOUCHED, prod still on $(cat LAST_GOOD 2>/dev/null || echo '<none>') ==="
+  exit 1
+fi
+
+# ---- 3. rolling up (from here on, failures trigger auto-rollback) ----------------------------
+log "up ($MANIFEST)"
+if ! up_manifest "$MANIFEST" 2>&1 | tee -a deploy.log; then
+  log "DEPLOY FAIL: compose up errored"
   DEPLOY_FAILED=1
 fi
 
@@ -138,7 +155,10 @@ if [ ! -f releases/LAST_GOOD.images.yml ]; then
   log "NO LAST_GOOD manifest — cannot roll back (first deploy). Stack left as-is for diagnosis."
   exit 2
 fi
-if deploy_manifest releases/LAST_GOOD.images.yml 2>&1 | tee -a deploy.log \
+# LAST_GOOD's images are almost always already local (they were just running) — a registry
+# blip must not block the rollback, so pull is best-effort here.
+pull_with_retry releases/LAST_GOOD.images.yml || log "WARN: rollback pull failed — proceeding with local images"
+if up_manifest releases/LAST_GOOD.images.yml 2>&1 | tee -a deploy.log \
    && wait_healthy "$HEALTH_TIMEOUT" && smoke; then
   log "=== ROLLED BACK to $(cat LAST_GOOD) — prod healthy on previous release; $RELEASE rejected ==="
   exit 1

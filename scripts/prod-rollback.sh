@@ -35,8 +35,11 @@ fi
 grep -q '@sha256:' "$MANIFEST" || { log "FATAL: $MANIFEST is not digest-pinned"; exit 2; }
 
 log "=== rollback to $TARGET start ==="
-if ! { $COMPOSE -f "$MANIFEST" $PROJECT pull -q && $COMPOSE -f "$MANIFEST" $PROJECT up -d --remove-orphans; } 2>&1 | tee -a deploy.log; then
-  log "ROLLBACK FAILED: compose pull/up errored"; exit 2
+# Rollback images are almost always already local — a registry blip must not block the rollback.
+$COMPOSE -f "$MANIFEST" $PROJECT pull -q 2>&1 | tee -a deploy.log \
+  || log "WARN: pull failed — proceeding with local images"
+if ! $COMPOSE -f "$MANIFEST" $PROJECT up -d --remove-orphans 2>&1 | tee -a deploy.log; then
+  log "ROLLBACK FAILED: compose up errored"; exit 2
 fi
 
 # Same health gate as deploy (duplicated inline so this script stands alone on the VPS).
