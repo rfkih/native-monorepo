@@ -81,12 +81,15 @@ smoke() { # cheap end-to-end probes through the edge (the tunnels' origin), from
   docker exec native-prod-edge wget -qO /dev/null -T 10 http://keycloak:8080/auth/realms/native/.well-known/openid-configuration \
     || { log "SMOKE FAIL: keycloak issuer"; return 1; }
   # gateway reachable through the edge: an unauthenticated /api hit must answer (401/403/404 all
-  # prove gateway is up; a 502 from nginx means it is not) — wget exits 8 on 4xx/5xx, so probe
-  # with server-response and accept any HTTP status except 5xx.
+  # prove gateway is up; a 502 from nginx means it is not). busybox wget reports 4xx as
+  # "wget: server returned error: HTTP/1.1 401 Unauthorized" — extract the NUMERIC code
+  # explicitly (the old $2-based parse read the word "server" and would have passed a 502).
   status=$(docker exec native-prod-edge sh -c \
-    "wget -qO /dev/null -T 10 --server-response http://127.0.0.1:8080/api/v1/companies/mine 2>&1 | awk '/HTTP\\//{s=\$2} END{print s}'")
+    "wget -qO /dev/null -T 10 --server-response http://127.0.0.1:8080/api/v1/companies/mine 2>&1 \
+     | grep -oE 'HTTP/[0-9.]+ [0-9]{3}' | tail -1 | grep -oE '[0-9]{3}\$'")
   case "$status" in
-    5*|"") log "SMOKE FAIL: gateway via edge (status='${status:-none}')"; return 1 ;;
+    401|403|404|200) : ;;
+    *) log "SMOKE FAIL: gateway via edge (status='${status:-none}')"; return 1 ;;
   esac
   log "smoke OK (console, employee, keycloak issuer, gateway status=$status)"
 }

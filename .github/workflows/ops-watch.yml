@@ -1,0 +1,93 @@
+# Native PROD ops watch (ADR 0053 §5 / ADR 0057 Phase 6) — the external watchdog.
+#
+# Every 30 minutes, from OUTSIDE the VPS (a GitHub runner = the external uptime check):
+#   1. VPS reachable over SSH; disk usage (fail > 88%, warn > 80% — expansion is the real fix);
+#      every native-prod container running+healthy; nightly backup fresh (< 26 h).
+#   2. Both public origins answer end-to-end THROUGH the tunnels (console 200, employee 200,
+#      OIDC discovery 200 with matching issuer) — URLs read live from the VPS's prod.env, so
+#      quick-tunnel churn never causes a false alarm about the wrong URL (a dead tunnel is a
+#      REAL alarm: prod is unreachable until prod-bootstrap.sh re-wires).
+#
+# Alerting channel: a failed run → GitHub notifies the repo owner (watch settings → Actions
+# failures). No extra services, no new secrets — reuses PROD_SSH_KEY.
+name: ops-watch
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ops-watch
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PROD_HOST: 202.74.75.3
+  PROD_USER: starsky
+
+jobs:
+  watch:
+    name: prod health + uptime
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Prepare SSH
+        env:
+          PROD_SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+        run: |
+          test -n "$PROD_SSH_KEY" || { echo "::error::PROD_SSH_KEY secret not set"; exit 1; }
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$PROD_SSH_KEY" > ~/.ssh/prod_key && chmod 600 ~/.ssh/prod_key
+          ssh-keyscan -H "$PROD_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: VPS health (disk, containers, backup freshness)
+        run: |
+          ssh -i ~/.ssh/prod_key -o IdentitiesOnly=yes -o ConnectTimeout=20 "$PROD_USER@$PROD_HOST" bash -s <<'EOF'
+          set -uo pipefail
+          fail=0
+
+          use=$(df --output=pcent / | tail -1 | tr -dc '0-9')
+          echo "disk: ${use}% used"
+          if [ "$use" -gt 88 ]; then echo "::error::disk ${use}% > 88% — a deploy needs ~5 GB headroom; prune/expand NOW"; fail=1
+          elif [ "$use" -gt 80 ]; then echo "::warning::disk ${use}% > 80% (ADR 0057 threshold) — plan the expansion"; fi
+
+          bad=$(docker ps -a --filter "label=com.docker.compose.project=native-prod" --format '{{.Names}}' \
+            | while read -r c; do
+                case "$c" in *minio-init*) continue ;; esac
+                s=$(docker inspect -f '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}nohc{{end}}' "$c" 2>/dev/null)
+                case "$s" in "running healthy"|"running nohc") ;; *) echo "$c=$s" ;; esac
+              done)
+          if [ -n "$bad" ]; then echo "::error::unhealthy containers: $(echo "$bad" | tr '\n' ' ')"; fail=1
+          else echo "containers: all healthy (release $(cat ~/native-prod/LAST_GOOD 2>/dev/null || echo '?'))"; fi
+
+          newest=$(ls -1t ~/native-prod/backups/nightly/native-*.tar.gz.enc 2>/dev/null | head -1)
+          if [ -z "$newest" ]; then echo "::error::no nightly backup exists at all"; fail=1
+          else
+            age_h=$(( ( $(date +%s) - $(stat -c %Y "$newest") ) / 3600 ))
+            echo "newest backup: $(basename "$newest") (${age_h}h old)"
+            [ "$age_h" -le 26 ] || { echo "::error::nightly backup is ${age_h}h old (> 26h) — cron broken?"; fail=1; }
+          fi
+          exit "$fail"
+          EOF
+
+      - name: External uptime through the tunnels
+        run: |
+          SSH="ssh -i ~/.ssh/prod_key -o IdentitiesOnly=yes -o ConnectTimeout=20"
+          BIZ=$($SSH "$PROD_USER@$PROD_HOST" "grep '^PUBLIC_URL=' ~/native-prod/prod.env | cut -d= -f2-")
+          EMP=$($SSH "$PROD_USER@$PROD_HOST" "grep '^EMPLOYEE_PUBLIC_URL=' ~/native-prod/prod.env | cut -d= -f2-")
+          echo "business: $BIZ"; echo "employee: $EMP"
+          fail=0
+          code=$(curl -s -o /dev/null -m 20 -w '%{http_code}' "$BIZ/") || code=000
+          [ "$code" = "200" ] && echo "console: 200" || { echo "::error::console origin returned $code"; fail=1; }
+          code=$(curl -s -o /dev/null -m 20 -w '%{http_code}' "$EMP/") || code=000
+          [ "$code" = "200" ] && echo "employee: 200" || { echo "::error::employee origin returned $code"; fail=1; }
+          issuer=$(curl -fsS -m 20 "$BIZ/auth/realms/native/.well-known/openid-configuration" 2>/dev/null | jq -r '.issuer // empty') || issuer=""
+          [ "$issuer" = "$BIZ/auth/realms/native" ] && echo "OIDC issuer: ok" \
+            || { echo "::error::OIDC discovery broken (issuer='$issuer')"; fail=1; }
+          if [ "$fail" != "0" ]; then
+            echo "::error::public origins failing — if the quick tunnels died, re-wire: ssh $PROD_USER@$PROD_HOST 'cd ~/native-prod && bash scripts/prod-bootstrap.sh \$(cat LAST_GOOD)'"
+          fi
+          exit "$fail"
