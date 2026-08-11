@@ -43,5 +43,5 @@ services:
     events: true
   - name: restaurant-service
     module: ":services:restaurant-service"
-    migrations: { count: 35, range: "V1..V35" }
+    migrations: { count: 36, range: "V1..V36" }
     events: true

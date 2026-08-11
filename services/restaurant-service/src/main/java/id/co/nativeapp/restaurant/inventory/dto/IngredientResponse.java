@@ -9,7 +9,9 @@ import org.springframework.lang.Nullable;
  *
  * <p>{@code stockQty} is ALWAYS a number (never {@code null}) — unlike {@code
  * MenuItemResponse.stockQuantity}, an ingredient has no untracked state. {@code unitCostMinor}/
- * {@code costCurrency} are {@code null} together when the ingredient carries no cost.
+ * {@code costCurrency} are {@code null} together when the ingredient carries no cost; {@code
+ * unitCostMinor} is the DERIVED moving-average unit cost ({@code round(stockValueMinor/stockQty)},
+ * V36), and {@code stockValueMinor} is the total value of stock on hand (0 when uncosted or empty).
  */
 public record IngredientResponse(
     UUID id,
@@ -19,6 +21,7 @@ public record IngredientResponse(
     int stockQty,
     @Nullable Long unitCostMinor,
     @Nullable String costCurrency,
+    long stockValueMinor,
     boolean active) {
 
   /** Maps the write-path aggregate to the response shape. */
@@ -31,6 +34,7 @@ public record IngredientResponse(
         ingredient.getStockQty(),
         ingredient.getUnitCostMinor(),
         ingredient.getCostCurrency(),
+        ingredient.getStockValueMinor(),
         ingredient.isActive());
   }
 }

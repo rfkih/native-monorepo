@@ -109,7 +109,8 @@ class IngredientWriterTest {
     when(repository.findById(ingredient.getId())).thenReturn(Optional.of(ingredient));
     when(repository.saveAndFlush(any(Ingredient.class))).thenAnswer(inv -> inv.getArgument(0));
 
-    IngredientResponse response = asTenant(() -> writer.addStock(ingredient.getId(), 5));
+    IngredientResponse response =
+        asTenant(() -> writer.addStock(ingredient.getId(), 5, null, null));
 
     assertThat(response.stockQty()).isEqualTo(15);
   }
@@ -120,9 +121,37 @@ class IngredientWriterTest {
     when(repository.findById(ingredient.getId())).thenReturn(Optional.of(ingredient));
     when(repository.saveAndFlush(any(Ingredient.class))).thenAnswer(inv -> inv.getArgument(0));
 
-    IngredientResponse response = asTenant(() -> writer.addStock(ingredient.getId(), -100));
+    IngredientResponse response =
+        asTenant(() -> writer.addStock(ingredient.getId(), -100, null, null));
 
     assertThat(response.stockQty()).isZero();
+  }
+
+  @Test
+  void addStockWithAPriceReceivesAndReblendsTheMovingAverage() {
+    // tracked(10) is 10 units @ 5_000 => value 50_000. Receive 10 more for a TOTAL of 130_000
+    // (13_000/unit) => value 180_000 over 20 units => a blended 9_000/unit.
+    Ingredient ingredient = tracked(10);
+    when(repository.findById(ingredient.getId())).thenReturn(Optional.of(ingredient));
+    when(repository.saveAndFlush(any(Ingredient.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    IngredientResponse response =
+        asTenant(() -> writer.addStock(ingredient.getId(), 10, 130_000L, "IDR"));
+
+    assertThat(response.stockQty()).isEqualTo(20);
+    assertThat(response.stockValueMinor()).isEqualTo(180_000L);
+    assertThat(response.unitCostMinor()).isEqualTo(9_000L);
+  }
+
+  @Test
+  void addStockWithOnlyOnePriceFieldIsRejected() {
+    Ingredient ingredient = tracked(10);
+    when(repository.findById(ingredient.getId())).thenReturn(Optional.of(ingredient));
+
+    assertThatThrownBy(
+            () -> asTenant(() -> writer.addStock(ingredient.getId(), 10, 130_000L, null)))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("both be present or both absent");
   }
 
   @Test

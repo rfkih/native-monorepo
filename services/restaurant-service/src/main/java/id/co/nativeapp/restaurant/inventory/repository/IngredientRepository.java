@@ -23,14 +23,15 @@ public interface IngredientRepository extends JpaRepository<Ingredient, UUID> {
   // Interface fields are implicitly public static final — the shared projection column list.
   String VIEW_COLUMNS =
       """
-      SELECT i.id              AS id,
-             i.business_id     AS business_id,
-             i.name            AS name,
-             i.unit            AS unit,
-             i.stock_qty       AS stock_qty,
-             i.unit_cost_minor AS unit_cost_minor,
-             i.cost_currency   AS cost_currency,
-             i.active          AS active
+      SELECT i.id                AS id,
+             i.business_id       AS business_id,
+             i.name              AS name,
+             i.unit              AS unit,
+             i.stock_qty         AS stock_qty,
+             i.unit_cost_minor   AS unit_cost_minor,
+             i.cost_currency     AS cost_currency,
+             i.stock_value_minor AS stock_value_minor,
+             i.active            AS active
         FROM ingredient i
       """;
 
@@ -51,6 +52,20 @@ public interface IngredientRepository extends JpaRepository<Ingredient, UUID> {
    * updated_at}/{@code version} like {@code MenuItemRepository#deductStock}; the true level is
    * re-established at the next ingredient stocktake.
    *
+   * <p><strong>Moving-average value (V36).</strong> The value bucket scales DOWN with quantity so a
+   * sale never moves the derived unit cost ({@code value / qty} is preserved) — REQUIRED, else value
+   * stays flat while qty falls and the next receive blends against an inflated average. Depleting to
+   * or past the current stock books ALL remaining value out (value -> 0), matching stock -> 0. Both
+   * SET expressions read the pre-update {@code stock_qty}, so they stay consistent; the value
+   * subtraction can never exceed the current value (its numerator qty is capped by the CASE), so the
+   * V36 {@code ck_ingredient_stock_value_nonneg} + {@code ck_ingredient_value_requires_stock} CHECKs
+   * hold. {@code unit_cost_minor} is deliberately left untouched — proportional scaling keeps the
+   * average unchanged. (PostgreSQL {@code round()} is HALF_UP vs the aggregate's HALF_EVEN — a
+   * sub-minor-unit difference on the value bucket only; the DERIVED average is unaffected because qty
+   * and value scale together. Note a physical opname does NOT reset this bucket — {@code setStock}
+   * likewise scales it proportionally — so the average's residual rounding drift is only cleared by a
+   * full stockout, value -> 0, or a manual revalue.)
+   *
    * @return 1 if the row exists (even when already at 0); 0 if the ingredient no longer exists
    */
   @Modifying
@@ -58,7 +73,12 @@ public interface IngredientRepository extends JpaRepository<Ingredient, UUID> {
       value =
           """
           UPDATE ingredient
-             SET stock_qty  = GREATEST(stock_qty - :qty, 0),
+             SET stock_value_minor = CASE
+                       WHEN stock_qty <= :qty THEN 0
+                       ELSE stock_value_minor
+                            - round(stock_value_minor::numeric * :qty / stock_qty)
+                     END,
+                 stock_qty  = GREATEST(stock_qty - :qty, 0),
                  updated_at = NOW(),
                  version    = version + 1
            WHERE id = :id

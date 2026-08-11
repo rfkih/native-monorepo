@@ -182,6 +182,54 @@ class IngredientDepletionIntegrationTest extends PostgresRlsTestBase {
   }
 
   // ---------------------------------------------------------------------------
+  // (c2) moving-average value bucket (V36) scales with quantity on a sale
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void depletionScalesTheValueBucketWithQuantityAndKeepsTheAverageCost() throws Exception {
+    // 100 g @ 50/g => value 5.000. A sale consuming 40 g scales value to 3.000 (60 g × 50) and the
+    // derived unit cost stays 50 — a sale never moves the moving average.
+    UUID ingredientId = createIngredient("Butter", 100, 50L, "IDR");
+    UUID itemId = createItem("Toast", 10_000L);
+    putRecipe(itemId, List.of(new RecipeLineInput(ingredientId, null, 40)));
+
+    checkout("deplete-value-001", List.of(new OrderLineRequest(itemId, 1)));
+
+    assertThat(stockOfIngredient(ingredientId)).isEqualTo(60);
+    assertThat(valueOfIngredient(ingredientId)).isEqualTo(3_000L);
+    assertThat(unitCostOfIngredient(ingredientId)).isEqualTo(50L);
+  }
+
+  @Test
+  void depletingPastAvailableStockBooksAllValueOut() throws Exception {
+    UUID ingredientId = createIngredient("Caviar", 5, 1_000L, "IDR"); // value 5.000
+    UUID itemId = createItem("Blini", 50_000L);
+    putRecipe(itemId, List.of(new RecipeLineInput(ingredientId, null, 10))); // needs 10, only 5
+
+    checkout("deplete-value-past-001", List.of(new OrderLineRequest(itemId, 1)));
+
+    assertThat(stockOfIngredient(ingredientId)).isZero();
+    assertThat(valueOfIngredient(ingredientId)).isZero(); // value booked out with the stock
+  }
+
+  @Test
+  void depletionOnANonCleanAverageStaysNonNegativeAndScalesExactly() throws Exception {
+    // A fractional average the create path can't produce: receive 3 units for a TOTAL of 100
+    // (avg 33,33/unit) => value 100 over qty 3. Depleting 1 => value 100 - round(100·1/3) =
+    // 100 - 33 = 67 over qty 2. Proves the DB value expression stays non-negative on a non-clean
+    // divisor (Postgres round() is HALF_UP here) and books the exact remainder.
+    UUID ingredientId = createIngredient("Kapulaga", 0, null, null); // uncosted, empty
+    receiveWithPrice(ingredientId, 3, 100L); // establishes cost at a non-integer average
+    UUID itemId = createItem("KariV36", 20_000L);
+    putRecipe(itemId, List.of(new RecipeLineInput(ingredientId, null, 1)));
+
+    checkout("deplete-nonclean-001", List.of(new OrderLineRequest(itemId, 1)));
+
+    assertThat(stockOfIngredient(ingredientId)).isEqualTo(2);
+    assertThat(valueOfIngredient(ingredientId)).isEqualTo(67L);
+  }
+
+  // ---------------------------------------------------------------------------
   // (d) items without recipes are no-ops
   // ---------------------------------------------------------------------------
 
@@ -309,6 +357,11 @@ class IngredientDepletionIntegrationTest extends PostgresRlsTestBase {
                 .id());
   }
 
+  private void receiveWithPrice(UUID ingredientId, int qty, long amountPaidMinor) throws Exception {
+    TenantContext.callAs(
+        TENANT, ACTOR, () -> ingredientService.addStock(ingredientId, qty, amountPaidMinor, "IDR"));
+  }
+
   private UUID createGroup(UUID itemId) throws Exception {
     return TenantContext.callAs(
         TENANT,
@@ -378,14 +431,27 @@ class IngredientDepletionIntegrationTest extends PostgresRlsTestBase {
   }
 
   private int stockOfIngredient(UUID ingredientId) throws Exception {
+    return (int) longColumnOfIngredient(ingredientId, "stock_qty");
+  }
+
+  private long valueOfIngredient(UUID ingredientId) throws Exception {
+    return longColumnOfIngredient(ingredientId, "stock_value_minor");
+  }
+
+  private long unitCostOfIngredient(UUID ingredientId) throws Exception {
+    return longColumnOfIngredient(ingredientId, "unit_cost_minor");
+  }
+
+  private long longColumnOfIngredient(UUID ingredientId, String column) throws Exception {
     try (Connection admin =
             java.sql.DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
         Statement st = admin.createStatement();
         ResultSet rs =
-            st.executeQuery("SELECT stock_qty FROM ingredient WHERE id = '" + ingredientId + "'")) {
+            st.executeQuery(
+                "SELECT " + column + " FROM ingredient WHERE id = '" + ingredientId + "'")) {
       rs.next();
-      return rs.getInt(1);
+      return rs.getLong(1);
     }
   }
 

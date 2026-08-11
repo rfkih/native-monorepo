@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
 /**
@@ -86,9 +87,15 @@ public class IngredientService {
     return writer.setStock(id, quantity);
   }
 
-  /** Adds a signed delta to an ingredient's stock, flooring at 0. */
-  public IngredientResponse addStock(UUID id, int amount) {
+  /**
+   * Adds a signed delta to an ingredient's stock, flooring at 0. When {@code amountPaidMinor} +
+   * {@code costCurrency} are supplied (a priced positive receive), updates the moving-average cost;
+   * otherwise it is a costless adjustment. The both-or-neither / positive-amount rules are enforced
+   * in {@link IngredientWriter}/the aggregate (400 on violation).
+   */
+  public IngredientResponse addStock(
+      UUID id, int amount, @Nullable Long amountPaidMinor, @Nullable String costCurrency) {
     TenantContext.require();
-    return writer.addStock(id, amount);
+    return writer.addStock(id, amount, amountPaidMinor, costCurrency);
   }
 }

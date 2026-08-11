@@ -1219,6 +1219,7 @@ export const id = {
     emptyHint:
       'Tambahkan yang dibeli dan dihitung gerai ini — bahan (roti, patty, saus) maupun perlengkapan (gelas, piring kertas, sedotan). Stock opname menghitung barang-barang ini, bukan item menu.',
     costPerUnit: '{{cost}} / {{unit}}',
+    stockValue: 'Nilai stok {{value}}',
     noCost: 'Belum ada biaya — dihitung, tidak pernah dibukukan',
     receiveAction: 'Terima',
     setAction: 'Atur jumlah',
@@ -1240,6 +1241,9 @@ export const id = {
     receiveTitle: 'Terima — {{name}}',
     receiveHint: 'Stok saat ini: {{qty}} {{unit}}. Masukkan jumlah yang diterima (atau koreksi negatif).',
     receiveAmountLabel: 'Jumlah ({{unit}})',
+    receivePriceLabel: 'Total dibayar ({{currency}}, opsional)',
+    receivePriceHint: 'Total harga pembelian ini — dipakai menghitung biaya rata-rata. Kosongkan jika tidak ada harga.',
+    receiveUnitPriceHint: '≈ {{price}} / {{unit}}',
     receiveSubmit: 'Tambahkan ke stok',
     setTitle: 'Atur jumlah — {{name}}',
     setHint: 'Stok saat ini: {{qty}} {{unit}}. Masukkan jumlah absolut yang baru.',

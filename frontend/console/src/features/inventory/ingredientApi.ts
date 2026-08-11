@@ -27,6 +27,8 @@ export interface Ingredient {
   stockQty: number
   unitCostMinor: number | null
   costCurrency: string | null
+  /** Total value of stock on hand, minor units of `costCurrency` (moving-average cost). */
+  stockValueMinor: number
   active: boolean
 }
 
@@ -125,15 +127,27 @@ export function useSetIngredientStock(session: CompanySession) {
   })
 }
 
+export interface AddIngredientStockInput {
+  id: string
+  amount: number
+  /** Total paid for THIS receipt (minor units, `costCurrency`) — moving-average cost input.
+   * Sent together with `costCurrency`, only on a positive receive with a price entered. */
+  amountPaidMinor?: number
+  costCurrency?: string
+}
+
 /** POST /{id}/stock/add — signed delta, floored at 0 server-side (the receive/purchase path). */
 export function useAddIngredientStock(session: CompanySession) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, amount }: { id: string; amount: number }) =>
+    mutationFn: ({ id, amount, amountPaidMinor, costCurrency }: AddIngredientStockInput) =>
       apiFetch<Ingredient>(`/api/v1/ingredients/${id}/stock/add`, {
         method: 'POST',
         tenant: tenantOf(session),
-        body: { amount },
+        body:
+          amountPaidMinor != null && costCurrency != null
+            ? { amount, amountPaidMinor, costCurrency }
+            : { amount },
       }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: INGREDIENTS_KEY(session) }),
   })

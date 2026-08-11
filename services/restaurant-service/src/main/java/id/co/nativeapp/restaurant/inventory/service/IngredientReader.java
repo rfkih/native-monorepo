@@ -52,6 +52,7 @@ public class IngredientReader {
         view.getStockQty(),
         view.getUnitCostMinor(),
         view.getCostCurrency() == null ? null : view.getCostCurrency().strip(),
+        view.getStockValueMinor(),
         view.isActive());
   }
 }

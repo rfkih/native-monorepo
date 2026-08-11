@@ -64,6 +64,16 @@ public class Ingredient extends Auditable {
   @Column(name = "cost_currency", length = 3)
   @Nullable private String costCurrency;
 
+  /**
+   * Total acquisition value of the stock on hand, in {@link #costCurrency}'s minor units — the
+   * SOURCE OF TRUTH for the perpetual moving weighted-average cost (V36). {@link #unitCostMinor} is
+   * DERIVED from this ({@code round(value / qty)}); keeping the value here preserves the exact
+   * fractional average that a rounded per-unit cost would lose (e.g. Rp 12,75/g). Always {@code 0}
+   * when the ingredient is uncosted or holds no stock (the V36 CHECK invariants).
+   */
+  @Column(name = "stock_value_minor", nullable = false)
+  private long stockValueMinor;
+
   @Column(name = "active", nullable = false)
   private boolean active = true;
 
@@ -116,7 +126,21 @@ public class Ingredient extends Auditable {
     return stockQty;
   }
 
-  /** The unit cost in minor units; {@code null} when no cost has been recorded. */
+  /**
+   * Total acquisition value of stock on hand, in {@link #costCurrency}'s minor units (V36) — the
+   * source of truth from which {@link #getUnitCostMinor()} is derived. {@code 0} when uncosted or
+   * empty.
+   */
+  public long getStockValueMinor() {
+    return stockValueMinor;
+  }
+
+  /**
+   * The DERIVED unit-cost display cache in minor units ({@code round(value / qty)}); {@code null}
+   * when no cost has ever been recorded. On a costed but empty ingredient this retains the
+   * last-known unit cost. Read paths (list, HPP) use this; the authoritative value is {@link
+   * #getStockValueMinor()} + {@link #getStockQty()}.
+   */
   @Nullable public Long getUnitCostMinor() {
     return unitCostMinor;
   }
@@ -154,7 +178,7 @@ public class Ingredient extends Auditable {
       this.unit = unit;
     }
     if (unitCostMinor != null) {
-      setUnitCost(unitCostMinor, costCurrency);
+      revalue(unitCostMinor, costCurrency);
     }
   }
 
@@ -193,12 +217,80 @@ public class Ingredient extends Auditable {
     this.costCurrency = currencyPresent ? costCurrency : null;
   }
 
+  /**
+   * Manually (re)sets the unit cost — a PATCH override / correction, NOT a moving-average blend.
+   * Revalues the CURRENT stock at the given unit cost: {@code stock_value_minor = qty × unitCost}
+   * (so {@link #getUnitCostMinor()} then reads back exactly {@code unitCostMinor}). Validated
+   * both-or-neither via {@link #setUnitCost}.
+   *
+   * @throws IllegalArgumentException per {@link #setUnitCost} (negative amount / bad currency /
+   *     currency without amount)
+   */
+  public void revalue(long newUnitCostMinor, @Nullable String currency) {
+    setUnitCost(newUnitCostMinor, currency);
+    // qty × unitCost — exact; value follows the manually-set unit cost.
+    this.stockValueMinor = Math.multiplyExact((long) stockQty, newUnitCostMinor);
+  }
+
   // ---------------------------------------------------------------------------
   // Stock tracking — ALWAYS tracked (never null), unlike MenuItem (ADR 0046).
   // ---------------------------------------------------------------------------
 
   /**
-   * Sets the absolute stock quantity.
+   * Receives a purchased quantity at its actual paid price — the moving weighted-average update
+   * (V36). Adds the EXACT {@code amountPaidMinor} to the value bucket and {@code addedQty} to stock;
+   * the derived unit cost ({@link #getUnitCostMinor()}) re-blends. Capturing the TOTAL paid for the
+   * receipt (never a per-unit price) is what keeps the average exact — a Rp 12,75/unit blend is
+   * never rounded away.
+   *
+   * <p>On a previously UNCOSTED ingredient this establishes the cost currency and values the WHOLE
+   * resulting stock at this receipt's unit price (pre-existing units are assumed acquired at the
+   * same price). On a costed ingredient the receipt currency must match its cost currency (no
+   * implicit FX — finance owns FX).
+   *
+   * @param addedQty units received (strictly positive)
+   * @param amountPaidMinor total paid for this receipt, in {@code currency}'s minor units (&ge; 0)
+   * @param currency the ISO-4217 code the amount is paid in
+   * @throws IllegalArgumentException if {@code addedQty <= 0}, {@code amountPaidMinor < 0}, the
+   *     currency is not a valid ISO-4217 code, or it differs from an existing cost currency
+   */
+  public void receive(int addedQty, long amountPaidMinor, String currency) {
+    if (addedQty <= 0) {
+      throw new IllegalArgumentException("receive quantity must be positive, got: " + addedQty);
+    }
+    if (amountPaidMinor < 0) {
+      throw new IllegalArgumentException("amountPaidMinor must be >= 0, got: " + amountPaidMinor);
+    }
+    Objects.requireNonNull(currency, "currency");
+    Money paid = Money.ofMinor(amountPaidMinor, currency); // validates the ISO-4217 code
+
+    if (costCurrency == null) {
+      // Uncosted -> costed: value the WHOLE resulting stock at this receipt's unit price.
+      long resultingQty = (long) stockQty + addedQty;
+      this.costCurrency = currency;
+      this.stockValueMinor = paid.mulDiv(resultingQty, addedQty).amountMinor();
+      this.stockQty = Math.toIntExact(resultingQty);
+    } else {
+      if (!getCostCurrency().equals(currency)) {
+        throw new IllegalArgumentException(
+            "receipt currency "
+                + currency
+                + " does not match ingredient cost currency "
+                + getCostCurrency());
+      }
+      this.stockValueMinor = Math.addExact(this.stockValueMinor, amountPaidMinor);
+      this.stockQty = Math.addExact(this.stockQty, addedQty);
+    }
+    recomputeUnitCostCache();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Stock tracking — ALWAYS tracked (never null), unlike MenuItem (ADR 0046).
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Sets the absolute stock quantity — a COSTLESS adjustment (a physical re-count / correction, not
+   * a purchase). Preserves the unit cost: the value bucket scales with quantity (V36).
    *
    * @param qty new quantity (&ge; 0)
    * @throws IllegalArgumentException if {@code qty} is negative
@@ -207,17 +299,60 @@ public class Ingredient extends Auditable {
     if (qty < 0) {
       throw new IllegalArgumentException("stock_qty must be >= 0, got: " + qty);
     }
-    this.stockQty = qty;
+    applyCostlessQuantity(qty);
   }
 
   /**
    * Adds {@code delta} units to the current stock, flooring at 0 ({@code MenuItem#addStock}'s
-   * floor-0 logic, minus the untracked branch — an ingredient has no untracked state, ADR 0046).
+   * floor-0 logic, minus the untracked branch — an ingredient has no untracked state, ADR 0046). A
+   * COSTLESS adjustment (found/lost stock, not a priced purchase — that is {@link #receive}):
+   * preserves the unit cost by scaling the value bucket with quantity (V36).
    *
    * @param delta units to add (positive to restock, negative to manually remove; floored at 0)
    */
   public void addStock(int delta) {
-    int next = stockQty + delta;
-    this.stockQty = Math.max(0, next);
+    // Add in long then floor at 0 — mirrors the *Exact discipline of the other paths: an extreme
+    // positive delta throws (toIntExact) rather than silently wrapping negative.
+    applyCostlessQuantity(Math.toIntExact(Math.max(0L, (long) stockQty + delta)));
+  }
+
+  /**
+   * Applies a COSTLESS quantity change to {@code newQty} — a set/add/stocktake adjustment that must
+   * NOT move the unit cost. The value bucket scales with quantity so {@code value / qty} (the
+   * average unit cost) is preserved: a re-count or a sale never changes what a unit cost. An
+   * uncosted ingredient carries no value. Scaling up from EMPTY stock values the new units at the
+   * last-known unit cost ({@link #unitCostMinor}), since there is no ratio to scale.
+   */
+  private void applyCostlessQuantity(int newQty) {
+    if (costCurrency == null) {
+      // Uncosted: no valuation bucket (V36 invariant: value = 0 when cost_currency IS NULL).
+      this.stockQty = newQty;
+      this.stockValueMinor = 0L;
+      return;
+    }
+    long newValue;
+    if (stockQty > 0) {
+      // Scale value with qty (preserves the average) — single HALF_EVEN rounding via mulDiv.
+      newValue = Money.ofMinor(stockValueMinor, costCurrency).mulDiv(newQty, stockQty).amountMinor();
+    } else {
+      // From empty: value the new units at the last-known unit cost (a costed ingredient always
+      // retains a non-null unitCostMinor cache — setUnitCost enforces both-or-neither).
+      newValue = unitCostMinor == null ? 0L : Math.multiplyExact((long) newQty, unitCostMinor);
+    }
+    this.stockQty = newQty;
+    this.stockValueMinor = newValue;
+    recomputeUnitCostCache();
+  }
+
+  /**
+   * Recomputes the derived unit-cost display cache {@code = round(value / qty)} (HALF_EVEN, via the
+   * shared {@link Money#mulDiv} rounding primitive). Left UNCHANGED when stock is zero (retains the
+   * last-known unit cost) or the ingredient is uncosted.
+   */
+  private void recomputeUnitCostCache() {
+    if (stockQty > 0 && costCurrency != null) {
+      this.unitCostMinor =
+          Money.ofMinor(stockValueMinor, costCurrency).mulDiv(1L, stockQty).amountMinor();
+    }
   }
 }

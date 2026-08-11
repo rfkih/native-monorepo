@@ -45,7 +45,7 @@ class IngredientControllerValidationTest {
   @MockitoBean private IngredientService ingredientService;
 
   private static IngredientResponse stubIngredient(UUID id) {
-    return new IngredientResponse(id, BUSINESS_ID, "Patty", "pcs", 0, null, null, true);
+    return new IngredientResponse(id, BUSINESS_ID, "Patty", "pcs", 0, null, null, 0L, true);
   }
 
   @Test
@@ -137,7 +137,7 @@ class IngredientControllerValidationTest {
     UUID id = UUID.randomUUID();
     when(ingredientService.create(any()))
         .thenReturn(
-            new IngredientResponse(id, BUSINESS_ID, "Patty", "pcs", 0, 5_000L, "IDR", true));
+            new IngredientResponse(id, BUSINESS_ID, "Patty", "pcs", 0, 5_000L, "IDR", 0L, true));
 
     String body =
         """
@@ -156,7 +156,7 @@ class IngredientControllerValidationTest {
     UUID id = UUID.randomUUID();
     when(ingredientService.update(org.mockito.ArgumentMatchers.eq(id), any()))
         .thenReturn(
-            new IngredientResponse(id, BUSINESS_ID, "Patty Sapi", "pcs", 0, null, null, true));
+            new IngredientResponse(id, BUSINESS_ID, "Patty Sapi", "pcs", 0, null, null, 0L, true));
 
     String body =
         """
@@ -198,7 +198,8 @@ class IngredientControllerValidationTest {
   void setStockReturns200WithTheUpdatedIngredient() throws Exception {
     UUID id = UUID.randomUUID();
     when(ingredientService.setStock(org.mockito.ArgumentMatchers.eq(id), anyInt()))
-        .thenReturn(new IngredientResponse(id, BUSINESS_ID, "Patty", "pcs", 25, null, null, true));
+        .thenReturn(
+            new IngredientResponse(id, BUSINESS_ID, "Patty", "pcs", 25, null, null, 0L, true));
 
     String body =
         """
@@ -247,8 +248,10 @@ class IngredientControllerValidationTest {
   @Test
   void addStockReturns200WithTheUpdatedIngredient() throws Exception {
     UUID id = UUID.randomUUID();
-    when(ingredientService.addStock(org.mockito.ArgumentMatchers.eq(id), anyInt()))
-        .thenReturn(new IngredientResponse(id, BUSINESS_ID, "Patty", "pcs", 15, null, null, true));
+    when(ingredientService.addStock(
+            org.mockito.ArgumentMatchers.eq(id), anyInt(), any(), any()))
+        .thenReturn(
+            new IngredientResponse(id, BUSINESS_ID, "Patty", "pcs", 15, null, null, 0L, true));
 
     String body =
         """
@@ -261,6 +264,49 @@ class IngredientControllerValidationTest {
                 .content(body))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.stockQty").value(15));
+  }
+
+  @Test
+  void addStockWithAPricePassesTheMovingAverageFieldsThrough() throws Exception {
+    UUID id = UUID.randomUUID();
+    when(ingredientService.addStock(
+            org.mockito.ArgumentMatchers.eq(id),
+            org.mockito.ArgumentMatchers.eq(5),
+            org.mockito.ArgumentMatchers.eq(130_000L),
+            org.mockito.ArgumentMatchers.eq("IDR")))
+        .thenReturn(
+            new IngredientResponse(
+                id, BUSINESS_ID, "Patty", "pcs", 15, 9_000L, "IDR", 135_000L, true));
+
+    String body =
+        """
+        {"amount":5,"amountPaidMinor":130000,"costCurrency":"IDR"}
+        """;
+    mockMvc
+        .perform(
+            post(INGREDIENTS_PATH + "/" + id + "/stock/add")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.unitCostMinor").value(9000))
+        .andExpect(jsonPath("$.stockValueMinor").value(135000));
+  }
+
+  @Test
+  void addStockWithNegativeAmountPaidIsRejectedWithAProblemDetail() throws Exception {
+    UUID id = UUID.randomUUID();
+    String body =
+        """
+        {"amount":5,"amountPaidMinor":-1,"costCurrency":"IDR"}
+        """;
+    mockMvc
+        .perform(
+            post(INGREDIENTS_PATH + "/" + id + "/stock/add")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body))
+        .andExpect(status().isBadRequest())
+        .andExpect(content().contentTypeCompatibleWith(PROBLEM_JSON))
+        .andExpect(jsonPath("$.errors[0].field").value("amountPaidMinor"));
   }
 
   @Test

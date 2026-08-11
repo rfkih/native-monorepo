@@ -1230,6 +1230,7 @@ export const en = {
     emptyHint:
       'Add what this outlet buys and counts — ingredients (bread, patty, sauce) and supplies (cups, paper plates, straws). The stock opname counts these, not menu items.',
     costPerUnit: '{{cost}} / {{unit}}',
+    stockValue: 'Stock value {{value}}',
     noCost: 'No cost set — counted, never posted to the books',
     receiveAction: 'Receive',
     setAction: 'Set quantity',
@@ -1251,6 +1252,9 @@ export const en = {
     receiveTitle: 'Receive — {{name}}',
     receiveHint: 'Current stock: {{qty}} {{unit}}. Enter what you received (or a negative correction).',
     receiveAmountLabel: 'Amount ({{unit}})',
+    receivePriceLabel: 'Total paid ({{currency}}, optional)',
+    receivePriceHint: 'The total price for this purchase — used to compute the moving-average cost. Leave empty if there was no price.',
+    receiveUnitPriceHint: '≈ {{price}} / {{unit}}',
     receiveSubmit: 'Add to stock',
     setTitle: 'Set quantity — {{name}}',
     setHint: 'Current stock: {{qty}} {{unit}}. Enter the new absolute quantity.',

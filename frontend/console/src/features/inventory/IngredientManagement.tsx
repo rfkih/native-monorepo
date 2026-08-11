@@ -186,7 +186,13 @@ function IngredientManagementInner({
         />
       ) : null}
       {receiving ? (
-        <ReceiveDialog session={session} ingredient={receiving} locale={locale} onClose={() => setReceiving(null)} />
+        <ReceiveDialog
+          session={session}
+          baseCurrency={baseCurrency}
+          ingredient={receiving}
+          locale={locale}
+          onClose={() => setReceiving(null)}
+        />
       ) : null}
       {setting ? (
         <SetQtyDialog session={session} ingredient={setting} locale={locale} onClose={() => setSetting(null)} />
@@ -223,6 +229,10 @@ function IngredientRow({
             {t('inventory.costPerUnit', {
               cost: formatMoney(ingredient.unitCostMinor, ingredient.costCurrency, locale),
               unit: ingredient.unit,
+            })}
+            {' · '}
+            {t('inventory.stockValue', {
+              value: formatMoney(ingredient.stockValueMinor, ingredient.costCurrency, locale),
             })}
           </div>
         ) : (
@@ -465,11 +475,13 @@ function IngredientFormDialog({
 
 function ReceiveDialog({
   session,
+  baseCurrency,
   ingredient,
   locale,
   onClose,
 }: {
   session: CompanySession
+  baseCurrency: string
   ingredient: Ingredient
   locale: string
   onClose: () => void
@@ -477,8 +489,19 @@ function ReceiveDialog({
   const { t } = useTranslation()
   const add = useAddIngredientStock(session)
   const [amountInput, setAmountInput] = useState('')
+  const [priceInput, setPriceInput] = useState('')
   const amount = Number.parseInt(amountInput, 10)
   const valid = Number.isFinite(amount) && amount !== 0
+  const isReceive = Number.isFinite(amount) && amount > 0
+
+  // Total-paid → per-unit hint, live as the cashier types. Costless (amount<=0 or price empty)
+  // shows nothing — divide-by-zero and empty-input are both guarded.
+  const amountPaidMinor =
+    isReceive && priceInput.trim() !== '' ? parseDiscountInput(priceInput, baseCurrency) : null
+  const unitPriceHint =
+    amountPaidMinor != null && amount > 0
+      ? formatMoney(Math.round(amountPaidMinor / amount), baseCurrency, locale)
+      : null
 
   return (
     <DialogShell title={t('inventory.receiveTitle', { name: ingredient.name })} onClose={onClose}>
@@ -501,6 +524,27 @@ function ReceiveDialog({
             placeholder="0"
           />
         </Field>
+        {isReceive ? (
+          <Field
+            label={t('inventory.receivePriceLabel', { currency: baseCurrency })}
+            htmlFor="ing-recv-price"
+            hint={
+              unitPriceHint != null
+                ? t('inventory.receiveUnitPriceHint', { price: unitPriceHint, unit: ingredient.unit })
+                : t('inventory.receivePriceHint')
+            }
+          >
+            <TextInput
+              id="ing-recv-price"
+              type="number"
+              min="0"
+              inputMode="numeric"
+              value={priceInput}
+              onChange={(e) => setPriceInput(e.target.value)}
+              placeholder={t('inventory.costPlaceholder')}
+            />
+          </Field>
+        ) : null}
         {add.isError ? (
           <p className="text-xs text-loss" role="alert">
             {t('inventory.errorGeneric')}
@@ -510,7 +554,12 @@ function ReceiveDialog({
           className="w-full"
           disabled={!valid || add.isPending}
           onClick={() =>
-            add.mutate({ id: ingredient.id, amount }, { onSuccess: onClose })
+            add.mutate(
+              amountPaidMinor != null
+                ? { id: ingredient.id, amount, amountPaidMinor, costCurrency: baseCurrency }
+                : { id: ingredient.id, amount },
+              { onSuccess: onClose },
+            )
           }
         >
           {add.isPending ? <Spinner /> : t('inventory.receiveSubmit')}

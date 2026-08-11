@@ -26,5 +26,8 @@ public interface IngredientView {
 
   @Nullable String getCostCurrency();
 
+  /** Total acquisition value of stock on hand, in {@code cost_currency}'s minor units (V36). */
+  long getStockValueMinor();
+
   boolean isActive();
 }

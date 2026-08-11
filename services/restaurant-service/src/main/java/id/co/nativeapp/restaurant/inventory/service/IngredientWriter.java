@@ -11,6 +11,7 @@ import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -126,16 +127,31 @@ public class IngredientWriter {
   }
 
   /**
-   * Adds a signed delta to an ingredient's stock, flooring at 0.
+   * Adds a signed delta to an ingredient's stock, flooring at 0. When a price ({@code
+   * amountPaidMinor} + {@code costCurrency}) is supplied it is a PRICED positive receive that
+   * updates the moving weighted-average cost (V36); otherwise it is a costless adjustment that
+   * preserves the unit cost. Price fields are both-or-neither (400 otherwise), mirroring how the
+   * aggregate validates the cost pair; the positive-amount rule is enforced by {@link
+   * Ingredient#receive}.
    *
    * @throws IngredientNotFoundException if not found or not visible to the current tenant
+   * @throws IllegalArgumentException if exactly one price field is present (→ 400)
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
-  public IngredientResponse addStock(UUID id, int amount) {
+  public IngredientResponse addStock(
+      UUID id, int amount, @Nullable Long amountPaidMinor, @Nullable String costCurrency) {
     TenantContext.require();
     Ingredient ingredient = load(id);
     outletAccessGuard.enforce(ingredient.getBusinessId());
-    ingredient.addStock(amount);
+    if (amountPaidMinor != null || costCurrency != null) {
+      if (amountPaidMinor == null || costCurrency == null) {
+        throw new IllegalArgumentException(
+            "amountPaidMinor and costCurrency must both be present or both absent");
+      }
+      ingredient.receive(amount, amountPaidMinor, costCurrency);
+    } else {
+      ingredient.addStock(amount);
+    }
     Ingredient saved = repository.saveAndFlush(ingredient);
     return IngredientResponse.from(saved);
   }

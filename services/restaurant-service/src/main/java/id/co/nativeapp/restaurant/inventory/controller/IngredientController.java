@@ -110,16 +110,21 @@ public class IngredientController {
 
   /**
    * Adds a signed delta to an ingredient's stock. Positive values receive stock; negative values
-   * manually reduce stock (floored at 0).
+   * manually reduce stock (floored at 0). When a price ({@code amountPaidMinor} + {@code
+   * costCurrency}) accompanies a positive receive, it updates the moving weighted-average cost
+   * (V36); otherwise it is a costless adjustment that preserves the unit cost.
    */
   @Operation(
-      summary = "Add a stock delta",
+      summary = "Add a stock delta (optionally priced)",
       description =
           "Adds a signed delta to an ingredient's stock. Positive = receive; negative = manually"
-              + " reduce (floored at 0). Returns 200 OK with the updated ingredient.")
+              + " reduce (floored at 0). An optional amountPaidMinor + costCurrency on a positive"
+              + " receive updates the moving-average cost. Returns 200 OK with the updated"
+              + " ingredient.")
   @PostMapping("/{id}/stock/add")
   public ResponseEntity<IngredientResponse> addStock(
       @PathVariable UUID id, @Valid @RequestBody AddIngredientStockRequest request) {
-    return ResponseEntity.ok(service.addStock(id, request.amount()));
+    return ResponseEntity.ok(
+        service.addStock(id, request.amount(), request.amountPaidMinor(), request.costCurrency()));
   }
 }
