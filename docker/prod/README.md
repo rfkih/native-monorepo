@@ -4,10 +4,13 @@ The full platform **co-located on the VPS `middleware`** alongside an unrelated 
 (Blackheart/vector). Design & rationale: **[ADR 0057](../../docs/adr/0057-cloudflare-edge-rollback-first-prod-deploy.md)**
 (amends [ADR 0053](../../docs/adr/0053-environments-branching-release-pipeline.md)).
 
-> **Status: Phase 1 (artifacts only).** These files exist and are reviewable; **nothing is
-> deployed yet**. The bring-up script (`scripts/prod-up.ps1`), GHCR image readiness, the
-> CI gates, and `deploy-prod.yml` land in Phases 2–5. Do **not** hand-run `docker compose up`
-> against this file — the deploy is health-gated with auto-rollback (Phase 4/5).
+> **Status: Phases 1–4 built; NOT yet deployed.** The stack definition (P1), complete GHCR
+> image set + digest pinning (P2), CI/AI/migration gates (P3), and the tag-triggered deploy
+> pipeline with auto-rollback (P4: `deploy-prod.yml` + `scripts/prod-deploy.sh` /
+> `prod-rollback.sh` + `docs/QA-CHECKLIST.md` + `e2e/`) all exist. Remaining: Phase 5
+> (first bring-up: `prod.env` secrets + quick tunnels + KC wiring on the VPS) and Phase 6
+> (backups/alerts/observability). Do **not** hand-run `docker compose up` against this
+> file — every deploy goes through the health-gated pipeline (or `prod-deploy.sh` directly).
 
 ## What's here
 | File | Purpose |

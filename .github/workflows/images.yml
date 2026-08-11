@@ -9,11 +9,16 @@
 #
 # Images: ghcr.io/<owner>/<repo>/<service>:{<sha>,latest} + console-web. GHCR packages
 # are created PRIVATE on first push even in a public repo — flip visibility once.
+#
+# Release tags (ADR 0057): pushing a `v*` tag force-builds the COMPLETE image set at that
+# commit's SHA — deploy-prod.yml waits for exactly these by resolving their digests. Tag
+# builds deliberately do NOT move `:latest` (re-deploying an old tag must never regress it).
 name: images
 
 on:
   push:
     branches: [master]
+    tags: ["v*"]
   workflow_dispatch:
     inputs:
       all:
@@ -46,6 +51,8 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Filter changed paths
+        # Skipped on tag pushes: `base` is a branch concept, and tags force-build ALL anyway.
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -89,7 +96,8 @@ jobs:
           CHANGED: ${{ steps.filter.outputs.changes }}
           CONSOLE: ${{ steps.filter.outputs.console }}
           EMPLOYEE: ${{ steps.filter.outputs.employee }}
-          FORCE_ALL: ${{ github.event_name == 'workflow_dispatch' && inputs.all }}
+          # Force the complete set on manual request AND on every release tag (deploy needs all 13).
+          FORCE_ALL: ${{ (github.event_name == 'workflow_dispatch' && inputs.all) || startsWith(github.ref, 'refs/tags/') }}
         run: |
           ALL='["gateway","org-service","restaurant-service","carwash-service","barbershop-service","loyalty-service","finance-service","entitlement-service","employee-service","notification-service","payment-service"]'
           if [ "$FORCE_ALL" = "true" ] || echo "$CHANGED" | jq -e 'any(. == "full-backend")' > /dev/null; then
@@ -148,12 +156,20 @@ jobs:
           # .dockerignore (which excludes **/build/ for the local from-source builds).
           # No buildx cache: the only layer beyond the JRE base is the jar COPY, which
           # changes every build — caching it would only churn the 10 GB cache limit.
+          # Tag builds skip :latest (see header).
           for svc in $(echo "$SERVICES" | jq -r '.[]'); do
-            docker buildx build --push \
-              -f docker/runtime.Dockerfile \
-              -t "$IMAGE_BASE/$svc:${{ github.sha }}" \
-              -t "$IMAGE_BASE/$svc:latest" \
-              "services/$svc/build/libs"
+            if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+              docker buildx build --push \
+                -f docker/runtime.Dockerfile \
+                -t "$IMAGE_BASE/$svc:${{ github.sha }}" \
+                "services/$svc/build/libs"
+            else
+              docker buildx build --push \
+                -f docker/runtime.Dockerfile \
+                -t "$IMAGE_BASE/$svc:${{ github.sha }}" \
+                -t "$IMAGE_BASE/$svc:latest" \
+                "services/$svc/build/libs"
+            fi
           done
 
   console-image:
@@ -182,9 +198,10 @@ jobs:
           context: frontend/console
           file: frontend/console/Dockerfile
           push: true
+          # Tag builds skip :latest (see header) — the empty line the expression leaves is ignored.
           tags: |
             ghcr.io/${{ github.repository }}/console-web:${{ github.sha }}
-            ghcr.io/${{ github.repository }}/console-web:latest
+            ${{ !startsWith(github.ref, 'refs/tags/') && format('ghcr.io/{0}/console-web:latest', github.repository) || '' }}
           # mode=min (final-stage layers only): the sole buildx cache in the repo, so
           # the Gradle cache never gets evicted by image-layer churn.
           cache-from: type=gha,scope=console
@@ -219,8 +236,9 @@ jobs:
           context: frontend
           file: frontend/employee/Dockerfile
           push: true
+          # Tag builds skip :latest (see header) — the empty line the expression leaves is ignored.
           tags: |
             ghcr.io/${{ github.repository }}/employee-web:${{ github.sha }}
-            ghcr.io/${{ github.repository }}/employee-web:latest
+            ${{ !startsWith(github.ref, 'refs/tags/') && format('ghcr.io/{0}/employee-web:latest', github.repository) || '' }}
           cache-from: type=gha,scope=employee
           cache-to: type=gha,mode=min,scope=employee

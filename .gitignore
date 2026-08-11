@@ -40,6 +40,11 @@ docker/compose.prod.images.yml
 ai-gate.diff
 ai-verdict.json
 
+# Playwright e2e artifacts (e2e/ suite — ADR 0053 gate 2)
+e2e/node_modules/
+e2e/test-results/
+e2e/playwright-report/
+
 # Signed Android installers served by the UAT edge (/*.apk -> docker/uat/downloads mount).
 # Binaries stay out of git; source of truth is C:\Users\rifki\native-till-signing\builds\.
 docker/uat/downloads/*.apk

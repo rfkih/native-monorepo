@@ -1,0 +1,13 @@
+{
+  "name": "native-e2e",
+  "private": true,
+  "description": "Critical-path e2e against a DEPLOYED Native stack (UAT by default) — ADR 0053 gate 2",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "install-browsers": "playwright install --with-deps chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}
