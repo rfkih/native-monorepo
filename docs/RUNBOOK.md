@@ -275,3 +275,28 @@ docker compose -f docker/compose.dev.yml down -v     # also drop data + replicat
 | Debezium task FAILED `ByteArrayConverter…HeapByteBuffer` | (gotcha #3c) | `binary.handling.mode: base64` + StringConverter |
 | message on Kafka but consumer silent / topic empty | stale Connect offset (gotcha #6) | fresh connector name/slot/prefix |
 | `psql` returns no rows from a known-populated table | RLS, no tenant GUC (gotcha #5) | set `app.current_tenant` or query the API |
+
+---
+
+## Production operations (VPS `middleware` — ADR 0053/0057)
+
+Prod lives on the owner VPS at `~/native-prod` (user `starsky`, 202.74.75.3 / tailnet 100.112.13.126),
+co-located with an unrelated live workload — never touch the `vector-*`/blackheart containers.
+Public edge = two Cloudflare **quick tunnels** (EPHEMERAL URLs; current values in `~/native-prod/prod.env`).
+
+| Task | How |
+|---|---|
+| **Release to prod** | Merge to master (green `gate`+`ai-gate`) → `git tag -a vX.Y.Z && git push origin vX.Y.Z` → approve the `deploy-prod` run (production environment). Health-gated, auto-rolls back to `LAST_GOOD` on failure. |
+| **Roll back** | `ssh <vps> 'cd ~/native-prod && bash scripts/prod-rollback.sh'` (LAST_GOOD) or `... prod-rollback.sh vX.Y.Z` for any retained release. |
+| **Tunnels died / new URLs** | `ssh <vps> 'cd ~/native-prod && bash scripts/prod-bootstrap.sh $(cat LAST_GOOD)'` — re-discovers URLs, rewrites prod.env, re-patches Keycloak. |
+| **Backups** | Nightly cron 02:10 WIB → `backups/nightly/*.enc` (AES-256; 11 DBs + MinIO + prod.env; keep 14). Offsite: Windows task `NativeProdBackupPull` pulls to `%USERPROFILE%\native-prod-backups` daily 04:00 (keep 30). Passphrase: `BACKUP_PASSPHRASE` in prod.env + `%USERPROFILE%\.native-prod-backup-passphrase.txt` — ALSO keep it in a password manager. |
+| **Restore drill (monthly)** | `ssh <vps> 'bash ~/native-prod/scripts/prod-restore-drill.sh'` — decrypts the newest archive, restores finance_service into a throwaway postgres, asserts the schema. |
+| **Watchdog** | `ops-watch.yml` every 30 min: disk (fail >88%), container health, backup freshness, external tunnel probes. A failed run = GitHub notification. Manual: `gh workflow run ops-watch.yml`. |
+| **Manual deploy (no CI)** | `ssh <vps> 'cd ~/native-prod && bash scripts/prod-deploy.sh vX.Y.Z'` — requires `releases/vX.Y.Z.images.yml` (digest-pinned) present. |
+
+Gotchas: the edge has **no host port** (probe via `docker exec native-prod-edge wget ...`); the tunnel
+containers ride compose profiles — scripts export `COMPOSE_PROFILES` from prod.env, so never run bare
+`docker compose up --remove-orphans` by hand (it would delete the tunnels); prod.env is generated,
+600, NEVER synced or committed — losing it strands the PII ciphertexts (it IS in every encrypted backup).
+Disk is the binding constraint (~82% after each release leaves two image sets) — prune superseded
+`ghcr.io/rfkih/native-monorepo` images (`docker image prune` won't catch digest-pulled ones) and plan expansion.
