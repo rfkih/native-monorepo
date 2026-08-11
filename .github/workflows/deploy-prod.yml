@@ -15,7 +15,9 @@
 #
 # Required repo secrets:
 #   PROD_SSH_KEY      private key for starsky@202.74.75.3 (dedicated deploy key recommended)
-#   GHCR_READ_TOKEN   PAT (classic) with read:packages — VPS pulls the private GHCR images
+# Optional:
+#   GHCR_READ_TOKEN   PAT with read:packages — only needed for out-of-band pulls on the VPS;
+#                     the deploy itself falls back to the workflow's GITHUB_TOKEN (packages: read)
 name: deploy-prod
 
 on:
@@ -138,9 +140,10 @@ jobs:
       - name: Deploy (health-gated, auto-rollback)
         env:
           TAG: ${{ steps.rel.outputs.tag }}
-          GHCR_READ_TOKEN: ${{ secrets.GHCR_READ_TOKEN }}
+          # The workflow token can pull this repo's packages; a PAT secret overrides if set.
+          GHCR_READ_TOKEN: ${{ secrets.GHCR_READ_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
-          test -n "$GHCR_READ_TOKEN" || { echo "::error::GHCR_READ_TOKEN secret not set"; exit 1; }
+          test -n "$GHCR_READ_TOKEN" || { echo "::error::no GHCR credential available"; exit 1; }
           SSH="ssh -i ~/.ssh/prod_key -o IdentitiesOnly=yes"
           # Login only for the pull window; logout in the always-step below.
           printf '%s' "$GHCR_READ_TOKEN" | $SSH "$PROD_USER@$PROD_HOST" \
