@@ -106,8 +106,8 @@ import org.springframework.transaction.annotation.Transactional;
  * {@code PayrollPosted} + aggregated {@code LaborCostAllocated} via the outbox in the SAME
  * transaction (rule 3) — only that transition emits, so a retried post cannot double-emit.
  *
- * <p><strong>Employment-type scope gate (ADR 0055 §5, P0).</strong> Before anything else,
- * {@code calculate} resolves every in-scope employee's effective {@link
+ * <p><strong>Employment-type scope gate (ADR 0055 §5, P0).</strong> Before anything else, {@code
+ * calculate} resolves every in-scope employee's effective {@link
  * id.co.nativeapp.employee.employee.domain.EmploymentType} as-of the run's period (see {@link
  * #requireSupportedEmploymentTypes}) and rejects the WHOLE run (422) if any of them is outside
  * {@link #SUPPORTED_EMPLOYMENT_TYPES} — {@code PERMANENT}/{@code CONTRACT}/{@code PROBATION} today,
@@ -313,12 +313,12 @@ public class PayrollRunWriter {
    * ADR 0055 §5 — the P0 scope gate. The {@link EmploymentType}s this engine can correctly compute
    * PPh 21 for TODAY, all currently treated as <em>pegawai tetap</em> (monthly TER + December
    * Art-17): {@code CONTRACT} is byte-identical to {@code PERMANENT} for monthly pay (ADR 0055 §2);
-   * {@code PROBATION} (masa percobaan) is a full pegawai tetap and gets this SAME explicit "allowed"
-   * decision rather than defaulting silently. {@code INTERN} is deliberately EXCLUDED (domain-
-   * specialist review, P0 fix): a magang stipend is usually <em>bukan pegawai</em>, so computing it
-   * as pegawai tetap would be a misclassification, not a simplification — it stays gated until the
-   * bukan-pegawai path lands. A type outside this set (currently {@code INTERN} and {@code
-   * DAILY_CASUAL}) rejects the WHOLE run — see {@link #requireSupportedEmploymentTypes}.
+   * {@code PROBATION} (masa percobaan) is a full pegawai tetap and gets this SAME explicit
+   * "allowed" decision rather than defaulting silently. {@code INTERN} is deliberately EXCLUDED
+   * (domain- specialist review, P0 fix): a magang stipend is usually <em>bukan pegawai</em>, so
+   * computing it as pegawai tetap would be a misclassification, not a simplification — it stays
+   * gated until the bukan-pegawai path lands. A type outside this set (currently {@code INTERN} and
+   * {@code DAILY_CASUAL}) rejects the WHOLE run — see {@link #requireSupportedEmploymentTypes}.
    */
   private static final Set<EmploymentType> SUPPORTED_EMPLOYMENT_TYPES =
       Set.of(EmploymentType.PERMANENT, EmploymentType.CONTRACT, EmploymentType.PROBATION);
@@ -1016,13 +1016,14 @@ public class PayrollRunWriter {
    * on the FIRST employee whose type is not in {@link #SUPPORTED_EMPLOYMENT_TYPES} — rejecting the
    * WHOLE run rather than silently computing that one person with the wrong PPh 21 method.
    *
-   * <p><strong>Fail-closed on a missing/lapsed contract (domain-specialist review, P0 fix).</strong>
-   * An in-scope employee with NO {@code employment_contract} row covering {@code asOf} (never
-   * contracted, or a contract whose {@code effective_to} is before this run's as-of date) has no
-   * matching row in the lookup — that employee is tracked separately per chunk and, if any remain
-   * unresolved after the chunk's rows are scanned, {@link MissingEmploymentContractForRunException}
-   * rejects the WHOLE run. Silently falling through here would have computed that employee as
-   * pegawai tetap by DEFAULT, defeating the whole point of a fail-closed gate.
+   * <p><strong>Fail-closed on a missing/lapsed contract (domain-specialist review, P0
+   * fix).</strong> An in-scope employee with NO {@code employment_contract} row covering {@code
+   * asOf} (never contracted, or a contract whose {@code effective_to} is before this run's as-of
+   * date) has no matching row in the lookup — that employee is tracked separately per chunk and, if
+   * any remain unresolved after the chunk's rows are scanned, {@link
+   * MissingEmploymentContractForRunException} rejects the WHOLE run. Silently falling through here
+   * would have computed that employee as pegawai tetap by DEFAULT, defeating the whole point of a
+   * fail-closed gate.
    */
   private void requireSupportedEmploymentTypes(List<UUID> employeeIds, LocalDate asOf) {
     for (List<UUID> idChunk : chunk(employeeIds)) {

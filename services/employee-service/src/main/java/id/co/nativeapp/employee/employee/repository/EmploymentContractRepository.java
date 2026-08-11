@@ -27,9 +27,9 @@ public interface EmploymentContractRepository extends JpaRepository<EmploymentCo
    * employeeIds} (within the bound tenant) — the payroll run's P0 scope-gate read (ADR 0055 §5).
    * Native + projection (CODE-STRUCTURE §3.3), selecting only the two columns the gate needs. An
    * employee with no contract covering {@code asOf} simply has no row here — the caller ({@code
-   * PayrollRunWriter#requireSupportedEmploymentTypes}) treats that as FAIL-CLOSED (rejects the run),
-   * never as an implicit "assume pegawai tetap". {@code employeeIds} must already be chunked by the
-   * caller (CLAUDE.md, {@code Lists.partition} at &le;1000).
+   * PayrollRunWriter#requireSupportedEmploymentTypes}) treats that as FAIL-CLOSED (rejects the
+   * run), never as an implicit "assume pegawai tetap". {@code employeeIds} must already be chunked
+   * by the caller (CLAUDE.md, {@code Lists.partition} at &le;1000).
    */
   @Query(
       value =

@@ -14,8 +14,8 @@ import java.util.UUID;
  * the unsupported employee with the wrong method is the fix for the latent hole ADR 0031 flagged:
  * {@code GrossToNetCalculator} never read {@code EmploymentType} at all, so pointing a run at an
  * intern, daily/casual, or freelance worker previously produced a wrong-but-plausible PPh 21
- * figure. The message names only the employee id (a UUID) and the employment-type enum value,
- * never PII (rule 6). Mapped to {@code 422} by {@code EmployeeApiAdvice}.
+ * figure. The message names only the employee id (a UUID) and the employment-type enum value, never
+ * PII (rule 6). Mapped to {@code 422} by {@code EmployeeApiAdvice}.
  */
 public class UnsupportedEmploymentTypeForRunException extends RuntimeException {
 

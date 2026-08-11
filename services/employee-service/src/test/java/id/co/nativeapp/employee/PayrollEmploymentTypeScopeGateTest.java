@@ -128,14 +128,10 @@ class PayrollEmploymentTypeScopeGateTest extends PostgresRlsTestBase {
 
     List<PayslipLineResponse> permanentLines =
         TenantContext.callAs(
-            TENANT_A,
-            ACTOR_A,
-            () -> payrollRunReader.findPayslipAuthorized(runId, permanentId[0]));
+            TENANT_A, ACTOR_A, () -> payrollRunReader.findPayslipAuthorized(runId, permanentId[0]));
     List<PayslipLineResponse> contractLines =
         TenantContext.callAs(
-            TENANT_A,
-            ACTOR_A,
-            () -> payrollRunReader.findPayslipAuthorized(runId, contractId[0]));
+            TENANT_A, ACTOR_A, () -> payrollRunReader.findPayslipAuthorized(runId, contractId[0]));
 
     assertThat(permanentLines).isNotEmpty();
     assertThat(contractLines)
