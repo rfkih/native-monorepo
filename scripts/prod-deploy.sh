@@ -33,6 +33,11 @@ DBS=(org_service restaurant_service carwash_service barbershop_service loyalty_s
 cd "$DEPLOY_DIR" || { echo "FATAL: $DEPLOY_DIR missing — VPS not provisioned (Phase 5 bootstrap)"; exit 2; }
 log() { echo "[$(date -u +%FT%TZ)] $*" | tee -a deploy.log; }
 
+# Activate the tunnel profile recorded at bootstrap (quicktunnel|namedtunnel). Without it,
+# `up --remove-orphans` would treat the RUNNING tunnel containers as orphans and DELETE them.
+profiles=$(grep -E '^COMPOSE_PROFILES=' prod.env 2>/dev/null | cut -d= -f2-)
+[ -n "$profiles" ] && export COMPOSE_PROFILES="$profiles"
+
 # ---- deploy lock (never two deploys, never deploy-vs-rollback) -------------------------------
 exec 9>deploy.lock
 flock -n 9 || { log "ABORT: another deploy/rollback holds the lock"; exit 2; }

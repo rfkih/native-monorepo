@@ -18,6 +18,10 @@ HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-600}"
 cd "$DEPLOY_DIR" || { echo "FATAL: $DEPLOY_DIR missing"; exit 2; }
 log() { echo "[$(date -u +%FT%TZ)] $*" | tee -a deploy.log; }
 
+# Activate the tunnel profile (see prod-deploy.sh — protects the tunnels from --remove-orphans).
+profiles=$(grep -E '^COMPOSE_PROFILES=' prod.env 2>/dev/null | cut -d= -f2-)
+[ -n "$profiles" ] && export COMPOSE_PROFILES="$profiles"
+
 exec 9>deploy.lock
 flock -n 9 || { log "ABORT: a deploy/rollback already holds the lock"; exit 2; }
 

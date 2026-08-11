@@ -127,7 +127,7 @@ jobs:
           $SSH "$PROD_USER@$PROD_HOST" "mkdir -p ~/$PROD_DIR/releases ~/$PROD_DIR/scripts ~/$PROD_DIR/backups"
           # Stack definition + configs (prod.env is NEVER synced — it lives only on the VPS).
           rsync -az -e "$SSH" \
-            docker/compose.prod.yml docker/prod docker/postgres docker/keycloak docker/minio \
+            docker/compose.prod.yml docker/prod docker/postgres docker/keycloak docker/minio docker/debezium \
             "$PROD_USER@$PROD_HOST:~/$PROD_DIR/"
           rsync -az -e "$SSH" \
             scripts/prod-deploy.sh scripts/prod-rollback.sh \
