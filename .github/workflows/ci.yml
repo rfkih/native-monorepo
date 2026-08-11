@@ -51,6 +51,7 @@ jobs:
       backend_run: ${{ steps.plan.outputs.backend_run }}
       backend_targets: ${{ steps.plan.outputs.backend_targets }}
       console: ${{ steps.filter.outputs.console }}
+      employee: ${{ steps.filter.outputs.employee }}
       self_order: ${{ steps.filter.outputs['self-order'] }}
     steps:
       - name: Checkout
@@ -92,7 +93,11 @@ jobs:
             entitlement-service: ['services/entitlement-service/**']
             employee-service: ['services/employee-service/**']
             notification-service: ['services/notification-service/**']
+            payment-service: ['services/payment-service/**']
             console: ['frontend/console/**']
+            # The employee SPA shares source with the console (`@` -> ../console/src), so a
+            # console/src change must re-run its gate too (see frontend/employee/Dockerfile).
+            employee: ['frontend/employee/**', 'frontend/console/**']
             self-order: ['frontend/self-order/**']
 
       - name: Compute Gradle targets
@@ -101,7 +106,7 @@ jobs:
           CHANGED: ${{ steps.filter.outputs.changes }}
           FORCE_FULL: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full) }}
         run: |
-          ALL='["gateway","org-service","restaurant-service","carwash-service","barbershop-service","loyalty-service","finance-service","entitlement-service","employee-service","notification-service"]'
+          ALL='["gateway","org-service","restaurant-service","carwash-service","barbershop-service","loyalty-service","finance-service","entitlement-service","employee-service","notification-service","payment-service"]'
           if [ "$FORCE_FULL" = "true" ] || echo "$CHANGED" | jq -e 'any(. == "full-backend")' > /dev/null; then
             echo "backend_run=true" >> "$GITHUB_OUTPUT"
             echo "backend_targets=build" >> "$GITHUB_OUTPUT"
@@ -182,6 +187,34 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  employee:
+    name: employee lint + test + build
+    needs: changes
+    if: needs.changes.outputs.employee == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend/employee
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/employee/package-lock.json
+
+      # Only employee's OWN deps: its tsconfig `paths` pin every shared specifier to this
+      # package's node_modules, and the shared ../console/src is present from the checkout —
+      # so `tsc -b` (which type-checks both trees) needs no console install (see tsconfig.app.json).
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
   self_order:
     name: self-order build
     needs: changes
@@ -235,7 +268,7 @@ jobs:
   # filtering) count as success; any failure or cancellation turns the gate red.
   gate:
     name: gate
-    needs: [changes, backend, console, self_order, doc_drift, no_select_star]
+    needs: [changes, backend, console, employee, self_order, doc_drift, no_select_star]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -243,7 +276,7 @@ jobs:
       - name: Fail if any upstream job failed or was cancelled
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: |
-          echo "upstream results: changes=${{ needs.changes.result }} backend=${{ needs.backend.result }} console=${{ needs.console.result }} self_order=${{ needs.self_order.result }} doc_drift=${{ needs.doc_drift.result }} no_select_star=${{ needs.no_select_star.result }}"
+          echo "upstream results: changes=${{ needs.changes.result }} backend=${{ needs.backend.result }} console=${{ needs.console.result }} employee=${{ needs.employee.result }} self_order=${{ needs.self_order.result }} doc_drift=${{ needs.doc_drift.result }} no_select_star=${{ needs.no_select_star.result }}"
           exit 1
       - name: All required jobs passed
         run: echo "gate green"

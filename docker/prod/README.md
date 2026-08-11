@@ -18,9 +18,21 @@ The full platform **co-located on the VPS `middleware`** alongside an unrelated 
 | `cloudflared/config.yml.example` | Named-tunnel config for the **target** edge (once a domain exists). |
 
 ## How it will be operated (Phases 2–5)
-- **Images (Phase 2):** prod PULLS `${IMAGE_BASE}/<svc>:${NATIVE_IMAGE_TAG}`. `images.yml` must
-  first add **`payment-service`** + the **`employee-web`** frontend (not built today), and the
-  VPS needs a GHCR read token (`docker login ghcr.io`). Tag is pinned to an `@sha256` digest.
+- **Images (Phase 2 ✅ in the repo):** `images.yml` now builds **all 13** prod images —
+  the 11 services (incl. `payment-service`) + `console-web` + `employee-web`. They publish to
+  GHCR on merge to `master` (editing the workflow force-rebuilds the whole set). Two operator
+  steps remain (owner actions, not code):
+  1. **GHCR read token on the VPS** — a GitHub PAT (classic) with `read:packages`:
+     ```bash
+     echo <PAT> | docker login ghcr.io -u <github-user> --password-stdin
+     ```
+     (GHCR packages are private on first push; a token is required to pull.)
+  2. **Pin the release to digests** — after the images build for a release ref:
+     ```powershell
+     ./scripts/release-manifest.ps1 -Tag <git-sha-or-version>   # -> docker/compose.prod.images.yml
+     ```
+     Deploy/rollback with both files so prod runs the exact `@sha256` that passed QA:
+     `docker compose -f compose.prod.yml -f compose.prod.images.yml -p native-prod up -d`.
 - **Secrets:** copy `prod.env.example` → `prod.env`, generate FRESH values (`openssl rand -base64 32`).
   **Never reuse UAT secrets.** `chmod 600`, root-only, keep an encrypted offsite copy.
 - **Edge:** interim = two Cloudflare **quick tunnels** (`--profile quicktunnel`), ephemeral URLs

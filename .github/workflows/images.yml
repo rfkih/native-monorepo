@@ -40,6 +40,7 @@ jobs:
     outputs:
       services: ${{ steps.plan.outputs.services }}
       console: ${{ steps.plan.outputs.console }}
+      employee: ${{ steps.plan.outputs.employee }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -76,23 +77,30 @@ jobs:
             entitlement-service: ['services/entitlement-service/**']
             employee-service: ['services/employee-service/**']
             notification-service: ['services/notification-service/**']
+            payment-service: ['services/payment-service/**']
             console: ['frontend/console/**']
+            # The employee SPA shares source with the console (`@` -> ../console/src), so a
+            # console/src change must rebuild it too (see frontend/employee/Dockerfile).
+            employee: ['frontend/employee/**', 'frontend/console/**']
 
       - name: Compute image list
         id: plan
         env:
           CHANGED: ${{ steps.filter.outputs.changes }}
           CONSOLE: ${{ steps.filter.outputs.console }}
+          EMPLOYEE: ${{ steps.filter.outputs.employee }}
           FORCE_ALL: ${{ github.event_name == 'workflow_dispatch' && inputs.all }}
         run: |
-          ALL='["gateway","org-service","restaurant-service","carwash-service","barbershop-service","loyalty-service","finance-service","entitlement-service","employee-service","notification-service"]'
+          ALL='["gateway","org-service","restaurant-service","carwash-service","barbershop-service","loyalty-service","finance-service","entitlement-service","employee-service","notification-service","payment-service"]'
           if [ "$FORCE_ALL" = "true" ] || echo "$CHANGED" | jq -e 'any(. == "full-backend")' > /dev/null; then
             echo "services=$ALL" >> "$GITHUB_OUTPUT"
             echo "console=true" >> "$GITHUB_OUTPUT"
+            echo "employee=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           echo "services=$(echo "$CHANGED" | jq -c --argjson all "$ALL" 'map(select(. as $x | $all | index($x) != null))')" >> "$GITHUB_OUTPUT"
           echo "console=$CONSOLE" >> "$GITHUB_OUTPUT"
+          echo "employee=$EMPLOYEE" >> "$GITHUB_OUTPUT"
 
   service-images:
     name: service images
@@ -181,3 +189,38 @@ jobs:
           # the Gradle cache never gets evicted by image-layer churn.
           cache-from: type=gha,scope=console
           cache-to: type=gha,mode=min,scope=console
+
+  employee-image:
+    name: employee image
+    needs: changes
+    if: needs.changes.outputs.employee == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push employee-web image
+        uses: docker/build-push-action@v6
+        with:
+          # PARENT context: the employee SPA shares source with the console via the `@`
+          # alias -> ../console/src, so both frontend/employee and frontend/console must be
+          # present at build time (see frontend/employee/Dockerfile).
+          context: frontend
+          file: frontend/employee/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/employee-web:${{ github.sha }}
+            ghcr.io/${{ github.repository }}/employee-web:latest
+          cache-from: type=gha,scope=employee
+          cache-to: type=gha,mode=min,scope=employee

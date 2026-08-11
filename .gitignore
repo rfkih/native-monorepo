@@ -32,6 +32,9 @@ docker/uat.env
 docker/prod.env
 # Named-tunnel credentials (cloudflared tunnel <UUID>.json) — a secret, like a client cert.
 docker/prod/cloudflared/*.json
+# Digest-pinned image override — GENERATED per release by scripts/release-manifest.ps1
+# (ADR 0057). The immutable record is the git tag + the VPS deploy log, not this file.
+docker/compose.prod.images.yml
 
 # Signed Android installers served by the UAT edge (/*.apk -> docker/uat/downloads mount).
 # Binaries stay out of git; source of truth is C:\Users\rifki\native-till-signing\builds\.
