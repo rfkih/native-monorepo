@@ -1,0 +1,114 @@
+# Native AI quality gates (ADR 0057 §4) — Claude Code runs headless on every PR as three blocking
+# reviewers: code-review, QA, and security. Layered ON TOP of the deterministic ci.yml gates; the
+# backstop for what still slips through is the health-gated auto-rollback deploy (ADR 0057 §3).
+#
+#   - Branch protection should require BOTH `gate` (ci.yml) and `ai-gate` (this file).
+#   - FAIL-CLOSED: a missing/invalid verdict file, a CLI error, or a blown budget fails the check.
+#     The verdict is enforced deterministically here (jq), not by trusting the model's prose:
+#     the check fails if verdict != PASS OR any CRITICAL/HIGH finding exists.
+#   - Model: claude-opus-4-8. Cost: bounded by --max-budget-usd per gate (3 gates per PR);
+#     docs-only PRs skip the model call entirely (empty code diff -> synthetic PASS).
+#   - Requires the ANTHROPIC_API_KEY repository secret. NOTE: on a public repo, PRs from forks
+#     don't receive secrets — the gates only work for same-repo branches (the solo workflow here).
+name: ai-gates
+
+on:
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+# A newer push to the same PR supersedes the running review — cancel it.
+concurrency:
+  group: ai-gates-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ai:
+    name: ai ${{ matrix.gate }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false # one gate failing must not cancel the other two verdicts
+      matrix:
+        gate: [code-review, qa, security]
+    steps:
+      - name: Checkout (full history for the merge-base diff)
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Materialize the PR diff
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || 'origin/master' }}
+        run: |
+          # Three-dot = diff since the merge base. Docs/prose are excluded so a docs-only PR
+          # produces an empty diff and skips the model call below.
+          git diff "$BASE_SHA"...HEAD -- . ':(exclude)docs/**' ':(exclude)*.md' > ai-gate.diff
+          echo "diff bytes: $(wc -c < ai-gate.diff)"
+
+      - name: Run the ${{ matrix.gate }} agent
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ ! -s ai-gate.diff ]; then
+            echo "empty code diff — synthetic PASS, no model call"
+            printf '{"gate":"%s","verdict":"PASS","summary":"empty code diff (docs-only change) - nothing to review","findings":[]}\n' \
+              "${{ matrix.gate }}" > ai-verdict.json
+            exit 0
+          fi
+          # Read-only repo access + Write (for the verdict file) + read-only git. The agent's
+          # chat output is irrelevant; only ai-verdict.json is enforced, in the next step.
+          claude -p "$(cat .github/ai-gates/${{ matrix.gate }}.md)" \
+            --model claude-opus-4-8 \
+            --max-budget-usd 8 \
+            --allowedTools "Read" "Grep" "Glob" "Write" \
+              "Bash(git diff:*)" "Bash(git log:*)" "Bash(git show:*)"
+
+      - name: Enforce the verdict (fail closed)
+        run: |
+          test -s ai-verdict.json || { echo "::error::${{ matrix.gate }}: no verdict file produced — failing closed"; exit 1; }
+          jq . ai-verdict.json > /dev/null || { echo "::error::${{ matrix.gate }}: verdict is not valid JSON — failing closed"; exit 1; }
+          VERDICT=$(jq -r '.verdict // "FAIL"' ai-verdict.json)
+          BLOCKING=$(jq '[.findings[]? | select(.severity == "CRITICAL" or .severity == "HIGH")] | length' ai-verdict.json)
+          echo "## AI ${{ matrix.gate }}: $VERDICT ($BLOCKING blocking finding(s))" >> "$GITHUB_STEP_SUMMARY"
+          jq -r '.summary' ai-verdict.json >> "$GITHUB_STEP_SUMMARY"
+          jq -r '.findings[]? | "- [\(.severity)/\(.confidence // "?")] \(.file):\(.line // 0) — \(.title)"' ai-verdict.json >> "$GITHUB_STEP_SUMMARY"
+          if [ "$VERDICT" != "PASS" ] || [ "$BLOCKING" != "0" ]; then
+            echo "::error::AI ${{ matrix.gate }} gate FAILED — $BLOCKING CRITICAL/HIGH finding(s); see the job summary + verdict artifact"
+            exit 1
+          fi
+          echo "AI ${{ matrix.gate }}: PASS"
+
+      - name: Upload verdict artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-verdict-${{ matrix.gate }}
+          path: ai-verdict.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # The ONLY check branch protection should require from this workflow (alongside ci.yml's `gate`).
+  ai-gate:
+    name: ai-gate
+    needs: [ai]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fail if any AI gate failed or was cancelled
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
+      - name: All AI gates passed
+        run: echo "ai-gate green"

@@ -7,8 +7,9 @@
 #   - The Gradle cache is written ONLY on master (`cache-read-only` elsewhere) so PR
 #     churn never evicts the shared cache (10 GB per-repo Actions cache limit).
 #   - PRs never build container images — images.yml handles that on master pushes only.
-#   - Branch protection should require exactly ONE status check: `gate`. It always
-#     runs and fails if any upstream job failed; path-skipped jobs count as success.
+#   - Branch protection should require exactly TWO status checks: `gate` (this file) and
+#     `ai-gate` (ai-gates.yml — the Claude review/QA/security gates, ADR 0057 §4). Each
+#     always runs and fails if any upstream job failed; path-skipped jobs count as success.
 #
 # Testcontainers spins up real Postgres / Kafka / Redis / Keycloak containers; the
 # GitHub-hosted `ubuntu-latest` runner ships a working Docker daemon.
@@ -264,11 +265,29 @@ jobs:
       - name: Forbid SELECT * in production queries
         run: bash scripts/check-no-select-star.sh
 
+  # Fast, always-on: every NEW Flyway migration must be expand/contract (backward-compatible) and
+  # applied migrations are immutable — the release invariant that keeps prod's app-tier rollback
+  # safe (ADR 0057 §3: an image rollback never triggers a DB rollback). Scans only the diff vs the
+  # PR base (or the previous commit on push), so history is never rescanned.
+  migration_safety:
+    name: migration safety
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout (full history for the base diff)
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Enforce forward-only + expand/contract migrations
+        env:
+          MIGRATION_BASE_REF: ${{ github.event.pull_request.base.sha || 'HEAD~1' }}
+        run: bash scripts/check-migration-safety.sh
+
   # The ONLY check branch protection should require. Skipped upstream jobs (path
   # filtering) count as success; any failure or cancellation turns the gate red.
   gate:
     name: gate
-    needs: [changes, backend, console, employee, self_order, doc_drift, no_select_star]
+    needs: [changes, backend, console, employee, self_order, doc_drift, no_select_star, migration_safety]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -276,7 +295,7 @@ jobs:
       - name: Fail if any upstream job failed or was cancelled
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: |
-          echo "upstream results: changes=${{ needs.changes.result }} backend=${{ needs.backend.result }} console=${{ needs.console.result }} employee=${{ needs.employee.result }} self_order=${{ needs.self_order.result }} doc_drift=${{ needs.doc_drift.result }} no_select_star=${{ needs.no_select_star.result }}"
+          echo "upstream results: changes=${{ needs.changes.result }} backend=${{ needs.backend.result }} console=${{ needs.console.result }} employee=${{ needs.employee.result }} self_order=${{ needs.self_order.result }} doc_drift=${{ needs.doc_drift.result }} no_select_star=${{ needs.no_select_star.result }} migration_safety=${{ needs.migration_safety.result }}"
           exit 1
       - name: All required jobs passed
         run: echo "gate green"

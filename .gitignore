@@ -36,6 +36,10 @@ docker/prod/cloudflared/*.json
 # (ADR 0057). The immutable record is the git tag + the VPS deploy log, not this file.
 docker/compose.prod.images.yml
 
+# AI-gate working files — produced in CI by ai-gates.yml (and by local dry-runs of its prompts).
+ai-gate.diff
+ai-verdict.json
+
 # Signed Android installers served by the UAT edge (/*.apk -> docker/uat/downloads mount).
 # Binaries stay out of git; source of truth is C:\Users\rifki\native-till-signing\builds\.
 docker/uat/downloads/*.apk
