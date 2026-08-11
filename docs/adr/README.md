@@ -75,3 +75,4 @@ boundary, a security posture. Routine, local choices do not need one — use a c
 | [0054](0054-company-scoped-employee-usernames.md) | Company-scoped employee usernames + realm brute-force hardening | Proposed |
 | [0055](0055-employment-type-payroll-classification.md) | Employment-type payroll classification — pegawai tetap / bukan pegawai / pegawai tidak tetap | Proposed |
 | [0056](0056-moving-average-inventory-cost.md) | Moving weighted-average inventory cost (operational scope; value+qty source of truth) | Accepted |
+| [0057](0057-cloudflare-edge-rollback-first-prod-deploy.md) | Cloudflare-tunnel edge + rollback-first production deployment (co-located VPS) | Accepted |

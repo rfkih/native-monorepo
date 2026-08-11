@@ -26,6 +26,13 @@ build-logic/tmp/
 # PII/gift-card keys). Never commit; losing it strands the UAT data (see docker/uat/README.md).
 docker/uat.env
 
+# PROD stack runtime env — the public URL(s) + GENERATED SECRETS, distinct from UAT's
+# (ADR 0057; secrets NEVER reused across environments). Never commit; root-only on the VPS
+# + an encrypted offsite copy. Losing it strands the prod data. See docker/prod/README.md.
+docker/prod.env
+# Named-tunnel credentials (cloudflared tunnel <UUID>.json) — a secret, like a client cert.
+docker/prod/cloudflared/*.json
+
 # Signed Android installers served by the UAT edge (/*.apk -> docker/uat/downloads mount).
 # Binaries stay out of git; source of truth is C:\Users\rifki\native-till-signing\builds\.
 docker/uat/downloads/*.apk

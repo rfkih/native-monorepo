@@ -1,0 +1,29 @@
+# Native PROD — Cloudflare NAMED tunnel config (TARGET edge, once a domain is on Cloudflare).
+# ADR 0057. Copy to docker/prod/cloudflared/config.yml and fill in; used by the
+# `cloudflared-named` service (profile: namedtunnel) in compose.prod.yml.
+#
+# One-time setup on the VPS (interactive, run by the owner — needs a Cloudflare login):
+#   cloudflared tunnel login                       # opens a browser; authorizes the domain
+#   cloudflared tunnel create native-prod          # prints the tunnel UUID + writes <UUID>.json
+#   # copy <UUID>.json into docker/prod/cloudflared/ (gitignored) and set TUNNEL_UUID in prod.env
+#   cloudflared tunnel route dns native-prod app.example.com
+#   cloudflared tunnel route dns native-prod me.example.com
+# Then switch the stack to the named tunnel:
+#   docker compose ... --profile namedtunnel up -d cloudflared-named   (and stop the quick tunnels)
+#
+# Switching quick → named is an EDGE-ONLY change: set PUBLIC_URL/EMPLOYEE_PUBLIC_URL in
+# prod.env to the domain URLs and re-wire Keycloak once (scripts/prod-up.ps1). No app change.
+
+tunnel: REPLACE_WITH_TUNNEL_UUID
+credentials-file: /etc/cloudflared/REPLACE_WITH_TUNNEL_UUID.json
+no-autoupdate: true
+
+ingress:
+  # Business origin — console + /auth (Keycloak issuer) + /api.
+  - hostname: app.example.com
+    service: http://edge:8080
+  # Employee self-service origin — employee SPA + /api.
+  - hostname: me.example.com
+    service: http://edge:8081
+  # Required catch-all: everything else is refused.
+  - service: http_status:404
