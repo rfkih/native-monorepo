@@ -148,7 +148,7 @@ export function IncomeStatement() {
               note={t('statements.ofRevenue', { pct: formatPercent(expenseRatio, locale) })}
             />
             <SummaryCard
-              chipClass="bg-profit"
+              chipClass={profit ? 'bg-profit' : 'bg-loss'}
               label={profit ? t('statements.netProfit') : t('statements.netLoss')}
               value={formatMoney(net, currency, locale)}
               valueClass={profit ? 'text-profit-ink' : 'text-loss'}
