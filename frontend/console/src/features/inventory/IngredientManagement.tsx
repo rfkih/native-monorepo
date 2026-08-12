@@ -411,7 +411,10 @@ function IngredientFormDialog({
           id: ingredient.id,
           name: name.trim(),
           unit: stored.unit,
-          displayUnit: stored.displayUnit,
+          // '' explicitly CLEARS the display unit (switching kg→pcs/g); the server treats a blank as
+          // "back to a base unit" and null as "leave unchanged" (PATCH), so send '' not null here —
+          // else a stale display_unit='kg' with unit='pcs' would violate the pairing CHECK.
+          displayUnit: stored.displayUnit ?? '',
           unitCostMinor: costMinor,
           costCurrency: costMinor != null ? baseCurrency : null,
         },

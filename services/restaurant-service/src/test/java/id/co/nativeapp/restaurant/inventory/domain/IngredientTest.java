@@ -165,6 +165,23 @@ class IngredientTest {
     assertThat(ingredient.getCostCurrency()).isEqualTo("IDR");
   }
 
+  @Test
+  void updateDisplayUnitLeavesOnNullClearsOnBlankAndSetsOnValue() {
+    ingredient.setDisplayUnit("kg");
+    // null = leave unchanged (PATCH): the display unit survives a plain rename.
+    ingredient.update("Tepung", null, null, null, null);
+    assertThat(ingredient.getDisplayUnit()).isEqualTo("kg");
+    // "" = CLEAR (switching a weight item to a base/count unit) — the console sends a blank for
+    // this,
+    // so a stale display_unit can never outlive its base unit and trip the pairing CHECK.
+    ingredient.update(null, "pcs", "", null, null);
+    assertThat(ingredient.getUnit()).isEqualTo("pcs");
+    assertThat(ingredient.getDisplayUnit()).isNull();
+    // a value sets it.
+    ingredient.update(null, "ml", "liter", null, null);
+    assertThat(ingredient.getDisplayUnit()).isEqualTo("liter");
+  }
+
   // -----------------------------------------------------------------------
   // Moving weighted-average cost (V36) — stock_value_minor is the source of truth
   // -----------------------------------------------------------------------

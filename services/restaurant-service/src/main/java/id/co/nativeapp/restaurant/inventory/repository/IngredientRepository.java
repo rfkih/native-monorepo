@@ -54,18 +54,19 @@ public interface IngredientRepository extends JpaRepository<Ingredient, UUID> {
    * re-established at the next ingredient stocktake.
    *
    * <p><strong>Moving-average value (V36).</strong> The value bucket scales DOWN with quantity so a
-   * sale never moves the derived unit cost ({@code value / qty} is preserved) — REQUIRED, else value
-   * stays flat while qty falls and the next receive blends against an inflated average. Depleting to
-   * or past the current stock books ALL remaining value out (value -> 0), matching stock -> 0. Both
-   * SET expressions read the pre-update {@code stock_qty}, so they stay consistent; the value
-   * subtraction can never exceed the current value (its numerator qty is capped by the CASE), so the
-   * V36 {@code ck_ingredient_stock_value_nonneg} + {@code ck_ingredient_value_requires_stock} CHECKs
-   * hold. {@code unit_cost_minor} is deliberately left untouched — proportional scaling keeps the
-   * average unchanged. (PostgreSQL {@code round()} is HALF_UP vs the aggregate's HALF_EVEN — a
-   * sub-minor-unit difference on the value bucket only; the DERIVED average is unaffected because qty
-   * and value scale together. Note a physical opname does NOT reset this bucket — {@code setStock}
-   * likewise scales it proportionally — so the average's residual rounding drift is only cleared by a
-   * full stockout, value -> 0, or a manual revalue.)
+   * sale never moves the derived unit cost ({@code value / qty} is preserved) — REQUIRED, else
+   * value stays flat while qty falls and the next receive blends against an inflated average.
+   * Depleting to or past the current stock books ALL remaining value out (value -> 0), matching
+   * stock -> 0. Both SET expressions read the pre-update {@code stock_qty}, so they stay
+   * consistent; the value subtraction can never exceed the current value (its numerator qty is
+   * capped by the CASE), so the V36 {@code ck_ingredient_stock_value_nonneg} + {@code
+   * ck_ingredient_value_requires_stock} CHECKs hold. {@code unit_cost_minor} is deliberately left
+   * untouched — proportional scaling keeps the average unchanged. (PostgreSQL {@code round()} is
+   * HALF_UP vs the aggregate's HALF_EVEN — a sub-minor-unit difference on the value bucket only;
+   * the DERIVED average is unaffected because qty and value scale together. Note a physical opname
+   * does NOT reset this bucket — {@code setStock} likewise scales it proportionally — so the
+   * average's residual rounding drift is only cleared by a full stockout, value -> 0, or a manual
+   * revalue.)
    *
    * @return 1 if the row exists (even when already at 0); 0 if the ingredient no longer exists
    */

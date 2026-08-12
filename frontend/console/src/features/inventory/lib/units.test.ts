@@ -97,6 +97,15 @@ describe('shownUnitCostMinor — exact per-shown-unit cost from the total value'
     const ing = { stockQty: 0, stockValueMinor: 0, unitCostMinor: 12, displayUnit: 'kg' }
     expect(shownUnitCostMinor(ing)).toBe(12_000)
   })
+  it('does not return NaN when the server omits stockValueMinor (pre-ADR-0056 backend)', () => {
+    const ing = {
+      stockQty: 1500,
+      stockValueMinor: undefined as unknown as number,
+      unitCostMinor: 12,
+      displayUnit: 'kg',
+    }
+    expect(shownUnitCostMinor(ing)).toBe(12_000) // cache ×factor, never NaN → no "IDRNaN"
+  })
 })
 
 describe('formatShownQty', () => {

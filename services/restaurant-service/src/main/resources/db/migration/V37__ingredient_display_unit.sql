@@ -45,18 +45,21 @@ ALTER TABLE ingredient NO FORCE ROW LEVEL SECURITY;
 -- semantics), so `stock_qty * 1000` below is OLD stock_qty * 1000 — the same value being written as
 -- the NEW stock_qty in this very statement — and the unit_cost_minor recompute divides by that same
 -- new quantity. stock_value_minor is deliberately absent from this SET list: the total value is
--- unchanged, only how it is expressed (qty x per-base-unit cache) changes. Guard: only recompute the
--- cache where the OLD qty was positive (a positive divisor) and a cache already existed to recompute;
--- otherwise the ELSE branch reads unit_cost_minor back into itself, leaving it byte-for-byte
--- unchanged (still NULL, or still whatever it already was).
+-- unchanged, only how it is expressed (qty x per-base-unit cache) changes. The cache recompute has
+-- three cases: a NULL cache stays NULL (uncosted); a POSITIVE-qty row derives the per-base cache
+-- exactly from value / (new qty); a ZERO-qty COSTED row (value is 0 by the V36 invariant, so it
+-- cannot be re-derived from value) instead rescales its retained per-DISPLAY cache down by the fixed
+-- 1000 factor — WITHOUT this it would keep the per-kg number while unit flips to g, a 1000x cache
+-- that the next costless restock would bake into stock_value_minor (the money source of truth).
 UPDATE ingredient
    SET display_unit = 'kg',
        unit = 'g',
        stock_qty = stock_qty * 1000,
        unit_cost_minor = CASE
-           WHEN stock_qty > 0 AND unit_cost_minor IS NOT NULL
+           WHEN unit_cost_minor IS NULL THEN NULL
+           WHEN stock_qty > 0
                THEN round(stock_value_minor::numeric / (stock_qty * 1000))::bigint
-           ELSE unit_cost_minor
+           ELSE round(unit_cost_minor::numeric / 1000)::bigint
        END
  WHERE unit = 'kg';
 
@@ -68,9 +71,10 @@ UPDATE ingredient
        unit = 'ml',
        stock_qty = stock_qty * 1000,
        unit_cost_minor = CASE
-           WHEN stock_qty > 0 AND unit_cost_minor IS NOT NULL
+           WHEN unit_cost_minor IS NULL THEN NULL
+           WHEN stock_qty > 0
                THEN round(stock_value_minor::numeric / (stock_qty * 1000))::bigint
-           ELSE unit_cost_minor
+           ELSE round(unit_cost_minor::numeric / 1000)::bigint
        END
  WHERE unit IN ('liter', 'l', 'L');
 

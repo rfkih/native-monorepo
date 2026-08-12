@@ -62,7 +62,10 @@ public class Ingredient extends Auditable {
   @Column(name = "display_unit", length = 16)
   @Nullable private String displayUnit;
 
-  /** Current stock in the base {@link #unit}, ALWAYS tracked — unlike {@code MenuItem.stockQuantity} (ADR 0046). */
+  /**
+   * Current stock in the base {@link #unit}, ALWAYS tracked — unlike {@code MenuItem.stockQuantity}
+   * (ADR 0046).
+   */
   @Column(name = "stock_qty", nullable = false)
   private int stockQty;
 
@@ -139,7 +142,9 @@ public class Ingredient extends Auditable {
     return displayUnit;
   }
 
-  /** Sets the display-unit label (see the field javadoc); {@code null} = display in the base unit. */
+  /**
+   * Sets the display-unit label (see the field javadoc); {@code null} = display in the base unit.
+   */
   public void setDisplayUnit(@Nullable String displayUnit) {
     this.displayUnit = displayUnit;
   }
@@ -266,10 +271,10 @@ public class Ingredient extends Auditable {
 
   /**
    * Receives a purchased quantity at its actual paid price — the moving weighted-average update
-   * (V36). Adds the EXACT {@code amountPaidMinor} to the value bucket and {@code addedQty} to stock;
-   * the derived unit cost ({@link #getUnitCostMinor()}) re-blends. Capturing the TOTAL paid for the
-   * receipt (never a per-unit price) is what keeps the average exact — a Rp 12,75/unit blend is
-   * never rounded away.
+   * (V36). Adds the EXACT {@code amountPaidMinor} to the value bucket and {@code addedQty} to
+   * stock; the derived unit cost ({@link #getUnitCostMinor()}) re-blends. Capturing the TOTAL paid
+   * for the receipt (never a per-unit price) is what keeps the average exact — a Rp 12,75/unit
+   * blend is never rounded away.
    *
    * <p>On a previously UNCOSTED ingredient this establishes the cost currency and values the WHOLE
    * resulting stock at this receipt's unit price (pre-existing units are assumed acquired at the
@@ -361,7 +366,8 @@ public class Ingredient extends Auditable {
     long newValue;
     if (stockQty > 0) {
       // Scale value with qty (preserves the average) — single HALF_EVEN rounding via mulDiv.
-      newValue = Money.ofMinor(stockValueMinor, costCurrency).mulDiv(newQty, stockQty).amountMinor();
+      newValue =
+          Money.ofMinor(stockValueMinor, costCurrency).mulDiv(newQty, stockQty).amountMinor();
     } else {
       // From empty: value the new units at the last-known unit cost (a costed ingredient always
       // retains a non-null unitCostMinor cache — setUnitCost enforces both-or-neither).

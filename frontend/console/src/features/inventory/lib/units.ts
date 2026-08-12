@@ -90,7 +90,12 @@ export function shownUnitCostMinor(ing: {
 }): number | null {
   if (ing.unitCostMinor == null) return null
   const factor = shownFactor(ing)
-  if (ing.stockQty > 0) return Math.round((ing.stockValueMinor * factor) / ing.stockQty)
+  // Derive from the exact total when there is stock AND the server actually sent a value — a
+  // pre-ADR-0056 backend omits stockValueMinor (undefined), which would poison the divide into NaN
+  // and render "IDRNaN"; fall back to the per-base cache scaled by the factor in that case.
+  if (ing.stockQty > 0 && Number.isFinite(ing.stockValueMinor)) {
+    return Math.round((ing.stockValueMinor * factor) / ing.stockQty)
+  }
   return ing.unitCostMinor * factor
 }
 
