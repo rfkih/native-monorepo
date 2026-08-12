@@ -126,6 +126,31 @@ class DeviceCredentialAcceptanceTest {
   }
 
   // ===========================================================================
+  // GET /api/v1/users must not 404 a not-yet-bootstrapped tenant (ADR 0054 regression)
+  // ===========================================================================
+
+  @Test
+  void listUsersReturns200NotA404WhenTheTenantHasNoCompanyRow() throws Exception {
+    // ADR 0054 made GET /api/v1/users read the tenant's company_code (to strip the <companyCode>.
+    // prefix off scoped logins for display). A not-yet-bootstrapped tenant has no `company` row yet
+    // (resetDatabase truncated it) — the endpoint must still return the team (its own contract:
+    // "empty list, not a 404, if the company has no users yet"), just without prefix-stripping.
+    // Before the fix this threw NoSuchElementException -> 404.
+    String token = tokenForOwner();
+    JsonNode team = getJson(token, "/api/v1/users");
+    assertThat(team.isArray()).isTrue();
+    boolean ownerListed = false;
+    for (JsonNode member : team) {
+      if (OWNER_USERNAME.equals(member.path("username").asString())) {
+        ownerListed = true;
+      }
+    }
+    assertThat(ownerListed)
+        .as("owner is listed with its raw username even when no company row exists")
+        .isTrue();
+  }
+
+  // ===========================================================================
   // Full lifecycle
   // ===========================================================================
 
