@@ -24,6 +24,7 @@ import { ListSkeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/features/_shared/financeUi'
 import type { OrgUnit } from '@/features/org/api'
 import { useTeam } from '@/features/team/api'
+import { displayLoginId } from '@/lib/loginId'
 import { useSession } from '@/lib/session'
 import { cn } from '@/lib/cn'
 import { useEmployees, type EmployeeListRow } from './api'
@@ -118,10 +119,7 @@ export function EmployeesTab({
   const usernameByUserId = useMemo(() => {
     const code = company?.companyCode
     return new Map(
-      (team.data ?? []).map((m) => {
-        const full = !code || m.username.includes('@') ? m.username : `${code}.${m.username}`
-        return [m.id, full] as const
-      }),
+      (team.data ?? []).map((m) => [m.id, displayLoginId(m.username, code)] as const),
     )
   }, [team.data, company?.companyCode])
   const [search, setSearch] = useState('')

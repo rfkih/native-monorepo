@@ -31,6 +31,8 @@ import { Field, TextInput } from '@/components/ui/Field'
 import { useTeam } from '@/features/team/api'
 import { localeOf } from '@/i18n'
 import { cn } from '@/lib/cn'
+import { displayLoginId } from '@/lib/loginId'
+import { useSession } from '@/lib/session'
 import {
   useEmployee,
   useEmployeeLogin,
@@ -78,6 +80,7 @@ export function EmployeeDetailDrawer({
   onSetOperatorPin: () => void
 }) {
   const { t, i18n } = useTranslation()
+  const { company } = useSession()
   const locale = localeOf(i18n.language)
   const employeeId = employee.employeeId
   const hasLogin = !!employee.userId
@@ -132,7 +135,13 @@ export function EmployeeDetailDrawer({
   }
 
   const userId = login.data?.userId ?? employee.userId
-  const username = team.data?.find((m) => m.id === userId)?.username ?? null
+  // The team list returns the LOCAL username (org-service strips the `<companyCode>.` prefix for a
+  // clean display). Re-compose the FULL company-scoped login id here — that is what the employee
+  // actually types to sign in (ADR 0054), and handing over the bare local (`leha`) was the bug.
+  const username = displayLoginId(
+    team.data?.find((m) => m.id === userId)?.username,
+    company?.companyCode,
+  ) || null
   const tempPassword = revealedTemp ?? login.data?.temporaryPassword ?? null
 
   async function handleReset() {
