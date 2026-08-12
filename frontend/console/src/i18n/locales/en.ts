@@ -1701,6 +1701,9 @@ export const en = {
       actionTerminate: 'Terminate',
       actionCreateLogin: 'Create login',
       hasLogin: 'Has login',
+      search: 'Search name or username…',
+      noMatch: 'No employees match your search.',
+      copyUsername: 'Copy username {{username}}',
       manage: 'Manage',
     },
     createLogin: {
