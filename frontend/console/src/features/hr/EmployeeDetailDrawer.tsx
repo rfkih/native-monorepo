@@ -22,17 +22,31 @@
 
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Check, Copy, KeyRound, Lock, Pencil, Plus, Trash2, UserPlus, X } from 'lucide-react'
+import {
+  Check,
+  Copy,
+  KeyRound,
+  Lock,
+  Pencil,
+  Plus,
+  ShieldCheck,
+  Trash2,
+  TriangleAlert,
+  UserPlus,
+  X,
+} from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Drawer } from '@/components/ui/Drawer'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { Field, TextInput } from '@/components/ui/Field'
-import { useTeam } from '@/features/team/api'
+import { useTeam, useUpdateMember } from '@/features/team/api'
 import { localeOf } from '@/i18n'
+import { BUSINESS_ROLES, type BusinessRole } from '@/lib/authContext'
 import { cn } from '@/lib/cn'
 import { displayLoginId } from '@/lib/loginId'
 import { useSession } from '@/lib/session'
+import { hasAccessRoleMismatch, impliedAccessRole, uniqueBusinessRoles } from './accessRoleMatch'
 import {
   useEmployee,
   useEmployeeLogin,
@@ -99,6 +113,10 @@ export function EmployeeDetailDrawer({
   const relink = useLinkLogin({ companyId, actor })
   const unlink = useUnlinkLogin({ companyId, actor })
   const updateEmployee = useUpdateEmployee({ companyId, actor })
+  // Phase 1 (HR-job-title vs. app-access-role visibility) — grants the implied access role onto
+  // the SAME Team endpoint the Team page's own change-role dialog uses (`PATCH /api/v1/users/{id}`,
+  // OPS-only), so this button only ever renders inside the `canManageLogins` branch below.
+  const grantAccess = useUpdateMember({ companyId, actor })
   const [busy, setBusy] = useState(false)
   // The freshly reset password, shown IMMEDIATELY from the reset result — so even if the follow-up
   // re-hold call fails, the owner still has the working credential in front of them (review Finding 5).
@@ -184,6 +202,30 @@ export function EmployeeDetailDrawer({
     : t('hr.list.unassigned')
   const monthYear = (iso: string | null) =>
     iso ? new Intl.DateTimeFormat(locale, { month: 'short', year: 'numeric' }).format(new Date(iso)) : null
+
+  // Phase 1 (HR-job-title vs. app-access-role visibility) — the CURRENT assignment's job title
+  // (same row the header/`headline` above already reads) vs. the linked login's actual Team page
+  // access role(s). `accessMember` reuses the SAME `team` query the username lookup above already
+  // fires (OPS-only, `hasLogin && canManageLogins`) — no extra API call.
+  const currentAssignmentRole = assignments[0]?.role ?? null
+  const accessMember = team.data?.find((m) => m.id === userId) ?? null
+  const impliedRole = impliedAccessRole(currentAssignmentRole)
+  const accessMismatch =
+    accessMember != null && hasAccessRoleMismatch(currentAssignmentRole, accessMember.roles)
+
+  async function handleGrantAccess() {
+    if (!accessMember || !impliedRole) return
+    try {
+      // ADDITIVE union — useUpdateMember's PATCH replaces the whole role set, so this must include
+      // every role the login already holds, not just the newly implied one.
+      await grantAccess.mutateAsync({
+        id: accessMember.id,
+        body: { roles: uniqueBusinessRoles([...accessMember.roles, impliedRole]) },
+      })
+    } catch {
+      // surfaced by grantAccess.isError below
+    }
+  }
 
   return (
     <Drawer onClose={onClose} ariaLabel={employee.fullName}>
@@ -377,6 +419,68 @@ export function EmployeeDetailDrawer({
           )}
         </div>
 
+        {/* App access (Phase 1 — HR-job-title vs. app-access-role visibility fix). The job title
+            above is FREE TEXT and grants nothing; this shows the login's REAL Keycloak access
+            role(s) (the Team page) and, on a mismatch, offers a 1-click additive grant. */}
+        <SectionHeading className="mt-6">{t('hr.appAccess.title')}</SectionHeading>
+        <div className="mt-2 rounded-[14px] border border-line p-4">
+          {!hasLogin ? (
+            <p className="text-sm text-ink-3">{t('hr.appAccess.noLogin')}</p>
+          ) : !canManageLogins ? (
+            // useTeam (org-service /api/v1/users) is OPS-only, so it is never even FETCHED for an
+            // hr-alone viewer (same reasoning as the Username row above) — there is no real access-
+            // role value to show read-only here, only this restriction notice.
+            <p className="text-sm text-ink-3">{t('hr.appAccess.restricted')}</p>
+          ) : team.isLoading ? (
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-4 w-56" />
+            </div>
+          ) : !accessMember ? (
+            <p className="text-sm text-ink-3">{t('hr.appAccess.unknown')}</p>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {accessMember.roles.length === 0 ? (
+                  <Badge tone="neutral">{t('hr.appAccess.none')}</Badge>
+                ) : (
+                  accessMember.roles.map((r) => <AccessRoleBadge key={r} role={r} />)
+                )}
+              </div>
+
+              {accessMismatch && impliedRole ? (
+                <div className="space-y-2.5 rounded-xl border border-amber/30 bg-amber-tint px-3.5 py-2.5">
+                  <p className="flex items-start gap-2 text-xs leading-relaxed text-amber">
+                    <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                    {t('hr.appAccess.mismatch', {
+                      role: currentAssignmentRole,
+                      access:
+                        accessMember.roles.length > 0
+                          ? accessMember.roles.map((r) => t(`team.role.${r}`)).join(', ')
+                          : t('hr.appAccess.none'),
+                    })}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9 text-xs"
+                    disabled={grantAccess.isPending}
+                    onClick={handleGrantAccess}
+                  >
+                    <ShieldCheck className="size-3.5" />
+                    {grantAccess.isPending
+                      ? t('hr.appAccess.granting')
+                      : t('hr.appAccess.grant', { role: t(`team.role.${impliedRole}`) })}
+                  </Button>
+                  {grantAccess.isError ? (
+                    <p className="text-xs text-loss">{t('hr.appAccess.grantError')}</p>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
+
         {/* Operator PIN (ADR 0049 P1) — the till PIN, separate from the console login above. Never
             revealed here (write-only, rule 6): the action always opens a fresh set/reset dialog. */}
         <SectionHeading className="mt-6">{t('hr.detail.operatorPinTitle')}</SectionHeading>
@@ -565,6 +669,22 @@ function SectionHeading({ children, className }: { children: React.ReactNode; cl
       {children}
     </div>
   )
+}
+
+/**
+ * A single app-access-role badge — mirrors `features/team/Team.tsx`'s own `RoleBadge` (tinted
+ * fill, `owner` alone carries the brand tint, every other role neutral) so the same role reads
+ * identically here and on the Team page. Not imported from `Team.tsx` (that file exports no
+ * components) — reuses `BUSINESS_ROLES`/`team.role.<role>`, the single source of truth for the 8
+ * access roles, instead of redefining the list.
+ */
+function AccessRoleBadge({ role }: { role: string }) {
+  const { t } = useTranslation()
+  const tone = role === 'owner' ? ('emerald' as const) : ('neutral' as const)
+  const label = (BUSINESS_ROLES as readonly string[]).includes(role)
+    ? t(`team.role.${role as BusinessRole}`)
+    : role
+  return <Badge tone={tone}>{label}</Badge>
 }
 
 function Detail({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
