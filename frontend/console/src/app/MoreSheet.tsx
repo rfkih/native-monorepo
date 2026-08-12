@@ -16,6 +16,7 @@ import {
   ClipboardCheck,
   CookingPot,
   Inbox,
+  Languages,
   LogOut,
   Moon,
   NotebookText,
@@ -25,6 +26,7 @@ import {
   Sun,
 } from 'lucide-react'
 import { MobileSheet } from '@/components/mobile/MobileSheet'
+import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { effectiveRoles, useAuth } from '@/lib/authContext'
 import { usePageAccess } from '@/lib/pageAccess'
 import { useTierAccess } from '@/lib/featureTier'
@@ -201,6 +203,16 @@ export function MoreSheet({
         ) : null}
 
         <div className="my-2 h-px bg-line" />
+        {/* Preferences — language + theme moved off the phone top bar (they crowded a 360px header). */}
+        <div className={cn(ROW_CLASS, 'justify-between hover:bg-transparent')}>
+          <span className="flex items-center gap-3">
+            <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-ink-50 text-ink-2">
+              <Languages className="size-[17px]" aria-hidden />
+            </span>
+            {t('nav.language')}
+          </span>
+          <LanguageSwitcher />
+        </div>
         <button type="button" onClick={toggle} className={ROW_CLASS}>
           <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-ink-50 text-ink-2">
             {theme === 'dark' ? <Sun className="size-[17px]" aria-hidden /> : <Moon className="size-[17px]" aria-hidden />}

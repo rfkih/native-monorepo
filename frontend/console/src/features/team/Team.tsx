@@ -917,7 +917,7 @@ export function Team() {
           ariaLabel={t('team.title')}
           value={roleFilter}
           onChange={setRoleFilter}
-          className="h-11 max-w-full overflow-x-auto"
+          className="flex-wrap max-w-full"
           options={[
             { value: 'all', label: t('team.filterAll') },
             ...ROLES.map((r) => ({ value: r, label: t(`team.role.${r}`) })),

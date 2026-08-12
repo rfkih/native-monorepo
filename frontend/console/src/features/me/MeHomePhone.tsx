@@ -22,7 +22,6 @@ import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { Wordmark } from '@/components/Wordmark'
-import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { EmptyState } from '@/features/_shared/financeUi'
 import { useMyClaims } from '@/features/expenses/api'
 import { effectiveRoles, useAuth } from '@/lib/authContext'
@@ -126,7 +125,8 @@ export function MeHomePhone() {
         >
           <Settings className="size-[18px]" aria-hidden />
         </Link>
-        <LanguageSwitcher />
+        {/* Language lives on the account page (the gear → /me/account) — keeping the EN/ID toggle
+            here pushed this compact h-14 header past a 360px (S23) viewport. */}
         {AUTH_MODE === 'oidc' && auth.authenticated ? (
           <button
             type="button"

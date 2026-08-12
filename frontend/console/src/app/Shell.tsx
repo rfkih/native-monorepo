@@ -121,31 +121,38 @@ export function Shell({ children }: { children: ReactNode }) {
 
           {company ? <CompanySwitcher /> : null}
 
+          {/* Theme, language and sign-out are HIDDEN on phone (< sm): they live in the More sheet,
+              reachable from the bottom tab bar. Keeping them here crowded the 360px top bar and made
+              sub-44px tap targets. Tablet/desktop (>= sm) keep them inline. */}
           <button
             type="button"
             onClick={toggle}
             aria-label={t('a11y.toggleTheme')}
             title={t('a11y.toggleTheme')}
-            className="grid size-10 place-items-center rounded-full border border-line bg-surface text-ink-3 transition-colors hover:bg-hover hover:text-ink"
+            className="hidden size-10 place-items-center rounded-full border border-line bg-surface text-ink-3 transition-colors hover:bg-hover hover:text-ink sm:grid"
           >
             {theme === 'dark' ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}
           </button>
 
-          <LanguageSwitcher />
+          <div className="hidden sm:block">
+            <LanguageSwitcher />
+          </div>
 
-          {AUTH_MODE === 'oidc' && auth.authenticated ? (
-            <button
-              type="button"
-              onClick={auth.logout}
-              title={auth.actor}
-              className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-sm font-medium text-ink-3 transition-colors hover:text-ink"
-            >
-              <LogOut className="size-4" />
-              <span className="hidden sm:inline">{t('nav.logout')}</span>
-            </button>
-          ) : (
-            <Avatar />
-          )}
+          <div className="hidden items-center sm:flex">
+            {AUTH_MODE === 'oidc' && auth.authenticated ? (
+              <button
+                type="button"
+                onClick={auth.logout}
+                title={auth.actor}
+                className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-sm font-medium text-ink-3 transition-colors hover:text-ink"
+              >
+                <LogOut className="size-4" />
+                <span className="hidden sm:inline">{t('nav.logout')}</span>
+              </button>
+            ) : (
+              <Avatar />
+            )}
+          </div>
         </header>
 
         <main className="mx-auto w-full max-w-[1200px] px-5 py-7 lg:px-8">{children}</main>

@@ -33,7 +33,7 @@ export function PeriodNav({
         type="button"
         aria-label={prevLabel}
         onClick={onPrev}
-        className="grid size-8 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-hover hover:text-ink"
+        className="grid size-10 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-hover hover:text-ink"
       >
         <ChevronLeft className="size-4" />
       </button>
@@ -44,7 +44,7 @@ export function PeriodNav({
         type="button"
         aria-label={nextLabel}
         onClick={onNext}
-        className="grid size-8 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-hover hover:text-ink"
+        className="grid size-10 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-hover hover:text-ink"
       >
         <ChevronRight className="size-4" />
       </button>

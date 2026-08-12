@@ -32,7 +32,10 @@ export function Segmented<T extends string>({
       role="tablist"
       aria-label={ariaLabel}
       className={cn(
-        'inline-flex h-10 items-center gap-[3px] rounded-xl bg-ink-50 p-1',
+        // min-h (not fixed h) so a wrapping variant (className="flex-wrap", e.g. the invoices status
+        // filter on a 360px phone) grows to fit its rows instead of the 2nd row spilling out of the
+        // box and being overlapped by the next element. min-h-11 (44px) is a comfortable touch row.
+        'inline-flex min-h-11 items-center gap-[3px] rounded-xl bg-ink-50 p-1',
         fluid && 'flex w-full',
         className,
       )}
@@ -49,7 +52,7 @@ export function Segmented<T extends string>({
             title={option.disabled ? option.title : undefined}
             onClick={() => onChange(option.value)}
             className={cn(
-              'grid h-8 place-items-center rounded-lg text-[13px] transition-colors',
+              'grid h-9 place-items-center rounded-lg text-[13px] transition-colors',
               fluid ? 'min-w-0 flex-1 px-1' : 'px-4',
               'disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-ink-3',
               active
