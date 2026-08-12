@@ -1693,6 +1693,10 @@ export const id = {
       noMatch: 'Tidak ada karyawan yang cocok.',
       copyUsername: 'Salin username {{username}}',
       manage: 'Kelola',
+      // Fase 1 (visibilitas jabatan HR vs peran akses aplikasi) — penanda kecil pada baris saat
+      // jabatan menyiratkan peran akses yang belum dimiliki login terkait.
+      accessMismatchHint:
+        'Jabatan menyiratkan peran akses aplikasi yang belum dimiliki login ini — buka Kelola untuk meninjau.',
     },
     createLogin: {
       title: 'Buat login — {{name}}',
@@ -1792,6 +1796,27 @@ export const id = {
       operatorPinHint:
         'Kode 4–6 digit yang dimasukkan karyawan ini di mesin kasir untuk mencatat penjualan atas namanya.',
       operatorPinAction: 'Atur / setel ulang PIN',
+    },
+    // Fase 1 (perbaikan visibilitas jabatan HR vs peran akses aplikasi) — jabatan HR
+    // (`assignment.role`, teks bebas) dan peran akses aplikasi (peran Keycloak yang ditegakkan
+    // gateway, halaman Team) adalah dua hal yang TIDAK TERKAIT; bagian ini menampilkan peran akses
+    // sebenarnya di samping jabatan dan menawarkan pemberian akses satu klik saat keduanya
+    // terlihat seharusnya cocok tapi tidak.
+    appAccess: {
+      title: 'Akses aplikasi',
+      noLogin: 'Belum ada login — tidak ada yang bisa diberi akses.',
+      // useTeam (org-service /api/v1/users) khusus OPS — login yang hanya berperan hr tidak
+      // pernah bisa memanggilnya (403 di gateway), sehingga tidak ada nilai peran akses nyata
+      // untuk ditampilkan hanya-baca di sini; batasan yang sama sudah menyembunyikan Nama
+      // pengguna di atas untuk penampil yang sama.
+      restricted: 'Hanya pemilik atau manajer yang bisa melihat peran akses login ini.',
+      unknown: 'Login ini tidak ditemukan di halaman Team — mungkin baru saja dibuat.',
+      none: 'tidak ada peran akses',
+      mismatch:
+        'Jabatan “{{role}}” belum menjadi peran akses aplikasi — menu login ini masih mengikuti {{access}}.',
+      grant: 'Berikan akses {{role}}',
+      granting: 'Memberikan…',
+      grantError: 'Akses gagal diperbarui. Coba lagi.',
     },
     roles: {
       chef: 'Koki',

@@ -1705,6 +1705,10 @@ export const en = {
       noMatch: 'No employees match your search.',
       copyUsername: 'Copy username {{username}}',
       manage: 'Manage',
+      // Phase 1 (HR-job-title vs. app-access-role visibility) — the tiny row indicator when a job
+      // title implies an access role the linked login doesn't actually hold yet.
+      accessMismatchHint:
+        'Job title implies an app-access role this login doesn’t have yet — open Manage to review.',
     },
     createLogin: {
       title: 'Create login — {{name}}',
@@ -1802,6 +1806,25 @@ export const en = {
       operatorPinHint:
         'The 4–6 digit code this employee enters at the till to ring a sale under their name.',
       operatorPinAction: 'Set / reset PIN',
+    },
+    // Phase 1 (the HR-job-title vs. app-access-role visibility fix) — the HR job title
+    // (`assignment.role`, free text) and the app-access role (the Keycloak role the gateway
+    // enforces, Team page) are UNRELATED; this section makes the actual access role visible next
+    // to the job title and offers a 1-click grant when they look like they should match but don't.
+    appAccess: {
+      title: 'App access',
+      noLogin: 'No login yet — nothing to grant access to.',
+      // useTeam (org-service /api/v1/users) is OPS-only — an hr-alone login can never fetch it
+      // (403 at the gateway), so there is no real access-role value to show read-only here; the
+      // same constraint already hides Username above for the same viewer.
+      restricted: 'Only an owner or manager can see this login’s access role.',
+      unknown: 'Could not find this login on the Team page — it may have just been created.',
+      none: 'no access role',
+      mismatch:
+        'Job title “{{role}}” isn’t an app-access role yet — this login’s menus still follow {{access}}.',
+      grant: 'Grant {{role}} access',
+      granting: 'Granting…',
+      grantError: 'Could not update access. Try again.',
     },
     roles: {
       chef: 'Chef',
