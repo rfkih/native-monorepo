@@ -2,7 +2,7 @@
 #
 # Efficiency model (GitHub free tier):
 #   - The `changes` job (dorny/paths-filter) scopes the Gradle build to the service
-#     modules that actually changed; libs/build-logic/config/workflow changes escalate
+#     modules that actually changed; libs/build-logic/config changes escalate
 #     to a full `./gradlew build`.
 #   - The Gradle cache is written ONLY on master (`cache-read-only` elsewhere) so PR
 #     churn never evicts the shared cache (10 GB per-repo Actions cache limit).
@@ -74,7 +74,10 @@ jobs:
               - 'build.gradle.kts'
               - 'gradle.properties'
               - 'config/**'
-              - '.github/workflows/**'
+              # NOTE: '.github/workflows/**' is deliberately NOT here — a workflow-file edit must
+              # not escalate to a full backend build. A pull_request runs the BASE branch's
+              # workflow, so building proves nothing about the changed file anyway; force a full
+              # run on demand via workflow_dispatch (input: full) if ever needed.
             libs: &libs
               - 'libs/**'
               - 'service-template/**'

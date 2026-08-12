@@ -67,7 +67,9 @@ jobs:
               - 'build.gradle.kts'
               - 'gradle.properties'
               - 'config/**'
-              - '.github/workflows/**'
+              # NOTE: '.github/workflows/**' is deliberately NOT here — a workflow-file edit must
+              # not force-rebuild the whole image set. Release tags still FORCE_ALL, and a real
+              # build-logic/libs/config change still escalates; a lone workflow edit does not.
             libs: &libs
               - 'libs/**'
               - 'service-template/**'
