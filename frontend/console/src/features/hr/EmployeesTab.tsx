@@ -23,9 +23,10 @@ import { TextInput } from '@/components/ui/Field'
 import { ListSkeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/features/_shared/financeUi'
 import type { OrgUnit } from '@/features/org/api'
-import { useTeam } from '@/features/team/api'
+import { useTeam, type TeamMember } from '@/features/team/api'
 import { useSession } from '@/lib/session'
 import { cn } from '@/lib/cn'
+import { hasAccessRoleMismatch } from './accessRoleMatch'
 import { useEmployees, type EmployeeListRow } from './api'
 import { CreateLoginDialog } from './CreateLoginDialog'
 import { EmployeeDetailDrawer } from './EmployeeDetailDrawer'
@@ -124,6 +125,13 @@ export function EmployeesTab({
       }),
     )
   }, [team.data, company?.companyCode])
+  // Phase 1 (HR-job-title vs. app-access-role visibility) — reuses the SAME team list above (no
+  // extra call) to flag rows whose job title implies an access role the linked login doesn't hold
+  // yet; only meaningful when `team` actually loaded (canManageLogins), same gate as usernames.
+  const teamByUserId = useMemo(
+    () => new Map((team.data ?? []).map((m) => [m.id, m] as const)),
+    [team.data],
+  )
   const [search, setSearch] = useState('')
 
   const unitName = (id: string | null) => units.find((u) => u.id === id)?.name ?? '—'
@@ -215,6 +223,10 @@ export function EmployeesTab({
               key={employee.employeeId}
               employee={employee}
               username={employee.userId ? (usernameByUserId.get(employee.userId) ?? null) : null}
+              accessMismatch={employeeAccessMismatch(
+                employee,
+                employee.userId ? teamByUserId.get(employee.userId) : undefined,
+              )}
               unitName={unitName}
               canManageLogins={canManageLogins}
               onManage={() => setDialog({ kind: 'detail', employeeId: employee.employeeId })}
@@ -336,9 +348,24 @@ export function EmployeesTab({
   )
 }
 
+/**
+ * Phase 1 (HR-job-title vs. app-access-role visibility) — true when ANY of the employee's current
+ * assignment job titles implies an access role the linked login's Team member doesn't actually
+ * hold. `member` is `undefined` whenever the login isn't resolvable (no login, team list not
+ * loaded, or `!canManageLogins` — the OPS-only `/api/v1/users` read never even fires then) — in
+ * every one of those cases this returns `false` rather than guessing.
+ */
+function employeeAccessMismatch(employee: GroupedEmployee, member: TeamMember | undefined): boolean {
+  if (!member) return false
+  return employee.rows.some(
+    (r) => r.assignmentId != null && hasAccessRoleMismatch(r.role, member.roles),
+  )
+}
+
 function EmployeeRow({
   employee,
   username,
+  accessMismatch,
   unitName,
   canManageLogins,
   onManage,
@@ -347,6 +374,9 @@ function EmployeeRow({
   employee: GroupedEmployee
   /** The linked login's username (the login id), resolved by the parent; null if none / not resolved. */
   username: string | null
+  /** True when a job title implies an access role the linked login doesn't hold yet — see
+   *  `employeeAccessMismatch`. */
+  accessMismatch: boolean
   unitName: (id: string | null) => string
   canManageLogins: boolean
   onManage: () => void
@@ -408,6 +438,18 @@ function EmployeeRow({
             </button>
           ) : employee.userId ? (
             <Badge tone="info">{t('hr.list.hasLogin')}</Badge>
+          ) : null}
+          {/* Phase 1 (HR-job-title vs. app-access-role visibility) — tiny indicator only, no label,
+              so it never crowds the row; the drawer's App access section has the full detail. */}
+          {accessMismatch ? (
+            <span
+              role="img"
+              aria-label={t('hr.list.accessMismatchHint')}
+              title={t('hr.list.accessMismatchHint')}
+              className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-tint-warning text-amber-2"
+            >
+              <TriangleAlert className="size-3" aria-hidden="true" />
+            </span>
           ) : null}
         </div>
         <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
