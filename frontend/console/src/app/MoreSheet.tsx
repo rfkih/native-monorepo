@@ -78,6 +78,9 @@ export function MoreSheet({
   const pageAccess = usePageAccess()
   const tierAccess = useTierAccess()
   const { groups } = useNavGroups()
+  // The 'catalog' group (menu + inventory) exists for the DESKTOP sidebar; on a phone those pages are
+  // the quick-access tiles below, so drop it from the "all pages" list here to avoid listing twice.
+  const pageGroups = groups.filter((g) => g.key !== 'catalog')
   const { company, companies, setActiveCompany } = useSession()
   const { theme, toggle } = useTheme()
   const navigate = useNavigate()
@@ -149,8 +152,8 @@ export function MoreSheet({
           </div>
         ) : null}
 
-        {groups.length > 0 ? <MicroHeading>{t('mobile.more.allPages')}</MicroHeading> : null}
-        {groups.map((group) => (
+        {pageGroups.length > 0 ? <MicroHeading>{t('mobile.more.allPages')}</MicroHeading> : null}
+        {pageGroups.map((group) => (
           <div key={group.key}>
             <MicroHeading>{group.heading}</MicroHeading>
             {group.items.map((item) => {

@@ -36,6 +36,8 @@ import {
   LineChart,
   type LucideProps,
   Network,
+  NotebookText,
+  Package,
   Percent,
   Printer,
   QrCode,
@@ -128,6 +130,35 @@ export function useNavGroups(): {
                   end: true,
                   page: 'dashboard' as const,
                   feature: 'dashboard' as const,
+                },
+              ]
+            : [],
+        },
+        {
+          // POS catalog — the menu (items + prices) and the stock-item inventory an owner edits from
+          // the desktop console. On a phone these are the MoreSheet's quick-access TILES, so this
+          // group is filtered OUT of MoreSheet's "all pages" list to avoid showing them twice — the
+          // desktop sidebar (which has no such tiles) is the surface this group exists for. Gate
+          // mirrors the /menu + /inventory routes exactly: POS capability ∧ `menu` grant ∧ `products`
+          // tier (see App.tsx `menuAllowed` and MoreSheet's tiles).
+          key: 'catalog',
+          heading: t('nav.groupCatalog'),
+          icon: Package,
+          items: posOk
+            ? [
+                {
+                  to: '/menu',
+                  label: t('nav.menu'),
+                  icon: NotebookText,
+                  page: 'menu' as const,
+                  feature: 'products' as const,
+                },
+                {
+                  to: '/inventory',
+                  label: t('nav.inventory'),
+                  icon: Package,
+                  page: 'menu' as const,
+                  feature: 'products' as const,
                 },
               ]
             : [],
