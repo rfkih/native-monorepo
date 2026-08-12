@@ -1242,7 +1242,8 @@ export const en = {
     namePlaceholder: 'e.g. Burger buns, paper cups',
     nameRequired: 'Enter a name.',
     unitLabel: 'Unit',
-    unitHint: 'Counted in whole numbers — use g or ml for anything you weigh or measure.',
+    unitHint: 'Counted in whole numbers — use g or ml for anything you weigh or measure to a fraction.',
+    unitGroup: { weight: 'Weight', volume: 'Volume', count: 'Count' },
     costLabel: 'Cost per unit ({{currency}}, optional)',
     costHint:
       'Used to value the stock-count difference in the books. Leave empty to count without posting anything.',
