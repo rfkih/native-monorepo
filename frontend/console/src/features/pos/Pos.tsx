@@ -90,6 +90,7 @@ import { BillTabsBar } from './components/BillTabsBar'
 import { CategoryCell, CategoryIcon, AllCategoriesIcon } from './components/CategoryRail'
 import { MenuTile } from './components/MenuTile'
 import { SummaryBar } from './components/SummaryBar'
+import { WalkInCartSheet } from './components/WalkInCartSheet'
 import { MenuSkeleton, EmptyMenu, EmptyCategory } from './components/MenuStates'
 import { BillSelectorOverlay } from './components/BillSelectorOverlay'
 import { OpenBillDialog } from './components/OpenBillDialog'
@@ -248,7 +249,7 @@ function PosInner({ session }: { session: CompanySession }) {
   const canManualDiscount = hasAnyRole(auth.roles, 'owner', 'manager')
 
   // Modal / overlay state
-  const [modal, setModal] = useState<'payment' | 'receipt' | null>(null)
+  const [modal, setModal] = useState<'payment' | 'receipt' | 'cart' | null>(null)
   const [modifierItem, setModifierItem] = useState<MenuItem | null>(null)
   const [placedOrder, setPlacedOrder] = useState<OrderResponse | null>(null)
   const [placedPayment, setPlacedPayment] = useState<PaymentResponse | null>(null)
@@ -498,6 +499,24 @@ function PosInner({ session }: { session: CompanySession }) {
       }
       return [...prev, { menuItemId, qty: 1, selectedOptionIds, effectiveUnitPriceMinor, selectedOptionNames }]
     })
+  }
+
+  // Walk-in cart line edits (WalkInCartSheet). Pure local-state — the cart is a client array until
+  // Charge, so no backend call. `delta` of -1 at qty 1 drops the line (decrement-to-remove).
+  function changeCartQty(key: string, delta: number) {
+    setCart((prev) => {
+      const idx = prev.findIndex((l) => lineKey(l.menuItemId, l.selectedOptionIds) === key)
+      if (idx === -1) return prev
+      const nextQty = prev[idx].qty + delta
+      if (nextQty <= 0) return prev.filter((_, i) => i !== idx)
+      const next = [...prev]
+      next[idx] = { ...next[idx], qty: nextQty }
+      return next
+    })
+  }
+
+  function removeCartLineByKey(key: string) {
+    setCart((prev) => prev.filter((l) => lineKey(l.menuItemId, l.selectedOptionIds) !== key))
   }
 
   function handleModifierConfirm(selectedOptionIds: string[], effectivePriceMinor: number) {
@@ -799,13 +818,10 @@ function PosInner({ session }: { session: CompanySession }) {
                   canManage={hasAnyRole(auth.roles, 'owner', 'manager')}
                 />
               ) : (
-                /* Responsive grid: ≥1180→4 cols, 768-1179→3, 560-767→2, <560→2 (156px floor) */
-                <div
-                  className="grid gap-3"
-                  style={{
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(156px, 1fr))',
-}}
-                >
+                /* Responsive grid. Phone is a FIXED 2 columns: the old `minmax(156px, 1fr)` auto-fill
+                   collapsed to 1 column on a 360px S23 (px-5 leaves 320px; 2×156 + gap = 324 > 320).
+                   From md → 3, from 1180px → 4 (mirrors the previous breakpoints). */
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-3 min-[1180px]:grid-cols-4">
                   {visibleItems.map((item, idx) => (
                     <MenuTile
                       key={item.id}
@@ -856,6 +872,7 @@ function PosInner({ session }: { session: CompanySession }) {
           maxRedeemablePoints={maxRedeemablePoints}
           onLoyaltyRedeemChange={setLoyaltyRedeemPoints}
           onExpand={() => setBillSheetOpen(true)}
+          onExpandCart={() => setModal('cart')}
           onDestinationClick={() => setShowBillSelector(true)}
           onSend={() => {
             // ADR 0049 P3b: a device terminal with no signed-in operator must identify one BEFORE
@@ -910,6 +927,23 @@ function PosInner({ session }: { session: CompanySession }) {
           locale={locale}
           onConfirm={handleModifierConfirm}
           onClose={() => setModifierItem(null)}
+        />
+      ) : null}
+
+      {modal === 'cart' ? (
+        <WalkInCartSheet
+          cart={cart}
+          items={items}
+          currency={currency}
+          locale={locale}
+          onInc={(key) => changeCartQty(key, 1)}
+          onDec={(key) => changeCartQty(key, -1)}
+          onRemove={removeCartLineByKey}
+          onClear={() => {
+            clearCart()
+            setModal(null)
+          }}
+          onClose={() => setModal(null)}
         />
       ) : null}
 

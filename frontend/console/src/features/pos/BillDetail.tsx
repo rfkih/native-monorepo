@@ -36,6 +36,8 @@ import { deriveCategories, visibleMenuItems,
 import { useMediaQuery } from './lib/useMediaQuery'
 import { PhoneSheetContent } from './components/PhoneSheetContent'
 import { BillLineItem } from './components/BillLineItem'
+import { BillLineGroupItem } from './components/BillLineGroupItem'
+import { groupUnpaidLines, type BillLineGroup } from './lib/billLineGroups'
 import { BillBreakdown } from './components/BillBreakdown'
 import { CancelConfirmDialog } from './components/CancelConfirmDialog'
 import { BillPaymentModal, type BillPaidInfo } from './BillPaymentModal'
@@ -135,6 +137,8 @@ export function BillDetail({
 
   const unpaidLines = bill?.lines.filter((l) => !l.paid) ?? []
   const unpaidTotal = unpaidLines.reduce((s, l) => s + l.lineTotalMinor, 0)
+  const lineGroups = groupUnpaidLines(bill?.lines ?? [])
+  const paidLines = bill?.lines.filter((l) => l.paid) ?? []
   const grandTotal =
     bill?.breakdown?.grandTotalMinor ??
     bill?.lines.reduce((s, l) => s + l.lineTotalMinor, 0) ??
@@ -171,6 +175,25 @@ export function BillDetail({
 
   function handleRemoveLine(lineId: string) {
     removeLine.mutate({ billId, lineId })
+  }
+
+  function handleIncrementGroup(g: BillLineGroup) {
+    appendLines.mutate({
+      billId,
+      lines: [{ menuItemId: g.menuItemId, qty: 1, selectedOptionIds: g.optionIds }],
+    })
+  }
+
+  function handleDecrementGroup(g: BillLineGroup) {
+    removeLine.mutate({ billId, lineId: g.lineIds[g.lineIds.length - 1] })
+  }
+
+  async function handleRemoveGroup(g: BillLineGroup) {
+    // Sequential, NOT parallel: the bill is one @Version aggregate — firing every removeLine at once
+    // makes all-but-the-first optimistic-lock-collide (partial removal + surfaced error). Await each.
+    for (const lineId of g.lineIds) {
+      await removeLine.mutateAsync({ billId, lineId })
+    }
   }
 
   function handleCancel() {
@@ -407,6 +430,12 @@ export function BillDetail({
             appendLines={appendLines}
             removeLine={removeLine}
             isRemoving={removeLine.isPending}
+            lineGroups={lineGroups}
+            paidLines={paidLines}
+            onIncrementGroup={handleIncrementGroup}
+            onDecrementGroup={handleDecrementGroup}
+            onRemoveGroup={handleRemoveGroup}
+            busy={appendLines.isPending || removeLine.isPending || billQuery.isFetching}
             onItemTap={handleItemTap}
             onToggleSplitMode={toggleSplitMode}
             onToggleLineSelect={toggleLineSelection}
@@ -500,19 +529,47 @@ export function BillDetail({
             <p className="px-5 py-10 text-center text-sm text-ink-3">{t('bills.noLines')}</p>
           ) : (
             <ul className="divide-y divide-line">
-              {bill.lines.map((line) => (
-                <BillLineItem
-                  key={line.id}
-                  line={line}
-                  locale={locale}
-                  currency={currency}
-                  splitMode={splitMode}
-                  selected={selectedLineIds.has(line.id)}
-                  onToggleSelect={() => toggleLineSelection(line.id)}
-                  onRemove={() => handleRemoveLine(line.id)}
-                  isRemoving={removeLine.isPending}
-                />
-              ))}
+              {splitMode
+                ? bill.lines.map((line) => (
+                    <BillLineItem
+                      key={line.id}
+                      line={line}
+                      locale={locale}
+                      currency={currency}
+                      splitMode={splitMode}
+                      selected={selectedLineIds.has(line.id)}
+                      onToggleSelect={() => toggleLineSelection(line.id)}
+                      onRemove={() => handleRemoveLine(line.id)}
+                      isRemoving={removeLine.isPending}
+                    />
+                  ))
+                : [
+                    ...lineGroups.map((g) => (
+                      <BillLineGroupItem
+                        key={g.key}
+                        group={g}
+                        locale={locale}
+                        currency={currency}
+                        onIncrement={() => handleIncrementGroup(g)}
+                        onDecrement={() => handleDecrementGroup(g)}
+                        onRemove={() => handleRemoveGroup(g)}
+                        busy={appendLines.isPending || removeLine.isPending || billQuery.isFetching}
+                      />
+                    )),
+                    ...paidLines.map((line) => (
+                      <BillLineItem
+                        key={line.id}
+                        line={line}
+                        locale={locale}
+                        currency={currency}
+                        splitMode={false}
+                        selected={false}
+                        onToggleSelect={() => {}}
+                        onRemove={() => {}}
+                        isRemoving={false}
+                      />
+                    )),
+                  ]}
             </ul>
           )}
           {appendLines.isError ? (

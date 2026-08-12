@@ -16,7 +16,9 @@ import type { MenuItem,
 } from '../api'
 import type { BillResponse, BillLineResponse } from '../billsApi'
 import type { VirtualCategory } from '../lib/categories'
+import type { BillLineGroup } from '../lib/billLineGroups'
 import { BillLineItem } from './BillLineItem'
+import { BillLineGroupItem } from './BillLineGroupItem'
 
 
 // ---------------------------------------------------------------------------
@@ -46,6 +48,12 @@ export interface PhoneSheetProps {
   appendLines: { isPending: boolean; isError: boolean; error: unknown }
   removeLine: { isPending: boolean; isError: boolean; error: unknown }
   isRemoving: boolean
+  lineGroups: BillLineGroup[]
+  paidLines: BillLineResponse[]
+  onIncrementGroup: (g: BillLineGroup) => void
+  onDecrementGroup: (g: BillLineGroup) => void
+  onRemoveGroup: (g: BillLineGroup) => void
+  busy: boolean
   onItemTap: (item: MenuItem) => void
   onToggleSplitMode: () => void
   onToggleLineSelect: (lineId: string) => void
@@ -72,6 +80,12 @@ export function PhoneSheetContent({
   splitMode,
   allLinesPaid,
   isRemoving,
+  lineGroups,
+  paidLines,
+  onIncrementGroup,
+  onDecrementGroup,
+  onRemoveGroup,
+  busy,
   onToggleSplitMode,
   onToggleLineSelect,
   onRemoveLine,
@@ -138,19 +152,47 @@ export function PhoneSheetContent({
           <p className="px-4 py-10 text-center text-sm text-ink-3">{t('bills.noLines')}</p>
         ) : (
           <ul className="divide-y divide-line">
-            {bill.lines.map((line) => (
-              <BillLineItem
-                key={line.id}
-                line={line}
-                locale={locale}
-                currency={currency}
-                splitMode={splitMode}
-                selected={selectedLineIds.has(line.id)}
-                onToggleSelect={() => onToggleLineSelect(line.id)}
-                onRemove={() => onRemoveLine(line.id)}
-                isRemoving={isRemoving}
-              />
-            ))}
+            {splitMode
+              ? bill.lines.map((line) => (
+                  <BillLineItem
+                    key={line.id}
+                    line={line}
+                    locale={locale}
+                    currency={currency}
+                    splitMode={splitMode}
+                    selected={selectedLineIds.has(line.id)}
+                    onToggleSelect={() => onToggleLineSelect(line.id)}
+                    onRemove={() => onRemoveLine(line.id)}
+                    isRemoving={isRemoving}
+                  />
+                ))
+              : [
+                  ...lineGroups.map((g) => (
+                    <BillLineGroupItem
+                      key={g.key}
+                      group={g}
+                      locale={locale}
+                      currency={currency}
+                      onIncrement={() => onIncrementGroup(g)}
+                      onDecrement={() => onDecrementGroup(g)}
+                      onRemove={() => onRemoveGroup(g)}
+                      busy={busy}
+                    />
+                  )),
+                  ...paidLines.map((line) => (
+                    <BillLineItem
+                      key={line.id}
+                      line={line}
+                      locale={locale}
+                      currency={currency}
+                      splitMode={false}
+                      selected={false}
+                      onToggleSelect={() => {}}
+                      onRemove={() => {}}
+                      isRemoving={false}
+                    />
+                  )),
+                ]}
           </ul>
         )}
       </div>

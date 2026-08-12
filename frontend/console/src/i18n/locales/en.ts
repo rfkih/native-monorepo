@@ -830,6 +830,7 @@ export const en = {
     viewOrder: 'View order',
     cartEmpty: 'Tap items to add them.',
     cartEmptyHint: 'Your order will appear here.',
+    clearCart: 'Clear',
     total: 'Total',
     subtotal: 'Subtotal',
     discount: 'Discount',
@@ -2822,6 +2823,8 @@ export const en = {
     statusCancelled: 'This bill was cancelled.',
     addToBill: 'Add {{name}} to bill',
     removeLine: 'Remove {{name}} from bill',
+    increaseQty: 'Increase quantity',
+    decreaseQty: 'Decrease quantity',
     viewBill: 'View bill',
     /** Split-by-item (Increment 3) */
     split: 'Split',
