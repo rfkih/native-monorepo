@@ -5,6 +5,36 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-12 — Close the ADR 0040 org-service error-inbox gap (500s → error_log fleet-complete)
+
+The last open item on the traceable-error-reference track (ADR 0040). The shared `ApiExceptionHandler`
+persists every unexpected HTTP 500 to `error_log` so a user-quoted `reference` resolves to a row — but
+`org-service` was the one DB-backed service where it didn't: it's a **pure producer** (emits
+`CompanyCreated` via outbox + Debezium CDC, runs no Kafka consumer), so it has no `kafka-clients` on its
+classpath, and the shared `ErrorInboxAutoConfiguration` gated the whole thing on
+`@ConditionalOnClass({JdbcTemplate, ConsumerRecord})` — the `ConsumerRecord` half was never satisfied, so
+its `ErrorInboxWriter` bean never activated. org-service 500s returned a reference that resolved only in
+the server log, not `error_log`.
+
+Closed with two changes: (1) `org-service` `V13__error_log.sql` — the same ops-table shape as the other
+services (no RLS, no Auditable; header records that org-service's `error_log` is fed **only** by the
+HTTP-500 path, no `ConsumeErrorRecorder` here). (2) Split `ErrorInboxAutoConfiguration` into two
+activation tiers — the **write path** (`ErrorInboxWriter` + its redactor / clock / REQUIRES_NEW template)
+now activates on `@ConditionalOnClass(JdbcTemplate)` alone, so any DB-backed service gets it; the
+**consumer/alert path** (`AlertWebhookClient` + `ConsumeErrorRecorder`) stays gated per-bean on
+`ConsumerRecord`, so it appears only on event-consuming services with a DLT recoverer to wrap. **No new
+dependency** — org-service already had the error-inbox classes transitively via `libs:security`
+(`implementation(project(":libs:error-inbox"))`); only the condition changed. org-service keeps its own
+`Clock` bean (`TimeConfig`), which the auto-config's `@ConditionalOnMissingBean errorInboxClock` yields to,
+and has no by-type `TransactionTemplate` injection, so the added `errorInboxTransactionTemplate` is
+unambiguous.
+
+Tests: new `ErrorInboxAutoConfigurationConditionsTest` (ApplicationContextRunner + `FilteredClassLoader`)
+proves the write path comes up JDBC-only with Kafka filtered out while the consumer/alert beans stay
+absent, and that both tiers activate when Kafka is present. `org-service` `CreateCompanyAcceptanceTest`
+(full context + real Postgres via Testcontainers) confirms V13 migrates cleanly and the context boots with
+the newly-wired `ErrorInboxWriter`. Not pushed.
+
 ## 2026-08-09 — Preset role-based access: office vs floor roles, gateway-enforced (ADR 0052)
 
 The owner wants everyone to log in as themselves and their **role** to decide the surface: office roles

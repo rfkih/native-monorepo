@@ -39,12 +39,17 @@ are the caller's own fault and neither persist nor change.
   is a trace id / UUID).
 - Persistence is best-effort and defensively wrapped — a DB failure, missing bean, or missing
   `error_log` table can never alter or fail the HTTP response.
-- **Coverage gap (accepted):** `org-service` depends on libs/security but has no `error_log` table
-  and no kafka-clients, so its `ErrorInboxWriter` bean never activates — its 500s return a reference
-  that resolves only in the server log, not `error_log`. It fails safe (no crash, no warn-spam).
-  Closing it (an `error_log` migration + decoupling the auto-config's Kafka `@ConditionalOnClass`
-  from the JDBC-only writer bean) is a tracked follow-up. The 8 DB+Kafka services — where virtually
-  all user-facing 500s occur (POS, finance, payroll) — are fully covered.
+- **Coverage gap (CLOSED 2026-08-12):** `org-service` depends on libs/security but had no
+  `error_log` table and has no kafka-clients, so its `ErrorInboxWriter` bean never activated — its
+  500s returned a reference that resolved only in the server log, not `error_log`. It failed safe
+  (no crash, no warn-spam). **Now closed:** (a) an `error_log` migration was added to org-service
+  (`V13__error_log.sql`, same ops-table shape — no RLS, no Auditable), and (b) `ErrorInboxAuto`
+  `Configuration` was split into two activation tiers — the write path (`ErrorInboxWriter` + its
+  redactor / clock / REQUIRES_NEW template) now activates on `@ConditionalOnClass(JdbcTemplate)`
+  alone, while the consumer/alert path (`AlertWebhookClient` + `ConsumeErrorRecorder`) stays gated
+  per-bean on `ConsumerRecord`. org-service (a pure producer, no DLT recoverer) therefore gets the
+  writer but not the recorder, and its `error_log` is fed solely by this HTTP-500 path. The whole
+  fleet was already covered; this extends persistence to the one remaining DB-backed service.
 - Redaction scope is the established ADR-0005 contract (emails + ≥10-digit runs → NIK/bank/NPWP
   covered; personal names and sub-10-digit figures are not) reused on the now-wider HTTP-500
   surface — re-affirmed as adequate, not re-scoped here.
