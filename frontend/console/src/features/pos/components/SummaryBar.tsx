@@ -51,6 +51,7 @@ export function SummaryBar({
   maxRedeemablePoints,
   onLoyaltyRedeemChange,
   onExpand,
+  onExpandCart,
   onDestinationClick,
   onSend,
   onPay,
@@ -84,6 +85,8 @@ export function SummaryBar({
   maxRedeemablePoints: number
   onLoyaltyRedeemChange: (points: number) => void
   onExpand: () => void
+  /** Walk-in mode: opens the editable cart sheet (WalkInCartSheet) — −/+/remove per line. */
+  onExpandCart: () => void
   /** Opens the order switcher (walk-in / bills / floor / parked). */
   onDestinationClick: () => void
   /** Bill mode only: fires the kitchen ticket directly. */
@@ -212,12 +215,13 @@ export function SummaryBar({
           </div>
         </div>
 
-        {/* Expand chevron — bill mode only (walk-in has no sheet) */}
-        {activeBill ? (
+        {/* Expand chevron — opens the bill sheet (bill mode) or the editable walk-in cart sheet
+            (walk-in with items). Walk-in previously had no line editor at all. */}
+        {activeBill || lineCount > 0 ? (
           <button
             type="button"
-            onClick={onExpand}
-            aria-label={t('bills.viewBill')}
+            onClick={activeBill ? onExpand : onExpandCart}
+            aria-label={activeBill ? t('bills.viewBill') : t('pos.viewOrder')}
             className="grid size-11 shrink-0 place-items-center rounded-full bg-ink-50 text-ink-2 transition-colors hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
           >
             <ChevronUp className="size-[18px]" aria-hidden="true" />

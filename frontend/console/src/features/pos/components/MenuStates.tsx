@@ -21,10 +21,8 @@ import type { } from '@/features/loyalty/api'
 
 export function MenuSkeleton() {
   return (
-    <div
-      className="grid gap-3"
-      style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(156px, 1fr))' }}
-    >
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 min-[1180px]:grid-cols-4">
+      {/* Matches the loaded menu grid (Pos.tsx) — 2 cols on phone, else it jumps 1→2 on load. */}
       {Array.from({ length: 8 }).map((_, i) => (
         <div key={i} className="overflow-hidden rounded-xl border border-line bg-surface" aria-hidden="true">
           <div className="shimmer h-[104px] w-full" />
