@@ -95,7 +95,10 @@ public class UserService {
   public List<UserResponse> listUsers() {
     String companyId = TenantContext.require().companyId();
     // The bound tenant's code, to strip the <companyCode>. prefix off scoped logins for display.
-    String companyCode = companyReader.findCurrentCompanyCode();
+    // Tolerant of a not-yet-bootstrapped tenant (no company row yet): a missing code means there is
+    // no prefix to strip, NOT a 404 — this endpoint contracts an empty/plain team list, never a 404
+    // (ADR 0054). inviteUser stays strict; it needs the code to compose the stored login.
+    String companyCode = companyReader.findCurrentCompanyCodeIfPresent().orElse(null);
     List<KeycloakUser> users = keycloak.listUsersByCompanyId(companyId);
 
     // Enrich each user with their active outlet count in one grouped query (no N+1).

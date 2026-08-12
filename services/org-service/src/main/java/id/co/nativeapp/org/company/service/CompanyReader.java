@@ -5,6 +5,7 @@ import id.co.nativeapp.org.company.projection.CompanyCurrentView;
 import id.co.nativeapp.org.company.repository.CompanyRepository;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -73,5 +74,21 @@ public class CompanyReader {
     return companyRepository
         .findCurrentCompanyCode()
         .orElseThrow(() -> new NoSuchElementException("No company found for the current tenant"));
+  }
+
+  /**
+   * Like {@link #findCurrentCompanyCode()} but tolerant of a not-yet-bootstrapped tenant: returns
+   * an empty {@link Optional} instead of throwing when no {@code company} row exists for the bound
+   * tenant. Used by the DISPLAY path ({@link
+   * id.co.nativeapp.org.user.service.UserService#listUsers()}), where a missing code simply means
+   * "there is no {@code <company_code>.} prefix to strip" — never a 404. The strict {@link
+   * #findCurrentCompanyCode()} stays for the invite path, which genuinely needs the code to compose
+   * the stored {@code <company_code>.<local>} login.
+   *
+   * @return the bound tenant's {@code company_code}, or empty if the tenant has no company row yet
+   */
+  @Transactional(readOnly = true)
+  public Optional<String> findCurrentCompanyCodeIfPresent() {
+    return companyRepository.findCurrentCompanyCode();
   }
 }
