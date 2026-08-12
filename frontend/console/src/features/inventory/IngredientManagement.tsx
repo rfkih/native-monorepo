@@ -16,7 +16,6 @@ import { ArrowLeft, Moon, Package, Plus, Sun, TriangleAlert, X } from 'lucide-re
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Field, TextInput } from '@/components/ui/Field'
-import { Segmented } from '@/components/ui/Segmented'
 import { Spinner } from '@/components/ui/Spinner'
 import { ListSkeleton } from '@/components/ui/Skeleton'
 import { OutletGate } from '@/components/OutletGate'
@@ -31,7 +30,7 @@ import { parseDiscountInput } from '@/features/pos/lib/discountInput'
 import { minorToMajorInput } from '@/features/pos/lib/registerFloat'
 import { formatQty } from '@/features/stocktake/lib/qty'
 import {
-  INGREDIENT_UNITS,
+  INGREDIENT_UNIT_GROUPS,
   useAddIngredientStock,
   useCreateIngredient,
   useDeactivateIngredient,
@@ -113,7 +112,7 @@ function IngredientManagementInner({
           <OutletPicker />
         </div>
 
-        <Button onClick={() => setShowCreate(true)} className="shrink-0">
+        <Button onClick={() => setShowCreate(true)} aria-label={t('inventory.addAction')} className="shrink-0">
           <Plus className="size-4" />
           <span className="hidden sm:inline">{t('inventory.addAction')}</span>
         </Button>
@@ -388,13 +387,38 @@ function IngredientFormDialog({
         </Field>
 
         <Field label={t('inventory.unitLabel')} hint={t('inventory.unitHint')}>
-          <Segmented
-            fluid
-            ariaLabel={t('inventory.unitLabel')}
-            value={unit}
-            onChange={setUnit}
-            options={INGREDIENT_UNITS.map((u) => ({ value: u as string, label: u }))}
-          />
+          {/* Grouped by kind (weight / volume / count) so kg + liter slot in without a crowded row. */}
+          <div className="space-y-2" role="radiogroup" aria-label={t('inventory.unitLabel')}>
+            {INGREDIENT_UNIT_GROUPS.map((group) => (
+              <div key={group.key} className="flex items-center gap-3">
+                <span className="w-16 shrink-0 text-xs font-semibold text-ink-3">
+                  {t(`inventory.unitGroup.${group.key}` as Parameters<typeof t>[0])}
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {group.units.map((u) => {
+                    const active = unit === u
+                    return (
+                      <button
+                        key={u}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() => setUnit(u)}
+                        className={cn(
+                          'h-10 min-w-[3.25rem] rounded-lg px-3 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
+                          active
+                            ? 'bg-emerald text-on-emerald'
+                            : 'border border-line bg-surface text-ink-2 hover:border-emerald-line hover:bg-emerald-tint',
+                        )}
+                      >
+                        {u}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
         </Field>
 
         <Field

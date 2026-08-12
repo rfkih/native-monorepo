@@ -1231,7 +1231,8 @@ export const id = {
     namePlaceholder: 'mis. Roti burger, gelas kertas',
     nameRequired: 'Isi nama barang.',
     unitLabel: 'Satuan',
-    unitHint: 'Dihitung dalam bilangan bulat — pakai g atau ml untuk yang ditimbang atau ditakar.',
+    unitHint: 'Dihitung dalam bilangan bulat — pakai g atau ml untuk yang ditimbang atau ditakar pecahan.',
+    unitGroup: { weight: 'Berat', volume: 'Volume', count: 'Jumlah' },
     costLabel: 'Biaya per satuan ({{currency}}, opsional)',
     costHint:
       'Dipakai menilai selisih stock opname di pembukuan. Kosongkan untuk menghitung tanpa membukukan apa pun.',

@@ -15,9 +15,18 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api'
 import type { CompanySession } from '@/lib/session'
 
-/** Units offered by the console picker. Backend treats the value as opaque display text. */
-export const INGREDIENT_UNITS = ['g', 'ml', 'pcs', 'pack'] as const
+/** Units offered by the console picker. Backend treats the value as opaque display text (≤16 chars,
+ *  no server-side conversion). Quantities are WHOLE numbers (stockQty is an int), so kg/liter mean
+ *  whole kg/liter — pick g/ml for anything you weigh or measure to a fraction. */
+export const INGREDIENT_UNITS = ['g', 'kg', 'ml', 'liter', 'pcs', 'pack'] as const
 export type IngredientUnit = (typeof INGREDIENT_UNITS)[number]
+
+/** The picker groups units by kind (weight / volume / count) for a clearer, less crowded UI. */
+export const INGREDIENT_UNIT_GROUPS: { key: 'weight' | 'volume' | 'count'; units: IngredientUnit[] }[] = [
+  { key: 'weight', units: ['g', 'kg'] },
+  { key: 'volume', units: ['ml', 'liter'] },
+  { key: 'count', units: ['pcs', 'pack'] },
+]
 
 export interface Ingredient {
   id: string
