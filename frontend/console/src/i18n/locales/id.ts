@@ -1689,6 +1689,9 @@ export const id = {
       actionTerminate: 'Berhentikan',
       actionCreateLogin: 'Buat login',
       hasLogin: 'Punya login',
+      search: 'Cari nama atau username…',
+      noMatch: 'Tidak ada karyawan yang cocok.',
+      copyUsername: 'Salin username {{username}}',
       manage: 'Kelola',
     },
     createLogin: {

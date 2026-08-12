@@ -14,14 +14,17 @@
 
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Plus, TriangleAlert } from 'lucide-react'
+import { Check, Copy, Plus, Search, TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { ErrorDetails } from '@/components/ErrorDetails'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { TextInput } from '@/components/ui/Field'
 import { ListSkeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/features/_shared/financeUi'
 import type { OrgUnit } from '@/features/org/api'
+import { useTeam } from '@/features/team/api'
+import { useSession } from '@/lib/session'
 import { cn } from '@/lib/cn'
 import { useEmployees, type EmployeeListRow } from './api'
 import { CreateLoginDialog } from './CreateLoginDialog'
@@ -104,6 +107,25 @@ export function EmployeesTab({
   )
   const query = useEmployees({ companyId, actor, orgUnitIds: unitIds, enabled: true })
 
+  // Resolve each linked login's USERNAME (userId → username) so the list shows the login id inline —
+  // hunting through hundreds of detail drawers to recover a forgotten id is not viable. Gated on
+  // canManageLogins (the /api/v1/users read is OPS-only); an hr-alone login falls back to a badge.
+  const { company } = useSession()
+  const team = useTeam({ companyId, actor, enabled: canManageLogins })
+  // The team list returns the LOCAL username (org-service strips the `<companyCode>.` prefix for
+  // display), but staff sign in with the FULL scoped id — re-add the prefix so the shown value is
+  // the actual login id. An owner's email login has no prefix (left as-is).
+  const usernameByUserId = useMemo(() => {
+    const code = company?.companyCode
+    return new Map(
+      (team.data ?? []).map((m) => {
+        const full = !code || m.username.includes('@') ? m.username : `${code}.${m.username}`
+        return [m.id, full] as const
+      }),
+    )
+  }, [team.data, company?.companyCode])
+  const [search, setSearch] = useState('')
+
   const unitName = (id: string | null) => units.find((u) => u.id === id)?.name ?? '—'
 
   const grouped = useMemo<GroupedEmployee[]>(() => {
@@ -127,6 +149,18 @@ export function EmployeesTab({
     return [...byId.values()]
   }, [query.data])
 
+  const q = search.trim().toLowerCase()
+  const filtered = useMemo(
+    () =>
+      q
+        ? grouped.filter((e) => {
+            const u = e.userId ? (usernameByUserId.get(e.userId) ?? '') : ''
+            return e.fullName.toLowerCase().includes(q) || u.toLowerCase().includes(q)
+          })
+        : grouped,
+    [grouped, q, usernameByUserId],
+  )
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-4">
@@ -145,6 +179,23 @@ export function EmployeesTab({
         )}
       </div>
 
+      {!query.isLoading && !query.isError && grouped.length > 0 ? (
+        <div className="relative">
+          <Search
+            className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-3"
+            aria-hidden="true"
+          />
+          <TextInput
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t('hr.list.search')}
+            aria-label={t('hr.list.search')}
+            className="pl-10"
+          />
+        </div>
+      ) : null}
+
       {query.isError ? (
         <Card className="space-y-3 p-8 text-center text-sm text-loss">
           <TriangleAlert className="mx-auto size-5" />
@@ -155,12 +206,15 @@ export function EmployeesTab({
         <ListSkeleton rows={5} avatar />
       ) : grouped.length === 0 ? (
         <EmptyState title={t('hr.list.empty')} hint={t('hr.list.emptyHint')} />
+      ) : filtered.length === 0 ? (
+        <p className="px-2 py-8 text-center text-sm text-ink-3">{t('hr.list.noMatch')}</p>
       ) : (
         <Card className="rounded-[20px] p-2.5">
-          {grouped.map((employee) => (
+          {filtered.map((employee) => (
             <EmployeeRow
               key={employee.employeeId}
               employee={employee}
+              username={employee.userId ? (usernameByUserId.get(employee.userId) ?? null) : null}
               unitName={unitName}
               canManageLogins={canManageLogins}
               onManage={() => setDialog({ kind: 'detail', employeeId: employee.employeeId })}
@@ -284,18 +338,22 @@ export function EmployeesTab({
 
 function EmployeeRow({
   employee,
+  username,
   unitName,
   canManageLogins,
   onManage,
   onCreateLogin,
 }: {
   employee: GroupedEmployee
+  /** The linked login's username (the login id), resolved by the parent; null if none / not resolved. */
+  username: string | null
   unitName: (id: string | null) => string
   canManageLogins: boolean
   onManage: () => void
   onCreateLogin: () => void
 }) {
   const { t } = useTranslation()
+  const [copied, setCopied] = useState(false)
   const active = employee.status === 'ACTIVE'
   const initials = employee.fullName
     .split(/\s+/)
@@ -327,7 +385,30 @@ function EmployeeRow({
           ) : (
             <Badge tone="neutral">{t('hr.list.compNone')}</Badge>
           )}
-          {employee.userId ? <Badge tone="info">{t('hr.list.hasLogin')}</Badge> : null}
+          {/* The login id (username) inline + copy — so a forgotten id is one glance away, not a
+              drawer dig. Falls back to a badge when the username couldn't be resolved (hr-alone). */}
+          {username ? (
+            <button
+              type="button"
+              onClick={() => {
+                void navigator.clipboard?.writeText(username)
+                setCopied(true)
+                setTimeout(() => setCopied(false), 1500)
+              }}
+              aria-label={t('hr.list.copyUsername', { username })}
+              title={t('hr.list.copyUsername', { username })}
+              className="inline-flex items-center gap-1 rounded-full bg-emerald-tint py-0.5 pl-2 pr-1.5 font-mono text-[11px] font-semibold text-emerald-2 transition-colors hover:bg-brand-100/60 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald"
+            >
+              {username}
+              {copied ? (
+                <Check className="size-3" aria-hidden="true" />
+              ) : (
+                <Copy className="size-3 opacity-70" aria-hidden="true" />
+              )}
+            </button>
+          ) : employee.userId ? (
+            <Badge tone="info">{t('hr.list.hasLogin')}</Badge>
+          ) : null}
         </div>
         <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
           {employee.rows.filter((r) => r.assignmentId).length === 0 ? (
