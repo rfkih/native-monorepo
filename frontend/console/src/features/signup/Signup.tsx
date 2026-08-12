@@ -51,7 +51,10 @@ const INTEREST_KEYS: Record<(typeof INTERESTS)[number], string> = {
   teacher: 'signup.interestTeacher',
 }
 
-const PASSWORD_MIN_LENGTH = 8
+// Must match the server's owner-credential floor (SignupRequest @Size(min = 10), raised by ADR 0054
+// to mirror the realm's length(10) policy). Keep in sync — a lower value here lets an 8–9-char
+// password pass the client and then fail server validation with a confusing generic 400.
+const PASSWORD_MIN_LENGTH = 10
 // UI copy of the server's lenient phone check (SignupRequest @Pattern) — advisory only.
 // Digit-terminated and ≤ 32 chars total (the company.phone column width).
 const PHONE_RE = /^\+?[0-9][0-9 ()-]{3,29}[0-9]$/
@@ -402,6 +405,41 @@ export function Signup() {
 
   // ── Submit ─────────────────────────────────────────────────────────────────
 
+  // Map a server RFC-7807 field-validation error (problem.errors[].field) back onto the specific
+  // form field + the step it lives on, so a rejected value shows WHAT is wrong exactly where the
+  // user typed it — not just a generic banner. Server messages are English (rule 9), so each known
+  // field resolves to a LOCALIZED message here; the password length reuses PASSWORD_MIN_LENGTH so it
+  // can never drift from the client hint again (the `passwordDistinctFromEmail` cross-field rule and
+  // `ownerPassword` @Size both land on the password field). Unknown fields fall through to the banner.
+  function serverFieldError(
+    field: string,
+  ): { key: keyof FormErrors; step: number; message: string } | null {
+    switch (field) {
+      case 'companyName':
+        return { key: 'companyName', step: STEP_COMPANY, message: t('signup.fieldRequired') }
+      case 'firstBusinessName':
+        return { key: 'firstBusinessName', step: STEP_COMPANY, message: t('signup.fieldRequired') }
+      case 'ownerFirstName':
+        return { key: 'ownerFirstName', step: STEP_YOU, message: t('signup.fieldRequired') }
+      case 'ownerEmail':
+        return { key: 'ownerEmail', step: STEP_YOU, message: t('signup.emailInvalid') }
+      case 'phone':
+        return { key: 'phone', step: STEP_YOU, message: t('signup.phoneInvalid') }
+      case 'ownerPassword':
+        return {
+          key: 'ownerPassword',
+          step: STEP_SECURITY,
+          message: t('signup.passwordTooShort', { min: PASSWORD_MIN_LENGTH }),
+        }
+      case 'passwordDistinctFromEmail':
+        return { key: 'ownerPassword', step: STEP_SECURITY, message: t('signup.passwordSameAsEmail') }
+      case 'termsAccepted':
+        return { key: 'terms', step: STEP_SECURITY, message: t('signup.termsRequired') }
+      default:
+        return null
+    }
+  }
+
   function submit() {
     const body: SignupRequest = {
       companyName: companyName.trim(),
@@ -420,6 +458,25 @@ export function Signup() {
     }
     mutation.mutate(body, {
       onSuccess: (res) => setSuccess(res),
+      onError: (err) => {
+        // Surface server-side field validation (400) ON the fields themselves and jump to the
+        // earliest step that has one, so nothing is hidden behind the generic banner (a password
+        // rejected on the Security step must not stay invisible while the user sits on Review).
+        const serverErrors = err.problem?.errors
+        if (err.status !== 400 || !serverErrors?.length) return
+        const mapped: FormErrors = {}
+        let firstStep: number | null = null
+        for (const { field } of serverErrors) {
+          const m = serverFieldError(field)
+          if (!m) continue
+          mapped[m.key] = m.message
+          firstStep = firstStep === null ? m.step : Math.min(firstStep, m.step)
+        }
+        if (Object.keys(mapped).length > 0) {
+          setErrors(mapped)
+          if (firstStep !== null) setStep(firstStep)
+        }
+      },
     })
   }
 
