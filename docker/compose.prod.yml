@@ -514,6 +514,10 @@ services:
     cpus: 0.5
     volumes:
       - ./prod/edge.conf:/etc/nginx/conf.d/default.conf:ro
+      # Android installers (ADR 0058): the edge serves any top-level /*.apk + /app/updates/ from this
+      # host mount, so an APK survives every container rebuild/recreate. Binaries are gitignored; the
+      # dir is kept by docker/prod/downloads/.gitkeep. Empty until a stable-origin prod build is dropped.
+      - ./prod/downloads:/srv/downloads:ro
 
   # ---------------------------------------------------------------------------
   # Cloudflare tunnels. INTERIM: two quick tunnels (profile: quicktunnel) → ephemeral

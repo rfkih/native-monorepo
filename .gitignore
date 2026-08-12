@@ -45,6 +45,16 @@ e2e/node_modules/
 e2e/test-results/
 e2e/playwright-report/
 
-# Signed Android installers served by the UAT edge (/*.apk -> docker/uat/downloads mount).
-# Binaries stay out of git; source of truth is C:\Users\rifki\native-till-signing\builds\.
+# Signed Android installers served by the edge (/*.apk -> docker/<env>/downloads mount) + the
+# OTA bundle zips. Binaries stay out of git; source of truth is C:\Users\rifki\native-till-signing\.
 docker/uat/downloads/*.apk
+docker/prod/downloads/*.apk
+docker/*/downloads/app/updates/*.zip
+# Per-environment APK build output (frontend/native-*/scripts/build-app.mjs, ADR 0058).
+frontend/native-till/dist/
+frontend/native-employee/dist/
+
+# Private keys / certs — NEVER commit. The prod VPS SSH key (sshkey.pem) is kept in the repo root
+# for local ops convenience; this guard stops it (and any other key) from being staged by accident.
+*.pem
+*.key

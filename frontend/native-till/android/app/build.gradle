@@ -30,6 +30,27 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // Per-environment app identities (ADR 0058): UAT and prod are SEPARATE installable apps so a
+    // tester can run both side-by-side and never confuse them. The WebView origin is still chosen at
+    // `cap sync` time (NATIVE_TILL_URL in capacitor.config.ts); the flavor only sets the app's
+    // Android identity + name + badged icon. Use `npm run build:uat` / `build:prod` (scripts/
+    // build-app.mjs) so one flag pairs the right origin with the right flavor.
+    flavorDimensions "env"
+    productFlavors {
+        // Prod = the canonical, permanent identity (also the future Play upload id). Built from
+        // src/main: applicationId id.co.nativeapp.till, launcher name "Native", brand icon.
+        prod {
+            dimension "env"
+        }
+        // UAT = a distinct app: applicationId id.co.nativeapp.till.uat, name "Native UAT", badged
+        // (amber) icon. Overrides live in src/uat/res (strings + adaptive icon). The .uat suffix
+        // lets it install alongside prod and keeps its OTA channel separate.
+        uat {
+            dimension "env"
+            applicationIdSuffix ".uat"
+            versionNameSuffix "-uat"
+        }
+    }
     signingConfigs {
         release {
             if (keystoreProps.getProperty('storeFile')) {

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- UAT adaptive-icon background (ADR 0058): amber, deliberately UNLIKE the brand cyan
+     (ic_launcher_bg_brand), with a darker diagonal band so the UAT app is unmistakable next to
+     prod on the home screen. Full 108 viewport → masked to the launcher's icon shape. The brand
+     white glyph (ic_launcher_fg_brand, from src/main) sits on top and stays legible on amber. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:pathData="M0,0 h108 v108 h-108 z" android:fillColor="#FFB45309" />
+    <path android:pathData="M0,74 L108,26 L108,52 L0,100 z" android:fillColor="#FF7C2D12" />
+</vector>

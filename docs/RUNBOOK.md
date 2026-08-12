@@ -293,6 +293,7 @@ Public edge = two Cloudflare **quick tunnels** (EPHEMERAL URLs; current values i
 | **Restore drill (monthly)** | `ssh <vps> 'bash ~/native-prod/scripts/prod-restore-drill.sh'` — decrypts the newest archive, restores finance_service into a throwaway postgres, asserts the schema. |
 | **Watchdog** | `ops-watch.yml` every 30 min: disk (fail >88%), container health, backup freshness, external tunnel probes. A failed run = GitHub notification. Manual: `gh workflow run ops-watch.yml`. |
 | **Manual deploy (no CI)** | `ssh <vps> 'cd ~/native-prod && bash scripts/prod-deploy.sh vX.Y.Z'` — requires `releases/vX.Y.Z.images.yml` (digest-pinned) present. |
+| **Android app (prod)** | Served at `https://<prod-origin>/native-app-latest.apk` + `/native-employee-app-latest.apk` from the `docker/prod/downloads` edge mount (ADR 0058). Prod is a SEPARATE app from UAT (`id.co.nativeapp.till` "Native" vs `…​.till.uat` "Native UAT", amber badge). **DEFERRED until a stable domain**: the origin is baked into the APK, so build (`npm run build:prod` in `frontend/native-till`) only against the named tunnel/domain, not an ephemeral quick-tunnel URL — the wrapper refuses the latter. Until then the prod link 404s by design. |
 
 Gotchas: the edge has **no host port** (probe via `docker exec native-prod-edge wget ...`); the tunnel
 containers ride compose profiles — scripts export `COMPOSE_PROFILES` from prod.env, so never run bare

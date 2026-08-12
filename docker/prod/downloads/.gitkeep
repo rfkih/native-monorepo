@@ -1,0 +1,2 @@
+# Keeps docker/prod/downloads/ in git so the edge bind mount (./prod/downloads -> /srv/downloads)
+# always has a directory to mount. APK/OTA binaries here are gitignored (see repo .gitignore).

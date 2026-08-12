@@ -31,6 +31,26 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // Per-environment app identities (ADR 0058), mirroring the Till app: UAT and prod are SEPARATE
+    // installable apps. The WebView origin is chosen at `cap sync` time (NATIVE_EMPLOYEE_URL in
+    // capacitor.config.ts); the flavor only sets Android identity + name + badged icon. Use
+    // `npm run build:uat` / `build:prod` (scripts/build-app.mjs) so the origin and flavor stay paired.
+    flavorDimensions "env"
+    productFlavors {
+        // Prod = the canonical, permanent identity. Built from src/main: applicationId
+        // id.co.nativeapp.employee, launcher name "Native Karyawan", brand icon.
+        prod {
+            dimension "env"
+        }
+        // UAT = a distinct app: applicationId id.co.nativeapp.employee.uat, name "Native Karyawan
+        // UAT", badged (amber) icon. Overrides live in src/uat/res. The .uat suffix lets it install
+        // alongside prod.
+        uat {
+            dimension "env"
+            applicationIdSuffix ".uat"
+            versionNameSuffix "-uat"
+        }
+    }
     signingConfigs {
         release {
             if (keystoreProps.getProperty('storeFile')) {

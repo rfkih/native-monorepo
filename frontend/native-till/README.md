@@ -9,6 +9,30 @@ Kotlin side is a dumb byte pipe.
 **This build is NOT part of the root Gradle build.** It has its own Android toolchain (AGP 8.13,
 JDK 21, Gradle 8.14 wrapper) and must never be wired into `settings.gradle.kts` / `build-logic/`.
 
+## Environments: UAT vs Prod are separate apps (ADR 0058)
+
+Two Gradle product flavors (`env` dimension) → two **distinct installable apps** so a device can hold
+both and never confuse them:
+
+| Flavor | applicationId | Launcher name | Icon | Origin |
+|---|---|---|---|---|
+| `prod` | `id.co.nativeapp.till` (canonical, permanent) | **Native** | brand (cyan) | the stable prod origin |
+| `uat` | `id.co.nativeapp.till.uat` | **Native UAT** | amber, badged | UAT |
+
+The flavor sets only the Android identity/name/icon; the WebView **origin** is still baked at
+`cap sync` time from `NATIVE_TILL_URL`. Use the wrapper so the two stay paired — **never** build the
+`uat` flavor while synced to the prod URL (or vice-versa):
+
+```powershell
+npm run build:uat                                     # → dist/native-app-uat-v<code>.apk (UAT origin)
+$env:NATIVE_TILL_URL="https://<prod-domain>"; npm run build:prod   # → dist/native-app-prod-v<code>.apk
+```
+
+`build:prod` **refuses** an ephemeral `*.trycloudflare.com` origin (it would break on the next prod
+restart) — build prod only once a named tunnel / domain gives a **stable** origin. Gradle tasks are
+now flavor-qualified: `assembleUatRelease` / `assembleProdRelease` (plain `assembleRelease` builds
+both); output paths gain a flavor segment (`app/build/outputs/apk/<flavor>/release/app-<flavor>-release.apk`).
+
 ## Build (Windows, this repo's dev machine)
 
 Prereqs: Node ≥ 20, Android SDK (Android Studio default install), JDK 21
@@ -22,20 +46,24 @@ cd android
 # android/local.properties must point at your SDK (machine-local, gitignored):
 #   sdk.dir=C:\\Users\\<you>\\AppData\\Local\\Android\\Sdk
 $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
-.\gradlew.bat assembleDebug
-# → app\build\outputs\apk\debug\app-debug.apk
+.\gradlew.bat assembleUatDebug
+# → app\build\outputs\apk\uat\debug\app-uat-debug.apk   (or just: npm run apk)
 ```
 
 The WebView origin defaults to the UAT console; override per build with
-`NATIVE_TILL_URL=https://... npx cap sync android`.
+`NATIVE_TILL_URL=https://... npx cap sync android` (or let `npm run build:uat|build:prod` set it —
+see **Environments** above).
 
 ## Release (production) build
+
+Prefer the wrapper (`npm run build:prod` / `build:uat`, see **Environments** above) — it pairs origin
+with flavor and names the output. To drive Gradle directly:
 
 ```powershell
 cd frontend/native-till/android
 $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
-.\gradlew.bat assembleRelease
-# → app\build\outputs\apk\release\app-release.apk (SIGNED when keystore.properties exists)
+.\gradlew.bat assembleProdRelease   # or assembleUatRelease
+# → app\build\outputs\apk\prod\release\app-prod-release.apk (SIGNED when keystore.properties exists)
 ```
 
 Signing: `android/keystore.properties` (gitignored, BOM-free — PS5.1 `Set-Content` writes a BOM
@@ -101,7 +129,7 @@ $env:NATIVE_TILL_ORIGIN = "<ORIGIN>"   # bakes absolute VITE_API_BASE_URL + <ORI
 npm run bundle                          # builds console → stages www/
 $env:NATIVE_TILL_BUNDLED = "1"          # drop server.url → serve www from https://localhost
 npx cap sync android
-cd android; $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"; .\gradlew.bat assembleRelease
+cd android; $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"; .\gradlew.bat assembleUatRelease
 ```
 Sanity before installing: `android/app/src/main/assets/capacitor.config.json` must have **no**
 `server.url` (only `errorPath`). Then uninstall the old app once (signing), install the APK, and check:
@@ -118,7 +146,7 @@ Acceptance (P2): login + data + print all succeed from the bundled build.
 Rebuild the bundled APK with OTA enabled and install it:
 ```powershell
 $env:NATIVE_TILL_UPDATE_URL = "<ORIGIN>/app/updates/updates.json"
-npx cap sync android; cd android; .\gradlew.bat assembleRelease   # install this build
+npx cap sync android; cd android; .\gradlew.bat assembleUatRelease   # install this build
 ```
 Make a **visible** web change (e.g. a label), then publish a higher bundle version:
 ```powershell
