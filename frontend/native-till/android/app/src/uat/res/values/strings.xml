@@ -1,0 +1,12 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!-- UAT flavor overrides (src/uat) — REPLACE the main values for the `uat` variant only (a flavor
+     source set wins over src/main for same-named resources, so this is an override, not a duplicate).
+     app_name/title distinguish the launcher next to the prod "Native" app; package_name and
+     custom_url_scheme are aligned to the .uat applicationId so a bundled UAT build's local WebView
+     scheme can never collide with the prod app. ADR 0058. -->
+<resources>
+    <string name="app_name">Native UAT</string>
+    <string name="title_activity_main">Native UAT</string>
+    <string name="package_name">id.co.nativeapp.till.uat</string>
+    <string name="custom_url_scheme">id.co.nativeapp.till.uat</string>
+</resources>

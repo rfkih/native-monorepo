@@ -12,6 +12,28 @@ self-service with nothing to print, so it registers no Capacitor plugins.
 JDK 21, Gradle 8.14 wrapper) and must never be wired into `settings.gradle.kts` / `build-logic/`
 — exactly the same posture as `frontend/native-till`.
 
+## Environments: UAT vs Prod are separate apps (ADR 0058)
+
+Two Gradle product flavors (`env` dimension), mirroring the Till app → two **distinct installable
+apps** so a device can hold both:
+
+| Flavor | applicationId | Launcher name | Icon | Origin |
+|---|---|---|---|---|
+| `prod` | `id.co.nativeapp.employee` (canonical, permanent) | **Native Karyawan** | brand (cyan) | the stable prod origin |
+| `uat` | `id.co.nativeapp.employee.uat` | **Native Karyawan UAT** | amber, badged | UAT |
+
+The flavor sets only identity/name/icon; the WebView **origin** is baked at `cap sync` time from
+`NATIVE_EMPLOYEE_URL`. Use the wrapper so the two stay paired:
+
+```powershell
+npm run build:uat                                          # → dist/native-employee-app-uat-v<code>.apk
+$env:NATIVE_EMPLOYEE_URL="https://<prod-origin>"; npm run build:prod
+```
+
+`build:prod` **refuses** an ephemeral `*.trycloudflare.com` origin — build prod only once a named
+tunnel / domain gives a **stable** origin. Gradle tasks are flavor-qualified
+(`assembleUatRelease` / `assembleProdRelease`); output paths gain a flavor segment.
+
 ## Build (Windows, this repo's dev machine)
 
 Prereqs: Node ≥ 20, Android SDK (Android Studio default install), JDK 21
@@ -25,13 +47,13 @@ cd android
 # android/local.properties must point at your SDK (machine-local, gitignored):
 #   sdk.dir=C:\\Users\\<you>\\AppData\\Local\\Android\\Sdk
 $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
-.\gradlew.bat assembleDebug
-# → app\build\outputs\apk\debug\app-debug.apk
+.\gradlew.bat assembleUatDebug
+# → app\build\outputs\apk\uat\debug\app-uat-debug.apk   (or just: npm run apk)
 ```
 
-The WebView origin defaults to the shared UAT funnel (a **placeholder** — there is no dedicated
-employee origin yet, see `capacitor.config.ts`); override per build with
-`NATIVE_EMPLOYEE_URL=https://... npx cap sync android`.
+The WebView origin defaults to the Employee UAT funnel (see `capacitor.config.ts`); override per
+build with `NATIVE_EMPLOYEE_URL=https://... npx cap sync android` (or let `npm run build:uat|build:prod`
+set it — see **Environments** above).
 
 ## Release (production) build
 
@@ -57,13 +79,13 @@ keyAlias=native-employee
 keyPassword=<key password>
 ```
 
-then build:
+then build (prefer the wrapper `npm run build:prod` / `build:uat` — it pairs origin with flavor):
 
 ```powershell
 cd frontend/native-employee/android
 $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
-.\gradlew.bat assembleRelease
-# → app\build\outputs\apk\release\app-release.apk (SIGNED when keystore.properties exists)
+.\gradlew.bat assembleProdRelease   # or assembleUatRelease
+# → app\build\outputs\apk\prod\release\app-prod-release.apk (SIGNED when keystore.properties exists)
 ```
 
 Signing: the keystore lives OUTSIDE the repo, e.g. `C:\Users\rifki\native-employee-signing\`
@@ -99,8 +121,10 @@ removed rather than carried over unused:
 ## Icons / splash
 
 Reuses the Till app's icon and splash assets **as-is** (same brand mark/gradient) so the project
-is complete today. **Follow-up:** commission or generate Employee-specific launcher icon/splash
-art to visually distinguish it from the Business/Till app on a device that has both installed.
+is complete today. The **UAT flavor** now overrides this with a badged amber launcher icon + a
+"Native Karyawan UAT" name (ADR 0058) so UAT and prod are distinguishable. **Still a follow-up:**
+commission Employee-specific art to visually distinguish it from the Business/Till app (a separate
+concern from the UAT/prod badge) on a device that has both installed.
 
 ## Versioning contract
 
