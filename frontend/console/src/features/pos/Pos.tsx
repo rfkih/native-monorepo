@@ -361,6 +361,24 @@ function PosInner({ session }: { session: CompanySession }) {
   const activeBill = openBillId ? openBillsList.find((b) => b.id === openBillId) : null
 
   const lineCount = cart.reduce((sum, l) => sum + l.qty, 0)
+
+  // The bottom dock (SummaryBar, position:fixed) grows tall once the walk-in cart has items — coupon
+  // + member + discount fields stack above the action row — far taller than a static pad. Measure it
+  // so the menu scroll area always clears it and the last rows are never hidden behind the dock.
+  const [dockHeight, setDockHeight] = useState(0)
+  useEffect(() => {
+    const el = document.getElementById('pos-summary-dock')
+    if (!el) {
+      setDockHeight(0)
+      return
+    }
+    const measure = () => setDockHeight(el.offsetHeight)
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [openBillId, lineCount])
+
   const discountMinor = parseDiscountInput(discountInput, currency)
   const clientSubtotalMinor = cart.reduce(
     (sum, l) => sum + l.effectiveUnitPriceMinor * l.qty,
@@ -771,7 +789,10 @@ function PosInner({ session }: { session: CompanySession }) {
         </div>
 
         {/* ── 4. Menu grid ─────────────────────────────────────────────── */}
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-28 pt-3 sm:pb-28">
+        <div
+          className="min-h-0 flex-1 overflow-y-auto px-5 pb-28 pt-3 sm:pb-28"
+          style={dockHeight ? { paddingBottom: dockHeight + 24 } : undefined}
+        >
           {/* Phone: spacer for the chip row */}
           <div className="h-14 sm:hidden" aria-hidden="true" />
 
