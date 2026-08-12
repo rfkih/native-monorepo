@@ -45,7 +45,7 @@ class IngredientControllerValidationTest {
   @MockitoBean private IngredientService ingredientService;
 
   private static IngredientResponse stubIngredient(UUID id) {
-    return new IngredientResponse(id, BUSINESS_ID, "Patty", "pcs", 0, null, null, 0L, true);
+    return new IngredientResponse(id, BUSINESS_ID, "Patty", "pcs", null, 0, null, null, 0L, true);
   }
 
   @Test
@@ -137,7 +137,7 @@ class IngredientControllerValidationTest {
     UUID id = UUID.randomUUID();
     when(ingredientService.create(any()))
         .thenReturn(
-            new IngredientResponse(id, BUSINESS_ID, "Patty", "pcs", 0, 5_000L, "IDR", 0L, true));
+            new IngredientResponse(id, BUSINESS_ID, "Patty", "pcs", null, 0, 5_000L, "IDR", 0L, true));
 
     String body =
         """
@@ -156,7 +156,7 @@ class IngredientControllerValidationTest {
     UUID id = UUID.randomUUID();
     when(ingredientService.update(org.mockito.ArgumentMatchers.eq(id), any()))
         .thenReturn(
-            new IngredientResponse(id, BUSINESS_ID, "Patty Sapi", "pcs", 0, null, null, 0L, true));
+            new IngredientResponse(id, BUSINESS_ID, "Patty Sapi", "pcs", null, 0, null, null, 0L, true));
 
     String body =
         """
@@ -199,7 +199,7 @@ class IngredientControllerValidationTest {
     UUID id = UUID.randomUUID();
     when(ingredientService.setStock(org.mockito.ArgumentMatchers.eq(id), anyInt()))
         .thenReturn(
-            new IngredientResponse(id, BUSINESS_ID, "Patty", "pcs", 25, null, null, 0L, true));
+            new IngredientResponse(id, BUSINESS_ID, "Patty", "pcs", null, 25, null, null, 0L, true));
 
     String body =
         """
@@ -251,7 +251,7 @@ class IngredientControllerValidationTest {
     when(ingredientService.addStock(
             org.mockito.ArgumentMatchers.eq(id), anyInt(), any(), any()))
         .thenReturn(
-            new IngredientResponse(id, BUSINESS_ID, "Patty", "pcs", 15, null, null, 0L, true));
+            new IngredientResponse(id, BUSINESS_ID, "Patty", "pcs", null, 15, null, null, 0L, true));
 
     String body =
         """
@@ -276,7 +276,7 @@ class IngredientControllerValidationTest {
             org.mockito.ArgumentMatchers.eq("IDR")))
         .thenReturn(
             new IngredientResponse(
-                id, BUSINESS_ID, "Patty", "pcs", 15, 9_000L, "IDR", 135_000L, true));
+                id, BUSINESS_ID, "Patty", "pcs", null, 15, 9_000L, "IDR", 135_000L, true));
 
     String body =
         """

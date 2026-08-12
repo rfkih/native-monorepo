@@ -49,6 +49,7 @@ public class IngredientReader {
         view.getBusinessId(),
         view.getName(),
         view.getUnit(),
+        view.getDisplayUnit(),
         view.getStockQty(),
         view.getUnitCostMinor(),
         view.getCostCurrency() == null ? null : view.getCostCurrency().strip(),

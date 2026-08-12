@@ -17,5 +17,6 @@ import org.springframework.lang.Nullable;
 public record UpdateIngredientRequest(
     @Nullable @Size(max = 255) String name,
     @Nullable @Size(max = 16) String unit,
+    @Nullable @Size(max = 16) String displayUnit,
     @Nullable @PositiveOrZero Long unitCostMinor,
     @Nullable @Size(min = 3, max = 3) String costCurrency) {}

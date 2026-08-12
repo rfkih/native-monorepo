@@ -25,6 +25,7 @@ public record CreateIngredientRequest(
     @NotNull UUID businessId,
     @NotBlank @Size(max = 255) String name,
     @NotBlank @Size(max = 16) String unit,
+    @Nullable @Size(max = 16) String displayUnit,
     @Nullable @PositiveOrZero Long unitCostMinor,
     @Nullable @Size(min = 3, max = 3) String costCurrency,
     @Nullable @PositiveOrZero Integer initialStockQty) {}

@@ -59,7 +59,7 @@ class IngredientWriterTest {
         asTenant(
             () ->
                 writer.create(
-                    new CreateIngredientRequest(OUTLET, "Roti", "pcs", null, null, null)));
+                    new CreateIngredientRequest(OUTLET, "Roti", "pcs", null, null, null, null)));
 
     assertThat(response.name()).isEqualTo("Roti");
     assertThat(response.stockQty()).isZero();
@@ -76,7 +76,7 @@ class IngredientWriterTest {
         asTenant(
             () ->
                 writer.create(
-                    new CreateIngredientRequest(OUTLET, "Roti", "pcs", 2_000L, "IDR", 30)));
+                    new CreateIngredientRequest(OUTLET, "Roti", "pcs", null, 2_000L, "IDR", 30)));
 
     assertThat(response.stockQty()).isEqualTo(30);
     assertThat(response.unitCostMinor()).isEqualTo(2_000L);

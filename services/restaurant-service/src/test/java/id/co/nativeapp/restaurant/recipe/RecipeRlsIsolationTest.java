@@ -163,7 +163,7 @@ class RecipeRlsIsolationTest extends PostgresRlsTestBase {
         actor,
         () ->
             ingredientService
-                .create(new CreateIngredientRequest(businessId, name, "g", 100L, "IDR", 100))
+                .create(new CreateIngredientRequest(businessId, name, "g", null, 100L, "IDR", 100))
                 .id());
   }
 

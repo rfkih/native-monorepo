@@ -27,6 +27,7 @@ public interface IngredientRepository extends JpaRepository<Ingredient, UUID> {
              i.business_id       AS business_id,
              i.name              AS name,
              i.unit              AS unit,
+             i.display_unit      AS display_unit,
              i.stock_qty         AS stock_qty,
              i.unit_cost_minor   AS unit_cost_minor,
              i.cost_currency     AS cost_currency,

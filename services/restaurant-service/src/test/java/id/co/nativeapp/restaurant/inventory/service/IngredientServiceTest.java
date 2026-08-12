@@ -37,7 +37,7 @@ class IngredientServiceTest {
   }
 
   private static CreateIngredientRequest request() {
-    return new CreateIngredientRequest(OUTLET, "Roti", "pcs", null, null, null);
+    return new CreateIngredientRequest(OUTLET, "Roti", "pcs", null, null, null, null);
   }
 
   @Test

@@ -381,7 +381,7 @@ class RecipeIntegrationTest extends PostgresRlsTestBase {
             ingredientService
                 .create(
                     new CreateIngredientRequest(
-                        businessId, name, "g", unitCostMinor, currency, 1000))
+                        businessId, name, "g", null, unitCostMinor, currency, 1000))
                 .id());
   }
 

@@ -30,6 +30,14 @@ import { cn } from '@/lib/cn'
 import { formatMoney, formatPercent } from '@/lib/money'
 import type { CompanySession } from '@/lib/session'
 import { useIngredients, type Ingredient } from '@/features/inventory/ingredientApi'
+import {
+  allowsFraction,
+  parseShownQtyInput,
+  shownUnit,
+  toBaseQty,
+  toDisplayQty,
+  type UnitBearing,
+} from '@/features/inventory/lib/units'
 import { useAdminModifierGroups, type MenuItem, type ModifierGroupResponse } from './api'
 import {
   computeMarginRatio,
@@ -134,9 +142,30 @@ function newLine(modifierOptionId: string | null): DraftLine {
 interface IngredientLike {
   name: string
   unit: string
+  /** The unit SHOWN to the user (kg/liter) when it sits above the base; null = the base unit
+   *  itself. A pre-existing-but-inactive recipe line has no catalog entry to read this from —
+   *  see the `recipe.lines` fallback below, which treats it as absent (factor 1). */
+  displayUnit: string | null
   unitCostMinor: number | null
   costCurrency: string | null
   active: boolean
+}
+
+/**
+ * Parses a recipe line's typed quantity — in the ingredient's SHOWN unit — into a signed base
+ * INTEGER. `parseShownQtyInput` only accepts non-negative magnitudes (it is shared with the
+ * stocktake counted-qty input, which is never negative), so a modifier-option DELTA line (which
+ * may be negative, e.g. "no cheese" = -20 g) strips a leading '-' before parsing and reapplies
+ * the sign to the parsed base value. Returns `null` when the typed text isn't a valid quantity
+ * for this ingredient (wrong shape, or a fraction on a base-unit ingredient).
+ */
+function parseLineQty(raw: string, ing: UnitBearing): number | null {
+  const trimmed = raw.trim()
+  const negative = trimmed.startsWith('-')
+  const magnitude = negative ? trimmed.slice(1) : trimmed
+  const base = parseShownQtyInput(magnitude, ing)
+  if (base == null) return null
+  return negative ? -base : base
 }
 
 function computeHppPreview(
@@ -156,8 +185,11 @@ function computeHppPreview(
     }
     if (currency == null) currency = ing.costCurrency
     else if (currency !== ing.costCurrency) mismatch = true
+    // qty is typed in the SHOWN unit (kg may be fractional) — unitCostMinor is PER-BASE, so
+    // convert to the base quantity (grams) BEFORE multiplying; never scale a per-base cost by a
+    // fractional kg value.
     const qty = Number(line.qty)
-    if (Number.isFinite(qty)) sum += qty * ing.unitCostMinor
+    if (Number.isFinite(qty)) sum += toBaseQty(qty, ing) * ing.unitCostMinor
   }
   return {
     hppMinor: currency != null ? sum : null,
@@ -191,20 +223,14 @@ function RecipeEditor({
   const { t } = useTranslation()
   const putRecipe = usePutRecipe(session)
 
-  const [lines, setLines] = useState<DraftLine[]>(() =>
-    recipe.lines.map((l) => ({
-      key: l.id,
-      ingredientId: l.ingredientId,
-      modifierOptionId: l.modifierOptionId,
-      qty: String(l.qtyPerPortion),
-    })),
-  )
-
+  // Built BEFORE the draft state so the initial qty seed below can convert each line's
+  // BASE qtyPerPortion into its ingredient's SHOWN unit (e.g. 1500 g -> "1.5" for a kg item).
   const ingredientById = new Map<string, IngredientLike>()
   for (const ing of ingredients) {
     ingredientById.set(ing.id, {
       name: ing.name,
       unit: ing.unit,
+      displayUnit: ing.displayUnit,
       unitCostMinor: ing.unitCostMinor,
       costCurrency: ing.costCurrency,
       active: ing.active,
@@ -212,15 +238,32 @@ function RecipeEditor({
   }
   for (const l of recipe.lines) {
     if (!ingredientById.has(l.ingredientId)) {
+      // No catalog entry (ingredient gone inactive) — the recipe response has no displayUnit of
+      // its own, so this falls back to the base unit as-is (factor 1, see `lib/units.ts`).
       ingredientById.set(l.ingredientId, {
         name: l.ingredientName,
         unit: l.unit,
+        displayUnit: null,
         unitCostMinor: l.unitCostMinor,
         costCurrency: l.costCurrency,
         active: l.ingredientActive,
       })
     }
   }
+
+  const [lines, setLines] = useState<DraftLine[]>(() =>
+    recipe.lines.map((l) => {
+      const ing = ingredientById.get(l.ingredientId)
+      const shownQty = ing ? toDisplayQty(l.qtyPerPortion, ing) : l.qtyPerPortion
+      return {
+        key: l.id,
+        ingredientId: l.ingredientId,
+        modifierOptionId: l.modifierOptionId,
+        qty: String(shownQty),
+      }
+    }),
+  )
+
   const pickableIngredients = [...ingredientById.entries()]
     .map(([id, ing]) => ({ id, ...ing }))
     .sort((a, b) => a.name.localeCompare(b.name, locale))
@@ -238,8 +281,12 @@ function RecipeEditor({
   // ---- Validation — mirrors the server's rules (see recipeApi.ts docs) --------------------
   function lineError(line: DraftLine): string | null {
     if (!line.ingredientId) return t('recipe.errors.ingredientRequired')
-    const qty = Number(line.qty)
-    if (line.qty.trim() === '' || !Number.isInteger(qty)) return t('recipe.errors.qtyInteger')
+    // Defensive fallback (ingredient not resolvable) — treat as a base unit, factor 1.
+    const ing: UnitBearing = ingredientById.get(line.ingredientId) ?? { unit: '', displayUnit: null }
+    // Typed in the ingredient's SHOWN unit — a fraction is only valid for kg/liter (parseLineQty
+    // rejects it otherwise); the base qty this resolves to is what actually gets saved/summed.
+    const qty = parseLineQty(line.qty, ing)
+    if (qty == null) return t('recipe.errors.qtyInteger')
     if (line.modifierOptionId === null) {
       if (qty <= 0) return t('recipe.errors.baseQtyPositive')
     } else if (qty === 0) {
@@ -264,11 +311,16 @@ function RecipeEditor({
 
   function handleSave() {
     if (hasErrors) return
-    const body: PutRecipeLineInput[] = lines.map((l) => ({
-      ingredientId: l.ingredientId,
-      modifierOptionId: l.modifierOptionId,
-      qtyPerPortion: Number(l.qty),
-    }))
+    const body: PutRecipeLineInput[] = lines.map((l) => {
+      const ing: UnitBearing = ingredientById.get(l.ingredientId) ?? { unit: '', displayUnit: null }
+      // Convert the SHOWN-unit input back to the BASE integer the server stores — `hasErrors`
+      // already guarantees every line parses (parseLineQty null-check in `lineError` above).
+      return {
+        ingredientId: l.ingredientId,
+        modifierOptionId: l.modifierOptionId,
+        qtyPerPortion: parseLineQty(l.qty, ing) ?? 0,
+      }
+    })
     putRecipe.mutate({ itemId: item.id, lines: body }, { onSuccess: onClose })
   }
 
@@ -450,7 +502,7 @@ function RecipeLineRow({
   onRemove,
 }: {
   line: DraftLine
-  ingredients: { id: string; name: string; unit: string; active: boolean }[]
+  ingredients: { id: string; name: string; unit: string; displayUnit: string | null; active: boolean }[]
   error: string | null
   signed: boolean
   onChange: (patch: Partial<DraftLine>) => void
@@ -458,6 +510,7 @@ function RecipeLineRow({
 }) {
   const { t } = useTranslation()
   const selected = ingredients.find((i) => i.id === line.ingredientId)
+  const selectedUnitLabel = selected ? shownUnit(selected) : ''
   return (
     <div>
       <div className="flex items-center gap-2">
@@ -479,11 +532,11 @@ function RecipeLineRow({
         <input
           aria-label={
             signed
-              ? t('recipe.deltaQtyLabel', { unit: selected?.unit ?? '' })
-              : t('recipe.qtyLabel', { unit: selected?.unit ?? '' })
+              ? t('recipe.deltaQtyLabel', { unit: selectedUnitLabel })
+              : t('recipe.qtyLabel', { unit: selectedUnitLabel })
           }
           type="number"
-          step="1"
+          step={selected && allowsFraction(selected) ? 'any' : '1'}
           value={line.qty}
           onChange={(e) => onChange({ qty: e.target.value })}
           placeholder={signed ? '±0' : '0'}

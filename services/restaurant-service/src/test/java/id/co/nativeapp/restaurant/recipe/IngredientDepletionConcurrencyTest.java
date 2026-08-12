@@ -128,7 +128,7 @@ class IngredientDepletionConcurrencyTest extends PostgresRlsTestBase {
         () ->
             ingredientService
                 .create(
-                    new CreateIngredientRequest(BUSINESS_ID, name, "g", 10L, "IDR", initialStock))
+                    new CreateIngredientRequest(BUSINESS_ID, name, "g", null, 10L, "IDR", initialStock))
                 .id());
   }
 

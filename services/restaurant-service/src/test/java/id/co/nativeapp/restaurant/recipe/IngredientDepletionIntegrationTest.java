@@ -353,7 +353,7 @@ class IngredientDepletionIntegrationTest extends PostgresRlsTestBase {
             ingredientService
                 .create(
                     new CreateIngredientRequest(
-                        BUSINESS_ID, name, "g", unitCostMinor, currency, initialStock))
+                        BUSINESS_ID, name, "g", null, unitCostMinor, currency, initialStock))
                 .id());
   }
 

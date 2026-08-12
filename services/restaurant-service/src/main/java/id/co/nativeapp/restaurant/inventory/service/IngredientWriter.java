@@ -61,6 +61,7 @@ public class IngredientWriter {
             request.unit(),
             request.unitCostMinor(),
             request.costCurrency());
+    ingredient.setDisplayUnit(request.displayUnit());
     if (request.initialStockQty() != null && request.initialStockQty() > 0) {
       ingredient.setStock(request.initialStockQty());
     }
@@ -82,7 +83,11 @@ public class IngredientWriter {
     Ingredient ingredient = load(id);
     outletAccessGuard.enforce(ingredient.getBusinessId());
     ingredient.update(
-        request.name(), request.unit(), request.unitCostMinor(), request.costCurrency());
+        request.name(),
+        request.unit(),
+        request.displayUnit(),
+        request.unitCostMinor(),
+        request.costCurrency());
     Ingredient saved = repository.saveAndFlush(ingredient);
     return IngredientResponse.from(saved);
   }

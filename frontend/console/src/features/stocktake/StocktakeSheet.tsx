@@ -31,7 +31,8 @@ import {
   type IngredientStocktakeLineResponse,
   type IngredientStocktakeResponse,
 } from '@/features/inventory/ingredientStocktakeApi'
-import { formatQty, formatSignedQty, parseQtyInput } from './lib/qty'
+import { allowsFraction, formatShownQty, parseShownQtyInput, shownUnit, toDisplayQty } from '@/features/inventory/lib/units'
+import { formatQty, formatSignedQty } from './lib/qty'
 
 /** The three verdict tones shared by the live per-line preview and the post-submit summary. */
 type Tone = 'loss' | 'gain' | 'balanced'
@@ -78,12 +79,14 @@ export function StocktakeSheet({
   // Held after a successful submit so the summary stays visible.
   const [result, setResult] = useState<IngredientStocktakeResponse | null>(null)
 
+  // Seeded (and re-parsed) in the ingredient's SHOWN unit — kg/liter items start counted at the
+  // system quantity expressed as a decimal (e.g. "1.5"), not the raw base-unit integer.
   function valueFor(ing: Ingredient): string {
-    return overrides[ing.id] ?? String(ing.stockQty)
+    return overrides[ing.id] ?? String(toDisplayQty(ing.stockQty, ing))
   }
 
   const parsedCounts = new Map<string, number | null>(
-    ingredients.map((ing) => [ing.id, parseQtyInput(valueFor(ing))]),
+    ingredients.map((ing) => [ing.id, parseShownQtyInput(valueFor(ing), ing)]),
   )
   const allCounted = ingredients.length > 0 && [...parsedCounts.values()].every((v) => v !== null)
 
@@ -221,23 +224,36 @@ function StocktakeIngredientRow({
 }) {
   const { t } = useTranslation()
   const systemQty = ingredient.stockQty
-  const countedQty = parseQtyInput(value)
+  const countedQty = parseShownQtyInput(value, ingredient)
   const varianceQty = countedQty != null ? countedQty - systemQty : null
   const tone = varianceQty != null ? toneOfVariance(varianceQty) : null
   // Client-side preview only (the server recomputes authoritatively on submit) — a simple
-  // qty × unit-cost, never rounded beyond integer minor units.
+  // qty × unit-cost, never rounded beyond integer minor units. Stays in the BASE quantity
+  // (grams) — unitCostMinor is per-base-unit, so a shown (kg) value would distort it ~1000×.
   const valuePreviewMinor =
     varianceQty != null && ingredient.unitCostMinor != null
       ? varianceQty * ingredient.unitCostMinor
       : null
   const previewCurrency = ingredient.costCurrency ?? currency
+  const fractional = allowsFraction(ingredient)
+  // Signed, locale-aware, in the SHOWN unit — up to 3 fraction digits for kg/liter.
+  const varianceDisplay =
+    varianceQty != null
+      ? new Intl.NumberFormat(locale, {
+          signDisplay: 'exceptZero',
+          maximumFractionDigits: fractional ? 3 : 0,
+        }).format(toDisplayQty(varianceQty, ingredient))
+      : null
 
   return (
     <li className="flex items-center gap-3 rounded-xl border border-line bg-paper px-3 py-2.5">
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium text-ink">{ingredient.name}</div>
         <div className="tnum mt-0.5 text-xs text-ink-3">
-          {t('stocktake.systemQty', { qty: formatQty(systemQty, locale), unit: ingredient.unit })}
+          {t('stocktake.systemQty', {
+            qty: formatShownQty(systemQty, ingredient, locale),
+            unit: shownUnit(ingredient),
+          })}
         </div>
       </div>
 
@@ -245,8 +261,8 @@ function StocktakeIngredientRow({
         aria-label={t('stocktake.countedForItem', { name: ingredient.name })}
         type="number"
         min="0"
-        step="1"
-        inputMode="numeric"
+        step={fractional ? 'any' : '1'}
+        inputMode={fractional ? 'decimal' : 'numeric'}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="0"
@@ -257,7 +273,7 @@ function StocktakeIngredientRow({
         {varianceQty != null ? (
           <>
             <div className={cn('tnum font-mono text-sm font-semibold', tone ? TONE_TEXT[tone] : undefined)}>
-              {formatSignedQty(varianceQty, locale)}
+              {varianceDisplay}
             </div>
             {valuePreviewMinor != null ? (
               <div className={cn('tnum font-mono text-[11px]', tone ? TONE_TEXT[tone] : undefined)}>
