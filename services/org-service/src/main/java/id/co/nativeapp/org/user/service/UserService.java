@@ -211,7 +211,8 @@ public class UserService {
    * @return the resolved user, guaranteed to belong to the caller's tenant
    */
   public UserResponse getUserById(String userId) {
-    return toResponse(resolveInTenant(userId), companyReader.findCurrentCompanyCode());
+    return toResponse(
+        resolveInTenant(userId), companyReader.findCurrentCompanyCodeIfPresent().orElse(null));
   }
 
   // ---------------------------------------------------------------------------
@@ -337,7 +338,8 @@ public class UserService {
         request.enabled());
 
     // Re-fetch the updated user to return current state.
-    return toResponse(resolveInTenant(userId), companyReader.findCurrentCompanyCode());
+    return toResponse(
+        resolveInTenant(userId), companyReader.findCurrentCompanyCodeIfPresent().orElse(null));
   }
 
   // ---------------------------------------------------------------------------

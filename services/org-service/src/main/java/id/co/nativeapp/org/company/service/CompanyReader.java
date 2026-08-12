@@ -89,6 +89,9 @@ public class CompanyReader {
    */
   @Transactional(readOnly = true)
   public Optional<String> findCurrentCompanyCodeIfPresent() {
+    // Deliberately calls the repository directly rather than delegating to/from the strict
+    // findCurrentCompanyCode() — a same-bean self-invocation would bypass the Spring proxy and the
+    // RlsAutoApplyAspect that binds the tenant GUC (see the class javadoc). Do not "DRY" these two.
     return companyRepository.findCurrentCompanyCode();
   }
 }
