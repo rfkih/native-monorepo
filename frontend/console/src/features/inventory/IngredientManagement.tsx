@@ -16,6 +16,7 @@ import { ArrowLeft, Moon, Package, Plus, Sun, TriangleAlert, X } from 'lucide-re
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Field, TextInput } from '@/components/ui/Field'
+import { Segmented } from '@/components/ui/Segmented'
 import { Spinner } from '@/components/ui/Spinner'
 import { ListSkeleton } from '@/components/ui/Skeleton'
 import { OutletGate } from '@/components/OutletGate'
@@ -322,18 +323,26 @@ function IngredientFormDialog({
   ingredient: Ingredient | null
   onClose: () => void
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const locale = localeOf(i18n.language)
   const create = useCreateIngredient(session)
   const update = useUpdateIngredient(session)
   const deactivate = useDeactivateIngredient(session)
 
+  const isCreate = ingredient == null
   const [name, setName] = useState(ingredient?.name ?? '')
   const [unit, setUnit] = useState<string>(ingredient?.unit ?? 'pcs')
+  // Two ways to express cost, toggled on create (an owner buying from a vendor knows the TOTAL they
+  // paid, not the per-unit — dividing by hand is the friction this removes). 'total' derives the
+  // per-unit from the quantity below; 'unit' takes the per-unit directly (the old behaviour, and
+  // the only mode when editing an existing item, which has no purchase quantity to divide by).
+  const [costMode, setCostMode] = useState<'total' | 'unit'>('total')
   const [costInput, setCostInput] = useState(
     ingredient?.unitCostMinor != null
       ? minorToMajorInput(ingredient.unitCostMinor, ingredient.costCurrency ?? baseCurrency)
       : '',
   )
+  const [totalInput, setTotalInput] = useState('')
   const [initialQty, setInitialQty] = useState('0')
   const [confirmRemove, setConfirmRemove] = useState(false)
   const [nameError, setNameError] = useState<string | null>(null)
@@ -341,12 +350,25 @@ function IngredientFormDialog({
   const busy = create.isPending || update.isPending || deactivate.isPending
   const mutationError = create.error ?? update.error ?? deactivate.error
 
+  // 'total' mode is only offered on create (the qty below is the divisor). Live-derive the per-unit
+  // as the owner types, so they see exactly what will be booked before submitting.
+  const useTotalMode = isCreate && costMode === 'total'
+  const qtyNum = Number.parseInt(initialQty, 10)
+  const qtyPositive = Number.isFinite(qtyNum) && qtyNum > 0
+  const totalMinor = totalInput.trim() === '' ? null : parseDiscountInput(totalInput, baseCurrency)
+  const derivedUnitMinor =
+    totalMinor != null && qtyPositive ? Math.round(totalMinor / qtyNum) : null
+
   function handleSubmit() {
     if (!name.trim()) {
       setNameError(t('inventory.nameRequired'))
       return
     }
-    const costMinor = costInput.trim() === '' ? null : parseDiscountInput(costInput, baseCurrency)
+    const costMinor = useTotalMode
+      ? derivedUnitMinor
+      : costInput.trim() === ''
+        ? null
+        : parseDiscountInput(costInput, baseCurrency)
     if (ingredient) {
       update.mutate(
         {
@@ -359,14 +381,13 @@ function IngredientFormDialog({
         { onSuccess: onClose },
       )
     } else {
-      const qty = Number.parseInt(initialQty, 10)
       create.mutate(
         {
           name: name.trim(),
           unit,
           unitCostMinor: costMinor,
           costCurrency: costMinor != null ? baseCurrency : null,
-          initialStockQty: Number.isFinite(qty) && qty > 0 ? qty : 0,
+          initialStockQty: qtyPositive ? qtyNum : 0,
         },
         { onSuccess: onClose },
       )
@@ -427,24 +448,15 @@ function IngredientFormDialog({
           </div>
         </Field>
 
-        <Field
-          label={t('inventory.costLabel', { currency: baseCurrency })}
-          htmlFor="ing-cost"
-          hint={t('inventory.costHint')}
-        >
-          <TextInput
-            id="ing-cost"
-            type="number"
-            min="0"
-            inputMode="numeric"
-            value={costInput}
-            onChange={(e) => setCostInput(e.target.value)}
-            placeholder={t('inventory.costPlaceholder')}
-          />
-        </Field>
-
-        {ingredient == null ? (
-          <Field label={t('inventory.initialQtyLabel')} htmlFor="ing-initial">
+        {/* Quantity first on create — in 'total' mode it is the divisor that turns the total paid
+            into a per-unit cost, so it must be entered before the amount reads sensibly. */}
+        {isCreate ? (
+          <Field
+            label={t(useTotalMode ? 'inventory.qtyBoughtLabel' : 'inventory.initialQtyLabel', {
+              unit,
+            })}
+            htmlFor="ing-initial"
+          >
             <TextInput
               id="ing-initial"
               type="number"
@@ -457,6 +469,66 @@ function IngredientFormDialog({
             />
           </Field>
         ) : null}
+
+        {/* Cost — enter the vendor TOTAL (per-unit derived) or the per-unit directly. The toggle is
+            create-only; editing an existing item has no purchase qty to divide by, so it stays
+            per-unit. */}
+        {isCreate ? (
+          <Segmented<'total' | 'unit'>
+            className="mb-2"
+            fluid
+            ariaLabel={t('inventory.costModeLabel')}
+            value={costMode}
+            onChange={setCostMode}
+            options={[
+              { value: 'total', label: t('inventory.costModeTotal') },
+              { value: 'unit', label: t('inventory.costModeUnit') },
+            ]}
+          />
+        ) : null}
+
+        {useTotalMode ? (
+          <Field
+            label={t('inventory.totalCostLabel', { currency: baseCurrency })}
+            htmlFor="ing-total"
+            hint={
+              derivedUnitMinor != null
+                ? t('inventory.receiveUnitPriceHint', {
+                    price: formatMoney(derivedUnitMinor, baseCurrency, locale),
+                    unit,
+                  })
+                : totalMinor != null && !qtyPositive
+                  ? t('inventory.totalNeedsQty')
+                  : t('inventory.totalCostHint')
+            }
+          >
+            <TextInput
+              id="ing-total"
+              type="number"
+              min="0"
+              inputMode="numeric"
+              value={totalInput}
+              onChange={(e) => setTotalInput(e.target.value)}
+              placeholder={t('inventory.costPlaceholder')}
+            />
+          </Field>
+        ) : (
+          <Field
+            label={t('inventory.costLabel', { currency: baseCurrency })}
+            htmlFor="ing-cost"
+            hint={t('inventory.costHint')}
+          >
+            <TextInput
+              id="ing-cost"
+              type="number"
+              min="0"
+              inputMode="numeric"
+              value={costInput}
+              onChange={(e) => setCostInput(e.target.value)}
+              placeholder={t('inventory.costPlaceholder')}
+            />
+          </Field>
+        )}
 
         {mutationError ? (
           <p className="text-xs text-loss" role="alert">

@@ -1249,6 +1249,15 @@ export const en = {
       'Used to value the stock-count difference in the books. Leave empty to count without posting anything.',
     costPlaceholder: 'Optional',
     initialQtyLabel: 'Starting quantity',
+    // How to enter cost when adding an item: the vendor TOTAL (per-unit derived from the quantity)
+    // or the per-unit cost directly.
+    costModeLabel: 'How to enter cost',
+    costModeTotal: 'Total price',
+    costModeUnit: 'Per unit',
+    qtyBoughtLabel: 'Quantity bought ({{unit}})',
+    totalCostLabel: 'Total purchase price ({{currency}}, optional)',
+    totalCostHint: 'The total you paid the supplier — the per-unit cost is worked out from the quantity.',
+    totalNeedsQty: 'Enter the quantity bought above to work out the per-unit cost.',
     removeAction: 'Remove item',
     removeConfirm: 'Tap again to remove — it disappears from lists and future counts.',
     receiveTitle: 'Receive — {{name}}',

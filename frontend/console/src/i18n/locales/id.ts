@@ -1238,6 +1238,15 @@ export const id = {
       'Dipakai menilai selisih stock opname di pembukuan. Kosongkan untuk menghitung tanpa membukukan apa pun.',
     costPlaceholder: 'Opsional',
     initialQtyLabel: 'Jumlah awal',
+    // Cara isi biaya saat menambah barang: masukkan TOTAL yang dibayar ke pemasok (biaya per
+    // satuan dihitung otomatis dari jumlah) atau biaya per satuan langsung.
+    costModeLabel: 'Cara isi biaya',
+    costModeTotal: 'Harga total',
+    costModeUnit: 'Per satuan',
+    qtyBoughtLabel: 'Jumlah dibeli ({{unit}})',
+    totalCostLabel: 'Total harga beli ({{currency}}, opsional)',
+    totalCostHint: 'Total yang dibayar ke pemasok — biaya per satuan dihitung otomatis dari jumlah.',
+    totalNeedsQty: 'Isi jumlah dibeli di atas untuk menghitung biaya per satuan.',
     removeAction: 'Hapus barang',
     removeConfirm: 'Ketuk lagi untuk menghapus — hilang dari daftar dan hitungan berikutnya.',
     receiveTitle: 'Terima — {{name}}',
