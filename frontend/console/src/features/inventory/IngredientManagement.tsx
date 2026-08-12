@@ -229,10 +229,16 @@ function IngredientRow({
               cost: formatMoney(ingredient.unitCostMinor, ingredient.costCurrency, locale),
               unit: ingredient.unit,
             })}
-            {' · '}
-            {t('inventory.stockValue', {
-              value: formatMoney(ingredient.stockValueMinor, ingredient.costCurrency, locale),
-            })}
+            {/* Guard: an older restaurant-service (pre-ADR 0056) omits stockValueMinor → undefined →
+                formatMoney renders "IDRNaN". Only show the stock value when it's a real number. */}
+            {Number.isFinite(ingredient.stockValueMinor) ? (
+              <>
+                {' · '}
+                {t('inventory.stockValue', {
+                  value: formatMoney(ingredient.stockValueMinor, ingredient.costCurrency, locale),
+                })}
+              </>
+            ) : null}
           </div>
         ) : (
           <div className="mt-0.5 text-xs text-ink-3">{t('inventory.noCost')}</div>
