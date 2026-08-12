@@ -2418,6 +2418,7 @@ export const id = {
     fieldRequired: 'Kolom ini wajib diisi.',
     emailInvalid: 'Masukkan alamat email yang valid.',
     passwordTooShort: 'Kata sandi minimal {{min}} karakter.',
+    passwordSameAsEmail: 'Kata sandi tidak boleh sama dengan alamat email Anda.',
     errorEmailExists: 'Akun dengan email ini sudah ada. Masuk atau gunakan alamat lain.',
     errorIdpUnavailable: 'Layanan masuk sedang tidak tersedia. Silakan coba lagi dalam beberapa menit.',
     errorRateLimited: 'Terlalu banyak percobaan pendaftaran. Mohon tunggu sebentar lalu coba lagi.',

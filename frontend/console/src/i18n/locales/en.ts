@@ -2439,6 +2439,7 @@ export const en = {
     fieldRequired: 'This field is required.',
     emailInvalid: 'Enter a valid email address.',
     passwordTooShort: 'Password must be at least {{min}} characters.',
+    passwordSameAsEmail: 'Password must not be the same as your email address.',
     errorEmailExists: 'An account with this email already exists. Sign in or use a different address.',
     errorIdpUnavailable: 'The sign-in service is temporarily unavailable. Please try again in a few minutes.',
     errorRateLimited: 'Too many sign-up attempts. Please wait a while and try again.',
