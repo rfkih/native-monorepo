@@ -101,6 +101,12 @@ dependencies {
     // libs/security's own proof), and okhttp fetches them via the password grant.
     testImplementation("com.github.dasniko:testcontainers-keycloak:3.9.0")
     testImplementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    // Fake-Keycloak unit test for KeycloakAdminClient#replaceRealmRoles (ADD-before-REMOVE
+    // fail-safe ordering, see KeycloakAdminClientRoleReplaceTest): an in-JVM MockWebServer needs no
+    // Docker/Testcontainers, so the ordering + failure-mid-operation assertions run fast and
+    // deterministically.
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 }
 
 // libs/security (#16) ships an auto-configuration whose DEFAULT (non-dev) path stands up a JWT
