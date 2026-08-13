@@ -147,6 +147,18 @@ if [ -z "${DEPLOY_FAILED:-}" ]; then
     echo "$RELEASE" > LAST_GOOD
     cp "$MANIFEST" releases/LAST_GOOD.images.yml
     log "=== deploy $RELEASE SUCCESS — recorded as LAST_GOOD ==="
+    # Reclaim disk from the SUPERSEDED release's images. Each release pulls the full 13-image set;
+    # `compose up` recreates the containers, so the PREVIOUS release's images are now held by no
+    # container and pile up until the disk fills (real incident 2026-08-13: 78 GB host hit 100% and
+    # Keycloak could not write → logins failed). `docker image prune -af` removes ONLY images with no
+    # container (running or stopped): the CURRENT release stays (running stack = the LAST_GOOD
+    # rollback target), and any co-located app on this host (blackheart/vector) is untouched because
+    # its images are pinned by its own containers. Best-effort — a good deploy is never failed on
+    # cleanup; if it errors, the ops-watch disk alert is the backstop.
+    before=$(df --output=avail / | tail -1 | tr -dc '0-9')
+    docker image prune -af >> deploy.log 2>&1 || log "WARN: post-deploy image prune failed (non-fatal)"
+    after=$(df --output=avail / | tail -1 | tr -dc '0-9')
+    log "post-deploy prune: freed ~$(( (after - before) / 1024 )) MB (avail $(( after / 1024 )) MB)"
     exit 0
   fi
   DEPLOY_FAILED=1
