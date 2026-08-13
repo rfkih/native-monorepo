@@ -75,7 +75,7 @@ public class SettingsWriter {
     this.mediaProperties = mediaProperties;
   }
 
-  /** Upserts the company default scope (mode + optional gateway credentials). */
+  /** Upserts the company default scope (mode + optional per-environment gateway credentials). */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public PaymentSettings upsertCompanyDefault(UpsertSettingsRequest request) {
     TenantContext.require();
@@ -83,11 +83,43 @@ public class SettingsWriter {
     PaymentSettings row = repository.findByOrgUnitIdIsNull().orElseGet(() -> newRow(null, mode));
     row.changeMode(mode);
     if (request.hasGatewayFields()) {
-      PspProvider provider = PspProvider.parse(request.provider());
-      ProviderEnvironment environment = ProviderEnvironment.parse(request.environment());
-      row.applyGatewayCredentials(provider, environment, request.serverKey(), request.clientKey());
+      // Validate the provider whitelist when supplied; the only provider is MIDTRANS.
+      if (notBlank(request.provider())) {
+        PspProvider.parse(request.provider());
+      }
+      row.setProvider(PspProvider.MIDTRANS);
+      // Per-environment credentials: each slot is written independently and never touches the
+      // other environment's key, so a save can never mismatch an environment with the wrong key.
+      if (notBlank(request.sandboxServerKey()) || notBlank(request.sandboxClientKey())) {
+        row.setSandboxCredentials(request.sandboxServerKey(), request.sandboxClientKey());
+      }
+      if (notBlank(request.productionServerKey()) || notBlank(request.productionClientKey())) {
+        row.setProductionCredentials(request.productionServerKey(), request.productionClientKey());
+      }
+      // Activating an environment REQUIRES its slot to hold a key (domain guard, → 422) — the
+      // structural fix for the environment/key mismatch trap.
+      if (notBlank(request.activeEnvironment())) {
+        row.activateEnvironment(ProviderEnvironment.parse(request.activeEnvironment()));
+      }
     }
     return repository.saveAndFlush(row);
+  }
+
+  private static boolean notBlank(String value) {
+    return value != null && !value.isBlank();
+  }
+
+  /**
+   * The decrypted server key stored for {@code environment}'s slot — call-scoped ONLY (rule 6),
+   * used solely by the verify probe. Empty when no key is stored for that environment.
+   */
+  @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
+  public java.util.Optional<String> serverKeyForEnvironment(ProviderEnvironment environment) {
+    TenantContext.require();
+    return repository
+        .findByOrgUnitIdIsNull()
+        .map(row -> row.serverKeyFor(environment))
+        .filter(Objects::nonNull);
   }
 
   /**

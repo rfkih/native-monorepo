@@ -47,8 +47,14 @@ public interface PaymentSettingsRepository extends JpaRepository<PaymentSettings
                  static_qr_sha256,
                  provider,
                  provider_environment,
-                 server_key_last4,
-                 (server_key_encrypted IS NOT NULL) AS gateway_connected
+                 sandbox_server_key_last4,
+                 production_server_key_last4,
+                 (sandbox_server_key_encrypted IS NOT NULL) AS sandbox_connected,
+                 (production_server_key_encrypted IS NOT NULL) AS production_connected,
+                 (CASE provider_environment
+                    WHEN 'SANDBOX' THEN sandbox_server_key_encrypted IS NOT NULL
+                    WHEN 'PRODUCTION' THEN production_server_key_encrypted IS NOT NULL
+                    ELSE FALSE END) AS gateway_connected
             FROM payment_settings
            ORDER BY org_unit_id NULLS FIRST
           """)

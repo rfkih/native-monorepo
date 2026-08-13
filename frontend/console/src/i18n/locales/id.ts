@@ -618,15 +618,24 @@ export const id = {
       },
       gateway: {
         heading: 'Payment gateway (Midtrans)',
-        environment: 'Environment',
+        activeEnvironment: 'Environment aktif',
         sandbox: 'Sandbox',
         production: 'Production',
         serverKey: 'Server key',
         serverKeySavedHint: 'Tersimpan — isi lagi hanya untuk mengganti',
         clientKey: 'Client key',
+        testConnection: 'Test koneksi',
+        verify: {
+          valid: 'Kunci valid',
+          invalid: 'Kunci ditolak — cek kunci & environment-nya.',
+          unreachable: 'Gateway tak bisa dijangkau — coba lagi.',
+        },
+        activateNeedsKey: 'Isi server key environment ini dulu sebelum mengaktifkannya.',
+        productionLiveWarning: 'Production memakai uang asli — pelanggan benar-benar terdebit.',
         save: 'Simpan pengaturan gateway',
         saveError: 'Tidak dapat menyimpan pengaturan gateway. Coba lagi.',
         connected: 'Terhubung',
+        connectedWithLast4: 'Terhubung · •••• {{last4}}',
         notConnected: 'Belum terhubung',
       },
     },
@@ -910,6 +919,9 @@ export const id = {
         staticHint:
           'Minta pelanggan memindai kode QRIS ini, lalu ketuk "Tandai lunas" setelah aplikasi pelanggan menampilkan berhasil.',
         imageError: 'Gambar QRIS tidak dapat dimuat — Anda tetap bisa konfirmasi manual.',
+        gatewayDegradedBadge: 'Gateway tak tersedia',
+        gatewayDegradedHint:
+          'Gateway QRIS sedang tak bisa dijangkau — konfirmasi manual. Ketuk "Tandai lunas" setelah pelanggan membayar.',
         gatewayInitiateHint:
           'Minta pelanggan memindai QR ini dengan aplikasi apa pun yang mendukung QRIS. Pembayaran dikonfirmasi otomatis — Anda tetap bisa menandainya lunas secara manual bila perlu.',
         gatewayWaiting: 'Membuat kode QR…',

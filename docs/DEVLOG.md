@@ -5,6 +5,28 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-13 — Per-environment QRIS gateway credentials + verify + honest degrade (ADR 0045 amendment)
+
+First real go-live (company "Bara Kebab", GATEWAY + PRODUCTION) exposed a silent human-error trap in
+the Midtrans settings: ONE credential slot + a write-only key (blank on save keeps the stored value),
+so flipping `environment` without re-typing the key left the OTHER environment's key in place →
+Midtrans auth failed at the till, surfaced only as the confusing "Demo · pending provider" MANUAL
+fallback (which also masked the day's disk-full outage). Owner chose the full fix: **two credential
+slots** (Sandbox + Production, migration **V6** — nullable ADD + RLS-wrapped backfill; legacy columns
+kept dead for rollback safety), `provider_environment` demoted to the **active** selector, and a
+domain guard (`activateEnvironment` → 422) so an environment can never be activated against another
+environment's (or no) key. Switching active env now needs no key re-entry. Domain
+`getServerKey()/hasServerKey()/getServerKeyLast4()` resolve the active slot, leaving ChargeWriter /
+WebhookService untouched. Added an owner-only **"Test connection"** (`POST …/gateway/verify` →
+`MidtransClient.verify`, a side-effect-free status probe: 404→VALID, 401/403→INVALID, else
+UNREACHABLE — catches a wrong/mis-environment key at the settings page, not the till). Console: a
+two-section gateway card (each env: keys + Connected·last4 + Test koneksi) + an "Environment aktif"
+switch with a Save guard (`canActivateEnvironment`) + a PRODUCTION "real money" warning; and an
+honest **"gateway unavailable — confirm manually"** till badge (PaymentModal / ServicePaymentModal /
+BillPaymentModal) replacing the misleading "Demo" copy when a configured GATEWAY degrades. All gates
+green (payment-service suite incl. Testcontainers + V6; console tsc + 31 vitest + lint). Branch
+`feat/qris-per-env-credentials`, NOT pushed. ADR 0045 amended.
+
 ## 2026-08-13 — English-first localization; Indonesian gated to Indonesia (ADR 0059)
 
 Taking the product global. Native was Indonesia-first: the console auto-picked Bahasa for any

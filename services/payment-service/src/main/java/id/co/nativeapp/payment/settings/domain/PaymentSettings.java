@@ -104,6 +104,33 @@ public class PaymentSettings extends Auditable {
   @Column(name = "server_key_last4", length = 4)
   private String serverKeyLast4;
 
+  // Per-environment credential slots (V6, ADR 0045 amendment). The merchant's SANDBOX and
+  // PRODUCTION Midtrans keys live in separate slots so `providerEnvironment` (the ACTIVE selector)
+  // can be flipped without ever re-typing — and can never be mismatched with the other
+  // environment's key. Each *_server_key/_client_key is AES-256-GCM ciphertext (rule 6, same
+  // converter as the legacy slot); *_last4 is the only readable trace.
+  @Convert(converter = PiiBytesAttributeConverter.class)
+  @Column(name = "sandbox_server_key_encrypted")
+  private String sandboxServerKey;
+
+  @Convert(converter = PiiBytesAttributeConverter.class)
+  @Column(name = "sandbox_client_key_encrypted")
+  private String sandboxClientKey;
+
+  @Column(name = "sandbox_server_key_last4", length = 4)
+  private String sandboxServerKeyLast4;
+
+  @Convert(converter = PiiBytesAttributeConverter.class)
+  @Column(name = "production_server_key_encrypted")
+  private String productionServerKey;
+
+  @Convert(converter = PiiBytesAttributeConverter.class)
+  @Column(name = "production_client_key_encrypted")
+  private String productionClientKey;
+
+  @Column(name = "production_server_key_last4", length = 4)
+  private String productionServerKeyLast4;
+
   protected PaymentSettings() {
     // for JPA
   }
@@ -127,40 +154,99 @@ public class PaymentSettings extends Auditable {
   }
 
   /**
-   * Applies GATEWAY credentials (company default row only — enforced by the writer). {@code
-   * serverKey} is WRITE-ONLY at the API: a {@code null} keeps the previously stored key (the
-   * console re-sends the form without it), a non-blank value replaces it and refreshes {@code
-   * serverKeyLast4}.
+   * Records the PSP provider (company default row only — enforced by the writer).
    *
    * @throws SettingsValidationException if this is a unit (outlet or division) override row
-   *     (credentials are company-level), or a key is provided without provider/environment
+   *     (credentials are company-level)
    */
-  public void applyGatewayCredentials(
-      PspProvider provider, ProviderEnvironment environment, String serverKey, String clientKey) {
-    if (orgUnitId != null) {
-      throw new SettingsValidationException(
-          "Gateway credentials live on the company default settings, not a unit override.");
-    }
+  public void setProvider(PspProvider provider) {
+    requireCompanyDefaultForCredentials();
     this.provider = Objects.requireNonNull(provider, "provider");
-    this.providerEnvironment = Objects.requireNonNull(environment, "environment");
-    if (serverKey != null && !serverKey.isBlank()) {
+  }
+
+  /**
+   * Stores the SANDBOX slot's credentials (company default row only). Keys are WRITE-ONLY: a {@code
+   * null}/blank keeps the slot's previously stored value (the console re-sends the form without
+   * it), a non-blank value replaces it and refreshes the slot's {@code last4}.
+   */
+  public void setSandboxCredentials(String serverKey, String clientKey) {
+    requireCompanyDefaultForCredentials();
+    if (isPresent(serverKey)) {
       String stripped = serverKey.strip();
-      this.serverKey = stripped;
-      this.serverKeyLast4 =
-          stripped.length() <= 4 ? stripped : stripped.substring(stripped.length() - 4);
+      this.sandboxServerKey = stripped;
+      this.sandboxServerKeyLast4 = last4Of(stripped);
     }
-    if (clientKey != null && !clientKey.isBlank()) {
-      this.clientKey = clientKey.strip();
+    if (isPresent(clientKey)) {
+      this.sandboxClientKey = clientKey.strip();
     }
   }
 
-  /** Removes any stored gateway credentials (and the provider/environment selection). */
+  /**
+   * Stores the PRODUCTION slot's credentials (company default row only). Same write-only semantics
+   * as {@link #setSandboxCredentials(String, String)}.
+   */
+  public void setProductionCredentials(String serverKey, String clientKey) {
+    requireCompanyDefaultForCredentials();
+    if (isPresent(serverKey)) {
+      String stripped = serverKey.strip();
+      this.productionServerKey = stripped;
+      this.productionServerKeyLast4 = last4Of(stripped);
+    }
+    if (isPresent(clientKey)) {
+      this.productionClientKey = clientKey.strip();
+    }
+  }
+
+  /**
+   * Makes {@code environment} the ACTIVE slot the till + webhook use. The structural guard against
+   * the environment/key mismatch (ADR 0045 amendment): the target slot MUST already hold a server
+   * key, so an environment can never be activated against another environment's (or no) key.
+   *
+   * @throws SettingsValidationException if this is a unit override row, or the target environment's
+   *     slot has no server key (→ 422)
+   */
+  public void activateEnvironment(ProviderEnvironment environment) {
+    requireCompanyDefaultForCredentials();
+    Objects.requireNonNull(environment, "environment");
+    if (!hasKeyFor(environment)) {
+      throw new SettingsValidationException(
+          "No server key is stored for the "
+              + environment
+              + " environment — enter it before activating that environment.");
+    }
+    this.providerEnvironment = environment;
+  }
+
+  /**
+   * Removes every stored gateway credential (both slots, the legacy slot, provider + active env).
+   */
   public void clearGatewayCredentials() {
     this.provider = null;
     this.providerEnvironment = null;
     this.serverKey = null;
     this.clientKey = null;
     this.serverKeyLast4 = null;
+    this.sandboxServerKey = null;
+    this.sandboxClientKey = null;
+    this.sandboxServerKeyLast4 = null;
+    this.productionServerKey = null;
+    this.productionClientKey = null;
+    this.productionServerKeyLast4 = null;
+  }
+
+  private void requireCompanyDefaultForCredentials() {
+    if (orgUnitId != null) {
+      throw new SettingsValidationException(
+          "Gateway credentials live on the company default settings, not a unit override.");
+    }
+  }
+
+  private static boolean isPresent(String value) {
+    return value != null && !value.isBlank();
+  }
+
+  private static String last4Of(String key) {
+    return key.length() <= 4 ? key : key.substring(key.length() - 4);
   }
 
   /**
@@ -238,8 +324,54 @@ public class PaymentSettings extends Auditable {
     return staticQrObjectKey;
   }
 
+  /** Whether the ACTIVE environment's slot holds a server key (the charge/webhook precondition). */
   public boolean hasServerKey() {
-    return serverKey != null;
+    return getServerKey() != null;
+  }
+
+  /**
+   * The server key stored for {@code environment}, or {@code null} — writer/charge-path use only.
+   */
+  public String serverKeyFor(ProviderEnvironment environment) {
+    if (environment == null) {
+      return null;
+    }
+    return switch (environment) {
+      case SANDBOX -> sandboxServerKey;
+      case PRODUCTION -> productionServerKey;
+    };
+  }
+
+  /** Whether {@code environment}'s slot holds a server key. */
+  public boolean hasKeyFor(ProviderEnvironment environment) {
+    return serverKeyFor(environment) != null;
+  }
+
+  /** The readable last-4 trace for {@code environment}'s server key, or {@code null}. */
+  public String serverKeyLast4For(ProviderEnvironment environment) {
+    if (environment == null) {
+      return null;
+    }
+    return switch (environment) {
+      case SANDBOX -> sandboxServerKeyLast4;
+      case PRODUCTION -> productionServerKeyLast4;
+    };
+  }
+
+  public boolean hasSandboxKey() {
+    return sandboxServerKey != null;
+  }
+
+  public boolean hasProductionKey() {
+    return productionServerKey != null;
+  }
+
+  public String getSandboxServerKeyLast4() {
+    return sandboxServerKeyLast4;
+  }
+
+  public String getProductionServerKeyLast4() {
+    return productionServerKeyLast4;
   }
 
   private static String requireNonBlank(String value, String field) {
@@ -291,15 +423,17 @@ public class PaymentSettings extends Auditable {
   }
 
   /**
-   * The decrypted server key — writer/charge-path use ONLY (rule 6): never serialized, never
-   * logged, never returned by a read endpoint.
+   * The decrypted server key of the ACTIVE environment ({@link #getProviderEnvironment()}) —
+   * writer/charge-path use ONLY (rule 6): never serialized, never logged, never returned by a read
+   * endpoint. {@code null} when no environment is active or its slot is empty.
    */
   public String getServerKey() {
-    return serverKey;
+    return serverKeyFor(providerEnvironment);
   }
 
+  /** The readable last-4 trace of the ACTIVE environment's server key, or {@code null}. */
   public String getServerKeyLast4() {
-    return serverKeyLast4;
+    return serverKeyLast4For(providerEnvironment);
   }
 
   /** Redacted — no credential, and no image bytes, ever reaches a log line (rule 6). */

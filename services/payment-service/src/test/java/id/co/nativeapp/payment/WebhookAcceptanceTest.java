@@ -64,7 +64,8 @@ class WebhookAcceptanceTest extends PostgresRlsTestBase {
         ACTOR,
         () ->
             settingsService.upsertCompanyDefault(
-                new UpsertSettingsRequest("GATEWAY", "MIDTRANS", "SANDBOX", SERVER_KEY, null)));
+                new UpsertSettingsRequest(
+                    "GATEWAY", "MIDTRANS", "SANDBOX", SERVER_KEY, null, null, null)));
   }
 
   @AfterEach

@@ -39,7 +39,7 @@ services:
     events: true
   - name: payment-service
     module: ":services:payment-service"
-    migrations: { count: 5, range: "V1..V5" }
+    migrations: { count: 6, range: "V1..V6" }
     events: true
   - name: restaurant-service
     module: ":services:restaurant-service"

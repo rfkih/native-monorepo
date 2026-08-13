@@ -60,11 +60,15 @@ import {
   useUploadStaticQr,
   useUpsertUnitOverride,
   useUpsertPaymentSettings,
+  useVerifyGateway,
+  type GatewayEnvCredential,
   type GatewayEnvironment,
+  type GatewayVerifyResult,
   type OwnerPaymentSettingsResponse,
   type PaymentSettingsRow,
   type UpsertCompanySettingsBody,
 } from './api'
+import { canActivateEnvironment, gatewayActiveConnected } from './gatewayActivation'
 import type { QrisMode } from './effectiveMode'
 
 /** Client-side pre-flight only (the server is the authority: 413 over-size, 422 bad magic bytes)
@@ -490,8 +494,8 @@ function DivisionModeEditor({
       {effectiveMode === 'GATEWAY' ? (
         <div className="flex flex-wrap items-center gap-2 rounded-xl bg-paper px-3.5 py-2.5 text-xs text-ink-3">
           <span>{t('settings.payments.division.gatewayHint')}</span>
-          <Badge tone={companyGateway?.connected ? 'profit' : 'neutral'}>
-            {companyGateway?.connected
+          <Badge tone={gatewayActiveConnected(companyGateway) ? 'profit' : 'neutral'}>
+            {gatewayActiveConnected(companyGateway)
               ? t('settings.payments.gateway.connected')
               : t('settings.payments.gateway.notConnected')}
           </Badge>
@@ -720,8 +724,8 @@ function OutletModeEditor({
       {effectiveMode === 'GATEWAY' ? (
         <div className="flex flex-wrap items-center gap-2 rounded-xl bg-paper px-3.5 py-2.5 text-xs text-ink-3">
           <span>{t('settings.payments.outlet.gatewayHint')}</span>
-          <Badge tone={companyGateway?.connected ? 'profit' : 'neutral'}>
-            {companyGateway?.connected
+          <Badge tone={gatewayActiveConnected(companyGateway) ? 'profit' : 'neutral'}>
+            {gatewayActiveConnected(companyGateway)
               ? t('settings.payments.gateway.connected')
               : t('settings.payments.gateway.notConnected')}
           </Badge>
@@ -937,27 +941,41 @@ function GatewayCard({
   const upsert = useUpsertPaymentSettings(session)
   // The owner settings query is already loaded by the time this card mounts (PaymentSettingsContent
   // gates on it) — these initializers read the CURRENT stored value exactly once; a later refetch
-  // (after Save) intentionally does not clobber the fields again, since serverKey/clientKey are
-  // never echoed back and are cleared explicitly in the Save handler below.
-  const [environment, setEnvironment] = useState<GatewayEnvironment>(gateway?.environment ?? 'SANDBOX')
-  const [serverKey, setServerKey] = useState('')
-  const [clientKey, setClientKey] = useState('')
+  // (after Save) intentionally does not clobber the fields again, since the keys are never echoed
+  // back and are cleared explicitly in the Save handler below. Per-environment (V6): each
+  // environment's key lives in its own slot, so switching the active environment never re-types a
+  // key and can never mismatch an environment with the wrong one.
+  const [activeEnvironment, setActiveEnvironment] = useState<GatewayEnvironment>(
+    gateway?.activeEnvironment ?? 'SANDBOX',
+  )
+  const [sandboxServerKey, setSandboxServerKey] = useState('')
+  const [sandboxClientKey, setSandboxClientKey] = useState('')
+  const [productionServerKey, setProductionServerKey] = useState('')
+  const [productionClientKey, setProductionClientKey] = useState('')
 
-  const connected = gateway?.connected ?? false
-  const serverKeyPlaceholder = connected && gateway?.serverKeyLast4 ? `•••• ${gateway.serverKeyLast4}` : undefined
+  // The client mirror of the server's structural guard: you cannot activate an environment whose
+  // slot has neither a stored nor a just-typed key.
+  const activationOk = canActivateEnvironment(activeEnvironment, gateway, {
+    sandboxServerKey,
+    productionServerKey,
+  })
 
   function onSave() {
     const body: UpsertCompanySettingsBody = {
       mode: currentMode,
       provider: 'MIDTRANS',
-      environment,
+      activeEnvironment,
     }
-    if (serverKey.trim()) body.serverKey = serverKey.trim()
-    if (clientKey.trim()) body.clientKey = clientKey.trim()
+    if (sandboxServerKey.trim()) body.sandboxServerKey = sandboxServerKey.trim()
+    if (sandboxClientKey.trim()) body.sandboxClientKey = sandboxClientKey.trim()
+    if (productionServerKey.trim()) body.productionServerKey = productionServerKey.trim()
+    if (productionClientKey.trim()) body.productionClientKey = productionClientKey.trim()
     upsert.mutate(body, {
       onSuccess: () => {
-        setServerKey('')
-        setClientKey('')
+        setSandboxServerKey('')
+        setSandboxClientKey('')
+        setProductionServerKey('')
+        setProductionClientKey('')
       },
     })
   }
@@ -966,58 +984,162 @@ function GatewayCard({
     <Card className="flex flex-col gap-5 p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-display text-lg font-bold text-ink">{t('settings.payments.gateway.heading')}</h2>
-        <Badge tone={connected ? 'profit' : 'neutral'}>
-          {connected ? t('settings.payments.gateway.connected') : t('settings.payments.gateway.notConnected')}
-        </Badge>
       </div>
 
       <div>
         <span className="mb-1.5 block text-sm font-medium text-ink">
-          {t('settings.payments.gateway.environment')}
+          {t('settings.payments.gateway.activeEnvironment')}
         </span>
         <Segmented
-          ariaLabel={t('settings.payments.gateway.environment')}
-          value={environment}
-          onChange={setEnvironment}
+          ariaLabel={t('settings.payments.gateway.activeEnvironment')}
+          value={activeEnvironment}
+          onChange={setActiveEnvironment}
           options={[
             { value: 'SANDBOX', label: t('settings.payments.gateway.sandbox') },
             { value: 'PRODUCTION', label: t('settings.payments.gateway.production') },
           ]}
         />
+        {!activationOk ? (
+          <p className="mt-2 text-xs text-loss">{t('settings.payments.gateway.activateNeedsKey')}</p>
+        ) : activeEnvironment === 'PRODUCTION' ? (
+          <p className="mt-2 text-xs text-amber-2">{t('settings.payments.gateway.productionLiveWarning')}</p>
+        ) : null}
       </div>
 
-      <Field
-        label={t('settings.payments.gateway.serverKey')}
-        htmlFor="gateway-server-key"
-        hint={connected ? t('settings.payments.gateway.serverKeySavedHint') : undefined}
-      >
-        <TextInput
-          id="gateway-server-key"
-          type="password"
-          autoComplete="off"
-          placeholder={serverKeyPlaceholder}
-          value={serverKey}
-          onChange={(e) => setServerKey(e.target.value)}
-        />
-      </Field>
+      <GatewayEnvSection
+        session={session}
+        env="SANDBOX"
+        credential={gateway?.sandbox ?? null}
+        serverKey={sandboxServerKey}
+        onServerKey={setSandboxServerKey}
+        clientKey={sandboxClientKey}
+        onClientKey={setSandboxClientKey}
+      />
 
-      <Field label={t('settings.payments.gateway.clientKey')} htmlFor="gateway-client-key">
-        <TextInput
-          id="gateway-client-key"
-          type="text"
-          autoComplete="off"
-          value={clientKey}
-          onChange={(e) => setClientKey(e.target.value)}
-        />
-      </Field>
+      <GatewayEnvSection
+        session={session}
+        env="PRODUCTION"
+        credential={gateway?.production ?? null}
+        serverKey={productionServerKey}
+        onServerKey={setProductionServerKey}
+        clientKey={productionClientKey}
+        onClientKey={setProductionClientKey}
+      />
 
       {upsert.isError ? <p className="text-sm text-loss">{t('settings.payments.gateway.saveError')}</p> : null}
 
       <div>
-        <Button type="button" disabled={upsert.isPending} onClick={onSave}>
+        <Button type="button" disabled={upsert.isPending || !activationOk} onClick={onSave}>
           {upsert.isPending ? <Spinner /> : t('settings.payments.gateway.save')}
         </Button>
       </div>
     </Card>
   )
+}
+
+/** One environment's credential slot (Sandbox / Production): keys + Connected badge + Test koneksi. */
+function GatewayEnvSection({
+  session,
+  env,
+  credential,
+  serverKey,
+  onServerKey,
+  clientKey,
+  onClientKey,
+}: {
+  session: CompanySession
+  env: GatewayEnvironment
+  credential: GatewayEnvCredential | null
+  serverKey: string
+  onServerKey: (value: string) => void
+  clientKey: string
+  onClientKey: (value: string) => void
+}) {
+  const { t } = useTranslation()
+  const verify = useVerifyGateway(session)
+  const connected = credential?.connected ?? false
+  const last4 = credential?.serverKeyLast4 ?? null
+  const serverKeyPlaceholder = connected && last4 ? `•••• ${last4}` : undefined
+  const envLabel = t(
+    env === 'SANDBOX' ? 'settings.payments.gateway.sandbox' : 'settings.payments.gateway.production',
+  )
+  const canVerify = connected || serverKey.trim().length > 0
+
+  function onVerify() {
+    verify.mutate({ environment: env, serverKey: serverKey.trim() || undefined })
+  }
+
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-line p-4">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-ink">{envLabel}</h3>
+        <Badge tone={connected ? 'profit' : 'neutral'}>
+          {connected
+            ? t('settings.payments.gateway.connectedWithLast4', { last4 })
+            : t('settings.payments.gateway.notConnected')}
+        </Badge>
+      </div>
+
+      <Field
+        label={t('settings.payments.gateway.serverKey')}
+        htmlFor={`gateway-server-key-${env}`}
+        hint={connected ? t('settings.payments.gateway.serverKeySavedHint') : undefined}
+      >
+        <TextInput
+          id={`gateway-server-key-${env}`}
+          type="password"
+          autoComplete="off"
+          placeholder={serverKeyPlaceholder}
+          value={serverKey}
+          onChange={(e) => onServerKey(e.target.value)}
+        />
+      </Field>
+
+      <Field label={t('settings.payments.gateway.clientKey')} htmlFor={`gateway-client-key-${env}`}>
+        <TextInput
+          id={`gateway-client-key-${env}`}
+          type="text"
+          autoComplete="off"
+          value={clientKey}
+          onChange={(e) => onClientKey(e.target.value)}
+        />
+      </Field>
+
+      <div className="flex items-center gap-3">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={!canVerify || verify.isPending}
+          onClick={onVerify}
+        >
+          {verify.isPending ? <Spinner /> : t('settings.payments.gateway.testConnection')}
+        </Button>
+        {verify.isError ? (
+          <span className="text-xs text-loss">{verifyMessage(t, 'UNREACHABLE')}</span>
+        ) : verify.data ? (
+          <span className={`text-xs ${verifyTone(verify.data.result)}`}>
+            {verifyMessage(t, verify.data.result)}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+function verifyTone(result: GatewayVerifyResult): string {
+  if (result === 'VALID') return 'text-profit'
+  if (result === 'INVALID') return 'text-loss'
+  return 'text-amber-2'
+}
+
+function verifyMessage(t: TFunction, result: GatewayVerifyResult): string {
+  switch (result) {
+    case 'VALID':
+      return t('settings.payments.gateway.verify.valid')
+    case 'INVALID':
+      return t('settings.payments.gateway.verify.invalid')
+    case 'UNREACHABLE':
+      return t('settings.payments.gateway.verify.unreachable')
+  }
 }

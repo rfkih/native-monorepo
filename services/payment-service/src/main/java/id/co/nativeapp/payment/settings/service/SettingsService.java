@@ -1,10 +1,15 @@
 package id.co.nativeapp.payment.settings.service;
 
 import id.co.nativeapp.mediastorage.MediaStorage;
+import id.co.nativeapp.payment.charge.service.QrisGatewayPort;
 import id.co.nativeapp.payment.config.ActorRolesProvider;
 import id.co.nativeapp.payment.settings.domain.PaymentSettings;
+import id.co.nativeapp.payment.settings.domain.ProviderEnvironment;
 import id.co.nativeapp.payment.settings.domain.SettingsForbiddenException;
+import id.co.nativeapp.payment.settings.domain.SettingsValidationException;
 import id.co.nativeapp.payment.settings.dto.EffectiveSettingsResponse;
+import id.co.nativeapp.payment.settings.dto.GatewayVerifyRequest;
+import id.co.nativeapp.payment.settings.dto.GatewayVerifyResponse;
 import id.co.nativeapp.payment.settings.dto.PaymentSettingsResponse;
 import id.co.nativeapp.payment.settings.dto.QrImageContentResponse;
 import id.co.nativeapp.payment.settings.dto.QrImageMetaResponse;
@@ -31,18 +36,21 @@ public class SettingsService {
   private final ActorRolesProvider roles;
   private final MediaStorage mediaStorage;
   private final QrObjectMigrationWriter migrationWriter;
+  private final QrisGatewayPort gatewayPort;
 
   public SettingsService(
       SettingsWriter writer,
       SettingsReader reader,
       ActorRolesProvider roles,
       MediaStorage mediaStorage,
-      QrObjectMigrationWriter migrationWriter) {
+      QrObjectMigrationWriter migrationWriter,
+      QrisGatewayPort gatewayPort) {
     this.writer = writer;
     this.reader = reader;
     this.roles = roles;
     this.mediaStorage = mediaStorage;
     this.migrationWriter = migrationWriter;
+    this.gatewayPort = gatewayPort;
   }
 
   /** Owner: the company's full QRIS configuration. */
@@ -69,6 +77,27 @@ public class SettingsService {
   public void deleteUnitOverride(UUID unitId) {
     requireOwner();
     writer.deleteUnitOverride(unitId);
+  }
+
+  /**
+   * Owner: verify a Midtrans key against the provider without saving or charging (ADR 0045
+   * amendment — "Test connection"). Probes the supplied key, or the key already stored for that
+   * environment's slot when none is supplied. Availability only — the key never leaves call scope.
+   */
+  public GatewayVerifyResponse verifyGateway(GatewayVerifyRequest request) {
+    requireOwner();
+    ProviderEnvironment environment = ProviderEnvironment.parse(request.environment());
+    String serverKey =
+        notBlank(request.serverKey())
+            ? request.serverKey().strip()
+            : writer.serverKeyForEnvironment(environment).orElse(null);
+    if (serverKey == null) {
+      throw new SettingsValidationException(
+          "No server key is stored for the " + environment + " environment to verify.");
+    }
+    QrisGatewayPort.GatewayVerification result =
+        gatewayPort.verify(new QrisGatewayPort.GatewayCredentials(serverKey, environment));
+    return new GatewayVerifyResponse(result.name());
   }
 
   /** Owner: upload/replace a scope's static QRIS image. */
@@ -115,5 +144,9 @@ public class SettingsService {
     if (!roles.currentRoles().isEmpty() && !roles.isOwner()) {
       throw new SettingsForbiddenException();
     }
+  }
+
+  private static boolean notBlank(String value) {
+    return value != null && !value.isBlank();
   }
 }

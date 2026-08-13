@@ -145,7 +145,13 @@ class ChargeFlowAcceptanceTest extends PostgresRlsTestBase {
         () ->
             settingsService.upsertCompanyDefault(
                 new UpsertSettingsRequest(
-                    "GATEWAY", "MIDTRANS", "SANDBOX", "SB-Mid-server-acceptance", null)));
+                    "GATEWAY",
+                    "MIDTRANS",
+                    "SANDBOX",
+                    "SB-Mid-server-acceptance",
+                    null,
+                    null,
+                    null)));
     setRoles("cashier");
   }
 
@@ -247,7 +253,7 @@ class ChargeFlowAcceptanceTest extends PostgresRlsTestBase {
         ACTOR,
         () ->
             settingsService.upsertCompanyDefault(
-                new UpsertSettingsRequest("STATIC", null, null, null, null)));
+                new UpsertSettingsRequest("STATIC", null, null, null, null, null, null)));
     setRoles("cashier");
     TenantContext.callAs(
         TENANT,
@@ -272,13 +278,14 @@ class ChargeFlowAcceptanceTest extends PostgresRlsTestBase {
         ACTOR,
         () ->
             settingsService.upsertCompanyDefault(
-                new UpsertSettingsRequest("STATIC", null, null, null, null)));
+                new UpsertSettingsRequest("STATIC", null, null, null, null, null, null)));
     TenantContext.callAs(
         TENANT,
         ACTOR,
         () ->
             settingsService.upsertUnitOverride(
-                DIVISION, new UpsertSettingsRequest("GATEWAY", null, null, null, null)));
+                DIVISION,
+                new UpsertSettingsRequest("GATEWAY", null, null, null, null, null, null)));
     setRoles("cashier");
 
     UUID outletWithNoRow = UUID.randomUUID();

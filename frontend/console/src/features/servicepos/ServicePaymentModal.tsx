@@ -131,6 +131,13 @@ export function ServicePaymentModal({
     divisionId: session.divisionId,
   })
   const qrisMode = effectiveQrisMode(qrisEffectiveQuery.data ?? undefined, qrisEffectiveQuery.isError, offline, currency)
+  // ADR 0045 amendment: configured GATEWAY degraded to MANUAL — see PaymentModal's twin doc
+  // (gated on IDR so a non-IDR currency limitation isn't misattributed to a gateway outage).
+  const degradedFromGateway =
+    qrisEffectiveQuery.data?.mode === 'GATEWAY' &&
+    qrisMode !== 'GATEWAY' &&
+    !offline &&
+    currency === 'IDR'
 
   // ADR 0045: while a GATEWAY charge is live, `ServiceDigitalAttempt` registers its cancel function
   // here so the FRAME's own X close button cancels the charge before closing — see PaymentModal's
@@ -251,6 +258,7 @@ export function ServicePaymentModal({
               locale={locale}
               tenderType={tender}
               qrisMode={qrisMode}
+              degradedFromGateway={degradedFromGateway}
               registerGatewayCancel={registerGatewayCancel}
             />
           )}
@@ -385,6 +393,7 @@ function ServiceDigitalAttempt({
   locale,
   tenderType,
   qrisMode,
+  degradedFromGateway = false,
   registerGatewayCancel,
 }: {
   attempt: TicketAttemptArgs
@@ -394,6 +403,8 @@ function ServiceDigitalAttempt({
   tenderType: 'QRIS' | 'CARD'
   /** ADR 0045: irrelevant for CARD — see PaymentModal's twin doc. */
   qrisMode: QrisMode
+  /** ADR 0045 amendment: configured GATEWAY degraded to MANUAL — see PaymentModal's twin doc. */
+  degradedFromGateway?: boolean
   /** ADR 0045: lets this attempt register the live gateway-cancel function with the modal frame —
    *  see ServicePaymentModal's `handleFrameClose` doc (identical contract to PaymentModal's). */
   registerGatewayCancel?: (fn: (() => Promise<boolean>) | null) => void
@@ -516,6 +527,8 @@ function ServiceDigitalAttempt({
         busy={checkout.isPending}
         errorSlot={checkout.isError ? <CheckoutErrorText error={checkout.error} /> : null}
         onInitiate={initiatePayment}
+        hintText={degradedFromGateway ? t('pos.payment.qris.gatewayDegradedHint') : undefined}
+        badgeText={degradedFromGateway ? t('pos.payment.qris.gatewayDegradedBadge') : undefined}
       />
     )
   }
@@ -555,8 +568,20 @@ function ServiceDigitalAttempt({
       onConfirm={confirmPayment}
       onCancel={onClose}
       qrSlot={staticQrSlot}
-      hintText={showStaticQr ? t('pos.payment.qris.staticHint') : undefined}
-      badgeText={showStaticQr ? null : undefined}
+      hintText={
+        showStaticQr
+          ? t('pos.payment.qris.staticHint')
+          : degradedFromGateway
+            ? t('pos.payment.qris.gatewayDegradedHint')
+            : undefined
+      }
+      badgeText={
+        showStaticQr
+          ? null
+          : degradedFromGateway
+            ? t('pos.payment.qris.gatewayDegradedBadge')
+            : undefined
+      }
     />
   )
 }

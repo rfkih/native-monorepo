@@ -80,6 +80,10 @@ export function BillPaymentModal({
   // Bills are one-step (pay directly) — STATIC shows the merchant's QR above the Pay button so the
   // customer can scan BEFORE the cashier confirms, unlike the two-step surfaces' pending panel.
   const showStaticQr = tender === 'QRIS' && qrisMode === 'STATIC'
+  // ADR 0045 amendment: configured GATEWAY degraded to MANUAL — honest badge, not the demo copy
+  // (bills have no offline mode; gated on IDR so a non-IDR currency limitation isn't misattributed).
+  const degradedFromGateway =
+    qrisEffectiveQuery.data?.mode === 'GATEWAY' && qrisMode !== 'GATEWAY' && currency === 'IDR'
   const staticQr = useStaticQrImageUrl(session, session.businessId, showStaticQr, 0, session.divisionId)
   const staticQrSlot = showStaticQr ? (
     staticQr.status === 'ready' && staticQr.url ? (
@@ -177,8 +181,20 @@ export function BillPaymentModal({
           onInitiate={() => pay({ tenderType: tender })}
           onCancel={onClose}
           qrSlot={staticQrSlot}
-          hintText={showStaticQr ? t('pos.payment.qris.staticHint') : undefined}
-          badgeText={showStaticQr ? null : undefined}
+          hintText={
+            showStaticQr
+              ? t('pos.payment.qris.staticHint')
+              : degradedFromGateway
+                ? t('pos.payment.qris.gatewayDegradedHint')
+                : undefined
+          }
+          badgeText={
+            showStaticQr
+              ? null
+              : degradedFromGateway
+                ? t('pos.payment.qris.gatewayDegradedBadge')
+                : undefined
+          }
         />
       )}
     </PaymentSurfaceFrame>

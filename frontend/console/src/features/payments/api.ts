@@ -34,13 +34,24 @@ function tenantOf(session: CompanySession) {
 
 export type GatewayEnvironment = 'SANDBOX' | 'PRODUCTION'
 
-/** The company-level gateway config block — credentials are company-level only (never per-outlet). */
-export interface GatewaySettings {
-  provider: 'MIDTRANS'
-  environment: GatewayEnvironment
-  /** Last 4 characters of the stored server key — never the key itself. Null when never configured. */
+/** One environment slot's readable trace — never the key itself (rule 6). */
+export interface GatewayEnvCredential {
+  /** Last 4 characters of that environment's stored server key. Null when its slot is empty. */
   serverKeyLast4: string | null
   connected: boolean
+}
+
+/**
+ * The company-level gateway config block (credentials are company-level only, never per-outlet).
+ * Per-environment (V6): the SANDBOX and PRODUCTION keys live in separate slots, and
+ * `activeEnvironment` is the one the till + webhook actually use — so an owner can hold both keys
+ * at once and switch between them without ever re-typing.
+ */
+export interface GatewaySettings {
+  provider: 'MIDTRANS'
+  activeEnvironment: GatewayEnvironment
+  sandbox: GatewayEnvCredential
+  production: GatewayEnvCredential
 }
 
 /** One row of the owner settings response — either the company default or a unit override. */
@@ -91,14 +102,30 @@ function invalidatePaymentSettings(qc: ReturnType<typeof useQueryClient>, sessio
   void qc.invalidateQueries({ queryKey: ['payment-settings-effective', session.companyId] })
 }
 
-/** PUT /api/v1/payment-settings body — serverKey/clientKey are WRITE-ONLY (blank/absent keeps the
- *  stored value); omit them entirely for a mode-only write (the settings page's mode picker). */
+/**
+ * PUT /api/v1/payment-settings body. The per-environment keys are WRITE-ONLY (blank/absent keeps
+ * that slot's stored value); omit every gateway field for a mode-only write (the settings page's
+ * mode picker). `activeEnvironment` selects the slot the till uses — the server refuses to activate
+ * an environment whose slot has no key (→ 422), so an environment can never be activated against
+ * the wrong (or no) key.
+ */
 export interface UpsertCompanySettingsBody {
   mode: QrisMode
   provider?: 'MIDTRANS'
-  environment?: GatewayEnvironment
+  activeEnvironment?: GatewayEnvironment
+  sandboxServerKey?: string
+  sandboxClientKey?: string
+  productionServerKey?: string
+  productionClientKey?: string
+}
+
+/** Outcome of a "Test connection" probe (POST …/gateway/verify) — availability only, no key. */
+export type GatewayVerifyResult = 'VALID' | 'INVALID' | 'UNREACHABLE'
+
+/** POST …/gateway/verify body — `serverKey` blank probes the environment's already-stored key. */
+export interface VerifyGatewayBody {
+  environment: GatewayEnvironment
   serverKey?: string
-  clientKey?: string
 }
 
 /** PUT /api/v1/payment-settings — OWNER only. */
@@ -113,6 +140,23 @@ export function useUpsertPaymentSettings(session: CompanySession) {
         body,
       }),
     onSuccess: () => invalidatePaymentSettings(qc, session),
+  })
+}
+
+/**
+ * POST /api/v1/payment-settings/gateway/verify — OWNER only. Probes Midtrans with a key (or the
+ * stored one) WITHOUT saving or charging, so a wrong key or a key for the wrong environment is
+ * caught at the settings page instead of at the till. No cache invalidation (read-only probe).
+ */
+export function useVerifyGateway(session: CompanySession) {
+  return useMutation({
+    mutationFn: (body: VerifyGatewayBody) =>
+      apiFetch<{ result: GatewayVerifyResult }>('/api/v1/payment-settings/gateway/verify', {
+        method: 'POST',
+        tenant: tenantOf(session),
+        auth: 'personal',
+        body,
+      }),
   })
 }
 

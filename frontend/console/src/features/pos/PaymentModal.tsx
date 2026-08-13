@@ -149,6 +149,18 @@ export function PaymentModal({
     divisionId: session.divisionId,
   })
   const qrisMode = effectiveQrisMode(qrisEffectiveQuery.data ?? undefined, qrisEffectiveQuery.isError, offline, currency)
+  // ADR 0045 amendment: the company's CONFIGURED mode is GATEWAY but the till resolved to MANUAL
+  // (effective query erroring/offline/disconnected/non-IDR) — surface an honest "gateway
+  // unavailable, confirm manually" badge instead of the demo "pending provider" copy. TanStack
+  // Query keeps the last GATEWAY value in `data` across a failed refetch, so a warm till still knows
+  // it degraded even while the effective read is erroring.
+  // Gated on IDR: for a non-IDR sale GATEWAY→MANUAL is a currency limitation (QRIS is IDR-only),
+  // not a gateway outage — showing "gateway unavailable" there would misattribute the reason.
+  const degradedFromGateway =
+    qrisEffectiveQuery.data?.mode === 'GATEWAY' &&
+    qrisMode !== 'GATEWAY' &&
+    !offline &&
+    currency === 'IDR'
 
   // ADR 0045: while a GATEWAY charge is live, `RestaurantDigitalAttempt` registers its cancel
   // function here so the FRAME's own X close button cancels the charge before closing (matching the
@@ -311,6 +323,7 @@ export function PaymentModal({
               locale={locale}
               tenderType={tender}
               qrisMode={qrisMode}
+              degradedFromGateway={degradedFromGateway}
               displayPublisher={displayPublisher}
               registerGatewayCancel={registerGatewayCancel}
             />
@@ -467,6 +480,7 @@ function RestaurantDigitalAttempt({
   locale,
   tenderType,
   qrisMode,
+  degradedFromGateway = false,
   displayPublisher,
   registerGatewayCancel,
 }: {
@@ -477,6 +491,9 @@ function RestaurantDigitalAttempt({
   tenderType: 'QRIS' | 'CARD'
   /** ADR 0045: irrelevant for CARD — only a QRIS tender in STATIC/GATEWAY mode changes this panel. */
   qrisMode: QrisMode
+  /** ADR 0045 amendment: configured GATEWAY degraded to MANUAL — show the honest "gateway
+   *  unavailable" badge/hint instead of the demo "pending provider" copy. */
+  degradedFromGateway?: boolean
   /** Phase 6 (ADR 0029): forwarded so a QR becoming visible here (STATIC or GATEWAY) mirrors to the
    *  customer display, same as PaymentModal's own PAYMENT_STARTED effect. */
   displayPublisher?: DisplayPublisher
@@ -690,6 +707,8 @@ function RestaurantDigitalAttempt({
           ) : null
         }
         onInitiate={initiatePayment}
+        hintText={degradedFromGateway ? t('pos.payment.qris.gatewayDegradedHint') : undefined}
+        badgeText={degradedFromGateway ? t('pos.payment.qris.gatewayDegradedBadge') : undefined}
       />
     )
   }
@@ -729,8 +748,20 @@ function RestaurantDigitalAttempt({
       onConfirm={confirmPayment}
       onCancel={onClose}
       qrSlot={staticQrSlot}
-      hintText={showStaticQr ? t('pos.payment.qris.staticHint') : undefined}
-      badgeText={showStaticQr ? null : undefined}
+      hintText={
+        showStaticQr
+          ? t('pos.payment.qris.staticHint')
+          : degradedFromGateway
+            ? t('pos.payment.qris.gatewayDegradedHint')
+            : undefined
+      }
+      badgeText={
+        showStaticQr
+          ? null
+          : degradedFromGateway
+            ? t('pos.payment.qris.gatewayDegradedBadge')
+            : undefined
+      }
     />
   )
 }

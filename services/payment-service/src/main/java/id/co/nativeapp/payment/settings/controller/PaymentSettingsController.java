@@ -1,6 +1,8 @@
 package id.co.nativeapp.payment.settings.controller;
 
 import id.co.nativeapp.payment.settings.dto.EffectiveSettingsResponse;
+import id.co.nativeapp.payment.settings.dto.GatewayVerifyRequest;
+import id.co.nativeapp.payment.settings.dto.GatewayVerifyResponse;
 import id.co.nativeapp.payment.settings.dto.PaymentSettingsResponse;
 import id.co.nativeapp.payment.settings.dto.QrImageContentResponse;
 import id.co.nativeapp.payment.settings.dto.QrImageMetaResponse;
@@ -62,6 +64,13 @@ public class PaymentSettingsController {
   public PaymentSettingsResponse upsertUnitOverride(
       @PathVariable UUID unitId, @RequestBody UpsertSettingsRequest request) {
     return service.upsertUnitOverride(unitId, request);
+  }
+
+  @Operation(
+      summary = "Verify a Midtrans key against the provider without saving or charging (owner)")
+  @PostMapping("/gateway/verify")
+  public GatewayVerifyResponse verifyGateway(@RequestBody GatewayVerifyRequest request) {
+    return service.verifyGateway(request);
   }
 
   @Operation(summary = "Delete a unit's (outlet or division) QRIS override (owner)")

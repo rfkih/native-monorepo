@@ -58,7 +58,8 @@ class TenancyIsolationTest extends PostgresRlsTestBase {
         ACTOR,
         () -> {
           service.upsertCompanyDefault(
-              new UpsertSettingsRequest("GATEWAY", "MIDTRANS", "SANDBOX", "SB-Mid-a-1234", null));
+              new UpsertSettingsRequest(
+                  "GATEWAY", "MIDTRANS", "SANDBOX", "SB-Mid-a-1234", null, null, null));
           service.uploadStaticQr(null, "image/png", PNG);
           return null;
         });

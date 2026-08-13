@@ -111,6 +111,19 @@ public class SettingsReader {
             () -> new PaymentSettingsNotFoundException("No static QRIS image is configured."));
   }
 
+  /**
+   * The ACTIVE environment's server-key last4 — the pre-V6 single-slot mirror (§1.3 back-compat).
+   */
+  private static String activeLast4(SettingsView view) {
+    if ("SANDBOX".equals(view.getProviderEnvironment())) {
+      return view.getSandboxServerKeyLast4();
+    }
+    if ("PRODUCTION".equals(view.getProviderEnvironment())) {
+      return view.getProductionServerKeyLast4();
+    }
+    return null;
+  }
+
   private static Optional<SettingsView> findByUnitId(List<SettingsView> views, UUID unitId) {
     return unitId == null
         ? Optional.empty()
@@ -124,7 +137,13 @@ public class SettingsReader {
             : new SettingsRowResponse.GatewayInfoResponse(
                 view.getProvider(),
                 view.getProviderEnvironment(),
-                view.getServerKeyLast4(),
+                new SettingsRowResponse.GatewayInfoResponse.EnvCredentialResponse(
+                    view.getSandboxServerKeyLast4(), view.getSandboxConnected()),
+                new SettingsRowResponse.GatewayInfoResponse.EnvCredentialResponse(
+                    view.getProductionServerKeyLast4(), view.getProductionConnected()),
+                // Pre-V6 single-slot mirror of the ACTIVE environment (§1.3 additive back-compat).
+                view.getProviderEnvironment(),
+                activeLast4(view),
                 view.getGatewayConnected());
     return new SettingsRowResponse(
         view.getId(),

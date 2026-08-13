@@ -631,15 +631,24 @@ export const en = {
       },
       gateway: {
         heading: 'Payment gateway (Midtrans)',
-        environment: 'Environment',
+        activeEnvironment: 'Active environment',
         sandbox: 'Sandbox',
         production: 'Production',
         serverKey: 'Server key',
         serverKeySavedHint: 'Saved — fill in again only to change it.',
         clientKey: 'Client key',
+        testConnection: 'Test connection',
+        verify: {
+          valid: 'Key verified',
+          invalid: 'Key rejected — check the key and environment.',
+          unreachable: 'Could not reach the gateway — try again.',
+        },
+        activateNeedsKey: "Enter this environment's server key before making it active.",
+        productionLiveWarning: 'Production uses real money — customers are charged for real.',
         save: 'Save gateway settings',
         saveError: 'Could not save the gateway settings. Try again.',
         connected: 'Connected',
+        connectedWithLast4: 'Connected · •••• {{last4}}',
         notConnected: 'Not connected',
       },
     },
@@ -921,6 +930,9 @@ export const en = {
         staticHint:
           'Ask the customer to scan this QRIS code, then tap "Mark as paid" once their app shows success.',
         imageError: "The QRIS image couldn't load — you can still confirm payment manually.",
+        gatewayDegradedBadge: 'Gateway unavailable',
+        gatewayDegradedHint:
+          'Can’t reach the QRIS gateway right now — confirm the payment manually. Tap "Mark as paid" once the customer has paid.',
         gatewayInitiateHint:
           'Ask the customer to scan this QR with any QRIS-enabled app. Payment is confirmed automatically — you can still mark it as paid by hand if needed.',
         gatewayWaiting: 'Generating the QR code…',
