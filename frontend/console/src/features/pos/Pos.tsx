@@ -368,12 +368,12 @@ function PosInner({ session }: { session: CompanySession }) {
   const [dockHeight, setDockHeight] = useState(0)
   useEffect(() => {
     const el = document.getElementById('pos-summary-dock')
-    if (!el) {
-      setDockHeight(0)
-      return
-    }
-    const measure = () => setDockHeight(el.offsetHeight)
+    // Route the no-element case through `measure` too — a direct setState in the effect body trips
+    // react-hooks' "setState synchronously within an effect"; going through the measure/observer
+    // callback is the accepted pattern and preserves the exact behaviour (0 when the dock is absent).
+    const measure = () => setDockHeight(el?.offsetHeight ?? 0)
     measure()
+    if (!el) return
     const ro = new ResizeObserver(measure)
     ro.observe(el)
     return () => ro.disconnect()

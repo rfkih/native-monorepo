@@ -3,6 +3,11 @@
  * Small, presentational, and reused across Beranda / Cuti / Klaim / Slip / Profil so the six
  * screen files stay consistent and can be built independently.
  */
+/* eslint-disable react-refresh/only-export-components --
+   Intentional shared-primitives module: this file deliberately co-locates the small presentational
+   components with the hooks/utils (useTenant, useIsSupervisor, greetingKey) the six staff screens
+   reuse. That trips react-refresh's one-file-one-kind rule, but Fast Refresh boundaries don't apply
+   to a shared primitives module and splitting it would fragment a cohesive, rarely-edited file. */
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
