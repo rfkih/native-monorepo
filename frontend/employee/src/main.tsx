@@ -25,7 +25,12 @@ i18n.addResourceBundle('id', 'translation', staffResources.id, true, true)
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
+      {/* persistSession: the Employee app is a PERSONAL-device app (ADR 0049 P5) — keep the OIDC
+          session in localStorage so an employee stays signed in across app/browser restarts (the
+          offline refresh token then re-auths silently for the ~30-day offline idle window). The
+          console deliberately does NOT pass this — its sessionStorage default protects shared
+          computers. */}
+      <AuthProvider persistSession>
         <SessionProvider>
           <BrowserRouter>
             <App />

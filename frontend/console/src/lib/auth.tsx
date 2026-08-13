@@ -45,9 +45,22 @@ const ELEVATION_IDLE_TTL_MS = 10 * 60 * 1000
  *  - `dev` — no Keycloak: a synthetic always-authenticated principal with every business role, so
  *    local `npm run dev` works offline against the header-trust `DevTenantFilter` path.
  */
-export function AuthProvider({ children }: { children: ReactNode }) {
+export function AuthProvider({
+  children,
+  persistSession = false,
+}: {
+  children: ReactNode
+  /**
+   * Persist the OIDC session in localStorage even in a plain browser (not just the native shell) —
+   * used by the Employee app (a personal-device app, ADR 0049 P5) so an employee stays signed in
+   * across app/browser restarts; the offline refresh token then keeps them in for the offline
+   * session's idle window (~30 days). The console leaves this `false`: on a shared computer the
+   * sessionStorage default is a security feature (the session dies when the browser closes).
+   */
+  persistSession?: boolean
+}) {
   return AUTH_MODE === 'oidc' ? (
-    <OidcAuthProvider>{children}</OidcAuthProvider>
+    <OidcAuthProvider persistSession={persistSession}>{children}</OidcAuthProvider>
   ) : (
     <DevAuthProvider>{children}</DevAuthProvider>
   )
@@ -95,7 +108,13 @@ function DevAuthProvider({ children }: { children: ReactNode }) {
 // ---------------------------------------------------------------------------
 // oidc: real Keycloak login (authorization-code + PKCE).
 // ---------------------------------------------------------------------------
-function OidcAuthProvider({ children }: { children: ReactNode }) {
+function OidcAuthProvider({
+  children,
+  persistSession,
+}: {
+  children: ReactNode
+  persistSession: boolean
+}) {
   // Created exactly once (lazy initializer) — a ref read during render trips react-hooks/refs.
   const [manager] = useState(
     () =>
@@ -107,12 +126,14 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
         response_type: 'code',
         scope: KEYCLOAK_SCOPE,
         automaticSilentRenew: true,
-        // Native Till shell (ADR 0043): the WebView process dies with the app, and
-        // sessionStorage with it — every cold start dumped the operator on the logged-out
-        // landing page. localStorage keeps the till signed in across restarts (Keycloak
-        // token lifetimes still govern expiry). Browsers keep the per-tab default.
+        // Native Till shell (ADR 0043) AND the Employee app (persistSession, ADR 0049 P5 — a
+        // personal-device app) keep the session in localStorage so it survives an app/browser
+        // restart; the offline refresh token then re-authenticates silently on reopen (Keycloak
+        // token lifetimes still govern expiry). A plain console browser keeps the per-tab
+        // sessionStorage default — a shared-computer safeguard (the session dies with the tab).
         userStore: new WebStorageStateStore({
-          store: isNativeShell() ? window.localStorage : window.sessionStorage,
+          store:
+            isNativeShell() || persistSession ? window.localStorage : window.sessionStorage,
         }),
       }),
   )
@@ -262,6 +283,23 @@ function OidcAuthProvider({ children }: { children: ReactNode }) {
       if (user && !user.expired) {
         apply(user)
         return
+      }
+      // A stored session whose ACCESS token has expired (the app was closed longer than the ~5-min
+      // access-token lifespan) is NOT treated as logged out: try ONE silent renew via the (offline)
+      // refresh token first, so reopening a PERSISTED app (native till shell / Employee app) re-auths
+      // seamlessly instead of dropping to the login screen. A plain browser with no persisted session
+      // (user === null here) skips this and falls straight through to the public site below.
+      if (user && user.expired) {
+        try {
+          const renewed = await manager.signinSilent()
+          if (renewed && !renewed.expired) {
+            apply(renewed)
+            return
+          }
+        } catch {
+          // Refresh/offline token is dead or the offline session has idled out → fall through to
+          // the unauthenticated public site; the user signs in explicitly.
+        }
       }
       // No valid session → render the PUBLIC marketing site (the landing page, /signup, /login)
       // instead of force-redirecting to Keycloak. Login is now EXPLICIT: the landing page's
