@@ -1712,7 +1712,7 @@ export const id = {
     },
     createLogin: {
       title: 'Buat login — {{name}}',
-      username: 'Nama pengguna',
+      username: 'ID login',
       usernameHint:
         'Karyawan masuk dengan ini plus kata sandi sekali pakai. Huruf, angka, dan titik — tanpa spasi.',
       email: 'Alamat email (opsional)',
@@ -1789,7 +1789,7 @@ export const id = {
       // ADR 0052 — ditampilkan untuk login yang hanya punya peran hr (`!canManageLogins`):
       // membuat login adalah tindakan khusus pemilik/manajer (org-service).
       noLoginReadOnly: 'Belum ada login. Minta pemilik atau manajer untuk membuatnya.',
-      username: 'Nama pengguna',
+      username: 'ID login',
       tempPassword: 'Kata sandi sekali pakai',
       tempPasswordHint:
         'Terlihat sampai karyawan pertama kali masuk dan mengganti sandinya — bagikan sekarang.',

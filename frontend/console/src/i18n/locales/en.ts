@@ -1724,7 +1724,7 @@ export const en = {
     },
     createLogin: {
       title: 'Create login — {{name}}',
-      username: 'Username',
+      username: 'Login ID',
       usernameHint:
         'The employee signs in with this and a one-time password. Letters, numbers and dots — no spaces.',
       email: 'Email address (optional)',
@@ -1800,7 +1800,7 @@ export const en = {
       // ADR 0052 — an hr-alone login (`!canManageLogins`) sees this instead: creating a login is an
       // owner/manager-only action (org-service).
       noLoginReadOnly: 'No login yet. Ask an owner or manager to create one.',
-      username: 'Username',
+      username: 'Login ID',
       tempPassword: 'One-time password',
       tempPasswordHint:
         'Visible until the employee first signs in and sets their own — share it with them now.',
