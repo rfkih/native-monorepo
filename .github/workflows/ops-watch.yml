@@ -1,7 +1,8 @@
 # Native PROD ops watch (ADR 0053 §5 / ADR 0057 Phase 6) — the external watchdog.
 #
 # Every hour, from OUTSIDE the VPS (a GitHub runner = the external uptime check):
-#   1. VPS reachable over SSH; disk usage (fail > 88%, warn > 80% — expansion is the real fix);
+#   1. VPS reachable over SSH; disk usage (fail > 82%, warn > 70% — small shared 78 GB host, so alert
+#      EARLY: the 88/80 thresholds let it reach 100% before anyone acted (2026-08-13 login outage));
 #      every native-prod container running+healthy; nightly backup fresh (< 26 h).
 #   2. Both public origins answer end-to-end THROUGH the tunnels (console 200, employee 200,
 #      OIDC discovery 200 with matching issuer) — URLs read live from the VPS's prod.env, so
@@ -56,8 +57,8 @@ jobs:
 
           use=$(df --output=pcent / | tail -1 | tr -dc '0-9')
           echo "disk: ${use}% used"
-          if [ "$use" -gt 88 ]; then echo "::error::disk ${use}% > 88% — a deploy needs ~5 GB headroom; prune/expand NOW"; fail=1
-          elif [ "$use" -gt 80 ]; then echo "::warning::disk ${use}% > 80% (ADR 0057 threshold) — plan the expansion"; fi
+          if [ "$use" -gt 82 ]; then echo "::error::disk ${use}% > 82% — a deploy needs ~5 GB headroom on this small shared 78 GB host; expand the disk and/or trim the co-located app NOW (image prune won't help: co-located images are container-pinned)"; fail=1
+          elif [ "$use" -gt 70 ]; then echo "::warning::disk ${use}% > 70% — trending toward the deploy-headroom limit; plan the disk expansion"; fi
 
           bad=$(docker ps -a --filter "label=com.docker.compose.project=native-prod" --format '{{.Names}}' \
             | while read -r c; do
