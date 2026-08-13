@@ -211,10 +211,15 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/employee/package-lock.json
 
-      # Only employee's OWN deps: its tsconfig `paths` pin every shared specifier to this
-      # package's node_modules, and the shared ../console/src is present from the checkout —
-      # so `tsc -b` (which type-checks both trees) needs no console install (see tsconfig.app.json).
       - run: npm ci
+      # The build's `tsc -b` also type-checks the shared ../console/src, whose react/react-dom are
+      # DELIBERATELY unmapped in tsconfig.app.json (so TS uses its @types/react fallback) — meaning
+      # they resolve from console's OWN node_modules, which the employee install does not provide.
+      # Install console's deps too so CI matches a local build (where ../console/node_modules exists);
+      # without this the employee build fails with "Cannot find module 'react'" on the shared source.
+      - name: Install console deps for the shared-source type-check
+        working-directory: frontend/console
+        run: npm ci
       - run: npm run lint
       - run: npm test
       - run: npm run build
