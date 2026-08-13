@@ -45,6 +45,7 @@ import { localeOf } from '@/i18n'
 import { BUSINESS_ROLES, type BusinessRole } from '@/lib/authContext'
 import { cn } from '@/lib/cn'
 import { hasAccessRoleMismatch, impliedAccessRole, uniqueBusinessRoles } from './accessRoleMatch'
+import { isActiveAssignment } from './assignments'
 import {
   useEmployee,
   useEmployeeLogin,
@@ -96,7 +97,13 @@ export function EmployeeDetailDrawer({
   const employeeId = employee.employeeId
   const hasLogin = !!employee.userId
   const active = employee.status === 'ACTIVE'
-  const assignments = employee.rows.filter((r) => r.assignmentId)
+  // ACTIVE only (effectiveTo === OPEN_ENDED) — `/api/v1/employees` returns one row per assignment
+  // CURRENT as of today, which still includes an already-ended assignment (a real effectiveTo date)
+  // for as long as that date hasn't passed yet; see `isActiveAssignment`. Both the map below and the
+  // `assignments[0]` header/summary reference derive from this single filtered array, so an ended
+  // assignment never renders (own row or as the header) and an employee whose only assignments have
+  // ended correctly falls through to the "unassigned" empty state.
+  const assignments = employee.rows.filter(isActiveAssignment)
 
   const detail = useEmployee({ companyId, actor, employeeId, enabled: true })
   // useEmployeeLogin reads employee-service's `/api/v1/employees/{id}/login` — HR-gated, so this
@@ -255,8 +262,9 @@ export function EmployeeDetailDrawer({
 
       {/* Body */}
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
-        {/* Assignments — one row per current assignment, ended IN PLACE (the row carries its own
-            assignmentId, so "end" always targets exactly the assignment you can see). */}
+        {/* Assignments — one row per ACTIVE assignment (see `isActiveAssignment` above), ended IN
+            PLACE (the row carries its own assignmentId, so "end" always targets exactly the
+            assignment you can see). */}
         <SectionHeading>{t('hr.detail.assignments')}</SectionHeading>
         <div className="mt-2 flex flex-col gap-1.5">
           {assignments.length === 0 ? (
