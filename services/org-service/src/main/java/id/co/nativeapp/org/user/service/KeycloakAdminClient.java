@@ -933,9 +933,17 @@ public class KeycloakAdminClient {
    * {@code newRoles} — a SET, so a single login may hold several roles at once (preset role-based
    * access model Phase 1; access at the gateway is the UNION of every held role's surfaces).
    *
-   * <p>The implementation: (1) fetches the current realm roles to find which business roles the
-   * user holds; (2) removes ALL of those; (3) assigns EVERY role in {@code newRoles}. Only the
-   * business roles are touched — Keycloak's built-in default roles are NOT stripped.
+   * <p><strong>ADD-before-REMOVE fail-safe ordering.</strong> A production incident showed that a
+   * naive remove-all-then-add-all sequence can leave a user's access permanently degraded: if the
+   * add step fails partway (a transient Keycloak error), the roles were already stripped in step
+   * one and never restored. This method instead computes the DIFF against the user's current
+   * business roles — {@code toAdd = newRoles \ current} and {@code toRemove = current \ newRoles} —
+   * and ADDS {@code toAdd} FIRST, ONLY THEN removing {@code toRemove}. If the add step throws, the
+   * user still holds every role they started with (nothing was removed yet): a mid-operation
+   * failure can only ever leave a harmless SUPERSET of the intended roles, never fewer than before.
+   * Diffing (rather than remove-all/add-all) also makes the call idempotent and avoids churning
+   * roles the user already holds. Only the business roles are touched — Keycloak's built-in default
+   * roles are NEVER stripped.
    *
    * @param userId the Keycloak user UUID
    * @param newRoles the new set of business roles to assign (each validated by the caller against
@@ -970,26 +978,45 @@ public class KeycloakAdminClient {
           "Keycloak role-mapping fetch for user " + userId + " failed — connection error", e);
     }
 
-    // 2. Filter down to only the business roles (to avoid stripping default Keycloak roles).
-    List<Map<?, ?>> businessRolesToRemove = new ArrayList<>();
+    // 2. Filter down to only the business roles (to avoid touching default Keycloak roles), keeping
+    // both the plain names (for the diff) and the role representations (needed by the DELETE body).
+    Set<String> currentBusinessRoleNames = new java.util.LinkedHashSet<>();
+    List<Map<?, ?>> currentBusinessRoleReps = new ArrayList<>();
     if (existingMappings != null) {
       for (Map<?, ?> roleRep : existingMappings) {
         String roleName = (String) roleRep.get("name");
         if (KeycloakUser.BUSINESS_ROLES.contains(roleName)) {
-          businessRolesToRemove.add(roleRep);
+          currentBusinessRoleNames.add(roleName);
+          currentBusinessRoleReps.add(roleRep);
         }
       }
     }
 
-    // 3. Remove the current business roles (DELETE with body).
-    if (!businessRolesToRemove.isEmpty()) {
+    // 3. Diff against the requested set.
+    Set<String> toAdd = new java.util.LinkedHashSet<>(newRoles);
+    toAdd.removeAll(currentBusinessRoleNames);
+    List<Map<?, ?>> toRemove = new ArrayList<>();
+    for (Map<?, ?> roleRep : currentBusinessRoleReps) {
+      if (!newRoles.contains(roleRep.get("name"))) {
+        toRemove.add(roleRep);
+      }
+    }
+
+    // 4. ADD FIRST (sequential POSTs — mirrors createInvitedUser). If this throws partway, the user
+    // still holds every role they started with — nothing has been removed yet (fail-safe).
+    for (String role : toAdd) {
+      assignRealmRole(userId, role);
+    }
+
+    // 5. ONLY THEN remove the roles no longer wanted (DELETE with body).
+    if (!toRemove.isEmpty()) {
       try {
         restClient
             .method(HttpMethod.DELETE)
             .uri(URI.create(mappingUrl))
             .header("Authorization", "Bearer " + token)
             .contentType(MediaType.APPLICATION_JSON)
-            .body(businessRolesToRemove)
+            .body(toRemove)
             .retrieve()
             .toBodilessEntity();
       } catch (RestClientResponseException e) {
@@ -1002,10 +1029,6 @@ public class KeycloakAdminClient {
       }
     }
 
-    // 4. Assign every role in the new set (sequential POSTs — mirrors createInvitedUser).
-    for (String role : newRoles) {
-      assignRealmRole(userId, role);
-    }
     log.info("Replaced business roles for Keycloak user {} with {}", userId, newRoles);
   }
 
