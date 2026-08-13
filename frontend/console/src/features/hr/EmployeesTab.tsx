@@ -29,6 +29,7 @@ import { useSession } from '@/lib/session'
 import { cn } from '@/lib/cn'
 import { hasAccessRoleMismatch } from './accessRoleMatch'
 import { useEmployees, type EmployeeListRow } from './api'
+import { isActiveAssignment } from './assignments'
 import { CreateLoginDialog } from './CreateLoginDialog'
 import { EmployeeDetailDrawer } from './EmployeeDetailDrawer'
 import { OperatorPinDialog } from './OperatorPinDialog'
@@ -451,11 +452,15 @@ function EmployeeRow({
           ) : null}
         </div>
         <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-          {employee.rows.filter((r) => r.assignmentId).length === 0 ? (
+          {/* ACTIVE only (see `isActiveAssignment`) — an already-ended assignment can still satisfy
+              the list endpoint's "current as of today" window until its chosen end date passes, so
+              filtering only on assignmentId is not enough (it would show alongside real active
+              ones). */}
+          {employee.rows.filter(isActiveAssignment).length === 0 ? (
             <span className="text-xs text-ink-3">{t('hr.list.unassigned')}</span>
           ) : (
             employee.rows
-              .filter((r) => r.assignmentId)
+              .filter(isActiveAssignment)
               .map((r) => (
                 <span
                   key={r.assignmentId}
