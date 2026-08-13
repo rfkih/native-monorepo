@@ -332,6 +332,7 @@ export const id = {
     copyDetails: 'Salin detail',
     traceId: 'ID pelacakan',
     errorReference: 'Referensi',
+    language: 'Bahasa',
     back: 'Kembali',
     continue: 'Lanjut',
     cancel: 'Batal',
@@ -2394,6 +2395,8 @@ export const id = {
       'Pembukuan Anda memakai {{currency}} — ditentukan oleh negara Anda dan dikunci saat pembuatan.',
     defaultLanguage: 'Bahasa bawaan',
     defaultLanguageHint: 'Bawaan untuk anggota tim baru. Tiap pengguna bisa menggantinya sendiri.',
+    languageEnglishOnlyNote:
+      'Bahasa workspace Anda adalah Inggris. Bahasa Indonesia tersedia untuk bisnis yang berbasis di Indonesia.',
     permanentNote:
       'Negara, mata uang dasar turunannya, dan bahasa bawaan dikunci saat pembuatan dan tidak dapat diubah lagi.',
     firstBusinessName: 'Nama bisnis',

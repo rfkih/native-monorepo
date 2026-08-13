@@ -227,11 +227,32 @@ class SignupAcceptanceTest {
 
   @Test
   void countryUsDerivesUsdBooks() throws Exception {
-    String body = signupBody(uniqueEmail()).replace("\"country\": \"ID\"", "\"country\": \"US\"");
+    // A non-Indonesian company signs up in English (ADR 0059 — Indonesian is gated to Indonesia),
+    // so the US variant switches BOTH the country and the language off the Indonesian defaults.
+    String body =
+        signupBody(uniqueEmail())
+            .replace("\"country\": \"ID\"", "\"country\": \"US\"")
+            .replace("\"defaultLanguage\": \"id\"", "\"defaultLanguage\": \"en\"");
     String responseBody = callSignup(body);
     String companyId = JSON.readValue(responseBody, JsonNode.class).get("companyId").asString();
     assertThat(companyColumnAsAdmin(companyId, "country")).isEqualTo("US");
     assertThat(companyColumnAsAdmin(companyId, "base_currency")).isEqualTo("USD");
+    assertThat(companyColumnAsAdmin(companyId, "default_language")).isEqualTo("en");
+  }
+
+  @Test
+  void indonesianLanguageForANonIndonesianCountryReturns400WithNoResidue() throws Exception {
+    // ADR 0059: Indonesian is available ONLY for an Indonesian company. A US company asking for
+    // "id" is rejected at the same derive-before-create point as an invalid country — a clean 400
+    // while NOTHING exists yet, so no company row and no Keycloak user may be left behind.
+    String email = uniqueEmail();
+    assertBadRequest(signupBody(email).replace("\"country\": \"ID\"", "\"country\": \"US\""));
+    try {
+      assertThat(rowCountAsAdmin("company")).isZero();
+    } catch (SQLException ignored) {
+      // Tables not created yet — equally proves nothing was persisted.
+    }
+    assertThat(keycloakUsersFor(email).size()).isZero();
   }
 
   @Test

@@ -345,6 +345,7 @@ export const en = {
     copyDetails: 'Copy details',
     traceId: 'Trace ID',
     errorReference: 'Reference',
+    language: 'Language',
     back: 'Back',
     continue: 'Continue',
     cancel: 'Cancel',
@@ -2413,6 +2414,8 @@ export const en = {
       'Your books will be kept in {{currency}} — set by your country and fixed at creation.',
     defaultLanguage: 'Default language',
     defaultLanguageHint: 'The default for new teammates. Each user can override their own.',
+    languageEnglishOnlyNote:
+      'Your workspace language is English. Indonesian is available for businesses based in Indonesia.',
     permanentNote:
       'The country, its derived base currency, and the default language are fixed at creation and cannot be changed later.',
     firstBusinessName: 'Business name',

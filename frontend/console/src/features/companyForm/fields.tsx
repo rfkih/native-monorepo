@@ -131,18 +131,28 @@ export function RegionFields({
           })}
         </p>
       </div>
-      <Field label={t('signup.defaultLanguage')} hint={t('signup.defaultLanguageHint')}>
-        <ChoiceCards
-          name="lang"
-          value={defaultLanguage}
-          onChange={onDefaultLanguage}
-          options={LANGS.map((l) => ({
-            value: l,
-            title: t(`lang.${l}`),
-            subtitle: l.toUpperCase(),
-          }))}
-        />
-      </Field>
+      {/* Language is English-first and gated to Indonesia (ADR 0059): the chooser only appears when
+          the selected country is Indonesia; every other country keeps its interface in English —
+          shown as a locked note, mirroring the derived-currency treatment above. */}
+      {country === 'ID' ? (
+        <Field label={t('signup.defaultLanguage')} hint={t('signup.defaultLanguageHint')}>
+          <ChoiceCards
+            name="lang"
+            value={defaultLanguage}
+            onChange={onDefaultLanguage}
+            options={LANGS.map((l) => ({
+              value: l,
+              title: t(`lang.${l}`),
+              subtitle: l.toUpperCase(),
+            }))}
+          />
+        </Field>
+      ) : (
+        <div className="flex items-start gap-2.5 rounded-xl border border-line bg-paper px-3.5 py-3">
+          <Lock className="mt-0.5 size-3.5 shrink-0 text-ink-3" aria-hidden />
+          <p className="text-xs leading-relaxed text-ink-2">{t('signup.languageEnglishOnlyNote')}</p>
+        </div>
+      )}
       {/* Permanent-settings notice */}
       <p className="rounded-xl border border-amber/30 bg-amber-tint px-3.5 py-2.5 text-xs leading-relaxed text-amber">
         {t('signup.permanentNote')}

@@ -77,3 +77,4 @@ boundary, a security posture. Routine, local choices do not need one — use a c
 | [0056](0056-moving-average-inventory-cost.md) | Moving weighted-average inventory cost (operational scope; value+qty source of truth) | Accepted |
 | [0057](0057-cloudflare-edge-rollback-first-prod-deploy.md) | Cloudflare-tunnel edge + rollback-first production deployment (co-located VPS) | Accepted |
 | [0058](0058-per-environment-android-app-identities.md) | Per-environment Android app identities (UAT vs Prod, side-by-side) | Accepted |
+| [0059](0059-english-first-localization.md) | English-first localization — Indonesian gated to Indonesia (company country in-app, browser time zone on public pages) | Accepted |

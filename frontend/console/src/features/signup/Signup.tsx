@@ -10,7 +10,7 @@
  * consent), Review (every row links back to its step). Each step is a real <form>, so
  * Enter advances; the Review step's submit creates the account.
  */
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft, ArrowRight, Check, Eye, EyeOff } from 'lucide-react'
@@ -26,6 +26,8 @@ import { BrandMark } from '@/components/Wordmark'
 import { ErrorDetails } from '@/components/ErrorDetails'
 import { cn } from '@/lib/cn'
 import { AUTH_MODE } from '@/lib/config'
+import { type Lang } from '@/i18n'
+import { isIndonesiaByTimeZone, langsForCountry } from '@/lib/geo'
 import { useAuth } from '@/lib/authContext'
 import { useSignup, type SignupRequest, type SignupResponse } from './api'
 // Barbershop scene for the brand panel (licensed — see src/assets/landing/SOURCES.md).
@@ -327,12 +329,15 @@ export function Signup() {
   const auth = useAuth()
   const mutation = useSignup()
 
-  // Form state
+  // Form state. The country seeds from the browser location (ADR 0059): Indonesia when the time
+  // zone says so, otherwise a sensible English-market default the owner can change. Language follows
+  // — Indonesian only when the detected country is Indonesia (else English-first).
+  const detectedCountry = useMemo(() => (isIndonesiaByTimeZone() ? 'ID' : 'US'), [])
   const [step, setStep] = useState(STEP_COMPANY)
   const [companyName, setCompanyName] = useState('')
-  const [country, setCountry] = useState<string>('ID')
+  const [country, setCountry] = useState<string>(detectedCountry)
   const [defaultLanguage, setDefaultLanguage] = useState<string>(
-    i18n.language === 'id' ? 'id' : 'en',
+    detectedCountry === 'ID' && i18n.language === 'id' ? 'id' : 'en',
   )
   const [firstBusinessName, setFirstBusinessName] = useState('')
   const [vertical, setVertical] = useState<string>('restaurant')
@@ -604,12 +609,19 @@ export function Signup() {
                 />
               )}
 
-              {/* Step 1 — Region: country decides the (locked) base currency; language */}
+              {/* Step 1 — Region: country decides the (locked) base currency AND which languages
+                  are offered (ADR 0059 — Indonesian only in Indonesia); changing it re-clamps the
+                  language to what the new country allows. */}
               {step === STEP_REGION && (
                 <RegionFields
                   country={country}
                   defaultLanguage={defaultLanguage}
-                  onCountry={setCountry}
+                  onCountry={(c) => {
+                    setCountry(c)
+                    setDefaultLanguage((prev) =>
+                      langsForCountry(c).includes(prev as Lang) ? prev : c === 'ID' ? 'id' : 'en',
+                    )
+                  }}
                   onDefaultLanguage={setDefaultLanguage}
                 />
               )}

@@ -33,6 +33,7 @@ import { useTierAccess } from '@/lib/featureTier'
 import { canFinance, canHr, canOps, canPos } from '@/lib/rolePreset'
 import { AUTH_MODE } from '@/lib/config'
 import { useSession } from '@/lib/session'
+import { useOfferedLangs } from '@/lib/geo'
 import { useTheme } from '@/lib/theme'
 import { cn } from '@/lib/cn'
 import { useNavGroups, type Icon } from './navGroups'
@@ -83,6 +84,9 @@ export function MoreSheet({
   const pageGroups = groups.filter((g) => g.key !== 'catalog')
   const { company, companies, setActiveCompany } = useSession()
   const { theme, toggle } = useTheme()
+  // Outside Indonesia there is a single UI language, so the switcher renders nothing (ADR 0059) —
+  // drop this labeled row entirely rather than leave a "Language" label with no control beside it.
+  const hasLanguageChoice = useOfferedLangs().length >= 2
   const navigate = useNavigate()
 
   // ADR 0049 P3b — mirrors MobileTabBarGate's per-capability booleans (merged/elevated roles), so
@@ -207,15 +211,17 @@ export function MoreSheet({
 
         <div className="my-2 h-px bg-line" />
         {/* Preferences — language + theme moved off the phone top bar (they crowded a 360px header). */}
-        <div className={cn(ROW_CLASS, 'justify-between hover:bg-transparent')}>
-          <span className="flex items-center gap-3">
-            <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-ink-50 text-ink-2">
-              <Languages className="size-[17px]" aria-hidden />
+        {hasLanguageChoice && (
+          <div className={cn(ROW_CLASS, 'justify-between hover:bg-transparent')}>
+            <span className="flex items-center gap-3">
+              <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-ink-50 text-ink-2">
+                <Languages className="size-[17px]" aria-hidden />
+              </span>
+              {t('nav.language')}
             </span>
-            {t('nav.language')}
-          </span>
-          <LanguageSwitcher />
-        </div>
+            <LanguageSwitcher />
+          </div>
+        )}
         <button type="button" onClick={toggle} className={ROW_CLASS}>
           <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-ink-50 text-ink-2">
             {theme === 'dark' ? <Sun className="size-[17px]" aria-hidden /> : <Moon className="size-[17px]" aria-hidden />}

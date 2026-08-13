@@ -5,6 +5,32 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-13 — English-first localization; Indonesian gated to Indonesia (ADR 0059)
+
+Taking the product global. Native was Indonesia-first: the console auto-picked Bahasa for any
+`navigator.language=id` browser and showed the EN/ID switcher to everyone, everywhere. New policy —
+**English is the global default; Indonesian is offered only in Indonesia** (and where offered, users
+may still choose English). "Indonesia" resolves by context: in-app it's the active company's country
+via the exact `baseCurrency === 'IDR'` proxy (ADR 0025 — no backend read change); on public pages
+(landing + signup pre-country) it's the browser IANA time zone (`Asia/Jakarta·Pontianak·Makassar·
+Jayapura`), which tracks physical location, not phone locale.
+
+One predicate, `offeredLangs(indonesia)` (`frontend/console/src/lib/geo.ts`), feeds every gate: the
+`LanguageSwitcher` (renders nothing when English is the only option), the signup/add-company chooser
+(shown only for an ID country; other countries locked to English, mirroring the locked-currency
+note), and `SessionProvider`, which on company-resolve **adopts the company's `defaultLanguage`**
+(finally wired to the UI — it was stored but never applied) and **clamps** anything not offered here
+to English. A manual toggle persists and wins; auto-selection never writes storage. Because the
+employee app reuses `SessionProvider` + `@/i18n` via the `@` alias, it follows for free.
+
+Server invariant lives in `CountryDefaults` beside the currency derivation — English for any country,
+Indonesian only for `ID`. `SignupService` applies it at the same **derive-before-create** point as
+the country check (a bad language `400`s before any Keycloak user exists — no compensation spent);
+the `Company` aggregate enforces it on every create path. No DB/schema/event change (`default_language`
+stays `en|id`, now country-gated). Behavior change: a non-ID company can no longer be created in
+Indonesian (`SignupAcceptanceTest.countryUsDerivesUsdBooks` updated to English + a new
+reject-with-no-residue case; `CountryDefaultsTest` + `geo.test.ts` cover the policy). Not pushed.
+
 ## 2026-08-12 — Close the ADR 0040 org-service error-inbox gap (500s → error_log fleet-complete)
 
 The last open item on the traceable-error-reference track (ADR 0040). The shared `ApiExceptionHandler`

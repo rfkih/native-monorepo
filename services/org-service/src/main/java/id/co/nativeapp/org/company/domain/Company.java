@@ -34,8 +34,11 @@ import org.hibernate.type.SqlTypes;
  * Hibernate to hydrate from the immutable column on read, never on write.
  *
  * <p>{@code default_language} is likewise set at creation (the dashboard never toggles it); a
- * per-user override lives on the user profile, not here. {@code legal_employer_id} records which
- * legal employer this company is.
+ * per-user override lives on the user profile, not here. It is <strong>country-gated</strong> (ADR
+ * 0059): English for any country, Indonesian only for an Indonesian company — validated in the
+ * constructor via {@link CountryDefaults#requireLanguageForCountry}, the language counterpart of
+ * the derived base currency. {@code legal_employer_id} records which legal employer this company
+ * is.
  */
 @Entity
 @Table(name = "company")
@@ -133,13 +136,15 @@ public class Company extends Auditable {
 
   /**
    * Creates a company with the given id (which is also its tenant {@code company_id}). Validates
-   * its invariants: non-blank name, a real ISO-4217 {@code baseCurrency}, non-blank {@code
-   * defaultLanguage}, non-null {@code legalEmployerId}, a real ISO 3166-1 {@code country}.
+   * its invariants: non-blank name, a real ISO-4217 {@code baseCurrency}, a supported {@code
+   * defaultLanguage} that is allowed for the {@code country} (English anywhere, Indonesian only for
+   * {@code ID} — ADR 0059), non-null {@code legalEmployerId}, a real ISO 3166-1 {@code country}.
    *
    * @param id the company id — also its own tenant id (a company is its own tenant)
    * @param name the company name; must be non-blank
    * @param baseCurrency the ISO-4217 base currency code; validated via {@link Currency}; IMMUTABLE
-   * @param defaultLanguage the company default language (e.g. {@code "en"}/{@code "id"}); non-blank
+   * @param defaultLanguage the company default language (e.g. {@code "en"}/{@code "id"}); must be
+   *     supported and allowed for {@code country} — Indonesian only for {@code ID} (ADR 0059)
    * @param legalEmployerId the legal employer this company is
    * @param country the ISO 3166-1 alpha-2 country code; validated via {@link CountryDefaults};
    *     IMMUTABLE (the base currency is derived from it at creation — ADR 0025)
@@ -163,9 +168,12 @@ public class Company extends Auditable {
     this.id = Objects.requireNonNull(id, "id");
     this.name = requireNonBlank(name, "name");
     this.baseCurrency = requireValidCurrency(baseCurrency);
-    this.defaultLanguage = requireNonBlank(defaultLanguage, "defaultLanguage");
     this.legalEmployerId = Objects.requireNonNull(legalEmployerId, "legalEmployerId");
+    // Country is validated BEFORE the language: the language whitelist is country-gated (ADR 0059)
+    // — English everywhere, Indonesian only for an Indonesian company. Same policy the signup
+    // orchestration applies before touching Keycloak; here it is the authoritative in-app check.
     this.country = CountryDefaults.requireValidCountry(country);
+    this.defaultLanguage = CountryDefaults.requireLanguageForCountry(this.country, defaultLanguage);
     this.phone = phone;
     this.companySize = companySize;
     this.primaryInterest = primaryInterest;

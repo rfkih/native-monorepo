@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useMutation } from '@tanstack/react-query'
@@ -16,6 +16,8 @@ import { AUTH_MODE } from '@/lib/config'
 import { DEV_ACTOR } from '@/lib/devIdentity'
 import { toPlanTier } from '@/lib/featureTier'
 import { cn } from '@/lib/cn'
+import { type Lang } from '@/i18n'
+import { isIndonesiaByTimeZone, langsForCountry } from '@/lib/geo'
 import { derivedCurrency } from '@/lib/countries'
 import { createCompany, type CompanyResponse } from './api'
 
@@ -42,13 +44,16 @@ export function OnboardingWizard() {
   // divisions and vice versa.
   const [entityConfirmed, setEntityConfirmed] = useState(false)
 
+  // Seed the country from the browser location (ADR 0059) — Indonesia when the time zone says so,
+  // else an English-market default; the language follows (Indonesian only for an ID company).
+  const detectedCountry = useMemo(() => (isIndonesiaByTimeZone() ? 'ID' : 'US'), [])
   const [step, setStep] = useState(COMPANY_STEP)
   const [name, setName] = useState('')
   const [bizName, setBizName] = useState('')
   const [vertical, setVertical] = useState<string>('restaurant')
-  const [country, setCountry] = useState<string>('ID')
+  const [country, setCountry] = useState<string>(detectedCountry)
   const [defaultLanguage, setDefaultLanguage] = useState<string>(
-    i18n.language === 'id' ? 'id' : 'en',
+    detectedCountry === 'ID' && i18n.language === 'id' ? 'id' : 'en',
   )
   const [errors, setErrors] = useState<StepErrors>({})
   const [created, setCreated] = useState<CompanyResponse | null>(null)
@@ -200,7 +205,12 @@ export function OnboardingWizard() {
             <RegionFields
               country={country}
               defaultLanguage={defaultLanguage}
-              onCountry={setCountry}
+              onCountry={(c) => {
+                setCountry(c)
+                setDefaultLanguage((prev) =>
+                  langsForCountry(c).includes(prev as Lang) ? prev : c === 'ID' ? 'id' : 'en',
+                )
+              }}
               onDefaultLanguage={setDefaultLanguage}
             />
           )}
