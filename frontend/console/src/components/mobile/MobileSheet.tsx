@@ -12,6 +12,7 @@
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/cn'
+import { useBackDismiss } from './useBackDismiss'
 
 export function MobileSheet({
   onClose,
@@ -27,6 +28,11 @@ export function MobileSheet({
 }) {
   const { t } = useTranslation()
   const panelRef = useRef<HTMLDivElement>(null)
+
+  // Phone/browser BACK closes the sheet instead of navigating off the page (Android hardware back
+  // in the native shell, the browser back gesture in a PWA). Mirrors the Escape handler below; the
+  // caller's reopen affordance (e.g. the POS dock's expand chevron) is unaffected.
+  useBackDismiss(onClose)
 
   useEffect(() => {
     panelRef.current?.focus()
