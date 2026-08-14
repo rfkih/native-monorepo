@@ -562,7 +562,41 @@ services:
     volumes:
       - ./prod/cloudflared:/etc/cloudflared:ro
 
+  # Dedicated Tailscale node for Native prod (profile: tsfunnel) — an INTERIM stable public
+  # origin WITHOUT a domain, until the named Cloudflare tunnel + domain lands. The VPS host's
+  # OWN tailscale node has all three Funnel ports (443/8443/10000) used by the co-located
+  # blackheart workload ("Funnel exhausted on this box"), so Native cannot funnel there. This
+  # is a SEPARATE tailscale node (its own container = its own tailnet identity), so it gets its
+  # own hostname `native-prod.<tailnet>.ts.net` and its own three Funnel ports — blackheart is
+  # untouched. Funnel maps :8443 -> edge:8080 (business) and :10000 -> edge:8081 (employee),
+  # mirroring the two cloudflared quick tunnels. Stable across restarts (persisted node state),
+  # so the APK origin baked against it never breaks like a quick tunnel does.
+  #
+  # Requires in prod.env: TS_AUTHKEY (a REUSABLE, non-ephemeral Tailscale auth key) and
+  # COMPOSE_PROFILES=tsfunnel. The tailnet ACL must allow Funnel for this node (nodeAttrs
+  # attr "funnel"); HTTPS/Funnel must be enabled for the tailnet (it already is — a8 UAT +
+  # blackheart both funnel). Serve+funnel is declared in ./prod/tailscale/serve.json;
+  # ${TS_CERT_DOMAIN} in that file is substituted with this node's FQDN at boot.
+  tailscale-native:
+    image: tailscale/tailscale:latest
+    container_name: native-prod-tailscale
+    profiles: ["tsfunnel"]
+    restart: unless-stopped
+    hostname: native-prod
+    mem_limit: 128m
+    cpus: 0.5
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:-}
+      TS_HOSTNAME: native-prod
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "true"
+      TS_SERVE_CONFIG: /config/serve.json
+    volumes:
+      - native-prod-tailscale-state:/var/lib/tailscale
+      - ./prod/tailscale/serve.json:/config/serve.json:ro
+
 volumes:
   native-prod-pgdata:
   native-prod-kafka-data:
   native-prod-minio-data:
+  native-prod-tailscale-state:
