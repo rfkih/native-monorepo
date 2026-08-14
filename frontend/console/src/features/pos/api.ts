@@ -171,7 +171,13 @@ export interface PriceBreakdownResponse {
 /** Matches backend PaymentResponse record (ADR 0006). All money is integer minor units. */
 export interface PaymentResponse {
   paymentId: string
-  orderId: string
+  /** Null for a bill-originated payment (ADR 0045 extension to bills — a bill is not an order); set
+   *  for an order-originated payment. See `billId`, its bill-side counterpart. */
+  orderId: string | null
+  /** ADR 0045 extension to bills: set for a bill-originated payment (`/bills/{id}/pay-pending` and
+   *  its `/receipt`); null for an order-originated payment. Optional/undefined on any response that
+   *  predates this field so a stale cache never crashes a reader. */
+  billId?: string | null
   /** String name of TenderType enum: CASH | QRIS | CARD | ONLINE */
   tenderType: string
   /** String name of Payment.Status enum: PENDING | CAPTURED | VOIDED | REFUNDED | PARTIALLY_REFUNDED | ABANDONED | FAILED */

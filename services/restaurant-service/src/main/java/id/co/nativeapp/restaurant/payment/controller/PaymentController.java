@@ -22,12 +22,15 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <ul>
  *   <li>{@code POST /api/v1/payments/{id}/capture} — captures a PENDING digital payment, records
- *       revenue ({@code SaleRecorded}), and transitions the order to {@code COMPLETED}.
+ *       revenue ({@code SaleRecorded}), and transitions the order to {@code COMPLETED} (or, for a
+ *       bill-originated payment (V38), the bill to PAID once every line is paid).
  *   <li>{@code GET /api/v1/payments/{id}/receipt} — returns the read-path view for a payment.
  *   <li>{@code POST /api/v1/payments/{id}/void} — voids a CAPTURED payment; emits {@code
  *       SaleVoided} for the finance reversal (ADR 0006, slice 4).
  *   <li>{@code POST /api/v1/payments/{id}/refund} — refunds a CAPTURED payment (partial or full);
  *       emits {@code SaleRefunded} for the finance reversal (ADR 0006, slice 4).
+ *   <li>{@code POST /api/v1/payments/{id}/abandon} — abandons a PENDING bill gateway payment (V38),
+ *       releasing its line reservation. Bill payments only.
  * </ul>
  *
  * <p>The tenant ({@code company_id}) and actor come from the bound {@link
@@ -123,5 +126,23 @@ public class PaymentController {
       @PathVariable UUID id, @Valid @RequestBody RefundRequest request) {
     Money refundAmount = Money.ofMinor(request.amountMinor(), request.currency());
     return ResponseEntity.ok(voidRefundService.refund(id, refundAmount));
+  }
+
+  /**
+   * Abandons a PENDING bill gateway payment (V38, dynamic QRIS/CARD) — releases its {@code
+   * bill_line} reservation so the lines become payable again (cash, or a fresh gateway attempt).
+   * Bill payments only; an order payment has no reservation to release.
+   *
+   * @param id the payment id
+   * @return {@code 200 OK} with the abandoned payment body (status = ABANDONED)
+   */
+  @Operation(
+      summary = "Abandon a PENDING bill gateway payment",
+      description =
+          "Abandons a PENDING bill gateway payment (V38) and releases its bill_line reservation."
+              + " Bill payments only.")
+  @PostMapping("/{id}/abandon")
+  public ResponseEntity<PaymentResponse> abandon(@PathVariable UUID id) {
+    return ResponseEntity.ok(captureService.abandon(id));
   }
 }

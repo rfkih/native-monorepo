@@ -5,6 +5,30 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-14 — Dynamic QRIS gateway for BILLS/tabs, full-bill (ADR 0045 amendment, closes ADR 0036 residual)
+
+Owner ("Bara Kebab") kept getting the manual "Demo · penyedia tertunda" panel when paying a **bill
+("tagihan")** with QRIS — even after the per-env fix (v0.1.14) and confirming the effective endpoint
+returns `GATEWAY, connected:true`. Root cause: dynamic QRIS was never built for bills — `BillWriter.
+payBill` records a `Sale` directly (one-step, **no `Payment` row**), so a gateway charge had nothing
+to attach to (the ADR 0036 residual). Orders work only because checkout mints a PENDING
+`Payment(paymentId)` the charge keys on. This extends the two-step gateway flow to bills, **full-bill
+only** (split checks = follow-up), with **zero payment-service change** (a bill's gateway payment is
+a restaurant `Payment` row keyed by `paymentId`; the charge/`PaymentChargeSucceeded`/consumer plumbing
+is reused, vertical stays `restaurant`). Migration **V38** (restaurant): `payment.order_id` nullable
++ `bill_id`/`discount_minor`/`check_idempotency_key` + `CHECK` exactly-one, and `bill_line.
+pending_payment_id` (line reservation). `POST /bills/{id}/pay-pending` reserves the unpaid lines +
+mints the PENDING bill payment; `BillPaymentCaptureWriter.capture` records the check Sale + closes the
+bill on settlement (reusing `recordCheck` extracted from `payBill` — cash path byte-for-byte
+unchanged); `PaymentChargeSucceededWriter` dispatches order-vs-bill by `isForBill()`; `POST
+/payments/{id}/abandon` releases the reservation on cancel; `payBill` now excludes reserved lines
+(real double-settle fix caught in review). Capture recompute-and-asserts at the mint instant and
+parks on drift; idempotent by already-CAPTURED + the sale unique key. Console: `BillPaymentModal`
+gained a gateway branch mirroring the order `RestaurantDigitalAttempt`. Built by two parallel agents,
+dual-reviewed; restaurant-service `:check` green (693 tests, ArchUnit 14/14), console tsc+vitest+lint
+green. Branch `feat/bill-gateway-qris`, NOT yet deployed (deploy gated on the prod Tailscale-Funnel
+edge being committed to the release branch first — else a deploy would delete the tailscale container).
+
 ## 2026-08-13 — Per-environment QRIS gateway credentials + verify + honest degrade (ADR 0045 amendment)
 
 First real go-live (company "Bara Kebab", GATEWAY + PRODUCTION) exposed a silent human-error trap in

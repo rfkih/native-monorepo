@@ -58,8 +58,18 @@ public class Payment extends Auditable {
   @Column(name = "id", nullable = false, updatable = false)
   private UUID id;
 
-  @Column(name = "order_id", nullable = false, updatable = false)
+  /** Set for an order-originated payment; {@code null} for a bill-originated one (rule: XOR). */
+  @Column(name = "order_id", updatable = false)
   private UUID orderId;
+
+  /**
+   * Set for a bill-originated payment (V38, dynamic QRIS/CARD gateway on a full-bill check); {@code
+   * null} for an order-originated one. Exactly one of {@link #orderId}/{@link #billId} is ever set
+   * — enforced both here ({@link #Payment} constructor) and by the {@code
+   * ck_payment_order_xor_bill} DB CHECK.
+   */
+  @Column(name = "bill_id", updatable = false)
+  private UUID billId;
 
   @Column(name = "business_id", nullable = false, updatable = false)
   private UUID businessId;
@@ -133,12 +143,23 @@ public class Payment extends Auditable {
   @Column(name = "sold_by_user_id", updatable = false)
   private String soldByUserId;
 
+  /**
+   * The manual (staff-entered) discount requested at pay-pending mint time, minor units (V38, bill
+   * gateway only) — re-fed into the same promotions + tax computation at capture time so the
+   * recomputed check breakdown reproduces the amount authorized here, deterministically. {@code
+   * null} for an order-originated payment and for any bill payment minted with no discount.
+   */
+  @Column(name = "discount_minor", updatable = false)
+  private Long discountMinor;
+
   protected Payment() {
     // for JPA
   }
 
+  @SuppressWarnings("checkstyle:ParameterNumber")
   private Payment(
       UUID orderId,
+      UUID billId,
       UUID businessId,
       TenderType tenderType,
       Status status,
@@ -151,9 +172,21 @@ public class Payment extends Auditable {
       Instant capturedAt,
       Instant occurredAt,
       String idempotencyKey,
-      String channelCode) {
+      String channelCode,
+      Long discountMinor) {
     this.id = UUID.randomUUID();
-    this.orderId = Objects.requireNonNull(orderId, "orderId");
+    // Rule: exactly one of orderId/billId is ever set — mirrors the DB ck_payment_order_xor_bill
+    // CHECK (V38) at the domain layer too, so a construction-time bug fails fast in-process rather
+    // than only at flush.
+    if ((orderId == null) == (billId == null)) {
+      throw new IllegalArgumentException(
+          "exactly one of orderId/billId must be set (order XOR bill payment); orderId="
+              + orderId
+              + " billId="
+              + billId);
+    }
+    this.orderId = orderId;
+    this.billId = billId;
     this.businessId = Objects.requireNonNull(businessId, "businessId");
     this.tenderType = Objects.requireNonNull(tenderType, "tenderType");
     this.status = Objects.requireNonNull(status, "status");
@@ -168,6 +201,7 @@ public class Payment extends Auditable {
     this.occurredAt = Objects.requireNonNull(occurredAt, "occurredAt");
     this.idempotencyKey = Objects.requireNonNull(idempotencyKey, "idempotencyKey");
     this.channelCode = channelCode;
+    this.discountMinor = discountMinor;
   }
 
   /**
@@ -192,6 +226,7 @@ public class Payment extends Auditable {
     }
     return new Payment(
         orderId,
+        null,
         businessId,
         TenderType.CASH,
         Status.CAPTURED,
@@ -204,6 +239,7 @@ public class Payment extends Auditable {
         occurredAt,
         occurredAt,
         idempotencyKey,
+        null,
         null);
   }
 
@@ -233,6 +269,7 @@ public class Payment extends Auditable {
     Objects.requireNonNull(saleId, "saleId");
     return new Payment(
         orderId,
+        null,
         businessId,
         TenderType.ONLINE,
         Status.CAPTURED,
@@ -245,12 +282,14 @@ public class Payment extends Auditable {
         capturedAt,
         capturedAt,
         idempotencyKey,
-        channelCode);
+        channelCode,
+        null);
   }
 
   /**
-   * A flagged-pending digital tender (QRIS/card): {@link Status#PENDING}, {@code providerPending =
-   * true}, no sale yet. Records revenue only when {@link #capture(UUID, Instant)} runs.
+   * A flagged-pending digital tender (QRIS/card) against an ORDER: {@link Status#PENDING}, {@code
+   * providerPending = true}, no sale yet. Records revenue only when {@link #capture(UUID, Instant)}
+   * runs.
    */
   public static Payment pendingDigital(
       UUID orderId,
@@ -265,6 +304,7 @@ public class Payment extends Auditable {
     }
     return new Payment(
         orderId,
+        null,
         businessId,
         tenderType,
         Status.PENDING,
@@ -277,7 +317,65 @@ public class Payment extends Auditable {
         null,
         occurredAt,
         idempotencyKey,
+        null,
         null);
+  }
+
+  /**
+   * A flagged-pending digital tender (QRIS/card) against a BILL (V38): {@link Status#PENDING},
+   * {@code providerPending = true}, no sale yet. Mints the reservation counterpart the caller
+   * ({@code BillWriter.initiatePendingPayment}) stamps onto the bill's still-unpaid {@code
+   * bill_line} rows. Records revenue only when {@link #capture(UUID, Instant)} runs (via {@code
+   * BillPaymentCaptureWriter}, not {@code PaymentCaptureWriter} — that class stays order-only).
+   *
+   * <p><strong>HIGH fix (code review).</strong> This factory does NOT accept — and {@link Payment}
+   * does NOT store — a sale idempotency key. Storing one here would be minted BEFORE the payment's
+   * own {@link #id} is known and, worse, is exactly what regressed to a bill-wide shared key in the
+   * first cut (a second sale on the same bill collided on {@code uq_sale_company_idempotency}).
+   * {@code BillPaymentCaptureWriter#capture} instead derives the check's sale idempotency key
+   * on-the-fly from {@code this.getId()} at CAPTURE time — mirroring EXACTLY how the order path's
+   * {@code PaymentCaptureWriter#capture} derives {@code payment.getId() + ":capture-sale"} — so it
+   * is unique PER PAYMENT (never shared across a bill's multiple checks over its lifetime) by
+   * construction, with no separate column to keep in sync.
+   *
+   * @param billId the bill this payment settles (never {@code null})
+   * @param discountMinor the manual discount requested at mint time, minor units, or {@code null} —
+   *     re-fed into the SAME promotions + tax computation at capture time so the recomputed grand
+   *     total reproduces {@code amount} deterministically
+   * @throws IllegalArgumentException if {@code billId} is {@code null} or {@code tenderType} is not
+   *     digital
+   */
+  public static Payment pendingDigitalForBill(
+      UUID billId,
+      UUID businessId,
+      TenderType tenderType,
+      Money amount,
+      Long discountMinor,
+      String providerRef,
+      Instant occurredAt,
+      String idempotencyKey) {
+    Objects.requireNonNull(billId, "billId");
+    if (tenderType == null || !tenderType.isDigital()) {
+      throw new IllegalArgumentException(
+          "pendingDigitalForBill requires a digital tender: " + tenderType);
+    }
+    return new Payment(
+        null,
+        billId,
+        businessId,
+        tenderType,
+        Status.PENDING,
+        amount,
+        null,
+        null,
+        true,
+        providerRef,
+        null,
+        null,
+        occurredAt,
+        idempotencyKey,
+        null,
+        discountMinor);
   }
 
   /** Captures a pending tender against a recorded sale ({@link Status#PENDING} → CAPTURED). */
@@ -288,6 +386,20 @@ public class Payment extends Auditable {
     this.saleId = Objects.requireNonNull(saleId, "saleId");
     this.capturedAt = Objects.requireNonNull(capturedAt, "capturedAt");
     this.status = Status.CAPTURED;
+  }
+
+  /**
+   * Abandons a PENDING tender that was never captured ({@link Status#PENDING} → {@link
+   * Status#ABANDONED}) — never produces revenue (ADR 0006 invariant). Used by {@code
+   * BillPaymentWriter#abandon} to release a stale/superseded gateway attempt (V38).
+   *
+   * @throws IllegalStateException if this payment is not currently PENDING
+   */
+  public void abandon() {
+    if (status != Status.PENDING) {
+      throw new IllegalStateException("only a PENDING payment can be abandoned; was " + status);
+    }
+    this.status = Status.ABANDONED;
   }
 
   /** Voids a captured tender ({@link Status#CAPTURED} → VOIDED) — a full reversal. */
@@ -332,8 +444,24 @@ public class Payment extends Auditable {
     return id;
   }
 
+  /** {@code null} for a bill-originated payment (V38) — see {@link #isForBill()}. */
   public UUID getOrderId() {
     return orderId;
+  }
+
+  /** {@code null} for an order-originated payment — see {@link #isForBill()}. */
+  public UUID getBillId() {
+    return billId;
+  }
+
+  /**
+   * {@code true} when this payment settles a {@code bill} (V38, dynamic QRIS/CARD gateway) rather
+   * than an {@code order} — dispatches {@code PaymentChargeSucceededWriter} / {@code
+   * PaymentCaptureService} to {@code BillPaymentCaptureWriter} instead of the order-only {@code
+   * PaymentCaptureWriter}.
+   */
+  public boolean isForBill() {
+    return billId != null;
   }
 
   public UUID getBusinessId() {
@@ -403,6 +531,14 @@ public class Payment extends Auditable {
    */
   public String getSoldByUserId() {
     return soldByUserId;
+  }
+
+  /**
+   * The manual discount requested at pay-pending mint time, minor units (V38, bill gateway only),
+   * or {@code null}. See {@link #pendingDigitalForBill} javadoc.
+   */
+  public Long getDiscountMinor() {
+    return discountMinor;
   }
 
   /**

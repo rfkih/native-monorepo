@@ -137,6 +137,34 @@ it, so it is recorded here.
   unavailable — confirm manually" badge instead of the demo "pending provider" copy. Fail-open to
   MANUAL is unchanged; only the wording stops misleading.
 
+## Amendment (2026-08-14) — dynamic QRIS gateway for BILLS/tabs (closes the ADR 0036 residual)
+
+The original decision + the DIVISION amendment shipped gateway QRIS for the ORDER surface only;
+bills/tabs fell back to manual "Demo" because a bill records its `Sale` **directly, one-step**
+(`BillWriter.payBill`) with **no `Payment` row** for a charge to attach to (the ADR 0036 residual).
+This EXTENDS the gateway flow to bills without changing payment-service at all — a bill's gateway
+payment is a restaurant `Payment` row keyed by `paymentId`, so the charge / `PaymentChargeSucceeded`
+/ consumer plumbing is reused verbatim (vertical stays `restaurant`). Scope: **full-bill**; split
+checks are a follow-up (the reservation model already supports them).
+
+- **Two-step on bills.** `POST /bills/{id}/pay-pending` reserves the bill's unpaid lines
+  (`bill_line.pending_payment_id`) and mints a **PENDING bill-aware `Payment`** (`payment.order_id`
+  nullable + `bill_id`/`discount_minor`/`check_idempotency_key`, migration V38, `CHECK` exactly one
+  of order_id/bill_id). On settlement, `BillPaymentCaptureWriter.capture(paymentId)` records the
+  check's `Sale` + `SaleRecorded`, marks the lines paid, closes the bill (PAID), and flips the
+  payment CAPTURED — reusing the sale-recording core extracted from `payBill` (`recordCheck`), so
+  the cash/manual path is byte-for-byte unchanged.
+- **Line reservation = correctness.** A concurrent cash `payBill` now excludes reserved lines, so a
+  line can never be double-settled. A second `pay-pending` self-heals a stale reservation
+  (abandon + re-reserve); `POST /payments/{id}/abandon` releases it on a clean cancel/close.
+- **Capture recompute-and-assert.** A bill is a mutable tab, so capture recomputes the breakdown
+  from the reserved lines **at the mint instant** (`Payment.occurredAt`, immune to an effective-dated
+  tax-rule change) and parks (never captures) on any drift from the authorized amount. Idempotent by
+  the already-CAPTURED short-circuit + the sale `(company_id, idempotency_key)` unique backstop.
+- **Console.** `BillPaymentModal` grows a gateway branch mirroring the order `RestaurantDigitalAttempt`
+  (initiate → `GatewayQrisPendingView` → poll → capture closes the bill); non-gateway tenders
+  unchanged.
+
 ## Consequences
 
 - Going live with digital tenders is now real: STATIC ships value with no PSP dependency at all,

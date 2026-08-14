@@ -13,7 +13,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api'
 import type { CompanySession } from '@/lib/session'
-import type { PriceBreakdownResponse, OrderLineInput } from './api'
+import type { PriceBreakdownResponse, OrderLineInput, PaymentResponse } from './api'
 
 // ---------------------------------------------------------------------------
 // Response types — mirroring backend DTOs exactly
@@ -104,6 +104,27 @@ export interface PayBillInput {
   /** Restrict this check to a subset of unpaid lines (Increment 3 split-by-item). */
   lineIds?: string[]
   /** Caller-supplied idempotency key — send a fresh UUID per check-pay attempt. */
+  idempotencyKey?: string
+}
+
+/**
+ * Request body for {@link usePayBillPending} — full-bill only (no `lineIds`; see
+ * `features/pos/lib/billGatewayQris.ts`'s `shouldUseBillGatewayFlow` guard). `discountMinor` mirrors
+ * {@link PayBillInput}'s field verbatim; BillPaymentModal does not currently source a discount for
+ * this leg (same as the existing one-step `usePayBill` call it mirrors), but the field is wired
+ * through for parity with the backend contract.
+ */
+export interface PayBillPendingInput {
+  billId: string
+  payment: { tenderType: 'QRIS' }
+  discountMinor?: number
+  /**
+   * The SAME key BillDetail mints per pay-initiation (`freshIdempotencyKey`), reused across retries
+   * of this attempt — sent for consistency with every other bill/order write on this contract, but
+   * INERT server-side for `pay-pending` specifically: the backend ignores it and self-heals by
+   * minting its own key (coordination note, 2026-08-14). Keep sending it (harmless); don't treat it
+   * as meaningful retry-dedup for THIS endpoint the way it is for `usePayBill`/`useCheckout`.
+   */
   idempotencyKey?: string
 }
 
@@ -241,6 +262,59 @@ export function usePayBill(session: CompanySession) {
       void qc.invalidateQueries({ queryKey: billsKey(session) })
       void qc.invalidateQueries({ queryKey: ['pnl'] })
     },
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Pay a bill — GATEWAY QRIS two-step leg (ADR 0045 extension to bills, full-bill only):
+// POST /api/v1/bills/{id}/pay-pending → 201 PaymentResponse (creates a PENDING payment WITHOUT
+// settling the bill) + POST /api/v1/payments/{id}/abandon (releases the reservation on a clean
+// cancel/close). Mirrors the order checkout's two-step digital leg (features/pos/api.ts's
+// useCheckout + useCapturePayment) — capture/receipt for the resulting payment reuse THOSE hooks
+// verbatim (BillPaymentModal imports useCapturePayment/useReceipt from ./api), nothing here
+// duplicates them.
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /api/v1/bills/{id}/pay-pending — creates a PENDING payment for the bill's current unpaid
+ * total (the full, un-split bill) without settling it. The response is the SAME `PaymentResponse`
+ * shape `useCapturePayment`/`useReceipt` (features/pos/api.ts) already return — reused verbatim
+ * rather than redeclared, so `useGatewayQris` and `GatewayQrisPendingView` drive off one consistent
+ * type across the order and bill flows. Only `paymentId`/`amountMinor`/`currency`/`status` are ever
+ * read off a bill-originated payment here — `orderId` is null (a bill is not an order; `billId` is
+ * its bill-side counterpart, unread here too).
+ * No cache invalidation on success: creating the PENDING payment doesn't change anything the bill
+ * read shows yet (unlike capture, which the caller invalidates on the CAPTURED transition).
+ */
+export function usePayBillPending(session: CompanySession) {
+  return useMutation({
+    mutationFn: ({ billId, payment, discountMinor, idempotencyKey }: PayBillPendingInput) =>
+      apiFetch<PaymentResponse>(`/api/v1/bills/${billId}/pay-pending`, {
+        method: 'POST',
+        tenant: tenantOf(session),
+        body: {
+          payment,
+          discountMinor: discountMinor != null && discountMinor > 0 ? discountMinor : null,
+          idempotencyKey: idempotencyKey ?? null,
+        },
+      }),
+  })
+}
+
+/**
+ * POST /api/v1/payments/{id}/abandon — releases a bill's line reservation after a PENDING GATEWAY
+ * QRIS payment (from {@link usePayBillPending}) is cleanly cancelled, or the payment modal closes
+ * mid-pending — BillPaymentModal's `handleGatewayCancel`. No order-side caller exists yet, so this
+ * lives here rather than in features/pos/api.ts; the plain shape otherwise matches
+ * `useCapturePayment`/`useReceipt` exactly (same payment-id path param, same response type).
+ */
+export function useAbandonPayment(session: CompanySession) {
+  return useMutation({
+    mutationFn: (paymentId: string) =>
+      apiFetch<PaymentResponse>(`/api/v1/payments/${paymentId}/abandon`, {
+        method: 'POST',
+        tenant: tenantOf(session),
+      }),
   })
 }
 

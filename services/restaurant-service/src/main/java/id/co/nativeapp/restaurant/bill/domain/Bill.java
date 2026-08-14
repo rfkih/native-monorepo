@@ -118,12 +118,19 @@ public class Bill extends Auditable {
   }
 
   /**
-   * Removes a line from this bill. The bill must be OPEN.
+   * Removes a line from this bill. The bill must be OPEN, and the line must NOT be currently
+   * RESERVED for an in-flight gateway payment (V38 hardening fix — code review): removing a
+   * reserved line would strand real PSP money at capture time (see {@link
+   * BillLineReservedException} javadoc).
    *
    * @throws IllegalStateException if the bill is not OPEN
+   * @throws BillLineReservedException if {@code line} is currently reserved
    */
   public void removeLine(BillLine line) {
     requireOpen("removeLine");
+    if (line.getPendingPaymentId() != null) {
+      throw new BillLineReservedException(id, line.getId(), line.getPendingPaymentId());
+    }
     lines.remove(line);
   }
 

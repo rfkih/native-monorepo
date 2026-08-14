@@ -6,6 +6,7 @@ import id.co.nativeapp.restaurant.bill.dto.BillSummaryResponse;
 import id.co.nativeapp.restaurant.bill.dto.OpenBillRequest;
 import id.co.nativeapp.restaurant.bill.dto.PayBillRequest;
 import id.co.nativeapp.restaurant.bill.service.BillService;
+import id.co.nativeapp.restaurant.payment.dto.PaymentResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -32,6 +33,8 @@ import org.springframework.web.bind.annotation.RestController;
  *   <li>{@code POST /api/v1/bills/{id}/lines} — append a round of items to an OPEN bill
  *   <li>{@code DELETE /api/v1/bills/{id}/lines/{lineId}} — remove a line from an OPEN bill
  *   <li>{@code POST /api/v1/bills/{id}/pay} — finalise an OPEN bill (revenue recognised here)
+ *   <li>{@code POST /api/v1/bills/{id}/pay-pending} — initiate a PENDING gateway (QRIS/CARD)
+ *       payment for the full bill (V38); revenue is recognised only at capture
  *   <li>{@code POST /api/v1/bills/{id}/cancel} — cancel an OPEN bill
  * </ul>
  *
@@ -137,6 +140,25 @@ public class BillController {
   public ResponseEntity<BillResponse> pay(
       @PathVariable UUID id, @Valid @RequestBody PayBillRequest request) {
     return ResponseEntity.ok(billService.payBill(id, request));
+  }
+
+  /**
+   * Initiates a PENDING gateway (QRIS/CARD) payment for the FULL bill (V38): mints a {@code
+   * payment} row for the check's grand total and reserves every unpaid line against it. Records NO
+   * sale — revenue is recognised only when the payment is captured (the {@code
+   * PaymentChargeSucceeded} webhook, or a manual {@code POST /api/v1/payments/{id}/capture}).
+   * Returns 200 OK with the PENDING payment.
+   */
+  @Operation(
+      summary = "Initiate a PENDING gateway payment for the full bill",
+      description =
+          "Mints a PENDING payment (QRIS/CARD) for the bill's full grand total and reserves every"
+              + " unpaid line against it. Records no sale. Returns 200 OK, 409 if the bill is not"
+              + " OPEN or a concurrent payment already claimed some lines.")
+  @PostMapping("/{id}/pay-pending")
+  public ResponseEntity<PaymentResponse> payPending(
+      @PathVariable UUID id, @Valid @RequestBody PayBillRequest request) {
+    return ResponseEntity.ok(billService.initiatePendingPayment(id, request));
   }
 
   /** Cancels an OPEN bill (no sale, no stock change). Returns 204 No Content. */
