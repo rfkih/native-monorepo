@@ -12,8 +12,10 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, apiFetch } from '@/lib/api'
-import type { CompanySession } from '@/lib/session'
+import { useSession, type CompanySession } from '@/lib/session'
+import { useResolvedOutlets } from '@/features/org/useResolvedOutlets'
 import { lastClosedSession } from './lib/registerFloat'
+import { registerMenuLabelKey, type RegisterMenuLabelKey } from './lib/registerGate'
 
 export interface RegisterSessionResponse {
   id: string
@@ -100,6 +102,36 @@ export function useLastClosedSession(session: CompanySession, enabled: boolean) 
       })
       return lastClosedSession(rows)
     },
+  })
+}
+
+/**
+ * The register entry's label key for a surface with NO POS `session` in scope — the manager
+ * "Lainnya" (More) sheet tile. It resolves the CURRENT effective outlet (the same hook OutletGate
+ * uses) then reads that outlet's open session, SHARING the POS/RegisterSheet cache via the identical
+ * query key (`currentKey`), so it costs no extra round trip when the till already loaded it. Returns
+ * the neutral combined label until the outlet AND the session read have BOTH settled — the tile
+ * never flashes the wrong action. Pass `active=false` (tile hidden) to skip the session read.
+ */
+export function useCurrentOutletRegisterLabelKey(active: boolean): RegisterMenuLabelKey {
+  const { company } = useSession()
+  const { effectiveOutletId, status } = useResolvedOutlets()
+  const enabled = active && !!company && !!effectiveOutletId
+  const query = useQuery({
+    enabled,
+    queryKey: ['register-session', company?.companyId, effectiveOutletId],
+    queryFn: () =>
+      apiFetch<RegisterSessionResponse | null>('/api/v1/register-sessions/current', {
+        tenant: { companyId: company!.companyId, actor: company!.actor },
+        query: { businessId: effectiveOutletId! },
+      }),
+  })
+  // Only trust an open/closed verdict once the outlet is 'ready' AND the session read has settled;
+  // any other state (loading/error/empty outlet, or an in-flight session read) → neutral label.
+  return registerMenuLabelKey({
+    isLoading: status !== 'ready' || query.isLoading,
+    isError: query.isError,
+    session: query.data,
   })
 }
 

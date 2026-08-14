@@ -31,6 +31,7 @@ import { effectiveRoles, useAuth } from '@/lib/authContext'
 import { usePageAccess } from '@/lib/pageAccess'
 import { useTierAccess } from '@/lib/featureTier'
 import { canFinance, canHr, canOps, canPos } from '@/lib/rolePreset'
+import { useCurrentOutletRegisterLabelKey } from '@/features/pos/registerApi'
 import { AUTH_MODE } from '@/lib/config'
 import { useSession } from '@/lib/session'
 import { useOfferedLangs } from '@/lib/geo'
@@ -100,6 +101,9 @@ export function MoreSheet({
   const financeOk = canFinance(roles)
   const hrOk = canHr(roles)
   const posOk = canPos(auth.roles)
+  // The register tile toggles Buka/Closing kasir like the POS till menu (owner request) — resolved
+  // for the current outlet only when the tile actually renders (onOpenRegister provided).
+  const registerLabelKey = useCurrentOutletRegisterLabelKey(onOpenRegister != null)
 
   const tiles = [
     financeOk && pageAccess.isAllowed('close') && tierAccess.allows('orgStructure')
@@ -137,7 +141,7 @@ export function MoreSheet({
                 className="flex min-h-[92px] flex-col items-center justify-center gap-2 rounded-2xl border border-line bg-surface px-1.5 py-3 text-center text-[12px] font-semibold text-ink-2 transition-colors hover:border-emerald-line hover:bg-emerald-tint hover:text-emerald-2"
               >
                 <Banknote className="size-[22px] text-emerald-2" strokeWidth={1.8} aria-hidden />
-                {t('mobile.more.registerClose')}
+                {t(registerLabelKey)}
               </button>
             ) : null}
             {tiles.map((tile) => (

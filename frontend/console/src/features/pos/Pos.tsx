@@ -97,7 +97,7 @@ import { OpenBillDialog } from './components/OpenBillDialog'
 import { NoCompany } from './components/NoCompany'
 import { RegisterSheet } from './RegisterSheet'
 import { useCurrentRegisterSession } from './registerApi'
-import { noConfirmedOpenSession } from './lib/registerGate'
+import { noConfirmedOpenSession, registerMenuLabelKey } from './lib/registerGate'
 import { useOperatorSession } from '@/features/operator/operatorSessionContext'
 import { operatorSignInRequired } from '@/features/operator/operatorGate'
 import { OperatorPinSheet } from '@/features/operator/OperatorPinSheet'
@@ -164,6 +164,17 @@ function PosInner({ session }: { session: CompanySession }) {
   // payment gate below (registerGate.ts) — same query RegisterSheet itself reads, so opening it
   // costs no extra round trip.
   const registerSessionQuery = useCurrentRegisterSession(session)
+  // The till-menu register entry reflects the drawer's ACTUAL state (owner request "kalo sudah
+  // closing harusnya berubah jadi buka kasir") — decision is the pure registerMenuLabelKey core,
+  // mirroring RegisterSheet's own state-aware title. Open → "Closing kasir"; confirmed-closed →
+  // "Buka kasir"; loading/error → the neutral combined label.
+  const registerMenuLabel = t(
+    registerMenuLabelKey({
+      isLoading: registerSessionQuery.isLoading,
+      isError: registerSessionQuery.isError,
+      session: registerSessionQuery.data,
+    }),
+  )
 
   // ADR 0049 P3b — the Business-app device terminal's operator gate. `isDeviceTerminal` is derived
   // from the VERIFIED token claim (auth.actorType, ADR 0049), never a client-side guess; a normal
@@ -1026,7 +1037,7 @@ function PosInner({ session }: { session: CompanySession }) {
             {
               key: 'register',
               icon: <Banknote className="size-4" aria-hidden="true" />,
-              label: t('register.title'),
+              label: registerMenuLabel,
               onSelect: () => setShowRegisterSheet(true),
               // ADR 0028: never close a drawer offline or over an unsynced queue — expected cash
               // would understate the replayed sales.
