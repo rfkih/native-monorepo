@@ -3915,6 +3915,10 @@ export const en = {
       subtitle: 'Look up a gift card by its code.',
     },
   },
+  appUpdate: {
+    available: 'A new version is available.',
+    action: 'Update',
+  },
   offline: {
     banner: {
       offline: 'You are offline — selling continues, cash only. Prices are provisional.',

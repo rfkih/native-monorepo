@@ -3888,6 +3888,10 @@ export const id = {
       subtitle: 'Cari kartu hadiah berdasarkan kodenya.',
     },
   },
+  appUpdate: {
+    available: 'Versi baru tersedia.',
+    action: 'Perbarui',
+  },
   offline: {
     banner: {
       offline: 'Anda sedang offline — penjualan tetap berlanjut, tunai saja. Harga bersifat sementara.',

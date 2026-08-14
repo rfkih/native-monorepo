@@ -10,6 +10,7 @@ import { Spinner } from '@/components/ui/Spinner'
 import { AppSkeleton, PosSkeleton } from '@/components/ui/Skeleton'
 import { BrandMark, Wordmark } from '@/components/Wordmark'
 import { OfflineBanner } from '@/features/pos/offline/OfflineBanner'
+import { AppUpdatePrompt } from '@/components/AppUpdatePrompt'
 import { effectiveRoles, hasAnyRole, useAuth } from '@/lib/authContext'
 import { isNativeShell } from '@/lib/escpos/transport'
 import { usePageAccess } from '@/lib/pageAccess'
@@ -565,6 +566,7 @@ export function App() {
           screen INCLUDING the full-screen POS surfaces, which render outside the dashboard shell
           (Phase 5 offline mode, ADR 0028). Renders nothing when there is nothing to say. */}
       <OfflineBanner />
+      <AppUpdatePrompt />
       {posAllowed && <PrefetchPosChunk />}
       <PrefetchRouteChunks
         canOps={opsOk}
