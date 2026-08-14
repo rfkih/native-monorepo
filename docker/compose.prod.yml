@@ -548,9 +548,14 @@ services:
     ports:
       - "127.0.0.1:12002:2000" # GET /quicktunnel -> {"hostname":"...trycloudflare.com"} (employee)
 
-  # NAMED tunnel (profile: namedtunnel) — the prod target once a domain is on Cloudflare.
-  # Stable URL, so restart:unless-stopped. Needs docker/prod/cloudflared/{config.yml,<UUID>.json}
-  # and TUNNEL_UUID in prod.env. Ingress maps app.<domain>->edge:8080, me.<domain>->edge:8081.
+  # NAMED tunnel (profile: namedtunnel) — the DURABLE prod edge, now that native-app.my.id is on
+  # Cloudflare. Remotely-managed (dashboard) tunnel: the connector authenticates with a single
+  # TUNNEL TOKEN (prod.env CF_TUNNEL_TOKEN) and pulls its ingress from Cloudflare — the public
+  # hostnames app.native-app.my.id -> http://edge:8080 (business) and emp.native-app.my.id ->
+  # http://edge:8081 (employee) are configured in the Zero Trust dashboard, and Cloudflare
+  # auto-creates their DNS. Stable URL, so restart:unless-stopped. Replaces BOTH quick tunnels
+  # (drop the quicktunnel profile once this is verified live). Reaches the edge by the compose
+  # hostname `edge` over native-prod_default — no host port, no config files, no cert JSON.
   cloudflared-named:
     image: cloudflare/cloudflared:latest
     container_name: native-prod-cloudflared-named
@@ -558,9 +563,7 @@ services:
     restart: unless-stopped
     mem_limit: 128m
     cpus: 0.5
-    command: ["tunnel", "--no-autoupdate", "--config", "/etc/cloudflared/config.yml", "run", "${TUNNEL_UUID:-}"]
-    volumes:
-      - ./prod/cloudflared:/etc/cloudflared:ro
+    command: ["tunnel", "--no-autoupdate", "run", "--token", "${CF_TUNNEL_TOKEN:-}"]
 
   # Dedicated Tailscale node for Native prod (profile: tsfunnel) — an INTERIM stable public
   # origin WITHOUT a domain, until the named Cloudflare tunnel + domain lands. The VPS host's
