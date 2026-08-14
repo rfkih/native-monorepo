@@ -5,6 +5,26 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-14 — Persistent login: staff ~30 days, owner capped 1 day
+
+Native/Android sessions were logging out after the phone sat inactive, even though the offline token
++ localStorage persistence + `offline_access` were already in place (Keycloak's default offline idle is
+30 days). Root cause was **client-side**, two bugs in `auth.tsx`: (1) `recoverOrLogout` called
+`manager.removeUser()` — which **deletes the offline token** — on ANY `signinSilent()` failure, so one
+transient blip (no signal on reopen, IdP momentarily down) permanently ended a session with weeks left;
+(2) nothing refreshed on resume, so a backgrounded WebView came back with a dead 5-min access token and
+401'd before renewing. Fixes: only a TERMINAL error (`invalid_grant`/`invalid_token`/`login_required`/
+`interaction_required`) logs out — a transient failure KEEPS the session and retries; a
+`visibilitychange`/`focus` listener proactively renews via the offline token on foreground (no
+`@capacitor/app` dep). **Owner 1-day cap** (owner request "owner auth only 1 day max"): an `owner`-role
+login re-authenticates daily — `auth_time` (or a stored fresh-login stamp) > 24h → `removeUser()` +
+`signinRedirect({prompt:'login'})`; managers, cashiers, staff, and kiosk `device` logins ride the
+30-day session. Decision logic lives in a new pure `authSession.ts` (14 unit tests); no Keycloak
+timeout change (30d == the default). Client-enforced (the shared `native-console` KC client can't do
+per-role limits — a dedicated client is the follow-up if a hard server cap is needed). Dual-reviewed
+(code + security PASS); console tsc + lint + vitest (498) green. Ships to devices via the console-web /
+employee-web deploy (the native apps are thin clients).
+
 ## 2026-08-14 — POS daily transaction summary / Z-report at closing (ADR 0060)
 
 Owner ("Bara Kebab") asked for a menu to **print today's transaction summary when closing the POS**.
