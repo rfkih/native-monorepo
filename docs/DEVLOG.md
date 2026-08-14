@@ -5,6 +5,31 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-14 — POS daily transaction summary / Z-report at closing (ADR 0060)
+
+Owner ("Bara Kebab") asked for a menu to **print today's transaction summary when closing the POS**.
+Built as a printable **Z-report**: transaction count, revenue breakdown (Bruto − Diskon − Loyalti +
+Servis + Pajak PB1 = TOTAL), per-tender net sales, refunds, net, and the cash-drawer reconciliation.
+**Key decision (ADR 0060):** the price breakdown was already computed at ring time and put on the
+`SaleRecorded` event but **thrown away on the row** — so instead of re-deriving it per order at report
+time (rounding drift, promo/loyalty reconstruction, per-sale rule-version loss), we **snapshot it onto
+`sale`** and `SUM` exactly. restaurant-service **V39** adds 6 nullable columns (`subtotal/discount/
+service_charge/tax/loyalty_redeemed_minor`, `uses_illustrative_rules`) + covering index
+`idx_sale_business_window`; `SaleWriter.stampBreakdown` mirrors the event's promo-only decomposition.
+New **session-scoped** endpoint `GET /api/v1/register-sessions/{id}/summary` (works OPEN=live X-report /
+CLOSED=final Z-report; window `[openedAt, closedAt ?? now)`) reuses the existing per-tender/cash sums.
+Reporting-only (finance GL stays authoritative); tax is **PB1 "Pajak Restoran" (not PPN)**, badged
+**"estimasi"** when the rate is illustrative, footer "bukan faktur pajak" (domain-specialist review).
+Snapshot is **forward-only** (legacy rows fall back to `subtotal == amount`). Console: `DailySummary`
+overlay prints through the existing `ThermalReceipt`/`usePrinter` pipeline (device + `window.print`
+fallback + retry), reached from **both** the closing sheet ("Cetak ringkasan" on the close form +
+verdict) and a till-menu item ("Ringkasan hari ini"); i18n en+id. **Code + security review PASS.**
+Review W1/W2: the settlement block was reworked from per-tender NET to per-tender **GROSS + an explicit
+gift-card settlement line** so `Σ tenders == total` foots even with refunds or a gift-card split (the
+whole point of a drawer-reconciliation document). Backend `:check` green (checkstyle + ArchUnit + all
+tests incl. the gift-card-footing case); console tsc+lint+vitest green (193). Branch
+`feat/business-employee-apps`, NOT committed/deployed. `servicepos`/carwash entry points = fast-follow.
+
 ## 2026-08-14 — Dynamic QRIS gateway for BILLS/tabs, full-bill (ADR 0045 amendment, closes ADR 0036 residual)
 
 Owner ("Bara Kebab") kept getting the manual "Demo · penyedia tertunda" panel when paying a **bill

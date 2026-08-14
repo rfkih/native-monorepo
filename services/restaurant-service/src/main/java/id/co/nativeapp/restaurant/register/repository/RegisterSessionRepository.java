@@ -2,6 +2,7 @@ package id.co.nativeapp.restaurant.register.repository;
 
 import id.co.nativeapp.restaurant.register.domain.RegisterSession;
 import id.co.nativeapp.restaurant.register.projection.RegisterSessionView;
+import id.co.nativeapp.restaurant.register.projection.SaleSummaryView;
 import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.util.List;
@@ -171,4 +172,59 @@ public interface RegisterSessionRepository extends JpaRepository<RegisterSession
       @Param("tender") String tender,
       @Param("from") Instant from,
       @Param("to") Instant to);
+
+  /**
+   * The aggregate sales figures for the POS daily summary (Z-report) over a session window {@code
+   * [from, to)}. Sums the per-sale price-breakdown SNAPSHOT (V39) so the report respects each
+   * sale's own effective tax rule with no re-derivation and no second rounding; legacy/no-breakdown
+   * rows fall back to {@code subtotal == amount_minor} via COALESCE (mirrors finance's fallback),
+   * keeping the reconciliation identity {@code gross − discount − loyalty + service + tax == total}
+   * true. Scoped to TENDERED sales ({@code tender_type IS NOT NULL}) — the same universe as the
+   * per-tender sums, so the summary's tender lines + refunds reconcile to the total. Every
+   * component is COALESCE'd to 0 (an all-NULL window / no rows returns zeros, never NULL). RLS
+   * auto-applies (no manual {@code company_id} — rule 5).
+   */
+  @Query(
+      value =
+          """
+          SELECT COUNT(*)                                                             AS txn_count,
+                 COALESCE(SUM(COALESCE(s.subtotal_minor, s.amount_minor)), 0)::bigint AS gross_sales_minor,
+                 COALESCE(SUM(s.discount_minor), 0)::bigint                           AS discount_minor,
+                 COALESCE(SUM(s.service_charge_minor), 0)::bigint                     AS service_charge_minor,
+                 COALESCE(SUM(s.tax_minor), 0)::bigint                                AS tax_minor,
+                 COALESCE(SUM(s.loyalty_redeemed_minor), 0)::bigint                   AS loyalty_redeemed_minor,
+                 COALESCE(SUM(s.amount_minor), 0)::bigint                             AS total_minor,
+                 COALESCE(BOOL_OR(s.uses_illustrative_rules), FALSE)                  AS uses_illustrative_rules
+            FROM sale s
+           WHERE s.business_id = :businessId
+             AND s.tender_type IS NOT NULL
+             AND s.occurred_at >= :from
+             AND s.occurred_at < :to
+          """,
+      nativeQuery = true)
+  SaleSummaryView summarizeSales(
+      @Param("businessId") UUID businessId, @Param("from") Instant from, @Param("to") Instant to);
+
+  /**
+   * Σ the gift-card-redeemed portion tendered across sales in the window ({@code sale.
+   * gift_card_redeemed_minor}) — the settlement value paid via gift card. On the Z-report it is a
+   * 5th settlement line alongside the CASH/CARD/QRIS/ONLINE GROSS sums; together they foot to Σ
+   * {@code amount_minor} (the day's total), because each per-tender GROSS sum already excludes the
+   * gift-card split ({@code cash_collected_minor} / {@code amount_minor −
+   * gift_card_redeemed_minor}). Scoped to tendered sales, matching the summary universe. RLS
+   * auto-applies (rule 5).
+   */
+  @Query(
+      value =
+          """
+          SELECT COALESCE(SUM(s.gift_card_redeemed_minor), 0)
+            FROM sale s
+           WHERE s.business_id = :businessId
+             AND s.tender_type IS NOT NULL
+             AND s.occurred_at >= :from
+             AND s.occurred_at < :to
+          """,
+      nativeQuery = true)
+  long sumGiftCardRedeemed(
+      @Param("businessId") UUID businessId, @Param("from") Instant from, @Param("to") Instant to);
 }

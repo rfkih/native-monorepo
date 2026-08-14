@@ -15,10 +15,13 @@ import id.co.nativeapp.restaurant.register.dto.OpenSessionRequest;
 import id.co.nativeapp.restaurant.register.dto.OpenSessionResult;
 import id.co.nativeapp.restaurant.register.dto.RegisterExpectedResponse;
 import id.co.nativeapp.restaurant.register.dto.RegisterSessionResponse;
+import id.co.nativeapp.restaurant.register.dto.RegisterSummaryResponse;
 import id.co.nativeapp.restaurant.register.dto.TenderCount;
 import id.co.nativeapp.restaurant.register.dto.TenderExpected;
+import id.co.nativeapp.restaurant.register.dto.TenderSalesLine;
 import id.co.nativeapp.restaurant.register.messaging.RegisterSessionClosedSchema;
 import id.co.nativeapp.restaurant.register.projection.RegisterSessionView;
+import id.co.nativeapp.restaurant.register.projection.SaleSummaryView;
 import id.co.nativeapp.restaurant.register.repository.RegisterSessionRepository;
 import id.co.nativeapp.restaurant.register.repository.RegisterSessionTenderRepository;
 import id.co.nativeapp.tenant.TenantContext;
@@ -389,6 +392,124 @@ public class RegisterSessionWriter {
     return Math.subtractExact(
         repository.sumSalesByTender(businessId, tender.name(), from, to),
         repository.sumRefundsByTender(businessId, tender.name(), from, to));
+  }
+
+  /**
+   * The POS daily transaction summary (Z-report) for a session — the aggregate sales figures + the
+   * per-tender net + the cash reconciliation, all over ONE window so they agree. Unlike {@link
+   * #expectedBreakdown} this works for a CLOSED session too (the final Z-report, and the till-menu
+   * "today's summary" when the drawer is already closed): the window is {@code [openedAt,
+   * closedAt)} for a CLOSED session, {@code [openedAt, now)} for an OPEN one. Read-only,
+   * outlet-gated (review W1). Reporting only — finance's GL stays authoritative; the tax line is
+   * illustrative-badged whenever any sale carried an illustrative rule.
+   */
+  @Transactional(readOnly = true)
+  public RegisterSummaryResponse summarize(UUID sessionId) {
+    RegisterSessionView session =
+        repository
+            .findViewById(sessionId)
+            .orElseThrow(() -> new RegisterSessionNotFoundException(sessionId));
+    outletAccessGuard.enforce(session.getBusinessId());
+
+    UUID businessId = session.getBusinessId();
+    Instant from = session.getOpenedAt();
+    boolean open = RegisterSession.STATUS_OPEN.equals(session.getStatus());
+    // A CLOSED session always has closed_at; fall back to now defensively so the window is valid.
+    Instant asOf = open || session.getClosedAt() == null ? Instant.now() : session.getClosedAt();
+
+    SaleSummaryView sales = repository.summarizeSales(businessId, from, asOf);
+
+    // Cash terms computed once (reused for the tender line, the refunds total, and — for an OPEN
+    // session — the live expected-cash figure below).
+    long cashSales = repository.sumCashSales(businessId, from, asOf);
+    long cashRefunds = repository.sumCashRefunds(businessId, from, asOf);
+
+    // Per-tender GROSS sales (before refunds) — the conventional Z-report settlement breakdown: the
+    // tender lines (+ the gift-card line below) foot to `total`, then the standalone `refunds` line
+    // nets to `netSales`. Each per-tender GROSS already excludes any gift-card-settled portion
+    // (cash uses cash_collected = amount − giftCard; non-cash uses amount − giftCard), so gift card
+    // is its own 5th settlement line — Σ (tenders + giftCard) == Σ amount_minor == total.
+    List<TenderSalesLine> tenders = new ArrayList<>(5);
+    tenders.add(new TenderSalesLine(TenderType.CASH.name(), cashSales));
+    tenders.add(
+        new TenderSalesLine(
+            TenderType.CARD.name(),
+            repository.sumSalesByTender(businessId, TenderType.CARD.name(), from, asOf)));
+    tenders.add(
+        new TenderSalesLine(
+            TenderType.QRIS.name(),
+            repository.sumSalesByTender(businessId, TenderType.QRIS.name(), from, asOf)));
+    tenders.add(
+        new TenderSalesLine(
+            TenderType.ONLINE.name(),
+            repository.sumSalesByTender(businessId, TenderType.ONLINE.name(), from, asOf)));
+    // Gift-card-redeemed-as-tender is a 5th settlement type (not a TenderType enum value) —
+    // appended
+    // only when non-zero so the breakdown foots without an always-zero line for the common
+    // merchant.
+    long giftCardSettled = repository.sumGiftCardRedeemed(businessId, from, asOf);
+    if (giftCardSettled != 0) {
+      tenders.add(new TenderSalesLine(RegisterSummaryResponse.TENDER_GIFT_CARD, giftCardSettled));
+    }
+
+    // Total refunds across all tenders (overflow-safe), so the report shows total / refunds / net.
+    long refunds =
+        Math.addExact(
+            cashRefunds,
+            Math.addExact(
+                repository.sumRefundsByTender(businessId, TenderType.CARD.name(), from, asOf),
+                Math.addExact(
+                    repository.sumRefundsByTender(businessId, TenderType.QRIS.name(), from, asOf),
+                    repository.sumRefundsByTender(
+                        businessId, TenderType.ONLINE.name(), from, asOf))));
+    long total = sales.getTotalMinor();
+    long netSales = Math.subtractExact(total, refunds);
+
+    // Cash reconciliation — live for OPEN (mirrors expectedBreakdown's cash formula: float + cash
+    // sales + cash gift-card sales − cash refunds), snapshotted for CLOSED.
+    long openingFloat = session.getOpeningFloatMinor();
+    Long expectedCash;
+    Long countedCash;
+    Long overShort;
+    if (open) {
+      expectedCash =
+          Math.subtractExact(
+              Math.addExact(
+                  openingFloat,
+                  Math.addExact(
+                      cashSales, repository.sumCashGiftCardSales(businessId, from, asOf))),
+              cashRefunds);
+      countedCash = null;
+      overShort = null;
+    } else {
+      expectedCash = session.getExpectedCashMinor();
+      countedCash = session.getCountedCashMinor();
+      overShort = session.getOverShortMinor();
+    }
+
+    return new RegisterSummaryResponse(
+        sessionId,
+        businessId,
+        session.getStatus(),
+        session.getBusinessDate(),
+        session.getCurrency() == null ? null : session.getCurrency().strip(),
+        from,
+        asOf,
+        sales.getTxnCount(),
+        sales.getGrossSalesMinor(),
+        sales.getDiscountMinor(),
+        sales.getLoyaltyRedeemedMinor(),
+        sales.getServiceChargeMinor(),
+        sales.getTaxMinor(),
+        total,
+        refunds,
+        netSales,
+        sales.getUsesIllustrativeRules(),
+        tenders,
+        openingFloat,
+        expectedCash,
+        countedCash,
+        overShort);
   }
 
   /** Open-replay re-read used by the service's double-open race recovery. */

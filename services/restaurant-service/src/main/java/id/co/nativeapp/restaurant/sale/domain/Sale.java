@@ -95,6 +95,43 @@ public class Sale extends Auditable {
   @Column(name = "sold_by_user_id", updatable = false)
   private String soldByUserId;
 
+  /**
+   * Reporting snapshot of the Phase 2 price breakdown computed at ring time (V39) — the SAME
+   * figures emitted on {@code SaleRecorded} (see {@link
+   * id.co.nativeapp.restaurant.sale.messaging.SaleRecordedSchema}), persisted here so the POS daily
+   * summary (Z-report) aggregates them with exact SQL sums instead of re-deriving the pricing
+   * engine per order. {@code updatable=false}: stamped exactly once at creation via {@link
+   * #stampBreakdown}. NULL for legacy/pre-V39 rows and for producers that carry no breakdown (the
+   * legacy {@code POST /api/v1/sales}, carwash) — readers fall back to {@code subtotal ==
+   * amount_minor}, mirroring finance's documented fallback. {@link #discountMinor} is PROMO-ONLY (a
+   * loyalty-points redemption is a separate contra-revenue term, not folded in here), matching the
+   * event wire's {@code discount_minor} decomposition.
+   */
+  @Column(name = "subtotal_minor", updatable = false)
+  private Long subtotalMinor;
+
+  @Column(name = "discount_minor", updatable = false)
+  private Long discountMinor;
+
+  @Column(name = "service_charge_minor", updatable = false)
+  private Long serviceChargeMinor;
+
+  @Column(name = "tax_minor", updatable = false)
+  private Long taxMinor;
+
+  /**
+   * Reporting snapshot (V39) of the loyalty-points redemption on this sale — a CONTRA-REVENUE term
+   * kept SEPARATE from {@link #discountMinor} (which is promo-only), matching the {@code
+   * SaleRecorded} wire. Persisting it lets the daily summary reconcile the full identity {@code
+   * gross − discount − loyaltyRedeemed + serviceCharge + tax = total}. {@code 0}/NULL when no
+   * points were redeemed.
+   */
+  @Column(name = "loyalty_redeemed_minor", updatable = false)
+  private Long loyaltyRedeemedMinor;
+
+  @Column(name = "uses_illustrative_rules", updatable = false)
+  private Boolean usesIllustrativeRules;
+
   protected Sale() {
     // for JPA
   }
@@ -244,5 +281,75 @@ public class Sale extends Auditable {
       throw new IllegalStateException("soldByUserId is already stamped on this sale");
     }
     this.soldByUserId = userId;
+  }
+
+  /**
+   * Stamps the Phase 2 price-breakdown reporting snapshot onto this sale (V39) — called by {@code
+   * SaleWriter} on a freshly-constructed (not-yet-persisted) sale, BEFORE the first save (the
+   * columns are {@code updatable=false}). The values are the SAME figures put on the {@code
+   * SaleRecorded} event: {@code discountMinor} must be PROMO-ONLY (the caller subtracts any loyalty
+   * redemption first, exactly as {@code SaleRecordedSchema#toRecord} does), so the sale row, the
+   * event, and the receipt all agree. Reporting-only — finance's GL remains the authoritative
+   * statutory figure.
+   *
+   * <p>Guarded to run exactly once: a second call (e.g. against an already-stamped sale) throws
+   * loudly instead of silently no-op'ing at the {@code updatable=false} column level.
+   *
+   * @throws IllegalStateException if a breakdown snapshot is already stamped on this sale
+   */
+  public void stampBreakdown(
+      long subtotalMinor,
+      long discountMinor,
+      long serviceChargeMinor,
+      long taxMinor,
+      long loyaltyRedeemedMinor,
+      boolean usesIllustrativeRules) {
+    if (this.subtotalMinor != null) {
+      throw new IllegalStateException("a price-breakdown snapshot is already stamped on this sale");
+    }
+    this.subtotalMinor = subtotalMinor;
+    this.discountMinor = discountMinor;
+    this.serviceChargeMinor = serviceChargeMinor;
+    this.taxMinor = taxMinor;
+    this.loyaltyRedeemedMinor = loyaltyRedeemedMinor;
+    this.usesIllustrativeRules = usesIllustrativeRules;
+  }
+
+  /**
+   * Reporting snapshot (V39): Σ line totals before discount, minor units — {@code null} if legacy.
+   */
+  public Long getSubtotalMinor() {
+    return subtotalMinor;
+  }
+
+  /** Reporting snapshot (V39): promo-only discount, minor units — {@code null} if legacy. */
+  public Long getDiscountMinor() {
+    return discountMinor;
+  }
+
+  /** Reporting snapshot (V39): service charge, minor units — {@code null} if legacy. */
+  public Long getServiceChargeMinor() {
+    return serviceChargeMinor;
+  }
+
+  /** Reporting snapshot (V39): tax / PB1, minor units — {@code null} if legacy. */
+  public Long getTaxMinor() {
+    return taxMinor;
+  }
+
+  /**
+   * Reporting snapshot (V39): loyalty-points contra-revenue, minor units — {@code null} if legacy.
+   */
+  public Long getLoyaltyRedeemedMinor() {
+    return loyaltyRedeemedMinor;
+  }
+
+  /**
+   * Reporting snapshot (V39): whether an {@code ILLUSTRATIVE_PLACEHOLDER} tax/service-charge rule
+   * produced these figures — the POS badges the printed tax line "estimasi" when true. {@code null}
+   * for legacy rows.
+   */
+  public Boolean getUsesIllustrativeRules() {
+    return usesIllustrativeRules;
   }
 }

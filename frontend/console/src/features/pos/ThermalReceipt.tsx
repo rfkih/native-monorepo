@@ -540,33 +540,40 @@ export function ThermalReceipt({
             ) : null}
 
             {/* ---- LINE ITEMS ---- */}
-            <div style={{ marginBottom: 4 }}>
-              {lineItems.map((item, i) => (
-                <div key={i} style={{ marginBottom: 4 }}>
-                  <ItemRow qty={item.qty} name={item.name} priceLabel={item.priceLabel} />
-                  {item.modifiers.map((mod, j) => (
-                    <div
-                      key={j}
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        paddingLeft: 24,
-                        fontSize: 11,
-                        color: '#444',
-                        marginBottom: 1,
-                      }}
-                    >
-                      <span>{mod.label}</span>
-                      {mod.deltaLabel ? (
-                        <span style={{ fontVariantNumeric: 'tabular-nums' }}>{mod.deltaLabel}</span>
-                      ) : null}
+            {/* An item-less receipt (the daily summary / Z-report reuses this component with no line
+                items) skips the whole items block AND its trailing rule so the header/totals don't
+                sit between two adjacent dashed rules. A real receipt always has ≥1 item. */}
+            {lineItems.length > 0 ? (
+              <>
+                <div style={{ marginBottom: 4 }}>
+                  {lineItems.map((item, i) => (
+                    <div key={i} style={{ marginBottom: 4 }}>
+                      <ItemRow qty={item.qty} name={item.name} priceLabel={item.priceLabel} />
+                      {item.modifiers.map((mod, j) => (
+                        <div
+                          key={j}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            paddingLeft: 24,
+                            fontSize: 11,
+                            color: '#444',
+                            marginBottom: 1,
+                          }}
+                        >
+                          <span>{mod.label}</span>
+                          {mod.deltaLabel ? (
+                            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{mod.deltaLabel}</span>
+                          ) : null}
+                        </div>
+                      ))}
                     </div>
                   ))}
                 </div>
-              ))}
-            </div>
 
-            <DashedRule />
+                <DashedRule />
+              </>
+            ) : null}
 
             {/* ---- TOTAL ROWS (subtotal, discount, service, tax) ---- */}
             {totalRows.map((row, i) => (

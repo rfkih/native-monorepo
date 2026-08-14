@@ -1189,12 +1189,36 @@ export const id = {
     tenderCard: 'Kartu',
     tenderQris: 'QRIS',
     tenderOnline: 'Online',
+    /** Tipe setelmen ke-5 pada ringkasan harian (penukaran gift card). */
+    tenderGiftCard: 'Gift card',
     errorDayClosed:
       'Outlet ini sudah ditutup untuk hari ini. Closing dilakukan sekali sehari — buat entri koreksi bila ada yang perlu diperbaiki.',
     errorAlreadyOpen: 'Sesi kasir sudah terbuka di outlet ini. Muat ulang untuk melihatnya.',
     errorNotOpen: 'Sesi kasir ini sudah tidak terbuka. Muat ulang untuk melihat kondisi terkini.',
     errorKeyConflict:
       'Penutupan itu sudah tercatat dengan jumlah berbeda. Muat ulang untuk melihat kondisi terkini.',
+    /** Ringkasan transaksi harian POS (Z-report) — dicetak saat tutup kasir dan dari menu kasir. */
+    summaryTillMenuLabel: 'Ringkasan hari ini',
+    summaryTitle: 'Ringkasan Harian',
+    summaryPrint: 'Cetak ringkasan',
+    summaryInterim: 'Sementara — kasir masih buka',
+    summaryClosedAt: 'Ditutup',
+    summaryAsOf: 'Per pukul',
+    summaryTransactions: 'Transaksi',
+    summaryGross: 'Penjualan bruto',
+    summaryDiscount: 'Diskon',
+    summaryLoyalty: 'Poin loyalti',
+    summaryService: 'Biaya layanan',
+    summaryTax: 'Pajak (PB1)',
+    summaryEstimated: 'estimasi',
+    summaryTaxEstimatedNote: 'Tarif pajak masih estimasi ilustratif — belum diverifikasi untuk pelaporan.',
+    summaryRefunds: 'Refund',
+    summaryNet: 'Penjualan bersih',
+    summaryCashSection: 'Kas laci',
+    summarySelisih: 'Selisih',
+    summaryFooter: 'Ringkasan manajemen internal — bukan faktur pajak.',
+    summaryEmpty: 'Buka kasir untuk melihat ringkasan hari ini.',
+    summaryError: 'Ringkasan gagal dimuat. Coba lagi.',
   },
   stocktake: {
     /** ADR 0038 fase 3 + ADR 0046 — stock opname sekarang menghitung BAHAN, bukan item menu.

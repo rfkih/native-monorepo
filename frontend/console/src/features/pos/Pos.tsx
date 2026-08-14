@@ -27,6 +27,7 @@ import {
   ClipboardCheck,
   History,
   ClipboardList,
+  FileText,
   Gift,
   KeyRound,
   LogIn,
@@ -96,6 +97,7 @@ import { BillSelectorOverlay } from './components/BillSelectorOverlay'
 import { OpenBillDialog } from './components/OpenBillDialog'
 import { NoCompany } from './components/NoCompany'
 import { RegisterSheet } from './RegisterSheet'
+import { DailySummary } from './DailySummary'
 import { useCurrentRegisterSession } from './registerApi'
 import { noConfirmedOpenSession, registerMenuLabelKey } from './lib/registerGate'
 import { useOperatorSession } from '@/features/operator/operatorSessionContext'
@@ -214,6 +216,11 @@ function PosInner({ session }: { session: CompanySession }) {
   const [registerGateActive, setRegisterGateActive] = useState(false)
   const [showStocktakeSheet, setShowStocktakeSheet] = useState(false)
   const [showSalesHistory, setShowSalesHistory] = useState(false)
+  // The daily transaction summary (Z-report) overlay. An explicit id (set by the close flow's "Cetak
+  // ringkasan") pins the session to summarize; null lets DailySummary resolve the current/last one
+  // (the till-menu "Ringkasan hari ini" entry).
+  const [showSummary, setShowSummary] = useState(false)
+  const [summarySessionId, setSummarySessionId] = useState<string | null>(null)
   // P4: the dock's Send/Pay reach INTO the bill sheet — each ++ asks BillDetail to fire the
   // kitchen ticket / the pay modal as soon as the bill is loaded (no manual sheet detour).
   const [autoKotToken, setAutoKotToken] = useState(0)
@@ -1075,6 +1082,19 @@ function PosInner({ session }: { session: CompanySession }) {
               disabledTitle: t('pos.history.disabledOffline'),
             },
             {
+              key: 'summary',
+              icon: <FileText className="size-4" aria-hidden="true" />,
+              label: t('register.summaryTillMenuLabel'),
+              // No explicit id → DailySummary resolves the current OPEN (X-report) or last CLOSED
+              // (Z-report) session. Server-truth aggregate — unavailable offline.
+              onSelect: () => {
+                setSummarySessionId(null)
+                setShowSummary(true)
+              },
+              disabled: offline,
+              disabledTitle: t('register.disabledOffline'),
+            },
+            {
               key: 'display',
               icon: <Monitor className="size-4" aria-hidden="true" />,
               label: t('pos.customerDisplay.button'),
@@ -1200,6 +1220,27 @@ function PosInner({ session }: { session: CompanySession }) {
                   setShowStocktakeSheet(true)
                 }
           }
+          onPrintSummary={
+            // Server-truth aggregate — no offline path, same as the close itself.
+            offline
+              ? undefined
+              : (sessionId) => {
+                  setSummarySessionId(sessionId)
+                  setShowSummary(true)
+                }
+          }
+        />
+      ) : null}
+
+      {showSummary ? (
+        <DailySummary
+          session={session}
+          locale={locale}
+          sessionId={summarySessionId}
+          onClose={() => {
+            setShowSummary(false)
+            setSummarySessionId(null)
+          }}
         />
       ) : null}
 

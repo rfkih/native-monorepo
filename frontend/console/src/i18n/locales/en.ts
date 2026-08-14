@@ -1200,12 +1200,36 @@ export const en = {
     tenderCard: 'Card',
     tenderQris: 'QRIS',
     tenderOnline: 'Online',
+    /** 5th settlement type on the daily summary (gift-card redemption). */
+    tenderGiftCard: 'Gift card',
     errorDayClosed:
       'This outlet is already closed for today. The daily close happens once a day — make a correction entry if something needs fixing.',
     errorAlreadyOpen: 'A register session is already open at this outlet. Refresh to see it.',
     errorNotOpen: 'This register session is no longer open. Refresh to see the current state.',
     errorKeyConflict:
       'That close was already recorded with a different amount. Refresh to see the current state.',
+    /** POS daily transaction summary (Z-report) — printed at close and from the till menu. */
+    summaryTillMenuLabel: 'Today’s summary',
+    summaryTitle: 'Daily summary',
+    summaryPrint: 'Print summary',
+    summaryInterim: 'Interim — drawer still open',
+    summaryClosedAt: 'Closed',
+    summaryAsOf: 'As of',
+    summaryTransactions: 'Transactions',
+    summaryGross: 'Gross sales',
+    summaryDiscount: 'Discount',
+    summaryLoyalty: 'Loyalty redeemed',
+    summaryService: 'Service charge',
+    summaryTax: 'Tax (PB1)',
+    summaryEstimated: 'estimated',
+    summaryTaxEstimatedNote: 'Tax rate is an illustrative estimate — not yet verified for reporting.',
+    summaryRefunds: 'Refunds',
+    summaryNet: 'Net sales',
+    summaryCashSection: 'Cash drawer',
+    summarySelisih: 'Difference',
+    summaryFooter: 'Internal management summary — not a tax invoice.',
+    summaryEmpty: 'Open the register to see today’s summary.',
+    summaryError: 'Could not load the summary. Please try again.',
   },
   stocktake: {
     /** ADR 0038 phase 3 + ADR 0046 — the stock opname now counts INGREDIENTS (bahan), not

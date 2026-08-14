@@ -6,6 +6,7 @@ import id.co.nativeapp.restaurant.register.dto.OpenSessionRequest;
 import id.co.nativeapp.restaurant.register.dto.OpenSessionResult;
 import id.co.nativeapp.restaurant.register.dto.RegisterExpectedResponse;
 import id.co.nativeapp.restaurant.register.dto.RegisterSessionResponse;
+import id.co.nativeapp.restaurant.register.dto.RegisterSummaryResponse;
 import id.co.nativeapp.tenant.TenantContext;
 import java.util.List;
 import java.util.Optional;
@@ -62,6 +63,12 @@ public class RegisterSessionService {
   public RegisterExpectedResponse expectedBreakdown(UUID sessionId) {
     TenantContext.require();
     return writer.expectedBreakdown(sessionId);
+  }
+
+  /** The POS daily transaction summary (Z-report) for a session — OPEN (X-report) or CLOSED. */
+  public RegisterSummaryResponse summarize(UUID sessionId) {
+    TenantContext.require();
+    return writer.summarize(sessionId);
   }
 
   public List<RegisterSessionResponse> history(UUID businessId) {

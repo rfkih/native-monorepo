@@ -141,7 +141,10 @@ export function renderReceipt(
       }
     }
   }
-  e.line(divider(cols))
+  // Only the ITEMS block's trailing divider is conditional: an item-less receipt (the daily
+  // summary / Z-report reuses this renderer with no line items) would otherwise print two dividers
+  // back-to-back. The meta divider above still separates the header block from the totals.
+  if (data.lineItems.length > 0) e.line(divider(cols))
 
   // Totals, then the grand total emphasized double-height.
   for (const row of data.totalRows) {

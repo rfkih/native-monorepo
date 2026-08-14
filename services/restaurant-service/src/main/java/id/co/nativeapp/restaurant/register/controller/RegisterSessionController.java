@@ -5,6 +5,7 @@ import id.co.nativeapp.restaurant.register.dto.OpenSessionRequest;
 import id.co.nativeapp.restaurant.register.dto.OpenSessionResult;
 import id.co.nativeapp.restaurant.register.dto.RegisterExpectedResponse;
 import id.co.nativeapp.restaurant.register.dto.RegisterSessionResponse;
+import id.co.nativeapp.restaurant.register.dto.RegisterSummaryResponse;
 import id.co.nativeapp.restaurant.register.service.RegisterSessionService;
 import io.swagger.v3.oas.annotations.Operation;
 import java.net.URI;
@@ -103,6 +104,26 @@ public class RegisterSessionController {
   @GetMapping("/{id}/expected")
   public ResponseEntity<RegisterExpectedResponse> expected(@PathVariable("id") UUID id) {
     return ResponseEntity.ok(service.expectedBreakdown(id));
+  }
+
+  /**
+   * The POS daily transaction summary (Z-report) for a session — the day's sales aggregates
+   * (transaction count, gross/discount/service/tax breakdown, per-tender net) plus the cash
+   * reconciliation, printed at close or any time during the day. Works for an OPEN session (a live
+   * X-report over {@code [openedAt, now)}) and a CLOSED one (the final Z-report over {@code
+   * [openedAt, closedAt)}). 404 for an unknown session. Reporting only — the tax line is
+   * illustrative unless an SME has replaced the seeded rate.
+   */
+  @Operation(
+      summary = "Register session daily summary (Z-report)",
+      description =
+          "The day's sales aggregates for the session (transaction count, gross/discount/service/tax"
+              + " breakdown, per-tender net sales, refunds) plus the cash reconciliation. Works for"
+              + " an OPEN session (live X-report) and a CLOSED one (final Z-report). Reporting only;"
+              + " the tax line is illustrative unless the seeded rate has been replaced by an SME.")
+  @GetMapping("/{id}/summary")
+  public ResponseEntity<RegisterSummaryResponse> summary(@PathVariable("id") UUID id) {
+    return ResponseEntity.ok(service.summarize(id));
   }
 
   /** The outlet's session history, most recent first (capped at 50). */

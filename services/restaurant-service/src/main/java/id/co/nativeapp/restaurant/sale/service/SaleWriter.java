@@ -6,6 +6,7 @@ import id.co.nativeapp.money.Money;
 import id.co.nativeapp.restaurant.metric.domain.RestaurantMetricContract;
 import id.co.nativeapp.restaurant.metric.messaging.MetricPublishedSchema;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
+import id.co.nativeapp.restaurant.pricing.domain.PriceBreakdown;
 import id.co.nativeapp.restaurant.register.service.CashWindowLock;
 import id.co.nativeapp.restaurant.sale.domain.OperatorMismatchException;
 import id.co.nativeapp.restaurant.sale.domain.Sale;
@@ -162,6 +163,10 @@ public class SaleWriter {
     // never silently falls back to the device actor.
     String resolvedSellerId = resolveSeller(operator, command);
     stampSeller(sale, resolvedSellerId, operator, companyId, command.businessId());
+    // V39: snapshot the Phase 2 price breakdown onto the sale row (BEFORE the first save — the
+    // columns are updatable=false) so the POS daily summary aggregates exact per-sale figures
+    // instead of re-deriving pricing per order. No-op when the caller carries no breakdown.
+    stampBreakdownIfPresent(sale, command);
     Sale saved = repository.saveAndFlush(sale);
 
     // Build the SaleRecorded GenericRecord from the .avsc and serialize it for the
@@ -253,6 +258,10 @@ public class SaleWriter {
     sale.setCompanyId(companyId);
     String resolvedSellerId = resolveSeller(operator, command);
     stampSeller(sale, resolvedSellerId, operator, companyId, command.businessId());
+    // V39: snapshot the Phase 2 price breakdown onto the sale row (BEFORE the first save — the
+    // columns are updatable=false) so the POS daily summary aggregates exact per-sale figures
+    // instead of re-deriving pricing per order. No-op when the caller carries no breakdown.
+    stampBreakdownIfPresent(sale, command);
     Sale saved = repository.saveAndFlush(sale);
 
     GenericRecord event =
@@ -303,6 +312,33 @@ public class SaleWriter {
    */
   private static long giftCardRedeemedOf(RecordSaleCommand command) {
     return command.giftCardRedeemedMinor() != null ? command.giftCardRedeemedMinor() : 0L;
+  }
+
+  /**
+   * Stamps the Phase 2 price-breakdown reporting snapshot onto a freshly-built sale (V39) when the
+   * caller carries one — the SAME figures emitted on the {@code SaleRecorded} event, so the sale
+   * row, the event, and the receipt all agree. {@code discount_minor} is decomposed to PROMO-ONLY
+   * exactly as {@link SaleRecordedSchema#toRecord} does (subtract the loyalty redemption, which is
+   * a separate contra-revenue term). No-op for legacy / carwash callers that pass a {@code null}
+   * breakdown — the columns stay NULL and the daily-summary reader falls back to {@code subtotal ==
+   * amount_minor}. Must run BEFORE the first save (the columns are {@code updatable=false}).
+   */
+  private static void stampBreakdownIfPresent(Sale sale, RecordSaleCommand command) {
+    PriceBreakdown breakdown = command.breakdown();
+    if (breakdown == null) {
+      return;
+    }
+    long loyaltyMinor =
+        command.loyaltyRedeemedMinor() != null ? command.loyaltyRedeemedMinor() : 0L;
+    sale.stampBreakdown(
+        breakdown.subtotal().amountMinor(),
+        // PROMO-ONLY discount: strip the loyalty term (carried separately below), exactly as the
+        // SaleRecorded wire decomposes it.
+        breakdown.discount().amountMinor() - loyaltyMinor,
+        breakdown.serviceCharge().amountMinor(),
+        breakdown.tax().amountMinor(),
+        loyaltyMinor,
+        breakdown.usesIllustrativeRules());
   }
 
   /**

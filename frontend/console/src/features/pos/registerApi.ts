@@ -48,6 +48,49 @@ export interface RegisterExpectedResponse {
   tenders: TenderExpected[]
 }
 
+/**
+ * One settlement line's GROSS sales (before refunds) on the daily summary — mirror of
+ * restaurant-service TenderSalesLine. `GIFT_CARD` is the 5th settlement type (gift-card redemption),
+ * present only when gift cards were redeemed. Σ `salesMinor` == `totalMinor`.
+ */
+export interface TenderSalesLine {
+  tenderType: 'CASH' | 'CARD' | 'QRIS' | 'ONLINE' | 'GIFT_CARD'
+  salesMinor: number
+}
+
+/**
+ * The POS daily transaction summary (Z-report) for a register session — mirror of restaurant-service
+ * RegisterSummaryResponse. Works for an OPEN session (a live X-report over `[openedAt, now)`) and a
+ * CLOSED one (the final Z-report over `[openedAt, closedAt)`). Reporting only: the tax line is PB1
+ * ("Pajak Restoran", not PPN) and MUST be badged "estimasi" when `usesIllustrativeRules` is true.
+ * Revenue breakdown reconciles: `grossSalesMinor − discountMinor − loyaltyRedeemedMinor +
+ * serviceChargeMinor + taxMinor == totalMinor`; `netSalesMinor == totalMinor − refundsMinor`.
+ */
+export interface RegisterSummaryResponse {
+  sessionId: string
+  businessId: string
+  status: 'OPEN' | 'CLOSED'
+  businessDate: string
+  currency: string
+  openedAt: string
+  asOf: string
+  transactionCount: number
+  grossSalesMinor: number
+  discountMinor: number
+  loyaltyRedeemedMinor: number
+  serviceChargeMinor: number
+  taxMinor: number
+  totalMinor: number
+  refundsMinor: number
+  netSalesMinor: number
+  usesIllustrativeRules: boolean
+  tenders: TenderSalesLine[]
+  openingFloatMinor: number
+  expectedCashMinor: number | null
+  countedCashMinor: number | null
+  overShortMinor: number | null
+}
+
 function tenantOf(session: CompanySession) {
   return { companyId: session.companyId, actor: session.actor }
 }
@@ -81,6 +124,28 @@ export function useRegisterExpected(
     enabled: enabled && !!sessionId,
     queryFn: () =>
       apiFetch<RegisterExpectedResponse>(`/api/v1/register-sessions/${sessionId}/expected`, {
+        tenant: tenantOf(session),
+      }),
+  })
+}
+
+/**
+ * The POS daily transaction summary (Z-report) for a session — the day's sales aggregates
+ * (transaction count, gross/discount/service/tax breakdown, per-tender net) + the cash
+ * reconciliation, over `[openedAt, closedAt ?? now)`. Works for an OPEN session (live X-report) and
+ * a CLOSED one (final Z-report), so the till-menu "today's summary" reads it for the current open OR
+ * last-closed session, and the close verdict reads it for the just-closed session.
+ */
+export function useRegisterSummary(
+  session: CompanySession,
+  sessionId: string | null | undefined,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ['register-summary', session.companyId, sessionId],
+    enabled: enabled && !!sessionId,
+    queryFn: () =>
+      apiFetch<RegisterSummaryResponse>(`/api/v1/register-sessions/${sessionId}/summary`, {
         tenant: tenantOf(session),
       }),
   })

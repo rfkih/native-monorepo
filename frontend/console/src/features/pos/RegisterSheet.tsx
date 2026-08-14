@@ -64,6 +64,7 @@ export function RegisterSheet({
   reasonMessage,
   onClose,
   onContinueToStocktake,
+  onPrintSummary,
 }: {
   session: CompanySession
   currency: string
@@ -78,6 +79,11 @@ export function RegisterSheet({
    * Callers omit it when the stocktake can't run right now (offline — ADR 0038 phase 3 has no
    * offline path). */
   onContinueToStocktake?: () => void
+  /** Owner request — "print today's transaction summary at closing": when provided, both the close
+   * FORM (a live X-report over the open session) and the after-close VERDICT (the final Z-report)
+   * offer a "Cetak ringkasan" action, handed the session id to summarize. The parent owns the print
+   * overlay (the DailySummary/ThermalReceipt surface) so this sheet stays print-agnostic. */
+  onPrintSummary?: (sessionId: string) => void
 }) {
   const { t } = useTranslation()
   const currentQuery = useCurrentRegisterSession(session)
@@ -222,6 +228,17 @@ export function RegisterSheet({
                 {formatMoney(Math.abs(closed.overShortMinor ?? 0), currency, locale)}
               </div>
             </div>
+            {/* Owner request — print today's transaction summary (Z-report) right after closing. */}
+            {onPrintSummary ? (
+              <Button
+                variant="outline"
+                className="w-full"
+                data-testid="register-print-summary"
+                onClick={() => onPrintSummary(closed.id)}
+              >
+                {t('register.summaryPrint')}
+              </Button>
+            ) : null}
             {onContinueToStocktake ? (
               <div className="space-y-2">
                 <Button className="w-full" onClick={onContinueToStocktake}>
@@ -343,6 +360,17 @@ export function RegisterSheet({
             >
               {busy ? <Spinner /> : t('register.closeAction')}
             </Button>
+            {/* Live X-report over the still-open session — print/review before committing the close. */}
+            {onPrintSummary && current ? (
+              <Button
+                variant="outline"
+                className="w-full"
+                data-testid="register-print-summary"
+                onClick={() => onPrintSummary(current.id)}
+              >
+                {t('register.summaryPrint')}
+              </Button>
+            ) : null}
           </div>
         ) : (
           /* ── No session → open form ─────────────────────────────────────── */

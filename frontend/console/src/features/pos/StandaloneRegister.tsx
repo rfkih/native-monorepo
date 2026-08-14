@@ -20,6 +20,7 @@ import { localeOf } from '@/i18n'
 import { StocktakeSheet } from '@/features/stocktake/StocktakeSheet'
 import { useOffline } from './offline/useOffline'
 import { RegisterSheet } from './RegisterSheet'
+import { DailySummary } from './DailySummary'
 
 export function StandaloneRegister({ onClose }: { onClose: () => void }) {
   const { t, i18n } = useTranslation()
@@ -27,6 +28,9 @@ export function StandaloneRegister({ onClose }: { onClose: () => void }) {
   const locale = localeOf(i18n.language)
   const { offline, queuedCount, rejectedCount } = useOffline()
   const [stocktake, setStocktake] = useState(false)
+  // The "Cetak ringkasan" print overlay, mirroring Pos.tsx (this surface hosts RegisterSheet too).
+  const [summaryOpen, setSummaryOpen] = useState(false)
+  const [summarySessionId, setSummarySessionId] = useState<string | null>(null)
 
   if (!company) return null
 
@@ -44,24 +48,38 @@ export function StandaloneRegister({ onClose }: { onClose: () => void }) {
         </div>
       ) : (
         <OutletGate company={company} requiredVertical="restaurant">
-          {(session) =>
-            stocktake ? (
-              <StocktakeSheet
-                session={session}
-                currency={company.baseCurrency}
-                locale={locale}
-                onClose={onClose}
-              />
-            ) : (
-              <RegisterSheet
-                session={session}
-                currency={company.baseCurrency}
-                locale={locale}
-                onClose={onClose}
-                onContinueToStocktake={() => setStocktake(true)}
-              />
-            )
-          }
+          {(session) => (
+            <>
+              {stocktake ? (
+                <StocktakeSheet
+                  session={session}
+                  currency={company.baseCurrency}
+                  locale={locale}
+                  onClose={onClose}
+                />
+              ) : (
+                <RegisterSheet
+                  session={session}
+                  currency={company.baseCurrency}
+                  locale={locale}
+                  onClose={onClose}
+                  onContinueToStocktake={() => setStocktake(true)}
+                  onPrintSummary={(sessionId) => {
+                    setSummarySessionId(sessionId)
+                    setSummaryOpen(true)
+                  }}
+                />
+              )}
+              {summaryOpen ? (
+                <DailySummary
+                  session={session}
+                  locale={locale}
+                  sessionId={summarySessionId}
+                  onClose={() => setSummaryOpen(false)}
+                />
+              ) : null}
+            </>
+          )}
         </OutletGate>
       )}
     </div>
