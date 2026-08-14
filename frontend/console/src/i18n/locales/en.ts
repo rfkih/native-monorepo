@@ -960,6 +960,19 @@ export const en = {
       disabledOffline: 'Sales history needs a connection.',
       capNote: 'Latest 200 shown',
     },
+    return: {
+      action: 'Return sale',
+      confirmTitle: 'Return this sale?',
+      confirmBody:
+        'This refunds {{amount}} for sale #{{reference}} to the customer and reverses it in the books. This cannot be undone.',
+      confirmAction: 'Return sale',
+      successTitle: 'Sale returned',
+      successBody: '{{amount}} has been refunded to the customer.',
+      errorForbidden: 'Only an owner or manager can return a sale.',
+      errorRejected:
+        'This sale can’t be returned in full — it may already be returned, or was paid (partly) with a gift card.',
+      errorGeneric: 'Could not return the sale. Please try again.',
+    },
     receipt: {
       title: 'Receipt',
       orderRef: 'Order',

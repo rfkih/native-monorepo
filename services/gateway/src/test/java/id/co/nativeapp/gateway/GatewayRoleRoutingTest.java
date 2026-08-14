@@ -232,6 +232,165 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
     assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/payments/x");
   }
 
+  // ---------------------------------------------------------------------------
+  // /api/v1/payments/*/refund + /*/void — the money-OUT reversal sub-paths (ADR 0061): escalated to
+  // SALE_REVERSAL_ROLES (owner/manager) by a HIGHEST_PRECEDENCE route, narrower than the POS_ROLES
+  // paymentsRoute a cashier rings sales through. A refund returns money + posts a GL reversal, so a
+  // cashier/chef/waitress must NOT reach it.
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void aManagerCanReachThePaymentRefundRoute() throws Exception {
+    // A manager-only token (no "owner") must pass — proves the gate is owner/manager, not
+    // owner-only.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, MANAGER_USERNAME, MANAGER_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .post()
+            .uri("/api/v1/payments/some-payment-id/refund")
+            .contentType(MediaType.APPLICATION_JSON)
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .body("{\"amountMinor\":1000,\"currency\":\"IDR\"}")
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath())
+        .isEqualTo("/api/v1/payments/some-payment-id/refund");
+  }
+
+  @Test
+  void anOwnerCanAlsoReachThePaymentRefundRoute() throws Exception {
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .post()
+            .uri("/api/v1/payments/some-payment-id/refund")
+            .contentType(MediaType.APPLICATION_JSON)
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .body("{\"amountMinor\":1000,\"currency\":\"IDR\"}")
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath())
+        .isEqualTo("/api/v1/payments/some-payment-id/refund");
+  }
+
+  @Test
+  void aCashierIsDeniedThePaymentRefundRouteWith403() throws Exception {
+    // The persona the SALE_REVERSAL_ROLES gate exists to exclude: a cashier rings sales but must
+    // not
+    // reverse one. The denial happens at the edge — the reversal never reaches restaurant-service.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .post()
+                    .uri("/api/v1/payments/some-payment-id/refund")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .body("{\"amountMinor\":1000,\"currency\":\"IDR\"}")
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void aCashierIsDeniedThePaymentVoidRouteWith403() throws Exception {
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .post()
+                    .uri("/api/v1/payments/some-payment-id/void")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void aManagerCanReachThePaymentVoidRoute() throws Exception {
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, MANAGER_USERNAME, MANAGER_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .post()
+            .uri("/api/v1/payments/some-payment-id/void")
+            .contentType(MediaType.APPLICATION_JSON)
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .body("{}")
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/payments/some-payment-id/void");
+  }
+
+  @Test
+  void aCashierCanStillReachThePaymentCaptureRoute() throws Exception {
+    // Regression guard (route-precedence, the other direction): the narrow /payments/*/refund|void
+    // reversal route must NOT swallow the sibling /payments/*/capture — capture stays a POS_ROLES
+    // cashier action, falling through to paymentsRoute exactly as before this phase.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .post()
+            .uri("/api/v1/payments/some-payment-id/capture")
+            .contentType(MediaType.APPLICATION_JSON)
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .body("{}")
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath())
+        .isEqualTo("/api/v1/payments/some-payment-id/capture");
+  }
+
+  @Test
+  void aCashierCanStillReachThePaymentReceiptRoute() throws Exception {
+    // Regression guard (the other read-path sibling): /payments/*/receipt must NOT be swallowed by
+    // the reversal route — a cashier reprints/polls receipts, so it falls through to POS_ROLES.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/payments/some-payment-id/receipt")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath())
+        .isEqualTo("/api/v1/payments/some-payment-id/receipt");
+  }
+
   @Test
   void aCashierCanReachThePosTablesRoute() throws Exception {
     String token =

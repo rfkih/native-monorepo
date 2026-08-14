@@ -700,7 +700,12 @@ export function useCapturePayment(session: CompanySession) {
   })
 }
 
-/** Voids a CAPTURED payment — full reversal before settlement. */
+/**
+ * Voids a CAPTURED payment — full reversal before settlement. Manager-gated at the gateway alongside
+ * refund (ADR 0061, SALE_REVERSAL_ROLES), so it rides the PERSONAL/elevated bearer for the same
+ * reason (see useRefundPayment). Currently unused by the UI, which standardizes on refund for the
+ * customer-return case.
+ */
 export function useVoidPayment(session: CompanySession) {
   const qc = useQueryClient()
   return useMutation({
@@ -708,6 +713,7 @@ export function useVoidPayment(session: CompanySession) {
       apiFetch<PaymentResponse>(`/api/v1/payments/${paymentId}/void`, {
         method: 'POST',
         tenant: tenantOf(session),
+        auth: 'personal',
       }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['pnl'] })
@@ -721,7 +727,13 @@ export interface RefundInput {
   currency: string
 }
 
-/** Refunds part or all of a CAPTURED payment. */
+/**
+ * Refunds part or all of a CAPTURED payment. Manager-gated at the gateway (ADR 0061,
+ * SALE_REVERSAL_ROLES) — sent on the PERSONAL bearer (`auth: 'personal'`) so an owner/manager
+ * identity is what the gateway authorizes: on a normal login that IS the login's token; on a shared
+ * device terminal it is the owner/manager ELEVATION token (ADR 0049 P3b), never the outlet
+ * credential a cashier holds.
+ */
 export function useRefundPayment(session: CompanySession) {
   const qc = useQueryClient()
   return useMutation({
@@ -730,9 +742,16 @@ export function useRefundPayment(session: CompanySession) {
         method: 'POST',
         tenant: tenantOf(session),
         body: { amountMinor, currency },
+        auth: 'personal',
       }),
     onSuccess: () => {
+      // The sale is now reversed — refresh the surfaces that show its state. The register/daily
+      // read models update asynchronously off SaleRefunded, so this only refreshes what the client
+      // can re-read directly (P&L, today's-sales list, and the reprinted receipt/order).
       void qc.invalidateQueries({ queryKey: ['pnl'] })
+      void qc.invalidateQueries({ queryKey: ['salesHistory'] })
+      void qc.invalidateQueries({ queryKey: ['orderReceipt'] })
+      void qc.invalidateQueries({ queryKey: ['receipt'] })
     },
   })
 }

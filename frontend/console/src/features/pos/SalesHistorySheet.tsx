@@ -14,8 +14,11 @@ import { Spinner } from '@/components/ui/Spinner'
 import { ListSkeleton } from '@/components/ui/Skeleton'
 import { cn } from '@/lib/cn'
 import { formatMoney } from '@/lib/money'
+import { useAuth, hasAnyRole, effectiveRoles } from '@/lib/authContext'
 import type { CompanySession } from '@/lib/session'
 import { ReceiptView } from './ReceiptView'
+import { ReturnSaleDialog } from './components/ReturnSaleDialog'
+import { canReturnPayment } from './lib/returnSale'
 import { useOrderReceipt, useSalesHistory, type SaleHistoryRow } from './salesHistoryApi'
 
 /** Tender → existing i18n label; ONLINE shows the channel's own immutable code. */
@@ -44,8 +47,13 @@ export function SalesHistorySheet({
   onClose: () => void
 }) {
   const { t } = useTranslation()
+  const auth = useAuth()
+  // Returns are owner/manager-only (ADR 0061). Merged roles so an ELEVATED device terminal lights
+  // the affordance up (ADR 0049 P3b); the gateway is the real boundary regardless.
+  const canReturn = hasAnyRole(effectiveRoles(auth.roles, auth.elevatedRoles), 'owner', 'manager')
   const history = useSalesHistory(session, true)
   const [selected, setSelected] = useState<SaleHistoryRow | null>(null)
+  const [returnOpen, setReturnOpen] = useState(false)
   const order = useOrderReceipt(session, selected?.orderId ?? null)
 
   const rows = history.data ?? []
@@ -174,7 +182,28 @@ export function SalesHistorySheet({
           reprint
           occurredAt={selected!.occurredAt}
           actionLabelText={t('common.close')}
+          secondaryAction={
+            canReturn && canReturnPayment(order.data!.payment!)
+              ? { label: t('pos.return.action'), onClick: () => setReturnOpen(true) }
+              : undefined
+          }
           onNew={() => setSelected(null)}
+        />
+      ) : null}
+
+      {returnOpen && receiptReady ? (
+        <ReturnSaleDialog
+          session={session}
+          order={order.data!}
+          payment={order.data!.payment!}
+          locale={locale}
+          onClose={() => setReturnOpen(false)}
+          onReturned={() => {
+            // The sale is reversed (the refund invalidated salesHistory/orderReceipt) — drop back to
+            // the list, which reloads with the sale now marked refunded.
+            setReturnOpen(false)
+            setSelected(null)
+          }}
         />
       ) : null}
     </div>

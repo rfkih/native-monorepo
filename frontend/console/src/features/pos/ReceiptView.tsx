@@ -16,7 +16,7 @@ import { useTranslation } from 'react-i18next'
 import { formatMoney } from '@/lib/money'
 import type { AppliedPromotionResponse, OrderResponse, PaymentResponse } from './api'
 import { ThermalReceipt } from './ThermalReceipt'
-import type { ThermalRow, ThermalLineItem } from './ThermalReceipt'
+import type { ThermalRow, ThermalLineItem, ThermalSecondaryAction } from './ThermalReceipt'
 
 interface Props {
   order: OrderResponse
@@ -49,6 +49,12 @@ interface Props {
   occurredAt?: string
   /** Overrides the bottom action label (default: "new order"). */
   actionLabelText?: string
+  /**
+   * Optional destructive action below the Print/primary row — the manager-gated "Return sale"
+   * refund (ADR 0061). The caller owns eligibility (owner/manager ∧ CAPTURED ∧ not provisional) and
+   * the confirm/refund flow; ReceiptView only forwards it to the receipt's button area.
+   */
+  secondaryAction?: ThermalSecondaryAction
   onNew: () => void
 }
 
@@ -108,6 +114,7 @@ export function ReceiptView({
   reprint,
   occurredAt,
   actionLabelText,
+  secondaryAction,
   onNew,
 }: Props) {
   const { t } = useTranslation()
@@ -247,6 +254,7 @@ export function ReceiptView({
       onPrint={() => window.print()}
       onAction={onNew}
       actionLabel={actionLabelText ?? t('pos.receipt.newOrder')}
+      secondaryAction={secondaryAction}
       isPending={isPending}
       pendingNote={isPending ? t('pos.receipt.pendingNote') : undefined}
       isProvisional={provisional}

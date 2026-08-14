@@ -58,6 +58,17 @@ export interface ThermalRow {
   isDeduction?: boolean
 }
 
+/**
+ * An optional DESTRUCTIVE action rendered as a full-width button beneath the main Print/action row
+ * (e.g. the manager-gated "Return sale" refund, ADR 0061). Omitted → nothing renders, so every
+ * caller that doesn't pass one is byte-identical to before.
+ */
+export interface ThermalSecondaryAction {
+  label: string
+  onClick: () => void
+  disabled?: boolean
+}
+
 export interface ThermalProps {
   /** Business / outlet name — printed in ALL CAPS in the header. */
   businessName: string
@@ -86,6 +97,8 @@ export interface ThermalProps {
   onAction: () => void
   /** Label for the primary action button. */
   actionLabel: string
+  /** Optional destructive action shown full-width below the Print/primary row — see the type doc. */
+  secondaryAction?: ThermalSecondaryAction
   /** When true, shows an amber "pending" banner beneath the title. */
   isPending?: boolean
   /** Pending note text (shown when isPending is true). */
@@ -297,6 +310,7 @@ export function ThermalReceipt({
   onPrint,
   onAction,
   actionLabel,
+  secondaryAction,
   isPending,
   pendingNote,
   isProvisional,
@@ -662,25 +676,40 @@ export function ThermalReceipt({
         {/* Buttons — outside the paper, hidden when printing                */}
         {/* ---------------------------------------------------------------- */}
         <div
-          className="mt-4 flex w-full justify-center gap-3 print:hidden"
+          className="mt-4 flex w-full flex-col gap-3 print:hidden"
           style={{ maxWidth: 320 }}
         >
-          <Button
-            variant="outline"
-            className="flex-1 border-white/20 bg-white/10 text-white hover:bg-white/20"
-            onClick={handlePrint}
-            disabled={deviceBusy}
-          >
-            <Printer className="size-4" />
-            {deviceBusy
-              ? t('pos.receipt.printing')
-              : printer.connected
-                ? t('pos.receipt.printDevice')
-                : t('pos.receipt.print')}
-          </Button>
-          <Button className="flex-1" onClick={onAction}>
-            {actionLabel}
-          </Button>
+          <div className="flex justify-center gap-3">
+            <Button
+              variant="outline"
+              className="flex-1 border-white/20 bg-white/10 text-white hover:bg-white/20"
+              onClick={handlePrint}
+              disabled={deviceBusy}
+            >
+              <Printer className="size-4" />
+              {deviceBusy
+                ? t('pos.receipt.printing')
+                : printer.connected
+                  ? t('pos.receipt.printDevice')
+                  : t('pos.receipt.print')}
+            </Button>
+            <Button className="flex-1" onClick={onAction}>
+              {actionLabel}
+            </Button>
+          </div>
+          {/* Destructive secondary action (e.g. manager-gated Return sale, ADR 0061) — full-width,
+              visually separated below, red-toned so it never reads as a routine tap on this dark
+              backdrop. */}
+          {secondaryAction ? (
+            <Button
+              variant="outline"
+              className="w-full border-red-400/40 bg-red-500/10 text-red-50 hover:bg-red-500/20 focus-visible:outline-red-300"
+              onClick={secondaryAction.onClick}
+              disabled={secondaryAction.disabled}
+            >
+              {secondaryAction.label}
+            </Button>
+          ) : null}
         </div>
       </div>
 

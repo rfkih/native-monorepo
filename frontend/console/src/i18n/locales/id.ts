@@ -949,6 +949,19 @@ export const id = {
       disabledOffline: 'Riwayat penjualan membutuhkan koneksi.',
       capNote: '200 terbaru ditampilkan',
     },
+    return: {
+      action: 'Kembalikan penjualan',
+      confirmTitle: 'Kembalikan penjualan ini?',
+      confirmBody:
+        'Ini mengembalikan {{amount}} untuk penjualan #{{reference}} ke pelanggan dan membatalkannya di pembukuan. Tindakan ini tidak bisa dibatalkan.',
+      confirmAction: 'Kembalikan penjualan',
+      successTitle: 'Penjualan dikembalikan',
+      successBody: '{{amount}} telah dikembalikan ke pelanggan.',
+      errorForbidden: 'Hanya pemilik atau manajer yang bisa mengembalikan penjualan.',
+      errorRejected:
+        'Penjualan ini tidak bisa dikembalikan penuh — mungkin sudah dikembalikan, atau dibayar (sebagian) dengan kartu hadiah.',
+      errorGeneric: 'Gagal mengembalikan penjualan. Silakan coba lagi.',
+    },
     receipt: {
       title: 'Struk',
       orderRef: 'Pesanan',

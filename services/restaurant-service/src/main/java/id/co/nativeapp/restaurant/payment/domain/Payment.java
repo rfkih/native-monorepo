@@ -405,7 +405,8 @@ public class Payment extends Auditable {
   /** Voids a captured tender ({@link Status#CAPTURED} → VOIDED) — a full reversal. */
   public void voidPayment() {
     if (status != Status.CAPTURED) {
-      throw new IllegalStateException("only a CAPTURED payment can be voided; was " + status);
+      throw new PaymentNotReversibleException(
+          "only a CAPTURED payment can be voided; was " + status);
     }
     this.status = Status.VOIDED;
   }
@@ -420,7 +421,8 @@ public class Payment extends Auditable {
   public Money refund(Money amount) {
     Objects.requireNonNull(amount, "amount");
     if (status != Status.CAPTURED && status != Status.PARTIALLY_REFUNDED) {
-      throw new IllegalStateException("only a captured payment can be refunded; was " + status);
+      throw new PaymentNotReversibleException(
+          "only a captured payment can be refunded; was " + status);
     }
     if (amount.amountMinor() <= 0L) {
       throw new IllegalArgumentException("refund amount must be positive");

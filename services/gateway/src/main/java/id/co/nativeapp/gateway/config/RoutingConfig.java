@@ -81,6 +81,19 @@ public class RoutingConfig {
   private static final String[] POS_ROLES = {"owner", "manager", "cashier", "chef", "waitress"};
 
   /**
+   * Roles allowed to REVERSE a captured sale — the refund/void money-out actions ({@code POST
+   * /api/v1/payments/*}{@code /refund}, {@code /void}). {@code owner}/{@code manager} only: a
+   * refund returns money to a customer and posts a GL reversal (ADR 0006, ADR 0061), so it is a
+   * MANAGER decision — narrower than the general {@link #POS_ROLES} till surface (which a {@code
+   * cashier}/{@code chef}/{@code waitress} rings). Capture and the receipt read stay POS_ROLES;
+   * only these two reversal sub-paths escalate, via a HIGHEST_PRECEDENCE route ordered before
+   * {@link #paymentsRoute}. On a shared device terminal a cashier must have an owner/manager
+   * ELEVATION (ADR 0049 P3b) on their bearer to pass — the console gates the affordance
+   * identically.
+   */
+  private static final String[] SALE_REVERSAL_ROLES = {"owner", "manager"};
+
+  /**
    * Roles allowed on the OPERATIONS surface — org structure/team, promotions, entitlements,
    * consolidation groups, self-order-access administration. {@code owner}/{@code manager} only: a
    * manager runs operations but does not see the detailed books, HR, or payroll (preset role-based
@@ -629,6 +642,34 @@ public class RoutingConfig {
         .before(uri(routes.restaurantService()))
         .filter(new RateLimitFilter(limiter))
         .filter(new RoleAuthorizationFilter(POS_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
+   * The two money-OUT reversal sub-paths — {@code POST /api/v1/payments/*}{@code /refund} and
+   * {@code /void} — escalated to {@link #SALE_REVERSAL_ROLES} (owner/manager). A refund returns
+   * money to a customer and drives the finance GL reversal (ADR 0006/0061); a {@code
+   * cashier}/{@code chef}/{@code waitress} rings sales but never reverses one.
+   *
+   * <p>{@code @Order(HIGHEST_PRECEDENCE)} is load-bearing: RouterFunction beans match in order
+   * (first match wins, NOT most-specific wins), so this specific route must precede the general
+   * {@link #paymentsRoute} ({@code /payments/**}, POS_ROLES) below — otherwise the wildcard route
+   * would swallow {@code /refund} and let a cashier reverse a sale. Every OTHER {@code
+   * /payments/**} path (capture, receipt) falls through to that POS_ROLES route unchanged — same
+   * first-match pattern as {@link #userMeOutletsRoute} and the owner-only payroll bank-file route.
+   */
+  @Bean
+  @Order(Ordered.HIGHEST_PRECEDENCE)
+  RouterFunction<ServerResponse> paymentReversalRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("restaurant-service-payment-reversal")
+        .route(path("/api/v1/payments/*/refund").or(path("/api/v1/payments/*/void")), http())
+        .before(uri(routes.restaurantService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(SALE_REVERSAL_ROLES))
         .filter(tenantFilter)
         .build();
   }

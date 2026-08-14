@@ -41,7 +41,7 @@ import {
   UserRound,
 } from 'lucide-react'
 import { useSession, type CompanySession } from '@/lib/session'
-import { useAuth, hasAnyRole } from '@/lib/authContext'
+import { useAuth, hasAnyRole, effectiveRoles } from '@/lib/authContext'
 import { accountMenuVisibility } from '@/features/pos-shell/layout/accountMenuGate'
 import { useTheme } from '@/lib/theme'
 import { localeOf } from '@/i18n'
@@ -92,6 +92,8 @@ import { CategoryCell, CategoryIcon, AllCategoriesIcon } from './components/Cate
 import { MenuTile } from './components/MenuTile'
 import { SummaryBar } from './components/SummaryBar'
 import { WalkInCartSheet } from './components/WalkInCartSheet'
+import { ReturnSaleDialog } from './components/ReturnSaleDialog'
+import { canReturnPayment } from './lib/returnSale'
 import { MenuSkeleton, EmptyMenu, EmptyCategory } from './components/MenuStates'
 import { BillSelectorOverlay } from './components/BillSelectorOverlay'
 import { OpenBillDialog } from './components/OpenBillDialog'
@@ -265,9 +267,18 @@ function PosInner({ session }: { session: CompanySession }) {
   // The manual discount is owner/manager-only (ADR 0026 §5; the server 403s anyway — this hides the
   // input for a cashier so it never sees an affordance it cannot use).
   const canManualDiscount = hasAnyRole(auth.roles, 'owner', 'manager')
+  // Returning a sale (full refund, ADR 0061) is owner/manager-only. Merged roles so an ELEVATED
+  // device terminal (ADR 0049 P3b) lights the affordance up; the gateway (SALE_REVERSAL_ROLES) is
+  // the real boundary. The refund posts on the personal/elevated bearer (useRefundPayment) — for a
+  // device terminal that means the elevation token, so this reads owner/manager only from an ACTUAL
+  // elevation (device credentials are cashier-tier by design; a base owner/manager device is not a
+  // provisioned shape). If one ever were, the button would fail CLOSED at the gateway, never widen.
+  const canReturnSale = hasAnyRole(effectiveRoles(auth.roles, auth.elevatedRoles), 'owner', 'manager')
 
   // Modal / overlay state
   const [modal, setModal] = useState<'payment' | 'receipt' | 'cart' | null>(null)
+  // The manager-gated "Return sale" confirm/refund dialog over the post-sale receipt (ADR 0061).
+  const [showReturnDialog, setShowReturnDialog] = useState(false)
   const [modifierItem, setModifierItem] = useState<MenuItem | null>(null)
   const [placedOrder, setPlacedOrder] = useState<OrderResponse | null>(null)
   const [placedPayment, setPlacedPayment] = useState<PaymentResponse | null>(null)
@@ -1033,7 +1044,29 @@ function PosInner({ session }: { session: CompanySession }) {
           tableLabel={null}
           appliedPromotions={lastAppliedPromotions}
           provisional={placedProvisional}
+          // Manager-gated Return (ADR 0061). Never on a PROVISIONAL offline receipt — its payment is
+          // a client-side placeholder with no server-side sale to reverse yet.
+          secondaryAction={
+            !placedProvisional && canReturnSale && canReturnPayment(placedPayment)
+              ? { label: t('pos.return.action'), onClick: () => setShowReturnDialog(true) }
+              : undefined
+          }
           onNew={handleNewOrder}
+        />
+      ) : null}
+
+      {modal === 'receipt' && showReturnDialog && placedOrder && placedPayment ? (
+        <ReturnSaleDialog
+          session={session}
+          order={placedOrder}
+          payment={placedPayment}
+          locale={locale}
+          onClose={() => setShowReturnDialog(false)}
+          onReturned={() => {
+            // Sale reversed — close the dialog and the receipt (back to a fresh POS).
+            setShowReturnDialog(false)
+            handleNewOrder()
+          }}
         />
       ) : null}
 
