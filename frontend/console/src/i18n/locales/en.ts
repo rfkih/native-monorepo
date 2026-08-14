@@ -206,6 +206,12 @@ export const en = {
     navProduct: 'Product',
     navCompliance: 'Compliance',
     navPricing: 'Pricing',
+    // SEO — the document <title> + meta description (features/landing/Landing.tsx#useLandingSeo).
+    // Keyword-led for the international market; kept ≤60 / ≤160 chars so they display in full in
+    // search results.
+    seoTitle: 'Native — Multi-Entity Accounting, POS & Payroll Software',
+    seoDescription:
+      'Native unifies point of sale, payroll and real-time financial consolidation across every company you run — multi-entity, multi-currency, one set of books.',
     /** ADR 0047 — the landing pricing section, rendered from lib/pricing.ts (never hand-kept). */
     pricing: {
       kicker: 'Pricing',

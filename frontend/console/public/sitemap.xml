@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Static sitemap for the public marketing surface. The landing declares its en/id/x-default
+     alternates so both the international (English) and Indonesian (?lng=id) versions index cleanly.
+     Authenticated app routes are intentionally excluded (they require a login). -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>https://app.native-app.my.id/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://app.native-app.my.id/"/>
+    <xhtml:link rel="alternate" hreflang="id" href="https://app.native-app.my.id/?lng=id"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://app.native-app.my.id/"/>
+    <lastmod>2026-08-15</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://app.native-app.my.id/signup</loc>
+    <lastmod>2026-08-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+</urlset>

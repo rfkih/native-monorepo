@@ -204,6 +204,11 @@ export const id = {
     navProduct: 'Produk',
     navCompliance: 'Kepatuhan',
     navPricing: 'Harga',
+    // SEO — judul <title> + meta description (features/landing/Landing.tsx#useLandingSeo). Kata
+    // kunci untuk pasar Indonesia; dijaga ≤60 / ≤160 karakter agar tampil penuh di hasil pencarian.
+    seoTitle: 'Native — Software Akuntansi, Kasir (POS) & Payroll',
+    seoDescription:
+      'Satukan pembukuan semua perusahaan Anda: kasir (POS), payroll, dan konsolidasi keuangan real-time dalam satu sistem. Multi-mata uang, siap PPh 21 & BPJS.',
     /** ADR 0047 — bagian harga di landing, dirender dari lib/pricing.ts (tidak pernah manual). */
     pricing: {
       kicker: 'Harga',

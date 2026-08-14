@@ -752,11 +752,50 @@ function Footer() {
   )
 }
 
+// ── SEO head sync ────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Keeps the document head in step with the active language (react-i18next). index.html ships the
+ * English baseline a no-JS crawler / social scraper sees; once the SPA runs this rewrites the same
+ * tags IN PLACE (no duplicates) to the resolved language — <title>, meta description, the OG/Twitter
+ * title+description mirrors, `og:locale` — and stamps `<html lang>`. The `hreflang` cluster stays
+ * static in index.html (identical on both URLs, so the return links are reciprocal), but canonical +
+ * og:url are made SELF-REFERENTIAL per language: the Indonesian view canonicalises to `/?lng=id`
+ * (its own hreflang alternate) rather than the English `/`, so Google indexes it as a distinct
+ * language version instead of folding it into the default as a duplicate.
+ */
+const SEO_ORIGIN = 'https://app.native-app.my.id'
+
+function useLandingSeo() {
+  const { t, i18n } = useTranslation()
+  useEffect(() => {
+    const lang = i18n.language === 'id' ? 'id' : 'en'
+    const title = t('landing.seoTitle')
+    const description = t('landing.seoDescription')
+    const pageUrl = lang === 'id' ? `${SEO_ORIGIN}/?lng=id` : `${SEO_ORIGIN}/`
+    document.documentElement.lang = lang
+    document.title = title
+    const setMeta = (selector: string, content: string) => {
+      document.head.querySelector<HTMLMetaElement>(selector)?.setAttribute('content', content)
+    }
+    setMeta('meta[name="description"]', description)
+    setMeta('meta[property="og:title"]', title)
+    setMeta('meta[property="og:description"]', description)
+    setMeta('meta[name="twitter:title"]', title)
+    setMeta('meta[name="twitter:description"]', description)
+    setMeta('meta[property="og:locale"]', lang === 'id' ? 'id_ID' : 'en_US')
+    setMeta('meta[property="og:locale:alternate"]', lang === 'id' ? 'en_US' : 'id_ID')
+    setMeta('meta[property="og:url"]', pageUrl)
+    document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.setAttribute('href', pageUrl)
+  }, [t, i18n.language])
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────────────────────────
 
 export function Landing() {
   const auth = useAuth()
   const onSignIn = () => auth.login()
+  useLandingSeo()
 
   useEffect(() => {
     if (!window.location.hash) window.scrollTo(0, 0)

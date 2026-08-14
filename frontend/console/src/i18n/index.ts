@@ -45,9 +45,26 @@ export function resolveLanguage(indonesia: boolean, companyDefault?: string | nu
   return offered.includes(wanted) ? wanted : 'en'
 }
 
-/** The boot language — resolved from the browser time zone alone (no company is known yet). */
+/**
+ * An explicit `?lng=en|id` in the URL — a shared deep link or a search engine following an hreflang
+ * alternate (the landing publishes `?lng=id` as the Indonesian version — see index.html). This is an
+ * EXPLICIT request, so it wins over auto-selection and is intentionally NOT clamped by the
+ * Indonesia-only gate (ADR 0059 governs auto-selection and the in-app switcher, not an explicit URL).
+ * Not persisted — once the user is in-app, {@link reconcileLanguage} takes over from the company
+ * context. Returns `null` when absent/invalid or the URL can't be read.
+ */
+function queryLangOverride(): Lang | null {
+  try {
+    const lng = new URLSearchParams(window.location.search).get('lng')
+    return lng === 'en' || lng === 'id' ? lng : null
+  } catch {
+    return null
+  }
+}
+
+/** The boot language — an explicit `?lng=` wins; otherwise resolved from the browser time zone. */
 function initialLang(): Lang {
-  return resolveLanguage(isIndonesiaByTimeZone())
+  return queryLangOverride() ?? resolveLanguage(isIndonesiaByTimeZone())
 }
 
 void i18n.use(initReactI18next).init({
