@@ -67,6 +67,12 @@ export interface ThermalSecondaryAction {
   label: string
   onClick: () => void
   disabled?: boolean
+  /**
+   * Visual tone. Defaults to `'danger'` (red) — the original use was the manager-gated Return sale
+   * (ADR 0061). `'neutral'` is a plain outline for a non-destructive drill-in (e.g. the past-day
+   * "Lihat transaksi" from the closing-history Z-report).
+   */
+  tone?: 'neutral' | 'danger'
 }
 
 export interface ThermalProps {
@@ -697,13 +703,17 @@ export function ThermalReceipt({
               {actionLabel}
             </Button>
           </div>
-          {/* Destructive secondary action (e.g. manager-gated Return sale, ADR 0061) — full-width,
-              visually separated below, red-toned so it never reads as a routine tap on this dark
-              backdrop. */}
+          {/* Secondary action — full-width, visually separated below. Default tone is destructive
+              (manager-gated Return sale, ADR 0061): red-toned so it never reads as a routine tap on
+              this dark backdrop. 'neutral' is a plain outline for a non-destructive drill-in. */}
           {secondaryAction ? (
             <Button
               variant="outline"
-              className="w-full border-red-400/40 bg-red-500/10 text-red-50 hover:bg-red-500/20 focus-visible:outline-red-300"
+              className={
+                secondaryAction.tone === 'neutral'
+                  ? 'w-full border-white/25 bg-white/5 text-white hover:bg-white/10'
+                  : 'w-full border-red-400/40 bg-red-500/10 text-red-50 hover:bg-red-500/20 focus-visible:outline-red-300'
+              }
               onClick={secondaryAction.onClick}
               disabled={secondaryAction.disabled}
             >

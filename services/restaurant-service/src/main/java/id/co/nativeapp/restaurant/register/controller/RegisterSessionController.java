@@ -1,6 +1,7 @@
 package id.co.nativeapp.restaurant.register.controller;
 
 import id.co.nativeapp.restaurant.register.dto.CloseSessionRequest;
+import id.co.nativeapp.restaurant.register.dto.ClosedSessionSummaryResponse;
 import id.co.nativeapp.restaurant.register.dto.OpenSessionRequest;
 import id.co.nativeapp.restaurant.register.dto.OpenSessionResult;
 import id.co.nativeapp.restaurant.register.dto.RegisterExpectedResponse;
@@ -131,6 +132,24 @@ public class RegisterSessionController {
   @GetMapping
   public ResponseEntity<List<RegisterSessionResponse>> history(@RequestParam UUID businessId) {
     return ResponseEntity.ok(service.history(businessId));
+  }
+
+  /**
+   * The outlet's CLOSED sessions (newest first, capped) with each closed day's net sales and
+   * transaction count — the manager/owner "past closed-day sales history" browse. Each row's net
+   * equals that session's Z-report net; tap-through opens {@code /{id}/summary}. POS_ROLES at the
+   * gateway (same as the summary); the owner/manager restriction is a client affordance. Reporting
+   * only.
+   */
+  @Operation(
+      summary = "Closed register session history (with sales)",
+      description =
+          "Recent CLOSED sessions for the outlet, newest first, each with its net sales and"
+              + " transaction count — the manager/owner past-day history browse. Reporting only.")
+  @GetMapping("/closed")
+  public ResponseEntity<List<ClosedSessionSummaryResponse>> closedHistory(
+      @RequestParam UUID businessId) {
+    return ResponseEntity.ok(service.closedHistory(businessId));
   }
 
   private static void requireKey(String idempotencyKey) {

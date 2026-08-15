@@ -954,6 +954,18 @@ export const id = {
       disabledOffline: 'Riwayat penjualan membutuhkan koneksi.',
       capNote: '200 terbaru ditampilkan',
     },
+    closingHistory: {
+      tillMenuLabel: 'Riwayat closing',
+      title: 'Riwayat closing',
+      emptyTitle: 'Belum ada closing',
+      emptyHint: 'Sesi kasir yang sudah ditutup akan muncul di sini, terbaru lebih dulu.',
+      error: 'Tidak dapat memuat riwayat closing.',
+      disabledOffline: 'Riwayat closing membutuhkan koneksi.',
+      denied: 'Hanya pemilik atau manajer yang dapat melihat riwayat closing.',
+      txnCount: '{{formatted}} transaksi',
+      viewTransactions: 'Lihat transaksi',
+      txnEmptyHint: 'Tidak ada transaksi pada hari ini.',
+    },
     return: {
       action: 'Kembalikan penjualan',
       confirmTitle: 'Kembalikan penjualan ini?',

@@ -501,9 +501,16 @@ public class SaleWriter {
    * with {@code occurredAt} in {@code [from, to)}, newest first, hard-capped at 200 rows.
    * RLS-scoped automatically; no manual {@code company_id} predicate. Read path: a native-query
    * projection (only the response columns), never {@code SELECT *} of the entity.
+   *
+   * <p>Outlet-gated (review W1): a cashier may only read the sales of an outlet they are assigned
+   * to — the same {@link OutletAccessGuard} policy the sale-recording writers and the register
+   * reads use (owner/manager bypass, grandfathered tenants allow). Without it a cashier could read
+   * a sibling outlet's transactions cross-outlet (RLS only scopes by company); this also backs the
+   * owner/manager past-day drill-down over a closed session's window.
    */
   @Transactional(readOnly = true)
   public List<SaleHistoryResponse> findHistory(UUID businessId, Instant from, Instant to) {
+    outletAccessGuard.enforce(businessId);
     return repository.findHistory(businessId, from, to).stream()
         .map(SaleWriter::toHistoryResponse)
         .toList();

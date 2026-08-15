@@ -11,6 +11,7 @@ import id.co.nativeapp.restaurant.register.domain.RegisterSessionNotFoundExcepti
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionNotOpenException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionTender;
 import id.co.nativeapp.restaurant.register.dto.CloseSessionRequest;
+import id.co.nativeapp.restaurant.register.dto.ClosedSessionSummaryResponse;
 import id.co.nativeapp.restaurant.register.dto.OpenSessionRequest;
 import id.co.nativeapp.restaurant.register.dto.OpenSessionResult;
 import id.co.nativeapp.restaurant.register.dto.RegisterExpectedResponse;
@@ -83,6 +84,9 @@ public class RegisterSessionWriter {
    * (documented simplification, ADR 0036; a per-outlet timezone is the additive follow-up).
    */
   private static final ZoneId DEFAULT_BUSINESS_ZONE = ZoneId.of("Asia/Jakarta");
+
+  /** Cap on the past closed-day history browse — bounded, index-backed, newest first. */
+  private static final int CLOSED_HISTORY_LIMIT = 90;
 
   private final RegisterSessionRepository repository;
   private final RegisterSessionTenderRepository tenderRepository;
@@ -533,6 +537,21 @@ public class RegisterSessionWriter {
     outletAccessGuard.enforce(businessId);
     return repository.findHistoryViewsByBusinessId(businessId).stream()
         .map(RegisterSessionWriter::toResponse)
+        .toList();
+  }
+
+  /**
+   * The outlet's CLOSED sessions with their day's net sales + transaction count, most recent first
+   * — the manager/owner past-day history browse. Read-only, outlet-gated; each row's net equals
+   * that session's Z-report net (the lateral aggregates mirror {@link #summarize}). Reporting only.
+   */
+  @Transactional(readOnly = true)
+  public List<ClosedSessionSummaryResponse> findClosedHistory(UUID businessId) {
+    outletAccessGuard.enforce(businessId);
+    return repository
+        .findClosedHistoryWithSalesByBusinessId(businessId, CLOSED_HISTORY_LIMIT)
+        .stream()
+        .map(ClosedSessionSummaryResponse::from)
         .toList();
   }
 

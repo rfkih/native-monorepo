@@ -23,6 +23,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Banknote,
   BookOpen,
+  CalendarClock,
   ChefHat,
   ClipboardCheck,
   History,
@@ -111,6 +112,7 @@ import { TillMenuSheet } from '@/features/pos-shell/layout/TillMenuSheet'
 import { usePrinterStatusAction } from '@/features/pos-shell/layout/usePrinterStatusAction'
 import { StocktakeSheet } from '@/features/stocktake/StocktakeSheet'
 import { SalesHistorySheet } from './SalesHistorySheet'
+import { ClosingHistorySheet } from './ClosingHistorySheet'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -218,6 +220,8 @@ function PosInner({ session }: { session: CompanySession }) {
   const [registerGateActive, setRegisterGateActive] = useState(false)
   const [showStocktakeSheet, setShowStocktakeSheet] = useState(false)
   const [showSalesHistory, setShowSalesHistory] = useState(false)
+  // The manager/owner past closed-day history browse (till menu, owner/manager only).
+  const [showClosingHistory, setShowClosingHistory] = useState(false)
   // The daily transaction summary (Z-report) overlay. An explicit id (set by the close flow's "Cetak
   // ringkasan") pins the session to summarize; null lets DailySummary resolve the current/last one
   // (the till-menu "Ringkasan hari ini" entry).
@@ -274,6 +278,14 @@ function PosInner({ session }: { session: CompanySession }) {
   // elevation (device credentials are cashier-tier by design; a base owner/manager device is not a
   // provisioned shape). If one ever were, the button would fail CLOSED at the gateway, never widen.
   const canReturnSale = hasAnyRole(effectiveRoles(auth.roles, auth.elevatedRoles), 'owner', 'manager')
+  // The past closed-day history browse is owner/manager-only. Merged roles for the same elevated
+  // device-terminal reason as the return affordance; the read is POS_ROLES at the gateway (like the
+  // Z-report), so this hides an entry a cashier does not need, not a security boundary.
+  const canViewClosingHistory = hasAnyRole(
+    effectiveRoles(auth.roles, auth.elevatedRoles),
+    'owner',
+    'manager',
+  )
 
   // Modal / overlay state
   const [modal, setModal] = useState<'payment' | 'receipt' | 'cart' | null>(null)
@@ -1127,6 +1139,20 @@ function PosInner({ session }: { session: CompanySession }) {
               disabled: offline,
               disabledTitle: t('register.disabledOffline'),
             },
+            // Owner/manager only: browse PAST closed days' sales (each drills into its Z-report and
+            // that day's transactions). Server-truth read — unavailable offline.
+            ...(canViewClosingHistory
+              ? [
+                  {
+                    key: 'closing-history',
+                    icon: <CalendarClock className="size-4" aria-hidden="true" />,
+                    label: t('pos.closingHistory.tillMenuLabel'),
+                    onSelect: () => setShowClosingHistory(true),
+                    disabled: offline,
+                    disabledTitle: t('pos.closingHistory.disabledOffline'),
+                  },
+                ]
+              : []),
             {
               key: 'display',
               icon: <Monitor className="size-4" aria-hidden="true" />,
@@ -1288,6 +1314,13 @@ function PosInner({ session }: { session: CompanySession }) {
 
       {showSalesHistory ? (
         <SalesHistorySheet session={session} locale={locale} onClose={() => setShowSalesHistory(false)} />
+      ) : null}
+      {showClosingHistory ? (
+        <ClosingHistorySheet
+          session={session}
+          locale={locale}
+          onClose={() => setShowClosingHistory(false)}
+        />
       ) : null}
 
       {showSyncCenter ? <SyncCenter locale={locale} onClose={() => setShowSyncCenter(false)} /> : null}

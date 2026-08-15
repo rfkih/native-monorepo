@@ -2,6 +2,7 @@ package id.co.nativeapp.restaurant.register.service;
 
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionAlreadyOpenException;
 import id.co.nativeapp.restaurant.register.dto.CloseSessionRequest;
+import id.co.nativeapp.restaurant.register.dto.ClosedSessionSummaryResponse;
 import id.co.nativeapp.restaurant.register.dto.OpenSessionRequest;
 import id.co.nativeapp.restaurant.register.dto.OpenSessionResult;
 import id.co.nativeapp.restaurant.register.dto.RegisterExpectedResponse;
@@ -74,5 +75,14 @@ public class RegisterSessionService {
   public List<RegisterSessionResponse> history(UUID businessId) {
     TenantContext.require();
     return writer.findHistory(businessId);
+  }
+
+  /**
+   * The outlet's CLOSED sessions with each day's net sales + transaction count (newest first) — the
+   * manager/owner past-day history browse. Reporting only; drill-in reuses {@link #summarize}.
+   */
+  public List<ClosedSessionSummaryResponse> closedHistory(UUID businessId) {
+    TenantContext.require();
+    return writer.findClosedHistory(businessId);
   }
 }

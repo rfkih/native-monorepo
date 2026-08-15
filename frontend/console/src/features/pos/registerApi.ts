@@ -91,11 +91,31 @@ export interface RegisterSummaryResponse {
   overShortMinor: number | null
 }
 
+/**
+ * One row of the manager/owner past closed-day history browse — mirror of restaurant-service
+ * ClosedSessionSummaryResponse. `netSalesMinor` equals that session's Z-report net (total − refunds)
+ * over its `[openedAt, closedAt)` window; money is minor units in `currency` (rule 8).
+ */
+export interface ClosedSessionSummary {
+  sessionId: string
+  businessDate: string
+  openedAt: string
+  closedAt: string | null
+  currency: string
+  netSalesMinor: number
+  transactionCount: number
+}
+
 function tenantOf(session: CompanySession) {
   return { companyId: session.companyId, actor: session.actor }
 }
 
 const currentKey = (s: CompanySession) => ['register-session', s.companyId, s.businessId]
+const closedHistoryKey = (s: CompanySession) => [
+  'register-closed-history',
+  s.companyId,
+  s.businessId,
+]
 
 /** The outlet's OPEN session (null when the drawer is closed — the endpoint returns 204). */
 export function useCurrentRegisterSession(session: CompanySession) {
@@ -200,6 +220,25 @@ export function useCurrentOutletRegisterLabelKey(active: boolean): RegisterMenuL
   })
 }
 
+/**
+ * The outlet's recent CLOSED sessions with each closed day's net sales + transaction count (newest
+ * first) — the manager/owner "past closed-day sales history" browse. Server truth; a tap-through
+ * opens the full Z-report via {@link useRegisterSummary}. Only fetched while the history sheet is
+ * open (`enabled`). Past days are immutable, so no polling.
+ */
+export function useClosedSessions(session: CompanySession, enabled: boolean) {
+  return useQuery({
+    enabled,
+    queryKey: closedHistoryKey(session),
+    staleTime: 60_000,
+    queryFn: () =>
+      apiFetch<ClosedSessionSummary[]>('/api/v1/register-sessions/closed', {
+        tenant: tenantOf(session),
+        query: { businessId: session.businessId },
+      }),
+  })
+}
+
 export function useOpenRegisterSession(session: CompanySession) {
   const qc = useQueryClient()
   return useMutation({
@@ -238,7 +277,11 @@ export function useCloseRegisterSession(session: CompanySession) {
         headers: { 'Idempotency-Key': `close:${sessionId}` },
         body: { countedCashMinor, tenderCounts },
       }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: currentKey(session) }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: currentKey(session) })
+      // The just-closed session becomes a new row in the past-day history browse.
+      void qc.invalidateQueries({ queryKey: closedHistoryKey(session) })
+    },
     onError: (err) => {
       // Already closed (double-close race or a changed recount after a lost response): the
       // server state is the truth — refetch so the sheet flips out of the close form.

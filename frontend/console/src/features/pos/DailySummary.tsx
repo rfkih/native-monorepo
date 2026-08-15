@@ -19,7 +19,12 @@ import { useTranslation } from 'react-i18next'
 import { Spinner } from '@/components/ui/Spinner'
 import { formatMoney } from '@/lib/money'
 import type { CompanySession } from '@/lib/session'
-import { ThermalReceipt, type ThermalRow, type ThermalLineItem } from './ThermalReceipt'
+import {
+  ThermalReceipt,
+  type ThermalRow,
+  type ThermalLineItem,
+  type ThermalSecondaryAction,
+} from './ThermalReceipt'
 import { useItemSales, type ItemSalesResponse } from './api'
 import {
   useCurrentRegisterSession,
@@ -43,12 +48,15 @@ export function DailySummary({
   locale,
   sessionId: explicitId,
   onClose,
+  secondaryAction,
 }: {
   session: CompanySession
   locale: string
   /** The close flow passes the current/just-closed session; the till menu omits it (resolve below). */
   sessionId?: string | null
   onClose: () => void
+  /** Optional extra CTA below Print/Close — the closing-history flow passes "Lihat transaksi". */
+  secondaryAction?: ThermalSecondaryAction
 }) {
   const { t } = useTranslation()
 
@@ -122,6 +130,7 @@ export function DailySummary({
       onPrint={() => window.print()}
       onAction={onClose}
       actionLabel={t('common.close')}
+      secondaryAction={secondaryAction}
     />
   )
 }

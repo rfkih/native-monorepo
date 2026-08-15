@@ -60,6 +60,30 @@ export function useSalesHistory(session: CompanySession, enabled: boolean) {
   })
 }
 
+/**
+ * The outlet's sales over an EXPLICIT window `[from, to)` — the manager/owner past closed-day
+ * transaction drill-down (the window is a closed session's `[openedAt, closedAt)`). A closed day is
+ * immutable, so unlike {@link useSalesHistory} there is no polling; the server still caps the list at
+ * its newest 200 rows. Only fetched while a past day is open (`enabled` + both bounds present).
+ */
+export function useSalesHistoryWindow(
+  session: CompanySession,
+  from: string | null,
+  to: string | null,
+  enabled: boolean,
+) {
+  return useQuery({
+    enabled: enabled && from != null && to != null,
+    queryKey: ['salesHistory', session.companyId, session.businessId, from, to],
+    staleTime: 5 * 60_000,
+    queryFn: () =>
+      apiFetch<SaleHistoryRow[]>('/api/v1/sales', {
+        tenant: tenantOf(session),
+        query: { businessId: session.businessId, from: from!, to: to! },
+      }),
+  })
+}
+
 /** One order with lines + payment + breakdown — the reprint's receipt source. */
 export function useOrderReceipt(session: CompanySession, orderId: string | null) {
   return useQuery({

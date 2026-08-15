@@ -1,6 +1,7 @@
 package id.co.nativeapp.restaurant.register.repository;
 
 import id.co.nativeapp.restaurant.register.domain.RegisterSession;
+import id.co.nativeapp.restaurant.register.projection.ClosedSessionSalesView;
 import id.co.nativeapp.restaurant.register.projection.RegisterSessionView;
 import id.co.nativeapp.restaurant.register.projection.SaleSummaryView;
 import jakarta.persistence.LockModeType;
@@ -70,6 +71,55 @@ public interface RegisterSessionRepository extends JpaRepository<RegisterSession
           VIEW_COLUMNS + " WHERE s.business_id = :businessId ORDER BY s.opened_at DESC LIMIT 50",
       nativeQuery = true)
   List<RegisterSessionView> findHistoryViewsByBusinessId(@Param("businessId") UUID businessId);
+
+  /**
+   * The outlet's CLOSED sessions, most recent first, each carrying the day's headline sales figures
+   * — backs the manager/owner past-day history browse. For each session the two lateral subqueries
+   * aggregate over the session's own {@code [opened_at, closed_at)} window, MIRRORING {@code
+   * RegisterSessionWriter#summarize} exactly so a row's {@code net_sales_minor} equals that
+   * session's Z-report net: sales total = Σ tendered {@code sale.amount_minor}; refunds = Σ {@code
+   * payment_refund.amount_minor} for the four settleable tenders; net = total − refunds. Closed
+   * sessions never overlap per outlet (one OPEN at a time), so each sale/refund falls in at most
+   * one window. RLS auto-scopes all three tables to the tenant (rule 5 — no manual {@code
+   * company_id}); the outer scan uses {@code idx_crs_outlet_history}, the sale lateral {@code
+   * idx_sale_business_window}. Every SUM is COALESCE'd to 0 (a no-sales day nets 0, never NULL).
+   */
+  @Query(
+      value =
+          """
+          SELECT s.id                                            AS id,
+                 s.business_date                                 AS business_date,
+                 s.opened_at                                     AS opened_at,
+                 s.closed_at                                     AS closed_at,
+                 s.currency                                      AS currency,
+                 (sales.total_minor - refunds.refunds_minor)::bigint AS net_sales_minor,
+                 sales.txn_count                                 AS transaction_count
+            FROM cash_register_session s
+            LEFT JOIN LATERAL (
+                SELECT COALESCE(SUM(x.amount_minor), 0)::bigint AS total_minor,
+                       COUNT(*)                                 AS txn_count
+                  FROM sale x
+                 WHERE x.business_id = s.business_id
+                   AND x.tender_type IS NOT NULL
+                   AND x.occurred_at >= s.opened_at
+                   AND x.occurred_at <  s.closed_at
+            ) sales ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT COALESCE(SUM(r.amount_minor), 0)::bigint AS refunds_minor
+                  FROM payment_refund r
+                 WHERE r.business_id = s.business_id
+                   AND r.tender_type IN ('CASH', 'CARD', 'QRIS', 'ONLINE')
+                   AND r.refunded_at >= s.opened_at
+                   AND r.refunded_at <  s.closed_at
+            ) refunds ON TRUE
+           WHERE s.business_id = :businessId
+             AND s.status = 'CLOSED'
+           ORDER BY s.opened_at DESC
+           LIMIT :limit
+          """,
+      nativeQuery = true)
+  List<ClosedSessionSalesView> findClosedHistoryWithSalesByBusinessId(
+      @Param("businessId") UUID businessId, @Param("limit") int limit);
 
   /**
    * Σ CASH physically collected for the outlet in the session window {@code [from, to)} — the

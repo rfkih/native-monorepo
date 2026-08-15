@@ -966,6 +966,18 @@ export const en = {
       disabledOffline: 'Sales history needs a connection.',
       capNote: 'Latest 200 shown',
     },
+    closingHistory: {
+      tillMenuLabel: 'Closing history',
+      title: 'Closing history',
+      emptyTitle: 'No closed days yet',
+      emptyHint: 'Closed register sessions appear here, most recent first.',
+      error: 'Could not load closing history.',
+      disabledOffline: 'Closing history needs a connection.',
+      denied: 'Only an owner or manager can view closing history.',
+      txnCount: '{{formatted}} txn',
+      viewTransactions: 'View transactions',
+      txnEmptyHint: 'No transactions recorded for this day.',
+    },
     return: {
       action: 'Return sale',
       confirmTitle: 'Return this sale?',
