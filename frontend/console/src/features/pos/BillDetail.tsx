@@ -39,6 +39,7 @@ import { BillLineItem } from './components/BillLineItem'
 import { BillLineGroupItem } from './components/BillLineGroupItem'
 import { groupUnpaidLines, type BillLineGroup } from './lib/billLineGroups'
 import { BillBreakdown } from './components/BillBreakdown'
+import { BillAttachments } from './components/BillAttachments'
 import { CancelConfirmDialog } from './components/CancelConfirmDialog'
 import { BillPaymentModal, type BillPaidInfo } from './BillPaymentModal'
 import { BillReceiptView } from './BillReceiptView'
@@ -577,6 +578,9 @@ export function BillDetail({
               {(appendLines.error as Error).message}
             </p>
           ) : null}
+
+          {/* Attachments (ADR 0063) — the "real receipt" photo/PDF; hidden during split-pay. */}
+          {!splitMode ? <BillAttachments session={session} billId={bill.id} /> : null}
         </div>
 
         {/* Totals block */}

@@ -11,7 +11,7 @@
  *   BillLineModifierResponse — modifier snapshot on a line
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiFetch } from '@/lib/api'
+import { apiFetch, apiUpload } from '@/lib/api'
 import type { CompanySession } from '@/lib/session'
 import type { PriceBreakdownResponse, OrderLineInput, PaymentResponse } from './api'
 
@@ -172,6 +172,67 @@ export function useBill(session: CompanySession, billId: string | null) {
       apiFetch<BillResponse>(`/api/v1/bills/${billId}`, {
         tenant: tenantOf(session),
       }),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Bill attachments (ADR 0063) — photos/PDF of the real receipt or a supporting document.
+// Metadata list is JSON; the bytes stream from an authenticated per-attachment endpoint (fetched as
+// a Blob in the component). Uploads are multipart; the image is compressed client-side first.
+// ---------------------------------------------------------------------------
+
+export interface BillAttachmentMeta {
+  id: string
+  contentType: string
+  byteSize: number
+  sha256: string
+  originalFilename: string | null
+  uploadedAt: string
+}
+
+function billAttachmentsKey(session: CompanySession, billId: string) {
+  return ['billAttachments', session.companyId, billId] as const
+}
+
+export function useBillAttachments(session: CompanySession, billId: string | null) {
+  return useQuery({
+    enabled: billId != null,
+    queryKey: billAttachmentsKey(session, billId ?? ''),
+    staleTime: 30_000,
+    queryFn: () =>
+      apiFetch<BillAttachmentMeta[]>(`/api/v1/bills/${billId}/attachments`, {
+        tenant: tenantOf(session),
+      }),
+  })
+}
+
+export function useUploadBillAttachment(session: CompanySession, billId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (file: File) => {
+      const formData = new FormData()
+      formData.append('file', file)
+      return apiUpload<BillAttachmentMeta>(`/api/v1/bills/${billId}/attachments`, formData, {
+        tenant: tenantOf(session),
+      })
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: billAttachmentsKey(session, billId) })
+    },
+  })
+}
+
+export function useDeleteBillAttachment(session: CompanySession, billId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (attachmentId: string) =>
+      apiFetch<void>(`/api/v1/bills/${billId}/attachments/${attachmentId}`, {
+        method: 'DELETE',
+        tenant: tenantOf(session),
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: billAttachmentsKey(session, billId) })
+    },
   })
 }
 

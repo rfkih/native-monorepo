@@ -2926,6 +2926,14 @@ export const en = {
     viewBill: 'View bill',
     /** Split-by-item (Increment 3) */
     split: 'Split',
+    attach: {
+      title: 'Attachments',
+      action: 'Attach',
+      remove: 'Remove attachment',
+      tooLarge: 'The file is too large (max 5 MB).',
+      imageError: 'Could not process the image. Try another photo.',
+      uploadError: 'Could not upload the attachment. Please try again.',
+    },
     splitToggle: 'Toggle split-by-item mode',
     splitHint: 'Check the items to pay in this round, then tap "Pay selected".',
     splitSelected: '{{n}} item(s) selected',

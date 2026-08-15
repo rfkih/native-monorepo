@@ -2,6 +2,14 @@ spring:
   application:
     name: restaurant-service
 
+  # Bill-attachment upload (ADR 0063) — the service's first multipart endpoint. max-file-size bounds
+  # the single attachment part (= BillAttachment.MAX_BYTES / the V40 CHECK; a larger part is rejected
+  # as 413 before the writer runs); max-request-size adds headroom for the multipart envelope.
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
+
   datasource:
     # Connect as the service's own NON-superuser role (no BYPASSRLS) so RLS is
     # genuinely enforced. Overridden per environment; in real deploys the creds
