@@ -538,6 +538,34 @@ public class RoutingConfig {
   }
 
   /**
+   * The register-close CORRECTION sub-path — {@code POST /api/v1/register-sessions/*}{@code
+   * /correct-close} — escalated to {@link #OPS_ROLES} (owner/manager). A correction reverses and
+   * re-posts a finance cash-variance journal (ADR 0064); a cashier opens/closes the till but never
+   * amends a completed close (the cashier's own mistake is what a manager fixes here).
+   *
+   * <p>{@code @Order(HIGHEST_PRECEDENCE)} is load-bearing: RouterFunction beans match in order
+   * (first match wins, NOT most-specific wins), so this specific route must precede the general
+   * {@link #registerSessionsRoute} ({@code /register-sessions/**}, POS_ROLES) below — otherwise the
+   * wildcard route would swallow {@code /correct-close} and let a cashier correct a close. Every
+   * OTHER {@code /register-sessions/**} path (open, close, summary, history) falls through to that
+   * POS_ROLES route unchanged — the same first-match pattern as {@link #paymentReversalRoute}.
+   */
+  @Bean
+  @Order(Ordered.HIGHEST_PRECEDENCE)
+  RouterFunction<ServerResponse> registerCloseCorrectionRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("restaurant-service-register-close-correction")
+        .route(path("/api/v1/register-sessions/*/correct-close"), http())
+        .before(uri(routes.restaurantService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(OPS_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
    * Register sessions — closing kasir (ADR 0036): the cashier opens/closes the till, so the route
    * carries POS_ROLES (owner, manager, cashier), like every till surface.
    */

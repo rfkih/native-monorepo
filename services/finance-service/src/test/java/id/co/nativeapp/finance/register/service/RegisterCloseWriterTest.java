@@ -11,6 +11,7 @@ import id.co.nativeapp.events.ProcessedEventStore;
 import id.co.nativeapp.finance.gl.domain.AccountRole;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.domain.JournalLine;
+import id.co.nativeapp.finance.gl.projection.JournalLineReversalView;
 import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
 import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
 import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
@@ -67,7 +68,10 @@ class RegisterCloseWriterTest {
             "IDR",
             List.of(
                 new TenderReconciliation("CARD", 800_000L, 810_000L, 10_000L),
-                new TenderReconciliation("ONLINE", 600_000L, 600_000L, 0L)));
+                new TenderReconciliation("ONLINE", 600_000L, 600_000L, 0L)),
+            null,
+            1,
+            null);
 
     JournalEntry entry = writer.buildEntry(event, UUID.randomUUID(), "2026-08");
 
@@ -84,5 +88,74 @@ class RegisterCloseWriterTest {
     assertThat(lines.get(2).getDebitMinor()).isEqualTo(10_000L);
     assertThat(lines.get(3).getAccountCode()).isEqualTo("4300");
     assertThat(lines.get(3).getCreditMinor()).isEqualTo(10_000L);
+  }
+
+  @Test
+  void reversalContraNegatesEveryLegOfThePriorVariance() {
+    // Prior entry = a cash SHORT of 50k: Dr CASH_SHORT_EXPENSE 5700 / Cr CASH_CLEARING 1900.
+    // The correction's contra must NEGATE it: Cr 5700 / Dr 1900 (same accounts, sides swapped), so
+    // prior + contra net to zero and the corrected variance below stands alone (ADR 0064).
+    List<JournalLineReversalView> priorLines =
+        List.of(
+            new StubLine("5700", 50_000L, 0L, "IDR", 1),
+            new StubLine("1900", 0L, 50_000L, "IDR", 2));
+
+    JournalEntry contra =
+        writer.buildReversalEntry(
+            priorLines,
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            "2026-08",
+            Instant.ofEpochMilli(1_750_030_000_000L),
+            "IDR");
+
+    List<JournalLine> lines = contra.getLines();
+    assertThat(lines).hasSize(2);
+    // Original Dr 5700 50k → contra Cr 5700 50k.
+    assertThat(lines.get(0).getAccountCode()).isEqualTo("5700");
+    assertThat(lines.get(0).getCreditMinor()).isEqualTo(50_000L);
+    assertThat(lines.get(0).getDebitMinor()).isZero();
+    // Original Cr 1900 50k → contra Dr 1900 50k.
+    assertThat(lines.get(1).getAccountCode()).isEqualTo("1900");
+    assertThat(lines.get(1).getDebitMinor()).isEqualTo(50_000L);
+    assertThat(lines.get(1).getCreditMinor()).isZero();
+    // Balanced (JournalEntry.balanced would have thrown otherwise): Σdebit == Σcredit.
+    assertThat(lines.stream().mapToLong(JournalLine::getDebitMinor).sum())
+        .isEqualTo(lines.stream().mapToLong(JournalLine::getCreditMinor).sum());
+  }
+
+  /** Minimal {@link JournalLineReversalView} stub for the pure reversal-builder test. */
+  private record StubLine(
+      String accountCode, long debitMinor, long creditMinor, String currency, int lineNo)
+      implements JournalLineReversalView {
+    @Override
+    public UUID getId() {
+      return UUID.randomUUID();
+    }
+
+    @Override
+    public String getAccountCode() {
+      return accountCode;
+    }
+
+    @Override
+    public long getDebitMinor() {
+      return debitMinor;
+    }
+
+    @Override
+    public long getCreditMinor() {
+      return creditMinor;
+    }
+
+    @Override
+    public String getCurrency() {
+      return currency;
+    }
+
+    @Override
+    public int getLineNo() {
+      return lineNo;
+    }
   }
 }

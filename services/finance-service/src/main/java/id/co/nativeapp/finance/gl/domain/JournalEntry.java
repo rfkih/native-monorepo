@@ -169,6 +169,57 @@ public class JournalEntry extends Auditable {
       UUID sourceEventId,
       boolean usesIllustrativeRules,
       List<JournalLine> lines) {
+    return build(
+        entryId,
+        period,
+        occurredAt,
+        description,
+        currency,
+        sourceEventId,
+        usesIllustrativeRules,
+        lines,
+        JournalPostingRole.PRIMARY);
+  }
+
+  /**
+   * A balanced REVERSAL entry — identical invariants to {@link #balanced}, but stamped {@code
+   * postingRole = REVERSAL} so a supersession/correction contra (ADR 0064) is distinguishable from
+   * an original posting in audit and reporting. Its lines are the negation of the entry being
+   * reversed; the caller supplies a DISTINCT (deterministic) {@code sourceEventId}.
+   */
+  @SuppressWarnings("checkstyle:ParameterNumber")
+  public static JournalEntry reversal(
+      UUID entryId,
+      String period,
+      Instant occurredAt,
+      String description,
+      String currency,
+      UUID sourceEventId,
+      boolean usesIllustrativeRules,
+      List<JournalLine> lines) {
+    return build(
+        entryId,
+        period,
+        occurredAt,
+        description,
+        currency,
+        sourceEventId,
+        usesIllustrativeRules,
+        lines,
+        JournalPostingRole.REVERSAL);
+  }
+
+  @SuppressWarnings("checkstyle:ParameterNumber")
+  private static JournalEntry build(
+      UUID entryId,
+      String period,
+      Instant occurredAt,
+      String description,
+      String currency,
+      UUID sourceEventId,
+      boolean usesIllustrativeRules,
+      List<JournalLine> lines,
+      JournalPostingRole postingRole) {
 
     Objects.requireNonNull(entryId, "entryId");
     Objects.requireNonNull(period, "period");
@@ -229,7 +280,7 @@ public class JournalEntry extends Auditable {
     entry.occurredAt = occurredAt;
     entry.description = description;
     entry.status = JournalStatus.POSTED;
-    entry.postingRole = JournalPostingRole.PRIMARY;
+    entry.postingRole = postingRole;
     entry.currency = currency;
     entry.sourceEventId = sourceEventId;
     entry.usesIllustrativeRules = usesIllustrativeRules;

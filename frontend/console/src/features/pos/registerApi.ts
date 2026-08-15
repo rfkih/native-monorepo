@@ -239,6 +239,44 @@ export function useClosedSessions(session: CompanySession, enabled: boolean) {
   })
 }
 
+/**
+ * Manager/owner CASH-count CORRECTION of a CLOSED session (ADR 0064) — the fix for a cashier who
+ * closed with the wrong counted cash. Rides the PERSONAL/elevated bearer (`auth: 'personal'`): the
+ * endpoint is owner/manager-only at the gateway, exactly like a refund. The server re-derives
+ * over/short and reverses + re-posts the finance variance; correcting to the recorded value is a
+ * no-op. Invalidates the session's Z-report, the closed-day list, and the current-session cache.
+ */
+export function useCorrectClose(session: CompanySession) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      sessionId,
+      countedCashMinor,
+      reason,
+    }: {
+      sessionId: string
+      countedCashMinor: number
+      reason: string
+    }) =>
+      apiFetch<RegisterSessionResponse>(
+        `/api/v1/register-sessions/${sessionId}/correct-close`,
+        {
+          method: 'POST',
+          tenant: tenantOf(session),
+          auth: 'personal',
+          body: { countedCashMinor, reason },
+        },
+      ),
+    onSuccess: (_data, vars) => {
+      void qc.invalidateQueries({
+        queryKey: ['register-summary', session.companyId, vars.sessionId],
+      })
+      void qc.invalidateQueries({ queryKey: closedHistoryKey(session) })
+      void qc.invalidateQueries({ queryKey: currentKey(session) })
+    },
+  })
+}
+
 export function useOpenRegisterSession(session: CompanySession) {
   const qc = useQueryClient()
   return useMutation({

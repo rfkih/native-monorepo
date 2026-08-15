@@ -81,6 +81,17 @@ public class RegisterSession extends Auditable {
   @Column(name = "close_idempotency_key")
   private String closeIdempotencyKey;
 
+  /** ADR 0064: 1 for the original close, +1 per manager/owner cash correction. */
+  @Column(name = "close_seq", nullable = false)
+  private int closeSeq = 1;
+
+  /**
+   * ADR 0064: outbox event id of the most recent close/correction — finance keys its variance
+   * journal on this, and a correction supersedes it. NULL for pre-0064 closes (not correctable).
+   */
+  @Column(name = "close_event_id")
+  private UUID closeEventId;
+
   protected RegisterSession() {
     // for JPA
   }
@@ -151,6 +162,40 @@ public class RegisterSession extends Auditable {
     this.closeIdempotencyKey = Objects.requireNonNull(closeIdempotencyKey, "closeIdempotencyKey");
   }
 
+  /**
+   * Records the outbox event id of the close (or, later, the most recent correction) — finance keys
+   * its variance journal on this id, so a subsequent correction supersedes it (ADR 0064). Set by
+   * the writer inside the close/correction transaction, after the outbox row is written.
+   */
+  public void recordCloseEventId(UUID closeEventId) {
+    this.closeEventId = Objects.requireNonNull(closeEventId, "closeEventId");
+  }
+
+  /**
+   * Applies a manager/owner cash-count CORRECTION (ADR 0064) to an already-CLOSED session:
+   * overwrites the counted cash and the signed over/short, bumps {@link #closeSeq}, and re-points
+   * {@link #closeEventId} at the correction's outbox event. Expected cash is UNCHANGED — the
+   * window's cash sales/refunds are historical; only the physical count was wrong. The prior
+   * figures survive in the CDC audit trail (Auditable {@code updated_by}/{@code updated_at}); the
+   * ledger correction is a finance-side reverse + re-post, never a mutation. Status stays CLOSED.
+   *
+   * @throws RegisterSessionNotClosedException if the session is not CLOSED (nothing final to
+   *     correct)
+   */
+  public void correctCash(
+      long newCountedCashMinor, long newOverShortMinor, UUID correctionEventId) {
+    if (!STATUS_CLOSED.equals(status)) {
+      throw new RegisterSessionNotClosedException(id, status);
+    }
+    if (newCountedCashMinor < 0) {
+      throw new IllegalArgumentException("countedCashMinor must be >= 0");
+    }
+    this.countedCashMinor = newCountedCashMinor;
+    this.overShortMinor = newOverShortMinor;
+    this.closeSeq += 1;
+    this.closeEventId = Objects.requireNonNull(correctionEventId, "correctionEventId");
+  }
+
   public UUID getId() {
     return id;
   }
@@ -210,5 +255,15 @@ public class RegisterSession extends Auditable {
 
   public String getCloseIdempotencyKey() {
     return closeIdempotencyKey;
+  }
+
+  /** ADR 0064: 1 for the original close, +1 per correction. */
+  public int getCloseSeq() {
+    return closeSeq;
+  }
+
+  /** ADR 0064: the event id finance keyed the current variance journal on (null pre-0064). */
+  public UUID getCloseEventId() {
+    return closeEventId;
   }
 }

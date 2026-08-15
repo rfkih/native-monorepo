@@ -5,8 +5,10 @@ import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.money.Money;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
 import id.co.nativeapp.restaurant.payment.domain.TenderType;
+import id.co.nativeapp.restaurant.register.domain.RegisterCloseCorrectionNotAllowedException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSession;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionIdempotencyKeyConflictException;
+import id.co.nativeapp.restaurant.register.domain.RegisterSessionNotClosedException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionNotFoundException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionNotOpenException;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionTender;
@@ -26,6 +28,7 @@ import id.co.nativeapp.restaurant.register.projection.SaleSummaryView;
 import id.co.nativeapp.restaurant.register.repository.RegisterSessionRepository;
 import id.co.nativeapp.restaurant.register.repository.RegisterSessionTenderRepository;
 import id.co.nativeapp.tenant.TenantContext;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -87,6 +90,14 @@ public class RegisterSessionWriter {
 
   /** Cap on the past closed-day history browse — bounded, index-backed, newest first. */
   private static final int CLOSED_HISTORY_LIMIT = 90;
+
+  /**
+   * How recent a close must be to self-correct in-app (ADR 0064, recent/unsealed-only). A coarse
+   * proxy for "the accounting period is still open" — restaurant-service cannot see finance's seal
+   * across the DB boundary, so finance is the authority (it quarantines a correction to a sealed
+   * period); this bound just stops ancient edits. ~2 months covers correcting last month's close.
+   */
+  private static final Duration CORRECTION_MAX_AGE = Duration.ofDays(62);
 
   private final RegisterSessionRepository repository;
   private final RegisterSessionTenderRepository tenderRepository;
@@ -259,16 +270,132 @@ public class RegisterSessionWriter {
             countedCash,
             overShort,
             session.getCurrency(),
-            tenderLines);
-    outboxWriter.write(
-        RegisterSessionClosedSchema.AGGREGATE_TYPE,
-        session.getId().toString(),
-        RegisterSessionClosedSchema.EVENT_TYPE,
-        AvroSerde.serialize(event),
-        null,
-        UUID.fromString(companyId),
-        closeInstant);
+            tenderLines,
+            null, // supersedes_event_id — an original close supersedes nothing (ADR 0064)
+            1, // close_seq
+            null); // reason
+    UUID closeEventId =
+        outboxWriter.write(
+            RegisterSessionClosedSchema.AGGREGATE_TYPE,
+            session.getId().toString(),
+            RegisterSessionClosedSchema.EVENT_TYPE,
+            AvroSerde.serialize(event),
+            null,
+            UUID.fromString(companyId),
+            closeInstant);
+    // ADR 0064: remember the event id finance keys its variance journal on, so a later
+    // manager/owner
+    // correction can name it as the entry to reverse. Persists in this same close transaction.
+    session.recordCloseEventId(closeEventId);
 
+    return RegisterSessionResponse.from(session);
+  }
+
+  /**
+   * Manager/owner CASH-count CORRECTION of an already-CLOSED session (ADR 0064) — the fix for a
+   * cashier who closed with the wrong counted cash. Re-emits the close snapshot with the corrected
+   * counted cash + recomputed over/short, MARKED as superseding the prior close/correction event so
+   * finance reverses that variance journal and posts the corrected one in its place (append-only,
+   * books stay balanced). Everything else on the event is UNCHANGED — the window, cash
+   * sales/refunds, expected cash, and the per-tender lines (only the physical cash count was wrong)
+   * — so the tender legs reverse-and-re-post identically and only the cash variance moves. The
+   * session stays CLOSED; its counted/over-short are amended in place (the prior values live on in
+   * the CDC audit trail).
+   *
+   * <p>Guards: CLOSED only (409); recent + reversible only (422 when older than {@link
+   * #CORRECTION_MAX_AGE} or closed before this feature, i.e. no {@code close_event_id}); {@code
+   * countedCash >= 0}. A finance-sealed period is caught downstream (the consumer quarantines the
+   * correction to the accountant). Idempotent: correcting to the value already recorded is a no-op.
+   */
+  @Transactional
+  public RegisterSessionResponse correctClose(UUID sessionId, long newCountedCash, String reason) {
+    String companyId = TenantContext.require().companyId();
+
+    RegisterSession session =
+        repository
+            .findWithLockById(sessionId)
+            .orElseThrow(() -> new RegisterSessionNotFoundException(sessionId));
+    outletAccessGuard.enforce(session.getBusinessId());
+
+    if (!RegisterSession.STATUS_CLOSED.equals(session.getStatus())) {
+      throw new RegisterSessionNotClosedException(sessionId, session.getStatus());
+    }
+    if (newCountedCash < 0) {
+      throw new IllegalArgumentException("countedCashMinor must be >= 0");
+    }
+    UUID priorEventId = session.getCloseEventId();
+    if (priorEventId == null) {
+      throw new RegisterCloseCorrectionNotAllowedException(
+          "register session "
+              + sessionId
+              + " was closed before corrections were supported (no reversible event) — post an"
+              + " adjusting entry instead");
+    }
+    Instant closedAt = session.getClosedAt();
+    if (closedAt.isBefore(Instant.now().minus(CORRECTION_MAX_AGE))) {
+      throw new RegisterCloseCorrectionNotAllowedException(
+          "register session "
+              + sessionId
+              + " was closed more than "
+              + CORRECTION_MAX_AGE.toDays()
+              + " days ago — too old to self-correct; post an adjusting entry instead");
+    }
+
+    // Idempotent no-op: the counted cash already equals the requested figure (double-submit/retry).
+    long currentCounted =
+        session.getCountedCashMinor() == null ? 0L : session.getCountedCashMinor();
+    if (currentCounted == newCountedCash) {
+      return RegisterSessionResponse.from(session);
+    }
+
+    // Over/short is re-derived from the STORED expected — the window's cash sales/refunds are
+    // historical; only the physical count moved.
+    long expected = session.getExpectedCashMinor() == null ? 0L : session.getExpectedCashMinor();
+    long newOverShort = Math.subtractExact(newCountedCash, expected);
+
+    // Re-emit the per-tender lines UNCHANGED (this is a cash-only correction): finance reverses the
+    // whole prior entry and re-posts the whole corrected entry, so the tender legs net to zero and
+    // only the cash variance changes.
+    List<RegisterSessionClosedSchema.TenderLine> tenderLines =
+        tenderRepository.findBySessionId(sessionId).stream()
+            .map(
+                t ->
+                    new RegisterSessionClosedSchema.TenderLine(
+                        t.getTenderType(),
+                        t.getExpectedMinor(),
+                        t.getCountedMinor(),
+                        t.getOverShortMinor()))
+            .toList();
+
+    GenericRecord event =
+        RegisterSessionClosedSchema.toRecord(
+            session.getId(),
+            companyId,
+            session.getBusinessId(),
+            session.getOpenedAt(),
+            closedAt,
+            session.getOpeningFloatMinor(),
+            session.getCashSalesMinor() == null ? 0L : session.getCashSalesMinor(),
+            session.getCashRefundsMinor() == null ? 0L : session.getCashRefundsMinor(),
+            expected,
+            newCountedCash,
+            newOverShort,
+            session.getCurrency(),
+            tenderLines,
+            priorEventId,
+            session.getCloseSeq() + 1,
+            reason);
+    UUID correctionEventId =
+        outboxWriter.write(
+            RegisterSessionClosedSchema.AGGREGATE_TYPE,
+            session.getId().toString(),
+            RegisterSessionClosedSchema.EVENT_TYPE,
+            AvroSerde.serialize(event),
+            null,
+            UUID.fromString(companyId),
+            closedAt);
+
+    session.correctCash(newCountedCash, newOverShort, correctionEventId);
     return RegisterSessionResponse.from(session);
   }
 

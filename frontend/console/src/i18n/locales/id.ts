@@ -965,6 +965,7 @@ export const id = {
       txnCount: '{{formatted}} transaksi',
       viewTransactions: 'Lihat transaksi',
       txnEmptyHint: 'Tidak ada transaksi pada hari ini.',
+      correctAction: 'Perbaiki',
     },
     return: {
       action: 'Kembalikan penjualan',
@@ -1178,6 +1179,28 @@ export const id = {
     serviceSelectedLabel: '{{name}} — dipilih',
     selectAddonLabel: 'Tambah {{name}}',
     addonSelectedLabel: 'Hapus {{name}}',
+  },
+  closeCorrection: {
+    title: 'Perbaiki closing',
+    loadError: 'Gagal memuat data closing. Coba lagi.',
+    cashTitle: 'Uang tunai',
+    currentCounted: 'Terhitung saat ini',
+    currentOverShort: 'Selisih saat ini',
+    newCounted: 'Jumlah terhitung yang benar',
+    newOverShort: 'Selisih baru',
+    reasonLabel: 'Alasan koreksi',
+    reasonPlaceholder: 'mis. kasir salah hitung laci',
+    save: 'Simpan koreksi',
+    saving: 'Menyimpan…',
+    saveError: 'Gagal menyimpan koreksi. Coba lagi.',
+    errorNotClosed: 'Sesi kasir ini belum ditutup — tidak ada yang bisa diperbaiki.',
+    errorNotAllowed:
+      'Closing ini tidak bisa diperbaiki (mungkin sudah terlalu lama). Hubungi akuntan Anda untuk jurnal penyesuaian.',
+    unchangedHint: 'Ubah jumlah untuk menyimpan koreksi.',
+    stockTitle: 'Stok opname',
+    stockHint:
+      'Salah input stok opname? Hitung ulang stok — sistem otomatis membukukan penyesuaian selisihnya.',
+    stockAction: 'Perbaiki stok opname',
   },
   register: {
     /** ADR 0036 — closing kasir (sesi kasir). `title` = label menu kasir & layar mandiri;

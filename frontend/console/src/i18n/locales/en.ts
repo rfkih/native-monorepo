@@ -977,6 +977,7 @@ export const en = {
       txnCount: '{{formatted}} txn',
       viewTransactions: 'View transactions',
       txnEmptyHint: 'No transactions recorded for this day.',
+      correctAction: 'Correct',
     },
     return: {
       action: 'Return sale',
@@ -1190,6 +1191,28 @@ export const en = {
     serviceSelectedLabel: '{{name}} — selected',
     selectAddonLabel: 'Add {{name}}',
     addonSelectedLabel: 'Remove {{name}}',
+  },
+  closeCorrection: {
+    title: 'Correct closing',
+    loadError: 'Could not load the closing. Try again.',
+    cashTitle: 'Cash',
+    currentCounted: 'Counted now',
+    currentOverShort: 'Over/short now',
+    newCounted: 'Corrected count',
+    newOverShort: 'New over/short',
+    reasonLabel: 'Reason for the correction',
+    reasonPlaceholder: 'e.g. cashier miscounted the drawer',
+    save: 'Save correction',
+    saving: 'Saving…',
+    saveError: 'Could not save the correction. Try again.',
+    errorNotClosed: 'This register session is not closed yet — there is nothing to correct.',
+    errorNotAllowed:
+      "This closing can't be corrected (it may be too old). Ask your accountant for an adjusting entry.",
+    unchangedHint: 'Change the amount to save a correction.',
+    stockTitle: 'Stock opname',
+    stockHint:
+      'Wrong stock counts? Re-count the stock — the system posts the compensating adjustment automatically.',
+    stockAction: 'Correct stock opname',
   },
   register: {
     /** ADR 0036 — closing kasir (register sessions). `title` labels the till-menu entry and the

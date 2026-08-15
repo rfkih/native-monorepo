@@ -1320,6 +1320,11 @@ function PosInner({ session }: { session: CompanySession }) {
           session={session}
           locale={locale}
           onClose={() => setShowClosingHistory(false)}
+          onOpenStocktake={() => {
+            // Stock-count correction hands off to the outlet's opname (self-compensating, ADR 0064).
+            setShowClosingHistory(false)
+            setShowStocktakeSheet(true)
+          }}
         />
       ) : null}
 

@@ -21,16 +21,20 @@ import { useAuth, hasAnyRole, effectiveRoles } from '@/lib/authContext'
 import type { CompanySession } from '@/lib/session'
 import { DailySummary } from './DailySummary'
 import { ClosedDayTransactionsSheet } from './components/ClosedDayTransactionsSheet'
+import { CloseCorrectionSheet } from './components/CloseCorrectionSheet'
 import { useClosedSessions, type ClosedSessionSummary } from './registerApi'
 
 export function ClosingHistorySheet({
   session,
   locale,
   onClose,
+  onOpenStocktake,
 }: {
   session: CompanySession
   locale: string
   onClose: () => void
+  /** Hands off to the outlet's stock opname (Pos's StocktakeSheet) for a stock-count correction. */
+  onOpenStocktake: () => void
 }) {
   const { t } = useTranslation()
   const auth = useAuth()
@@ -39,9 +43,11 @@ export function ClosingHistorySheet({
   const canView = hasAnyRole(effectiveRoles(auth.roles, auth.elevatedRoles), 'owner', 'manager')
 
   const history = useClosedSessions(session, canView)
-  // Level 2 (the Z-report) and level 3 (that day's transactions), both keyed off a picked closed day.
+  // Level 2 (the Z-report), level 3 (that day's transactions), and the correction flow — each keyed
+  // off a picked closed day.
   const [detail, setDetail] = useState<ClosedSessionSummary | null>(null)
   const [txns, setTxns] = useState<ClosedSessionSummary | null>(null)
+  const [correct, setCorrect] = useState<ClosedSessionSummary | null>(null)
 
   const rows = history.data ?? []
   const dateFmt = new Intl.DateTimeFormat(locale, {
@@ -114,32 +120,44 @@ export function ClosingHistorySheet({
         ) : (
           <div className="mx-auto flex max-w-[640px] flex-col gap-1.5">
             {rows.map((row) => (
-              <button
+              <div
                 key={row.sessionId}
-                type="button"
-                onClick={() => setDetail(row)}
-                className="flex w-full items-center gap-3 rounded-2xl border border-line bg-surface px-3.5 py-3 text-left transition-colors hover:border-emerald-line hover:bg-emerald-tint/40"
+                className="flex items-stretch gap-2 rounded-2xl border border-line bg-surface transition-colors hover:border-emerald-line"
               >
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13.5px] font-semibold text-ink">
-                    {dateFmt.format(new Date(row.businessDate))}
+                <button
+                  type="button"
+                  onClick={() => setDetail(row)}
+                  className="flex min-w-0 flex-1 items-center gap-3 rounded-l-2xl px-3.5 py-3 text-left hover:bg-emerald-tint/40"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13.5px] font-semibold text-ink">
+                      {dateFmt.format(new Date(row.businessDate))}
+                    </span>
+                    <span className="mt-0.5 block text-[11.5px] text-ink-3">
+                      {timeFmt.format(new Date(row.openedAt))}
+                      {row.closedAt ? `–${timeFmt.format(new Date(row.closedAt))}` : ''}
+                    </span>
                   </span>
-                  <span className="mt-0.5 block text-[11.5px] text-ink-3">
-                    {timeFmt.format(new Date(row.openedAt))}
-                    {row.closedAt ? `–${timeFmt.format(new Date(row.closedAt))}` : ''}
+                  <span className="shrink-0 text-right">
+                    <span className="tnum block font-mono text-[14px] font-bold text-ink">
+                      {formatMoney(row.netSalesMinor, row.currency, locale)}
+                    </span>
+                    <span className="mt-0.5 block text-[11px] text-ink-3">
+                      {t('pos.closingHistory.txnCount', {
+                        formatted: new Intl.NumberFormat(locale).format(row.transactionCount),
+                      })}
+                    </span>
                   </span>
-                </span>
-                <span className="shrink-0 text-right">
-                  <span className="tnum block font-mono text-[14px] font-bold text-ink">
-                    {formatMoney(row.netSalesMinor, row.currency, locale)}
-                  </span>
-                  <span className="mt-0.5 block text-[11px] text-ink-3">
-                    {t('pos.closingHistory.txnCount', {
-                      formatted: new Intl.NumberFormat(locale).format(row.transactionCount),
-                    })}
-                  </span>
-                </span>
-              </button>
+                </button>
+                {/* Manager/owner correction affordance (the whole sheet is already owner/manager). */}
+                <button
+                  type="button"
+                  onClick={() => setCorrect(row)}
+                  className="shrink-0 rounded-r-2xl border-l border-line px-3 text-[12px] font-semibold text-ink-2 hover:bg-hover hover:text-ink"
+                >
+                  {t('pos.closingHistory.correctAction')}
+                </button>
+              </div>
             ))}
           </div>
         )}
@@ -173,6 +191,22 @@ export function ClosingHistorySheet({
           to={txns.closedAt}
           title={dateFmt.format(new Date(txns.businessDate))}
           onClose={() => setTxns(null)}
+        />
+      ) : null}
+
+      {/* Correction (ADR 0064) — cash re-count (reverse + re-post) or hand off to the stock opname. */}
+      {correct ? (
+        <CloseCorrectionSheet
+          session={session}
+          locale={locale}
+          currency={correct.currency}
+          sessionId={correct.sessionId}
+          onClose={() => setCorrect(null)}
+          onCorrected={() => setCorrect(null)}
+          onOpenStocktake={() => {
+            setCorrect(null)
+            onOpenStocktake()
+          }}
         />
       ) : null}
     </div>

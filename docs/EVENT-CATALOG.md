@@ -1945,11 +1945,17 @@ treats a violation as poison (DLT).
 | `over_short_minor` | `long` | SIGNED `counted − expected`: negative = short (expense), positive = over (other income), zero = no entry |
 | `currency` | `string` | ISO-4217 code for every amount on the event |
 | `tenders` | `array<record>` | ADR 0038 phase 2 — non-cash per-tender reconciliation: `{tender_type (CARD/QRIS/ONLINE), expected_minor, counted_minor, over_short_minor}`. Empty on cash-only / pre-phase-2 closes. Finance trues each tender's clearing account (card 1902, QRIS 1901, online 1250), reusing the cash SHORT/OVER accounts |
+| `supersedes_event_id` | `["null","string"]` | ADR 0064 — manager/owner CLOSE CORRECTION marker. NULL on an original close. When set, names the prior close/correction event id (the variance journal's `source_event_id`) this event corrects; finance REVERSES that prior variance (balanced contra) and posts THIS corrected variance in its place (append-only) |
+| `close_seq` | `int` | ADR 0064 — 1 for the original close, +1 per correction (monotonic per session; audit/display). Pre-0064 events decode as 1 |
+| `reason` | `["null","string"]` | ADR 0064 — the manager/owner's correction reason (NULL on an original close). Audit only; not PII |
 
 **Compatibility:** the original fields are required; `tenders` was appended additively (ADR 0038
-phase 2) with `default: []`, so old producers' bytes decode with an empty array and the cash
-posting is unchanged. Evolve additively only — append new fields with a default (never reorder;
-consumers may decode positionally).
+phase 2) with `default: []`, and `supersedes_event_id` / `close_seq` / `reason` additively (ADR 0064)
+with `null`/`1`/`null` defaults, so old producers' bytes decode as an uncorrected original close and
+the cash posting is unchanged. Evolve additively only — append new fields with a default (never
+reorder; consumers may decode positionally). **Consumer caution:** a re-emitted close carrying
+`supersedes_event_id` would DOUBLE-POST in any consumer that treats it as a fresh close — only the
+register-close consumer (which reverses the superseded variance first) may act on this event.
 
 **Avro schema** (single source of truth in `libs/contracts/src/main/resources/avro/RegisterSessionClosed.avsc`)
 

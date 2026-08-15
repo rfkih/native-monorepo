@@ -2,6 +2,7 @@ package id.co.nativeapp.restaurant.register.controller;
 
 import id.co.nativeapp.restaurant.register.dto.CloseSessionRequest;
 import id.co.nativeapp.restaurant.register.dto.ClosedSessionSummaryResponse;
+import id.co.nativeapp.restaurant.register.dto.CorrectCloseRequest;
 import id.co.nativeapp.restaurant.register.dto.OpenSessionRequest;
 import id.co.nativeapp.restaurant.register.dto.OpenSessionResult;
 import id.co.nativeapp.restaurant.register.dto.RegisterExpectedResponse;
@@ -78,6 +79,26 @@ public class RegisterSessionController {
       @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
     requireKey(idempotencyKey);
     return ResponseEntity.ok(service.close(id, request, idempotencyKey));
+  }
+
+  /**
+   * Manager/owner CASH-count CORRECTION of an already-CLOSED session (ADR 0064) — the fix for a
+   * cashier who closed with the wrong counted cash. Finance reverses the prior cash-variance
+   * journal and posts the corrected one (append-only). Gateway-gated to owner/manager. 200 with the
+   * amended session; 409 if the session is not CLOSED; 422 if it is too old / predates the feature.
+   */
+  @Operation(
+      summary = "Correct a closed register session's cash count",
+      description =
+          "Manager/owner-only. Re-derives the over/short from the corrected counted cash and reverses"
+              + " + re-posts the finance variance (books stay balanced). Recent, unsealed closes"
+              + " only; correcting to the recorded value is a no-op. A required reason is recorded"
+              + " for audit.")
+  @PostMapping("/{id}/correct-close")
+  public ResponseEntity<RegisterSessionResponse> correctClose(
+      @PathVariable("id") UUID id,
+      @jakarta.validation.Valid @RequestBody CorrectCloseRequest request) {
+    return ResponseEntity.ok(service.correctClose(id, request));
   }
 
   /** The outlet's current OPEN session — 200 with the session, or 204 when none is open. */

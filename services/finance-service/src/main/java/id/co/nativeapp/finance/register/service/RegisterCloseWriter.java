@@ -5,9 +5,11 @@ import id.co.nativeapp.events.ProcessedEventStore;
 import id.co.nativeapp.finance.gl.domain.AccountRole;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
 import id.co.nativeapp.finance.gl.domain.JournalLine;
+import id.co.nativeapp.finance.gl.projection.JournalLineReversalView;
 import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
 import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
 import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
+import id.co.nativeapp.finance.labor.messaging.ReversalEventIds;
 import id.co.nativeapp.finance.pnl.domain.MismatchedPostingCurrencyException;
 import id.co.nativeapp.finance.register.messaging.RegisterSessionClosedEvent;
 import id.co.nativeapp.finance.revenue.domain.LedgerPosting;
@@ -17,6 +19,7 @@ import id.co.nativeapp.tenant.TenantContext;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -115,7 +118,8 @@ public class RegisterCloseWriter {
     // Collect every tender with a non-zero variance: cash (top-level) + each non-cash line
     // (ADR 0038). Zero across all → no entry (the event stays claimed by processOnce).
     List<TenderVariance> variances = collectVariances(event);
-    if (variances.isEmpty()) {
+    boolean isCorrection = event.supersedesEventId() != null;
+    if (!isCorrection && variances.isEmpty()) {
       log.info(
           "RegisterSessionClosed {}: zero variance across all tenders for session {} — no entry",
           event.eventId(),
@@ -126,6 +130,26 @@ public class RegisterCloseWriter {
     // rule 8: validate the ISO code + the single-base-currency guard, once for the event.
     requireConsistentGlCurrency(period, Money.ofMinor(0L, event.currency()));
 
+    // ADR 0064 — a CORRECTION first REVERSES the superseded variance journal (a balanced contra),
+    // then posts the corrected variance below IN ITS PLACE. Both live under THIS event's
+    // processOnce
+    // claim, so the whole correction (reverse + re-post) is one atomic, idempotent unit and the
+    // ledger only ever grows (never mutates). Ordered before the corrected posting so a
+    // correction-to-zero (drawer now reconciles) still unwinds the prior entry.
+    if (isCorrection) {
+      reverseSupersededVariance(event, companyId, period);
+    }
+
+    if (variances.isEmpty()) {
+      log.info(
+          "RegisterSessionClosed correction {} (seq {}) nets to zero variance for session {} —"
+              + " reversed the prior entry, no new entry",
+          event.eventId(),
+          event.closeSeq(),
+          event.sessionId());
+      return;
+    }
+
     UUID entryId = UUID.randomUUID();
     JournalEntry entry = buildEntry(event, entryId, period);
     entry.setCompanyId(companyId);
@@ -135,10 +159,117 @@ public class RegisterCloseWriter {
       journalLineRepository.save(line);
     }
     log.info(
-        "Posted register close variance for session {} across {} tender(s) (entry {})",
+        "Posted register close variance for session {} across {} tender(s) (entry {}, seq {})",
         event.sessionId(),
         variances.size(),
-        entryId);
+        entryId,
+        event.closeSeq());
+  }
+
+  /**
+   * Reverses the variance journal a prior close/correction posted (ADR 0064): loads the entry whose
+   * {@code source_event_id} is the event's {@code supersedesEventId}, and posts a balanced CONTRA
+   * that negates each of its legs (original debit → contra credit, original credit → contra debit),
+   * in the SAME period so the two net to zero. The contra's {@code source_event_id} is
+   * DETERMINISTIC ({@link ReversalEventIds#forPriorPosting}) so a redelivered correction re-derives
+   * the same id and the UNIQUE backstop makes a second reversal a no-op — the prior entry can never
+   * be reversed twice. Absent prior entry (the superseded close reconciled to zero, so posted
+   * nothing) → nothing to reverse; the corrected variance stands alone.
+   */
+  private void reverseSupersededVariance(
+      RegisterSessionClosedEvent event, String companyId, String period) {
+    UUID supersededEventId = event.supersedesEventId();
+    Optional<UUID> priorEntryId = journalEntryRepository.findIdBySourceEventId(supersededEventId);
+    if (priorEntryId.isEmpty()) {
+      // No prior variance entry. Two very different causes (review W1) — distinguish them:
+      //   (a) the superseded close WAS processed but reconciled to zero (no entry) → safe to skip;
+      //   (b) the superseded close has NOT been consumed yet → we must NOT post the corrected
+      //       variance now, or when the original later posts, BOTH would stand (double-count).
+      // The normal path never hits (b) — Debezium orders both events on the session partition key —
+      // but a DLT'd + late-reprocessed original could. Fail closed so this correction RETRIES (its
+      // processOnce claim rolls back with the throw) until the original is applied.
+      if (!processedEvents.alreadyProcessed(supersededEventId)) {
+        throw new IllegalStateException(
+            "RegisterSessionClosed correction "
+                + event.eventId()
+                + " supersedes "
+                + supersededEventId
+                + " which has not been processed yet — retrying until the original close posts"
+                + " (reversal must never race ahead of the entry it reverses)");
+      }
+      log.info(
+          "RegisterSessionClosed correction {} supersedes {} which posted no variance entry"
+              + " (reconciled to zero) — nothing to reverse",
+          event.eventId(),
+          supersededEventId);
+      return;
+    }
+
+    UUID contraSourceEventId = ReversalEventIds.forPriorPosting(priorEntryId.get());
+    if (journalEntryRepository.findIdBySourceEventId(contraSourceEventId).isPresent()) {
+      log.debug(
+          "Reversal contra for prior entry {} already posted — idempotent skip",
+          priorEntryId.get());
+      return;
+    }
+
+    List<JournalLineReversalView> priorLines =
+        journalLineRepository.findLinesByEntryId(priorEntryId.get());
+    if (priorLines.isEmpty()) {
+      throw new IllegalStateException(
+          "prior register-close variance entry " + priorEntryId.get() + " has no lines to reverse");
+    }
+
+    UUID contraId = UUID.randomUUID();
+    JournalEntry contra =
+        buildReversalEntry(
+            priorLines, contraId, contraSourceEventId, period, event.closedAt(), event.currency());
+    contra.setCompanyId(companyId);
+    journalEntryRepository.saveAndFlush(contra);
+    for (JournalLine line : contra.getLines()) {
+      line.setCompanyId(companyId);
+      journalLineRepository.save(line);
+    }
+    log.info(
+        "Reversed superseded register-close variance (prior entry {}) for correction {} (contra {})",
+        priorEntryId.get(),
+        event.eventId(),
+        contraId);
+  }
+
+  /**
+   * Builds (but does not persist) the balanced CONTRA of a prior variance entry — one leg per prior
+   * line with the side swapped (original debit → contra credit, original credit → contra debit),
+   * same account + currency. Pure besides no lookups, so a unit test asserts the exact negation
+   * (the {@link #buildEntry} pattern). The contra of a balanced entry is balanced by construction.
+   */
+  public JournalEntry buildReversalEntry(
+      List<JournalLineReversalView> priorLines,
+      UUID contraId,
+      UUID contraSourceEventId,
+      String period,
+      Instant occurredAt,
+      String currency) {
+    List<JournalLine> contraLines = new ArrayList<>(priorLines.size());
+    int lineNo = 1;
+    for (JournalLineReversalView prior : priorLines) {
+      boolean wasDebit = prior.getDebitMinor() != 0;
+      long amountMinor = wasDebit ? prior.getDebitMinor() : prior.getCreditMinor();
+      Money amount = Money.ofMinor(amountMinor, prior.getCurrency());
+      contraLines.add(
+          wasDebit
+              ? JournalLine.credit(contraId, lineNo++, prior.getAccountCode(), amount)
+              : JournalLine.debit(contraId, lineNo++, prior.getAccountCode(), amount));
+    }
+    return JournalEntry.reversal(
+        contraId,
+        period,
+        occurredAt,
+        "Register close correction — reversal of superseded variance",
+        currency,
+        contraSourceEventId,
+        true,
+        contraLines);
   }
 
   /**

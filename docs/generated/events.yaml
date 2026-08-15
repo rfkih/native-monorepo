@@ -294,6 +294,9 @@ events:
       - { name: over_short_minor, type: "long" }
       - { name: currency, type: "string" }
       - { name: tenders, type: "array<record:TenderReconciliation>" }
+      - { name: supersedes_event_id, type: "null|string" }
+      - { name: close_seq, type: "int" }
+      - { name: reason, type: "null|string" }
   - name: SaleRecorded
     namespace: id.co.nativeapp.events.restaurant
     schema: libs/contracts/src/main/resources/avro/SaleRecorded.avsc

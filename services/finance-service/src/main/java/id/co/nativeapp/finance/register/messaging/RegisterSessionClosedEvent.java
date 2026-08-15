@@ -36,6 +36,12 @@ import org.apache.avro.generic.GenericRecord;
  * @param tenders non-cash per-tender reconciliation lines (CARD/QRIS/ONLINE) counted at close (ADR
  *     0038 phase 2); empty on a cash-only / pre-phase-2 close. Finance posts each element's
  *     variance truing that tender's clearing account, alongside the cash variance above
+ * @param supersedesEventId ADR 0064 close-correction marker — NULL on an original close; when set,
+ *     the id of the prior close/correction event (the {@code source_event_id} of the variance
+ *     journal finance posted for it) that THIS corrected snapshot supersedes. Finance reverses that
+ *     prior variance (balanced contra) and posts this one in its place
+ * @param closeSeq 1 for the original close, +1 per correction (audit/display; pre-0064 events = 1)
+ * @param reason the manager/owner's correction reason (NULL on an original close); audit only
  */
 public record RegisterSessionClosedEvent(
     UUID eventId,
@@ -51,7 +57,10 @@ public record RegisterSessionClosedEvent(
     long countedCashMinor,
     long overShortMinor,
     String currency,
-    List<TenderReconciliation> tenders) {
+    List<TenderReconciliation> tenders,
+    UUID supersedesEventId,
+    int closeSeq,
+    String reason) {
 
   /**
    * One non-cash tender's expected-vs-counted at close (ADR 0038 phase 2). {@code overShortMinor}
@@ -75,6 +84,15 @@ public record RegisterSessionClosedEvent(
                 (long) line.get("over_short_minor")));
       }
     }
+    // ADR 0064 correction fields — additive with defaults (null / 1 / null); a pre-0064 event that
+    // lacks them decodes as an uncorrected original close.
+    Object supersedesRaw = record.get("supersedes_event_id");
+    UUID supersedesEventId =
+        supersedesRaw == null ? null : UUID.fromString(supersedesRaw.toString());
+    Object closeSeqRaw = record.get("close_seq");
+    int closeSeq = closeSeqRaw == null ? 1 : (int) closeSeqRaw;
+    Object reasonRaw = record.get("reason");
+    String reason = reasonRaw == null ? null : reasonRaw.toString();
     return new RegisterSessionClosedEvent(
         eventId,
         UUID.fromString(record.get("session_id").toString()),
@@ -89,7 +107,10 @@ public record RegisterSessionClosedEvent(
         (long) record.get("counted_cash_minor"),
         (long) record.get("over_short_minor"),
         record.get("currency").toString(),
-        tenders);
+        tenders,
+        supersedesEventId,
+        closeSeq,
+        reason);
   }
 
   /**

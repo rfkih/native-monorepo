@@ -76,6 +76,11 @@ public final class RegisterSessionClosedSchema {
    * @param currency ISO-4217 code shared by every amount
    * @param tenders the non-cash per-tender reconciliation lines (CARD/QRIS/ONLINE) counted at close
    *     — empty on a cash-only close (ADR 0038 phase 2)
+   * @param supersedesEventId ADR 0064 correction marker — {@code null} on an original close; the
+   *     prior close/correction outbox event id this corrected snapshot supersedes (finance reverses
+   *     that variance and posts this one in its place)
+   * @param closeSeq 1 for the original close, +1 per correction
+   * @param reason the manager/owner's correction reason ({@code null} on an original close)
    */
   @SuppressWarnings("checkstyle:ParameterNumber")
   public static GenericRecord toRecord(
@@ -91,7 +96,10 @@ public final class RegisterSessionClosedSchema {
       long countedCashMinor,
       long overShortMinor,
       String currency,
-      List<TenderLine> tenders) {
+      List<TenderLine> tenders,
+      UUID supersedesEventId,
+      int closeSeq,
+      String reason) {
     GenericRecord record = new GenericData.Record(SCHEMA);
     record.put("session_id", sessionId.toString());
     record.put("company_id", companyId);
@@ -105,6 +113,11 @@ public final class RegisterSessionClosedSchema {
     record.put("counted_cash_minor", countedCashMinor);
     record.put("over_short_minor", overShortMinor);
     record.put("currency", currency);
+    // ADR 0064 correction fields (null / 1 / null on an original close).
+    record.put(
+        "supersedes_event_id", supersedesEventId == null ? null : supersedesEventId.toString());
+    record.put("close_seq", closeSeq);
+    record.put("reason", reason);
 
     Schema tendersSchema = SCHEMA.getField("tenders").schema();
     Schema itemSchema = tendersSchema.getElementType();

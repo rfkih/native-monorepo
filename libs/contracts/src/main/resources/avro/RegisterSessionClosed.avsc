@@ -26,6 +26,9 @@
         {"name": "counted_minor", "type": "long", "doc": "The actual settled/batch amount the cashier entered for this tender at close, minor units (≥ 0)."},
         {"name": "over_short_minor", "type": "long", "doc": "SIGNED counted_minor − expected_minor. Negative = short, positive = over, zero = no entry for this tender."}
       ]
-    }}}
+    }}},
+    {"name": "supersedes_event_id", "type": ["null", "string"], "default": null, "doc": "Manager/owner CLOSE CORRECTION marker (ADR 0064). NULL on an original close. When set, this event CORRECTS a prior close: it carries the corrected drawer snapshot and names the prior close/correction event's id (the source_event_id of the variance journal finance posted for it). Finance REVERSES that prior variance journal (a balanced contra) and posts THIS corrected variance in its place — append-only, never a mutation. Additive (rule 7): a consumer that ignores this field sees a plain re-emitted close and would double-post, so ONLY the register-close consumer, which handles it, may act on this event type."},
+    {"name": "close_seq", "type": "int", "default": 1, "doc": "1 for the original close, incremented on each manager/owner correction (2, 3, …) — a monotonic sequence per session for audit/display (mirrors payroll run_seq). Additive; pre-ADR-0064 events decode as 1."},
+    {"name": "reason", "type": ["null", "string"], "default": null, "doc": "The manager/owner's free-text reason for a correction (NULL on an original close). Carried for the audit trail; finance stamps it into the correction entry's context. Not PII."}
   ]
 }

@@ -3,6 +3,7 @@ package id.co.nativeapp.restaurant.register.service;
 import id.co.nativeapp.restaurant.register.domain.RegisterSessionAlreadyOpenException;
 import id.co.nativeapp.restaurant.register.dto.CloseSessionRequest;
 import id.co.nativeapp.restaurant.register.dto.ClosedSessionSummaryResponse;
+import id.co.nativeapp.restaurant.register.dto.CorrectCloseRequest;
 import id.co.nativeapp.restaurant.register.dto.OpenSessionRequest;
 import id.co.nativeapp.restaurant.register.dto.OpenSessionResult;
 import id.co.nativeapp.restaurant.register.dto.RegisterExpectedResponse;
@@ -53,6 +54,15 @@ public class RegisterSessionService {
       UUID sessionId, CloseSessionRequest request, String idempotencyKey) {
     TenantContext.require();
     return writer.close(sessionId, request, idempotencyKey);
+  }
+
+  /**
+   * Manager/owner CASH-count correction of an already-CLOSED session (ADR 0064) — finance reverses
+   * the prior variance and posts the corrected one. Correcting to the recorded value is a no-op.
+   */
+  public RegisterSessionResponse correctClose(UUID sessionId, CorrectCloseRequest request) {
+    TenantContext.require();
+    return writer.correctClose(sessionId, request.countedCashMinor(), request.reason());
   }
 
   public Optional<RegisterSessionResponse> current(UUID businessId) {
