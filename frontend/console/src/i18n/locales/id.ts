@@ -1245,6 +1245,8 @@ export const id = {
     tillMenuLabel: 'Stock opname',
     entryHint:
       'Jumlah terisi otomatis dengan kuantitas sistem — ubah hanya yang berbeda dari hasil hitung fisik Anda. Untuk menu yang sudah punya resep, selisih bahan berbiaya dibaca sebagai pemborosan/kehilangan; untuk yang lain, selisih masih mencakup pemakaian normal, bukan hanya kehilangan.',
+    soldTodayTitle: 'Barang terjual hari ini',
+    soldTodayEmpty: 'Belum ada penjualan hari ini.',
     systemQty: 'Sistem: {{qty}} {{unit}}',
     countedForItem: 'Jumlah terhitung untuk {{name}}',
     notCounted: 'Belum dihitung',

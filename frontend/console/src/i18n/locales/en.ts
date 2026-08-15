@@ -1257,6 +1257,8 @@ export const en = {
     tillMenuLabel: 'Stock count',
     entryHint:
       'Counts start pre-filled with the system quantity — only change what differs from your physical count. For a menu covered by a recipe, a costed ingredient’s difference reads as waste/loss; for the rest, it still includes normal usage, not just loss.',
+    soldTodayTitle: 'Items sold today',
+    soldTodayEmpty: 'No sales yet today.',
     systemQty: 'System: {{qty}} {{unit}}',
     countedForItem: 'Counted quantity for {{name}}',
     notCounted: 'Not counted',

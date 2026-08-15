@@ -19,7 +19,8 @@ import { useTranslation } from 'react-i18next'
 import { Spinner } from '@/components/ui/Spinner'
 import { formatMoney } from '@/lib/money'
 import type { CompanySession } from '@/lib/session'
-import { ThermalReceipt, type ThermalRow } from './ThermalReceipt'
+import { ThermalReceipt, type ThermalRow, type ThermalLineItem } from './ThermalReceipt'
+import { useItemSales, type ItemSalesResponse } from './api'
 import {
   useCurrentRegisterSession,
   useLastClosedSession,
@@ -59,10 +60,17 @@ export function DailySummary({
   const resolvedId = explicitId ?? openId ?? lastClosedQuery.data?.id ?? null
 
   const summaryQuery = useRegisterSummary(session, resolvedId, true)
+  const summaryData = summaryQuery.data
+  // Per-item breakdown over the SAME window the summary reports (openedAt → asOf). Dependent on the
+  // summary — disabled until it resolves; a failure degrades to no items, never blocks the report.
+  const itemsQuery = useItemSales(session, summaryData?.openedAt ?? null, summaryData?.asOf ?? null)
 
   const resolving =
     (!explicitId && currentQuery.isLoading) || (needLastClosed && lastClosedQuery.isLoading)
-  const loading = resolving || (resolvedId != null && summaryQuery.isLoading)
+  const loading =
+    resolving ||
+    (resolvedId != null && summaryQuery.isLoading) ||
+    (summaryData != null && itemsQuery.isLoading)
 
   if (loading) {
     return (
@@ -103,7 +111,7 @@ export function DailySummary({
     )
   }
 
-  const props = buildSummaryProps(summary, session.name, locale, t)
+  const props = buildSummaryProps(summary, itemsQuery.data ?? [], session.name, locale, t)
 
   return (
     <ThermalReceipt
@@ -121,6 +129,7 @@ export function DailySummary({
 /** Maps the server summary onto the shared ThermalReceipt data model (labels pre-formatted). */
 function buildSummaryProps(
   s: RegisterSummaryResponse,
+  items: ItemSalesResponse[],
   outletName: string,
   locale: string,
   t: ReturnType<typeof useTranslation>['t'],
@@ -208,6 +217,17 @@ function buildSummaryProps(
     paymentRows.push({ label, valueLabel: money(os) })
   }
 
+  // Per-item sold breakdown (renders "12× Burger … Rp 300.000" between the meta and totals blocks —
+  // the ThermalReceipt line-items slot that the Z-report previously left empty). Best-sellers first
+  // from the server; revenue is GROSS per item (order-level discount/tax stay in the totals above,
+  // so it need not foot exactly to net).
+  const lineItems: ThermalLineItem[] = items.map((it) => ({
+    qty: it.soldQty,
+    name: it.name,
+    priceLabel: money(it.revenueMinor),
+    modifiers: [],
+  }))
+
   return {
     businessName: outletName,
     title: t('register.summaryTitle'),
@@ -215,7 +235,7 @@ function buildSummaryProps(
     tagline: closed ? undefined : t('register.summaryInterim'),
     dateTime: `${dateFmt.format(new Date(s.businessDate))} · ${timeFmt.format(new Date(s.asOf))}`,
     metaRows,
-    lineItems: [],
+    lineItems,
     totalRows,
     grandTotalLabel: money(s.totalMinor),
     paymentRows,

@@ -373,6 +373,39 @@ export function useItemPopularity(session: CompanySession) {
   })
 }
 
+/** One row of the per-item sales breakdown over a window (GET /api/v1/orders/item-sales). */
+export interface ItemSalesResponse {
+  menuItemId: string
+  /** Sold-time name snapshot — survives a menu rename/delete. */
+  name: string
+  soldQty: number
+  /** Gross revenue for the item, minor units (sum of line totals). */
+  revenueMinor: number
+}
+
+/**
+ * Per-menu-item units sold + gross revenue whose SALE occurred in [from, to), best-sellers first —
+ * the Z-report items section (the register session's window) and the stock-opname "sold today"
+ * reference (the local-day window). `from`/`to` are ISO instants; disabled until both are known.
+ */
+export function useItemSales(
+  session: CompanySession,
+  from: string | null,
+  to: string | null,
+  enabled = true,
+) {
+  return useQuery({
+    enabled: enabled && from != null && to != null,
+    queryKey: ['itemSales', session.companyId, session.businessId, from, to],
+    staleTime: 60_000,
+    queryFn: () =>
+      apiFetch<ItemSalesResponse[]>('/api/v1/orders/item-sales', {
+        tenant: tenantOf(session),
+        query: { businessId: session.businessId, from: from ?? undefined, to: to ?? undefined },
+      }),
+  })
+}
+
 export function useMenu(session: CompanySession) {
   return useQuery({
     queryKey: ['menu', session.companyId, session.businessId],

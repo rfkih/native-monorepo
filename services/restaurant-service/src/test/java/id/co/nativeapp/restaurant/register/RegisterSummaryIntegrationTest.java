@@ -8,6 +8,7 @@ import id.co.nativeapp.restaurant.menu.dto.CreateMenuItemRequest;
 import id.co.nativeapp.restaurant.menu.service.MenuService;
 import id.co.nativeapp.restaurant.order.dto.CheckoutRequest;
 import id.co.nativeapp.restaurant.order.dto.CheckoutResult;
+import id.co.nativeapp.restaurant.order.dto.ItemSalesResponse;
 import id.co.nativeapp.restaurant.order.dto.OrderLineRequest;
 import id.co.nativeapp.restaurant.order.dto.PriceBreakdownResponse;
 import id.co.nativeapp.restaurant.order.service.OrderService;
@@ -24,6 +25,7 @@ import id.co.nativeapp.restaurant.register.service.RegisterSessionService;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.service.SaleService;
 import id.co.nativeapp.tenant.TenantContext;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -355,6 +357,74 @@ class RegisterSummaryIntegrationTest extends PostgresRlsTestBase {
     assertThat(summary.expectedCashMinor()).isEqualTo(openingFloat);
     assertThat(summary.countedCashMinor()).isNull();
     assertThat(summary.overShortMinor()).isNull();
+  }
+
+  @Test
+  void itemSalesReturnsPerItemUnitsAndGrossRevenueOverTheWindow() throws Exception {
+    UUID outlet = UUID.fromString("aaaaaaaa-5555-5555-5555-555555555555");
+
+    UUID burgerId =
+        asTenant(
+            () ->
+                menuService
+                    .createItem(
+                        new CreateMenuItemRequest(outlet, "Burger", "DRINK", 30_000L, "IDR"))
+                    .id());
+    UUID kebabId =
+        asTenant(
+            () ->
+                menuService
+                    .createItem(new CreateMenuItemRequest(outlet, "Kebab", "DRINK", 25_000L, "IDR"))
+                    .id());
+
+    // Two CASH checkouts through the REAL path: Burger×2 + Kebab×1, then Burger×1 in a SECOND sale
+    // —
+    // so Burger's 3 units span two sales (proves cross-sale aggregation, not just per-order).
+    asTenant(
+        () ->
+            orderService.checkout(
+                new CheckoutRequest(
+                    outlet,
+                    "items-a-" + UUID.randomUUID(),
+                    List.of(new OrderLineRequest(burgerId, 2), new OrderLineRequest(kebabId, 1)),
+                    new PaymentRequest(TenderType.CASH, 200_000L))));
+    asTenant(
+        () ->
+            orderService.checkout(
+                new CheckoutRequest(
+                    outlet,
+                    "items-b-" + UUID.randomUUID(),
+                    List.of(new OrderLineRequest(burgerId, 1)),
+                    new PaymentRequest(TenderType.CASH, 100_000L))));
+
+    List<ItemSalesResponse> items =
+        asTenant(
+            () ->
+                orderService.itemSales(
+                    outlet, Instant.EPOCH, Instant.parse("2999-12-31T00:00:00Z")));
+
+    // Best-sellers first: Burger (3 units across the two sales), then Kebab (1). Revenue = GROSS
+    // line
+    // totals: Burger 3 × 30,000 = 90,000; Kebab 1 × 25,000 = 25,000. Name is the sold-time
+    // snapshot.
+    assertThat(items).hasSize(2);
+    assertThat(items.get(0).menuItemId()).isEqualTo(burgerId);
+    assertThat(items.get(0).name()).isEqualTo("Burger");
+    assertThat(items.get(0).soldQty()).isEqualTo(3L);
+    assertThat(items.get(0).revenueMinor()).isEqualTo(90_000L);
+    assertThat(items.get(1).menuItemId()).isEqualTo(kebabId);
+    assertThat(items.get(1).name()).isEqualTo("Kebab");
+    assertThat(items.get(1).soldQty()).isEqualTo(1L);
+    assertThat(items.get(1).revenueMinor()).isEqualTo(25_000L);
+
+    // Window EXCLUSION: a window entirely BEFORE these sales returns nothing (proves the time
+    // filter).
+    List<ItemSalesResponse> none =
+        asTenant(
+            () ->
+                orderService.itemSales(
+                    outlet, Instant.EPOCH, Instant.parse("2020-01-01T00:00:00Z")));
+    assertThat(none).isEmpty();
   }
 
   /** The GROSS sales settled to a tender on the summary (0 if that tender line is absent). */

@@ -3,6 +3,7 @@ package id.co.nativeapp.restaurant.order.controller;
 import id.co.nativeapp.restaurant.order.dto.CheckoutRequest;
 import id.co.nativeapp.restaurant.order.dto.CheckoutResult;
 import id.co.nativeapp.restaurant.order.dto.ItemPopularityResponse;
+import id.co.nativeapp.restaurant.order.dto.ItemSalesResponse;
 import id.co.nativeapp.restaurant.order.dto.OrderResponse;
 import id.co.nativeapp.restaurant.order.dto.ParkOrderRequest;
 import id.co.nativeapp.restaurant.order.dto.ParkedOrderSummary;
@@ -14,6 +15,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
@@ -136,6 +138,25 @@ public class OrderController {
   public ResponseEntity<List<ItemPopularityResponse>> itemPopularity(
       @RequestParam UUID businessId) {
     return ResponseEntity.ok(orderService.itemPopularity(businessId));
+  }
+
+  /**
+   * Per-menu-item units sold + gross revenue over a time window {@code [from, to)}, best-sellers
+   * first — the Z-report items section (called with the register session's window) and the
+   * stock-opname "sold today" reference (called with the local-day bounds). The client passes the
+   * window bounds as ISO-8601 instants, matching {@code GET /api/v1/sales}. Returns {@code 200 OK};
+   * empty list when nothing sold in the window.
+   */
+  @Operation(
+      summary = "Per-item sales over a window",
+      description =
+          "Units sold + gross revenue per menu item whose sale occurred in [from, to) at a"
+              + " business, best-sellers first. Powers the Z-report items section and the"
+              + " stock-opname sold-today reference. Returns 200 OK; empty when nothing sold.")
+  @GetMapping("/item-sales")
+  public ResponseEntity<List<ItemSalesResponse>> itemSales(
+      @RequestParam UUID businessId, @RequestParam Instant from, @RequestParam Instant to) {
+    return ResponseEntity.ok(orderService.itemSales(businessId, from, to));
   }
 
   /**

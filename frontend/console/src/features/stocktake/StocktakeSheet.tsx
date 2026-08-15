@@ -17,7 +17,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
-import { ClipboardCheck, TriangleAlert, X } from 'lucide-react'
+import { ChevronDown, ClipboardCheck, TriangleAlert, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { ListSkeleton, Skeleton } from '@/components/ui/Skeleton'
@@ -25,6 +25,8 @@ import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { formatMoney } from '@/lib/money'
 import type { CompanySession } from '@/lib/session'
+import { useItemSales, type ItemSalesResponse } from '@/features/pos/api'
+import { localDayBounds } from '@/features/pos/salesHistoryApi'
 import { useIngredients, type Ingredient } from '@/features/inventory/ingredientApi'
 import {
   useSubmitIngredientStocktake,
@@ -68,6 +70,12 @@ export function StocktakeSheet({
   const navigate = useNavigate()
   const ingredientsQuery = useIngredients(session)
   const submit = useSubmitIngredientStocktake(session)
+
+  // "Sold today" reference for the opname — units + omzet per MENU item over the local day, a
+  // read-only aid to reconcile the physical count (the stocktake itself is ingredient-keyed, ADR
+  // 0046). Day bounds are truncated to the calendar day, so from/to are stable across renders.
+  const { from, to } = localDayBounds(new Date())
+  const soldTodayQuery = useItemSales(session, from, to)
 
   const ingredients: Ingredient[] = ingredientsQuery.data ?? []
 
@@ -172,6 +180,12 @@ export function StocktakeSheet({
           </div>
         ) : (
           <>
+            <SoldTodayPanel
+              items={soldTodayQuery.data ?? []}
+              loading={soldTodayQuery.isLoading}
+              currency={currency}
+              locale={locale}
+            />
             <p className="shrink-0 px-5 pt-3 text-xs leading-relaxed text-ink-3">{t('stocktake.entryHint')}</p>
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-3">
               <ul className="space-y-2">
@@ -205,6 +219,67 @@ export function StocktakeSheet({
           </>
         )}
       </div>
+    </div>
+  )
+}
+
+/**
+ * A collapsible, read-only "items sold today" reference in the stock-opname flow — units + gross
+ * omzet per MENU item over the local day (from useItemSales). Collapsed by default so the ingredient
+ * count stays the focus; expanded it caps its height and scrolls. Purely informational (helps the
+ * operator sanity-check the physical count); it never feeds the ingredient submission.
+ */
+function SoldTodayPanel({
+  items,
+  loading,
+  currency,
+  locale,
+}: {
+  items: ItemSalesResponse[]
+  loading: boolean
+  currency: string
+  locale: string
+}) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div className="shrink-0 border-b border-line px-5 pt-3">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 rounded-lg py-1.5 text-left text-[13px] font-semibold text-ink-2 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+      >
+        <ChevronDown
+          className={cn('size-4 shrink-0 text-ink-3 transition-transform', open && 'rotate-180')}
+          aria-hidden="true"
+        />
+        <span className="flex-1">{t('stocktake.soldTodayTitle')}</span>
+      </button>
+      {open ? (
+        <div className="max-h-44 overflow-y-auto overscroll-contain pb-2">
+          {loading ? (
+            <p className="py-2 text-center text-xs text-ink-3">…</p>
+          ) : items.length === 0 ? (
+            <p className="py-2 text-center text-xs text-ink-3">{t('stocktake.soldTodayEmpty')}</p>
+          ) : (
+            <ul className="divide-y divide-line">
+              {items.map((it) => (
+                <li key={it.menuItemId} className="flex items-center gap-3 py-1.5 text-sm">
+                  <span className="tnum w-9 shrink-0 font-mono font-bold text-ink">
+                    {it.soldQty}×
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-ink-2">{it.name}</span>
+                  <span className="tnum shrink-0 font-mono text-[12px] text-ink-3">
+                    {formatMoney(it.revenueMinor, currency, locale)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
     </div>
   )
 }
