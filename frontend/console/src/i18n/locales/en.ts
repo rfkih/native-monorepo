@@ -1239,6 +1239,14 @@ export const en = {
     countedLabel: 'Counted cash in drawer',
     countedHint: 'Count the WHOLE drawer including the float. The expected amount and the difference are computed by the system.',
     closeAction: 'Close register',
+    /** Owner request — mismatch confirm: when the counted drawer ≠ the system's expected cash, make
+     * the cashier reconfirm the entered amount before the close commits. The server stays the source
+     * of truth; this is only a fat-finger safety net. Reuses `expected`/`counted`/`result*` above. */
+    confirmMismatchTitle: 'Double-check the cash count',
+    confirmMismatchBody:
+      'The counted cash doesn’t match what the system expects in the drawer. Please confirm the amount you entered is correct before closing.',
+    confirmProceed: 'Yes, close register',
+    confirmRecount: 'Check the count again',
     cashSales: 'Cash sales',
     cashRefunds: 'Cash refunds',
     expected: 'Expected in drawer',

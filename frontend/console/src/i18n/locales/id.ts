@@ -1227,6 +1227,14 @@ export const id = {
     countedLabel: 'Uang tunai terhitung di laci',
     countedHint: 'Hitung SELURUH isi laci termasuk modal awal. Jumlah seharusnya dan selisihnya dihitung oleh sistem.',
     closeAction: 'Tutup kasir',
+    /** Permintaan owner — konfirmasi selisih: bila kas terhitung ≠ kas seharusnya menurut sistem,
+     * kasir harus mengonfirmasi jumlah yang dimasukkan sebelum closing dijalankan. Sistem tetap
+     * sumber kebenaran; ini hanya jaring pengaman salah ketik. Pakai ulang `expected`/`counted`/`result*`. */
+    confirmMismatchTitle: 'Periksa lagi hitungan kas',
+    confirmMismatchBody:
+      'Uang tunai terhitung tidak sama dengan yang seharusnya ada di laci menurut sistem. Pastikan jumlah yang Anda masukkan sudah benar sebelum menutup kasir.',
+    confirmProceed: 'Ya, tutup kasir',
+    confirmRecount: 'Periksa lagi hitungannya',
     cashSales: 'Penjualan tunai',
     cashRefunds: 'Refund tunai',
     expected: 'Seharusnya di laci',

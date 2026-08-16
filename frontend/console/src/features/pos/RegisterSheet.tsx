@@ -19,6 +19,7 @@ import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { formatMoney } from '@/lib/money'
 import type { CompanySession } from '@/lib/session'
+import { needsCountConfirmation } from './lib/closeGuard'
 import { parseDiscountInput } from './lib/discountInput'
 import { minorToMajorInput } from './lib/registerFloat'
 import {
@@ -101,9 +102,21 @@ export function RegisterSheet({
   const [tenderCounts, setTenderCounts] = useState<Record<string, string>>({})
   // Held after a successful close so the verdict stays visible (the query flips to 204/null).
   const [closed, setClosed] = useState<RegisterSessionResponse | null>(null)
+  // Owner request — the cashier tapped "Close" while the counted drawer didn't match expected cash:
+  // hold the close behind a confirm step so a fat-fingered count can be caught before it commits.
+  const [confirmMismatch, setConfirmMismatch] = useState(false)
 
   const current = currentQuery.data ?? null
   const busy = openSession.isPending || closeSession.isPending
+  // The live expected CASH in the drawer (float + cash sales − cash refunds) — the same preview the
+  // cashier sees above. Null until the preview loads → the mismatch guard simply doesn't fire, and
+  // the server stays the source of truth for the recorded over/short either way.
+  const expectedCashMinor =
+    expectedQuery.data?.tenders.find((td) => td.tenderType === 'CASH')?.expectedMinor ?? null
+  // The counted-drawer entry as minor units — drives the mismatch guard and the confirm preview.
+  const countedPreviewMinor = parseDiscountInput(countedInput, currency)
+  const mismatchOverShort =
+    expectedCashMinor != null ? countedPreviewMinor - expectedCashMinor : 0
 
   // Float default (owner request): "the float should be filled at start of the day, defaulting to
   // the last day's cash count" — the cash-stays-in-drawer-overnight model. Fetched only while the
@@ -136,8 +149,20 @@ export function RegisterSheet({
     )
   }
 
-  function handleClose() {
+  // Close tapped: if the counted drawer differs from the system's expected cash, make the cashier
+  // confirm the entered amount first (owner request) instead of committing the close straight away.
+  function handleCloseClick() {
     if (!current) return
+    if (needsCountConfirmation(expectedCashMinor, countedPreviewMinor)) {
+      setConfirmMismatch(true)
+      return
+    }
+    doClose()
+  }
+
+  function doClose() {
+    if (!current) return
+    setConfirmMismatch(false)
     // Only tenders the cashier actually entered are settled (ADR 0038); the rest are left unsettled.
     const nonCash = Object.entries(tenderCounts)
       .filter(([, raw]) => raw.trim() !== '')
@@ -174,6 +199,7 @@ export function RegisterSheet({
         : t('register.titleOpen')
 
   return (
+    <>
     <div
       className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4 backdrop-blur-sm"
       role="dialog"
@@ -356,7 +382,7 @@ export function RegisterSheet({
               className="w-full"
               data-testid="register-close"
               disabled={busy || countedInput.trim() === ''}
-              onClick={handleClose}
+              onClick={handleCloseClick}
             >
               {busy ? <Spinner /> : t('register.closeAction')}
             </Button>
@@ -430,6 +456,75 @@ export function RegisterSheet({
         )}
       </div>
     </div>
+
+    {/* Owner request — mismatch confirm: the counted drawer ≠ the system's expected cash, so make
+        the cashier reconfirm the amount before the close commits (a fat-finger safety net; the
+        server still records whatever is submitted as the authoritative over/short). */}
+    {confirmMismatch && expectedCashMinor != null ? (
+      <div
+        className="fixed inset-0 z-[60] grid place-items-center bg-black/50 p-4 backdrop-blur-sm"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('register.confirmMismatchTitle')}
+      >
+        <div
+          className="reveal w-full max-w-sm space-y-4 rounded-card border border-line bg-surface p-5 shadow-lg"
+          data-testid="register-mismatch-confirm"
+        >
+          <h3 className="font-display text-lg font-semibold text-ink">
+            {t('register.confirmMismatchTitle')}
+          </h3>
+          <p className="text-sm text-ink-3">{t('register.confirmMismatchBody')}</p>
+          <div className="space-y-2 rounded-xl bg-ink-50 px-4 py-3">
+            <ResultRow
+              label={t('register.expected')}
+              minor={expectedCashMinor}
+              currency={currency}
+              locale={locale}
+            />
+            <ResultRow
+              label={t('register.counted')}
+              minor={countedPreviewMinor}
+              currency={currency}
+              locale={locale}
+              strong
+            />
+            <div
+              className={cn(
+                'flex items-baseline justify-between border-t border-line pt-2 text-sm font-semibold',
+                mismatchOverShort > 0 ? 'text-profit-ink' : 'text-loss',
+              )}
+            >
+              <span>
+                {mismatchOverShort > 0 ? t('register.resultOver') : t('register.resultShort')}
+              </span>
+              <span className="tnum font-mono">
+                {formatMoney(Math.abs(mismatchOverShort), currency, locale)}
+              </span>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1"
+              data-testid="register-mismatch-recount"
+              onClick={() => setConfirmMismatch(false)}
+            >
+              {t('register.confirmRecount')}
+            </Button>
+            <Button
+              className="flex-1"
+              data-testid="register-mismatch-proceed"
+              disabled={busy}
+              onClick={doClose}
+            >
+              {busy ? <Spinner /> : t('register.confirmProceed')}
+            </Button>
+          </div>
+        </div>
+      </div>
+    ) : null}
+    </>
   )
 }
 
