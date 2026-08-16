@@ -68,7 +68,8 @@ class LaborCostPostingTest extends PostgresRlsTestBase {
 
     // The P&L expense leg moved up; net = -expense for a labor-only period.
     ConsolidatedPnl pnl =
-        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.pnlForPeriod(period)).orElseThrow();
+        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.accumulatedPnlForPeriod(period))
+            .orElseThrow();
     assertThat(pnl.expense()).isEqualTo(Money.ofMinor(amount, "IDR"));
     assertThat(pnl.net()).isEqualTo(Money.ofMinor(-amount, "IDR"));
     assertThat(pnl.usesIllustrativeRules()).isFalse();
@@ -92,7 +93,8 @@ class LaborCostPostingTest extends PostgresRlsTestBase {
     // One ledger row only; the P&L expense reflects a single application (no double-count).
     assertThat(ledgerCountAsAdmin()).isEqualTo(1L);
     ConsolidatedPnl pnl =
-        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.pnlForPeriod(period)).orElseThrow();
+        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.accumulatedPnlForPeriod(period))
+            .orElseThrow();
     assertThat(pnl.expense()).isEqualTo(Money.ofMinor(amount, "IDR"));
   }
 
@@ -123,7 +125,8 @@ class LaborCostPostingTest extends PostgresRlsTestBase {
 
     // The P&L row is flagged illustrative.
     ConsolidatedPnl afterIllustrative =
-        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.pnlForPeriod(period)).orElseThrow();
+        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.accumulatedPnlForPeriod(period))
+            .orElseThrow();
     assertThat(afterIllustrative.usesIllustrativeRules()).isTrue();
 
     // A later NON-illustrative bucket for the SAME period (a separate, clean run_seq=2
@@ -146,7 +149,8 @@ class LaborCostPostingTest extends PostgresRlsTestBase {
                     occurredAt)))
         .isTrue();
     ConsolidatedPnl afterClean =
-        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.pnlForPeriod(period)).orElseThrow();
+        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.accumulatedPnlForPeriod(period))
+            .orElseThrow();
     assertThat(afterClean.usesIllustrativeRules()).as("sticky — stays flagged").isTrue();
     // Net per period is exactly the latest clean run (3M): the illustrative run was reversed.
     assertThat(afterClean.expense()).isEqualTo(Money.ofMinor(3_000_000L, "IDR"));
@@ -184,7 +188,8 @@ class LaborCostPostingTest extends PostgresRlsTestBase {
 
     // The cost is real and visible in the P&L expense leg (required for reconciliation to balance).
     ConsolidatedPnl pnl =
-        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.pnlForPeriod(period)).orElseThrow();
+        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.accumulatedPnlForPeriod(period))
+            .orElseThrow();
     assertThat(pnl.expense()).isEqualTo(Money.ofMinor(amount, "IDR"));
   }
 
@@ -225,7 +230,8 @@ class LaborCostPostingTest extends PostgresRlsTestBase {
 
     // The cost is visible in the P&L expense leg like any other labor bucket.
     ConsolidatedPnl pnl =
-        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.pnlForPeriod(period)).orElseThrow();
+        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.accumulatedPnlForPeriod(period))
+            .orElseThrow();
     assertThat(pnl.expense()).isEqualTo(Money.ofMinor(amount, "IDR"));
   }
 
@@ -300,7 +306,8 @@ class LaborCostPostingTest extends PostgresRlsTestBase {
     // The P&L read does NOT throw "Multiple currencies": there is exactly one (IDR) row for the
     // period.
     ConsolidatedPnl pnl =
-        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.pnlForPeriod(period)).orElseThrow();
+        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.accumulatedPnlForPeriod(period))
+            .orElseThrow();
     assertThat(pnl.expense()).isEqualTo(Money.ofMinor(20_000_000L, "IDR"));
   }
 

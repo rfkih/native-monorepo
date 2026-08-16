@@ -73,7 +73,8 @@ class ExpenseRecordedConsumeAcceptanceTest extends KafkaPostgresTestBase {
 
     // The P&L read model reflects revenue, expense, and net.
     ConsolidatedPnl pnl =
-        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.pnlForPeriod(period)).orElseThrow();
+        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.accumulatedPnlForPeriod(period))
+            .orElseThrow();
     assertThat(pnl.revenue()).isEqualTo(Money.ofMinor(revenueMinor, "IDR"));
     assertThat(pnl.expense()).isEqualTo(Money.ofMinor(expenseMinor, "IDR"));
     assertThat(pnl.net()).isEqualTo(Money.ofMinor(revenueMinor - expenseMinor, "IDR"));
@@ -98,7 +99,8 @@ class ExpenseRecordedConsumeAcceptanceTest extends KafkaPostgresTestBase {
 
     // The duplicate expense was NOT re-applied: expense is the original + the 1-minor marker only.
     ConsolidatedPnl afterDup =
-        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.pnlForPeriod(period)).orElseThrow();
+        TenantContext.callAs(TENANT_A, ACTOR_A, () -> pnlReader.accumulatedPnlForPeriod(period))
+            .orElseThrow();
     assertThat(afterDup.expense()).isEqualTo(Money.ofMinor(expenseMinor + 1L, "IDR"));
     assertThat(afterDup.revenue()).isEqualTo(Money.ofMinor(revenueMinor, "IDR"));
   }

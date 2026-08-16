@@ -83,3 +83,4 @@ boundary, a security posture. Routine, local choices do not need one — use a c
 | [0062](0062-web-build-version-gate.md) | Web-build version gate — a soft "update available" prompt + self-healing reload; root `/` served no-store so the SW-less Native shell picks up deploys | Accepted |
 | [0063](0063-bill-attachments-private-media.md) | Bill attachments (photo/PDF real receipt) — private content-addressed media; anon MinIO policy narrowed to menu images only | Accepted |
 | [0064](0064-manager-close-correction-reverse-repost.md) | Manager/owner correction of a completed closing — reverse + re-post the cash variance (never mutate); stock opname self-compensates; recent/unsealed + owner/manager only | Accepted |
+| [0065](0065-gl-derived-dashboard-pnl.md) | Dashboard P&L is GL-derived (shares the income-statement computation) so beranda "Laba bersih" == Laba-Rugi report; `consolidated_pnl` demoted to write-path currency-guard state | Accepted |

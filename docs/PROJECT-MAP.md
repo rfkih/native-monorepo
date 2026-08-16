@@ -66,7 +66,7 @@ Ports/creds for local run: see RUNBOOK. Each non-gateway service connects as its
 Postgres role `<svc>_service` (so **RLS is enforced at runtime**).
 
 ## finance-service feature packages (the consolidation core, by area)
-`revenue` (SaleRecorded→ledger+consolidated_revenue) · `expense` (ExpenseRecorded) · `pnl` (consolidated P&L) ·
+`revenue` (SaleRecorded→ledger+consolidated_revenue) · `expense` (ExpenseRecorded) · `pnl` (dashboard P&L — GL-derived == income statement, ADR 0065; `consolidated_pnl` now write-path currency-guard only) ·
 `mapping` (chart_of_account + gl resolution) · `labor` (Payroll/LaborCost→labor cost, P3b) · `fx` (fx_rate +
 translation + presentation, P3c) · `group` (group membership read model, P3d-1) · `grouptb` (group
 trial-balance ingest + the two-GUC RLS, P3d-2) · `consolidation` (the group close engine + eliminations +

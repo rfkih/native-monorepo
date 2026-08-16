@@ -7,7 +7,7 @@ import id.co.nativeapp.finance.expense.service.ExpensePostingService;
 import id.co.nativeapp.finance.fx.dto.PnlPresentation;
 import id.co.nativeapp.finance.fx.dto.RevenuePresentation;
 import id.co.nativeapp.finance.fx.service.PresentationConverter;
-import id.co.nativeapp.finance.pnl.domain.ConsolidatedPnl;
+import id.co.nativeapp.finance.pnl.domain.PnlFigures;
 import id.co.nativeapp.finance.pnl.service.PnlReader;
 import id.co.nativeapp.finance.revenue.messaging.SaleRecordedEvent;
 import id.co.nativeapp.finance.revenue.service.RevenuePostingService;
@@ -87,7 +87,7 @@ class PresentationReadOnlyTest extends PostgresRlsTestBase {
             TENANT,
             ACTOR,
             () -> {
-              ConsolidatedPnl pnl = pnlReader.pnlForPeriod(PERIOD).orElseThrow();
+              PnlFigures pnl = pnlReader.pnlForPeriod(PERIOD).orElseThrow();
               return presentationConverter.convertPnl(pnl, PERIOD, USD);
             });
 

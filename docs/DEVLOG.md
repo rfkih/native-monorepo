@@ -5,6 +5,30 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-16 — Dashboard P&L is GL-derived — one "Laba bersih" (ADR 0065)
+
+Owner report (Bara Kebab, rfkih23@gmail.com): the beranda net profit ≠ the Laba-Rugi (income
+statement) net profit for the same month. Root cause: `GET /api/v1/pnl` (dashboard) read the
+`consolidated_pnl` **accumulator**, fed only by hand-picked POS writers (SaleRecorded net revenue,
+reversals, ExpenseRecorded, expense claims, labor, stocktake shrinkage), while the income statement is
+GL-derived. Everything that hits the GL but no accumulator writer — register-close cash variance
+(5700/4300), QRIS/platform fees, depreciation, disposal, service charge, AR/AP — showed on the
+statement but not the dashboard. Classic "accumulator fed by selected writers" anti-pattern (each new
+writer must remember to feed it). **Fix (Option A, consistency-first):** `PnlReader.pnlForPeriod` now
+delegates to the same `IncomeStatementReader` the statement uses, returning a new immutable
+`pnl.domain.PnlFigures`; beranda == Laba-Rugi **by construction**. `PnlResponse` HTTP contract
+byte-identical (incl. the presentation-currency lens) → **zero frontend change**. `consolidated_pnl`
++ its writers stay, now serving only the two write-path currency guards (read via the new
+`PnlReader.accumulatedPnlForPeriod`); retiring the accumulator is deferred. Behaviour deltas (all
+improvements): multi-currency period 500→**422**; a GL-nonempty zero-P&L period 204→**200 zeros**.
+New `PnlMatchesIncomeStatementTest` seeds a sale + a register-close cash short and proves
+`pnl.net == income.net` while the old accumulator missed the short; the 9 writer-acceptance suites
+repoint to `accumulatedPnlForPeriod`. Full finance-service `test` (unit + ArchUnit + Testcontainers)
+green. **Known follow-ups (pre-existing GL bugs the unified number inherits, NOT introduced here):**
+labor supersession posts no GL contra (`TODO(GL-labor-reversal)` → GL overstates labor on payroll
+re-runs); labor `Dr 6000 / Cr 6900` (both EXPENSE) nets to zero until `PayrollLiabilitiesPosted`
+clears 6900 (accrual-vs-liability timing). Both already affected the income statement; deferred.
+
 ## 2026-08-16 — Auto stock-tracking (1:1 auto-link) + per-day usage aggregate (ADR 0050 follow-up)
 
 Owner ask: "aku mau setiap menu sudah otomatis mengurangi stock … jadi ketika stock opname sudah di
