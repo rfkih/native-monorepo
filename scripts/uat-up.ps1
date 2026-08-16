@@ -1,4 +1,4 @@
-# Native UAT — bring up (or re-wire) the public UAT stack.
+﻿# Native UAT — bring up (or re-wire) the public UAT stack.
 #
 #   .\scripts\uat-up.ps1              full run: build jars + images, start, wire, smoke
 #   .\scripts\uat-up.ps1 -SkipBuild   restart/re-wire only (e.g. after the tunnel died)
