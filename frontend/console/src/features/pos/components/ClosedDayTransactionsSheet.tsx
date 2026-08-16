@@ -58,11 +58,15 @@ export function ClosedDayTransactionsSheet({
   const [selected, setSelected] = useState<SaleHistoryRow | null>(null)
   const order = useOrderReceipt(session, selected?.orderId ?? null)
 
-  const rows = history.data ?? []
+  const fetched = history.data ?? []
+  // Match the Z-report's universe (flaw-audit W2): the count/net one level up sum only TENDERED
+  // sales (`tender_type IS NOT NULL`), so untendered legacy rows are dropped here too — otherwise a
+  // day could say "3 txn" yet list 5 rows with no explanation.
+  const rows = fetched.filter((r) => r.tenderType != null)
   // No header total here (review W2): a summed GROSS of these rows would contradict the NET shown one
   // level up (the Z-report), which already subtracts refunds — the authoritative figures live there.
-  // The server caps the list at its newest 200 rows; at the cap we show only the cap note.
-  const capped = rows.length >= 200
+  // The server caps the list at its newest 200 rows; the cap note keys off the RAW fetch size.
+  const capped = fetched.length >= 200
   const timeFormat = new Intl.DateTimeFormat(locale, { timeStyle: 'short' })
 
   const receiptReady = selected != null && order.data != null && order.data.payment != null

@@ -4,6 +4,7 @@ import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.ResponseBytes;
 import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.http.apache5.Apache5HttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
@@ -37,6 +38,16 @@ public final class S3MediaStorage implements MediaStorage {
                 StaticCredentialsProvider.create(
                     AwsBasicCredentials.create(properties.accessKey(), properties.secretKey())))
             .forcePathStyle(true)
+            // §4 Resilience (flaw-audit C1): OWNED timeouts, never the SDK's 30s-with-retries
+            // defaults. connect/socket bound each network hop; apiCallTimeout is the hard ceiling
+            // on one whole call INCLUDING retries — a hung MinIO fails a serve in seconds instead
+            // of pinning the calling thread (and, before the reader split, a DB connection) for
+            // minutes.
+            .httpClientBuilder(
+                Apache5HttpClient.builder()
+                    .connectionTimeout(properties.connectTimeout())
+                    .socketTimeout(properties.socketTimeout()))
+            .overrideConfiguration(o -> o.apiCallTimeout(properties.apiCallTimeout()))
             .build(),
         properties.bucket());
   }

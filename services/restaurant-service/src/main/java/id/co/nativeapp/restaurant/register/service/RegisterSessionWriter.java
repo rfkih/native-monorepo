@@ -88,7 +88,11 @@ public class RegisterSessionWriter {
    */
   private static final ZoneId DEFAULT_BUSINESS_ZONE = ZoneId.of("Asia/Jakarta");
 
-  /** Cap on the past closed-day history browse — bounded, index-backed, newest first. */
+  /**
+   * Cap on the past closed-day history browse — 90 SESSIONS (not days: a multi-shift outlet closes
+   * more than once per day, so this is ~45 calendar days at two shifts). Bounded, index-backed,
+   * newest first.
+   */
   private static final int CLOSED_HISTORY_LIMIT = 90;
 
   /**

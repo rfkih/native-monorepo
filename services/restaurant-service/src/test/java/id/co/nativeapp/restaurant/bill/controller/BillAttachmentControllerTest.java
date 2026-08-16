@@ -2,6 +2,8 @@ package id.co.nativeapp.restaurant.bill.controller;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -11,8 +13,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import id.co.nativeapp.restaurant.bill.domain.BillAttachment;
+import id.co.nativeapp.restaurant.bill.domain.BillAttachmentLimitExceededException;
 import id.co.nativeapp.restaurant.bill.domain.InvalidBillAttachmentException;
-import id.co.nativeapp.restaurant.bill.dto.BillAttachmentContentResponse;
+import id.co.nativeapp.restaurant.bill.dto.BillAttachmentContentMeta;
 import id.co.nativeapp.restaurant.bill.service.BillAttachmentReader;
 import id.co.nativeapp.restaurant.bill.service.BillAttachmentWriter;
 import id.co.nativeapp.restaurant.config.BillAttachmentAdvice;
@@ -86,8 +89,9 @@ class BillAttachmentControllerTest {
 
   @Test
   void streamingAnAttachmentCarriesPrivateCacheEtagAndNosniff() throws Exception {
-    when(reader.content(BILL_ID, ATT_ID))
-        .thenReturn(new BillAttachmentContentResponse("image/png", PNG, SHA));
+    when(reader.contentMeta(BILL_ID, ATT_ID))
+        .thenReturn(new BillAttachmentContentMeta("image/png", SHA, "restaurant/t/bill/k.png"));
+    when(reader.payload("restaurant/t/bill/k.png")).thenReturn(PNG);
 
     mockMvc
         .perform(get(BASE + "/{id}/attachments/{aid}", BILL_ID, ATT_ID))
@@ -98,5 +102,33 @@ class BillAttachmentControllerTest {
         .andExpect(header().string("X-Content-Type-Options", "nosniff"))
         .andExpect(header().string("Cache-Control", containsString("private")))
         .andExpect(header().string("Cache-Control", containsString("max-age=300")));
+  }
+
+  @Test
+  void aMatchingIfNoneMatchShortCircuitsTo304WithoutFetchingBytes() throws Exception {
+    // Flaw-audit C1/S1: a revalidation is answered from the metadata row alone — the object store
+    // is NEVER touched (payload would throw if called; it is left unstubbed on purpose).
+    when(reader.contentMeta(BILL_ID, ATT_ID))
+        .thenReturn(new BillAttachmentContentMeta("image/png", SHA, "restaurant/t/bill/k.png"));
+
+    mockMvc
+        .perform(
+            get(BASE + "/{id}/attachments/{aid}", BILL_ID, ATT_ID)
+                .header("If-None-Match", '"' + SHA + '"'))
+        .andExpect(status().isNotModified())
+        .andExpect(header().string("ETag", '"' + SHA + '"'));
+    verify(reader, never()).payload(any());
+  }
+
+  @Test
+  void theAttachmentCapIsMappedTo422ProblemDetail() throws Exception {
+    when(writer.upload(any(), any(), any(), any()))
+        .thenThrow(new BillAttachmentLimitExceededException(BILL_ID, 10));
+
+    mockMvc
+        .perform(multipart(BASE + "/{id}/attachments", BILL_ID).file(part()))
+        .andExpect(status().isUnprocessableEntity())
+        .andExpect(content().contentTypeCompatibleWith(PROBLEM_JSON))
+        .andExpect(jsonPath("$.type").value("https://errors.nativeapp.id/bill-attachment-limit"));
   }
 }

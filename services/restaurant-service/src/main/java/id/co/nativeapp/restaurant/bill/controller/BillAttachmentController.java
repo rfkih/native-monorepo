@@ -1,18 +1,18 @@
 package id.co.nativeapp.restaurant.bill.controller;
 
 import id.co.nativeapp.restaurant.bill.domain.BillAttachment;
-import id.co.nativeapp.restaurant.bill.dto.BillAttachmentContentResponse;
+import id.co.nativeapp.restaurant.bill.dto.BillAttachmentContentMeta;
 import id.co.nativeapp.restaurant.bill.dto.BillAttachmentMetaResponse;
 import id.co.nativeapp.restaurant.bill.service.BillAttachmentReader;
 import id.co.nativeapp.restaurant.bill.service.BillAttachmentWriter;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.io.IOException;
+import java.net.URI;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import org.springframework.http.CacheControl;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
@@ -53,7 +54,10 @@ public class BillAttachmentController {
       @PathVariable UUID id, @RequestPart("file") MultipartFile file) throws IOException {
     BillAttachment attachment =
         writer.upload(id, file.getContentType(), file.getBytes(), file.getOriginalFilename());
-    return ResponseEntity.status(HttpStatus.CREATED)
+    // 201 + Location per §1.1. A byte-identical re-upload (network retry / double-tap) returns the
+    // EXISTING row idempotently — same shape, still Created-with-Location (the row does exist).
+    return ResponseEntity.created(
+            URI.create("/api/v1/bills/" + id + "/attachments/" + attachment.getId()))
         .body(BillAttachmentMetaResponse.from(attachment));
   }
 
@@ -65,19 +69,30 @@ public class BillAttachmentController {
 
   @Operation(summary = "Stream one of a bill's attachments (authenticated)")
   @GetMapping("/{id}/attachments/{attachmentId}")
-  public ResponseEntity<byte[]> content(@PathVariable UUID id, @PathVariable UUID attachmentId) {
-    BillAttachmentContentResponse content = reader.content(id, attachmentId);
+  public ResponseEntity<byte[]> content(
+      @PathVariable UUID id, @PathVariable UUID attachmentId, WebRequest request) {
+    // Two proxied reader calls, deliberately (flaw-audit C1): a short transactional METADATA read
+    // authorizes the serve and yields the ETag; the MinIO byte fetch runs OUTSIDE any DB
+    // transaction so a slow object store never pins a Hikari connection. The conditional check sits
+    // between them: an If-None-Match revalidation is answered 304 from the metadata row alone —
+    // no object-store round-trip, no 5 MiB in heap.
+    BillAttachmentContentMeta meta = reader.contentMeta(id, attachmentId);
+    String etag = meta.etag();
+    if (request.checkNotModified(etag)) {
+      // checkNotModified already wrote 304 + the ETag header; Spring ignores this null body.
+      return null;
+    }
+    byte[] data = reader.payload(meta.objectKey());
     // Private short cache + the content sha256 as ETag (immutable content → a revisit revalidates
     // cheaply to 304), nosniff on an authenticated binary response. Same idiom as the
-    // expense-receipt
-    // serve — never the anonymous immutable /api/media caching (this is sensitive).
+    // expense-receipt serve — never the anonymous immutable /api/media caching (this is sensitive).
     return ResponseEntity.ok()
-        .contentType(MediaType.parseMediaType(content.contentType()))
-        .contentLength(content.data().length)
+        .contentType(MediaType.parseMediaType(meta.contentType()))
+        .contentLength(data.length)
         .cacheControl(CacheControl.maxAge(5, TimeUnit.MINUTES).cachePrivate())
-        .eTag('"' + content.sha256() + '"')
+        .eTag(etag)
         .header("X-Content-Type-Options", "nosniff")
-        .body(content.data());
+        .body(data);
   }
 
   @Operation(summary = "Remove one of a bill's attachments")

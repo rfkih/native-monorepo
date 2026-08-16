@@ -91,7 +91,18 @@ smoke() { # cheap end-to-end probes through the edge (the tunnels' origin), from
     401|403|404|200) : ;;
     *) log "SMOKE FAIL: gateway via edge (status='${status:-none}')"; return 1 ;;
   esac
-  log "smoke OK (console, employee, keycloak issuer, gateway status=$status)"
+  # ADR 0063 (flaw-audit W5): the MinIO anon policy MUST be narrowed to menu/* — a BILL-prefix key
+  # must come back 403 (denied), never 404 (key-miss under a covering policy = bill receipts are
+  # publicly fetchable; re-run docker/minio/init.sh on this env). Menu stays anon-readable (404 on
+  # a bogus key). Skipped only if the media route itself is absent (pre-0048 stack).
+  bogus=$(printf '0%.0s' $(seq 1 64))
+  bill_status=$(docker exec native-prod-edge sh -c \
+    "wget -qO /dev/null -T 10 --server-response http://127.0.0.1:8080/api/media/restaurant/smoke/bill/${bogus}.jpg 2>&1 \
+     | grep -oE 'HTTP/[0-9.]+ [0-9]{3}' | tail -1 | grep -oE '[0-9]{3}\$'")
+  if [ "$bill_status" != "403" ]; then
+    log "SMOKE FAIL: anon media policy too broad — bill-prefix key returned '${bill_status:-none}' (expected 403). Re-run minio init."; return 1
+  fi
+  log "smoke OK (console, employee, keycloak issuer, gateway status=$status, bill-media anon=403)"
 }
 
 pull_with_retry() { # pull_with_retry <images.yml> — registries blip (TLS timeouts); retry before failing

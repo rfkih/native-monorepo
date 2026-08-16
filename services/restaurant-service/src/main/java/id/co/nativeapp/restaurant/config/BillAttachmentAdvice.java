@@ -1,5 +1,6 @@
 package id.co.nativeapp.restaurant.config;
 
+import id.co.nativeapp.restaurant.bill.domain.BillAttachmentLimitExceededException;
 import id.co.nativeapp.restaurant.bill.domain.InvalidBillAttachmentException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
@@ -43,6 +44,16 @@ public class BillAttachmentAdvice {
     ProblemDetail problem =
         problem(HttpStatus.UNPROCESSABLE_ENTITY, "bill-attachment-invalid", request);
     problem.setTitle("Invalid attachment");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  @ExceptionHandler(BillAttachmentLimitExceededException.class)
+  public ProblemDetail handleLimit(
+      BillAttachmentLimitExceededException ex, HttpServletRequest request) {
+    ProblemDetail problem =
+        problem(HttpStatus.UNPROCESSABLE_ENTITY, "bill-attachment-limit", request);
+    problem.setTitle("Attachment limit reached");
     problem.setDetail(ex.getMessage());
     return problem;
   }

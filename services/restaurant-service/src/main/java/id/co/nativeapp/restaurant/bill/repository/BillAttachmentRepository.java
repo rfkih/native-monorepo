@@ -3,6 +3,7 @@ package id.co.nativeapp.restaurant.bill.repository;
 import id.co.nativeapp.restaurant.bill.domain.BillAttachment;
 import id.co.nativeapp.restaurant.bill.projection.BillAttachmentView;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -34,4 +35,18 @@ public interface BillAttachmentRepository extends JpaRepository<BillAttachment, 
           """,
       nativeQuery = true)
   List<BillAttachmentView> findMetaByBillId(@Param("billId") UUID billId);
+
+  /**
+   * The number of attachments already on a bill — backs the per-bill cap (flaw-audit W1: without a
+   * ceiling a looping client writes unbounded 5 MiB objects). Derived scalar count, RLS-scoped.
+   */
+  long countByBillId(UUID billId);
+
+  /**
+   * A bill's existing attachment with the given content hash, if any — the idempotency probe
+   * (flaw-audit W3): a byte-identical re-upload (network retry, double-tap) returns this row
+   * instead of inserting a duplicate. Derived query, RLS-scoped; the CHAR(64) column compares
+   * exactly against the 64-hex digest.
+   */
+  Optional<BillAttachment> findFirstByBillIdAndSha256(UUID billId, String sha256);
 }

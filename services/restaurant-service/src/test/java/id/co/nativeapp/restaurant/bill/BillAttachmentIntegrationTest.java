@@ -7,9 +7,10 @@ import id.co.nativeapp.mediastorage.MediaStorage;
 import id.co.nativeapp.mediastorage.Sha256;
 import id.co.nativeapp.restaurant.PostgresRlsTestBase;
 import id.co.nativeapp.restaurant.bill.domain.BillAttachment;
+import id.co.nativeapp.restaurant.bill.domain.BillAttachmentLimitExceededException;
 import id.co.nativeapp.restaurant.bill.domain.BillNotFoundException;
 import id.co.nativeapp.restaurant.bill.domain.InvalidBillAttachmentException;
-import id.co.nativeapp.restaurant.bill.dto.BillAttachmentContentResponse;
+import id.co.nativeapp.restaurant.bill.dto.BillAttachmentContentMeta;
 import id.co.nativeapp.restaurant.bill.dto.BillAttachmentMetaResponse;
 import id.co.nativeapp.restaurant.bill.dto.OpenBillRequest;
 import id.co.nativeapp.restaurant.bill.service.BillAttachmentReader;
@@ -78,21 +79,44 @@ class BillAttachmentIntegrationTest extends PostgresRlsTestBase {
         .extracting(BillAttachmentMetaResponse::contentType)
         .containsExactlyInAnyOrder("image/png", "application/pdf");
 
-    BillAttachmentContentResponse served = asA(() -> reader.content(billId, photo.getId()));
-    assertThat(served.data()).isEqualTo(PNG);
-    assertThat(served.contentType()).isEqualTo("image/png");
-    assertThat(served.sha256()).isEqualTo(Sha256.hex(PNG));
+    // The serve is TWO proxied calls (flaw-audit C1): a transactional metadata read, then the
+    // byte fetch with NO transaction — composed here exactly as the controller composes them.
+    BillAttachmentContentMeta meta = asA(() -> reader.contentMeta(billId, photo.getId()));
+    assertThat(meta.contentType()).isEqualTo("image/png");
+    assertThat(meta.sha256()).isEqualTo(Sha256.hex(PNG));
+    assertThat(reader.payload(meta.objectKey())).isEqualTo(PNG);
   }
 
   @Test
-  void reUploadingTheSamePhotoIsContentAddressed() throws Exception {
+  void reUploadingTheSameBytesOnTheSameBillIsIdempotent() throws Exception {
     UUID billId = openBill();
     BillAttachment first = asA(() -> writer.upload(billId, "image/png", PNG, "a.png"));
+    // Flaw-audit W3: a byte-identical re-upload (network retry / double-tap) returns the EXISTING
+    // row — one row, one object, no duplicate.
     BillAttachment second = asA(() -> writer.upload(billId, "image/png", PNG, "b.png"));
-    // Two rows (a bill keeps many), but the SAME sha256 → the SAME object key: stored once (dedup).
-    assertThat(second.getId()).isNotEqualTo(first.getId());
-    assertThat(second.getSha256()).isEqualTo(first.getSha256());
-    assertThat(asA(() -> reader.list(billId))).hasSize(2);
+    assertThat(second.getId()).isEqualTo(first.getId());
+    assertThat(asA(() -> reader.list(billId))).hasSize(1);
+  }
+
+  @Test
+  void anEleventhAttachmentOnOneBillIsRejected() throws Exception {
+    UUID billId = openBill();
+    // Ten DISTINCT payloads fill the cap (vary a trailing byte — the magic bytes stay valid).
+    for (int i = 0; i < BillAttachmentWriter.MAX_ATTACHMENTS_PER_BILL; i++) {
+      byte[] distinct = PNG.clone();
+      distinct[distinct.length - 1] = (byte) i;
+      asA(() -> writer.upload(billId, "image/png", distinct, "p" + ".png"));
+    }
+    byte[] eleventh = PNG.clone();
+    eleventh[eleventh.length - 1] = (byte) 0x7F;
+    assertThatThrownBy(() -> asA(() -> writer.upload(billId, "image/png", eleventh, "x.png")))
+        .isInstanceOf(BillAttachmentLimitExceededException.class);
+    // A byte-identical re-upload of an EXISTING attachment still replays fine at the cap.
+    byte[] replay = PNG.clone();
+    replay[replay.length - 1] = (byte) 3;
+    assertThat(asA(() -> writer.upload(billId, "image/png", replay, "p.png")).getId()).isNotNull();
+    assertThat(asA(() -> reader.list(billId)))
+        .hasSize(BillAttachmentWriter.MAX_ATTACHMENTS_PER_BILL);
   }
 
   @Test
@@ -115,7 +139,7 @@ class BillAttachmentIntegrationTest extends PostgresRlsTestBase {
     BillAttachment onA = asA(() -> writer.upload(billA, "image/png", PNG, "a.png"));
 
     // Same tenant, WRONG bill → 404 (never serve bill A's attachment under bill B).
-    assertThatThrownBy(() -> asA(() -> reader.content(billB, onA.getId())))
+    assertThatThrownBy(() -> asA(() -> reader.contentMeta(billB, onA.getId())))
         .isInstanceOf(BillNotFoundException.class);
   }
 

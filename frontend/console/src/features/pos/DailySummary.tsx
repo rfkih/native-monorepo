@@ -144,7 +144,10 @@ function buildSummaryProps(
   t: ReturnType<typeof useTranslation>['t'],
 ) {
   const money = (minor: number) => formatMoney(minor, s.currency, locale)
-  const dateFmt = new Intl.DateTimeFormat(locale, { dateStyle: 'medium' })
+  // dateFmt renders businessDate (a plain YYYY-MM-DD, parsed as UTC midnight) — format in UTC so a
+  // UTC-negative device never shows the previous day (flaw-audit W1). timeFmt renders true
+  // instants and stays device-local.
+  const dateFmt = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' })
   const timeFmt = new Intl.DateTimeFormat(locale, { timeStyle: 'short' })
   const closed = s.status === 'CLOSED'
 

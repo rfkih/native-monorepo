@@ -50,11 +50,15 @@ export function ClosingHistorySheet({
   const [correct, setCorrect] = useState<ClosedSessionSummary | null>(null)
 
   const rows = history.data ?? []
+  // businessDate is a plain YYYY-MM-DD calendar date: new Date() parses it as UTC midnight, so it
+  // MUST be formatted in UTC too (the lib/period.ts convention) — a device in a UTC-negative zone
+  // would otherwise label every closed day one day early (flaw-audit W1).
   const dateFmt = new Intl.DateTimeFormat(locale, {
     weekday: 'short',
     day: 'numeric',
     month: 'short',
     year: 'numeric',
+    timeZone: 'UTC',
   })
   const timeFmt = new Intl.DateTimeFormat(locale, { timeStyle: 'short' })
 

@@ -14,7 +14,7 @@
  */
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { CalendarClock, Coins, Package, TriangleAlert, X } from 'lucide-react'
+import { CalendarClock, CheckCircle2, Coins, Package, TriangleAlert, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { ApiError } from '@/lib/api'
@@ -64,21 +64,33 @@ export function CloseCorrectionSheet({
 
   const [countedInput, setCountedInput] = useState<string | null>(null)
   const [reason, setReason] = useState('')
+  // Held after a successful save so the async-ledger note is SHOWN (flaw-audit C2): the session is
+  // amended synchronously, but the FINANCE correction posts asynchronously and a filed/sealed
+  // period quarantines it to the accountant — the manager must not walk away thinking the books
+  // themselves are already fixed.
+  const [saved, setSaved] = useState(false)
 
   const money = (minor: number) => formatMoney(minor, currency, locale)
   const expected = summary?.expectedCashMinor ?? 0
   const currentCounted = summary?.countedCashMinor ?? 0
   // The input shows the recorded count until the manager edits it (derived, not copied to state).
   const countedValue = countedInput ?? minorToMajorInput(currentCounted, currency)
-  const parsedCounted = parseDiscountInput(countedValue, currency)
-  const newOverShort = parsedCounted - expected
-  const unchanged = parsedCounted === currentCounted
-  const canSubmit = !unchanged && reason.trim() !== '' && !correct.isPending
+  // Flaw-audit W3: a cash COUNT must be a real number — an empty/garbage entry must never coerce
+  // to 0 (parseDiscountInput's discount semantics), which would book the whole expected drawer as
+  // a fake short. Digits with optional separators only.
+  const trimmed = countedValue.trim()
+  const inputValid = /^\d[\d.,\s]*$/.test(trimmed)
+  const parsedCounted = inputValid ? parseDiscountInput(trimmed, currency) : null
+  const newOverShort = parsedCounted == null ? null : parsedCounted - expected
+  const unchanged = parsedCounted != null && parsedCounted === currentCounted
+  const canSubmit =
+    parsedCounted != null && !unchanged && reason.trim() !== '' && !correct.isPending
 
   function submit() {
+    if (parsedCounted == null) return
     correct.mutate(
       { sessionId, countedCashMinor: parsedCounted, reason: reason.trim() },
-      { onSuccess: () => onCorrected() },
+      { onSuccess: () => setSaved(true) },
     )
   }
 
@@ -119,7 +131,21 @@ export function CloseCorrectionSheet({
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-        {summaryQuery.isLoading ? (
+        {saved ? (
+          // Post-save state (flaw-audit C2): the honest completion message — the session figures
+          // are corrected NOW; the ledger correction is applied asynchronously, and if the period
+          // was already filed it waits with the accountant instead of posting.
+          <div className="mx-auto mt-8 max-w-sm rounded-card border border-line bg-surface px-6 py-6 text-center">
+            <CheckCircle2 className="mx-auto mb-3 size-8 text-emerald-2" aria-hidden />
+            <p className="text-sm font-semibold text-ink">{t('closeCorrection.successTitle')}</p>
+            <p className="mt-2 text-[12.5px] leading-relaxed text-ink-3">
+              {t('closeCorrection.successNote')}
+            </p>
+            <Button className="mt-5 w-full" onClick={onCorrected}>
+              {t('common.close')}
+            </Button>
+          </div>
+        ) : summaryQuery.isLoading ? (
           <div className="grid place-items-center py-16">
             <Spinner />
           </div>
@@ -156,7 +182,13 @@ export function CloseCorrectionSheet({
                 className="mt-1 w-full rounded-xl border border-line bg-paper px-3 py-2.5 text-right font-mono text-[15px] font-bold text-ink outline-none focus:border-emerald-line"
               />
               <div className="mt-2">
-                {overShortRow(t('closeCorrection.newOverShort'), newOverShort)}
+                {newOverShort != null ? (
+                  overShortRow(t('closeCorrection.newOverShort'), newOverShort)
+                ) : (
+                  <p className="text-[12px] font-semibold text-loss">
+                    {t('closeCorrection.invalidAmount')}
+                  </p>
+                )}
               </div>
 
               <label

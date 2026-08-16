@@ -1193,6 +1193,10 @@ export const id = {
     save: 'Simpan koreksi',
     saving: 'Menyimpan…',
     saveError: 'Gagal menyimpan koreksi. Coba lagi.',
+    invalidAmount: 'Masukkan jumlah yang valid.',
+    successTitle: 'Koreksi tersimpan',
+    successNote:
+      'Angka closing sudah diperbarui. Pembukuan diperbarui otomatis beberapa saat lagi; jika periode tersebut sudah dilaporkan (mis. SPT sudah difile), koreksi menunggu penanganan akuntan dan belum masuk pembukuan.',
     errorNotClosed: 'Sesi kasir ini belum ditutup — tidak ada yang bisa diperbaiki.',
     errorNotAllowed:
       'Closing ini tidak bisa diperbaiki (mungkin sudah terlalu lama). Hubungi akuntan Anda untuk jurnal penyesuaian.',

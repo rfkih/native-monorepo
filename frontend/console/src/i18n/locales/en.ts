@@ -1205,6 +1205,10 @@ export const en = {
     save: 'Save correction',
     saving: 'Saving…',
     saveError: 'Could not save the correction. Try again.',
+    invalidAmount: 'Enter a valid amount.',
+    successTitle: 'Correction saved',
+    successNote:
+      'The closing figures are updated. The books update automatically in a moment; if that period was already filed (e.g. the tax return is in), the correction waits with your accountant and is not yet in the books.',
     errorNotClosed: 'This register session is not closed yet — there is nothing to correct.',
     errorNotAllowed:
       "This closing can't be corrected (it may be too old). Ask your accountant for an adjusting entry.",
