@@ -802,6 +802,13 @@ export const id = {
     expenseAccounts: 'Akun beban',
     lineItems: 'Rincian akun',
     noLines: 'Tidak ada akun',
+    /** Drill-down kartu ringkasan (Laba Rugi): klik kartu → drawer rincian per akun. */
+    viewDetail: 'Lihat rincian',
+    revenueDetailTitle: 'Rincian pendapatan',
+    expenseDetailTitle: 'Rincian beban',
+    netDetailTitle: 'Ringkasan laba-rugi',
+    detailShareNote: '% dari total',
+    netDetailHint: 'Pendapatan dikurangi beban untuk periode ini. Ketuk Pendapatan atau Beban untuk melihat tiap akun.',
     cashFlow: {
       title: 'Laporan arus kas',
       disposalProceeds: 'Hasil pelepasan aset',

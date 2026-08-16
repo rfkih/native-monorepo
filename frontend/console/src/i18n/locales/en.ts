@@ -814,6 +814,13 @@ export const en = {
     expenseAccounts: 'Expense accounts',
     lineItems: 'Line items',
     noLines: 'No accounts',
+    /** Summary-card drill-down (Laba Rugi): click a card → per-account breakdown drawer. */
+    viewDetail: 'View breakdown',
+    revenueDetailTitle: 'Revenue breakdown',
+    expenseDetailTitle: 'Expense breakdown',
+    netDetailTitle: 'Profit & loss recap',
+    detailShareNote: 'share of total',
+    netDetailHint: 'Revenue minus expense for the period. Tap Revenue or Expense to see each account.',
     cashFlow: {
       title: 'Cash flow statement',
       subtitle: 'How cash moved this period — the indirect method.',

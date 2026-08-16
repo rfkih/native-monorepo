@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Download, Printer, TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
@@ -6,11 +6,15 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ListSkeleton, StatCardsSkeleton } from '@/components/ui/Skeleton'
 import { useSession } from '@/lib/session'
+import { effectiveRoles, useAuth } from '@/lib/authContext'
+import { canFinance } from '@/lib/rolePreset'
 import { localeOf } from '@/i18n'
 import { formatMoney, formatAmount, formatPercent } from '@/lib/money'
 import { currentPeriod, shiftPeriod } from '@/lib/period'
+import { useAccounts } from '@/features/budget/api'
 import { useIncomeStatement } from './api'
 import { downloadCsv } from '@/lib/csv'
+import { IncomeDetailDrawer, type IncomeDetailKind } from './IncomeDetailDrawer'
 import { EntityScope, LineSection, PeriodNav, StatementEmptyState, SummaryCard } from './parts'
 
 /**
@@ -23,9 +27,16 @@ import { EntityScope, LineSection, PeriodNav, StatementEmptyState, SummaryCard }
 export function IncomeStatement() {
   const { t, i18n } = useTranslation()
   const { company } = useSession()
+  const auth = useAuth()
   const locale = localeOf(i18n.language)
+  // The COA name endpoint (/budgets/accounts) is FINANCE_ROLES-gated (owner/accountant), but this
+  // page is open to the wider REPORTS_ROLES (incl. manager). Only owners/accountants may fetch names;
+  // a manager's drawer gracefully shows account codes instead of 403-ing on every load.
+  const canSeeAccountNames = canFinance(effectiveRoles(auth.roles, auth.elevatedRoles))
 
   const [period, setPeriod] = useState(currentPeriod())
+  // Which summary card's drill-down drawer is open (null = none). Cleared on close / period change.
+  const [detail, setDetail] = useState<IncomeDetailKind | null>(null)
 
   const query = useIncomeStatement({
     companyId: company?.companyId ?? '',
@@ -33,6 +44,20 @@ export function IncomeStatement() {
     period,
     enabled: !!company,
   })
+
+  // Chart-of-accounts for the drill-down drawer: code → friendly name (falls back to the code).
+  // Shares the budget module's COA endpoint + personal bearer; cached under one key fleet-wide.
+  // Fetched ONLY when a finance-role user has a drawer open — avoids an unused call on every P&L
+  // view and the manager 403 (the endpoint is FINANCE_ROLES-gated; see canSeeAccountNames above).
+  const accountsQuery = useAccounts({
+    companyId: company?.companyId ?? '',
+    actor: company?.actor ?? '',
+    enabled: !!company && canSeeAccountNames && detail !== null,
+  })
+  const accountNames = useMemo(
+    () => new Map((accountsQuery.data ?? []).map((a) => [a.accountCode, a.name])),
+    [accountsQuery.data],
+  )
 
   if (!company) {
     return (
@@ -93,8 +118,14 @@ export function IncomeStatement() {
           <PeriodNav
             period={period}
             locale={locale}
-            onPrev={() => setPeriod((p) => shiftPeriod(p, -1))}
-            onNext={() => setPeriod((p) => shiftPeriod(p, 1))}
+            onPrev={() => {
+              setDetail(null)
+              setPeriod((p) => shiftPeriod(p, -1))
+            }}
+            onNext={() => {
+              setDetail(null)
+              setPeriod((p) => shiftPeriod(p, 1))
+            }}
             prevLabel={t('statements.prevPeriod')}
             nextLabel={t('statements.nextPeriod')}
           />
@@ -140,12 +171,16 @@ export function IncomeStatement() {
               chipClass="bg-brand-500"
               label={t('statements.revenue')}
               value={formatMoney(totalRevenue, currency, locale)}
+              onClick={() => setDetail('revenue')}
+              detailLabel={t('statements.viewDetail')}
             />
             <SummaryCard
               chipClass="bg-loss"
               label={t('statements.expense')}
               value={formatMoney(totalExpense, currency, locale)}
               note={t('statements.ofRevenue', { pct: formatPercent(expenseRatio, locale) })}
+              onClick={() => setDetail('expense')}
+              detailLabel={t('statements.viewDetail')}
             />
             <SummaryCard
               chipClass={profit ? 'bg-profit' : 'bg-loss'}
@@ -161,6 +196,8 @@ export function IncomeStatement() {
               }
               noteClass={profit ? 'text-profit-ink' : 'text-loss'}
               emphatic
+              onClick={() => setDetail('net')}
+              detailLabel={t('statements.viewDetail')}
             />
           </div>
 
@@ -241,6 +278,18 @@ export function IncomeStatement() {
           </div>
         </>
       )}
+
+      {/* Card drill-down (owner request): a clicked summary card opens the per-account breakdown. */}
+      {detail && data ? (
+        <IncomeDetailDrawer
+          kind={detail}
+          data={data}
+          names={accountNames}
+          currency={currency}
+          locale={locale}
+          onClose={() => setDetail(null)}
+        />
+      ) : null}
     </div>
   )
 }

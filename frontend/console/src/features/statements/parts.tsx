@@ -3,7 +3,9 @@
 // statement-related from a single module.
 export { KpiTile, PeriodNav, EmptyState as StatementEmptyState } from '@/features/_shared/financeUi'
 
+import { ChevronRight } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
+import { cn } from '@/lib/cn'
 
 /**
  * The reporting-entity line every formal statement leads with: WHICH business these figures belong
@@ -18,7 +20,12 @@ export function EntityScope({ name, scope }: { name: string; scope: string }) {
   )
 }
 
-/** The 2b/2c statement summary card: color chip + uppercase label + mono figure (+ optional note). */
+/**
+ * The 2b/2c statement summary card: color chip + uppercase label + mono figure (+ optional note).
+ * When `onClick` is set the whole card becomes a keyboard-accessible button that opens a detail view
+ * (the P&L drill-down) — with a hover/focus affordance + a `detailLabel` chevron hint that is hidden
+ * in print. Callers that omit `onClick` render exactly as before (a static, non-interactive card).
+ */
 export function SummaryCard({
   chipClass,
   label,
@@ -27,6 +34,8 @@ export function SummaryCard({
   note,
   noteClass,
   emphatic,
+  onClick,
+  detailLabel,
 }: {
   chipClass: string
   label: string
@@ -35,15 +44,15 @@ export function SummaryCard({
   note?: string
   noteClass?: string
   emphatic?: boolean
+  onClick?: () => void
+  detailLabel?: string
 }) {
-  return (
-    <Card
-      className={`print:break-inside-avoid ${
-        emphatic
-          ? 'border-transparent p-5 shadow-md outline outline-2 -outline-offset-2 outline-brand-100 print:outline-0'
-          : 'p-5'
-      }`}
-    >
+  const padding = emphatic
+    ? 'border-transparent p-5 shadow-md outline outline-2 -outline-offset-2 outline-brand-100 print:outline-0'
+    : 'p-5'
+
+  const body = (
+    <>
       <div className="flex items-center gap-2">
         <span className={`size-2.5 rounded-[3px] ${chipClass}`} aria-hidden />
         <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
@@ -60,8 +69,33 @@ export function SummaryCard({
       {note ? (
         <div className={`mt-1.5 text-xs font-semibold ${noteClass ?? 'text-ink-3'}`}>{note}</div>
       ) : null}
-    </Card>
+    </>
   )
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(
+          'rounded-card border border-line bg-surface text-left shadow-sm transition-shadow',
+          'w-full hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500',
+          'print:break-inside-avoid print:shadow-none',
+          padding,
+        )}
+      >
+        {body}
+        {detailLabel ? (
+          <span className="mt-2.5 inline-flex items-center gap-0.5 text-[11px] font-semibold text-brand-600 print:hidden">
+            {detailLabel}
+            <ChevronRight className="size-3.5" aria-hidden />
+          </span>
+        ) : null}
+      </button>
+    )
+  }
+
+  return <Card className={`print:break-inside-avoid ${padding}`}>{body}</Card>
 }
 
 /** A normalized statement line for the detail tables. */
