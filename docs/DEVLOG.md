@@ -5,6 +5,29 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-16 — INCIDENT: fleet-wide Debezium CDC outage on deploy + hardening
+
+Investigating a "corrected closing but P&L still wrong" report surfaced a bigger problem: **every
+Debezium outbox connector task was FAILED** (`Couldn't obtain encoding for database … connect timed
+out`). Root cause: a prod deploy earlier today **recreated the `native-prod-postgres` container** (new
+IP), but the `native-prod-connect` container was NOT recreated/restarted, so Debezium held stale JDBC
+connections → all tasks FAILED → **the outbox stopped flowing to Kafka fleet-wide** (sales, closings,
+corrections stopped reaching finance). It went undetected because both `prod-deploy.sh` `wait_healthy`
+and `ops-watch` only assert the connect **container** is "healthy" (the worker), never that the
+connector **tasks** are RUNNING — so the deploy reported SUCCESS while CDC was dead. **Remediation
+(live):** `docker restart native-prod-connect` → re-established connectivity → then restarted the
+FAILED tasks via `POST /connectors/<c>/restart?includeTasks=true` → all 8 RUNNING. **Long-term fixes:**
+(1) `prod-deploy.sh` now runs `recover_cdc` after the health gate — verifies every connector task is
+RUNNING and, if not, restarts connect + the failed tasks (best-effort; never fails the app-tier
+deploy, logs loudly). (2) `ops-watch.yml` gains a "Debezium CDC health" step that alerts when any
+connector task is FAILED (the detection gap that hid this). **Follow-up:** the deploy ideally should
+avoid recreating postgres at all, or restart connect whenever it does — the recover step covers it
+either way. Also surfaced: register sessions closed **before** ADR 0064 shipped (v0.1.21) have a NULL
+`close_event_id` so the correct-close feature refuses them (`RegisterCloseCorrectionNotAllowedException`)
+— the affected Bara Kebab session was unblocked by backfilling `close_event_id` from its outbox row id
+(which matches the finance journal's `source_event_id`); a broader backfill migration for pre-0064
+sessions is a deferred follow-up.
+
 ## 2026-08-16 — Dashboard P&L is GL-derived — one "Laba bersih" (ADR 0065)
 
 Owner report (Bara Kebab, rfkih23@gmail.com): the beranda net profit ≠ the Laba-Rugi (income

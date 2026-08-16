@@ -79,6 +79,32 @@ jobs:
           exit "$fail"
           EOF
 
+      - name: Debezium CDC health (connector TASKS running, not just the worker)
+        # The container healthcheck only proves the Kafka Connect worker is up; a connector TASK can
+        # be FAILED while the worker is "healthy" — e.g. a deploy recreated postgres and connect kept
+        # stale connections (the 2026-08-16 fleet-wide outage: every outbox task FAILED, no event
+        # reached finance, yet the container check was green). Assert every connector task is RUNNING.
+        run: |
+          ssh -i ~/.ssh/prod_key -o IdentitiesOnly=yes -o ConnectTimeout=20 "$PROD_USER@$PROD_HOST" bash -s <<'EOF'
+          set -uo pipefail
+          if ! docker inspect native-prod-connect >/dev/null 2>&1; then
+            echo "connect container absent — skipping CDC check"; exit 0
+          fi
+          api() { docker exec native-prod-connect curl -s -m 10 "localhost:8083/$1" 2>/dev/null; }
+          conns=$(api connectors | tr -d '[]"' | tr ',' ' ')
+          if [ -z "${conns// }" ]; then echo "::error::no Debezium connectors registered — CDC is not running"; exit 1; fi
+          failed=""; n=0
+          for c in $conns; do
+            n=$((n+1))
+            api "connectors/$c/status" | grep -o '"state":"[A-Z]*"' | sed -n 2p | grep -q RUNNING || failed="$failed $c"
+          done
+          if [ -n "$failed" ]; then
+            echo "::error::Debezium connector task(s) FAILED:$failed — outbox events are NOT flowing to consumers (finance P&L, closings, corrections). Recover: docker restart native-prod-connect; then for each c: curl -XPOST localhost:8083/connectors/\$c/restart?includeTasks=true"
+            exit 1
+          fi
+          echo "CDC: all $n connector task(s) RUNNING"
+          EOF
+
       - name: External uptime through the tunnels
         run: |
           SSH="ssh -i ~/.ssh/prod_key -o IdentitiesOnly=yes -o ConnectTimeout=20"

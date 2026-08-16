@@ -119,6 +119,44 @@ up_manifest() { # up_manifest <images.yml> — (re)converge onto the given pin f
   $COMPOSE -f "$1" $PROJECT up -d --remove-orphans
 }
 
+# ---- CDC health (Debezium): connector TASKS RUNNING, not just the connect worker "healthy" ----
+# The connect container's healthcheck only proves the Kafka Connect WORKER is up. A connector TASK
+# can be FAILED while the worker is "healthy" — e.g. `compose up` recreated postgres with a new IP
+# and connect held stale JDBC connections (the 2026-08-16 fleet-wide CDC outage: every outbox task
+# FAILED "Couldn't obtain encoding … connect timed out", yet wait_healthy passed connect as
+# "running healthy" and the deploy reported SUCCESS while NO outbox event reached any consumer —
+# sales/closings/corrections silently stopped flowing to finance). So after a healthy deploy, force
+# CDC back to RUNNING: restart connect (drops the stale connections, re-resolves the current
+# postgres) then clear any still-FAILED task. Best-effort — a healthy app tier is never failed on
+# CDC recovery; ops-watch is the durable alarm if this cannot restore it.
+CONNECT_CTR="native-prod-connect"
+connect_get()  { docker exec "$CONNECT_CTR" curl -s -m 10         "localhost:8083/$1" 2>/dev/null; }
+connect_post() { docker exec "$CONNECT_CTR" curl -s -m 10 -X POST "localhost:8083/$1" 2>/dev/null; }
+cdc_stopped_connectors() { # names of connectors whose task state is not RUNNING; empty ⇒ all good
+  local list c
+  list=$(connect_get connectors | tr -d '[]"' | tr ',' ' ') || return 0
+  for c in $list; do
+    connect_get "connectors/$c/status" | grep -o '"state":"[A-Z]*"' | sed -n 2p | grep -q RUNNING \
+      || echo "$c"
+  done
+}
+recover_cdc() {
+  docker inspect "$CONNECT_CTR" >/dev/null 2>&1 || { log "cdc: no $CONNECT_CTR container — skipped"; return 0; }
+  local stopped; stopped=$(cdc_stopped_connectors | tr '\n' ' ')
+  [ -z "${stopped// }" ] && { log "cdc: all connector tasks RUNNING"; return 0; }
+  log "cdc: connector task(s) not RUNNING (${stopped}) — restarting connect + failed tasks"
+  docker restart "$CONNECT_CTR" >/dev/null 2>&1
+  local i; for i in $(seq 1 45); do connect_get connectors >/dev/null 2>&1 && break; sleep 4; done
+  local c; for c in $(connect_get connectors | tr -d '[]"' | tr ',' ' '); do
+    connect_post "connectors/$c/restart?includeTasks=true&onlyFailed=true" >/dev/null 2>&1 || true
+  done
+  sleep 15
+  stopped=$(cdc_stopped_connectors | tr '\n' ' ')
+  [ -z "${stopped// }" ] && { log "cdc: recovered — all connector tasks RUNNING"; return 0; }
+  log "ERROR: cdc: connector task(s) STILL not RUNNING after recovery (${stopped}) — outbox events are NOT flowing to consumers (finance P&L etc.); manual attention required"
+  return 1
+}
+
 # ---- 1. pre-deploy DB snapshot (disaster net — routine rollback NEVER restores it) -----------
 if docker inspect -f '{{.State.Status}}' native-prod-postgres 2>/dev/null | grep -q running; then
   log "snapshotting ${#DBS[@]} databases (pre-$RELEASE)"
@@ -155,6 +193,11 @@ fi
 if [ -z "${DEPLOY_FAILED:-}" ]; then
   log "health gate (timeout ${HEALTH_TIMEOUT}s)"
   if wait_healthy "$HEALTH_TIMEOUT" && smoke; then
+    # CDC is async and outside the container healthcheck: a deploy that recreated postgres can leave
+    # every Debezium task FAILED while the app tier is green (2026-08-16 outage). Recover it here so a
+    # deploy never silently kills the event pipeline. Best-effort: the app is healthy, so a CDC hiccup
+    # does not fail/rollback the deploy — it logs loudly and ops-watch keeps alerting until resolved.
+    recover_cdc || log "WARN: post-deploy CDC recovery incomplete — see ops-watch (deploy still recorded; app tier is healthy)"
     echo "$RELEASE" > LAST_GOOD
     cp "$MANIFEST" releases/LAST_GOOD.images.yml
     log "=== deploy $RELEASE SUCCESS — recorded as LAST_GOOD ==="
