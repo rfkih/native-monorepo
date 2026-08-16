@@ -12,7 +12,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Moon, Package, Plus, Sun, TriangleAlert, X } from 'lucide-react'
+import { ArrowLeft, ClipboardList, Moon, Package, Plus, Sun, TriangleAlert, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Field, TextInput } from '@/components/ui/Field'
@@ -29,6 +29,7 @@ import { formatMoney } from '@/lib/money'
 import { cn } from '@/lib/cn'
 import { parseDiscountInput } from '@/features/pos/lib/discountInput'
 import { minorToMajorInput } from '@/features/pos/lib/registerFloat'
+import { StocktakeHistorySheet } from './StocktakeHistorySheet'
 import {
   allowsFraction,
   formatShownQty,
@@ -94,6 +95,8 @@ function IngredientManagementInner({
   const [editing, setEditing] = useState<Ingredient | null>(null)
   const [receiving, setReceiving] = useState<Ingredient | null>(null)
   const [setting, setSetting] = useState<Ingredient | null>(null)
+  // Riwayat opname (V42 usage in the detail).
+  const [showHistory, setShowHistory] = useState(false)
 
   const ingredients = query.data ?? []
 
@@ -122,6 +125,17 @@ function IngredientManagementInner({
         <div className="min-w-0 max-sm:order-last max-sm:w-full">
           <OutletPicker />
         </div>
+
+        {/* Riwayat opname — past counts with sistem/hitung/selisih + "terpakai hari itu" (V42). */}
+        <Button
+          variant="outline"
+          onClick={() => setShowHistory(true)}
+          aria-label={t('stocktake.historyTitle')}
+          className="shrink-0"
+        >
+          <ClipboardList className="size-4" />
+          <span className="hidden sm:inline">{t('stocktake.historyAction')}</span>
+        </Button>
 
         <Button onClick={() => setShowCreate(true)} aria-label={t('inventory.addAction')} className="shrink-0">
           <Plus className="size-4" />
@@ -206,6 +220,14 @@ function IngredientManagementInner({
       ) : null}
       {setting ? (
         <SetQtyDialog session={session} ingredient={setting} locale={locale} onClose={() => setSetting(null)} />
+      ) : null}
+      {showHistory ? (
+        <StocktakeHistorySheet
+          session={session}
+          currency={baseCurrency}
+          locale={locale}
+          onClose={() => setShowHistory(false)}
+        />
       ) : null}
     </div>
   )

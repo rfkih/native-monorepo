@@ -64,6 +64,45 @@ export function useIngredients(session: CompanySession) {
   })
 }
 
+/** One ingredient's quantity consumed by sales on the requested day ("terpakai", V42). */
+export interface IngredientUsage {
+  ingredientId: string
+  qtyUsed: number
+}
+
+/**
+ * The outlet-local calendar-day key (YYYY-MM-DD) usage is attributed to — Asia/Jakarta, mirroring
+ * the SERVER's attribution zone (IngredientDepletionWriter / the register business-date
+ * convention). Never the device zone: a device in another zone would query the wrong bucket.
+ */
+export function usageDayKey(at: Date = new Date()): string {
+  // en-CA formats as YYYY-MM-DD.
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(at)
+}
+
+/**
+ * GET /api/v1/ingredients/usage?businessId&date — per-ingredient "terpakai" for one outlet-local
+ * day. Ingredients with no sales that day are ABSENT (treat absence as 0). Usage accrues from the
+ * feature's deployment forward — earlier days read empty, not zero-filled.
+ */
+export function useIngredientUsage(session: CompanySession, dateKey: string, enabled: boolean) {
+  return useQuery({
+    enabled,
+    queryKey: ['ingredient-usage', session.companyId, session.businessId, dateKey],
+    staleTime: 30_000,
+    queryFn: () =>
+      apiFetch<IngredientUsage[]>('/api/v1/ingredients/usage', {
+        tenant: tenantOf(session),
+        query: { businessId: session.businessId, date: dateKey },
+      }),
+  })
+}
+
 export interface CreateIngredientInput {
   name: string
   /** BASE unit (g/ml/pcs/pack). */

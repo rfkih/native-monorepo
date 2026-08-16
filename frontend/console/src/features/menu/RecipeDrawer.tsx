@@ -41,6 +41,7 @@ import {
 import { useAdminModifierGroups, type MenuItem, type ModifierGroupResponse } from './api'
 import {
   computeMarginRatio,
+  useAutoLinkItem,
   usePutRecipe,
   useRecipe,
   type PutRecipeLineInput,
@@ -79,6 +80,9 @@ export function RecipeDrawer({
     <Drawer onClose={onClose} ariaLabel={t('recipe.drawerLabel', { name: item.name })}>
       {ready ? (
         <RecipeEditor
+          // Re-seed the draft when the SERVER recipe changes (e.g. the 1-klik auto-link below
+          // refetched it) — the editor's draft state initializes once per mount.
+          key={recipeQuery.data!.lines.map((l) => l.id).join('|')}
           session={session}
           item={item}
           locale={locale}
@@ -222,6 +226,7 @@ function RecipeEditor({
 }) {
   const { t } = useTranslation()
   const putRecipe = usePutRecipe(session)
+  const autoLink = useAutoLinkItem(session)
 
   // Built BEFORE the draft state so the initial qty seed below can convert each line's
   // BASE qtyPerPortion into its ingredient's SHOWN unit (e.g. 1500 g -> "1.5" for a kg item).
@@ -380,9 +385,28 @@ function RecipeEditor({
         <p className="mt-1 text-xs leading-relaxed text-ink-3">{t('recipe.baseSectionHint')}</p>
         <div className="mt-2.5 flex flex-col gap-2.5">
           {baseLines.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-line px-3 py-2.5 text-sm text-ink-3">
-              {t('recipe.baseEmpty')}
-            </p>
+            <div className="rounded-xl border border-dashed border-line px-3 py-2.5">
+              <p className="text-sm text-ink-3">{t('recipe.baseEmpty')}</p>
+              {/* 1-klik "Lacak stok": mint a same-named 1:1 pcs ingredient + base line server-side
+                  (no-op if a recipe exists). The refetched recipe re-keys the editor above. */}
+              <button
+                type="button"
+                disabled={autoLink.isPending}
+                onClick={() => autoLink.mutate(item.id)}
+                className="mt-2 flex h-9 w-full items-center justify-center gap-1.5 rounded-[10px] border border-emerald-line bg-emerald-tint/40 text-[12.5px] font-semibold text-emerald-2 transition-colors hover:bg-emerald-tint disabled:opacity-60"
+              >
+                {autoLink.isPending ? t('recipe.autoLinkRunning') : t('recipe.autoLinkAction')}
+              </button>
+              {autoLink.isError ? (
+                <p className="mt-1.5 text-xs text-loss">
+                  {autoLink.error instanceof ApiError &&
+                  typeof autoLink.error.problem?.type === 'string' &&
+                  autoLink.error.problem.type.includes('recipe-auto-link-blocked')
+                    ? t('recipe.autoLinkBlocked')
+                    : t('recipe.autoLinkError')}
+                </p>
+              ) : null}
+            </div>
           ) : (
             baseLines.map((line) => (
               <RecipeLineRow

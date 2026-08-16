@@ -1299,6 +1299,13 @@ export const en = {
     soldTodayTitle: 'Items sold today',
     soldTodayEmpty: 'No sales yet today.',
     systemQty: 'System: {{qty}} {{unit}}',
+    usedToday: 'Used today: {{qty}} {{unit}}',
+    usedThatDay: 'Used that day: {{qty}} {{unit}}',
+    historyTitle: 'Opname history',
+    historyAction: 'Opname history',
+    historyError: 'Could not load the opname history.',
+    historyEmpty: 'No stock opnames recorded yet.',
+    historyVariedCount: '{{formatted}} items with variance',
     countedForItem: 'Counted quantity for {{name}}',
     notCounted: 'Not counted',
     submitAction: 'Submit stock count',
@@ -2732,10 +2739,30 @@ export const en = {
       previewAlt: 'Preview of {{name}}',
       placeholderAlt: 'No photo',
     },
+    autoLink: {
+      action: 'Track stock for all items',
+      actionShort: 'Track stock',
+      title: 'Track stock for all items',
+      explain:
+        'Every menu item without a recipe gets auto-linked to a same-named ingredient (unit pcs, stock 0) with a 1-per-portion recipe — so each sale immediately reduces stock and the stock-opname figures fill in automatically.',
+      skipNote:
+        "Items that already have a recipe are never touched. The 1:1 recipe is a starting point — refine it into a real ingredient recipe any time.",
+      confirm: 'Link now',
+      running: 'Linking…',
+      result: '{{linked}} items linked, {{skipped}} skipped (already have a recipe).',
+      blocked:
+        '{{blocked}} items couldn’t be linked — their name matches an ingredient in another unit (e.g. grams). Rename them or build a recipe.',
+      afterHint:
+        'Seed each ingredient’s starting stock via the Inventory page or the first stock opname. After that, the opname is just verification.',
+      error: 'Could not link. Try again.',
+    },
     createItem: {
       title: 'Add menu item',
       nameLabel: 'Item name',
       namePlaceholder: 'e.g. Nasi Goreng',
+      autoTrackLabel: 'Track stock for this item',
+      autoTrackHint:
+        'Automatically creates a same-named ingredient (1 per portion) so every sale reduces stock.',
       categoryLabel: 'Category',
       categoryPlaceholder: 'Select a category…',
       priceLabel: 'Price ({{currency}})',
@@ -2890,6 +2917,11 @@ export const en = {
     baseSection: 'Base ingredients',
     baseSectionHint: 'Every portion of this item uses these ingredients, in this quantity.',
     baseEmpty: 'No base ingredients yet — add the first one below.',
+    autoLinkAction: 'Auto-track 1:1 stock',
+    autoLinkRunning: 'Linking…',
+    autoLinkError: 'Could not link. Try again.',
+    autoLinkBlocked:
+      'This item’s name matches an ingredient in another unit — rename it or build a recipe.',
     addLine: 'Add ingredient',
     /** Quantities are always whole numbers — nudges the operator to pick a unit that survives that. */
     roundingHint:

@@ -5,6 +5,31 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-16 — Auto stock-tracking (1:1 auto-link) + per-day usage aggregate (ADR 0050 follow-up)
+
+Owner ask: "aku mau setiap menu sudah otomatis mengurangi stock … jadi ketika stock opname sudah di
+prefil sama system jadi cuma verifikasi dan adjust" + "di riwayat stock opname harian tampilkan juga
+stock yang terpakai di hari itu". Per-sale ingredient depletion (ADR 0050) and the opname prefill
+already existed; the gap was menu items with **no recipe** — those never moved any stock, so their
+opname figures never pre-filled. **Part A — "Lacak stok otomatis" (1:1 auto-link):** for a recipe-less
+menu item, mint a same-named ingredient (unit `pcs`, stock 0, uncosted) + a 1-per-portion base recipe
+line, so the EXISTING depletion starts moving it. Bulk sweep ("Lacak stok semua menu"), per-item
+1-klik (RecipeDrawer), and a create-menu checkbox (default ON, best-effort — a link failure never
+fails the create). Idempotent; existing recipes untouched; an ACTIVE same-named `pcs` ingredient is
+REUSED case-insensitively (the V31 unique is on `lower(name)`); a same-named **non-`pcs`** ingredient
+(e.g. raw "Ayam" in grams) is **BLOCKED**, never silently depleted (bulk tallies `blockedCount`;
+1-klik → 422 `recipe-auto-link-blocked`). **Part B — per-day usage aggregate:** new table
+`ingredient_usage_day` (V42, `Auditable` + FORCE RLS), UPSERTed in the SAME transaction as each
+depletion (`ON CONFLICT (ingredient_id, usage_date) DO UPDATE qty_used = existing + EXCLUDED`),
+surfaced as "terpakai hari ini" in the opname sheet and "terpakai hari itu" in a new opname-history
+sheet. Usage accrues from deploy forward (prior days unreconstructable). Business-date zone is a fixed
+`Asia/Jakarta` v1 (a per-outlet zone is the additive follow-up); the console read key pins the same
+zone so read/write agree. Sale-path safety: the usage UPSERT runs per-ingredient right after each
+deplete, holding the same ascending-UUID lock order (no batch — would risk the cross-sale deadlock);
+concurrency test proves additive accumulation, atomicity test proves a rolled-back sale leaves no
+usage row. Dual code-reviewed (PASS; C1 case-sensitivity, W1 create-fail, W2 raw-material-collision
+all fixed). restaurant-service tests + console tsc/lint/vitest green.
+
 ## 2026-08-14 — Persistent login: staff ~30 days, owner capped 1 day
 
 Native/Android sessions were logging out after the phone sat inactive, even though the offline token

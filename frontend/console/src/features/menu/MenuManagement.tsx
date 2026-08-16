@@ -74,7 +74,13 @@ import {
 } from './api'
 import { resizeImageFile } from './image'
 import { RecipeDrawer } from './RecipeDrawer'
-import { computeMarginRatio, useHppSummary, type HppSummaryRow } from './recipeApi'
+import {
+  computeMarginRatio,
+  useAutoLinkAll,
+  useHppSummary,
+  type AutoLinkResult,
+  type HppSummaryRow,
+} from './recipeApi'
 
 // ---------------------------------------------------------------------------
 // Entry guard
@@ -458,6 +464,9 @@ function CreateItemDialog({
   const [unitCostInput, setUnitCostInput] = useState('')
   const [unitCostError, setUnitCostError] = useState<string | null>(null)
   const [imageUrl, setImageUrl] = useState<string | null>(null)
+  // "Lacak stok" (default ON): the new item is 1:1-auto-linked to a same-named ingredient so its
+  // sales deplete stock from day one and the opname prefill moves.
+  const [autoTrack, setAutoTrack] = useState(true)
 
   const exp = isoMinorExponent(session.baseCurrency)
 
@@ -491,6 +500,7 @@ function CreateItemDialog({
         currency: session.baseCurrency,
         imageUrl: imageUrl ?? null,
         unitCostMinor: unitCost.minor,
+        autoTrackStock: autoTrack,
       },
       { onSuccess: () => onClose() },
     )
@@ -567,6 +577,24 @@ function CreateItemDialog({
 
         <ImagePicker value={imageUrl} onChange={setImageUrl} itemName={name.trim() || undefined} />
 
+        {/* "Lacak stok" — default ON: sales of the new item deplete a same-named 1:1 ingredient. */}
+        <label className="flex items-start gap-2.5 rounded-xl border border-line bg-paper px-3 py-2.5">
+          <input
+            type="checkbox"
+            checked={autoTrack}
+            onChange={(e) => setAutoTrack(e.target.checked)}
+            className="mt-0.5 size-4 shrink-0 accent-emerald"
+          />
+          <span className="min-w-0">
+            <span className="block text-sm font-medium text-ink">
+              {t('menu.createItem.autoTrackLabel')}
+            </span>
+            <span className="block text-xs leading-relaxed text-ink-3">
+              {t('menu.createItem.autoTrackHint')}
+            </span>
+          </span>
+        </label>
+
         {mutation.isError ? (
           <p className="rounded-xl border border-loss/30 bg-tint-loss px-3 py-2 text-sm text-loss">
             {t('menu.errorGeneric')}
@@ -582,6 +610,76 @@ function CreateItemDialog({
           </Button>
         </div>
       </form>
+    </DialogOverlay>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// "Lacak stok semua menu" — bulk 1:1 auto-link (POST /api/v1/menu/recipes/auto-link)
+// ---------------------------------------------------------------------------
+
+function AutoLinkDialog({
+  session,
+  locale,
+  onClose,
+}: {
+  session: CompanySession
+  locale: string
+  onClose: () => void
+}) {
+  const { t } = useTranslation()
+  const autoLink = useAutoLinkAll(session)
+  // Held after success so the result stays visible (X ditautkan / Y dilewati).
+  const [result, setResult] = useState<AutoLinkResult | null>(null)
+  const nf = new Intl.NumberFormat(locale)
+
+  return (
+    <DialogOverlay onClose={onClose}>
+      <div className="space-y-4">
+        <h2 className="font-display text-lg font-semibold text-ink">{t('menu.autoLink.title')}</h2>
+        {result ? (
+          <>
+            <p className="rounded-xl border border-emerald-line bg-emerald-tint/40 px-3 py-2.5 text-sm text-ink">
+              {t('menu.autoLink.result', {
+                linked: nf.format(result.linkedCount),
+                skipped: nf.format(result.skippedCount),
+              })}
+            </p>
+            {result.blockedCount > 0 ? (
+              <p className="rounded-xl border border-amber-line bg-tint-amber px-3 py-2.5 text-sm text-amber-2">
+                {t('menu.autoLink.blocked', { blocked: nf.format(result.blockedCount) })}
+              </p>
+            ) : null}
+            <p className="text-xs leading-relaxed text-ink-3">{t('menu.autoLink.afterHint')}</p>
+            <div className="flex justify-end">
+              <Button onClick={onClose}>{t('common.close')}</Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="text-sm leading-relaxed text-ink-2">{t('menu.autoLink.explain')}</p>
+            <p className="text-xs leading-relaxed text-ink-3">{t('menu.autoLink.skipNote')}</p>
+            {autoLink.isError ? (
+              <p className="rounded-xl border border-loss/30 bg-tint-loss px-3 py-2 text-sm text-loss">
+                {t('menu.autoLink.error')}
+              </p>
+            ) : null}
+            <div className="flex justify-end gap-3">
+              <Button type="button" variant="outline" onClick={onClose}>
+                {t('common.cancel')}
+              </Button>
+              <Button
+                disabled={autoLink.isPending}
+                onClick={() =>
+                  autoLink.mutate(undefined, { onSuccess: (res) => setResult(res) })
+                }
+              >
+                {autoLink.isPending ? t('menu.autoLink.running') : t('menu.autoLink.confirm')}
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
     </DialogOverlay>
   )
 }
@@ -2351,6 +2449,8 @@ function MenuManagementInner({ session }: { session: CompanySession }) {
   const hppSummaryQuery = useHppSummary(session)
   const [showCreateItem, setShowCreateItem] = useState(false)
   const [showManageCategories, setShowManageCategories] = useState(false)
+  // "Lacak stok semua menu" — the bulk 1:1 auto-link confirmation dialog.
+  const [showAutoLink, setShowAutoLink] = useState(false)
   const [managingOptionsFor, setManagingOptionsFor] = useState<MenuItem | null>(null)
   const [recipeFor, setRecipeFor] = useState<MenuItem | null>(null)
 
@@ -2411,6 +2511,16 @@ function MenuManagementInner({ session }: { session: CompanySession }) {
         >
           <span className="hidden sm:inline">{t('menu.categories.manage')}</span>
           <span className="sm:hidden">{t('menu.categories.manageShort')}</span>
+        </Button>
+
+        {/* "Lacak stok semua menu" — bulk 1:1 auto-link so every menu sale depletes stock. */}
+        <Button
+          variant="outline"
+          onClick={() => setShowAutoLink(true)}
+          className="shrink-0 max-sm:order-last max-sm:flex-1"
+        >
+          <span className="hidden sm:inline">{t('menu.autoLink.action')}</span>
+          <span className="sm:hidden">{t('menu.autoLink.actionShort')}</span>
         </Button>
 
         <Button
@@ -2481,6 +2591,10 @@ function MenuManagementInner({ session }: { session: CompanySession }) {
           session={session}
           onClose={() => setShowCreateItem(false)}
         />
+      ) : null}
+
+      {showAutoLink ? (
+        <AutoLinkDialog session={session} locale={locale} onClose={() => setShowAutoLink(false)} />
       ) : null}
 
       {showManageCategories ? (

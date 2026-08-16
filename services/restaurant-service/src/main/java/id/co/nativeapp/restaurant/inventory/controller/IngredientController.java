@@ -3,6 +3,7 @@ package id.co.nativeapp.restaurant.inventory.controller;
 import id.co.nativeapp.restaurant.inventory.dto.AddIngredientStockRequest;
 import id.co.nativeapp.restaurant.inventory.dto.CreateIngredientRequest;
 import id.co.nativeapp.restaurant.inventory.dto.IngredientResponse;
+import id.co.nativeapp.restaurant.inventory.dto.IngredientUsageResponse;
 import id.co.nativeapp.restaurant.inventory.dto.SetIngredientStockRequest;
 import id.co.nativeapp.restaurant.inventory.dto.UpdateIngredientRequest;
 import id.co.nativeapp.restaurant.inventory.service.IngredientService;
@@ -10,8 +11,10 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -48,6 +51,25 @@ public class IngredientController {
   @GetMapping
   public ResponseEntity<List<IngredientResponse>> list(@RequestParam UUID businessId) {
     return ResponseEntity.ok(service.findByBusiness(businessId));
+  }
+
+  /**
+   * Per-ingredient quantity consumed by sales on one outlet-local day ("terpakai", V42) — feeds the
+   * opname sheet's "terpakai hari ini" and the opname-history detail. The literal {@code /usage}
+   * segment cannot collide with an id path (this controller maps no {@code GET /{id}}).
+   */
+  @Operation(
+      summary = "Ingredient usage for a day",
+      description =
+          "Per-ingredient quantity consumed by sales on the given outlet-local calendar day"
+              + " (Asia/Jakarta attribution, mirroring the register business_date convention)."
+              + " Ingredients with no usage that day are absent. Usage accrues from the feature's"
+              + " deployment forward.")
+  @GetMapping("/usage")
+  public ResponseEntity<List<IngredientUsageResponse>> usage(
+      @RequestParam UUID businessId,
+      @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+    return ResponseEntity.ok(service.usageForDate(businessId, date));
   }
 
   /** Creates a new active ingredient. {@code 201 Created} + {@code Location} header on success. */

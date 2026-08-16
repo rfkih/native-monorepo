@@ -1287,6 +1287,13 @@ export const id = {
     soldTodayTitle: 'Barang terjual hari ini',
     soldTodayEmpty: 'Belum ada penjualan hari ini.',
     systemQty: 'Sistem: {{qty}} {{unit}}',
+    usedToday: 'Terpakai hari ini: {{qty}} {{unit}}',
+    usedThatDay: 'Terpakai hari itu: {{qty}} {{unit}}',
+    historyTitle: 'Riwayat opname',
+    historyAction: 'Riwayat opname',
+    historyError: 'Tidak dapat memuat riwayat opname.',
+    historyEmpty: 'Belum ada stock opname tercatat.',
+    historyVariedCount: '{{formatted}} barang selisih',
     countedForItem: 'Jumlah terhitung untuk {{name}}',
     notCounted: 'Belum dihitung',
     submitAction: 'Kirim stock opname',
@@ -2712,10 +2719,30 @@ export const id = {
       previewAlt: 'Pratinjau {{name}}',
       placeholderAlt: 'Belum ada foto',
     },
+    autoLink: {
+      action: 'Lacak stok semua menu',
+      actionShort: 'Lacak stok',
+      title: 'Lacak stok semua menu',
+      explain:
+        'Setiap menu yang belum punya resep akan otomatis ditautkan ke bahan senama (satuan pcs, stok awal 0) dengan resep 1 per porsi — sehingga setiap penjualan langsung mengurangi stok dan angka stock opname terisi otomatis.',
+      skipNote:
+        'Menu yang sudah punya resep tidak akan disentuh. Resep 1:1 ini titik awal — Anda bisa mengubahnya jadi resep bahan sungguhan kapan saja.',
+      confirm: 'Tautkan sekarang',
+      running: 'Menautkan…',
+      result: '{{linked}} menu ditautkan, {{skipped}} dilewati (sudah punya resep).',
+      blocked:
+        '{{blocked}} menu tidak bisa ditautkan — namanya sama dengan bahan bersatuan lain (mis. gram). Beri nama berbeda atau buat resep manual.',
+      afterHint:
+        'Isi stok awal tiap bahan lewat halaman Inventaris atau stock opname pertama. Setelah itu, opname tinggal verifikasi.',
+      error: 'Gagal menautkan. Coba lagi.',
+    },
     createItem: {
       title: 'Tambah item menu',
       nameLabel: 'Nama item',
       namePlaceholder: 'mis. Nasi Goreng',
+      autoTrackLabel: 'Lacak stok item ini',
+      autoTrackHint:
+        'Otomatis membuat bahan senama (1 per porsi) sehingga setiap penjualan mengurangi stok.',
       categoryLabel: 'Kategori',
       categoryPlaceholder: 'Pilih kategori…',
       priceLabel: 'Harga ({{currency}})',
@@ -2869,6 +2896,11 @@ export const id = {
     baseSection: 'Bahan dasar',
     baseSectionHint: 'Setiap porsi item ini memakai bahan-bahan berikut, dalam jumlah ini.',
     baseEmpty: 'Belum ada bahan dasar — tambahkan yang pertama di bawah.',
+    autoLinkAction: 'Lacak stok 1:1 otomatis',
+    autoLinkRunning: 'Menautkan…',
+    autoLinkError: 'Gagal menautkan. Coba lagi.',
+    autoLinkBlocked:
+      'Nama item sama dengan bahan bersatuan lain — beri nama berbeda atau buat resep manual.',
     addLine: 'Tambah bahan',
     roundingHint:
       'Jumlah selalu berupa bilangan bulat. Untuk bahan yang dipakai dalam jumlah sangat kecil per porsi (sejumput, secolek), lacak dalam pcs atau pack, bukan g/ml, agar jumlahnya bisa dibulatkan ke angka yang wajar.',

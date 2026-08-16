@@ -3,8 +3,10 @@ package id.co.nativeapp.restaurant.inventory.service;
 import id.co.nativeapp.restaurant.inventory.domain.IngredientNameConflictException;
 import id.co.nativeapp.restaurant.inventory.dto.CreateIngredientRequest;
 import id.co.nativeapp.restaurant.inventory.dto.IngredientResponse;
+import id.co.nativeapp.restaurant.inventory.dto.IngredientUsageResponse;
 import id.co.nativeapp.restaurant.inventory.dto.UpdateIngredientRequest;
 import id.co.nativeapp.tenant.TenantContext;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -34,6 +36,12 @@ public class IngredientService {
   public List<IngredientResponse> findByBusiness(UUID businessId) {
     TenantContext.require();
     return reader.findByBusiness(businessId);
+  }
+
+  /** Per-ingredient quantity consumed by sales on one outlet-local day ("terpakai", V42). */
+  public List<IngredientUsageResponse> usageForDate(UUID businessId, LocalDate date) {
+    TenantContext.require();
+    return reader.usageForDate(businessId, date);
   }
 
   /**

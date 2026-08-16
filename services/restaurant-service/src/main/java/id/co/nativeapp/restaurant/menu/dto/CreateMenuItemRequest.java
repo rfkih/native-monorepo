@@ -22,6 +22,10 @@ import org.springframework.lang.Nullable;
  * cost in minor units, in the same currency as {@code priceMinor}, used to value an inventory
  * stocktake's variance. {@code null} = no cost recorded (the item can still be counted at
  * stocktake; its variance simply posts no ledger entry).
+ *
+ * <p>{@code autoTrackStock} is optional ("Lacak stok", 2026-08-16): {@code true} 1:1-auto-links the
+ * new item to a same-named ingredient right after creation, so its sales deplete stock from day
+ * one. {@code null}/{@code false} = no link (the bulk sweep or the drawer 1-klik can link later).
  */
 public record CreateMenuItemRequest(
     @NotNull UUID businessId,
@@ -30,7 +34,23 @@ public record CreateMenuItemRequest(
     @NotNull @Positive Long priceMinor,
     @NotBlank String currency,
     @Nullable @Size(max = 3_000_000) String imageUrl,
-    @Nullable @PositiveOrZero Long unitCostMinor) {
+    @Nullable @PositiveOrZero Long unitCostMinor,
+    @Nullable Boolean autoTrackStock) {
+
+  /**
+   * Back-compat constructor for the pre-autoTrackStock canonical shape (autoTrackStock defaults to
+   * {@code null}) — keeps every existing 7-arg caller source-compatible.
+   */
+  public CreateMenuItemRequest(
+      UUID businessId,
+      String name,
+      String category,
+      Long priceMinor,
+      String currency,
+      @Nullable String imageUrl,
+      @Nullable Long unitCostMinor) {
+    this(businessId, name, category, priceMinor, currency, imageUrl, unitCostMinor, null);
+  }
 
   /**
    * Back-compat constructor for callers that supply an image but no unit cost (unitCostMinor
@@ -43,7 +63,7 @@ public record CreateMenuItemRequest(
       Long priceMinor,
       String currency,
       @Nullable String imageUrl) {
-    this(businessId, name, category, priceMinor, currency, imageUrl, null);
+    this(businessId, name, category, priceMinor, currency, imageUrl, null, null);
   }
 
   /**
@@ -52,6 +72,6 @@ public record CreateMenuItemRequest(
    */
   public CreateMenuItemRequest(
       UUID businessId, String name, String category, Long priceMinor, String currency) {
-    this(businessId, name, category, priceMinor, currency, null, null);
+    this(businessId, name, category, priceMinor, currency, null, null, null);
   }
 }

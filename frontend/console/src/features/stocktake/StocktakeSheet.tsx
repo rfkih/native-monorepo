@@ -27,7 +27,12 @@ import { formatMoney } from '@/lib/money'
 import type { CompanySession } from '@/lib/session'
 import { useItemSales, type ItemSalesResponse } from '@/features/pos/api'
 import { localDayBounds } from '@/features/pos/salesHistoryApi'
-import { useIngredients, type Ingredient } from '@/features/inventory/ingredientApi'
+import {
+  useIngredients,
+  useIngredientUsage,
+  usageDayKey,
+  type Ingredient,
+} from '@/features/inventory/ingredientApi'
 import {
   useSubmitIngredientStocktake,
   type IngredientStocktakeLineResponse,
@@ -76,6 +81,10 @@ export function StocktakeSheet({
   // 0046). Day bounds are truncated to the calendar day, so from/to are stable across renders.
   const { from, to } = localDayBounds(new Date())
   const soldTodayQuery = useItemSales(session, from, to)
+  // Per-ingredient "terpakai hari ini" (V42) — how much today's sales consumed by recipe, so the
+  // operator can sanity-check the prefilled system figure. Absent = 0 (no sales of it today).
+  const usageQuery = useIngredientUsage(session, usageDayKey(), true)
+  const usedById = new Map((usageQuery.data ?? []).map((u) => [u.ingredientId, u.qtyUsed]))
 
   const ingredients: Ingredient[] = ingredientsQuery.data ?? []
 
@@ -197,6 +206,7 @@ export function StocktakeSheet({
                     onChange={(raw) => setOverrides((p) => ({ ...p, [ing.id]: raw }))}
                     currency={currency}
                     locale={locale}
+                    usedToday={usedById.get(ing.id) ?? 0}
                   />
                 ))}
               </ul>
@@ -290,12 +300,15 @@ function StocktakeIngredientRow({
   onChange,
   currency,
   locale,
+  usedToday,
 }: {
   ingredient: Ingredient
   value: string
   onChange: (raw: string) => void
   currency: string
   locale: string
+  /** Quantity today's sales consumed by recipe ("terpakai hari ini", V42) — 0 when none. */
+  usedToday: number
 }) {
   const { t } = useTranslation()
   const systemQty = ingredient.stockQty
@@ -330,6 +343,14 @@ function StocktakeIngredientRow({
             unit: shownUnit(ingredient),
           })}
         </div>
+        {usedToday > 0 ? (
+          <div className="tnum mt-0.5 text-[11px] text-ink-3">
+            {t('stocktake.usedToday', {
+              qty: formatShownQty(usedToday, ingredient, locale),
+              unit: shownUnit(ingredient),
+            })}
+          </div>
+        ) : null}
       </div>
 
       <input

@@ -4,6 +4,7 @@ import id.co.nativeapp.restaurant.inventory.domain.Ingredient;
 import id.co.nativeapp.restaurant.inventory.projection.IngredientView;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -87,4 +88,15 @@ public interface IngredientRepository extends JpaRepository<Ingredient, UUID> {
           """,
       nativeQuery = true)
   int depleteStockFloorZero(@Param("id") UUID id, @Param("qty") int qty);
+
+  /**
+   * The ACTIVE ingredient whose name matches (CASE-INSENSITIVELY) at the outlet — the auto-link
+   * find-or-create probe ("Lacak stok"). CASE-INSENSITIVE is load-bearing: the V31 active-name
+   * unique is on {@code lower(name)}, so a case-sensitive probe would miss a lowercase row and then
+   * collide on mint (review C1). At most one row by that unique. Returns the whole aggregate so the
+   * caller can decide reuse-vs-block by unit (a same-named non-{@code pcs} raw material must NOT be
+   * depleted 1-per-portion — review W2).
+   */
+  Optional<Ingredient> findFirstByBusinessIdAndNameIgnoreCaseAndActiveTrue(
+      UUID businessId, String name);
 }

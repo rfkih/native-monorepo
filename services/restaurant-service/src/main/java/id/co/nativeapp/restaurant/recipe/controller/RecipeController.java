@@ -1,5 +1,6 @@
 package id.co.nativeapp.restaurant.recipe.controller;
 
+import id.co.nativeapp.restaurant.recipe.dto.AutoLinkResult;
 import id.co.nativeapp.restaurant.recipe.dto.HppSummaryRow;
 import id.co.nativeapp.restaurant.recipe.dto.PutRecipeRequest;
 import id.co.nativeapp.restaurant.recipe.dto.RecipeResponse;
@@ -12,6 +13,7 @@ import java.util.UUID;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -59,6 +61,34 @@ public class RecipeController {
   public ResponseEntity<RecipeResponse> put(
       @PathVariable UUID itemId, @Valid @RequestBody PutRecipeRequest request) {
     return ResponseEntity.ok(service.putRecipe(itemId, request));
+  }
+
+  /**
+   * "Lacak stok semua menu" — 1:1 auto-link for every active recipe-less item at the outlet: each
+   * gets a same-named ingredient (pcs, stock 0) + a base line of 1/portion, so its sales start
+   * depleting stock and the opname prefill starts moving. Idempotent (second run links 0).
+   */
+  @Operation(
+      summary = "Auto-link all recipe-less menu items to 1:1 ingredients",
+      description =
+          "For every ACTIVE menu item of the outlet without a recipe: creates (or reuses) a"
+              + " same-named ingredient (unit pcs, stock 0, no cost) and a 1-per-portion base"
+              + " recipe line. Items that already have a recipe are never touched. Idempotent.")
+  @PostMapping("/recipes/auto-link")
+  public ResponseEntity<AutoLinkResult> autoLinkAll(@RequestParam UUID businessId) {
+    return ResponseEntity.ok(service.autoLinkAll(businessId));
+  }
+
+  /** 1-klik "Lacak stok" for ONE item — no-op if it already has a recipe (never overwrites). */
+  @Operation(
+      summary = "Auto-link one menu item to a 1:1 ingredient",
+      description =
+          "Creates (or reuses) a same-named ingredient and a 1-per-portion base recipe line for"
+              + " this item; a no-op when the item already has a recipe. Returns the resulting"
+              + " recipe. 404 unknown item.")
+  @PostMapping("/{itemId}/recipe/auto-link")
+  public ResponseEntity<RecipeResponse> autoLinkItem(@PathVariable UUID itemId) {
+    return ResponseEntity.ok(service.autoLinkItem(itemId));
   }
 
   /** Outlet-wide derived HPP per menu item — feeds the console's HPP/margin chips in one call. */
