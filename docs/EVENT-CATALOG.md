@@ -46,7 +46,7 @@ has landed yet — the status names the phases that will land them.
 
 | Event | Producer | Consumers | Key fields | Status |
 |---|---|---|---|---|
-| **`CompanyCreated`** | **org-service** | **entitlement, finance, verticals** | **company_id, legal_employer_id, base_currency, default_language** | **LIVE (M1.2)** |
+| **`CompanyCreated`** | **org-service** | **entitlement, finance, employee, verticals** | **company_id, legal_employer_id, base_currency, default_language** | **LIVE (M1.2)** |
 | **`OrgUnitCreated`** | **org-service** | **employee, verticals, finance** | **org_unit_id, type, parent_id, company_id** | **LIVE (#18); finance consumer Phase 2 outlet-scoping** |
 | **`OrgUnitChanged`** | **org-service** | **employee, verticals, finance** | **org_unit_id, type, parent_id, company_id** | **LIVE (#18); finance consumer Phase 2 outlet-scoping** |
 | **`EntitlementGranted`** | **entitlement-service** | **shell, all services** | **company_id, module_key** | **LIVE** |
@@ -789,6 +789,23 @@ finance`), persisting `tenant_entitlement` rows and emitting one `EntitlementGra
 grant — all in one transaction inside the new company's tenant scope (so RLS applies). The
 `CompanyCreatedContractTest` asserts the consumer copy stays backward-compatible with the
 producer schema (rule 7).
+
+### `CompanyCreated` — employee-service consumer view
+
+employee-service **consumes** the org-service `CompanyCreated` to **auto-activate the
+OFFICIAL statutory payroll dataset** for a new tenant (ADR 0042's go-live default made
+automatic, so no tenant is left on illustrative rules — the fix for the persistent "angka
+ilustratif" badge). It reads the **shared `libs/contracts` schema**
+(`avro/CompanyCreated.avsc`, full name `id.co.nativeapp.events.org.CompanyCreated`) as
+**raw Avro bytes** via `libs/events AvroSerde` (no Schema Registry serde), and dedupes by
+the event UUID (`ProcessedEventStore`) so a re-delivery never double-seeds. Unlike the
+entitlement consumer, it **reads `base_currency`**: the OFFICIAL dataset (`ID-2026.1`:
+BPJS / PTKP / PPh21 TER) is Indonesian statutory law, so only an **`IDR`** company — the
+Indonesia proxy (ADR 0025: country ID → IDR; Native is multi-country, ADR 0059) — is
+seeded; a non-IDR company is skipped. On an IDR company it seeds the base pay-component
+catalog then activates the OFFICIAL dataset over it — one transaction inside the new
+company's tenant scope (so RLS applies). The `CompanyCreatedConsumerContractTest` asserts
+the consumer view stays backward-compatible with the producer schema (rule 7).
 
 ### `EmployeeChanged`
 

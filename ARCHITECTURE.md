@@ -77,7 +77,7 @@ Each entry: **Responsibility · Owns · Publishes · Consumes · Notes.**
 - **Responsibility:** the canonical employee and everything HR — records, contracts, assignments, compensation, payroll, leave.
 - **Owns:** `employee` (incl. `ptkp_status`), `employment_contract` (incl. `employment_type`), `assignment` (org_unit, `reporting_to`, role, effective dates), `management_scope`, `compensation_package`, `earning_rule`, `pay_component` (incl. `gl_account`), `statutory_rule` (versioned, effective-dated), `payroll_run`, `payslip_line` (stamps `rule_version`), `leave_*`.
 - **Publishes:** `EmployeeChanged`, `AssignmentChanged`, `PayrollPosted`, `LaborCostAllocated`.
-- **Consumes:** `MetricPublished` (for variable pay), `PeriodSealed` (completeness gate), `OrgUnitChanged`, `EntitlementGranted/Revoked`.
+- **Consumes:** `MetricPublished` (for variable pay), `PeriodSealed` (completeness gate), `OrgUnitChanged`, `EntitlementGranted/Revoked`, `CompanyCreated` (auto-activate the OFFICIAL statutory payroll dataset for a new IDR tenant — ADR 0066).
 - **Notes (key invariants):**
   - Org/team/manager live on the **assignment**, not the employee; an employee holds multiple concurrent assignments.
   - Concurrent assignments must all resolve to the **same `legal_employer`** — enforce at assignment creation (reject cross-company concurrency).
@@ -144,7 +144,7 @@ Each entry: **Responsibility · Owns · Publishes · Consumes · Notes.**
 
 | Event | Producer | Consumers | Key fields |
 |---|---|---|---|
-| `CompanyCreated` | org-service | entitlement, finance, verticals | company_id, legal_employer_id, base_currency, default_language |
+| `CompanyCreated` | org-service | entitlement, finance, employee, verticals | company_id, legal_employer_id, base_currency, default_language |
 | `OrgUnitCreated/Changed` | org-service | employee, verticals, finance | org_unit_id, type, parent_id, company_id |
 | `EntitlementGranted/Revoked` | entitlement | shell, all services | company_id, module_key |
 | `EmployeeChanged` | employee | verticals | employee_id, company_id, status |
