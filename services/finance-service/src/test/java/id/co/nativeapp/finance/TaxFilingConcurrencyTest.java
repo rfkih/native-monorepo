@@ -72,7 +72,7 @@ class TaxFilingConcurrencyTest extends PostgresRlsTestBase {
                   vendorWriter.create("Acme Supplies", null, null).id(),
                   "IDR",
                   true,
-                  List.of(new BillLineInput("Purchase", 1, 4_000_000L)));
+                  List.of(new BillLineInput("Purchase", 1, 4_000_000L, false)));
           billWriter.post(bill, 30);
           return null;
         });

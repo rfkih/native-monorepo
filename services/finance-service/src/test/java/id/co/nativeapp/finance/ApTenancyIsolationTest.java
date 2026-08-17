@@ -60,7 +60,7 @@ class ApTenancyIsolationTest extends PostgresRlsTestBase {
                       vendor.id(),
                       "IDR",
                       true,
-                      List.of(new BillLineInput("Supplies", 2, 500_000L)));
+                      List.of(new BillLineInput("Supplies", 2, 500_000L, false)));
               billWriter.post(id, 30);
               billPaymentWriter.record(id, 300_000L, "CASH", null);
               return id;

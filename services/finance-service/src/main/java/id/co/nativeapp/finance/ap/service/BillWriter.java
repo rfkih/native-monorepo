@@ -7,14 +7,19 @@ import id.co.nativeapp.finance.ap.domain.BillStateException;
 import id.co.nativeapp.finance.ap.domain.BillStatus;
 import id.co.nativeapp.finance.ap.domain.Vendor;
 import id.co.nativeapp.finance.ap.domain.VendorNotFoundException;
+import id.co.nativeapp.finance.ap.projection.BillLineNetView;
 import id.co.nativeapp.finance.ap.repository.BillLineRepository;
 import id.co.nativeapp.finance.ap.repository.BillRepository;
 import id.co.nativeapp.finance.ap.repository.VendorRepository;
+import id.co.nativeapp.finance.gl.domain.AccountRole;
 import id.co.nativeapp.finance.gl.domain.EventKind;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
+import id.co.nativeapp.finance.gl.domain.JournalLine;
 import id.co.nativeapp.finance.gl.repository.JournalEntryRepository;
 import id.co.nativeapp.finance.gl.repository.JournalLineRepository;
 import id.co.nativeapp.finance.gl.service.JournalPostingService;
+import id.co.nativeapp.finance.gl.service.RoleAccountResolver;
+import id.co.nativeapp.finance.inventory.service.PerpetualInventoryReader;
 import id.co.nativeapp.finance.pnl.domain.MismatchedPostingCurrencyException;
 import id.co.nativeapp.finance.revenue.domain.LedgerPosting;
 import id.co.nativeapp.money.Money;
@@ -23,6 +28,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.Currency;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -51,6 +57,27 @@ import org.springframework.transaction.annotation.Transactional;
  * <p><strong>Idempotency.</strong> The post GL entry's {@code source_event_id} is the bill id
  * (UNIQUE), and post is a DRAFT→POSTED transition guarded to run once (a re-post is a 409), so a
  * duplicate post can never double-post. The void contra uses a fresh event id.
+ *
+ * <p><strong>ADR 0067 Phase B, §3 — inventory routing, DEPLOY-SAFE by construction.</strong> When
+ * the owning company is perpetual-active ({@link PerpetualInventoryReader#isActiveFor}, keyed on
+ * the posting period): the bill's lines are split by {@link BillLine#isInventory()} into {@code
+ * EXPENSE_NET} (non-inventory) and {@code INVENTORY_NET} (inventory-flagged), and an AD-HOC 4-line
+ * entry is built directly via {@link RoleAccountResolver} — {@code Dr EXPENSE(expenseNet) / Dr
+ * GRNI_CLEARING(inventoryNet) / Dr VAT_INPUT(tax) / Cr AP(gross)} (contra on void) — NEVER the
+ * {@link JournalPostingService}/posting-template path. This is deliberate: {@code BILL_POSTED}/
+ * {@code BILL_VOID}'s DB-version-3 template (the one whose lines carry {@code EXPENSE_NET}/{@code
+ * INVENTORY_NET}) is seeded future-dated (effective 2099-01-01, V53) so it can never resolve for a
+ * real event — routing the active branch through it would coincidentally require flipping that date
+ * (a global, irreversible change for every tenant) just to unblock one company's activation.
+ * Building the split ad-hoc instead means activating a SINGLE company never depends on — and can
+ * never accidentally trigger — a fleet-wide template flip.
+ *
+ * <p>The INACTIVE branch (every tenant in Phase B — {@code isActiveFor} reads a table that ships
+ * EMPTY) is completely UNTOUCHED: it keeps calling {@link
+ * JournalPostingService#buildEntryFromBreakdown} with the SAME {@code {GROSS, NET, TAX}} map as
+ * before this ADR, which resolves the CURRENTLY-effective {@code BILL_POSTED}/{@code BILL_VOID}
+ * template (DB version 2, V51's official supersession) — byte-identical to pre-ADR-0067 behaviour,
+ * and independent of whether the DB-version-3 template even exists.
  */
 @Component
 public class BillWriter {
@@ -73,6 +100,8 @@ public class BillWriter {
   private final JournalPostingService journalPostingService;
   private final JournalEntryRepository journalEntryRepository;
   private final JournalLineRepository journalLineRepository;
+  private final RoleAccountResolver roleAccountResolver;
+  private final PerpetualInventoryReader perpetualInventoryReader;
   private final JdbcTemplate jdbcTemplate;
   private final Clock clock;
 
@@ -84,6 +113,8 @@ public class BillWriter {
       JournalPostingService journalPostingService,
       JournalEntryRepository journalEntryRepository,
       JournalLineRepository journalLineRepository,
+      RoleAccountResolver roleAccountResolver,
+      PerpetualInventoryReader perpetualInventoryReader,
       JdbcTemplate jdbcTemplate,
       Clock clock) {
     this.billRepository = billRepository;
@@ -92,6 +123,8 @@ public class BillWriter {
     this.journalPostingService = journalPostingService;
     this.journalEntryRepository = journalEntryRepository;
     this.journalLineRepository = journalLineRepository;
+    this.roleAccountResolver = roleAccountResolver;
+    this.perpetualInventoryReader = perpetualInventoryReader;
     this.jdbcTemplate = jdbcTemplate;
     this.clock = clock;
   }
@@ -137,7 +170,13 @@ public class BillWriter {
     for (BillLineInput input : lineInputs) {
       Money unitPrice = Money.ofMinor(input.unitPriceMinor(), currency);
       BillLine line =
-          BillLine.of(bill.getId(), lineNo++, input.description(), input.quantity(), unitPrice);
+          BillLine.of(
+              bill.getId(),
+              lineNo++,
+              input.description(),
+              input.quantity(),
+              unitPrice,
+              input.inventory());
       line.setCompanyId(companyId);
       billLineRepository.save(line);
     }
@@ -174,17 +213,20 @@ public class BillWriter {
     // trust the client just because the console hides the currency toggle).
     requireConsistentGlCurrency(period, bill.total());
 
-    // Dr EXPENSE (net = subtotal) / Dr VAT_INPUT (tax) / Cr AP (total). TAX line zero-omits when
-    // the bill is not taxable. source_event_id = bill id (UNIQUE backstop; post runs once).
+    // ADR 0067 Phase B, §3: perpetual-active companies split EXPENSE_NET/INVENTORY_NET via an
+    // ad-hoc entry (never the posting-template path — see the class docs). Every tenant in Phase B
+    // takes the INACTIVE branch, byte-identical to pre-ADR-0067.
     JournalEntry glEntry =
-        journalPostingService.buildEntryFromBreakdown(
-            EventKind.BILL_POSTED,
-            period,
-            now,
-            bill.getId(),
-            "AP bill posted",
-            bill.isUsesIllustrativeRules(),
-            postAmounts(bill));
+        perpetualInventoryReader.isActiveFor(period)
+            ? buildSplitBillEntry(bill, now, period, "AP bill posted", false)
+            : journalPostingService.buildEntryFromBreakdown(
+                EventKind.BILL_POSTED,
+                period,
+                now,
+                bill.getId(),
+                "AP bill posted",
+                bill.isUsesIllustrativeRules(),
+                postAmounts(bill));
     persistEntry(glEntry, companyId);
 
     String number = nextBillNumber(companyId);
@@ -216,14 +258,16 @@ public class BillWriter {
       // posts in the current period, which may differ from the post period.
       requireConsistentGlCurrency(period, bill.total());
       JournalEntry contra =
-          journalPostingService.buildEntryFromBreakdown(
-              EventKind.BILL_VOID,
-              period,
-              now,
-              UUID.randomUUID(),
-              "AP bill voided",
-              bill.isUsesIllustrativeRules(),
-              postAmounts(bill));
+          perpetualInventoryReader.isActiveFor(period)
+              ? buildSplitBillEntry(bill, now, period, "AP bill voided", true)
+              : journalPostingService.buildEntryFromBreakdown(
+                  EventKind.BILL_VOID,
+                  period,
+                  now,
+                  UUID.randomUUID(),
+                  "AP bill voided",
+                  bill.isUsesIllustrativeRules(),
+                  postAmounts(bill));
       persistEntry(contra, companyId);
     }
     bill.voidBill();
@@ -239,6 +283,101 @@ public class BillWriter {
     amounts.put("TAX", bill.tax());
     return amounts;
   }
+
+  /**
+   * ADR 0067 Phase B, §3 — builds (but does not persist) the perpetual-active split entry directly
+   * via {@link RoleAccountResolver}, NEVER the {@link JournalPostingService} posting-template path
+   * (see the class docs for why). {@code expenseNet + inventoryNet == bill.subtotal()} exactly (the
+   * lines partition the SAME sum {@link Bill#subtotal()} was computed from), so the entry balances
+   * by construction: {@code Σdebit == expenseNet + inventoryNet + tax == subtotal + tax == gross ==
+   * Σcredit}. A zero-amount leg is omitted (the {@link JournalPostingService} zero-line-omission
+   * precedent) — a bill with no inventory-flagged lines therefore posts the SAME three legs as the
+   * inactive path (just built via a different mechanism), and a non-taxable bill still omits TAX.
+   *
+   * <p>POST: {@code Dr EXPENSE(expenseNet) / Dr GRNI_CLEARING(inventoryNet) / Dr VAT_INPUT(tax) /
+   * Cr AP(gross)}. VOID ({@code contra = true}): the exact mirror, {@code Dr AP(gross) / Cr
+   * EXPENSE(expenseNet) / Cr GRNI_CLEARING(inventoryNet) / Cr VAT_INPUT(tax)} — the same line
+   * ordering V53's registered (but inert) BILL_VOID v3 template documents.
+   */
+  private JournalEntry buildSplitBillEntry(
+      Bill bill, Instant occurredAt, String period, String description, boolean contra) {
+    UUID sourceEventId = contra ? UUID.randomUUID() : bill.getId();
+    UUID entryId = UUID.randomUUID();
+    Currency currency = Currency.getInstance(bill.getCurrency());
+    NetSplit split = computeNetSplit(bill.getId(), currency);
+    Money tax = bill.tax();
+    Money gross = bill.total();
+
+    String expenseCode = requireMapped(AccountRole.EXPENSE, occurredAt);
+    String grniCode = requireMapped(AccountRole.GRNI_CLEARING, occurredAt);
+    String taxCode = requireMapped(AccountRole.VAT_INPUT, occurredAt);
+    String apCode = requireMapped(AccountRole.AP, occurredAt);
+
+    List<JournalLine> lines = new ArrayList<>(4);
+    int lineNo = 1;
+    if (!contra) {
+      if (!split.expenseNet().isZero()) {
+        lines.add(JournalLine.debit(entryId, lineNo++, expenseCode, split.expenseNet()));
+      }
+      if (!split.inventoryNet().isZero()) {
+        lines.add(JournalLine.debit(entryId, lineNo++, grniCode, split.inventoryNet()));
+      }
+      if (!tax.isZero()) {
+        lines.add(JournalLine.debit(entryId, lineNo++, taxCode, tax));
+      }
+      lines.add(JournalLine.credit(entryId, lineNo, apCode, gross));
+    } else {
+      lines.add(JournalLine.debit(entryId, lineNo++, apCode, gross));
+      if (!split.expenseNet().isZero()) {
+        lines.add(JournalLine.credit(entryId, lineNo++, expenseCode, split.expenseNet()));
+      }
+      if (!split.inventoryNet().isZero()) {
+        lines.add(JournalLine.credit(entryId, lineNo++, grniCode, split.inventoryNet()));
+      }
+      if (!tax.isZero()) {
+        lines.add(JournalLine.credit(entryId, lineNo, taxCode, tax));
+      }
+    }
+
+    return JournalEntry.balanced(
+        entryId,
+        period,
+        occurredAt,
+        description,
+        currency.getCurrencyCode(),
+        sourceEventId,
+        true, // GRNI_CLEARING/EXPENSE/VAT_INPUT/AP mappings are all illustrative-seeded today
+        lines);
+  }
+
+  /** Partitions one bill's persisted lines into {@code EXPENSE_NET} / {@code INVENTORY_NET}. */
+  private NetSplit computeNetSplit(UUID billId, Currency currency) {
+    Money expenseNet = Money.zero(currency);
+    Money inventoryNet = Money.zero(currency);
+    for (BillLineNetView line : billLineRepository.findNetViewsByBillId(billId)) {
+      Money amount = Money.ofMinor(line.getLineTotalMinor(), currency);
+      if (line.getIsInventory()) {
+        inventoryNet = inventoryNet.plus(amount);
+      } else {
+        expenseNet = expenseNet.plus(amount);
+      }
+    }
+    return new NetSplit(expenseNet, inventoryNet);
+  }
+
+  /**
+   * Fail loud on an unmapped role (V13/V28/V53 seed every role used here, effective 2000-01-01).
+   */
+  private String requireMapped(AccountRole role, Instant occurredAt) {
+    String accountCode = roleAccountResolver.resolve(role, occurredAt);
+    if (accountCode == null) {
+      throw new IllegalStateException(
+          "no role_account_map mapping for " + role + " at " + occurredAt);
+    }
+    return accountCode;
+  }
+
+  private record NetSplit(Money expenseNet, Money inventoryNet) {}
 
   private void persistEntry(JournalEntry entry, String companyId) {
     entry.setCompanyId(companyId);

@@ -22,6 +22,13 @@ import org.hibernate.type.SqlTypes;
  * MoneyEmbeddable} per amount would clash on the {@code currency} column).
  *
  * <p>Extends {@link Auditable}; under the {@code bill_line} RLS policy (V27).
+ *
+ * <p><strong>ADR 0067 Phase B, §3.</strong> {@link #inventory} (V54 {@code is_inventory}, {@code
+ * NOT NULL DEFAULT FALSE}) is the optional per-line flag steering {@code BillWriter}'s net split
+ * between {@code EXPENSE_NET} (non-inventory lines, unchanged {@code Dr 5000}) and {@code
+ * INVENTORY_NET} (inventory-flagged lines, {@code Dr 2050 GRNI}) — read ONLY when the owning
+ * company is perpetual-active; otherwise ignored (every line routes to {@code EXPENSE}, today's
+ * unchanged behaviour).
  */
 @Entity
 @Table(name = "bill_line")
@@ -53,6 +60,10 @@ public class BillLine extends Auditable {
   @Column(name = "currency", nullable = false, length = 3)
   private String currency;
 
+  /** See the class docs (ADR 0067 Phase B, §3). Defaults {@code false} (V54 column default). */
+  @Column(name = "is_inventory", nullable = false, updatable = false)
+  private boolean inventory;
+
   protected BillLine() {
     // for JPA
   }
@@ -66,9 +77,16 @@ public class BillLine extends Auditable {
    * @param description the line description (required)
    * @param quantity the whole-unit quantity (&gt; 0)
    * @param unitPrice the per-unit price as {@link Money} (positive; its currency is the line's)
+   * @param inventory whether this line routes to inventory (ADR 0067 Phase B, §3) when the owning
+   *     company is perpetual-active; ignored otherwise
    */
   public static BillLine of(
-      UUID billId, int lineNo, String description, int quantity, Money unitPrice) {
+      UUID billId,
+      int lineNo,
+      String description,
+      int quantity,
+      Money unitPrice,
+      boolean inventory) {
     Objects.requireNonNull(billId, "billId");
     Objects.requireNonNull(unitPrice, "unitPrice");
     if (quantity <= 0) {
@@ -87,6 +105,7 @@ public class BillLine extends Auditable {
     line.unitPriceMinor = unitPrice.amountMinor();
     line.lineTotalMinor = lineTotal.amountMinor();
     line.currency = unitPrice.currency().getCurrencyCode();
+    line.inventory = inventory;
     return line;
   }
 
@@ -127,5 +146,10 @@ public class BillLine extends Auditable {
   /** The extended line total ({@code unitPrice × quantity}) as a {@link Money} value. */
   public Money lineTotal() {
     return Money.ofMinor(lineTotalMinor, currency.strip());
+  }
+
+  /** See the class docs (ADR 0067 Phase B, §3). */
+  public boolean isInventory() {
+    return inventory;
   }
 }

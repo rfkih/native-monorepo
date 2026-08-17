@@ -14,9 +14,8 @@ import org.apache.avro.Schema;
  * UUID and by {@code receipt_id} (via {@code journal_entry.source_event_id} UNIQUE) — no Schema
  * Registry serde.
  *
- * <p>ADR 0067 Phase 0 (contracts-first, this class): schema registration + catalog + contract tests
- * only. The {@code decode(...)} + event record land with the {@code StockReceived}-consuming
- * listener (Phase B).
+ * <p>ADR 0067 Phase B: {@link #decode} builds the typed {@link StockReceivedEvent} the {@code
+ * StockReceivedListener} hands to {@code StockReceivedService}.
  */
 public final class StockReceivedSchema {
 
@@ -35,6 +34,12 @@ public final class StockReceivedSchema {
   /** The parsed reader schema. */
   public static Schema schema() {
     return SCHEMA;
+  }
+
+  /** Decodes the raw outbox Avro payload into the typed event (see {@code AvroSerde}). */
+  public static StockReceivedEvent decode(java.util.UUID eventId, byte[] payload) {
+    return StockReceivedEvent.from(
+        eventId, id.co.nativeapp.events.AvroSerde.deserialize(payload, SCHEMA));
   }
 
   private static Schema parse() {

@@ -11,9 +11,10 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Request body to create a DRAFT bill. Each line carries a description, whole-unit quantity, and
- * per-unit price in minor units; the server computes the line totals, subtotal, tax (illustrative
- * input VAT when {@code taxable}), and grand total — never the client.
+ * Request body to create a DRAFT bill. Each line carries a description, whole-unit quantity,
+ * per-unit price in minor units, and an optional {@code inventory} flag (ADR 0067 Phase B, §3); the
+ * server computes the line totals, subtotal, tax (illustrative input VAT when {@code taxable}), and
+ * grand total — never the client.
  */
 public record CreateBillRequest(
     @NotNull UUID vendorId,
@@ -21,9 +22,20 @@ public record CreateBillRequest(
     boolean taxable,
     @NotEmpty @Valid List<LineRequest> lines) {
 
-  /** One requested bill line. */
+  /**
+   * One requested bill line.
+   *
+   * @param inventory whether this line is an inventory purchase (ADR 0067 Phase B, §3) — read ONLY
+   *     when the owning company is perpetual-active; ignored otherwise (every tenant in Phase B).
+   *     {@code Boolean} (boxed), not {@code boolean}: Jackson's record deserializer treats a
+   *     MISSING primitive creator property as an error, but tolerates a missing boxed one as {@code
+   *     null} — so an old client that omits the field parses fine (never a 400) and reads as {@code
+   *     null}, treated as {@code false} by {@link
+   *     id.co.nativeapp.finance.ap.controller.BillController} (backward compatible).
+   */
   public record LineRequest(
       @NotBlank @Size(max = 500) String description,
       @Positive int quantity,
-      @Positive long unitPriceMinor) {}
+      @Positive long unitPriceMinor,
+      Boolean inventory) {}
 }

@@ -76,7 +76,7 @@ has landed yet — the status names the phases that will land them.
 | **`ConsolidationClosed`** | **finance** (within-company + group close) | **shell, notification** | **company_id (or group_id), period** | **LIVE (PRODUCER P3d SEAM 4a; notification consumer #22)** |
 | **`DeliveryReceipt`** | **notification-service** | **(audit/observability sinks; re-send policy)** | **notification_id, company_id, channel, status, provider_ref, delivered_at** | **LIVE (#22)** |
 | **`PaymentChargeSucceeded`** | **payment-service** | **restaurant-service, carwash-service, barbershop-service** (each filters on `vertical`) | **charge_id, company_id, vertical, payment_id, reference_id?, business_id, amount_minor, currency, provider, provider_txn_id?, succeeded_at** | **LIVE (ADR 0045): producer (webhook + sync settlement transitions, outbox, Debezium `payment-outbox-connector`) AND all three vertical consumers built — each runs its existing idempotent capture writer** |
-| **`StockReceived`** | **restaurant-service** | **finance-service** | **receipt_id, company_id, business_id, ingredient_id, qty, value_minor, currency, received_at** | **SCHEMA REGISTERED (ADR 0067, Phase 0); producer + `goods_receipt` idempotency anchor Phase B, finance capitalization consumer Phase B** |
+| **`StockReceived`** | **restaurant-service** | **finance-service** | **receipt_id, company_id, business_id, ingredient_id, qty, value_minor, currency, received_at** | **LIVE (ADR 0067, Phase B): producer (`IngredientWriter.addStock` priced branch + `goods_receipt` idempotency anchor) AND finance consumer (`StockReceivedWriter`, capitalize-if-perpetual-active/else claimed no-op) both wired; perpetual-active branch dead in prod until Phase D activates a tenant** |
 | **`SaleCogsRecorded`** | **restaurant-service** | **finance-service** | **sale_id, company_id, business_id, occurred_at, cogs_minor, currency** | **SCHEMA REGISTERED (ADR 0067, Phase 0); producer (`IngredientDepletionWriter` COGS fold) Phase C, finance perpetual-COGS consumer Phase C** |
 
 ---
@@ -2445,15 +2445,17 @@ call). Both are NEW contracts, deliberately not evolutions of `SaleRecorded` or 
 — a mid-deploy mix of old/new consumers would otherwise post money under mixed semantics, the same
 reasoning `ExpenseClaimApproved` used against overloading `ExpenseRecorded`.
 
-**Status of this wave (Phase 0).** Both schemas are registered in `libs/contracts` (the single
-source of truth, ADR 0003), added to this catalog, and covered by producer-side (restaurant-service)
-and consumer-side (finance-service) contract-test triads (parse with the documented shape,
-round-trip through `libs/events AvroSerde`, an incompatible required-field-without-default
-evolution rejected, a backward-compatible optional-field-with-default evolution accepted). **No
-producer or consumer is wired yet** — `inventory.service.IngredientWriter.addStock`'s priced-receive
-branch + the `goods_receipt` idempotency anchor (Phase B) and
-`recipe.service.IngredientDepletionWriter`'s COGS fold (Phase C) are later waves; this is
-deliberately schema-and-catalog-only (the ADR 0027 loyalty/gift-card contracts-first precedent).
+**Status of this wave.** Both schemas are registered in `libs/contracts` (the single source of
+truth, ADR 0003), added to this catalog, and covered by producer-side (restaurant-service) and
+consumer-side (finance-service) contract-test triads (parse with the documented shape, round-trip
+through `libs/events AvroSerde`, an incompatible required-field-without-default evolution rejected,
+a backward-compatible optional-field-with-default evolution accepted). **`StockReceived` is wired
+end-to-end (Phase B):** `inventory.service.IngredientWriter.addStock`'s priced-receive branch writes
+the `goods_receipt` idempotency anchor + the outbox row in the same transaction (restaurant), and
+`inventory.service.StockReceivedWriter` capitalizes it (finance) — perpetual-active branch dead in
+production until Phase D activates a company (no `inventory_method_config` row exists yet).
+**`SaleCogsRecorded` is NOT yet wired** — `recipe.service.IngredientDepletionWriter`'s COGS fold is
+Phase C, a later wave (the ADR 0027 loyalty/gift-card contracts-first precedent).
 
 ### `StockReceived`
 
@@ -2463,13 +2465,15 @@ finance-service can debit `1100 Inventory`. A new `goods_receipt` row (restauran
 B) will be the durable idempotency anchor — this also closes ADR 0056 accepted-limitation #1 (a
 duplicated priced receive currently double-adds value).
 
-- **Producer (Phase B, not yet wired):** `restaurant-service` `inventory.service.IngredientWriter.addStock`
+- **Producer (Phase B, WIRED):** `restaurant-service` `inventory.service.IngredientWriter.addStock`
   (the priced branch — `amountPaidMinor` present), outbox row in the same transaction as
   `Ingredient.receive`.
-- **Consumers (Phase B, not yet wired):** `finance-service` — when the company is perpetual-active
-  for the receipt's period: `Dr INVENTORY (1100, value_minor) / Cr GRNI_CLEARING (2050, value_minor)`
-  (ad-hoc 2-line entry via `RoleAccountResolver`, the V50 stocktake/bank/asset-disposal precedent —
-  no template needed); otherwise a claimed no-op (idempotency preserved; nothing posts).
+- **Consumers (Phase B, WIRED):** `finance-service` `inventory.service.StockReceivedWriter` — when
+  the company is perpetual-active for the receipt's period: `Dr INVENTORY (1100, value_minor) / Cr
+  GRNI_CLEARING (2050, value_minor)` (ad-hoc 2-line entry via `RoleAccountResolver`, the V50
+  stocktake/bank/asset-disposal precedent — no template needed); otherwise a claimed no-op
+  (idempotency preserved; nothing posts) — the branch EVERY tenant takes today, since no
+  `inventory_method_config` row exists until Phase D activation.
 - **Aggregate type / partition key:** `goods_receipt` / `receipt_id`
 - **Outbox `event_type`:** `StockReceived`
 - **Schema:** `libs/contracts/src/main/resources/avro/StockReceived.avsc`
