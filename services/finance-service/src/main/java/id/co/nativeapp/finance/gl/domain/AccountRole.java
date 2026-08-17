@@ -312,7 +312,30 @@ public enum AccountRole {
    * written (the {@code PlatformSettlementWriter} precedent). Maps to account 5720 (ILLUSTRATIVE —
    * SME-gated, V52).
    */
-  QRIS_FEE_EXPENSE;
+  QRIS_FEE_EXPENSE,
+
+  /**
+   * Perpetual inventory (ADR 0067 phase 0, ILLUSTRATIVE — SME-gated): the goods-received-not-
+   * invoiced clearing account — the 3-way GRNI idiom that avoids per-line receipt/bill matching
+   * (rule 1). Credited by a priced goods receipt (Dr {@link #INVENTORY} / Cr this — the {@code
+   * StockReceived} consumer, Phase B, NOT wired yet) and debited by an inventory-flagged AP bill
+   * line (Dr this / Cr {@link #AP} — the {@code BILL_POSTED} {@code INVENTORY_NET} leg, registered
+   * at posting_template DB version 3 (V51's go-live already claimed version 2; see V53's VERSION
+   * NUMBERING NOTE) but INACTIVE (future-effective) until Phase B updates {@code BillWriter} to
+   * populate it. A non-zero residual is the expected price/timing variance between the restaurant's
+   * landed receipt value and the vendor's invoiced amount — reviewed periodically by an accountant,
+   * never auto-reconciled. Maps to account 2050 (ILLUSTRATIVE — SME-gated, V53).
+   */
+  GRNI_CLEARING,
+
+  /**
+   * Perpetual inventory (ADR 0067 phase 0, ILLUSTRATIVE — SME-gated): cost of goods sold — will be
+   * debited per sale by the (not-yet-wired) {@code SaleCogsRecorded} consumer (Dr this / Cr {@link
+   * #INVENTORY}, Phase C). Reuses the {@code 5100 Cost of Goods Sold} account already seeded in the
+   * chart (V2) but, until this role, never mapped to any double-entry posting. Maps to account 5100
+   * (ILLUSTRATIVE — SME-gated, V53).
+   */
+  COGS;
 
   /**
    * The GL clearing {@link AccountRole} a POS tender settles through — the single source shared by

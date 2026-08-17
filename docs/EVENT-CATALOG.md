@@ -76,6 +76,8 @@ has landed yet — the status names the phases that will land them.
 | **`ConsolidationClosed`** | **finance** (within-company + group close) | **shell, notification** | **company_id (or group_id), period** | **LIVE (PRODUCER P3d SEAM 4a; notification consumer #22)** |
 | **`DeliveryReceipt`** | **notification-service** | **(audit/observability sinks; re-send policy)** | **notification_id, company_id, channel, status, provider_ref, delivered_at** | **LIVE (#22)** |
 | **`PaymentChargeSucceeded`** | **payment-service** | **restaurant-service, carwash-service, barbershop-service** (each filters on `vertical`) | **charge_id, company_id, vertical, payment_id, reference_id?, business_id, amount_minor, currency, provider, provider_txn_id?, succeeded_at** | **LIVE (ADR 0045): producer (webhook + sync settlement transitions, outbox, Debezium `payment-outbox-connector`) AND all three vertical consumers built — each runs its existing idempotent capture writer** |
+| **`StockReceived`** | **restaurant-service** | **finance-service** | **receipt_id, company_id, business_id, ingredient_id, qty, value_minor, currency, received_at** | **SCHEMA REGISTERED (ADR 0067, Phase 0); producer + `goods_receipt` idempotency anchor Phase B, finance capitalization consumer Phase B** |
+| **`SaleCogsRecorded`** | **restaurant-service** | **finance-service** | **sale_id, company_id, business_id, occurred_at, cogs_minor, currency** | **SCHEMA REGISTERED (ADR 0067, Phase 0); producer (`IngredientDepletionWriter` COGS fold) Phase C, finance perpetual-COGS consumer Phase C** |
 
 ---
 
@@ -2423,3 +2425,159 @@ never reorder/remove/retype. `reference_id` and `provider_txn_id` are nullable u
 (`PaymentChargeSucceededContractTest` — parse, round-trip both nullable states, self-compat,
 added-optional accepted, required-without-default rejected); each vertical adds its consumer-side
 copy with its listener.
+
+---
+
+## ADR 0067 (perpetual inventory accounting) — schema foundation
+
+The two events below are the **event-contract foundation** of [ADR 0067](adr/0067-perpetual-inventory-accounting.md)
+(perpetual inventory accounting — capitalize purchases, COGS on consumption, stocktake trues the
+asset). Today restaurant-service's ingredient value (moving-average, ADR 0056) and finance-service's
+GL never meet: a purchase expenses in full at bill-post (`Dr 5000`, never capitalized), a sale's
+recipe depletion posts nothing to the GL, and a stocktake variance double-counts the loss while
+`1100 Inventory` only ever gets credited — driving it structurally negative. ADR 0067 closes that
+by having restaurant-service emit two valued **facts** unconditionally — `StockReceived` (a priced
+goods receipt) and `SaleCogsRecorded` (a sale's recipe-depletion cost) — and finance-service decide
+the accounting treatment **locally**: post `Dr 1100 Inventory / Cr 2050 GRNI Clearing` /
+`Dr 5100 COGS / Cr 1100 Inventory` when the company is perpetual-active for the event's period,
+otherwise a claimed no-op (rule 2 — restaurant stays election-agnostic; no cross-service config
+call). Both are NEW contracts, deliberately not evolutions of `SaleRecorded` or `StocktakeCompleted`
+— a mid-deploy mix of old/new consumers would otherwise post money under mixed semantics, the same
+reasoning `ExpenseClaimApproved` used against overloading `ExpenseRecorded`.
+
+**Status of this wave (Phase 0).** Both schemas are registered in `libs/contracts` (the single
+source of truth, ADR 0003), added to this catalog, and covered by producer-side (restaurant-service)
+and consumer-side (finance-service) contract-test triads (parse with the documented shape,
+round-trip through `libs/events AvroSerde`, an incompatible required-field-without-default
+evolution rejected, a backward-compatible optional-field-with-default evolution accepted). **No
+producer or consumer is wired yet** — `inventory.service.IngredientWriter.addStock`'s priced-receive
+branch + the `goods_receipt` idempotency anchor (Phase B) and
+`recipe.service.IngredientDepletionWriter`'s COGS fold (Phase C) are later waves; this is
+deliberately schema-and-catalog-only (the ADR 0027 loyalty/gift-card contracts-first precedent).
+
+### `StockReceived`
+
+Will be emitted by restaurant-service when a PRICED goods receipt is recorded (a moving-average
+receive, ADR 0056) — the only place inventory value is known. Carries the *exact landed value* so
+finance-service can debit `1100 Inventory`. A new `goods_receipt` row (restaurant migration, Phase
+B) will be the durable idempotency anchor — this also closes ADR 0056 accepted-limitation #1 (a
+duplicated priced receive currently double-adds value).
+
+- **Producer (Phase B, not yet wired):** `restaurant-service` `inventory.service.IngredientWriter.addStock`
+  (the priced branch — `amountPaidMinor` present), outbox row in the same transaction as
+  `Ingredient.receive`.
+- **Consumers (Phase B, not yet wired):** `finance-service` — when the company is perpetual-active
+  for the receipt's period: `Dr INVENTORY (1100, value_minor) / Cr GRNI_CLEARING (2050, value_minor)`
+  (ad-hoc 2-line entry via `RoleAccountResolver`, the V50 stocktake/bank/asset-disposal precedent —
+  no template needed); otherwise a claimed no-op (idempotency preserved; nothing posts).
+- **Aggregate type / partition key:** `goods_receipt` / `receipt_id`
+- **Outbox `event_type`:** `StockReceived`
+- **Schema:** `libs/contracts/src/main/resources/avro/StockReceived.avsc`
+- **Full name:** `id.co.nativeapp.events.restaurant.StockReceived`
+- **Idempotency (Phase B):** `receipt_id` UNIQUE (`ProcessedEventStore` + `journal_entry.source_event_id`).
+
+`ingredient_id` is a UUID reference, not PII — traceability only; finance posts one aggregate
+`1100`/`2050` pair per receipt and does not dimension the GL on it. `1100` has exactly one writer
+(finance's `StockReceived` consumer) — restaurant never values inventory into the GL.
+
+**Key fields**
+
+| Field | Avro type | Meaning |
+|---|---|---|
+| `receipt_id` | `string` | The `goods_receipt` aggregate id (UUID as string); partition key AND finance idempotency key |
+| `company_id` | `string` | The owning tenant (UUID as string) |
+| `business_id` | `string` | The originating outlet (UUID as string) |
+| `ingredient_id` | `string` | The received ingredient (UUID as string) — traceability only |
+| `qty` | `long` | Units received, in the ingredient's own base unit (integer; ADR 0046 decimal ban) |
+| `value_minor` | `long` | The EXACT total paid for this receipt, minor units — the value added to the moving-average bucket. Never a float |
+| `currency` | `string` | ISO-4217 currency code (e.g. IDR, USD) |
+| `received_at` | `timestamp-millis` | When the goods were received, epoch millis UTC — drives the accounting period |
+
+**Avro schema** (single source of truth in `libs/contracts/src/main/resources/avro/StockReceived.avsc`)
+
+```json
+{
+  "type": "record",
+  "name": "StockReceived",
+  "namespace": "id.co.nativeapp.events.restaurant",
+  "doc": "Emitted by restaurant-service when a PRICED goods receipt is recorded (a moving-average receive, ADR 0056). Consumed by finance-service to capitalize the landed value to Inventory under the GRNI clearing idiom (Dr 1100 / Cr 2050) WHEN the company is perpetual-active for received_at's period; otherwise a claimed no-op. Money is integer minor units + an ISO-4217 code, never a float (rule 8). ALL fields required (a brand-new contract); future additive fields append LAST with a default (rule 7).",
+  "fields": [
+    {"name": "receipt_id", "type": "string", "doc": "The goods_receipt aggregate id (UUID as string); partition key AND finance idempotency key."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string)."},
+    {"name": "business_id", "type": "string", "doc": "The originating outlet (UUID as string)."},
+    {"name": "ingredient_id", "type": "string", "doc": "The received ingredient (UUID as string) — traceability only; finance posts one aggregate Dr 1100 / Cr 2050 pair and does not dimension the GL on it."},
+    {"name": "qty", "type": "long", "doc": "Units received, in the ingredient's own base unit (integer; ADR 0046 decimal ban)."},
+    {"name": "value_minor", "type": "long", "doc": "The EXACT total paid for this receipt, in the currency's minor units — the value added to the moving-average bucket. Never a float (rule 8)."},
+    {"name": "currency", "type": "string", "doc": "ISO-4217 currency code (e.g. IDR, USD)."},
+    {"name": "received_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the goods were received, epoch millis UTC — drives the accounting period."}
+  ]
+}
+```
+
+**Compatibility.** ALL fields required (a brand-new contract, not an evolution) — this is correct
+per rule 7; future additive fields append LAST with a default. **Contract tests:**
+`StockReceivedContractTest` in restaurant-service (producer: parse documented shape, round-trip
+via `AvroSerde`, required-field-without-default rejected, optional-field-with-default accepted) AND
+in finance-service (consumer: parse, backward-compatible with the producer schema embedded above,
+producer-written bytes decode under the consumer view, required-field-without-default rejected).
+
+### `SaleCogsRecorded`
+
+Will be emitted by restaurant-service when a sale depletes recipe ingredients (ADR 0050 phase C —
+pinned name). Carries the cost of goods consumed by a sale so finance-service expenses it against
+inventory. Deliberately a SEPARATE event from `SaleRecorded` (not a field on it) to avoid the SALE
+posting-template deployment hazard (ADR 0050 phase-C pin, V37 note).
+
+- **Producer (Phase C, not yet wired):** `restaurant-service` `recipe.service.IngredientDepletionWriter`
+  folds COGS from the same depletion query (Σ depleted qty × moving-average unit cost at sale
+  time), persists `sale.cogs_minor` + `cogs_currency` as an audit anchor, and writes the outbox row
+  in the same transaction as the sale + depletion. Called from every sale-recording site behind the
+  existing derived-key idempotency (checkout, payParked, bill checks, digital capture, offline
+  replay).
+- **Consumers (Phase C, not yet wired):** `finance-service` — when perpetual-active:
+  `Dr COGS (5100) / Cr INVENTORY (1100)` (ad-hoc 2-line entry via `RoleAccountResolver`); otherwise
+  a claimed no-op. Because the dashboard P&L is GL-derived (ADR 0065), the `5100` leg reaches the
+  beranda AND the income statement automatically once this posts — no `consolidated_pnl` writer to
+  remember.
+- **Aggregate type / partition key:** `sale` / `sale_id`
+- **Outbox `event_type`:** `SaleCogsRecorded`
+- **Schema:** `libs/contracts/src/main/resources/avro/SaleCogsRecorded.avsc`
+- **Full name:** `id.co.nativeapp.events.restaurant.SaleCogsRecorded`
+- **Idempotency (Phase C):** `sale_id` UNIQUE.
+
+**Key fields**
+
+| Field | Avro type | Meaning |
+|---|---|---|
+| `sale_id` | `string` | The sale aggregate id (UUID as string); partition key AND finance idempotency key |
+| `company_id` | `string` | The owning tenant (UUID as string) |
+| `business_id` | `string` | The originating outlet (UUID as string) — the dimensional `business_id` on the COGS `ledger_posting` |
+| `occurred_at` | `timestamp-millis` | When the sale occurred, epoch millis UTC — drives the accounting period (same period as the sale's revenue) |
+| `cogs_minor` | `long` | Cost of goods sold for this sale: Σ (depleted qty × moving-average unit cost at sale time), minor units. Never a float |
+| `currency` | `string` | ISO-4217 currency code (e.g. IDR, USD) |
+
+**Avro schema** (single source of truth in `libs/contracts/src/main/resources/avro/SaleCogsRecorded.avsc`)
+
+```json
+{
+  "type": "record",
+  "name": "SaleCogsRecorded",
+  "namespace": "id.co.nativeapp.events.restaurant",
+  "doc": "Emitted by restaurant-service when a sale depletes recipe ingredients (ADR 0050 phase C). Consumed by finance-service to post perpetual COGS (Dr 5100 / Cr 1100) WHEN the company is perpetual-active for occurred_at's period; otherwise a claimed no-op. cogs_minor = Σ depleted qty × moving-average unit cost at sale time, snapshotted into sale.cogs_minor. Money is integer minor units + an ISO-4217 code, never a float (rule 8). A separate event from SaleRecorded (NOT a field on it) to avoid the SALE posting-template deployment hazard (ADR 0050 phase-C pin, V37 note). ALL fields required; future additive fields append LAST with a default (rule 7).",
+  "fields": [
+    {"name": "sale_id", "type": "string", "doc": "The sale aggregate id (UUID as string); partition key AND finance idempotency key."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string)."},
+    {"name": "business_id", "type": "string", "doc": "The originating outlet (UUID as string) — the dimensional business_id on the COGS ledger_posting."},
+    {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the sale occurred, epoch millis UTC — drives the accounting period (same period as the sale's revenue)."},
+    {"name": "cogs_minor", "type": "long", "doc": "Cost of goods sold for this sale: Σ (depleted qty × moving-average unit cost at sale time), in the currency's minor units. Never a float (rule 8)."},
+    {"name": "currency", "type": "string", "doc": "ISO-4217 currency code (e.g. IDR, USD)."}
+  ]
+}
+```
+
+**Compatibility.** ALL fields required (a brand-new contract, not an evolution) — this is correct
+per rule 7; future additive fields append LAST with a default. **Contract tests:**
+`SaleCogsRecordedContractTest` in restaurant-service (producer: parse documented shape, round-trip
+via `AvroSerde`, required-field-without-default rejected, optional-field-with-default accepted) AND
+in finance-service (consumer: parse, backward-compatible with the producer schema embedded above,
+producer-written bytes decode under the consumer view, required-field-without-default rejected).

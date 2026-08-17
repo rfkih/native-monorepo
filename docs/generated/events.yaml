@@ -297,6 +297,16 @@ events:
       - { name: supersedes_event_id, type: "null|string" }
       - { name: close_seq, type: "int" }
       - { name: reason, type: "null|string" }
+  - name: SaleCogsRecorded
+    namespace: id.co.nativeapp.events.restaurant
+    schema: libs/contracts/src/main/resources/avro/SaleCogsRecorded.avsc
+    fields:
+      - { name: sale_id, type: "string" }
+      - { name: company_id, type: "string" }
+      - { name: business_id, type: "string" }
+      - { name: occurred_at, type: "timestamp-millis" }
+      - { name: cogs_minor, type: "long" }
+      - { name: currency, type: "string" }
   - name: SaleRecorded
     namespace: id.co.nativeapp.events.restaurant
     schema: libs/contracts/src/main/resources/avro/SaleRecorded.avsc
@@ -350,6 +360,18 @@ events:
       - { name: occurred_at, type: "timestamp-millis" }
       - { name: tender_type, type: "null|string" }
       - { name: channel, type: "null|string" }
+  - name: StockReceived
+    namespace: id.co.nativeapp.events.restaurant
+    schema: libs/contracts/src/main/resources/avro/StockReceived.avsc
+    fields:
+      - { name: receipt_id, type: "string" }
+      - { name: company_id, type: "string" }
+      - { name: business_id, type: "string" }
+      - { name: ingredient_id, type: "string" }
+      - { name: qty, type: "long" }
+      - { name: value_minor, type: "long" }
+      - { name: currency, type: "string" }
+      - { name: received_at, type: "timestamp-millis" }
   - name: StocktakeCompleted
     namespace: id.co.nativeapp.events.restaurant
     schema: libs/contracts/src/main/resources/avro/StocktakeCompleted.avsc

@@ -75,6 +75,7 @@ abstract class PostgresRlsTestBase {
               + " employee_expense_claim_ledger,"
               + " platform_receivable, platform_settlement,"
               + " pending_sale_reversal,"
+              + " inventory_method_config,"
               + " journal_line, journal_entry CASCADE");
     } catch (SQLException ignored) {
       // Tables not created yet (pre-Flyway) — nothing to reset.
