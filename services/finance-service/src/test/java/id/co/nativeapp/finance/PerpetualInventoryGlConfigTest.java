@@ -40,8 +40,11 @@ class PerpetualInventoryGlConfigTest extends PostgresRlsTestBase {
   void grniClearingRoleResolvesToTheNewAccount() {
     assertThat(roleAccountResolver.resolve(AccountRole.GRNI_CLEARING, NOW)).isEqualTo("2050");
     assertThat(illustrativeFor("GRNI_CLEARING"))
-        .as("V53 seeds GRNI_CLEARING as illustrative (SME-gated) version 1")
-        .isTrue();
+        .as(
+            "V53 seeded GRNI_CLEARING as illustrative (SME-gated) version 1; V55 superseded it with"
+                + " an official version 2 (bucket A of the go-live SME review) — the account code is"
+                + " unchanged, only provenance flipped")
+        .isFalse();
   }
 
   @Test
@@ -49,7 +52,9 @@ class PerpetualInventoryGlConfigTest extends PostgresRlsTestBase {
     assertThat(roleAccountResolver.resolve(AccountRole.COGS, NOW))
         .as("5100 Cost of Goods Sold already existed (V2) but was never role-mapped before V53")
         .isEqualTo("5100");
-    assertThat(illustrativeFor("COGS")).isTrue();
+    assertThat(illustrativeFor("COGS"))
+        .as("V55 superseded COGS's illustrative version 1 with an official version 2")
+        .isFalse();
   }
 
   /**

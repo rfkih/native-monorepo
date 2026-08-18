@@ -167,10 +167,12 @@ class ReconcilePostingTest {
 
   @Test
   void depositQrisClearingWithFeeDebitsBankAndFeeCreditsGrossToQrisClearing() {
-    // QRIS_FEE_EXPENSE (5720) is a genuine illustrative placeholder (V52; V51's blanket OFFICIAL
-    // supersession never covered it), so a real QRIS-fee reconciliation posts an illustrative leg
-    // and IS badged provisional — the writer must derive that through. Stub the resolver to reflect
-    // prod (the fee leg's role resolves illustrative) rather than the all-official mock default.
+    // QRIS_FEE_EXPENSE (5720) was seeded illustrative (V52) and superseded official by V55 (bucket A
+    // of the go-live SME review) — prod no longer badges a QRIS-fee reconciliation provisional. This
+    // test keeps RoleAccountResolver mocked (unit test, no DB), so it independently proves the writer
+    // still DERIVES uses_illustrative_rules from whatever the resolver reports (rather than
+    // hardcoding it) by forcing the illustrative branch here; see PerpetualInventoryGlConfigTest /
+    // GlConfigOfficialiseTest for the real-DB provenance assertion against the live V55 data.
     when(roleResolver.anyIllustrative(any(), any(), any(), any())).thenReturn(true);
     JournalEntry entry =
         writer.buildEntry(
@@ -188,8 +190,7 @@ class ReconcilePostingTest {
     assertThat(lineFor(lines, "1901").getCreditMinor())
         .isEqualTo(1_020_000L); // Cr QRIS_CLEARING (gross)
     assertThat(entry.isUsesIllustrativeRules())
-        .as(
-            "a QRIS-fee reconciliation posts the still-illustrative 5720 leg, so it stays provisional")
+        .as("when the fee leg's role resolves illustrative, the entry is badged provisional")
         .isTrue();
   }
 
