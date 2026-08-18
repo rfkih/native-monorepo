@@ -19,10 +19,19 @@ interface DraftLine {
   description: string
   quantity: string
   unitPriceMajor: string
+  /** ADR 0067 Phase B, §3 — flags this line as a capitalizable inventory purchase. Defaults false;
+   *  the backend ignores it unless the company has activated perpetual inventory accounting. */
+  inventory: boolean
 }
 
 function newLine(): DraftLine {
-  return { key: crypto.randomUUID(), description: '', quantity: '1', unitPriceMajor: '' }
+  return {
+    key: crypto.randomUUID(),
+    description: '',
+    quantity: '1',
+    unitPriceMajor: '',
+    inventory: false,
+  }
 }
 
 /** A line is submittable once it has a description, a positive integer quantity, and a positive unit price. */
@@ -39,7 +48,7 @@ function parseLine(
   const unitPriceMinor = Math.round(unitPriceMajor * 10 ** exponent)
   if (unitPriceMinor <= 0) return null
   return {
-    body: { description, quantity, unitPriceMinor },
+    body: { description, quantity, unitPriceMinor, inventory: line.inventory },
     lineTotalMinor: quantity * unitPriceMinor,
   }
 }
@@ -228,6 +237,21 @@ export function NewBill() {
                   >
                     <Trash2 className="size-4" />
                   </button>
+                  {/* ADR 0067 Phase B, §3 — per-line inventory flag. Shows unconditionally (the
+                      backend ignores it until the company activates perpetual inventory
+                      accounting), so the form stays ready ahead of activation. */}
+                  <label className="flex cursor-pointer items-center gap-2 sm:col-span-5">
+                    <input
+                      type="checkbox"
+                      checked={line.inventory}
+                      onChange={(e) => updateLine(line.key, { inventory: e.target.checked })}
+                      className="size-4 accent-emerald"
+                    />
+                    <span className="text-xs font-medium text-ink-2">
+                      {t('ap.newBill.inventoryLabel')}
+                    </span>
+                    <span className="text-xs text-ink-3">{t('ap.newBill.inventoryHint')}</span>
+                  </label>
                 </div>
               )
             })}

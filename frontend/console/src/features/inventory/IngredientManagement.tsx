@@ -9,7 +9,7 @@
  * via parseDiscountInput, rendered via formatMoney — rule 8); an uncosted ingredient is
  * counted at opname but never posts to the books.
  */
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, ClipboardList, Moon, Package, Plus, Sun, TriangleAlert, X } from 'lucide-react'
@@ -653,6 +653,11 @@ function ReceiveDialog({
 }) {
   const { t } = useTranslation()
   const add = useAddIngredientStock(session)
+  // ADR 0067 Phase D1 — the Idempotency-Key for THIS receive attempt. Minted once per dialog (a ref,
+  // not per click) so a MANUAL retry after a lost response reuses the SAME key and the backend
+  // dedupes the goods_receipt / Dr 1100 posting (a fresh key per click would double-post real money).
+  // A new dialog = a new receive = a new key.
+  const receiveKeyRef = useRef<string>(crypto.randomUUID())
   const [amountInput, setAmountInput] = useState('')
   const [priceInput, setPriceInput] = useState('')
   // The delta is typed in the SHOWN unit (kg/liter allow decimals; a negative value is a correction)
@@ -675,6 +680,25 @@ function ReceiveDialog({
     amountPaidMinor != null && amountDisplay > 0
       ? formatMoney(Math.round(amountPaidMinor / amountDisplay), baseCurrency, locale)
       : null
+
+  function handleSubmit() {
+    if (!valid) return
+    // ADR 0067 Phase D1 — the stable per-attempt Idempotency-Key (receiveKeyRef, not minted here),
+    // only on the PRICED path (the backend dedupes goods_receipt by this key; a costless delta has no
+    // receipt row to dedupe). Mirrors features/ap/api.ts's useRecordPayment.
+    add.mutate(
+      amountPaidMinor != null
+        ? {
+            id: ingredient.id,
+            amount,
+            amountPaidMinor,
+            costCurrency: baseCurrency,
+            idempotencyKey: receiveKeyRef.current,
+          }
+        : { id: ingredient.id, amount },
+      { onSuccess: onClose },
+    )
+  }
 
   return (
     <DialogShell title={t('inventory.receiveTitle', { name: ingredient.name })} onClose={onClose}>
@@ -723,18 +747,7 @@ function ReceiveDialog({
             {t('inventory.errorGeneric')}
           </p>
         ) : null}
-        <Button
-          className="w-full"
-          disabled={!valid || add.isPending}
-          onClick={() =>
-            add.mutate(
-              amountPaidMinor != null
-                ? { id: ingredient.id, amount, amountPaidMinor, costCurrency: baseCurrency }
-                : { id: ingredient.id, amount },
-              { onSuccess: onClose },
-            )
-          }
-        >
+        <Button className="w-full" disabled={!valid || add.isPending} onClick={handleSubmit}>
           {add.isPending ? <Spinner /> : t('inventory.receiveSubmit')}
         </Button>
       </div>

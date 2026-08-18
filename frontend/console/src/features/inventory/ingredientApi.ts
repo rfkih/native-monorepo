@@ -193,16 +193,33 @@ export interface AddIngredientStockInput {
    * Sent together with `costCurrency`, only on a positive receive with a price entered. */
   amountPaidMinor?: number
   costCurrency?: string
+  /**
+   * ADR 0067 Phase D1 — a stable UUID minted ONCE per user submit (`crypto.randomUUID()` in the
+   * calling component's submit handler, NOT inside `mutationFn`, which re-runs on every TanStack
+   * Query retry and would mint a fresh key per retry) — mirrors `features/ap/api.ts`'s
+   * `useRecordPayment` idiom exactly. Sent as the `Idempotency-Key` header ONLY on a priced receive
+   * (`amountPaidMinor` present): the backend dedupes a retried priced receive by this key
+   * (`goods_receipt.idempotency_key`) so it never double-adds the value / double-posts `Dr 1100`.
+   * The header is optional server-side (backward compatible) and ignored on a costless call.
+   */
+  idempotencyKey?: string
 }
 
 /** POST /{id}/stock/add — signed delta, floored at 0 server-side (the receive/purchase path). */
 export function useAddIngredientStock(session: CompanySession) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, amount, amountPaidMinor, costCurrency }: AddIngredientStockInput) =>
+    mutationFn: ({
+      id,
+      amount,
+      amountPaidMinor,
+      costCurrency,
+      idempotencyKey,
+    }: AddIngredientStockInput) =>
       apiFetch<Ingredient>(`/api/v1/ingredients/${id}/stock/add`, {
         method: 'POST',
         tenant: tenantOf(session),
+        headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
         body:
           amountPaidMinor != null && costCurrency != null
             ? { amount, amountPaidMinor, costCurrency }

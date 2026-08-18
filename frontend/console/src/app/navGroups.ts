@@ -19,6 +19,7 @@ import {
   ArrowLeftRight,
   Banknote,
   BookOpen,
+  Boxes,
   Building2,
   CalendarCheck,
   CalendarClock,
@@ -398,6 +399,12 @@ export function useNavGroups(): {
                 // deliberately UNTAGGED (no `page`, no `feature`) like the escape hatch below.
                 ...(isOwner
                   ? [{ to: '/settings/payments', label: t('nav.payments'), icon: QrCode }]
+                  : []),
+                // Owner-only (ADR 0067 §5) — perpetual-inventory election & activation is an
+                // irreversible accounting decision, not a plan-tier feature: same UNTAGGED
+                // treatment as payments above.
+                ...(isOwner
+                  ? [{ to: '/settings/inventory', label: t('nav.inventoryMethod'), icon: Boxes }]
                   : []),
                 // The escape hatch (plan Risk 1): owner-only, and deliberately UNTAGGED (no `page`,
                 // no `feature`) so it is never hidden by the grant or tier filters below — a

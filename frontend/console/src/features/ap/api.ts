@@ -172,6 +172,11 @@ export interface CreateBillLineBody {
   description: string
   quantity: number
   unitPriceMinor: number
+  /** ADR 0067 Phase B, §3 — capitalizes this line to the Inventory asset (`Dr 2050 GRNI`) instead
+   *  of the generic expense account, but ONLY once the owning company is perpetual-inventory-active
+   *  (ignored otherwise — ADR 0067 Phase D). Optional; an old client that omits it behaves exactly
+   *  like `false` (backward compatible with the pre-ADR-0067 request shape). */
+  inventory?: boolean
 }
 
 /** POST /api/v1/ap/bills body. */

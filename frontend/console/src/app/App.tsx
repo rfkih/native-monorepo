@@ -213,6 +213,11 @@ const FeaturesSettings = lazy(() =>
 const PaymentSettings = lazy(() =>
   import('@/features/payments/PaymentSettings').then((m) => ({ default: m.PaymentSettings })),
 )
+const InventoryMethodSettings = lazy(() =>
+  import('@/features/inventory/InventoryMethodSettings').then((m) => ({
+    default: m.InventoryMethodSettings,
+  })),
+)
 const MyExpenses = lazy(() =>
   import('@/features/expenses/MyExpenses').then((m) => ({ default: m.MyExpenses })),
 )
@@ -627,6 +632,13 @@ export function App() {
               Owner-only (a payments-integrity decision, not a plan-tier feature): mirrors
               /settings/features' registration exactly, one level below it. */}
           {isOwner && <Route path="/settings/payments" element={<PaymentSettings />} />}
+
+          {/* Perpetual-inventory election & activation (ADR 0067 §5, Phase D4/D5) — owner-only:
+              activation books a real opening GL entry and is effectively irreversible, the same
+              sensitivity as QRIS payment-settings administration above. */}
+          {isOwner && (
+            <Route path="/settings/inventory" element={<InventoryMethodSettings />} />
+          )}
 
           {/* Onboarding picks its chrome ONCE, on entry (see OnboardingRoute): first company →
               full-page standalone wizard (no shell to wander off into); adding another company →

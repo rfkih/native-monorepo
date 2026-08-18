@@ -374,6 +374,7 @@ export const en = {
     printer: 'Printer',
     payments: 'Payments',
     features: 'Features',
+    inventoryMethod: 'Inventory accounting',
     switchCompany: 'Switch company',
     language: 'Language',
     actingAs: 'Acting as',
@@ -656,6 +657,58 @@ export const en = {
         connected: 'Connected',
         connectedWithLast4: 'Connected · •••• {{last4}}',
         notConnected: 'Not connected',
+      },
+    },
+    inventoryMethod: {
+      /** ADR 0067 §5, Phase D4/D5 — the perpetual-inventory election & activation console.
+       * OWNER-ONLY: activation books a real opening GL entry and is effectively irreversible
+       * (no deactivate/amend flow), so this is never framed as a casual toggle. */
+      title: 'Inventory accounting',
+      subtitle:
+        'Perpetual inventory accounting capitalizes purchases to the Inventory asset and expenses them as Cost of Goods Sold only when sold — instead of expensing every purchase immediately.',
+      loadError: 'Could not load the inventory accounting status. Try again.',
+      status: {
+        activeBadge: 'Perpetual inventory active',
+        cutoverLabel: 'Cutover month',
+        activatedLabel: 'Activated',
+        assetLabel: 'Inventory asset (1100)',
+        negativeWarning: 'Inventory asset is negative',
+        negativeHint:
+          'The inventory asset account has gone negative — check recent stock receipts and cost of goods sold for an unflagged purchase or an oversell.',
+      },
+      inactive: {
+        heading: 'Not yet activated',
+        body: "Today, every purchase is expensed immediately and the inventory asset account isn't tracked. Activating perpetual inventory changes how purchases and sales post to the books going forward: it books a one-time opening entry for what you have on hand today, then capitalizes future inventory purchases and expenses them as Cost of Goods Sold only once they're sold.",
+        bullet1: 'A deliberate, owner-only accounting change — not a casual toggle.',
+        bullet2:
+          'Applies going forward from the cutover month you choose; already-sealed periods keep their existing entries.',
+        bullet3: 'Cannot be turned off once activated.',
+        action: 'Activate perpetual inventory',
+      },
+      activate: {
+        formTitle: 'Activate perpetual inventory',
+        formIntro:
+          "Choose the month this takes effect and the value of inventory you've counted on hand as of that month. Leave the value at 0 if you haven't counted anything yet.",
+        cutoverLabel: 'Cutover month',
+        cutoverHint: 'Perpetual accounting applies from this month onward.',
+        openingValueLabel: 'Counted opening inventory value ({{currency}})',
+        openingValueHint:
+          'The value of ingredients/stock on hand as of the cutover month, from your latest stock count. Books a one-time opening entry to Inventory.',
+        confirmTitle: 'Confirm activation',
+        confirmWarning:
+          'This is permanent. Perpetual inventory accounting cannot be turned off once activated.',
+        confirmCutover: 'Cutover month',
+        confirmOpeningValue: 'Opening inventory value',
+        confirmNote:
+          'Purchases you flag as inventory (or record as a stock receive) will be capitalized to the books from {{period}} onward, and cost of goods sold will post automatically when items are sold.',
+        acknowledge: 'I understand this change is permanent and affects the company books.',
+        confirmAction: 'Activate perpetual inventory',
+      },
+      error: {
+        alreadyActive: 'Perpetual inventory is already active for this company.',
+        sealedPeriod:
+          'That cutover month is already sealed (tax-filed) and can no longer be used — choose a later month.',
+        generic: 'Could not activate perpetual inventory. Try again.',
       },
     },
   },
@@ -3339,6 +3392,12 @@ export const en = {
       quantityLabel: 'Qty',
       unitPriceLabel: 'Unit price',
       lineTotal: 'Line total',
+      /** ADR 0067 Phase B, §3 — flags this line as a capitalizable inventory purchase. Only takes
+       * effect once the company has activated perpetual inventory accounting; shown always so the
+       * form is ready ahead of activation. */
+      inventoryLabel: 'Inventory',
+      inventoryHint:
+        'Capitalized to the inventory asset instead of expensed immediately — only applies once perpetual inventory accounting is active.',
       preview: 'Preview',
       subtotal: 'Subtotal',
       tax: 'Tax (11%)',

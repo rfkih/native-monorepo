@@ -360,6 +360,7 @@ export const id = {
     printer: 'Printer',
     payments: 'Pembayaran',
     features: 'Fitur',
+    inventoryMethod: 'Akuntansi persediaan',
     switchCompany: 'Ganti perusahaan',
     language: 'Bahasa',
     actingAs: 'Bertindak sebagai',
@@ -642,6 +643,58 @@ export const id = {
         connected: 'Terhubung',
         connectedWithLast4: 'Terhubung · •••• {{last4}}',
         notConnected: 'Belum terhubung',
+      },
+    },
+    inventoryMethod: {
+      /** ADR 0067 §5, Fase D4/D5 — konsol pemilihan & aktivasi akuntansi persediaan perpetual.
+       * HANYA OWNER: aktivasi membukukan entri GL nyata dan sifatnya nyaris tak bisa dibatalkan
+       * (tidak ada alur nonaktifkan/ubah), jadi ini tidak pernah ditampilkan sebagai tombol biasa. */
+      title: 'Akuntansi persediaan',
+      subtitle:
+        'Akuntansi persediaan perpetual mengkapitalisasi pembelian ke akun aset Persediaan dan membebankannya sebagai Harga Pokok Penjualan (HPP) hanya saat terjual — bukan langsung dibebankan sebagai biaya saat dibeli.',
+      loadError: 'Tidak dapat memuat status akuntansi persediaan. Coba lagi.',
+      status: {
+        activeBadge: 'Persediaan perpetual aktif',
+        cutoverLabel: 'Bulan cutover',
+        activatedLabel: 'Diaktifkan',
+        assetLabel: 'Aset persediaan (1100)',
+        negativeWarning: 'Aset persediaan negatif',
+        negativeHint:
+          'Akun aset persediaan bernilai negatif — periksa penerimaan stok terbaru dan harga pokok penjualan untuk pembelian yang belum ditandai atau kelebihan jual.',
+      },
+      inactive: {
+        heading: 'Belum diaktifkan',
+        body: 'Saat ini, setiap pembelian langsung dibebankan sebagai biaya dan akun aset persediaan tidak dilacak. Mengaktifkan persediaan perpetual mengubah cara pembelian dan penjualan dibukukan mulai sekarang: sistem membukukan satu entri pembukaan untuk stok yang ada saat ini, lalu mengkapitalisasi pembelian persediaan berikutnya dan membebankannya sebagai HPP hanya setelah terjual.',
+        bullet1: 'Perubahan akuntansi yang disengaja dan hanya bisa dilakukan owner — bukan sekadar tombol.',
+        bullet2:
+          'Berlaku sejak bulan cutover yang Anda pilih ke depan; periode yang sudah disegel tetap memakai entri lama.',
+        bullet3: 'Tidak bisa dimatikan setelah diaktifkan.',
+        action: 'Aktifkan persediaan perpetual',
+      },
+      activate: {
+        formTitle: 'Aktifkan persediaan perpetual',
+        formIntro:
+          'Pilih bulan mulai berlaku dan nilai persediaan yang sudah Anda hitung ada di tangan per bulan itu. Biarkan 0 jika belum pernah dihitung.',
+        cutoverLabel: 'Bulan cutover',
+        cutoverHint: 'Akuntansi perpetual berlaku sejak bulan ini.',
+        openingValueLabel: 'Nilai persediaan awal terhitung ({{currency}})',
+        openingValueHint:
+          'Nilai bahan/stok yang ada per bulan cutover, dari hitung stok terakhir Anda. Membukukan satu entri pembukaan ke Persediaan.',
+        confirmTitle: 'Konfirmasi aktivasi',
+        confirmWarning:
+          'Ini permanen. Akuntansi persediaan perpetual tidak bisa dimatikan setelah diaktifkan.',
+        confirmCutover: 'Bulan cutover',
+        confirmOpeningValue: 'Nilai persediaan awal',
+        confirmNote:
+          'Pembelian yang Anda tandai sebagai persediaan (atau dicatat sebagai penerimaan stok) akan dikapitalisasi ke pembukuan sejak {{period}}, dan harga pokok penjualan akan otomatis dibukukan saat barang terjual.',
+        acknowledge: 'Saya paham perubahan ini permanen dan memengaruhi pembukuan perusahaan.',
+        confirmAction: 'Aktifkan persediaan perpetual',
+      },
+      error: {
+        alreadyActive: 'Persediaan perpetual sudah aktif untuk perusahaan ini.',
+        sealedPeriod:
+          'Bulan cutover itu sudah disegel (sudah lapor pajak) dan tidak bisa dipakai lagi — pilih bulan berikutnya.',
+        generic: 'Tidak dapat mengaktifkan persediaan perpetual. Coba lagi.',
       },
     },
   },
@@ -3313,6 +3366,9 @@ export const id = {
       quantityLabel: 'Jml',
       unitPriceLabel: 'Harga satuan',
       lineTotal: 'Total baris',
+      inventoryLabel: 'Persediaan',
+      inventoryHint:
+        'Dikapitalisasi ke aset persediaan, bukan langsung dibebankan sebagai biaya — hanya berlaku setelah akuntansi persediaan perpetual diaktifkan.',
       preview: 'Pratinjau',
       subtotal: 'Subtotal',
       tax: 'Pajak (11%)',
