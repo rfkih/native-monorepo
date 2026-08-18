@@ -863,8 +863,10 @@ public class BillWriter {
 
     // ADR 0050: recipe-driven ingredient depletion for THIS check's lines only — per-check by
     // design (same tx + idempotency short-circuit as the check's sale, so a replay can never
-    // double-deplete). Floors at 0, never blocks the payment.
-    ingredientDepletionWriter.depleteForLines(toDepletionLines(lines));
+    // double-deplete). Floors at 0, never blocks the payment. ADR 0067 Phase C: the SAME call folds
+    // COGS (null when nothing costed) — threaded into the sale command below.
+    IngredientDepletionWriter.CogsResult cogs =
+        ingredientDepletionWriter.depleteForLines(toDepletionLines(lines));
 
     // Record ONE sale for this check — one SaleRecorded outbox event.
     RecordSaleCommand saleCommand =
@@ -876,7 +878,9 @@ public class BillWriter {
             checkIdempotencyKey,
             tenderTypeName,
             breakdown,
-            onlineChannel);
+            onlineChannel,
+            cogs != null ? cogs.cogsMinor() : null,
+            cogs != null ? cogs.currency() : null);
     RecordSaleResult saleResult = saleWriter.recordInCurrentTx(saleCommand);
     UUID checkSaleId = saleResult.sale().id();
 

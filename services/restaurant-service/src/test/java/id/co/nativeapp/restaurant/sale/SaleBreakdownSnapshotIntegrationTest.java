@@ -66,6 +66,8 @@ class SaleBreakdownSnapshotIntegrationTest extends PostgresRlsTestBase {
             null,
             null,
             null,
+            null,
+            null,
             null);
 
     UUID saleId = asTenant(() -> saleService.recordSale(command)).sale().id();
@@ -100,6 +102,8 @@ class SaleBreakdownSnapshotIntegrationTest extends PostgresRlsTestBase {
             UUID.randomUUID(),
             200L,
             loyaltyRedeemedMinor,
+            null,
+            null,
             null,
             null,
             null,

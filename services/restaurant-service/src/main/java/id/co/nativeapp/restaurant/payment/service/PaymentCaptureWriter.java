@@ -181,8 +181,10 @@ public class PaymentCaptureWriter {
 
     // Deduct stock for tracked order lines — same transaction as sale + payment state change.
     // An insufficient-stock shortfall throws InsufficientStockException, rolling back everything
-    // (no sale, no SaleRecorded, no stock change, no status transition).
-    deductStockForOrder(payment.getOrderId(), payment.getAmount().currency().getCurrencyCode());
+    // (no sale, no SaleRecorded, no stock change, no status transition). ADR 0067 Phase C: the SAME
+    // depletion call folds COGS (null when nothing costed) — threaded into the sale command below.
+    IngredientDepletionWriter.CogsResult cogs =
+        deductStockForOrder(payment.getOrderId(), payment.getAmount().currency().getCurrencyCode());
 
     // Phase 3 review fix (W1): reconstruct the Phase-2 price breakdown this order was actually
     // priced with at checkout (see reconstructBreakdown javadoc) — null on a reconciliation
@@ -228,7 +230,11 @@ public class PaymentCaptureWriter {
                 // capture — ONLINE never goes through it (it captures synchronously, see
                 // PaymentWriter), so no channel ever rides here.
                 null,
-                soldByUserId)
+                soldByUserId,
+                // ADR 0067 Phase C: the COGS fold from the SAME ingredient-depletion call above —
+                // null when nothing was costed.
+                cogs != null ? cogs.cogsMinor() : null,
+                cogs != null ? cogs.currency() : null)
             : new RecordSaleCommand(
                 payment.getBusinessId(),
                 grandTotal.amountMinor(),
@@ -243,7 +249,9 @@ public class PaymentCaptureWriter {
                 null,
                 null,
                 null,
-                soldByUserId);
+                soldByUserId,
+                cogs != null ? cogs.cogsMinor() : null,
+                cogs != null ? cogs.currency() : null);
     RecordSaleResult saleResult = saleWriter.recordInCurrentTx(saleCommand);
 
     // Capture the payment aggregate: PENDING → CAPTURED, sets sale_id + captured_at.
@@ -360,11 +368,14 @@ public class PaymentCaptureWriter {
    *
    * @param orderId the order whose lines to deduct
    * @param currencyCode ISO-4217 code used to construct the transient {@link OrderLine} adapters
+   * @return the ADR 0067 Phase C COGS fold from the ingredient depletion call below, or {@code
+   *     null} when the order has no lines or nothing was costed
    */
-  private void deductStockForOrder(UUID orderId, String currencyCode) {
+  private IngredientDepletionWriter.CogsResult deductStockForOrder(
+      UUID orderId, String currencyCode) {
     List<OrderLineView> lineViews = orderLineRepository.findViewsByOrderId(orderId);
     if (lineViews.isEmpty()) {
-      return;
+      return null;
     }
 
     // Load current item views to get stock_quantity state (RLS-scoped, chunked to <=1000).
@@ -400,7 +411,7 @@ public class PaymentCaptureWriter {
             .add(mv.getOptionId());
       }
     }
-    ingredientDepletionWriter.depleteForLines(
+    return ingredientDepletionWriter.depleteForLines(
         lineViews.stream()
             .map(
                 lv ->

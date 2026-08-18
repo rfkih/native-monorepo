@@ -140,6 +140,8 @@ class RegisterSummaryIntegrationTest extends PostgresRlsTestBase {
                     null,
                     null,
                     null,
+                    null,
+                    null,
                     null)));
 
     // A partial CASH refund against sale 1, via the real VoidRefundWriter production path — its
@@ -308,7 +310,9 @@ class RegisterSummaryIntegrationTest extends PostgresRlsTestBase {
                     UUID.randomUUID(), // giftCardId
                     giftCardRedeemed, // giftCardRedeemedMinor
                     null, // channel
-                    null))); // soldByUserId
+                    null, // soldByUserId
+                    null, // cogsMinor
+                    null))); // cogsCurrency
 
     RegisterSummaryResponse summary = asTenant(() -> registerSessionService.summarize(sessionId));
 

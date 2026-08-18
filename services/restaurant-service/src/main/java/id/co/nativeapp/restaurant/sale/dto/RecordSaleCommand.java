@@ -65,6 +65,14 @@ import java.util.UUID;
  *     precedence over this field — see {@code SaleWriter}'s seller-resolution javadoc). Appended
  *     LAST, mirroring every prior additive field's positional-decode-safety discipline — this is an
  *     internal application command, never the HTTP request body (rule 5)
+ * @param cogsMinor ADR 0067 Phase C: the Σ (depleted qty × moving-average unit cost) fold ({@code
+ *     recipe.service.IngredientDepletionWriter.CogsResult}), computed by the caller from the SAME
+ *     depletion call this sale's recording follows. {@code null} when the depletion carried no
+ *     costed ingredients (or no depletion at all) — {@code SaleWriter} leaves {@code
+ *     sale.cogs_minor} NULL and writes no {@code SaleCogsRecorded} event. Appended LAST alongside
+ *     {@code cogsCurrency}, mirroring {@code soldByUserId}'s positional-decode-safety discipline
+ * @param cogsCurrency ISO-4217 code of {@code cogsMinor}; required exactly when {@code cogsMinor}
+ *     is non-null
  */
 @SuppressWarnings("checkstyle:ParameterNumber")
 public record RecordSaleCommand(
@@ -81,7 +89,9 @@ public record RecordSaleCommand(
     UUID giftCardId,
     Long giftCardRedeemedMinor,
     String channel,
-    String soldByUserId) {
+    String soldByUserId,
+    Long cogsMinor,
+    String cogsCurrency) {
 
   /**
    * Convenience constructor preserving the original five-argument shape (no-tender / legacy
@@ -100,6 +110,8 @@ public record RecordSaleCommand(
         currency,
         occurredAt,
         idempotencyKey,
+        null,
+        null,
         null,
         null,
         null,
@@ -129,6 +141,8 @@ public record RecordSaleCommand(
         occurredAt,
         idempotencyKey,
         tenderType,
+        null,
+        null,
         null,
         null,
         null,
@@ -166,6 +180,8 @@ public record RecordSaleCommand(
         null,
         null,
         null,
+        null,
+        null,
         null);
   }
 
@@ -197,6 +213,44 @@ public record RecordSaleCommand(
         null,
         null,
         channel,
+        null,
+        null,
         null);
+  }
+
+  /**
+   * Convenience constructor for a tender type + breakdown + channel + the ADR 0067 Phase C COGS
+   * fold — the shape {@code BillWriter} uses (bills do not yet support loyalty/gift-card redemption
+   * or digital-tender operator threading, but DO deplete recipes and so may carry a COGS fold).
+   */
+  @SuppressWarnings("checkstyle:ParameterNumber")
+  public RecordSaleCommand(
+      UUID businessId,
+      Long amountMinor,
+      String currency,
+      Instant occurredAt,
+      String idempotencyKey,
+      String tenderType,
+      PriceBreakdown breakdown,
+      String channel,
+      Long cogsMinor,
+      String cogsCurrency) {
+    this(
+        businessId,
+        amountMinor,
+        currency,
+        occurredAt,
+        idempotencyKey,
+        tenderType,
+        breakdown,
+        null,
+        null,
+        null,
+        null,
+        null,
+        channel,
+        null,
+        cogsMinor,
+        cogsCurrency);
   }
 }

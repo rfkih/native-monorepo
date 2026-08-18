@@ -3,7 +3,11 @@ package id.co.nativeapp.restaurant.recipe.messaging;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.time.Instant;
+import java.util.UUID;
 import org.apache.avro.Schema;
+import org.apache.avro.generic.GenericData;
+import org.apache.avro.generic.GenericRecord;
 
 /**
  * Loads the {@code SaleCogsRecorded} Avro schema ({@code avro/SaleCogsRecorded.avsc},
@@ -14,10 +18,11 @@ import org.apache.avro.Schema;
  * (ADR 0050 phase-C pin, V37 note). Money is integer minor units + ISO-4217, never a float (rule
  * 8).
  *
- * <p>ADR 0067 Phase 0 (contracts-first, this class): schema registration + catalog + contract tests
- * only. The {@code toRecord(...)} builder, {@code sale.cogs_minor}/{@code cogs_currency}
- * persistence, and the outbox write land with {@code recipe.service.IngredientDepletionWriter}
- * (Phase C) — no outbox row is written by this Phase.
+ * <p>ADR 0067 Phase C: {@link #toRecord} builds the payload written by {@code
+ * recipe.service.IngredientDepletionWriter}'s COGS fold, via {@code sale.service.SaleWriter}, in
+ * the same transaction as the sale + depletion. Emitted ONLY when the fold is positive — a sale
+ * with no costed recipe depletion writes no event (mirrors {@code sale.cogs_minor}/{@code
+ * cogs_currency} staying NULL).
  */
 public final class SaleCogsRecordedSchema {
 
@@ -39,6 +44,38 @@ public final class SaleCogsRecordedSchema {
   /** The parsed reader/writer schema. */
   public static Schema schema() {
     return SCHEMA;
+  }
+
+  /**
+   * Builds a {@code SaleCogsRecorded} record. {@code cogsMinor} is the exact Σ (depleted qty ×
+   * moving-average unit cost) fold ({@link
+   * id.co.nativeapp.restaurant.recipe.service.IngredientDepletionWriter.CogsResult}), never a float
+   * (rule 8); callers must only invoke this when {@code cogsMinor > 0}.
+   *
+   * @param saleId the sale aggregate id (partition key + finance idempotency key)
+   * @param companyId the owning tenant
+   * @param businessId the originating outlet — the dimensional {@code business_id} finance stamps
+   *     on the COGS {@code ledger_posting}
+   * @param occurredAt when the sale occurred — drives the accounting period (same period as the
+   *     sale's revenue)
+   * @param cogsMinor Σ depleted qty × moving-average unit cost, minor units
+   * @param currency ISO-4217 code of {@code cogsMinor}
+   */
+  public static GenericRecord toRecord(
+      UUID saleId,
+      String companyId,
+      UUID businessId,
+      Instant occurredAt,
+      long cogsMinor,
+      String currency) {
+    GenericRecord record = new GenericData.Record(SCHEMA);
+    record.put("sale_id", saleId.toString());
+    record.put("company_id", companyId);
+    record.put("business_id", businessId.toString());
+    record.put("occurred_at", occurredAt.toEpochMilli());
+    record.put("cogs_minor", cogsMinor);
+    record.put("currency", currency);
+    return record;
   }
 
   private static Schema parse() {

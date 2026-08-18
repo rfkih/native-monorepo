@@ -7,16 +7,15 @@ import org.apache.avro.Schema;
 
 /**
  * Loads finance-service's reader view of the {@code SaleCogsRecorded} contract from the classpath
- * ({@code avro/SaleCogsRecorded.avsc}, single-sourced from libs/contracts — ADR 0003). Will be
- * consumed to post perpetual COGS: {@code Dr 5100 COGS / Cr 1100 Inventory} WHEN the company is
+ * ({@code avro/SaleCogsRecorded.avsc}, single-sourced from libs/contracts — ADR 0003). Consumed to
+ * post perpetual COGS: {@code Dr 5100 COGS / Cr 1100 Inventory} WHEN the company is
  * perpetual-active for {@code occurred_at}'s period, otherwise a claimed no-op (ADR 0067 §1).
  * Because the dashboard P&L is GL-derived (ADR 0065), the {@code 5100} leg reaches the beranda and
  * the income statement automatically once this posts. Wire bytes are raw Avro (libs/events {@code
  * AvroSerde}), deduped by the event UUID and by {@code sale_id} UNIQUE — no Schema Registry serde.
  *
- * <p>ADR 0067 Phase 0 (contracts-first, this class): schema registration + catalog + contract tests
- * only. The {@code decode(...)} + event record land with the {@code SaleCogsRecorded}-consuming
- * listener (Phase C).
+ * <p>ADR 0067 Phase C: {@link #decode} builds the typed {@link SaleCogsRecordedEvent} the {@code
+ * SaleCogsRecordedListener} hands to {@code SaleCogsRecordedService}.
  */
 public final class SaleCogsRecordedSchema {
 
@@ -35,6 +34,12 @@ public final class SaleCogsRecordedSchema {
   /** The parsed reader schema. */
   public static Schema schema() {
     return SCHEMA;
+  }
+
+  /** Decodes the raw outbox Avro payload into the typed event (see {@code AvroSerde}). */
+  public static SaleCogsRecordedEvent decode(java.util.UUID eventId, byte[] payload) {
+    return SaleCogsRecordedEvent.from(
+        eventId, id.co.nativeapp.events.AvroSerde.deserialize(payload, SCHEMA));
   }
 
   private static Schema parse() {

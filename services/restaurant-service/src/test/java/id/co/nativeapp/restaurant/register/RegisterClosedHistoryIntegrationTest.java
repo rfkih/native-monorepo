@@ -213,7 +213,9 @@ class RegisterClosedHistoryIntegrationTest extends PostgresRlsTestBase {
                     UUID.randomUUID(), // giftCardId
                     giftCardRedeemed, // giftCardRedeemedMinor
                     null, // channel
-                    null))); // soldByUserId
+                    null, // soldByUserId
+                    null, // cogsMinor
+                    null))); // cogsCurrency
     closeSession(s, 0L);
 
     RegisterSummaryResponse z = asA(() -> registerSessionService.summarize(s));

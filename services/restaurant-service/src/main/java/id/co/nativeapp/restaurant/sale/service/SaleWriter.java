@@ -7,6 +7,7 @@ import id.co.nativeapp.restaurant.metric.domain.RestaurantMetricContract;
 import id.co.nativeapp.restaurant.metric.messaging.MetricPublishedSchema;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
 import id.co.nativeapp.restaurant.pricing.domain.PriceBreakdown;
+import id.co.nativeapp.restaurant.recipe.messaging.SaleCogsRecordedSchema;
 import id.co.nativeapp.restaurant.register.service.CashWindowLock;
 import id.co.nativeapp.restaurant.sale.domain.OperatorMismatchException;
 import id.co.nativeapp.restaurant.sale.domain.Sale;
@@ -167,6 +168,9 @@ public class SaleWriter {
     // columns are updatable=false) so the POS daily summary aggregates exact per-sale figures
     // instead of re-deriving pricing per order. No-op when the caller carries no breakdown.
     stampBreakdownIfPresent(sale, command);
+    // ADR 0067 Phase C: snapshot the caller's COGS fold (BEFORE the first save — updatable=false).
+    // No-op when the caller's depletion carried no costed ingredients.
+    sale.stampCogs(command.cogsMinor(), command.cogsCurrency());
     Sale saved = repository.saveAndFlush(sale);
 
     // Build the SaleRecorded GenericRecord from the .avsc and serialize it for the
@@ -200,6 +204,10 @@ public class SaleWriter {
         null,
         UUID.fromString(companyId),
         saved.getOccurredAt());
+
+    // ADR 0067 Phase C: SaleCogsRecorded, same transaction, ONLY when the fold was positive
+    // (sale.cogs_minor stays NULL and nothing is emitted for a sale with no costed depletion).
+    emitSaleCogsRecordedIfPresent(saved, companyId);
 
     // Own-sales commission feed: emit a MetricPublished (sales_amount @ employee) in the SAME
     // transaction, attributed to the resolved seller (operator who rang it, ADR 0049 P2; else the
@@ -262,6 +270,9 @@ public class SaleWriter {
     // columns are updatable=false) so the POS daily summary aggregates exact per-sale figures
     // instead of re-deriving pricing per order. No-op when the caller carries no breakdown.
     stampBreakdownIfPresent(sale, command);
+    // ADR 0067 Phase C: snapshot the caller's COGS fold (BEFORE the first save — updatable=false).
+    // No-op when the caller's depletion carried no costed ingredients.
+    sale.stampCogs(command.cogsMinor(), command.cogsCurrency());
     Sale saved = repository.saveAndFlush(sale);
 
     GenericRecord event =
@@ -286,11 +297,43 @@ public class SaleWriter {
         UUID.fromString(companyId),
         saved.getOccurredAt());
 
+    // ADR 0067 Phase C: SaleCogsRecorded, same transaction, ONLY when the fold was positive.
+    emitSaleCogsRecordedIfPresent(saved, companyId);
+
     emitSalesMetric(saved, companyId, resolvedSellerId);
 
     postOutboxHook.afterOutboxWrite(saved);
 
     return new RecordSaleResult(SaleResponse.from(saved), true);
+  }
+
+  /**
+   * ADR 0067 Phase C: writes the {@code SaleCogsRecorded} outbox row in the caller's transaction —
+   * ONLY when {@code saved.getCogsMinor()} is present (a sale with no costed recipe depletion emits
+   * nothing, mirroring {@code sale.cogs_minor} staying NULL). {@code occurredAt} drives the
+   * accounting period, the SAME period as this sale's revenue.
+   */
+  private void emitSaleCogsRecordedIfPresent(Sale saved, String companyId) {
+    Long cogsMinor = saved.getCogsMinor();
+    if (cogsMinor == null) {
+      return;
+    }
+    GenericRecord cogsEvent =
+        SaleCogsRecordedSchema.toRecord(
+            saved.getId(),
+            companyId,
+            saved.getBusinessId(),
+            saved.getOccurredAt(),
+            cogsMinor,
+            saved.getCogsCurrency());
+    outboxWriter.write(
+        SaleCogsRecordedSchema.AGGREGATE_TYPE,
+        saved.getId().toString(),
+        SaleCogsRecordedSchema.EVENT_TYPE,
+        AvroSerde.serialize(cogsEvent),
+        null,
+        UUID.fromString(companyId),
+        saved.getOccurredAt());
   }
 
   /**

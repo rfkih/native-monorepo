@@ -77,7 +77,7 @@ has landed yet — the status names the phases that will land them.
 | **`DeliveryReceipt`** | **notification-service** | **(audit/observability sinks; re-send policy)** | **notification_id, company_id, channel, status, provider_ref, delivered_at** | **LIVE (#22)** |
 | **`PaymentChargeSucceeded`** | **payment-service** | **restaurant-service, carwash-service, barbershop-service** (each filters on `vertical`) | **charge_id, company_id, vertical, payment_id, reference_id?, business_id, amount_minor, currency, provider, provider_txn_id?, succeeded_at** | **LIVE (ADR 0045): producer (webhook + sync settlement transitions, outbox, Debezium `payment-outbox-connector`) AND all three vertical consumers built — each runs its existing idempotent capture writer** |
 | **`StockReceived`** | **restaurant-service** | **finance-service** | **receipt_id, company_id, business_id, ingredient_id, qty, value_minor, currency, received_at** | **LIVE (ADR 0067, Phase B): producer (`IngredientWriter.addStock` priced branch + `goods_receipt` idempotency anchor) AND finance consumer (`StockReceivedWriter`, capitalize-if-perpetual-active/else claimed no-op) both wired; perpetual-active branch dead in prod until Phase D activates a tenant** |
-| **`SaleCogsRecorded`** | **restaurant-service** | **finance-service** | **sale_id, company_id, business_id, occurred_at, cogs_minor, currency** | **SCHEMA REGISTERED (ADR 0067, Phase 0); producer (`IngredientDepletionWriter` COGS fold) Phase C, finance perpetual-COGS consumer Phase C** |
+| **`SaleCogsRecorded`** | **restaurant-service** | **finance-service** | **sale_id, company_id, business_id, occurred_at, cogs_minor, currency** | **LIVE (ADR 0067, Phase C): producer (`recipe.service.IngredientDepletionWriter` COGS fold + `sale.service.SaleWriter` snapshot/outbox) AND finance consumer (`inventory.service.SaleCogsRecordedWriter`, post-if-perpetual-active/else claimed no-op) both wired; perpetual-active branch dead in prod until Phase D activates a tenant** |
 
 ---
 
@@ -2454,8 +2454,11 @@ end-to-end (Phase B):** `inventory.service.IngredientWriter.addStock`'s priced-r
 the `goods_receipt` idempotency anchor + the outbox row in the same transaction (restaurant), and
 `inventory.service.StockReceivedWriter` capitalizes it (finance) — perpetual-active branch dead in
 production until Phase D activates a company (no `inventory_method_config` row exists yet).
-**`SaleCogsRecorded` is NOT yet wired** — `recipe.service.IngredientDepletionWriter`'s COGS fold is
-Phase C, a later wave (the ADR 0027 loyalty/gift-card contracts-first precedent).
+**`SaleCogsRecorded` is ALSO wired end-to-end (Phase C):** `recipe.service.IngredientDepletionWriter`
+folds COGS from the SAME depletion query that computes ingredient usage, `sale.service.SaleWriter`
+snapshots it onto `sale.cogs_minor`/`cogs_currency` and writes the outbox row in the sale's own
+transaction (restaurant), and `inventory.service.SaleCogsRecordedWriter` posts `Dr 5100 / Cr 1100`
+(finance) — same DORMANT posture as `StockReceived` until a tenant activates.
 
 ### `StockReceived`
 
@@ -2532,17 +2535,22 @@ pinned name). Carries the cost of goods consumed by a sale so finance-service ex
 inventory. Deliberately a SEPARATE event from `SaleRecorded` (not a field on it) to avoid the SALE
 posting-template deployment hazard (ADR 0050 phase-C pin, V37 note).
 
-- **Producer (Phase C, not yet wired):** `restaurant-service` `recipe.service.IngredientDepletionWriter`
+- **Producer (Phase C, WIRED):** `restaurant-service` `recipe.service.IngredientDepletionWriter`
   folds COGS from the same depletion query (Σ depleted qty × moving-average unit cost at sale
-  time), persists `sale.cogs_minor` + `cogs_currency` as an audit anchor, and writes the outbox row
-  in the same transaction as the sale + depletion. Called from every sale-recording site behind the
-  existing derived-key idempotency (checkout, payParked, bill checks, digital capture, offline
-  replay).
-- **Consumers (Phase C, not yet wired):** `finance-service` — when perpetual-active:
-  `Dr COGS (5100) / Cr INVENTORY (1100)` (ad-hoc 2-line entry via `RoleAccountResolver`); otherwise
-  a claimed no-op. Because the dashboard P&L is GL-derived (ADR 0065), the `5100` leg reaches the
+  time) — no second query, no second DB read; `sale.service.SaleWriter` persists `sale.cogs_minor` +
+  `cogs_currency` as an audit anchor (BEFORE the sale's first save) and writes the outbox row in the
+  same transaction as the sale + depletion, ONLY when the fold is positive (a sale with no costed
+  recipe depletion leaves the columns NULL and emits nothing). Called from every sale-recording site
+  behind the existing derived-key idempotency (checkout, payParked, bill checks, digital capture,
+  offline replay) — one behaviour, no variants.
+- **Consumers (Phase C, WIRED):** `finance-service` `inventory.service.SaleCogsRecordedWriter` — when
+  perpetual-active for `occurred_at`'s period: `Dr COGS (5100) / Cr INVENTORY (1100)` (ad-hoc 2-line
+  entry via `RoleAccountResolver`, the `StockReceivedWriter` Phase B template) PLUS a dimensional
+  `LedgerPosting(EXPENSE, business_id, …, 5100)` for the per-outlet rollup; otherwise a claimed
+  no-op — the branch EVERY tenant takes today, since no `inventory_method_config` row exists until
+  Phase D activation. Because the dashboard P&L is GL-derived (ADR 0065), the `5100` leg reaches the
   beranda AND the income statement automatically once this posts — no `consolidated_pnl` writer to
-  remember.
+  remember (deliberately NOT written here).
 - **Aggregate type / partition key:** `sale` / `sale_id`
 - **Outbox `event_type`:** `SaleCogsRecorded`
 - **Schema:** `libs/contracts/src/main/resources/avro/SaleCogsRecorded.avsc`
