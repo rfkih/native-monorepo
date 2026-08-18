@@ -40,10 +40,11 @@ class ReconcilePostingTest {
   private static final UUID BANK_ACCOUNT = UUID.randomUUID();
 
   private ReconciliationWriter writer;
+  private RoleAccountResolver roleResolver;
 
   @BeforeEach
   void setUp() {
-    RoleAccountResolver roleResolver = mock(RoleAccountResolver.class);
+    roleResolver = mock(RoleAccountResolver.class);
     when(roleResolver.resolve(eq(AccountRole.BANK), any())).thenReturn("1000");
     when(roleResolver.resolve(eq(AccountRole.CASH_CLEARING), any())).thenReturn("1900");
     when(roleResolver.resolve(eq(AccountRole.INTEREST_INCOME), any())).thenReturn("4100");
@@ -166,6 +167,11 @@ class ReconcilePostingTest {
 
   @Test
   void depositQrisClearingWithFeeDebitsBankAndFeeCreditsGrossToQrisClearing() {
+    // QRIS_FEE_EXPENSE (5720) is a genuine illustrative placeholder (V52; V51's blanket OFFICIAL
+    // supersession never covered it), so a real QRIS-fee reconciliation posts an illustrative leg
+    // and IS badged provisional — the writer must derive that through. Stub the resolver to reflect
+    // prod (the fee leg's role resolves illustrative) rather than the all-official mock default.
+    when(roleResolver.anyIllustrative(any(), any(), any(), any())).thenReturn(true);
     JournalEntry entry =
         writer.buildEntry(
             line(1_000_000L),
@@ -182,7 +188,9 @@ class ReconcilePostingTest {
     assertThat(lineFor(lines, "1901").getCreditMinor())
         .isEqualTo(1_020_000L); // Cr QRIS_CLEARING (gross)
     assertThat(entry.isUsesIllustrativeRules())
-        .isFalse(); // provenance-derived (was hardcoded true)
+        .as(
+            "a QRIS-fee reconciliation posts the still-illustrative 5720 leg, so it stays provisional")
+        .isTrue();
   }
 
   @Test
