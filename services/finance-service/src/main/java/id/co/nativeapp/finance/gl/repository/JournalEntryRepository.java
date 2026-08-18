@@ -93,6 +93,18 @@ public interface JournalEntryRepository extends JpaRepository<JournalEntry, UUID
       nativeQuery = true)
   Optional<UUID> findIdBySourceEventId(@Param("sourceEventId") UUID sourceEventId);
 
+  /**
+   * Whether the entry {@code id} was posted with illustrative (provisional) provenance — read by
+   * the register-close correction (ADR 0064) so a reversal contra MIRRORS the flag of the entry it
+   * reverses (the {@code ReversalPostingWriter} / {@code PayrollLiabilityWriter} pattern), rather
+   * than re-deriving it from the corrected event. RLS-scoped (rule 5). Scalar boolean, not a {@code
+   * SELECT *}.
+   */
+  @Query(
+      value = "SELECT je.uses_illustrative_rules FROM journal_entry je WHERE je.id = :id",
+      nativeQuery = true)
+  Optional<Boolean> findUsesIllustrativeRulesById(@Param("id") UUID id);
+
   @Query(
       value =
           """

@@ -268,11 +268,13 @@ public class AssetDisposalWriter {
             Math.addExact(proceeds.amountMinor(), accumulated.amountMinor()), cost.amountMinor());
 
     List<JournalLine> lines = new ArrayList<>();
+    List<AccountRole> rolesPosted = new ArrayList<>();
     int lineNo = 1;
     if (proceeds.isPositive()) {
       lines.add(
           JournalLine.debit(
               entryId, lineNo++, requireMapped(AccountRole.CASH_CLEARING, now), proceeds));
+      rolesPosted.add(AccountRole.CASH_CLEARING);
     }
     if (accumulated.isPositive()) {
       lines.add(
@@ -281,10 +283,12 @@ public class AssetDisposalWriter {
               lineNo++,
               requireMapped(AccountRole.ACCUMULATED_DEPRECIATION, now),
               accumulated));
+      rolesPosted.add(AccountRole.ACCUMULATED_DEPRECIATION);
     }
     lines.add(
         JournalLine.credit(
             entryId, lineNo++, requireMapped(AccountRole.FIXED_ASSET_COST, now), cost));
+    rolesPosted.add(AccountRole.FIXED_ASSET_COST);
     if (gainMinor > 0) {
       lines.add(
           JournalLine.credit(
@@ -292,6 +296,7 @@ public class AssetDisposalWriter {
               lineNo++,
               requireMapped(AccountRole.GAIN_ON_DISPOSAL, now),
               Money.ofMinor(gainMinor, cost.currency())));
+      rolesPosted.add(AccountRole.GAIN_ON_DISPOSAL);
     } else if (gainMinor < 0) {
       lines.add(
           JournalLine.debit(
@@ -299,7 +304,12 @@ public class AssetDisposalWriter {
               lineNo,
               requireMapped(AccountRole.LOSS_ON_DISPOSAL, now),
               Money.ofMinor(Math.negateExact(gainMinor), cost.currency())));
+      rolesPosted.add(AccountRole.LOSS_ON_DISPOSAL);
     }
+    // Derived from the provenance of the roles actually posted above (the conditional legs only
+    // count when present), rather than hardcoded.
+    boolean usesIllustrative =
+        roleAccountResolver.anyIllustrative(now, rolesPosted.toArray(new AccountRole[0]));
     return JournalEntry.balanced(
         entryId,
         period,
@@ -307,7 +317,7 @@ public class AssetDisposalWriter {
         "Fixed asset disposed",
         cost.currency().getCurrencyCode(),
         sourceEventId,
-        true,
+        usesIllustrative,
         lines);
   }
 

@@ -112,6 +112,51 @@ class PayrollSettlementWriterTest extends PostgresRlsTestBase {
     // The OTHER two buckets are untouched (still unsettled).
     assertThat(bucket(detail, "PPH21").settled()).isFalse();
     assertThat(bucket(detail, "BPJS_KES").settled()).isFalse();
+
+    // Provenance-derived (was hardcoded true): a non-illustrative liability + OFFICIAL
+    // CASH_CLEARING.
+    assertThat(usesIllustrativeRulesAsAdmin(netWages.journalEntryId())).isFalse();
+  }
+
+  @Test
+  void settlingABucketWhoseLiabilityWasIllustrativeKeepsTheSettlementFlaggedProvisional()
+      throws Exception {
+    // The liability entry's OWN uses_illustrative_rules (event.usesIllustrativeRules(), the
+    // posting-level provenance PayrollLiabilityWriter stamps — see its class javadoc) travels onto
+    // the settlement even though CASH_CLEARING itself resolves OFFICIAL, because
+    // PayrollSettlementWriter#buildSettlementEntry ORs the bucket's inherited flag with whatever
+    // CASH_CLEARING resolves to now.
+    UUID runId = UUID.randomUUID();
+    Instant occurredAt = clock.instant();
+    TenantContext.callAs(
+        TENANT_A,
+        ACTOR,
+        () ->
+            liabilityService.handle(
+                new PayrollLiabilitiesPostedEvent(
+                    UUID.randomUUID(),
+                    TENANT_A,
+                    runId,
+                    1,
+                    "REGULAR",
+                    LedgerPosting.periodOf(occurredAt),
+                    "IDR",
+                    Money.ofMinor(10_000_000L, "IDR"),
+                    List.of(
+                        new LiabilityBucket(
+                            "NET_WAGES_PAYABLE", Money.ofMinor(10_000_000L, "IDR"))),
+                    true, // the run's liability itself is illustrative-badged
+                    occurredAt)));
+    UUID runLedgerId = runLedgerIdAsAdmin(runId, 1);
+
+    PayrollSettlementResult result =
+        settle(runLedgerId, SettlementKind.NET_WAGES, "illustrative-liability-key");
+    assertThat(result.created()).isTrue();
+
+    UUID settlementEntryId = settlementJournalEntryIdAsAdmin(runLedgerId, "NET_WAGES");
+    assertThat(usesIllustrativeRulesAsAdmin(settlementEntryId))
+        .as("the settlement inherits the liability run's illustrative provenance")
+        .isTrue();
   }
 
   @Test
@@ -400,6 +445,7 @@ class PayrollSettlementWriterTest extends PostgresRlsTestBase {
         settlementWriter.buildSettlementEntry(
             SettlementKind.NET_WAGES,
             "9999", // deliberately the suspense code — a plain pass-through, not a real resolution
+            false,
             Money.ofMinor(5_000_000L, "IDR"),
             "2026-08",
             clock.instant(),
@@ -408,6 +454,28 @@ class PayrollSettlementWriterTest extends PostgresRlsTestBase {
         entry.getLines().stream().filter(l -> l.getDebitMinor() > 0).findFirst().orElseThrow();
     assertThat(drLeg.getAccountCode()).isEqualTo("9999");
     assertThat(drLeg.getDebitMinor()).isEqualTo(5_000_000L);
+    // Provenance-derived (was hardcoded true): a non-illustrative bucket + OFFICIAL CASH_CLEARING.
+    assertThat(entry.isUsesIllustrativeRules()).isFalse();
+  }
+
+  @Test
+  void anIllustrativeBucketProvenanceBadgesTheSettlementEntryProvisional() {
+    // The bucket's OWN historical provenance (read off the liability entry that produced
+    // bucketAccountCode) alone flags the settlement, even when CASH_CLEARING itself resolves
+    // OFFICIAL — the OR in buildSettlementEntry.
+    JournalEntry entry =
+        settlementWriter.buildSettlementEntry(
+            SettlementKind.NET_WAGES,
+            "2640",
+            true, // the liability entry that resolved 2640 was itself illustrative
+            Money.ofMinor(5_000_000L, "IDR"),
+            "2026-08",
+            clock.instant(),
+            UUID.randomUUID());
+
+    assertThat(entry.isUsesIllustrativeRules())
+        .as("an illustrative bucket provenance flags the settlement entry provisional")
+        .isTrue();
   }
 
   @Test
@@ -565,6 +633,20 @@ class PayrollSettlementWriterTest extends PostgresRlsTestBase {
   private static Connection adminConnection() throws Exception {
     return java.sql.DriverManager.getConnection(
         POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+  }
+
+  /** The {@code journal_entry.uses_illustrative_rules} flag for {@code entryId}, read as admin. */
+  private boolean usesIllustrativeRulesAsAdmin(UUID entryId) throws Exception {
+    try (Connection admin = adminConnection();
+        PreparedStatement ps =
+            admin.prepareStatement(
+                "SELECT uses_illustrative_rules FROM journal_entry WHERE id = ?")) {
+      ps.setObject(1, entryId);
+      try (ResultSet rs = ps.executeQuery()) {
+        rs.next();
+        return rs.getBoolean(1);
+      }
+    }
   }
 
   /**

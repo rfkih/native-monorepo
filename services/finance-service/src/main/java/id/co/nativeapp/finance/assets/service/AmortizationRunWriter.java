@@ -208,6 +208,11 @@ public class AmortizationRunWriter {
         List.of(
             JournalLine.debit(entryId, 1, expenseCode, amount),
             JournalLine.credit(entryId, 2, accumCode, amount));
+    // Derived from the provenance of the DEPRECIATION_EXPENSE/ACCUMULATED_DEPRECIATION mappings
+    // actually resolved above, rather than hardcoded.
+    boolean usesIllustrative =
+        roleAccountResolver.anyIllustrative(
+            now, AccountRole.DEPRECIATION_EXPENSE, AccountRole.ACCUMULATED_DEPRECIATION);
     return JournalEntry.balanced(
         entryId,
         period,
@@ -215,7 +220,7 @@ public class AmortizationRunWriter {
         "Depreciation (" + period + ")",
         amount.currency().getCurrencyCode(),
         sourceEventId,
-        true,
+        usesIllustrative,
         lines);
   }
 
@@ -234,6 +239,7 @@ public class AmortizationRunWriter {
       Money amount) {
     List<JournalLine> lines;
     String description;
+    boolean usesIllustrative;
     if (kind == DeferralKind.PREPAID_EXPENSE) {
       String expenseCode = requireMapped(AccountRole.EXPENSE, now);
       String prepaidCode = requireMapped(AccountRole.PREPAID_EXPENSE, now);
@@ -242,6 +248,11 @@ public class AmortizationRunWriter {
               JournalLine.debit(entryId, 1, expenseCode, amount),
               JournalLine.credit(entryId, 2, prepaidCode, amount));
       description = "Prepaid expense amortized (" + period + ")";
+      // Derived from the provenance of the EXPENSE/PREPAID_EXPENSE mappings actually resolved
+      // above, rather than hardcoded.
+      usesIllustrative =
+          roleAccountResolver.anyIllustrative(
+              now, AccountRole.EXPENSE, AccountRole.PREPAID_EXPENSE);
     } else {
       String deferredCode = requireMapped(AccountRole.DEFERRED_REVENUE, now);
       String revenueCode = requireMapped(AccountRole.REVENUE, now);
@@ -250,6 +261,11 @@ public class AmortizationRunWriter {
               JournalLine.debit(entryId, 1, deferredCode, amount),
               JournalLine.credit(entryId, 2, revenueCode, amount));
       description = "Deferred revenue recognized (" + period + ")";
+      // Derived from the provenance of the DEFERRED_REVENUE/REVENUE mappings actually resolved
+      // above, rather than hardcoded.
+      usesIllustrative =
+          roleAccountResolver.anyIllustrative(
+              now, AccountRole.DEFERRED_REVENUE, AccountRole.REVENUE);
     }
     return JournalEntry.balanced(
         entryId,
@@ -258,7 +274,7 @@ public class AmortizationRunWriter {
         description,
         amount.currency().getCurrencyCode(),
         sourceEventId,
-        true,
+        usesIllustrative,
         lines);
   }
 

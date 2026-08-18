@@ -221,19 +221,27 @@ public class PlatformSettlementWriter {
             Math.subtractExact(gross.amountMinor(), net.amountMinor()),
             gross.currency().getCurrencyCode());
     List<JournalLine> lines = new ArrayList<>();
+    List<AccountRole> rolesPosted = new ArrayList<>();
     int lineNo = 1;
     if (net.amountMinor() > 0) {
       lines.add(
           JournalLine.debit(entryId, lineNo++, requireMapped(AccountRole.CASH_CLEARING, now), net));
+      rolesPosted.add(AccountRole.CASH_CLEARING);
     }
     if (fee.amountMinor() > 0) {
       lines.add(
           JournalLine.debit(
               entryId, lineNo++, requireMapped(AccountRole.PLATFORM_FEE_EXPENSE, now), fee));
+      rolesPosted.add(AccountRole.PLATFORM_FEE_EXPENSE);
     }
     lines.add(
         JournalLine.credit(
             entryId, lineNo, requireMapped(AccountRole.PLATFORM_RECEIVABLE, now), gross));
+    rolesPosted.add(AccountRole.PLATFORM_RECEIVABLE);
+    // Derived from the provenance of the roles actually posted above (the conditional
+    // CASH_CLEARING/PLATFORM_FEE_EXPENSE legs only count when present), rather than hardcoded.
+    boolean usesIllustrative =
+        roleAccountResolver.anyIllustrative(now, rolesPosted.toArray(new AccountRole[0]));
     return JournalEntry.balanced(
         entryId,
         period,
@@ -241,7 +249,7 @@ public class PlatformSettlementWriter {
         "Platform settlement — " + channelCode,
         gross.currency().getCurrencyCode(),
         entryId,
-        true,
+        usesIllustrative,
         lines);
   }
 

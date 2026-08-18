@@ -112,6 +112,33 @@ class AmortizationPostingTest {
     assertThat(totalDebit(lines)).isEqualTo(totalCredit(lines)).isEqualTo(12_000_000L);
     assertThat(lineFor(lines, "1500").getDebitMinor()).isEqualTo(12_000_000L); // Dr FA cost
     assertThat(lineFor(lines, "1900").getCreditMinor()).isEqualTo(12_000_000L); // Cr clearing
+    // Provenance-derived (was hardcoded true): the resolver reports no illustrative mapping, so the
+    // entry is not badged provisional.
+    assertThat(entry.isUsesIllustrativeRules()).isFalse();
+  }
+
+  @Test
+  void anIllustrativeAssetMappingBadgesTheAcquisitionEntryProvisional() {
+    RoleAccountResolver illustrativeResolver = mock(RoleAccountResolver.class);
+    when(illustrativeResolver.resolve(eq(AccountRole.FIXED_ASSET_COST), any())).thenReturn("1500");
+    when(illustrativeResolver.resolve(eq(AccountRole.CASH_CLEARING), any())).thenReturn("1900");
+    when(illustrativeResolver.anyIllustrative(any(), any(), any())).thenReturn(true);
+    FixedAssetWriter illustrativeWriter =
+        new FixedAssetWriter(
+            mock(FixedAssetRepository.class),
+            mock(JournalEntryRepository.class),
+            mock(JournalLineRepository.class),
+            illustrativeResolver,
+            mock(JdbcTemplate.class),
+            Clock.fixed(NOW, ZoneOffset.UTC));
+
+    JournalEntry entry =
+        illustrativeWriter.buildAcquisitionEntry(
+            PERIOD, NOW, UUID.randomUUID(), UUID.randomUUID(), Money.ofMinor(12_000_000L, "IDR"));
+
+    assertThat(entry.isUsesIllustrativeRules())
+        .as("an illustrative FIXED_ASSET_COST/CASH_CLEARING mapping flags the entry provisional")
+        .isTrue();
   }
 
   @Test
@@ -129,6 +156,37 @@ class AmortizationPostingTest {
     assertThat(totalDebit(lines)).isEqualTo(totalCredit(lines)).isEqualTo(1_000_000L);
     assertThat(lineFor(lines, "1400").getDebitMinor()).isEqualTo(1_000_000L); // Dr prepaid
     assertThat(lineFor(lines, "1900").getCreditMinor()).isEqualTo(1_000_000L); // Cr clearing
+    assertThat(entry.isUsesIllustrativeRules())
+        .isFalse(); // provenance-derived (was hardcoded true)
+  }
+
+  @Test
+  void anIllustrativeMappingBadgesTheDeferralCreationEntryProvisional() {
+    RoleAccountResolver illustrativeResolver = mock(RoleAccountResolver.class);
+    when(illustrativeResolver.resolve(eq(AccountRole.PREPAID_EXPENSE), any())).thenReturn("1400");
+    when(illustrativeResolver.resolve(eq(AccountRole.CASH_CLEARING), any())).thenReturn("1900");
+    when(illustrativeResolver.anyIllustrative(any(), any(), any())).thenReturn(true);
+    DeferralWriter illustrativeWriter =
+        new DeferralWriter(
+            mock(DeferralRepository.class),
+            mock(JournalEntryRepository.class),
+            mock(JournalLineRepository.class),
+            illustrativeResolver,
+            mock(JdbcTemplate.class),
+            Clock.fixed(NOW, ZoneOffset.UTC));
+
+    JournalEntry entry =
+        illustrativeWriter.buildCreationEntry(
+            DeferralKind.PREPAID_EXPENSE,
+            PERIOD,
+            NOW,
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            AMOUNT);
+
+    assertThat(entry.isUsesIllustrativeRules())
+        .as("an illustrative PREPAID_EXPENSE/CASH_CLEARING mapping flags the entry provisional")
+        .isTrue();
   }
 
   @Test
@@ -148,6 +206,8 @@ class AmortizationPostingTest {
         .isEqualTo(1_000_000L); // Dr clearing (cash in)
     assertThat(lineFor(lines, "2400").getCreditMinor())
         .isEqualTo(1_000_000L); // Cr deferred revenue
+    assertThat(entry.isUsesIllustrativeRules())
+        .isFalse(); // provenance-derived (was hardcoded true)
   }
 
   @Test
@@ -159,6 +219,39 @@ class AmortizationPostingTest {
     assertThat(totalDebit(lines)).isEqualTo(totalCredit(lines)).isEqualTo(1_000_000L);
     assertThat(lineFor(lines, "5500").getDebitMinor()).isEqualTo(1_000_000L); // Dr dep expense
     assertThat(lineFor(lines, "1590").getCreditMinor()).isEqualTo(1_000_000L); // Cr accum dep
+    assertThat(entry.isUsesIllustrativeRules())
+        .isFalse(); // provenance-derived (was hardcoded true)
+  }
+
+  @Test
+  void anIllustrativeMappingBadgesTheDepreciationEntryProvisional() {
+    RoleAccountResolver illustrativeResolver = mock(RoleAccountResolver.class);
+    when(illustrativeResolver.resolve(eq(AccountRole.DEPRECIATION_EXPENSE), any()))
+        .thenReturn("5500");
+    when(illustrativeResolver.resolve(eq(AccountRole.ACCUMULATED_DEPRECIATION), any()))
+        .thenReturn("1590");
+    when(illustrativeResolver.anyIllustrative(any(), any(), any())).thenReturn(true);
+    AmortizationRunWriter illustrativeWriter =
+        new AmortizationRunWriter(
+            mock(FixedAssetRepository.class),
+            mock(DeferralRepository.class),
+            mock(AmortizationRunRepository.class),
+            mock(AmortizationRunLineRepository.class),
+            mock(JournalEntryRepository.class),
+            mock(JournalLineRepository.class),
+            illustrativeResolver,
+            mock(JdbcTemplate.class),
+            Clock.fixed(NOW, ZoneOffset.UTC));
+
+    JournalEntry entry =
+        illustrativeWriter.buildAssetEntry(
+            PERIOD, NOW, UUID.randomUUID(), UUID.randomUUID(), AMOUNT);
+
+    assertThat(entry.isUsesIllustrativeRules())
+        .as(
+            "an illustrative DEPRECIATION_EXPENSE/ACCUMULATED_DEPRECIATION mapping flags the entry"
+                + " provisional")
+        .isTrue();
   }
 
   @Test
@@ -176,6 +269,8 @@ class AmortizationPostingTest {
     assertThat(totalDebit(lines)).isEqualTo(totalCredit(lines)).isEqualTo(1_000_000L);
     assertThat(lineFor(lines, "5000").getDebitMinor()).isEqualTo(1_000_000L); // Dr expense
     assertThat(lineFor(lines, "1400").getCreditMinor()).isEqualTo(1_000_000L); // Cr prepaid
+    assertThat(entry.isUsesIllustrativeRules())
+        .isFalse(); // provenance-derived (was hardcoded true)
   }
 
   @Test
@@ -193,6 +288,8 @@ class AmortizationPostingTest {
     assertThat(totalDebit(lines)).isEqualTo(totalCredit(lines)).isEqualTo(1_000_000L);
     assertThat(lineFor(lines, "2400").getDebitMinor()).isEqualTo(1_000_000L); // Dr deferred revenue
     assertThat(lineFor(lines, "4000").getCreditMinor()).isEqualTo(1_000_000L); // Cr revenue
+    assertThat(entry.isUsesIllustrativeRules())
+        .isFalse(); // provenance-derived (was hardcoded true)
   }
 
   @Test
@@ -215,6 +312,42 @@ class AmortizationPostingTest {
     assertThat(lineFor(lines, "1590").getDebitMinor()).isEqualTo(1_000_000L); // Dr accum removed
     assertThat(lineFor(lines, "1500").getCreditMinor()).isEqualTo(12_000_000L); // Cr cost removed
     assertThat(lineFor(lines, "4200").getCreditMinor()).isEqualTo(1_000_000L); // Cr gain
+    assertThat(entry.isUsesIllustrativeRules())
+        .isFalse(); // provenance-derived (was hardcoded true)
+  }
+
+  @Test
+  void anIllustrativeMappingBadgesTheDisposalEntryProvisional() {
+    RoleAccountResolver illustrativeResolver = mock(RoleAccountResolver.class);
+    when(illustrativeResolver.resolve(eq(AccountRole.CASH_CLEARING), any())).thenReturn("1900");
+    when(illustrativeResolver.resolve(eq(AccountRole.ACCUMULATED_DEPRECIATION), any()))
+        .thenReturn("1590");
+    when(illustrativeResolver.resolve(eq(AccountRole.FIXED_ASSET_COST), any())).thenReturn("1500");
+    when(illustrativeResolver.resolve(eq(AccountRole.GAIN_ON_DISPOSAL), any())).thenReturn("4200");
+    when(illustrativeResolver.anyIllustrative(any(), any(), any(), any(), any())).thenReturn(true);
+    AssetDisposalWriter illustrativeWriter =
+        new AssetDisposalWriter(
+            mock(FixedAssetRepository.class),
+            mock(AmortizationRunRepository.class),
+            mock(JournalEntryRepository.class),
+            mock(JournalLineRepository.class),
+            illustrativeResolver,
+            mock(JdbcTemplate.class),
+            Clock.fixed(NOW, ZoneOffset.UTC));
+
+    JournalEntry entry =
+        illustrativeWriter.buildDisposalEntry(
+            PERIOD,
+            NOW,
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            Money.ofMinor(12_000_000L, "IDR"),
+            Money.ofMinor(1_000_000L, "IDR"),
+            Money.ofMinor(12_000_000L, "IDR"));
+
+    assertThat(entry.isUsesIllustrativeRules())
+        .as("an illustrative mapping among the 4 posted roles flags the entry provisional")
+        .isTrue();
   }
 
   @Test
@@ -237,6 +370,8 @@ class AmortizationPostingTest {
     assertThat(lineFor(lines, "1590").getDebitMinor()).isEqualTo(1_000_000L);
     assertThat(lineFor(lines, "5600").getDebitMinor()).isEqualTo(3_000_000L); // Dr loss
     assertThat(lineFor(lines, "1500").getCreditMinor()).isEqualTo(12_000_000L);
+    assertThat(entry.isUsesIllustrativeRules())
+        .isFalse(); // provenance-derived (was hardcoded true)
   }
 
   @Test

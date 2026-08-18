@@ -257,6 +257,11 @@ public class FixedAssetWriter {
         List.of(
             JournalLine.debit(entryId, 1, assetCode, cost),
             JournalLine.credit(entryId, 2, clearingCode, cost));
+    // Derived from the provenance of the FIXED_ASSET_COST/CASH_CLEARING mappings actually resolved
+    // above, rather than hardcoded.
+    boolean usesIllustrative =
+        roleAccountResolver.anyIllustrative(
+            now, AccountRole.FIXED_ASSET_COST, AccountRole.CASH_CLEARING);
     return JournalEntry.balanced(
         entryId,
         period,
@@ -264,7 +269,7 @@ public class FixedAssetWriter {
         "Fixed asset acquired",
         cost.currency().getCurrencyCode(),
         sourceEventId,
-        true,
+        usesIllustrative,
         lines);
   }
 
@@ -289,6 +294,8 @@ public class FixedAssetWriter {
     List<JournalLine> lines = new java.util.ArrayList<>();
     lines.add(
         JournalLine.debit(entryId, 1, requireMapped(AccountRole.FIXED_ASSET_COST, now), cost));
+    List<AccountRole> rolesPosted =
+        new java.util.ArrayList<>(List.of(AccountRole.FIXED_ASSET_COST));
     int lineNo = 2;
     if (openingAccumulated.isPositive()) {
       lines.add(
@@ -297,12 +304,18 @@ public class FixedAssetWriter {
               lineNo++,
               requireMapped(AccountRole.ACCUMULATED_DEPRECIATION, now),
               openingAccumulated));
+      rolesPosted.add(AccountRole.ACCUMULATED_DEPRECIATION);
     }
     if (net.isPositive()) {
       lines.add(
           JournalLine.credit(
               entryId, lineNo, requireMapped(AccountRole.OPENING_BALANCE_EQUITY, now), net));
+      rolesPosted.add(AccountRole.OPENING_BALANCE_EQUITY);
     }
+    // Derived from the provenance of the roles actually posted above (the conditional
+    // ACCUMULATED_DEPRECIATION/OPENING_BALANCE_EQUITY legs only count when present).
+    boolean usesIllustrative =
+        roleAccountResolver.anyIllustrative(now, rolesPosted.toArray(new AccountRole[0]));
     return JournalEntry.balanced(
         entryId,
         period,
@@ -310,7 +323,7 @@ public class FixedAssetWriter {
         "Fixed asset brought forward",
         cost.currency().getCurrencyCode(),
         sourceEventId,
-        true,
+        usesIllustrative,
         lines);
   }
 

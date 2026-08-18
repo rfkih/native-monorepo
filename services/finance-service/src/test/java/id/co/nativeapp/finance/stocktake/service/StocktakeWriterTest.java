@@ -130,7 +130,22 @@ class StocktakeWriterTest {
     assertThat(lines.get(1).getCreditMinor()).isEqualTo(75_000L);
     assertThat(entry.getDescription()).isEqualTo("Inventory stocktake shrinkage");
     assertThat(entry.getSourceEventId()).isEqualTo(event.eventId());
-    assertThat(entry.isUsesIllustrativeRules()).isTrue();
+    // Provenance-derived now (was hardcoded true): the resolver reports no illustrative mapping
+    // (the
+    // OFFICIAL role_account_map versions resolve), so the entry is not badged provisional.
+    assertThat(entry.isUsesIllustrativeRules()).isFalse();
+  }
+
+  @Test
+  void anIllustrativeMappingBadgesTheEntryProvisional() {
+    mapInventoryAccounts();
+    when(resolver.anyIllustrative(any(), any(), any())).thenReturn(true);
+
+    JournalEntry entry = writer().buildEntry(event(75_000L), UUID.randomUUID(), "2026-08");
+
+    assertThat(entry.isUsesIllustrativeRules())
+        .as("an illustrative INVENTORY/INVENTORY_SHRINKAGE mapping flags the entry provisional")
+        .isTrue();
   }
 
   @Test
@@ -189,7 +204,8 @@ class StocktakeWriterTest {
     assertThat(saved.getAmount()).isEqualTo(expected);
     assertThat(saved.getSourceEventId()).isEqualTo(event.eventId());
 
-    verify(pnlReadModel).addExpense(period, expected, TENANT, ACTOR, true);
+    // The read-model flag mirrors the derived GL-entry flag (OFFICIAL mappings resolve → false).
+    verify(pnlReadModel).addExpense(period, expected, TENANT, ACTOR, false);
 
     // Coherence lock: the GL journal and the read model tell the SAME story in this one post — the
     // loss DEBITS the 5800 expense leg by the magnitude, matching the positive read-model expense.
@@ -219,7 +235,7 @@ class StocktakeWriterTest {
     assertThat(saved.getGlAccountCode()).isEqualTo("5800");
     assertThat(saved.getAmount()).isEqualTo(expected);
 
-    verify(pnlReadModel).addExpense(period, expected, TENANT, ACTOR, true);
+    verify(pnlReadModel).addExpense(period, expected, TENANT, ACTOR, false);
   }
 
   @Test

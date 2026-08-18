@@ -172,10 +172,10 @@ public class StocktakeWriter {
     // consolidated_pnl dashboard. Always keyed to INVENTORY_SHRINKAGE (5800) — the sign lives in
     // the
     // amount, never the account — and the 1100 asset leg stays GL-journal-only. usesIllustrative
-    // mirrors the GL entry (5800/1100 are illustrative, SME-gated per V50), keeping the dashboard's
-    // provisional badge consistent with the books. ledger_posting.source_event_id UNIQUE (the
-    // reused
-    // event id) is the DB idempotency backstop.
+    // mirrors the GL entry (derived from the resolved INVENTORY/INVENTORY_SHRINKAGE mapping
+    // provenance in buildEntry), keeping the dashboard's provisional badge consistent with the
+    // books. ledger_posting.source_event_id UNIQUE (the reused event id) is the DB idempotency
+    // backstop.
     String shrinkageCode = requireMapped(AccountRole.INVENTORY_SHRINKAGE, event.countedAt());
     LedgerPosting posting =
         new LedgerPosting(
@@ -187,7 +187,8 @@ public class StocktakeWriter {
             event.eventId());
     posting.setCompanyId(companyId);
     ledgerRepository.save(posting);
-    pnlReadModel.addExpense(period, signedExpense, companyId, actor, true);
+    pnlReadModel.addExpense(
+        period, signedExpense, companyId, actor, entry.isUsesIllustrativeRules());
 
     log.info(
         "Posted stocktake shrinkage for stocktake {} (entry {})", event.stocktakeId(), entryId);
@@ -233,8 +234,22 @@ public class StocktakeWriter {
     }
 
     String description = isLoss ? "Inventory stocktake shrinkage" : "Inventory stocktake gain";
+    // Derive the provisional flag from the provenance of the mappings actually resolved (INVENTORY
+    // +
+    // INVENTORY_SHRINKAGE) rather than hardcoding it: once V50's OFFICIAL role_account_map versions
+    // resolve, a new stocktake posting is no longer badged illustrative.
+    boolean usesIllustrative =
+        roleAccountResolver.anyIllustrative(
+            occurredAt, AccountRole.INVENTORY, AccountRole.INVENTORY_SHRINKAGE);
     return JournalEntry.balanced(
-        entryId, period, occurredAt, description, currencyCode, event.eventId(), true, lines);
+        entryId,
+        period,
+        occurredAt,
+        description,
+        currencyCode,
+        event.eventId(),
+        usesIllustrative,
+        lines);
   }
 
   /** Fail loud on an unmapped role (V50 seeds both, effective 2000-01-01 — internal fault). */

@@ -187,26 +187,35 @@ public class TaxFilingWriter {
     String inputCode = requireMapped(AccountRole.VAT_INPUT, now);
 
     List<JournalLine> lines = new ArrayList<>(3);
+    List<AccountRole> rolesPosted = new ArrayList<>(3);
     int lineNo = 1;
     if (outputVatMinor > 0L) {
       lines.add(
           JournalLine.debit(
               entryId, lineNo++, outputCode, Money.ofMinor(outputVatMinor, currency)));
+      rolesPosted.add(AccountRole.VAT_OUTPUT);
     }
     if (inputVatMinor > 0L) {
       lines.add(
           JournalLine.credit(entryId, lineNo++, inputCode, Money.ofMinor(inputVatMinor, currency)));
+      rolesPosted.add(AccountRole.VAT_INPUT);
     }
     if (signedNet > 0L) {
       String payableCode = requireMapped(AccountRole.VAT_PAYABLE, now);
       lines.add(
           JournalLine.credit(entryId, lineNo++, payableCode, Money.ofMinor(signedNet, currency)));
+      rolesPosted.add(AccountRole.VAT_PAYABLE);
     } else if (signedNet < 0L) {
       String carryCode = requireMapped(AccountRole.VAT_CREDIT_CARRYFORWARD, now);
       lines.add(
           JournalLine.debit(entryId, lineNo++, carryCode, Money.ofMinor(-signedNet, currency)));
+      rolesPosted.add(AccountRole.VAT_CREDIT_CARRYFORWARD);
     }
 
+    // Derived from the provenance of every role actually posted above (the conditional legs only
+    // count when present), rather than hardcoded.
+    boolean usesIllustrative =
+        roleAccountResolver.anyIllustrative(now, rolesPosted.toArray(new AccountRole[0]));
     return JournalEntry.balanced(
         entryId,
         period,
@@ -214,7 +223,7 @@ public class TaxFilingWriter {
         "PPN VAT return filed (" + period + ")",
         currency.getCurrencyCode(),
         sourceEventId,
-        true,
+        usesIllustrative,
         lines);
   }
 

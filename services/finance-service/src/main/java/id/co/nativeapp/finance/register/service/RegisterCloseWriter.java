@@ -175,6 +175,11 @@ public class RegisterCloseWriter {
    * the same id and the UNIQUE backstop makes a second reversal a no-op — the prior entry can never
    * be reversed twice. Absent prior entry (the superseded close reconciled to zero, so posted
    * nothing) → nothing to reverse; the corrected variance stands alone.
+   *
+   * <p>The contra carries the {@code uses_illustrative_rules} of the ENTRY IT REVERSES (read by
+   * id), mirroring {@code ReversalPostingWriter} / {@code PayrollLiabilityWriter}: reversing an
+   * illustrative original yields an illustrative contra — including a correction-to-zero, which the
+   * corrected-variances derivation could not express.
    */
   private void reverseSupersededVariance(
       RegisterSessionClosedEvent event, String companyId, String period) {
@@ -220,10 +225,23 @@ public class RegisterCloseWriter {
           "prior register-close variance entry " + priorEntryId.get() + " has no lines to reverse");
     }
 
+    // The contra mirrors the provisional flag of the ENTRY IT REVERSES (matching
+    // ReversalPostingWriter / PayrollLiabilityWriter), not the corrected variances — so reversing
+    // an
+    // illustrative original yields an illustrative contra, including a correction-to-zero.
+    boolean usesIllustrative =
+        journalEntryRepository.findUsesIllustrativeRulesById(priorEntryId.get()).orElse(false);
+
     UUID contraId = UUID.randomUUID();
     JournalEntry contra =
         buildReversalEntry(
-            priorLines, contraId, contraSourceEventId, period, event.closedAt(), event.currency());
+            priorLines,
+            contraId,
+            contraSourceEventId,
+            period,
+            event.closedAt(),
+            event.currency(),
+            usesIllustrative);
     contra.setCompanyId(companyId);
     journalEntryRepository.saveAndFlush(contra);
     for (JournalLine line : contra.getLines()) {
@@ -242,14 +260,20 @@ public class RegisterCloseWriter {
    * line with the side swapped (original debit → contra credit, original credit → contra debit),
    * same account + currency. Pure besides no lookups, so a unit test asserts the exact negation
    * (the {@link #buildEntry} pattern). The contra of a balanced entry is balanced by construction.
+   *
+   * @param usesIllustrativeRules the provisional badge to carry — the caller derives this from the
+   *     SAME roles the corrected variance entry posts to, so the two always agree (see {@link
+   *     #reverseSupersededVariance})
    */
+  @SuppressWarnings("checkstyle:ParameterNumber")
   public JournalEntry buildReversalEntry(
       List<JournalLineReversalView> priorLines,
       UUID contraId,
       UUID contraSourceEventId,
       String period,
       Instant occurredAt,
-      String currency) {
+      String currency,
+      boolean usesIllustrativeRules) {
     List<JournalLine> contraLines = new ArrayList<>(priorLines.size());
     int lineNo = 1;
     for (JournalLineReversalView prior : priorLines) {
@@ -268,7 +292,7 @@ public class RegisterCloseWriter {
         "Register close correction — reversal of superseded variance",
         currency,
         contraSourceEventId,
-        true,
+        usesIllustrativeRules,
         contraLines);
   }
 
@@ -337,6 +361,11 @@ public class RegisterCloseWriter {
       }
     }
 
+    // Derived from the provenance of every role actually posted above (each tender's clearing
+    // role + its SHORT/OVER role), rather than hardcoded.
+    boolean usesIllustrative =
+        roleAccountResolver.anyIllustrative(
+            occurredAt, rolesForVariances(variances).toArray(new AccountRole[0]));
     return JournalEntry.balanced(
         entryId,
         period,
@@ -344,8 +373,26 @@ public class RegisterCloseWriter {
         "Register close variance (selisih kas — per tender)",
         currencyCode,
         event.eventId(),
-        true,
+        usesIllustrative,
         lines);
+  }
+
+  /**
+   * The {@link AccountRole}s a set of tender variances posts to: each tender's own clearing role,
+   * plus {@code CASH_SHORT_EXPENSE} or {@code CASH_OVER_INCOME} depending on its sign — the exact
+   * roles {@link #buildEntry} resolves into lines. May repeat a role across tenders; harmless,
+   * since {@link RoleAccountResolver#anyIllustrative} OR-folds and is idempotent.
+   */
+  private static List<AccountRole> rolesForVariances(List<TenderVariance> variances) {
+    List<AccountRole> roles = new ArrayList<>(variances.size() * 2);
+    for (TenderVariance variance : variances) {
+      roles.add(variance.clearingRole());
+      roles.add(
+          variance.overShortMinor() < 0
+              ? AccountRole.CASH_SHORT_EXPENSE
+              : AccountRole.CASH_OVER_INCOME);
+    }
+    return roles;
   }
 
   /** Fail loud on an unmapped role (V43 seeds both, effective 2000-01-01 — internal fault). */

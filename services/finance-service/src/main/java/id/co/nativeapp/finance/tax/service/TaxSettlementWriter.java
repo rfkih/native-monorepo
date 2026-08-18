@@ -132,6 +132,11 @@ public class TaxSettlementWriter {
         List.of(
             JournalLine.debit(entryId, 1, payableCode, net),
             JournalLine.credit(entryId, 2, clearingCode, net));
+    // Derived from the provenance of the VAT_PAYABLE/CASH_CLEARING mappings actually resolved
+    // above, rather than hardcoded.
+    boolean usesIllustrative =
+        roleAccountResolver.anyIllustrative(
+            now, AccountRole.VAT_PAYABLE, AccountRole.CASH_CLEARING);
     return JournalEntry.balanced(
         entryId,
         period,
@@ -139,7 +144,7 @@ public class TaxSettlementWriter {
         "PPN VAT settlement (" + filing.getPeriod() + ")",
         currency.getCurrencyCode(),
         entryId,
-        true,
+        usesIllustrative,
         lines);
   }
 

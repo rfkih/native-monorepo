@@ -77,6 +77,33 @@ class ReconcilePostingTest {
     assertThat(totalDebit(lines)).isEqualTo(totalCredit(lines)).isEqualTo(1_000_000L);
     assertThat(lineFor(lines, "1000").getDebitMinor()).isEqualTo(1_000_000L); // Dr BANK
     assertThat(lineFor(lines, "1900").getCreditMinor()).isEqualTo(1_000_000L); // Cr CASH_CLEARING
+    // Provenance-derived (was hardcoded true): every resolved role above is OFFICIAL, so the entry
+    // is not badged provisional.
+    assertThat(entry.isUsesIllustrativeRules()).isFalse();
+  }
+
+  @Test
+  void anIllustrativeMappingBadgesTheReconciliationEntryProvisional() {
+    RoleAccountResolver illustrativeResolver = mock(RoleAccountResolver.class);
+    when(illustrativeResolver.resolve(eq(AccountRole.BANK), any())).thenReturn("1000");
+    when(illustrativeResolver.resolve(eq(AccountRole.CASH_CLEARING), any())).thenReturn("1900");
+    when(illustrativeResolver.anyIllustrative(any(), any(), any())).thenReturn(true);
+    ReconciliationWriter illustrativeWriter =
+        new ReconciliationWriter(
+            mock(BankStatementLineRepository.class),
+            illustrativeResolver,
+            mock(JournalEntryRepository.class),
+            mock(JournalLineRepository.class),
+            mock(JdbcTemplate.class),
+            Clock.fixed(NOW, ZoneOffset.UTC));
+
+    JournalEntry entry =
+        illustrativeWriter.buildEntry(
+            line(1_000_000L), ReconciliationCategory.CLEARING, NOW, UUID.randomUUID());
+
+    assertThat(entry.isUsesIllustrativeRules())
+        .as("an illustrative BANK/CASH_CLEARING mapping flags the entry provisional")
+        .isTrue();
   }
 
   @Test
@@ -154,6 +181,8 @@ class ReconcilePostingTest {
     assertThat(lineFor(lines, "5720").getDebitMinor()).isEqualTo(20_000L); // Dr QRIS_FEE_EXPENSE
     assertThat(lineFor(lines, "1901").getCreditMinor())
         .isEqualTo(1_020_000L); // Cr QRIS_CLEARING (gross)
+    assertThat(entry.isUsesIllustrativeRules())
+        .isFalse(); // provenance-derived (was hardcoded true)
   }
 
   @Test

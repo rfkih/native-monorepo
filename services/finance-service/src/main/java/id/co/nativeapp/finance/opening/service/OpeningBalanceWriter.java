@@ -190,6 +190,12 @@ public class OpeningBalanceWriter {
         journalLines.add(JournalLine.credit(entryId, lineNo++, line.accountCode(), amount));
       }
     }
+    // Every user-supplied line targets its OWN account_code directly (no role resolution — the
+    // user picks the balance-sheet account), so only the auto-plug OPENING_BALANCE_EQUITY leg (when
+    // present) is a role-resolved posting whose provenance can be derived; with no plug, no role
+    // was
+    // resolved at all and the entry is not badged provisional.
+    boolean usesIllustrative = false;
     if (plug != 0) {
       String obe = requireMapped(AccountRole.OPENING_BALANCE_EQUITY, occurredAt);
       Money plugAmount = Money.ofMinor(Math.abs(plug), currency);
@@ -198,9 +204,18 @@ public class OpeningBalanceWriter {
       } else {
         journalLines.add(JournalLine.debit(entryId, lineNo, obe, plugAmount));
       }
+      usesIllustrative =
+          roleAccountResolver.anyIllustrative(occurredAt, AccountRole.OPENING_BALANCE_EQUITY);
     }
     return JournalEntry.balanced(
-        entryId, period, occurredAt, "Opening balances", currency, entryId, true, journalLines);
+        entryId,
+        period,
+        occurredAt,
+        "Opening balances",
+        currency,
+        entryId,
+        usesIllustrative,
+        journalLines);
   }
 
   private static long sumSide(List<OpeningBalanceLine> lines, OpeningBalanceSide side) {

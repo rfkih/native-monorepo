@@ -153,6 +153,7 @@ public class DeferralWriter {
     String clearingCode = requireMapped(AccountRole.CASH_CLEARING, now);
     List<JournalLine> lines;
     String description;
+    boolean usesIllustrative;
     if (kind == DeferralKind.PREPAID_EXPENSE) {
       String prepaidCode = requireMapped(AccountRole.PREPAID_EXPENSE, now);
       lines =
@@ -160,6 +161,11 @@ public class DeferralWriter {
               JournalLine.debit(entryId, 1, prepaidCode, total),
               JournalLine.credit(entryId, 2, clearingCode, total));
       description = "Prepaid expense created";
+      // Derived from the provenance of the PREPAID_EXPENSE/CASH_CLEARING mappings actually
+      // resolved above, rather than hardcoded.
+      usesIllustrative =
+          roleAccountResolver.anyIllustrative(
+              now, AccountRole.PREPAID_EXPENSE, AccountRole.CASH_CLEARING);
     } else {
       String deferredCode = requireMapped(AccountRole.DEFERRED_REVENUE, now);
       lines =
@@ -167,6 +173,11 @@ public class DeferralWriter {
               JournalLine.debit(entryId, 1, clearingCode, total),
               JournalLine.credit(entryId, 2, deferredCode, total));
       description = "Deferred revenue received";
+      // Derived from the provenance of the CASH_CLEARING/DEFERRED_REVENUE mappings actually
+      // resolved above, rather than hardcoded.
+      usesIllustrative =
+          roleAccountResolver.anyIllustrative(
+              now, AccountRole.CASH_CLEARING, AccountRole.DEFERRED_REVENUE);
     }
     return JournalEntry.balanced(
         entryId,
@@ -175,7 +186,7 @@ public class DeferralWriter {
         description,
         total.currency().getCurrencyCode(),
         sourceEventId,
-        true,
+        usesIllustrative,
         lines);
   }
 

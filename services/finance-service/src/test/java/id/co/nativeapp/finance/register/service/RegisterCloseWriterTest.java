@@ -88,6 +88,43 @@ class RegisterCloseWriterTest {
     assertThat(lines.get(2).getDebitMinor()).isEqualTo(10_000L);
     assertThat(lines.get(3).getAccountCode()).isEqualTo("4300");
     assertThat(lines.get(3).getCreditMinor()).isEqualTo(10_000L);
+    // Provenance-derived (was hardcoded true): every resolved role above is OFFICIAL, so the entry
+    // is not badged provisional.
+    assertThat(entry.isUsesIllustrativeRules()).isFalse();
+  }
+
+  @Test
+  void anIllustrativeMappingBadgesTheVarianceEntryProvisional() {
+    when(resolver.resolve(eq(AccountRole.CASH_CLEARING), any())).thenReturn("1900");
+    when(resolver.resolve(eq(AccountRole.CASH_SHORT_EXPENSE), any())).thenReturn("5700");
+    // 1 tender (CASH) → 2 roles (its clearing role + CASH_SHORT_EXPENSE) → Instant + 2 varargs.
+    when(resolver.anyIllustrative(any(), any(), any())).thenReturn(true);
+
+    RegisterSessionClosedEvent event =
+        new RegisterSessionClosedEvent(
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            "11111111-1111-1111-1111-111111111111",
+            UUID.randomUUID(),
+            Instant.ofEpochMilli(1_750_000_000_000L),
+            Instant.ofEpochMilli(1_750_030_000_000L),
+            50_000L,
+            0L,
+            0L,
+            50_000L,
+            0L,
+            -50_000L,
+            "IDR",
+            List.of(),
+            null,
+            1,
+            null);
+
+    JournalEntry entry = writer.buildEntry(event, UUID.randomUUID(), "2026-08");
+
+    assertThat(entry.isUsesIllustrativeRules())
+        .as("an illustrative CASH_CLEARING/CASH_SHORT_EXPENSE mapping flags the entry provisional")
+        .isTrue();
   }
 
   @Test
@@ -107,7 +144,8 @@ class RegisterCloseWriterTest {
             UUID.randomUUID(),
             "2026-08",
             Instant.ofEpochMilli(1_750_030_000_000L),
-            "IDR");
+            "IDR",
+            false); // the caller derives this from the corrected variance's own roles
 
     List<JournalLine> lines = contra.getLines();
     assertThat(lines).hasSize(2);
@@ -122,6 +160,30 @@ class RegisterCloseWriterTest {
     // Balanced (JournalEntry.balanced would have thrown otherwise): Σdebit == Σcredit.
     assertThat(lines.stream().mapToLong(JournalLine::getDebitMinor).sum())
         .isEqualTo(lines.stream().mapToLong(JournalLine::getCreditMinor).sum());
+    // The caller-supplied flag passes through verbatim (buildReversalEntry does not derive it).
+    assertThat(contra.isUsesIllustrativeRules()).isFalse();
+  }
+
+  @Test
+  void reversalEntryCarriesWhicheverFlagTheCallerDerived() {
+    // buildReversalEntry has no resolver lookups of its own — it just carries the caller's derived
+    // flag verbatim, so the reversal always matches the corrected variance entry it is paired with.
+    List<JournalLineReversalView> priorLines =
+        List.of(
+            new StubLine("5700", 50_000L, 0L, "IDR", 1),
+            new StubLine("1900", 0L, 50_000L, "IDR", 2));
+
+    JournalEntry contra =
+        writer.buildReversalEntry(
+            priorLines,
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            "2026-08",
+            Instant.ofEpochMilli(1_750_030_000_000L),
+            "IDR",
+            true);
+
+    assertThat(contra.isUsesIllustrativeRules()).isTrue();
   }
 
   /** Minimal {@link JournalLineReversalView} stub for the pure reversal-builder test. */

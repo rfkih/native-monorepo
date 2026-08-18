@@ -206,15 +206,20 @@ public class ReconciliationWriter {
     long fee = validateFee(category, feeMinor);
 
     Money amount = Money.ofMinor(Math.abs(amountMinor), line.getCurrency());
+    AccountRole contraRole = contraRole(category);
     String bankCode = requireMapped(AccountRole.BANK, now);
-    String contraCode = requireMapped(contraRole(category), now);
+    String contraCode = requireMapped(contraRole, now);
 
     List<JournalLine> lines = new ArrayList<>(3);
+    List<AccountRole> rolesPosted = new ArrayList<>(3);
+    rolesPosted.add(AccountRole.BANK);
+    rolesPosted.add(contraRole);
     if (fee > 0) {
       // Only reachable for QRIS_CLEARING (validateFee) — deposit-only (validateCategoryForDirection
       // already rejected a withdrawal above), so `amount` here is the net QRIS settlement deposit.
       Money feeAmount = Money.ofMinor(fee, line.getCurrency());
       String feeCode = requireMapped(AccountRole.QRIS_FEE_EXPENSE, now);
+      rolesPosted.add(AccountRole.QRIS_FEE_EXPENSE);
       Money gross = amount.plus(feeAmount);
       lines.add(JournalLine.debit(entryId, 1, bankCode, amount));
       lines.add(JournalLine.debit(entryId, 2, feeCode, feeAmount));
@@ -227,6 +232,10 @@ public class ReconciliationWriter {
       lines.add(JournalLine.credit(entryId, 2, bankCode, amount));
     }
 
+    // Derived from the provenance of every role actually posted above (BANK + the category's
+    // contra + the optional QRIS fee leg), rather than hardcoded.
+    boolean usesIllustrative =
+        roleAccountResolver.anyIllustrative(now, rolesPosted.toArray(new AccountRole[0]));
     String period = LedgerPosting.periodOf(now);
     return JournalEntry.balanced(
         entryId,
@@ -235,7 +244,7 @@ public class ReconciliationWriter {
         "Bank reconciliation (" + category + ")",
         amount.currency().getCurrencyCode(),
         line.getId(),
-        true,
+        usesIllustrative,
         lines);
   }
 
