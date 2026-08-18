@@ -1516,6 +1516,62 @@ public class RoutingConfig {
         .build();
   }
 
+  /**
+   * {@code POST /api/v1/inventory-method/activate} — perpetual-inventory ACTIVATION (ADR 0067 §5,
+   * Phase D4) — OWNER-ONLY, narrower than the general {@link #FINANCE_ROLES} surface {@link
+   * #inventoryMethodRoute} sits behind (the {@link #paymentSettingsRoute}/{@link
+   * #payrollRunBankFileRoute} precedent). Activation books a one-time opening {@code Dr 1100 / Cr
+   * 3900} entry and is an effectively-irreversible, once-per-company election (no
+   * deactivate/re-activate flow) — an {@code accountant} reads the books but does not get to elect
+   * the company's accounting method or decide when its opening inventory posts, so it is excluded
+   * exactly like the QRIS payment-settings admin and the payroll bank file.
+   *
+   * <p>{@code @Order(HIGHEST_PRECEDENCE)} is load-bearing: RouterFunction beans are matched in
+   * declaration order across the WHOLE bean set (first match wins, NOT most-specific-path wins), so
+   * without this the general {@link #inventoryMethodRoute} ({@code /api/v1/inventory-method/**},
+   * {@link #FINANCE_ROLES}) below would swallow this exact path FIRST and let an {@code accountant}
+   * token through — this route must be checked before that one for its narrower {@link
+   * #OWNER_ROLES} gate to apply. Every OTHER {@code /api/v1/inventory-method/**} path (today just
+   * the {@code GET} status read) falls through to that route unchanged — the {@link
+   * #registerCloseCorrectionRoute} first-match pattern.
+   */
+  @Bean
+  @Order(Ordered.HIGHEST_PRECEDENCE)
+  RouterFunction<ServerResponse> inventoryMethodActivateRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("finance-service-inventory-method-activate")
+        .route(path("/api/v1/inventory-method/activate"), http())
+        .before(uri(routes.financeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(OWNER_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
+  /**
+   * The rest of {@code /api/v1/inventory-method/**} (today just {@code GET
+   * /api/v1/inventory-method}, the election status + live {@code 1100} balance read, ADR 0067 §5
+   * Phase D4/D5) — {@link #FINANCE_ROLES} (owner/accountant), the same back-office-books surface as
+   * {@link #openingBalancesRoute}: an accountant reads the books, including whether perpetual
+   * inventory is active and its negative-asset monitor flag, but does not activate it (see {@link
+   * #inventoryMethodActivateRoute}).
+   */
+  @Bean
+  RouterFunction<ServerResponse> inventoryMethodRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("finance-service-inventory-method")
+        .route(path("/api/v1/inventory-method/**"), http())
+        .before(uri(routes.financeService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(FINANCE_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
   @Bean
   RouterFunction<ServerResponse> groupsRoute(
       GatewayRouteProperties routes,

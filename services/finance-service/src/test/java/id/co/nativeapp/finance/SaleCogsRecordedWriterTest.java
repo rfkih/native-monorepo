@@ -155,12 +155,15 @@ class SaleCogsRecordedWriterTest extends PostgresRlsTestBase {
             admin.prepareStatement(
                 "INSERT INTO inventory_method_config"
                     + " (id, method, perpetual_active, cutover_period, activated_at, created_at,"
-                    + " created_by, updated_at, updated_by, version, company_id)"
-                    + " VALUES (?, 'PERPETUAL', ?, ?, now(), now(), 'test', now(), 'test', 0, ?)")) {
+                    + " created_by, updated_at, updated_by, version, company_id, currency,"
+                    + " idempotency_key, opening_inventory_value_minor)"
+                    + " VALUES (?, 'PERPETUAL', ?, ?, now(), now(), 'test', now(), 'test', 0, ?,"
+                    + " 'IDR', ?, 0)")) {
       ps.setObject(1, UUID.randomUUID());
       ps.setBoolean(2, perpetualActive);
       ps.setString(3, cutoverPeriod);
       ps.setString(4, companyId);
+      ps.setString(5, "test-activate-" + companyId);
       ps.executeUpdate();
     }
   }

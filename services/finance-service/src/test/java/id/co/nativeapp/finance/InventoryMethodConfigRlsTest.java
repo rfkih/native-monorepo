@@ -78,11 +78,13 @@ class InventoryMethodConfigRlsTest extends PostgresRlsTestBase {
           conn.prepareStatement(
               "INSERT INTO inventory_method_config"
                   + " (id, method, cutover_period, activated_at,"
-                  + "  created_at, created_by, updated_at, updated_by, version, company_id)"
+                  + "  created_at, created_by, updated_at, updated_by, version, company_id,"
+                  + "  currency, idempotency_key, opening_inventory_value_minor)"
                   + " VALUES (?, 'PERPETUAL', NULL, NULL,"
-                  + "  now(), 'test-actor', now(), 'test-actor', 0, ?)")) {
+                  + "  now(), 'test-actor', now(), 'test-actor', 0, ?, 'IDR', ?, 0)")) {
         ps.setObject(1, id);
         ps.setString(2, stampedCompanyId);
+        ps.setString(3, "test-activate-" + id);
         ps.executeUpdate();
       }
     }

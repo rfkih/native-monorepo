@@ -167,11 +167,13 @@ class BillInventoryRoutingTest extends PostgresRlsTestBase {
             admin.prepareStatement(
                 "INSERT INTO inventory_method_config"
                     + " (id, method, perpetual_active, cutover_period, activated_at, created_at,"
-                    + " created_by, updated_at, updated_by, version, company_id)"
+                    + " created_by, updated_at, updated_by, version, company_id, currency,"
+                    + " idempotency_key, opening_inventory_value_minor)"
                     + " VALUES (?, 'PERPETUAL', true, NULL, now(), now(), 'test', now(),"
-                    + " 'test', 0, ?)")) {
+                    + " 'test', 0, ?, 'IDR', ?, 0)")) {
       ps.setObject(1, UUID.randomUUID());
       ps.setString(2, companyId);
+      ps.setString(3, "test-activate-" + companyId);
       ps.executeUpdate();
     }
   }

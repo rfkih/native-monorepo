@@ -44,6 +44,12 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
   private static final String EMPLOYEE_USERNAME = "employee-acme";
   private static final String EMPLOYEE_PASSWORD = "employee-password";
 
+  // An ACCOUNTANT-carrying user — proves the OWNER-ONLY inventory-method activate gate excludes
+  // the persona that otherwise reads the whole FINANCE_ROLES back-office surface (opening-balances,
+  // AP/AR, tax, bank, …). Same seeded realm user GatewayRoleExpansionTest already uses.
+  private static final String ACCOUNTANT_USERNAME = "accountant-acme";
+  private static final String ACCOUNTANT_PASSWORD = "accountant-password";
+
   @Test
   void aCashierCanReachThePosMenuRoute() throws Exception {
     String token =
@@ -2561,6 +2567,185 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
 
     assertThat(response).isEqualTo("ok");
     assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/payment-settings");
+  }
+
+  // ---------------------------------------------------------------------------
+  // /api/v1/inventory-method/** — perpetual-inventory election & activation (ADR 0067 §5, Phase
+  // D4/D5). The status GET is FINANCE_ROLES (owner/accountant, the opening-balances precedent); the
+  // POST .../activate is narrower, OWNER-ONLY (the payment-settings/bank-file precedent) — it books
+  // a one-time opening entry and is an effectively-irreversible election.
+  // ---------------------------------------------------------------------------
+
+  @Test
+  void aCashierIsDeniedTheInventoryMethodStatusRouteWith403() throws Exception {
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/inventory-method")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void anAccountantCanReachTheInventoryMethodStatusRoute() throws Exception {
+    // FINANCE_ROLES admits accountant — reading the election status/1100 balance is a books read,
+    // not the activation decision.
+    String token =
+        obtainAccessToken(
+            REALM, CLIENT_ID, CLIENT_SECRET, ACCOUNTANT_USERNAME, ACCOUNTANT_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/inventory-method")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/inventory-method");
+  }
+
+  @Test
+  void anOwnerCanReachTheInventoryMethodStatusRoute() throws Exception {
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/inventory-method")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/inventory-method");
+  }
+
+  @Test
+  void aCashierIsDeniedTheInventoryMethodActivateRouteWith403() throws Exception {
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .post()
+                    .uri("/api/v1/inventory-method/activate")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .body("{}")
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void aManagerIsDeniedTheInventoryMethodActivateRouteWith403() throws Exception {
+    // The persona the owner-only gate EXISTS to exclude (the bank-file precedent): manager-acme
+    // carries ONLY the "manager" realm role, unlike owner-acme (which also carries "manager").
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, MANAGER_USERNAME, MANAGER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .post()
+                    .uri("/api/v1/inventory-method/activate")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .body("{}")
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void anAccountantIsDeniedTheInventoryMethodActivateRouteWith403() throws Exception {
+    // The narrower gate this route exists to prove: FINANCE_ROLES (owner/accountant) reads the
+    // books, but an accountant does NOT get to elect perpetual inventory or book the opening entry
+    // — only OWNER_ROLES does.
+    String token =
+        obtainAccessToken(
+            REALM, CLIENT_ID, CLIENT_SECRET, ACCOUNTANT_USERNAME, ACCOUNTANT_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .post()
+                    .uri("/api/v1/inventory-method/activate")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .body("{}")
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void anOwnerCanReachTheInventoryMethodActivateRoute() throws Exception {
+    // The HIGHEST_PRECEDENCE-ordered specific route must be checked BEFORE the general
+    // /api/v1/inventory-method/** (FINANCE_ROLES) route, so an owner token reaches it.
+    String token = obtainAccessToken();
+
+    String response =
+        gatewayClient()
+            .post()
+            .uri("/api/v1/inventory-method/activate")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .body("{}")
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/inventory-method/activate");
+  }
+
+  @Test
+  void theInventoryMethodActivateRouteDoesNotShadowOtherInventoryMethodSubPaths() throws Exception {
+    // Route-precedence proof, the other direction: the narrow /activate carve-out must not swallow
+    // its PARENT /api/v1/inventory-method (the status read) — an accountant still reaches that.
+    String token =
+        obtainAccessToken(
+            REALM, CLIENT_ID, CLIENT_SECRET, ACCOUNTANT_USERNAME, ACCOUNTANT_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/inventory-method")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).isEqualTo("/api/v1/inventory-method");
   }
 
   // ---------------------------------------------------------------------------
