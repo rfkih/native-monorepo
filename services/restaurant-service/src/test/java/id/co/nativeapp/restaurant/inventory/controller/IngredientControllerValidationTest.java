@@ -251,7 +251,8 @@ class IngredientControllerValidationTest {
   @Test
   void addStockReturns200WithTheUpdatedIngredient() throws Exception {
     UUID id = UUID.randomUUID();
-    when(ingredientService.addStock(org.mockito.ArgumentMatchers.eq(id), anyInt(), any(), any()))
+    when(ingredientService.addStock(
+            org.mockito.ArgumentMatchers.eq(id), anyInt(), any(), any(), any()))
         .thenReturn(
             new IngredientResponse(
                 id, BUSINESS_ID, "Patty", "pcs", null, 15, null, null, 0L, true));
@@ -276,7 +277,8 @@ class IngredientControllerValidationTest {
             org.mockito.ArgumentMatchers.eq(id),
             org.mockito.ArgumentMatchers.eq(5),
             org.mockito.ArgumentMatchers.eq(130_000L),
-            org.mockito.ArgumentMatchers.eq("IDR")))
+            org.mockito.ArgumentMatchers.eq("IDR"),
+            org.mockito.ArgumentMatchers.isNull()))
         .thenReturn(
             new IngredientResponse(
                 id, BUSINESS_ID, "Patty", "pcs", null, 15, 9_000L, "IDR", 135_000L, true));
@@ -293,6 +295,53 @@ class IngredientControllerValidationTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.unitCostMinor").value(9000))
         .andExpect(jsonPath("$.stockValueMinor").value(135000));
+  }
+
+  @Test
+  void addStockPassesTheIdempotencyKeyHeaderThrough() throws Exception {
+    // ADR 0067 Phase D, D1 — the OPTIONAL Idempotency-Key header threads through to the service
+    // exactly (the RegisterSessionController idiom); no header at all is unaffected (asserted by
+    // #addStockWithAPricePassesTheMovingAverageFieldsThrough above, which sends none).
+    UUID id = UUID.randomUUID();
+    when(ingredientService.addStock(
+            org.mockito.ArgumentMatchers.eq(id),
+            org.mockito.ArgumentMatchers.eq(5),
+            org.mockito.ArgumentMatchers.eq(130_000L),
+            org.mockito.ArgumentMatchers.eq("IDR"),
+            org.mockito.ArgumentMatchers.eq("receive-key-1")))
+        .thenReturn(
+            new IngredientResponse(
+                id, BUSINESS_ID, "Patty", "pcs", null, 15, 9_000L, "IDR", 135_000L, true));
+
+    String body =
+        """
+        {"amount":5,"amountPaidMinor":130000,"costCurrency":"IDR"}
+        """;
+    mockMvc
+        .perform(
+            post(INGREDIENTS_PATH + "/" + id + "/stock/add")
+                .header("Idempotency-Key", "receive-key-1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.stockQty").value(15));
+  }
+
+  @Test
+  void addStockWithAnOverlongIdempotencyKeyIsRejectedWithAProblemDetail() throws Exception {
+    UUID id = UUID.randomUUID();
+    String body =
+        """
+        {"amount":5,"amountPaidMinor":130000,"costCurrency":"IDR"}
+        """;
+    mockMvc
+        .perform(
+            post(INGREDIENTS_PATH + "/" + id + "/stock/add")
+                .header("Idempotency-Key", "k".repeat(65))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body))
+        .andExpect(status().isBadRequest())
+        .andExpect(content().contentTypeCompatibleWith(PROBLEM_JSON));
   }
 
   @Test

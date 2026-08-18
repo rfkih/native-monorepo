@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -135,18 +136,43 @@ public class IngredientController {
    * manually reduce stock (floored at 0). When a price ({@code amountPaidMinor} + {@code
    * costCurrency}) accompanies a positive receive, it updates the moving weighted-average cost
    * (V36); otherwise it is a costless adjustment that preserves the unit cost.
+   *
+   * <p><strong>ADR 0067 Phase D, D1 — receive idempotency.</strong> An OPTIONAL {@code
+   * Idempotency-Key} header (the {@code RegisterSessionController} idiom; max 64 chars, mirroring
+   * the {@code goods_receipt.idempotency_key} column width) makes a PRICED receive safe to retry: a
+   * replay with the SAME key + payload returns 200 with the current ingredient state and adds the
+   * value/emits the event only once; the SAME key with a DIFFERENT payload is a 409. The header is
+   * ignored on a costless call (no {@code goods_receipt} row to dedupe) and, for backward
+   * compatibility, a priced call with NO key is unchanged pre-D1 behaviour (still susceptible to a
+   * double-write on retry — callers should supply a key).
    */
   @Operation(
       summary = "Add a stock delta (optionally priced)",
       description =
           "Adds a signed delta to an ingredient's stock. Positive = receive; negative = manually"
               + " reduce (floored at 0). An optional amountPaidMinor + costCurrency on a positive"
-              + " receive updates the moving-average cost. Returns 200 OK with the updated"
+              + " receive updates the moving-average cost. An optional Idempotency-Key header makes"
+              + " a priced receive safe to retry: same key + payload replays without adding value"
+              + " again; same key + a different payload is a 409. Returns 200 OK with the updated"
               + " ingredient.")
   @PostMapping("/{id}/stock/add")
   public ResponseEntity<IngredientResponse> addStock(
-      @PathVariable UUID id, @Valid @RequestBody AddIngredientStockRequest request) {
+      @PathVariable UUID id,
+      @Valid @RequestBody AddIngredientStockRequest request,
+      @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+    validateIdempotencyKey(idempotencyKey);
     return ResponseEntity.ok(
-        service.addStock(id, request.amount(), request.amountPaidMinor(), request.costCurrency()));
+        service.addStock(
+            id,
+            request.amount(),
+            request.amountPaidMinor(),
+            request.costCurrency(),
+            idempotencyKey));
+  }
+
+  private static void validateIdempotencyKey(String idempotencyKey) {
+    if (idempotencyKey != null && idempotencyKey.length() > 64) {
+      throw new IllegalArgumentException("Idempotency-Key must be at most 64 characters");
+    }
   }
 }

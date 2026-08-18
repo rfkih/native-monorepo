@@ -1,5 +1,6 @@
 package id.co.nativeapp.restaurant.config;
 
+import id.co.nativeapp.restaurant.inventory.domain.GoodsReceiptIdempotencyKeyConflictException;
 import id.co.nativeapp.restaurant.inventory.domain.IngredientNameConflictException;
 import id.co.nativeapp.restaurant.inventory.domain.IngredientNotFoundException;
 import id.co.nativeapp.restaurant.inventory.domain.IngredientStocktakeNotFoundException;
@@ -26,6 +27,9 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  *       ({@code ingredient-stocktake-not-found})
  *   <li>{@link IngredientNameConflictException} — duplicate ACTIVE name at the outlet → {@code 409}
  *       ({@code ingredient-name-conflict})
+ *   <li>{@link GoodsReceiptIdempotencyKeyConflictException} — a replayed priced-receive {@code
+ *       Idempotency-Key} with a different payload (ADR 0067 Phase D, D1) → {@code 409} ({@code
+ *       goods-receipt-idempotency-key-conflict})
  * </ul>
  */
 @RestControllerAdvice
@@ -58,6 +62,16 @@ public class IngredientAdvice {
       IngredientNameConflictException ex, HttpServletRequest request) {
     ProblemDetail problem = problem(HttpStatus.CONFLICT, "ingredient-name-conflict", request);
     problem.setTitle("Ingredient name already in use");
+    problem.setDetail(ex.getMessage());
+    return problem;
+  }
+
+  @ExceptionHandler(GoodsReceiptIdempotencyKeyConflictException.class)
+  public ProblemDetail handleGoodsReceiptKeyConflict(
+      GoodsReceiptIdempotencyKeyConflictException ex, HttpServletRequest request) {
+    ProblemDetail problem =
+        problem(HttpStatus.CONFLICT, "goods-receipt-idempotency-key-conflict", request);
+    problem.setTitle("Idempotency-Key conflict");
     problem.setDetail(ex.getMessage());
     return problem;
   }

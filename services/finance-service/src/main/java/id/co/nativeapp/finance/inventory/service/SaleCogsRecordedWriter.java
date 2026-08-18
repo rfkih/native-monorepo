@@ -1,5 +1,6 @@
 package id.co.nativeapp.finance.inventory.service;
 
+import id.co.nativeapp.errorinbox.ErrorInboxWriter;
 import id.co.nativeapp.events.ProcessedEventStore;
 import id.co.nativeapp.finance.gl.domain.AccountRole;
 import id.co.nativeapp.finance.gl.domain.JournalEntry;
@@ -52,6 +53,15 @@ import org.springframework.transaction.annotation.Transactional;
  * transaction; {@code journal_entry.source_event_id} is the UNIQUE DB backstop (the {@code
  * sale_id}-as-idempotency-key ADR 0067 §1 describes is realised via {@code event.eventId()} — the
  * outbox row's own UUID, one-to-one with the producing {@code sale} row's COGS fold).
+ *
+ * <p><strong>ADR 0067 Phase D, D2 — sealed-period symmetry.</strong> Gated the SAME way as the
+ * {@code RevenuePostingWriter}/{@code RegisterCloseWriter}/{@code StocktakeWriter} consumers: for
+ * an ACTIVE tenant, a sale dated into a period whose VAT return is already FILED ({@code
+ * tax_filing} — ADR 0017 seals it) is QUARANTINED — nothing posts (no journal entry, no dimensional
+ * {@code ledger_posting}), the event is recorded to the error inbox for manual accountant action,
+ * and {@code processOnce} still marks it processed so a redelivery can never retry it into the
+ * sealed books. Checked AFTER the perpetual-active branch — an INACTIVE tenant's claimed no-op must
+ * stay silent (no error-inbox noise) regardless of whether the period happens to be sealed.
  */
 @Component
 public class SaleCogsRecordedWriter {
@@ -64,6 +74,7 @@ public class SaleCogsRecordedWriter {
   private final RoleAccountResolver roleAccountResolver;
   private final PerpetualInventoryReader perpetualInventoryReader;
   private final LedgerPostingRepository ledgerRepository;
+  private final ErrorInboxWriter errorInbox;
   private final JdbcTemplate jdbcTemplate;
 
   @SuppressWarnings("checkstyle:ParameterNumber")
@@ -74,6 +85,7 @@ public class SaleCogsRecordedWriter {
       RoleAccountResolver roleAccountResolver,
       PerpetualInventoryReader perpetualInventoryReader,
       LedgerPostingRepository ledgerRepository,
+      ErrorInboxWriter errorInbox,
       JdbcTemplate jdbcTemplate) {
     this.processedEvents = processedEvents;
     this.journalEntryRepository = journalEntryRepository;
@@ -81,6 +93,7 @@ public class SaleCogsRecordedWriter {
     this.roleAccountResolver = roleAccountResolver;
     this.perpetualInventoryReader = perpetualInventoryReader;
     this.ledgerRepository = ledgerRepository;
+    this.errorInbox = errorInbox;
     this.jdbcTemplate = jdbcTemplate;
   }
 
@@ -106,6 +119,34 @@ public class SaleCogsRecordedWriter {
           event.eventId(),
           companyId,
           period);
+      return;
+    }
+
+    // Sealed-period quarantine (ADR 0067 Phase D, D2 — Phase C review W2): mirrors
+    // RevenuePostingWriter/RegisterCloseWriter/StocktakeWriter EXACTLY. Without this, an active
+    // tenant's SaleCogsRecorded could post COGS into a period whose paired SaleRecorded revenue is
+    // already quarantined — a one-sided sealed-book entry.
+    if (ledgerRepository.sealedPeriodExists(period)) {
+      log.warn(
+          "SaleCogsRecorded {} targets sealed period {} — quarantined, not posted",
+          event.eventId(),
+          period);
+      errorInbox.record(
+          new IllegalStateException(
+              "SaleCogsRecorded "
+                  + event.eventId()
+                  + " occurred_at "
+                  + event.occurredAt()
+                  + " targets sealed period "
+                  + period
+                  + " — cogs "
+                  + event.cogsMinor()
+                  + " "
+                  + event.currency()
+                  + " quarantined for manual posting"),
+          "finance.inventory.sale-cogs-recorded-sealed-period-quarantine",
+          companyId,
+          null);
       return;
     }
 

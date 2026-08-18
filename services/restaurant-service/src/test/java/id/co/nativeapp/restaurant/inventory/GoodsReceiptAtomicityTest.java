@@ -49,7 +49,8 @@ class GoodsReceiptAtomicityTest extends PostgresRlsTestBase {
   void aPricedReceiveWritesOneGoodsReceiptAndOneStockReceivedOutboxRow() throws Exception {
     UUID ingredientId = seedIngredient(10, 5_000L);
 
-    TenantContext.callAs(TENANT, ACTOR, () -> service.addStock(ingredientId, 10, 130_000L, "IDR"));
+    TenantContext.callAs(
+        TENANT, ACTOR, () -> service.addStock(ingredientId, 10, 130_000L, "IDR", null));
 
     assertThat(rowCountAsAdmin("goods_receipt")).isEqualTo(1L);
     assertThat(rowCountAsAdmin("outbox")).isEqualTo(1L);
@@ -95,7 +96,7 @@ class GoodsReceiptAtomicityTest extends PostgresRlsTestBase {
   void aNonPricedAddStockEmitsNoGoodsReceiptOrOutboxRow() throws Exception {
     UUID ingredientId = seedIngredient(10, 5_000L);
 
-    TenantContext.callAs(TENANT, ACTOR, () -> service.addStock(ingredientId, 5, null, null));
+    TenantContext.callAs(TENANT, ACTOR, () -> service.addStock(ingredientId, 5, null, null, null));
 
     assertThat(rowCountAsAdmin("goods_receipt")).isZero();
     assertThat(rowCountAsAdmin("outbox")).isZero();
@@ -111,7 +112,9 @@ class GoodsReceiptAtomicityTest extends PostgresRlsTestBase {
       assertThatThrownBy(
               () ->
                   TenantContext.callAs(
-                      TENANT, ACTOR, () -> service.addStock(ingredientId, 10, 130_000L, "IDR")))
+                      TENANT,
+                      ACTOR,
+                      () -> service.addStock(ingredientId, 10, 130_000L, "IDR", null)))
           .isInstanceOf(IllegalStateException.class)
           .hasMessageContaining(BOOM);
     } finally {

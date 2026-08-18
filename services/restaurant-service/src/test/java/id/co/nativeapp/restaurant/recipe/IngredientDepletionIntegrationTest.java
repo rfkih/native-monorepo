@@ -359,7 +359,9 @@ class IngredientDepletionIntegrationTest extends PostgresRlsTestBase {
 
   private void receiveWithPrice(UUID ingredientId, int qty, long amountPaidMinor) throws Exception {
     TenantContext.callAs(
-        TENANT, ACTOR, () -> ingredientService.addStock(ingredientId, qty, amountPaidMinor, "IDR"));
+        TENANT,
+        ACTOR,
+        () -> ingredientService.addStock(ingredientId, qty, amountPaidMinor, "IDR", null));
   }
 
   private UUID createGroup(UUID itemId) throws Exception {

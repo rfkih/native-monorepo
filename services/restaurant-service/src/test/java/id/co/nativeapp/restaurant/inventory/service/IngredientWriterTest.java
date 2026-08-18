@@ -119,7 +119,7 @@ class IngredientWriterTest {
     when(repository.saveAndFlush(any(Ingredient.class))).thenAnswer(inv -> inv.getArgument(0));
 
     IngredientResponse response =
-        asTenant(() -> writer.addStock(ingredient.getId(), 5, null, null));
+        asTenant(() -> writer.addStock(ingredient.getId(), 5, null, null, null));
 
     assertThat(response.stockQty()).isEqualTo(15);
   }
@@ -131,7 +131,7 @@ class IngredientWriterTest {
     when(repository.saveAndFlush(any(Ingredient.class))).thenAnswer(inv -> inv.getArgument(0));
 
     IngredientResponse response =
-        asTenant(() -> writer.addStock(ingredient.getId(), -100, null, null));
+        asTenant(() -> writer.addStock(ingredient.getId(), -100, null, null, null));
 
     assertThat(response.stockQty()).isZero();
   }
@@ -147,7 +147,7 @@ class IngredientWriterTest {
         .thenAnswer(inv -> inv.getArgument(0));
 
     IngredientResponse response =
-        asTenant(() -> writer.addStock(ingredient.getId(), 10, 130_000L, "IDR"));
+        asTenant(() -> writer.addStock(ingredient.getId(), 10, 130_000L, "IDR", null));
 
     assertThat(response.stockQty()).isEqualTo(20);
     assertThat(response.stockValueMinor()).isEqualTo(180_000L);
@@ -174,7 +174,7 @@ class IngredientWriterTest {
     when(repository.findById(ingredient.getId())).thenReturn(Optional.of(ingredient));
 
     assertThatThrownBy(
-            () -> asTenant(() -> writer.addStock(ingredient.getId(), 10, 130_000L, null)))
+            () -> asTenant(() -> writer.addStock(ingredient.getId(), 10, 130_000L, null, null)))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("both be present or both absent");
   }
