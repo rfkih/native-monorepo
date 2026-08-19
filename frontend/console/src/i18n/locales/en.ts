@@ -1391,6 +1391,14 @@ export const en = {
     done: 'Done',
     varianceLinesTitle: 'Items with a variance',
     lineCounts: 'System {{system}} → counted {{counted}}',
+    /** ADR 0068 part 3 — the pre-submit variance-confirmation guard (stocktakeVarianceGuard.ts):
+     * one or more counted quantities look implausible (a ×1000 g/kg slip, an extra zero…). A
+     * fat-finger safety net, not a hard block — the operator can always "Save anyway". */
+    varianceGuardTitle: 'Double-check this count',
+    varianceGuardBody:
+      'One or more counts look far outside the expected range — a common cause is a kg/g mix-up or an extra zero. Check the amounts below before saving:',
+    varianceGuardRecount: 'Check again',
+    varianceGuardProceed: 'Save anyway',
   },
   inventory: {
     /** ADR 0046 phase 1 — the per-outlet stock-item catalog behind the stock opname. Owner

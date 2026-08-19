@@ -13,6 +13,11 @@
  *
  * Money rule (rule 8): unit cost / variance value render via formatMoney; quantities via the
  * Intl-backed helpers in ./lib/qty (never a raw toString). Strings rule (rule 9): i18n keys only.
+ *
+ * ADR 0068 part 3 — before a count is submitted, every line runs through stocktakeVarianceGuard
+ * (../lib/stocktakeVarianceGuard); a line that looks implausible (a ×1000 g/kg slip, an extra
+ * zero…) pauses submit behind a confirm dialog naming the suspicious line(s) — the SAME "are you
+ * sure?" shape as RegisterSheet's close-cash mismatch confirm, one step later in the flow.
  */
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -40,6 +45,7 @@ import {
 } from '@/features/inventory/ingredientStocktakeApi'
 import { allowsFraction, formatShownQty, parseShownQtyInput, shownUnit, toDisplayQty } from '@/features/inventory/lib/units'
 import { formatQty, formatSignedQty } from './lib/qty'
+import { checkStocktakeVariance, type StocktakeVarianceFlag, type StocktakeVarianceLine } from './lib/stocktakeVarianceGuard'
 
 /** The three verdict tones shared by the live per-line preview and the post-submit summary. */
 type Tone = 'loss' | 'gain' | 'balanced'
@@ -95,6 +101,12 @@ export function StocktakeSheet({
   const [overrides, setOverrides] = useState<Record<string, string>>({})
   // Held after a successful submit so the summary stays visible.
   const [result, setResult] = useState<IngredientStocktakeResponse | null>(null)
+  // ADR 0068 part 3 — set when Submit trips the variance guard: holds the flagged line(s) so the
+  // confirm dialog can name them. Null = no confirm showing (either nothing tripped, or it's
+  // already been dismissed/confirmed).
+  const [pendingVarianceFlags, setPendingVarianceFlags] = useState<StocktakeVarianceFlag[] | null>(
+    null,
+  )
 
   // Seeded (and re-parsed) in the ingredient's SHOWN unit — kg/liter items start counted at the
   // system quantity expressed as a decimal (e.g. "1.5"), not the raw base-unit integer.
@@ -106,17 +118,47 @@ export function StocktakeSheet({
     ingredients.map((ing) => [ing.id, parseShownQtyInput(valueFor(ing), ing)]),
   )
   const allCounted = ingredients.length > 0 && [...parsedCounts.values()].every((v) => v !== null)
+  // Lookup for the confirm dialog — flags carry only ingredientId + numbers (the guard is a plain
+  // pure helper with no ingredient/display knowledge, see stocktakeVarianceGuard.ts).
+  const ingredientById = new Map(ingredients.map((ing) => [ing.id, ing]))
 
-  function handleSubmit() {
-    const lines = ingredients.map((ing) => ({
+  // ADR 0068 part 3 guard input — BASE-unit quantities (the same numbers the submit payload
+  // carries), the ingredient's own unit cost/currency (defaulted to the company base currency when
+  // the ingredient carries none, same fallback StocktakeIngredientRow already uses for its preview).
+  const varianceLines: StocktakeVarianceLine[] = ingredients.map((ing) => ({
+    ingredientId: ing.id,
+    systemQty: ing.stockQty,
+    countedQty: parsedCounts.get(ing.id) ?? 0,
+    unitCostMinor: ing.unitCostMinor,
+    currency: ing.costCurrency ?? currency,
+  }))
+
+  function buildSubmitLines() {
+    return ingredients.map((ing) => ({
       ingredientId: ing.id,
       countedQty: parsedCounts.get(ing.id) ?? 0,
     }))
-    submit.mutate(lines, {
+  }
+
+  function doSubmit() {
+    setPendingVarianceFlags(null)
+    submit.mutate(buildSubmitLines(), {
       onSuccess: (res) => {
         if (res) setResult(res)
       },
     })
+  }
+
+  // Submit tapped: if any line looks implausible (a ×1000 g/kg slip, an extra zero…), hold the
+  // submit behind a confirm dialog naming the suspicious line(s) instead of posting straight away —
+  // a safety net, not a hard block (the owner can always "Save anyway", ADR 0068 §3).
+  function handleSubmitClick() {
+    const flags = checkStocktakeVariance(varianceLines)
+    if (flags.length > 0) {
+      setPendingVarianceFlags(flags)
+      return
+    }
+    doSubmit()
   }
 
   const submitErrorMessage = (): string => {
@@ -128,6 +170,7 @@ export function StocktakeSheet({
   }
 
   return (
+    <>
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4"
       role="dialog"
@@ -221,7 +264,7 @@ export function StocktakeSheet({
                 className="w-full"
                 data-testid="stocktake-submit"
                 disabled={!allCounted || submit.isPending}
-                onClick={handleSubmit}
+                onClick={handleSubmitClick}
               >
                 {submit.isPending ? <Spinner /> : t('stocktake.submitAction')}
               </Button>
@@ -230,6 +273,65 @@ export function StocktakeSheet({
         )}
       </div>
     </div>
+
+    {/* ADR 0068 part 3 — variance confirm: one or more counts tripped the plausibility guard, so
+        make the operator reconfirm before the count posts (a fat-finger/×1000-slip safety net; the
+        server still records + values whatever is submitted, this only gates whether it's sent). */}
+    {pendingVarianceFlags && pendingVarianceFlags.length > 0 ? (
+      <div
+        className="fixed inset-0 z-[60] grid place-items-center bg-black/50 p-4 backdrop-blur-sm"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('stocktake.varianceGuardTitle')}
+      >
+        <div
+          className="reveal max-h-full w-full max-w-sm space-y-4 overflow-y-auto overscroll-contain rounded-card border border-line bg-surface p-5 shadow-lg"
+          data-testid="stocktake-variance-confirm"
+        >
+          <h3 className="font-display text-lg font-semibold text-ink">
+            {t('stocktake.varianceGuardTitle')}
+          </h3>
+          <p className="text-sm text-ink-3">{t('stocktake.varianceGuardBody')}</p>
+          <ul className="space-y-2 rounded-xl bg-ink-50 px-4 py-3">
+            {pendingVarianceFlags.map((flag) => {
+              const ing = ingredientById.get(flag.ingredientId)
+              if (!ing) return null
+              return (
+                <li key={flag.ingredientId} className="text-sm">
+                  <div className="font-medium text-ink">{ing.name}</div>
+                  <div className="tnum text-xs text-loss">
+                    {t('stocktake.lineCounts', {
+                      system: formatShownQty(flag.systemQty, ing, locale),
+                      counted: formatShownQty(flag.countedQty, ing, locale),
+                    })}{' '}
+                    {shownUnit(ing)}
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1"
+              data-testid="stocktake-variance-recount"
+              onClick={() => setPendingVarianceFlags(null)}
+            >
+              {t('stocktake.varianceGuardRecount')}
+            </Button>
+            <Button
+              className="flex-1"
+              data-testid="stocktake-variance-proceed"
+              disabled={submit.isPending}
+              onClick={doSubmit}
+            >
+              {submit.isPending ? <Spinner /> : t('stocktake.varianceGuardProceed')}
+            </Button>
+          </div>
+        </div>
+      </div>
+    ) : null}
+    </>
   )
 }
 

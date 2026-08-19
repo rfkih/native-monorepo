@@ -1379,6 +1379,15 @@ export const id = {
     done: 'Selesai',
     varianceLinesTitle: 'Item dengan selisih',
     lineCounts: 'Sistem {{system}} → terhitung {{counted}}',
+    /** ADR 0068 fase 3 — jaring pengaman konfirmasi selisih sebelum submit
+     * (stocktakeVarianceGuard.ts): satu atau lebih jumlah terhitung tampak tidak masuk akal
+     * (salah kg/g, kelebihan angka nol...). Jaring pengaman salah ketik, bukan penghalang keras —
+     * operator selalu bisa "Simpan saja". */
+    varianceGuardTitle: 'Periksa lagi hitungan ini',
+    varianceGuardBody:
+      'Hitungan untuk satu atau lebih barang tampak jauh di luar perkiraan — penyebab umumnya salah kg/g atau kelebihan angka nol. Periksa jumlahnya di bawah ini sebelum menyimpan:',
+    varianceGuardRecount: 'Periksa lagi',
+    varianceGuardProceed: 'Simpan saja',
   },
   inventory: {
     /** ADR 0046 fase 1 — katalog barang stok per gerai di balik stock opname. Penamaan owner:
