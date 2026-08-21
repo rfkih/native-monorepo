@@ -52,6 +52,14 @@ import { MOCK_REVENUE, money } from './mock'
 /** Demo-request mail target — the product's contact address (demonstration build). */
 const CONTACT_EMAIL = 'halo@native.id'
 
+/**
+ * Android POS app download — ALWAYS the PROD app. Absolute on purpose: this same console build also
+ * serves the UAT origin, where a relative `/native-app-latest.apk` would silently hand out the UAT
+ * flavor (a different installable app, ADR 0058). The alias 302s to the current
+ * `native-app-prod-v<N>.apk` (docker/prod/edge.conf, bumped per release) so this URL never changes.
+ */
+const ANDROID_APP_URL = 'https://app.native-app.my.id/native-app-latest.apk'
+
 // ── Scroll-reveal (flash-free, reduced-motion-safe) ──────────────────────────────────────────────
 
 function prefersReducedMotion(): boolean {
@@ -285,6 +293,11 @@ function Hero() {
             <Check className="mt-0.5 size-4 shrink-0 text-profit-ink" strokeWidth={2.1} />
             {t('landing.heroNote')}
           </p>
+          <div className="reveal mt-4" style={{ animationDelay: '380ms' }}>
+            <CtaLink href={ANDROID_APP_URL} variant="outline">
+              <Download className="size-4" /> {t('landing.downloadAndroid')}
+            </CtaLink>
+          </div>
         </div>
 
         {/* Right — the product screenshot + floating accent cards */}
@@ -670,6 +683,12 @@ function CtaBand() {
             >
               {t('landing.ctaSecondary')}
             </Link>
+            <a
+              href={ANDROID_APP_URL}
+              className="inline-flex h-[54px] items-center justify-center gap-2 rounded-xl border border-white/35 px-6 text-[15px] font-semibold text-white transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            >
+              <Download className="size-4" /> {t('landing.downloadAndroid')}
+            </a>
           </div>
         </div>
       </Reveal>

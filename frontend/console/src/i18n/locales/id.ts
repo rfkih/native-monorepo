@@ -229,6 +229,7 @@ export const id = {
     heroPrimary: 'Jadwalkan demo 30 menit',
     heroSecondary: 'Lihat produknya',
     heroNote: 'Tanpa kartu kredit. Data Anda dapat diekspor kapan saja.',
+    downloadAndroid: 'Unduh aplikasi Android',
     mockPeriod: 'Juli 2026 · 3 outlet',
     mockLive: 'Langsung',
     mockRevenue: 'Pendapatan',

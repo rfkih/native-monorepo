@@ -233,6 +233,7 @@ export const en = {
     heroPrimary: 'Book a 30-minute demo',
     heroSecondary: 'See the product',
     heroNote: 'No credit card. Your data can be exported at any time.',
+    downloadAndroid: 'Download the Android app',
     // product mockups
     mockPeriod: 'July 2026 · 3 outlets',
     mockLive: 'Live',
