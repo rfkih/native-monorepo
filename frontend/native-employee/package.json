@@ -9,7 +9,10 @@
     "open": "cap open android",
     "apk": "cap sync android && cd android && gradlew assembleUatDebug",
     "build:uat": "node scripts/build-app.mjs --env uat",
-    "build:prod": "node scripts/build-app.mjs --env prod"
+    "build:prod": "node scripts/build-app.mjs --env prod",
+    "aab:prod": "node scripts/build-app.mjs --env prod --format aab",
+    "aab:uat": "node scripts/build-app.mjs --env uat --format aab",
+    "store:assets": "node scripts/render-store-assets.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.0",

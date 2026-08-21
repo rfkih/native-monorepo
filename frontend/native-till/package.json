@@ -10,6 +10,8 @@
     "apk": "cap sync android && cd android && gradlew assembleUatDebug",
     "build:uat": "node scripts/build-app.mjs --env uat",
     "build:prod": "node scripts/build-app.mjs --env prod",
+    "aab:prod": "node scripts/build-app.mjs --env prod --format aab",
+    "aab:uat": "node scripts/build-app.mjs --env uat --format aab",
     "bundle": "node scripts/bundle-console.mjs",
     "publish": "node scripts/publish-bundle.mjs"
   },
