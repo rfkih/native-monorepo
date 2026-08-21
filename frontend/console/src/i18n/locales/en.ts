@@ -416,6 +416,7 @@ export const en = {
     deferrals: 'Deferrals',
     channels: 'Sales channels',
     platformSettlements: 'Platform settlements',
+    marketplace: 'Marketplace / Platform Online',
     openingBalances: 'Opening balances',
   },
   a11y: {
@@ -3672,6 +3673,25 @@ export const en = {
       colNet: 'Net',
       colFee: 'Fee',
     },
+  },
+  marketplace: {
+    title: 'Marketplace / Platform Online',
+    subtitle:
+      'Per-platform summary for the period: gross online sales, platform fee, net received, and what is still outstanding.',
+    noCompany: 'No company selected',
+    noCompanyHint: 'Create a company to see the marketplace report.',
+    error: 'Could not load the marketplace report.',
+    empty: 'No marketplace activity yet',
+    emptyHint:
+      'This report fills in once an ONLINE sale is rung through a channel or a settlement is recorded.',
+    prevPeriod: 'Previous period',
+    nextPeriod: 'Next period',
+    colPlatform: 'Platform',
+    colGross: 'Gross sales',
+    colFee: 'Commission / fee',
+    colNet: 'Net received',
+    colOutstanding: 'Outstanding',
+    totalsLabel: 'Total',
   },
   tax: {
     report: {

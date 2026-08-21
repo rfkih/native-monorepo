@@ -289,6 +289,9 @@ const PlatformSettlements = lazy(() =>
     default: m.PlatformSettlements,
   })),
 )
+const Marketplace = lazy(() =>
+  import('@/features/marketplace/Marketplace').then((m) => ({ default: m.Marketplace })),
+)
 const CustomerDisplay = lazy(() =>
   import('@/features/pos/display/CustomerDisplay').then((m) => ({ default: m.CustomerDisplay })),
 )
@@ -723,6 +726,12 @@ export function App() {
               <Route
                 path="/platform-settlements"
                 element={company ? <PlatformSettlements /> : <Navigate to="/onboarding" replace />}
+              />
+            )}
+            {financeAllowed && (
+              <Route
+                path="/marketplace"
+                element={company ? <Marketplace /> : <Navigate to="/onboarding" replace />}
               />
             )}
             {financeAllowed && (

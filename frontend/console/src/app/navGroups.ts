@@ -46,6 +46,7 @@ import {
   Receipt,
   Scale,
   SlidersHorizontal,
+  Store,
   Tag,
   Target,
   Truck,
@@ -275,6 +276,15 @@ export function useNavGroups(): {
                     to: '/platform-settlements',
                     label: t('nav.platformSettlements'),
                     icon: HandCoins,
+                    feature: 'channels' as const,
+                  },
+                  // Marketplace / Platform Online — the per-channel period report joining ONLINE
+                  // sales, settlements, and outstanding. Same gate as platform-settlements (FINANCE,
+                  // not OPS): it reads finance-service's settlement/outstanding figures.
+                  {
+                    to: '/marketplace',
+                    label: t('nav.marketplace'),
+                    icon: Store,
                     feature: 'channels' as const,
                   },
                 ]

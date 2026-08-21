@@ -13,6 +13,8 @@ import id.co.nativeapp.finance.platform.domain.PlatformSettlementIdempotencyKeyC
 import id.co.nativeapp.finance.platform.dto.PlatformOutstandingResponse;
 import id.co.nativeapp.finance.platform.dto.PlatformSettlementResponse;
 import id.co.nativeapp.finance.platform.dto.PlatformSettlementResult;
+import id.co.nativeapp.finance.platform.dto.PlatformSettlementSummaryResponse;
+import id.co.nativeapp.finance.platform.projection.PlatformSettlementSummaryView;
 import id.co.nativeapp.finance.platform.repository.PlatformSettlementRepository;
 import id.co.nativeapp.finance.pnl.domain.MismatchedPostingCurrencyException;
 import id.co.nativeapp.finance.revenue.domain.LedgerPosting;
@@ -206,6 +208,31 @@ public class PlatformSettlementWriter {
                     v.getCurrency() == null ? null : v.getCurrency().strip(),
                     v.getSettledAt()))
         .toList();
+  }
+
+  /**
+   * The per-channel settlement summary for a {@code YYYY-MM} period ({@code GET
+   * /api/v1/platform-settlements/summary}) — one row per {@code (channelCode, currency)} bucket:
+   * settled gross/fee/net totals and settlement count. RLS-scoped automatically; no manual {@code
+   * company_id} predicate. Read path: a native-query projection, never {@code SELECT *}.
+   */
+  @Transactional(readOnly = true)
+  public List<PlatformSettlementSummaryResponse> summary(String period) {
+    return settlementRepository.findSummary(period).stream()
+        .map(PlatformSettlementWriter::toSummaryResponse)
+        .toList();
+  }
+
+  /** Maps a read projection to the response shape (currency CHAR(3) is right-padded — strip it). */
+  private static PlatformSettlementSummaryResponse toSummaryResponse(
+      PlatformSettlementSummaryView view) {
+    return new PlatformSettlementSummaryResponse(
+        view.getChannelCode(),
+        view.getSettledGrossMinor(),
+        view.getFeeMinor(),
+        view.getNetMinor(),
+        view.getSettlementCount(),
+        view.getCurrency() == null ? null : view.getCurrency().strip());
   }
 
   /**

@@ -402,6 +402,7 @@ export const id = {
     deferrals: 'Tangguhan',
     channels: 'Channel Penjualan',
     platformSettlements: 'Settlement Platform',
+    marketplace: 'Marketplace / Platform Online',
     openingBalances: 'Saldo awal',
   },
   a11y: {
@@ -3644,6 +3645,25 @@ export const id = {
       colNet: 'Bersih',
       colFee: 'Komisi',
     },
+  },
+  marketplace: {
+    title: 'Marketplace / Platform Online',
+    subtitle:
+      'Ringkasan per platform untuk periode ini: penjualan kotor online, komisi platform, bersih diterima, dan yang masih belum cair.',
+    noCompany: 'Belum ada perusahaan dipilih',
+    noCompanyHint: 'Buat perusahaan untuk melihat laporan marketplace.',
+    error: 'Tidak dapat memuat laporan marketplace.',
+    empty: 'Belum ada aktivitas marketplace',
+    emptyHint:
+      'Laporan ini akan terisi setelah ada penjualan ONLINE lewat sebuah channel atau settlement yang tercatat.',
+    prevPeriod: 'Periode sebelumnya',
+    nextPeriod: 'Periode berikutnya',
+    colPlatform: 'Platform',
+    colGross: 'Penjualan',
+    colFee: 'Komisi/Fee',
+    colNet: 'Diterima',
+    colOutstanding: 'Belum cair',
+    totalsLabel: 'Total',
   },
   tax: {
     report: {

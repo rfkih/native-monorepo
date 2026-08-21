@@ -487,6 +487,33 @@ public class RoutingConfig {
   // ---------------------------------------------------------------------------
   // restaurant-service (cashier POS)
   // ---------------------------------------------------------------------------
+
+  /**
+   * {@code GET /api/v1/sales/channel-summary} (EXACT) — the company-wide per-platform online-sales
+   * report (GoFood/GrabFood/ShopeeFood gross by channel). Unlike the outlet-scoped POS reads on
+   * {@code /api/v1/sales/**}, this aggregates EVERY outlet's online sales, so it is management
+   * financial data — gated to {@link #REPORTS_ROLES} (owner/manager/accountant), mirroring the
+   * finance-service settlement-summary twin ({@link #FINANCE_ROLES}).
+   * {@code @Order(HIGHEST_PRECEDENCE)} is load-bearing: this exact-path carve-out must be matched
+   * before the general {@link #salesRoute} ({@code /api/v1/sales/**}, {@link #POS_ROLES}) so a
+   * {@code cashier}/{@code chef}/{@code waitress} token cannot read the company-wide report; every
+   * other {@code /api/v1/sales/...} path still falls through to the POS route unchanged.
+   */
+  @Bean
+  @Order(Ordered.HIGHEST_PRECEDENCE)
+  RouterFunction<ServerResponse> salesChannelSummaryRoute(
+      GatewayRouteProperties routes,
+      RedisTokenBucketRateLimiter limiter,
+      TenantContextHeaderFilter tenantFilter) {
+    return GatewayRouterFunctions.route("restaurant-service-sales-channel-summary")
+        .route(GET("/api/v1/sales/channel-summary"), http())
+        .before(uri(routes.restaurantService()))
+        .filter(new RateLimitFilter(limiter))
+        .filter(new RoleAuthorizationFilter(REPORTS_ROLES))
+        .filter(tenantFilter)
+        .build();
+  }
+
   @Bean
   RouterFunction<ServerResponse> salesRoute(
       GatewayRouteProperties routes,

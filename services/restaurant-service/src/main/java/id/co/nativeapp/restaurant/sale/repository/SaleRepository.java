@@ -1,6 +1,7 @@
 package id.co.nativeapp.restaurant.sale.repository;
 
 import id.co.nativeapp.restaurant.sale.domain.Sale;
+import id.co.nativeapp.restaurant.sale.projection.ChannelSalesSummaryView;
 import id.co.nativeapp.restaurant.sale.projection.SaleHistoryView;
 import id.co.nativeapp.restaurant.sale.projection.SaleView;
 import id.co.nativeapp.tenant.RlsAutoApplyAspect;
@@ -105,4 +106,37 @@ public interface SaleRepository extends JpaRepository<Sale, UUID> {
       nativeQuery = true)
   List<SaleHistoryView> findHistory(
       @Param("businessId") UUID businessId, @Param("from") Instant from, @Param("to") Instant to);
+
+  /**
+   * The per-channel ONLINE sales summary for a {@code YYYY-MM} period ({@code GET
+   * /api/v1/sales/channel-summary}) — one row per {@code (channel_code, currency)} bucket, gross
+   * sales total (a plain {@code SUM}, never a float — the aggregated currency is carried alongside
+   * so a mixed-currency channel is never silently merged) and transaction count.
+   *
+   * <p>Only {@code channel_code IS NOT NULL} rows are considered — {@code sale.channel_code} is set
+   * ONLY for an {@code ONLINE}-tender sale (see {@code Sale#getChannelCode} javadoc), so this
+   * predicate alone selects exactly the ONLINE population; no separate {@code tender_type} filter
+   * is needed. The month bucket is the OUTLET-LOCAL calendar month: {@code occurred_at} is {@code
+   * TIMESTAMPTZ}, so it is shifted to {@code Asia/Jakarta} BEFORE {@code to_char} — otherwise an
+   * order rung 00:00–07:00 WIB on the 1st would bucket into the prior month (the DB session TZ is
+   * UTC). Mirrors the {@code Asia/Jakarta} attribution the register business-date / V42
+   * ingredient_usage_day convention already uses (NOT the DATE-column {@code BillRepository} idiom,
+   * which is timezone-immune). RLS-scoped automatically (rule 5) — no manual {@code company_id}
+   * predicate, matching this repository's other native queries.
+   */
+  @Query(
+      value =
+          """
+          SELECT s.channel_code       AS channel_code,
+                 SUM(s.amount_minor)  AS gross_sales_minor,
+                 COUNT(*)             AS transaction_count,
+                 s.currency           AS currency
+            FROM sale s
+           WHERE s.channel_code IS NOT NULL
+             AND to_char(s.occurred_at AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM') = :period
+           GROUP BY s.channel_code, s.currency
+           ORDER BY s.channel_code
+          """,
+      nativeQuery = true)
+  List<ChannelSalesSummaryView> findChannelSummary(@Param("period") String period);
 }

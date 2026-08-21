@@ -1,5 +1,6 @@
 package id.co.nativeapp.restaurant.sale.service;
 
+import id.co.nativeapp.restaurant.sale.dto.ChannelSalesSummaryResponse;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
 import id.co.nativeapp.restaurant.sale.dto.SaleHistoryResponse;
@@ -86,5 +87,14 @@ public class SaleService {
    */
   public List<SaleHistoryResponse> findHistory(UUID businessId, Instant from, Instant to) {
     return writer.findHistory(businessId, from, to);
+  }
+
+  /**
+   * The per-channel ONLINE sales summary ({@code GET /api/v1/sales/channel-summary}) for a {@code
+   * YYYY-MM} period — one row per {@code (channelCode, currency)} bucket: gross sales total and
+   * transaction count. Company-wide (no outlet scoping); RLS scopes the tenant.
+   */
+  public List<ChannelSalesSummaryResponse> channelSalesSummary(String period) {
+    return writer.channelSalesSummary(period);
   }
 }

@@ -11,11 +11,13 @@ import id.co.nativeapp.restaurant.recipe.messaging.SaleCogsRecordedSchema;
 import id.co.nativeapp.restaurant.register.service.CashWindowLock;
 import id.co.nativeapp.restaurant.sale.domain.OperatorMismatchException;
 import id.co.nativeapp.restaurant.sale.domain.Sale;
+import id.co.nativeapp.restaurant.sale.dto.ChannelSalesSummaryResponse;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
 import id.co.nativeapp.restaurant.sale.dto.SaleHistoryResponse;
 import id.co.nativeapp.restaurant.sale.dto.SaleResponse;
 import id.co.nativeapp.restaurant.sale.messaging.SaleRecordedSchema;
+import id.co.nativeapp.restaurant.sale.projection.ChannelSalesSummaryView;
 import id.co.nativeapp.restaurant.sale.projection.SaleHistoryView;
 import id.co.nativeapp.restaurant.sale.projection.SaleView;
 import id.co.nativeapp.restaurant.sale.repository.SaleRepository;
@@ -570,6 +572,20 @@ public class SaleWriter {
         view.getIdempotencyKey());
   }
 
+  /**
+   * The per-channel ONLINE sales summary for a {@code YYYY-MM} period ({@code GET
+   * /api/v1/sales/channel-summary}) — one row per {@code (channelCode, currency)} bucket.
+   * RLS-scoped automatically; no manual {@code company_id} predicate. Read path: a native-query
+   * projection (only the response columns), never {@code SELECT *} of the entity. Not outlet-gated
+   * — this is a company-wide (all-outlets) report, unlike {@link #findHistory}.
+   */
+  @Transactional(readOnly = true)
+  public List<ChannelSalesSummaryResponse> channelSalesSummary(String period) {
+    return repository.findChannelSummary(period).stream()
+        .map(SaleWriter::toChannelSummaryResponse)
+        .toList();
+  }
+
   /** Maps a read projection to the response shape (currency CHAR(3) is right-padded — strip it). */
   private static SaleHistoryResponse toHistoryResponse(SaleHistoryView view) {
     return new SaleHistoryResponse(
@@ -580,5 +596,15 @@ public class SaleWriter {
         view.getCurrency().strip(),
         view.getTenderType(),
         view.getChannelCode());
+  }
+
+  /** Maps a read projection to the response shape (currency CHAR(3) is right-padded — strip it). */
+  private static ChannelSalesSummaryResponse toChannelSummaryResponse(
+      ChannelSalesSummaryView view) {
+    return new ChannelSalesSummaryResponse(
+        view.getChannelCode(),
+        view.getGrossSalesMinor(),
+        view.getTransactionCount(),
+        view.getCurrency().strip());
   }
 }

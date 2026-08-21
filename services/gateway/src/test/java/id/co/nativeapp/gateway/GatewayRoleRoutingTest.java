@@ -438,6 +438,53 @@ class GatewayRoleRoutingTest extends GatewayIntegrationTestBase {
   }
 
   @Test
+  void aCashierIsDeniedTheSalesChannelSummaryRouteWith403AndItNeverReachesTheDownstream()
+      throws Exception {
+    // The per-platform online-sales report is company-wide financial data (REPORTS_ROLES), NOT a
+    // POS
+    // read — a cashier ringing ONLINE orders must not read the whole company's GoFood/Grab/Shopee
+    // totals. The HIGHEST_PRECEDENCE carve-out denies at the edge before the general /sales/**
+    // route.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
+
+    assertThatThrownBy(
+            () ->
+                gatewayClient()
+                    .get()
+                    .uri("/api/v1/sales/channel-summary?period=2026-06")
+                    .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                    .retrieve()
+                    .body(String.class))
+        .isInstanceOf(HttpClientErrorException.class)
+        .satisfies(
+            ex ->
+                assertThat(((HttpClientErrorException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.FORBIDDEN));
+
+    assertThat(receivedRequests).isEmpty();
+  }
+
+  @Test
+  void aManagerCanReachTheSalesChannelSummaryRoute() throws Exception {
+    // A manager-only token passes (REPORTS_ROLES = owner/manager/accountant) — proves the carve-out
+    // admits management, and that the exact-path GET does not fall through to the POS route.
+    String token =
+        obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, MANAGER_USERNAME, MANAGER_PASSWORD);
+
+    String response =
+        gatewayClient()
+            .get()
+            .uri("/api/v1/sales/channel-summary?period=2026-06")
+            .header(HttpHeaders.AUTHORIZATION, bearer(token))
+            .retrieve()
+            .body(String.class);
+
+    assertThat(response).isEqualTo("ok");
+    assertThat(theForwardedRequest().getPath()).startsWith("/api/v1/sales/channel-summary");
+  }
+
+  @Test
   void aCashierIsDeniedTheDashboardRevenueRouteWith403() throws Exception {
     String token =
         obtainAccessToken(REALM, CLIENT_ID, CLIENT_SECRET, CASHIER_USERNAME, CASHIER_PASSWORD);
