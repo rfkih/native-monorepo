@@ -5,6 +5,31 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-21 — FIELD BUG: app "redirects to the web" after restart → allowNavigation fix
+
+Field report: on some devices, opening the app after a restart lands the user in Chrome (the web
+console) instead of the app. Root cause: Capacitor keeps a top-frame navigation inside the WebView
+only when its **host** equals `server.url`'s host or is listed in `server.allowNavigation`
+(`Bridge.launchIntent` — HOST-only, ports ignored); anything else fires `ACTION_VIEW` → system
+browser. Prod Keycloak lives on the Business origin (`env.js` → `https://app.native-app.my.id/auth`,
+= `PUBLIC_URL`), and the interactive login is a top-frame `signinRedirect`. On a normal open the
+stored offline token renews **silently** (XHR — never navigates), so nothing breaks; after a restart
+where that renew fails (offline session idled out / OEM cleared WebView storage) the user taps
+sign-in → cross-host redirect → Chrome, and after login Keycloak sends them back to the origin *in
+Chrome* — they stay on the web. Affected: (1) the **Employee app in prod** — its origin
+`emp.native-app.my.id` differs from the auth host **by design** (ADR 0049 P5 shared issuer) and its
+config had **no allowNavigation at all**; UAT never reproduced it because the employee origin and
+Keycloak share `a8.tailbf9662.ts.net` (only ports differ, and ports are ignored). (2) **Old Business
+APKs** baked with the funnel origin `native-prod.tailbf9662.ts.net` — cross-host ever since
+`PUBLIC_URL` migrated to Cloudflare; those installs need the current APK reinstalled (origin is baked
+in), and the funnel origin was found **down** during diagnosis anyway. **Fix:** both apps'
+`capacitor.config.ts` now bake the auth host into `server.allowNavigation`, wired through
+`build-app.mjs` (`--auth-url` / `NATIVE_*_AUTH_ORIGIN`; employee prod default
+`https://app.native-app.my.id`, till default = its own origin — a no-op guard today, but required for
+the ADR 0051 bundled shell where the WebView origin is `https://localhost`). External links stay
+un-whitelisted on purpose (they belong in the browser). The Employee prod APK/AAB must be rebuilt
+with this fix **before** the Play upload (still gated on its own upload keystore).
+
 ## 2026-08-16 — INCIDENT: fleet-wide Debezium CDC outage on deploy + hardening
 
 Investigating a "corrected closing but P&L still wrong" report surfaced a bigger problem: **every

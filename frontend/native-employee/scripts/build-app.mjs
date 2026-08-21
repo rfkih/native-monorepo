@@ -84,8 +84,21 @@ if (env === 'prod' && /trycloudflare\.com/i.test(origin) && !allowEphemeral) {
   process.exit(1)
 }
 
+// --- auth origin --------------------------------------------------------------------------------
+// The BUSINESS origin that serves Keycloak (${PUBLIC_URL}/auth — the shared token issuer, ADR 0049
+// P5). Baked into the shell's allowNavigation so the interactive login redirect stays inside the
+// WebView instead of breaking out to the system browser (Capacitor's check is host-only; see
+// capacitor.config.ts). Must match the deployed environment's PUBLIC_URL — override with
+// --auth-url / NATIVE_EMPLOYEE_AUTH_ORIGIN if that ever moves.
+const AUTH_DEFAULTS = { uat: 'https://a8.tailbf9662.ts.net:8443', prod: 'https://app.native-app.my.id' }
+const authOrigin = arg('--auth-url') ?? process.env.NATIVE_EMPLOYEE_AUTH_ORIGIN ?? AUTH_DEFAULTS[env]
+if (!/^https:\/\//.test(authOrigin)) {
+  console.error(`build-app: auth origin must be a full https:// URL, got: ${authOrigin}`)
+  process.exit(1)
+}
+
 // --- toolchain ----------------------------------------------------------------------------------
-const buildEnv = { ...process.env, NATIVE_EMPLOYEE_URL: origin }
+const buildEnv = { ...process.env, NATIVE_EMPLOYEE_URL: origin, NATIVE_EMPLOYEE_AUTH_ORIGIN: authOrigin }
 if (!buildEnv.JAVA_HOME) {
   const jbr = 'C:\\Program Files\\Android\\Android Studio\\jbr'
   if (process.platform === 'win32' && existsSync(jbr)) {
@@ -106,7 +119,7 @@ const run = (cmd, cwd) => {
 
 const isAab = format === 'aab'
 const gradleTask = isAab ? 'bundle' : 'assemble'
-console.log(`[build-app] env=${env}  type=${type}  format=${format}  origin=${origin}`)
+console.log(`[build-app] env=${env}  type=${type}  format=${format}  origin=${origin}  auth=${authOrigin}`)
 run('npx cap sync android', app)
 run(`${gradlew} ${gradleTask}${flavor}${typeCap}`, androidDir)
 

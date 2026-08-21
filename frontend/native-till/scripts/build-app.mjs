@@ -84,8 +84,18 @@ if (env === 'prod' && /trycloudflare\.com/i.test(origin) && !allowEphemeral) {
   process.exit(1)
 }
 
+// --- auth origin --------------------------------------------------------------------------------
+// The origin serving Keycloak (${PUBLIC_URL}/auth). For the till this IS the app origin today, so
+// the default is a no-op whitelist entry — override with --auth-url / NATIVE_TILL_AUTH_ORIGIN only
+// if the app origin and token issuer ever split hosts (see capacitor.config.ts AUTH_ORIGIN).
+const authOrigin = arg('--auth-url') ?? process.env.NATIVE_TILL_AUTH_ORIGIN ?? origin
+if (!/^https:\/\//.test(authOrigin)) {
+  console.error(`build-app: auth origin must be a full https:// URL, got: ${authOrigin}`)
+  process.exit(1)
+}
+
 // --- toolchain (match README: Android Studio JBR, NOT the backend JDK 25) ------------------------
-const buildEnv = { ...process.env, NATIVE_TILL_URL: origin }
+const buildEnv = { ...process.env, NATIVE_TILL_URL: origin, NATIVE_TILL_AUTH_ORIGIN: authOrigin }
 if (!buildEnv.JAVA_HOME) {
   const jbr = 'C:\\Program Files\\Android\\Android Studio\\jbr'
   if (process.platform === 'win32' && existsSync(jbr)) {
@@ -106,7 +116,7 @@ const run = (cmd, cwd) => {
 
 const isAab = format === 'aab'
 const gradleTask = isAab ? 'bundle' : 'assemble'
-console.log(`[build-app] env=${env}  type=${type}  format=${format}  origin=${origin}`)
+console.log(`[build-app] env=${env}  type=${type}  format=${format}  origin=${origin}  auth=${authOrigin}`)
 run('npx cap sync android', app)
 run(`${gradlew} ${gradleTask}${flavor}${typeCap}`, androidDir)
 
