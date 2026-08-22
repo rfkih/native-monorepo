@@ -18,8 +18,9 @@ import { ListSkeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/features/_shared/financeUi'
 import { useSession, type CompanySession } from '@/lib/session'
 import { cn } from '@/lib/cn'
-import { useSalesChannels, useUpdateSalesChannel, type SalesChannel } from './channelsApi'
+import { useCreateSalesChannel, useSalesChannels, useUpdateSalesChannel, type SalesChannel } from './channelsApi'
 import { ChannelDialog } from './ChannelDialog'
+import { availableSuggestions, type SuggestedPlatform } from './suggestedChannels'
 
 export function Channels() {
   const { t } = useTranslation()
@@ -53,6 +54,10 @@ function ChannelsInner({ company }: { company: CompanySession }) {
           {t('channels.add')}
         </Button>
       </div>
+
+      {!query.isLoading && !query.isError ? (
+        <SuggestedPlatforms session={company} existingCodes={channels.map((c) => c.code)} />
+      ) : null}
 
       {query.isError ? (
         <Card className="p-8 text-center text-sm text-loss">
@@ -91,6 +96,74 @@ function ChannelsInner({ company }: { company: CompanySession }) {
         />
       ) : null}
     </div>
+  )
+}
+
+/**
+ * SuggestedPlatforms — the "suggested standard delivery platforms" quick-add row: GoFood/GrabFood/
+ * ShopeeFood one-tap chips for the ones the company doesn't already have. A SUGGESTION only — it
+ * never auto-creates or seeds anything; tapping a chip goes through the same useCreateSalesChannel
+ * mutation the manual dialog uses (same normalization implicitly, since these codes are already
+ * canonical — see suggestedChannels.ts). Disappears entirely once all three exist, or on a vertical
+ * (e.g. carwash, barbershop) where the owner has already dismissed them by adding others.
+ */
+function SuggestedPlatforms({
+  session,
+  existingCodes,
+}: {
+  session: CompanySession
+  existingCodes: string[]
+}) {
+  const { t } = useTranslation()
+  const createChannel = useCreateSalesChannel(session)
+  const [pendingCode, setPendingCode] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const suggestions = availableSuggestions(existingCodes)
+  if (suggestions.length === 0) return null
+
+  async function addSuggestion(platform: SuggestedPlatform) {
+    setError(null)
+    setPendingCode(platform.code)
+    try {
+      await createChannel.mutateAsync({ code: platform.code, name: platform.name })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setPendingCode(null)
+    }
+  }
+
+  return (
+    <Card className="p-4">
+      <p className="text-xs font-bold uppercase tracking-[0.08em] text-ink-3">
+        {t('channels.suggestions.title')}
+      </p>
+      <p className="mt-1 text-xs text-ink-3">{t('channels.suggestions.hint')}</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {suggestions.map((platform) => {
+          const isPending = createChannel.isPending && pendingCode === platform.code
+          return (
+            <button
+              key={platform.code}
+              type="button"
+              disabled={createChannel.isPending}
+              aria-label={t('channels.suggestions.addAria', { name: platform.name })}
+              onClick={() => void addSuggestion(platform)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-ink-2 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isPending ? <Spinner /> : <Plus className="size-3.5" />}
+              {platform.name}
+            </button>
+          )
+        })}
+      </div>
+      {error ? (
+        <p className="mt-2 text-xs text-loss" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </Card>
   )
 }
 

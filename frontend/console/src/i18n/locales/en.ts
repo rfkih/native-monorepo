@@ -3609,6 +3609,11 @@ export const en = {
     deactivate: 'Deactivate',
     deactivateConfirm:
       'Deactivate {{name}}? It will no longer be offered as an ONLINE payment channel at checkout.',
+    suggestions: {
+      title: 'Add a popular platform',
+      hint: 'One tap adds it to your channel list — you can rename, deactivate, or ignore it anytime.',
+      addAria: 'Add {{name}} as a sales channel',
+    },
     dialog: {
       createTitle: 'New sales channel',
       editTitle: 'Edit sales channel',

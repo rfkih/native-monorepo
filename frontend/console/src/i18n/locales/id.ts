@@ -3581,6 +3581,11 @@ export const id = {
     deactivate: 'Nonaktifkan',
     deactivateConfirm:
       'Nonaktifkan {{name}}? Channel ini tidak akan lagi ditawarkan sebagai metode pembayaran ONLINE saat checkout.',
+    suggestions: {
+      title: 'Tambah platform populer',
+      hint: 'Satu ketukan langsung menambahkannya ke daftar channel Anda — bisa diubah nama, dinonaktifkan, atau diabaikan kapan saja.',
+      addAria: 'Tambahkan {{name}} sebagai channel penjualan',
+    },
     dialog: {
       createTitle: 'Channel penjualan baru',
       editTitle: 'Ubah channel penjualan',
