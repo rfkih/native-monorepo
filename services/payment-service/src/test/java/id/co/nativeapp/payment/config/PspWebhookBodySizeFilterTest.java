@@ -1,4 +1,4 @@
-package id.co.nativeapp.restaurant.config;
+package id.co.nativeapp.payment.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -16,28 +16,28 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
 /**
- * Unit test for {@link SelfOrderBodySizeFilter} — the container-edge body-size guard for the
- * ANONYMOUS self-order surface (security review F-2): the body may not exceed {@value
- * SelfOrderBodySizeFilter#MAX_BODY_BYTES} bytes, whether its size is declared ({@code
- * Content-Length}) or streamed ({@code Transfer-Encoding: chunked}).
+ * Unit test for {@link PspWebhookBodySizeFilter} — the pre-parse body cap on the ANONYMOUS Midtrans
+ * webhook surface (security review W1): at most {@value PspWebhookBodySizeFilter#MAX_BODY_BYTES}
+ * bytes, whether declared ({@code Content-Length}) or streamed (chunked).
  *
- * <p>Chunked MUST pass through when within the cap: the gateway's proxy re-streams EVERY forwarded
- * body as chunked, so a chunked-refusal (the original O-2 posture) rejected every real diner
- * submission — the self-order/PSP-webhook 411-morphs-to-401 outage. The cap is now enforced WHILE
- * reading (bounded buffer), and a rejection is written directly — {@code sendError} would dispatch
- * to {@code /error}, which is not a public path, and the security chain would morph the 413 into a
- * bodyless 401.
+ * <p>Chunked MUST pass through when within the cap — THE prod outage regression: Midtrans sends
+ * {@code Content-Length}, but its request reaches this service THROUGH THE GATEWAY, whose proxy
+ * re-streams every forwarded body as {@code Transfer-Encoding: chunked}. The original W1 posture
+ * refused chunked with 411, whose {@code sendError} dispatch to {@code /error} (not a public path)
+ * was then morphed by the security chain into the bodyless 401 every Midtrans notification got —
+ * settlement webhooks never worked; only the POS {@code /sync} polling fallback masked it.
  */
-class SelfOrderBodySizeFilterTest {
+class PspWebhookBodySizeFilterTest {
 
-  private final SelfOrderBodySizeFilter filter = new SelfOrderBodySizeFilter();
+  private final PspWebhookBodySizeFilter filter = new PspWebhookBodySizeFilter();
 
   @Test
   void anOversizedContentLengthIsRejectedWith413BeforeTheBodyIsRead() throws Exception {
-    // A Mockito mock so getContentLengthLong() can claim an arbitrary size WITHOUT allocating it —
-    // the declared-length fast path must reject before ever touching the stream.
+    // Mockito mock: getContentLengthLong() claims an arbitrary size WITHOUT allocating it — the
+    // declared-length fast path must reject before ever touching the stream.
     HttpServletRequest request = mock(HttpServletRequest.class);
-    when(request.getContentLengthLong()).thenReturn(SelfOrderBodySizeFilter.MAX_BODY_BYTES + 1);
+    when(request.getContentLengthLong())
+        .thenReturn((long) PspWebhookBodySizeFilter.MAX_BODY_BYTES + 1);
     MockHttpServletResponse response = new MockHttpServletResponse();
     AtomicBoolean chainCalled = new AtomicBoolean(false);
 
@@ -48,51 +48,40 @@ class SelfOrderBodySizeFilterTest {
   }
 
   @Test
-  void aNormalSizedBodyProceedsWithItsBodyIntact() throws Exception {
-    MockHttpServletRequest request = new MockHttpServletRequest();
-    request.setContent("{\"lines\":[1,2,3]}".getBytes(StandardCharsets.UTF_8));
-    MockHttpServletResponse response = new MockHttpServletResponse();
-    AtomicReference<String> downstreamBody = new AtomicReference<>();
-
-    filter.doFilter(request, response, chainReadingBodyInto(downstreamBody));
-
-    assertThat(downstreamBody).hasValue("{\"lines\":[1,2,3]}");
-    assertThat(response.getStatus()).isEqualTo(200);
-  }
-
-  @Test
-  void aBodyExactlyAtTheCeilingProceedsThroughTheChain() throws Exception {
-    MockHttpServletRequest request = new MockHttpServletRequest();
-    request.setContent(new byte[(int) SelfOrderBodySizeFilter.MAX_BODY_BYTES]);
-    MockHttpServletResponse response = new MockHttpServletResponse();
-    AtomicBoolean chainCalled = new AtomicBoolean(false);
-
-    filter.doFilter(request, response, chainThatSets(chainCalled));
-
-    assertThat(chainCalled).isTrue();
-  }
-
-  @Test
-  void aChunkedBodyWithinTheCapProceedsWithItsBodyIntact() throws Exception {
-    // THE regression (self-order outage): chunked = no Content-Length. The gateway proxy sends
-    // every forwarded body this way, so it must pass — capped while reading, not refused.
+  void aChunkedNotificationWithinTheCapProceedsWithItsBodyIntact() throws Exception {
+    // THE regression: the gateway-forwarded (chunked, no Content-Length) Midtrans notification
+    // must reach WebhookService with its body — the signature verifies the exact raw bytes.
     MockHttpServletRequest backing = new MockHttpServletRequest();
-    backing.setContent("{\"lines\":[1]}".getBytes(StandardCharsets.UTF_8));
+    backing.setContent(
+        "{\"order_id\":\"n-x\",\"status_code\":\"200\"}".getBytes(StandardCharsets.UTF_8));
     backing.addHeader("Transfer-Encoding", "chunked");
     MockHttpServletResponse response = new MockHttpServletResponse();
     AtomicReference<String> downstreamBody = new AtomicReference<>();
 
     filter.doFilter(withoutContentLength(backing), response, chainReadingBodyInto(downstreamBody));
 
-    assertThat(downstreamBody).hasValue("{\"lines\":[1]}");
+    assertThat(downstreamBody).hasValue("{\"order_id\":\"n-x\",\"status_code\":\"200\"}");
     assertThat(response.getStatus()).isEqualTo(200);
   }
 
   @Test
+  void aDeclaredNotificationWithinTheCapProceedsWithItsBodyIntact() throws Exception {
+    MockHttpServletRequest request = new MockHttpServletRequest();
+    request.setContent("{\"order_id\":\"n-x\"}".getBytes(StandardCharsets.UTF_8));
+    MockHttpServletResponse response = new MockHttpServletResponse();
+    AtomicReference<String> downstreamBody = new AtomicReference<>();
+
+    filter.doFilter(request, response, chainReadingBodyInto(downstreamBody));
+
+    assertThat(downstreamBody).hasValue("{\"order_id\":\"n-x\"}");
+  }
+
+  @Test
   void aStreamedBodyExceedingTheCapIsRejectedWith413() throws Exception {
-    // Chunked (undeclared length) but over the ceiling: the cap binds while reading.
+    // Chunked (undeclared length) over the ceiling: the cap binds while reading — the heap-DoS
+    // the filter exists to stop, now enforced instead of dodged by refusing chunked outright.
     MockHttpServletRequest backing = new MockHttpServletRequest();
-    backing.setContent(new byte[(int) SelfOrderBodySizeFilter.MAX_BODY_BYTES + 1]);
+    backing.setContent(new byte[PspWebhookBodySizeFilter.MAX_BODY_BYTES + 1]);
     backing.addHeader("Transfer-Encoding", "chunked");
     MockHttpServletResponse response = new MockHttpServletResponse();
     AtomicBoolean chainCalled = new AtomicBoolean(false);
@@ -107,7 +96,7 @@ class SelfOrderBodySizeFilterTest {
   void aLyingSmallContentLengthCannotSlipAnOversizedStreamPastTheCap() throws Exception {
     // Declared 10 bytes, streamed cap+1: the fast path passes, but the cap binds on bytes READ.
     MockHttpServletRequest backing = new MockHttpServletRequest();
-    backing.setContent(new byte[(int) SelfOrderBodySizeFilter.MAX_BODY_BYTES + 1]);
+    backing.setContent(new byte[PspWebhookBodySizeFilter.MAX_BODY_BYTES + 1]);
     MockHttpServletResponse response = new MockHttpServletResponse();
     AtomicBoolean chainCalled = new AtomicBoolean(false);
 
@@ -128,7 +117,7 @@ class SelfOrderBodySizeFilterTest {
   @Test
   void theBufferedBodyIsAlsoReplayedThroughGetReader() throws Exception {
     MockHttpServletRequest request = new MockHttpServletRequest();
-    request.setContent("{\"lines\":[1]}".getBytes(StandardCharsets.UTF_8));
+    request.setContent("{\"order_id\":\"n-x\"}".getBytes(StandardCharsets.UTF_8));
     MockHttpServletResponse response = new MockHttpServletResponse();
     AtomicReference<String> downstreamBody = new AtomicReference<>();
 
@@ -143,15 +132,29 @@ class SelfOrderBodySizeFilterTest {
           }
         });
 
-    assertThat(downstreamBody).hasValue("{\"lines\":[1]}");
+    assertThat(downstreamBody).hasValue("{\"order_id\":\"n-x\"}");
+  }
+
+  @Test
+  void aBodyExactlyAtTheCeilingProceedsThroughTheChain() throws Exception {
+    MockHttpServletRequest request = new MockHttpServletRequest();
+    request.setContent(new byte[PspWebhookBodySizeFilter.MAX_BODY_BYTES]);
+    MockHttpServletResponse response = new MockHttpServletResponse();
+    AtomicBoolean chainCalled = new AtomicBoolean(false);
+
+    filter.doFilter(request, response, chainThatSets(chainCalled));
+
+    assertThat(chainCalled).isTrue();
   }
 
   @Test
   void aRejectionIsWrittenDirectlyNeverViaSendError() throws Exception {
-    // sendError would ERROR-dispatch to /error — not a public path, so the security chain morphs
-    // the rejection into a bodyless 401 (the webhook outage). Direct write keeps the real status.
+    // sendError ERROR-dispatches to /error — not in native.security.public-paths, so the security
+    // chain would answer a bodyless 401 (what Midtrans saw for every notification). Direct write
+    // keeps the true 413 on the wire.
     HttpServletRequest request = mock(HttpServletRequest.class);
-    when(request.getContentLengthLong()).thenReturn(SelfOrderBodySizeFilter.MAX_BODY_BYTES + 1);
+    when(request.getContentLengthLong())
+        .thenReturn((long) PspWebhookBodySizeFilter.MAX_BODY_BYTES + 1);
     MockHttpServletResponse response = new MockHttpServletResponse();
 
     filter.doFilter(request, response, chainThatSets(new AtomicBoolean()));
@@ -159,18 +162,6 @@ class SelfOrderBodySizeFilterTest {
     assertThat(response.getErrorMessage()).isNull(); // sendError() would have set this
     assertThat(response.getContentType()).startsWith("application/problem+json");
     assertThat(response.getContentAsString()).contains("413");
-  }
-
-  @Test
-  void anEmptyBodyRequestProceedsThroughTheChain() throws Exception {
-    // GETs (menu browse) ride the same /api/v1/self-order/* registration — must never be blocked.
-    MockHttpServletRequest request = new MockHttpServletRequest();
-    MockHttpServletResponse response = new MockHttpServletResponse();
-    AtomicBoolean chainCalled = new AtomicBoolean(false);
-
-    filter.doFilter(request, response, chainThatSets(chainCalled));
-
-    assertThat(chainCalled).isTrue();
   }
 
   /** Hides the derived Content-Length so the request presents as a chunked (undeclared) body. */

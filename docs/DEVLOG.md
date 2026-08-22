@@ -5,6 +5,35 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-22 — INCIDENT: Midtrans webhooks (and self-order submits) 401 — chunked-refusing body filters
+
+Midtrans emailed the merchant: every notification to `POST /api/v1/psp-webhooks/midtrans/{companyId}`
+got HTTP 401 (12 retries over 3h for one expire notification — an unpaid Rp 12.000 QR, no money
+moved). Tracing hop by hop (edge access log → gateway metrics → payment-service metrics → a
+throwaway copy of the prod gateway image wired to the real payment-service with security DEBUG):
+the gateway's security chain and `pspWebhookRoute` are CORRECT — the request dies inside
+payment-service, before its servlet pipeline (invisible to http_server_requests; the filter runs at
+HIGHEST_PRECEDENCE, ahead of the observation filter). Root cause: **`PspWebhookBodySizeFilter`
+refused any `Transfer-Encoding: chunked` request with 411** ("Midtrans always sends
+Content-Length") — true at the edge, false one hop later: **the gateway's proxy re-streams EVERY
+forwarded body as chunked** (captured on the wire). The 411's `sendError` then ERROR-dispatched to
+`/error`, which is not in `native.security.public-paths`, so the security chain morphed it into the
+bodyless 401 Midtrans saw. Net: **the settlement webhook never worked in ANY deployed environment**
+— QRIS still settled because the POS `/sync` polling fallback masked it. Same defect in
+`SelfOrderBodySizeFilter` (O-2 hardening): **anonymous self-order ORDER SUBMISSION through the
+gateway was equally dead** (browse GETs fine, POST → empty 401), verified against prod. **Fix:**
+both filters now enforce the cap WHILE reading — bounded O(cap) buffering per request (the bound IS
+the heap-DoS protection), replay the buffered body to the chain (`BufferedBodyRequest`); a genuine
+oversize is written DIRECTLY as a 413 problem+json (never `sendError`, so it can't morph into a
+401). Self-order filter ordering flipped (header-only token check first, so bad-token junk never
+pays the buffering). Regression tests cover the chunked-passes / streamed-oversize-413 /
+lying-Content-Length / direct-write shapes.
+Diagnosis rule of thumb this bought: an anonymous route answering an EMPTY 401 despite permitAll =
+suspect a `sendError`/error-dispatch morph or a pre-security filter, and check the service's
+http_server_requests for the request's ABSENCE. Also flagged: the affected company's QRIS gateway
+runs with `provider_environment=SANDBOX` active in prod — a real customer can never pay a sandbox
+QR; the owner must flip to Production credentials for real sales.
+
 ## 2026-08-21 — FIELD BUG: app "redirects to the web" after restart → allowNavigation fix
 
 Field report: on some devices, opening the app after a restart lands the user in Chrome (the web
