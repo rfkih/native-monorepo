@@ -26,6 +26,14 @@ export interface SaleHistoryRow {
   currency: string
   tenderType: string | null
   channelCode: string | null
+  /** 'CAPTURED' | 'VOIDED' | 'REFUNDED' | 'PARTIALLY_REFUNDED' | null — null on a row from before
+   *  this field existed, or a legacy/no-order sale, so a stale cache never crashes a reader (same
+   *  optional-field convention as `billId` in api.ts). */
+  paymentStatus?: string | null
+  /** The settling payment's cumulative refunded amount in minor units — 0 when nothing was
+   *  refunded or no payment backs the sale (server COALESCEs); optional only for stale caches.
+   *  Feeds `netSaleAmountMinor` so the day total subtracts refunds. */
+  refundedMinor?: number
 }
 
 function tenantOf(session: CompanySession) {

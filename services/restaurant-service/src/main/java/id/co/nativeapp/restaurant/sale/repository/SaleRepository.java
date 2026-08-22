@@ -84,6 +84,17 @@ public interface SaleRepository extends JpaRepository<Sale, UUID> {
    * restaurant_order.sale_id} is set by the writer at most once per order, so a sale has at most
    * one matching order row in practice. RLS-scoped automatically (rule 5) on both joined tables —
    * no manual {@code company_id} predicate, matching this repository's other native queries.
+   *
+   * <p>Also LEFT JOINs {@code payment} for the reversal status ({@code payment_status} is {@code
+   * null} when no payment backs the sale, e.g. bill-cash and legacy {@code POST /api/v1/sales}
+   * sales) and the cumulative refunded amount ({@code refunded_minor}, COALESCEd to 0 for those
+   * same unbacked sales so the client's net-of-reversals day total never mixes null into money
+   * math) — {@code payment.sale_id} is set by the writer at most once per sale today (each
+   * payment's sale idempotency key is derived per-payment), so a sale has at most one matching
+   * payment row in practice. There is no unique constraint enforcing that, though: a future
+   * split-tender change (V3's deferred {@code payment_seq} note) would let several payments settle
+   * one sale, and this join would need to revisit to aggregate (e.g. worst-of-status or a separate
+   * per-tender breakdown) rather than assuming a single row.
    */
   @Query(
       value =
@@ -94,9 +105,12 @@ public interface SaleRepository extends JpaRepository<Sale, UUID> {
                  s.amount_minor AS amount_minor,
                  s.currency     AS currency,
                  s.tender_type  AS tender_type,
-                 s.channel_code AS channel_code
+                 s.channel_code AS channel_code,
+                 p.status       AS payment_status,
+                 COALESCE(p.refunded_minor, 0) AS refunded_minor
             FROM sale s
             LEFT JOIN restaurant_order o ON o.sale_id = s.id
+            LEFT JOIN payment p ON p.sale_id = s.id
            WHERE s.business_id = :businessId
              AND s.occurred_at >= :from
              AND s.occurred_at < :to

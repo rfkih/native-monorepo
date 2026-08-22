@@ -10,6 +10,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { History, ReceiptText, TriangleAlert, X } from 'lucide-react'
+import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
 import { ListSkeleton } from '@/components/ui/Skeleton'
 import { cn } from '@/lib/cn'
@@ -18,7 +19,7 @@ import { useAuth, hasAnyRole, effectiveRoles } from '@/lib/authContext'
 import type { CompanySession } from '@/lib/session'
 import { ReceiptView } from './ReceiptView'
 import { ReturnSaleDialog } from './components/ReturnSaleDialog'
-import { canReturnPayment } from './lib/returnSale'
+import { canReturnPayment, netSaleAmountMinor, reversalStatusKey } from './lib/returnSale'
 import { useOrderReceipt, useSalesHistory, type SaleHistoryRow } from './salesHistoryApi'
 
 /** Tender → existing i18n label; ONLINE shows the channel's own immutable code. */
@@ -58,7 +59,13 @@ export function SalesHistorySheet({
 
   const rows = history.data ?? []
   const currency = rows[0]?.currency ?? session.baseCurrency
-  const totalMinor = rows.reduce((sum, r) => sum + r.amountMinor, 0)
+  // NET of reversals (owner request): a voided/refunded sale must not inflate the day figure.
+  // Deliberately NOT byte-identical to the register Z-report's net: the Z-report attributes
+  // refund DELTAS to the day they happened (V22) and does not subtract voids, while this list
+  // zeroes a voided sale and subtracts each sale's CUMULATIVE refund on the sale's own day. The
+  // two agree on a void-free day whose refunds are same-day — the only shape the POS return
+  // flow produces (ADR 0061 returns are live-day only; no UI issues voids).
+  const totalMinor = rows.reduce((sum, r) => sum + netSaleAmountMinor(r), 0)
   // The server caps the list at its newest 200 rows. At the cap the sum is NOT the day's
   // total any more — never present a truncated figure as if it were (review W2).
   const capped = rows.length >= 200
@@ -118,6 +125,11 @@ export function SalesHistorySheet({
           <div className="mx-auto flex max-w-[640px] flex-col gap-1.5">
             {rows.map((row) => {
               const openable = row.orderId != null
+              const reversalKey = reversalStatusKey(row.paymentStatus)
+              // A FULL reversal (voided/refunded) zeroes the sale out — strike the amount through.
+              // A partial refund still leaves a real balance, so its amount prints normally.
+              const fullReversal =
+                row.paymentStatus === 'VOIDED' || row.paymentStatus === 'REFUNDED'
               return (
                 <button
                   key={row.saleId}
@@ -135,8 +147,9 @@ export function SalesHistorySheet({
                     {timeFormat.format(new Date(row.occurredAt))}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13.5px] font-semibold text-ink-2">
-                      {tenderLabel(t, row)}
+                    <span className="flex items-center gap-1.5 truncate text-[13.5px] font-semibold text-ink-2">
+                      <span className="truncate">{tenderLabel(t, row)}</span>
+                      {reversalKey ? <Badge tone="loss">{t(reversalKey)}</Badge> : null}
                     </span>
                     <span className="tnum mt-0.5 block font-mono text-[11px] text-ink-3">
                       {row.orderId != null
@@ -144,8 +157,22 @@ export function SalesHistorySheet({
                         : t('pos.history.noReceipt')}
                     </span>
                   </span>
-                  <span className="tnum shrink-0 font-mono text-[14px] font-bold text-ink">
-                    {formatMoney(row.amountMinor, row.currency, locale)}
+                  <span className="flex shrink-0 flex-col items-end">
+                    <span
+                      className={cn(
+                        'tnum font-mono text-[14px] font-bold text-ink',
+                        fullReversal && 'line-through text-ink-3',
+                      )}
+                    >
+                      {formatMoney(row.amountMinor, row.currency, locale)}
+                    </span>
+                    {/* A partial refund keeps its gross line — show the refunded delta so the
+                        visible rows still foot to the net header total. */}
+                    {row.paymentStatus === 'PARTIALLY_REFUNDED' && (row.refundedMinor ?? 0) > 0 ? (
+                      <span className="tnum font-mono text-[11px] font-semibold text-loss">
+                        {formatMoney(-(row.refundedMinor ?? 0), row.currency, locale)}
+                      </span>
+                    ) : null}
                   </span>
                 </button>
               )

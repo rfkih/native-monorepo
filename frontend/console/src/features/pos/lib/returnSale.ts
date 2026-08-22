@@ -7,6 +7,7 @@
  */
 import { ApiError } from '@/lib/api'
 import type { PaymentResponse } from '../api'
+import type { SaleHistoryRow } from '../salesHistoryApi'
 
 /**
  * Whether a payment can be RETURNED (full refund). Only a settled `CAPTURED` tender is refundable —
@@ -17,6 +18,39 @@ import type { PaymentResponse } from '../api'
  */
 export function canReturnPayment(payment: Pick<PaymentResponse, 'status'>): boolean {
   return payment.status === 'CAPTURED'
+}
+
+/**
+ * Maps a sale-history row's `paymentStatus` to the i18n key for its reversal badge (the
+ * sales-history lists' red "Voided"/"Refunded"/"Partially refunded" tag) — null for any status
+ * that isn't a reversal (including an unsettled `PENDING` or a legacy row with no status at all),
+ * so a plain sale never grows a badge.
+ */
+export function reversalStatusKey(paymentStatus: string | null | undefined): string | null {
+  switch (paymentStatus) {
+    case 'VOIDED':
+      return 'pos.receipt.statusVoided'
+    case 'REFUNDED':
+      return 'pos.receipt.statusRefunded'
+    case 'PARTIALLY_REFUNDED':
+      return 'pos.receipt.statusPartiallyRefunded'
+    default:
+      return null
+  }
+}
+
+/**
+ * A sale-history row's NET contribution to the day total, in minor units. A VOIDED sale counts 0
+ * (the capture was undone — its `refundedMinor` stays 0, a void is not a refund); otherwise the
+ * cumulative refund is subtracted, which zeroes a fully REFUNDED sale (refunded == amount) and
+ * leaves a partial refund's remainder. A stale-cache row without the fields nets its full amount —
+ * exactly the pre-field behavior.
+ */
+export function netSaleAmountMinor(
+  row: Pick<SaleHistoryRow, 'amountMinor' | 'paymentStatus' | 'refundedMinor'>,
+): number {
+  if (row.paymentStatus === 'VOIDED') return 0
+  return row.amountMinor - (row.refundedMinor ?? 0)
 }
 
 /**

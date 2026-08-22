@@ -36,6 +36,9 @@ export interface ThermalToEscposInput {
   paymentRows: Row[]
   footerNote: string
   provisionalNote?: string
+  /** Set for a VOIDED/REFUNDED/PARTIALLY_REFUNDED sale — renders as a solid banner, mirroring
+   *  `provisionalNote`'s treatment, right after it. */
+  reversedNote?: string
 }
 
 export function toEscposReceiptData(input: ThermalToEscposInput): EscposReceiptData {
@@ -58,5 +61,6 @@ export function toEscposReceiptData(input: ThermalToEscposInput): EscposReceiptD
     paymentRows: input.paymentRows.map((r) => ({ label: r.label, valueLabel: r.valueLabel })),
     footerNote: input.footerNote,
     provisionalNote: input.provisionalNote,
+    reversedNote: input.reversedNote,
   }
 }

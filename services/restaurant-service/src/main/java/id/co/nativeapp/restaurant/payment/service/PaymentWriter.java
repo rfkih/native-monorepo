@@ -353,6 +353,7 @@ public class PaymentWriter {
         view.getTenderedMinor(),
         view.getChangeMinor(),
         view.isProviderPending(),
-        view.getSaleId());
+        view.getSaleId(),
+        view.getRefundedMinor());
   }
 }

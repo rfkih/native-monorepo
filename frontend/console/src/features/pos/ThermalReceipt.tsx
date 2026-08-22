@@ -119,6 +119,15 @@ export interface ThermalProps {
   /** Provisional marker text (shown when isProvisional is true). */
   provisionalNote?: string
   /**
+   * True when the underlying payment was reversed (VOIDED / REFUNDED / PARTIALLY_REFUNDED) — a
+   * cancelled or refunded sale must never be mistaken for a normal paid receipt, on screen OR on
+   * the printed thermal paper (incl. a history reprint). Renders a solid banner identical in style
+   * to the provisional marker, placed right after it (and after the pending banner).
+   */
+  isReversed?: boolean
+  /** Reversed-sale banner text (shown when isReversed is true). */
+  reversedNote?: string
+  /**
    * Set by surfaces that mount right after a successful payment (ReceiptView, ServiceReceipt,
    * BillReceiptView): when the operator has enabled auto-print in printer settings AND a device
    * is connected, the receipt is sent to it once on appearance — no Print tap. Never auto-falls
@@ -321,6 +330,8 @@ export function ThermalReceipt({
   pendingNote,
   isProvisional,
   provisionalNote,
+  isReversed,
+  reversedNote,
   autoPrint,
   cashTender,
   zIndexClass = 'z-40',
@@ -351,6 +362,7 @@ export function ThermalReceipt({
         paymentRows,
         footerNote,
         provisionalNote: isProvisional ? provisionalNote : undefined,
+        reversedNote: isReversed ? reversedNote : undefined,
       }),
     [
       businessName,
@@ -367,6 +379,8 @@ export function ThermalReceipt({
       footerNote,
       isProvisional,
       provisionalNote,
+      isReversed,
+      reversedNote,
     ],
   )
 
@@ -546,6 +560,24 @@ export function ThermalReceipt({
                 }}
               >
                 {pendingNote}
+              </div>
+            ) : null}
+
+            {/* ---- REVERSED BANNER (voided/refunded/partially refunded) ---- */}
+            {isReversed && reversedNote ? (
+              <div
+                style={{
+                  border: '2px solid #000',
+                  padding: '4px 6px',
+                  marginBottom: 8,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  lineHeight: 1.4,
+                  textAlign: 'center',
+                  letterSpacing: '0.03em',
+                }}
+              >
+                {reversedNote}
               </div>
             ) : null}
 

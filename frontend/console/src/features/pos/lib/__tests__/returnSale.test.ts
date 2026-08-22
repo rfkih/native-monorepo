@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import { ApiError } from '@/lib/api'
-import { canReturnPayment, refundErrorKey } from '../returnSale'
+import {
+  canReturnPayment,
+  netSaleAmountMinor,
+  refundErrorKey,
+  reversalStatusKey,
+} from '../returnSale'
 
 describe('canReturnPayment', () => {
   it('allows a CAPTURED payment to be returned', () => {
@@ -41,5 +46,55 @@ describe('refundErrorKey', () => {
   it('falls back to a generic message for a non-ApiError (network/unknown)', () => {
     expect(refundErrorKey(new Error('network down'))).toBe('pos.return.errorGeneric')
     expect(refundErrorKey(null)).toBe('pos.return.errorGeneric')
+  })
+})
+
+describe('reversalStatusKey', () => {
+  it('maps each reversal status to its badge i18n key', () => {
+    expect(reversalStatusKey('VOIDED')).toBe('pos.receipt.statusVoided')
+    expect(reversalStatusKey('REFUNDED')).toBe('pos.receipt.statusRefunded')
+    expect(reversalStatusKey('PARTIALLY_REFUNDED')).toBe('pos.receipt.statusPartiallyRefunded')
+  })
+
+  it('returns null for a non-reversal status or an absent value', () => {
+    expect(reversalStatusKey('CAPTURED')).toBeNull()
+    expect(reversalStatusKey('PENDING')).toBeNull()
+    expect(reversalStatusKey(null)).toBeNull()
+    expect(reversalStatusKey(undefined)).toBeNull()
+  })
+})
+
+describe('netSaleAmountMinor', () => {
+  it('counts a plain captured sale in full', () => {
+    expect(
+      netSaleAmountMinor({ amountMinor: 50_000, paymentStatus: 'CAPTURED', refundedMinor: 0 }),
+    ).toBe(50_000)
+  })
+
+  it('zeroes a VOIDED sale even though its refundedMinor stays 0 (a void is not a refund)', () => {
+    expect(
+      netSaleAmountMinor({ amountMinor: 50_000, paymentStatus: 'VOIDED', refundedMinor: 0 }),
+    ).toBe(0)
+  })
+
+  it('zeroes a fully REFUNDED sale via its cumulative refund', () => {
+    expect(
+      netSaleAmountMinor({ amountMinor: 50_000, paymentStatus: 'REFUNDED', refundedMinor: 50_000 }),
+    ).toBe(0)
+  })
+
+  it('leaves a partial refund its remainder', () => {
+    expect(
+      netSaleAmountMinor({
+        amountMinor: 50_000,
+        paymentStatus: 'PARTIALLY_REFUNDED',
+        refundedMinor: 20_000,
+      }),
+    ).toBe(30_000)
+  })
+
+  it('nets the full amount for a stale-cache or legacy row without the fields', () => {
+    expect(netSaleAmountMinor({ amountMinor: 50_000 })).toBe(50_000)
+    expect(netSaleAmountMinor({ amountMinor: 50_000, paymentStatus: null })).toBe(50_000)
   })
 })

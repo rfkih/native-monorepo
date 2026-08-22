@@ -136,6 +136,7 @@ public class PaymentCaptureService {
         view.getTenderedMinor(),
         view.getChangeMinor(),
         view.isProviderPending(),
-        view.getSaleId());
+        view.getSaleId(),
+        view.getRefundedMinor());
   }
 }

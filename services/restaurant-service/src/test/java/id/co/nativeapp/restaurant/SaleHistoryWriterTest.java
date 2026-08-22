@@ -83,6 +83,9 @@ class SaleHistoryWriterTest {
     when(view.getCurrency()).thenReturn("IDR");
     when(view.getTenderType()).thenReturn("CASH");
     when(view.getChannelCode()).thenReturn(null);
+    when(view.getPaymentStatus()).thenReturn("REFUNDED");
+    // A full refund's cumulative refunded amount equals the sale amount.
+    when(view.getRefundedMinor()).thenReturn(150_000L);
     when(repository.findHistory(businessId, from, to)).thenReturn(List.of(view));
 
     List<SaleHistoryResponse> result = asTenant(() -> writer.findHistory(businessId, from, to));
@@ -96,6 +99,8 @@ class SaleHistoryWriterTest {
     assertThat(response.currency()).isEqualTo("IDR");
     assertThat(response.tenderType()).isEqualTo("CASH");
     assertThat(response.channelCode()).isNull();
+    assertThat(response.paymentStatus()).isEqualTo("REFUNDED");
+    assertThat(response.refundedMinor()).isEqualTo(150_000L);
     verify(repository).findHistory(businessId, from, to);
   }
 
@@ -113,6 +118,9 @@ class SaleHistoryWriterTest {
     when(view.getCurrency()).thenReturn("IDR");
     when(view.getTenderType()).thenReturn(null);
     when(view.getChannelCode()).thenReturn(null);
+    when(view.getPaymentStatus()).thenReturn(null);
+    // The query COALESCEs the unbacked sale's refunded amount to 0 — never null.
+    when(view.getRefundedMinor()).thenReturn(0L);
     when(repository.findHistory(any(), any(), any())).thenReturn(List.of(view));
 
     List<SaleHistoryResponse> result = asTenant(() -> writer.findHistory(businessId, from, to));
@@ -120,6 +128,8 @@ class SaleHistoryWriterTest {
     assertThat(result).hasSize(1);
     assertThat(result.get(0).orderId()).isNull();
     assertThat(result.get(0).tenderType()).isNull();
+    assertThat(result.get(0).paymentStatus()).isNull();
+    assertThat(result.get(0).refundedMinor()).isZero();
   }
 
   @Test

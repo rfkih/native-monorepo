@@ -12,12 +12,14 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ReceiptText, TriangleAlert, X } from 'lucide-react'
+import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
 import { ListSkeleton } from '@/components/ui/Skeleton'
 import { cn } from '@/lib/cn'
 import { formatMoney } from '@/lib/money'
 import type { CompanySession } from '@/lib/session'
 import { ReceiptView } from '../ReceiptView'
+import { reversalStatusKey } from '../lib/returnSale'
 import { useOrderReceipt, useSalesHistoryWindow, type SaleHistoryRow } from '../salesHistoryApi'
 
 /** Tender → existing i18n label; ONLINE shows the channel's own immutable code. */
@@ -112,6 +114,11 @@ export function ClosedDayTransactionsSheet({
           <div className="mx-auto flex max-w-[640px] flex-col gap-1.5">
             {rows.map((row) => {
               const openable = row.orderId != null
+              const reversalKey = reversalStatusKey(row.paymentStatus)
+              // A FULL reversal (voided/refunded) zeroes the sale out — strike the amount through.
+              // A partial refund still leaves a real balance, so its amount prints normally.
+              const fullReversal =
+                row.paymentStatus === 'VOIDED' || row.paymentStatus === 'REFUNDED'
               return (
                 <button
                   key={row.saleId}
@@ -129,8 +136,9 @@ export function ClosedDayTransactionsSheet({
                     {timeFormat.format(new Date(row.occurredAt))}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13.5px] font-semibold text-ink-2">
-                      {tenderLabel(t, row)}
+                    <span className="flex items-center gap-1.5 truncate text-[13.5px] font-semibold text-ink-2">
+                      <span className="truncate">{tenderLabel(t, row)}</span>
+                      {reversalKey ? <Badge tone="loss">{t(reversalKey)}</Badge> : null}
                     </span>
                     <span className="tnum mt-0.5 block font-mono text-[11px] text-ink-3">
                       {row.orderId != null
@@ -138,8 +146,22 @@ export function ClosedDayTransactionsSheet({
                         : t('pos.history.noReceipt')}
                     </span>
                   </span>
-                  <span className="tnum shrink-0 font-mono text-[14px] font-bold text-ink">
-                    {formatMoney(row.amountMinor, row.currency, locale)}
+                  <span className="flex shrink-0 flex-col items-end">
+                    <span
+                      className={cn(
+                        'tnum font-mono text-[14px] font-bold text-ink',
+                        fullReversal && 'line-through text-ink-3',
+                      )}
+                    >
+                      {formatMoney(row.amountMinor, row.currency, locale)}
+                    </span>
+                    {/* A partial refund keeps its gross line — show the refunded delta so the rows
+                        read consistently with the live-day sheet. */}
+                    {row.paymentStatus === 'PARTIALLY_REFUNDED' && (row.refundedMinor ?? 0) > 0 ? (
+                      <span className="tnum font-mono text-[11px] font-semibold text-loss">
+                        {formatMoney(-(row.refundedMinor ?? 0), row.currency, locale)}
+                      </span>
+                    ) : null}
                   </span>
                 </button>
               )

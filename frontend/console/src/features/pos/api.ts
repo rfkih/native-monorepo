@@ -192,6 +192,9 @@ export interface PaymentResponse {
   providerPending: boolean
   /** null until the payment is CAPTURED */
   saleId: string | null
+  /** Cumulative amount refunded so far, minor units. Optional/undefined on any response that
+   *  predates this field (same stale-cache convention as `billId` above) — treat as 0 when absent. */
+  refundedMinor?: number
 }
 
 export interface OrderResponse {

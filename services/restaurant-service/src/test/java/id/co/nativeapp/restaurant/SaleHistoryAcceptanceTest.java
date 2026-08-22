@@ -31,6 +31,14 @@ import org.springframework.boot.test.context.SpringBootTest;
  * <p>Sales are recorded via {@link SaleService#recordSale} with an explicit {@code occurredAt} (the
  * five-arg {@link RecordSaleCommand} convenience constructor) so the boundary timestamps are exact,
  * not "whatever {@code Instant.now()} happened to be".
+ *
+ * <p>Also proves the {@code payment} LEFT JOIN added for the payment-reversal status ({@code
+ * paymentStatus}) and cumulative refunded amount ({@code refundedMinor}): a sale backed by a VOIDED
+ * payment surfaces that status (refunded stays 0 — a void is not a refund), a PARTIALLY_REFUNDED
+ * payment surfaces its non-zero {@code refunded_minor}, an unbacked sale stays {@code null} status
+ * with refunded COALESCEd to 0, and — critically — the join does not duplicate or drop rows (the
+ * existing {@code containsExactly} ordering assertion below still holds with the payment rows
+ * present).
  */
 @SpringBootTest
 class SaleHistoryAcceptanceTest extends PostgresRlsTestBase {
@@ -49,8 +57,10 @@ class SaleHistoryAcceptanceTest extends PostgresRlsTestBase {
   @Test
   void findHistoryHonoursTheHalfOpenBoundaryNewestFirstOrderJoinAndTenantIsolation()
       throws Exception {
-    // s1: occurred_at == FROM exactly -> INCLUDED (lower bound is inclusive). No linked order.
+    // s1: occurred_at == FROM exactly -> INCLUDED (lower bound is inclusive). No linked order,
+    // but linked to a PARTIALLY_REFUNDED payment — proves a non-zero refunded_minor surfaces.
     UUID s1 = recordSale(TENANT_A, ACTOR_A, "hist-at-from", 10_000L, FROM);
+    insertPaymentForSale(TENANT_A, s1, "PARTIALLY_REFUNDED", 4_000L, FROM);
 
     // s3: occurred_at == FROM + 1h -> the middle result, no linked order.
     UUID s3 = recordSale(TENANT_A, ACTOR_A, "hist-middle", 15_000L, FROM.plusSeconds(3600));
@@ -58,6 +68,11 @@ class SaleHistoryAcceptanceTest extends PostgresRlsTestBase {
     // s2: occurred_at == FROM + 2h -> the newest result, LINKED to a restaurant_order row.
     UUID s2 = recordSale(TENANT_A, ACTOR_A, "hist-later", 20_000L, FROM.plusSeconds(7200));
     UUID linkedOrderId = linkOrderToSale(TENANT_A, s2, FROM.plusSeconds(7200), 20_000L);
+
+    // s3 is also linked to a VOIDED payment — proves the payment LEFT JOIN surfaces
+    // paymentStatus without duplicating or dropping the sale row. A void takes no refund,
+    // so its refunded_minor stays 0.
+    insertPaymentForSale(TENANT_A, s3, "VOIDED", 0L, FROM.plusSeconds(3600));
 
     // s4: occurred_at == TO exactly -> EXCLUDED (upper bound is exclusive).
     UUID s4 = recordSale(TENANT_A, ACTOR_A, "hist-at-to", 99_000L, TO);
@@ -97,6 +112,16 @@ class SaleHistoryAcceptanceTest extends PostgresRlsTestBase {
     SaleHistoryResponse atFrom = history.get(2);
     assertThat(atFrom.saleId()).isEqualTo(s1);
     assertThat(atFrom.orderId()).as("no restaurant_order row backs this sale").isNull();
+
+    // The payment LEFT JOIN: the payment-backed sales (s3 voided, s1 partially refunded) carry
+    // their status + refunded amount; the unbacked sale (s2, despite its order link) stays a
+    // null status with refunded COALESCEd to 0.
+    assertThat(newest.paymentStatus()).as("no payment row backs this sale").isNull();
+    assertThat(newest.refundedMinor()).as("unbacked sale COALESCEs to 0").isZero();
+    assertThat(middle.paymentStatus()).isEqualTo("VOIDED");
+    assertThat(middle.refundedMinor()).as("a void takes no refund").isZero();
+    assertThat(atFrom.paymentStatus()).isEqualTo("PARTIALLY_REFUNDED");
+    assertThat(atFrom.refundedMinor()).isEqualTo(4_000L);
   }
 
   private UUID recordSale(
@@ -140,5 +165,48 @@ class SaleHistoryAcceptanceTest extends PostgresRlsTestBase {
       ps.executeUpdate();
     }
     return orderId;
+  }
+
+  /**
+   * Inserts a {@code payment} row linking back to an already-recorded sale (test-only whole-row
+   * write over the admin/BYPASSRLS connection, mirroring {@link #linkOrderToSale} — no public API
+   * flips a payment's status directly in a test). Exercises the repository's LEFT JOIN {@code
+   * p.sale_id = s.id} path. Uses {@code bill_id} (nullable, unconstrained by an FK) rather than
+   * {@code order_id} to satisfy V38's {@code ck_payment_order_xor_bill} without needing a real
+   * {@code restaurant_order} row.
+   */
+  private UUID insertPaymentForSale(
+      String companyId, UUID saleId, String status, long refundedMinor, Instant occurredAt)
+      throws Exception {
+    UUID paymentId = UUID.randomUUID();
+    Timestamp ts = Timestamp.from(occurredAt);
+    try (Connection admin =
+            java.sql.DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        PreparedStatement ps =
+            admin.prepareStatement(
+                "INSERT INTO payment (id, bill_id, business_id, tender_type, status,"
+                    + " amount_minor, currency, tendered_minor, change_minor, refunded_minor,"
+                    + " sale_id, occurred_at, idempotency_key,"
+                    + " created_at, created_by, updated_at, updated_by, version, company_id)"
+                    + " VALUES (?, ?, ?, 'CASH', ?, ?, 'IDR', ?, ?, ?, ?, ?, ?, ?, 'test', ?,"
+                    + " 'test', 0, ?)")) {
+      ps.setObject(1, paymentId);
+      ps.setObject(2, UUID.randomUUID());
+      ps.setObject(3, BUSINESS);
+      ps.setString(4, status);
+      ps.setLong(5, 10_000L);
+      ps.setLong(6, 10_000L);
+      ps.setLong(7, 0L);
+      ps.setLong(8, refundedMinor);
+      ps.setObject(9, saleId);
+      ps.setTimestamp(10, ts);
+      ps.setString(11, "hist-payment-" + paymentId);
+      ps.setTimestamp(12, ts);
+      ps.setTimestamp(13, ts);
+      ps.setString(14, companyId);
+      ps.executeUpdate();
+    }
+    return paymentId;
   }
 }

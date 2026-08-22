@@ -595,7 +595,9 @@ public class SaleWriter {
         view.getAmountMinor(),
         view.getCurrency().strip(),
         view.getTenderType(),
-        view.getChannelCode());
+        view.getChannelCode(),
+        view.getPaymentStatus(),
+        view.getRefundedMinor());
   }
 
   /** Maps a read projection to the response shape (currency CHAR(3) is right-padded — strip it). */

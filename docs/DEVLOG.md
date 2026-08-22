@@ -5,6 +5,31 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-22 — Reversed-sale visibility: history badge, receipt banner, net day total
+
+Owner bug report: a successful "Kembalikan penjualan" (ADR 0061 return) left NO trace — the
+today's-sales list showed the sale as if nothing happened, and a reprinted receipt gave no clue which
+transaction was reversed. Root cause: a reversal is a status flip on the `payment` aggregate
+(`CAPTURED → VOIDED | REFUNDED | PARTIALLY_REFUNDED` + cumulative `refunded_minor`), but
+`SaleRepository.findHistory` never joined `payment`, and the receipt rendered the status only as one
+12px label/value row buried under the tender lines. **Fix (read-model surfacing only — no `sale`
+schema change, no new events):** `findHistory` LEFT JOINs `payment` (V45 adds the missing
+`idx_payment_sale_id`; 1:0..1 today by writer discipline — per-payment sale idempotency keys — with
+the split-tender revisit documented in the javadoc and non-duplication pinned by the acceptance
+test) surfacing additive `paymentStatus` + `refundedMinor` (COALESCEd to 0); `PaymentResponse` /
+`PaymentReceiptView` now carry `refundedMinor` too. Console: red `Badge tone="loss"`
+("Dibatalkan"/"Dikembalikan"/"Dikembalikan sebagian") on rows in both history sheets, full
+reversals struck through; a solid reversal banner on the receipt (mirrors the ADR 0028 provisional
+banner) on screen AND in the ESC/POS output, the partial variant interpolating the refunded amount.
+The "Penjualan hari ini" header total is now NET via pure `netSaleAmountMinor` (`VOIDED → 0`, else
+`amount − refunded`; safe: `ck_payment_refunded` + `Payment.refund()` cap refunded ≤ amount, and a
+VOIDED payment is terminal with refunded 0), and a partially-refunded row shows its −delta so the
+visible rows still foot to the header. Documented divergence (deliberate): the register Z-report
+attributes refund DELTAS to the day they happened (V22) and does not subtract voids — the two agree
+on every shape the POS UI can produce (live-day full returns only; no UI issues voids). Beranda P&L
+untouched — finance's `SaleVoided`/`SaleRefunded` reversal listeners already net the GL. Carwash
+deliberately out of scope (no void/refund flow ported).
+
 ## 2026-08-22 — INCIDENT: Midtrans webhooks (and self-order submits) 401 — chunked-refusing body filters
 
 Midtrans emailed the merchant: every notification to `POST /api/v1/psp-webhooks/midtrans/{companyId}`

@@ -36,6 +36,9 @@ export interface EscposReceiptData {
   footerNote: string
   /** Rendered as a solid banner when set (offline provisional receipts — ADR 0028). */
   provisionalNote?: string
+  /** Rendered as a solid banner when set (voided/refunded/partially refunded sale), right after
+   *  the provisional banner. */
+  reversedNote?: string
 }
 
 export function columnsFor(paper: PaperWidth): number {
@@ -108,6 +111,12 @@ export function renderReceipt(
   if (data.provisionalNote) {
     e.align('center').bold(true)
     for (const l of wrap(data.provisionalNote.toUpperCase(), cols)) e.line(l)
+    e.bold(false).align('left').line(divider(cols))
+  }
+
+  if (data.reversedNote) {
+    e.align('center').bold(true)
+    for (const l of wrap(data.reversedNote.toUpperCase(), cols)) e.line(l)
     e.bold(false).align('left').line(divider(cols))
   }
 

@@ -6,7 +6,9 @@ import java.util.UUID;
 /**
  * Response shape for a payment tender. {@code amountMinor}/{@code currency} is the tender amount as
  * Money (rule 8); {@code tenderedMinor}/{@code changeMinor} are cash-only (null for digital);
- * {@code providerPending} flags a digital tender whose real settlement is not yet wired (ADR 0006).
+ * {@code providerPending} flags a digital tender whose real settlement is not yet wired (ADR 0006);
+ * {@code refundedMinor} is the cumulative amount refunded/voided back against this payment so far
+ * (Money, same currency as {@code amountMinor}; zero for a payment never reversed).
  *
  * <p>Exactly one of {@code orderId}/{@code billId} is set (V38) — {@code orderId} for an
  * order-originated payment, {@code billId} for a bill-originated gateway payment (dynamic QRIS/CARD
@@ -23,7 +25,8 @@ public record PaymentResponse(
     Long tenderedMinor,
     Long changeMinor,
     boolean providerPending,
-    UUID saleId) {
+    UUID saleId,
+    long refundedMinor) {
 
   /** Maps the write-path aggregate to the response shape. */
   public static PaymentResponse from(Payment payment) {
@@ -38,6 +41,7 @@ public record PaymentResponse(
         payment.getTenderedMinor(),
         payment.getChangeMinor(),
         payment.isProviderPending(),
-        payment.getSaleId());
+        payment.getSaleId(),
+        payment.getRefundedMinor());
   }
 }
