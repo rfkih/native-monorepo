@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient, keepPreviousData, type UseQueryO
 import { useEffect, useRef, useState } from 'react'
 import { apiFetch } from '@/lib/api'
 import type { CompanySession } from '@/lib/session'
+import { checkoutRequestBody, payParkedRequestBody } from './lib/tenderRequestBodies'
 import { stashCatalog } from './offline/catalogCache'
 import type { EffectiveRulesResponse } from './offline/provisionalPricing'
 
@@ -232,7 +233,9 @@ export interface CheckoutPaymentInput {
   /**
    * Required for ONLINE — the picked sales channel's immutable UPPERCASE code (ADR 0036 Phase B).
    * Sent ONLY with tenderType 'ONLINE'; the server rejects ONLINE combined with a gift-card or
-   * loyalty-points redemption, or a missing/inactive channel.
+   * loyalty-points redemption, or a missing/inactive channel. NOTE: the server reads the code from
+   * the request's TOP LEVEL, not from this payment block — the request-body builders
+   * (lib/tenderRequestBodies.ts) mirror this field up; never build one of those bodies by hand.
    */
   channelCode?: string
 }
@@ -497,36 +500,11 @@ export interface CheckoutInput {
 export function useCheckout(session: CompanySession) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({
-      idempotencyKey,
-      lines,
-      payment,
-      discountMinor,
-      orderType,
-      tableId,
-      couponCode,
-      loyaltyMemberId,
-      loyaltyRedeemPoints,
-      giftCardId,
-      giftCardRedeemMinor,
-    }: CheckoutInput) =>
+    mutationFn: (input: CheckoutInput) =>
       apiFetch<OrderResponse>('/api/v1/orders', {
         method: 'POST',
         tenant: tenantOf(session),
-        body: {
-          businessId: session.businessId,
-          idempotencyKey,
-          lines,
-          payment: payment ?? null,
-          discountMinor: discountMinor && discountMinor > 0 ? discountMinor : null,
-          orderType: orderType ?? null,
-          tableId: tableId ?? null,
-          couponCode: couponCode || null,
-          loyaltyMemberId: loyaltyMemberId || null,
-          loyaltyRedeemPoints: loyaltyRedeemPoints && loyaltyRedeemPoints > 0 ? loyaltyRedeemPoints : null,
-          giftCardId: giftCardId || null,
-          giftCardRedeemMinor: giftCardRedeemMinor && giftCardRedeemMinor > 0 ? giftCardRedeemMinor : null,
-        },
+        body: checkoutRequestBody(session.businessId, input),
       }),
     onSuccess: (res) => {
       // A CAPTURED payment recorded a Sale → consolidated dashboard revenue changes.
@@ -625,26 +603,11 @@ export interface PayParkedInput {
 export function usePayParked(session: CompanySession) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({
-      orderId,
-      payment,
-      couponCode,
-      loyaltyMemberId,
-      loyaltyRedeemPoints,
-      giftCardId,
-      giftCardRedeemMinor,
-    }: PayParkedInput) =>
-      apiFetch<OrderResponse>(`/api/v1/orders/${orderId}/pay`, {
+    mutationFn: (input: PayParkedInput) =>
+      apiFetch<OrderResponse>(`/api/v1/orders/${input.orderId}/pay`, {
         method: 'POST',
         tenant: tenantOf(session),
-        body: {
-          payment: payment ?? null,
-          couponCode: couponCode || null,
-          loyaltyMemberId: loyaltyMemberId || null,
-          loyaltyRedeemPoints: loyaltyRedeemPoints && loyaltyRedeemPoints > 0 ? loyaltyRedeemPoints : null,
-          giftCardId: giftCardId || null,
-          giftCardRedeemMinor: giftCardRedeemMinor && giftCardRedeemMinor > 0 ? giftCardRedeemMinor : null,
-        },
+        body: payParkedRequestBody(input),
       }),
     onSuccess: (res) => {
       if (res?.payment?.status === 'CAPTURED') {

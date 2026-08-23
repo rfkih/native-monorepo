@@ -5,6 +5,24 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-23 — FIELD BUG: ONLINE-tender checkout born broken — channelCode nested vs top-level
+
+Owner (merchant `c1e01e6e`) created their first sales channel (`SHOPEE`) and tried to ring an
+ONLINE-tender sale from the POS → 400 "channelCode is required when tenderType is ONLINE", twice.
+Edge-log + prod-DB trace: the channel row is valid+active, but **prod has never recorded a single
+ONLINE sale** (62 CASH, 1 QRIS) — the flow was born broken in `61ee6939` (2026-08-03, ADR 0036 B3).
+Root cause: a straight CONTRACT MISMATCH — the server reads `channelCode` from the request's TOP
+LEVEL (`CheckoutRequest`/`PayParkedRequest`/`PayBillRequest`; `PaymentRequest` has no such field),
+while the console always nested it inside the `payment` block, where Jackson silently ignores it.
+Both sides shipped in the same commit, each with its own tests (backend tests post top-level,
+frontend tests exercise the picker in isolation) — no test ever crossed the seam, the same blind
+spot as the Midtrans-webhook outage. **Fix (frontend-only, v0.1.30):** the three tender-carrying
+bodies are now built by pure, unit-tested builders (`pos/lib/tenderRequestBodies.ts`) that mirror
+`payment.channelCode` to the top level; contract tests pin the mirror for all three (ONLINE →
+code, non-ONLINE/no-payment → null). Sending the top-level field for non-ONLINE tenders is safe
+(`OrderWriter`/`BillWriter` null it for any non-ONLINE tender). Old cached shells are equally
+broken either way (the flow never worked), so no server-side back-compat shim is needed.
+
 ## 2026-08-22 — Reversed-sale visibility: history badge, receipt banner, net day total
 
 Owner bug report: a successful "Kembalikan penjualan" (ADR 0061 return) left NO trace — the

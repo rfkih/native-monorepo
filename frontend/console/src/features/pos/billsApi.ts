@@ -13,6 +13,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch, apiUpload } from '@/lib/api'
 import type { CompanySession } from '@/lib/session'
+import { payBillRequestBody } from './lib/tenderRequestBodies'
 import type { PriceBreakdownResponse, OrderLineInput, PaymentResponse } from './api'
 
 // ---------------------------------------------------------------------------
@@ -307,16 +308,11 @@ export function useRemoveLine(session: CompanySession) {
 export function usePayBill(session: CompanySession) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ billId, payment, discountMinor, lineIds, idempotencyKey }: PayBillInput) =>
-      apiFetch<BillResponse>(`/api/v1/bills/${billId}/pay`, {
+    mutationFn: (input: PayBillInput) =>
+      apiFetch<BillResponse>(`/api/v1/bills/${input.billId}/pay`, {
         method: 'POST',
         tenant: tenantOf(session),
-        body: {
-          payment: payment ?? null,
-          discountMinor: discountMinor != null && discountMinor > 0 ? discountMinor : null,
-          lineIds: lineIds && lineIds.length > 0 ? lineIds : null,
-          idempotencyKey: idempotencyKey ?? null,
-        },
+        body: payBillRequestBody(input),
       }),
     onSuccess: (_res, { billId }) => {
       void qc.invalidateQueries({ queryKey: billKey(session, billId) })
