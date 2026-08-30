@@ -12,6 +12,7 @@
  */
 import { useTranslation } from 'react-i18next'
 import { X, ChefHat } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import type { BillLineResponse, BillResponse } from './billsApi'
@@ -27,6 +28,7 @@ interface Props {
 
 export function KotView({ bill, lines, locale, tableLabel, onClose }: Props) {
   const { t } = useTranslation()
+  useBackDismiss(onClose)
 
   function handlePrint() {
     window.print()

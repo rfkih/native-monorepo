@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Check, Play, Plus, TriangleAlert } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -70,6 +71,7 @@ function DefineGroupDialog({
   actor: string
   onClose: () => void
 }) {
+  useBackDismiss(onClose)
   const { t } = useTranslation()
   const [name, setName] = useState('')
   const [currency, setCurrency] = useState('IDR')
@@ -138,6 +140,7 @@ function AddMemberDialog({
   actor: string
   onClose: () => void
 }) {
+  useBackDismiss(onClose)
   const { t } = useTranslation()
   const [memberId, setMemberId] = useState('')
   const mutation = useAddGroupMember({ companyId, actor, groupId })
@@ -198,6 +201,7 @@ function RemoveMemberDialog({
   actor: string
   onClose: () => void
 }) {
+  useBackDismiss(onClose)
   const { t } = useTranslation()
   const mutation = useRemoveGroupMember({ companyId, actor, groupId })
 
@@ -253,6 +257,7 @@ function RunCloseDialog({
   actor: string
   onClose: () => void
 }) {
+  useBackDismiss(onClose)
   const { t, i18n } = useTranslation()
   const locale = localeOf(i18n.language)
   const mutation = useRunGroupClose({ companyId, actor, groupId })

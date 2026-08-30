@@ -20,6 +20,7 @@ import { AUTH_MODE } from '@/lib/config'
 import { useSession } from '@/lib/session'
 import { useTheme } from '@/lib/theme'
 import { cn } from '@/lib/cn'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { useNavGroups, type NavGroup, type NavItem } from './navGroups'
 
 export function Shell({ children }: { children: ReactNode }) {
@@ -29,6 +30,8 @@ export function Shell({ children }: { children: ReactNode }) {
   const { pathname, search } = useLocation()
   const { theme, toggle } = useTheme()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  // Phone/browser Back closes the open nav drawer instead of navigating (parks only while open).
+  useBackDismiss(() => setDrawerOpen(false), drawerOpen)
 
   // Nav data + role/grant/tier filtering live in navGroups.ts (shared with the phone More sheet).
   const { groups, canPos } = useNavGroups()

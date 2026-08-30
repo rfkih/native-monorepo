@@ -17,6 +17,7 @@
  */
 import { useTranslation } from 'react-i18next'
 import { Printer, X } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -73,6 +74,7 @@ export function PayslipPrint({
   locale,
   onClose,
 }: PayslipPrintProps) {
+  useBackDismiss(onClose)
   const { t } = useTranslation()
 
   const periodLabel = new Intl.DateTimeFormat(locale, { year: 'numeric', month: 'long' }).format(

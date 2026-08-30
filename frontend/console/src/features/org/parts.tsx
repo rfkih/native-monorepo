@@ -8,6 +8,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Card } from '@/components/ui/Card'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { Button } from '@/components/ui/Button'
 import { Field, TextInput } from '@/components/ui/Field'
 import { Spinner } from '@/components/ui/Spinner'
@@ -65,8 +66,9 @@ export function VerticalBadge({ vertical }: { vertical: string | null }) {
   )
 }
 
-/** Simple modal overlay — closes on backdrop click or Escape. Bottom-sheet feel on phone
- *  (Native Console Android): bottom-anchored, full-width, rounded top corners. */
+/** Simple modal overlay — closes on backdrop click, Escape, or the phone/browser Back button.
+ *  Bottom-sheet feel on phone (Native Console Android): bottom-anchored, full-width, rounded top
+ *  corners. */
 export function DialogOverlay({
   children,
   onClose,
@@ -74,6 +76,7 @@ export function DialogOverlay({
   children: React.ReactNode
   onClose: () => void
 }) {
+  useBackDismiss(onClose)
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm sm:items-center"

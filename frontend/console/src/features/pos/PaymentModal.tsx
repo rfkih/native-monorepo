@@ -18,7 +18,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useQueryClient } from '@tanstack/react-query'
+import { useIsMutating, useQueryClient } from '@tanstack/react-query'
 import { Gift } from 'lucide-react'
 import { GiftCardField } from '@/components/GiftCardField'
 import type { CompanySession } from '@/lib/session'
@@ -132,6 +132,10 @@ export function PaymentModal({
 }: Props) {
   const { t } = useTranslation()
   const [tender, setTender] = useState<PosTender>('CASH')
+  // The checkout/capture mutations live in the attempt sub-components, so the frame can't read
+  // them — any in-flight mutation while this surface is open is payment work: hardware Back must
+  // not dismiss the surface mid-post (a re-attempt would mint a fresh idempotency key).
+  const mutationsInFlight = useIsMutating()
 
   // ADR 0036 Phase B3: the ONLINE tender's channel roster — fetched only while this payment
   // surface is mounted (component-scoped, like usePaymentAttempt's key), and never while offline
@@ -241,7 +245,7 @@ export function PaymentModal({
   }
 
   return (
-    <PaymentSurfaceFrame onClose={handleFrameClose}>
+    <PaymentSurfaceFrame onClose={handleFrameClose} backDismissEnabled={mutationsInFlight === 0}>
       {/* Offline: `breakdown` is already the caller's provisional breakdown, so this renders
           unchanged with its "estimated" badge doing double duty. */}
       <PaymentBreakdown breakdown={breakdown} grandTotalMinor={grandTotalMinor} currency={currency} locale={locale} />

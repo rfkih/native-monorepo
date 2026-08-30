@@ -28,6 +28,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Printer, RefreshCw, TriangleAlert, X } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { Button } from '@/components/ui/Button'
 import { usePrinter } from '@/lib/escpos/printerContext'
 import { toEscposReceiptData } from '@/lib/escpos/fromThermalProps'
@@ -337,6 +338,9 @@ export function ThermalReceipt({
   zIndexClass = 'z-40',
 }: ThermalProps) {
   const { t } = useTranslation()
+  // No dedicated close/X or Escape handling on this surface — onAction IS the dismiss/proceed
+  // callback every caller passes (labelled Close / New order), so Back mirrors it.
+  useBackDismiss(onAction)
   const headingId = useId()
   const printer = usePrinter()
   const [deviceBusy, setDeviceBusy] = useState(false)

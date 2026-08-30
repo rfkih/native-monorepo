@@ -13,6 +13,7 @@ import { Card } from '@/components/ui/Card'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { Spinner } from '@/components/ui/Spinner'
 import { ScreenHeader } from '@/components/mobile/ScreenHeader'
+import { guardedNavigateBack } from '@/components/mobile/backGuardProtocol'
 import { EmptyState } from '@/features/_shared/financeUi'
 import { ClaimStatusBadge } from '@/features/expenses/parts'
 import { formatDate } from '@/features/expenses/format'
@@ -68,7 +69,7 @@ export function ClaimDetailScreen() {
 
   return (
     <div className="flex min-h-[100dvh] flex-col bg-paper">
-      <ScreenHeader title={t('staff.claimDetail.title')} onBack={() => navigate(-1)} />
+      <ScreenHeader title={t('staff.claimDetail.title')} onBack={() => guardedNavigateBack(navigate)} />
 
       <div className="flex-1 overflow-y-auto">
         {detail.isLoading ? (

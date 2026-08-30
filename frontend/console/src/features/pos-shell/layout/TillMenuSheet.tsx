@@ -4,11 +4,13 @@
  * crowd the header as 10 always-visible icons. Anchored top-right under the band.
  *
  * Focus contract (the SheetOverlay rules): initial focus on the panel, Escape closes, backdrop
- * click closes. pos-shell rule: stateless — items and their handlers come from the caller.
+ * click closes, phone/browser Back closes (useBackDismiss). pos-shell rule: stateless — items and
+ * their handlers come from the caller.
  */
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { cn } from '@/lib/cn'
 
 export interface TillMenuItem {
@@ -31,6 +33,7 @@ export function TillMenuSheet({ items, onClose }: { items: TillMenuItem[]; onClo
   const { t } = useTranslation()
   const panelRef = useRef<HTMLDivElement>(null)
 
+  useBackDismiss(onClose)
   useEffect(() => {
     panelRef.current?.focus()
     function onKey(e: KeyboardEvent) {

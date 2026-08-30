@@ -22,6 +22,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import QRCode from 'qrcode'
 import { Printer, QrCode as QrCodeIcon, RefreshCw } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { Skeleton } from '@/components/ui/Skeleton'
@@ -176,6 +177,7 @@ function RotateConfirmDialog({
   onClose: () => void
 }) {
   const { t } = useTranslation()
+  useBackDismiss(onClose, !pending)
   return (
     <div
       className="fixed inset-0 z-[70] grid place-items-center bg-black/40 p-4 backdrop-blur-sm"

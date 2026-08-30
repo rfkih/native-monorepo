@@ -364,6 +364,15 @@ export const en = {
     save: 'Save',
     submit: 'Submit',
   },
+  backGuard: {
+    leaveTitle: 'Leave this page?',
+    leaveBody: 'Going back will leave this page.',
+    leaveConfirm: 'Leave',
+    exitTitle: 'Exit the app?',
+    exitBody: 'The app will be closed to the background.',
+    exitConfirm: 'Exit',
+    exitHint: 'Press back again to exit',
+  },
   nav: {
     dashboard: 'Dashboard',
     income: 'Income statement',

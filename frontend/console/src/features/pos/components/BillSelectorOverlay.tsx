@@ -8,6 +8,7 @@
  */
 import { useTranslation } from 'react-i18next'
 import { ClipboardList, Plus, ShoppingBag, Table2, X } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { cn } from '@/lib/cn'
 import { formatMoney } from '@/lib/money'
 import { type BillSummaryResponse } from '../billsApi'
@@ -42,6 +43,7 @@ export function BillSelectorOverlay({
   onClose: () => void
 }) {
   const { t } = useTranslation()
+  useBackDismiss(onClose)
   const walkInActive = activeBillId === null
   return (
     <div

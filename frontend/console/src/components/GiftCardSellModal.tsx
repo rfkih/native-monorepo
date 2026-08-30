@@ -18,6 +18,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Check, Copy, Gift, Printer, X } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
@@ -40,6 +41,9 @@ type TenderTab = 'CASH' | 'QRIS' | 'CARD'
 
 export function GiftCardSellModal({ vertical, session, currency, locale, onClose }: Props) {
   const { t } = useTranslation()
+  // Covers every render branch below (form / success / print) — one mounted instance, one onClose
+  // target throughout the flow.
+  useBackDismiss(onClose)
   const sell = useSellGiftCard(vertical, session)
 
   const [idempotencyKey] = useState<string>(() => crypto.randomUUID())

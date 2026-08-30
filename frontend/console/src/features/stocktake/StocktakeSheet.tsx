@@ -23,6 +23,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { ChevronDown, ClipboardCheck, TriangleAlert, X } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { ListSkeleton, Skeleton } from '@/components/ui/Skeleton'
@@ -78,6 +79,7 @@ export function StocktakeSheet({
   onClose: () => void
 }) {
   const { t } = useTranslation()
+  useBackDismiss(onClose)
   const navigate = useNavigate()
   const ingredientsQuery = useIngredients(session)
   const submit = useSubmitIngredientStocktake(session)
@@ -106,6 +108,11 @@ export function StocktakeSheet({
   // already been dismissed/confirmed).
   const [pendingVarianceFlags, setPendingVarianceFlags] = useState<StocktakeVarianceFlag[] | null>(
     null,
+  )
+  // Inner confirm layer, inline conditional JSX within this always-mounted-while-open component.
+  useBackDismiss(
+    () => setPendingVarianceFlags(null),
+    pendingVarianceFlags != null && pendingVarianceFlags.length > 0,
   )
 
   // Seeded (and re-parsed) in the ingredient's SHOWN unit — kg/liter items start counted at the

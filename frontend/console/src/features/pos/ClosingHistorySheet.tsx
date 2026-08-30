@@ -15,6 +15,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CalendarClock, ReceiptText, TriangleAlert, X } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { ListSkeleton } from '@/components/ui/Skeleton'
 import { formatMoney } from '@/lib/money'
 import { useAuth, hasAnyRole, effectiveRoles } from '@/lib/authContext'
@@ -37,6 +38,8 @@ export function ClosingHistorySheet({
   onOpenStocktake: () => void
 }) {
   const { t } = useTranslation()
+  // Covers both render branches below (denied / normal) — one mounted instance, one onClose target.
+  useBackDismiss(onClose)
   const auth = useAuth()
   // Owner/manager only. Merged roles so an ELEVATED device terminal lights it up (ADR 0049 P3b); the
   // gateway is the real boundary regardless.

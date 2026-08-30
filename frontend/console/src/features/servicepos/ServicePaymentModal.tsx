@@ -14,7 +14,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useQueryClient } from '@tanstack/react-query'
+import { useIsMutating, useQueryClient } from '@tanstack/react-query'
 import { Gift } from 'lucide-react'
 import { GiftCardField } from '@/components/GiftCardField'
 import type { CompanySession } from '@/lib/session'
@@ -122,6 +122,8 @@ export function ServicePaymentModal({
 }: Props) {
   const { t } = useTranslation()
   const [tender, setTender] = useState<ServiceTender>('CASH')
+  // Back must not dismiss the surface while a checkout/capture mutation is posting — see PaymentModal.
+  const mutationsInFlight = useIsMutating()
 
   // ADR 0045: the QRIS mode this outlet actually resolves to — see PaymentModal's twin doc
   // (never fetched while offline; `currency` is the sale's own currency, rule 8). ADR 0045
@@ -196,7 +198,7 @@ export function ServicePaymentModal({
   }
 
   return (
-    <PaymentSurfaceFrame onClose={handleFrameClose}>
+    <PaymentSurfaceFrame onClose={handleFrameClose} backDismissEnabled={mutationsInFlight === 0}>
       <PaymentBreakdown breakdown={breakdown} grandTotalMinor={grandTotalMinor} currency={currency} locale={locale} />
 
       {/* Gift-card redemption (Phase 4, ADR 0027) — unreachable offline (Phase 5, ADR 0028). */}

@@ -8,6 +8,7 @@
  */
 import { useTranslation } from 'react-i18next'
 import { ScreenHeader } from '@/components/mobile/ScreenHeader'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { OutletGate } from '@/components/OutletGate'
 import { useSession } from '@/lib/session'
 import { localeOf } from '@/i18n'
@@ -15,6 +16,7 @@ import { StocktakeSheet } from './StocktakeSheet'
 
 export function StandaloneStocktake({ onClose }: { onClose: () => void }) {
   const { t, i18n } = useTranslation()
+  useBackDismiss(onClose)
   const { company } = useSession()
   const locale = localeOf(i18n.language)
 

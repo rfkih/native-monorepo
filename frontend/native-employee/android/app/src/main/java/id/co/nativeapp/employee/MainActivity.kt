@@ -8,11 +8,13 @@ import com.getcapacitor.BridgeActivity
  * Native Karyawan — a thin Capacitor shell (ADR 0049 P5) that renders the live console origin's
  * role-gated `/me` employee self-service surface (payslips, time-off, claims, PII profile, own
  * sales/commission). Pure self-service: unlike the Business/Till app (ADR 0043), there is nothing
- * to print here, so this shell registers no native plugins.
+ * to print here — the only native plugin is NativeShell (minimize, for the web back-guard's exit
+ * confirm).
  */
 class MainActivity : BridgeActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        registerPlugin(NativeShellPlugin::class.java)
         super.onCreate(savedInstanceState)
         // The console layout is designed at CSS-pixel scale; Android's accessibility font size
         // otherwise multiplies into WebView text zoom and shatters the grid layouts.

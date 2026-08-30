@@ -21,7 +21,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useQueryClient } from '@tanstack/react-query'
+import { useIsMutating, useQueryClient } from '@tanstack/react-query'
 import type { CompanySession } from '@/lib/session'
 import { PaymentSurfaceFrame } from '@/features/pos-shell/payment/PaymentSurfaceFrame'
 import { PaymentBreakdown } from '@/features/pos-shell/payment/PaymentBreakdown'
@@ -78,6 +78,8 @@ export function BillPaymentModal({
 }: Props) {
   const { t } = useTranslation()
   const [tender, setTender] = useState<PosTender>('CASH')
+  // Back must not dismiss the surface while a pay/capture mutation is posting — see PaymentModal.
+  const mutationsInFlight = useIsMutating()
   const payBill = usePayBill(session)
   // ADR 0036 Phase B3: fetched only while this payment surface is mounted, same as PaymentModal.
   const channelsQuery = useSalesChannels(session)
@@ -178,7 +180,12 @@ export function BillPaymentModal({
   }
 
   return (
-    <PaymentSurfaceFrame zIndexClass="z-[60]" subtitle={bill.guestLabel} onClose={handleFrameClose}>
+    <PaymentSurfaceFrame
+      zIndexClass="z-[60]"
+      subtitle={bill.guestLabel}
+      onClose={handleFrameClose}
+      backDismissEnabled={mutationsInFlight === 0}
+    >
       <PaymentBreakdown
         breakdown={breakdown}
         grandTotalMinor={grandTotalMinor}

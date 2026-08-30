@@ -12,6 +12,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { FileText, Loader2, Paperclip, Trash2, X } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { apiFetchBlob } from '@/lib/api'
 import type { CompanySession } from '@/lib/session'
 import { prepareAttachment } from '../lib/attachmentImage'
@@ -35,6 +36,8 @@ export function BillAttachments({
   const remove = useDeleteBillAttachment(session, billId)
   const [error, setError] = useState<string | null>(null)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+  // The lightbox is inline conditional JSX inside this always-mounted component.
+  useBackDismiss(() => setLightboxUrl(null), lightboxUrl != null)
 
   async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]

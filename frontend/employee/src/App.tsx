@@ -7,6 +7,7 @@ import { Field, TextInput } from '@/components/ui/Field'
 import { Wordmark } from '@/components/Wordmark'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { useAuth } from '@/lib/authContext'
+import { BackGuard } from '@/components/mobile/BackGuard'
 import { StaffShell } from './staff/StaffShell'
 import { Beranda } from './staff/Beranda'
 import { useIsSupervisor } from './staff/ui'
@@ -107,6 +108,8 @@ export function App() {
 
   return (
     <Suspense fallback={<CenteredSpinner />}>
+      {/* Hardware-Back confirm guard (Android shell only — self-disables in browsers). */}
+      <BackGuard homePath="/me" />
       <Routes>
         {/* Tab screens — wrapped in the bottom-nav shell. */}
         <Route element={<StaffShell />}>

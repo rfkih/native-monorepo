@@ -13,6 +13,7 @@ import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, ClipboardList, Moon, Package, Plus, Sun, TriangleAlert, X } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Field, TextInput } from '@/components/ui/Field'
@@ -389,6 +390,7 @@ function IngredientFormDialog({
   const [nameError, setNameError] = useState<string | null>(null)
 
   const busy = create.isPending || update.isPending || deactivate.isPending
+  useBackDismiss(onClose, !busy)
   const mutationError = create.error ?? update.error ?? deactivate.error
 
   // 'total' mode is only offered on create (the qty below is the divisor). Live-derive the per-unit
@@ -651,6 +653,7 @@ function ReceiveDialog({
   locale: string
   onClose: () => void
 }) {
+  useBackDismiss(onClose)
   const { t } = useTranslation()
   const add = useAddIngredientStock(session)
   // ADR 0067 Phase D1 — the Idempotency-Key for THIS receive attempt. Minted once per dialog (a ref,
@@ -766,6 +769,7 @@ function SetQtyDialog({
   locale: string
   onClose: () => void
 }) {
+  useBackDismiss(onClose)
   const { t } = useTranslation()
   const set = useSetIngredientStock(session)
   // Shown in the display unit (kg), parsed back to a base integer for the API.

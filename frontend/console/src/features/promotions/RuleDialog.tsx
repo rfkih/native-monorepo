@@ -13,6 +13,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X, TriangleAlert } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
@@ -66,6 +67,7 @@ function toMajorInput(minor: number | null, currency: string): string {
 const DAY_INDEXES = [0, 1, 2, 3, 4, 5, 6] as const
 
 export function RuleDialog({ session, vertical, rule, itemOptions, categoryOptions, currency, locale, onClose }: Props) {
+  useBackDismiss(onClose)
   const { t } = useTranslation()
   const isEdit = rule != null
   const createRule = useCreatePromoRule(vertical, session)

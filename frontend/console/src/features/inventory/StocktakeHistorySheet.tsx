@@ -10,6 +10,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft, ClipboardList, TriangleAlert, X } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { ListSkeleton } from '@/components/ui/Skeleton'
 import { cn } from '@/lib/cn'
 import { formatMoney } from '@/lib/money'
@@ -33,6 +34,7 @@ export function StocktakeHistorySheet({
   onClose: () => void
 }) {
   const { t } = useTranslation()
+  useBackDismiss(onClose)
   const history = useStocktakeHistory(session, true)
   const [selected, setSelected] = useState<IngredientStocktakeResponse | null>(null)
 

@@ -16,6 +16,7 @@
  * footer states it is not a tax invoice.
  */
 import { useTranslation } from 'react-i18next'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { Spinner } from '@/components/ui/Spinner'
 import { formatMoney } from '@/lib/money'
 import type { CompanySession } from '@/lib/session'
@@ -59,6 +60,9 @@ export function DailySummary({
   secondaryAction?: ThermalSecondaryAction
 }) {
   const { t } = useTranslation()
+  // Covers every render branch below (loading / error-empty / the ThermalReceipt success state) —
+  // one mounted instance, one onClose target (Phone/browser Back closes this overlay).
+  useBackDismiss(onClose)
 
   // Resolve the session to summarize: explicit → current OPEN → most recent CLOSED.
   const currentQuery = useCurrentRegisterSession(session)

@@ -8,6 +8,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Check, Copy, Plus, Search, Store, TriangleAlert, UserX } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -253,6 +254,7 @@ function InviteDialog({
   actor: string
   onClose: () => void
 }) {
+  useBackDismiss(onClose)
   const { t } = useTranslation()
   const [email, setEmail] = useState('')
   // Multi-select (preset role-based access model Phase 1/2 — a login may hold several roles at
@@ -406,6 +408,7 @@ function ChangeRoleDialog({
   actor: string
   onClose: () => void
 }) {
+  useBackDismiss(onClose)
   const { t } = useTranslation()
   // Multi-select, seeded from the member's CURRENT role set (preset role-based access model
   // Phase 1/2 — a login may hold several roles at once). The PATCH replaces the whole set, so an
@@ -490,6 +493,7 @@ function DeactivateDialog({
   actor: string
   onClose: () => void
 }) {
+  useBackDismiss(onClose)
   const { t } = useTranslation()
   const mutation = useDeactivateMember({ companyId, actor })
 
@@ -544,6 +548,7 @@ function EditOutletsDialog({
   actor: string
   onClose: () => void
 }) {
+  useBackDismiss(onClose)
   const { t } = useTranslation()
 
   // All company outlets (the option list)

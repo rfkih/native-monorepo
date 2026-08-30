@@ -15,6 +15,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CalendarClock, CheckCircle2, Coins, Package, TriangleAlert, X } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { ApiError } from '@/lib/api'
@@ -58,6 +59,7 @@ export function CloseCorrectionSheet({
   onOpenStocktake: () => void
 }) {
   const { t } = useTranslation()
+  useBackDismiss(onClose)
   const summaryQuery = useRegisterSummary(session, sessionId, true)
   const correct = useCorrectClose(session)
   const summary = summaryQuery.data

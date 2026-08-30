@@ -12,6 +12,7 @@
  */
 import { useTranslation } from 'react-i18next'
 import { AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
@@ -38,6 +39,7 @@ export function ReturnSaleDialog({
 }) {
   const { t } = useTranslation()
   const refund = useRefundPayment(session)
+  useBackDismiss(onClose, !refund.isPending)
   const amountLabel = formatMoney(payment.amountMinor, payment.currency, locale)
   const reference = order.orderId.slice(-8).toUpperCase()
 

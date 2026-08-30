@@ -1,11 +1,13 @@
 import { useEffect, type ReactNode } from 'react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 
 /**
  * Right-hand side panel (Native Console Web design). The complement of DialogOverlay: a dialog is
  * for one decision that can be answered without looking at anything behind it; a Drawer is for one
- * object with several actions where the list behind should stay visible. Closes on backdrop click
- * or Escape. Compose the body from Drawer.Header-like slots by the caller — this only owns the
- * overlay, the panel chrome, and the entrance.
+ * object with several actions where the list behind should stay visible. Closes on backdrop click,
+ * Escape, or the phone/browser Back button (useBackDismiss). Compose the body from
+ * Drawer.Header-like slots by the caller — this only owns the overlay, the panel chrome, and the
+ * entrance.
  */
 export function Drawer({
   children,
@@ -16,6 +18,7 @@ export function Drawer({
   onClose: () => void
   ariaLabel?: string
 }) {
+  useBackDismiss(onClose)
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose()

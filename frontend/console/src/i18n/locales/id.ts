@@ -350,6 +350,15 @@ export const id = {
     save: 'Simpan',
     submit: 'Kirim',
   },
+  backGuard: {
+    leaveTitle: 'Keluar dari halaman ini?',
+    leaveBody: 'Tombol kembali akan meninggalkan halaman ini.',
+    leaveConfirm: 'Keluar',
+    exitTitle: 'Keluar aplikasi?',
+    exitBody: 'Aplikasi akan ditutup ke latar belakang.',
+    exitConfirm: 'Keluar',
+    exitHint: 'Tekan kembali sekali lagi untuk keluar',
+  },
   nav: {
     dashboard: 'Dasbor',
     income: 'Laporan laba rugi',

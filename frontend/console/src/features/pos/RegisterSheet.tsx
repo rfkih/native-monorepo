@@ -12,6 +12,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Banknote, X } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { FormSkeleton } from '@/components/ui/Skeleton'
@@ -87,6 +88,7 @@ export function RegisterSheet({
   onPrintSummary?: (sessionId: string) => void
 }) {
   const { t } = useTranslation()
+  useBackDismiss(onClose)
   const currentQuery = useCurrentRegisterSession(session)
   const openSession = useOpenRegisterSession(session)
   const closeSession = useCloseRegisterSession(session)
@@ -105,6 +107,8 @@ export function RegisterSheet({
   // Owner request — the cashier tapped "Close" while the counted drawer didn't match expected cash:
   // hold the close behind a confirm step so a fat-fingered count can be caught before it commits.
   const [confirmMismatch, setConfirmMismatch] = useState(false)
+  // Inner confirm layer, inline conditional JSX within this always-mounted-while-open component.
+  useBackDismiss(() => setConfirmMismatch(false), confirmMismatch)
 
   const current = currentQuery.data ?? null
   const busy = openSession.isPending || closeSession.isPending

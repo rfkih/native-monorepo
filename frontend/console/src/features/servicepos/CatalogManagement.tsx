@@ -19,6 +19,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, Pencil, Plus, Wrench } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -387,6 +388,7 @@ function CreateCatalogItemDialog({
   titleKey: string
   onClose: () => void
 }) {
+  useBackDismiss(onClose)
   const { t } = useTranslation()
   const createPackage = useCreatePackage(config, session)
   const createAddon = useCreateAddon(config, session)
@@ -501,6 +503,7 @@ function EditCatalogItemDialog({
   titleKey: string
   onClose: () => void
 }) {
+  useBackDismiss(onClose)
   const { t } = useTranslation()
   const updatePackage = useUpdatePackage(config, session)
   const updateAddon = useUpdateAddon(config, session)
@@ -731,6 +734,7 @@ function WasherDialog({
   canDashboard: boolean
   onClose: () => void
 }) {
+  useBackDismiss(onClose)
   const { t } = useTranslation()
   const createMutation = useCreateStaffProfile(config, session)
   const updateMutation = useUpdateStaffProfile(config, session)

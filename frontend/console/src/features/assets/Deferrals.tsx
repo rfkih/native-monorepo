@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Plus, TriangleAlert, X } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -49,6 +50,8 @@ export function Deferrals() {
   const [months, setMonths] = useState('12')
   const [startPeriod, setStartPeriod] = useState(currentMonth())
   const [error, setError] = useState<string | null>(null)
+
+  useBackDismiss(() => setDialogOpen(false), dialogOpen)
 
   if (!company) {
     return <EmptyState title={t('assets.noCompany')} hint={t('assets.noCompanyHint')} />

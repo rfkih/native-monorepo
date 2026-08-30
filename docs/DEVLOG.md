@@ -5,6 +5,33 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-30 — Hardware-Back guard: confirm-before-leave + every overlay back-dismissable
+
+Owner complaint: in the Android apps a stray Back press silently left a menu (or backgrounded the
+app) — e.g. falling out of the POS mid-shift. Decision (owner-approved): EVERY page-changing Back
+shows a confirm dialog ("Keluar dari halaman ini?" / at home "Keluar aplikasi?"), only open
+overlays auto-close, and the guard runs ONLY in the native shells (browsers unchanged). Mechanism:
+the shells translate Back into `webView.goBack()` → `popstate`, so the guard generalizes
+`useBackDismiss`'s History-API trick to routes — `useBackGuard` parks a sentinel entry
+(`{...routerState, backGuard:true}`, same URL so react-router never navigates) above every route
+entry; a Back press pops the sentinel, the guard eagerly re-parks and asks. Confirm = `go(-2)`;
+at root (pathname==home or `idx<=0` — never step back into Keycloak) the exit dialog backgrounds
+the app via a new 2-method Capacitor plugin (`NativeShell.minimize()` → `moveTaskToBack`, both
+shells; web falls back to a "tekan back sekali lagi" hint + 2.5s guard suspension on old APKs).
+Deliberate in-app back arrows use `guardedNavigateBack` (`navigate(-2)` over the sentinel). All
+protocol pieces (markers, LIFO overlay registry, per-event self-pop consumption) live in
+`components/mobile/backGuardProtocol.ts` (unit-tested); ~50 overlays gained `useBackDismiss`
+(now with an `enabled` param — payment surfaces pass `useIsMutating()===0` so Back can't dismiss
+a mid-post charge and invite a double-sale re-attempt). Two latent `useBackDismiss` bugs fixed en
+route: (1) stacked sheets all closed on one Back (every instance heard every popstate — now only
+the registry's topmost reacts); (2) StrictMode's unmount→remount raced the async unwind
+`history.back()` and stranded the overlay entry in forward history (verified in Chrome) — the
+unwind is now deferred one tick and ADOPTABLE by a same-tick remount. Verified by
+`scripts/backguard-smoke.mjs` (playwright walk of the full state machine against the dev server
+with the guard forced via `?backGuardDev=1` — 20/20). Web ships first (thin clients pick it up
+immediately); the APK rebuild only upgrades the exit button from hint-fallback to instant
+minimize.
+
 ## 2026-08-23 — FIELD BUG: ONLINE-tender checkout born broken — channelCode nested vs top-level
 
 Owner (merchant `c1e01e6e`) created their first sales channel (`SHOPEE`) and tried to ring an

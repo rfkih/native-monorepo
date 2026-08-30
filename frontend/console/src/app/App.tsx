@@ -11,6 +11,7 @@ import { AppSkeleton, PosSkeleton } from '@/components/ui/Skeleton'
 import { BrandMark, Wordmark } from '@/components/Wordmark'
 import { OfflineBanner } from '@/features/pos/offline/OfflineBanner'
 import { AppUpdatePrompt } from '@/components/AppUpdatePrompt'
+import { BackGuard } from '@/components/mobile/BackGuard'
 import { effectiveRoles, hasAnyRole, useAuth } from '@/lib/authContext'
 import { isNativeShell } from '@/lib/escpos/transport'
 import { usePageAccess } from '@/lib/pageAccess'
@@ -575,6 +576,8 @@ export function App() {
           (Phase 5 offline mode, ADR 0028). Renders nothing when there is nothing to say. */}
       <OfflineBanner />
       <AppUpdatePrompt />
+      {/* Hardware-Back confirm guard (Android shells only — self-disables in browsers). */}
+      <BackGuard homePath={home} />
       {posAllowed && <PrefetchPosChunk />}
       <PrefetchRouteChunks
         canOps={opsOk}

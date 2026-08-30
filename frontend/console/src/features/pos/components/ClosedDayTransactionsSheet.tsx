@@ -12,6 +12,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ReceiptText, TriangleAlert, X } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
 import { ListSkeleton } from '@/components/ui/Skeleton'
@@ -56,6 +57,7 @@ export function ClosedDayTransactionsSheet({
   onClose: () => void
 }) {
   const { t } = useTranslation()
+  useBackDismiss(onClose)
   const history = useSalesHistoryWindow(session, from, to, true)
   const [selected, setSelected] = useState<SaleHistoryRow | null>(null)
   const order = useOrderReceipt(session, selected?.orderId ?? null)

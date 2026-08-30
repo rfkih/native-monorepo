@@ -24,6 +24,7 @@ import {
   Settings,
   Users,
 } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
 import { Skeleton } from '@/components/ui/Skeleton'
@@ -45,6 +46,7 @@ interface Props {
 
 export function TableFloor({ session, locale, tables, onOpenBill, onClose }: Props) {
   const { t } = useTranslation()
+  useBackDismiss(onClose)
   const billsQuery = useBills(session)
   const openBill = useOpenBill(session)
   const bills = billsQuery.data ?? []

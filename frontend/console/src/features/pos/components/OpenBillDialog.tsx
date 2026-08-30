@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next'
 import {
   X,
 } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { isOutletNotAssigned } from '@/lib/api'
@@ -35,6 +36,7 @@ export function OpenBillDialog({
   onClose: () => void
 }) {
   const { t } = useTranslation()
+  useBackDismiss(onClose)
   const openBill = useOpenBill(session)
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null)
   const [guestLabel, setGuestLabel] = useState('')

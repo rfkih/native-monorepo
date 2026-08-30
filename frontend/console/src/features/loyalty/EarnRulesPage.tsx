@@ -19,6 +19,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CreditCard, Percent, Plus, Search, TriangleAlert, User } from 'lucide-react'
+import { useBackDismiss } from '@/components/mobile/useBackDismiss'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -176,6 +177,7 @@ function EarnRuleDialog({
   currency: string
   onClose: () => void
 }) {
+  useBackDismiss(onClose)
   const { t } = useTranslation()
   const createRule = useCreateEarnRule(session)
 
