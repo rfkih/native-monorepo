@@ -21,9 +21,10 @@ android {
         // 4 = release signing introduced; 5 = launcher rename "Native Till" → "Native";
         // 7 = @capacitor/splash-screen plugin (cold-start splash);
         // 8 = @capgo/capacitor-updater OTA plugin (ADR 0051 P3, dormant until NATIVE_TILL_UPDATE_URL);
-        // 9 = allowNavigation auth-host whitelist (login must stay in the WebView — config is native).
-        versionCode 9
-        versionName "1.7"
+        // 9 = allowNavigation auth-host whitelist (login must stay in the WebView — config is native);
+        // 10 = NativeShell plugin v2 (minimize for the back-guard exit + saveFile Downloads + printPage).
+        versionCode 10
+        versionName "1.8"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
