@@ -11,6 +11,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { History, ReceiptText, TriangleAlert, X } from 'lucide-react'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
 import { ListSkeleton } from '@/components/ui/Skeleton'
@@ -50,6 +51,7 @@ export function SalesHistorySheet({
 }) {
   const { t } = useTranslation()
   useBackDismiss(onClose)
+  useScrollLock()
   const auth = useAuth()
   // Returns are owner/manager-only (ADR 0061). Merged roles so an ELEVATED device terminal lights
   // the affordance up (ADR 0049 P3b); the gateway is the real boundary regardless.

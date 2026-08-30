@@ -159,7 +159,7 @@ export function ClaimDetailScreen() {
       </div>
 
       {d ? (
-        <footer className="border-t border-line bg-surface px-4 pb-[calc(14px+env(safe-area-inset-bottom))] pt-3.5">
+        <footer className="border-t border-line bg-surface px-4 pb-[calc(14px+var(--safe-area-inset-bottom,0px))] pt-3.5">
           {submitClaim.isError || cancelClaim.isError ? (
             <p className="mb-2.5 text-center text-[12.5px] text-loss">{t('me.error')}</p>
           ) : null}

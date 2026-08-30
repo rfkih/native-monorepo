@@ -8,6 +8,7 @@ import { ListSkeleton, Skeleton, StatCardsSkeleton } from '@/components/ui/Skele
 import { useSession } from '@/lib/session'
 import { localeOf } from '@/i18n'
 import { formatMoney, formatAmount, formatPercent } from '@/lib/money'
+import { printCurrentPage } from '@/lib/nativeShell'
 import { currentPeriod, shiftPeriod } from '@/lib/period'
 import { useBalanceSheet, type BalanceLine } from './api'
 import { downloadCsv } from '@/lib/csv'
@@ -108,7 +109,7 @@ export function BalanceSheet() {
             prevLabel={t('statements.prevPeriod')}
             nextLabel={t('statements.nextPeriod')}
           />
-          <Button variant="outline" onClick={() => window.print()}>
+          <Button variant="outline" onClick={() => printCurrentPage('balance-sheet')}>
             <Printer className="size-[15px]" aria-hidden />
             {t('statements.print')}
           </Button>

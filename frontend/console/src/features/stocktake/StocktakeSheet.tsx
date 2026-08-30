@@ -24,6 +24,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { ChevronDown, ClipboardCheck, TriangleAlert, X } from 'lucide-react'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { ListSkeleton, Skeleton } from '@/components/ui/Skeleton'
@@ -80,6 +81,7 @@ export function StocktakeSheet({
 }) {
   const { t } = useTranslation()
   useBackDismiss(onClose)
+  useScrollLock()
   const navigate = useNavigate()
   const ingredientsQuery = useIngredients(session)
   const submit = useSubmitIngredientStocktake(session)
@@ -114,6 +116,7 @@ export function StocktakeSheet({
     () => setPendingVarianceFlags(null),
     pendingVarianceFlags != null && pendingVarianceFlags.length > 0,
   )
+  useScrollLock(pendingVarianceFlags != null && pendingVarianceFlags.length > 0)
 
   // Seeded (and re-parsed) in the ingredient's SHOWN unit — kg/liter items start counted at the
   // system quantity expressed as a decimal (e.g. "1.5"), not the raw base-unit integer.

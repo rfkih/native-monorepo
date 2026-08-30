@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { FileText, Loader2, Paperclip, Trash2, X } from 'lucide-react'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { apiFetchBlob } from '@/lib/api'
 import type { CompanySession } from '@/lib/session'
 import { prepareAttachment } from '../lib/attachmentImage'
@@ -35,9 +36,20 @@ export function BillAttachments({
   const upload = useUploadBillAttachment(session, billId)
   const remove = useDeleteBillAttachment(session, billId)
   const [error, setError] = useState<string | null>(null)
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+  // 'image' reuses the AttachmentThumb-owned thumbUrl (revoked when that thumb unmounts); 'pdf' is a
+  // one-shot object URL created for this view only, so it's this component's job to revoke it below.
+  const [lightbox, setLightbox] = useState<{ url: string; kind: 'image' | 'pdf' } | null>(null)
   // The lightbox is inline conditional JSX inside this always-mounted component.
-  useBackDismiss(() => setLightboxUrl(null), lightboxUrl != null)
+  useBackDismiss(() => setLightbox(null), lightbox != null)
+  useScrollLock(lightbox != null)
+
+  // Revokes the PDF's one-shot object URL when the lightbox closes/switches/unmounts. Never revokes
+  // the 'image' kind — that URL is the live thumbnail src, owned and revoked by AttachmentThumb.
+  useEffect(() => {
+    if (!lightbox || lightbox.kind !== 'pdf') return undefined
+    const url = lightbox.url
+    return () => URL.revokeObjectURL(url)
+  }, [lightbox])
 
   async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -100,7 +112,16 @@ export function BillAttachments({
               session={session}
               billId={billId}
               meta={a}
-              onViewImage={setLightboxUrl}
+              onViewImage={(url) => setLightbox({ url, kind: 'image' })}
+              onViewPdf={(url) =>
+                setLightbox((prev) => {
+                  // A rapid second tap can replace a pdf URL that never reached the revoke effect
+                  // (its mount never committed) — revoke the superseded one here; double-revoking
+                  // an already-freed URL is a no-op.
+                  if (prev?.kind === 'pdf') URL.revokeObjectURL(prev.url)
+                  return { url, kind: 'pdf' }
+                })
+              }
               onDelete={() => remove.mutate(a.id)}
               deleting={remove.isPending}
             />
@@ -108,23 +129,34 @@ export function BillAttachments({
         </div>
       ) : null}
 
-      {lightboxUrl ? (
+      {lightbox ? (
         <div
           className="fixed inset-0 z-[80] grid place-items-center bg-black/85 p-4 print:hidden"
           role="dialog"
           aria-modal="true"
           aria-label={t('bills.attach.title')}
-          onClick={() => setLightboxUrl(null)}
+          onClick={() => setLightbox(null)}
         >
-          <img
-            src={lightboxUrl}
-            alt={t('bills.attach.title')}
-            className="max-h-full max-w-full rounded-lg"
-            onClick={(e) => e.stopPropagation()}
-          />
+          {lightbox.kind === 'image' ? (
+            <img
+              src={lightbox.url}
+              alt={t('bills.attach.title')}
+              className="max-h-full max-w-full rounded-lg"
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            // Same-WebView rendering (Task B): a PDF blob URL can't leave the page in the single-
+            // WebView shell (window.open on it is a dead no-op there), so it's shown right here.
+            <iframe
+              src={lightbox.url}
+              title={t('bills.attach.title')}
+              className="h-[85vh] w-[90vw] max-w-2xl rounded-lg bg-white"
+              onClick={(e) => e.stopPropagation()}
+            />
+          )}
           <button
             type="button"
-            onClick={() => setLightboxUrl(null)}
+            onClick={() => setLightbox(null)}
             aria-label={t('common.close')}
             className="absolute right-4 top-4 grid size-10 place-items-center rounded-full bg-white/15 text-white hover:bg-white/25"
           >
@@ -138,13 +170,15 @@ export function BillAttachments({
 
 /**
  * One attachment tile. Images fetch their blob eagerly for the thumbnail; a PDF shows an icon and
- * fetches its blob only when tapped (opened in a new tab). Object URLs are revoked on unmount.
+ * fetches its blob only when tapped (shown in the shared lightbox, `onViewPdf`). Object URLs are
+ * revoked on unmount (images, here) or on lightbox close/unmount (PDFs, in the parent — see there).
  */
 function AttachmentThumb({
   session,
   billId,
   meta,
   onViewImage,
+  onViewPdf,
   onDelete,
   deleting,
 }: {
@@ -152,6 +186,7 @@ function AttachmentThumb({
   billId: string
   meta: BillAttachmentMeta
   onViewImage: (url: string) => void
+  onViewPdf: (url: string) => void
   onDelete: () => void
   deleting: boolean
 }) {
@@ -186,10 +221,9 @@ function AttachmentThumb({
     const blob = await apiFetchBlob(path, {
       tenant: { companyId: session.companyId, actor: session.actor },
     })
-    // The object URL is intentionally not revoked: revoking it immediately would race the new tab's
-    // fetch, and it is freed anyway when this document unloads. One short-lived URL per manual open
-    // (a rare action) is a negligible, bounded leak — not worth a load-listener on a foreign tab.
-    if (blob) window.open(URL.createObjectURL(blob), '_blank', 'noopener')
+    // Handed to the parent's lightbox rather than window.open — a blob: URL can't leave the page in
+    // the single-WebView shell. The parent owns revoking this URL (on lightbox close/unmount).
+    if (blob) onViewPdf(URL.createObjectURL(blob))
   }
 
   return (

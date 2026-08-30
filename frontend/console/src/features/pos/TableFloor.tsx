@@ -25,6 +25,7 @@ import {
   Users,
 } from 'lucide-react'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
 import { Skeleton } from '@/components/ui/Skeleton'
@@ -47,6 +48,7 @@ interface Props {
 export function TableFloor({ session, locale, tables, onOpenBill, onClose }: Props) {
   const { t } = useTranslation()
   useBackDismiss(onClose)
+  useScrollLock()
   const billsQuery = useBills(session)
   const openBill = useOpenBill(session)
   const bills = billsQuery.data ?? []
@@ -350,9 +352,8 @@ function TableCard({
         'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500',
         occupied
           ? [
-              'border-emerald-500 bg-emerald-50 shadow-sm',
-              'hover:border-emerald-600 hover:shadow-md',
-              'dark:bg-emerald-950/30 dark:border-emerald-400',
+              'border-emerald bg-emerald-tint shadow-sm',
+              'hover:border-emerald-2 hover:shadow-md',
             ]
           : [
               'border-line bg-surface',
@@ -369,7 +370,7 @@ function TableCard({
 
       {/* Table icon */}
       <Table2
-        className={cn('mb-1.5 size-5', occupied ? 'text-emerald-600 dark:text-emerald-400' : 'text-ink-3')}
+        className={cn('mb-1.5 size-5', occupied ? 'text-emerald-2' : 'text-ink-3')}
         aria-hidden="true"
       />
 
@@ -377,24 +378,24 @@ function TableCard({
       <span
         className={cn(
           'font-display text-[17px] font-bold leading-tight',
-          occupied ? 'text-emerald-700 dark:text-emerald-300' : 'text-ink',
+          occupied ? 'text-emerald-2' : 'text-ink',
         )}
       >
         {table.label}
       </span>
 
       {/* Capacity */}
-      <span className={cn('mt-0.5 text-[10.5px]', occupied ? 'text-emerald-600/80' : 'text-ink-3')}>
+      <span className={cn('mt-0.5 text-[10.5px]', occupied ? 'text-emerald-2/80' : 'text-ink-3')}>
         {t('pos.table.capacity', { n: table.capacity })}
       </span>
 
       {/* Occupied details */}
       {occupied ? (
         <div className="mt-2 w-full space-y-0.5">
-          <div className="tnum rounded-lg bg-emerald-100 px-2 py-1 font-mono text-[11px] font-semibold text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200">
+          <div className="tnum rounded-lg bg-emerald-tint px-2 py-1 font-mono text-[11px] font-semibold text-emerald-2">
             {formatMoney(runningTotalMinor, currency, locale)}
           </div>
-          <div className="text-[10px] text-emerald-600 dark:text-emerald-400">
+          <div className="text-[10px] text-emerald-2">
             {t('bills.itemCount', { n: itemCount })}
           </div>
         </div>

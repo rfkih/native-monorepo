@@ -22,6 +22,7 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { Boxes, Check, LogOut, TriangleAlert } from 'lucide-react'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -57,7 +58,7 @@ export function InventoryMethodSettings() {
   if (!company) return null
 
   return (
-    <div className="min-h-screen bg-paper">
+    <div className="min-h-[100dvh] bg-paper">
       {/* This route renders OUTSIDE the dashboard Shell (owner-only, mirrors /settings/features'
           and /settings/payments' registration in App.tsx), so it carries its own minimal topbar —
           same idiom as /me, FeaturesSettings.tsx, and PaymentSettings.tsx. */}
@@ -293,6 +294,7 @@ function ActivationDialog({
   onClose: () => void
 }) {
   useBackDismiss(onClose)
+  useScrollLock()
   const { t, i18n } = useTranslation()
   const locale = localeOf(i18n.language)
   const currency = session.baseCurrency

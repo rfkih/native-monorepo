@@ -15,6 +15,7 @@ import { TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { ScreenHeader } from '@/components/mobile/ScreenHeader'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { OutletGate } from '@/components/OutletGate'
 import { useSession } from '@/lib/session'
 import { localeOf } from '@/i18n'
@@ -26,6 +27,7 @@ import { DailySummary } from './DailySummary'
 export function StandaloneRegister({ onClose }: { onClose: () => void }) {
   const { t, i18n } = useTranslation()
   useBackDismiss(onClose)
+  useScrollLock()
   const { company } = useSession()
   const locale = localeOf(i18n.language)
   const { offline, queuedCount, rejectedCount } = useOffline()

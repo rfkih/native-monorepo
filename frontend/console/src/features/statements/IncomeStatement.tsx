@@ -10,6 +10,7 @@ import { effectiveRoles, useAuth } from '@/lib/authContext'
 import { canFinance } from '@/lib/rolePreset'
 import { localeOf } from '@/i18n'
 import { formatMoney, formatAmount, formatPercent } from '@/lib/money'
+import { printCurrentPage } from '@/lib/nativeShell'
 import { currentPeriod, shiftPeriod } from '@/lib/period'
 import { useAccounts } from '@/features/budget/api'
 import { useIncomeStatement } from './api'
@@ -129,7 +130,7 @@ export function IncomeStatement() {
             prevLabel={t('statements.prevPeriod')}
             nextLabel={t('statements.nextPeriod')}
           />
-          <Button variant="outline" onClick={() => window.print()} aria-label={t('statements.print')}>
+          <Button variant="outline" onClick={() => printCurrentPage('income-statement')} aria-label={t('statements.print')}>
             <Printer className="size-[15px]" aria-hidden />
             <span className="max-sm:hidden">{t('statements.print')}</span>
           </Button>

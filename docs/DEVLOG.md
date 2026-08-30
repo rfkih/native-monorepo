@@ -5,6 +5,43 @@
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live
 > task list is ephemeral; this file is the memory. Update the **Current status** section as you go.
 
+## 2026-08-30 — UI-bug audit fixed fleet-wide (web + both Android shells)
+
+A four-dimension audit (i18n/formatting, layout/stacking/theme, Android-WebView quirks, plus a
+45-screen runtime walk) found and fixed, in one sweep:
+**Shell-dead flows (the big ones):** every CSV/bank-file export and every `window.print()` was a
+silent no-op in the Android apps (WebView ignores `<a download>`/blob and print). NativeShell
+plugin v2 (both shells) adds `saveFile` (base64 → MediaStore Downloads, API 29+ gate, orphan-row
+cleanup) and `printPage` (PrintManager over the same @media print CSS); web routes through
+`lib/nativeShell.ts` — `deliverDownload` (lib/csv.ts, also used by `apiDownload`) saves via the
+shell with a `FileSaveToast` confirmation and falls back to the browser anchor path, and 12
+`window.print()` sites became `printCurrentPage()` (incl. "Cetak slip", the Employee app's only
+print action). Old APKs degrade gracefully (bridge absent → browser path). Also shell-gated the
+POS "Customer display" `window.open` (single-WebView shell would navigate the till away) and PDF
+bill attachments now render in the in-app lightbox (blob URLs can't leave the WebView).
+**Crash safety:** a global `ErrorBoundary` (console + employee, outermost above providers,
+module-level `i18n.t`) replaces the white-screen-of-death with a recover+reload card.
+**Scroll & stacking:** new `useScrollLock` (counter-based body lock + scrollbar compensation)
+wired into every overlay (~50 — shared containers + bespoke) so touch flicks stop scroll-chaining
+behind modals; OfflineBanner/AppUpdatePrompt now stack in one fixed banner rail instead of
+covering each other; the Employee app gained the ADR-0062 update prompt.
+**Safe-area, single source of truth:** `--safe-area-inset-*` gets stylesheet `env()` defaults
+(Capacitor's injected values override), `viewport-fit=cover` added to console+employee, and every
+fixed bottom surface (POS SummaryBar dock, BillDetail bar, staff tab bar/FAB/footer, self-order
+CTA, BackGuard hint) pads with the var — bare `env()` read 0 inside the shells. Employee's
+double-counted inset removed (body already contributes it).
+**Layout/theme:** six finance tables (Customers/Vendors/Channels/BankAccounts/Expenses/Categories)
+were phone-clipped with unreachable columns → `overflow-x-auto`; `min-h-screen` → `min-h-[100dvh]`
+sweep (~13 files + body); TableFloor's Tailwind-default greens → brand tokens; global
+`touch-action: manipulation` kills POS double-tap zoom without sacrificing pinch.
+**i18n/formatting:** raw ISO dates → `formatDate` (staff Beranda/Profile, /me, groups, loyalty —
+loyalty also labels the `9999-12-31` sentinel "tanpa tanggal akhir"); payslip periods share one
+`periodLabel` helper (console /me showed raw "2026-07"); commission % via `formatPercent`;
+printer test receipt uses Intl + company currency (was hardcoded `Rp`); self-order stepper
+aria + plural keys. Verified: 594 vitest, lint/build green ×3 apps, both shells compile,
+back-guard smoke 20/20, runtime walk clean. The saveFile/printPage upgrades ride the SAME APK
+rebuild the back-guard's `minimize()` is already waiting on; everything else ships with the web.
+
 ## 2026-08-30 — Hardware-Back guard: confirm-before-leave + every overlay back-dismissable
 
 Owner complaint: in the Android apps a stray Back press silently left a menu (or backgrounded the

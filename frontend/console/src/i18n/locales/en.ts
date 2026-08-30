@@ -363,6 +363,13 @@ export const en = {
     done: 'Done',
     save: 'Save',
     submit: 'Submit',
+    fileSaved: 'Saved to Downloads: {{filename}}',
+    fileSaveFailed: 'Could not save {{filename}} — check storage space and try again',
+  },
+  appCrash: {
+    title: 'Something went wrong',
+    body: 'The app hit an unexpected error. Reload to continue — your data is safe on the server.',
+    reload: 'Reload',
   },
   backGuard: {
     leaveTitle: 'Leave this page?',
@@ -4086,6 +4093,7 @@ export const en = {
       rateSummary: '{{pct}} of every sale back in points',
       minSaleLabel: 'Minimum sale to earn',
       effectiveRange: 'Effective {{from}} – {{to}}',
+      effectiveOpenEnded: 'Effective {{from}} – no end date',
       fields: {
         rate: 'Points rate',
         rateHint: 'The percentage of each sale returned as points, e.g. 1 for 1%. 1 point = 1 minor currency unit.',

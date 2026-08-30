@@ -14,6 +14,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X, Plus } from 'lucide-react'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
@@ -36,6 +37,7 @@ interface Props {
 export function TableManagement({ session, onClose }: Props) {
   const { t } = useTranslation()
   useBackDismiss(onClose)
+  useScrollLock()
   const tablesQuery = useTables(session)
   const tables = tablesQuery.data ?? []
 

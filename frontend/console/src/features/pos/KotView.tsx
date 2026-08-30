@@ -13,8 +13,10 @@
 import { useTranslation } from 'react-i18next'
 import { X, ChefHat } from 'lucide-react'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
+import { printCurrentPage } from '@/lib/nativeShell'
 import type { BillLineResponse, BillResponse } from './billsApi'
 
 interface Props {
@@ -29,9 +31,10 @@ interface Props {
 export function KotView({ bill, lines, locale, tableLabel, onClose }: Props) {
   const { t } = useTranslation()
   useBackDismiss(onClose)
+  useScrollLock()
 
   function handlePrint() {
-    window.print()
+    printCurrentPage('kot')
   }
 
   return (

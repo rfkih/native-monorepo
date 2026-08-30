@@ -19,6 +19,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Check, Copy, Gift, Printer, X } from 'lucide-react'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
@@ -28,6 +29,7 @@ import type { CompanySession } from '@/lib/session'
 import type { Vertical } from '@/features/org/api'
 import { useSellGiftCard, type GiftCardSaleResponse } from '@/features/loyalty/api'
 import { ThermalReceipt } from '@/features/pos/ThermalReceipt'
+import { printCurrentPage } from '@/lib/nativeShell'
 
 interface Props {
   vertical: Vertical
@@ -44,6 +46,7 @@ export function GiftCardSellModal({ vertical, session, currency, locale, onClose
   // Covers every render branch below (form / success / print) — one mounted instance, one onClose
   // target throughout the flow.
   useBackDismiss(onClose)
+  useScrollLock()
   const sell = useSellGiftCard(vertical, session)
 
   const [idempotencyKey] = useState<string>(() => crypto.randomUUID())
@@ -119,7 +122,7 @@ export function GiftCardSellModal({ vertical, session, currency, locale, onClose
               : []
           }
           footerNote={t('pos.receipt.thankYou')}
-          onPrint={() => window.print()}
+          onPrint={() => printCurrentPage('gift-card-receipt')}
           onAction={onClose}
           actionLabel={t('common.close')}
         />

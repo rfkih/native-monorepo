@@ -66,12 +66,20 @@
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
 /*
- * Native Till shell only (ADR 0043): Android 15+ forces edge-to-edge, and Capacitor injects the
- * real inset values as --safe-area-inset-* CSS variables INSIDE the app WebView. Browsers never
- * define them, so the var() fallbacks resolve to 0 and this is a no-op outside the app. Keeps the
- * header/actions clear of the status bar clock and the gesture pill. (position:fixed overlays
- * anchor to the viewport and bypass body padding — audit per-surface if one clips.)
+ * Safe-area insets, ONE source of truth: --safe-area-inset-*.
+ * In the Android shells (ADR 0043/0049) Capacitor injects the REAL inset values as inline
+ * --safe-area-inset-* variables (Android 15+ forces edge-to-edge), overriding these stylesheet
+ * defaults. In a plain browser/PWA the defaults resolve to env() — live once index.html declares
+ * viewport-fit=cover, 0px otherwise. Fixed overlays bypass body padding, so every fixed bottom
+ * surface pads itself with var(--safe-area-inset-bottom, 0px) — use the var, never bare env(),
+ * or the shell's injected values are ignored.
  */
+:root {
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --safe-area-inset-right: env(safe-area-inset-right, 0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-inset-left: env(safe-area-inset-left, 0px);
+}
 body {
   padding-top: var(--safe-area-inset-top, 0px);
   padding-right: var(--safe-area-inset-right, 0px);
@@ -221,12 +229,26 @@ body {
 
   body {
     margin: 0;
+    /* dvh tracks the mobile URL bar / keyboard; the vh line is the older-browser fallback. */
     min-height: 100vh;
+    min-height: 100dvh;
     background-color: var(--color-paper);
     color: var(--color-ink);
     font-family: var(--font-sans);
     font-size: 15px;
     line-height: 1.5;
+  }
+
+  /* Kill the 300ms double-tap-to-zoom delay and accidental zooms on taps — pinch-zoom on content
+     stays available (unlike user-scalable=no, which would cost accessibility). A busy till takes
+     rapid double-taps on the same tile constantly. */
+  button,
+  a,
+  [role='button'],
+  input,
+  select,
+  textarea {
+    touch-action: manipulation;
   }
 
   /* Smooth the theme flip, but never fight reduced-motion. */

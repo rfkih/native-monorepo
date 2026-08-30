@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from 'react'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 
 /**
  * Right-hand side panel (Native Console Web design). The complement of DialogOverlay: a dialog is
@@ -19,6 +20,7 @@ export function Drawer({
   ariaLabel?: string
 }) {
   useBackDismiss(onClose)
+  useScrollLock()
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose()

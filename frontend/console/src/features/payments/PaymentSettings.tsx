@@ -89,7 +89,7 @@ export function PaymentSettings() {
   if (!company) return null
 
   return (
-    <div className="min-h-screen bg-paper">
+    <div className="min-h-[100dvh] bg-paper">
       {/* This route renders OUTSIDE the dashboard Shell (owner-only, mirrors /settings/features'
           registration in App.tsx), so it carries its own minimal topbar — same idiom as /me and
           FeaturesSettings.tsx. */}

@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { cn } from '@/lib/cn'
 
 export function PaymentSurfaceFrame({
@@ -30,6 +31,7 @@ export function PaymentSurfaceFrame({
 }) {
   const { t } = useTranslation()
   useBackDismiss(onClose, backDismissEnabled)
+  useScrollLock()
   return (
     <div
       className={cn('fixed inset-0 grid place-items-center bg-black/40 p-4 backdrop-blur-sm', zIndexClass)}

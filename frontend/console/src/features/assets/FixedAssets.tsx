@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Play, Plus, TriangleAlert, X } from 'lucide-react'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -64,7 +65,9 @@ export function FixedAssets() {
   const [disposeError, setDisposeError] = useState<string | null>(null)
 
   useBackDismiss(() => setDialogOpen(false), dialogOpen)
+  useScrollLock(dialogOpen)
   useBackDismiss(() => setDisposeTarget(null), disposeTarget != null)
+  useScrollLock(disposeTarget != null)
 
   if (!company) {
     return <EmptyState title={t('assets.noCompany')} hint={t('assets.noCompanyHint')} />

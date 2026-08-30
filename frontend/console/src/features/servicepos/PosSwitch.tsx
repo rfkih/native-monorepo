@@ -30,7 +30,7 @@ const Pos = lazy(() => import('@/features/pos/Pos').then((m) => ({ default: m.Po
 // one.
 function CatalogSwitchSkeleton() {
   return (
-    <div className="min-h-screen bg-paper">
+    <div className="min-h-[100dvh] bg-paper">
       <div className="flex h-16 items-center gap-3 border-b border-line bg-surface px-4 sm:px-6">
         <Skeleton className="size-9 shrink-0 rounded-full" />
         <Skeleton className="h-4 w-32" />

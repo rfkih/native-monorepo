@@ -117,42 +117,44 @@ export function CategoriesAdmin() {
         </Card>
       ) : (
         <Card className="overflow-hidden rounded-[20px]">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-line bg-paper text-left text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
-                <th className="px-4 py-3">{t('expenses.categories.colName')}</th>
-                <th className="px-4 py-3">{t('expenses.categories.colGlHint')}</th>
-                <th className="px-4 py-3">{t('expenses.categories.colTaxable')}</th>
-                <th className="px-4 py-3 text-right">{t('expenses.categories.colActions')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((c) => (
-                <tr key={c.id} className="border-b border-ink-50 last:border-0 hover:bg-hover">
-                  <td className="px-4 py-3 font-semibold text-ink">{c.name}</td>
-                  <td className="px-4 py-3 text-ink-2">
-                    {c.glHint ? (
-                      <Badge tone="neutral">{t(`expenses.categories.glHint.${c.glHint}`)}</Badge>
-                    ) : (
-                      <Badge tone="neutral">{t('expenses.categories.glHint.general')}</Badge>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-ink-2">
-                    {c.taxable ? t('expenses.categories.yes') : t('expenses.categories.no')}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      type="button"
-                      onClick={() => setDialog({ mode: 'edit', category: c })}
-                      className="text-sm font-semibold text-brand-700 hover:underline focus-visible:outline-2 focus-visible:outline-emerald"
-                    >
-                      {t('expenses.categories.edit')}
-                    </button>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-line bg-paper text-left text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+                  <th className="px-4 py-3">{t('expenses.categories.colName')}</th>
+                  <th className="px-4 py-3">{t('expenses.categories.colGlHint')}</th>
+                  <th className="px-4 py-3">{t('expenses.categories.colTaxable')}</th>
+                  <th className="px-4 py-3 text-right">{t('expenses.categories.colActions')}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {rows.map((c) => (
+                  <tr key={c.id} className="border-b border-ink-50 last:border-0 hover:bg-hover">
+                    <td className="px-4 py-3 font-semibold text-ink">{c.name}</td>
+                    <td className="px-4 py-3 text-ink-2">
+                      {c.glHint ? (
+                        <Badge tone="neutral">{t(`expenses.categories.glHint.${c.glHint}`)}</Badge>
+                      ) : (
+                        <Badge tone="neutral">{t('expenses.categories.glHint.general')}</Badge>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-ink-2">
+                      {c.taxable ? t('expenses.categories.yes') : t('expenses.categories.no')}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => setDialog({ mode: 'edit', category: c })}
+                        className="text-sm font-semibold text-brand-700 hover:underline focus-visible:outline-2 focus-visible:outline-emerald"
+                      >
+                        {t('expenses.categories.edit')}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </Card>
       )}
 

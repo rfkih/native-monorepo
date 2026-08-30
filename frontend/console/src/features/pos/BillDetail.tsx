@@ -690,7 +690,7 @@ export function BillDetail({
 
       {/* Phone: SummaryBar equivalent — tap to open phone sheet */}
       {!isTablet && lineCount > 0 && !billOpen ? (
-        <div className="fixed inset-x-0 bottom-0 z-30 flex items-center gap-3 border-t border-line bg-surface px-4 py-3 shadow-lg">
+        <div className="fixed inset-x-0 bottom-0 z-30 flex items-center gap-3 border-t border-line bg-surface px-4 pt-3 pb-[calc(0.75rem+var(--safe-area-inset-bottom,0px))] shadow-lg">
           <div className="min-w-0 flex-1">
             <div className="text-[11px] font-medium uppercase tracking-wide text-ink-3">
               {t('pos.total')}

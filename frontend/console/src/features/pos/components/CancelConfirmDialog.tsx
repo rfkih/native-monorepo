@@ -6,6 +6,7 @@ import {
   AlertTriangle,
 } from 'lucide-react'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
@@ -34,6 +35,7 @@ export function CancelConfirmDialog({
 }) {
   const { t } = useTranslation()
   useBackDismiss(onClose, !isCancelling)
+  useScrollLock()
   return (
     <div
       className="fixed inset-0 z-[70] grid place-items-center bg-black/40 p-4 backdrop-blur-sm"

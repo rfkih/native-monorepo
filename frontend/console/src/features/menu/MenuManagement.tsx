@@ -33,6 +33,7 @@ import {
   X,
 } from 'lucide-react'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -335,6 +336,7 @@ function CategoryManagerDialog({
   onClose: () => void
 }) {
   useBackDismiss(onClose)
+  useScrollLock()
   const { t } = useTranslation()
   const categories = useCategories(session)
   const create = useCreateCategory(session)
@@ -458,6 +460,7 @@ function CreateItemDialog({
   onClose: () => void
 }) {
   useBackDismiss(onClose)
+  useScrollLock()
   const { t } = useTranslation()
   const mutation = useCreateMenuItem(session)
   const [name, setName] = useState('')
@@ -631,6 +634,7 @@ function AutoLinkDialog({
   onClose: () => void
 }) {
   useBackDismiss(onClose)
+  useScrollLock()
   const { t } = useTranslation()
   const autoLink = useAutoLinkAll(session)
   // Held after success so the result stays visible (X ditautkan / Y dilewati).
@@ -702,6 +706,7 @@ function EditItemDialog({
   onClose: () => void
 }) {
   useBackDismiss(onClose)
+  useScrollLock()
   const { t } = useTranslation()
   const mutation = useUpdateMenuItem(session)
   const exp = isoMinorExponent(session.baseCurrency)
@@ -928,6 +933,7 @@ function CreateGroupDialog({
   onClose: () => void
 }) {
   useBackDismiss(onClose)
+  useScrollLock()
   const { t } = useTranslation()
   const mutation = useCreateModifierGroup(session)
   const [name, setName] = useState('')
@@ -1014,6 +1020,7 @@ function EditGroupDialog({
   onClose: () => void
 }) {
   useBackDismiss(onClose)
+  useScrollLock()
   const { t } = useTranslation()
   const mutation = useUpdateModifierGroup(session)
   const [name, setName] = useState(group.name)
@@ -1103,6 +1110,7 @@ function DeleteGroupDialog({
   const { t } = useTranslation()
   const mutation = useDeleteModifierGroup(session)
   useBackDismiss(onClose, !mutation.isPending)
+  useScrollLock()
 
   function handleConfirm() {
     mutation.mutate({ itemId, groupId: group.id }, { onSuccess: () => onClose() })
@@ -1165,6 +1173,7 @@ function CreateOptionDialog({
   onClose: () => void
 }) {
   useBackDismiss(onClose)
+  useScrollLock()
   const { t } = useTranslation()
   const mutation = useCreateModifierOption(session)
   const [name, setName] = useState('')
@@ -1277,6 +1286,7 @@ function EditOptionDialog({
   onClose: () => void
 }) {
   useBackDismiss(onClose)
+  useScrollLock()
   const { t } = useTranslation()
   const mutation = useUpdateModifierOption(session)
   const exp = isoMinorExponent(session.baseCurrency)
@@ -1392,6 +1402,7 @@ function DeleteOptionDialog({
   const { t } = useTranslation()
   const mutation = useDeleteModifierOption(session)
   useBackDismiss(onClose, !mutation.isPending)
+  useScrollLock()
 
   function handleConfirm() {
     mutation.mutate(
@@ -1457,6 +1468,7 @@ function SetStockDialog({
   onClose: () => void
 }) {
   useBackDismiss(onClose)
+  useScrollLock()
   const { t } = useTranslation()
   const mutation = useSetStock(session)
   const [input, setInput] = useState(
@@ -1540,6 +1552,7 @@ function AddStockDialog({
   onClose: () => void
 }) {
   useBackDismiss(onClose)
+  useScrollLock()
   const { t } = useTranslation()
   const mutation = useAddStock(session)
   const [input, setInput] = useState('')
@@ -1622,6 +1635,7 @@ function DeleteItemDialog({
   const { t } = useTranslation()
   const mutation = useDeleteItem(session)
   useBackDismiss(onClose, !mutation.isPending)
+  useScrollLock()
 
   function handleConfirm() {
     mutation.mutate(item.id, { onSuccess: () => onClose() })
@@ -1925,6 +1939,7 @@ function ModifierGroupsPanel({
   onClose: () => void
 }) {
   useBackDismiss(onClose)
+  useScrollLock()
   const { t } = useTranslation()
   const groupsQuery = useAdminModifierGroups(session, item.id)
   const [showCreateGroup, setShowCreateGroup] = useState(false)

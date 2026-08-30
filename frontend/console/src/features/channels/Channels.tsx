@@ -70,21 +70,23 @@ function ChannelsInner({ company }: { company: CompanySession }) {
         <EmptyState title={t('channels.empty')} hint={t('channels.emptyHint')} />
       ) : (
         <Card className="overflow-hidden rounded-[20px]">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-line bg-paper text-left text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
-                <th className="px-4 py-3">{t('channels.colCode')}</th>
-                <th className="px-4 py-3">{t('channels.colName')}</th>
-                <th className="px-4 py-3">{t('channels.colStatus')}</th>
-                <th className="px-4 py-3 text-right">{t('channels.colActions')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {channels.map((c) => (
-                <ChannelRow key={c.id} session={company} channel={c} onEdit={() => setDialog({ mode: 'edit', channel: c })} />
-              ))}
-            </tbody>
-          </table>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-line bg-paper text-left text-[11px] font-bold uppercase tracking-[0.08em] text-ink-3">
+                  <th className="px-4 py-3">{t('channels.colCode')}</th>
+                  <th className="px-4 py-3">{t('channels.colName')}</th>
+                  <th className="px-4 py-3">{t('channels.colStatus')}</th>
+                  <th className="px-4 py-3 text-right">{t('channels.colActions')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {channels.map((c) => (
+                  <ChannelRow key={c.id} session={company} channel={c} onEdit={() => setDialog({ mode: 'edit', channel: c })} />
+                ))}
+              </tbody>
+            </table>
+          </div>
         </Card>
       )}
 

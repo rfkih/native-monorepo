@@ -7,6 +7,7 @@ import i18n from '@/i18n'
 import { queryClient } from '@/lib/queryClient'
 import { AuthProvider } from '@/lib/auth'
 import { SessionProvider } from '@/lib/SessionProvider'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { staffResources } from './staffI18n'
 import { App } from './App'
 
@@ -24,19 +25,23 @@ i18n.addResourceBundle('id', 'translation', staffResources.id, true, true)
  */
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      {/* persistSession: the Employee app is a PERSONAL-device app (ADR 0049 P5) — keep the OIDC
-          session in localStorage so an employee stays signed in across app/browser restarts (the
-          offline refresh token then re-auths silently for the ~30-day offline idle window). The
-          console deliberately does NOT pass this — its sessionStorage default protects shared
-          computers. */}
-      <AuthProvider persistSession>
-        <SessionProvider>
-          <BrowserRouter>
-            <App />
-          </BrowserRouter>
-        </SessionProvider>
-      </AuthProvider>
-    </QueryClientProvider>
+    {/* Outermost: a crash anywhere below must show the recover screen, never a blank page — the
+        Android shell has no reload affordance of its own. */}
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        {/* persistSession: the Employee app is a PERSONAL-device app (ADR 0049 P5) — keep the OIDC
+            session in localStorage so an employee stays signed in across app/browser restarts (the
+            offline refresh token then re-auths silently for the ~30-day offline idle window). The
+            console deliberately does NOT pass this — its sessionStorage default protects shared
+            computers. */}
+        <AuthProvider persistSession>
+          <SessionProvider>
+            <BrowserRouter>
+              <App />
+            </BrowserRouter>
+          </SessionProvider>
+        </AuthProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   </StrictMode>,
 )

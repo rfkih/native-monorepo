@@ -8,6 +8,7 @@ import { ListSkeleton, StatCardsSkeleton } from '@/components/ui/Skeleton'
 import { useSession } from '@/lib/session'
 import { localeOf } from '@/i18n'
 import { formatMoney, formatAmount } from '@/lib/money'
+import { printCurrentPage } from '@/lib/nativeShell'
 import { currentPeriod, shiftPeriod } from '@/lib/period'
 import { useCashFlow } from './api'
 import { downloadCsv } from '@/lib/csv'
@@ -96,7 +97,7 @@ export function CashFlow() {
             prevLabel={t('statements.prevPeriod')}
             nextLabel={t('statements.nextPeriod')}
           />
-          <Button variant="outline" onClick={() => window.print()}>
+          <Button variant="outline" onClick={() => printCurrentPage('cash-flow')}>
             <Printer className="size-[15px]" aria-hidden />
             {t('statements.print')}
           </Button>

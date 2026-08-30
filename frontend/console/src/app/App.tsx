@@ -12,6 +12,7 @@ import { BrandMark, Wordmark } from '@/components/Wordmark'
 import { OfflineBanner } from '@/features/pos/offline/OfflineBanner'
 import { AppUpdatePrompt } from '@/components/AppUpdatePrompt'
 import { BackGuard } from '@/components/mobile/BackGuard'
+import { FileSaveToast } from '@/components/FileSaveToast'
 import { effectiveRoles, hasAnyRole, useAuth } from '@/lib/authContext'
 import { isNativeShell } from '@/lib/escpos/transport'
 import { usePageAccess } from '@/lib/pageAccess'
@@ -571,13 +572,19 @@ export function App() {
 
   return (
     <>
-      {/* App-global, mounted once here (not inside Shell) so it is visible on every authenticated
-          screen INCLUDING the full-screen POS surfaces, which render outside the dashboard shell
-          (Phase 5 offline mode, ADR 0028). Renders nothing when there is nothing to say. */}
-      <OfflineBanner />
-      <AppUpdatePrompt />
+      {/* App-global top banner RAIL, mounted once here (not inside Shell) so it is visible on
+          every authenticated screen INCLUDING the full-screen POS surfaces, which render outside
+          the dashboard shell (Phase 5 offline mode, ADR 0028). One fixed column so simultaneous
+          banners (offline + update available) stack instead of covering each other; each child
+          renders nothing when there is nothing to say. */}
+      <div className="fixed inset-x-0 top-0 z-[70] flex flex-col print:hidden">
+        <OfflineBanner />
+        <AppUpdatePrompt />
+      </div>
       {/* Hardware-Back confirm guard (Android shells only — self-disables in browsers). */}
       <BackGuard homePath={home} />
+      {/* Confirms NativeShell file saves (exports land in Downloads with no chrome of their own). */}
+      <FileSaveToast />
       {posAllowed && <PrefetchPosChunk />}
       <PrefetchRouteChunks
         canOps={opsOk}

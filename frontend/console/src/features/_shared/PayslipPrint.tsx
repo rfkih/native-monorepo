@@ -18,10 +18,12 @@
 import { useTranslation } from 'react-i18next'
 import { Printer, X } from 'lucide-react'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { formatMoney } from '@/lib/money'
+import { printCurrentPage } from '@/lib/nativeShell'
 
 export interface PayslipPrintLine {
   componentKey: string
@@ -75,6 +77,7 @@ export function PayslipPrint({
   onClose,
 }: PayslipPrintProps) {
   useBackDismiss(onClose)
+  useScrollLock()
   const { t } = useTranslation()
 
   const periodLabel = new Intl.DateTimeFormat(locale, { year: 'numeric', month: 'long' }).format(
@@ -109,7 +112,7 @@ export function PayslipPrint({
         <div className="flex items-center justify-between border-b border-line px-5 py-4 print:hidden">
           <h2 className="font-display text-lg font-semibold text-ink">{t('payslip.print.title')}</h2>
           <div className="flex items-center gap-2">
-            <Button type="button" variant="outline" onClick={() => window.print()}>
+            <Button type="button" variant="outline" onClick={() => printCurrentPage('payslip')}>
               <Printer className="size-4" />
               {t('payslip.print.cta')}
             </Button>

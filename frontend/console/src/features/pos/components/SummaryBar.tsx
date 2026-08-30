@@ -112,7 +112,7 @@ export function SummaryBar({
   return (
     <div
       id="pos-summary-dock"
-      className="fixed inset-x-0 bottom-0 z-30 flex flex-col rounded-t-[28px] bg-surface shadow-[0_-12px_32px_rgba(15,23,42,.10)]"
+      className="fixed inset-x-0 bottom-0 z-30 flex flex-col rounded-t-[28px] bg-surface pb-[var(--safe-area-inset-bottom,0px)] shadow-[0_-12px_32px_rgba(15,23,42,.10)]"
       style={{ boxSizing: 'border-box' }}
     >
       {/* Drag handle */}

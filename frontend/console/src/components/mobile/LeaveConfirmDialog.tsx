@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next'
 import { LogOut } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
+import { useScrollLock } from './useScrollLock'
 import type { BackGuardDialogKind } from './useBackGuard'
 
 export function LeaveConfirmDialog({
@@ -23,6 +24,7 @@ export function LeaveConfirmDialog({
   onCancel: () => void
 }) {
   const { t } = useTranslation()
+  useScrollLock()
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {

@@ -50,6 +50,13 @@ export default defineConfig({
     // FAIL if 5175 is taken instead of silently hopping ports — mirrors console (5173) and
     // self-order (5174): a second `npm run dev` means a server is already running.
     strictPort: true,
+    // The `@` alias reaches into ../console/src; source modules pass Vite's default fs allow-list
+    // via the alias, but RAW assets served over /@fs (the Plus Jakarta Sans woff2 in
+    // console/src/assets/fonts) get 403'd without listing the sibling root — dev then silently
+    // falls back to the system font. Dev-server only; production bundles the font.
+    fs: {
+      allow: ['.', fileURLToPath(new URL('../console', import.meta.url))],
+    },
     proxy: {
       '/api': { target: GATEWAY, changeOrigin: true },
     },

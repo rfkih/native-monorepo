@@ -9,6 +9,7 @@ import {
   X,
 } from 'lucide-react'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { isOutletNotAssigned } from '@/lib/api'
@@ -37,6 +38,7 @@ export function OpenBillDialog({
 }) {
   const { t } = useTranslation()
   useBackDismiss(onClose)
+  useScrollLock()
   const openBill = useOpenBill(session)
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null)
   const [guestLabel, setGuestLabel] = useState('')

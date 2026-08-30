@@ -23,9 +23,11 @@ import { useTranslation } from 'react-i18next'
 import QRCode from 'qrcode'
 import { Printer, QrCode as QrCodeIcon, RefreshCw } from 'lucide-react'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { Skeleton } from '@/components/ui/Skeleton'
+import { printCurrentPage } from '@/lib/nativeShell'
 import type { CompanySession } from '@/lib/session'
 import { useSelfOrderAccess, useRotateSelfOrderAccess } from './selfOrderApi'
 
@@ -59,7 +61,7 @@ export function SelfOrderQr({ session, outletId }: Props) {
           <div className="flex items-center gap-1.5">
             <button
               type="button"
-              onClick={() => window.print()}
+              onClick={() => printCurrentPage('self-order-qr')}
               aria-label={t('pos.selfOrderQr.print')}
               title={t('pos.selfOrderQr.print')}
               className="grid size-8 place-items-center rounded-lg text-ink-3 hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
@@ -178,6 +180,7 @@ function RotateConfirmDialog({
 }) {
   const { t } = useTranslation()
   useBackDismiss(onClose, !pending)
+  useScrollLock()
   return (
     <div
       className="fixed inset-0 z-[70] grid place-items-center bg-black/40 p-4 backdrop-blur-sm"

@@ -3,7 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover: makes env(safe-area-inset-*) live in browsers/PWA so the safe-area
+         defaults in index.css work outside the Capacitor shells too. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
     <!-- Set the theme BEFORE first paint to avoid a flash of the wrong colours (FOUC). Reads the
          same storage key as src/lib/theme.ts; falls back to the OS preference. -->

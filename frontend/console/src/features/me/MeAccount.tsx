@@ -34,7 +34,7 @@ export function MeAccount() {
   const actor = auth.actor
 
   return (
-    <div className="min-h-screen bg-paper">
+    <div className="min-h-[100dvh] bg-paper">
       {/* Phone chrome (Native Console Android): back to /me. */}
       <ScreenHeader className="sm:hidden" title={t('me.account.title')} backTo="/me" />
       {/* Topbar — mirrors features/expenses/MyExpenses.tsx's chrome */}

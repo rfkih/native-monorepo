@@ -13,6 +13,7 @@ import { useState, useId } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X, Check } from 'lucide-react'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -85,6 +86,7 @@ function validate(
 export function ModifierModal({ item, locale, onConfirm, onClose }: Props) {
   const { t } = useTranslation()
   useBackDismiss(onClose)
+  useScrollLock()
 
   // Map: groupId → Set<optionId>
   const [selections, setSelections] = useState<Map<string, Set<string>>>(() => {

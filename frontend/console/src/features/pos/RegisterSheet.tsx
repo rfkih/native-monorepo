@@ -13,6 +13,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Banknote, X } from 'lucide-react'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { FormSkeleton } from '@/components/ui/Skeleton'
@@ -89,6 +90,7 @@ export function RegisterSheet({
 }) {
   const { t } = useTranslation()
   useBackDismiss(onClose)
+  useScrollLock()
   const currentQuery = useCurrentRegisterSession(session)
   const openSession = useOpenRegisterSession(session)
   const closeSession = useCloseRegisterSession(session)
@@ -109,6 +111,7 @@ export function RegisterSheet({
   const [confirmMismatch, setConfirmMismatch] = useState(false)
   // Inner confirm layer, inline conditional JSX within this always-mounted-while-open component.
   useBackDismiss(() => setConfirmMismatch(false), confirmMismatch)
+  useScrollLock(confirmMismatch)
 
   const current = currentQuery.data ?? null
   const busy = openSession.isPending || closeSession.isPending

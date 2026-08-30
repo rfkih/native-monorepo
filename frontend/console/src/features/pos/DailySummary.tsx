@@ -17,8 +17,10 @@
  */
 import { useTranslation } from 'react-i18next'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Spinner } from '@/components/ui/Spinner'
 import { formatMoney } from '@/lib/money'
+import { printCurrentPage } from '@/lib/nativeShell'
 import type { CompanySession } from '@/lib/session'
 import {
   ThermalReceipt,
@@ -63,6 +65,7 @@ export function DailySummary({
   // Covers every render branch below (loading / error-empty / the ThermalReceipt success state) —
   // one mounted instance, one onClose target (Phone/browser Back closes this overlay).
   useBackDismiss(onClose)
+  useScrollLock()
 
   // Resolve the session to summarize: explicit → current OPEN → most recent CLOSED.
   const currentQuery = useCurrentRegisterSession(session)
@@ -131,7 +134,7 @@ export function DailySummary({
       zIndexClass="z-[70]"
       // A summary must never kick the cash drawer, and is never auto-printed (user-initiated).
       cashTender={false}
-      onPrint={() => window.print()}
+      onPrint={() => printCurrentPage('daily-summary')}
       onAction={onClose}
       actionLabel={t('common.close')}
       secondaryAction={secondaryAction}

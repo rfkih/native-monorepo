@@ -4,7 +4,8 @@
  * that self-heals the cache and reloads to the latest bundle. Re-appears if an even newer build
  * ships after a dismiss (the dismissed id no longer matches the latest).
  *
- * Mounted once in app/App.tsx (beside OfflineBanner) so it covers every screen, including the
+ * Mounted once per app inside the fixed top banner rail (console app/App.tsx, employee App.tsx —
+ * below OfflineBanner there, so simultaneous banners stack) covering every screen, including the
  * full-screen POS. Checks on mount, whenever the app returns to the foreground, and every 15 min —
  * so a long-open till (which never relaunches, so the shell-refetch fix can't help it) still learns
  * of a new deploy. A failed/offline check reads as "up to date" (fails closed — never nags).
@@ -51,7 +52,7 @@ export function AppUpdatePrompt() {
   return (
     <div
       role="status"
-      className="fixed inset-x-0 top-0 z-[71] flex items-center justify-center gap-3 border-b border-line bg-surface px-4 py-2 text-[13px] text-ink shadow-sm print:hidden"
+      className="flex items-center justify-center gap-3 border-b border-line bg-surface px-4 py-2 text-[13px] text-ink shadow-sm print:hidden"
     >
       <ArrowUpCircle className="size-4 shrink-0 text-emerald-2" aria-hidden="true" />
       <span className="font-semibold">{t('appUpdate.available')}</span>

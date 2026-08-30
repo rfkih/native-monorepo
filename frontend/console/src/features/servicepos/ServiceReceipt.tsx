@@ -11,6 +11,7 @@
  */
 import { useTranslation } from 'react-i18next'
 import { formatMoney } from '@/lib/money'
+import { printCurrentPage } from '@/lib/nativeShell'
 import { ThermalReceipt } from '@/features/pos/ThermalReceipt'
 import type { ThermalRow, ThermalLineItem } from '@/features/pos/ThermalReceipt'
 import type { VerticalPosConfig } from './config'
@@ -203,7 +204,7 @@ export function ServiceReceipt({
       grandTotalLabel={grandTotalLabel}
       paymentRows={paymentRows}
       footerNote={t('pos.receipt.thankYou')}
-      onPrint={() => window.print()}
+      onPrint={() => printCurrentPage('receipt')}
       onAction={onNew}
       actionLabel={t('servicePos.receipt.newTicket')}
       isPending={!!(isPending && payment?.providerPending)}

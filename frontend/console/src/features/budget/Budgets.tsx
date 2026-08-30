@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Plus, Trash2, TriangleAlert, X } from 'lucide-react'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { ListSkeleton } from '@/components/ui/Skeleton'
@@ -62,6 +63,7 @@ export function Budgets() {
   const [error, setError] = useState<string | null>(null)
 
   useBackDismiss(() => setDialogOpen(false), dialogOpen)
+  useScrollLock(dialogOpen)
 
   if (!company) {
     return <EmptyState title={t('budget.noCompany')} hint={t('budget.noCompanyHint')} />

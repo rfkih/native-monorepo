@@ -43,6 +43,7 @@ import {
 } from 'lucide-react'
 import { useSession, type CompanySession } from '@/lib/session'
 import { useAuth, hasAnyRole, effectiveRoles } from '@/lib/authContext'
+import { isNativeShell } from '@/lib/escpos/transport'
 import { accountMenuVisibility } from '@/features/pos-shell/layout/accountMenuGate'
 import { useTheme } from '@/lib/theme'
 import { localeOf } from '@/i18n'
@@ -1153,18 +1154,26 @@ function PosInner({ session }: { session: CompanySession }) {
                   },
                 ]
               : []),
-            {
-              key: 'display',
-              icon: <Monitor className="size-4" aria-hidden="true" />,
-              label: t('pos.customerDisplay.button'),
-              onSelect: () => {
-                displayPublisher.activate()
-                window.open(
-                  `${window.location.origin}/pos/customer-display?outlet=${encodeURIComponent(session.businessId)}`,
-                  'native-pos-display',
-                )
-              },
-            },
+            // Customer display needs a SECOND window (a browser tab dragged to the customer
+            // monitor). The Android shell is a single WebView — window.open would either navigate
+            // the till itself away mid-shift or spawn a logged-out external tab — so the entry is
+            // browser-only.
+            ...(isNativeShell()
+              ? []
+              : [
+                  {
+                    key: 'display',
+                    icon: <Monitor className="size-4" aria-hidden="true" />,
+                    label: t('pos.customerDisplay.button'),
+                    onSelect: () => {
+                      displayPublisher.activate()
+                      window.open(
+                        `${window.location.origin}/pos/customer-display?outlet=${encodeURIComponent(session.businessId)}`,
+                        'native-pos-display',
+                      )
+                    },
+                  },
+                ]),
             {
               key: 'giftcard',
               icon: <Gift className="size-4" aria-hidden="true" />,

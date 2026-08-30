@@ -349,6 +349,13 @@ export const id = {
     done: 'Selesai',
     save: 'Simpan',
     submit: 'Kirim',
+    fileSaved: 'Tersimpan di Unduhan: {{filename}}',
+    fileSaveFailed: 'Gagal menyimpan {{filename}} — cek ruang penyimpanan lalu coba lagi',
+  },
+  appCrash: {
+    title: 'Terjadi kesalahan',
+    body: 'Aplikasi mengalami galat tak terduga. Muat ulang untuk melanjutkan — data Anda aman di server.',
+    reload: 'Muat ulang',
   },
   backGuard: {
     leaveTitle: 'Keluar dari halaman ini?',
@@ -4057,6 +4064,7 @@ export const id = {
       rateSummary: '{{pct}} dari setiap penjualan kembali dalam bentuk poin',
       minSaleLabel: 'Minimum penjualan untuk memperoleh poin',
       effectiveRange: 'Berlaku {{from}} – {{to}}',
+      effectiveOpenEnded: 'Berlaku {{from}} – tanpa tanggal akhir',
       fields: {
         rate: 'Tarif poin',
         rateHint: 'Persentase dari setiap penjualan yang dikembalikan sebagai poin, misalnya 1 untuk 1%. 1 poin = 1 satuan minor mata uang.',

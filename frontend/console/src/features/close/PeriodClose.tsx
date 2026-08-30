@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Check, TriangleAlert, X } from 'lucide-react'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -34,6 +35,7 @@ function ConfirmCloseDialog({
   onResult: (r: CloseResponse) => void
 }) {
   useBackDismiss(onClose)
+  useScrollLock()
   const { t, i18n } = useTranslation()
   const locale = localeOf(i18n.language)
   const mutation = useClosePeriod({ companyId, actor })

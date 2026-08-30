@@ -16,6 +16,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CalendarClock, CheckCircle2, Coins, Package, TriangleAlert, X } from 'lucide-react'
 import { useBackDismiss } from '@/components/mobile/useBackDismiss'
+import { useScrollLock } from '@/components/mobile/useScrollLock'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { ApiError } from '@/lib/api'
@@ -60,6 +61,7 @@ export function CloseCorrectionSheet({
 }) {
   const { t } = useTranslation()
   useBackDismiss(onClose)
+  useScrollLock()
   const summaryQuery = useRegisterSummary(session, sessionId, true)
   const correct = useCorrectClose(session)
   const summary = summaryQuery.data
