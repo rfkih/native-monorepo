@@ -144,9 +144,10 @@ class RegisterSummaryIntegrationTest extends PostgresRlsTestBase {
                     null,
                     null)));
 
-    // A partial CASH refund against sale 1, via the real VoidRefundWriter production path — its
+    // A FULL CASH refund against sale 1, via the real VoidRefundWriter production path — its
     // payment_refund row is what RegisterSessionRepository#sumCashRefunds/sumRefundsByTender read.
-    long refundMinor = 5_000L;
+    // (2026-08-31 audit #2: partial refunds are rejected at the edge — full-only, once.)
+    long refundMinor = cashGrandTotal;
     asTenant(() -> voidRefundService.refund(cashPaymentId, Money.ofMinor(refundMinor, "IDR")));
 
     RegisterSummaryResponse summary = asTenant(() -> registerSessionService.summarize(sessionId));

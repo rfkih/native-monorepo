@@ -112,6 +112,9 @@ export function BillDetail({
   const [modifierItem, setModifierItem] = useState<MenuItem | null>(null)
   const [showPayModal, setShowPayModal] = useState(false)
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+  // First failure of a group-remove loop (audit #6) — removeLine.isError alone resets to false
+  // when a LATER line in the loop succeeds, hiding a mid-loop conflict.
+  const [groupRemoveError, setGroupRemoveError] = useState<unknown>(null)
   const [billOpen, setBillOpen] = useState(false) // phone-only: bill rail drawer
 
   // ─── Split mode ────────────────────────────────────────────────────────────
@@ -208,11 +211,22 @@ export function BillDetail({
 
   async function handleRemoveGroup(g: BillLineGroup) {
     if (!allowRemoveLines) return
-    // Sequential, NOT parallel: the bill is one @Version aggregate — firing every removeLine at once
-    // makes all-but-the-first optimistic-lock-collide (partial removal + surfaced error). Await each.
+    // Sequential, NOT parallel: each removeLine saves the bill aggregate, so parallel calls
+    // optimistic-lock-collide. Per-line failures are TOLERATED and the loop continues (audit #6):
+    // a concurrent split-pay can mark one of these lines paid mid-loop (409 bill-line-paid) —
+    // aborting used to strand the group half-trimmed with the rest silently skipped. The failure
+    // is tracked locally (removeLine.isError resets when a LATER line succeeds) and rendered
+    // below; the refetched bill shows what actually remains.
+    setGroupRemoveError(null)
+    let firstError: unknown = null
     for (const lineId of g.lineIds) {
-      await removeLine.mutateAsync({ billId, lineId })
+      try {
+        await removeLine.mutateAsync({ billId, lineId })
+      } catch (err) {
+        if (firstError === null) firstError = err
+      }
     }
+    if (firstError !== null) setGroupRemoveError(firstError)
   }
 
   // RFC-7807: the lockdown's stable problem `type` slugs → localized copy (ENGINEERING-STANDARDS
@@ -721,9 +735,9 @@ export function BillDetail({
             ) : null}
           </div>
 
-          {removeLine.isError ? (
+          {removeLine.isError || groupRemoveError !== null ? (
             <p className="px-5 pb-3 text-xs text-loss" role="alert">
-              {billProblemMessage(removeLine.error)}
+              {billProblemMessage(groupRemoveError !== null ? groupRemoveError : removeLine.error)}
             </p>
           ) : null}
         </div>

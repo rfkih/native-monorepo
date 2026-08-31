@@ -195,6 +195,29 @@ public class RevenuePostingWriter {
           "finance.revenue.sealed-period-quarantine",
           companyId,
           null);
+      // 2026-08-31 audit: a reversal that arrived BEFORE this sale is PARKED awaiting it
+      // (pending_sale_reversal); with the sale quarantined the drain loop below never runs, so the
+      // parked reversal would strand SILENTLY (its event id is already claimed by processOnce).
+      // Surface each one to the error inbox alongside the sale, so the accountant handling the
+      // quarantine sees the whole picture — the rows stay parked for the same manual action.
+      pendingReversals
+          .findBySaleIdAndAppliedAtIsNullOrderByOccurredAtAsc(event.saleId())
+          .forEach(
+              parked ->
+                  errorInbox.record(
+                      new IllegalStateException(
+                          "Parked "
+                              + parked.getKind()
+                              + " reversal (event "
+                              + parked.getReversalEventId()
+                              + ") awaits sale "
+                              + event.saleId()
+                              + ", which was quarantined into sealed period "
+                              + period
+                              + " — resolve together with the sale"),
+                      "finance.revenue.sealed-period-quarantine",
+                      companyId,
+                      null));
       return;
     }
 

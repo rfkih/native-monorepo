@@ -126,9 +126,22 @@ class BillGatewayConcurrencyTest extends PostgresRlsTestBase {
         gatewayWon = true;
       } catch (ExecutionException ex) {
         assertThat(ex.getCause())
-            .as("the gateway loser must fail with the reservation-conflict exception")
-            .isInstanceOf(
-                id.co.nativeapp.restaurant.bill.domain.BillLineReservationConflictException.class);
+            .as(
+                "the gateway loser must fail with a RECOGNIZED conflict. Since the 2026-08-31 C1"
+                    + " fix both paths serialize on the bill row lock (findWithLockById), so the"
+                    + " loser usually observes the winner's COMMITTED state at its post-lock"
+                    + " status/line checks (BillNotOpen when cash fully paid, or no unpaid lines)"
+                    + " instead of losing at the guarded line UPDATE")
+            .matches(
+                t ->
+                    t
+                            instanceof
+                            id.co.nativeapp.restaurant.bill.domain
+                                .BillLineReservationConflictException
+                        || t instanceof id.co.nativeapp.restaurant.bill.domain.BillNotOpenException
+                        || (t instanceof IllegalArgumentException
+                            && t.getMessage().contains("unpaid")),
+                "a recognized post-lock conflict (not an arbitrary validation error)");
         gatewayLost = true;
       }
     } finally {

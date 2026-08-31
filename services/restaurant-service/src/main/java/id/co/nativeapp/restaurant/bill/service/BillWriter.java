@@ -57,6 +57,7 @@ import id.co.nativeapp.tenant.TenantContext;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Currency;
@@ -70,6 +71,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -134,6 +136,8 @@ public class BillWriter {
   private final AppliedPromotionRepository appliedPromotionRepository;
   private final ManualDiscountGuard manualDiscountGuard;
   private final ActorRolesProvider actorRoles;
+  /** Audit #3: age after which a PENDING gateway reservation is considered leaked (self-healed). */
+  private final Duration pendingReservationTtl;
   private final SalesChannelRepository salesChannelRepository;
   private final CashWindowLock cashWindowLock;
   private final PaymentWriter paymentWriter;
@@ -161,7 +165,8 @@ public class BillWriter {
       PaymentWriter paymentWriter,
       BillPaymentWriter billPaymentWriter,
       PaymentRepository paymentRepository,
-      ActorRolesProvider actorRoles) {
+      ActorRolesProvider actorRoles,
+      @Value("${native.bill.pending-reservation-ttl:PT30M}") Duration pendingReservationTtl) {
     this.billRepository = billRepository;
     this.lineRepository = lineRepository;
     this.modifierRepository = modifierRepository;
@@ -182,6 +187,14 @@ public class BillWriter {
     this.billPaymentWriter = billPaymentWriter;
     this.paymentRepository = paymentRepository;
     this.actorRoles = actorRoles;
+    // Fail fast on a NEGATIVE TTL (a config typo would otherwise be an always-true age check).
+    // ZERO is deliberately allowed — it means "every reservation is immediately expired", which
+    // the TTL tests pin (PT0S); production keeps the PT30M default.
+    if (pendingReservationTtl.isNegative()) {
+      throw new IllegalStateException(
+          "native.bill.pending-reservation-ttl must be >= 0, got " + pendingReservationTtl);
+    }
+    this.pendingReservationTtl = pendingReservationTtl;
   }
 
   /**
@@ -380,12 +393,22 @@ public class BillWriter {
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public BillResponse payBill(UUID billId, PayBillRequest request) {
     String actor = TenantContext.require().actor();
+    // FOR UPDATE (audit C1/H1): the bill row is the serialization point of every bill write path —
+    // see BillRepository#findWithLockById.
     Bill bill =
-        billRepository.findById(billId).orElseThrow(() -> new BillNotFoundException(billId));
+        billRepository
+            .findWithLockById(billId)
+            .orElseThrow(() -> new BillNotFoundException(billId));
 
     // Phase 5 enforcement at the money moment: even if the bill was opened by someone else (or the
     // cashier's assignment was revoked mid-shift), paying it requires outlet access.
     outletAccessGuard.enforce(bill.getBusinessId());
+
+    // Audit #3 (expiry): a gateway reservation whose PENDING payment is older than the TTL is a
+    // leak (customer walked away, shell crashed before Abandon) — self-heal it here so the cashier
+    // can take cash instead of being locked out forever. Joins THIS transaction, under the bill
+    // row lock above. A FRESH reservation is deliberately untouched (customer may be mid-scan).
+    releaseExpiredPendingReservation(billId);
 
     // Idempotent: already PAID — return current state without side effects.
     if ("PAID".equals(bill.getStatus())) {
@@ -596,8 +619,12 @@ public class BillWriter {
   public PaymentResponse initiatePendingPayment(UUID billId, PayBillRequest request) {
     String actor = TenantContext.require().actor();
 
+    // FOR UPDATE (audit C1/H1): reserving lines judges + mutates bill_line state, so it must
+    // serialize on the bill row like every other bill write path — see findWithLockById.
     Bill bill =
-        billRepository.findById(billId).orElseThrow(() -> new BillNotFoundException(billId));
+        billRepository
+            .findWithLockById(billId)
+            .orElseThrow(() -> new BillNotFoundException(billId));
 
     // Phase 5 enforcement — same guard as payBill.
     outletAccessGuard.enforce(bill.getBusinessId());
@@ -722,12 +749,22 @@ public class BillWriter {
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void cancelBill(UUID billId) {
+    // FOR UPDATE (audit C1/H1): Bill.cancel()'s paid/reserved guard is a read of child rows that a
+    // partial split-pay / reservation mutates WITHOUT bumping bill.version — the row lock makes
+    // this cancel serialize against those writers (they all load via findWithLockById too), so the
+    // line state read below is the committed truth for the duration of this transaction.
     Bill bill =
-        billRepository.findById(billId).orElseThrow(() -> new BillNotFoundException(billId));
+        billRepository
+            .findWithLockById(billId)
+            .orElseThrow(() -> new BillNotFoundException(billId));
 
     if (!"OPEN".equals(bill.getStatus())) {
       throw new BillNotOpenException(billId, bill.getStatus());
     }
+
+    // Audit #3 (expiry): an EXPIRED gateway reservation must not lock the bill uncancellable
+    // forever — self-heal it (fresh reservations still block via Bill.cancel()'s guard).
+    releaseExpiredPendingReservation(billId);
 
     if (!bill.getLines().isEmpty()) {
       requireOwnerOrManager("cancel", billId);
@@ -735,6 +772,38 @@ public class BillWriter {
 
     bill.cancel();
     billRepository.saveAndFlush(bill);
+  }
+
+  /**
+   * Audit #3 fix: abandons this bill's live PENDING gateway payment — releasing its bill_line
+   * reservation — IF it is older than {@code pendingReservationTtl}. Without any server-side
+   * expiry, a customer who walks away from a QRIS (or a shell that crashes before Abandon) leaves
+   * the bill's lines reserved forever: unpayable by cash and uncancellable. Joins the caller's
+   * transaction (both callers hold the bill row lock). A fresh PENDING payment is left alone — the
+   * customer may be mid-scan; {@code initiatePendingPayment}'s own self-heal (deliberate retry)
+   * remains unconditional.
+   */
+  private void releaseExpiredPendingReservation(UUID billId) {
+    paymentRepository
+        .findLivePendingBillPaymentId(billId)
+        .ifPresent(
+            pendingId ->
+                paymentRepository
+                    .findById(pendingId)
+                    .filter(
+                        p ->
+                            p.getCreatedAt() != null
+                                && p.getCreatedAt()
+                                    .isBefore(Instant.now().minus(pendingReservationTtl)))
+                    .ifPresent(
+                        expired -> {
+                          try {
+                            billPaymentWriter.abandonInCurrentTx(expired.getId());
+                          } catch (IllegalStateException alreadySettled) {
+                            // Settled (captured/abandoned) between our read and the abandon —
+                            // benign race, nothing to heal.
+                          }
+                        }));
   }
 
   // -------------------------------------------------------------------------

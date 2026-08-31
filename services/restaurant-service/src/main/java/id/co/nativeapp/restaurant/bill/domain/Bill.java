@@ -178,10 +178,11 @@ public class Bill extends Auditable {
     this.status = "CANCELLED";
   }
 
-  /** Sets the order-level fixed discount in minor units (null = no discount). */
-  public void setDiscountMinor(Long discountMinor) {
-    this.discountMinor = discountMinor;
-  }
+  // NOTE (2026-08-31 audit L1): there is deliberately NO setter for discountMinor — the column is
+  // a legacy always-null artifact (discounts are applied PER CHECK at pay time via
+  // PayBillRequest.discountMinor, never bill-wide), so the live breakdown responses that read
+  // getDiscountMinor() always see null. A setter would silently diverge the display breakdown
+  // from what pay actually charges.
 
   /**
    * Sets the currency on first item append. Only valid when the current currency is "XXX" (the

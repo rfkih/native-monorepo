@@ -57,7 +57,9 @@ class RegisterClosedHistoryIntegrationTest extends PostgresRlsTestBase {
     UUID outlet = UUID.fromString("cccccccc-1111-1111-1111-111111111111");
 
     // S1 — a CASH checkout (refundable via the real path) + a directly-rung CARD sale, then a
-    // partial CASH refund, then CLOSE. Its net must reflect total − refund.
+    // FULL CASH refund of the checkout, then CLOSE. Its net must reflect total − refund.
+    // (2026-08-31 audit #2: partial refunds are now rejected at the edge — finance only posts
+    // full reversals — so the refund here is the payment's full amount.)
     UUID s1 = openSession(outlet, 0L);
     UUID esTehId = createItem(outlet, "Es Teh", 40_000L);
     CheckoutResult cashCheckout =
@@ -82,7 +84,7 @@ class RegisterClosedHistoryIntegrationTest extends PostgresRlsTestBase {
                     "closed-card-" + UUID.randomUUID(),
                     "CARD",
                     cardBreakdown)));
-    long refundMinor = 5_000L;
+    long refundMinor = cashCheckout.order().payment().amountMinor();
     asA(() -> voidRefundService.refund(cashPaymentId, Money.ofMinor(refundMinor, "IDR")));
     closeSession(s1, 100_000L);
 
@@ -150,7 +152,7 @@ class RegisterClosedHistoryIntegrationTest extends PostgresRlsTestBase {
 
     // S1: the refund was subtracted, so the list net == the Z-report net < the total.
     ClosedSessionSummaryResponse rowS1 = history.get(2);
-    assertThat(zS1.refundsMinor()).as("S1 carried a partial refund").isEqualTo(refundMinor);
+    assertThat(zS1.refundsMinor()).as("S1 carried a full cash refund").isEqualTo(refundMinor);
     assertThat(rowS1.netSalesMinor()).isEqualTo(zS1.netSalesMinor());
     assertThat(rowS1.netSalesMinor()).isEqualTo(zS1.totalMinor() - refundMinor);
     assertThat(rowS1.netSalesMinor()).isLessThan(zS1.totalMinor());

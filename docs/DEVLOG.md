@@ -1,5 +1,47 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-08-31 — Functional money-flow audit → fixes: atomic cancel, full-only refunds, reservation TTL
+
+A three-dimension functional audit (bill lifecycle / money-GL seam / concurrency-idempotency)
+found the core posture strong (Money type, round-once pricing, reconciliation identity at both
+ends, symmetric reversals, complete CashWindowLock coverage, outbox+processOnce everywhere) and a
+handful of real flaws, all fixed:
+**C1/H1 (CRITICAL) — cancel TOCTOU.** `Bill.cancel()`'s paid/reserved-line guard read an
+in-memory snapshot while a PARTIAL split-pay (`markLinesPaidForCash`) and a gateway reservation
+mutate `bill_line` via native UPDATEs that never bump `bill.version` — a racing cancel passed its
+guard AND its optimistic check, committing a CANCELLED bill with a recorded sale (or live PSP
+reservation) stranded on it. Fix: `BillRepository#findWithLockById` (bill row FOR UPDATE) is now
+the serialization point of every bill write path (cancelBill, payBill, initiatePendingPayment,
+BillPaymentCaptureWriter.capture); canonical lock order bill → bill_line → payment. Pinned by
+`BillCancelRaceTest` (barrier-raced, exactly-one-winner, invariant asserted via BYPASSRLS).
+`BillGatewayConcurrencyTest`'s loser-exception set widened: losers now observe the winner's
+committed state at their post-lock checks instead of losing at the guarded UPDATE.
+**#2 (HIGH) — partial refunds.** `VoidRefundWriter.refund` accepted CASH/QRIS/CARD partials (200
+OK, drawer/Z-report updated) while finance DLT'd the event (`PartialRefundNotSupportedException`)
+— the GL silently kept full revenue+clearing forever; the old ONLINE-only guard's comment even
+documented the mechanism. Refunds are now ALL-OR-NOTHING, once, for every tender
+(`RefundEdgeGuardTest`); the two register tests that exercised partials via the real path now
+refund in full. Real partial support = SaleRefunded v2 with prorated legs (future).
+**#3 (HIGH) — PENDING reservation TTL.** No server-side expiry existed: an abandoned QRIS left
+bill lines reserved forever (cash-blocked AND — post-lockdown — uncancellable).
+`releaseExpiredPendingReservation` (TTL `native.bill.pending-reservation-ttl`, default PT30M) now
+self-heals inside cash `payBill` and `cancelBill` under the bill lock; fresh reservations still
+block. (`BillPendingReservationTtlTest` pins it at PT0S. The ORDER-side stuck-AWAITING_PAYMENT +
+a `PaymentChargeExpired` event remain a follow-up.)
+**#4 — capture-vs-abandon deadlock**: `doAbandon` reordered to release lines BEFORE the payment
+update (line → payment, matching capture). **#5 — offline replay orphan**: `OfflineReplayGuard`
+clamps a `clientOccurredAt` predating the current OPEN session's `openedAt` to that `openedAt`
+(the cash IS in this drawer; no open session = unchanged, the inherent gap)
+(`OfflineReplayClampTest`). **#6** — FE group-remove now tolerates per-line 409s instead of
+stranding a half-trimmed group. **LOW**: sealed-period quarantine also surfaces the sale's parked
+reversals to the error inbox (they stranded silently); dead `Bill.setDiscountMinor` removed (the
+bill-level discount column is an always-null legacy — discounts are per-check); CashWindowLock
+javadoc participant list completed.
+**Known-open, unchanged by design:** inventory shrinkage double-expense (awaits the ADR 0050/0067
+inventory-method decision), labor GL supersession contra TODO, deliberate Z-report-vs-GL
+divergence, ArchUnit layering debt (register dto→projection, BillAttachmentController→entity),
+two stocktake tests that flake on local Postgres connection slots (green in isolation).
+
 ## 2026-08-31 — Open-bill lockdown: once a bill has items, its flow must end in payment
 
 Owner rule: the POS open-bill flow was too loose — ANY operator (cashier included) could cancel an

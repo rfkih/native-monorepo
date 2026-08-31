@@ -128,9 +128,13 @@ public class BillPaymentCaptureWriter {
               + payment.getStatus());
     }
 
+    // FOR UPDATE (audit C1/H1): capture marks bill_line rows paid, so it must serialize on the
+    // bill row like every other bill write path (canonical lock order bill → bill_line → payment —
+    // the payment row is only locked at the very end, by capture() + saveAndFlush below). See
+    // BillRepository#findWithLockById.
     Bill bill =
         billRepository
-            .findById(payment.getBillId())
+            .findWithLockById(payment.getBillId())
             .orElseThrow(
                 () ->
                     new IllegalArgumentException(

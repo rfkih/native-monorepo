@@ -1,6 +1,7 @@
 package id.co.nativeapp.restaurant.bill.service;
 
 import id.co.nativeapp.restaurant.bill.repository.BillLineRepository;
+import id.co.nativeapp.restaurant.bill.repository.BillRepository;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
 import id.co.nativeapp.restaurant.payment.domain.Payment;
 import id.co.nativeapp.restaurant.payment.dto.PaymentResponse;
@@ -37,14 +38,17 @@ public class BillPaymentWriter {
 
   private final PaymentRepository paymentRepository;
   private final BillLineRepository lineRepository;
+  private final BillRepository billRepository;
   private final OutletAccessGuard outletAccessGuard;
 
   public BillPaymentWriter(
       PaymentRepository paymentRepository,
       BillLineRepository lineRepository,
+      BillRepository billRepository,
       OutletAccessGuard outletAccessGuard) {
     this.paymentRepository = paymentRepository;
     this.lineRepository = lineRepository;
+    this.billRepository = billRepository;
     this.outletAccessGuard = outletAccessGuard;
   }
 
@@ -93,12 +97,47 @@ public class BillPaymentWriter {
     // initiatePendingPayment's "Phase 5 enforcement at the money moment" guard.
     outletAccessGuard.enforce(payment.getBusinessId());
 
+    // ADR 0069: abandon mutates bill_line reservation state, so it MUST serialize on the bill row
+    // like every other bill write path (bill → bill_line → payment). Re-entrant for the in-tx
+    // self-heal callers, whose transaction already holds this lock.
+    billRepository
+        .findWithLockById(payment.getBillId())
+        .orElseThrow(
+            () ->
+                new IllegalStateException(
+                    "Bill " + payment.getBillId() + " not found for payment " + paymentId));
+
+    // FRESH status re-check UNDER the bill lock (audit-fix review W1): `payment` above was read
+    // BEFORE the lock, so a concurrent settle (capture, or another abandon) may have committed in
+    // between — the stale in-memory PENDING would pass Payment#abandon's guard and then blow up as
+    // an optimistic-lock 500 at flush. A native read sees the committed truth; non-PENDING throws
+    // the same IllegalStateException the self-heal callers already treat as the benign
+    // "already settled" outcome. While we hold the bill lock no further settle can start.
+    String freshStatus =
+        paymentRepository
+            .findStatusFresh(paymentId)
+            .orElseThrow(
+                () -> new IllegalStateException("Payment " + paymentId + " no longer exists"));
+    if (!Payment.Status.PENDING.name().equals(freshStatus)) {
+      throw new IllegalStateException(
+          "only a PENDING bill payment can be abandoned; payment "
+              + paymentId
+              + " is "
+              + freshStatus);
+    }
+
+    // LOCK ORDER (audit #4 deadlock fix): release the bill_line reservation FIRST, then update the
+    // payment row — bill_line → payment, the same canonical order capture takes (bill → bill_line
+    // → payment). The previous payment-first order deadlocked against a concurrent webhook capture
+    // (each held the other's second lock). Ordering is safe: if the payment turns out not to be
+    // PENDING, Payment#abandon below throws and THIS whole transaction — including the release —
+    // rolls back; and a captured payment's lines were already re-pointed by
+    // markLinesPaidForCapture, so the release UPDATE would have matched zero rows anyway.
+    lineRepository.releaseReservation(paymentId, actor);
+
     // Payment#abandon enforces the PENDING guard (throws IllegalStateException otherwise).
     payment.abandon();
     paymentRepository.saveAndFlush(payment);
-
-    // Release the reservation so the lines are payable again (cash, or a fresh gateway attempt).
-    lineRepository.releaseReservation(paymentId, actor);
 
     return PaymentResponse.from(payment);
   }

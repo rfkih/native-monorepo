@@ -3,6 +3,7 @@ package id.co.nativeapp.restaurant.order.service;
 import id.co.nativeapp.restaurant.order.domain.OfflineReplayValidationException;
 import id.co.nativeapp.restaurant.order.dto.CheckoutRequest;
 import id.co.nativeapp.restaurant.payment.domain.TenderType;
+import id.co.nativeapp.restaurant.register.repository.RegisterSessionRepository;
 import java.time.Duration;
 import java.time.Instant;
 import org.springframework.stereotype.Component;
@@ -24,6 +25,12 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class OfflineReplayGuard {
+
+  private final RegisterSessionRepository registerSessionRepository;
+
+  public OfflineReplayGuard(RegisterSessionRepository registerSessionRepository) {
+    this.registerSessionRepository = registerSessionRepository;
+  }
 
   /** {@code clientOccurredAt} may not be more than this far in the past. */
   private static final Duration MAX_PAST = Duration.ofHours(48);
@@ -88,7 +95,25 @@ public class OfflineReplayGuard {
 
     enforceOfflineFieldMatrix(request);
 
-    return clientOccurredAt != null ? clientOccurredAt : now;
+    if (clientOccurredAt == null) {
+      return now;
+    }
+
+    // 2026-08-31 audit #5: a replay backdated BEFORE the current OPEN register session's window
+    // would land in NO session at all — its own session already closed (and summed its cash
+    // without it), and the current window starts later — permanently understating the drawer's
+    // expected cash. The physical cash IS in this drawer, so clamp the instant to the open
+    // session's start: the sale reconciles in the session that will actually count the money.
+    // With no OPEN session the instant is left as-is (the pre-existing, inherent backdating gap —
+    // nothing can reconcile a drawer that isn't open).
+    return registerSessionRepository
+        .findOpenViewByBusinessId(request.businessId())
+        .map(
+            open ->
+                clientOccurredAt.isBefore(open.getOpenedAt())
+                    ? open.getOpenedAt()
+                    : clientOccurredAt)
+        .orElse(clientOccurredAt);
   }
 
   private static Instant max(Instant a, Instant b) {

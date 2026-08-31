@@ -54,6 +54,15 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID> {
   Optional<UUID> findLivePendingBillPaymentId(@Param("billId") UUID billId);
 
   /**
+   * The payment's status as COMMITTED IN THE DATABASE right now — bypasses the persistence
+   * context's first-level cache (a native scalar read), unlike a repeated {@code findById}. Used
+   * by {@code BillPaymentWriter#doAbandon} to re-validate PENDING <em>after</em> acquiring the
+   * bill row lock (ADR 0069): the entity loaded before the lock may be stale.
+   */
+  @Query(value = "SELECT p.status FROM payment p WHERE p.id = :paymentId", nativeQuery = true)
+  Optional<String> findStatusFresh(@Param("paymentId") UUID paymentId);
+
+  /**
    * The most recent payment against an order — the order read path's receipt-rebuild need ({@code
    * GET /api/v1/orders/{id}}, {@code OrderWriter.findById}). A voided+retried order can have
    * several payment rows; the newest ({@code created_at DESC}) is the one whose receipt the cashier
