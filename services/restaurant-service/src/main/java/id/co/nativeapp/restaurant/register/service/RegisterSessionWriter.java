@@ -23,6 +23,7 @@ import id.co.nativeapp.restaurant.register.dto.TenderCount;
 import id.co.nativeapp.restaurant.register.dto.TenderExpected;
 import id.co.nativeapp.restaurant.register.dto.TenderSalesLine;
 import id.co.nativeapp.restaurant.register.messaging.RegisterSessionClosedSchema;
+import id.co.nativeapp.restaurant.register.projection.ClosedSessionSalesView;
 import id.co.nativeapp.restaurant.register.projection.RegisterSessionView;
 import id.co.nativeapp.restaurant.register.projection.SaleSummaryView;
 import id.co.nativeapp.restaurant.register.repository.RegisterSessionRepository;
@@ -682,8 +683,23 @@ public class RegisterSessionWriter {
     return repository
         .findClosedHistoryWithSalesByBusinessId(businessId, CLOSED_HISTORY_LIMIT)
         .stream()
-        .map(ClosedSessionSummaryResponse::from)
+        .map(RegisterSessionWriter::toClosedSummary)
         .toList();
+  }
+
+  /**
+   * Maps the closed-history projection to its response row (CHAR(3) currency stripped). Lives in
+   * the SERVICE layer — the dto boundary must not reach into projections (ArchUnit).
+   */
+  private static ClosedSessionSummaryResponse toClosedSummary(ClosedSessionSalesView v) {
+    return new ClosedSessionSummaryResponse(
+        v.getId(),
+        v.getBusinessDate(),
+        v.getOpenedAt(),
+        v.getClosedAt(),
+        v.getCurrency() == null ? null : v.getCurrency().strip(),
+        v.getNetSalesMinor(),
+        v.getTransactionCount());
   }
 
   /**

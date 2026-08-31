@@ -1,5 +1,48 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-08-31 — Follow-ups closed: `PaymentChargeExpired` event (order+bill release) + ArchUnit debt
+
+Cleared the open follow-ups from the money-flow audit below.
+
+**`PaymentChargeExpired` — the un-happy-path counterpart of `PaymentChargeSucceeded` (ADR 0045).**
+The audit's TTL self-heal covered the BILL side lazily; the ORDER side (stuck `AWAITING_PAYMENT`)
+had no recovery at all, and neither side learned *promptly* that a charge had died. Now
+payment-service emits `PaymentChargeExpired` (outbox, rule 3) whenever a **QR_ISSUED** gateway
+charge terminates without settling — `EXPIRED` (the lazy `expireIfPast` sweep on the till poll, or
+a `/sync`), `CANCELED` (cashier cancel), or `FAILED` (PSP) — carrying a `reason`. Emission is in
+the SAME transaction as the terminal transition; `ChargeWriter.terminateIfLive` captures
+`wasQrIssued` before the flip and emits ONLY then, so an `INITIATED`-stage failure (dead PSP at
+create — the `create()` call already fails synchronously to the caller) emits **nothing** (proven
+by `ChargeFlowAcceptanceTest`, which still asserts zero outbox on the dead-PSP path and now asserts
+exactly one event, with `reason`, on cancel-of-issued-QR and sync-finds-expired).
+restaurant-service consumes it (`PaymentChargeExpiredListener → …Service → …Writer`: dedupe by
+event id, vertical filter, PENDING-precondition no-op for the capture-won-the-race case,
+park-don't-drop for unknown-payment/order or a true state divergence): a BILL payment releases its
+`bill_line` reservation + abandons under the ADR 0069 bill-row lock (a new **guard-free**
+`BillPaymentWriter.abandonForExpiredChargeInCurrentTx` — the outlet-access guard scopes *cashier*
+actions and would wrongly 403 on the system consumer thread; RLS still scopes every query by the
+event's `company_id`); an ORDER payment reverts `AWAITING_PAYMENT → PENDING` (new
+`Order.revertAwaitingToPending()`, so the sale is payable again by cash / a fresh QR) + abandons the
+tender. No money moves, no `SaleRecorded` (ADR 0006 revenue-at-capture holds). Schema single-sourced
+in `libs/contracts`, added to `docs/EVENT-CATALOG.md`; contract tests both sides + a real-Kafka
+`PaymentChargeExpiredConsumeAcceptanceTest` (order-revert+redelivery-idempotency, bill-release,
+already-captured no-op, wrong-vertical skip, unknown-payment park). *Still deferred, by design:*
+true partial refunds (SaleRefunded v2 prorated legs) — an enhancement, not a bug.
+
+**ArchUnit layering debt cleared** (the three long-standing violations): `ClosedSessionSummaryResponse`'s
+projection→dto `from()` factory moved to `RegisterSessionWriter.toClosedSummary` (a dto must not
+reach into the projection layer); `BillAttachmentWriter.upload` now returns the DTO so
+`BillAttachmentController` never touches the `@Entity`; `OfflineReplayGuard` (an `order.service`
+class, not a `*Writer/*Service/*Reader`) no longer injects `RegisterSessionRepository` — the open
+session's `openedAt` is supplied lazily by `OrderWriter` via a `Supplier`, so the extra query still
+runs only on the accepted-backdate replay path. `LayeredArchitectureTest` fully green.
+
+**Inventory shrinkage double-expense** (the third open item) needed no new work — ADR 0068
+(periodic-safe default + stock-opname variance guard) was already Accepted AND shipped in
+`40901209`; the finance `StocktakeWriter`/`StockReceivedWriter`/`SaleCogsRecordedWriter`/AP
+`BillWriter` gates on `PerpetualInventoryReader.isActiveFor` are in place, so a non-activated
+tenant's opname no longer posts to the GL.
+
 ## 2026-08-31 — Functional money-flow audit → fixes: atomic cancel, full-only refunds, reservation TTL
 
 A three-dimension functional audit (bill lifecycle / money-GL seam / concurrency-idempotency)

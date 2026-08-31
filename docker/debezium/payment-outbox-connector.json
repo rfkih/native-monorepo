@@ -6,7 +6,7 @@
     "//": "Tail payment-service's database; one connector per service DB (DB-per-service).",
     "//2": "Per-service copy of debezium/outbox-connector.json (see docker/README.md) — only the",
     "//3": "database/slot/publication/prefix differ. Producers routed here:",
-    "//4": "PaymentChargeSucceeded (restaurant/carwash/barbershop consumers — ADR 0045).",
+    "//4": "PaymentChargeSucceeded + PaymentChargeExpired (restaurant/carwash/barbershop consumers — ADR 0045); each routes to its own topic by event_type.",
     "database.hostname": "postgres",
     "database.port": "5432",
     "database.user": "payment_service",

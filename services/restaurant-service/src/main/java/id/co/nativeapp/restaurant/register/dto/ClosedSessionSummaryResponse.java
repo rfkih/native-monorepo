@@ -1,6 +1,5 @@
 package id.co.nativeapp.restaurant.register.dto;
 
-import id.co.nativeapp.restaurant.register.projection.ClosedSessionSalesView;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -11,6 +10,9 @@ import java.util.UUID;
  * /api/v1/register-sessions/{id}/summary}). {@code netSalesMinor} equals that session's Z-report
  * net (total − refunds) over its {@code [openedAt, closedAt)} window. All money is integer minor
  * units in {@code currency} (rule 8); formatting is the client's job.
+ *
+ * <p>Mapping from the repository projection lives in {@code RegisterSessionWriter} — a dto must
+ * not depend on the projection layer (LayeredArchitectureTest).
  */
 public record ClosedSessionSummaryResponse(
     UUID sessionId,
@@ -19,16 +21,4 @@ public record ClosedSessionSummaryResponse(
     Instant closedAt,
     String currency,
     long netSalesMinor,
-    long transactionCount) {
-
-  public static ClosedSessionSummaryResponse from(ClosedSessionSalesView v) {
-    return new ClosedSessionSummaryResponse(
-        v.getId(),
-        v.getBusinessDate(),
-        v.getOpenedAt(),
-        v.getClosedAt(),
-        v.getCurrency() == null ? null : v.getCurrency().strip(),
-        v.getNetSalesMinor(),
-        v.getTransactionCount());
-  }
-}
+    long transactionCount) {}

@@ -8,6 +8,7 @@ import id.co.nativeapp.restaurant.bill.domain.Bill;
 import id.co.nativeapp.restaurant.bill.domain.BillAttachment;
 import id.co.nativeapp.restaurant.bill.domain.BillAttachmentLimitExceededException;
 import id.co.nativeapp.restaurant.bill.domain.BillNotFoundException;
+import id.co.nativeapp.restaurant.bill.dto.BillAttachmentMetaResponse;
 import id.co.nativeapp.restaurant.bill.repository.BillAttachmentRepository;
 import id.co.nativeapp.restaurant.bill.repository.BillRepository;
 import id.co.nativeapp.restaurant.outletref.service.OutletAccessGuard;
@@ -66,7 +67,9 @@ public class BillAttachmentWriter {
   }
 
   /**
-   * Uploads one attachment (photo/PDF) onto a bill in the bound tenant.
+   * Uploads one attachment (photo/PDF) onto a bill in the bound tenant. Returns the metadata DTO,
+   * not the entity — the controller must never touch a JPA entity (ArchUnit {@code
+   * controllersMustNotDependOnEntities}).
    *
    * @throws MaxUploadSizeExceededException if the bytes exceed {@link BillAttachment#MAX_BYTES}
    *     (413)
@@ -77,7 +80,7 @@ public class BillAttachmentWriter {
    *     #MAX_ATTACHMENTS_PER_BILL} attachments (422)
    */
   @Transactional
-  public BillAttachment upload(
+  public BillAttachmentMetaResponse upload(
       UUID billId, String declaredContentType, byte[] data, String originalFilename) {
     String tenant = TenantContext.require().companyId();
 
@@ -106,7 +109,7 @@ public class BillAttachmentWriter {
     Optional<BillAttachment> existing =
         attachmentRepository.findFirstByBillIdAndSha256(billId, sha256);
     if (existing.isPresent()) {
-      return existing.get();
+      return BillAttachmentMetaResponse.from(existing.get());
     }
 
     // Per-bill ceiling (flaw-audit W1): bounds tenant storage growth and the serve fan-out.
@@ -132,7 +135,7 @@ public class BillAttachmentWriter {
             objectKey,
             sanitizeFilename(originalFilename));
     attachment.setCompanyId(tenant);
-    return attachmentRepository.saveAndFlush(attachment);
+    return BillAttachmentMetaResponse.from(attachmentRepository.saveAndFlush(attachment));
   }
 
   /**

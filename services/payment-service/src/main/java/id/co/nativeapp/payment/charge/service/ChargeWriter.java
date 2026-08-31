@@ -3,10 +3,12 @@ package id.co.nativeapp.payment.charge.service;
 import id.co.nativeapp.events.AvroSerde;
 import id.co.nativeapp.events.OutboxWriter;
 import id.co.nativeapp.payment.charge.domain.ChargeConflictException;
+import id.co.nativeapp.payment.charge.domain.ChargeExpiryReason;
 import id.co.nativeapp.payment.charge.domain.ChargeNotFoundException;
 import id.co.nativeapp.payment.charge.domain.ChargeStatus;
 import id.co.nativeapp.payment.charge.domain.ChargeValidationException;
 import id.co.nativeapp.payment.charge.domain.PaymentCharge;
+import id.co.nativeapp.payment.charge.messaging.PaymentChargeExpiredSchema;
 import id.co.nativeapp.payment.charge.messaging.PaymentChargeSucceededSchema;
 import id.co.nativeapp.payment.charge.repository.PaymentChargeRepository;
 import id.co.nativeapp.payment.settings.domain.PaymentSettings;
@@ -157,24 +159,25 @@ public class ChargeWriter {
   /** live → FAILED (no-op on a terminal charge — the PSP outcome may race a cancel). */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void markFailed(UUID chargeId) {
-    transitionIfLive(chargeId, PaymentCharge::markFailed);
+    terminateIfLive(chargeId, PaymentCharge::markFailed, ChargeExpiryReason.FAILED);
   }
 
   /** live → CANCELED (no-op on a terminal charge). */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void markCanceled(UUID chargeId) {
-    transitionIfLive(chargeId, PaymentCharge::markCanceled);
+    terminateIfLive(chargeId, PaymentCharge::markCanceled, ChargeExpiryReason.CANCELED);
   }
 
   /** live → EXPIRED (no-op on a terminal charge). */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void markExpired(UUID chargeId) {
-    transitionIfLive(chargeId, PaymentCharge::markExpired);
+    terminateIfLive(chargeId, PaymentCharge::markExpired, ChargeExpiryReason.EXPIRED);
   }
 
   /**
    * The lazy expiry sweep (the fleet's no-@Scheduled idiom): flips QR_ISSUED → EXPIRED once the QR
-   * is past its expiry + grace. Called from the till's poll read path.
+   * is past its expiry + grace, and emits {@code PaymentChargeExpired} so the vertical releases the
+   * PENDING tender it was holding. Called from the till's poll read path.
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void expireIfPast(UUID chargeId, Instant now) {
@@ -183,7 +186,10 @@ public class ChargeWriter {
         && charge.getExpiresAt() != null
         && now.isAfter(charge.getExpiresAt().plusSeconds(EXPIRY_GRACE_SECONDS))) {
       charge.markExpired();
+      // Flush BEFORE the outbox emit: a concurrent settle that already flipped this row to SUCCEEDED
+      // makes this flush throw on the version check and rolls the whole tx back — no EXPIRED event.
       charges.saveAndFlush(charge);
+      emitChargeExpired(charge, ChargeExpiryReason.EXPIRED, now);
     }
   }
 
@@ -270,14 +276,60 @@ public class ChargeWriter {
     return new RemoteOp(charge, requireCompanyCredentials());
   }
 
-  private void transitionIfLive(
-      UUID chargeId, java.util.function.Consumer<PaymentCharge> transition) {
+  /**
+   * live → a terminal non-SUCCEEDED state (FAILED/CANCELED/EXPIRED), no-op on an already-terminal
+   * charge. When the prior state was QR_ISSUED — the only state in which a customer-facing QR
+   * existed and a vertical PENDING tender is genuinely waiting on the async settlement — it ALSO
+   * emits {@code PaymentChargeExpired} in this same transaction so the vertical releases that
+   * tender. An INITIATED-state termination (e.g. the gateway never issued a QR) emits nothing: the
+   * originating {@code create()} call fails synchronously to the caller, which handles it in-band.
+   */
+  private void terminateIfLive(
+      UUID chargeId,
+      java.util.function.Consumer<PaymentCharge> transition,
+      ChargeExpiryReason reason) {
     PaymentCharge charge = require(chargeId);
     if (!charge.isLive()) {
       return;
     }
+    boolean wasQrIssued = charge.getStatus() == ChargeStatus.QR_ISSUED;
     transition.accept(charge);
+    // Force the optimistic-version check BEFORE the outbox insert (the applySettlement discipline):
+    // a concurrent transition makes this flush throw and the whole transaction — no event — rolls
+    // back.
     charges.saveAndFlush(charge);
+    if (wasQrIssued) {
+      emitChargeExpired(charge, reason, Instant.now());
+    }
+  }
+
+  /**
+   * Writes the {@code PaymentChargeExpired} outbox row (rule 3) for a charge that terminated without
+   * settling, in the CALLER's transaction. The counterpart of {@link #applySettlement}'s emit on the
+   * un-happy path — carries no money movement, only the release signal + audit fields.
+   */
+  private void emitChargeExpired(PaymentCharge charge, ChargeExpiryReason reason, Instant occurredAt) {
+    byte[] payload =
+        AvroSerde.serialize(
+            PaymentChargeExpiredSchema.toRecord(
+                charge.getId(),
+                charge.getCompanyId(),
+                charge.getVertical(),
+                charge.getPaymentId(),
+                charge.getReferenceId(),
+                charge.getBusinessId(),
+                charge.getAmountMinor(),
+                charge.getCurrency(),
+                reason.name(),
+                occurredAt));
+    outboxWriter.write(
+        PaymentChargeExpiredSchema.AGGREGATE_TYPE,
+        charge.getId().toString(),
+        PaymentChargeExpiredSchema.EVENT_TYPE,
+        payload,
+        null,
+        UUID.fromString(charge.getCompanyId()),
+        occurredAt);
   }
 
   private PaymentCharge require(UUID chargeId) {

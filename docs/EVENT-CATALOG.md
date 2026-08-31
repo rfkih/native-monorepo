@@ -76,6 +76,7 @@ has landed yet — the status names the phases that will land them.
 | **`ConsolidationClosed`** | **finance** (within-company + group close) | **shell, notification** | **company_id (or group_id), period** | **LIVE (PRODUCER P3d SEAM 4a; notification consumer #22)** |
 | **`DeliveryReceipt`** | **notification-service** | **(audit/observability sinks; re-send policy)** | **notification_id, company_id, channel, status, provider_ref, delivered_at** | **LIVE (#22)** |
 | **`PaymentChargeSucceeded`** | **payment-service** | **restaurant-service, carwash-service, barbershop-service** (each filters on `vertical`) | **charge_id, company_id, vertical, payment_id, reference_id?, business_id, amount_minor, currency, provider, provider_txn_id?, succeeded_at** | **LIVE (ADR 0045): producer (webhook + sync settlement transitions, outbox, Debezium `payment-outbox-connector`) AND all three vertical consumers built — each runs its existing idempotent capture writer** |
+| **`PaymentChargeExpired`** | **payment-service** | **restaurant-service** (carwash/barbershop when built — each filters on `vertical`) | **charge_id, company_id, vertical, payment_id, reference_id?, business_id, amount_minor, currency, reason, occurred_at** | **LIVE (ADR 0045): the un-happy-path counterpart of `PaymentChargeSucceeded` — producer emits when a QR_ISSUED charge terminates without settling (EXPIRED/CANCELED/FAILED, outbox, same Debezium connector); restaurant consumer RELEASES the PENDING tender (bill reservation → abandon; order → revert AWAITING_PAYMENT). No money moves** |
 | **`StockReceived`** | **restaurant-service** | **finance-service** | **receipt_id, company_id, business_id, ingredient_id, qty, value_minor, currency, received_at** | **LIVE (ADR 0067, Phase B): producer (`IngredientWriter.addStock` priced branch + `goods_receipt` idempotency anchor) AND finance consumer (`StockReceivedWriter`, capitalize-if-perpetual-active/else claimed no-op) both wired; perpetual-active branch dead in prod until Phase D activates a tenant** |
 | **`SaleCogsRecorded`** | **restaurant-service** | **finance-service** | **sale_id, company_id, business_id, occurred_at, cogs_minor, currency** | **LIVE (ADR 0067, Phase C): producer (`recipe.service.IngredientDepletionWriter` COGS fold + `sale.service.SaleWriter` snapshot/outbox) AND finance consumer (`inventory.service.SaleCogsRecordedWriter`, post-if-perpetual-active/else claimed no-op) both wired; perpetual-active branch dead in prod until Phase D activates a tenant** |
 
@@ -2425,6 +2426,65 @@ never reorder/remove/retype. `reference_id` and `provider_txn_id` are nullable u
 (`PaymentChargeSucceededContractTest` — parse, round-trip both nullable states, self-compat,
 added-optional accepted, required-without-default rejected); each vertical adds its consumer-side
 copy with its listener.
+
+---
+
+### `PaymentChargeExpired`
+
+The un-happy-path counterpart of `PaymentChargeSucceeded`. Emitted by payment-service when a
+dynamic-QRIS gateway charge (ADR 0045) that had **already issued its QR** reaches a TERMINAL state
+**without settling** — `EXPIRED` (the QR timed out; the lazy past-expiry sweep on the till's poll,
+or a `/sync`, flipped it), `CANCELED` (the cashier cancelled the attempt and the PSP confirmed no
+money moved), or `FAILED` (the PSP reported failure). The outbox row is written in the SAME
+transaction as the status transition (rule 3). An `INITIATED` charge that failed **before** any QR
+was issued does NOT emit this — the originating `create()` call fails synchronously to the caller,
+which handles it in-band.
+
+The POS vertical named in `vertical` consumes it and RELEASES the PENDING tender it was holding for
+the charge, so the sale can be paid another way (cash, or a fresh QR): restaurant releases a bill
+payment's `bill_line` reservation and abandons it (`BillPaymentWriter`, under the ADR 0069 bill-row
+lock), or reverts an order out of `AWAITING_PAYMENT` back to `PENDING` and abandons the order
+tender. **No money moves and no `SaleRecorded` is emitted** (ADR 0006 revenue-at-capture holds). A
+consumer that finds the payment already CAPTURED (the cashier's manual mark-as-paid raced the dying
+charge) or already ABANDONED (a prior delivery) no-ops; an unknown payment / order or a bill/order
+state divergence parks in the error inbox, processed-marked, and releases nothing.
+
+- **Producer:** `payment-service`
+- **Consumers:** `restaurant-service` (carwash/barbershop skip events whose `vertical` is not their
+  own; their release writers are wired when those verticals adopt the gateway)
+- **Aggregate type / partition key:** `payment_charge` / `charge_id`
+- **Outbox `event_type`:** `PaymentChargeExpired`
+- **Schema:** `libs/contracts/src/main/resources/avro/PaymentChargeExpired.avsc`
+- **Full name:** `id.co.nativeapp.events.payment.PaymentChargeExpired`
+- **Status:** LIVE — the lazy sweep (`ChargeWriter.expireIfPast`, run on the till's `GET
+  /api/v1/charges/{id}` poll) and the `/sync` + `/cancel` transitions (`markExpired`/`markCanceled`/
+  `markFailed`) all emit on a QR_ISSUED→terminal flip through the same optimistic-guarded transition;
+  Debezium ships it via `docker/debezium/payment-outbox-connector.json` (routed by `event_type`, no
+  connector change). The restaurant consumer (`payment.messaging.PaymentChargeExpiredListener` →
+  `PaymentChargeExpiredWriter`: dedupe by event id, PENDING-precondition no-op for the capture/
+  already-released races, park-don't-drop for unknown-payment/unknown-order/state-divergence, then
+  the bill/order release).
+
+**Key fields**
+
+| Field | Avro type | Meaning |
+|---|---|---|
+| `charge_id` | `string` | The payment_charge id (UUID as string); partition key |
+| `company_id` | `string` | The owning tenant (UUID as string) |
+| `vertical` | `string` | `restaurant` \| `carwash` \| `barbershop` (lowercase module-key casing) — the consumer filter |
+| `payment_id` | `string` | The vertical's payment row id — restaurant's release anchor |
+| `reference_id` | `["null","string"]` default `null` | The vertical's release key when different: the carwash/barbershop TICKET id; null for restaurant |
+| `business_id` | `string` | The outlet the charge was rung at (real OUTLET id, ADR 0012) |
+| `amount_minor` | `long` | The charge amount, minor units — audit/observability only; no capture happens on this event |
+| `currency` | `string` | ISO-4217 (`IDR` — QRIS is IDR-only, enforced at charge creation) |
+| `reason` | `string` | Why the charge terminated: `EXPIRED` \| `CANCELED` \| `FAILED` — the release is identical regardless; recorded for audit / park messages |
+| `occurred_at` | `timestamp-millis` | When the terminal transition was recorded (UTC) |
+
+**Compatibility.** Only backward-compatible evolution is allowed: append fields with a default,
+never reorder/remove/retype. `reference_id` is a nullable union with `default: null` from day one.
+**Contract tests:** producer-side in payment-service (`PaymentChargeExpiredContractTest` — parse,
+round-trip both nullable states, self-compat, added-optional accepted, required-without-default
+rejected); restaurant adds its consumer-side round-trip.
 
 ---
 

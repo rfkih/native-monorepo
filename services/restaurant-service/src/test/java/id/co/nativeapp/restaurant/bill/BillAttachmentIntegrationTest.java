@@ -63,15 +63,17 @@ class BillAttachmentIntegrationTest extends PostgresRlsTestBase {
   void uploadsPhotoAndPdfListsThemAndStreamsTheExactBytesBack() throws Exception {
     UUID billId = openBill();
 
-    BillAttachment photo = asA(() -> writer.upload(billId, "image/png", PNG, "receipt.png"));
-    BillAttachment doc = asA(() -> writer.upload(billId, "application/pdf", PDF, "invoice.pdf"));
+    BillAttachmentMetaResponse photo =
+        asA(() -> writer.upload(billId, "image/png", PNG, "receipt.png"));
+    BillAttachmentMetaResponse doc =
+        asA(() -> writer.upload(billId, "application/pdf", PDF, "invoice.pdf"));
 
-    assertThat(photo.getContentType()).isEqualTo("image/png");
-    assertThat(photo.getByteSize()).isEqualTo(PNG.length);
-    assertThat(photo.getSha256()).isEqualTo(Sha256.hex(PNG));
-    assertThat(photo.getOriginalFilename()).isEqualTo("receipt.png");
-    assertThat(doc.getContentType()).isEqualTo("application/pdf");
-    assertThat(doc.getSha256()).isEqualTo(Sha256.hex(PDF));
+    assertThat(photo.contentType()).isEqualTo("image/png");
+    assertThat(photo.byteSize()).isEqualTo(PNG.length);
+    assertThat(photo.sha256()).isEqualTo(Sha256.hex(PNG));
+    assertThat(photo.originalFilename()).isEqualTo("receipt.png");
+    assertThat(doc.contentType()).isEqualTo("application/pdf");
+    assertThat(doc.sha256()).isEqualTo(Sha256.hex(PDF));
 
     List<BillAttachmentMetaResponse> list = asA(() -> reader.list(billId));
     assertThat(list).hasSize(2);
@@ -81,7 +83,7 @@ class BillAttachmentIntegrationTest extends PostgresRlsTestBase {
 
     // The serve is TWO proxied calls (flaw-audit C1): a transactional metadata read, then the
     // byte fetch with NO transaction — composed here exactly as the controller composes them.
-    BillAttachmentContentMeta meta = asA(() -> reader.contentMeta(billId, photo.getId()));
+    BillAttachmentContentMeta meta = asA(() -> reader.contentMeta(billId, photo.id()));
     assertThat(meta.contentType()).isEqualTo("image/png");
     assertThat(meta.sha256()).isEqualTo(Sha256.hex(PNG));
     assertThat(reader.payload(meta.objectKey())).isEqualTo(PNG);
@@ -90,11 +92,11 @@ class BillAttachmentIntegrationTest extends PostgresRlsTestBase {
   @Test
   void reUploadingTheSameBytesOnTheSameBillIsIdempotent() throws Exception {
     UUID billId = openBill();
-    BillAttachment first = asA(() -> writer.upload(billId, "image/png", PNG, "a.png"));
+    BillAttachmentMetaResponse first = asA(() -> writer.upload(billId, "image/png", PNG, "a.png"));
     // Flaw-audit W3: a byte-identical re-upload (network retry / double-tap) returns the EXISTING
     // row — one row, one object, no duplicate.
-    BillAttachment second = asA(() -> writer.upload(billId, "image/png", PNG, "b.png"));
-    assertThat(second.getId()).isEqualTo(first.getId());
+    BillAttachmentMetaResponse second = asA(() -> writer.upload(billId, "image/png", PNG, "b.png"));
+    assertThat(second.id()).isEqualTo(first.id());
     assertThat(asA(() -> reader.list(billId))).hasSize(1);
   }
 
@@ -114,7 +116,7 @@ class BillAttachmentIntegrationTest extends PostgresRlsTestBase {
     // A byte-identical re-upload of an EXISTING attachment still replays fine at the cap.
     byte[] replay = PNG.clone();
     replay[replay.length - 1] = (byte) 3;
-    assertThat(asA(() -> writer.upload(billId, "image/png", replay, "p.png")).getId()).isNotNull();
+    assertThat(asA(() -> writer.upload(billId, "image/png", replay, "p.png")).id()).isNotNull();
     assertThat(asA(() -> reader.list(billId)))
         .hasSize(BillAttachmentWriter.MAX_ATTACHMENTS_PER_BILL);
   }
@@ -136,10 +138,10 @@ class BillAttachmentIntegrationTest extends PostgresRlsTestBase {
   void anAttachmentCanOnlyBeReadUnderItsOwnBill() throws Exception {
     UUID billA = openBill();
     UUID billB = openBill();
-    BillAttachment onA = asA(() -> writer.upload(billA, "image/png", PNG, "a.png"));
+    BillAttachmentMetaResponse onA = asA(() -> writer.upload(billA, "image/png", PNG, "a.png"));
 
     // Same tenant, WRONG bill → 404 (never serve bill A's attachment under bill B).
-    assertThatThrownBy(() -> asA(() -> reader.contentMeta(billB, onA.getId())))
+    assertThatThrownBy(() -> asA(() -> reader.contentMeta(billB, onA.id())))
         .isInstanceOf(BillNotFoundException.class);
   }
 
@@ -173,11 +175,14 @@ class BillAttachmentIntegrationTest extends PostgresRlsTestBase {
   @Test
   void deleteRemovesTheRowButKeepsTheContentAddressedObject() throws Exception {
     UUID billId = openBill();
-    BillAttachment onA = asA(() -> writer.upload(billId, "image/png", PNG, "a.png"));
+    BillAttachmentMetaResponse onA = asA(() -> writer.upload(billId, "image/png", PNG, "a.png"));
+    // The DTO carries no objectKey (it never travels to the client) — capture it via the serve
+    // metadata BEFORE deleting the row.
+    String objectKey = asA(() -> reader.contentMeta(billId, onA.id())).objectKey();
 
     asA(
         () -> {
-          writer.delete(billId, onA.getId());
+          writer.delete(billId, onA.id());
           return null;
         });
 
@@ -185,21 +190,21 @@ class BillAttachmentIntegrationTest extends PostgresRlsTestBase {
     assertThat(asA(() -> reader.list(billId))).isEmpty();
     // …but the shared, content-addressed object is deliberately NOT deleted (ADR 0048): a
     // byte-identical attachment on a sibling bill would still reference it.
-    assertThat(mediaStorage.get(onA.getObjectKey()).data()).isEqualTo(PNG);
+    assertThat(mediaStorage.get(objectKey).data()).isEqualTo(PNG);
   }
 
   @Test
   void deleteUnderTheWrongBillIs404AndDoesNotRemoveTheRow() throws Exception {
     UUID billA = openBill();
     UUID billB = openBill();
-    BillAttachment onA = asA(() -> writer.upload(billA, "image/png", PNG, "a.png"));
+    BillAttachmentMetaResponse onA = asA(() -> writer.upload(billA, "image/png", PNG, "a.png"));
 
     // Same tenant, WRONG bill → 404: an attachment can only be deleted under its own bill (IDOR).
     assertThatThrownBy(
             () ->
                 asA(
                     () -> {
-                      writer.delete(billB, onA.getId());
+                      writer.delete(billB, onA.id());
                       return null;
                     }))
         .isInstanceOf(BillNotFoundException.class);
@@ -209,7 +214,7 @@ class BillAttachmentIntegrationTest extends PostgresRlsTestBase {
   @Test
   void anotherTenantCannotDeleteABillsAttachment() throws Exception {
     UUID billId = openBill();
-    BillAttachment onA = asA(() -> writer.upload(billId, "image/png", PNG, "a.png"));
+    BillAttachmentMetaResponse onA = asA(() -> writer.upload(billId, "image/png", PNG, "a.png"));
 
     // RLS scopes findById to the bound tenant — tenant B's delete never finds tenant A's row (404).
     assertThatThrownBy(
@@ -218,7 +223,7 @@ class BillAttachmentIntegrationTest extends PostgresRlsTestBase {
                     TENANT_B,
                     ACTOR,
                     () -> {
-                      writer.delete(billId, onA.getId());
+                      writer.delete(billId, onA.id());
                       return null;
                     }))
         .isInstanceOf(BillNotFoundException.class);

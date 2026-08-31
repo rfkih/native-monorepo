@@ -60,7 +60,7 @@ public class BillPaymentWriter {
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public PaymentResponse abandon(UUID paymentId) {
-    return doAbandon(paymentId);
+    return doAbandon(paymentId, true);
   }
 
   /**
@@ -73,10 +73,33 @@ public class BillPaymentWriter {
    */
   @Transactional(propagation = Propagation.MANDATORY)
   public PaymentResponse abandonInCurrentTx(UUID paymentId) {
-    return doAbandon(paymentId);
+    return doAbandon(paymentId, true);
   }
 
-  private PaymentResponse doAbandon(UUID paymentId) {
+  /**
+   * System-initiated release of a bill's PENDING gateway reservation when its charge DIED — the
+   * {@code PaymentChargeExpired} consumer ({@code payment.service.PaymentChargeExpiredWriter}) drives
+   * this, joining the consumer's transaction (propagation {@code MANDATORY}).
+   *
+   * <p><strong>Skips the outlet-access guard on purpose.</strong> {@link OutletAccessGuard} scopes a
+   * CASHIER's actions to their assigned outlet; this release runs on a Kafka consumer thread from an
+   * authenticated payment-service event — a system actor with no operator session and no {@code
+   * X-Roles} (so {@code isOwnerOrManager()} is false and the guard would wrongly throw {@code
+   * OutletNotAssignedException} for any outlet-scoping tenant). There is no cashier to scope: the
+   * charge death is the authority for releasing the hold. Every other step (bill-row lock, fresh
+   * PENDING re-check, {@code bill_line → payment} release order) is identical to {@link
+   * #abandonInCurrentTx}.
+   *
+   * @throws IllegalArgumentException if the payment is not found or is not a bill payment
+   * @throws IllegalStateException if the payment is not currently PENDING (a benign "already settled"
+   *     outcome the caller treats as a no-op)
+   */
+  @Transactional(propagation = Propagation.MANDATORY)
+  public PaymentResponse abandonForExpiredChargeInCurrentTx(UUID paymentId) {
+    return doAbandon(paymentId, false);
+  }
+
+  private PaymentResponse doAbandon(UUID paymentId, boolean enforceOutlet) {
     String actor = TenantContext.require().actor();
 
     // Load the full aggregate (write path).
@@ -94,8 +117,12 @@ public class BillPaymentWriter {
     // touching it — without this, a cashier at outlet X could abandon outlet Y's reservation
     // (cross-outlet grief, or a window for a double-charge if the released lines then get paid
     // some other way while the original QRIS payment is still live). Mirrors payBill/
-    // initiatePendingPayment's "Phase 5 enforcement at the money moment" guard.
-    outletAccessGuard.enforce(payment.getBusinessId());
+    // initiatePendingPayment's "Phase 5 enforcement at the money moment" guard. Skipped only for the
+    // system-initiated expired-charge release, which has no cashier to scope (see
+    // abandonForExpiredChargeInCurrentTx).
+    if (enforceOutlet) {
+      outletAccessGuard.enforce(payment.getBusinessId());
+    }
 
     // ADR 0069: abandon mutates bill_line reservation state, so it MUST serialize on the bill row
     // like every other bill write path (bill → bill_line → payment). Re-entrant for the in-tx

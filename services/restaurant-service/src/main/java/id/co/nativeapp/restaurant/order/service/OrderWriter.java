@@ -46,6 +46,7 @@ import id.co.nativeapp.restaurant.promotion.repository.CouponRepository;
 import id.co.nativeapp.restaurant.promotion.service.ManualDiscountGuard;
 import id.co.nativeapp.restaurant.promotion.service.PromotionEngineService;
 import id.co.nativeapp.restaurant.recipe.service.IngredientDepletionWriter;
+import id.co.nativeapp.restaurant.register.repository.RegisterSessionRepository;
 import id.co.nativeapp.restaurant.register.service.CashWindowLock;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleCommand;
 import id.co.nativeapp.restaurant.sale.dto.RecordSaleResult;
@@ -151,6 +152,7 @@ public class OrderWriter {
   private final SelfOrderProperties selfOrderProperties;
   private final SalesChannelRepository salesChannelRepository;
   private final CashWindowLock cashWindowLock;
+  private final RegisterSessionRepository registerSessionRepository;
 
   @SuppressWarnings("checkstyle:ParameterNumber")
   public OrderWriter(
@@ -174,7 +176,8 @@ public class OrderWriter {
       OfflineReplayGuard offlineReplayGuard,
       SelfOrderProperties selfOrderProperties,
       SalesChannelRepository salesChannelRepository,
-      CashWindowLock cashWindowLock) {
+      CashWindowLock cashWindowLock,
+      RegisterSessionRepository registerSessionRepository) {
     this.orderRepository = orderRepository;
     this.lineRepository = lineRepository;
     this.modifierRepository = modifierRepository;
@@ -196,6 +199,7 @@ public class OrderWriter {
     this.selfOrderProperties = selfOrderProperties;
     this.salesChannelRepository = salesChannelRepository;
     this.cashWindowLock = cashWindowLock;
+    this.registerSessionRepository = registerSessionRepository;
   }
 
   /**
@@ -259,7 +263,16 @@ public class OrderWriter {
     // (GL period), so a replayed offline sale posts into the day it actually happened. NOTE: an
     // offline-replayed (client-backdated) occurredAt is explicit historical data, independent of
     // lock timing — the CashWindowLock protects the live/"now" case, not deliberate backdating.
-    Instant now = offlineReplayGuard.resolveOccurredAt(request, Instant.now());
+    // The open-session openedAt is supplied LAZILY — the guard only pulls it on the accepted
+    // backdated-replay path, so the normal checkout pays no extra query.
+    Instant now =
+        offlineReplayGuard.resolveOccurredAt(
+            request,
+            Instant.now(),
+            () ->
+                registerSessionRepository
+                    .findOpenViewByBusinessId(request.businessId())
+                    .map(open -> open.getOpenedAt()));
     boolean offlineReplay = Boolean.TRUE.equals(request.offlineReplay());
 
     // ------------------------------------------------------------------

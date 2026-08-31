@@ -1,0 +1,18 @@
+{
+  "type": "record",
+  "name": "PaymentChargeExpired",
+  "namespace": "id.co.nativeapp.events.payment",
+  "doc": "Emitted by payment-service when a LIVE dynamic-QRIS gateway charge (ADR 0045, merchant's own Midtrans account) that had already issued its QR reaches a TERMINAL state WITHOUT settling — EXPIRED (the QR timed out; the lazy sweep or a status sync flipped it), CANCELED (the cashier cancelled the attempt), or FAILED (the PSP reported failure). Written to the outbox in the SAME transaction as the charge's status transition (rule 3). The counterpart of PaymentChargeSucceeded for the un-happy path: it exists so the POS vertical named in `vertical` can proactively RELEASE the PENDING tender it was holding open for this charge — restaurant releases the bill-line reservation and abandons the payment, or reverts the order out of AWAITING_PAYMENT — instead of relying only on a lazy time-to-live self-heal. An INITIATED charge that failed before any QR was issued does NOT emit this (the create() call fails synchronously to the caller, which handles it in-band). No money moves on this event; a consumer that finds the payment no longer PENDING (already captured, already abandoned, unknown) treats it as a benign no-op or parks. Money is an integer minor-units amount plus an ISO-4217 currency code, never a float (rule 8). No PII rides this event (rule 6).",
+  "fields": [
+    {"name": "charge_id", "type": "string", "doc": "The payment_charge aggregate id (UUID as string); also the Kafka partition key."},
+    {"name": "company_id", "type": "string", "doc": "The owning tenant (UUID as string)."},
+    {"name": "vertical", "type": "string", "doc": "Which POS vertical's payment this charge was holding: restaurant | carwash | barbershop (lowercase module-key casing, the OrgUnitCreated.vertical convention). Every vertical consumes the topic and skips events whose vertical is not its own."},
+    {"name": "payment_id", "type": "string", "doc": "The vertical's payment row id (UUID as string) — restaurant's release key, and every vertical's resolution anchor."},
+    {"name": "reference_id", "type": ["null", "string"], "default": null, "doc": "The vertical's release key when it differs from payment_id: the carwash/barbershop TICKET id. Null for restaurant."},
+    {"name": "business_id", "type": "string", "doc": "The outlet the charge was rung at (UUID as string; a real OUTLET org unit, ADR 0012)."},
+    {"name": "amount_minor", "type": "long", "doc": "The charge amount in minor units — the tender RESIDUAL the QR would have charged. Carried for audit/observability only; no capture happens on this event."},
+    {"name": "currency", "type": "string", "doc": "ISO-4217 currency code of amount_minor (IDR — QRIS is IDR-only; enforced at charge creation)."},
+    {"name": "reason", "type": "string", "doc": "Why the charge terminated without settling: EXPIRED | CANCELED | FAILED. Consumers release the pending tender identically regardless of reason; the value is recorded for audit and error-inbox park messages."},
+    {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the terminal transition was recorded, epoch millis (UTC)."}
+  ]
+}

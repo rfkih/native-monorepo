@@ -3,9 +3,10 @@ package id.co.nativeapp.restaurant.order.service;
 import id.co.nativeapp.restaurant.order.domain.OfflineReplayValidationException;
 import id.co.nativeapp.restaurant.order.dto.CheckoutRequest;
 import id.co.nativeapp.restaurant.payment.domain.TenderType;
-import id.co.nativeapp.restaurant.register.repository.RegisterSessionRepository;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Optional;
+import java.util.function.Supplier;
 import org.springframework.stereotype.Component;
 
 /**
@@ -26,12 +27,6 @@ import org.springframework.stereotype.Component;
 @Component
 public class OfflineReplayGuard {
 
-  private final RegisterSessionRepository registerSessionRepository;
-
-  public OfflineReplayGuard(RegisterSessionRepository registerSessionRepository) {
-    this.registerSessionRepository = registerSessionRepository;
-  }
-
   /** {@code clientOccurredAt} may not be more than this far in the past. */
   private static final Duration MAX_PAST = Duration.ofHours(48);
 
@@ -46,10 +41,16 @@ public class OfflineReplayGuard {
    *
    * @param request the checkout request
    * @param now the server's current instant (injected so tests can pin it)
+   * @param openSessionOpenedAt lazily yields the current OPEN register session's {@code openedAt}
+   *     for the request's outlet (empty when none is open). A supplier — not a value — so the extra
+   *     query runs ONLY on the accepted-backdate replay path, never on the normal checkout hot
+   *     path; supplied by the caller because this guard sits below the service layer's repository
+   *     access (ArchUnit: repositories are used only from *Service/*Writer/*Reader).
    * @return the instant to use as the order/sale's {@code occurredAt}
    * @throws OfflineReplayValidationException if the contract is violated (surfaces as {@code 422})
    */
-  public Instant resolveOccurredAt(CheckoutRequest request, Instant now) {
+  public Instant resolveOccurredAt(
+      CheckoutRequest request, Instant now, Supplier<Optional<Instant>> openSessionOpenedAt) {
     boolean offlineReplay = Boolean.TRUE.equals(request.offlineReplay());
     Instant clientOccurredAt = request.clientOccurredAt();
 
@@ -106,13 +107,9 @@ public class OfflineReplayGuard {
     // session's start: the sale reconciles in the session that will actually count the money.
     // With no OPEN session the instant is left as-is (the pre-existing, inherent backdating gap —
     // nothing can reconcile a drawer that isn't open).
-    return registerSessionRepository
-        .findOpenViewByBusinessId(request.businessId())
-        .map(
-            open ->
-                clientOccurredAt.isBefore(open.getOpenedAt())
-                    ? open.getOpenedAt()
-                    : clientOccurredAt)
+    return openSessionOpenedAt
+        .get()
+        .map(openedAt -> clientOccurredAt.isBefore(openedAt) ? openedAt : clientOccurredAt)
         .orElse(clientOccurredAt);
   }
 

@@ -1,6 +1,5 @@
 package id.co.nativeapp.restaurant.bill.controller;
 
-import id.co.nativeapp.restaurant.bill.domain.BillAttachment;
 import id.co.nativeapp.restaurant.bill.dto.BillAttachmentContentMeta;
 import id.co.nativeapp.restaurant.bill.dto.BillAttachmentMetaResponse;
 import id.co.nativeapp.restaurant.bill.service.BillAttachmentReader;
@@ -52,13 +51,13 @@ public class BillAttachmentController {
   @PostMapping(path = "/{id}/attachments", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public ResponseEntity<BillAttachmentMetaResponse> upload(
       @PathVariable UUID id, @RequestPart("file") MultipartFile file) throws IOException {
-    BillAttachment attachment =
+    BillAttachmentMetaResponse attachment =
         writer.upload(id, file.getContentType(), file.getBytes(), file.getOriginalFilename());
     // 201 + Location per §1.1. A byte-identical re-upload (network retry / double-tap) returns the
     // EXISTING row idempotently — same shape, still Created-with-Location (the row does exist).
     return ResponseEntity.created(
-            URI.create("/api/v1/bills/" + id + "/attachments/" + attachment.getId()))
-        .body(BillAttachmentMetaResponse.from(attachment));
+            URI.create("/api/v1/bills/" + id + "/attachments/" + attachment.id()))
+        .body(attachment);
   }
 
   @Operation(summary = "List a bill's attachments (metadata only)")

@@ -223,6 +223,20 @@ events:
       - { name: legal_employer_id, type: "string" }
       - { name: name, type: "string" }
       - { name: vertical, type: "null|string" }
+  - name: PaymentChargeExpired
+    namespace: id.co.nativeapp.events.payment
+    schema: libs/contracts/src/main/resources/avro/PaymentChargeExpired.avsc
+    fields:
+      - { name: charge_id, type: "string" }
+      - { name: company_id, type: "string" }
+      - { name: vertical, type: "string" }
+      - { name: payment_id, type: "string" }
+      - { name: reference_id, type: "null|string" }
+      - { name: business_id, type: "string" }
+      - { name: amount_minor, type: "long" }
+      - { name: currency, type: "string" }
+      - { name: reason, type: "string" }
+      - { name: occurred_at, type: "timestamp-millis" }
   - name: PaymentChargeSucceeded
     namespace: id.co.nativeapp.events.payment
     schema: libs/contracts/src/main/resources/avro/PaymentChargeSucceeded.avsc

@@ -4,6 +4,7 @@ import id.co.nativeapp.events.AvroSerde;
 import id.co.nativeapp.events.Base64ByteArraySerializer;
 import id.co.nativeapp.restaurant.entitlement.messaging.EntitlementEventListener;
 import id.co.nativeapp.restaurant.entitlement.messaging.EntitlementEventSchemas;
+import id.co.nativeapp.restaurant.payment.messaging.PaymentChargeExpiredConsumerSchema;
 import id.co.nativeapp.restaurant.payment.messaging.PaymentChargeSucceededConsumerSchema;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -98,6 +99,45 @@ public final class EventFixtures {
     publish(
         bootstrapServers,
         PaymentChargeSucceededConsumerSchema.TOPIC,
+        companyId,
+        eventId,
+        AvroSerde.serialize(event));
+  }
+
+  /**
+   * Builds a {@code PaymentChargeExpired} record (ADR 0045) the way payment-service + Debezium would
+   * emit it when a QR_ISSUED charge terminated without settling. {@code referenceId} is {@code null}
+   * for the restaurant shape (its release key is {@code paymentId}).
+   */
+  @SuppressWarnings("checkstyle:ParameterNumber")
+  public static GenericRecord paymentChargeExpired(
+      UUID chargeId,
+      String companyId,
+      String vertical,
+      UUID paymentId,
+      UUID businessId,
+      long amountMinor,
+      String currency,
+      String reason) {
+    GenericRecord record = new GenericData.Record(PaymentChargeExpiredConsumerSchema.schema());
+    record.put("charge_id", chargeId.toString());
+    record.put("company_id", companyId);
+    record.put("vertical", vertical);
+    record.put("payment_id", paymentId.toString());
+    record.put("reference_id", null);
+    record.put("business_id", businessId.toString());
+    record.put("amount_minor", amountMinor);
+    record.put("currency", currency);
+    record.put("reason", reason);
+    record.put("occurred_at", Instant.now().toEpochMilli());
+    return record;
+  }
+
+  public static void publishPaymentChargeExpired(
+      String bootstrapServers, String companyId, UUID eventId, GenericRecord event) {
+    publish(
+        bootstrapServers,
+        PaymentChargeExpiredConsumerSchema.TOPIC,
         companyId,
         eventId,
         AvroSerde.serialize(event));
