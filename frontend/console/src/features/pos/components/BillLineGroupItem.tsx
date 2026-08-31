@@ -21,6 +21,7 @@ export function BillLineGroupItem({
   onDecrement,
   onRemove,
   busy,
+  canRemove = true,
 }: {
   group: BillLineGroup
   locale: string
@@ -29,6 +30,9 @@ export function BillLineGroupItem({
   onDecrement: () => void
   onRemove: () => void
   busy: boolean
+  /** Open-bill lockdown: false hides the −/remove affordances (adding stays allowed — cashiers
+   *  can still take orders; only TRIMMING the bill is owner/manager). */
+  canRemove?: boolean
 }) {
   const { t } = useTranslation()
 
@@ -52,17 +56,19 @@ export function BillLineGroupItem({
           ) : null}
         </div>
 
-        {/* Stepper */}
+        {/* Stepper — the − is a removeLine in disguise, so it follows the lockdown too. */}
         <div className="flex shrink-0 items-center gap-1.5">
-          <button
-            type="button"
-            onClick={onDecrement}
-            disabled={busy}
-            aria-label={t('bills.decreaseQty')}
-            className="grid size-10 place-items-center rounded-lg border border-line text-ink-3 hover:bg-hover hover:text-ink disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
-          >
-            <Minus className="size-3.5" />
-          </button>
+          {canRemove ? (
+            <button
+              type="button"
+              onClick={onDecrement}
+              disabled={busy}
+              aria-label={t('bills.decreaseQty')}
+              className="grid size-10 place-items-center rounded-lg border border-line text-ink-3 hover:bg-hover hover:text-ink disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+            >
+              <Minus className="size-3.5" />
+            </button>
+          ) : null}
           <span className="tnum min-w-[1.5rem] text-center font-mono text-sm font-bold text-ink">
             {group.qty}
           </span>
@@ -82,17 +88,19 @@ export function BillLineGroupItem({
         </div>
 
         {/* Remove whole group */}
-        <button
-          type="button"
-          onClick={onRemove}
-          disabled={busy}
-          aria-label={t('bills.removeLine', { name: group.nameSnapshot })}
-          className={cn(
-            'grid size-9 shrink-0 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-hover hover:text-loss disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
-          )}
-        >
-          <Trash2 className="size-3.5" />
-        </button>
+        {canRemove ? (
+          <button
+            type="button"
+            onClick={onRemove}
+            disabled={busy}
+            aria-label={t('bills.removeLine', { name: group.nameSnapshot })}
+            className={cn(
+              'grid size-9 shrink-0 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-hover hover:text-loss disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald',
+            )}
+          >
+            <Trash2 className="size-3.5" />
+          </button>
+        ) : null}
       </div>
     </li>
   )

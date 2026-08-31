@@ -287,6 +287,12 @@ function PosInner({ session }: { session: CompanySession }) {
     'owner',
     'manager',
   )
+  // Open-bill lockdown (owner rule): cancelling a bill WITH lines and removing/decrementing lines
+  // are owner/manager-only — once a bill holds items its flow must end in payment. Merged roles so
+  // an elevated device terminal lights the affordances up; the server guard
+  // (BillWriter.requireOwnerOrManager, 403 bill-mutation-forbidden) is the real boundary. An EMPTY
+  // bill stays cancellable by anyone (wrong table opened) — see lib/billPermissions.ts.
+  const canVoidBill = hasAnyRole(effectiveRoles(auth.roles, auth.elevatedRoles), 'owner', 'manager')
 
   // Modal / overlay state
   const [modal, setModal] = useState<'payment' | 'receipt' | 'cart' | null>(null)
@@ -1373,6 +1379,7 @@ function PosInner({ session }: { session: CompanySession }) {
           onSheetOpenChange={setBillSheetOpen}
           autoKotToken={autoKotToken}
           autoPayToken={autoPayToken}
+          canVoid={canVoidBill}
           onBack={() => {
             setOpenBillId(null)
             setBillSheetOpen(false)

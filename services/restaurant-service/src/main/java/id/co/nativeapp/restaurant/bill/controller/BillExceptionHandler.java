@@ -1,7 +1,10 @@
 package id.co.nativeapp.restaurant.bill.controller;
 
+import id.co.nativeapp.restaurant.bill.domain.BillHasPaidLinesException;
+import id.co.nativeapp.restaurant.bill.domain.BillLinePaidException;
 import id.co.nativeapp.restaurant.bill.domain.BillLineReservationConflictException;
 import id.co.nativeapp.restaurant.bill.domain.BillLineReservedException;
+import id.co.nativeapp.restaurant.bill.domain.BillMutationForbiddenException;
 import id.co.nativeapp.restaurant.bill.domain.BillNotFoundException;
 import id.co.nativeapp.restaurant.bill.domain.BillNotOpenException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -25,6 +28,9 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  *   <li>{@link BillNotOpenException} → {@code 409 Conflict}
  *   <li>{@link BillLineReservationConflictException} → {@code 409 Conflict}
  *   <li>{@link BillLineReservedException} → {@code 409 Conflict}
+ *   <li>{@link BillMutationForbiddenException} → {@code 403 Forbidden} (open-bill lockdown)
+ *   <li>{@link BillHasPaidLinesException} → {@code 409 Conflict}
+ *   <li>{@link BillLinePaidException} → {@code 409 Conflict}
  * </ul>
  */
 @RestControllerAdvice
@@ -73,6 +79,38 @@ public class BillExceptionHandler {
     problem.setProperty("billId", ex.getBillId().toString());
     problem.setProperty("lineId", ex.getLineId().toString());
     problem.setProperty("pendingPaymentId", ex.getPendingPaymentId().toString());
+    return problem;
+  }
+
+  @ExceptionHandler(BillMutationForbiddenException.class)
+  public ProblemDetail handleBillMutationForbidden(
+      BillMutationForbiddenException ex, HttpServletRequest req) {
+    ProblemDetail problem = problem(HttpStatus.FORBIDDEN, "bill-mutation-forbidden", req);
+    problem.setTitle("Owner or manager role required");
+    problem.setDetail(ex.getMessage());
+    problem.setProperty("billId", ex.getBillId().toString());
+    problem.setProperty("action", ex.getAction());
+    return problem;
+  }
+
+  @ExceptionHandler(BillHasPaidLinesException.class)
+  public ProblemDetail handleBillHasPaidLines(
+      BillHasPaidLinesException ex, HttpServletRequest req) {
+    ProblemDetail problem = problem(HttpStatus.CONFLICT, "bill-has-paid-lines", req);
+    problem.setTitle("Bill has paid lines");
+    problem.setDetail(ex.getMessage());
+    problem.setProperty("billId", ex.getBillId().toString());
+    problem.setProperty("paidLineCount", ex.getPaidLineCount());
+    return problem;
+  }
+
+  @ExceptionHandler(BillLinePaidException.class)
+  public ProblemDetail handleBillLinePaid(BillLinePaidException ex, HttpServletRequest req) {
+    ProblemDetail problem = problem(HttpStatus.CONFLICT, "bill-line-paid", req);
+    problem.setTitle("Bill line is already paid");
+    problem.setDetail(ex.getMessage());
+    problem.setProperty("billId", ex.getBillId().toString());
+    problem.setProperty("lineId", ex.getLineId().toString());
     return problem;
   }
 

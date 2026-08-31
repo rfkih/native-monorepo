@@ -1,5 +1,32 @@
 # DEVLOG — history, key decisions, current status
 
+## 2026-08-31 — Open-bill lockdown: once a bill has items, its flow must end in payment
+
+Owner rule: the POS open-bill flow was too loose — ANY operator (cashier included) could cancel an
+open bill or trim its lines, with no server-side role check, and cancel even succeeded on a
+partially-paid split-check (stranding the recorded sales) or under an in-flight gateway
+reservation. Now (server = the real boundary, `restaurant-service`):
+**Cancel** — a bill WITH lines requires owner/manager (403 `bill-mutation-forbidden`); an EMPTY
+bill (wrong table opened) stays cancellable by anyone; a bill with PAID lines is uncancellable for
+EVERY role (409 `bill-has-paid-lines`), as is one with payment-reserved lines (409
+`bill-line-reserved`). **Remove/decrement lines** — owner/manager only; removing a PAID line is
+refused server-side (409 `bill-line-paid`). Guards live in `BillWriter` (role, via
+`ActorRolesProvider`) + `Bill.cancel()/removeLine()` (money invariants); pinned by
+`BillLockdownTest` (10 cases incl. the reserved-line path, `X-Roles` MockHttpServletRequest
+idiom). Frontend mirrors the policy as pure functions (`pos/lib/billPermissions.ts`, vitest):
+cancel link becomes a visible "needs owner/manager" explainer for cashiers (touch has no
+tooltips), disappears entirely on partially-paid bills, and −/trash affordances hide for cashiers
+(+ stays — taking orders is still cashier work); `canVoid` uses
+`effectiveRoles(auth.roles, auth.elevatedRoles)` so elevated device terminals light up (same as
+return-sale). Lockdown problem slugs map to i18n copy instead of raw server English.
+**Explicit ack (review W2):** the role guard inherits `ManualDiscountGuard`'s empty-roles-pass —
+a request with NO `X-Roles` header is trusted (gateway-less dev recipe / direct service tests);
+the gateway always stamps the header on authenticated routes, so a real cashier token is denied.
+Making these guards JWT-authoritative is a deliberate follow-up, not an accident. Also noted:
+full local suite surfaces PRE-EXISTING failures unrelated to this change — LayeredArchitectureTest
+(register dto→projection since cbca8f42; BillAttachmentController→entity since d7cc142d) and two
+stocktake tests that flake on local Postgres connection exhaustion (green in isolation).
+
 > **For an AI agent:** this is the durable record of *what was built, why, and where we are* — the
 > decisions especially (the code shows the *what*; this shows the *why*, which you can't re-derive).
 > Keep it current: when you finish a milestone or make a design decision, add a dated line. The live

@@ -5,6 +5,7 @@ import id.co.nativeapp.restaurant.bill.domain.Bill;
 import id.co.nativeapp.restaurant.bill.domain.BillLine;
 import id.co.nativeapp.restaurant.bill.domain.BillLineModifier;
 import id.co.nativeapp.restaurant.bill.domain.BillLineReservationConflictException;
+import id.co.nativeapp.restaurant.bill.domain.BillMutationForbiddenException;
 import id.co.nativeapp.restaurant.bill.domain.BillNotFoundException;
 import id.co.nativeapp.restaurant.bill.domain.BillNotOpenException;
 import id.co.nativeapp.restaurant.bill.dto.AppendLinesRequest;
@@ -19,6 +20,7 @@ import id.co.nativeapp.restaurant.bill.repository.BillLineModifierRepository;
 import id.co.nativeapp.restaurant.bill.repository.BillLineRepository;
 import id.co.nativeapp.restaurant.bill.repository.BillRepository;
 import id.co.nativeapp.restaurant.channel.repository.SalesChannelRepository;
+import id.co.nativeapp.restaurant.config.ActorRolesProvider;
 import id.co.nativeapp.restaurant.menu.domain.InsufficientStockException;
 import id.co.nativeapp.restaurant.menu.projection.MenuItemView;
 import id.co.nativeapp.restaurant.menu.projection.ModifierOptionView;
@@ -131,6 +133,7 @@ public class BillWriter {
   private final PromotionEngineService promotionEngine;
   private final AppliedPromotionRepository appliedPromotionRepository;
   private final ManualDiscountGuard manualDiscountGuard;
+  private final ActorRolesProvider actorRoles;
   private final SalesChannelRepository salesChannelRepository;
   private final CashWindowLock cashWindowLock;
   private final PaymentWriter paymentWriter;
@@ -157,7 +160,8 @@ public class BillWriter {
       CashWindowLock cashWindowLock,
       PaymentWriter paymentWriter,
       BillPaymentWriter billPaymentWriter,
-      PaymentRepository paymentRepository) {
+      PaymentRepository paymentRepository,
+      ActorRolesProvider actorRoles) {
     this.billRepository = billRepository;
     this.lineRepository = lineRepository;
     this.modifierRepository = modifierRepository;
@@ -177,6 +181,20 @@ public class BillWriter {
     this.paymentWriter = paymentWriter;
     this.billPaymentWriter = billPaymentWriter;
     this.paymentRepository = paymentRepository;
+    this.actorRoles = actorRoles;
+  }
+
+  /**
+   * Open-bill lockdown (owner rule): destructive open-bill mutations require {@code
+   * owner}/{@code manager}. Empty-roles-pass semantics shared with {@link
+   * id.co.nativeapp.restaurant.promotion.service.ManualDiscountGuard} — a headerless caller
+   * (gateway-less dev recipe / direct service-layer test) is trusted; a real cashier token is
+   * denied.
+   */
+  private void requireOwnerOrManager(String action, UUID billId) {
+    if (!actorRoles.currentRoles().isEmpty() && !actorRoles.isOwnerOrManager()) {
+      throw new BillMutationForbiddenException(billId, action);
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -292,10 +310,15 @@ public class BillWriter {
 
   /**
    * Removes a single line from an OPEN bill. Stock is not adjusted at remove time — deduction
-   * happens only at pay time.
+   * happens only at pay time. Open-bill lockdown (owner rule): removing lines requires {@code
+   * owner}/{@code manager} — a cashier cannot trim a bill after items were served. The domain
+   * additionally refuses removing a PAID or payment-reserved line (see {@link
+   * Bill#removeLine(BillLine)}).
    *
    * @throws BillNotFoundException if the bill is not found
    * @throws BillNotOpenException if the bill is not OPEN
+   * @throws BillMutationForbiddenException if the actor is not owner/manager
+   * @throws id.co.nativeapp.restaurant.bill.domain.BillLinePaidException if the line is paid
    * @throws IllegalArgumentException if the line does not belong to this bill
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -306,6 +329,8 @@ public class BillWriter {
     if (!"OPEN".equals(bill.getStatus())) {
       throw new BillNotOpenException(billId, bill.getStatus());
     }
+
+    requireOwnerOrManager("removeLine", billId);
 
     BillLine lineToRemove =
         bill.getLines().stream()
@@ -682,10 +707,18 @@ public class BillWriter {
   // -------------------------------------------------------------------------
 
   /**
-   * Cancels an OPEN bill (no sale, no stock change).
+   * Cancels an OPEN bill (no sale, no stock change). Open-bill lockdown (owner rule): a bill that
+   * holds lines must end in payment unless an {@code owner}/{@code manager} intervenes — only an
+   * EMPTY bill (wrong table opened) may be cancelled by anyone. The domain additionally refuses a
+   * cancel while any line is PAID or reserved by an in-flight payment (see {@link Bill#cancel()}).
    *
    * @throws BillNotFoundException if the bill is not found
    * @throws BillNotOpenException if the bill is not OPEN
+   * @throws BillMutationForbiddenException if the bill has lines and the actor is not
+   *     owner/manager
+   * @throws id.co.nativeapp.restaurant.bill.domain.BillHasPaidLinesException if any line is paid
+   * @throws id.co.nativeapp.restaurant.bill.domain.BillLineReservedException if any line is
+   *     reserved
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void cancelBill(UUID billId) {
@@ -694,6 +727,10 @@ public class BillWriter {
 
     if (!"OPEN".equals(bill.getStatus())) {
       throw new BillNotOpenException(billId, bill.getStatus());
+    }
+
+    if (!bill.getLines().isEmpty()) {
+      requireOwnerOrManager("cancel", billId);
     }
 
     bill.cancel();

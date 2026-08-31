@@ -38,6 +38,8 @@ import { PhoneSheetContent } from './components/PhoneSheetContent'
 import { BillLineItem } from './components/BillLineItem'
 import { BillLineGroupItem } from './components/BillLineGroupItem'
 import { groupUnpaidLines, type BillLineGroup } from './lib/billLineGroups'
+import { canCancelBill, canRemoveBillLines, showCancelNeedsManager } from './lib/billPermissions'
+import { ApiError } from '@/lib/api'
 import { BillBreakdown } from './components/BillBreakdown'
 import { BillAttachments } from './components/BillAttachments'
 import { CancelConfirmDialog } from './components/CancelConfirmDialog'
@@ -71,6 +73,10 @@ interface Props {
   autoPayToken?: number
   onBack: () => void
   onPaid: () => void
+  /** Open-bill lockdown: the login (incl. device-terminal elevation) is owner/manager — gates
+   *  cancelling a bill WITH lines and removing/decrementing lines (see lib/billPermissions.ts;
+   *  the server 403s regardless). */
+  canVoid: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -88,6 +94,7 @@ export function BillDetail({
   autoPayToken = 0,
   onBack,
   onPaid,
+  canVoid,
 }: Props) {
   const { t } = useTranslation()
   const qc = useQueryClient()
@@ -138,6 +145,14 @@ export function BillDetail({
 
   const unpaidLines = bill?.lines.filter((l) => !l.paid) ?? []
   const unpaidTotal = unpaidLines.reduce((s, l) => s + l.lineTotalMinor, 0)
+  // Open-bill lockdown (owner rule): see lib/billPermissions.ts. Keyed on the raw line ROW count
+  // (not summed qty) — the policy is "has the bill any items at all". A bill with PAID lines is
+  // uncancellable for everyone (server 409s), so no button and no hint in that state.
+  const billLineRows = bill?.lines.length ?? 0
+  const billHasPaidLines = bill?.lines.some((l) => l.paid) ?? false
+  const allowCancel = canCancelBill(canVoid, billLineRows, billHasPaidLines)
+  const cancelHintVisible = showCancelNeedsManager(canVoid, billLineRows, billHasPaidLines)
+  const allowRemoveLines = canRemoveBillLines(canVoid)
   const lineGroups = groupUnpaidLines(bill?.lines ?? [])
   const paidLines = bill?.lines.filter((l) => l.paid) ?? []
   const grandTotal =
@@ -175,6 +190,7 @@ export function BillDetail({
   }
 
   function handleRemoveLine(lineId: string) {
+    if (!allowRemoveLines) return // affordances are hidden; belt-and-braces (server 403s anyway)
     removeLine.mutate({ billId, lineId })
   }
 
@@ -186,10 +202,12 @@ export function BillDetail({
   }
 
   function handleDecrementGroup(g: BillLineGroup) {
+    if (!allowRemoveLines) return
     removeLine.mutate({ billId, lineId: g.lineIds[g.lineIds.length - 1] })
   }
 
   async function handleRemoveGroup(g: BillLineGroup) {
+    if (!allowRemoveLines) return
     // Sequential, NOT parallel: the bill is one @Version aggregate — firing every removeLine at once
     // makes all-but-the-first optimistic-lock-collide (partial removal + surfaced error). Await each.
     for (const lineId of g.lineIds) {
@@ -197,7 +215,21 @@ export function BillDetail({
     }
   }
 
+  // RFC-7807: the lockdown's stable problem `type` slugs → localized copy (ENGINEERING-STANDARDS
+  // §1.2 — never surface the server's raw English `detail` to the operator). Anything else falls
+  // back to the message as before.
+  function billProblemMessage(err: unknown): string {
+    if (err instanceof ApiError && typeof err.problem?.type === 'string') {
+      const type = err.problem.type
+      if (type.includes('bill-mutation-forbidden')) return t('bills.errNeedsManager')
+      if (type.includes('bill-has-paid-lines')) return t('bills.errHasPaidLines')
+      if (type.includes('bill-line-paid')) return t('bills.errLinePaid')
+    }
+    return err instanceof Error ? err.message : String(err)
+  }
+
   function handleCancel() {
+    if (!allowCancel) return // affordance is hidden; belt-and-braces (server enforces regardless)
     cancelBill.mutate(billId, {
       onSuccess: () => {
         onBack()
@@ -443,6 +475,9 @@ export function BillDetail({
             onRemoveLine={handleRemoveLine}
             onKot={() => setShowKot(true)}
             onCancel={() => setShowCancelConfirm(true)}
+            canCancel={allowCancel}
+            cancelHintVisible={cancelHintVisible}
+            canRemoveLines={allowRemoveLines}
             onPayModal={openPayModal}
             onClose={() => setBillOpen(false)}
             onBack={onBack}
@@ -542,6 +577,7 @@ export function BillDetail({
                       onToggleSelect={() => toggleLineSelection(line.id)}
                       onRemove={() => handleRemoveLine(line.id)}
                       isRemoving={removeLine.isPending}
+                      canRemove={allowRemoveLines}
                     />
                   ))
                 : [
@@ -555,6 +591,7 @@ export function BillDetail({
                         onDecrement={() => handleDecrementGroup(g)}
                         onRemove={() => handleRemoveGroup(g)}
                         busy={appendLines.isPending || removeLine.isPending || billQuery.isFetching}
+                        canRemove={allowRemoveLines}
                       />
                     )),
                     ...paidLines.map((line) => (
@@ -667,21 +704,26 @@ export function BillDetail({
             )}
           </div>
 
-          {/* Cancel link */}
+          {/* Cancel link — open-bill lockdown: a bill with items needs owner/manager; the
+              replacement text explains itself (touch screens have no tooltips). */}
           <div className="pb-4 text-center">
-            <button
-              type="button"
-              onClick={() => setShowCancelConfirm(true)}
-              disabled={cancelBill.isPending}
-              className="text-xs text-ink-3 underline hover:text-loss focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
-            >
-              {t('bills.cancelBill')}
-            </button>
+            {allowCancel ? (
+              <button
+                type="button"
+                onClick={() => setShowCancelConfirm(true)}
+                disabled={cancelBill.isPending}
+                className="text-xs text-ink-3 underline hover:text-loss focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald"
+              >
+                {t('bills.cancelBill')}
+              </button>
+            ) : cancelHintVisible ? (
+              <p className="px-5 text-[11px] text-ink-3">{t('bills.cancelNeedsManager')}</p>
+            ) : null}
           </div>
 
           {removeLine.isError ? (
             <p className="px-5 pb-3 text-xs text-loss" role="alert">
-              {(removeLine.error as Error).message}
+              {billProblemMessage(removeLine.error)}
             </p>
           ) : null}
         </div>
@@ -754,7 +796,7 @@ export function BillDetail({
         <CancelConfirmDialog
           bill={bill}
           isCancelling={cancelBill.isPending}
-          error={cancelBill.isError ? (cancelBill.error as Error).message : null}
+          error={cancelBill.isError ? billProblemMessage(cancelBill.error) : null}
           onConfirm={handleCancel}
           onClose={() => setShowCancelConfirm(false)}
         />

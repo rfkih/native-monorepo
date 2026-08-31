@@ -128,6 +128,11 @@ public class Bill extends Auditable {
    */
   public void removeLine(BillLine line) {
     requireOpen("removeLine");
+    // Open-bill lockdown hardening: a PAID line's sale is recorded — removing it would silently
+    // detach money from the bill. The frontend never offers this; the server refuses regardless.
+    if (line.isPaid()) {
+      throw new BillLinePaidException(id, line.getId());
+    }
     if (line.getPendingPaymentId() != null) {
       throw new BillLineReservedException(id, line.getId(), line.getPendingPaymentId());
     }
@@ -150,12 +155,26 @@ public class Bill extends Auditable {
   }
 
   /**
-   * Cancels this bill (no sale, no stock change).
+   * Cancels this bill (no sale, no stock change). Open-bill lockdown hardening: refused while any
+   * line is already PAID (the recorded split-check sales would be stranded — settle the remainder
+   * or reverse the paid checks first) or RESERVED for an in-flight gateway payment (cancelling
+   * under a pending capture would strand real PSP money).
    *
    * @throws IllegalStateException if the bill is not OPEN
+   * @throws BillHasPaidLinesException if any line is already paid
+   * @throws BillLineReservedException if any line is reserved by an in-flight payment
    */
   public void cancel() {
     requireOpen("cancel");
+    int paidCount = (int) lines.stream().filter(BillLine::isPaid).count();
+    if (paidCount > 0) {
+      throw new BillHasPaidLinesException(id, paidCount);
+    }
+    for (BillLine line : lines) {
+      if (line.getPendingPaymentId() != null) {
+        throw new BillLineReservedException(id, line.getId(), line.getPendingPaymentId());
+      }
+    }
     this.status = "CANCELLED";
   }
 
